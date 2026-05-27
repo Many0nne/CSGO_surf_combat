@@ -11,6 +11,7 @@ local yaw   = 0
 local pitch = 0
 local hrpRef: BasePart? = nil
 local conn: RBXScriptConnection? = nil
+local currentCamHeight = Config.CAM_HEIGHT_STAND
 
 local function hideCharacterPart(obj: Instance)
 	if obj:IsA("BasePart") then
@@ -36,11 +37,15 @@ function FPSCamera.init(hrp: BasePart, char: Model)
 		yaw   = yaw + delta.X * Config.DEFAULT_SENS
 		pitch = math.clamp(pitch - delta.Y * Config.DEFAULT_SENS, Config.PITCH_MIN, Config.PITCH_MAX)
 
-		local headPos = hrpRef.Position + Vector3.new(0, Config.CAM_HEIGHT_STAND, 0)
+		local headPos = hrpRef.Position + Vector3.new(0, currentCamHeight, 0)
 		cam.CFrame = CFrame.new(headPos)
 			* CFrame.Angles(0, math.rad(-yaw), 0)
 			* CFrame.Angles(math.rad(pitch), 0, 0)
 	end)
+end
+
+function FPSCamera.setCamHeight(h: number)
+	currentCamHeight = h
 end
 
 function FPSCamera.getCameraYaw(): number

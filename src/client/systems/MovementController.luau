@@ -9,12 +9,12 @@ local WallSlide         = require(script.Parent.WallSlide)
 local SlopeSystem       = require(script.Parent.SlopeSystem)
 local CoyoteJump        = require(script.Parent.CoyoteJump)
 local BhopSystem        = require(script.Parent.BhopSystem)
+local CrouchSystem      = require(script.Parent.CrouchSystem)
 local InputModule       = require(script.Parent.Parent.input.InputModule)
 local PhysicsUtils      = require(ReplicatedStorage.Shared.PhysicsUtils)
 local Config            = require(ReplicatedStorage.Shared.MovementConfig)
 local MovementState     = require(ReplicatedStorage.Shared.MovementState)
 
-local HALF_HEIGHT  = Config.CHAR_HEIGHT_STAND / 2
 local JUMP_LOCKOUT = 0.15  -- empêche re-grounding immédiat après un saut
 
 local MovementController = {}
@@ -26,40 +26,55 @@ function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, sp
 	local debugTick   = 0
 	local surfNormal: Vector3? = nil  -- normale de la rampe surf en contact (nil si aucune)
 
+	CrouchSystem.init(hrp)
+
 	RunService.Heartbeat:Connect(function(dt)
 		jumpLockout = math.max(0, jumpLockout - dt)
 
 		-- 1. Détection sol
 		local gnd = GroundDetection.getGroundInfo(hrp)
 
-		-- 2. Transitions d'état
-		if gnd.onGround and jumpLockout <= 0 then
-			if state == MovementState.AIRBORNE then
-				velocity = Vector3.new(velocity.X, 0, velocity.Z)
-			end
-			surfNormal = nil
-			state = MovementState.GROUNDED
-		elseif not gnd.onGround then
-			state = MovementState.AIRBORNE
+		-- 2. Crouch (avant transitions d'état pour connaître halfHeight)
+		local crouchInfo = CrouchSystem.update(dt)
+		if camera then
+			camera.setCamHeight(crouchInfo.camHeight)
 		end
-		-- gnd.onGround=true mais jumpLockout>0 → state reste AIRBORNE
 
-		-- 3. Saut (coyote + buffer + normal) — consomme isJumpPressed() en interne
+		-- 3. Transitions d'état
+		local isOnGround = gnd.onGround and jumpLockout <= 0
+		if isOnGround then
+			if state == MovementState.AIRBORNE or state == MovementState.CROUCHING_AIR then
+				velocity = Vector3.new(velocity.X, 0, velocity.Z)
+				surfNormal = nil
+			end
+			state = crouchInfo.isCrouching and MovementState.CROUCHING_GROUND or MovementState.GROUNDED
+		elseif not gnd.onGround then
+			state = crouchInfo.isCrouching and MovementState.CROUCHING_AIR or MovementState.AIRBORNE
+		end
+		-- gnd.onGround=true mais jumpLockout>0 → state reste AIRBORNE/CROUCHING_AIR
+
+		local isGroundedState = state == MovementState.GROUNDED or state == MovementState.CROUCHING_GROUND
+		local isAirborneState = state == MovementState.AIRBORNE or state == MovementState.CROUCHING_AIR
+
+		-- 4. Saut (coyote + buffer + normal) — consomme isJumpPressed() en interne
 		local shouldJump = CoyoteJump.update(gnd.onGround, dt)
 
-		-- 4. Direction souhaitée depuis le yaw de la caméra FPS
+		-- 5. Direction souhaitée depuis le yaw de la caméra FPS
 		local wishdir = InputModule.getWishDir(camera and camera.getCameraYaw() or 0)
 
-		-- 5. Vitesse cible selon mode
+		-- 6. Vitesse cible selon mode
 		local wishspeed = Config.RUN_SPEED
 		if InputModule.isWalking() then
 			wishspeed = Config.WALK_SPEED
 		end
+		if crouchInfo.isCrouching then
+			wishspeed = Config.CROUCH_SPEED
+		end
 
-		-- 6. Physique
+		-- 7. Physique
 		local velXZ = PhysicsUtils.getXZ(velocity)
 
-		if state == MovementState.GROUNDED then
+		if isGroundedState then
 			local projWishdir = gnd.slopeAngle > 1
 				and SlopeSystem.projectWishDir(wishdir, gnd.normal)
 				or wishdir
@@ -77,13 +92,13 @@ function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, sp
 			if willJump then
 				velocity    = Vector3.new(velocity.X, Config.JUMP_VELOCITY, velocity.Z)
 				jumpLockout = JUMP_LOCKOUT
-				state       = MovementState.AIRBORNE
+				state       = crouchInfo.isCrouching and MovementState.CROUCHING_AIR or MovementState.AIRBORNE
 			else
 				velocity = Vector3.new(velocity.X, 0, velocity.Z)
 			end
 
-		else
-			-- AIRBORNE : AirAccelerate Source + gravité (pas de projection wishdir en surf)
+		elseif isAirborneState then
+			-- AirAccelerate Source + gravité (pas de projection wishdir en surf)
 			velocity = PhysicsStepAir.step(velocity, wishdir, wishspeed, dt)
 			velocity += Vector3.new(0, Config.GRAVITY * dt, 0)
 			-- Clamp fall speed uniquement hors surf
@@ -94,13 +109,13 @@ function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, sp
 			if shouldJump then
 				velocity    = Vector3.new(velocity.X, Config.JUMP_VELOCITY, velocity.Z)
 				jumpLockout = JUMP_LOCKOUT
-				surfNormal = nil
+				surfNormal  = nil
 			end
 		end
 
-		-- 7. Déplacer le character
-		if state == MovementState.GROUNDED then
-			local snapY   = gnd.hitPosition.Y + HALF_HEIGHT
+		-- 8. Déplacer le character
+		if isGroundedState then
+			local snapY   = gnd.hitPosition.Y + crouchInfo.halfHeight
 			local moveVec = Vector3.new(velocity.X * dt, 0, velocity.Z * dt)
 			local stepYOffset, wallNormal = StepupSystem.tryStepup(hrp, moveVec)
 
@@ -117,8 +132,8 @@ function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, sp
 				targetY,
 				hrp.Position.Z + moveVec.Z
 			) * hrp.CFrame.Rotation
-		else
-			-- AIRBORNE : wallslide + surf via ClipVelocity (multi-pass + probe maintien de contact)
+		elseif isAirborneState then
+			-- Wallslide + surf via ClipVelocity (multi-pass + probe maintien de contact)
 			local newVel, moveVec, hitNormal = WallSlide.resolve(hrp, velocity, dt, surfNormal)
 			velocity = newVel
 			hrp.CFrame += moveVec
@@ -131,7 +146,7 @@ function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, sp
 			end
 		end
 
-		-- 8. Speedometer + debug
+		-- 9. Speedometer + debug
 		local spd = PhysicsUtils.getXZ(velocity).Magnitude
 		if speedometer then
 			speedometer.update(spd)
@@ -141,22 +156,6 @@ function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, sp
 			debugTick = 0
 			print(string.format("[Speed] XZ=%.1f  Y=%.1f  state=%s", spd, velocity.Y, state))
 		end
-
-		-- 9. Bonus : détection de bhop via changement rapide de wishdir — boost temporaire si angle > Config.STRAFE_ASSIST_DEG
-		local lastWishdirTime = 0
-		local lastWishdir = Vector3.zero
-
-		-- Dans la boucle Heartbeat, avant de calculer wishdir :
-		local currentTime = tick()
-		if (currentTime - lastWishdirTime) < 0.1 and lastWishdir.Magnitude > 0 then
-			-- Si wishdir a changé rapidement, appliquer un boost
-			local angleChange = PhysicsUtils.angleDeg(lastWishdir, wishdir)
-			if angleChange > 30 then  -- Changement de direction significatif
-				wishspeed = wishspeed * 1.2  -- Boost de 20%
-			end
-		end
-		lastWishdir = wishdir
-		lastWishdirTime = currentTime
 	end)
 end
 
