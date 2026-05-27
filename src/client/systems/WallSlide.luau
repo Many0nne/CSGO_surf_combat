@@ -2,7 +2,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config       = require(ReplicatedStorage.Shared.MovementConfig)
 local PhysicsUtils = require(ReplicatedStorage.Shared.PhysicsUtils)
 
-local RADIUS = Config.CHAR_RADIUS - 0.05
+local RADIUS       = Config.CHAR_RADIUS - 0.05
+local SURF_SKIN    = 0.3   -- distance du probe de maintien de contact surf
+local SURF_THRESHOLD = 0.7 -- normal.Y < seuil → surface est une rampe surf (≈45°)
 
 local castParams = RaycastParams.new()
 castParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -13,17 +15,44 @@ function WallSlide.init(character: Model)
 	castParams.FilterDescendantsInstances = { character }
 end
 
--- Résout la collision de mur pour un déplacement aérien.
--- Retourne (newVelocity, moveVec) où moveVec est le déplacement à appliquer ce tick.
-function WallSlide.resolve(hrp: BasePart, velocity: Vector3, dt: number): (Vector3, Vector3)
-	local moveVec = velocity * dt
-	if moveVec.Magnitude < 1e-5 then return velocity, moveVec end
+-- Résout la collision de mur/rampe pour un déplacement aérien.
+-- lastSurfNormal : normale surf persistante du frame précédent (nil si aucune).
+-- Retourne (newVelocity, moveVec, hitNormal) où hitNormal est nil si aucune surface détectée.
+function WallSlide.resolve(hrp: BasePart, velocity: Vector3, dt: number, lastSurfNormal: Vector3?): (Vector3, Vector3, Vector3?)
+	local moveVec    = velocity * dt
+	local foundNormal: Vector3? = nil
 
-	local hit = workspace:Spherecast(hrp.Position, RADIUS, moveVec, castParams)
-	if not hit then return velocity, moveVec end
+	-- Passe 1 : cast dans la direction de la velocity
+	if moveVec.Magnitude >= 1e-5 then
+		local hit = workspace:Spherecast(hrp.Position, RADIUS, moveVec, castParams)
+		if hit then
+			foundNormal = hit.Normal
+			velocity    = PhysicsUtils.projectOnPlane(velocity, hit.Normal)
+			moveVec     = velocity * dt
 
-	local newVelocity = PhysicsUtils.projectOnPlane(velocity, hit.Normal)
-	return newVelocity, newVelocity * dt
+			-- Passe 2 : re-cast dans la nouvelle direction (comme TryPlayerMove Source)
+			if moveVec.Magnitude >= 1e-5 then
+				local hit2 = workspace:Spherecast(hrp.Position, RADIUS, moveVec, castParams)
+				if hit2 then
+					velocity = PhysicsUtils.projectOnPlane(velocity, hit2.Normal)
+					moveVec  = velocity * dt
+				end
+			end
+		end
+	end
+
+	-- Probe de maintien de contact : re-détecte la rampe même si la velocity est tangentielle
+	if not foundNormal and lastSurfNormal then
+		local probeDir = -lastSurfNormal * SURF_SKIN
+		local probe = workspace:Spherecast(hrp.Position, RADIUS, probeDir, castParams)
+		if probe and probe.Normal.Y < SURF_THRESHOLD then
+			foundNormal = probe.Normal
+			velocity    = PhysicsUtils.projectOnPlane(velocity, probe.Normal)
+			moveVec     = velocity * dt
+		end
+	end
+
+	return velocity, moveVec, foundNormal
 end
 
 return WallSlide

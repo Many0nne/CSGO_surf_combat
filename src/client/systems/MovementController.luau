@@ -20,10 +20,11 @@ local JUMP_LOCKOUT = 0.15  -- empêche re-grounding immédiat après un saut
 local MovementController = {}
 
 function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, speedometer, camera)
-	local velocity   = Vector3.zero
-	local state      = MovementState.GROUNDED
+	local velocity    = Vector3.zero
+	local state       = MovementState.GROUNDED
 	local jumpLockout = 0
-	local debugTick  = 0
+	local debugTick   = 0
+	local surfNormal: Vector3? = nil  -- normale de la rampe surf en contact (nil si aucune)
 
 	RunService.Heartbeat:Connect(function(dt)
 		jumpLockout = math.max(0, jumpLockout - dt)
@@ -36,6 +37,7 @@ function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, sp
 			if state == MovementState.AIRBORNE then
 				velocity = Vector3.new(velocity.X, 0, velocity.Z)
 			end
+			surfNormal = nil
 			state = MovementState.GROUNDED
 		elseif not gnd.onGround then
 			state = MovementState.AIRBORNE
@@ -81,8 +83,8 @@ function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, sp
 			end
 
 		else
-			-- AIRBORNE : AirAccelerate XZ only; pitch does not add Y velocity
-			velocity = PhysicsStepAir.step(velocity, wishdir, wishspeed, dt)
+			-- AIRBORNE : AirAccelerate (avec projection surf si sur rampe) + gravité
+			velocity = PhysicsStepAir.step(velocity, wishdir, wishspeed, dt, surfNormal)
 			velocity += Vector3.new(0, Config.GRAVITY * dt, 0)
 			if velocity.Y < -Config.MAX_FALL_SPEED then
 				velocity = Vector3.new(velocity.X, -Config.MAX_FALL_SPEED, velocity.Z)
@@ -91,6 +93,7 @@ function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, sp
 			if shouldJump then
 				velocity    = Vector3.new(velocity.X, Config.JUMP_VELOCITY, velocity.Z)
 				jumpLockout = JUMP_LOCKOUT
+				surfNormal  = nil
 			end
 		end
 
@@ -114,10 +117,17 @@ function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, sp
 				hrp.Position.Z + moveVec.Z
 			) * hrp.CFrame.Rotation
 		else
-			-- AIRBORNE : wallslide + surf via ClipVelocity
-			local newVel, moveVec = WallSlide.resolve(hrp, velocity, dt)
+			-- AIRBORNE : wallslide + surf via ClipVelocity (multi-pass + probe maintien de contact)
+			local newVel, moveVec, hitNormal = WallSlide.resolve(hrp, velocity, dt, surfNormal)
 			velocity = newVel
 			hrp.CFrame += moveVec
+
+			-- Mise à jour de la surf normale persistante
+			if hitNormal and hitNormal.Y < 0.7 then
+				surfNormal = hitNormal
+			else
+				surfNormal = nil
+			end
 		end
 
 		-- 8. Speedometer + debug

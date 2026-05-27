@@ -7,13 +7,14 @@ return {
 	-- Accélération
 	GROUND_ACCEL           = 128,
 	AIR_ACCEL              = 300,
+	AIR_SPEED_CAP          = 40,   -- équivalent GetAirSpeedCap() Source (élargit la fenêtre strafe)
 	FRICTION               = 8.0,
 	STOP_SPEED             = 2,
 
 	-- Saut / Gravité
-	JUMP_VELOCITY    = 28,
-	GRAVITY          = -80,      -- compromis -60/-120 : arc ~4.9 studs, airtime ~0.7s
-	MAX_FALL_SPEED   = 55,       -- vitesse terminale douce ; marge cast : 0.53 stud
+	JUMP_VELOCITY    = 38,
+	GRAVITY          = -115,     -- arc ~4.8 studs (38²/300), trajectoire plus nerveuse
+	MAX_FALL_SPEED   = 95,
 
 	-- Pentes
 	SLOPE_ANGLE_MAX = 45,
