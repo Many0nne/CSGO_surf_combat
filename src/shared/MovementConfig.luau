@@ -1,21 +1,19 @@
 return {
 	-- Vitesses (studs/s)
-	RUN_SPEED          = 16,
-	WALK_SPEED         = 8,
-	CROUCH_SPEED       = 4.5,
-	BACKWARD_SPEED_MAX = 12,   -- 0.75 * RUN_SPEED (was equal to WALK_SPEED)
+	RUN_SPEED    = 16,
+	WALK_SPEED   = 8,
+	CROUCH_SPEED = 4.5,
 
 	-- Accélération
-	GROUND_ACCEL           = 100,
-	AIR_ACCEL              = 12,
-	SURF_ACCEL             = 6.75,    -- accélération surf sur pente (gravité quasi-équilibrée sur 60°, montée très lente)
-	FRICTION_AIR_BACKWARD  = 50,  -- valeur haute → stop recul aérien en ~1-2 frames
+	GROUND_ACCEL           = 128,
+	AIR_ACCEL              = 300,
 	FRICTION               = 8.0,
 	STOP_SPEED             = 2,
 
 	-- Saut / Gravité
-	JUMP_VELOCITY  = 28,
-	GRAVITY        = -120,
+	JUMP_VELOCITY    = 28,
+	GRAVITY          = -80,      -- compromis -60/-120 : arc ~4.9 studs, airtime ~0.7s
+	MAX_FALL_SPEED   = 55,       -- vitesse terminale douce ; marge cast : 0.53 stud
 
 	-- Pentes
 	SLOPE_ANGLE_MAX = 45,
@@ -24,14 +22,14 @@ return {
 
 	-- Bunny hop
 	BHOP_LAND_WINDOW = 0.1,
-	AUTO_BHOP        = false,
+	AUTO_BHOP        = true,
 
 	-- Coyote time & jump buffer
 	COYOTE_TIME      = 0.09,
 	JUMP_BUFFER_TIME = 0.13,
 
 	-- Strafe (tolérance angle supplémentaire vs CS:GO pur)
-	STRAFE_ASSIST_DEG = 10,
+	-- STRAFE_ASSIST_DEG = 45,
 
 	-- Réseau
 	NET_SYNC_RATE   = 20,

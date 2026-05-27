@@ -1,1 +1,0 @@
-1. point d'attention futur à check, à l'heure actuelle je peut pas check si le slide fonctionne parfaitement car il faut jouer avec la caméra pour pouvoir slide droit en prennant de la vitesse 

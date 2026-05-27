@@ -60,19 +60,22 @@ end
 -- Applique l'accélération Source (ground ou air) à la vitesse horizontale
 -- Retourne la nouvelle vitesse XZ
 function PhysicsUtils.accelerate(
-	velocityXZ: Vector3,
-	wishdir: Vector3,
-	wishspeed: number,
-	accel: number,
-	dt: number
+    velocityXZ: Vector3,
+    wishdir: Vector3,
+    wishspeed: number,
+    accel: number,
+    dt: number
 ): Vector3
-	local currentSpeed = velocityXZ:Dot(wishdir)
-	local addSpeed = wishspeed - currentSpeed
-	if addSpeed <= 0 then
-		return velocityXZ
-	end
-	local accelSpeed = math.min(accel * wishspeed * dt, addSpeed)
-	return velocityXZ + wishdir * accelSpeed
+    local currentSpeed = velocityXZ:Dot(wishdir)
+    local addSpeed = wishspeed - currentSpeed
+
+    -- Ne pas limiter addSpeed, même si currentSpeed < 0
+    if addSpeed <= 0 then
+        return velocityXZ
+    end
+
+    local accelSpeed = math.min(accel * dt, addSpeed)
+    return velocityXZ + wishdir * accelSpeed
 end
 
 return PhysicsUtils

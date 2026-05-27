@@ -20,6 +20,7 @@ local held = {
 
 local jumpPressedEdge = false
 local jumpPressTime   = -math.huge
+local lastWishdir = Vector3.zero
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	local key = KEY_MAP[input.KeyCode]
@@ -59,19 +60,34 @@ local InputModule = {}
 -- yaw : angle horizontal de la caméra en degrés (depuis FPSCamera.getCameraYaw()).
 -- Retourne Vector3.zero si aucune touche directionnelle n'est pressée.
 function InputModule.getWishDir(yaw: number): Vector3
+    local fwd = (held.W and 1 or 0) - (held.S and 1 or 0)
+    local rgt = (held.D and 1 or 0) - (held.A and 1 or 0)
+    if fwd == 0 and rgt == 0 then
+        lastWishdir = Vector3.zero
+        return Vector3.zero
+    end
+
+    local yr = math.rad(yaw)
+    local s, c = math.sin(yr), math.cos(yr)
+    local raw = Vector3.new(fwd * s + rgt * c, 0, fwd * (-c) + rgt * s)
+
+    -- Supprimer le lissage pour le bhop
+    lastWishdir = raw.Unit
+    return lastWishdir
+end
+
+-- Variante 3D : inclut le pitch pour que viser en bas influence la wishdir (surf/air).
+function InputModule.getWishDir3D(yaw: number, pitch: number): Vector3
 	local fwd = (held.W and 1 or 0) - (held.S and 1 or 0)
 	local rgt = (held.D and 1 or 0) - (held.A and 1 or 0)
-	if fwd == 0 and rgt == 0 then
-		return Vector3.zero
-	end
-	local yr  = math.rad(yaw)
-	local s, c = math.sin(yr), math.cos(yr)
-	-- forward = (sin(yaw), 0, -cos(yaw))  right = (cos(yaw), 0, sin(yaw))
-	local raw = Vector3.new(fwd * s + rgt * c, 0, fwd * (-c) + rgt * s)
-	if raw.Magnitude > 1 then
-		return raw.Unit
-	end
-	return raw
+	if fwd == 0 and rgt == 0 then return Vector3.zero end
+	local yr = math.rad(yaw)
+	local pr = math.rad(pitch)
+	local forward = Vector3.new(math.sin(yr) * math.cos(pr), math.sin(pr), -math.cos(yr) * math.cos(pr))
+	local right   = Vector3.new(math.cos(yr), 0, math.sin(yr))
+	local dir = forward * fwd + right * rgt
+	if dir.Magnitude > 1e-4 then return dir.Unit end
+	return Vector3.zero
 end
 
 -- Shift tenu

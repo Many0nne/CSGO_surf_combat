@@ -3,21 +3,23 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local GroundDetection   = require(script.Parent.GroundDetection)
 local PhysicsStepGround = require(script.Parent.PhysicsStepGround)
+local PhysicsStepAir    = require(script.Parent.PhysicsStepAir)
 local StepupSystem      = require(script.Parent.StepupSystem)
 local WallSlide         = require(script.Parent.WallSlide)
 local SlopeSystem       = require(script.Parent.SlopeSystem)
+local CoyoteJump        = require(script.Parent.CoyoteJump)
+local BhopSystem        = require(script.Parent.BhopSystem)
 local InputModule       = require(script.Parent.Parent.input.InputModule)
 local PhysicsUtils      = require(ReplicatedStorage.Shared.PhysicsUtils)
 local Config            = require(ReplicatedStorage.Shared.MovementConfig)
 local MovementState     = require(ReplicatedStorage.Shared.MovementState)
 
-local HALF_HEIGHT      = Config.CHAR_HEIGHT_STAND / 2
-local JUMP_LOCKOUT     = 0.15  -- empêche re-grounding immédiat après un saut
-local SLIDE_HYSTERESIS = 2     -- degrés : empêche l'oscillation autour de 45°
+local HALF_HEIGHT  = Config.CHAR_HEIGHT_STAND / 2
+local JUMP_LOCKOUT = 0.15  -- empêche re-grounding immédiat après un saut
 
 local MovementController = {}
 
-function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, speedometer)
+function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, speedometer, camera)
 	local velocity   = Vector3.zero
 	local state      = MovementState.GROUNDED
 	local jumpLockout = 0
@@ -31,40 +33,46 @@ function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, sp
 
 		-- 2. Transitions d'état
 		if gnd.onGround and jumpLockout <= 0 then
-			local steep = state == MovementState.SLIDING
-				and gnd.slopeAngle > (Config.SLOPE_ANGLE_MAX - SLIDE_HYSTERESIS)
-				or  gnd.slopeAngle > Config.SLOPE_ANGLE_MAX
-			if state == MovementState.AIRBORNE or (state == MovementState.SLIDING and not steep) then
+			if state == MovementState.AIRBORNE then
 				velocity = Vector3.new(velocity.X, 0, velocity.Z)
 			end
-			state = steep and MovementState.SLIDING or MovementState.GROUNDED
+			state = MovementState.GROUNDED
 		elseif not gnd.onGround then
 			state = MovementState.AIRBORNE
 		end
 		-- gnd.onGround=true mais jumpLockout>0 → state reste AIRBORNE
 
-		-- 3. Direction souhaitée (yaw=0 jusqu'à l'implémentation de FPSCamera)
-		local wishdir = InputModule.getWishDir(0)
+		-- 3. Saut (coyote + buffer + normal) — consomme isJumpPressed() en interne
+		local shouldJump = CoyoteJump.update(gnd.onGround, dt)
 
-		-- 4. Vitesse cible selon mode
+		-- 4. Direction souhaitée depuis le yaw de la caméra FPS
+		local wishdir = InputModule.getWishDir(camera and camera.getCameraYaw() or 0)
+
+		-- 5. Vitesse cible selon mode
 		local wishspeed = Config.RUN_SPEED
 		if InputModule.isWalking() then
 			wishspeed = Config.WALK_SPEED
-		elseif InputModule.isBackwardOnly() then
-			wishspeed = Config.BACKWARD_SPEED_MAX
 		end
 
-		-- 5. Physique
+		-- 6. Physique
 		local velXZ = PhysicsUtils.getXZ(velocity)
 
 		if state == MovementState.GROUNDED then
 			local projWishdir = gnd.slopeAngle > 1
 				and SlopeSystem.projectWishDir(wishdir, gnd.normal)
 				or wishdir
-			velXZ   = PhysicsStepGround.step(velXZ, projWishdir, wishspeed, dt)
+
+			local bhop = BhopSystem.update(gnd.onGround, shouldJump, dt)
+
+			if bhop.skipFriction then
+				velXZ = PhysicsUtils.accelerate(velXZ, projWishdir, wishspeed, Config.GROUND_ACCEL, dt)
+			else
+				velXZ = PhysicsStepGround.step(velXZ, projWishdir, wishspeed, dt)
+			end
 			velocity = PhysicsUtils.setXZ(velocity, velXZ)
 
-			if InputModule.isJumpPressed() then
+			local willJump = shouldJump or bhop.forceJump
+			if willJump then
 				velocity    = Vector3.new(velocity.X, Config.JUMP_VELOCITY, velocity.Z)
 				jumpLockout = JUMP_LOCKOUT
 				state       = MovementState.AIRBORNE
@@ -72,27 +80,21 @@ function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, sp
 				velocity = Vector3.new(velocity.X, 0, velocity.Z)
 			end
 
-		elseif state == MovementState.SLIDING then
-			-- Gravité projetée sur la pente
-			velocity = SlopeSystem.slideStep(velocity, gnd.normal, dt)
-			-- Surf : contrôle directionnel le long de la pente (air-accel style, sans friction)
-			if wishdir.Magnitude > 1e-4 then
-				local surfDir = PhysicsUtils.safeNormalize(PhysicsUtils.projectOnPlane(wishdir, gnd.normal))
-				local addSpeed = Config.RUN_SPEED - velocity:Dot(surfDir)
-				if addSpeed > 0 then
-					local accelSpeed = math.min(Config.SURF_ACCEL * Config.RUN_SPEED * dt, addSpeed)
-					velocity += surfDir * accelSpeed
-				end
-			end
-			-- Pas de saut en SLIDING (pieds pas complètement en contact avec le sol)
-
 		else
-			-- Pas d'accélération air ici (étape 13) — gravité uniquement
-			velocity = PhysicsUtils.setXZ(velocity, velXZ)
+			-- AIRBORNE : AirAccelerate XZ only; pitch does not add Y velocity
+			velocity = PhysicsStepAir.step(velocity, wishdir, wishspeed, dt)
 			velocity += Vector3.new(0, Config.GRAVITY * dt, 0)
+			if velocity.Y < -Config.MAX_FALL_SPEED then
+				velocity = Vector3.new(velocity.X, -Config.MAX_FALL_SPEED, velocity.Z)
+			end
+			-- Coyote jump : Space pressé dans la fenêtre coyote
+			if shouldJump then
+				velocity    = Vector3.new(velocity.X, Config.JUMP_VELOCITY, velocity.Z)
+				jumpLockout = JUMP_LOCKOUT
+			end
 		end
 
-		-- 6. Déplacer le character
+		-- 7. Déplacer le character
 		if state == MovementState.GROUNDED then
 			local snapY   = gnd.hitPosition.Y + HALF_HEIGHT
 			local moveVec = Vector3.new(velocity.X * dt, 0, velocity.Z * dt)
@@ -111,27 +113,14 @@ function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, sp
 				targetY,
 				hrp.Position.Z + moveVec.Z
 			) * hrp.CFrame.Rotation
-		elseif state == MovementState.SLIDING then
-			local newVel, moveVec = WallSlide.resolve(hrp, velocity, dt)
-			velocity = newVel
-			local newX = hrp.Position.X + moveVec.X
-			local newZ = hrp.Position.Z + moveVec.Z
-			-- Snap Y à la surface de la pente au nouveau XZ (empêche d'enfoncer dans la géométrie)
-			local targetY = gnd.normal.Y > 1e-4
-				and (gnd.hitPosition.Y
-					- (newX - gnd.hitPosition.X) * gnd.normal.X / gnd.normal.Y
-					- (newZ - gnd.hitPosition.Z) * gnd.normal.Z / gnd.normal.Y
-					+ HALF_HEIGHT)
-				or (hrp.Position.Y + moveVec.Y)
-			hrp.CFrame = CFrame.new(newX, targetY, newZ) * hrp.CFrame.Rotation
 		else
-			-- AIRBORNE : wallslide
+			-- AIRBORNE : wallslide + surf via ClipVelocity
 			local newVel, moveVec = WallSlide.resolve(hrp, velocity, dt)
 			velocity = newVel
 			hrp.CFrame += moveVec
 		end
 
-		-- 7. Speedometer + debug
+		-- 8. Speedometer + debug
 		local spd = PhysicsUtils.getXZ(velocity).Magnitude
 		if speedometer then
 			speedometer.update(spd)
@@ -141,6 +130,22 @@ function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, sp
 			debugTick = 0
 			print(string.format("[Speed] XZ=%.1f  Y=%.1f  state=%s", spd, velocity.Y, state))
 		end
+
+		-- 9. Bonus : détection de bhop via changement rapide de wishdir — boost temporaire si angle > Config.STRAFE_ASSIST_DEG
+		local lastWishdirTime = 0
+		local lastWishdir = Vector3.zero
+
+		-- Dans la boucle Heartbeat, avant de calculer wishdir :
+		local currentTime = tick()
+		if (currentTime - lastWishdirTime) < 0.1 and lastWishdir.Magnitude > 0 then
+			-- Si wishdir a changé rapidement, appliquer un boost
+			local angleChange = PhysicsUtils.angleDeg(lastWishdir, wishdir)
+			if angleChange > 30 then  -- Changement de direction significatif
+				wishspeed = wishspeed * 1.2  -- Boost de 20%
+			end
+		end
+		lastWishdir = wishdir
+		lastWishdirTime = currentTime
 	end)
 end
 

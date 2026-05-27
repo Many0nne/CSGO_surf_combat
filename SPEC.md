@@ -97,7 +97,6 @@ src/
 RUN_SPEED          = 16       -- ~250 Source u/s
 WALK_SPEED         = 8        -- ~52% run
 CROUCH_SPEED       = 4.5
-BACKWARD_SPEED_MAX = WALK_SPEED
 
 -- Accélération
 GROUND_ACCEL       = 100      -- ground accelerate

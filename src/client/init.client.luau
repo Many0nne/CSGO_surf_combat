@@ -7,6 +7,7 @@ local WallSlide          = require(script.systems.WallSlide)
 local InputModule        = require(script.input.InputModule)
 local MovementController = require(script.systems.MovementController)
 local Speedometer        = require(script.ui.Speedometer)
+local FPSCamera          = require(script.camera.FPSCamera)
 
 local player = Players.LocalPlayer
 
@@ -56,6 +57,9 @@ local function setupCharacter(char: Model)
 	-- Étape 8 — wallslide
 	WallSlide.init(char)
 
+	-- Étape 10 — caméra FPS
+	FPSCamera.init(rootPart, char)
+
 	-- Test étape 3 : log changements onGround
 	if testGndConn then testGndConn:Disconnect() end
 	local lastOnGround = nil
@@ -73,7 +77,7 @@ local function setupCharacter(char: Model)
 	if testInpConn then testInpConn:Disconnect() end
 	local lastWish = Vector3.zero
 	testInpConn = RunService.Heartbeat:Connect(function()
-		local wish = InputModule.getWishDir(0)
+		local wish = InputModule.getWishDir(FPSCamera.getCameraYaw())
 		if (wish - lastWish).Magnitude > 0.001 then
 			lastWish = wish
 			print(string.format("[Input] wishDir=(%.3f, %.3f, %.3f)  walk=%s  crouch=%s",
@@ -85,7 +89,7 @@ local function setupCharacter(char: Model)
 
 	-- Étapes 5 & 18 : physique + speedometer
 	Speedometer.init()
-	MovementController.init(char, rootPart, humanoid, Speedometer)
+	MovementController.init(char, rootPart, humanoid, Speedometer, FPSCamera)
 end
 
 if player.Character then

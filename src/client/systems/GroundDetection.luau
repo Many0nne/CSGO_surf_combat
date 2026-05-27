@@ -1,10 +1,10 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Config = require(ReplicatedStorage.Shared.MovementConfig)
+local Config  = require(ReplicatedStorage.Shared.MovementConfig)
 
 local CAST_RADIUS = Config.CHAR_RADIUS - 0.05
 local HALF_HEIGHT = Config.CHAR_HEIGHT_STAND / 2
-local CAST_SKIN   = 0.15
+local CAST_SKIN   = 0.5    -- augmenté de 0.15 : détection jusqu'à ~1.45 studs sous les pieds
 local CAST_DIST   = HALF_HEIGHT + CAST_SKIN
 local CAST_DIR    = Vector3.new(0, -CAST_DIST, 0)
 
@@ -47,8 +47,11 @@ function GroundDetection.getGroundInfo(rootPart: BasePart): GroundInfo
 	local cosAngle   = math.clamp(normal:Dot(Vector3.yAxis), -1, 1)
 	local slopeAngle = math.deg(math.acos(cosAngle))
 
+	-- Surface trop raide : non-marchable, le joueur reste en l'air (équivalent CategorizePosition Source).
+	local onGround = slopeAngle <= Config.SLOPE_ANGLE_MAX
+
 	return {
-		onGround    = true,
+		onGround    = onGround,
 		normal      = normal,
 		slopeAngle  = slopeAngle,
 		distance    = result.Distance - HALF_HEIGHT,
