@@ -86,6 +86,7 @@ function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, sp
 			-- AIRBORNE : AirAccelerate Source + gravité (pas de projection wishdir en surf)
 			velocity = PhysicsStepAir.step(velocity, wishdir, wishspeed, dt)
 			velocity += Vector3.new(0, Config.GRAVITY * dt, 0)
+			-- Clamp fall speed uniquement hors surf
 			if not surfNormal and velocity.Y < -Config.MAX_FALL_SPEED then
 				velocity = Vector3.new(velocity.X, -Config.MAX_FALL_SPEED, velocity.Z)
 			end

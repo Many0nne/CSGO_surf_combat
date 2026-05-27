@@ -78,6 +78,7 @@ CSGO/
 - Garder `default.project.json` synchronisé avec l'arborescence `src/` (mappings Rojo).
 - `aftman.toml` gère la version de Rojo utilisée.
 - `SPEC.md` contient la spécification détaillée (mappings, architecture, constantes). Utilisez-le comme source de vérité pour la structure des fichiers.
+- Valeurs récentes : `AIR_ACCEL=50`, `GRAVITY=-125`, `MAX_FALL_SPEED=100`, `AUTO_BHOP=true`.
 - Consigne de lecture : pour les revues de code, analyses ou demandes de modification, ne lire que les fichiers strictement concernés par l'étape ou la demande.
 - Évitez d'analyser ou d'indexer l'ensemble du dépôt sauf si la tâche l'exige explicitement. Quand vous consultez des fichiers, précisez lesquels dans votre message ou votre PR.
 
@@ -92,17 +93,17 @@ CSGO/
 - `src/client/systems/CrouchSystem.luau`: logique de position accroupie et hitbox.
 - `src/client/systems/GroundDetection.luau`: détection du sol et transitions air/sol.
 - `src/client/systems/MovementController.luau`: contrôles de mouvement principaux (vitesse, acceleration).
-- `src/client/systems/PhysicsStepAir.luau`: étape physique pour l'état en l'air.
+- `src/client/systems/PhysicsStepAir.luau`: étape physique aérienne (air accelerate Source + cap `AIR_SPEED_CAP`).
 - `src/client/systems/PhysicsStepGround.luau`: étape physique pour l'état au sol.
 - `src/client/systems/SlopeSystem.luau`: gestion des pentes et adaptation du mouvement.
 - `src/client/systems/StepupSystem.luau`: logique pour monter sur de petits obstacles.
-- `src/client/systems/WallSlide.luau`: comportement de glisse le long des murs.
+- `src/client/systems/WallSlide.luau`: glisse le long des murs/rampe avec conservation de normale surf si on avance vers la rampe.
 - `src/client/ui/SettingsMenu.luau`: interface des réglages côté client.
 - `src/client/ui/Speedometer.luau`: affichage de la vitesse du joueur.
 - `src/server/init.server.luau`: point d'entrée serveur, initialise les services côté serveur.
 - `src/server/SettingsStore.luau`: stockage et récupération des paramètres serveur.
 - `src/server/Validator.luau`: routines de validation côté serveur (anti-cheat, sanity checks).
-- `src/shared/MovementConfig.luau`: constantes et paramètres de configuration du mouvement.
+- `src/shared/MovementConfig.luau`: constantes et paramètres de configuration du mouvement (AIR_ACCEL, GRAVITY, AUTO_BHOP, etc.).
 - `src/shared/MovementState.luau`: structure d'état partagée pour le mouvement du joueur.
 - `src/shared/NetworkProtocol.luau`: définitions des messages et du protocole réseau.
 - `src/shared/PhysicsUtils.luau`: fonctions utilitaires pour la physique.

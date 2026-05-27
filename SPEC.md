@@ -93,35 +93,36 @@ src/
 ## Constantes Physiques (MovementConfig.luau)
 
 ```lua
--- Vitesses (studs/s, à calibrer au feel)
 RUN_SPEED          = 16       -- ~250 Source u/s
 WALK_SPEED         = 8        -- ~52% run
 CROUCH_SPEED       = 4.5
 
 -- Accélération
-GROUND_ACCEL       = 100      -- ground accelerate
-AIR_ACCEL          = 12       -- air accelerate (Source: 10, +léger assist)
+GROUND_ACCEL       = 128      -- ground accelerate
+AIR_ACCEL          = 50       -- air accelerate (Source-style, scaled by wishspeed)
+AIR_SPEED_CAP      = 40       -- équivalent GetAirSpeedCap() Source
 FRICTION           = 8.0      -- surface friction
 STOP_SPEED         = 2
 
 -- Saut / Gravité
-JUMP_VELOCITY      = 28
-GRAVITY            = -120     -- u/s² (ajusté pour le feel Roblox)
+JUMP_VELOCITY      = 38
+GRAVITY            = -125     -- u/s² (ajusté pour le feel Roblox)
+MAX_FALL_SPEED     = 100
 
 -- Pentes
 SLOPE_ANGLE_MAX    = 45
 STEPUP_HEIGHT      = 1.2      -- ~18 Source units en studs
+SLOPE_FRICTION     = 0.1
 
 -- Bhop
 BHOP_LAND_WINDOW   = 0.1      -- secondes : fenêtre bon timing
-AUTO_BHOP          = false    -- flag toggle
+AUTO_BHOP          = true     -- flag toggle (par défaut activé)
 
 -- Coyote / buffer
 COYOTE_TIME        = 0.09     -- 90ms
 JUMP_BUFFER_TIME   = 0.13     -- 130ms
 
--- Strafe
-STRAFE_ASSIST_DEG  = 10       -- tolérance angle supplémentaire
+-- STRAFE_ASSIST_DEG = 45     -- tolérance angle supplémentaire (actuellement désactivé)
 
 -- Réseau
 NET_SYNC_RATE      = 20       -- Hz
@@ -164,9 +165,11 @@ CHAR_HEIGHT_CROUCH = 2.4
 ### Mouvement Aérien & Air Strafe
 
 ```
-- Même formule avec AIR_ACCEL (faible)
+- Modèle Source : airWishspeed = min(wishspeed, AIR_SPEED_CAP)
+- addSpeed = airWishspeed - dot(velocity.XZ, wishdir)
+- accelSpeed = min(AIR_ACCEL * airWishspeed * dt, addSpeed)
 - Pas de friction en l'air
-- S pressé : velocity.XZ *= max(0, 1 - FRICTION_AIR_BACKWARD * dt) → stop ~1-2 frames
+- Clamp MAX_FALL_SPEED uniquement hors surf
 - Strafe : wishdir = lookVector.XZ rotated par A/D
            gain si angle(velocity, wishdir) < 90° + STRAFE_ASSIST_DEG
 ```
@@ -201,6 +204,7 @@ CHAR_HEIGHT_CROUCH = 2.4
 
 - Collision mur → `velocity = projectOnPlane(velocity, wallNormal)`
 - Vitesse tangentielle conservée
+- La normale surf est conservée uniquement si on se dirige vers la rampe
 
 ---
 
