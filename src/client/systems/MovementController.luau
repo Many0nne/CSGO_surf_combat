@@ -83,17 +83,17 @@ function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, sp
 			end
 
 		else
-			-- AIRBORNE : AirAccelerate (avec projection surf si sur rampe) + gravité
-			velocity = PhysicsStepAir.step(velocity, wishdir, wishspeed, dt, surfNormal)
+			-- AIRBORNE : AirAccelerate Source + gravité (pas de projection wishdir en surf)
+			velocity = PhysicsStepAir.step(velocity, wishdir, wishspeed, dt)
 			velocity += Vector3.new(0, Config.GRAVITY * dt, 0)
-			if velocity.Y < -Config.MAX_FALL_SPEED then
+			if not surfNormal and velocity.Y < -Config.MAX_FALL_SPEED then
 				velocity = Vector3.new(velocity.X, -Config.MAX_FALL_SPEED, velocity.Z)
 			end
 			-- Coyote jump : Space pressé dans la fenêtre coyote
 			if shouldJump then
 				velocity    = Vector3.new(velocity.X, Config.JUMP_VELOCITY, velocity.Z)
 				jumpLockout = JUMP_LOCKOUT
-				surfNormal  = nil
+				surfNormal = nil
 			end
 		end
 

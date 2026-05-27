@@ -41,16 +41,17 @@ function WallSlide.resolve(hrp: BasePart, velocity: Vector3, dt: number, lastSur
 		end
 	end
 
-	-- Probe de maintien de contact : re-détecte la rampe même si la velocity est tangentielle
-	if not foundNormal and lastSurfNormal then
-		local probeDir = -lastSurfNormal * SURF_SKIN
-		local probe = workspace:Spherecast(hrp.Position, RADIUS, probeDir, castParams)
-		if probe and probe.Normal.Y < SURF_THRESHOLD then
-			foundNormal = probe.Normal
-			velocity    = PhysicsUtils.projectOnPlane(velocity, probe.Normal)
-			moveVec     = velocity * dt
+	-- Probe de maintien de contact : ne sert qu'a garder la normale si on est encore "contre" la rampe.
+		if not foundNormal and lastSurfNormal then
+			-- Si on s'eloigne deja de la rampe, ne pas re-coller artificiellement.
+			if velocity:Dot(lastSurfNormal) < 0 then
+				local probeDir = -lastSurfNormal * SURF_SKIN
+				local probe = workspace:Spherecast(hrp.Position, RADIUS, probeDir, castParams)
+				if probe and probe.Normal.Y < SURF_THRESHOLD then
+					foundNormal = probe.Normal
+				end
+			end
 		end
-	end
 
 	return velocity, moveVec, foundNormal
 end
