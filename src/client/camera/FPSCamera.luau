@@ -10,7 +10,7 @@ local FPSCamera = {}
 local yaw   = 0
 local pitch = 0
 local hrpRef: BasePart? = nil
-local conn: RBXScriptConnection? = nil
+local boundStepName = "FPSCameraUpdate"
 local currentCamHeight = Config.CAM_HEIGHT_STAND
 
 local function hideCharacterPart(obj: Instance)
@@ -24,14 +24,15 @@ function FPSCamera.init(hrp: BasePart, char: Model)
 	cam.CameraType = Enum.CameraType.Scriptable
 	cam.FieldOfView = Config.DEFAULT_FOV
 	UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+	UserInputService.MouseIconEnabled = true
 
 	for _, obj in char:GetDescendants() do
 		hideCharacterPart(obj)
 	end
 	char.DescendantAdded:Connect(hideCharacterPart)
 
-	if conn then conn:Disconnect() end
-	conn = RunService.RenderStepped:Connect(function()
+	RunService:UnbindFromRenderStep(boundStepName)
+	RunService:BindToRenderStep(boundStepName, Enum.RenderPriority.Camera.Value, function()
 		if not hrpRef then return end
 		local delta = UserInputService:GetMouseDelta()
 		yaw   = yaw + delta.X * Config.DEFAULT_SENS

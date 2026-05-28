@@ -12,7 +12,7 @@ function Speedometer.init()
 
 	local lbl = Instance.new("TextLabel")
 	lbl.Size                   = UDim2.new(0, 160, 0, 36)
-	lbl.Position               = UDim2.new(0.5, -80, 1, -70)
+	lbl.Position               = UDim2.new(0.5, -80, 1, -120)
 	lbl.BackgroundTransparency = 1
 	lbl.TextColor3             = Color3.new(1, 1, 1)
 	lbl.TextStrokeTransparency = 0.5

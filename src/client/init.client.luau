@@ -5,10 +5,13 @@ local StepupSystem       = require(script.systems.StepupSystem)
 local WallSlide          = require(script.systems.WallSlide)
 local CharacterDimensions = require(script.systems.CharacterDimensions)
 local MovementController = require(script.systems.MovementController)
+local ViewmodelSystem    = require(script.systems.ViewmodelSystem)
 local Speedometer        = require(script.ui.Speedometer)
 local FPSCamera          = require(script.camera.FPSCamera)
 
 local player = Players.LocalPlayer
+
+ViewmodelSystem.init(player)
 
 local character: Model?   = nil
 local humanoid: Humanoid? = nil

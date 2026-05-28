@@ -44,7 +44,7 @@ end
 
 -- Appeler à chaque CharacterAdded pour exclure les parts du character du cast.
 function GroundDetection.init(character: Model)
-	params.FilterDescendantsInstances = { character }
+	params.FilterDescendantsInstances = { character, workspace.CurrentCamera }
 	refreshDims()
 end
 

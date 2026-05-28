@@ -12,7 +12,7 @@ castParams.FilterType = Enum.RaycastFilterType.Exclude
 local StepupSystem = {}
 
 function StepupSystem.init(character: Model)
-	castParams.FilterDescendantsInstances = { character }
+	castParams.FilterDescendantsInstances = { character, workspace.CurrentCamera }
 	local stand = CharacterDimensions.getStand()
 	HALF_HEIGHT = stand.halfHeight
 	CENTER_OFFSET = stand.centerOffset

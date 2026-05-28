@@ -26,7 +26,7 @@ function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, sp
 	local surfNormal: Vector3? = nil  -- normale de la rampe surf en contact (nil si aucune)
 	local headCastParams = RaycastParams.new()
 	headCastParams.FilterType = Enum.RaycastFilterType.Exclude
-	headCastParams.FilterDescendantsInstances = { _char }
+	headCastParams.FilterDescendantsInstances = { _char, workspace.CurrentCamera }
 	local hitboxLogged = false
 
 	CrouchSystem.init(hrp)

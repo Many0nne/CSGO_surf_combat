@@ -12,7 +12,7 @@ castParams.FilterType = Enum.RaycastFilterType.Exclude
 local WallSlide = {}
 
 function WallSlide.init(character: Model)
-	castParams.FilterDescendantsInstances = { character }
+	castParams.FilterDescendantsInstances = { character, workspace.CurrentCamera }
 end
 
 local function capsuleCast(
