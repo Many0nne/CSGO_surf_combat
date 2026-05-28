@@ -6,15 +6,15 @@ return {
 
 	-- Accélération
 	GROUND_ACCEL           = 128,
-	AIR_ACCEL              = 50,
+	AIR_ACCEL              = 40,
 	AIR_SPEED_CAP          = 40,   -- équivalent GetAirSpeedCap() Source (élargit la fenêtre strafe)
 	FRICTION               = 8.0,
 	STOP_SPEED             = 2,
 
 	-- Saut / Gravité
 	JUMP_VELOCITY    = 38,
-	GRAVITY          = -125,     -- arc ~4.8 studs (38²/300), trajectoire plus nerveuse
-	MAX_FALL_SPEED   = 100,
+	GRAVITY          = -110,     -- arc ~4.8 studs (38²/300), trajectoire plus nerveuse
+	MAX_FALL_SPEED   = 150,
 
 	-- Pentes
 	SLOPE_ANGLE_MAX = 45,

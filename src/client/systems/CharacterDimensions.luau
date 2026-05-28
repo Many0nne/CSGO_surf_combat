@@ -103,14 +103,6 @@ function CharacterDimensions.init(character: Model, hrp: BasePart)
 	end
 
 	radius = Config.CHAR_RADIUS
-
-	if Config.HITBOX_DEBUG then
-		print(string.format(
-			"[Hitbox] rootToTop=%.3f rootToBottom=%.3f height=%.3f radius=%.3f headBuf=%.2f",
-			standRootToTop, standRootToBottom, standHeight, radius
-			, Config.HITBOX_HEAD_BUFFER
-		))
-	end
 end
 
 function CharacterDimensions.getStand()

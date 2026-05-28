@@ -62,13 +62,6 @@ function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, sp
 			clipped = Vector3.new(clipped.X, math.min(0, clipped.Y), clipped.Z)
 		end
 
-		if Config.HITBOX_DEBUG then
-			print(string.format(
-				"[HeadCol] %s normalY=%.2f moveY=%.3f->%.3f",
-				isCeiling and "CEILING" or "HEADWALL",
-				hit.Normal.Y, moveVec.Y, clipped.Y
-			))
-		end
 
 		return clipped, true
 	end
@@ -87,10 +80,6 @@ function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, sp
 		end
 		if Config.HITBOX_DEBUG and not hitboxLogged then
 			hitboxLogged = true
-			print(string.format(
-				"[Hitbox] rootToTop=%.3f rootToBottom=%.3f centerOffset=%.3f radius=%.3f",
-				crouchInfo.rootToTop, crouchInfo.rootToBottom, crouchInfo.centerOffset, crouchInfo.radius
-			))
 		end
 
 		-- 3. Transitions d'état
@@ -224,6 +213,7 @@ function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, sp
 		if speedometer then
 			speedometer.update(spd)
 		end
+
 	end)
 end
 
