@@ -1,9 +1,11 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config  = require(ReplicatedStorage.Shared.MovementConfig)
+local CharacterDimensions = require(script.Parent.CharacterDimensions)
 
 local CAST_RADIUS = Config.CHAR_RADIUS - 0.05
 local HALF_HEIGHT = Config.CHAR_HEIGHT_STAND / 2
+local CENTER_OFFSET = 0
 local CAST_SKIN   = 0.5    -- augmenté de 0.15 : détection jusqu'à ~1.45 studs sous les pieds
 local CAST_DIST   = HALF_HEIGHT + CAST_SKIN
 local CAST_DIR    = Vector3.new(0, -CAST_DIST, 0)
@@ -31,14 +33,25 @@ local GROUND_MISS: GroundInfo = {
 
 local GroundDetection = {}
 
+local function refreshDims()
+	local stand = CharacterDimensions.getStand()
+	CAST_RADIUS = stand.radius - 0.05
+	HALF_HEIGHT = stand.halfHeight
+	CENTER_OFFSET = stand.centerOffset
+	CAST_DIST = HALF_HEIGHT + CAST_SKIN
+	CAST_DIR = Vector3.new(0, -CAST_DIST, 0)
+end
+
 -- Appeler à chaque CharacterAdded pour exclure les parts du character du cast.
 function GroundDetection.init(character: Model)
 	params.FilterDescendantsInstances = { character }
+	refreshDims()
 end
 
 -- Retourne l'état du sol sous rootPart.
 function GroundDetection.getGroundInfo(rootPart: BasePart): GroundInfo
-	local result = workspace:Spherecast(rootPart.Position, CAST_RADIUS, CAST_DIR, params)
+	local origin = rootPart.Position + Vector3.new(0, CENTER_OFFSET, 0)
+	local result = workspace:Spherecast(origin, CAST_RADIUS, CAST_DIR, params)
 	if not result then
 		return GROUND_MISS
 	end

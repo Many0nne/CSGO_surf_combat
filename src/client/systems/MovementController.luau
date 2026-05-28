@@ -23,10 +23,56 @@ function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, sp
 	local velocity    = Vector3.zero
 	local state       = MovementState.GROUNDED
 	local jumpLockout = 0
-	local debugTick   = 0
 	local surfNormal: Vector3? = nil  -- normale de la rampe surf en contact (nil si aucune)
+	local headCastParams = RaycastParams.new()
+	headCastParams.FilterType = Enum.RaycastFilterType.Exclude
+	headCastParams.FilterDescendantsInstances = { _char }
+	local hitboxLogged = false
 
 	CrouchSystem.init(hrp)
+
+	local function getHeadHitAlongMove(startPos: Vector3, moveVec: Vector3, radius: number): RaycastResult?
+		if moveVec.Magnitude < 1e-4 then
+			return nil
+		end
+		return workspace:Spherecast(startPos, radius, moveVec, headCastParams)
+	end
+
+	local function resolveHeadGround(
+		moveVec: Vector3,
+		hrpPos: Vector3,
+		info: { rootToTop: number, radius: number }
+	): (Vector3, boolean)
+		if moveVec.Magnitude < 1e-4 then return moveVec, false end
+
+		local headCenter = Vector3.new(
+			hrpPos.X,
+			hrpPos.Y + info.rootToTop - info.radius,
+			hrpPos.Z
+		)
+		local hit = workspace:Spherecast(headCenter, info.radius, moveVec, headCastParams)
+		if not hit then return moveVec, false end
+
+		local isCeiling = hit.Normal.Y < -0.15
+		local isHeadWall = not isCeiling and math.abs(hit.Normal.Y) < 0.65
+		if not isCeiling and not isHeadWall then return moveVec, false end
+
+		local clipped = PhysicsUtils.projectOnPlane(moveVec, hit.Normal)
+		if isCeiling then
+			clipped = Vector3.new(clipped.X, math.min(0, clipped.Y), clipped.Z)
+		end
+
+		if Config.HITBOX_DEBUG then
+			print(string.format(
+				"[HeadCol] %s normalY=%.2f moveY=%.3f->%.3f",
+				isCeiling and "CEILING" or "HEADWALL",
+				hit.Normal.Y, moveVec.Y, clipped.Y
+			))
+		end
+
+		return clipped, true
+	end
+
 
 	RunService.Heartbeat:Connect(function(dt)
 		jumpLockout = math.max(0, jumpLockout - dt)
@@ -38,6 +84,13 @@ function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, sp
 		local crouchInfo = CrouchSystem.update(dt)
 		if camera then
 			camera.setCamHeight(crouchInfo.camHeight)
+		end
+		if Config.HITBOX_DEBUG and not hitboxLogged then
+			hitboxLogged = true
+			print(string.format(
+				"[Hitbox] rootToTop=%.3f rootToBottom=%.3f centerOffset=%.3f radius=%.3f",
+				crouchInfo.rootToTop, crouchInfo.rootToBottom, crouchInfo.centerOffset, crouchInfo.radius
+			))
 		end
 
 		-- 3. Transitions d'état
@@ -114,8 +167,12 @@ function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, sp
 		end
 
 		-- 8. Déplacer le character
+		local targetRot = hrp.CFrame.Rotation
+		if camera and camera.getCameraYaw then
+			targetRot = CFrame.Angles(0, math.rad(-camera.getCameraYaw()), 0)
+		end
 		if isGroundedState then
-			local snapY   = gnd.hitPosition.Y + crouchInfo.halfHeight
+			local snapY   = gnd.hitPosition.Y + crouchInfo.rootToBottom
 			local moveVec = Vector3.new(velocity.X * dt, 0, velocity.Z * dt)
 			local stepYOffset, wallNormal = StepupSystem.tryStepup(hrp, moveVec)
 
@@ -127,16 +184,31 @@ function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, sp
 			end
 
 			local targetY = stepYOffset and (hrp.Position.Y + stepYOffset) or snapY
-			hrp.CFrame = CFrame.new(
+			local newPos = Vector3.new(
 				hrp.Position.X + moveVec.X,
 				targetY,
 				hrp.Position.Z + moveVec.Z
-			) * hrp.CFrame.Rotation
+			)
+			local headMoveVec = Vector3.new(
+				newPos.X - hrp.Position.X,
+				newPos.Y - hrp.Position.Y,
+				newPos.Z - hrp.Position.Z
+			)
+			local clippedHead, headBlocked = resolveHeadGround(headMoveVec, hrp.Position, crouchInfo)
+			if headBlocked then
+				newPos = hrp.Position + clippedHead
+				if math.abs(clippedHead.Y - headMoveVec.Y) > 1e-3 then
+					velocity = Vector3.new(velocity.X, 0, velocity.Z)
+				end
+			end
+
+			hrp.CFrame = CFrame.new(newPos) * targetRot
 		elseif isAirborneState then
 			-- Wallslide + surf via ClipVelocity (multi-pass + probe maintien de contact)
-			local newVel, moveVec, hitNormal = WallSlide.resolve(hrp, velocity, dt, surfNormal)
+			local newVel, moveVec, hitNormal = WallSlide.resolve(hrp, velocity, dt, surfNormal, crouchInfo)
 			velocity = newVel
-			hrp.CFrame += moveVec
+			local newPos = hrp.Position + moveVec
+			hrp.CFrame = CFrame.new(newPos) * targetRot
 
 			-- Mise à jour de la surf normale persistante
 			if hitNormal and hitNormal.Y < 0.7 then
@@ -146,15 +218,11 @@ function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, sp
 			end
 		end
 
+
 		-- 9. Speedometer + debug
 		local spd = PhysicsUtils.getXZ(velocity).Magnitude
 		if speedometer then
 			speedometer.update(spd)
-		end
-		debugTick += dt
-		if debugTick >= 0.5 then
-			debugTick = 0
-			print(string.format("[Speed] XZ=%.1f  Y=%.1f  state=%s", spd, velocity.Y, state))
 		end
 	end)
 end

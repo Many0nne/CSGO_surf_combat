@@ -1,10 +1,9 @@
 local Players    = game:GetService("Players")
-local RunService = game:GetService("RunService")
 
 local GroundDetection    = require(script.systems.GroundDetection)
 local StepupSystem       = require(script.systems.StepupSystem)
 local WallSlide          = require(script.systems.WallSlide)
-local InputModule        = require(script.input.InputModule)
+local CharacterDimensions = require(script.systems.CharacterDimensions)
 local MovementController = require(script.systems.MovementController)
 local Speedometer        = require(script.ui.Speedometer)
 local FPSCamera          = require(script.camera.FPSCamera)
@@ -16,8 +15,6 @@ local humanoid: Humanoid? = nil
 local rootPart: BasePart? = nil
 
 local stateConn:    RBXScriptConnection?
-local testGndConn:  RBXScriptConnection?
-local testInpConn:  RBXScriptConnection?
 
 local function setupCharacter(char: Model)
 	character = char
@@ -49,6 +46,7 @@ local function setupCharacter(char: Model)
 	end)
 
 	-- Étape 3 — ground detection
+	CharacterDimensions.init(char, rootPart)
 	GroundDetection.init(char)
 
 	-- Étape 7 — stepup
@@ -59,33 +57,6 @@ local function setupCharacter(char: Model)
 
 	-- Étape 10 — caméra FPS
 	FPSCamera.init(rootPart, char)
-
-	-- Test étape 3 : log changements onGround
-	if testGndConn then testGndConn:Disconnect() end
-	local lastOnGround = nil
-	testGndConn = RunService.Heartbeat:Connect(function()
-		if not rootPart then return end
-		local info = GroundDetection.getGroundInfo(rootPart)
-		if info.onGround ~= lastOnGround then
-			lastOnGround = info.onGround
-			print(string.format("[Ground] onGround=%s  slope=%.1f°  mat=%s",
-				tostring(info.onGround), info.slopeAngle, tostring(info.material)))
-		end
-	end)
-
-	-- Test étape 4 : log changements wishdir (yaw=0, caméra pas encore implémentée)
-	if testInpConn then testInpConn:Disconnect() end
-	local lastWish = Vector3.zero
-	testInpConn = RunService.Heartbeat:Connect(function()
-		local wish = InputModule.getWishDir(FPSCamera.getCameraYaw())
-		if (wish - lastWish).Magnitude > 0.001 then
-			lastWish = wish
-			print(string.format("[Input] wishDir=(%.3f, %.3f, %.3f)  walk=%s  crouch=%s",
-				wish.X, wish.Y, wish.Z,
-				tostring(InputModule.isWalking()),
-				tostring(InputModule.isCrouching())))
-		end
-	end)
 
 	-- Étapes 5 & 18 : physique + speedometer
 	Speedometer.init()

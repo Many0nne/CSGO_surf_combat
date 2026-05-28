@@ -2,9 +2,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config       = require(ReplicatedStorage.Shared.MovementConfig)
 local PhysicsUtils = require(ReplicatedStorage.Shared.PhysicsUtils)
 
-local RADIUS       = Config.CHAR_RADIUS - 0.05
-local SURF_SKIN    = 0.3   -- distance du probe de maintien de contact surf
-local SURF_THRESHOLD = 0.7 -- normal.Y < seuil → surface est une rampe surf (≈45°)
+local SURF_SKIN      = 0.3
+local SURF_THRESHOLD = 0.7
+local MAX_BUMPS      = 4
 
 local castParams = RaycastParams.new()
 castParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -15,38 +15,80 @@ function WallSlide.init(character: Model)
 	castParams.FilterDescendantsInstances = { character }
 end
 
--- Résout la collision de mur/rampe pour un déplacement aérien.
--- lastSurfNormal : normale surf persistante du frame précédent (nil si aucune).
--- Retourne (newVelocity, moveVec, hitNormal) où hitNormal est nil si aucune surface détectée.
-function WallSlide.resolve(hrp: BasePart, velocity: Vector3, dt: number, lastSurfNormal: Vector3?): (Vector3, Vector3, Vector3?)
-	local moveVec    = velocity * dt
-	local foundNormal: Vector3? = nil
+local function capsuleCast(
+	bottomCenter: Vector3,
+	topCenter: Vector3,
+	radius: number,
+	moveVec: Vector3,
+	params: RaycastParams
+): RaycastResult?
+	if moveVec.Magnitude < 1e-5 then return nil end
+	local midCenter = (bottomCenter + topCenter) * 0.5
+	local best: RaycastResult? = nil
+	for _, origin in ipairs({ bottomCenter, midCenter, topCenter }) do
+		local hit = workspace:Spherecast(origin, radius, moveVec, params)
+		if hit and (not best or hit.Distance < best.Distance) then
+			best = hit
+		end
+	end
+	return best
+end
 
-	-- Passe 1 : cast dans la direction de la velocity
-	if moveVec.Magnitude >= 1e-5 then
-		local hit = workspace:Spherecast(hrp.Position, RADIUS, moveVec, castParams)
-		if hit then
-			foundNormal = hit.Normal
-			velocity    = PhysicsUtils.projectOnPlane(velocity, hit.Normal)
-			moveVec     = velocity * dt
+function WallSlide.resolve(
+	hrp: BasePart,
+	velocity: Vector3,
+	dt: number,
+	lastSurfNormal: Vector3?,
+	crouchInfo: { rootToTop: number, rootToBottom: number, radius: number, centerOffset: number }
+): (Vector3, Vector3, Vector3?)
+	local radius  = crouchInfo.radius - 0.05
+	local bCenter = hrp.Position - Vector3.new(0, crouchInfo.rootToBottom - radius, 0)
+	local tCenter = hrp.Position + Vector3.new(0, crouchInfo.rootToTop  - radius, 0)
 
-			-- Passe 2 : re-cast dans la nouvelle direction (comme TryPlayerMove Source)
-			if moveVec.Magnitude >= 1e-5 then
-				local hit2 = workspace:Spherecast(hrp.Position, RADIUS, moveVec, castParams)
-				if hit2 then
-					velocity = PhysicsUtils.projectOnPlane(velocity, hit2.Normal)
-					moveVec  = velocity * dt
-				end
+	local moveVec     = velocity * dt
+	local foundNormal : Vector3? = nil
+	local planes      : { Vector3 } = {}
+
+	for _bump = 1, MAX_BUMPS do
+		if moveVec.Magnitude < 1e-5 then break end
+
+		local hit = capsuleCast(bCenter, tCenter, radius, moveVec, castParams)
+		if not hit then break end
+
+		foundNormal = hit.Normal
+
+		local dotVel = velocity:Dot(hit.Normal)
+		if dotVel < 0 then
+			velocity = velocity - hit.Normal * dotVel
+		end
+
+		if hit.Normal.Y < -0.2 then
+			velocity = Vector3.new(velocity.X, math.min(0, velocity.Y), velocity.Z)
+		end
+
+		moveVec = velocity * dt
+		table.insert(planes, hit.Normal)
+
+		if #planes >= 2 then
+			local n1 = planes[#planes - 1]
+			local n2 = planes[#planes]
+			local crease = n1:Cross(n2)
+			if crease.Magnitude > 1e-4 then
+				local creaseUnit = crease.Unit
+				velocity = creaseUnit * velocity:Dot(creaseUnit)
+				moveVec  = velocity * dt
+			else
+				velocity = Vector3.zero
+				moveVec  = Vector3.zero
+				break
 			end
 		end
 	end
 
-	-- Probe de maintien de contact : ne sert qu'a garder la normale si on est encore "contre" la rampe.
 	if not foundNormal and lastSurfNormal then
-		-- Si on s'eloigne deja de la rampe, ne pas re-coller artificiellement.
 		if velocity:Dot(lastSurfNormal) < 0 then
-			local probeDir = -lastSurfNormal * SURF_SKIN
-			local probe = workspace:Spherecast(hrp.Position, RADIUS, probeDir, castParams)
+			local mCenter = (bCenter + tCenter) * 0.5
+			local probe = workspace:Spherecast(mCenter, radius, -lastSurfNormal * SURF_SKIN, castParams)
 			if probe and probe.Normal.Y < SURF_THRESHOLD then
 				foundNormal = probe.Normal
 			end

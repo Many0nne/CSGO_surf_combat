@@ -1,7 +1,9 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage.Shared.MovementConfig)
+local CharacterDimensions = require(script.Parent.CharacterDimensions)
 
 local HALF_HEIGHT = Config.CHAR_HEIGHT_STAND / 2
+local CENTER_OFFSET = 0
 local RADIUS      = Config.CHAR_RADIUS - 0.05
 
 local castParams = RaycastParams.new()
@@ -11,6 +13,10 @@ local StepupSystem = {}
 
 function StepupSystem.init(character: Model)
 	castParams.FilterDescendantsInstances = { character }
+	local stand = CharacterDimensions.getStand()
+	HALF_HEIGHT = stand.halfHeight
+	CENTER_OFFSET = stand.centerOffset
+	RADIUS = stand.radius - 0.05
 end
 
 -- Retourne (yOffset, wallNormal).
@@ -20,7 +26,7 @@ end
 function StepupSystem.tryStepup(hrp: BasePart, moveVec: Vector3): (number?, Vector3?)
 	if moveVec.Magnitude < 1e-4 then return nil, nil end
 
-	local origin = hrp.Position
+	local origin = hrp.Position + Vector3.new(0, CENTER_OFFSET, 0)
 	local upVec  = Vector3.new(0, Config.STEPUP_HEIGHT, 0)
 
 	-- 1. Bloqué horizontalement ?

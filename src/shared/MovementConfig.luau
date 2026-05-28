@@ -47,6 +47,9 @@ return {
 	CAM_LERP_SPEED    = 12,
 
 	-- Hitbox
+	HITBOX_USE_RIG_BOUNDS = true,
+	HITBOX_DEBUG          = true,
+	HITBOX_HEAD_BUFFER    = 0.3,
 	CHAR_RADIUS        = 1.0,
 	CHAR_HEIGHT_STAND  = 4.8,
 	CHAR_HEIGHT_CROUCH = 2.4,
