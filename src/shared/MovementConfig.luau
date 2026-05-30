@@ -55,7 +55,8 @@ return {
 	AWP_RELOAD_TIME   = 3.7,
 	AWP_MAG_SIZE      = 5,
 	AWP_RESERVE_SIZE  = 10,
-	AWP_SPEED_MULT    = 0.85,     -- à ajuster
+	AWP_SPEED_MULT        = 0.85,
+	AWP_SCOPE_SENS_MULT   = 0.7,   -- multiplicateur de sensibilité en mode scope
 	-- TODO: AWP_PENETRATION = 250
 
 	-- Hitbox

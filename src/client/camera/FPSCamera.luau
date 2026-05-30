@@ -12,6 +12,10 @@ local pitch = 0
 local hrpRef: BasePart? = nil
 local boundStepName = "FPSCameraUpdate"
 local currentCamHeight = Config.CAM_HEIGHT_STAND
+local baseSens      = Config.DEFAULT_SENS
+local scopeSensMult = Config.AWP_SCOPE_SENS_MULT
+local isScoped      = false
+local currentSens   = baseSens
 
 local function hideCharacterPart(obj: Instance)
 	if obj:IsA("BasePart") then
@@ -35,8 +39,8 @@ function FPSCamera.init(hrp: BasePart, char: Model)
 	RunService:BindToRenderStep(boundStepName, Enum.RenderPriority.Camera.Value, function()
 		if not hrpRef then return end
 		local delta = UserInputService:GetMouseDelta()
-		yaw   = yaw + delta.X * Config.DEFAULT_SENS
-		pitch = math.clamp(pitch - delta.Y * Config.DEFAULT_SENS, Config.PITCH_MIN, Config.PITCH_MAX)
+		yaw   = yaw + delta.X * currentSens
+		pitch = math.clamp(pitch - delta.Y * currentSens, Config.PITCH_MIN, Config.PITCH_MAX)
 
 		local headPos = hrpRef.Position + Vector3.new(0, currentCamHeight, 0)
 		cam.CFrame = CFrame.new(headPos)
@@ -55,6 +59,29 @@ end
 
 function FPSCamera.getCameraPitch(): number
 	return pitch
+end
+
+function FPSCamera.setSensitivity(s: number)
+	baseSens    = s
+	currentSens = isScoped and (baseSens * scopeSensMult) or baseSens
+end
+
+function FPSCamera.getSensitivity(): number
+	return baseSens
+end
+
+function FPSCamera.setScopeMultiplier(m: number)
+	scopeSensMult = m
+	currentSens   = isScoped and (baseSens * scopeSensMult) or baseSens
+end
+
+function FPSCamera.getScopeMultiplier(): number
+	return scopeSensMult
+end
+
+function FPSCamera.setScoped(scoped: boolean)
+	isScoped    = scoped
+	currentSens = isScoped and (baseSens * scopeSensMult) or baseSens
 end
 
 function FPSCamera.setFOV(targetFov: number, duration: number?)

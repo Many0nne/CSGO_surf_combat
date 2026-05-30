@@ -15,7 +15,8 @@ local Config          = require(ReplicatedStorage.Shared.MovementConfig)
 local toolState = {} -- [tool] = {ammo=, reserve=, reloading=, lastFire=}
 
 -- Active weapon scope state
-local scopeLevel  = 0
+local scopeLevel        = 0
+local scopeBlockedUntil = 0
 local currentTool = nil :: Tool?
 local currentCfg  = nil
 local scopeConn   = nil :: RBXScriptConnection?
@@ -77,8 +78,10 @@ end
 
 local function resetScope()
 	if scopeConn then scopeConn:Disconnect(); scopeConn = nil end
+	scopeBlockedUntil = 0
 	if scopeLevel ~= 0 then
 		FPSCamera.setFOV(Config.DEFAULT_FOV)
+		FPSCamera.setScoped(false)
 		ViewmodelSystem.setVisible(true)
 		setScopeGuiVisible(false)
 	end
@@ -90,16 +93,19 @@ local function tryToggleScope(cfg)
 	scopeLevel = (scopeLevel + 1) % 3
 	if scopeLevel == 0 then
 		FPSCamera.setFOV(Config.DEFAULT_FOV, cfg.ScopeTweenTime)
+		FPSCamera.setScoped(false)
 		ViewmodelSystem.setVisible(true)
 		setScopeGuiVisible(false)
 		ViewmodelSystem.playSound("ZoomOut")
 	elseif scopeLevel == 1 then
 		FPSCamera.setFOV(cfg.ScopeFov1, cfg.ScopeTweenTime)
+		FPSCamera.setScoped(true)
 		ViewmodelSystem.setVisible(false)
 		setScopeGuiVisible(true)
 		ViewmodelSystem.playSound("ZoomIn")
 	else
 		FPSCamera.setFOV(cfg.ScopeFov2, cfg.ScopeTweenTime)
+		FPSCamera.setScoped(true)
 		setScopeGuiVisible(true)
 		ViewmodelSystem.playSound("ZoomIn")
 	end
@@ -142,7 +148,9 @@ local function onToolActivated(tool)
 
 	s.ammo     = s.ammo - 1
 	s.lastFire = now
+	scopeBlockedUntil = now + firedelay
 	ViewmodelSystem.playAnimation("Shoot")
+	resetScope()
 	-- TODO: envoyer RemoteEvent au serveur pour dégâts/trace
 end
 
@@ -161,6 +169,7 @@ local function onToolEquipped(tool, char)
 		scopeConn = UserInputService.InputBegan:Connect(function(input, gp)
 			if gp then return end
 			if input.UserInputType == Enum.UserInputType.MouseButton2 then
+				if tick() < scopeBlockedUntil then return end
 				tryToggleScope(cfg)
 			end
 		end)

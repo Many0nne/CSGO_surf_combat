@@ -15,6 +15,7 @@ CSGO/
   feedback.md
   logs.md
   README.md
+  SOURCE_ENGINE_SURF.md
   sourcemap.json
   SPEC.md
   src/
@@ -28,6 +29,7 @@ CSGO/
         InputModule.luau
       systems/
         BhopSystem.luau
+        CharacterDimensions.luau
         CoyoteJump.luau
         CrouchSystem.luau
         GroundDetection.luau
@@ -36,7 +38,9 @@ CSGO/
         PhysicsStepGround.luau
         SlopeSystem.luau
         StepupSystem.luau
+        ViewmodelSystem.luau
         WallSlide.luau
+        WeaponSystem.luau
       ui/
         SettingsMenu.luau
         Speedometer.luau
@@ -49,6 +53,7 @@ CSGO/
       MovementState.luau
       NetworkProtocol.luau
       PhysicsUtils.luau
+      WeaponConfig.luau
 ```
 
 ## Rojo Mapping
@@ -68,6 +73,7 @@ CSGO/
   - `src/server`: scripts côté serveur (stores, validateurs, logique persistante).
   - `src/shared`: modules partagés (protocoles réseau, états, configs, utils physiques).
 - `README.md`: informations générales et instructions d'usage du dépôt.
+- `SOURCE_ENGINE_SURF.md`: notes de référence sur le surf Source et les comportements de mouvement à reproduire.
 - `CSGO.rbxlx`: artefact de build produit par `rojo build`.
 - `feedback.md`: journal de retours et notes de travail.
 - `logs.md`: journalisation et traces de debug.
@@ -89,6 +95,7 @@ CSGO/
 - `src/client/debug/Noclip.luau`: outil de debug pour activer/désactiver le noclip.
 - `src/client/input/InputModule.luau`: gestion des entrées utilisateur et mapping des actions.
 - `src/client/systems/BhopSystem.luau`: implémentation du bunnyhop (saut en chaîne).
+- `src/client/systems/CharacterDimensions.luau`: calcule les dimensions du personnage et les hitboxes debout/accroupi.
 - `src/client/systems/CoyoteJump.luau`: gestion du "coyote time" pour les sauts.
 - `src/client/systems/CrouchSystem.luau`: logique de position accroupie et hitbox.
 - `src/client/systems/GroundDetection.luau`: détection du sol et transitions air/sol.
@@ -97,7 +104,9 @@ CSGO/
 - `src/client/systems/PhysicsStepGround.luau`: étape physique pour l'état au sol.
 - `src/client/systems/SlopeSystem.luau`: gestion des pentes et adaptation du mouvement.
 - `src/client/systems/StepupSystem.luau`: logique pour monter sur de petits obstacles.
+- `src/client/systems/ViewmodelSystem.luau`: gestion du viewmodel, des animations et des sons des armes en vue à la première personne.
 - `src/client/systems/WallSlide.luau`: glisse le long des murs/rampe avec conservation de normale surf si on avance vers la rampe.
+- `src/client/systems/WeaponSystem.luau`: logique client des armes, munitions, recharge, scope et vitesse liée à l'arme.
 - `src/client/ui/SettingsMenu.luau`: interface des réglages côté client.
 - `src/client/ui/Speedometer.luau`: affichage de la vitesse du joueur.
 - `src/server/init.server.luau`: point d'entrée serveur, initialise les services côté serveur.
@@ -107,6 +116,7 @@ CSGO/
 - `src/shared/MovementState.luau`: structure d'état partagée pour le mouvement du joueur.
 - `src/shared/NetworkProtocol.luau`: définitions des messages et du protocole réseau.
 - `src/shared/PhysicsUtils.luau`: fonctions utilitaires pour la physique.
+- `src/shared/WeaponConfig.luau`: définitions partagées des armes et de leurs paramètres par défaut.
 
 ## Common Commands
 

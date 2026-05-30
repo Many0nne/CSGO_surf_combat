@@ -8,6 +8,7 @@ local MovementController = require(script.systems.MovementController)
 local ViewmodelSystem    = require(script.systems.ViewmodelSystem)
 local WeaponSystem       = require(script.systems.WeaponSystem)
 local Speedometer        = require(script.ui.Speedometer)
+local SettingsMenu       = require(script.ui.SettingsMenu)
 local FPSCamera          = require(script.camera.FPSCamera)
 
 local player = Players.LocalPlayer
@@ -55,6 +56,9 @@ local function setupCharacter(char: Model)
 
 	-- Étape 10 — caméra FPS
 	FPSCamera.init(rootPart, char)
+
+	-- Étape 19 — settings menu
+	SettingsMenu.init(FPSCamera)
 
 	-- Étapes 5 & 18 : physique + speedometer
 	Speedometer.init()
