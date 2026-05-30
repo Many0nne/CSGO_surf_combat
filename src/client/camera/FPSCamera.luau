@@ -50,7 +50,7 @@ function FPSCamera.init(hrp: BasePart, char: Model)
 end
 
 function FPSCamera.setCamHeight(h: number)
-	currentCamHeight = h
+	currentCamHeight = h - 0.4
 end
 
 function FPSCamera.getCameraYaw(): number

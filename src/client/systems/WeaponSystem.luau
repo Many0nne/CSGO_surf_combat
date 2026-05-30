@@ -20,6 +20,7 @@ local scopeBlockedUntil = 0
 local currentTool = nil :: Tool?
 local currentCfg  = nil
 local scopeConn   = nil :: RBXScriptConnection?
+local isBusy = false 
 
 local function getScopeGui(): ScreenGui?
 	local pg = Players.LocalPlayer:FindFirstChild("PlayerGui")
@@ -76,8 +77,7 @@ local function setScopeGuiVisible(visible: boolean)
 	if gui then gui.Enabled = visible end
 end
 
-local function resetScope()
-	if scopeConn then scopeConn:Disconnect(); scopeConn = nil end
+local function resetScopeVisuals()
 	scopeBlockedUntil = 0
 	if scopeLevel ~= 0 then
 		FPSCamera.setFOV(Config.DEFAULT_FOV)
@@ -86,6 +86,11 @@ local function resetScope()
 		setScopeGuiVisible(false)
 	end
 	scopeLevel = 0
+end
+
+local function resetScope()  -- appelée seulement au déséquip / mort
+	if scopeConn then scopeConn:Disconnect(); scopeConn = nil end
+	resetScopeVisuals()
 end
 
 local function tryToggleScope(cfg)
@@ -119,17 +124,28 @@ local function reloadTool(tool, cfg)
 	if s.ammo >= (cfg and cfg.Magazine or 0) then return end
 	if s.reserve <= 0 then return end
 
+	resetScopeVisuals()
+
+	isBusy = true
 	s.reloading = true
 	ViewmodelSystem.playReload(ViewmodelSystem.getActiveViewmodel())
 
 	local reloadTime = cfg and cfg.ReloadTime or 2
 	task.delay(reloadTime, function()
-		if not toolState[tool] then return end
+		if not toolState[tool] then
+			if currentTool == tool then
+				isBusy = false
+			end
+			return
+		end
 		local needed = (cfg and cfg.Magazine or 0) - s.ammo
 		local used   = math.min(needed, s.reserve)
 		s.ammo      = s.ammo + used
 		s.reserve   = s.reserve - used
 		s.reloading = false
+		if currentTool == tool then
+			isBusy = false
+		end
 	end)
 end
 
@@ -140,6 +156,7 @@ local function onToolActivated(tool)
 	local firedelay = cfg and cfg.FireDelay or 0.1
 
 	if s.reloading then return end
+	if isBusy then return end
 	if s.ammo <= 0 then
 		reloadTool(tool, cfg)
 		return
@@ -148,9 +165,16 @@ local function onToolActivated(tool)
 
 	s.ammo     = s.ammo - 1
 	s.lastFire = now
+	isBusy = true
 	scopeBlockedUntil = now + firedelay
 	ViewmodelSystem.playAnimation("Shoot")
-	resetScope()
+	resetScopeVisuals()
+	local shootAnimTime = cfg and cfg.ShootAnimTime or 0.4
+	task.delay(shootAnimTime, function()
+		if currentTool == tool then
+			isBusy = false
+		end
+	end)
 	-- TODO: envoyer RemoteEvent au serveur pour dégâts/trace
 end
 
@@ -160,15 +184,24 @@ local function onToolEquipped(tool, char)
 	ensureAmmoState(tool, cfg)
 	currentTool = tool
 	currentCfg  = cfg
+	isBusy = true
 
 	if cfg and cfg.RunSpeedMultiplier then
 		createSpeedValueForChar(char, cfg.RunSpeedMultiplier)
 	end
 
+	local equipTime = cfg and cfg.EquipTime or 0.8
+	task.delay(equipTime, function()
+		if currentTool == tool then
+			isBusy = false
+		end
+	end)
+
 	if cfg and cfg.HasScope then
 		scopeConn = UserInputService.InputBegan:Connect(function(input, gp)
 			if gp then return end
 			if input.UserInputType == Enum.UserInputType.MouseButton2 then
+				if isBusy then return end
 				if tick() < scopeBlockedUntil then return end
 				tryToggleScope(cfg)
 			end
@@ -185,9 +218,9 @@ end
 
 local function onToolUnequipped(tool, char)
 	resetScope()
+	isBusy = false
 	currentTool = nil
 	currentCfg  = nil
-	clearAmmoState(tool)
 	removeSpeedValue(char)
 end
 
@@ -246,6 +279,7 @@ function WeaponSystem.init(player)
 	end
 	pl.CharacterAdded:Connect(function(char)
 		resetScope()
+		isBusy = false
 		currentTool = nil
 		currentCfg  = nil
 		for _, child in char:GetChildren() do

@@ -16,6 +16,8 @@ WeaponConfig.Weapons = {
 		-- Recommended run speed multiplier while holding this weapon (client-side).
 		-- Not a fixed game-units value; movement system multiplies wishspeed by this.
 		RunSpeedMultiplier = 0.75,
+		EquipTime     = 1.58,
+		ShootAnimTime = 1.63,
 		HasScope       = true,
 		ScopeFov1      = 40,
 		ScopeFov2      = 10,
