@@ -24,7 +24,7 @@ function FPSCamera.init(hrp: BasePart, char: Model)
 	cam.CameraType = Enum.CameraType.Scriptable
 	cam.FieldOfView = Config.DEFAULT_FOV
 	UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
-	UserInputService.MouseIconEnabled = true
+	UserInputService.MouseIconEnabled = false
 
 	for _, obj in char:GetDescendants() do
 		hideCharacterPart(obj)
@@ -55,6 +55,16 @@ end
 
 function FPSCamera.getCameraPitch(): number
 	return pitch
+end
+
+function FPSCamera.setFOV(targetFov: number, duration: number?)
+	if duration and duration > 0 then
+		local TweenService = game:GetService("TweenService")
+		local info = TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+		TweenService:Create(cam, info, { FieldOfView = targetFov }):Play()
+	else
+		cam.FieldOfView = targetFov
+	end
 end
 
 return FPSCamera

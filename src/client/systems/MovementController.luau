@@ -10,6 +10,7 @@ local SlopeSystem       = require(script.Parent.SlopeSystem)
 local CoyoteJump        = require(script.Parent.CoyoteJump)
 local BhopSystem        = require(script.Parent.BhopSystem)
 local CrouchSystem      = require(script.Parent.CrouchSystem)
+local WeaponSystem      = require(script.Parent.WeaponSystem)
 local InputModule       = require(script.Parent.Parent.input.InputModule)
 local PhysicsUtils      = require(ReplicatedStorage.Shared.PhysicsUtils)
 local Config            = require(ReplicatedStorage.Shared.MovementConfig)
@@ -19,14 +20,14 @@ local JUMP_LOCKOUT = 0.15  -- empêche re-grounding immédiat après un saut
 
 local MovementController = {}
 
-function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, speedometer, camera)
+function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, speedometer, camera)
 	local velocity    = Vector3.zero
 	local state       = MovementState.GROUNDED
 	local jumpLockout = 0
 	local surfNormal: Vector3? = nil  -- normale de la rampe surf en contact (nil si aucune)
 	local headCastParams = RaycastParams.new()
 	headCastParams.FilterType = Enum.RaycastFilterType.Exclude
-	headCastParams.FilterDescendantsInstances = { _char, workspace.CurrentCamera }
+	headCastParams.FilterDescendantsInstances = { char, workspace.CurrentCamera }
 	local hitboxLogged = false
 
 	CrouchSystem.init(hrp)
@@ -112,6 +113,7 @@ function MovementController.init(_char: Model, hrp: BasePart, _hum: Humanoid, sp
 		if crouchInfo.isCrouching then
 			wishspeed = Config.CROUCH_SPEED
 		end
+		wishspeed = wishspeed * WeaponSystem.getSpeedMultiplier()
 
 		-- 7. Physique
 		local velXZ = PhysicsUtils.getXZ(velocity)

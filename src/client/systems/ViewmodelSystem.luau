@@ -4,12 +4,12 @@ local RunService = game:GetService("RunService")
 
 local ViewmodelSystem = {}
 
-local cam = workspace.CurrentCamera
 local activeViewmodel = nil :: Model?
 local renderConn = nil :: RBXScriptConnection?
 local boundStepName = "ViewmodelUpdate"
-local equipTrack = nil :: AnimationTrack?
-local shootTrack = nil :: AnimationTrack?
+local equipTrack  = nil :: AnimationTrack?
+local shootTrack  = nil :: AnimationTrack?
+local actionTrack = nil :: AnimationTrack?
 local lastCamCFrame = nil :: CFrame?
 local swayPos = Vector3.zero
 local swayVel = Vector3.zero
@@ -30,6 +30,8 @@ local function clearViewmodel()
 	equipTrack = nil
 	stopTrack(shootTrack)
 	shootTrack = nil
+	stopTrack(actionTrack)
+	actionTrack = nil
 	if renderConn then
 		renderConn:Disconnect()
 		renderConn = nil
@@ -99,27 +101,19 @@ local function playEquipAnimation(model: Model)
 	equipTrack = animator:LoadAnimation(equip)
 	equipTrack.Looped = false
 	equipTrack:Play()
-	equipTrack.Stopped:Connect(function()
-		-- equip finished
+
+	-- Écouter le KeyframeMarker pour jouer le son Bolt
+	equipTrack:GetMarkerReachedSignal("Bolt Sound"):Connect(function()
+		local sounds = model:FindFirstChild("Sounds")
+		if sounds then
+			local boltSound = sounds:FindFirstChild("Bolt")
+			if boltSound and boltSound:IsA("Sound") then
+				boltSound:Play()
+			end
+		end
 	end)
-end
 
-local function playShootAnimation(model: Model)
-	local animations = model:FindFirstChild("Animations") or model:FindFirstChild("AnimSaves")
-	if not animations then return end
 
-	local shoot = animations:FindFirstChild("Shoot")
-	if not shoot or not shoot:IsA("Animation") then return end
-
-	local animator = getAnimator(model)
-	if not animator then return end
-
-	shootTrack = animator:LoadAnimation(shoot)
-	shootTrack.Looped = false
-	shootTrack:Play()
-	shootTrack.Stopped:Connect(function()
-		-- shoot finished
-	end)
 end
 
 local function getViewmodelTemplate(name: string): Model?
@@ -149,6 +143,9 @@ local function equipTool(tool: Tool)
 
 	local template = getViewmodelTemplate(viewmodelName)
 	if not template then return end
+
+	local cam = workspace.CurrentCamera
+	if not cam then return end
 
 	clearViewmodel()
 	activeViewmodel = template:Clone()
@@ -195,11 +192,6 @@ local function hookTool(tool: Instance)
 	tool.Equipped:Connect(function()
 		equipTool(tool)
 	end)
-	tool.Activated:Connect(function()
-		if activeViewmodel then
-			playShootAnimation(activeViewmodel)
-		end
-	end)
 	tool.Unequipped:Connect(function()
 		clearViewmodel()
 	end)
@@ -214,6 +206,60 @@ local function onCharacter(char: Model)
 	char.ChildAdded:Connect(function(child)
 		hookTool(child)
 	end)
+end
+
+function ViewmodelSystem.playAnimation(name: string)
+	if not activeViewmodel then return end
+	local animations = activeViewmodel:FindFirstChild("Animations")
+		or activeViewmodel:FindFirstChild("AnimSaves")
+	if not animations then return end
+	local anim = animations:FindFirstChild(name)
+	if not anim or not anim:IsA("Animation") then return end
+	local animator = getAnimator(activeViewmodel)
+	if not animator then return end
+
+	stopTrack(equipTrack)
+	equipTrack = nil
+	stopTrack(actionTrack)
+	actionTrack = nil
+
+	local track = animator:LoadAnimation(anim)
+	track.Looped = false
+	track:Play()
+	actionTrack = track
+end
+
+function ViewmodelSystem.setVisible(visible: boolean)
+	if not activeViewmodel then return end
+	local modifier = visible and 0 or 1
+	for _, obj in activeViewmodel:GetDescendants() do
+		if obj:IsA("BasePart") then
+			(obj :: BasePart).LocalTransparencyModifier = modifier
+		end
+	end
+end
+
+function ViewmodelSystem.getActiveViewmodel()
+	return activeViewmodel
+end
+
+function ViewmodelSystem.playReload(model: Model?)
+	local m = model or activeViewmodel
+	if not m then return end
+	local animations = m:FindFirstChild("Animations") or m:FindFirstChild("AnimSaves")
+	if not animations then return end
+	local reloadAnim = animations:FindFirstChild("Reload")
+	if not reloadAnim or not reloadAnim:IsA("Animation") then return end
+	local animator = getAnimator(m)
+	if not animator then return end
+	stopTrack(equipTrack)
+	equipTrack = nil
+	stopTrack(actionTrack)
+	actionTrack = nil
+	local track = animator:LoadAnimation(reloadAnim)
+	track.Looped = false
+	track:Play()
+	actionTrack = track
 end
 
 function ViewmodelSystem.init(player: Player?)

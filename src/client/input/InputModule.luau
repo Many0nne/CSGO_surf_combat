@@ -11,15 +11,17 @@ local KEY_MAP = {
 	[Enum.KeyCode.LeftControl]  = "Ctrl",
 	[Enum.KeyCode.RightControl] = "Ctrl",
 	[Enum.KeyCode.Space]        = "Space",
+	[Enum.KeyCode.R]            = "R",
 }
 
 local held = {
 	W = false, A = false, S = false, D = false,
-	Shift = false, Ctrl = false, Space = false,
+	Shift = false, Ctrl = false, Space = false, R = false,
 }
 
-local jumpPressedEdge = false
-local jumpPressTime   = -math.huge
+local jumpPressedEdge   = false
+local jumpPressTime     = -math.huge
+local reloadPressedEdge = false
 local lastWishdir = Vector3.zero
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -32,6 +34,8 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if key == "Space" then
 		jumpPressedEdge = true
 		jumpPressTime   = tick()
+	elseif key == "R" then
+		reloadPressedEdge = true
 	end
 end)
 
@@ -122,6 +126,15 @@ end
 -- True si S est le seul axe directionnel pressé (pas W/A/D) → vitesse limitée en recul.
 function InputModule.isBackwardOnly(): boolean
 	return held.S and not held.W and not held.A and not held.D
+end
+
+-- Edge trigger : retourne true une seule fois par appui de R (consommé à la lecture).
+function InputModule.isReloadPressed(): boolean
+	if reloadPressedEdge then
+		reloadPressedEdge = false
+		return true
+	end
+	return false
 end
 
 return InputModule

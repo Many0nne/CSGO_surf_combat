@@ -6,23 +6,20 @@ local WallSlide          = require(script.systems.WallSlide)
 local CharacterDimensions = require(script.systems.CharacterDimensions)
 local MovementController = require(script.systems.MovementController)
 local ViewmodelSystem    = require(script.systems.ViewmodelSystem)
+local WeaponSystem       = require(script.systems.WeaponSystem)
 local Speedometer        = require(script.ui.Speedometer)
 local FPSCamera          = require(script.camera.FPSCamera)
 
 local player = Players.LocalPlayer
 
 ViewmodelSystem.init(player)
+WeaponSystem.init(player)
 
-local character: Model?   = nil
-local humanoid: Humanoid? = nil
-local rootPart: BasePart? = nil
-
-local stateConn:    RBXScriptConnection?
+local stateConn: RBXScriptConnection?
 
 local function setupCharacter(char: Model)
-	character = char
-	humanoid  = char:WaitForChild("Humanoid") :: Humanoid
-	rootPart  = char:WaitForChild("HumanoidRootPart") :: BasePart
+	local humanoid = char:WaitForChild("Humanoid") :: Humanoid
+	local rootPart = char:WaitForChild("HumanoidRootPart") :: BasePart
 	rootPart.Anchored = true
 
 	humanoid.WalkSpeed       = 0
@@ -34,9 +31,7 @@ local function setupCharacter(char: Model)
 	stateConn = humanoid.StateChanged:Connect(function(_, newState)
 		if newState ~= Enum.HumanoidStateType.PlatformStanding then
 			task.defer(function()
-				if humanoid then
-					humanoid:ChangeState(Enum.HumanoidStateType.PlatformStanding)
-				end
+				humanoid:ChangeState(Enum.HumanoidStateType.PlatformStanding)
 			end)
 		end
 	end)
