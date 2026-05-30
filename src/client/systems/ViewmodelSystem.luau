@@ -123,7 +123,7 @@ local function playEquipAnimation(model: Model)
 end
 
 local function getViewmodelTemplate(name: string): Model?
-	local container = ReplicatedStorage:FindFirstChild("Viewmodels")
+	local container = ReplicatedStorage:FindFirstChild("ViewModels")
 	if not container then return nil end
 
 	local template = container:FindFirstChild(name)
