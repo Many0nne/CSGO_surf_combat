@@ -87,6 +87,18 @@ local function getAnimator(model: Model): Animator?
 end
 
 
+local function connectSoundMarkers(track: AnimationTrack, model: Model, mapping: {[string]: string})
+	local sounds = model:FindFirstChild("Sounds")
+	if not sounds then return end
+	for marker, soundName in mapping do
+		local s = sounds:FindFirstChild(soundName)
+		if s and s:IsA("Sound") then
+			track:GetMarkerReachedSignal(marker):Connect(function()
+				s:Play()
+			end)
+		end
+	end
+end
 
 local function playEquipAnimation(model: Model)
 	local animations = model:FindFirstChild("Animations") or model:FindFirstChild("AnimSaves")
@@ -102,16 +114,10 @@ local function playEquipAnimation(model: Model)
 	equipTrack.Looped = false
 	equipTrack:Play()
 
-	-- Écouter le KeyframeMarker pour jouer le son Bolt
-	equipTrack:GetMarkerReachedSignal("Bolt Sound"):Connect(function()
-		local sounds = model:FindFirstChild("Sounds")
-		if sounds then
-			local boltSound = sounds:FindFirstChild("Bolt")
-			if boltSound and boltSound:IsA("Sound") then
-				boltSound:Play()
-			end
-		end
-	end)
+	connectSoundMarkers(equipTrack, model, {
+		["Bolt Sound"] = "Bolt",
+		["Draw Sound"] = "Draw",
+	})
 
 
 end
@@ -227,6 +233,12 @@ function ViewmodelSystem.playAnimation(name: string)
 	track.Looped = false
 	track:Play()
 	actionTrack = track
+	if name == "Shoot" then
+		connectSoundMarkers(track, activeViewmodel, {
+			["Shoot Sound"] = "Shoot",
+			["Bolt Sound"]  = "Bolt",
+		})
+	end
 end
 
 function ViewmodelSystem.setVisible(visible: boolean)
@@ -237,6 +249,14 @@ function ViewmodelSystem.setVisible(visible: boolean)
 			(obj :: BasePart).LocalTransparencyModifier = modifier
 		end
 	end
+end
+
+function ViewmodelSystem.playSound(name: string)
+	if not activeViewmodel then return end
+	local sounds = activeViewmodel:FindFirstChild("Sounds")
+	if not sounds then return end
+	local s = sounds:FindFirstChild(name)
+	if s and s:IsA("Sound") then s:Play() end
 end
 
 function ViewmodelSystem.getActiveViewmodel()
@@ -260,6 +280,12 @@ function ViewmodelSystem.playReload(model: Model?)
 	track.Looped = false
 	track:Play()
 	actionTrack = track
+	connectSoundMarkers(track, m, {
+		["Bolt Sound"]    = "Bolt",
+		["ClipHit Sound"] = "ClipHit",
+		["ClipIn Sound"]  = "ClipIn",
+		["ClipOut Sound"] = "ClipOut",
+	})
 end
 
 function ViewmodelSystem.init(player: Player?)

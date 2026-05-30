@@ -92,19 +92,24 @@ local function tryToggleScope(cfg)
 		FPSCamera.setFOV(Config.DEFAULT_FOV, cfg.ScopeTweenTime)
 		ViewmodelSystem.setVisible(true)
 		setScopeGuiVisible(false)
+		ViewmodelSystem.playSound("ZoomOut")
 	elseif scopeLevel == 1 then
 		FPSCamera.setFOV(cfg.ScopeFov1, cfg.ScopeTweenTime)
 		ViewmodelSystem.setVisible(false)
 		setScopeGuiVisible(true)
+		ViewmodelSystem.playSound("ZoomIn")
 	else
 		FPSCamera.setFOV(cfg.ScopeFov2, cfg.ScopeTweenTime)
 		setScopeGuiVisible(true)
+		ViewmodelSystem.playSound("ZoomIn")
 	end
 end
 
 local function reloadTool(tool, cfg)
 	local s = ensureAmmoState(tool, cfg)
 	if s.reloading then return end
+	local fireDelay = cfg and cfg.FireDelay or 0
+	if tick() - s.lastFire < fireDelay then return end
 	if s.ammo >= (cfg and cfg.Magazine or 0) then return end
 	if s.reserve <= 0 then return end
 
