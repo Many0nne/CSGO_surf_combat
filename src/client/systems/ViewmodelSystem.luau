@@ -2,9 +2,13 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+local AnimationSoundSystem = require(script.Parent.AnimationSoundSystem)
+local WeaponConfig        = require(ReplicatedStorage.Shared.WeaponConfig)
+
 local ViewmodelSystem = {}
 
-local activeViewmodel = nil :: Model?
+local activeViewmodel    = nil :: Model?
+local currentAnimSounds  = nil :: {[string]: {string}}?
 local renderConn = nil :: RBXScriptConnection?
 local boundStepName = "ViewmodelUpdate"
 local equipTrack  = nil :: AnimationTrack?
@@ -44,6 +48,7 @@ local function clearViewmodel()
 	lastCamCFrame = nil
 	swayPos = Vector3.zero
 	swayVel = Vector3.zero
+	currentAnimSounds = nil
 end
 
 local function springUpdate(
@@ -62,43 +67,6 @@ local function springUpdate(
 end
 
 
-local function getAnimator(model: Model): Animator?
-	local controller = model:FindFirstChildWhichIsA("AnimationController", true)
-	if controller then
-		local animator = controller:FindFirstChildWhichIsA("Animator")
-		if not animator then
-			animator = Instance.new("Animator")
-			animator.Parent = controller
-		end
-		return animator
-	end
-
-	local humanoid = model:FindFirstChildWhichIsA("Humanoid", true)
-	if humanoid then
-		local animator = humanoid:FindFirstChildWhichIsA("Animator")
-		if not animator then
-			animator = Instance.new("Animator")
-			animator.Parent = humanoid
-		end
-		return animator
-	end
-
-	return nil
-end
-
-
-local function connectSoundMarkers(track: AnimationTrack, model: Model, mapping: {[string]: string})
-	local sounds = model:FindFirstChild("Sounds")
-	if not sounds then return end
-	for marker, soundName in mapping do
-		local s = sounds:FindFirstChild(soundName)
-		if s and s:IsA("Sound") then
-			track:GetMarkerReachedSignal(marker):Connect(function()
-				s:Play()
-			end)
-		end
-	end
-end
 
 local function playEquipAnimation(model: Model)
 	local animations = model:FindFirstChild("Animations") or model:FindFirstChild("AnimSaves")
@@ -107,17 +75,15 @@ local function playEquipAnimation(model: Model)
 	local equip = animations:FindFirstChild("Equip")
 	if not equip or not equip:IsA("Animation") then return end
 
-	local animator = getAnimator(model)
+	local animator = AnimationSoundSystem.getAnimator(model)
 	if not animator then return end
 
 	equipTrack = animator:LoadAnimation(equip)
 	equipTrack.Looped = false
 	equipTrack:Play()
 
-	connectSoundMarkers(equipTrack, model, {
-		["Bolt Sound"] = "Bolt",
-		["Draw Sound"] = "Draw",
-	})
+	local sounds = currentAnimSounds and currentAnimSounds["Equip"] or {}
+	AnimationSoundSystem.connectSoundMarkers(equipTrack, model, sounds)
 
 
 end
@@ -154,6 +120,10 @@ local function equipTool(tool: Tool)
 	if not cam then return end
 
 	clearViewmodel()
+
+	local weaponName = tool:GetAttribute("WeaponName") or tool.Name
+	local cfg = WeaponConfig.Weapons and WeaponConfig.Weapons[weaponName]
+	currentAnimSounds = cfg and cfg.AnimationSounds or nil
 	activeViewmodel = template:Clone()
 	activeViewmodel.Parent = cam
 	ensurePrimaryPart(activeViewmodel)
@@ -221,7 +191,7 @@ function ViewmodelSystem.playAnimation(name: string)
 	if not animations then return end
 	local anim = animations:FindFirstChild(name)
 	if not anim or not anim:IsA("Animation") then return end
-	local animator = getAnimator(activeViewmodel)
+	local animator = AnimationSoundSystem.getAnimator(activeViewmodel)
 	if not animator then return end
 
 	stopTrack(equipTrack)
@@ -233,12 +203,8 @@ function ViewmodelSystem.playAnimation(name: string)
 	track.Looped = false
 	track:Play()
 	actionTrack = track
-	if name == "Shoot" then
-		connectSoundMarkers(track, activeViewmodel, {
-			["Shoot Sound"] = "Shoot",
-			["Bolt Sound"]  = "Bolt",
-		})
-	end
+	local sounds = currentAnimSounds and currentAnimSounds[name] or {}
+	AnimationSoundSystem.connectSoundMarkers(track, activeViewmodel, sounds)
 end
 
 function ViewmodelSystem.setVisible(visible: boolean)
@@ -270,7 +236,7 @@ function ViewmodelSystem.playReload(model: Model?)
 	if not animations then return end
 	local reloadAnim = animations:FindFirstChild("Reload")
 	if not reloadAnim or not reloadAnim:IsA("Animation") then return end
-	local animator = getAnimator(m)
+	local animator = AnimationSoundSystem.getAnimator(m)
 	if not animator then return end
 	stopTrack(equipTrack)
 	equipTrack = nil
@@ -280,12 +246,8 @@ function ViewmodelSystem.playReload(model: Model?)
 	track.Looped = false
 	track:Play()
 	actionTrack = track
-	connectSoundMarkers(track, m, {
-		["Bolt Sound"]    = "Bolt",
-		["ClipHit Sound"] = "ClipHit",
-		["ClipIn Sound"]  = "ClipIn",
-		["ClipOut Sound"] = "ClipOut",
-	})
+	local sounds = currentAnimSounds and currentAnimSounds["Reload"] or {}
+	AnimationSoundSystem.connectSoundMarkers(track, m, sounds)
 end
 
 function ViewmodelSystem.init(player: Player?)

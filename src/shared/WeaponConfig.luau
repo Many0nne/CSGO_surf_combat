@@ -22,7 +22,25 @@ WeaponConfig.Weapons = {
 		ScopeFov1      = 40,
 		ScopeFov2      = 10,
 		ScopeTweenTime = 0.1,
+		AnimationSounds = {
+			Equip  = { "Bolt", "Draw" },
+			Shoot  = { "Shoot", "Bolt" },
+			Reload = { "Bolt", "ClipIn", "ClipOut", "ClipHit" },
+			Zoom = { "ZoomIn", "ZoomOut" },
+		},
 	},
+	Butterfly = {
+		Name = "Butterfly Knife",
+		Damage = 50,
+		RPM = 60,
+		FireDelay = 1, -- seconds between shots
+		Penetration = 0,
+		RunSpeedMultiplier = 1.0,
+		EquipTime     = 1.0,
+		AnimationSounds = {
+			Equip  = { "Equip" },
+		},
+	}
 }
 
 return WeaponConfig
