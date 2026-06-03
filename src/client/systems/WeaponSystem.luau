@@ -133,19 +133,16 @@ local function reloadTool(tool, cfg)
 	local reloadTime = cfg and cfg.ReloadTime or 2
 	task.delay(reloadTime, function()
 		if not toolState[tool] then
-			if currentTool == tool then
-				isBusy = false
-			end
+			if currentTool == tool then isBusy = false end
 			return
 		end
+		if not s.reloading then return end
 		local needed = (cfg and cfg.Magazine or 0) - s.ammo
 		local used   = math.min(needed, s.reserve)
 		s.ammo      = s.ammo + used
 		s.reserve   = s.reserve - used
 		s.reloading = false
-		if currentTool == tool then
-			isBusy = false
-		end
+		if currentTool == tool then isBusy = false end
 	end)
 end
 
@@ -191,7 +188,9 @@ local function onToolEquipped(tool, char)
 	end
 
 	local equipTime = cfg and cfg.EquipTime or 0.8
-	task.delay(equipTime, function()
+	local animLength = ViewmodelSystem.getPreloadedTrackLength("Equip")
+	local actualEquipTime = (animLength > 0 and animLength) or equipTime
+	task.delay(actualEquipTime, function()
 		if currentTool == tool then
 			isBusy = false
 		end
@@ -217,6 +216,10 @@ local function onToolEquipped(tool, char)
 end
 
 local function onToolUnequipped(tool, char)
+	local s = toolState[tool]
+	if s and s.reloading then
+		s.reloading = false
+	end
 	resetScope()
 	isBusy = false
 	currentTool = nil
@@ -226,6 +229,8 @@ end
 
 local function hookTool(tool, player)
 	if not tool:IsA("Tool") then return end
+	if tool:GetAttribute("_WeaponHookBound") then return end
+	tool:SetAttribute("_WeaponHookBound", true)
 
 	tool.Equipped:Connect(function()
 		onToolEquipped(tool, player.Character)

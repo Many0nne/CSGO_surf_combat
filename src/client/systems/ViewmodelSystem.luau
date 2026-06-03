@@ -9,6 +9,7 @@ local ViewmodelSystem = {}
 
 local activeViewmodel    = nil :: Model?
 local currentAnimSounds  = nil :: {[string]: {string}}?
+local preloadedTracks    = {} :: {[string]: AnimationTrack}
 local renderConn = nil :: RBXScriptConnection?
 local boundStepName = "ViewmodelUpdate"
 local equipTrack  = nil :: AnimationTrack?
@@ -49,6 +50,7 @@ local function clearViewmodel()
 	swayPos = Vector3.zero
 	swayVel = Vector3.zero
 	currentAnimSounds = nil
+	preloadedTracks = {}
 end
 
 local function springUpdate(
@@ -68,18 +70,34 @@ end
 
 
 
+local function preloadAnimations(model: Model, animator: Animator)
+	preloadedTracks = {}
+	local folder = model:FindFirstChild("Animations") or model:FindFirstChild("AnimSaves")
+	if not folder then return end
+	for _, obj in folder:GetChildren() do
+		if obj:IsA("Animation") then
+			local t = animator:LoadAnimation(obj)
+			t.Looped = false
+			preloadedTracks[obj.Name] = t
+		end
+	end
+end
+
 local function playEquipAnimation(model: Model)
-	local animations = model:FindFirstChild("Animations") or model:FindFirstChild("AnimSaves")
-	if not animations then return end
-
-	local equip = animations:FindFirstChild("Equip")
-	if not equip or not equip:IsA("Animation") then return end
-
 	local animator = AnimationSoundSystem.getAnimator(model)
 	if not animator then return end
 
-	equipTrack = animator:LoadAnimation(equip)
-	equipTrack.Looped = false
+	local track = preloadedTracks["Equip"]
+	if not track then
+		local animations = model:FindFirstChild("Animations") or model:FindFirstChild("AnimSaves")
+		if not animations then return end
+		local equip = animations:FindFirstChild("Equip")
+		if not equip or not equip:IsA("Animation") then return end
+		track = animator:LoadAnimation(equip)
+		track.Looped = false
+	end
+
+	equipTrack = track
 	equipTrack:Play()
 
 	local sounds = currentAnimSounds and currentAnimSounds["Equip"] or {}
@@ -130,6 +148,11 @@ local function equipTool(tool: Tool)
 	if not activeViewmodel.PrimaryPart then
 		clearViewmodel()
 		return
+	end
+
+	local animator = AnimationSoundSystem.getAnimator(activeViewmodel)
+	if animator then
+		preloadAnimations(activeViewmodel, animator)
 	end
 
 	local offset = tool:GetAttribute("ViewmodelOffset")
@@ -199,7 +222,7 @@ function ViewmodelSystem.playAnimation(name: string)
 	stopTrack(actionTrack)
 	actionTrack = nil
 
-	local track = animator:LoadAnimation(anim)
+	local track = preloadedTracks[name] or animator:LoadAnimation(anim)
 	track.Looped = false
 	track:Play()
 	actionTrack = track
@@ -229,6 +252,11 @@ function ViewmodelSystem.getActiveViewmodel()
 	return activeViewmodel
 end
 
+function ViewmodelSystem.getPreloadedTrackLength(name: string): number
+	local t = preloadedTracks[name]
+	return t and t.Length or 0
+end
+
 function ViewmodelSystem.playReload(model: Model?)
 	local m = model or activeViewmodel
 	if not m then return end
@@ -242,7 +270,7 @@ function ViewmodelSystem.playReload(model: Model?)
 	equipTrack = nil
 	stopTrack(actionTrack)
 	actionTrack = nil
-	local track = animator:LoadAnimation(reloadAnim)
+	local track = preloadedTracks["Reload"] or animator:LoadAnimation(reloadAnim)
 	track.Looped = false
 	track:Play()
 	actionTrack = track
