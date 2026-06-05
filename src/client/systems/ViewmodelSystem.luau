@@ -10,6 +10,7 @@ local ViewmodelSystem = {}
 local activeViewmodel    = nil :: Model?
 local currentAnimSounds  = nil :: {[string]: {string}}?
 local preloadedTracks    = {} :: {[string]: AnimationTrack}
+local markerConns        = {} :: {RBXScriptConnection}
 local renderConn = nil :: RBXScriptConnection?
 local boundStepName = "ViewmodelUpdate"
 local equipTrack  = nil :: AnimationTrack?
@@ -51,6 +52,8 @@ local function clearViewmodel()
 	swayVel = Vector3.zero
 	currentAnimSounds = nil
 	preloadedTracks = {}
+	for _, c in markerConns do c:Disconnect() end
+	markerConns = {}
 end
 
 local function springUpdate(
@@ -101,7 +104,8 @@ local function playEquipAnimation(model: Model)
 	equipTrack:Play()
 
 	local sounds = currentAnimSounds and currentAnimSounds["Equip"] or {}
-	AnimationSoundSystem.connectSoundMarkers(equipTrack, model, sounds)
+	local newConns = AnimationSoundSystem.connectSoundMarkers(equipTrack, model, sounds)
+	for _, c in newConns do table.insert(markerConns, c) end
 
 
 end
@@ -207,7 +211,7 @@ local function onCharacter(char: Model)
 	end)
 end
 
-function ViewmodelSystem.playAnimation(name: string)
+function ViewmodelSystem.playAnimation(name: string, markerOverrides: {[string]: string}?)
 	if not activeViewmodel then return end
 	local animations = activeViewmodel:FindFirstChild("Animations")
 		or activeViewmodel:FindFirstChild("AnimSaves")
@@ -226,8 +230,23 @@ function ViewmodelSystem.playAnimation(name: string)
 	track.Looped = false
 	track:Play()
 	actionTrack = track
-	local sounds = currentAnimSounds and currentAnimSounds[name] or {}
-	AnimationSoundSystem.connectSoundMarkers(track, activeViewmodel, sounds)
+	for _, c in markerConns do c:Disconnect() end
+	markerConns = {}
+	if markerOverrides then
+		for markerName, value in markerOverrides do
+			local c
+			if type(value) == "function" then
+				c = AnimationSoundSystem.connectDynamicMarker(track, activeViewmodel, markerName, value)
+			else
+				c = AnimationSoundSystem.connectSoundMarker(track, activeViewmodel, markerName, value)
+			end
+			if c then table.insert(markerConns, c) end
+		end
+	else
+		local sounds = currentAnimSounds and currentAnimSounds[name] or {}
+		local newConns = AnimationSoundSystem.connectSoundMarkers(track, activeViewmodel, sounds)
+		for _, c in newConns do table.insert(markerConns, c) end
+	end
 end
 
 function ViewmodelSystem.setVisible(visible: boolean)
@@ -275,7 +294,8 @@ function ViewmodelSystem.playReload(model: Model?)
 	track:Play()
 	actionTrack = track
 	local sounds = currentAnimSounds and currentAnimSounds["Reload"] or {}
-	AnimationSoundSystem.connectSoundMarkers(track, m, sounds)
+	local newConns = AnimationSoundSystem.connectSoundMarkers(track, m, sounds)
+	for _, c in newConns do table.insert(markerConns, c) end
 end
 
 function ViewmodelSystem.init(player: Player?)

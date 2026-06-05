@@ -33,12 +33,17 @@ WeaponConfig.Weapons = {
 		Name = "Butterfly Knife",
 		Damage = 50,
 		RPM = 60,
-		FireDelay = 1, -- seconds between shots
+		FireDelay = 1,
 		Penetration = 0,
 		RunSpeedMultiplier = 1.0,
 		EquipTime     = 1.0,
+		ShootAnimTime = 1.0,
+		IsMelee       = true,
+		MeleeRange    = 5,
+		BackstabMultiplier = 2,
 		AnimationSounds = {
-			Equip  = { "Equip" },
+			Equip = { "Equip" },
+			Shoot = {},
 		},
 	}
 }

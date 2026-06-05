@@ -18,7 +18,12 @@ WeaponSystem.init(player)
 
 local stateConn: RBXScriptConnection?
 
+local function teardownCharacter(_char: Model)
+	-- TODO: déconnecter les bindings par-personnage (FPSCamera, MovementController, etc.)
+end
+
 local function setupCharacter(char: Model)
+	teardownCharacter(char)
 	local humanoid = char:WaitForChild("Humanoid") :: Humanoid
 	local rootPart = char:WaitForChild("HumanoidRootPart") :: BasePart
 	rootPart.Anchored = true
@@ -44,23 +49,14 @@ local function setupCharacter(char: Model)
 		end
 	end)
 
-	-- Étape 3 — ground detection
+	-- CharacterDimensions doit précéder GroundDetection (lit les dimensions de la capsule)
 	CharacterDimensions.init(char, rootPart)
 	GroundDetection.init(char)
-
-	-- Étape 7 — stepup
 	StepupSystem.init(char)
-
-	-- Étape 8 — wallslide
 	WallSlide.init(char)
-
-	-- Étape 10 — caméra FPS
+	-- FPSCamera doit précéder MovementController et SettingsMenu
 	FPSCamera.init(rootPart, char)
-
-	-- Étape 19 — settings menu
 	SettingsMenu.init(FPSCamera)
-
-	-- Étapes 5 & 18 : physique + speedometer
 	Speedometer.init()
 	MovementController.init(char, rootPart, humanoid, Speedometer, FPSCamera)
 end
