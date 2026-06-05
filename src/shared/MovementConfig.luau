@@ -6,8 +6,8 @@ return {
 
 	-- Accélération
 	GROUND_ACCEL           = 128,
-	AIR_ACCEL              = 40,
-	AIR_SPEED_CAP          = 40,   -- équivalent GetAirSpeedCap() Source (élargit la fenêtre strafe)
+	AIR_ACCEL              = 150,
+	AIR_SPEED_CAP          = 30,   -- équivalent GetAirSpeedCap() Source (hardcodé à 30 dans le SDK)
 	FRICTION               = 8.0,
 	STOP_SPEED             = 2,
 
@@ -20,6 +20,7 @@ return {
 	SLOPE_ANGLE_MAX = 45,
 	STEPUP_HEIGHT   = 1.2,
 	SLOPE_FRICTION  = 0.1,   -- μ : friction proportionnelle à la force normale sur la pente
+	SURF_FRICTION   = 0.5,   -- surfaceFriction Source sur les rampes surf (réduit l'air accel latéral)
 
 	-- Bunny hop
 	BHOP_LAND_WINDOW = 0.1,

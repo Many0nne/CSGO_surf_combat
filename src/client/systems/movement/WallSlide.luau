@@ -2,7 +2,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config       = require(ReplicatedStorage.Shared.MovementConfig)
 local PhysicsUtils = require(ReplicatedStorage.Shared.PhysicsUtils)
 
-local SURF_SKIN      = 0.3
+local SURF_SKIN      = 1.5
 local SURF_THRESHOLD = 0.7
 local MAX_BUMPS      = 4
 
@@ -45,7 +45,8 @@ function WallSlide.resolve(
 	local bCenter = hrp.Position - Vector3.new(0, crouchInfo.rootToBottom - radius, 0)
 	local tCenter = hrp.Position + Vector3.new(0, crouchInfo.rootToTop  - radius, 0)
 
-	local moveVec     = velocity * dt
+	local moveVec      = velocity * dt
+	local primalVelocity = velocity  -- velocity avant toute clipping (équivalent primal_velocity Source)
 	local foundNormal : Vector3? = nil
 	local planes      : { Vector3 } = {}
 
@@ -75,8 +76,15 @@ function WallSlide.resolve(
 			local crease = n1:Cross(n2)
 			if crease.Magnitude > 1e-4 then
 				local creaseUnit = crease.Unit
-				velocity = creaseUnit * velocity:Dot(creaseUnit)
-				moveVec  = velocity * dt
+				-- Source TryPlayerMove : projette la velocity PRIMALE sur la crease (pas la clippée)
+				velocity = creaseUnit * primalVelocity:Dot(creaseUnit)
+				-- Si le résultat pousse dans l'un des plans, stopper (évite rebond en arrière)
+				if velocity:Dot(n1) < 0 or velocity:Dot(n2) < 0 then
+					velocity = Vector3.zero
+					moveVec  = Vector3.zero
+					break
+				end
+				moveVec = velocity * dt
 			else
 				velocity = Vector3.zero
 				moveVec  = Vector3.zero

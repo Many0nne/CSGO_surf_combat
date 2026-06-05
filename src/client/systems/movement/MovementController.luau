@@ -106,13 +106,11 @@ function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, spe
 			end
 
 		elseif isAirborneState then
-			-- AirAccelerate Source + gravité (pas de projection wishdir en surf)
-			velocity = PhysicsStepAir.step(velocity, wishdir, wishspeed, dt)
-			velocity += Vector3.new(0, Config.GRAVITY * dt, 0)
-			-- Clamp fall speed uniquement hors surf
-			if not surfNormal and velocity.Y < -Config.MAX_FALL_SPEED then
-				velocity = Vector3.new(velocity.X, -Config.MAX_FALL_SPEED, velocity.Z)
-			end
+			-- StartGravity : demi-pas avant déplacement (schéma leapfrog Source)
+			velocity += Vector3.new(0, Config.GRAVITY * 0.5 * dt, 0)
+			-- AirAccelerate Source (velocity 3D, surfaceFriction selon contact rampe)
+			local surfFric = surfNormal and Config.SURF_FRICTION or 1.0
+			velocity = PhysicsStepAir.step(velocity, wishdir, wishspeed, surfFric, dt)
 			-- Coyote jump : Space pressé dans la fenêtre coyote
 			if shouldJump then
 				velocity    = Vector3.new(velocity.X, Config.JUMP_VELOCITY, velocity.Z)
@@ -164,6 +162,13 @@ function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, spe
 			velocity = newVel
 			local newPos = hrp.Position + moveVec
 			hrp.CFrame = CFrame.new(newPos) * targetRot
+
+			-- FinishGravity : demi-pas après déplacement (schéma leapfrog Source)
+			velocity += Vector3.new(0, Config.GRAVITY * 0.5 * dt, 0)
+			-- Clamp fall speed uniquement hors surf
+			if not surfNormal and velocity.Y < -Config.MAX_FALL_SPEED then
+				velocity = Vector3.new(velocity.X, -Config.MAX_FALL_SPEED, velocity.Z)
+			end
 
 			-- Mise à jour de la surf normale persistante
 			if hitNormal and hitNormal.Y < 0.7 then
