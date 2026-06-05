@@ -18,3 +18,17 @@ meleeEvent.OnServerEvent:Connect(function(player, targetCharacter, damage)
 
 	humanoid:TakeDamage(damage)
 end)
+
+local hitscanEvent = Instance.new("RemoteEvent")
+hitscanEvent.Name = "HitscanDamage"
+hitscanEvent.Parent = ReplicatedStorage
+
+hitscanEvent.OnServerEvent:Connect(function(player, targetCharacter, damage)
+	if typeof(targetCharacter) ~= "Instance" then return end
+	if typeof(damage) ~= "number" then return end
+	damage = math.clamp(damage, 0, 1000)
+	if player.Character == targetCharacter then return end
+	local humanoid = targetCharacter:FindFirstChildWhichIsA("Humanoid")
+	if not humanoid then return end
+	humanoid:TakeDamage(damage)
+end)

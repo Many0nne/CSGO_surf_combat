@@ -8,6 +8,7 @@ local WeaponSystem = {}
 local ViewmodelSystem    = require(script.Parent.ViewmodelSystem)
 local ScopeSystem        = require(script.Parent.ScopeSystem)
 local MeleeHitDetection  = require(script.Parent.MeleeHitDetection)
+local HitscanSystem      = require(script.Parent.HitscanSystem)
 local FPSCamera          = require(script.Parent.Parent.Parent.camera.FPSCamera)
 local InputModule        = require(script.Parent.Parent.Parent.input.InputModule)
 local WeaponConfig       = require(ReplicatedStorage.Shared.WeaponConfig)
@@ -15,7 +16,8 @@ local WeaponConfig       = require(ReplicatedStorage.Shared.WeaponConfig)
 -- Per-tool runtime state (stored on the client)
 local toolState = {} -- [tool] = { ammo, reserve, magazine, lastFire }
 
-local meleeEvent = ReplicatedStorage:WaitForChild("MeleeDamage", 10) :: RemoteEvent?
+local meleeEvent   = ReplicatedStorage:WaitForChild("MeleeDamage", 10) :: RemoteEvent?
+local hitscanEvent = ReplicatedStorage:WaitForChild("HitscanDamage", 10) :: RemoteEvent?
 
 local currentTool = nil :: Tool?
 local currentCfg  = nil
@@ -132,13 +134,15 @@ local function onToolActivated(tool)
 		ViewmodelSystem.playAnimation("Shoot")
 	end
 	ScopeSystem.resetVisuals()
+	if not (cfg and cfg.IsMelee) then
+		HitscanSystem.resolveHit(cfg, ViewmodelSystem.getActiveViewmodel())
+	end
 	local shootAnimTime = cfg and cfg.ShootAnimTime or 0.4
 	task.delay(shootAnimTime, function()
 		if currentTool == tool and weaponState == "FIRING" then
 			weaponState = "IDLE"
 		end
 	end)
-	-- TODO: envoyer RemoteEvent au serveur — dégâts hitscan
 end
 
 local function onToolEquipped(tool, char)
@@ -226,6 +230,7 @@ function WeaponSystem.init(player)
 
 	ScopeSystem.init(FPSCamera, ViewmodelSystem)
 	MeleeHitDetection.init(meleeEvent)
+	HitscanSystem.init(hitscanEvent)
 
 	RunService.Heartbeat:Connect(function()
 		if InputModule.isReloadPressed() and currentTool and currentCfg then
