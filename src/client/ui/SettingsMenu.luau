@@ -2,7 +2,7 @@ local Players           = game:GetService("Players")
 local UserInputService  = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Config = require(ReplicatedStorage.Shared.MovementConfig)
+local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
 
 local SettingsMenu = {}
 
@@ -198,11 +198,11 @@ function SettingsMenu.init(fpsCam: typeof(fpsCamRef))
 	div.BorderSizePixel  = 0
 	div.Parent           = panel
 
-	makeSlider(panel, "Sensitivity", 60, 0.1, 5.0, Config.DEFAULT_SENS, 2,
+	makeSlider(panel, "Sensitivity", 60, 0.1, 5.0, CameraConfig.DEFAULT_SENS, 2,
 		function(v) if fpsCamRef then fpsCamRef.setSensitivity(v) end end
 	)
 
-	makeSlider(panel, "Scope Sens", 110, 0.1, 1.0, Config.AWP_SCOPE_SENS_MULT, 2,
+	makeSlider(panel, "Scope Sens", 110, 0.1, 1.0, CameraConfig.SCOPE_SENS_MULT, 2,
 		function(v) if fpsCamRef then fpsCamRef.setScopeMultiplier(v) end end
 	)
 

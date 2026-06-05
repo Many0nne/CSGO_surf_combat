@@ -1,6 +1,6 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config      = require(ReplicatedStorage.Shared.MovementConfig)
-local InputModule = require(script.Parent.Parent.input.InputModule)
+local InputModule = require(script.Parent.Parent.Parent.input.InputModule)
 
 local coyoteTimer    = 0
 local wasOnGround    = true

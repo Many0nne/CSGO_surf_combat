@@ -1,8 +1,8 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Config      = require(ReplicatedStorage.Shared.MovementConfig)
+local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
 local CharacterDimensions = require(script.Parent.CharacterDimensions)
-local InputModule = require(script.Parent.Parent.input.InputModule)
+local InputModule = require(script.Parent.Parent.Parent.input.InputModule)
 
 local STAND_HALF  = 0
 local CROUCH_HALF = 0
@@ -12,7 +12,7 @@ local UNCROUCH_CAST_DIST = 0
 
 local hrpRef: BasePart? = nil
 local crouching = false
-local camHeight = Config.CAM_HEIGHT_STAND
+local camHeight = CameraConfig.CAM_HEIGHT_STAND
 local halfHeight = STAND_HALF
 local rootToBottom = 0
 local rootToTop = 0
@@ -33,7 +33,7 @@ local CrouchSystem = {}
 function CrouchSystem.init(hrp: BasePart)
 	hrpRef     = hrp
 	crouching  = false
-	camHeight  = Config.CAM_HEIGHT_STAND
+	camHeight  = CameraConfig.CAM_HEIGHT_STAND
 	local standDims = CharacterDimensions.getStand()
 	local crouchDims = CharacterDimensions.getCrouch()
 	STAND_HALF = standDims.halfHeight
@@ -62,8 +62,8 @@ function CrouchSystem.update(dt: number): { isCrouching: boolean, camHeight: num
 		end
 	end
 
-	local targetCamHeight = crouching and Config.CAM_HEIGHT_CROUCH or Config.CAM_HEIGHT_STAND
-	camHeight = camHeight + (targetCamHeight - camHeight) * math.min(1, Config.CAM_LERP_SPEED * dt)
+	local targetCamHeight = crouching and CameraConfig.CAM_HEIGHT_CROUCH or CameraConfig.CAM_HEIGHT_STAND
+	camHeight = camHeight + (targetCamHeight - camHeight) * math.min(1, CameraConfig.CAM_LERP_SPEED * dt)
 
 	local dims = crouching and CharacterDimensions.getCrouch() or CharacterDimensions.getStand()
 	halfHeight = dims.halfHeight

@@ -1,6 +1,6 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config      = require(ReplicatedStorage.Shared.MovementConfig)
-local InputModule = require(script.Parent.Parent.input.InputModule)
+local InputModule = require(script.Parent.Parent.Parent.input.InputModule)
 
 local landTimer   = math.huge  -- time since last landing; huge = airborne / never landed
 local wasOnGround = false

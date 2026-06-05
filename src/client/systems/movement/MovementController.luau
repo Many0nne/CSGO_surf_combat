@@ -1,6 +1,7 @@
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local HeadCollisionResolver = require(script.Parent.HeadCollisionResolver)
 local GroundDetection   = require(script.Parent.GroundDetection)
 local PhysicsStepGround = require(script.Parent.PhysicsStepGround)
 local PhysicsStepAir    = require(script.Parent.PhysicsStepAir)
@@ -10,8 +11,8 @@ local SlopeSystem       = require(script.Parent.SlopeSystem)
 local CoyoteJump        = require(script.Parent.CoyoteJump)
 local BhopSystem        = require(script.Parent.BhopSystem)
 local CrouchSystem      = require(script.Parent.CrouchSystem)
-local WeaponSystem      = require(script.Parent.WeaponSystem)
-local InputModule       = require(script.Parent.Parent.input.InputModule)
+local WeaponSystem      = require(script.Parent.Parent.weapon.WeaponSystem)
+local InputModule       = require(script.Parent.Parent.Parent.input.InputModule)
 local PhysicsUtils      = require(ReplicatedStorage.Shared.PhysicsUtils)
 local Config            = require(ReplicatedStorage.Shared.MovementConfig)
 local MovementState     = require(ReplicatedStorage.Shared.MovementState)
@@ -25,47 +26,10 @@ function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, spe
 	local state       = MovementState.GROUNDED
 	local jumpLockout = 0
 	local surfNormal: Vector3? = nil  -- normale de la rampe surf en contact (nil si aucune)
-	local headCastParams = RaycastParams.new()
-	headCastParams.FilterType = Enum.RaycastFilterType.Exclude
-	headCastParams.FilterDescendantsInstances = { char, workspace.CurrentCamera }
 	local hitboxLogged = false
 
 	CrouchSystem.init(hrp)
-
-	local function getHeadHitAlongMove(startPos: Vector3, moveVec: Vector3, radius: number): RaycastResult?
-		if moveVec.Magnitude < 1e-4 then
-			return nil
-		end
-		return workspace:Spherecast(startPos, radius, moveVec, headCastParams)
-	end
-
-	local function resolveHeadGround(
-		moveVec: Vector3,
-		hrpPos: Vector3,
-		info: { rootToTop: number, radius: number }
-	): (Vector3, boolean)
-		if moveVec.Magnitude < 1e-4 then return moveVec, false end
-
-		local headCenter = Vector3.new(
-			hrpPos.X,
-			hrpPos.Y + info.rootToTop - info.radius,
-			hrpPos.Z
-		)
-		local hit = workspace:Spherecast(headCenter, info.radius, moveVec, headCastParams)
-		if not hit then return moveVec, false end
-
-		local isCeiling = hit.Normal.Y < -0.15
-		local isHeadWall = not isCeiling and math.abs(hit.Normal.Y) < 0.65
-		if not isCeiling and not isHeadWall then return moveVec, false end
-
-		local clipped = PhysicsUtils.projectOnPlane(moveVec, hit.Normal)
-		if isCeiling then
-			clipped = Vector3.new(clipped.X, math.min(0, clipped.Y), clipped.Z)
-		end
-
-
-		return clipped, true
-	end
+	HeadCollisionResolver.init(char)
 
 
 	RunService.Heartbeat:Connect(function(dt)
@@ -185,7 +149,7 @@ function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, spe
 				newPos.Y - hrp.Position.Y,
 				newPos.Z - hrp.Position.Z
 			)
-			local clippedHead, headBlocked = resolveHeadGround(headMoveVec, hrp.Position, crouchInfo)
+			local clippedHead, headBlocked = HeadCollisionResolver.resolve(headMoveVec, hrp.Position, crouchInfo)
 			if headBlocked then
 				newPos = hrp.Position + clippedHead
 				if math.abs(clippedHead.Y - headMoveVec.Y) > 1e-3 then

@@ -28,19 +28,25 @@ CSGO/
       input/
         InputModule.luau
       systems/
-        BhopSystem.luau
-        CharacterDimensions.luau
-        CoyoteJump.luau
-        CrouchSystem.luau
-        GroundDetection.luau
-        MovementController.luau
-        PhysicsStepAir.luau
-        PhysicsStepGround.luau
-        SlopeSystem.luau
-        StepupSystem.luau
-        ViewmodelSystem.luau
-        WallSlide.luau
-        WeaponSystem.luau
+        movement/
+          BhopSystem.luau
+          CharacterDimensions.luau
+          CoyoteJump.luau
+          CrouchSystem.luau
+          GroundDetection.luau
+          HeadCollisionResolver.luau
+          MovementController.luau
+          PhysicsStepAir.luau
+          PhysicsStepGround.luau
+          SlopeSystem.luau
+          StepupSystem.luau
+          WallSlide.luau
+        weapon/
+          AnimationSoundSystem.luau
+          MeleeHitDetection.luau
+          ScopeSystem.luau
+          ViewmodelSystem.luau
+          WeaponSystem.luau
       ui/
         SettingsMenu.luau
         Speedometer.luau
@@ -49,6 +55,7 @@ CSGO/
       SettingsStore.luau
       Validator.luau
     shared/
+      CameraConfig.luau
       MovementConfig.luau
       MovementState.luau
       NetworkProtocol.luau
@@ -94,25 +101,30 @@ CSGO/
 - `src/client/camera/FPSCamera.luau`: contrôles et logique de la caméra FPS.
 - `src/client/debug/Noclip.luau`: outil de debug pour activer/désactiver le noclip.
 - `src/client/input/InputModule.luau`: gestion des entrées utilisateur et mapping des actions.
-- `src/client/systems/BhopSystem.luau`: implémentation du bunnyhop (saut en chaîne).
-- `src/client/systems/CharacterDimensions.luau`: calcule les dimensions du personnage et les hitboxes debout/accroupi.
-- `src/client/systems/CoyoteJump.luau`: gestion du "coyote time" pour les sauts.
-- `src/client/systems/CrouchSystem.luau`: logique de position accroupie et hitbox.
-- `src/client/systems/GroundDetection.luau`: détection du sol et transitions air/sol.
-- `src/client/systems/MovementController.luau`: contrôles de mouvement principaux (vitesse, acceleration).
-- `src/client/systems/PhysicsStepAir.luau`: étape physique aérienne (air accelerate Source + cap `AIR_SPEED_CAP`).
-- `src/client/systems/PhysicsStepGround.luau`: étape physique pour l'état au sol.
-- `src/client/systems/SlopeSystem.luau`: gestion des pentes et adaptation du mouvement.
-- `src/client/systems/StepupSystem.luau`: logique pour monter sur de petits obstacles.
-- `src/client/systems/ViewmodelSystem.luau`: gestion du viewmodel, des animations et des sons des armes en vue à la première personne.
-- `src/client/systems/WallSlide.luau`: glisse le long des murs/rampe avec conservation de normale surf si on avance vers la rampe.
-- `src/client/systems/WeaponSystem.luau`: logique client des armes, munitions, recharge, scope et vitesse liée à l'arme.
+- `src/client/systems/movement/BhopSystem.luau`: implémentation du bunnyhop (saut en chaîne).
+- `src/client/systems/movement/CharacterDimensions.luau`: calcule les dimensions du personnage et les hitboxes debout/accroupi.
+- `src/client/systems/movement/CoyoteJump.luau`: gestion du "coyote time" pour les sauts.
+- `src/client/systems/movement/CrouchSystem.luau`: logique de position accroupie, hauteur caméra et hitbox.
+- `src/client/systems/movement/GroundDetection.luau`: détection du sol et transitions air/sol.
+- `src/client/systems/movement/HeadCollisionResolver.luau`: résolution des collisions tête (plafond, mur haut) lors du déplacement.
+- `src/client/systems/movement/MovementController.luau`: orchestrateur principal du mouvement (boucle Heartbeat, transitions d'état).
+- `src/client/systems/movement/PhysicsStepAir.luau`: étape physique aérienne (air accelerate Source + cap `AIR_SPEED_CAP`).
+- `src/client/systems/movement/PhysicsStepGround.luau`: étape physique pour l'état au sol.
+- `src/client/systems/movement/SlopeSystem.luau`: gestion des pentes et adaptation du mouvement.
+- `src/client/systems/movement/StepupSystem.luau`: logique pour monter sur de petits obstacles.
+- `src/client/systems/movement/WallSlide.luau`: glisse le long des murs/rampe avec conservation de normale surf si on avance vers la rampe.
+- `src/client/systems/weapon/AnimationSoundSystem.luau`: gestion des marqueurs sons sur les AnimationTracks.
+- `src/client/systems/weapon/MeleeHitDetection.luau`: raycast et calcul de dégâts melee (backstab inclus).
+- `src/client/systems/weapon/ScopeSystem.luau`: gestion du scope (FOV, GUI, sensibilité caméra) pour les armes à lunette.
+- `src/client/systems/weapon/ViewmodelSystem.luau`: gestion du viewmodel, des animations et des sons des armes en vue FPS.
+- `src/client/systems/weapon/WeaponSystem.luau`: logique client des armes, munitions, recharge et vitesse liée à l'arme.
 - `src/client/ui/SettingsMenu.luau`: interface des réglages côté client.
 - `src/client/ui/Speedometer.luau`: affichage de la vitesse du joueur.
 - `src/server/init.server.luau`: point d'entrée serveur, initialise les services côté serveur.
 - `src/server/SettingsStore.luau`: stockage et récupération des paramètres serveur.
 - `src/server/Validator.luau`: routines de validation côté serveur (anti-cheat, sanity checks).
-- `src/shared/MovementConfig.luau`: constantes et paramètres de configuration du mouvement (AIR_ACCEL, GRAVITY, AUTO_BHOP, etc.).
+- `src/shared/CameraConfig.luau`: constantes caméra (FOV, sensibilité, pitch min/max, hauteurs, lerp speed, scope sens multiplier).
+- `src/shared/MovementConfig.luau`: constantes physique du mouvement uniquement (vitesses, accel, friction, saut, pentes, bhop, réseau, hitbox).
 - `src/shared/MovementState.luau`: structure d'état partagée pour le mouvement du joueur.
 - `src/shared/NetworkProtocol.luau`: définitions des messages et du protocole réseau.
 - `src/shared/PhysicsUtils.luau`: fonctions utilitaires pour la physique.

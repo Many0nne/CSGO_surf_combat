@@ -2,7 +2,7 @@ local UserInputService  = game:GetService("UserInputService")
 local RunService        = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Config = require(ReplicatedStorage.Shared.MovementConfig)
+local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
 
 local cam = workspace.CurrentCamera
 local FPSCamera = {}
@@ -11,9 +11,9 @@ local yaw   = 0
 local pitch = 0
 local hrpRef: BasePart? = nil
 local boundStepName = "FPSCameraUpdate"
-local currentCamHeight = Config.CAM_HEIGHT_STAND
-local baseSens      = Config.DEFAULT_SENS
-local scopeSensMult = Config.AWP_SCOPE_SENS_MULT
+local currentCamHeight = CameraConfig.CAM_HEIGHT_STAND
+local baseSens      = CameraConfig.DEFAULT_SENS
+local scopeSensMult = CameraConfig.SCOPE_SENS_MULT
 local isScoped      = false
 local currentSens   = baseSens
 
@@ -26,7 +26,7 @@ end
 function FPSCamera.init(hrp: BasePart, char: Model)
 	hrpRef = hrp
 	cam.CameraType = Enum.CameraType.Scriptable
-	cam.FieldOfView = Config.DEFAULT_FOV
+	cam.FieldOfView = CameraConfig.DEFAULT_FOV
 	UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
 	UserInputService.MouseIconEnabled = false
 
@@ -40,7 +40,7 @@ function FPSCamera.init(hrp: BasePart, char: Model)
 		if not hrpRef then return end
 		local delta = UserInputService:GetMouseDelta()
 		yaw   = yaw + delta.X * currentSens
-		pitch = math.clamp(pitch - delta.Y * currentSens, Config.PITCH_MIN, Config.PITCH_MAX)
+		pitch = math.clamp(pitch - delta.Y * currentSens, CameraConfig.PITCH_MIN, CameraConfig.PITCH_MAX)
 
 		local headPos = hrpRef.Position + Vector3.new(0, currentCamHeight, 0)
 		cam.CFrame = CFrame.new(headPos)

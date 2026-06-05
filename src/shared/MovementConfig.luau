@@ -37,28 +37,6 @@ return {
 	MAX_SPEED_SERVER = 300,
 	MAX_DELTA_POS   = 5,
 
-	-- Caméra
-	DEFAULT_FOV       = 90,
-	DEFAULT_SENS      = 0.3,
-	PITCH_MIN         = -89,
-	PITCH_MAX         = 89,
-	CAM_HEIGHT_STAND  = 2.5,
-	CAM_HEIGHT_CROUCH = 1.2,
-	CAM_LERP_SPEED    = 12,
-
-	-- AWP
-	AWP_SCOPE_FOV1     = 40,   -- premier zoom
-	AWP_SCOPE_FOV2     = 10,   -- deuxième zoom
-	AWP_FOV_TWEEN_TIME = 0.1,
-	AWP_DMG           = 115,
-	AWP_FIRE_INTERVAL = 60 / 41,  -- ~1.463s entre les tirs (41 RPM)
-	AWP_RELOAD_TIME   = 3.7,
-	AWP_MAG_SIZE      = 5,
-	AWP_RESERVE_SIZE  = 10,
-	AWP_SPEED_MULT        = 0.85,
-	AWP_SCOPE_SENS_MULT   = 0.7,   -- multiplicateur de sensibilité en mode scope
-	-- TODO: AWP_PENETRATION = 250
-
 	-- Hitbox
 	HITBOX_USE_RIG_BOUNDS = true,
 	HITBOX_DEBUG          = true,

@@ -5,23 +5,21 @@ local UserInputService = game:GetService("UserInputService")
 
 local WeaponSystem = {}
 
-local ViewmodelSystem = require(script.Parent.ViewmodelSystem)
-local FPSCamera       = require(script.Parent.Parent.camera.FPSCamera)
-local InputModule     = require(script.Parent.Parent.input.InputModule)
-local WeaponConfig    = require(ReplicatedStorage.Shared.WeaponConfig)
-local Config          = require(ReplicatedStorage.Shared.MovementConfig)
+local ViewmodelSystem    = require(script.Parent.ViewmodelSystem)
+local ScopeSystem        = require(script.Parent.ScopeSystem)
+local MeleeHitDetection  = require(script.Parent.MeleeHitDetection)
+local FPSCamera          = require(script.Parent.Parent.Parent.camera.FPSCamera)
+local InputModule        = require(script.Parent.Parent.Parent.input.InputModule)
+local WeaponConfig       = require(ReplicatedStorage.Shared.WeaponConfig)
 
 -- Per-tool runtime state (stored on the client)
 local toolState = {} -- [tool] = { ammo, reserve, magazine, lastFire }
 
 local meleeEvent = ReplicatedStorage:WaitForChild("MeleeDamage", 10) :: RemoteEvent?
 
--- Active weapon scope state
-local scopeLevel  = 0
 local currentTool = nil :: Tool?
 local currentCfg  = nil
 local scopeConn   = nil :: RBXScriptConnection?
-local lastStabDamageMultiplier = 1
 
 -- Weapon action state machine
 -- Transitions : IDLE ↔ SCOPED, IDLE → EQUIPPING → IDLE,
@@ -31,13 +29,6 @@ local cancelReload: (() -> ())? = nil
 
 local function canAct(): boolean
 	return weaponState == "IDLE" or weaponState == "SCOPED"
-end
-
-local function getScopeGui(): ScreenGui?
-	local pg = Players.LocalPlayer:FindFirstChild("PlayerGui")
-	if not pg then return nil end
-	local gui = pg:FindFirstChild("ScopeGUI")
-	return gui and gui:IsA("ScreenGui") and gui or nil
 end
 
 local function ensureAmmoState(tool, cfg)
@@ -82,52 +73,6 @@ local function removeSpeedValue(char)
 	end
 end
 
-local function setScopeGuiVisible(visible: boolean)
-	local gui = getScopeGui()
-	if gui then gui.Enabled = visible end
-end
-
-local function resetScopeVisuals()
-	if scopeLevel ~= 0 then
-		FPSCamera.setFOV(Config.DEFAULT_FOV)
-		FPSCamera.setScoped(false)
-		ViewmodelSystem.setVisible(true)
-		setScopeGuiVisible(false)
-	end
-	scopeLevel = 0
-end
-
-local function resetScope()  -- appelée seulement au déséquip / mort
-	if scopeConn then scopeConn:Disconnect(); scopeConn = nil end
-	resetScopeVisuals()
-end
-
-local function tryToggleScope(cfg)
-	if not cfg or not cfg.HasScope then return end
-	scopeLevel = (scopeLevel + 1) % 3
-	if scopeLevel == 0 then
-		weaponState = "IDLE"
-		FPSCamera.setFOV(Config.DEFAULT_FOV, cfg.ScopeTweenTime)
-		FPSCamera.setScoped(false)
-		ViewmodelSystem.setVisible(true)
-		setScopeGuiVisible(false)
-		ViewmodelSystem.playSound("ZoomOut")
-	elseif scopeLevel == 1 then
-		weaponState = "SCOPED"
-		FPSCamera.setFOV(cfg.ScopeFov1, cfg.ScopeTweenTime)
-		FPSCamera.setScoped(true)
-		ViewmodelSystem.setVisible(false)
-		setScopeGuiVisible(true)
-		ViewmodelSystem.playSound("ZoomIn")
-	else
-		weaponState = "SCOPED"
-		FPSCamera.setFOV(cfg.ScopeFov2, cfg.ScopeTweenTime)
-		FPSCamera.setScoped(true)
-		setScopeGuiVisible(true)
-		ViewmodelSystem.playSound("ZoomIn")
-	end
-end
-
 local function reloadTool(tool, cfg)
 	if not canAct() then return end
 	local s = ensureAmmoState(tool, cfg)
@@ -136,7 +81,7 @@ local function reloadTool(tool, cfg)
 	if s.ammo >= (cfg and cfg.Magazine or 0) then return end
 	if s.reserve <= 0 then return end
 
-	resetScopeVisuals()
+	ScopeSystem.resetVisuals()
 	weaponState = "RELOADING"
 	ViewmodelSystem.playReload(ViewmodelSystem.getActiveViewmodel())
 
@@ -155,56 +100,6 @@ local function reloadTool(tool, cfg)
 		task.cancel(thread)
 		cancelReload = nil
 	end
-end
-
-local function isBackstab(hitInstance): boolean
-	local char = hitInstance.Parent
-	if not char then return false end
-	local hrp = char:FindFirstChild("HumanoidRootPart")
-	if not hrp then
-		char = char.Parent
-		if not char then return false end
-		hrp = char:FindFirstChild("HumanoidRootPart")
-	end
-	if not hrp then return false end
-	local cam = workspace.CurrentCamera
-	if not cam then return false end
-	local toAttacker = cam.CFrame.Position - hrp.Position
-	-- dot < 0 : l'attaquant est dans le demi-espace arrière du cible
-	return toAttacker:Dot(hrp.CFrame.LookVector) < 0
-end
-
-local function resolveStabHit(cfg)
-	lastStabDamageMultiplier = 1
-	local range = cfg and cfg.MeleeRange or 80
-	local cam = workspace.CurrentCamera
-	if not cam then return "Shoot_void" end
-	local params = RaycastParams.new()
-	local filtered = { Players.LocalPlayer.Character }
-	local vm = ViewmodelSystem.getActiveViewmodel()
-	if vm then table.insert(filtered, vm) end
-	params.FilterDescendantsInstances = filtered
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	local result = workspace:Raycast(cam.CFrame.Position, cam.CFrame.LookVector * range, params)
-	if not result then return "Shoot_void" end
-	local hit = result.Instance
-	local isHuman = hit.Parent:FindFirstChildWhichIsA("Humanoid")
-		or (hit.Parent.Parent and hit.Parent.Parent:FindFirstChildWhichIsA("Humanoid"))
-	if isHuman then
-		if isBackstab(hit) then
-			lastStabDamageMultiplier = cfg and cfg.BackstabMultiplier or 2
-		end
-		local damage = (cfg and cfg.Damage or 50) * lastStabDamageMultiplier
-		local targetChar = hit.Parent
-		if not targetChar:FindFirstChildWhichIsA("Humanoid") then
-			targetChar = targetChar.Parent
-		end
-		if meleeEvent and targetChar then
-			meleeEvent:FireServer(targetChar, damage)
-		end
-		return "Shoot_human"
-	end
-	return "Shoot_wall"
 end
 
 local function onToolActivated(tool)
@@ -228,18 +123,22 @@ local function onToolActivated(tool)
 	s.lastFire = now
 	weaponState = "FIRING"
 	if cfg and cfg.IsMelee then
-		ViewmodelSystem.playAnimation("Shoot", { ["Stab Sound"] = function() return resolveStabHit(cfg) end })
+		ViewmodelSystem.playAnimation("Shoot", {
+			["Stab Sound"] = function()
+				return MeleeHitDetection.resolveHit(cfg, ViewmodelSystem.getActiveViewmodel())
+			end
+		})
 	else
 		ViewmodelSystem.playAnimation("Shoot")
 	end
-	resetScopeVisuals()
+	ScopeSystem.resetVisuals()
 	local shootAnimTime = cfg and cfg.ShootAnimTime or 0.4
 	task.delay(shootAnimTime, function()
 		if currentTool == tool and weaponState == "FIRING" then
 			weaponState = "IDLE"
 		end
 	end)
-	-- TODO: envoyer RemoteEvent au serveur — dégâts = cfg.Damage * lastStabDamageMultiplier (backstab x2)
+	-- TODO: envoyer RemoteEvent au serveur — dégâts hitscan
 end
 
 local function onToolEquipped(tool, char)
@@ -268,7 +167,7 @@ local function onToolEquipped(tool, char)
 			if gp then return end
 			if input.UserInputType == Enum.UserInputType.MouseButton2 then
 				if not canAct() then return end
-				tryToggleScope(cfg)
+				weaponState = ScopeSystem.toggle(cfg)
 			end
 		end)
 	end
@@ -283,7 +182,8 @@ end
 
 local function onToolUnequipped(tool, char)
 	if cancelReload then cancelReload() end
-	resetScope()
+	if scopeConn then scopeConn:Disconnect(); scopeConn = nil end
+	ScopeSystem.reset()
 	weaponState = "IDLE"
 	currentTool = nil
 	currentCfg  = nil
@@ -324,6 +224,9 @@ function WeaponSystem.init(player)
 	local pl = player or Players.LocalPlayer
 	if not pl then return end
 
+	ScopeSystem.init(FPSCamera, ViewmodelSystem)
+	MeleeHitDetection.init(meleeEvent)
+
 	RunService.Heartbeat:Connect(function()
 		if InputModule.isReloadPressed() and currentTool and currentCfg then
 			reloadTool(currentTool, currentCfg)
@@ -347,7 +250,7 @@ function WeaponSystem.init(player)
 	end
 	pl.CharacterAdded:Connect(function(char)
 		if cancelReload then cancelReload() end
-		resetScope()
+		ScopeSystem.reset()
 		weaponState = "IDLE"
 		currentTool = nil
 		currentCfg  = nil
