@@ -62,18 +62,18 @@ function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, spe
 		-- 3. Transitions d'état
 		local isOnGround = gnd.onGround and jumpLockout <= 0
 		if isOnGround then
-			if state == MovementState.AIRBORNE or state == MovementState.CROUCHING_AIR then
+			if state == MovementState.AIRBORNE or state == MovementState.CROUCHING then
 				velocity = Vector3.new(velocity.X, 0, velocity.Z)
 				surfNormal = nil
 			end
-			state = crouchInfo.isCrouching and MovementState.CROUCHING_GROUND or MovementState.GROUNDED
+			state = crouchInfo.isCrouching and MovementState.CROUCHING or MovementState.GROUNDED
 		elseif not gnd.onGround then
-			state = crouchInfo.isCrouching and MovementState.CROUCHING_AIR or MovementState.AIRBORNE
+			state = crouchInfo.isCrouching and MovementState.CROUCHING or MovementState.AIRBORNE
 		end
-		-- gnd.onGround=true mais jumpLockout>0 → state reste AIRBORNE/CROUCHING_AIR
+		-- gnd.onGround=true mais jumpLockout>0 → state reste AIRBORNE/CROUCHING
 
-		local isGroundedState = state == MovementState.GROUNDED or state == MovementState.CROUCHING_GROUND
-		local isAirborneState = state == MovementState.AIRBORNE or state == MovementState.CROUCHING_AIR
+		local isGroundedState = state == MovementState.GROUNDED or (state == MovementState.CROUCHING and isOnGround)
+		local isAirborneState = state == MovementState.AIRBORNE or (state == MovementState.CROUCHING and not isOnGround)
 
 		-- 4. Saut (coyote + buffer + normal) — consomme isJumpPressed() en interne
 		local shouldJump = CoyoteJump.update(gnd.onGround, dt)
@@ -112,7 +112,7 @@ function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, spe
 			if willJump then
 				velocity    = Vector3.new(velocity.X, Config.JUMP_VELOCITY, velocity.Z)
 				jumpLockout = JUMP_LOCKOUT
-				state       = crouchInfo.isCrouching and MovementState.CROUCHING_AIR or MovementState.AIRBORNE
+				state       = crouchInfo.isCrouching and MovementState.CROUCHING or MovementState.AIRBORNE
 			else
 				velocity = Vector3.new(velocity.X, 0, velocity.Z)
 			end
