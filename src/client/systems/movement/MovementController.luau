@@ -44,7 +44,8 @@ function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, spe
 	local wasGrounded = false
 
 
-	RunService.Heartbeat:Connect(function(dt)
+	RunService.Heartbeat:Connect(function(rawDt)
+		local dt = math.min(rawDt, 1/30)
 		jumpLockout = math.max(0, jumpLockout - dt)
 
 		-- 1. Détection sol

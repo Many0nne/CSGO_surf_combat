@@ -74,14 +74,23 @@ function GroundDetection.getGroundInfo(rootPart: BasePart, velocityY: number?, w
 	-- NORMALE DE CLASSIFICATION : le spherecast renvoie une normale d'ARÊTE sur les
 	-- jointures entre rampes. On relance un raycast fin droit sous le centre pour
 	-- récupérer la vraie normale de FACE (stable d'un segment à l'autre).
+	-- Longueur bornée au contact réel : sinon sur rampe courbe le rayon file plus bas
+	-- et lit une face plus plate (ou le sol SOUS la rampe) → faux "marchable".
 	local normal = result.Normal
-	local centerRay = workspace:Raycast(origin, CAST_DIR, params)
+	local probeLen = result.Distance + CAST_RADIUS + 0.1
+	local centerRay = workspace:Raycast(origin, Vector3.new(0, -probeLen, 0), params)
 	if centerRay then
 		normal = centerRay.Normal
 	end
 
 	-- Garde "montée rapide" : on ne grounde pas si on monte vite (départ de rampe surf).
 	if velocityY and velocityY > Config.JUMP_VELOCITY * 0.5 then
+		return GROUND_MISS
+	end
+
+	-- Séparateur dur surf/sol : une surface non-marchable ne grounde JAMAIS.
+	-- On reste airborne et WallSlide gère le glissement.
+	if normal.Y < Config.SURF_NORMAL_Y then
 		return GROUND_MISS
 	end
 

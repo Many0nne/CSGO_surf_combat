@@ -13,7 +13,8 @@ local MAX_BUMPS       = 4
 local MAX_CLIP_PLANES = 5
 local SKIN            = 0.015
 local PUSH_OUT        = 20.0   -- "a surfer cries"
-local MAX_SUBSTEPS    = 12
+local MAX_SUBSTEPS    = 48     -- couvre ~300 u/s meme a 20 fps
+local MAX_DT          = 1/30  -- borne les sauts apres lag spike
 local STEP_FACTOR     = 0.5    -- longueur max d'un sweep = STEP_FACTOR * radius
 local SNAP_OUT        = 0.6    -- distance (en rayons) au-dessus de la surface d'ou l'on sonde
 local SNAP_IN         = 1.4    -- distance (en rayons) vers la surface
@@ -168,10 +169,20 @@ function WallSlide.resolve(
 	local rtb, rtt = crouchInfo.rootToBottom, crouchInfo.rootToTop
 
 	-- 1. Decoupage en sous-pas pour qu'aucun sweep ne depasse STEP_FACTOR * radius.
+	dt = math.min(dt, MAX_DT)
+
 	local maxStep  = radius * STEP_FACTOR
 	local distFull = velocity.Magnitude * dt
-	local nSub     = math.clamp(math.ceil(distFull / math.max(maxStep, 1e-3)), 1, MAX_SUBSTEPS)
-	local subDt    = dt / nSub
+	local nSub     = math.ceil(distFull / math.max(maxStep, 1e-3))
+
+	if nSub > MAX_SUBSTEPS then
+		-- au-dessus du budget : on limite la distance parcourue ce frame
+		-- (leger rubber-band, preferable a un clip a travers le mur)
+		nSub = MAX_SUBSTEPS
+		dt   = nSub * maxStep / math.max(velocity.Magnitude, 1e-3)
+	end
+
+	local subDt = dt / math.max(nSub, 1)
 
 	local origin      = hrp.Position
 	local totalDisp   = Vector3.zero
@@ -223,14 +234,30 @@ function WallSlide.commitMove(
 	local rtb, rtt = crouchInfo.rootToBottom, crouchInfo.rootToTop
 	local delta = candidate - fromSafe
 	if delta.Magnitude < 1e-5 then return candidate, velocity end
+	local dir = delta.Unit
 
 	local hit = hullCast(fromSafe, r, rtb, rtt, delta)
 	if not hit then
+		-- convexite : la corde peut rater la courbe mais le point final etre dedans
+		if penInfoRaw(candidate, r - 0.05, rtb, rtt) then
+			return fromSafe, clipVelocity(velocity, dir, 1.0)
+		end
 		return candidate, velocity
 	end
 
+	-- Contact rasant : on longe la surface (dir quasi perpendiculaire a la normale).
+	-- Le hull touche deja la rampe → distance ≈ 0, mais ce n'est pas un obstacle frontal.
+	-- On garde le candidat tant qu'il ne penetre pas.
+	if dir:Dot(hit.Normal) > -0.1 then
+		if penInfoRaw(candidate, r - 0.05, rtb, rtt) then
+			return fromSafe, clipVelocity(velocity, hit.Normal, 1.0)
+		end
+		return candidate, velocity
+	end
+
+	-- Obstruction frontale reelle : clamp + clip.
 	local moved = math.max(0, hit.Distance - SKIN)
-	local pos = fromSafe + delta.Unit * moved
+	local pos = fromSafe + dir * moved
 	local vel = velocity
 	if velocity:Dot(hit.Normal) < 0 then
 		vel = clipVelocity(velocity, hit.Normal, 1.0)
