@@ -49,19 +49,48 @@ function GroundDetection.init(character: Model)
 end
 
 -- Retourne l'état du sol sous rootPart.
-function GroundDetection.getGroundInfo(rootPart: BasePart): GroundInfo
+-- velocityY  : vitesse verticale courante (garde "bMovingUpRapidly" Source)
+-- wasGrounded: était-on au sol la frame précédente (hystérésis anti-flicker)
+function GroundDetection.getGroundInfo(rootPart: BasePart, velocityY: number?, wasGrounded: boolean?): GroundInfo
 	local origin = rootPart.Position + Vector3.new(0, CENTER_OFFSET, 0)
+
+	-- Détection par spherecast (capsule tolérante), avec repli sur 4 quadrants
+	-- pour ne pas rater le sol au bord d'une marche (≈ TryTouchGroundInQuadrants).
 	local result = workspace:Spherecast(origin, CAST_RADIUS, CAST_DIR, params)
+	if not result then
+		local q = CAST_RADIUS * 0.6
+		for _, off in ipairs({
+			Vector3.new(q,0,0), Vector3.new(-q,0,0),
+			Vector3.new(0,0,q), Vector3.new(0,0,-q),
+		}) do
+			result = workspace:Spherecast(origin + off, CAST_RADIUS, CAST_DIR, params)
+			if result then break end
+		end
+	end
 	if not result then
 		return GROUND_MISS
 	end
 
-	local normal     = result.Normal
+	-- NORMALE DE CLASSIFICATION : le spherecast renvoie une normale d'ARÊTE sur les
+	-- jointures entre rampes. On relance un raycast fin droit sous le centre pour
+	-- récupérer la vraie normale de FACE (stable d'un segment à l'autre).
+	local normal = result.Normal
+	local centerRay = workspace:Raycast(origin, CAST_DIR, params)
+	if centerRay then
+		normal = centerRay.Normal
+	end
+
+	-- Garde "montée rapide" : on ne grounde pas si on monte vite (départ de rampe surf).
+	if velocityY and velocityY > Config.JUMP_VELOCITY * 0.5 then
+		return GROUND_MISS
+	end
+
 	local cosAngle   = math.clamp(normal:Dot(Vector3.yAxis), -1, 1)
 	local slopeAngle = math.deg(math.acos(cosAngle))
 
-	-- Surface trop raide : non-marchable, le joueur reste en l'air (équivalent CategorizePosition Source).
-	local onGround = slopeAngle <= Config.SLOPE_ANGLE_MAX
+	-- Hystérésis : marge supplémentaire pour RESTER au sol (évite l'oscillation au seuil).
+	local maxAngle = Config.SLOPE_ANGLE_MAX + (wasGrounded and 3 or 0)
+	local onGround = slopeAngle <= maxAngle
 
 	return {
 		onGround    = onGround,

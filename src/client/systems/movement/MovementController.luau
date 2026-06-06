@@ -19,6 +19,9 @@ local MovementState     = require(ReplicatedStorage.Shared.MovementState)
 
 local JUMP_LOCKOUT = 0.15  -- empêche re-grounding immédiat après un saut
 
+local slideParams = RaycastParams.new()
+slideParams.FilterType = Enum.RaycastFilterType.Exclude
+
 local MovementController = {}
 
 function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, speedometer, camera)
@@ -31,12 +34,20 @@ function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, spe
 	CrouchSystem.init(hrp)
 	HeadCollisionResolver.init(char)
 
+	CrouchSystem.init(hrp)
+	HeadCollisionResolver.init(char)
+	GroundDetection.init(char)
+	WallSlide.init(char)
+	slideParams.FilterDescendantsInstances = { char, workspace.CurrentCamera }
+
+	local wasGrounded = false
+
 
 	RunService.Heartbeat:Connect(function(dt)
 		jumpLockout = math.max(0, jumpLockout - dt)
 
 		-- 1. Détection sol
-		local gnd = GroundDetection.getGroundInfo(hrp)
+		local gnd = GroundDetection.getGroundInfo(hrp, velocity.Y, wasGrounded)
 
 		-- 2. Crouch (avant transitions d'état pour connaître halfHeight)
 		local crouchInfo = CrouchSystem.update(dt)
@@ -127,10 +138,18 @@ function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, spe
 		if isGroundedState then
 			local snapY   = gnd.hitPosition.Y + crouchInfo.rootToBottom
 			local moveVec = Vector3.new(velocity.X * dt, 0, velocity.Z * dt)
-			local stepYOffset, wallNormal = StepupSystem.tryStepup(hrp, moveVec)
 
-			-- Mur détecté, stepup impossible → projeter la velocity sur le mur
-			if wallNormal and not stepYOffset then
+			local stepYOffset, wallNormal, slideNormal = StepupSystem.tryStepup(hrp, moveVec)
+
+			if slideNormal then
+				-- Pente / jointure marchable : on glisse (ClipVelocity 3D), pas de perte sèche.
+				local d = velocity:Dot(slideNormal)
+				if d < 0 then
+					velocity = velocity - slideNormal * d
+				end
+				moveVec = Vector3.new(velocity.X * dt, 0, velocity.Z * dt)
+			elseif wallNormal and not stepYOffset then
+				-- Vrai mur, stepup impossible → projeter la velocity sur le mur.
 				local velXZ2 = PhysicsUtils.projectOnPlane(PhysicsUtils.getXZ(velocity), wallNormal)
 				velocity = PhysicsUtils.setXZ(velocity, velXZ2)
 				moveVec  = Vector3.new(velocity.X * dt, 0, velocity.Z * dt)
@@ -184,6 +203,8 @@ function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, spe
 		if speedometer then
 			speedometer.update(spd)
 		end
+
+		wasGrounded = isGroundedState
 
 	end)
 end

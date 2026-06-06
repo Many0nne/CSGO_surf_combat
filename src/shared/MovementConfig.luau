@@ -20,7 +20,8 @@ return {
 	SLOPE_ANGLE_MAX = 45,
 	STEPUP_HEIGHT   = 1.2,
 	SLOPE_FRICTION  = 0.1,   -- μ : friction proportionnelle à la force normale sur la pente
-	SURF_FRICTION   = 0.5,   -- surfaceFriction Source sur les rampes surf (réduit l'air accel latéral)
+	SURF_FRICTION   = 1,   -- surfaceFriction Source sur les rampes surf (réduit l'air accel latéral)
+	SURF_NORMAL_Y   = 0.7,   -- seuil unique marchable/surf (≈ cos 45.6°, comme sv_walkable_normal)
 
 	-- Bunny hop
 	BHOP_LAND_WINDOW = 0.1,

@@ -5,6 +5,7 @@ local PhysicsUtils = require(ReplicatedStorage.Shared.PhysicsUtils)
 local SURF_SKIN      = 1.5
 local SURF_THRESHOLD = 0.7
 local MAX_BUMPS      = 4
+local RETRACE_LEN    = 0.1   -- décalage anti-rampbug (≈ momsurffix_ramp_initial_retrace_length)
 
 local castParams = RaycastParams.new()
 castParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -45,10 +46,12 @@ function WallSlide.resolve(
 	local bCenter = hrp.Position - Vector3.new(0, crouchInfo.rootToBottom - radius, 0)
 	local tCenter = hrp.Position + Vector3.new(0, crouchInfo.rootToTop  - radius, 0)
 
-	local moveVec      = velocity * dt
-	local primalVelocity = velocity  -- velocity avant toute clipping (équivalent primal_velocity Source)
+	local moveVec        = velocity * dt
+	local primalVelocity = velocity
 	local foundNormal : Vector3? = nil
-	local planes      : { Vector3 } = {}
+	local validNormal : Vector3? = lastSurfNormal   -- dernier plan de surf "valide"
+	local posOffset      = Vector3.zero             -- décalage anti-rampbug, appliqué à la fin
+	local planes : { Vector3 } = {}
 
 	for _bump = 1, MAX_BUMPS do
 		if moveVec.Magnitude < 1e-5 then break end
@@ -56,15 +59,32 @@ function WallSlide.resolve(
 		local hit = capsuleCast(bCenter, tCenter, radius, moveVec, castParams)
 		if not hit then break end
 
+		-- ANTI-RAMPBUG : une normale qui diffère brutalement du dernier plan surf valide
+		-- est typiquement une mini-pente parasite sur une jointure. On l'esquive en
+		-- décalant le cast le long du plan valide précédent (= "move away from the ramp").
+		if validNormal and validNormal.Y < SURF_THRESHOLD and hit.Normal:Dot(validNormal) < 0.7 then
+			local nudge = validNormal * RETRACE_LEN
+			local reHit = capsuleCast(bCenter + nudge, tCenter + nudge, radius, moveVec, castParams)
+			if (not reHit) or reHit.Normal:Dot(validNormal) >= 0.7 then
+				bCenter   += nudge
+				tCenter   += nudge
+				posOffset += nudge
+				if not reHit then break end
+				hit = reHit
+			end
+		end
+
 		foundNormal = hit.Normal
 
 		local dotVel = velocity:Dot(hit.Normal)
 		if dotVel < 0 then
 			velocity = velocity - hit.Normal * dotVel
 		end
-
 		if hit.Normal.Y < -0.2 then
 			velocity = Vector3.new(velocity.X, math.min(0, velocity.Y), velocity.Z)
+		end
+		if hit.Normal.Y < SURF_THRESHOLD then
+			validNormal = hit.Normal   -- on ne mémorise comme "valide" que les plans surf
 		end
 
 		moveVec = velocity * dt
@@ -76,9 +96,7 @@ function WallSlide.resolve(
 			local crease = n1:Cross(n2)
 			if crease.Magnitude > 1e-4 then
 				local creaseUnit = crease.Unit
-				-- Source TryPlayerMove : projette la velocity PRIMALE sur la crease (pas la clippée)
 				velocity = creaseUnit * primalVelocity:Dot(creaseUnit)
-				-- Si le résultat pousse dans l'un des plans, stopper (évite rebond en arrière)
 				if velocity:Dot(n1) < 0 or velocity:Dot(n2) < 0 then
 					velocity = Vector3.zero
 					moveVec  = Vector3.zero
@@ -93,6 +111,7 @@ function WallSlide.resolve(
 		end
 	end
 
+	-- Maintien de contact surf (inchangé)
 	if not foundNormal and lastSurfNormal then
 		if velocity:Dot(lastSurfNormal) < 0 then
 			local mCenter = (bCenter + tCenter) * 0.5
@@ -103,7 +122,7 @@ function WallSlide.resolve(
 		end
 	end
 
-	return velocity, moveVec, foundNormal
+	return velocity, moveVec + posOffset, foundNormal
 end
 
 return WallSlide
