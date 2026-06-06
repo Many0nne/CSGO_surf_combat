@@ -20,6 +20,25 @@ local SNAP_IN         = 1.4    -- distance (en rayons) vers la surface
 local SNAP_MAX        = 1.0    -- decalage max (en rayons) qu'un snap peut appliquer
 local LEAVE_SPEED     = 50     -- au-dela de cette vitesse SORTANTE, on ne recolle pas (saut/ejection)
 
+local penProbe = Instance.new("Part")
+penProbe.Anchored = true
+penProbe.CanCollide = false
+penProbe.CanQuery = false
+penProbe.CanTouch = false
+penProbe.Transparency = 1
+penProbe.Name = "PenProbe"
+
+local penOP = OverlapParams.new()
+penOP.FilterType = Enum.RaycastFilterType.Exclude
+
+local function penInfoRaw(pos: Vector3, radius: number, rtb: number, rtt: number): BasePart?
+	local centerY = (rtt - rtb) * 0.5
+	penProbe.Size = Vector3.new(radius * 2, rtt + rtb, radius * 2) * 0.9
+	penProbe.CFrame = CFrame.new(pos + Vector3.new(0, centerY, 0))
+	local parts = workspace:GetPartsInPart(penProbe, penOP)
+	return parts[1]
+end
+
 local castParams = RaycastParams.new()
 castParams.FilterType = Enum.RaycastFilterType.Exclude
 
@@ -27,20 +46,20 @@ local WallSlide = {}
 
 function WallSlide.init(character: Model)
 	castParams.FilterDescendantsInstances = { character, workspace.CurrentCamera }
+	penOP.FilterDescendantsInstances = { character, workspace.CurrentCamera, penProbe }
+	penProbe.Parent = workspace
 end
 
--- Capsule approximee par 3 spheres. Renvoie le hit le plus proche.
-local function capsuleCast(b: Vector3, t: Vector3, radius: number, moveVec: Vector3): RaycastResult?
+function WallSlide.penInfo(pos: Vector3, ci: { rootToTop: number, rootToBottom: number, radius: number }): BasePart?
+	return penInfoRaw(pos, ci.radius - 0.05, ci.rootToBottom, ci.rootToTop)
+end
+
+local function hullCast(pos: Vector3, radius: number, rtb: number, rtt: number, moveVec: Vector3): RaycastResult?
 	if moveVec.Magnitude < 1e-5 then return nil end
-	local mid = (b + t) * 0.5
-	local best: RaycastResult? = nil
-	for _, origin in ipairs({ b, mid, t }) do
-		local hit = workspace:Spherecast(origin, radius, moveVec, castParams)
-		if hit and (not best or hit.Distance < best.Distance) then
-			best = hit
-		end
-	end
-	return best
+	local centerY = (rtt - rtb) * 0.5
+	local cf = CFrame.new(pos + Vector3.new(0, centerY, 0))
+	local size = Vector3.new(radius * 2, rtt + rtb, radius * 2)
+	return workspace:Blockcast(cf, size, moveVec, castParams)
 end
 
 local function clipVelocity(vel: Vector3, normal: Vector3, overbounce: number): Vector3
@@ -56,10 +75,6 @@ local function slideOnce(
 	origin: Vector3, velocity: Vector3, dt: number,
 	radius: number, rtb: number, rtt: number
 ): (Vector3, Vector3, Vector3?)
-	local function centers(pos: Vector3): (Vector3, Vector3)
-		return pos - Vector3.new(0, rtb - radius, 0), pos + Vector3.new(0, rtt - radius, 0)
-	end
-
 	local primal     = velocity
 	local origVel    = velocity
 	local disp       = Vector3.zero
@@ -74,8 +89,7 @@ local function slideOnce(
 		local moveVec = velocity * timeLeft
 		if moveVec.Magnitude < 1e-5 then break end
 
-		local b, t = centers(pos)
-		local hit = capsuleCast(b, t, radius, moveVec)
+		local hit = hullCast(pos, radius, rtb, rtt, moveVec)
 		if not hit then
 			disp += moveVec
 			break
@@ -184,9 +198,7 @@ function WallSlide.resolve(
 		local outDist = radius * SNAP_OUT
 		local inDist  = radius * (SNAP_OUT + SNAP_IN)
 		local snapPos = origin + n * outDist
-		local b = snapPos - Vector3.new(0, rtb - radius, 0)
-		local t = snapPos + Vector3.new(0, rtt - radius, 0)
-		local hit = capsuleCast(b, t, radius, -n * inDist)
+		local hit = hullCast(snapPos, radius, rtb, rtt, -n * inDist)
 		if hit and hit.Normal.Y < SURF_THRESHOLD then
 			-- shift le long de n pour reposer a SKIN de la surface (recolle des deux cotes)
 			local shiftAmt = outDist - hit.Distance + SKIN
@@ -201,6 +213,29 @@ function WallSlide.resolve(
 	end
 
 	return velocity, totalDisp, foundNormal
+end
+
+function WallSlide.commitMove(
+	fromSafe: Vector3, candidate: Vector3, velocity: Vector3,
+	crouchInfo: { rootToTop: number, rootToBottom: number, radius: number }
+): (Vector3, Vector3)
+	local r = crouchInfo.radius - 0.05
+	local rtb, rtt = crouchInfo.rootToBottom, crouchInfo.rootToTop
+	local delta = candidate - fromSafe
+	if delta.Magnitude < 1e-5 then return candidate, velocity end
+
+	local hit = hullCast(fromSafe, r, rtb, rtt, delta)
+	if not hit then
+		return candidate, velocity
+	end
+
+	local moved = math.max(0, hit.Distance - SKIN)
+	local pos = fromSafe + delta.Unit * moved
+	local vel = velocity
+	if velocity:Dot(hit.Normal) < 0 then
+		vel = clipVelocity(velocity, hit.Normal, 1.0)
+	end
+	return pos, vel
 end
 
 return WallSlide

@@ -34,14 +34,9 @@ function StepupSystem.tryStepup(hrp: BasePart, moveVec: Vector3): (number?, Vect
 	local horizHit = workspace:Spherecast(origin, RADIUS, moveVec, castParams)
 	if not horizHit then return nil, nil, nil end
 
-	print(string.format("[SU] horizHit normalY=%.3f (thresh=%.2f) dist=%.3f",
-		horizHit.Normal.Y, Config.SURF_NORMAL_Y, horizHit.Distance
-	))
-
 	-- 1b. Surface MARCHABLE devant (pente douce / jointure d'arrondi multi-rampes) :
 	-- ni un mur, ni une marche → on glisse dessus (ClipVelocity 3D), pas de blocage.
 	if horizHit.Normal.Y >= Config.SURF_NORMAL_Y then
-		print(string.format("[SU] → slideNormal (%.2f,%.2f,%.2f)", horizHit.Normal.X, horizHit.Normal.Y, horizHit.Normal.Z))
 		return nil, nil, horizHit.Normal
 	end
 

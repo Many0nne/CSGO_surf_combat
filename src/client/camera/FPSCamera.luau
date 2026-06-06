@@ -16,6 +16,7 @@ local baseSens      = CameraConfig.DEFAULT_SENS
 local scopeSensMult = CameraConfig.SCOPE_SENS_MULT
 local isScoped      = false
 local currentSens   = baseSens
+local activeFovTween: Tween? = nil
 
 -- Interpolation de position entre deux pas physiques (Heartbeat).
 -- Le perso est deplace par CFrame sur Heartbeat (~60 Hz) ; la camera rend a la
@@ -117,10 +118,17 @@ function FPSCamera.setScoped(scoped: boolean)
 end
 
 function FPSCamera.setFOV(targetFov: number, duration: number?)
+	if activeFovTween then
+		activeFovTween:Cancel()
+		activeFovTween = nil
+	end
 	if duration and duration > 0 then
 		local TweenService = game:GetService("TweenService")
 		local info = TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-		TweenService:Create(cam, info, { FieldOfView = targetFov }):Play()
+		local t = TweenService:Create(cam, info, { FieldOfView = targetFov })
+		activeFovTween = t
+		t.Completed:Once(function() activeFovTween = nil end)
+		t:Play()
 	else
 		cam.FieldOfView = targetFov
 	end

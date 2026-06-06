@@ -165,18 +165,23 @@ function SettingsMenu.init(fpsCam: typeof(fpsCamRef))
 	gui.Enabled        = false
 	gui.Parent         = Players.LocalPlayer:WaitForChild("PlayerGui")
 
-	local backdrop = Instance.new("Frame")
+	local backdrop = Instance.new("TextButton")
 	backdrop.Size                   = UDim2.new(1, 0, 1, 0)
 	backdrop.BackgroundColor3       = Color3.new(0, 0, 0)
 	backdrop.BackgroundTransparency = 0.5
 	backdrop.BorderSizePixel        = 0
+	backdrop.Text                   = ""
+	backdrop.AutoButtonColor        = false
 	backdrop.Parent                 = gui
+	backdrop.MouseButton1Click:Connect(function() setOpen(false) end)
 
-	local panel = Instance.new("Frame")
+	local panel = Instance.new("TextButton")
 	panel.Size             = UDim2.new(0, 380, 0, 210)
 	panel.Position         = UDim2.new(0.5, -190, 0.5, -105)
 	panel.BackgroundColor3 = Color3.fromRGB(20, 20, 22)
 	panel.BorderSizePixel  = 0
+	panel.Text             = ""
+	panel.AutoButtonColor  = false
 	panel.Parent           = backdrop
 	local pc = Instance.new("UICorner")
 	pc.CornerRadius = UDim.new(0, 8)
