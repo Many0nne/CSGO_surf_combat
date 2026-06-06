@@ -19,7 +19,7 @@ local STEP_FACTOR     = 0.5    -- longueur max d'un sweep = STEP_FACTOR * radius
 local SNAP_OUT        = 0.6    -- distance (en rayons) au-dessus de la surface d'ou l'on sonde
 local SNAP_IN         = 1.4    -- distance (en rayons) vers la surface
 local SNAP_MAX        = 1.0    -- decalage max (en rayons) qu'un snap peut appliquer
-local LEAVE_SPEED     = 50     -- au-dela de cette vitesse SORTANTE, on ne recolle pas (saut/ejection)
+local LEAVE_SPEED     = 0     -- au-dela de cette vitesse SORTANTE, on ne recolle pas (saut/ejection)
 
 local penProbe = Instance.new("Part")
 penProbe.Anchored = true
