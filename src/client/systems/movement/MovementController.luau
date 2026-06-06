@@ -177,8 +177,14 @@ function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, spe
 			hrp.CFrame = CFrame.new(newPos) * targetRot
 		elseif isAirborneState then
 			-- Wallslide + surf via ClipVelocity (multi-pass + probe maintien de contact)
+			local velBefore = velocity.Magnitude
 			local newVel, moveVec, hitNormal = WallSlide.resolve(hrp, velocity, dt, surfNormal, crouchInfo)
 			velocity = newVel
+			print(string.format("[MC] WallSlide vel %.1f→%.1f hitN=%s surfN=%s",
+				velBefore, velocity.Magnitude,
+				hitNormal and string.format("(%.2f,%.2f,%.2f)", hitNormal.X, hitNormal.Y, hitNormal.Z) or "nil",
+				surfNormal and string.format("(%.2f,%.2f,%.2f)", surfNormal.X, surfNormal.Y, surfNormal.Z) or "nil"
+			))
 			local newPos = hrp.Position + moveVec
 			hrp.CFrame = CFrame.new(newPos) * targetRot
 
@@ -191,8 +197,17 @@ function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, spe
 
 			-- Mise à jour de la surf normale persistante
 			if hitNormal and hitNormal.Y < 0.7 then
+				if surfNormal == nil or (hitNormal - surfNormal).Magnitude > 0.05 then
+					print(string.format("[MC] surfNormal updated (%.2f,%.2f,%.2f)→(%.2f,%.2f,%.2f)",
+						surfNormal and surfNormal.X or 0, surfNormal and surfNormal.Y or 0, surfNormal and surfNormal.Z or 0,
+						hitNormal.X, hitNormal.Y, hitNormal.Z
+					))
+				end
 				surfNormal = hitNormal
 			else
+				if surfNormal then
+					print("[MC] surfNormal cleared")
+				end
 				surfNormal = nil
 			end
 		end

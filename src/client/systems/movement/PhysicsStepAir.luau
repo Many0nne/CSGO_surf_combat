@@ -1,4 +1,3 @@
-local PhysicsUtils = require(game:GetService("ReplicatedStorage").Shared.PhysicsUtils)
 local Config       = require(game:GetService("ReplicatedStorage").Shared.MovementConfig)
 
 local PhysicsStepAir = {}
