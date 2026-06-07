@@ -144,12 +144,16 @@ function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, spe
 			local stepYOffset, wallNormal, slideNormal = StepupSystem.tryStepup(hrp, moveVec)
 
 			if slideNormal then
-				-- Pente / jointure marchable : on glisse (ClipVelocity 3D), pas de perte sèche.
-				local d = velocity:Dot(slideNormal)
-				if d < 0 then
-					velocity = velocity - slideNormal * d
+				-- Ignorer si c'est la pente sur laquelle on se tient déjà (snapY gère le Y).
+				-- Clipper uniquement pour les jointures / angles inattendus.
+				local isCurrentGround = gnd.normal and slideNormal:Dot(gnd.normal) > 0.9
+				if not isCurrentGround then
+					local d = velocity:Dot(slideNormal)
+					if d < 0 then
+						velocity = velocity - slideNormal * d
+					end
+					moveVec = Vector3.new(velocity.X * dt, 0, velocity.Z * dt)
 				end
-				moveVec = Vector3.new(velocity.X * dt, 0, velocity.Z * dt)
 			elseif wallNormal and not stepYOffset then
 				-- Vrai mur, stepup impossible → projeter la velocity sur le mur.
 				local velXZ2 = PhysicsUtils.projectOnPlane(PhysicsUtils.getXZ(velocity), wallNormal)
@@ -176,7 +180,8 @@ function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, spe
 				end
 			end
 
-			newPos, velocity = WallSlide.commitMove(lastSafePos, newPos, velocity, crouchInfo)
+			-- StepupSystem gère déjà la détection de murs (wallNormal) en grounded.
+			-- commitMove causerait des faux positifs sur les pentes (hull cast diagonal → slope face).
 			hrp.CFrame = CFrame.new(newPos) * targetRot
 			if not WallSlide.penInfo(newPos, crouchInfo) then
 				lastSafePos = newPos
