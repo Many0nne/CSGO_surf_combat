@@ -1,98 +1,71 @@
-Les deux symptômes ne sont en fait qu'un seul bug, et c'est une conséquence directe d'avoir réparé le tunneling : avant, à grande vitesse, tu traversais la rampe, donc tu n'entrais jamais réellement en contact avec elle. Maintenant que la collision tient, le personnage touche vraiment la rampe — et ça expose une mauvaise classification du sol qui était là depuis le début mais masquée.
-La cause commune : la rampe surf est classée « sol »
-Regarde la transition d'état dans MovementController :
-luaif isOnGround then
-    if state == MovementState.AIRBORNE or state == MovementState.CROUCHING then
-        velocity = Vector3.new(velocity.X, 0, velocity.Z)  -- ← Y écrasé à 0
-        surfNormal = nil                                    -- ← surf désactivée
-    end
-    state = ... GROUNDED ...
-Si GroundDetection renvoie onGround = true sur la rampe surf, alors d'un coup :
-
-velocity.Y passe à 0 → tu ne peux plus glisser ni vers le haut ni vers le bas (« bloque instantanément »).
-l'état devient GROUNDED → tu peux sauter, la rampe compte comme un sol.
-surfNormal = nil → la physique surf s'arrête.
-
-Donc les deux symptômes sortent du même faux grounding. Reste à comprendre pourquoi la rampe se fait classer marchable.
-Pourquoi ça grounde sur une rampe steep
-Dans GroundDetection, tu écrases la normale du spherecast par un raycast central « pour avoir la vraie normale de face » :
-lualocal normal = result.Normal
-local centerRay = workspace:Raycast(origin, CAST_DIR, params)  -- CAST_DIR = -(HALF_HEIGHT + 0.5)
-if centerRay then
-    normal = centerRay.Normal
-end
-Deux problèmes se combinent :
-
-CAST_DIR est trop long (HALF_HEIGHT + CAST_SKIN = 2.4 + 0.5 = 2.9). Sur une rampe courbe, le rayon central file plus bas que le point de contact réel et tape soit une portion plus plate de la courbe, soit carrément le sol sous la rampe → normale Y >= 0.7 → marchable.
-Aucun séparateur dur surf/marchable. La classification repose sur slopeAngle <= 45 (+3 hystérésis), ce qui à la frontière laisse passer des normales surf.
-
-Patch 1 — GroundDetection : borner le rayon + garde surf dure
-lua	-- Normale de FACE via raycast central, mais BORNÉ à la profondeur du contact
-	-- spherecast — sinon, sur rampe courbe, le rayon file plus bas et lit une face
-	-- plus plate (ou le sol SOUS la rampe) → faux "marchable".
-	local normal = result.Normal
-	local probeLen = result.Distance + CAST_RADIUS + 0.1
-	local centerRay = workspace:Raycast(origin, Vector3.new(0, -probeLen, 0), params)
-	if centerRay then
-		normal = centerRay.Normal
-	end
-
-	-- Garde "montée rapide"
-	if velocityY and velocityY > Config.JUMP_VELOCITY * 0.5 then
-		return GROUND_MISS
-	end
-
-	-- SURF : une surface non-marchable ne grounde JAMAIS. C'est le séparateur dur
-	-- entre "sol" et "rampe surf" → on reste airborne et WallSlide gère le glissement.
-	if normal.Y < Config.SURF_NORMAL_Y then
-		return GROUND_MISS
-	end
-
-	local cosAngle   = math.clamp(normal:Dot(Vector3.yAxis), -1, 1)
-	local slopeAngle = math.deg(math.acos(cosAngle))
-	local maxAngle   = Config.SLOPE_ANGLE_MAX + (wasGrounded and 3 or 0)
-	local onGround   = slopeAngle <= maxAngle
-La garde normal.Y < SURF_NORMAL_Y → GROUND_MISS est ce qui répare les deux symptômes en une fois : sur la rampe surf tu restes airborne, velocity.Y est conservée, surfNormal reste actif, et tu ne peux plus sauter.
-Note : SURF_NORMAL_Y = 0.7 (≈ 45.6°) est désormais le seuil qui tranche, donc l'hystérésis +3 ne joue plus que dans la bande 42–45.6° (sol marchable franc), ce qui est le comportement voulu.
-Patch 2 — commitMove : ne pas clamper un contact rasant
-Même une fois le grounding corrigé, il reste un piège : pendant un slide surf correct, ta capsule longe la rampe à SKIN près. commitMove relance alors un hullCast depuis lastSafePos, qui est collé à la rampe → le blockcast part au contact, renvoie une distance ≈ 0, et moved = max(0, 0 - SKIN) = 0 → position figée → slide tué.
-Il faut distinguer un contact rasant (on glisse parallèlement à la surface) d'une obstruction frontale (mur). On n'ampute le mouvement que si le delta entre vraiment dans le plan :
-luafunction WallSlide.commitMove(fromSafe, candidate, velocity, crouchInfo)
-	local r = crouchInfo.radius - 0.05
-	local rtb, rtt = crouchInfo.rootToBottom, crouchInfo.rootToTop
-	local delta = candidate - fromSafe
-	if delta.Magnitude < 1e-5 then return candidate, velocity end
-	local dir = delta.Unit
-
-	local hit = hullCast(fromSafe, r, rtb, rtt, delta)
-	if not hit then
-		if penInfoRaw(candidate, r - 0.05, rtb, rtt) then
-			return fromSafe, clipVelocity(velocity, dir, 1.0)
-		end
-		return candidate, velocity
-	end
-
-	-- Contact rasant : on longe la surface (dir quasi ⟂ normale). Le hull touche déjà
-	-- la rampe → distance ≈ 0, mais ce n'est PAS un obstacle frontal. On garde le
-	-- candidat tant qu'il ne pénètre pas.
-	if dir:Dot(hit.Normal) > -0.1 then
-		if penInfoRaw(candidate, r - 0.05, rtb, rtt) then
-			return fromSafe, clipVelocity(velocity, hit.Normal, 1.0)
-		end
-		return candidate, velocity
-	end
-
-	-- Obstruction frontale réelle : clamp + clip.
-	local moved = math.max(0, hit.Distance - SKIN)
-	local pos = fromSafe + dir * moved
-	local vel = velocity
-	if velocity:Dot(hit.Normal) < 0 then
-		vel = clipVelocity(velocity, hit.Normal, 1.0)
-	end
-	return pos, vel
-end
-dir:Dot(hit.Normal) > -0.1 : tant que le mouvement n'entre pas franchement dans le plan (slide parallèle ⇒ produit scalaire ≈ 0), on n'ampute pas — la protection anti-tunnel reste assurée par le penInfoRaw sur le candidat et par la branche frontale.
-Ordre de test
-Applique d'abord le Patch 1 seul et vérifie que tu restes airborne sur la rampe (plus de saut possible, Y conservée). Si le slide « accroche » encore par à-coups, ajoute le Patch 2.
-Un point à surveiller côté design : si certaines de tes rampes sont réellement ≤ 45°, elles resteront marchables par définition (SLOPE_ANGLE_MAX = 45). Pour qu'une rampe se comporte en surf, il faut qu'elle soit plus raide que ce seuil — sinon c'est la géométrie qu'il faut ajuster, pas le code.
-Tu veux que je te renvoie GroundDetection.getGroundInfo en entier avec le Patch 1 intégré, pour éviter une erreur de recollage ?Opus 4.8 Moyen
+  21:08:26.177  Assistant plugin version changed from 201069e to 09b2c7f. This may cause instability when using Assistant or the MCP server. Please restart Roblox Studio to fix.  -  Serveur
+  21:08:26.607  Assistant plugin version changed from 201069e to 09b2c7f. This may cause instability when using Assistant or the MCP server. Please restart Roblox Studio to fix.  -  Client
+  21:08:32.881  [BHOP] 113.8->97.4 move=1.89/1.93 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=0.87 | start=113.8 airResolve=97.4 airCommit=97.4  -  Client - MovementController:273
+  21:08:32.999  [BHOP] 97.3->97.5 move=0.49/1.65 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=97.3 airResolve=97.5 airCommit=97.5  -  Client - MovementController:273
+  21:08:33.015  [BHOP] 97.5->97.5 move=0.08/1.56 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=97.5 airResolve=97.5 airCommit=97.5  -  Client - MovementController:273
+  21:08:33.032  [BHOP] 97.5->97.5 move=0.03/1.66 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=97.5 airResolve=97.5 airCommit=97.5  -  Client - MovementController:273
+  21:08:33.049  [BHOP] 97.5->97.5 move=0.07/1.66 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=97.5 airResolve=97.5 airCommit=97.5  -  Client - MovementController:273
+  21:08:33.067  [BHOP] 97.5->97.5 move=0.03/1.78 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=97.5 airResolve=97.5 airCommit=97.5  -  Client - MovementController:273
+  21:08:33.081  [BHOP] 97.5->97.5 move=0.02/1.47 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=97.5 airResolve=97.5 airCommit=97.5  -  Client - MovementController:273
+  21:08:33.099  [BHOP] 97.5->98.8 move=0.05/1.56 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=97.5 airResolve=98.8 airCommit=98.8  -  Client - MovementController:273
+  21:08:33.115  [BHOP] 98.8->99.4 move=0.02/1.68 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=98.8 airResolve=99.4 airCommit=99.4  -  Client - MovementController:273
+  21:08:33.131  [BHOP] 99.4->100.0 move=0.02/1.59 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=99.4 airResolve=100.0 airCommit=100.0  -  Client - MovementController:273
+  21:08:33.148  [BHOP] 100.0->100.4 move=0.01/1.80 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=100.0 airResolve=100.4 airCommit=100.4  -  Client - MovementController:273
+  21:08:33.165  [BHOP] 100.4->100.6 move=0.03/1.53 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=100.4 airResolve=100.6 airCommit=100.6  -  Client - MovementController:273
+  21:08:33.182  [BHOP] 100.6->100.7 move=0.01/1.70 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=100.6 airResolve=100.7 airCommit=100.7  -  Client - MovementController:273
+  21:08:33.198  [BHOP] 100.7->100.9 move=0.03/1.70 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=100.7 airResolve=100.9 airCommit=100.9  -  Client - MovementController:273
+  21:08:33.215  [BHOP] 100.9->101.3 move=0.00/1.71 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=100.9 airResolve=101.3 airCommit=101.3  -  Client - MovementController:273
+  21:08:33.265  [BHOP] 101.6->101.6 move=0.09/1.83 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.12 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.281  [BHOP] 101.6->101.6 move=0.06/1.63 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.10 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.299  [BHOP] 101.6->101.6 move=0.08/1.84 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.08 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.314  [BHOP] 101.6->101.6 move=0.05/1.63 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.07 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.331  [BHOP] 101.6->101.6 move=0.06/1.74 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.05 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.348  [BHOP] 101.6->101.6 move=0.02/1.74 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.03 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.364  [BHOP] 101.6->101.6 move=0.04/1.47 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.02 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.382  [BHOP] 101.6->101.6 move=0.02/1.83 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.399  [BHOP] 101.6->101.6 move=0.03/1.73 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.415  [BHOP] 101.6->101.6 move=0.03/1.63 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.478  [BHOP] 101.6->101.6 move=0.07/2.13 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.10 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.501  [BHOP] 101.6->101.6 move=0.09/2.44 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.08 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.518  [BHOP] 101.6->101.6 move=0.08/1.73 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.06 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.532  [BHOP] 101.6->101.6 move=0.05/1.32 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.05 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.548  [BHOP] 101.6->101.6 move=0.02/1.63 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.03 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.565  [BHOP] 101.6->101.6 move=0.06/1.71 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.02 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.582  [BHOP] 101.6->101.6 move=0.05/1.73 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.599  [BHOP] 101.6->101.6 move=0.01/1.73 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.615  [BHOP] 101.6->101.6 move=0.03/1.62 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.677  [BHOP] 101.6->101.6 move=0.08/2.54 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.10 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.695  [BHOP] 101.6->101.6 move=0.08/1.83 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.09 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.719  [BHOP] 101.6->101.6 move=0.09/2.44 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.06 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.741  [BHOP] 101.6->101.6 move=0.09/2.13 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.04 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.758  [BHOP] 101.6->101.6 move=0.01/1.70 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.03 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.781  [BHOP] 101.6->101.6 move=0.08/2.23 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.801  [BHOP] 101.6->101.6 move=0.04/2.13 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.825  [BHOP] 101.6->101.6 move=0.02/2.54 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.900  [BHOP] 101.6->101.6 move=0.10/2.32 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.10 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.921  [BHOP] 101.6->101.6 move=0.03/2.12 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.08 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.940  [BHOP] 101.6->101.6 move=0.09/1.81 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.06 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.957  [BHOP] 101.6->101.6 move=0.03/1.80 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.04 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.972  [BHOP] 101.6->101.6 move=0.05/1.52 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.03 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:33.993  [BHOP] 101.6->101.6 move=0.03/2.24 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.01 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:34.011  [BHOP] 101.6->101.6 move=0.06/1.83 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:34.037  [BHOP] 101.6->101.6 move=0.02/2.64 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:34.096  [BHOP] 101.6->101.6 move=0.07/1.83 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.11 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:34.113  [BHOP] 101.6->101.6 move=0.06/1.73 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.09 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:34.123  [BHOP] 101.6->101.6 move=0.03/1.12 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.08 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:34.145  [BHOP] 101.6->101.6 move=0.07/2.23 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.06 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:34.170  [BHOP] 101.6->101.6 move=0.09/2.58 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.04 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:34.201  [BHOP] 101.6->101.6 move=0.04/3.06 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.01 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:34.223  [BHOP] 101.6->101.6 move=0.06/2.24 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:34.255  [BHOP] 101.6->101.6 move=0.05/3.23 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:34.315  [BHOP] 101.6->101.6 move=0.95/3.39 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.12 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:34.340  [BHOP] 101.6->101.6 move=0.10/2.44 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.09 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:34.363  [BHOP] 101.6->101.6 move=0.08/2.44 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.07 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:34.393  [BHOP] 101.6->101.6 move=0.07/2.95 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.04 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:34.420  [BHOP] 101.6->101.6 move=0.09/2.85 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.01 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:34.454  [BHOP] 101.6->101.6 move=0.05/3.39 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:34.479  [BHOP] 101.6->101.6 move=0.05/2.44 | grd=false air=true onGnd=false held=true shouldJump=false lockIn=0.00 slopeA=0.0 nY=1.00 willJump=false skipFric=nil | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 airResolve=101.6 airCommit=101.6  -  Client - MovementController:273
+  21:08:34.511  [BHOP] 101.6->74.7 move=2.47/3.36 | grd=true air=false onGnd=true held=false shouldJump=false lockIn=0.00 slopeA=30.0 nY=0.87 willJump=false skipFric=false | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=101.6 grdAcc=74.7 grdJmp=74.7 grdClip=74.7 grdHead=74.7  -  Client - MovementController:273
+  21:08:34.538  [BHOP] 74.7->58.5 move=1.58/2.02 | grd=true air=false onGnd=true held=false shouldJump=false lockIn=0.00 slopeA=30.0 nY=0.87 willJump=false skipFric=false | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=74.7 grdAcc=58.5 grdJmp=58.5 grdClip=58.5 grdHead=58.5  -  Client - MovementController:273
+  21:08:34.566  [BHOP] 58.5->45.8 move=1.25/1.59 | grd=true air=false onGnd=true held=false shouldJump=false lockIn=0.00 slopeA=30.0 nY=0.87 willJump=false skipFric=false | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=58.5 grdAcc=45.8 grdJmp=45.8 grdClip=45.8 grdHead=45.8  -  Client - MovementController:273
+  21:08:34.588  [BHOP] 45.8->37.8 move=0.83/1.00 | grd=true air=false onGnd=true held=false shouldJump=false lockIn=0.00 slopeA=30.0 nY=0.87 willJump=false skipFric=false | slideNY=nil dot=nil isCur=nil wallNY=nil hitNY=nil | start=45.8 grdAcc=37.8 grdJmp=37.8 grdClip=37.8 grdHead=37.8  -  Client - MovementController:273

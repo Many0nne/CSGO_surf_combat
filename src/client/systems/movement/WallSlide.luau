@@ -100,6 +100,21 @@ local function slideOnce(
 		local moveDir  = moveVec.Unit
 		local moved    = math.max(0, hit.Distance - SKIN)
 
+		-- Correction d'ARETE : le Blockcast accroche souvent l'arete de la jointure plat->rampe
+		-- et renvoie une normale VERTICALE parasite (faux mur) alors que la vraie face est
+		-- marchable. Un rayon fin le long du mouvement lit la vraie face : si elle est marchable,
+		-- on glisse le long de la rampe (preserve la vitesse) au lieu de clipper contre un faux
+		-- mur (ce qui tuait le bhop a la jointure). Vrais murs et surf (nY 0.3-0.7) inchanges.
+		local hitNormal = hit.Normal
+		if hitNormal.Y < SURF_THRESHOLD then
+			-- Rayon fin depuis le centre du joueur jusqu'a la face (le hit.Position du Blockcast
+			-- est sur la boite balayee, decale d'un rayon ; on vise donc hit.Distance + radius).
+			local probe = workspace:Raycast(pos, moveDir * (hit.Distance + radius + 0.5), castParams)
+			if probe and probe.Normal.Y >= SURF_THRESHOLD then
+				hitNormal = probe.Normal
+			end
+		end
+
 		if moved > 1e-4 then
 			pos       += moveDir * moved
 			disp      += moveDir * moved
@@ -108,7 +123,7 @@ local function slideOnce(
 			table.clear(planes)
 		end
 
-		found = hit.Normal
+		found = hitNormal
 		timeLeft -= timeLeft * (hit.Distance / fullDist)
 
 		if numplanes >= MAX_CLIP_PLANES then
@@ -116,7 +131,7 @@ local function slideOnce(
 			break
 		end
 		numplanes += 1
-		planes[numplanes] = hit.Normal
+		planes[numplanes] = hitNormal
 
 		if numplanes == 1 then
 			velocity = clipVelocity(origVel, planes[1], 1.0)
@@ -238,9 +253,21 @@ function WallSlide.commitMove(
 
 	local hit = hullCast(fromSafe, r, rtb, rtt, delta)
 	if not hit then
-		-- convexite : la corde peut rater la courbe mais le point final etre dedans
+		-- Le hull n'a rien touche sur tout le trajet → aucun obstacle frontal reel.
 		if penInfoRaw(candidate, r - 0.05, rtb, rtt) then
-			return fromSafe, clipVelocity(velocity, dir, 1.0)
+			-- Le point final PENETRE une part. Une fois dedans, tous les casts partant de
+			-- l'interieur renvoient nil (Roblox) : resolve ne voit plus rien et GroundDetection
+			-- ne grounde pas → joueur coince invisible, vitesse gardee mais 0 deplacement.
+			-- On EJECTE vers le haut (rampes/sols sont SOUS le joueur) jusqu'a sortir, en gardant
+			-- la vitesse. Il ressort SUR la rampe → re-grounde au tick suivant → chemin grounded.
+			local pos   = candidate
+			local freed = false
+			for _ = 1, 12 do
+				if not penInfoRaw(pos, r - 0.05, rtb, rtt) then freed = true break end
+				pos += Vector3.new(0, 0.15, 0)
+			end
+			if not freed then pos = fromSafe end  -- secours : rien de libre vers le haut
+			return pos, velocity
 		end
 		return candidate, velocity
 	end

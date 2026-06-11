@@ -94,6 +94,7 @@ function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, spe
 
 		-- 7. Physique
 		local velXZ = PhysicsUtils.getXZ(velocity)
+		local willJump = false  -- saut effectif ce tick (visible jusqu'au déplacement étape 8)
 
 		if isGroundedState then
 			local projWishdir = gnd.slopeAngle > 1
@@ -109,7 +110,7 @@ function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, spe
 			end
 			velocity = PhysicsUtils.setXZ(velocity, velXZ)
 
-			local willJump = shouldJump or bhop.forceJump
+			willJump = shouldJump or bhop.forceJump
 			if willJump then
 				velocity    = Vector3.new(velocity.X, Config.JUMP_VELOCITY, velocity.Z)
 				jumpLockout = JUMP_LOCKOUT
@@ -147,7 +148,7 @@ function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, spe
 				-- Ignorer si c'est la pente sur laquelle on se tient déjà (snapY gère le Y).
 				-- Clipper uniquement pour les jointures / angles inattendus.
 				local isCurrentGround = gnd.normal and slideNormal:Dot(gnd.normal) > 0.9
-				if not isCurrentGround then
+				if not isCurrentGround and not willJump then  -- en bhop la rampe marchable ne mange pas la vitesse
 					local d = velocity:Dot(slideNormal)
 					if d < 0 then
 						velocity = velocity - slideNormal * d
@@ -167,6 +168,25 @@ function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, spe
 				targetY,
 				hrp.Position.Z + moveVec.Z
 			)
+
+			-- Re-snap Y au sol à la DESTINATION : suit la rampe à la jointure plat→pente.
+			-- Sans ça, à grande vitesse le déplacement XZ dépasse là où la rampe monte alors que
+			-- le Y reste au niveau du sol actuel → on s'enfonce dans la pente → blocage/rollback
+			-- en bhop. On ne fait MONTER que vers une surface marchable (jamais tomber dans un trou).
+			if not stepYOffset and moveVec.Magnitude > 1e-3 then
+				local up   = Config.STEPUP_HEIGHT
+				local org  = Vector3.new(newPos.X, hrp.Position.Y + up, newPos.Z)
+				local down = Vector3.new(0, -(up + crouchInfo.rootToBottom + 0.6), 0)
+				local destHit = workspace:Spherecast(org, crouchInfo.radius * 0.9, down, slideParams)
+				if destHit and destHit.Normal.Y >= Config.SURF_NORMAL_Y then
+					local destSnapY = destHit.Position.Y + crouchInfo.rootToBottom
+					if destSnapY > targetY then
+						targetY = destSnapY
+						newPos  = Vector3.new(newPos.X, targetY, newPos.Z)
+					end
+				end
+			end
+
 			local headMoveVec = Vector3.new(
 				newPos.X - hrp.Position.X,
 				newPos.Y - hrp.Position.Y,
@@ -218,8 +238,9 @@ function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, spe
 		end
 
 
-		-- 9. Speedometer + debug
+		-- 9. Speedometer
 		local spd = PhysicsUtils.getXZ(velocity).Magnitude
+
 		if speedometer then
 			speedometer.update(spd)
 		end
