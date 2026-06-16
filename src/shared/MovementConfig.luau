@@ -7,7 +7,7 @@ return {
 	-- Accélération
 	GROUND_ACCEL           = 128,
 	AIR_ACCEL              = 150,
-	AIR_SPEED_CAP          = 30,   -- équivalent GetAirSpeedCap() Source (hardcodé à 30 dans le SDK)
+	AIR_SPEED_CAP          = 10,   -- équivalent GetAirSpeedCap() Source (hardcodé à 30 dans le SDK)
 	FRICTION               = 8.0,
 	STOP_SPEED             = 2,
 
