@@ -208,11 +208,25 @@ function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, spe
 			end
 		elseif isAirborneState then
 			-- Wallslide + surf via ClipVelocity (multi-pass + probe maintien de contact)
-			local velBefore = velocity.Magnitude
-			local newVel, moveVec, hitNormal = WallSlide.resolve(hrp, velocity, dt, surfNormal, crouchInfo)
+			local sBefore = PhysicsUtils.getXZ(velocity).Magnitude
+			local newVel, moveVec, hitNormal, stepped = WallSlide.resolve(hrp, velocity, dt, surfNormal, crouchInfo)
 			velocity = newVel
+			local sResolve = PhysicsUtils.getXZ(velocity).Magnitude
 			local candidate = hrp.Position + moveVec
-			candidate, velocity = WallSlide.commitMove(lastSafePos, candidate, velocity, crouchInfo)
+			if stepped then
+				-- Rebord enjambé en l'air : commitMove re-clipperait la face verticale, on l'évite.
+				candidate = WallSlide.ejectUp(candidate, lastSafePos, crouchInfo)
+			else
+				candidate, velocity = WallSlide.commitMove(lastSafePos, candidate, velocity, crouchInfo)
+			end
+			if Config.MOVE_DEBUG then
+				local sCommit = PhysicsUtils.getXZ(velocity).Magnitude
+				local pen = WallSlide.penInfo(candidate, crouchInfo) ~= nil
+				print(string.format(
+					"[AIR] pos=%s velY=%.0f xz: before=%.0f afterResolve=%.0f afterCommit=%.0f disp=%.2f stepped=%s surf=%s pen=%s",
+					tostring(hrp.Position), velocity.Y, sBefore, sResolve, sCommit, moveVec.Magnitude,
+					tostring(stepped), surfNormal and ("Y" .. string.format("%.2f", surfNormal.Y)) or "nil", tostring(pen)))
+			end
 			hrp.CFrame = CFrame.new(candidate) * targetRot
 			if not WallSlide.penInfo(candidate, crouchInfo) then
 				lastSafePos = candidate
@@ -225,14 +239,12 @@ function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, spe
 				velocity = Vector3.new(velocity.X, -Config.MAX_FALL_SPEED, velocity.Z)
 			end
 
-			-- Mise à jour de la surf normale persistante
-			if hitNormal and hitNormal.Y < 0.7 then
-				if surfNormal == nil or (hitNormal - surfNormal).Magnitude > 0.05 then
-					end
+			-- Mise à jour de la surf normale persistante : UNIQUEMENT les vraies rampes surf
+			-- (SURF_NORMAL_MIN <= Y < SURF_NORMAL_Y). Une face quasi verticale (Y < MIN) est un MUR,
+			-- pas du surf : la stocker désactiverait à tort le clamp de chute et changerait la friction.
+			if hitNormal and hitNormal.Y >= Config.SURF_NORMAL_MIN and hitNormal.Y < Config.SURF_NORMAL_Y then
 				surfNormal = hitNormal
 			else
-				if surfNormal then
-					end
 				surfNormal = nil
 			end
 		end

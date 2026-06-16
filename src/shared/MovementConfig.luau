@@ -22,6 +22,7 @@ return {
 	SLOPE_FRICTION  = 0.1,   -- μ : friction proportionnelle à la force normale sur la pente
 	SURF_FRICTION   = 1,   -- surfaceFriction Source sur les rampes surf (réduit l'air accel latéral)
 	SURF_NORMAL_Y   = 0.7,   -- seuil unique marchable/surf (≈ cos 45.6°, comme sv_walkable_normal)
+	SURF_NORMAL_MIN = 0.1,   -- borne basse surf : sous ce seuil (face quasi verticale ≥84°) = MUR, pas surf
 
 	-- Bunny hop
 	BHOP_LAND_WINDOW = 0.1,
@@ -42,6 +43,10 @@ return {
 	-- Hitbox
 	HITBOX_USE_RIG_BOUNDS = true,
 	HITBOX_DEBUG          = true,
+
+	-- Debug mouvement : logs verbeux par frame airborne (bhop haute vitesse, jointure rampe/élément)
+	MOVE_DEBUG            = false,
+
 	HITBOX_HEAD_BUFFER    = 0.3,
 	CHAR_RADIUS        = 1.0,
 	CHAR_HEIGHT_STAND  = 4.8,

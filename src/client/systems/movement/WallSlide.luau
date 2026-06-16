@@ -8,6 +8,9 @@
 --   * Snap de surface : équivalent du ground-snap de Source. On recolle la capsule à la rampe
 --     en sondant DEPUIS L'EXTÉRIEUR (sinon Roblox ignore les casts qui démarrent dans une part).
 
+local Config = require(game:GetService("ReplicatedStorage").Shared.MovementConfig)
+local function dbg(...) if Config.MOVE_DEBUG then print("[WS]", ...) end end
+
 local SURF_THRESHOLD  = 0.7
 local MAX_BUMPS       = 4
 local MAX_CLIP_PLANES = 5
@@ -71,6 +74,30 @@ local function clipVelocity(vel: Vector3, normal: Vector3, overbounce: number): 
 	return out
 end
 
+-- Step-up AERIEN : equivalent de StepupSystem (sol) pour l'etat airborne. En bhop, un rebord
+-- quasi vertical (mur, PAS une rampe surf) a la jointure haut-de-rampe / element tue toute la
+-- vitesse horizontale (ClipVelocity contre une normale Y~0) -> "coup de mur". Au sol on enjambe
+-- ces rebords ; en l'air rien ne le faisait. On sonde donc : (1) degagement vers le haut sur
+-- STEPUP_HEIGHT, (2) degagement vers l'avant a la hauteur surelevee, (3) surface MARCHABLE sous
+-- le point sureleve+avance. Si OK, renvoie le yOffset a appliquer (on monte + on garde la vitesse).
+local function airStepUp(origin: Vector3, horizDir: Vector3, radius: number, rtb: number, rtt: number): number?
+	if horizDir.Magnitude < 1e-3 then return nil end
+	local up   = Config.STEPUP_HEIGHT
+	local fwd  = horizDir.Unit * (radius + 0.3)
+	-- 1. Peut-on monter de STEPUP_HEIGHT sans cogner un plafond ?
+	if hullCast(origin, radius, rtb, rtt, Vector3.new(0, up, 0)) then return nil end
+	-- 2. A la hauteur surelevee, l'avant est-il degage (le rebord est passe sous nous) ?
+	local raised = origin + Vector3.new(0, up, 0)
+	if hullCast(raised, radius, rtb, rtt, fwd) then return nil end
+	-- 3. Surface marchable sous le point sureleve + avance ?
+	local down = hullCast(raised + fwd, radius, rtb, rtt, Vector3.new(0, -(up + 0.5), 0))
+	if not down or down.Normal.Y < Config.SURF_NORMAL_Y then return nil end
+	local footY = origin.Y - rtb
+	local stepHeight = down.Position.Y - footY
+	if stepHeight <= 0.05 or stepHeight > up then return nil end
+	return stepHeight + 0.05
+end
+
 -- Collide-and-slide d'UN sous-pas. Renvoie (velocity, displacement, surfNormal?).
 local function slideOnce(
 	origin: Vector3, velocity: Vector3, dt: number,
@@ -113,6 +140,9 @@ local function slideOnce(
 			if probe and probe.Normal.Y >= SURF_THRESHOLD then
 				hitNormal = probe.Normal
 			end
+			dbg("slideOnce edge", "bump=", _bump, "blockN=", hit.Normal,
+				"probe=", probe and probe.Normal or "nil",
+				"corrected=", hitNormal ~= hit.Normal, "finalN=", hitNormal)
 		end
 
 		if moved > 1e-4 then
@@ -127,6 +157,7 @@ local function slideOnce(
 		timeLeft -= timeLeft * (hit.Distance / fullDist)
 
 		if numplanes >= MAX_CLIP_PLANES then
+			dbg("slideOnce ZERO maxClipPlanes", "bump=", _bump, "numplanes=", numplanes)
 			velocity = Vector3.zero
 			break
 		end
@@ -148,6 +179,7 @@ local function slideOnce(
 			end
 			if not resolved then
 				if numplanes ~= 2 then
+					dbg("slideOnce ZERO unresolved", "bump=", _bump, "numplanes=", numplanes)
 					velocity = Vector3.zero
 					break
 				end
@@ -166,10 +198,14 @@ local function slideOnce(
 				end
 			end
 			if velocity:Dot(primal) <= 0 then
+				dbg("slideOnce ZERO reversed", "bump=", _bump, "numplanes=", numplanes)
 				velocity = Vector3.zero
 				break
 			end
 		end
+
+		dbg("slideOnce bump", "bump=", _bump, "numplanes=", numplanes,
+			"hitN=", hitNormal, "velAfter=", velocity, "spd=", velocity.Magnitude)
 	end
 
 	return velocity, disp, found
@@ -179,9 +215,10 @@ function WallSlide.resolve(
 	hrp: BasePart, velocity: Vector3, dt: number,
 	lastSurfNormal: Vector3?,
 	crouchInfo: { rootToTop: number, rootToBottom: number, radius: number, centerOffset: number }
-): (Vector3, Vector3, Vector3?)
+): (Vector3, Vector3, Vector3?, boolean)
 	local radius = crouchInfo.radius - 0.05
 	local rtb, rtt = crouchInfo.rootToBottom, crouchInfo.rootToTop
+	local inVel = velocity  -- vitesse d'entree (pour restaurer l'horizontale apres un step-up)
 
 	-- 1. Decoupage en sous-pas pour qu'aucun sweep ne depasse STEP_FACTOR * radius.
 	dt = math.min(dt, MAX_DT)
@@ -198,6 +235,10 @@ function WallSlide.resolve(
 	end
 
 	local subDt = dt / math.max(nSub, 1)
+
+	dbg("resolve", "spd=", velocity.Magnitude, "distFull=", distFull,
+		"nSubNeeded=", math.ceil(distFull / math.max(maxStep, 1e-3)),
+		"nSubUsed=", nSub, "clamped=", nSub == MAX_SUBSTEPS, "subDt=", subDt)
 
 	local origin      = hrp.Position
 	local totalDisp   = Vector3.zero
@@ -232,13 +273,36 @@ function WallSlide.resolve(
 				local shift = n * shiftAmt
 				origin    += shift
 				totalDisp += shift
+				dbg("resolve snap", "shiftAmt=", shiftAmt, "hitN=", hit.Normal,
+					"velBefore=", velocity.Magnitude, "velAfter=", clipVelocity(velocity, hit.Normal, 1.0).Magnitude)
 				velocity = clipVelocity(velocity, hit.Normal, 1.0)
 				foundNormal = hit.Normal
 			end
 		end
 	end
 
-	return velocity, totalDisp, foundNormal
+	-- 3. Step-up aerien : si un rebord QUASI VERTICAL (mur, pas surf) a tue l'horizontale, on
+	--    tente de l'enjamber comme au sol au lieu de stopper net le bhop.
+	local stepped = false
+	local inHoriz  = Vector3.new(inVel.X, 0, inVel.Z)
+	local outHoriz = Vector3.new(velocity.X, 0, velocity.Z)
+	if foundNormal and foundNormal.Y < Config.SURF_NORMAL_MIN
+		and inHoriz.Magnitude > 1e-2
+		and outHoriz.Magnitude < inHoriz.Magnitude - 1.0  -- l'horizontale a bien chute
+	then
+		local stepY = airStepUp(origin, inHoriz, radius, rtb, rtt)
+		if stepY then
+			local shift = Vector3.new(0, stepY, 0)
+			origin    += shift
+			totalDisp += shift
+			velocity   = Vector3.new(inVel.X, velocity.Y, inVel.Z)  -- on enjambe : on garde l'horizontale
+			foundNormal = nil  -- plus un mur : on a franchi le rebord
+			stepped = true
+			dbg("airStepUp", "stepY=", stepY, "restoredXZ=", inHoriz.Magnitude)
+		end
+	end
+
+	return velocity, totalDisp, foundNormal, stepped
 end
 
 function WallSlide.commitMove(
@@ -267,6 +331,8 @@ function WallSlide.commitMove(
 				pos += Vector3.new(0, 0.15, 0)
 			end
 			if not freed then pos = fromSafe end  -- secours : rien de libre vers le haut
+			dbg("commitMove penEject", "freed=", freed, "fellBackToSafe=", not freed,
+				"deltaY=", pos.Y - candidate.Y)
 			return pos, velocity
 		end
 		return candidate, velocity
@@ -277,6 +343,8 @@ function WallSlide.commitMove(
 	-- On garde le candidat tant qu'il ne penetre pas.
 	if dir:Dot(hit.Normal) > -0.1 then
 		if penInfoRaw(candidate, r - 0.05, rtb, rtt) then
+			dbg("commitMove grazing PEN", "hitN=", hit.Normal, "dirDotN=", dir:Dot(hit.Normal),
+				"velBefore=", velocity.Magnitude, "velAfter=", clipVelocity(velocity, hit.Normal, 1.0).Magnitude)
 			return fromSafe, clipVelocity(velocity, hit.Normal, 1.0)
 		end
 		return candidate, velocity
@@ -289,7 +357,28 @@ function WallSlide.commitMove(
 	if velocity:Dot(hit.Normal) < 0 then
 		vel = clipVelocity(velocity, hit.Normal, 1.0)
 	end
+	dbg("commitMove frontal", "hitN=", hit.Normal, "hitDist=", hit.Distance, "moved=", moved,
+		"dirDotN=", dir:Dot(hit.Normal), "velBefore=", velocity.Magnitude, "velAfter=", vel.Magnitude)
 	return pos, vel
+end
+
+-- Apres un step-up aerien, on ne passe PAS par commitMove (son sweep diagonal depuis fromSafe
+-- raccrocherait encore le rebord enjambe). On garde le candidat sureleve (deja verifie sans
+-- collision par airStepUp) et on applique seulement la securite anti-penetration : si le point
+-- penetre une part, on ejecte vers le haut ; en dernier recours on retombe sur fromSafe.
+function WallSlide.ejectUp(
+	candidate: Vector3, fromSafe: Vector3,
+	crouchInfo: { rootToTop: number, rootToBottom: number, radius: number }
+): Vector3
+	local r = crouchInfo.radius - 0.05
+	local rtb, rtt = crouchInfo.rootToBottom, crouchInfo.rootToTop
+	if not penInfoRaw(candidate, r - 0.05, rtb, rtt) then return candidate end
+	local pos = candidate
+	for _ = 1, 12 do
+		if not penInfoRaw(pos, r - 0.05, rtb, rtt) then return pos end
+		pos += Vector3.new(0, 0.15, 0)
+	end
+	return fromSafe
 end
 
 return WallSlide
