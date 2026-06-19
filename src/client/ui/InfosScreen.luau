@@ -47,7 +47,7 @@ local SECTIONS = {
 			"The goal isn't to clone CS:GO — it's to take what makes surf feel great and build something original on top of it.",
 			"New weapons, skins, and animations are planned, all made from scratch with originality in mind.",
 			"Thanks for playing while it's still rough around the edges.",
-			"Want to give feedback or help out? Join the Discord: discord.gg/2mQMxTXyCE",
+			"Want to give feedback or help out? Join the Discord: https://discord.gg/QK66g32mbB",
 		},
 	},
 }
