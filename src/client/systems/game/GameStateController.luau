@@ -1,5 +1,6 @@
-local Players          = game:GetService("Players")
+local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService  = game:GetService("UserInputService")
 
 local Shared          = ReplicatedStorage:WaitForChild("Shared")
 local NetworkProtocol = require(Shared:WaitForChild("NetworkProtocol"))
@@ -52,6 +53,8 @@ local function setState(newState: State)
 		InfosScreen.hide()
 		RoundHUD.hide()
 		activateLobbyCamera()
+		UserInputService.MouseBehavior  = Enum.MouseBehavior.Default
+		UserInputService.MouseIconEnabled = true
 
 	elseif newState == "INFOS" then
 		InfosScreen.show()
@@ -73,6 +76,13 @@ local function setState(newState: State)
 
 	elseif newState == "RESULT" then
 		RoundHUD.hide()
+		-- Tuer le personnage local pour sortir du mode FPS et libérer la souris
+		if localPlayer.Character then
+			local hum = localPlayer.Character:FindFirstChildOfClass("Humanoid")
+			if hum and hum.Health > 0 then hum.Health = 0 end
+		end
+		UserInputService.MouseBehavior    = Enum.MouseBehavior.Default
+		UserInputService.MouseIconEnabled = true
 	end
 end
 
@@ -98,10 +108,10 @@ local function onCharacterAdded(char: Model)
 end
 
 local function onCharacterRemoving(_char: Model)
-	-- Uniquement si en jeu actif (pas en RESULT où c'est le serveur qui détruit)
 	if state == "IN_ROUND" then
 		setState("DEAD")
 	end
+	-- En RESULT la destruction vient de endRound() côté serveur — pas de transition
 end
 
 -- ── Remotes serveur ────────────────────────────────────────────────────────

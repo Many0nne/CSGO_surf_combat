@@ -31,7 +31,7 @@ local SECTIONS = {
 			"Left Click Fire",
 			"R          Reload",
 			"Tab        Leaderboard",
-			"Escape     Settings",
+			"P     Settings",
 		},
 	},
 	{
