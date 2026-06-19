@@ -4,11 +4,18 @@ local Speedometer = {}
 local label: TextLabel?
 
 function Speedometer.init()
+	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+	local existing = playerGui:FindFirstChild("Speedometer")
+	if existing then
+		label = existing:FindFirstChildWhichIsA("TextLabel")
+		return
+	end
+
 	local gui = Instance.new("ScreenGui")
 	gui.Name              = "Speedometer"
 	gui.ResetOnSpawn      = false
 	gui.IgnoreGuiInset    = true
-	gui.Parent            = Players.LocalPlayer:WaitForChild("PlayerGui")
+	gui.Parent            = playerGui
 
 	local lbl = Instance.new("TextLabel")
 	lbl.Size                   = UDim2.new(0, 160, 0, 36)
