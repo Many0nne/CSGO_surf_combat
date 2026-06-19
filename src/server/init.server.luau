@@ -5,10 +5,11 @@ local Shared          = ReplicatedStorage:WaitForChild("Shared")
 local NetworkProtocol = require(Shared:WaitForChild("NetworkProtocol"))
 local GameConfig      = require(Shared:WaitForChild("GameConfig"))
 
-local SpawnManager = require(script.SpawnManager)
-local RoundManager = require(script.RoundManager)
-local StatsStore   = require(script.StatsStore)
-local Validator    = require(script.Validator)
+local SpawnManager     = require(script.SpawnManager)
+local RoundManager     = require(script.RoundManager)
+local StatsStore       = require(script.StatsStore)
+local Validator        = require(script.Validator)
+local FeedbackService  = require(script.FeedbackService)
 
 -- Spawn contrôlé : on gère LoadCharacter nous-mêmes
 Players.CharacterAutoLoads = false
@@ -30,10 +31,13 @@ local roundStateRmt  = makeRemote(N.ROUND_STATE)
 local scoreUpdateRmt = makeRemote(N.SCORE_UPDATE)
 local roundResultRmt = makeRemote(N.ROUND_RESULT)
 local playerDiedRmt  = makeRemote(N.PLAYER_DIED)
+local sendFeedbackRmt = makeRemote(N.SEND_FEEDBACK)
+local feedbackAckRmt  = makeRemote(N.FEEDBACK_ACK)
 
 -- ── Initialisation des sous-systèmes ──────────────────────────────────────
 
 StatsStore.init()
+FeedbackService.init(sendFeedbackRmt, feedbackAckRmt)
 
 RoundManager.init({
 	roundState  = roundStateRmt,

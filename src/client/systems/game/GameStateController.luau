@@ -5,9 +5,10 @@ local Shared          = ReplicatedStorage:WaitForChild("Shared")
 local NetworkProtocol = require(Shared:WaitForChild("NetworkProtocol"))
 local GameConfig      = require(Shared:WaitForChild("GameConfig"))
 
-local MainMenu    = require(script.Parent.Parent.Parent.ui.MainMenu)
-local InfosScreen = require(script.Parent.Parent.Parent.ui.InfosScreen)
-local RoundHUD    = require(script.Parent.Parent.Parent.ui.RoundHUD)
+local MainMenu      = require(script.Parent.Parent.Parent.ui.MainMenu)
+local InfosScreen   = require(script.Parent.Parent.Parent.ui.InfosScreen)
+local RoundHUD      = require(script.Parent.Parent.Parent.ui.RoundHUD)
+local FeedbackModal = require(script.Parent.Parent.Parent.ui.FeedbackModal)
 
 local GameStateController = {}
 
@@ -58,6 +59,7 @@ local function setState(newState: State)
 	elseif newState == "SPAWNING" then
 		MainMenu.hide()
 		InfosScreen.hide()
+		FeedbackModal.hide()
 
 	elseif newState == "IN_ROUND" then
 		MainMenu.hide()
@@ -156,6 +158,7 @@ function GameStateController.init(player: Player, setupCharacter: (char: Model) 
 	task.spawn(listenToRemotes)
 
 	-- UI
+	FeedbackModal.init()
 	MainMenu.init(
 		function()  -- Play
 			if state ~= "MENU" then return end
@@ -164,6 +167,9 @@ function GameStateController.init(player: Player, setupCharacter: (char: Model) 
 		end,
 		function()  -- Infos
 			setState("INFOS")
+		end,
+		function()  -- Feedback
+			FeedbackModal.show()
 		end
 	)
 	InfosScreen.init(function()  -- fermer infos

@@ -12,6 +12,9 @@ Protocol.Names = {
 	SCORE_UPDATE   = "ScoreUpdate",
 	ROUND_RESULT   = "RoundResult",
 	PLAYER_DIED    = "PlayerDied",
+	-- Feedback
+	SEND_FEEDBACK  = "SendFeedback",
+	FEEDBACK_ACK   = "FeedbackAck",
 }
 
 function Protocol.getRemote(name: string): RemoteEvent

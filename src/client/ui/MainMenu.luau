@@ -9,8 +9,9 @@ local FONT        = Enum.Font.GothamBold
 local FONT_LIGHT  = Enum.Font.Gotham
 
 local gui: ScreenGui
-local onPlayCallback:  (() -> ())?
-local onInfosCallback: (() -> ())?
+local onPlayCallback:     (() -> ())?
+local onInfosCallback:    (() -> ())?
+local onFeedbackCallback: (() -> ())?
 
 local function makeButton(parent: Frame, text: string, color: Color3, yPos: UDim2): TextButton
 	local btn = Instance.new("TextButton")
@@ -30,9 +31,10 @@ local function makeButton(parent: Frame, text: string, color: Color3, yPos: UDim
 	return btn
 end
 
-function MainMenu.init(onPlay: () -> (), onInfos: () -> ())
-	onPlayCallback  = onPlay
-	onInfosCallback = onInfos
+function MainMenu.init(onPlay: () -> (), onInfos: () -> (), onFeedback: () -> ())
+	onPlayCallback     = onPlay
+	onInfosCallback    = onInfos
+	onFeedbackCallback = onFeedback
 
 	gui = Instance.new("ScreenGui")
 	gui.Name            = "MainMenu"
@@ -50,7 +52,7 @@ function MainMenu.init(onPlay: () -> (), onInfos: () -> ())
 
 	-- Carte centrale
 	local card = Instance.new("Frame")
-	card.Size               = UDim2.new(0, 280, 0, 264)
+	card.Size               = UDim2.new(0, 280, 0, 308)
 	card.AnchorPoint        = Vector2.new(0.5, 0.5)
 	card.Position           = UDim2.fromScale(0.5, 0.5)
 	card.BackgroundColor3   = CARD_COLOR
@@ -92,14 +94,18 @@ function MainMenu.init(onPlay: () -> (), onInfos: () -> ())
 	sub.Parent            = card
 
 	-- Boutons
-	local playBtn  = makeButton(card, "JOUER", ACCENT_COLOR, UDim2.fromOffset(0, 100))
-	local infosBtn = makeButton(card, "INFOS", Color3.fromRGB(35, 40, 55), UDim2.fromOffset(0, 154))
+	local playBtn     = makeButton(card, "PLAY",     ACCENT_COLOR,                UDim2.fromOffset(0, 100))
+	local infosBtn    = makeButton(card, "INFOS",    Color3.fromRGB(35, 40, 55), UDim2.fromOffset(0, 154))
+	local feedbackBtn = makeButton(card, "FEEDBACK", Color3.fromRGB(35, 40, 55), UDim2.fromOffset(0, 208))
 
 	playBtn.MouseButton1Click:Connect(function()
 		if onPlayCallback then onPlayCallback() end
 	end)
 	infosBtn.MouseButton1Click:Connect(function()
 		if onInfosCallback then onInfosCallback() end
+	end)
+	feedbackBtn.MouseButton1Click:Connect(function()
+		if onFeedbackCallback then onFeedbackCallback() end
 	end)
 
 	-- Version

@@ -12,32 +12,32 @@ local onCloseCallback: (() -> ())?
 
 local SECTIONS = {
 	{
-		title = "COMMENT SURFER",
+		title = "HOW TO SURF",
 		lines = {
-			"Approche une rampe inclinée (< 45°) et avance vers elle.",
-			"Utilise A/D pour strafer et garder de la vitesse.",
-			"Ne saute pas sur la rampe — glisse et conserve l'élan.",
-			"Combine les strafes aériens pour accélérer (air accel).",
-			"Le bhop (saut à l'atterrissage) conserve la vitesse.",
+			"Approach a ramp and align yourself PARALLEL to its surface.",
+			"Hold A or D to press into the ramp — never use W while surfing.",
+			"Steer along the ramp's direction with your mouse to gain speed.",
+			"Stay on the ramp's sweet spot: not too high, not too low.",
+			"Chain ramps smoothly — use air strafes (A/D + mouse) between them.",
+			"Never jump onto a ramp — let gravity carry you onto it.",
 		},
 	},
 	{
-		title = "CONTRÔLES",
+		title = "CONTROLS",
 		lines = {
-			"W A S D    Déplacement",
-			"Espace     Saut / Bhop",
-			"Ctrl       Accroupi",
-			"Clic G     Tirer",
-			"R          Recharger",
+			"W A S D    Movement",
+			"Space      Jump / Bhop (hold for long jumps)",
+			"Ctrl       Crouch",
+			"Left Click Fire",
+			"R          Reload",
 			"Tab        Leaderboard",
-			"Échap      Réglages",
+			"Escape     Settings",
 		},
 	},
 	{
-		title = "CRÉDITS",
+		title = "CREDITS",
 		lines = {
-			"Développé avec Roblox Studio + Rojo.",
-			"Physique inspirée du SDK Source (CS:GO surf).",
+			"Physics inspired by the Source SDK (CS:GO surf).",
 		},
 	},
 }
