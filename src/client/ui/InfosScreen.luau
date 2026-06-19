@@ -40,6 +40,16 @@ local SECTIONS = {
 			"Physics inspired by the Source SDK (CS:GO surf).",
 		},
 	},
+	{
+		title = "ABOUT",
+		lines = {
+			"This game is a solo passion project by a web developer learning 3D and animation on the go.",
+			"The goal isn't to clone CS:GO — it's to take what makes surf feel great and build something original on top of it.",
+			"New weapons, skins, and animations are planned, all made from scratch with originality in mind.",
+			"Thanks for playing while it's still rough around the edges.",
+			"Want to give feedback or help out? Join the Discord: discord.gg/2mQMxTXyCE",
+		},
+	},
 }
 
 local function addSection(scroll: ScrollingFrame, yOffset: number, section: { title: string, lines: { string } }): number
