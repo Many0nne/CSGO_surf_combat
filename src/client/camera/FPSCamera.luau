@@ -50,7 +50,7 @@ function FPSCamera.init(hrp: BasePart, char: Model)
 
 	RunService:UnbindFromRenderStep(boundStepName)
 	RunService:BindToRenderStep(boundStepName, Enum.RenderPriority.Camera.Value, function()
-		if not hrpRef then return end
+		if not hrpRef or not hrpRef.Parent then return end
 
 		-- Rotation : toujours a la frequence d'affichage (souris fluide).
 		local delta = UserInputService:GetMouseDelta()

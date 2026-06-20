@@ -62,6 +62,11 @@ local function onCharacterAdded(player: Player, char: Model)
 		if not attackerId or attackerId > 0 then
 			StatsStore.recordDeath(player)
 		end
+		task.defer(function()
+			if player.Character then
+				player.Character:Destroy()
+			end
+		end)
 	end)
 end
 

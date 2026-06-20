@@ -45,6 +45,7 @@ function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, spe
 
 
 	RunService.Heartbeat:Connect(function(rawDt)
+		if not hrp.Parent then return end
 		local dt = math.min(rawDt, 1/30)
 		jumpLockout = math.max(0, jumpLockout - dt)
 
