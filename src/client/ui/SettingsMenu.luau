@@ -1,19 +1,49 @@
 local Players           = game:GetService("Players")
 local UserInputService  = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService      = game:GetService("TweenService")
 
 local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
 
 local SettingsMenu = {}
 
+local SURFACE  = Color3.fromRGB(14, 20, 32)
+local PANEL    = Color3.fromRGB(18, 26, 40)
+local BORDER   = Color3.fromRGB(28, 42, 62)
+local ACCENT   = Color3.fromRGB(205, 38, 38)
+local TRACK_BG = Color3.fromRGB(22, 32, 50)
+local TEXT     = Color3.fromRGB(220, 230, 245)
+local MUTED    = Color3.fromRGB(72, 92, 120)
+local BTN_BG   = Color3.fromRGB(18, 28, 44)
+
+local FONT_BLK = Enum.Font.GothamBlack
+local FONT_BD  = Enum.Font.GothamBold
+local FONT_REG = Enum.Font.Gotham
+
+local TWEEN_FAST = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
 local gui: ScreenGui?
 local open = false
 local fpsCamRef: {
-	setSensitivity: (number) -> (),
-	getSensitivity: () -> number,
+	setSensitivity:    (number) -> (),
+	getSensitivity:    () -> number,
 	setScopeMultiplier: (number) -> (),
 	getScopeMultiplier: () -> number,
 }?
+
+local function addCorner(parent: GuiObject, r: number)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, r)
+	c.Parent = parent
+end
+
+local function addStroke(parent: GuiObject, color: Color3, thick: number)
+	local s = Instance.new("UIStroke")
+	s.Color = color
+	s.Thickness = thick
+	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	s.Parent = parent
+end
 
 local function makeSlider(
 	parent: GuiBase2d,
@@ -30,28 +60,31 @@ local function makeSlider(
 	local currentVal = initVal
 
 	local row = Instance.new("Frame")
-	row.Size                   = UDim2.new(1, -40, 0, 36)
-	row.Position               = UDim2.new(0, 20, 0, yOffset)
+	row.Size                   = UDim2.new(1, 0, 0, 48)
+	row.Position               = UDim2.fromOffset(0, yOffset)
 	row.BackgroundTransparency = 1
 	row.Parent                 = parent
 
+	-- Label
 	local lbl = Instance.new("TextLabel")
-	lbl.Size                   = UDim2.new(0, 110, 1, 0)
+	lbl.Size                   = UDim2.new(0, 110, 0, 18)
+	lbl.Position               = UDim2.fromOffset(0, 0)
 	lbl.BackgroundTransparency = 1
-	lbl.TextColor3             = Color3.new(1, 1, 1)
-	lbl.Font                   = Enum.Font.GothamBold
-	lbl.TextSize               = 14
+	lbl.TextColor3             = MUTED
+	lbl.Font                   = FONT_BD
+	lbl.TextSize               = 11
 	lbl.TextXAlignment         = Enum.TextXAlignment.Left
 	lbl.Text                   = labelText
 	lbl.Parent                 = row
 
-	-- TextBox pour saisie directe
+	-- Value TextBox
 	local valBox = Instance.new("TextBox")
-	valBox.Size                   = UDim2.new(0, 54, 0, 26)
-	valBox.Position               = UDim2.new(1, -54, 0.5, -13)
-	valBox.BackgroundColor3       = Color3.fromRGB(35, 35, 38)
+	valBox.Size                   = UDim2.fromOffset(52, 26)
+	valBox.AnchorPoint            = Vector2.new(1, 1)
+	valBox.Position               = UDim2.new(1, 0, 1, 0)
+	valBox.BackgroundColor3       = PANEL
 	valBox.BorderSizePixel        = 0
-	valBox.TextColor3             = Color3.fromRGB(220, 220, 220)
+	valBox.TextColor3             = TEXT
 	valBox.Font                   = Enum.Font.Code
 	valBox.TextSize               = 13
 	valBox.TextXAlignment         = Enum.TextXAlignment.Center
@@ -59,50 +92,45 @@ local function makeSlider(
 	valBox.Text                   = string.format(fmt, initVal)
 	valBox.ZIndex                 = 12
 	valBox.Parent                 = row
-	local vbc = Instance.new("UICorner")
-	vbc.CornerRadius = UDim.new(0, 4)
-	vbc.Parent = valBox
+	addCorner(valBox, 3)
+	addStroke(valBox, BORDER, 1)
 
+	-- Track
 	local track = Instance.new("Frame")
-	track.Size             = UDim2.new(1, -178, 0, 6)
-	track.Position         = UDim2.new(0, 115, 0.5, -3)
-	track.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+	track.Size             = UDim2.new(1, -170, 0, 4)
+	track.Position         = UDim2.new(0, 116, 1, -14)
+	track.BackgroundColor3 = TRACK_BG
 	track.BorderSizePixel  = 0
 	track.Parent           = row
-	local tc = Instance.new("UICorner")
-	tc.CornerRadius = UDim.new(1, 0)
-	tc.Parent = track
+	addCorner(track, 2)
+	addStroke(track, BORDER, 1)
 
 	local fill = Instance.new("Frame")
-	fill.BackgroundColor3 = Color3.fromRGB(80, 170, 255)
+	fill.BackgroundColor3 = ACCENT
 	fill.BorderSizePixel  = 0
 	fill.Parent           = track
-	local fc = Instance.new("UICorner")
-	fc.CornerRadius = UDim.new(1, 0)
-	fc.Parent = fill
+	addCorner(fill, 2)
 
 	local handle = Instance.new("TextButton")
-	handle.Size             = UDim2.new(0, 16, 0, 16)
+	handle.Size             = UDim2.fromOffset(14, 14)
+	handle.AnchorPoint      = Vector2.new(0.5, 0.5)
 	handle.BackgroundColor3 = Color3.new(1, 1, 1)
 	handle.BorderSizePixel  = 0
 	handle.Text             = ""
 	handle.ZIndex           = 10
 	handle.Parent           = track
-	local hc = Instance.new("UICorner")
-	hc.CornerRadius = UDim.new(1, 0)
-	hc.Parent = handle
+	addCorner(handle, 7)
 
 	local function applyValue(v: number)
 		v = math.clamp(v, minVal, maxVal)
 		currentVal = v
 		local t = (v - minVal) / (maxVal - minVal)
 		fill.Size       = UDim2.new(t, 0, 1, 0)
-		handle.Position = UDim2.new(t, -8, 0.5, -8)
+		handle.Position = UDim2.new(t, 0, 0.5, 0)
 		valBox.Text     = string.format(fmt, v)
 		onChange(v)
 	end
 
-	-- Saisie directe : appliquer sur Enter ou perte de focus
 	valBox.FocusLost:Connect(function()
 		local num = tonumber(valBox.Text)
 		if num then
@@ -166,64 +194,99 @@ function SettingsMenu.init(fpsCam: typeof(fpsCamRef))
 	gui.Parent         = Players.LocalPlayer:WaitForChild("PlayerGui")
 
 	local backdrop = Instance.new("TextButton")
-	backdrop.Size                   = UDim2.new(1, 0, 1, 0)
-	backdrop.BackgroundColor3       = Color3.new(0, 0, 0)
-	backdrop.BackgroundTransparency = 0.5
+	backdrop.Size                   = UDim2.fromScale(1, 1)
+	backdrop.BackgroundColor3       = Color3.fromRGB(0, 0, 0)
+	backdrop.BackgroundTransparency = 0.55
 	backdrop.BorderSizePixel        = 0
 	backdrop.Text                   = ""
 	backdrop.AutoButtonColor        = false
 	backdrop.Parent                 = gui
 	backdrop.MouseButton1Click:Connect(function() setOpen(false) end)
 
+	-- Panel
 	local panel = Instance.new("TextButton")
-	panel.Size             = UDim2.new(0, 380, 0, 210)
-	panel.Position         = UDim2.new(0.5, -190, 0.5, -105)
-	panel.BackgroundColor3 = Color3.fromRGB(20, 20, 22)
+	panel.Size             = UDim2.fromOffset(420, 256)
+	panel.AnchorPoint      = Vector2.new(0.5, 0.5)
+	panel.Position         = UDim2.fromScale(0.5, 0.5)
+	panel.BackgroundColor3 = SURFACE
 	panel.BorderSizePixel  = 0
 	panel.Text             = ""
 	panel.AutoButtonColor  = false
 	panel.Parent           = backdrop
-	local pc = Instance.new("UICorner")
-	pc.CornerRadius = UDim.new(0, 8)
-	pc.Parent = panel
+	addCorner(panel, 6)
+	addStroke(panel, BORDER, 1)
+
+	-- Left accent stripe
+	local stripe = Instance.new("Frame")
+	stripe.Size             = UDim2.new(0, 3, 0.65, 0)
+	stripe.AnchorPoint      = Vector2.new(0, 0.5)
+	stripe.Position         = UDim2.new(0, 0, 0.5, 0)
+	stripe.BackgroundColor3 = ACCENT
+	stripe.BorderSizePixel  = 0
+	stripe.Parent           = panel
+	addCorner(stripe, 2)
+
+	-- Content frame (padded)
+	local content = Instance.new("Frame")
+	content.Size                   = UDim2.fromScale(1, 1)
+	content.BackgroundTransparency = 1
+	content.BorderSizePixel        = 0
+	content.Parent                 = panel
+
+	local pad = Instance.new("UIPadding")
+	pad.PaddingLeft   = UDim.new(0, 32)
+	pad.PaddingRight  = UDim.new(0, 24)
+	pad.PaddingTop    = UDim.new(0, 26)
+	pad.PaddingBottom = UDim.new(0, 24)
+	pad.Parent        = content
 
 	local title = Instance.new("TextLabel")
-	title.Size                   = UDim2.new(1, 0, 0, 44)
+	title.Size                   = UDim2.new(1, 0, 0, 22)
+	title.Position               = UDim2.fromOffset(0, 0)
 	title.BackgroundTransparency = 1
-	title.TextColor3             = Color3.new(1, 1, 1)
-	title.Font                   = Enum.Font.GothamBold
+	title.TextColor3             = TEXT
+	title.Font                   = FONT_BLK
 	title.TextSize               = 18
+	title.TextXAlignment         = Enum.TextXAlignment.Left
 	title.Text                   = "SETTINGS"
-	title.Parent                 = panel
+	title.Parent                 = content
 
 	local div = Instance.new("Frame")
-	div.Size             = UDim2.new(1, -40, 0, 1)
-	div.Position         = UDim2.new(0, 20, 0, 44)
-	div.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+	div.Size             = UDim2.new(1, 0, 0, 1)
+	div.Position         = UDim2.fromOffset(0, 32)
+	div.BackgroundColor3 = BORDER
 	div.BorderSizePixel  = 0
-	div.Parent           = panel
+	div.Parent           = content
 
-	makeSlider(panel, "Sensitivity", 60, 0.1, 5.0, CameraConfig.DEFAULT_SENS, 2,
+	makeSlider(content, "Sensitivity", 44, 0.1, 5.0, CameraConfig.DEFAULT_SENS, 2,
 		function(v) if fpsCamRef then fpsCamRef.setSensitivity(v) end end
 	)
-
-	makeSlider(panel, "Scope Sens", 110, 0.1, 1.0, CameraConfig.SCOPE_SENS_MULT, 2,
+	makeSlider(content, "Scope Sens",  102, 0.1, 1.0, CameraConfig.SCOPE_SENS_MULT, 2,
 		function(v) if fpsCamRef then fpsCamRef.setScopeMultiplier(v) end end
 	)
 
+	-- Close button
 	local closeBtn = Instance.new("TextButton")
-	closeBtn.Size             = UDim2.new(0, 100, 0, 32)
-	closeBtn.Position         = UDim2.new(0.5, -50, 1, -52)
-	closeBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 65)
+	closeBtn.Size             = UDim2.new(0, 100, 0, 36)
+	closeBtn.AnchorPoint      = Vector2.new(1, 1)
+	closeBtn.Position         = UDim2.new(1, 0, 1, 0)
+	closeBtn.BackgroundColor3 = BTN_BG
 	closeBtn.BorderSizePixel  = 0
-	closeBtn.TextColor3       = Color3.new(1, 1, 1)
-	closeBtn.Font             = Enum.Font.GothamBold
-	closeBtn.TextSize         = 14
+	closeBtn.TextColor3       = MUTED
+	closeBtn.Font             = FONT_BD
+	closeBtn.TextSize         = 13
 	closeBtn.Text             = "CLOSE"
-	closeBtn.Parent           = panel
-	local cc = Instance.new("UICorner")
-	cc.CornerRadius = UDim.new(0, 6)
-	cc.Parent = closeBtn
+	closeBtn.AutoButtonColor  = false
+	closeBtn.Parent           = content
+	addCorner(closeBtn, 3)
+	addStroke(closeBtn, BORDER, 1)
+
+	closeBtn.MouseEnter:Connect(function()
+		TweenService:Create(closeBtn, TWEEN_FAST, { TextColor3 = TEXT, BackgroundColor3 = Color3.fromRGB(24, 36, 56) }):Play()
+	end)
+	closeBtn.MouseLeave:Connect(function()
+		TweenService:Create(closeBtn, TWEEN_FAST, { TextColor3 = MUTED, BackgroundColor3 = BTN_BG }):Play()
+	end)
 	closeBtn.MouseButton1Click:Connect(function() setOpen(false) end)
 
 	UserInputService.InputBegan:Connect(function(inp, gameProcessed)
