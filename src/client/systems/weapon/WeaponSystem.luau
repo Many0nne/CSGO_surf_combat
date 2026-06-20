@@ -207,6 +207,10 @@ local function hookTool(tool, player)
 	end)
 end
 
+function WeaponSystem.getState(): string
+	return weaponState
+end
+
 function WeaponSystem.getSpeedMultiplier()
 	local player = Players.LocalPlayer
 	local char   = player and player.Character

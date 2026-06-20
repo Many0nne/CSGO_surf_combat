@@ -9,19 +9,31 @@ local TRACER_LIFETIME = 0.1
 local TRACER_WIDTH    = 0.05
 local TRACER_COLOR    = Color3.fromRGB(255, 240, 180)
 
+local terrain = workspace:WaitForChild("Terrain")
+
 local function spawnTracer(origin: Vector3, endpoint: Vector3)
-	local length = (endpoint - origin).Magnitude
-	local mid    = (origin + endpoint) / 2
-	local p = Instance.new("Part")
-	p.Anchored      = true
-	p.CanCollide    = false
-	p.CastShadow    = false
-	p.Size          = Vector3.new(TRACER_WIDTH, TRACER_WIDTH, length)
-	p.CFrame        = CFrame.lookAt(mid, endpoint)
-	p.Color         = TRACER_COLOR
-	p.Material      = Enum.Material.Neon
-	p.Parent        = workspace
-	Debris:AddItem(p, TRACER_LIFETIME)
+	local a0 = Instance.new("Attachment")
+	a0.WorldPosition = origin
+	a0.Parent = terrain
+
+	local a1 = Instance.new("Attachment")
+	a1.WorldPosition = endpoint
+	a1.Parent = terrain
+
+	local beam = Instance.new("Beam")
+	beam.Attachment0   = a0
+	beam.Attachment1   = a1
+	beam.Width0        = TRACER_WIDTH
+	beam.Width1        = TRACER_WIDTH
+	beam.Color         = ColorSequence.new(TRACER_COLOR)
+	beam.LightEmission = 1
+	beam.FaceCamera    = true
+	beam.Segments      = 1
+	beam.Parent        = terrain
+
+	Debris:AddItem(beam, TRACER_LIFETIME)
+	Debris:AddItem(a0,   TRACER_LIFETIME)
+	Debris:AddItem(a1,   TRACER_LIFETIME)
 end
 
 function HitscanSystem.init(event: RemoteEvent?)

@@ -31,7 +31,6 @@ function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, spe
 	local surfNormal: Vector3? = nil  -- normale de la rampe surf en contact (nil si aucune)
 	local hitboxLogged = false
 	local lastSafePos = hrp.Position
-
 	CrouchSystem.init(hrp)
 	HeadCollisionResolver.init(char)
 
