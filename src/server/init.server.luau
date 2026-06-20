@@ -10,6 +10,7 @@ local RoundManager     = require(script.RoundManager)
 local StatsStore       = require(script.StatsStore)
 local Validator        = require(script.Validator)
 local FeedbackService  = require(script.FeedbackService)
+local BotManager       = require(script.BotManager)
 
 -- Spawn contrôlé : on gère LoadCharacter nous-mêmes
 Players.CharacterAutoLoads = false
@@ -46,13 +47,21 @@ RoundManager.init({
 	playerDied  = playerDiedRmt,
 })
 
+BotManager.init({
+	roundManager = RoundManager,
+	spawnManager = SpawnManager,
+})
+
 -- ── Gestion du cycle de vie des personnages ────────────────────────────────
 
 local function onCharacterAdded(player: Player, char: Model)
 	local humanoid = char:WaitForChild("Humanoid") :: Humanoid
 	humanoid.Died:Connect(function()
-		StatsStore.recordDeath(player)
-		RoundManager.onCharacterDied(player, SpawnManager.spawnPlayer)
+		local attackerId = RoundManager.onCharacterDied(player, SpawnManager.spawnPlayer)
+		-- In-round only: do not persist deaths caused by bots (negative ids).
+		if not attackerId or attackerId > 0 then
+			StatsStore.recordDeath(player)
+		end
 	end)
 end
 
@@ -67,23 +76,32 @@ SpawnManager.init(spawnRmt, function(player: Player): boolean
 	if RoundManager.getState() == "idle" then
 		RoundManager.startRound(GameConfig.ROUND_DURATION)
 	end
+	task.defer(BotManager.maintainPopulation)
 	return true
 end)
 
 -- ── Combat : validation et attribution des dégâts ─────────────────────────
 
+local function recordHit(player: Player, targetCharacter: Instance)
+	local targetPlayer = Players:GetPlayerFromCharacter(targetCharacter)
+	if targetPlayer then
+		RoundManager.recordDamage(player, targetPlayer)
+	else
+		local botId = BotManager.getBotId(targetCharacter)
+		if botId then RoundManager.recordDamageById(player.UserId, botId) end
+	end
+end
+
 meleeRmt.OnServerEvent:Connect(function(player, targetCharacter, damage)
 	if not Validator.validateMelee(player, targetCharacter, damage) then return end
-	local targetPlayer = Players:GetPlayerFromCharacter(targetCharacter)
-	if targetPlayer then RoundManager.recordDamage(player, targetPlayer) end
+	recordHit(player, targetCharacter)
 	local humanoid = targetCharacter:FindFirstChildWhichIsA("Humanoid") :: Humanoid?
 	if humanoid then humanoid:TakeDamage(damage) end
 end)
 
 hitscanRmt.OnServerEvent:Connect(function(player, targetCharacter, damage)
 	if not Validator.validateHitscan(player, targetCharacter, damage) then return end
-	local targetPlayer = Players:GetPlayerFromCharacter(targetCharacter)
-	if targetPlayer then RoundManager.recordDamage(player, targetPlayer) end
+	recordHit(player, targetCharacter)
 	local humanoid = targetCharacter:FindFirstChildWhichIsA("Humanoid") :: Humanoid?
 	if humanoid then humanoid:TakeDamage(damage) end
 end)
@@ -101,9 +119,13 @@ local function setupPlayer(player: Player)
 	end
 end
 
-Players.PlayerAdded:Connect(setupPlayer)
+Players.PlayerAdded:Connect(function(player)
+	setupPlayer(player)
+	task.defer(BotManager.maintainPopulation)
+end)
 Players.PlayerRemoving:Connect(function(player)
 	RoundManager.removePlayer(player)
+	task.defer(BotManager.maintainPopulation)
 end)
 
 for _, player in Players:GetPlayers() do

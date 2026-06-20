@@ -11,13 +11,23 @@ local function getRoot(char: Model): BasePart?
 	return char:FindFirstChild("HumanoidRootPart") :: BasePart?
 end
 
--- Returns false if any basic type/ownership checks fail
+-- A bot is a server-spawned NPC tagged via the IsBot attribute (see BotManager).
+function Validator.isBot(inst: Instance): boolean
+	return inst:GetAttribute("IsBot") == true
+end
+
+-- Returns false if any basic type/ownership checks fail.
+-- Valid targets are either real players (other than the attacker) or bots.
 local function commonChecks(attacker: Player, targetCharacter: Instance, damage: number, maxDamage: number): (boolean, Player?, Humanoid?)
 	if typeof(targetCharacter) ~= "Instance" then return false, nil, nil end
 	if typeof(damage) ~= "number" or damage <= 0 or damage > maxDamage then return false, nil, nil end
 
 	local targetPlayer = Players:GetPlayerFromCharacter(targetCharacter)
-	if not targetPlayer or targetPlayer == attacker then return false, nil, nil end
+	if targetPlayer then
+		if targetPlayer == attacker then return false, nil, nil end
+	elseif not Validator.isBot(targetCharacter) then
+		return false, nil, nil
+	end
 
 	local humanoid = targetCharacter:FindFirstChildWhichIsA("Humanoid") :: Humanoid?
 	if not humanoid or humanoid.Health <= 0 then return false, nil, nil end
