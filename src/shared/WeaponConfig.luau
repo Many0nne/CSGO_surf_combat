@@ -16,15 +16,15 @@ WeaponConfig.Weapons = {
 		-- Recommended run speed multiplier while holding this weapon (client-side).
 		-- Not a fixed game-units value; movement system multiplies wishspeed by this.
 		RunSpeedMultiplier = 0.75,
-		EquipTime     = 1.58,
+		EquipTime = 1.58,
 		ShootAnimTime = 1.63,
-		HasScope       = true,
-		ScopeFov1      = 40,
-		ScopeFov2      = 10,
+		HasScope = true,
+		ScopeFov1 = 40,
+		ScopeFov2 = 10,
 		ScopeTweenTime = 0.1,
 		AnimationSounds = {
-			Equip  = { "Bolt", "Draw" },
-			Shoot  = { "Shoot", "Bolt" },
+			Equip = { "Bolt", "Draw" },
+			Shoot = { "Shoot", "Bolt" },
 			Reload = { "Bolt", "ClipIn", "ClipOut", "ClipHit" },
 			Zoom = { "ZoomIn", "ZoomOut" },
 		},
@@ -36,17 +36,16 @@ WeaponConfig.Weapons = {
 		FireDelay = 1,
 		Penetration = 0,
 		RunSpeedMultiplier = 1.0,
-		EquipTime     = 1.0,
+		EquipTime = 1.0,
 		ShootAnimTime = 1.0,
-		IsMelee       = true,
-		MeleeRange    = 7.5,
+		IsMelee = true,
+		MeleeRange = 7.5,
 		BackstabMultiplier = 2,
 		AnimationSounds = {
 			Equip = { "Equip" },
 			Shoot = {},
 		},
-	}
+	},
 }
 
 return WeaponConfig
-

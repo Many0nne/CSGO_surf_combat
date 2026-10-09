@@ -1,15 +1,15 @@
 local DataStoreService = game:GetService("DataStoreService")
-local Players          = game:GetService("Players")
+local Players = game:GetService("Players")
 
-local SCHEMA_VERSION    = 1
+local SCHEMA_VERSION = 1
 local AUTO_SAVE_INTERVAL = 120
 
 local store = DataStoreService:GetDataStore("PlayerStats_v1")
 
-type Stats   = { kills: number, deaths: number, roundsPlayed: number, roundsWon: number }
+type Stats = { kills: number, deaths: number, roundsPlayed: number, roundsWon: number }
 type Profile = { schemaVersion: number, stats: Stats }
 
-local profiles:     { [number]: Profile } = {}
+local profiles: { [number]: Profile } = {}
 local saveDisabled: { [number]: boolean } = {}
 
 local StatsStore = {}
@@ -23,7 +23,9 @@ end
 local function tryGet(k: string): (boolean, any)
 	for attempt = 1, 3 do
 		local ok, result = pcall(store.GetAsync, store, k)
-		if ok then return true, result end
+		if ok then
+			return true, result
+		end
 		task.wait(2 ^ attempt)
 	end
 	return false, nil
@@ -32,7 +34,9 @@ end
 local function trySet(k: string, data: any): boolean
 	for attempt = 1, 3 do
 		local ok = pcall(store.SetAsync, store, k, data)
-		if ok then return true end
+		if ok then
+			return true
+		end
 		task.wait(2 ^ attempt)
 	end
 	return false
@@ -64,9 +68,13 @@ function StatsStore.load(player: Player)
 end
 
 function StatsStore.save(player: Player)
-	if saveDisabled[player.UserId] then return end
+	if saveDisabled[player.UserId] then
+		return
+	end
 	local profile = profiles[player.UserId]
-	if not profile then return end
+	if not profile then
+		return
+	end
 	trySet(key(player), profile)
 end
 
@@ -77,19 +85,27 @@ end
 
 function StatsStore.recordKill(player: Player)
 	local p = profiles[player.UserId]
-	if p then p.stats.kills += 1 end
+	if p then
+		p.stats.kills += 1
+	end
 end
 
 function StatsStore.recordDeath(player: Player)
 	local p = profiles[player.UserId]
-	if p then p.stats.deaths += 1 end
+	if p then
+		p.stats.deaths += 1
+	end
 end
 
 function StatsStore.recordRoundEnd(player: Player, won: boolean)
 	local p = profiles[player.UserId]
-	if not p then return end
+	if not p then
+		return
+	end
 	p.stats.roundsPlayed += 1
-	if won then p.stats.roundsWon += 1 end
+	if won then
+		p.stats.roundsWon += 1
+	end
 end
 
 function StatsStore.init()
@@ -104,7 +120,7 @@ function StatsStore.init()
 
 	Players.PlayerRemoving:Connect(function(player)
 		StatsStore.save(player)
-		profiles[player.UserId]     = nil
+		profiles[player.UserId] = nil
 		saveDisabled[player.UserId] = nil
 	end)
 

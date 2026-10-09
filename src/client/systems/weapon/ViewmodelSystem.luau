@@ -3,17 +3,17 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local AnimationSoundSystem = require(script.Parent.AnimationSoundSystem)
-local WeaponConfig        = require(ReplicatedStorage.Shared.WeaponConfig)
+local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 
 local ViewmodelSystem = {}
 
-local activeViewmodel    = nil :: Model?
-local currentAnimSounds  = nil :: {[string]: {string}}?
-local preloadedTracks    = {} :: {[string]: AnimationTrack}
-local markerConns        = {} :: {RBXScriptConnection}
+local activeViewmodel = nil :: Model?
+local currentAnimSounds = nil :: { [string]: { string } }?
+local preloadedTracks = {} :: { [string]: AnimationTrack }
+local markerConns = {} :: { RBXScriptConnection }
 local boundStepName = "ViewmodelUpdate"
-local equipTrack  = nil :: AnimationTrack?
-local shootTrack  = nil :: AnimationTrack?
+local equipTrack = nil :: AnimationTrack?
+local shootTrack = nil :: AnimationTrack?
 local actionTrack = nil :: AnimationTrack?
 local lastCamCFrame = nil :: CFrame?
 local swayPos = Vector3.zero
@@ -21,11 +21,11 @@ local swayVel = Vector3.zero
 local currentOffset = CFrame.new()
 
 -- Pre-built caches: cloned models (always in camera, invisible until equip) + loaded tracks
-local viewmodelCache = {} :: {[string]: Model}
-local tracksCache    = {} :: {[string]: {[string]: AnimationTrack}}
-local partsCache     = {} :: {[string]: {BasePart}}
+local viewmodelCache = {} :: { [string]: Model }
+local tracksCache = {} :: { [string]: { [string]: AnimationTrack } }
+local partsCache = {} :: { [string]: { BasePart } }
 -- Guard: prevents double-hooking when a tool moves Backpack → Character
-local hookedTools = {} :: {[Tool]: boolean}
+local hookedTools = {} :: { [Tool]: boolean }
 
 local SWAY_STRENGTH = 3.5
 local SWAY_MAX = math.rad(6)
@@ -40,7 +40,9 @@ end
 
 local function setModelVisibility(viewmodelName: string, visible: boolean)
 	local parts = partsCache[viewmodelName]
-	if not parts then return end
+	if not parts then
+		return
+	end
 	local modifier = visible and 0 or 1
 	for _, part in parts do
 		part.LocalTransparencyModifier = modifier
@@ -50,9 +52,12 @@ end
 local activeViewmodelName = "" -- tracks which cache key is active for fast visibility toggle
 
 local function clearViewmodel()
-	stopTrack(equipTrack);  equipTrack  = nil
-	stopTrack(shootTrack);  shootTrack  = nil
-	stopTrack(actionTrack); actionTrack = nil
+	stopTrack(equipTrack)
+	equipTrack = nil
+	stopTrack(shootTrack)
+	shootTrack = nil
+	stopTrack(actionTrack)
+	actionTrack = nil
 	if activeViewmodel then
 		setModelVisibility(activeViewmodelName, false)
 		activeViewmodel = nil
@@ -64,7 +69,9 @@ local function clearViewmodel()
 	currentAnimSounds = nil
 	preloadedTracks = {}
 	currentOffset = CFrame.new()
-	for _, c in markerConns do c:Disconnect() end
+	for _, c in markerConns do
+		c:Disconnect()
+	end
 	markerConns = {}
 end
 
@@ -85,7 +92,9 @@ end
 
 local function getViewmodelTemplate(name: string): Model?
 	local container = ReplicatedStorage:FindFirstChild("ViewModels")
-	if not container then return nil end
+	if not container then
+		return nil
+	end
 	local template = container:FindFirstChild(name)
 	if template and template:IsA("Model") then
 		return template
@@ -94,7 +103,9 @@ local function getViewmodelTemplate(name: string): Model?
 end
 
 local function ensurePrimaryPart(model: Model)
-	if model.PrimaryPart then return end
+	if model.PrimaryPart then
+		return
+	end
 	local firstPart = model:FindFirstChildWhichIsA("BasePart", true)
 	if firstPart then
 		model.PrimaryPart = firstPart
@@ -104,16 +115,26 @@ end
 -- Clones the viewmodel and pre-loads all animations ahead of equip time.
 -- The clone stays parented to the camera (invisible) so no re-registration overhead at equip.
 local function prewarmViewmodel(tool: Instance)
-	if not tool:IsA("Tool") then return end
+	if not tool:IsA("Tool") then
+		return
+	end
 	local viewmodelName = tool:GetAttribute("ViewmodelName")
-	if type(viewmodelName) ~= "string" or viewmodelName == "" then return end
-	if viewmodelCache[viewmodelName] then return end
+	if type(viewmodelName) ~= "string" or viewmodelName == "" then
+		return
+	end
+	if viewmodelCache[viewmodelName] then
+		return
+	end
 
 	local template = getViewmodelTemplate(viewmodelName)
-	if not template then return end
+	if not template then
+		return
+	end
 
 	local cam = workspace.CurrentCamera
-	if not cam then return end
+	if not cam then
+		return
+	end
 
 	local model = template:Clone()
 	model.Parent = cam
@@ -129,7 +150,7 @@ local function prewarmViewmodel(tool: Instance)
 	end
 
 	-- Pre-cache BaseParts list so visibility toggle never calls GetDescendants()
-	local parts: {BasePart} = {}
+	local parts: { BasePart } = {}
 	for _, d in model:GetDescendants() do
 		if d:IsA("BasePart") then
 			table.insert(parts, d :: BasePart)
@@ -164,19 +185,25 @@ end
 
 local function playEquipAnimation(model: Model)
 	local track = preloadedTracks["Equip"]
-	if not track then return end
+	if not track then
+		return
+	end
 
 	equipTrack = track
 	equipTrack:Play()
 
 	local sounds = currentAnimSounds and currentAnimSounds["Equip"] or {}
 	local newConns = AnimationSoundSystem.connectSoundMarkers(equipTrack, model, sounds)
-	for _, c in newConns do table.insert(markerConns, c) end
+	for _, c in newConns do
+		table.insert(markerConns, c)
+	end
 end
 
 local function equipTool(tool: Tool)
 	local viewmodelName = tool:GetAttribute("ViewmodelName")
-	if type(viewmodelName) ~= "string" or viewmodelName == "" then return end
+	if type(viewmodelName) ~= "string" or viewmodelName == "" then
+		return
+	end
 
 	clearViewmodel()
 
@@ -211,10 +238,14 @@ local function equipTool(tool: Tool)
 end
 
 local function hookTool(tool: Instance)
-	if not tool:IsA("Tool") then return end
+	if not tool:IsA("Tool") then
+		return
+	end
 	-- Guard: a tool moves Backpack → Character on equip, which fires ChildAdded again.
 	-- Without this, Equipped/Unequipped get double-connected causing two equipTool calls.
-	if hookedTools[tool :: Tool] then return end
+	if hookedTools[tool :: Tool] then
+		return
+	end
 	hookedTools[tool :: Tool] = true
 
 	prewarmViewmodel(tool)
@@ -237,24 +268,35 @@ local function onCharacter(char: Model)
 	end)
 end
 
-function ViewmodelSystem.playAnimation(name: string, markerOverrides: {[string]: string | () -> string}?)
-	if not activeViewmodel then return end
-	local animations = activeViewmodel:FindFirstChild("Animations")
-		or activeViewmodel:FindFirstChild("AnimSaves")
-	if not animations then return end
+function ViewmodelSystem.playAnimation(name: string, markerOverrides: { [string]: string | () -> string }?)
+	if not activeViewmodel then
+		return
+	end
+	local animations = activeViewmodel:FindFirstChild("Animations") or activeViewmodel:FindFirstChild("AnimSaves")
+	if not animations then
+		return
+	end
 	local anim = animations:FindFirstChild(name)
-	if not anim or not anim:IsA("Animation") then return end
+	if not anim or not anim:IsA("Animation") then
+		return
+	end
 	local animator = AnimationSoundSystem.getAnimator(activeViewmodel)
-	if not animator then return end
+	if not animator then
+		return
+	end
 
-	stopTrack(equipTrack);  equipTrack  = nil
-	stopTrack(actionTrack); actionTrack = nil
+	stopTrack(equipTrack)
+	equipTrack = nil
+	stopTrack(actionTrack)
+	actionTrack = nil
 
 	local track = preloadedTracks[name] or animator:LoadAnimation(anim)
 	track.Looped = false
 	track:Play()
 	actionTrack = track
-	for _, c in markerConns do c:Disconnect() end
+	for _, c in markerConns do
+		c:Disconnect()
+	end
 	markerConns = {}
 	if markerOverrides then
 		for markerName, value in markerOverrides do
@@ -264,26 +306,38 @@ function ViewmodelSystem.playAnimation(name: string, markerOverrides: {[string]:
 			else
 				c = AnimationSoundSystem.connectSoundMarker(track, activeViewmodel, markerName, value)
 			end
-			if c then table.insert(markerConns, c) end
+			if c then
+				table.insert(markerConns, c)
+			end
 		end
 	else
 		local sounds = currentAnimSounds and currentAnimSounds[name] or {}
 		local newConns = AnimationSoundSystem.connectSoundMarkers(track, activeViewmodel, sounds)
-		for _, c in newConns do table.insert(markerConns, c) end
+		for _, c in newConns do
+			table.insert(markerConns, c)
+		end
 	end
 end
 
 function ViewmodelSystem.setVisible(visible: boolean)
-	if not activeViewmodel then return end
+	if not activeViewmodel then
+		return
+	end
 	setModelVisibility(activeViewmodelName, visible)
 end
 
 function ViewmodelSystem.playSound(name: string)
-	if not activeViewmodel then return end
+	if not activeViewmodel then
+		return
+	end
 	local sounds = activeViewmodel:FindFirstChild("Sounds")
-	if not sounds then return end
+	if not sounds then
+		return
+	end
 	local s = sounds:FindFirstChild(name)
-	if s and s:IsA("Sound") then s:Play() end
+	if s and s:IsA("Sound") then
+		s:Play()
+	end
 end
 
 function ViewmodelSystem.getActiveViewmodel()
@@ -297,27 +351,41 @@ end
 
 function ViewmodelSystem.playReload(model: Model?)
 	local m = model or activeViewmodel
-	if not m then return end
+	if not m then
+		return
+	end
 	local animations = m:FindFirstChild("Animations") or m:FindFirstChild("AnimSaves")
-	if not animations then return end
+	if not animations then
+		return
+	end
 	local reloadAnim = animations:FindFirstChild("Reload")
-	if not reloadAnim or not reloadAnim:IsA("Animation") then return end
+	if not reloadAnim or not reloadAnim:IsA("Animation") then
+		return
+	end
 	local animator = AnimationSoundSystem.getAnimator(m)
-	if not animator then return end
-	stopTrack(equipTrack);  equipTrack  = nil
-	stopTrack(actionTrack); actionTrack = nil
+	if not animator then
+		return
+	end
+	stopTrack(equipTrack)
+	equipTrack = nil
+	stopTrack(actionTrack)
+	actionTrack = nil
 	local track = preloadedTracks["Reload"] or animator:LoadAnimation(reloadAnim)
 	track.Looped = false
 	track:Play()
 	actionTrack = track
 	local sounds = currentAnimSounds and currentAnimSounds["Reload"] or {}
 	local newConns = AnimationSoundSystem.connectSoundMarkers(track, m, sounds)
-	for _, c in newConns do table.insert(markerConns, c) end
+	for _, c in newConns do
+		table.insert(markerConns, c)
+	end
 end
 
 function ViewmodelSystem.init(player: Player?)
 	local localPlayer = player or Players.LocalPlayer
-	if not localPlayer then return end
+	if not localPlayer then
+		return
+	end
 
 	-- Single RenderStep for the session lifetime — no bind/unbind per equip
 	RunService:BindToRenderStep(boundStepName, Enum.RenderPriority.Camera.Value + 1, function(dt)
@@ -328,7 +396,9 @@ function ViewmodelSystem.init(player: Player?)
 			return
 		end
 		local cam = workspace.CurrentCamera
-		if not cam then return end
+		if not cam then
+			return
+		end
 		dt = dt or (1 / 60)
 		if not lastCamCFrame then
 			lastCamCFrame = cam.CFrame

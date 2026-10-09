@@ -41,12 +41,7 @@ end
 
 -- Applique la friction Source à la vitesse horizontale
 -- Retourne la nouvelle vitesse XZ
-function PhysicsUtils.applyFriction(
-	velocityXZ: Vector3,
-	friction: number,
-	stopSpeed: number,
-	dt: number
-): Vector3
+function PhysicsUtils.applyFriction(velocityXZ: Vector3, friction: number, stopSpeed: number, dt: number): Vector3
 	local speed = velocityXZ.Magnitude
 	if speed < 1e-4 then
 		return Vector3.zero
@@ -60,22 +55,22 @@ end
 -- Applique l'accélération Source (ground ou air) à la vitesse horizontale
 -- Retourne la nouvelle vitesse XZ
 function PhysicsUtils.accelerate(
-    velocityXZ: Vector3,
-    wishdir: Vector3,
-    wishspeed: number,
-    accel: number,
-    dt: number
+	velocityXZ: Vector3,
+	wishdir: Vector3,
+	wishspeed: number,
+	accel: number,
+	dt: number
 ): Vector3
-    local currentSpeed = velocityXZ:Dot(wishdir)
-    local addSpeed = wishspeed - currentSpeed
+	local currentSpeed = velocityXZ:Dot(wishdir)
+	local addSpeed = wishspeed - currentSpeed
 
-    -- Ne pas limiter addSpeed, même si currentSpeed < 0
-    if addSpeed <= 0 then
-        return velocityXZ
-    end
+	-- Ne pas limiter addSpeed, même si currentSpeed < 0
+	if addSpeed <= 0 then
+		return velocityXZ
+	end
 
-    local accelSpeed = math.min(accel * dt, addSpeed)
-    return velocityXZ + wishdir * accelSpeed
+	local accelSpeed = math.min(accel * dt, addSpeed)
+	return velocityXZ + wishdir * accelSpeed
 end
 
 return PhysicsUtils

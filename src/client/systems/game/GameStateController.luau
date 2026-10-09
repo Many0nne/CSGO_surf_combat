@@ -1,13 +1,13 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local UserInputService  = game:GetService("UserInputService")
+local UserInputService = game:GetService("UserInputService")
 
-local Shared          = ReplicatedStorage:WaitForChild("Shared")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
 local NetworkProtocol = require(Shared:WaitForChild("NetworkProtocol"))
-local GameConfig      = require(Shared:WaitForChild("GameConfig"))
+local GameConfig = require(Shared:WaitForChild("GameConfig"))
 
-local MainMenu      = require(script.Parent.Parent.Parent.ui.MainMenu)
-local InfosScreen   = require(script.Parent.Parent.Parent.ui.InfosScreen)
-local RoundHUD      = require(script.Parent.Parent.Parent.ui.RoundHUD)
+local MainMenu = require(script.Parent.Parent.Parent.ui.MainMenu)
+local InfosScreen = require(script.Parent.Parent.Parent.ui.InfosScreen)
+local RoundHUD = require(script.Parent.Parent.Parent.ui.RoundHUD)
 local FeedbackModal = require(script.Parent.Parent.Parent.ui.FeedbackModal)
 
 local GameStateController = {}
@@ -20,8 +20,8 @@ type State = "MENU" | "INFOS" | "SPAWNING" | "IN_ROUND" | "DEAD" | "RESULT"
 local state: State = "MENU"
 local localPlayer: Player
 local setupCharFn: (char: Model) -> ()
-local humDiedConn:      RBXScriptConnection?
-local resultTimer:      thread?
+local humDiedConn: RBXScriptConnection?
+local resultTimer: thread?
 
 -- Remotes (résolus une seule fois)
 local spawnRemote: RemoteEvent?
@@ -31,7 +31,7 @@ local spawnRemote: RemoteEvent?
 local function activateLobbyCamera()
 	local cam = workspace.CurrentCamera
 	cam.CameraType = Enum.CameraType.Scriptable
-	cam.CFrame     = LOBBY_CAM_CF
+	cam.CFrame = LOBBY_CAM_CF
 end
 
 local function deactivateLobbyCamera()
@@ -50,35 +50,32 @@ local function setState(newState: State)
 		InfosScreen.hide()
 		RoundHUD.hide()
 		activateLobbyCamera()
-		UserInputService.MouseBehavior  = Enum.MouseBehavior.Default
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 		UserInputService.MouseIconEnabled = true
-
 	elseif newState == "INFOS" then
 		InfosScreen.show()
-
 	elseif newState == "SPAWNING" then
 		MainMenu.hide()
 		InfosScreen.hide()
 		FeedbackModal.hide()
-
 	elseif newState == "IN_ROUND" then
 		MainMenu.hide()
 		InfosScreen.hide()
 		RoundHUD.show()
 		RoundHUD.hideRespawning()
 		deactivateLobbyCamera()
-
 	elseif newState == "DEAD" then
 		RoundHUD.showRespawning(GameConfig.RESPAWN_DELAY)
-
 	elseif newState == "RESULT" then
 		RoundHUD.hide()
 		-- Tuer le personnage local pour sortir du mode FPS et libérer la souris
 		if localPlayer.Character then
 			local hum = localPlayer.Character:FindFirstChildOfClass("Humanoid")
-			if hum and hum.Health > 0 then hum.Health = 0 end
+			if hum and hum.Health > 0 then
+				hum.Health = 0
+			end
 		end
-		UserInputService.MouseBehavior    = Enum.MouseBehavior.Default
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 		UserInputService.MouseIconEnabled = true
 	end
 end
@@ -88,7 +85,9 @@ end
 local function onCharacterAdded(char: Model)
 	-- Connecter la mort
 	local humanoid = char:WaitForChild("Humanoid") :: Humanoid
-	if humDiedConn then humDiedConn:Disconnect() end
+	if humDiedConn then
+		humDiedConn:Disconnect()
+	end
 	humDiedConn = humanoid.Died:Connect(function()
 		if state == "IN_ROUND" then
 			setState("DEAD")
@@ -137,7 +136,10 @@ local function listenToRemotes()
 	-- RoundResult : { winnerName, scores }
 	local roundResultRmt = NetworkProtocol.getRemote(N.ROUND_RESULT)
 	roundResultRmt.OnClientEvent:Connect(function(data: { winnerName: string })
-		if resultTimer then task.cancel(resultTimer); resultTimer = nil end
+		if resultTimer then
+			task.cancel(resultTimer)
+			resultTimer = nil
+		end
 		setState("RESULT")
 		RoundHUD.show()
 		RoundHUD.showResult(data.winnerName)
@@ -158,28 +160,28 @@ end
 -- ── Init ───────────────────────────────────────────────────────────────────
 
 function GameStateController.init(player: Player, setupCharacter: (char: Model) -> ())
-	localPlayer  = player
-	setupCharFn  = setupCharacter
+	localPlayer = player
+	setupCharFn = setupCharacter
 
 	-- Connexions RemoteEvent (attend que le serveur les crée)
 	task.spawn(listenToRemotes)
 
 	-- UI
 	FeedbackModal.init()
-	MainMenu.init(
-		function()  -- Play
-			if state ~= "MENU" then return end
-			setState("SPAWNING")
-			if spawnRemote then spawnRemote:FireServer() end
-		end,
-		function()  -- Infos
-			setState("INFOS")
-		end,
-		function()  -- Feedback
-			FeedbackModal.show()
+	MainMenu.init(function() -- Play
+		if state ~= "MENU" then
+			return
 		end
-	)
-	InfosScreen.init(function()  -- fermer infos
+		setState("SPAWNING")
+		if spawnRemote then
+			spawnRemote:FireServer()
+		end
+	end, function() -- Infos
+		setState("INFOS")
+	end, function() -- Feedback
+		FeedbackModal.show()
+	end)
+	InfosScreen.init(function() -- fermer infos
 		setState("MENU")
 	end)
 	RoundHUD.init()

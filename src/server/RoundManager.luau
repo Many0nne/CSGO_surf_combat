@@ -1,21 +1,21 @@
-local Players    = game:GetService("Players")
+local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 type Score = { name: string, kills: number, deaths: number, firstKillTick: number }
 
 local RoundManager = {}
 
-local state      = "idle"  -- "idle" | "active" | "result"
-local timeLeft   = 0
+local state = "idle" -- "idle" | "active" | "result"
+local timeLeft = 0
 -- Combatant id: real players use their positive UserId, bots use a synthetic
 -- negative id. Both slot into these [number]-keyed tables.
-local scores: { [number]: Score } = {}       -- keyed by combatant id
-local lastAttacker: { [number]: number } = {}  -- victim id → attacker id
+local scores: { [number]: Score } = {} -- keyed by combatant id
+local lastAttacker: { [number]: number } = {} -- victim id → attacker id
 
-local roundStateRmt:  RemoteEvent
+local roundStateRmt: RemoteEvent
 local scoreUpdateRmt: RemoteEvent
 local roundResultRmt: RemoteEvent
-local playerDiedRmt:  RemoteEvent
+local playerDiedRmt: RemoteEvent
 
 local timerConn: RBXScriptConnection?
 
@@ -38,7 +38,7 @@ function RoundManager.ensureScoreById(id: number, name: string): Score
 end
 
 function RoundManager.removeScoreById(id: number)
-	scores[id]       = nil
+	scores[id] = nil
 	lastAttacker[id] = nil
 	broadcastScores()
 end
@@ -48,19 +48,20 @@ local function ensureScore(player: Player): Score
 end
 
 local function computeWinner(): string
-	local bestName   = "Personne"
-	local bestKills  = -1
+	local bestName = "Personne"
+	local bestKills = -1
 	local bestDeaths = math.huge
-	local bestTick   = math.huge
+	local bestTick = math.huge
 	for _, score in pairs(scores) do
-		if  score.kills > bestKills
-		or (score.kills == bestKills and score.deaths < bestDeaths)
-		or (score.kills == bestKills and score.deaths == bestDeaths and score.firstKillTick < bestTick)
+		if
+			score.kills > bestKills
+			or (score.kills == bestKills and score.deaths < bestDeaths)
+			or (score.kills == bestKills and score.deaths == bestDeaths and score.firstKillTick < bestTick)
 		then
-			bestKills  = score.kills
+			bestKills = score.kills
 			bestDeaths = score.deaths
-			bestTick   = score.firstKillTick
-			bestName   = score.name
+			bestTick = score.firstKillTick
+			bestName = score.name
 		end
 	end
 	return bestName
@@ -69,7 +70,10 @@ end
 -- ── round lifecycle ────────────────────────────────────────────────────────
 
 local function endRound()
-	if timerConn then timerConn:Disconnect(); timerConn = nil end
+	if timerConn then
+		timerConn:Disconnect()
+		timerConn = nil
+	end
 	state = "result"
 
 	local winnerName = computeWinner()
@@ -82,8 +86,8 @@ local function endRound()
 		end
 	end
 
-	task.delay(6, function()  -- RESULT_DURATION
-		state  = "idle"
+	task.delay(6, function() -- RESULT_DURATION
+		state = "idle"
 		scores = {}
 		lastAttacker = {}
 		broadcastState()
@@ -91,8 +95,10 @@ local function endRound()
 end
 
 function RoundManager.startRound(duration: number)
-	if state == "active" then return end
-	state    = "active"
+	if state == "active" then
+		return
+	end
+	state = "active"
 	timeLeft = duration
 	broadcastState()
 	broadcastScores()
@@ -101,7 +107,10 @@ function RoundManager.startRound(duration: number)
 
 	timerConn = RunService.Heartbeat:Connect(function(dt)
 		if state ~= "active" then
-			if timerConn then timerConn:Disconnect(); timerConn = nil end
+			if timerConn then
+				timerConn:Disconnect()
+				timerConn = nil
+			end
 			return
 		end
 		timeLeft = timeLeft - dt
@@ -135,10 +144,14 @@ end
 -- Generic death/attribution for any tracked combatant (player or bot).
 -- Returns the attacker id (or nil) so callers can decide on persistent stats.
 function RoundManager.onCombatantDied(victimId: number, victimPlayer: Player?): number?
-	if state ~= "active" then return nil end
+	if state ~= "active" then
+		return nil
+	end
 
 	local victimScore = scores[victimId]
-	if not victimScore then return nil end
+	if not victimScore then
+		return nil
+	end
 	victimScore.deaths += 1
 
 	local attackerId = lastAttacker[victimId]
@@ -167,7 +180,7 @@ function RoundManager.onCharacterDied(victim: Player, spawnFn: (Player) -> ()): 
 	ensureScore(victim)
 	local attackerId = RoundManager.onCombatantDied(victim.UserId, victim)
 
-	task.delay(2.5, function()  -- RESPAWN_DELAY
+	task.delay(2.5, function() -- RESPAWN_DELAY
 		if state == "active" and victim.Parent then
 			spawnFn(victim)
 		end
@@ -183,12 +196,15 @@ function RoundManager.addPlayer(player: Player)
 end
 
 function RoundManager.removePlayer(player: Player)
-	scores[player.UserId]       = nil
+	scores[player.UserId] = nil
 	lastAttacker[player.UserId] = nil
 	broadcastScores()
 	if state == "active" and #Players:GetPlayers() == 0 then
-		if timerConn then timerConn:Disconnect(); timerConn = nil end
-		state  = "idle"
+		if timerConn then
+			timerConn:Disconnect()
+			timerConn = nil
+		end
+		state = "idle"
 		scores = {}
 	end
 end
@@ -206,15 +222,15 @@ end
 -- ── init ───────────────────────────────────────────────────────────────────
 
 function RoundManager.init(remotes: {
-	roundState:   RemoteEvent,
-	scoreUpdate:  RemoteEvent,
-	roundResult:  RemoteEvent,
-	playerDied:   RemoteEvent,
+	roundState: RemoteEvent,
+	scoreUpdate: RemoteEvent,
+	roundResult: RemoteEvent,
+	playerDied: RemoteEvent,
 })
-	roundStateRmt  = remotes.roundState
+	roundStateRmt = remotes.roundState
 	scoreUpdateRmt = remotes.scoreUpdate
 	roundResultRmt = remotes.roundResult
-	playerDiedRmt  = remotes.playerDied
+	playerDiedRmt = remotes.playerDied
 end
 
 return RoundManager

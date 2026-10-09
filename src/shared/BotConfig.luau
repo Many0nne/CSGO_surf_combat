@@ -3,6 +3,8 @@
 -- See plan: bots fill empty combatant slots so a lone player always has
 -- opponents. Surf/air-strafe is a Phase 2 follow-up (STRAFE_ENABLED).
 
+-- Alignement en colonnes conservé volontairement
+-- stylua: ignore
 return {
 	-- ── Population ──────────────────────────────────────────────────────────
 	-- Target number of combatants (players + bots) the round tries to keep.

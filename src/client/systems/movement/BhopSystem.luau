@@ -1,8 +1,8 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Config      = require(ReplicatedStorage.Shared.MovementConfig)
+local Config = require(ReplicatedStorage.Shared.MovementConfig)
 local InputModule = require(script.Parent.Parent.Parent.input.InputModule)
 
-local landTimer   = math.huge  -- time since last landing; huge = airborne / never landed
+local landTimer = math.huge -- time since last landing; huge = airborne / never landed
 local wasOnGround = false
 
 local BhopSystem = {}
@@ -23,13 +23,13 @@ function BhopSystem.update(onGround: boolean, shouldJump: boolean, dt: number)
 	end
 	wasOnGround = onGround
 
-	local jumpHeld   = InputModule.isJumpHeld()
+	local jumpHeld = InputModule.isJumpHeld()
 	local goodTiming = onGround and (landTimer <= Config.BHOP_LAND_WINDOW)
 
 	-- AUTO_BHOP : forcer un saut tant que Space est maintenu (si CoyoteJump n'en a pas émis)
-	local forceJump    = Config.AUTO_BHOP and onGround and jumpHeld and not shouldJump
+	local forceJump = Config.AUTO_BHOP and onGround and jumpHeld and not shouldJump
 
-	local willJump     = shouldJump or forceJump
+	local willJump = shouldJump or forceJump
 	local skipFriction = onGround and willJump and (goodTiming or Config.AUTO_BHOP)
 
 	return { skipFriction = skipFriction, forceJump = forceJump }

@@ -1,5 +1,5 @@
-local UserInputService  = game:GetService("UserInputService")
-local RunService        = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
@@ -7,15 +7,15 @@ local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
 local cam = workspace.CurrentCamera
 local FPSCamera = {}
 
-local yaw   = 0
+local yaw = 0
 local pitch = 0
 local hrpRef: BasePart? = nil
 local boundStepName = "FPSCameraUpdate"
 local currentCamHeight = CameraConfig.CAM_HEIGHT_STAND
-local baseSens      = CameraConfig.DEFAULT_SENS
+local baseSens = CameraConfig.DEFAULT_SENS
 local scopeSensMult = CameraConfig.SCOPE_SENS_MULT
-local isScoped      = false
-local currentSens   = baseSens
+local isScoped = false
+local currentSens = baseSens
 local activeFovTween: Tween? = nil
 
 -- Interpolation de position entre deux pas physiques (Heartbeat).
@@ -24,9 +24,9 @@ local activeFovTween: Tween? = nil
 -- donne une position en escalier => saccades quand on translate ET tourne. On
 -- interpole donc entre les deux dernieres positions connues.
 local renderPrevPos: Vector3? = nil
-local renderCurPos:  Vector3? = nil
+local renderCurPos: Vector3? = nil
 local lastStepClock = 0
-local lastStepDt    = 0
+local lastStepDt = 0
 
 local function hideCharacterPart(obj: Instance)
 	if obj:IsA("BasePart") then
@@ -37,7 +37,7 @@ end
 function FPSCamera.init(hrp: BasePart, char: Model)
 	hrpRef = hrp
 	renderPrevPos = hrp.Position
-	renderCurPos  = hrp.Position
+	renderCurPos = hrp.Position
 	cam.CameraType = Enum.CameraType.Scriptable
 	cam.FieldOfView = CameraConfig.DEFAULT_FOV
 	UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
@@ -50,11 +50,13 @@ function FPSCamera.init(hrp: BasePart, char: Model)
 
 	RunService:UnbindFromRenderStep(boundStepName)
 	RunService:BindToRenderStep(boundStepName, Enum.RenderPriority.Camera.Value, function()
-		if not hrpRef or not hrpRef.Parent then return end
+		if not hrpRef or not hrpRef.Parent then
+			return
+		end
 
 		-- Rotation : toujours a la frequence d'affichage (souris fluide).
 		local delta = UserInputService:GetMouseDelta()
-		yaw   = yaw + delta.X * currentSens
+		yaw = yaw + delta.X * currentSens
 		pitch = math.clamp(pitch - delta.Y * currentSens, CameraConfig.PITCH_MIN, CameraConfig.PITCH_MAX)
 
 		-- Position : interpolee entre les deux derniers pas physiques.
@@ -67,9 +69,7 @@ function FPSCamera.init(hrp: BasePart, char: Model)
 		end
 
 		local headPos = basePos + Vector3.new(0, currentCamHeight, 0)
-		cam.CFrame = CFrame.new(headPos)
-			* CFrame.Angles(0, math.rad(-yaw), 0)
-			* CFrame.Angles(math.rad(pitch), 0, 0)
+		cam.CFrame = CFrame.new(headPos) * CFrame.Angles(0, math.rad(-yaw), 0) * CFrame.Angles(math.rad(pitch), 0, 0)
 	end)
 end
 
@@ -77,9 +77,9 @@ end
 --   FPSCamera.updateRoot(hrp.Position, dt)
 function FPSCamera.updateRoot(pos: Vector3, dt: number)
 	renderPrevPos = renderCurPos or pos
-	renderCurPos  = pos
+	renderCurPos = pos
 	lastStepClock = os.clock()
-	lastStepDt    = dt
+	lastStepDt = dt
 end
 
 function FPSCamera.setCamHeight(h: number)
@@ -95,7 +95,7 @@ function FPSCamera.getCameraPitch(): number
 end
 
 function FPSCamera.setSensitivity(s: number)
-	baseSens    = s
+	baseSens = s
 	currentSens = isScoped and (baseSens * scopeSensMult) or baseSens
 end
 
@@ -105,7 +105,7 @@ end
 
 function FPSCamera.setScopeMultiplier(m: number)
 	scopeSensMult = m
-	currentSens   = isScoped and (baseSens * scopeSensMult) or baseSens
+	currentSens = isScoped and (baseSens * scopeSensMult) or baseSens
 end
 
 function FPSCamera.getScopeMultiplier(): number
@@ -113,7 +113,7 @@ function FPSCamera.getScopeMultiplier(): number
 end
 
 function FPSCamera.setScoped(scoped: boolean)
-	isScoped    = scoped
+	isScoped = scoped
 	currentSens = isScoped and (baseSens * scopeSensMult) or baseSens
 end
 
@@ -127,7 +127,9 @@ function FPSCamera.setFOV(targetFov: number, duration: number?)
 		local info = TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 		local t = TweenService:Create(cam, info, { FieldOfView = targetFov })
 		activeFovTween = t
-		t.Completed:Once(function() activeFovTween = nil end)
+		t.Completed:Once(function()
+			activeFovTween = nil
+		end)
 		t:Play()
 	else
 		cam.FieldOfView = targetFov

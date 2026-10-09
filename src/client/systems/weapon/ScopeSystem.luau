@@ -11,18 +11,22 @@ local level = 0
 
 local function getScopeGui(): ScreenGui?
 	local pg = Players.LocalPlayer:FindFirstChild("PlayerGui")
-	if not pg then return nil end
+	if not pg then
+		return nil
+	end
 	local gui = pg:FindFirstChild("ScopeGUI")
 	return gui and gui:IsA("ScreenGui") and gui or nil
 end
 
 local function setGuiVisible(visible: boolean)
 	local gui = getScopeGui()
-	if gui then gui.Enabled = visible end
+	if gui then
+		gui.Enabled = visible
+	end
 end
 
 function ScopeSystem.init(camera, viewmodel)
-	cameraRef   = camera
+	cameraRef = camera
 	viewmodelRef = viewmodel
 	level = 0
 end
@@ -47,7 +51,9 @@ end
 
 -- Retourne le nouvel état weaponState ("IDLE" ou "SCOPED")
 function ScopeSystem.toggle(cfg): string
-	if not cfg or not cfg.HasScope then return "IDLE" end
+	if not cfg or not cfg.HasScope then
+		return "IDLE"
+	end
 	level = (level + 1) % 3
 	if level == 0 then
 		cameraRef.setFOV(CameraConfig.DEFAULT_FOV, cfg.ScopeTweenTime)

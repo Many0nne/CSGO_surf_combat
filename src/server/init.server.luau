@@ -1,16 +1,16 @@
-local Players           = game:GetService("Players")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Shared          = ReplicatedStorage:WaitForChild("Shared")
+local Shared = ReplicatedStorage:WaitForChild("Shared")
 local NetworkProtocol = require(Shared:WaitForChild("NetworkProtocol"))
-local GameConfig      = require(Shared:WaitForChild("GameConfig"))
+local GameConfig = require(Shared:WaitForChild("GameConfig"))
 
-local SpawnManager     = require(script.SpawnManager)
-local RoundManager     = require(script.RoundManager)
-local StatsStore       = require(script.StatsStore)
-local Validator        = require(script.Validator)
-local FeedbackService  = require(script.FeedbackService)
-local BotManager       = require(script.BotManager)
+local SpawnManager = require(script.SpawnManager)
+local RoundManager = require(script.RoundManager)
+local StatsStore = require(script.StatsStore)
+local Validator = require(script.Validator)
+local FeedbackService = require(script.FeedbackService)
+local BotManager = require(script.BotManager)
 
 -- Spawn contrôlé : on gère LoadCharacter nous-mêmes
 Players.CharacterAutoLoads = false
@@ -24,16 +24,16 @@ local function makeRemote(name: string): RemoteEvent
 	return r
 end
 
-local N            = NetworkProtocol.Names
-local meleeRmt     = makeRemote(N.MELEE_DAMAGE)
-local hitscanRmt   = makeRemote(N.HITSCAN_DAMAGE)
-local spawnRmt     = makeRemote(N.REQUEST_SPAWN)
-local roundStateRmt  = makeRemote(N.ROUND_STATE)
+local N = NetworkProtocol.Names
+local meleeRmt = makeRemote(N.MELEE_DAMAGE)
+local hitscanRmt = makeRemote(N.HITSCAN_DAMAGE)
+local spawnRmt = makeRemote(N.REQUEST_SPAWN)
+local roundStateRmt = makeRemote(N.ROUND_STATE)
 local scoreUpdateRmt = makeRemote(N.SCORE_UPDATE)
 local roundResultRmt = makeRemote(N.ROUND_RESULT)
-local playerDiedRmt  = makeRemote(N.PLAYER_DIED)
+local playerDiedRmt = makeRemote(N.PLAYER_DIED)
 local sendFeedbackRmt = makeRemote(N.SEND_FEEDBACK)
-local feedbackAckRmt  = makeRemote(N.FEEDBACK_ACK)
+local feedbackAckRmt = makeRemote(N.FEEDBACK_ACK)
 
 -- ── Initialisation des sous-systèmes ──────────────────────────────────────
 
@@ -41,10 +41,10 @@ StatsStore.init()
 FeedbackService.init(sendFeedbackRmt, feedbackAckRmt)
 
 RoundManager.init({
-	roundState  = roundStateRmt,
+	roundState = roundStateRmt,
 	scoreUpdate = scoreUpdateRmt,
 	roundResult = roundResultRmt,
-	playerDied  = playerDiedRmt,
+	playerDied = playerDiedRmt,
 })
 
 BotManager.init({
@@ -74,9 +74,13 @@ end
 
 SpawnManager.init(spawnRmt, function(player: Player): boolean
 	-- Refuser si déjà vivant
-	if player.Character and player.Character.Parent then return false end
+	if player.Character and player.Character.Parent then
+		return false
+	end
 	-- Refuser si résultat en cours (bannière de fin)
-	if RoundManager.getState() == "result" then return false end
+	if RoundManager.getState() == "result" then
+		return false
+	end
 	-- Démarrer le round si idle (1er joueur à cliquer Play)
 	if RoundManager.getState() == "idle" then
 		RoundManager.startRound(GameConfig.ROUND_DURATION)
@@ -93,22 +97,32 @@ local function recordHit(player: Player, targetCharacter: Instance)
 		RoundManager.recordDamage(player, targetPlayer)
 	else
 		local botId = BotManager.getBotId(targetCharacter)
-		if botId then RoundManager.recordDamageById(player.UserId, botId) end
+		if botId then
+			RoundManager.recordDamageById(player.UserId, botId)
+		end
 	end
 end
 
 meleeRmt.OnServerEvent:Connect(function(player, targetCharacter, damage)
-	if not Validator.validateMelee(player, targetCharacter, damage) then return end
+	if not Validator.validateMelee(player, targetCharacter, damage) then
+		return
+	end
 	recordHit(player, targetCharacter)
 	local humanoid = targetCharacter:FindFirstChildWhichIsA("Humanoid") :: Humanoid?
-	if humanoid then humanoid:TakeDamage(damage) end
+	if humanoid then
+		humanoid:TakeDamage(damage)
+	end
 end)
 
 hitscanRmt.OnServerEvent:Connect(function(player, targetCharacter, damage)
-	if not Validator.validateHitscan(player, targetCharacter, damage) then return end
+	if not Validator.validateHitscan(player, targetCharacter, damage) then
+		return
+	end
 	recordHit(player, targetCharacter)
 	local humanoid = targetCharacter:FindFirstChildWhichIsA("Humanoid") :: Humanoid?
-	if humanoid then humanoid:TakeDamage(damage) end
+	if humanoid then
+		humanoid:TakeDamage(damage)
+	end
 end)
 
 -- ── Lifecycle joueurs ─────────────────────────────────────────────────────

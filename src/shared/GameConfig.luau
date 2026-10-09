@@ -1,3 +1,5 @@
+-- Alignement en colonnes conservé volontairement
+-- stylua: ignore
 return {
 	ROUND_DURATION     = 300,  -- 5 minutes
 	RESPAWN_DELAY      = 2.5,

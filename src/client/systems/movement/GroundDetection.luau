@@ -1,33 +1,33 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Config  = require(ReplicatedStorage.Shared.MovementConfig)
+local Config = require(ReplicatedStorage.Shared.MovementConfig)
 local CharacterDimensions = require(script.Parent.CharacterDimensions)
 
 local CAST_RADIUS = Config.CHAR_RADIUS - 0.05
 local HALF_HEIGHT = Config.CHAR_HEIGHT_STAND / 2
 local CENTER_OFFSET = 0
-local CAST_SKIN   = 0.5    -- augmenté de 0.15 : détection jusqu'à ~1.45 studs sous les pieds
-local CAST_DIST   = HALF_HEIGHT + CAST_SKIN
-local CAST_DIR    = Vector3.new(0, -CAST_DIST, 0)
+local CAST_SKIN = 0.5 -- augmenté de 0.15 : détection jusqu'à ~1.45 studs sous les pieds
+local CAST_DIST = HALF_HEIGHT + CAST_SKIN
+local CAST_DIR = Vector3.new(0, -CAST_DIST, 0)
 
 local params = RaycastParams.new()
 params.FilterType = Enum.RaycastFilterType.Exclude
 
 export type GroundInfo = {
-	onGround    : boolean,
-	normal      : Vector3,
-	slopeAngle  : number,
-	distance    : number,
-	material    : Enum.Material,
-	hitPosition : Vector3,
+	onGround: boolean,
+	normal: Vector3,
+	slopeAngle: number,
+	distance: number,
+	material: Enum.Material,
+	hitPosition: Vector3,
 }
 
 local GROUND_MISS: GroundInfo = {
-	onGround    = false,
-	normal      = Vector3.yAxis,
-	slopeAngle  = 0,
-	distance    = math.huge,
-	material    = Enum.Material.Air,
+	onGround = false,
+	normal = Vector3.yAxis,
+	slopeAngle = 0,
+	distance = math.huge,
+	material = Enum.Material.Air,
 	hitPosition = Vector3.zero,
 }
 
@@ -60,11 +60,15 @@ function GroundDetection.getGroundInfo(rootPart: BasePart, velocityY: number?, w
 	if not result then
 		local q = CAST_RADIUS * 0.6
 		for _, off in ipairs({
-			Vector3.new(q,0,0), Vector3.new(-q,0,0),
-			Vector3.new(0,0,q), Vector3.new(0,0,-q),
+			Vector3.new(q, 0, 0),
+			Vector3.new(-q, 0, 0),
+			Vector3.new(0, 0, q),
+			Vector3.new(0, 0, -q),
 		}) do
 			result = workspace:Spherecast(origin + off, CAST_RADIUS, CAST_DIR, params)
-			if result then break end
+			if result then
+				break
+			end
 		end
 	end
 	if not result then
@@ -94,7 +98,7 @@ function GroundDetection.getGroundInfo(rootPart: BasePart, velocityY: number?, w
 		return GROUND_MISS
 	end
 
-	local cosAngle   = math.clamp(normal:Dot(Vector3.yAxis), -1, 1)
+	local cosAngle = math.clamp(normal:Dot(Vector3.yAxis), -1, 1)
 	local slopeAngle = math.deg(math.acos(cosAngle))
 
 	-- Hystérésis : marge supplémentaire pour RESTER au sol (évite l'oscillation au seuil).
@@ -102,11 +106,11 @@ function GroundDetection.getGroundInfo(rootPart: BasePart, velocityY: number?, w
 	local onGround = slopeAngle <= maxAngle
 
 	return {
-		onGround    = onGround,
-		normal      = normal,
-		slopeAngle  = slopeAngle,
-		distance    = result.Distance - HALF_HEIGHT,
-		material    = result.Material,
+		onGround = onGround,
+		normal = normal,
+		slopeAngle = slopeAngle,
+		distance = result.Distance - HALF_HEIGHT,
+		material = result.Material,
 		hitPosition = result.Position,
 	}
 end

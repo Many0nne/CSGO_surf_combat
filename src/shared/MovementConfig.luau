@@ -1,3 +1,5 @@
+-- Alignement en colonnes conservé volontairement
+-- stylua: ignore
 return {
 	-- Vitesses (studs/s)
 	RUN_SPEED    = 16,

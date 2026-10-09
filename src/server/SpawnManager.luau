@@ -3,11 +3,17 @@ local SpawnManager = {}
 local groundSpawnsFolder: Folder?
 
 local function getGroundSpawns(): Folder?
-	if groundSpawnsFolder then return groundSpawnsFolder end
+	if groundSpawnsFolder then
+		return groundSpawnsFolder
+	end
 	local maps = workspace:WaitForChild("Maps", 10)
-	if not maps then return nil end
+	if not maps then
+		return nil
+	end
 	local map = maps:WaitForChild("Map", 10)
-	if not map then return nil end
+	if not map then
+		return nil
+	end
 	groundSpawnsFolder = map:WaitForChild("GroundSpawns", 10) :: Folder?
 	return groundSpawnsFolder
 end

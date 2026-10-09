@@ -1,3 +1,5 @@
+-- Alignement en colonnes conservé volontairement
+-- stylua: ignore
 return {
 	DEFAULT_FOV       = 90,
 	DEFAULT_SENS      = 0.3,

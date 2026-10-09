@@ -1,10 +1,10 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Config      = require(ReplicatedStorage.Shared.MovementConfig)
+local Config = require(ReplicatedStorage.Shared.MovementConfig)
 local InputModule = require(script.Parent.Parent.Parent.input.InputModule)
 
-local coyoteTimer    = 0
-local wasOnGround    = true
-local didTriggerJump = false   -- empêche le coyote de démarrer sur un saut volontaire
+local coyoteTimer = 0
+local wasOnGround = true
+local didTriggerJump = false -- empêche le coyote de démarrer sur un saut volontaire
 
 local CoyoteJump = {}
 
@@ -12,7 +12,7 @@ local CoyoteJump = {}
 -- Consomme isJumpPressed() en interne — ne pas l'appeler ailleurs ce tick.
 -- Retourne true si un saut doit se déclencher (normal / coyote / buffer).
 function CoyoteJump.update(onGround: boolean, dt: number): boolean
-	local prevOnGround       = wasOnGround
+	local prevOnGround = wasOnGround
 	local prevDidTriggerJump = didTriggerJump
 	didTriggerJump = false
 
@@ -26,12 +26,12 @@ function CoyoteJump.update(onGround: boolean, dt: number): boolean
 	end
 	wasOnGround = onGround
 
-	local jumpPressed  = InputModule.isJumpPressed()   -- edge, consommé ici
+	local jumpPressed = InputModule.isJumpPressed() -- edge, consommé ici
 	local jumpBuffered = (tick() - InputModule.getJumpPressTime()) <= Config.JUMP_BUFFER_TIME
 
 	local normalJump = onGround and jumpPressed
 	local coyoteJump = not onGround and coyoteTimer > 0 and jumpPressed
-	local bufferJump = onGround and not prevOnGround and jumpBuffered  -- atterrissage + buffer actif
+	local bufferJump = onGround and not prevOnGround and jumpBuffered -- atterrissage + buffer actif
 
 	local shouldJump = normalJump or coyoteJump or bufferJump
 	if shouldJump then

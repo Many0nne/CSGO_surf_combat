@@ -1,5 +1,5 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Config       = require(ReplicatedStorage.Shared.MovementConfig)
+local Config = require(ReplicatedStorage.Shared.MovementConfig)
 local PhysicsUtils = require(ReplicatedStorage.Shared.PhysicsUtils)
 
 local GRAVITY_VEC = Vector3.new(0, Config.GRAVITY, 0)
@@ -22,7 +22,7 @@ function SlopeSystem.slideStep(velocity: Vector3, surfaceNormal: Vector3, dt: nu
 
 	-- 2. Décomposer la gravité
 	local g_parallel = PhysicsUtils.projectOnPlane(GRAVITY_VEC, surfaceNormal)
-	local g_perp     = GRAVITY_VEC - g_parallel  -- composante dans la normale → force normale
+	local g_perp = GRAVITY_VEC - g_parallel -- composante dans la normale → force normale
 
 	-- 3. Friction proportionnelle à la force normale (s'oppose au mouvement dans les deux sens)
 	local speed = velocity.Magnitude

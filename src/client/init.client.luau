@@ -1,15 +1,15 @@
 local Players = game:GetService("Players")
 
-local GroundDetection     = require(script.systems.movement.GroundDetection)
-local StepupSystem        = require(script.systems.movement.StepupSystem)
-local WallSlide           = require(script.systems.movement.WallSlide)
+local GroundDetection = require(script.systems.movement.GroundDetection)
+local StepupSystem = require(script.systems.movement.StepupSystem)
+local WallSlide = require(script.systems.movement.WallSlide)
 local CharacterDimensions = require(script.systems.movement.CharacterDimensions)
-local MovementController  = require(script.systems.movement.MovementController)
-local ViewmodelSystem     = require(script.systems.weapon.ViewmodelSystem)
-local WeaponSystem        = require(script.systems.weapon.WeaponSystem)
-local FPSCamera           = require(script.camera.FPSCamera)
-local SettingsMenu        = require(script.ui.SettingsMenu)
-local Speedometer         = require(script.ui.Speedometer)
+local MovementController = require(script.systems.movement.MovementController)
+local ViewmodelSystem = require(script.systems.weapon.ViewmodelSystem)
+local WeaponSystem = require(script.systems.weapon.WeaponSystem)
+local FPSCamera = require(script.camera.FPSCamera)
+local SettingsMenu = require(script.ui.SettingsMenu)
+local Speedometer = require(script.ui.Speedometer)
 local GameStateController = require(script.systems.game.GameStateController)
 
 local player = Players.LocalPlayer
@@ -23,13 +23,15 @@ local function setupCharacter(char: Model)
 	local humanoid = char:WaitForChild("Humanoid") :: Humanoid
 	local rootPart = char:WaitForChild("HumanoidRootPart") :: BasePart
 
-	rootPart.Anchored    = true
-	humanoid.WalkSpeed   = 0
-	humanoid.JumpPower   = 0
+	rootPart.Anchored = true
+	humanoid.WalkSpeed = 0
+	humanoid.JumpPower = 0
 	humanoid.AutoJumpEnabled = false
 	humanoid:ChangeState(Enum.HumanoidStateType.PlatformStanding)
 
-	if stateConn then stateConn:Disconnect() end
+	if stateConn then
+		stateConn:Disconnect()
+	end
 	stateConn = humanoid.StateChanged:Connect(function(_, newState)
 		if newState ~= Enum.HumanoidStateType.PlatformStanding then
 			task.defer(function()

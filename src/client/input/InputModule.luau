@@ -2,38 +2,48 @@ local UserInputService = game:GetService("UserInputService")
 
 -- Map KeyCode → nom de touche interne
 local KEY_MAP = {
-	[Enum.KeyCode.W]            = "W",
-	[Enum.KeyCode.A]            = "A",
-	[Enum.KeyCode.S]            = "S",
-	[Enum.KeyCode.D]            = "D",
-	[Enum.KeyCode.LeftShift]    = "Shift",
-	[Enum.KeyCode.RightShift]   = "Shift",
-	[Enum.KeyCode.LeftControl]  = "Ctrl",
+	[Enum.KeyCode.W] = "W",
+	[Enum.KeyCode.A] = "A",
+	[Enum.KeyCode.S] = "S",
+	[Enum.KeyCode.D] = "D",
+	[Enum.KeyCode.LeftShift] = "Shift",
+	[Enum.KeyCode.RightShift] = "Shift",
+	[Enum.KeyCode.LeftControl] = "Ctrl",
 	[Enum.KeyCode.RightControl] = "Ctrl",
-	[Enum.KeyCode.Space]        = "Space",
-	[Enum.KeyCode.R]            = "R",
+	[Enum.KeyCode.Space] = "Space",
+	[Enum.KeyCode.R] = "R",
 }
 
 local held = {
-	W = false, A = false, S = false, D = false,
-	Shift = false, Ctrl = false, Space = false, R = false,
+	W = false,
+	A = false,
+	S = false,
+	D = false,
+	Shift = false,
+	Ctrl = false,
+	Space = false,
+	R = false,
 }
 
-local jumpPressedEdge   = false
-local jumpPressTime     = -math.huge
+local jumpPressedEdge = false
+local jumpPressTime = -math.huge
 local reloadPressedEdge = false
 local lastWishdir = Vector3.zero
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	local key = KEY_MAP[input.KeyCode]
-	if not key then return end
+	if not key then
+		return
+	end
 	-- Bloquer le saut si l'UI a capturé l'input (ex: chat ouvert), mais laisser passer
 	-- les touches de mouvement même si gameProcessed (ex: Ctrl+Z intercepté comme Undo).
-	if gameProcessed and key == "Space" then return end
+	if gameProcessed and key == "Space" then
+		return
+	end
 	held[key] = true
 	if key == "Space" then
 		jumpPressedEdge = true
-		jumpPressTime   = tick()
+		jumpPressTime = tick()
 	elseif key == "R" then
 		reloadPressedEdge = true
 	end
@@ -41,16 +51,22 @@ end)
 
 UserInputService.InputEnded:Connect(function(input)
 	local key = KEY_MAP[input.KeyCode]
-	if not key then return end
+	if not key then
+		return
+	end
 	-- Pour les touches doublées (L/R Shift, L/R Ctrl), ne relâcher que si aucune des deux n'est tenue
 	if key == "Shift" then
-		if not UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
-			and not UserInputService:IsKeyDown(Enum.KeyCode.RightShift) then
+		if
+			not UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
+			and not UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
+		then
 			held.Shift = false
 		end
 	elseif key == "Ctrl" then
-		if not UserInputService:IsKeyDown(Enum.KeyCode.LeftControl)
-			and not UserInputService:IsKeyDown(Enum.KeyCode.RightControl) then
+		if
+			not UserInputService:IsKeyDown(Enum.KeyCode.LeftControl)
+			and not UserInputService:IsKeyDown(Enum.KeyCode.RightControl)
+		then
 			held.Ctrl = false
 		end
 	else
@@ -64,33 +80,37 @@ local InputModule = {}
 -- yaw : angle horizontal de la caméra en degrés (depuis FPSCamera.getCameraYaw()).
 -- Retourne Vector3.zero si aucune touche directionnelle n'est pressée.
 function InputModule.getWishDir(yaw: number): Vector3
-    local fwd = (held.W and 1 or 0) - (held.S and 1 or 0)
-    local rgt = (held.D and 1 or 0) - (held.A and 1 or 0)
-    if fwd == 0 and rgt == 0 then
-        lastWishdir = Vector3.zero
-        return Vector3.zero
-    end
+	local fwd = (held.W and 1 or 0) - (held.S and 1 or 0)
+	local rgt = (held.D and 1 or 0) - (held.A and 1 or 0)
+	if fwd == 0 and rgt == 0 then
+		lastWishdir = Vector3.zero
+		return Vector3.zero
+	end
 
-    local yr = math.rad(yaw)
-    local s, c = math.sin(yr), math.cos(yr)
-    local raw = Vector3.new(fwd * s + rgt * c, 0, fwd * (-c) + rgt * s)
+	local yr = math.rad(yaw)
+	local s, c = math.sin(yr), math.cos(yr)
+	local raw = Vector3.new(fwd * s + rgt * c, 0, fwd * -c + rgt * s)
 
-    -- Supprimer le lissage pour le bhop
-    lastWishdir = raw.Unit
-    return lastWishdir
+	-- Supprimer le lissage pour le bhop
+	lastWishdir = raw.Unit
+	return lastWishdir
 end
 
 -- Variante 3D : inclut le pitch pour que viser en bas influence la wishdir (surf/air).
 function InputModule.getWishDir3D(yaw: number, pitch: number): Vector3
 	local fwd = (held.W and 1 or 0) - (held.S and 1 or 0)
 	local rgt = (held.D and 1 or 0) - (held.A and 1 or 0)
-	if fwd == 0 and rgt == 0 then return Vector3.zero end
+	if fwd == 0 and rgt == 0 then
+		return Vector3.zero
+	end
 	local yr = math.rad(yaw)
 	local pr = math.rad(pitch)
 	local forward = Vector3.new(math.sin(yr) * math.cos(pr), math.sin(pr), -math.cos(yr) * math.cos(pr))
-	local right   = Vector3.new(math.cos(yr), 0, math.sin(yr))
+	local right = Vector3.new(math.cos(yr), 0, math.sin(yr))
 	local dir = forward * fwd + right * rgt
-	if dir.Magnitude > 1e-4 then return dir.Unit end
+	if dir.Magnitude > 1e-4 then
+		return dir.Unit
+	end
 	return Vector3.zero
 end
 

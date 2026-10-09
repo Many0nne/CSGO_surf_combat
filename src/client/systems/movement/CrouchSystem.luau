@@ -4,7 +4,7 @@ local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
 local CharacterDimensions = require(script.Parent.CharacterDimensions)
 local InputModule = require(script.Parent.Parent.Parent.input.InputModule)
 
-local STAND_HALF  = 0
+local STAND_HALF = 0
 local STAND_ROOT_TOP = 0
 local CROUCH_ROOT_TOP = 0
 local UNCROUCH_CAST_DIST = 0
@@ -18,7 +18,9 @@ local rootToTop = 0
 local centerOffset = 0
 
 local function canUncrouch(): boolean
-	if not hrpRef then return true end
+	if not hrpRef then
+		return true
+	end
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = { hrpRef.Parent :: Instance }
@@ -30,9 +32,9 @@ end
 local CrouchSystem = {}
 
 function CrouchSystem.init(hrp: BasePart)
-	hrpRef     = hrp
-	crouching  = false
-	camHeight  = CameraConfig.CAM_HEIGHT_STAND
+	hrpRef = hrp
+	crouching = false
+	camHeight = CameraConfig.CAM_HEIGHT_STAND
 	local standDims = CharacterDimensions.getStand()
 	local crouchDims = CharacterDimensions.getCrouch()
 	STAND_HALF = standDims.halfHeight
@@ -49,7 +51,15 @@ function CrouchSystem.init(hrp: BasePart)
 	centerOffset = standDims.centerOffset
 end
 
-function CrouchSystem.update(dt: number): { isCrouching: boolean, camHeight: number, halfHeight: number, rootToBottom: number, rootToTop: number, centerOffset: number, radius: number }
+function CrouchSystem.update(dt: number): {
+	isCrouching: boolean,
+	camHeight: number,
+	halfHeight: number,
+	rootToBottom: number,
+	rootToTop: number,
+	centerOffset: number,
+	radius: number,
+}
 	local wantCrouch = InputModule.isCrouching()
 
 	if wantCrouch then
