@@ -125,11 +125,12 @@ local function onToolActivated(tool)
 	s.lastFire = now
 	weaponState = "FIRING"
 	if cfg and cfg.IsMelee then
-		ViewmodelSystem.playAnimation("Shoot", {
+		local markerOverrides: { [string]: string | () -> string } = {
 			["Stab Sound"] = function()
 				return MeleeHitDetection.resolveHit(cfg, ViewmodelSystem.getActiveViewmodel())
-			end
-		})
+			end,
+		}
+		ViewmodelSystem.playAnimation("Shoot", markerOverrides)
 	else
 		ViewmodelSystem.playAnimation("Shoot")
 	end
@@ -184,7 +185,7 @@ local function onToolEquipped(tool, char)
 	end
 end
 
-local function onToolUnequipped(tool, char)
+local function onToolUnequipped(char)
 	if cancelReload then cancelReload() end
 	if scopeConn then scopeConn:Disconnect(); scopeConn = nil end
 	ScopeSystem.reset()
@@ -203,7 +204,10 @@ local function hookTool(tool, player)
 		onToolEquipped(tool, player.Character)
 	end)
 	tool.Unequipped:Connect(function()
-		onToolUnequipped(tool, player.Character)
+		onToolUnequipped(player.Character)
+	end)
+	tool.Destroying:Connect(function()
+		clearAmmoState(tool)
 	end)
 end
 

@@ -1,0 +1,6 @@
+std = "roblox"
+
+[lints]
+# Les one-liners ("if conn then conn:Disconnect(); conn = nil end", corps de fonction/boucle courts) sont l'idiome du projet
+multiple_statements = "allow"
+roblox_manual_fromscale_or_fromoffset = "allow"

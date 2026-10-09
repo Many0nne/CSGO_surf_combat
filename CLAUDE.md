@@ -162,4 +162,19 @@ CSGO/
 ```bash
 rojo serve
 rojo build -o "CSGO.rbxlx"
+bash tools/check.sh         # selene + stylua --check + luau-lsp analyze sur src/
+bash tools/check.sh --fix   # idem, en appliquant le formatage StyLua
 ```
+
+## Outillage qualité
+
+- Outils gérés par Aftman (`aftman.toml`) : `stylua`, `selene`, `luau-lsp`. Binaires dans `~/.aftman/bin`.
+- Configs : `stylua.toml` (tabs, guillemets doubles, 120 colonnes), `selene.toml` (std roblox, plusieurs instructions par ligne autorisées — idiome du projet), `.luaurc` (mode `nonstrict`).
+- Après toute modification de code `.luau`, lancer `bash tools/check.sh` et ne pas introduire de nouvel avertissement.
+
+## Roblox Studio MCP
+
+- Le serveur MCP `Roblox_Studio` (officiel, intégré à Studio) est configuré en scope local. Studio doit être ouvert avec "Enable Studio as MCP server" activé.
+- **Ne jamais modifier de scripts via le MCP** (`multi_edit`, `execute_luau` qui écrit dans `Source`, etc.) : la synchro Rojo va uniquement des fichiers vers Studio, toute modification de script faite dans Studio sera écrasée ou perdue. Le code se modifie exclusivement dans `src/`.
+- Usages du MCP : inspecter la scène (`search_game_tree`, `inspect_instance`), construire la map et les objets du workspace (rampes de surf, spawns, décor), chercher et insérer des assets, playtester (`start_stop_play`, simulation d'input, `get_console_output`, `screen_capture`) pour vérifier un comportement.
+- Les éléments créés dans le workspace via le MCP ne sont pas dans `src/` : penser à sauvegarder la place dans Studio.

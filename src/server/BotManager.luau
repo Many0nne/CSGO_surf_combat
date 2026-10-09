@@ -296,7 +296,7 @@ local function hasLineOfSight(bot: Bot, targetRoot: BasePart, targetChar: Model)
 	local dir    = targetRoot.Position - origin
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = { bot.model :: Instance }
+	params.FilterDescendantsInstances = { bot.model :: Model }
 	local result = workspace:Raycast(origin, dir, params)
 	if not result then return true end -- nothing in between
 	return result.Instance:IsDescendantOf(targetChar)
@@ -469,7 +469,7 @@ local function fireAt(bot: Bot, target: Combatant)
 
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = { bot.model :: Instance }
+	params.FilterDescendantsInstances = { bot.model :: Model }
 	local result = workspace:Raycast(origin, dir, params)
 	if result and result.Instance:IsDescendantOf(target.char) then
 		RoundManager.recordDamageById(bot.id, target.id)
@@ -646,7 +646,7 @@ local function thinkBot(bot: Bot)
 		bot.wanderTarget = root.Position + Vector3.new(math.cos(angle) * r, 0, math.sin(angle) * r)
 		bot.nextWander   = now + BotConfig.REPATH_INTERVAL
 	end
-	navigateTo(bot, bot.wanderTarget)
+	navigateTo(bot, bot.wanderTarget :: Vector3)
 end
 
 local function onHeartbeat()

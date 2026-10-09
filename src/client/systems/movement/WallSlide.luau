@@ -173,9 +173,9 @@ local function slideOnce(
 				local cand = clipVelocity(origVel, planes[i], 1.0)
 				local ok = true
 				for j = 1, numplanes do
-					if j ~= i and cand:Dot(planes[j]) < 0 then ok = false break end
+					if j ~= i and cand:Dot(planes[j]) < 0 then ok = false; break end
 				end
-				if ok then velocity = cand resolved = true break end
+				if ok then velocity = cand; resolved = true; break end
 			end
 			if not resolved then
 				if numplanes ~= 2 then
@@ -327,7 +327,7 @@ function WallSlide.commitMove(
 			local pos   = candidate
 			local freed = false
 			for _ = 1, 12 do
-				if not penInfoRaw(pos, r - 0.05, rtb, rtt) then freed = true break end
+				if not penInfoRaw(pos, r - 0.05, rtb, rtt) then freed = true; break end
 				pos += Vector3.new(0, 0.15, 0)
 			end
 			if not freed then pos = fromSafe end  -- secours : rien de libre vers le haut

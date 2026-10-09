@@ -5,7 +5,6 @@ local CharacterDimensions = require(script.Parent.CharacterDimensions)
 local InputModule = require(script.Parent.Parent.Parent.input.InputModule)
 
 local STAND_HALF  = 0
-local CROUCH_HALF = 0
 local STAND_ROOT_TOP = 0
 local CROUCH_ROOT_TOP = 0
 local UNCROUCH_CAST_DIST = 0
@@ -37,7 +36,6 @@ function CrouchSystem.init(hrp: BasePart)
 	local standDims = CharacterDimensions.getStand()
 	local crouchDims = CharacterDimensions.getCrouch()
 	STAND_HALF = standDims.halfHeight
-	CROUCH_HALF = crouchDims.halfHeight
 	STAND_ROOT_TOP = standDims.rootToTop
 	CROUCH_ROOT_TOP = crouchDims.rootToTop
 	UNCROUCH_CAST_DIST = STAND_ROOT_TOP - CROUCH_ROOT_TOP + 0.1

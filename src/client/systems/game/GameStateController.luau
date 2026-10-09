@@ -1,4 +1,3 @@
-local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService  = game:GetService("UserInputService")
 
@@ -21,8 +20,6 @@ type State = "MENU" | "INFOS" | "SPAWNING" | "IN_ROUND" | "DEAD" | "RESULT"
 local state: State = "MENU"
 local localPlayer: Player
 local setupCharFn: (char: Model) -> ()
-local charAddedConn:    RBXScriptConnection?
-local charRemovingConn: RBXScriptConnection?
 local humDiedConn:      RBXScriptConnection?
 local resultTimer:      thread?
 
@@ -188,8 +185,8 @@ function GameStateController.init(player: Player, setupCharacter: (char: Model) 
 	RoundHUD.init()
 
 	-- Connexions personnage
-	charAddedConn = player.CharacterAdded:Connect(onCharacterAdded)
-	charRemovingConn = player.CharacterRemoving:Connect(onCharacterRemoving)
+	player.CharacterAdded:Connect(onCharacterAdded)
+	player.CharacterRemoving:Connect(onCharacterRemoving)
 
 	-- Si personnage déjà présent (cas edge)
 	if player.Character then

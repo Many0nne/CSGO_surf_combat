@@ -39,7 +39,7 @@ function SpawnManager.spawnPlayer(player: Player)
 			root.CFrame = cf
 		end
 	end)
-	player:LoadCharacter()
+	player:LoadCharacterAsync()
 end
 
 function SpawnManager.init(requestSpawnRemote: RemoteEvent, canSpawn: (Player) -> boolean)

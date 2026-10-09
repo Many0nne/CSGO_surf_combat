@@ -237,7 +237,7 @@ local function onCharacter(char: Model)
 	end)
 end
 
-function ViewmodelSystem.playAnimation(name: string, markerOverrides: {[string]: string}?)
+function ViewmodelSystem.playAnimation(name: string, markerOverrides: {[string]: string | () -> string}?)
 	if not activeViewmodel then return end
 	local animations = activeViewmodel:FindFirstChild("Animations")
 		or activeViewmodel:FindFirstChild("AnimSaves")

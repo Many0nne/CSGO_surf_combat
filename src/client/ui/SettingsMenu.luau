@@ -18,7 +18,6 @@ local BTN_BG   = Color3.fromRGB(18, 28, 44)
 
 local FONT_BLK = Enum.Font.GothamBlack
 local FONT_BD  = Enum.Font.GothamBold
-local FONT_REG = Enum.Font.Gotham
 
 local TWEEN_FAST = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
@@ -186,12 +185,13 @@ function SettingsMenu.init(fpsCam: typeof(fpsCamRef))
 	if gui then return end
 	fpsCamRef = fpsCam
 
-	gui = Instance.new("ScreenGui")
-	gui.Name           = "SettingsMenu"
-	gui.ResetOnSpawn   = false
-	gui.IgnoreGuiInset = true
-	gui.Enabled        = false
-	gui.Parent         = Players.LocalPlayer:WaitForChild("PlayerGui")
+	local screenGui = Instance.new("ScreenGui")
+	screenGui.Name           = "SettingsMenu"
+	screenGui.ResetOnSpawn   = false
+	screenGui.IgnoreGuiInset = true
+	screenGui.Enabled        = false
+	screenGui.Parent         = Players.LocalPlayer:WaitForChild("PlayerGui")
+	gui = screenGui
 
 	local backdrop = Instance.new("TextButton")
 	backdrop.Size                   = UDim2.fromScale(1, 1)

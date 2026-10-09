@@ -6,7 +6,6 @@ local CharacterDimensions = {}
 
 local standRootToTop = Config.CHAR_HEIGHT_STAND / 2
 local standRootToBottom = Config.CHAR_HEIGHT_STAND / 2
-local standHeight = Config.CHAR_HEIGHT_STAND
 local radius = Config.CHAR_RADIUS
 
 local function expandBounds(minVec: Vector3, maxVec: Vector3, point: Vector3): (Vector3, Vector3)
@@ -98,7 +97,6 @@ function CharacterDimensions.init(character: Model, hrp: BasePart)
 		if rootToTop > 0 and rootToBottom > 0 then
 			standRootToTop = rootToTop
 			standRootToBottom = rootToBottom
-			standHeight = rootToTop + rootToBottom
 		end
 	end
 
