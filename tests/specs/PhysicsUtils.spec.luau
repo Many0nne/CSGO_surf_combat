@@ -47,5 +47,18 @@ return function(T, Loader)
 			local v = PhysicsUtils.accelerate(Vector3.new(29, 0, 0), Vector3.xAxis, 30, 12, DT)
 			T.expectNear(v.X, 30, 1e-5)
 		end)
+
+		-- Issue #7 : à la jonction rampe montante -> sol, les pieds finissent ~1.7 cm sous le rebord.
+		T.it("airStepOffset enjambe un rebord de quelques mm (jonction rampe -> sol)", function()
+			T.expectNear(PhysicsUtils.airStepOffset(0.017, 1.2, 0.05) :: number, 0.067, 1e-6)
+		end)
+
+		T.it("airStepOffset décolle d'au moins clearance quand le rebord est déjà sous les pieds", function()
+			T.expectNear(PhysicsUtils.airStepOffset(-0.2, 1.2, 0.05) :: number, 0.05, 1e-6)
+		end)
+
+		T.it("airStepOffset refuse un rebord plus haut que la marche max", function()
+			T.expectEqual(PhysicsUtils.airStepOffset(1.5, 1.2, 0.05), nil)
+		end)
 	end)
 end
