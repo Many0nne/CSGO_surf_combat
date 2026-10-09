@@ -74,4 +74,13 @@ function PhysicsUtils.accelerate(
 	return velocityXZ + wishdir * accelSpeed
 end
 
+-- Cette méthode permet de calculer le décalage Y d'un step-up aérien lorsqu'un rebord quasi vertical a tué l'horizontale.
+-- Pas de borne basse : un rebord de quelques mm sous les pieds (jonction rampe -> sol) doit être enjambé, pas cogné.
+function PhysicsUtils.airStepOffset(stepHeight: number, maxStep: number, clearance: number): number?
+	if stepHeight > maxStep then
+		return nil
+	end
+	return math.max(stepHeight, 0) + clearance
+end
+
 return PhysicsUtils

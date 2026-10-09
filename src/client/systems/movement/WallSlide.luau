@@ -9,6 +9,7 @@
 --     en sondant DEPUIS L'EXTÉRIEUR (sinon Roblox ignore les casts qui démarrent dans une part).
 
 local Config = require(game:GetService("ReplicatedStorage").Shared.MovementConfig)
+local PhysicsUtils = require(game:GetService("ReplicatedStorage").Shared.PhysicsUtils)
 local function dbg(...)
 	if Config.MOVE_DEBUG then
 		print("[WS]", ...)
@@ -108,12 +109,12 @@ local function airStepUp(origin: Vector3, horizDir: Vector3, radius: number, rtb
 	if not down or down.Normal.Y < Config.SURF_NORMAL_Y then
 		return nil
 	end
+	-- Pas de borne basse (issue #7) : la boite a fond plat mord dans une rampe marchable et son
+	-- arete avant accroche la face verticale du sol suivant, meme si ce sol ne depasse que de
+	-- quelques mm. Les sous-pas restants (vy > 0) remontent ensuite les pieds a ~1 cm sous le
+	-- rebord : avec une borne "> 0.05" le step-up etait refuse et toute l'horizontale perdue.
 	local footY = origin.Y - rtb
-	local stepHeight = down.Position.Y - footY
-	if stepHeight <= 0.05 or stepHeight > up then
-		return nil
-	end
-	return stepHeight + 0.05
+	return PhysicsUtils.airStepOffset(down.Position.Y - footY, up, 0.05)
 end
 
 -- Collide-and-slide d'UN sous-pas. Renvoie (velocity, displacement, surfNormal?).
