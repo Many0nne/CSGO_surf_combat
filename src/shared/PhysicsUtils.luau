@@ -69,7 +69,8 @@ function PhysicsUtils.accelerate(
 		return velocityXZ
 	end
 
-	local accelSpeed = math.min(accel * dt, addSpeed)
+	-- Source: accel * wishspeed * dt (sans wishspeed, la vitesse plafonne à accel / friction)
+	local accelSpeed = math.min(accel * wishspeed * dt, addSpeed)
 	return velocityXZ + wishdir * accelSpeed
 end
 

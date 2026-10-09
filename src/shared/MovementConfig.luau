@@ -7,7 +7,7 @@ return {
 	CROUCH_SPEED = 8.4,    -- ≈ 0.28 × RUN_SPEED
 
 	-- Accélération
-	GROUND_ACCEL           = 128,
+	GROUND_ACCEL           = 12,   -- sv_accelerate Source (× wishspeed) ; doit rester > FRICTION pour atteindre RUN_SPEED
 	AIR_ACCEL              = 150,
 	AIR_SPEED_CAP          = 4,    -- 4/30 ≈ 0.13 (Source 30/250 ≈ 0.12) ; équivalent GetAirSpeedCap() Source (hardcodé à 30 dans le SDK)
 	FRICTION               = 8.0,
