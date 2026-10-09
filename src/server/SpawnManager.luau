@@ -1,3 +1,7 @@
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local CharacterAppearance = require(ReplicatedStorage.Shared.CharacterAppearance)
+
 local SpawnManager = {}
 
 local groundSpawnsFolder: Folder?
@@ -40,11 +44,13 @@ function SpawnManager.spawnPlayer(player: Player)
 	local conn: RBXScriptConnection
 	conn = player.CharacterAdded:Connect(function(char)
 		conn:Disconnect()
+		CharacterAppearance.apply(char)
 		local root = char:WaitForChild("HumanoidRootPart", 5) :: BasePart?
 		if root then
 			root.CFrame = cf
 		end
 	end)
+	-- Rig = StarterCharacter, skin appliqué dans CharacterAdded : identiques aux bots (#1).
 	player:LoadCharacterAsync()
 end
 

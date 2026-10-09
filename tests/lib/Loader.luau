@@ -79,6 +79,8 @@ function Loader:require(target: any)
 			Vector3 = roblox.Vector3,
 			CFrame = roblox.CFrame,
 			Instance = roblox.Instance,
+			Color3 = roblox.Color3,
+			Enum = roblox.Enum,
 		}
 		local chunk = luau.load(fs.readFile(file), { debugName = file, environment = env })
 		self.cache[file] = chunk()
