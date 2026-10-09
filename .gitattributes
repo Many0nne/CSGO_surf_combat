@@ -1,0 +1,2 @@
+# StyLua impose line_endings = "Windows" : checkout des sources Luau en CRLF sur toutes les plateformes (CI Linux incluse)
+*.luau text eol=crlf
