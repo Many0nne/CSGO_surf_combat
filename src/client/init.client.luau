@@ -44,6 +44,7 @@ local function setupCharacter(char: Model)
 		local animate = char:WaitForChild("Animate", 5)
 		if animate and animate:IsA("LocalScript") then
 			animate.Enabled = false
+			-- Ses pistes déjà lancées sont coupées par CharacterAnimator (MovementController).
 		end
 	end)
 

@@ -16,6 +16,7 @@ local InputModule = require(script.Parent.Parent.Parent.input.InputModule)
 local PhysicsUtils = require(ReplicatedStorage.Shared.PhysicsUtils)
 local Config = require(ReplicatedStorage.Shared.MovementConfig)
 local MovementState = require(ReplicatedStorage.Shared.MovementState)
+local CharacterAnimator = require(ReplicatedStorage.Shared.CharacterAnimator)
 
 local JUMP_LOCKOUT = 0.15 -- empêche re-grounding immédiat après un saut
 
@@ -24,13 +25,15 @@ slideParams.FilterType = Enum.RaycastFilterType.Exclude
 
 local MovementController = {}
 
-function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, speedometer, camera)
+function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, speedometer, camera)
 	local velocity = Vector3.zero
 	local state = MovementState.GROUNDED
 	local jumpLockout = 0
 	local surfNormal: Vector3? = nil -- normale de la rampe surf en contact (nil si aucune)
 	local hitboxLogged = false
 	local lastSafePos = hrp.Position
+	-- Animations 3e personne : jouées sur l'Animator du personnage local, donc répliquées aux autres clients.
+	local charAnimator = CharacterAnimator.new(hum)
 	CrouchSystem.init(hrp)
 	HeadCollisionResolver.init(char)
 
@@ -256,6 +259,15 @@ function MovementController.init(char: Model, hrp: BasePart, _hum: Humanoid, spe
 		if speedometer then
 			speedometer.update(spd)
 		end
+
+		-- 10. Animation 3e personne (même pipeline que les bots)
+		charAnimator:update({
+			onGround = isGroundedState,
+			crouching = crouchInfo.isCrouching,
+			surfing = isAirborneState and surfNormal ~= nil,
+			speed = spd,
+			verticalSpeed = velocity.Y,
+		})
 
 		wasGrounded = isGroundedState
 	end)

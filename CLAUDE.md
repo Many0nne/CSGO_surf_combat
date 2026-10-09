@@ -66,6 +66,9 @@ CSGO/
       Validator.luau
     shared/
       CameraConfig.luau
+      CharacterAnimator.luau
+      CharacterAppearance.luau
+      CharacterConfig.luau
       GameConfig.luau
       MovementConfig.luau
       MovementState.luau
@@ -157,6 +160,9 @@ CSGO/
 - `src/server/StatsStore.luau`: DataStore stats joueur (kills/deaths/rounds), save périodique + déconnexion, robustesse load.
 - `src/server/Validator.luau`: validation serveur des dégâts melee et hitscan (distance, ownership, sanity).
 - `src/shared/CameraConfig.luau`: constantes caméra (FOV, sensibilité, pitch min/max, hauteurs, lerp speed, scope sens multiplier).
+- `src/shared/CharacterConfig.luau`: rig/skin communs (couleurs, ids d'images Shirt/Pants/visage) et animations 3e personne (ids, fallbacks, seuils de vitesse, fondus).
+- `src/shared/CharacterAppearance.luau`: rig de référence (`StarterPlayer.StarterCharacter`, cloné pour les bots) et application du skin commun (BodyColors + vêtements) côté serveur.
+- `src/shared/CharacterAnimator.luau`: pipeline d'animation 3e personne commun joueurs/bots (état de mouvement → piste, fondus, vitesse de lecture) ; alimenté par `MovementController` (client, répliqué via l'Animator) et `BotManager` (serveur).
 - `src/shared/GameConfig.luau`: constantes jeu (ROUND_DURATION=300, RESPAWN_DELAY=2.5, RESULT_DURATION=6, AUTO_SAVE_INTERVAL=120).
 - `src/shared/MovementConfig.luau`: constantes physique du mouvement uniquement (vitesses, accel, friction, saut, pentes, bhop, réseau, hitbox).
 - `src/shared/MovementState.luau`: structure d'état partagée pour le mouvement du joueur.

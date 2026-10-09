@@ -8,7 +8,9 @@
 --
 -- Bots use a standard enabled Humanoid for locomotion (unlike players, whose
 -- Humanoid is disabled in favour of the custom client CFrame movement) —
--- surf/air-strafe is a Phase 2 follow-up.
+-- surf/air-strafe is a Phase 2 follow-up. Rig, skin and third-person
+-- animations come from the same shared pipeline as players (CharacterConfig /
+-- CharacterAppearance / CharacterAnimator), fed here from the bot's Humanoid.
 --
 -- A bot is identified by a synthetic NEGATIVE id (real players use positive
 -- UserIds), tagged with the IsBot attribute so Validator accepts it as a target
@@ -17,13 +19,15 @@
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local ServerStorage = game:GetService("ServerStorage")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local PathfindingService = game:GetService("PathfindingService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local BotConfig = require(Shared:WaitForChild("BotConfig"))
 local WeaponConfig = require(Shared:WaitForChild("WeaponConfig"))
+local CharacterConfig = require(Shared:WaitForChild("CharacterConfig"))
+local CharacterAppearance = require(Shared:WaitForChild("CharacterAppearance"))
+local CharacterAnimator = require(Shared:WaitForChild("CharacterAnimator"))
 
 -- Bots fire the exact same weapon as players (damage + fire rate from config).
 local WEAPON = WeaponConfig.Weapons[BotConfig.WEAPON] or WeaponConfig.Weapons.AWP
@@ -37,6 +41,7 @@ type Bot = {
 	humanoid: Humanoid?,
 	root: BasePart?,
 	head: BasePart?,
+	animator: any?, -- CharacterAnimator (3rd-person animations, replicated)
 	alive: boolean,
 	nextShot: number,
 	nextThink: number,
@@ -81,7 +86,7 @@ local function pickName(): string
 	return cycle == 0 and base or (base .. " (" .. (cycle + 1) .. ")")
 end
 
--- Build a simple block rig when no ServerStorage template is provided.
+-- Build a simple block rig when the shared avatar rig cannot be generated.
 local function buildBlockRig(name: string): Model
 	local model = Instance.new("Model")
 	model.Name = name
@@ -124,46 +129,45 @@ local function buildBlockRig(name: string): Model
 	return model
 end
 
--- Default Roblox avatar grey + standard proportions, so a generated rig looks
--- like a normal player rather than a tiny black blank.
-local DEFAULT_GREY = Color3.fromRGB(163, 162, 165)
-
-local function makeDefaultDescription(): HumanoidDescription
-	local desc = Instance.new("HumanoidDescription")
-	desc.HeadColor = DEFAULT_GREY
-	desc.TorsoColor = DEFAULT_GREY
-	desc.LeftArmColor = DEFAULT_GREY
-	desc.RightArmColor = DEFAULT_GREY
-	desc.LeftLegColor = DEFAULT_GREY
-	desc.RightLegColor = DEFAULT_GREY
-	desc.HeightScale = 1
-	desc.WidthScale = 1
-	desc.DepthScale = 1
-	desc.HeadScale = 1
-	desc.BodyTypeScale = 0
-	desc.ProportionScale = 0
-	return desc
-end
-
--- One cached rig template, cloned for every bot. Building it once guarantees all
--- bots are the SAME size (calling CreateHumanoidModelFromDescription per spawn
--- could intermittently fail and fall back to a differently-sized rig).
+-- One cached rig template, cloned for every bot. It is the players' rig
+-- (StarterPlayer.StarterCharacter) so bots and players share size and hitbox;
+-- only without one is an R15 rig generated, once, so all bots stay the SAME size
+-- (calling CreateHumanoidModelFromDescription per spawn could intermittently
+-- fail and fall back to a differently-sized rig).
 local rigTemplate: Model? = nil
+
+-- Adapts the player rig to a physics-driven bot. Scripts it carries (Animate,
+-- Health…) are removed: animations come from CharacterAnimator and bots must
+-- not regenerate health. Parts are unanchored: the player rig ships with an
+-- anchored root (the client moves it by CFrame), which would leave a bot's
+-- Humanoid frozen mid-air at its spawn point.
+local function adaptPlayerRig(model: Model)
+	for _, inst in model:GetDescendants() do
+		if inst:IsA("BaseScript") then
+			inst:Destroy()
+		elseif inst:IsA("BasePart") then
+			inst.Anchored = false
+		end
+	end
+end
 
 local function getRigTemplate(): Model?
 	if rigTemplate then
 		return rigTemplate
 	end
-	-- A hand-authored template in ServerStorage wins, if present.
-	local provided = ServerStorage:FindFirstChild(BotConfig.TEMPLATE_NAME)
-	if provided and provided:IsA("Model") then
-		rigTemplate = provided
+	local starter = CharacterAppearance.getTemplate()
+	if starter then
+		local model = starter:Clone()
+		model.Name = "__BotRigTemplate"
+		adaptPlayerRig(model)
+		rigTemplate = model
 		return rigTemplate
 	end
-	-- Otherwise build one real R15 avatar rig (same kind LoadCharacter gives
-	-- players) and keep it detached as the clone source.
 	local ok, model = pcall(function()
-		return Players:CreateHumanoidModelFromDescription(makeDefaultDescription(), Enum.HumanoidRigType.R15)
+		return Players:CreateHumanoidModelFromDescription(
+			CharacterAppearance.buildDescription(),
+			CharacterConfig.RIG_TYPE
+		)
 	end)
 	if ok and model then
 		model.Name = "__BotRigTemplate"
@@ -178,6 +182,7 @@ local function buildRig(name: string): Model
 	local tmpl = getRigTemplate()
 	local model: Model = tmpl and tmpl:Clone() or buildBlockRig(name)
 	model.Name = name
+	CharacterAppearance.apply(model)
 	return model
 end
 
@@ -363,6 +368,7 @@ local function spawnRig(bot: Bot)
 	bot.humanoid = humanoid
 	bot.root = root
 	bot.head = model:FindFirstChild("Head") :: BasePart? or root
+	bot.animator = CharacterAnimator.new(humanoid, true)
 	bot.alive = true
 	bot.nextShot = 0
 	bot.nextThink = 0
@@ -399,6 +405,7 @@ local function createBot()
 		humanoid = nil,
 		root = nil,
 		head = nil,
+		animator = nil,
 		alive = false,
 		nextShot = 0,
 		nextThink = 0,
@@ -444,10 +451,13 @@ function BotManager.onBotDied(id: number)
 
 	RoundManager.onCombatantDied(id, nil)
 
+	if bot.animator then
+		bot.animator:destroy()
+	end
 	if bot.model then
 		bot.model:Destroy()
 	end
-	bot.model, bot.humanoid, bot.root, bot.head = nil, nil, nil, nil
+	bot.model, bot.humanoid, bot.root, bot.head, bot.animator = nil, nil, nil, nil, nil
 
 	task.delay(BotConfig.RESPAWN_DELAY, function()
 		-- Respawn only if this identity still exists and a slot is still wanted.
@@ -718,6 +728,23 @@ local function thinkBot(bot: Bot)
 	navigateTo(bot, bot.wanderTarget :: Vector3)
 end
 
+-- Cette méthode permet de traduire l'état du Humanoid d'un bot en entrée d'animation lorsqu'une frame passe ;
+-- même pipeline que les joueurs, seule la source (Humanoid actif vs physique client) diffère.
+local function updateBotAnimation(bot: Bot)
+	local humanoid, root, animator = bot.humanoid, bot.root, bot.animator
+	if not humanoid or not root or not animator then
+		return
+	end
+	local vel = root.AssemblyLinearVelocity
+	animator:update({
+		onGround = humanoid.FloorMaterial ~= Enum.Material.Air,
+		crouching = false,
+		surfing = false,
+		speed = Vector3.new(vel.X, 0, vel.Z).Magnitude,
+		verticalSpeed = vel.Y,
+	})
+end
+
 local function onHeartbeat()
 	if not RoundManager.isActive() then
 		if liveBotCount() > 0 then
@@ -727,9 +754,12 @@ local function onHeartbeat()
 	end
 	local now = os.clock()
 	for _, bot in pairs(bots) do
-		if bot.alive and now >= bot.nextThink then
-			bot.nextThink = now + BotConfig.THINK_INTERVAL
-			thinkBot(bot)
+		if bot.alive then
+			if now >= bot.nextThink then
+				bot.nextThink = now + BotConfig.THINK_INTERVAL
+				thinkBot(bot)
+			end
+			updateBotAnimation(bot)
 		end
 	end
 end

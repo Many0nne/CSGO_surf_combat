@@ -23,10 +23,7 @@ return {
 	-- ── Bot character ───────────────────────────────────────────────────────
 	HEALTH    = 100,
 	WALK_SPEED = 18,
-	-- Optional template model in ServerStorage to clone (must contain a
-	-- Humanoid + HumanoidRootPart). If absent, bots spawn as a real R15 avatar
-	-- rig via CreateHumanoidModelFromDescription (visually identical to players).
-	TEMPLATE_NAME = "BotTemplate",
+	-- Rig / skin / animations: shared with players, see CharacterConfig.
 
 	-- ── Combat ──────────────────────────────────────────────────────────────
 	-- Which weapon the bots use. Damage AND fire rate are read from
