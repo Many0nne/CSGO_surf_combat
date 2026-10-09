@@ -2,14 +2,14 @@
 -- stylua: ignore
 return {
 	-- Vitesses (studs/s)
-	RUN_SPEED    = 16,
-	WALK_SPEED   = 8,
-	CROUCH_SPEED = 4.5,
+	RUN_SPEED    = 30,     -- ratio Source: AIR_SPEED_CAP / RUN_SPEED ≈ 30/250 ≈ 0.12
+	WALK_SPEED   = 15,     -- 0.5 × RUN_SPEED
+	CROUCH_SPEED = 8.4,    -- ≈ 0.28 × RUN_SPEED
 
 	-- Accélération
-	GROUND_ACCEL           = 128,
+	GROUND_ACCEL           = 12,   -- sv_accelerate Source (× wishspeed) ; doit rester > FRICTION pour atteindre RUN_SPEED
 	AIR_ACCEL              = 150,
-	AIR_SPEED_CAP          = 10,   -- équivalent GetAirSpeedCap() Source (hardcodé à 30 dans le SDK)
+	AIR_SPEED_CAP          = 6,    -- 6/30 = 0.2 (Source 30/250 ≈ 0.12, relevé pour un gain plus rapide) ; équivalent GetAirSpeedCap() Source (hardcodé à 30 dans le SDK)
 	FRICTION               = 8.0,
 	STOP_SPEED             = 2,
 
