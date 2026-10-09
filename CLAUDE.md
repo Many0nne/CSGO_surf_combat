@@ -72,6 +72,13 @@ CSGO/
       NetworkProtocol.luau
       PhysicsUtils.luau
       WeaponConfig.luau
+  tests/
+    run.luau
+    lib/
+      Loader.luau
+      Test.luau
+    specs/
+      *.spec.luau
 ```
 
 ## Rojo Mapping
@@ -162,7 +169,8 @@ CSGO/
 ```bash
 rojo serve
 rojo build -o "CSGO.rbxlx"
-bash tools/check.sh         # selene + stylua --check + luau-lsp analyze sur src/
+bash tools/check.sh         # selene + stylua --check + luau-lsp analyze sur src/, puis tests Lune
+lune run tests/run.luau     # tests unitaires seuls
 bash tools/check.sh --fix   # idem, en appliquant le formatage StyLua
 ```
 
@@ -172,6 +180,7 @@ bash tools/check.sh --fix   # idem, en appliquant le formatage StyLua
 - Configs : `stylua.toml` (tabs, guillemets doubles, 120 colonnes), `selene.toml` (std roblox, règles par défaut), `.luaurc` (mode `nonstrict`).
 - Les fichiers de constantes (`CameraConfig`, `GameConfig`, `MovementConfig`, `BotConfig`) sont exclus de StyLua via `-- stylua: ignore` pour garder l'alignement en colonnes : respecter cet alignement à la main quand on les modifie.
 - Après toute modification de code `.luau`, lancer `bash tools/check.sh` et ne pas introduire de nouvel avertissement.
+- Tests unitaires (Lune, hors Roblox) dans `tests/specs/*.spec.luau` : chaque spec retourne `function(T, Loader)`. `Loader.new({ Players = mock }):require("src/...")` charge un module de `src/` en simulant `game:GetService` et le `require` d'Instances Rojo ; les services non simulés lèvent une erreur. Seuls les modules sans raycast/`workspace` sont testables (physique pure, `Validator`). Ajouter un test pour toute correction de bug physique.
 - CI GitHub Actions (`.github/workflows/ci.yml`) : sur chaque PR et push sur `main`, lance `tools/check.sh` puis `rojo build`. Les définitions de types luau-lsp sont téléchargées pour la version déclarée dans `aftman.toml`.
 
 ## Roblox Studio MCP
