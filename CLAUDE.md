@@ -102,7 +102,7 @@ CSGO/
 - Garder `default.project.json` synchronisé avec l'arborescence `src/` (mappings Rojo).
 - `aftman.toml` gère la version de Rojo utilisée.
 - `SPEC.md` contient la spécification détaillée (mappings, architecture, constantes). Utilisez-le comme source de vérité pour la structure des fichiers.
-- Valeurs récentes : `RUN_SPEED=30`, `AIR_SPEED_CAP=4`, `AIR_ACCEL=150`, `GRAVITY=-110`, `MAX_FALL_SPEED=130`, `AUTO_BHOP=true`.
+- Valeurs récentes : `RUN_SPEED=30`, `AIR_SPEED_CAP=6`, `AIR_ACCEL=150`, `GROUND_ACCEL=12`, `GRAVITY=-110`, `MAX_FALL_SPEED=130`, `AUTO_BHOP=true`.
 - Consigne de lecture : pour les revues de code, analyses ou demandes de modification, ne lire que les fichiers strictement concernés par l'étape ou la demande.
 - Évitez d'analyser ou d'indexer l'ensemble du dépôt sauf si la tâche l'exige explicitement. Quand vous consultez des fichiers, précisez lesquels dans votre message ou votre PR.
 
