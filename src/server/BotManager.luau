@@ -136,12 +136,17 @@ end
 -- fail and fall back to a differently-sized rig).
 local rigTemplate: Model? = nil
 
--- Scripts the player rig carries (Animate, Health…) are not wanted on a bot:
--- animations come from CharacterAnimator and bots must not regenerate health.
-local function stripScripts(model: Model)
+-- Adapts the player rig to a physics-driven bot. Scripts it carries (Animate,
+-- Health…) are removed: animations come from CharacterAnimator and bots must
+-- not regenerate health. Parts are unanchored: the player rig ships with an
+-- anchored root (the client moves it by CFrame), which would leave a bot's
+-- Humanoid frozen mid-air at its spawn point.
+local function adaptPlayerRig(model: Model)
 	for _, inst in model:GetDescendants() do
 		if inst:IsA("BaseScript") then
 			inst:Destroy()
+		elseif inst:IsA("BasePart") then
+			inst.Anchored = false
 		end
 	end
 end
@@ -154,7 +159,7 @@ local function getRigTemplate(): Model?
 	if starter then
 		local model = starter:Clone()
 		model.Name = "__BotRigTemplate"
-		stripScripts(model)
+		adaptPlayerRig(model)
 		rigTemplate = model
 		return rigTemplate
 	end
