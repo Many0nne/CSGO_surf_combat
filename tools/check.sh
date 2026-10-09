@@ -5,9 +5,11 @@ set -u
 cd "$(dirname "$0")/.."
 export PATH="$HOME/.aftman/bin:$PATH"
 
-DEFS="tools/globalTypes.d.luau"
+# Définitions de types alignées sur la version de luau-lsp déclarée dans aftman.toml
+LSP_VERSION=$(sed -n 's/^luau-lsp *= *"[^@]*@\([0-9.]*\)".*/\1/p' aftman.toml)
+DEFS="tools/globalTypes-$LSP_VERSION.d.luau"
 if [ ! -f "$DEFS" ]; then
-	curl -sSfL -o "$DEFS" https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/main/scripts/globalTypes.d.luau
+	curl -sSfL -o "$DEFS" "https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/$LSP_VERSION/scripts/globalTypes.d.luau" || exit 1
 fi
 rojo sourcemap default.project.json -o sourcemap.json >/dev/null
 
