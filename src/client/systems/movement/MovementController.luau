@@ -12,6 +12,7 @@ local CoyoteJump = require(script.Parent.CoyoteJump)
 local BhopSystem = require(script.Parent.BhopSystem)
 local CrouchSystem = require(script.Parent.CrouchSystem)
 local WeaponSystem = require(script.Parent.Parent.weapon.WeaponSystem)
+local ViewmodelSystem = require(script.Parent.Parent.weapon.ViewmodelSystem)
 local InputModule = require(script.Parent.Parent.Parent.input.InputModule)
 local PhysicsUtils = require(ReplicatedStorage.Shared.PhysicsUtils)
 local Config = require(ReplicatedStorage.Shared.MovementConfig)
@@ -259,6 +260,8 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 		if speedometer then
 			speedometer.update(spd)
 		end
+		-- Bob, inclinaison en strafe et impact d'atterrissage du viewmodel
+		ViewmodelSystem.setMotion(spd, velocity, isGroundedState)
 
 		-- 10. Animation 3e personne (même pipeline que les bots)
 		charAnimator:update({

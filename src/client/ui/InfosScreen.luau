@@ -36,6 +36,7 @@ local SECTIONS: { Section } = {
 			{ "CTRL", "Crouch" },
 			{ "LEFT CLICK", "Fire" },
 			{ "R", "Reload" },
+			{ "F", "Inspect weapon" },
 			{ "TAB", "Leaderboard" },
 			{ "P", "Settings" },
 		},

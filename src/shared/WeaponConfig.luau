@@ -29,10 +29,13 @@ WeaponConfig.Weapons = {
 			Grip = CFrame.fromMatrix(Vector3.new(0, -0.2, 0), Vector3.new(0, -1, 0), Vector3.new(0, 0, -1)),
 			Pose = "Rifle",
 		},
+		-- Sons déclenchés par les marqueurs des clips du viewmodel (src/client/systems/weapon/clips) ;
+		-- Zoom est joué par ScopeSystem. Vérifié par tests/specs/ViewmodelClips.spec.luau.
 		AnimationSounds = {
 			Equip = { "Bolt", "Draw" },
 			Shoot = { "Shoot", "Bolt" },
 			Reload = { "Bolt", "ClipIn", "ClipOut", "ClipHit" },
+			Inspect = {},
 			Zoom = { "ZoomIn", "ZoomOut" },
 		},
 	},
@@ -53,10 +56,13 @@ WeaponConfig.Weapons = {
 			Grip = CFrame.fromMatrix(Vector3.new(0, -0.2, 0), Vector3.new(0, -1, 0), Vector3.new(0, 0, -1)),
 			Pose = "Melee",
 		},
+		-- Le marqueur "Stab" du tir est résolu par WeaponSystem (Shoot_void / Shoot_human / Shoot_wall).
 		AnimationSounds = {
 			Equip = { "Equip" },
 			Shoot = {},
+			Inspect = { "Equip" },
 		},
+		DynamicMarkers = { "Stab" },
 	},
 }
 

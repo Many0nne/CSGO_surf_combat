@@ -45,10 +45,14 @@ CSGO/
           StepupSystem.luau
           WallSlide.luau
         weapon/
-          AnimationSoundSystem.luau
+          clips/
+            AWP.luau
+            Butterfly.luau
           HitscanSystem.luau
           MeleeHitDetection.luau
           ScopeSystem.luau
+          ViewmodelAnimator.luau
+          ViewmodelMotion.luau
           ViewmodelSystem.luau
           WeaponSystem.luau
           WeaponThirdPersonView.luau
@@ -75,6 +79,7 @@ CSGO/
       MovementState.luau
       NetworkProtocol.luau
       PhysicsUtils.luau
+      ViewmodelConfig.luau
       WeaponConfig.luau
       WeaponThirdPerson.luau
   tests/
@@ -144,10 +149,12 @@ CSGO/
 - `src/client/systems/movement/SlopeSystem.luau`: gestion des pentes et adaptation du mouvement.
 - `src/client/systems/movement/StepupSystem.luau`: logique pour monter sur de petits obstacles.
 - `src/client/systems/movement/WallSlide.luau`: glisse le long des murs/rampe avec conservation de normale surf si on avance vers la rampe.
-- `src/client/systems/weapon/AnimationSoundSystem.luau`: gestion des marqueurs sons sur les AnimationTracks.
+- `src/client/systems/weapon/clips/<Viewmodel>.luau`: animations du viewmodel écrites en code (pivots, suivis, clips Idle/Equip/Shoot/Reload/Inspect, marqueurs sons) ; un fichier par `ReplicatedStorage.ViewModels.<nom>`.
 - `src/client/systems/weapon/MeleeHitDetection.luau`: raycast et calcul de dégâts melee (backstab inclus).
 - `src/client/systems/weapon/ScopeSystem.luau`: gestion du scope (FOV, GUI, sensibilité caméra) pour les armes à lunette.
-- `src/client/systems/weapon/ViewmodelSystem.luau`: gestion du viewmodel, des animations et des sons des armes en vue FPS.
+- `src/client/systems/weapon/ViewmodelAnimator.luau`: moteur pur de keyframes du viewmodel (easing, fondus, marqueurs, pivots, suivi des bras) appliqué sur `Motor6D.Transform`.
+- `src/client/systems/weapon/ViewmodelMotion.luau`: couche procédurale du viewmodel (sway, bob, inclinaison en strafe, impact d'atterrissage).
+- `src/client/systems/weapon/ViewmodelSystem.luau`: viewmodel FPS (clone dans la caméra, lecture des clips, sons des marqueurs) ; en Studio, `LocalPlayer.ViewmodelDebug` (play/seek/resume/setClips) pour régler les animations.
 - `src/client/systems/weapon/WeaponSystem.luau`: logique client des armes, munitions, recharge et vitesse liée à l'arme.
 - `src/client/systems/weapon/WeaponThirdPersonView.luau`: rendu client des armes 3e personne de tous les personnages (décalage procédural du grip pour tir/recharge/switch, modèle 3P masqué pour soi en 1re personne).
 - `src/client/systems/game/GameStateController.luau`: machine d'état client (MENU/INFOS/SPAWNING/IN_ROUND/DEAD/RESULT), caméra lobby, coordination UI ↔ remotes.
@@ -171,6 +178,7 @@ CSGO/
 - `src/shared/MovementState.luau`: structure d'état partagée pour le mouvement du joueur.
 - `src/shared/NetworkProtocol.luau`: noms des RemoteEvents et helper getRemote(name). Remotes : MeleeDamage, HitscanDamage, RequestSpawn, RoundState, ScoreUpdate, RoundResult, PlayerDied, WeaponAction.
 - `src/shared/PhysicsUtils.luau`: fonctions utilitaires pour la physique.
+- `src/shared/ViewmodelConfig.luau`: réglages du viewmodel (fondus, sway, bob, inclinaison, atterrissage).
 - `src/shared/WeaponConfig.luau`: définitions partagées des armes et de leurs paramètres par défaut (dont `ThirdPerson` : échelle, grip, pose 3P).
 - `src/shared/WeaponThirdPerson.luau`: arme 3e personne commune joueurs/bots : construction du modèle 3P depuis `ViewModels`, grip soudé à la main, pose des épaules, actions répliquées en attributs (`Weapon3PAction`/`Weapon3PActionAt`), règles pures (grip, décalages d'action, visibilité).
 
@@ -188,7 +196,7 @@ bash tools/check.sh --fix   # idem, en appliquant le formatage StyLua
 
 - Outils gérés par Aftman (`aftman.toml`) : `stylua`, `selene`, `luau-lsp`. Binaires dans `~/.aftman/bin`.
 - Configs : `stylua.toml` (tabs, guillemets doubles, 120 colonnes), `selene.toml` (std roblox, règles par défaut), `.luaurc` (mode `nonstrict`).
-- Les fichiers de constantes (`CameraConfig`, `GameConfig`, `MovementConfig`, `BotConfig`) sont exclus de StyLua via `-- stylua: ignore` pour garder l'alignement en colonnes : respecter cet alignement à la main quand on les modifie.
+- Les fichiers de constantes (`CameraConfig`, `GameConfig`, `MovementConfig`, `BotConfig`, `ViewmodelConfig`) sont exclus de StyLua via `-- stylua: ignore` pour garder l'alignement en colonnes : respecter cet alignement à la main quand on les modifie.
 - Après toute modification de code `.luau`, lancer `bash tools/check.sh` et ne pas introduire de nouvel avertissement.
 - Tests unitaires (Lune, hors Roblox) dans `tests/specs/*.spec.luau` : chaque spec retourne `function(T, Loader)`. `Loader.new({ Players = mock }):require("src/...")` charge un module de `src/` en simulant `game:GetService` et le `require` d'Instances Rojo ; les services non simulés lèvent une erreur. Seuls les modules sans raycast/`workspace` sont testables (physique pure, `Validator`). Ajouter un test pour toute correction de bug physique.
 - CI GitHub Actions (`.github/workflows/ci.yml`) : sur chaque PR et push sur `main`, lance `tools/check.sh` puis `rojo build`. Les définitions de types luau-lsp sont téléchargées pour la version déclarée dans `aftman.toml`.
