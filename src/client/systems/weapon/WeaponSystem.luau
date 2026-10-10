@@ -18,6 +18,15 @@ local toolState = {} -- [tool] = { ammo, reserve, magazine, lastFire }
 
 local meleeEvent = ReplicatedStorage:WaitForChild("MeleeDamage", 10) :: RemoteEvent?
 local hitscanEvent = ReplicatedStorage:WaitForChild("HitscanDamage", 10) :: RemoteEvent?
+local weaponActionEvent = ReplicatedStorage:WaitForChild("WeaponAction", 10) :: RemoteEvent?
+
+-- Cette méthode permet de signaler au serveur une action d'arme lorsqu'elle démarre localement,
+-- pour que les autres joueurs voient la pose 3P correspondante (#5).
+local function replicateAction(action: string)
+	if weaponActionEvent then
+		weaponActionEvent:FireServer(action)
+	end
+end
 
 local currentTool = nil :: Tool?
 local currentCfg = nil
@@ -102,6 +111,7 @@ local function reloadTool(tool, cfg)
 	ScopeSystem.resetVisuals()
 	weaponState = "RELOADING"
 	ViewmodelSystem.playReload(ViewmodelSystem.getActiveViewmodel())
+	replicateAction("Reload")
 
 	local reloadTime = cfg and cfg.ReloadTime or 2
 	local thread = task.delay(reloadTime, function()
@@ -146,6 +156,7 @@ local function onToolActivated(tool)
 	end
 	s.lastFire = now
 	weaponState = "FIRING"
+	replicateAction("Shoot")
 	if cfg and cfg.IsMelee then
 		local markerOverrides: { [string]: string | () -> string } = {
 			["Stab Sound"] = function()
