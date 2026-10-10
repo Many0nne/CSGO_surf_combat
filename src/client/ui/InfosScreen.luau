@@ -1,20 +1,22 @@
+-- Page Infos (direction « Tactical ») : onglets à gauche (HOW TO SURF, CONTROLS, CREDITS, ABOUT),
+-- contenu à droite, affichée sous la barre de navigation du menu principal.
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
+local UIKit = require(script.Parent.UIKit)
+
+local C = UITheme.Colors
+local F = UITheme.Fonts
+local T = UITheme.TextSize
+local Motion = UITheme.Motion
+local L = UITheme.Layout
+
 local InfosScreen = {}
 
-local BG = Color3.fromRGB(9, 13, 20)
-local SURFACE = Color3.fromRGB(14, 20, 32)
-local BORDER = Color3.fromRGB(28, 42, 62)
-local ACCENT = Color3.fromRGB(205, 38, 38)
-local TEXT = Color3.fromRGB(220, 230, 245)
-local MUTED = Color3.fromRGB(72, 92, 120)
+type Section = { title: string, lines: { string }?, keys: { { string } }? }
 
-local FONT_BLK = Enum.Font.GothamBlack
-local FONT_BD = Enum.Font.GothamBold
-local FONT_REG = Enum.Font.Gotham
-
-local gui: ScreenGui
-local onCloseCallback: (() -> ())?
-
-local SECTIONS = {
+local SECTIONS: { Section } = {
 	{
 		title = "HOW TO SURF",
 		lines = {
@@ -28,14 +30,14 @@ local SECTIONS = {
 	},
 	{
 		title = "CONTROLS",
-		lines = {
-			"W A S D    Movement",
-			"Space      Jump / Bhop (hold for long jumps)",
-			"Ctrl       Crouch",
-			"Left Click Fire",
-			"R          Reload",
-			"Tab        Leaderboard",
-			"P          Settings",
+		keys = {
+			{ "W A S D", "Movement" },
+			{ "SPACE", "Jump / Bhop (hold for long jumps)" },
+			{ "CTRL", "Crouch" },
+			{ "LEFT CLICK", "Fire" },
+			{ "R", "Reload" },
+			{ "TAB", "Leaderboard" },
+			{ "P", "Settings" },
 		},
 	},
 	{
@@ -56,179 +58,264 @@ local SECTIONS = {
 	},
 }
 
-local function addCorner(parent: GuiObject, r: number)
-	local c = Instance.new("UICorner")
-	c.CornerRadius = UDim.new(0, r)
-	c.Parent = parent
-end
+local gui: ScreenGui
+local panel: CanvasGroup
+local content: ScrollingFrame
+local tabs: { { button: TextButton, bar: Frame } } = {}
+local selected = 1
+local onCloseCallback: (() -> ())?
 
-local function addStroke(parent: GuiObject, color: Color3, thick: number)
-	local s = Instance.new("UIStroke")
-	s.Color = color
-	s.Thickness = thick
-	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	s.Parent = parent
-end
-
-local function addSection(
-	scroll: ScrollingFrame,
-	yOffset: number,
-	section: { title: string, lines: { string } }
-): number
-	local headerRow = Instance.new("Frame")
-	headerRow.Size = UDim2.new(1, 0, 0, 26)
-	headerRow.Position = UDim2.fromOffset(0, yOffset)
-	headerRow.BackgroundTransparency = 1
-	headerRow.Parent = scroll
-
-	local dot = Instance.new("Frame")
-	dot.Size = UDim2.fromOffset(3, 14)
-	dot.AnchorPoint = Vector2.new(0, 0.5)
-	dot.Position = UDim2.fromScale(0, 0.5)
-	dot.BackgroundColor3 = ACCENT
-	dot.BorderSizePixel = 0
-	dot.Parent = headerRow
-	addCorner(dot, 2)
-
-	local header = Instance.new("TextLabel")
-	header.Size = UDim2.new(1, -10, 1, 0)
-	header.Position = UDim2.fromOffset(10, 0)
-	header.BackgroundTransparency = 1
-	header.Text = section.title
-	header.TextColor3 = ACCENT
-	header.Font = FONT_BD
-	header.TextSize = 11
-	header.TextXAlignment = Enum.TextXAlignment.Left
-	header.Parent = headerRow
-
-	yOffset += 30
-
-	for _, line in section.lines do
-		local lbl = Instance.new("TextLabel")
-		lbl.Size = UDim2.new(1, 0, 0, 20)
-		lbl.Position = UDim2.fromOffset(0, yOffset)
-		lbl.BackgroundTransparency = 1
-		lbl.Text = line
-		lbl.TextColor3 = TEXT
-		lbl.Font = FONT_REG
-		lbl.TextSize = 13
-		lbl.TextWrapped = true
-		lbl.TextXAlignment = Enum.TextXAlignment.Left
-		lbl.Parent = scroll
-		yOffset += 22
+-- Cette méthode permet d'afficher une ligne de texte en fondu avec un décalage lorsqu'un onglet se remplit.
+local function fadeIn(labels: { TextLabel }, delay: number)
+	for _, lbl in labels do
+		lbl.TextTransparency = 1
 	end
+	task.delay(delay, function()
+		for _, lbl in labels do
+			UIKit.tween(lbl, Motion.Enter, { TextTransparency = 0 })
+		end
+	end)
+end
 
-	return yOffset + 18
+-- Cette méthode permet de créer une ligne de paragraphe à hauteur automatique lorsque l'onglet affiché est du texte.
+local function addParagraph(text: string, order: number): TextLabel
+	return UIKit.text({
+		Name = "Line" .. order,
+		Text = text,
+		TextSize = 18,
+		TextColor3 = C.TextSoft,
+		TextWrapped = true,
+		LineHeight = 1.15,
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Size = UDim2.new(1, 0, 0, 22),
+		LayoutOrder = order,
+		Parent = content,
+	})
+end
+
+-- Cette méthode permet de créer une ligne « touche → action » soulignée lorsque l'onglet affiché est CONTROLS.
+local function addKeyRow(key: string, action: string, order: number): { TextLabel }
+	local row = UIKit.frame({
+		Name = "Key" .. order,
+		Size = UDim2.new(1, 0, 0, 40),
+		BackgroundTransparency = 1,
+		LayoutOrder = order,
+		Parent = content,
+	})
+	UIKit.frame({
+		Name = "Underline",
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.fromScale(0, 1),
+		Size = UDim2.new(1, 0, 0, 1),
+		BackgroundColor3 = C.Raised,
+		Parent = row,
+	})
+	local keyLbl = UIKit.text({
+		Text = key,
+		FontFace = F.MonoBold,
+		TextSize = T.Small,
+		TextColor3 = C.Accent,
+		Size = UDim2.new(0, 150, 1, 0),
+		Parent = row,
+	})
+	local actionLbl = UIKit.text({
+		Text = action,
+		TextSize = 18,
+		Position = UDim2.fromOffset(150, 0),
+		Size = UDim2.new(1, -150, 1, 0),
+		Parent = row,
+	})
+	return { keyLbl, actionLbl }
+end
+
+-- Cette méthode permet de remplir la zone de contenu avec la section choisie lorsque l'onglet change.
+local function renderSection(index: number)
+	for _, child in content:GetChildren() do
+		if child:IsA("GuiObject") then
+			child:Destroy()
+		end
+	end
+	content.CanvasPosition = Vector2.zero
+
+	local section = SECTIONS[index]
+	local title = UIKit.text({
+		Name = "Title",
+		Text = section.title,
+		FontFace = F.Display,
+		TextSize = T.H1,
+		Size = UDim2.new(1, 0, 0, 48),
+		LayoutOrder = 0,
+		Parent = content,
+	})
+	fadeIn({ title }, 0)
+
+	if section.keys then
+		for i, pair in section.keys do
+			fadeIn(addKeyRow(pair[1], pair[2], i), i * Motion.Stagger)
+		end
+	else
+		for i, line in section.lines or {} do
+			fadeIn({ addParagraph(line, i) }, i * Motion.Stagger)
+		end
+	end
+end
+
+-- Cette méthode permet de mettre en avant l'onglet choisi (fond, texte, barre ambre) lorsque l'utilisateur clique dessus.
+local function selectTab(index: number)
+	selected = index
+	for i, tab in tabs do
+		local active = i == index
+		UIKit.tween(tab.button, Motion.Hover, {
+			BackgroundTransparency = active and 0 or 1,
+			TextColor3 = active and C.White or C.Muted,
+		})
+		tab.bar.Visible = active
+	end
+	renderSection(index)
+end
+
+-- Cette méthode permet de créer la colonne d'onglets lorsque la page est construite.
+local function buildTabs(parent: CanvasGroup)
+	local column = UIKit.frame({
+		Name = "Tabs",
+		Size = UDim2.new(0, 260, 1, 0),
+		BackgroundTransparency = 1,
+		Parent = parent,
+	})
+	UIKit.padding(column, 16, 0, 16, 0)
+	UIKit.create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = column })
+	UIKit.frame({
+		Name = "Divider",
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.fromScale(1, 0),
+		Size = UDim2.new(0, 1, 1, 0),
+		BackgroundColor3 = C.Border,
+		Parent = parent,
+	})
+
+	for i, section in SECTIONS do
+		local btn = UIKit.button({
+			Name = section.title,
+			Text = "",
+			Size = UDim2.new(1, 0, 0, 48),
+			BackgroundColor3 = C.Raised,
+			BackgroundTransparency = 1,
+			TextColor3 = C.Muted,
+			LayoutOrder = i,
+			Parent = column,
+		})
+		-- Le libellé suit la couleur du bouton (TextColor3 animé sur le bouton, recopié ici)
+		local label = UIKit.text({
+			Text = section.title,
+			FontFace = F.DisplayMedium,
+			TextSize = T.Body,
+			TextColor3 = C.Muted,
+			Position = UDim2.fromOffset(21, 0),
+			Size = UDim2.new(1, -60, 1, 0),
+			Parent = btn,
+		})
+		btn:GetPropertyChangedSignal("TextColor3"):Connect(function()
+			label.TextColor3 = btn.TextColor3
+		end)
+		UIKit.text({
+			Text = string.format("%02d", i),
+			FontFace = F.Mono,
+			TextSize = T.Caption,
+			TextColor3 = C.Muted,
+			TextXAlignment = Enum.TextXAlignment.Right,
+			Position = UDim2.fromOffset(0, 0),
+			Size = UDim2.new(1, -18, 1, 0),
+			Parent = btn,
+		})
+		local bar = UIKit.frame({
+			Name = "ActiveBar",
+			Size = UDim2.new(0, 3, 1, 0),
+			BackgroundColor3 = C.Accent,
+			Visible = false,
+			Parent = btn,
+		})
+		btn.MouseEnter:Connect(function()
+			if selected ~= i then
+				UIKit.tween(btn, Motion.Hover, { BackgroundTransparency = 0, TextColor3 = C.White })
+			end
+		end)
+		btn.MouseLeave:Connect(function()
+			if selected ~= i then
+				UIKit.tween(btn, Motion.Hover, { BackgroundTransparency = 1, TextColor3 = C.Muted })
+			end
+		end)
+		btn.MouseButton1Click:Connect(function()
+			selectTab(i)
+		end)
+		tabs[i] = { button = btn, bar = bar }
+	end
 end
 
 function InfosScreen.init(onClose: () -> ())
 	onCloseCallback = onClose
 
-	gui = Instance.new("ScreenGui")
-	gui.Name = "InfosScreen"
-	gui.ResetOnSpawn = false
-	gui.IgnoreGuiInset = true
-	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	gui.Enabled = false
-	gui.Parent = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+	gui = UIKit.create("ScreenGui", {
+		Name = "InfosScreen",
+		ResetOnSpawn = false,
+		IgnoreGuiInset = true,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+		DisplayOrder = 2,
+		Enabled = false,
+		Parent = Players.LocalPlayer:WaitForChild("PlayerGui"),
+	})
+	local root = UIKit.scaledRoot(gui)
 
-	local overlay = Instance.new("Frame")
-	overlay.Size = UDim2.fromScale(1, 1)
-	overlay.BackgroundColor3 = BG
-	overlay.BackgroundTransparency = 0.15
-	overlay.BorderSizePixel = 0
-	overlay.Parent = gui
+	panel = UIKit.create("CanvasGroup", {
+		Name = "Panel",
+		Position = UDim2.fromOffset(L.Margin, L.ContentTop),
+		Size = UDim2.new(1, -2 * L.Margin, 0, 560),
+		BackgroundColor3 = C.Ground,
+		BackgroundTransparency = 0.05,
+		BorderSizePixel = 0,
+		Parent = root,
+	})
+	UIKit.stroke(panel, C.Border)
+	buildTabs(panel)
 
-	local panel = Instance.new("Frame")
-	panel.Size = UDim2.new(0, 480, 0.88, 0)
-	panel.AnchorPoint = Vector2.new(0.5, 0.5)
-	panel.Position = UDim2.fromScale(0.5, 0.5)
-	panel.BackgroundColor3 = SURFACE
-	panel.BorderSizePixel = 0
-	panel.Parent = overlay
-	addCorner(panel, 6)
-	addStroke(panel, BORDER, 1)
+	content = UIKit.create("ScrollingFrame", {
+		Name = "Content",
+		Position = UDim2.fromOffset(260, 0),
+		Size = UDim2.new(1, -260, 1, 0),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ScrollBarThickness = 3,
+		ScrollBarImageColor3 = C.Accent,
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		CanvasSize = UDim2.fromScale(0, 0),
+		Parent = panel,
+	})
+	UIKit.padding(content, 30, 96, 30, 40)
+	UIKit.create("UIListLayout", {
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, 14),
+		Parent = content,
+	})
 
-	local stripe = Instance.new("Frame")
-	stripe.Size = UDim2.new(0, 3, 0.8, 0)
-	stripe.AnchorPoint = Vector2.new(0, 0.5)
-	stripe.Position = UDim2.fromScale(0, 0.5)
-	stripe.BackgroundColor3 = ACCENT
-	stripe.BorderSizePixel = 0
-	stripe.Parent = panel
-	addCorner(stripe, 2)
-
-	local titleBar = Instance.new("Frame")
-	titleBar.Size = UDim2.new(1, 0, 0, 50)
-	titleBar.BackgroundTransparency = 1
-	titleBar.Parent = panel
-
-	local titleLbl = Instance.new("TextLabel")
-	titleLbl.Size = UDim2.new(1, -56, 1, 0)
-	titleLbl.Position = UDim2.fromOffset(24, 0)
-	titleLbl.BackgroundTransparency = 1
-	titleLbl.Text = "INFOS"
-	titleLbl.TextColor3 = TEXT
-	titleLbl.Font = FONT_BLK
-	titleLbl.TextSize = 18
-	titleLbl.TextXAlignment = Enum.TextXAlignment.Left
-	titleLbl.Parent = titleBar
-
-	local closeBtn = Instance.new("TextButton")
-	closeBtn.Size = UDim2.fromOffset(32, 32)
-	closeBtn.AnchorPoint = Vector2.new(1, 0.5)
-	closeBtn.Position = UDim2.new(1, -12, 0.5, 0)
-	closeBtn.BackgroundColor3 = Color3.fromRGB(22, 34, 52)
-	closeBtn.BorderSizePixel = 0
-	closeBtn.Text = "✕"
-	closeBtn.TextColor3 = MUTED
-	closeBtn.Font = FONT_BD
-	closeBtn.TextSize = 14
-	closeBtn.AutoButtonColor = false
-	closeBtn.Parent = titleBar
-	addCorner(closeBtn, 3)
-	addStroke(closeBtn, BORDER, 1)
-
-	closeBtn.MouseEnter:Connect(function()
-		closeBtn.TextColor3 = TEXT
-	end)
-	closeBtn.MouseLeave:Connect(function()
-		closeBtn.TextColor3 = MUTED
-	end)
-	closeBtn.MouseButton1Click:Connect(function()
+	local close = UIKit.closeButton(panel)
+	close.AnchorPoint = Vector2.new(1, 0)
+	close.Position = UDim2.new(1, -24, 0, 24)
+	close.ZIndex = 2
+	close.MouseButton1Click:Connect(function()
 		if onCloseCallback then
 			onCloseCallback()
 		end
 	end)
 
-	local sep = Instance.new("Frame")
-	sep.Size = UDim2.new(1, -40, 0, 1)
-	sep.Position = UDim2.fromOffset(20, 50)
-	sep.BackgroundColor3 = BORDER
-	sep.BorderSizePixel = 0
-	sep.Parent = panel
-
-	local scroll = Instance.new("ScrollingFrame")
-	scroll.Size = UDim2.new(1, -48, 1, -68)
-	scroll.Position = UDim2.fromOffset(24, 60)
-	scroll.BackgroundTransparency = 1
-	scroll.BorderSizePixel = 0
-	scroll.ScrollBarThickness = 3
-	scroll.ScrollBarImageColor3 = ACCENT
-	scroll.CanvasSize = UDim2.fromScale(0, 0)
-	scroll.Parent = panel
-
-	local yOff = 8
-	for _, section in SECTIONS do
-		yOff = addSection(scroll, yOff, section)
-	end
-	scroll.CanvasSize = UDim2.fromOffset(0, yOff)
+	selectTab(1)
 end
 
 function InfosScreen.show()
-	if gui then
-		gui.Enabled = true
+	if not gui or gui.Enabled then
+		return
 	end
+	gui.Enabled = true
+	selectTab(selected)
+	UIKit.reveal(panel, 0, 14)
 end
 
 function InfosScreen.hide()

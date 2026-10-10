@@ -1,4 +1,5 @@
 local Players = game:GetService("Players")
+local StarterGui = game:GetService("StarterGui")
 
 local GroundDetection = require(script.systems.movement.GroundDetection)
 local StepupSystem = require(script.systems.movement.StepupSystem)
@@ -55,10 +56,15 @@ local function setupCharacter(char: Model)
 	StepupSystem.init(char)
 	WallSlide.init(char)
 	FPSCamera.init(rootPart, char)
-	SettingsMenu.init(FPSCamera)
 	Speedometer.init()
 	MovementController.init(char, rootPart, humanoid, Speedometer, FPSCamera)
 end
+
+-- Liste des joueurs native désactivée : le classement du jeu (Tab) la remplace et elle masquait le bouton PLAY
+StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
+
+-- Réglages créés dès le démarrage : accessibles depuis le menu, avant tout spawn
+SettingsMenu.init(FPSCamera)
 
 -- GameStateController orchestre les transitions d'état, le spawn et tous les UIs.
 -- Il appelle setupCharacter au bon moment (après LoadCharacter côté serveur).

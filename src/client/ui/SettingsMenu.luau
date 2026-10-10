@@ -1,28 +1,34 @@
+-- Réglages souris (direction « Tactical »). Deux présentations du même panneau :
+-- « page » (sous la barre de navigation, bouton SETTINGS du menu) et « modal » (centrée, touche P).
+local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TweenService = game:GetService("TweenService")
 
 local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
+local UITheme = require(ReplicatedStorage.Shared.UITheme)
+local UIKit = require(script.Parent.UIKit)
+
+local C = UITheme.Colors
+local F = UITheme.Fonts
+local T = UITheme.TextSize
+local Motion = UITheme.Motion
+local L = UITheme.Layout
+
+export type Mode = "page" | "modal"
 
 local SettingsMenu = {}
 
-local SURFACE = Color3.fromRGB(14, 20, 32)
-local PANEL = Color3.fromRGB(18, 26, 40)
-local BORDER = Color3.fromRGB(28, 42, 62)
-local ACCENT = Color3.fromRGB(205, 38, 38)
-local TRACK_BG = Color3.fromRGB(22, 32, 50)
-local TEXT = Color3.fromRGB(220, 230, 245)
-local MUTED = Color3.fromRGB(72, 92, 120)
-local BTN_BG = Color3.fromRGB(18, 28, 44)
-
-local FONT_BLK = Enum.Font.GothamBlack
-local FONT_BD = Enum.Font.GothamBold
-
-local TWEEN_FAST = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local PANEL_SIZE = Vector2.new(640, 266)
 
 local gui: ScreenGui?
+local backdrop: TextButton
+local panel: CanvasGroup
 local open = false
+local mode: Mode = "modal"
+local savedMouseBehavior = Enum.MouseBehavior.LockCenter
+local savedMouseIcon = false
+local onClosedCallback: (() -> ())?
 local fpsCamRef: {
 	setSensitivity: (number) -> (),
 	getSensitivity: () -> number,
@@ -30,22 +36,10 @@ local fpsCamRef: {
 	getScopeMultiplier: () -> number,
 }?
 
-local function addCorner(parent: GuiObject, r: number)
-	local c = Instance.new("UICorner")
-	c.CornerRadius = UDim.new(0, r)
-	c.Parent = parent
-end
-
-local function addStroke(parent: GuiObject, color: Color3, thick: number)
-	local s = Instance.new("UIStroke")
-	s.Color = color
-	s.Thickness = thick
-	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	s.Parent = parent
-end
-
+-- Cette méthode permet de construire une ligne « libellé | curseur | valeur éditable » lorsqu'un réglage est ajouté ;
+-- elle renvoie la fonction qui applique une valeur (bornée, formatée, transmise à `onChange`).
 local function makeSlider(
-	parent: GuiBase2d,
+	parent: GuiObject,
 	labelText: string,
 	yOffset: number,
 	minVal: number,
@@ -57,67 +51,69 @@ local function makeSlider(
 	local fmt = "%." .. decimals .. "f"
 	local currentVal = initVal
 
-	local row = Instance.new("Frame")
-	row.Size = UDim2.new(1, 0, 0, 48)
-	row.Position = UDim2.fromOffset(0, yOffset)
-	row.BackgroundTransparency = 1
-	row.Parent = parent
+	local row = UIKit.frame({
+		Name = labelText,
+		Position = UDim2.fromOffset(0, yOffset),
+		Size = UDim2.new(1, 0, 0, 78),
+		BackgroundTransparency = 1,
+		Parent = parent,
+	})
+	UIKit.padding(row, 0, 32, 0, 32)
+	UIKit.text({
+		Text = labelText,
+		FontFace = F.DisplayMedium,
+		TextSize = 17,
+		Size = UDim2.new(0, 180, 1, 0),
+		Parent = row,
+	})
 
-	-- Label
-	local lbl = Instance.new("TextLabel")
-	lbl.Size = UDim2.fromOffset(110, 18)
-	lbl.Position = UDim2.fromOffset(0, 0)
-	lbl.BackgroundTransparency = 1
-	lbl.TextColor3 = MUTED
-	lbl.Font = FONT_BD
-	lbl.TextSize = 11
-	lbl.TextXAlignment = Enum.TextXAlignment.Left
-	lbl.Text = labelText
-	lbl.Parent = row
+	local valBox = UIKit.create("TextBox", {
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.fromScale(1, 0.5),
+		Size = UDim2.fromOffset(84, 36),
+		BackgroundColor3 = C.Ground,
+		BorderSizePixel = 0,
+		FontFace = F.MonoBold,
+		TextSize = T.Body,
+		TextColor3 = C.Accent,
+		ClearTextOnFocus = false,
+		Text = string.format(fmt, initVal),
+		Parent = row,
+	})
+	local valStroke = UIKit.stroke(valBox, C.BorderStrong)
+	valBox.Focused:Connect(function()
+		UIKit.tween(valStroke, Motion.Hover, { Color = C.Accent })
+	end)
 
-	-- Value TextBox
-	local valBox = Instance.new("TextBox")
-	valBox.Size = UDim2.fromOffset(52, 26)
-	valBox.AnchorPoint = Vector2.new(1, 1)
-	valBox.Position = UDim2.fromScale(1, 1)
-	valBox.BackgroundColor3 = PANEL
-	valBox.BorderSizePixel = 0
-	valBox.TextColor3 = TEXT
-	valBox.Font = Enum.Font.Code
-	valBox.TextSize = 13
-	valBox.TextXAlignment = Enum.TextXAlignment.Center
-	valBox.ClearTextOnFocus = false
-	valBox.Text = string.format(fmt, initVal)
-	valBox.ZIndex = 12
-	valBox.Parent = row
-	addCorner(valBox, 3)
-	addStroke(valBox, BORDER, 1)
-
-	-- Track
-	local track = Instance.new("Frame")
-	track.Size = UDim2.new(1, -170, 0, 4)
-	track.Position = UDim2.new(0, 116, 1, -14)
-	track.BackgroundColor3 = TRACK_BG
-	track.BorderSizePixel = 0
-	track.Parent = row
-	addCorner(track, 2)
-	addStroke(track, BORDER, 1)
-
-	local fill = Instance.new("Frame")
-	fill.BackgroundColor3 = ACCENT
-	fill.BorderSizePixel = 0
-	fill.Parent = track
-	addCorner(fill, 2)
-
-	local handle = Instance.new("TextButton")
-	handle.Size = UDim2.fromOffset(14, 14)
-	handle.AnchorPoint = Vector2.new(0.5, 0.5)
-	handle.BackgroundColor3 = Color3.new(1, 1, 1)
-	handle.BorderSizePixel = 0
-	handle.Text = ""
-	handle.ZIndex = 10
-	handle.Parent = track
-	addCorner(handle, 7)
+	-- Piste : zone cliquable haute (24 px) contenant la barre fine, le remplissage et la poignée
+	local hit = UIKit.button({
+		Name = "Track",
+		Text = "",
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, 200, 0.5, 0),
+		Size = UDim2.new(1, -304, 0, 24),
+		BackgroundTransparency = 1,
+		Parent = row,
+	})
+	local track = UIKit.frame({
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.fromScale(0, 0.5),
+		Size = UDim2.new(1, 0, 0, 4),
+		BackgroundColor3 = C.BorderStrong,
+		Parent = hit,
+	})
+	local fill = UIKit.frame({ Size = UDim2.fromScale(0, 1), BackgroundColor3 = C.Accent, Parent = track })
+	local handle = UIKit.frame({
+		Name = "Handle",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Size = UDim2.fromOffset(14, 14),
+		BackgroundColor3 = C.Text,
+		ZIndex = 2,
+		Parent = track,
+	})
+	local handleScale = UIKit.create("UIScale", { Parent = handle })
+	UIKit.hover(hit, handleScale, { Scale = 1 }, { Scale = 1.25 })
+	UIKit.hover(hit, handle, { BackgroundColor3 = C.Text }, { BackgroundColor3 = C.Accent })
 
 	local function applyValue(v: number)
 		v = math.clamp(v, minVal, maxVal)
@@ -130,6 +126,7 @@ local function makeSlider(
 	end
 
 	valBox.FocusLost:Connect(function()
+		UIKit.tween(valStroke, Motion.Hover, { Color = C.BorderStrong })
 		local num = tonumber(valBox.Text)
 		if num then
 			applyValue(num)
@@ -138,9 +135,7 @@ local function makeSlider(
 		end
 	end)
 
-	applyValue(initVal)
-
-	local function valueFromMouse(inputPos: Vector2): number
+	local function valueFromMouse(inputPos: Vector3): number
 		local absPos = track.AbsolutePosition
 		local absSize = track.AbsoluteSize
 		local t = math.clamp((inputPos.X - absPos.X) / absSize.X, 0, 1)
@@ -148,8 +143,11 @@ local function makeSlider(
 	end
 
 	local dragging = false
-	handle.MouseButton1Down:Connect(function()
-		dragging = true
+	hit.InputBegan:Connect(function(inp)
+		if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = true
+			applyValue(valueFromMouse(inp.Position))
+		end
 	end)
 	UserInputService.InputChanged:Connect(function(inp)
 		if dragging and inp.UserInputType == Enum.UserInputType.MouseMovement then
@@ -161,26 +159,51 @@ local function makeSlider(
 			dragging = false
 		end
 	end)
-	track.InputBegan:Connect(function(inp)
-		if inp.UserInputType == Enum.UserInputType.MouseButton1 then
-			applyValue(valueFromMouse(inp.Position))
-		end
-	end)
 
+	applyValue(initVal)
 	return applyValue
 end
 
-local function setOpen(state: boolean)
-	open = state
-	if gui then
-		gui.Enabled = state
+-- Cette méthode permet de placer le panneau selon la présentation (page sous la navigation ou modale centrée) lorsqu'il s'ouvre.
+local function applyLayout()
+	if mode == "page" then
+		backdrop.Visible = false
+		panel.AnchorPoint = Vector2.zero
+		panel.Position = UDim2.fromOffset(L.Margin, L.ContentTop)
+	else
+		backdrop.Visible = true
+		panel.AnchorPoint = Vector2.new(0.5, 0.5)
+		panel.Position = UDim2.fromScale(0.5, 0.5)
 	end
+	panel:SetAttribute("RestPosition", panel.Position)
+end
+
+-- Cette méthode permet d'ouvrir ou fermer le panneau en sauvegardant puis restaurant l'état de la souris
+-- lorsque le joueur appuie sur P, clique sur SETTINGS ou ferme le panneau.
+local function setOpen(state: boolean)
+	if not gui or state == open then
+		return
+	end
+	open = state
 	if state then
+		savedMouseBehavior = UserInputService.MouseBehavior
+		savedMouseIcon = UserInputService.MouseIconEnabled
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 		UserInputService.MouseIconEnabled = true
+		applyLayout()
+		gui.Enabled = true
+		if mode == "modal" then
+			backdrop.BackgroundTransparency = 1
+			UIKit.tween(backdrop, Motion.Enter, { BackgroundTransparency = 0.55 })
+		end
+		UIKit.reveal(panel, 0, 14)
 	else
-		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
-		UserInputService.MouseIconEnabled = false
+		gui.Enabled = false
+		UserInputService.MouseBehavior = savedMouseBehavior
+		UserInputService.MouseIconEnabled = savedMouseIcon
+		if onClosedCallback then
+			onClosedCallback()
+		end
 	end
 end
 
@@ -190,127 +213,120 @@ function SettingsMenu.init(fpsCam: typeof(fpsCamRef))
 	end
 	fpsCamRef = fpsCam
 
-	local screenGui = Instance.new("ScreenGui")
-	screenGui.Name = "SettingsMenu"
-	screenGui.ResetOnSpawn = false
-	screenGui.IgnoreGuiInset = true
-	screenGui.Enabled = false
-	screenGui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+	local screenGui = UIKit.create("ScreenGui", {
+		Name = "SettingsMenu",
+		ResetOnSpawn = false,
+		IgnoreGuiInset = true,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+		DisplayOrder = 3,
+		Enabled = false,
+		Parent = Players.LocalPlayer:WaitForChild("PlayerGui"),
+	})
 	gui = screenGui
+	local root = UIKit.scaledRoot(screenGui)
 
-	local backdrop = Instance.new("TextButton")
-	backdrop.Size = UDim2.fromScale(1, 1)
-	backdrop.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-	backdrop.BackgroundTransparency = 0.55
-	backdrop.BorderSizePixel = 0
-	backdrop.Text = ""
-	backdrop.AutoButtonColor = false
-	backdrop.Parent = gui
+	backdrop = UIKit.button({
+		Name = "Backdrop",
+		Text = "",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundColor3 = Color3.new(0, 0, 0),
+		BackgroundTransparency = 0.55,
+		Parent = root,
+	})
 	backdrop.MouseButton1Click:Connect(function()
 		setOpen(false)
 	end)
 
-	-- Panel
-	local panel = Instance.new("TextButton")
-	panel.Size = UDim2.fromOffset(420, 256)
-	panel.AnchorPoint = Vector2.new(0.5, 0.5)
-	panel.Position = UDim2.fromScale(0.5, 0.5)
-	panel.BackgroundColor3 = SURFACE
-	panel.BorderSizePixel = 0
-	panel.Text = ""
-	panel.AutoButtonColor = false
-	panel.Parent = backdrop
-	addCorner(panel, 6)
-	addStroke(panel, BORDER, 1)
+	panel = UIKit.create("CanvasGroup", {
+		Name = "Panel",
+		Size = UDim2.fromOffset(PANEL_SIZE.X, PANEL_SIZE.Y),
+		BackgroundColor3 = C.Ground,
+		BackgroundTransparency = 0.05,
+		BorderSizePixel = 0,
+		Parent = root,
+	})
+	UIKit.stroke(panel, C.Border)
 
-	-- Left accent stripe
-	local stripe = Instance.new("Frame")
-	stripe.Size = UDim2.new(0, 3, 0.65, 0)
-	stripe.AnchorPoint = Vector2.new(0, 0.5)
-	stripe.Position = UDim2.fromScale(0, 0.5)
-	stripe.BackgroundColor3 = ACCENT
-	stripe.BorderSizePixel = 0
-	stripe.Parent = panel
-	addCorner(stripe, 2)
+	UIKit.text({
+		Text = "SETTINGS",
+		FontFace = F.Display,
+		TextSize = T.H1,
+		Position = UDim2.fromOffset(32, 20),
+		Size = UDim2.new(1, -120, 0, 40),
+		Parent = panel,
+	})
+	UIKit.text({
+		Text = "Souris",
+		TextSize = T.Small,
+		TextColor3 = C.Muted,
+		Position = UDim2.fromOffset(32, 60),
+		Size = UDim2.new(1, -120, 0, 20),
+		Parent = panel,
+	})
+	local close = UIKit.closeButton(panel)
+	close.AnchorPoint = Vector2.new(1, 0)
+	close.Position = UDim2.new(1, -24, 0, 24)
+	close.MouseButton1Click:Connect(function()
+		setOpen(false)
+	end)
+	for _, y in { 96, 174 } do
+		UIKit.frame({
+			Name = "Divider",
+			Position = UDim2.fromOffset(0, y),
+			Size = UDim2.new(1, 0, 0, 1),
+			BackgroundColor3 = y == 96 and C.Border or C.Raised,
+			Parent = panel,
+		})
+	end
 
-	-- Content frame (padded)
-	local content = Instance.new("Frame")
-	content.Size = UDim2.fromScale(1, 1)
-	content.BackgroundTransparency = 1
-	content.BorderSizePixel = 0
-	content.Parent = panel
-
-	local pad = Instance.new("UIPadding")
-	pad.PaddingLeft = UDim.new(0, 32)
-	pad.PaddingRight = UDim.new(0, 24)
-	pad.PaddingTop = UDim.new(0, 26)
-	pad.PaddingBottom = UDim.new(0, 24)
-	pad.Parent = content
-
-	local title = Instance.new("TextLabel")
-	title.Size = UDim2.new(1, 0, 0, 22)
-	title.Position = UDim2.fromOffset(0, 0)
-	title.BackgroundTransparency = 1
-	title.TextColor3 = TEXT
-	title.Font = FONT_BLK
-	title.TextSize = 18
-	title.TextXAlignment = Enum.TextXAlignment.Left
-	title.Text = "SETTINGS"
-	title.Parent = content
-
-	local div = Instance.new("Frame")
-	div.Size = UDim2.new(1, 0, 0, 1)
-	div.Position = UDim2.fromOffset(0, 32)
-	div.BackgroundColor3 = BORDER
-	div.BorderSizePixel = 0
-	div.Parent = content
-
-	makeSlider(content, "Sensitivity", 44, 0.1, 5.0, CameraConfig.DEFAULT_SENS, 2, function(v)
+	makeSlider(panel, "Sensitivity", 96, 0.1, 5.0, CameraConfig.DEFAULT_SENS, 2, function(v)
 		if fpsCamRef then
 			fpsCamRef.setSensitivity(v)
 		end
 	end)
-	makeSlider(content, "Scope Sens", 102, 0.1, 1.0, CameraConfig.SCOPE_SENS_MULT, 2, function(v)
+	makeSlider(panel, "Scope Sens", 175, 0.1, 1.0, CameraConfig.SCOPE_SENS_MULT, 2, function(v)
 		if fpsCamRef then
 			fpsCamRef.setScopeMultiplier(v)
 		end
 	end)
 
-	-- Close button
-	local closeBtn = Instance.new("TextButton")
-	closeBtn.Size = UDim2.fromOffset(100, 36)
-	closeBtn.AnchorPoint = Vector2.new(1, 1)
-	closeBtn.Position = UDim2.fromScale(1, 1)
-	closeBtn.BackgroundColor3 = BTN_BG
-	closeBtn.BorderSizePixel = 0
-	closeBtn.TextColor3 = MUTED
-	closeBtn.Font = FONT_BD
-	closeBtn.TextSize = 13
-	closeBtn.Text = "CLOSE"
-	closeBtn.AutoButtonColor = false
-	closeBtn.Parent = content
-	addCorner(closeBtn, 3)
-	addStroke(closeBtn, BORDER, 1)
-
-	closeBtn.MouseEnter:Connect(function()
-		TweenService:Create(closeBtn, TWEEN_FAST, { TextColor3 = TEXT, BackgroundColor3 = Color3.fromRGB(24, 36, 56) })
-			:Play()
-	end)
-	closeBtn.MouseLeave:Connect(function()
-		TweenService:Create(closeBtn, TWEEN_FAST, { TextColor3 = MUTED, BackgroundColor3 = BTN_BG }):Play()
-	end)
-	closeBtn.MouseButton1Click:Connect(function()
-		setOpen(false)
-	end)
-
 	UserInputService.InputBegan:Connect(function(inp, gameProcessed)
+		-- Échap ferme le panneau, même si Roblox traite aussi la touche (menu système)
+		if inp.KeyCode == Enum.KeyCode.Escape then
+			setOpen(false)
+			return
+		end
 		if gameProcessed then
 			return
 		end
 		if inp.KeyCode == Enum.KeyCode.P then
+			if not open then
+				mode = "modal"
+			end
 			setOpen(not open)
 		end
 	end)
+	-- Échap ouvre le menu Roblox, qui peut capturer la touche avant nous : on ferme aussi à son ouverture
+	GuiService.MenuOpened:Connect(function()
+		setOpen(false)
+	end)
+end
+
+-- Cette méthode permet d'enregistrer une action à exécuter à chaque fermeture du panneau
+-- lorsque le menu doit remettre son onglet actif sur ACCUEIL.
+function SettingsMenu.setOnClosed(callback: () -> ())
+	onClosedCallback = callback
+end
+
+-- Cette méthode permet d'ouvrir le panneau dans une présentation donnée lorsque le menu clique sur SETTINGS.
+function SettingsMenu.open(newMode: Mode)
+	mode = newMode
+	setOpen(true)
+end
+
+-- Cette méthode permet de fermer le panneau s'il est ouvert lorsque le joueur quitte la page (PLAY, ACCUEIL, INFOS).
+function SettingsMenu.close()
+	setOpen(false)
 end
 
 function SettingsMenu.isOpen(): boolean
