@@ -12,6 +12,7 @@ CSGO/
   CLAUDE.md
   CSGO.rbxlx
   default.project.json
+  DESIGN.md
   feedback.md
   GAME_SYSTEM_SPEC.md
   logs.md
@@ -75,6 +76,7 @@ CSGO/
       MovementState.luau
       NetworkProtocol.luau
       PhysicsUtils.luau
+      UITheme.luau
       WeaponConfig.luau
       WeaponThirdPerson.luau
   tests/
@@ -97,6 +99,7 @@ CSGO/
 - `default.project.json`: configuration Rojo qui mappe l'arborescence `src/` vers le projet Roblox.
 - `aftman.toml`: gère la version et la configuration de Rojo (outil de synchronisation/build).
 - `CLAUDE.md`: guide de contexte et conventions pour travailler dans ce dépôt.
+- `DESIGN.md`: direction artistique « SLIPSTREAM » (palette, typographie, ton, maquettes ASCII des écrans) ; les valeurs vivent dans `UITheme`.
 - `SPEC.md`: spécification détaillée du projet (mappings, architecture, constantes). Utilisez-le comme source de vérité.
 - `src/`: code source organisé par rôle : `client/`, `server/`, `shared/`.
   - `src/client`: scripts et systèmes côté client (caméra, input, UI, systèmes de mouvement).
@@ -171,6 +174,7 @@ CSGO/
 - `src/shared/MovementState.luau`: structure d'état partagée pour le mouvement du joueur.
 - `src/shared/NetworkProtocol.luau`: noms des RemoteEvents et helper getRemote(name). Remotes : MeleeDamage, HitscanDamage, RequestSpawn, RoundState, ScoreUpdate, RoundResult, PlayerDied, WeaponAction.
 - `src/shared/PhysicsUtils.luau`: fonctions utilitaires pour la physique.
+- `src/shared/UITheme.luau`: tokens de style UI (marque, couleurs, polices, tailles de texte, rayons, espacements, traits, transparences, durées) ; seule source de couleurs/polices pour `src/client/ui`.
 - `src/shared/WeaponConfig.luau`: définitions partagées des armes et de leurs paramètres par défaut (dont `ThirdPerson` : échelle, grip, pose 3P).
 - `src/shared/WeaponThirdPerson.luau`: arme 3e personne commune joueurs/bots : construction du modèle 3P depuis `ViewModels`, grip soudé à la main, pose des épaules, actions répliquées en attributs (`Weapon3PAction`/`Weapon3PActionAt`), règles pures (grip, décalages d'action, visibilité).
 
@@ -188,7 +192,7 @@ bash tools/check.sh --fix   # idem, en appliquant le formatage StyLua
 
 - Outils gérés par Aftman (`aftman.toml`) : `stylua`, `selene`, `luau-lsp`. Binaires dans `~/.aftman/bin`.
 - Configs : `stylua.toml` (tabs, guillemets doubles, 120 colonnes), `selene.toml` (std roblox, règles par défaut), `.luaurc` (mode `nonstrict`).
-- Les fichiers de constantes (`CameraConfig`, `GameConfig`, `MovementConfig`, `BotConfig`) sont exclus de StyLua via `-- stylua: ignore` pour garder l'alignement en colonnes : respecter cet alignement à la main quand on les modifie.
+- Les fichiers de constantes (`CameraConfig`, `GameConfig`, `MovementConfig`, `BotConfig`, `UITheme`) sont exclus de StyLua via `-- stylua: ignore` pour garder l'alignement en colonnes : respecter cet alignement à la main quand on les modifie.
 - Après toute modification de code `.luau`, lancer `bash tools/check.sh` et ne pas introduire de nouvel avertissement.
 - Tests unitaires (Lune, hors Roblox) dans `tests/specs/*.spec.luau` : chaque spec retourne `function(T, Loader)`. `Loader.new({ Players = mock }):require("src/...")` charge un module de `src/` en simulant `game:GetService` et le `require` d'Instances Rojo ; les services non simulés lèvent une erreur. Seuls les modules sans raycast/`workspace` sont testables (physique pure, `Validator`). Ajouter un test pour toute correction de bug physique.
 - CI GitHub Actions (`.github/workflows/ci.yml`) : sur chaque PR et push sur `main`, lance `tools/check.sh` puis `rojo build`. Les définitions de types luau-lsp sont téléchargées pour la version déclarée dans `aftman.toml`.
