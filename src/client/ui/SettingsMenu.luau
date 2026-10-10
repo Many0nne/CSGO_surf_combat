@@ -4,22 +4,17 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
+local UITheme = require(ReplicatedStorage.Shared.UITheme)
 
 local SettingsMenu = {}
 
-local SURFACE = Color3.fromRGB(14, 20, 32)
-local PANEL = Color3.fromRGB(18, 26, 40)
-local BORDER = Color3.fromRGB(28, 42, 62)
-local ACCENT = Color3.fromRGB(205, 38, 38)
-local TRACK_BG = Color3.fromRGB(22, 32, 50)
-local TEXT = Color3.fromRGB(220, 230, 245)
-local MUTED = Color3.fromRGB(72, 92, 120)
-local BTN_BG = Color3.fromRGB(18, 28, 44)
+local C = UITheme.Color
+local F = UITheme.Font
+local TS = UITheme.TextSize
+local R = UITheme.Radius
+local THIN = UITheme.Stroke.THIN
 
-local FONT_BLK = Enum.Font.GothamBlack
-local FONT_BD = Enum.Font.GothamBold
-
-local TWEEN_FAST = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local TWEEN_FAST = TweenInfo.new(UITheme.Motion.FAST, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
 local gui: ScreenGui?
 local open = false
@@ -68,9 +63,9 @@ local function makeSlider(
 	lbl.Size = UDim2.fromOffset(110, 18)
 	lbl.Position = UDim2.fromOffset(0, 0)
 	lbl.BackgroundTransparency = 1
-	lbl.TextColor3 = MUTED
-	lbl.Font = FONT_BD
-	lbl.TextSize = 11
+	lbl.TextColor3 = C.TEXT_DIM
+	lbl.Font = F.LABEL
+	lbl.TextSize = TS.LABEL
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
 	lbl.Text = labelText
 	lbl.Parent = row
@@ -80,44 +75,44 @@ local function makeSlider(
 	valBox.Size = UDim2.fromOffset(52, 26)
 	valBox.AnchorPoint = Vector2.new(1, 1)
 	valBox.Position = UDim2.fromScale(1, 1)
-	valBox.BackgroundColor3 = PANEL
+	valBox.BackgroundColor3 = C.SURFACE_RAISED
 	valBox.BorderSizePixel = 0
-	valBox.TextColor3 = TEXT
-	valBox.Font = Enum.Font.Code
-	valBox.TextSize = 13
+	valBox.TextColor3 = C.TEXT
+	valBox.Font = F.MONO
+	valBox.TextSize = TS.BODY
 	valBox.TextXAlignment = Enum.TextXAlignment.Center
 	valBox.ClearTextOnFocus = false
 	valBox.Text = string.format(fmt, initVal)
 	valBox.ZIndex = 12
 	valBox.Parent = row
-	addCorner(valBox, 3)
-	addStroke(valBox, BORDER, 1)
+	addCorner(valBox, R.MD)
+	addStroke(valBox, C.BORDER, THIN)
 
 	-- Track
 	local track = Instance.new("Frame")
 	track.Size = UDim2.new(1, -170, 0, 4)
 	track.Position = UDim2.new(0, 116, 1, -14)
-	track.BackgroundColor3 = TRACK_BG
+	track.BackgroundColor3 = C.TRACK
 	track.BorderSizePixel = 0
 	track.Parent = row
-	addCorner(track, 2)
-	addStroke(track, BORDER, 1)
+	addCorner(track, R.SM)
+	addStroke(track, C.BORDER, THIN)
 
 	local fill = Instance.new("Frame")
-	fill.BackgroundColor3 = ACCENT
+	fill.BackgroundColor3 = C.ACCENT
 	fill.BorderSizePixel = 0
 	fill.Parent = track
-	addCorner(fill, 2)
+	addCorner(fill, R.SM)
 
 	local handle = Instance.new("TextButton")
 	handle.Size = UDim2.fromOffset(14, 14)
 	handle.AnchorPoint = Vector2.new(0.5, 0.5)
-	handle.BackgroundColor3 = Color3.new(1, 1, 1)
+	handle.BackgroundColor3 = C.HANDLE
 	handle.BorderSizePixel = 0
 	handle.Text = ""
 	handle.ZIndex = 10
 	handle.Parent = track
-	addCorner(handle, 7)
+	addCorner(handle, R.PILL)
 
 	local function applyValue(v: number)
 		v = math.clamp(v, minVal, maxVal)
@@ -200,8 +195,8 @@ function SettingsMenu.init(fpsCam: typeof(fpsCamRef))
 
 	local backdrop = Instance.new("TextButton")
 	backdrop.Size = UDim2.fromScale(1, 1)
-	backdrop.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-	backdrop.BackgroundTransparency = 0.55
+	backdrop.BackgroundColor3 = C.BACKDROP
+	backdrop.BackgroundTransparency = UITheme.Transparency.BACKDROP
 	backdrop.BorderSizePixel = 0
 	backdrop.Text = ""
 	backdrop.AutoButtonColor = false
@@ -215,23 +210,23 @@ function SettingsMenu.init(fpsCam: typeof(fpsCamRef))
 	panel.Size = UDim2.fromOffset(420, 256)
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
 	panel.Position = UDim2.fromScale(0.5, 0.5)
-	panel.BackgroundColor3 = SURFACE
+	panel.BackgroundColor3 = C.SURFACE
 	panel.BorderSizePixel = 0
 	panel.Text = ""
 	panel.AutoButtonColor = false
 	panel.Parent = backdrop
-	addCorner(panel, 6)
-	addStroke(panel, BORDER, 1)
+	addCorner(panel, R.LG)
+	addStroke(panel, C.BORDER, THIN)
 
 	-- Left accent stripe
 	local stripe = Instance.new("Frame")
-	stripe.Size = UDim2.new(0, 3, 0.65, 0)
+	stripe.Size = UDim2.new(0, UITheme.Stroke.STRIPE, 0.65, 0)
 	stripe.AnchorPoint = Vector2.new(0, 0.5)
 	stripe.Position = UDim2.fromScale(0, 0.5)
-	stripe.BackgroundColor3 = ACCENT
+	stripe.BackgroundColor3 = C.ACCENT
 	stripe.BorderSizePixel = 0
 	stripe.Parent = panel
-	addCorner(stripe, 2)
+	addCorner(stripe, R.SM)
 
 	-- Content frame (padded)
 	local content = Instance.new("Frame")
@@ -241,19 +236,19 @@ function SettingsMenu.init(fpsCam: typeof(fpsCamRef))
 	content.Parent = panel
 
 	local pad = Instance.new("UIPadding")
-	pad.PaddingLeft = UDim.new(0, 32)
-	pad.PaddingRight = UDim.new(0, 24)
+	pad.PaddingLeft = UDim.new(0, UITheme.Space.XL)
+	pad.PaddingRight = UDim.new(0, UITheme.Space.LG)
 	pad.PaddingTop = UDim.new(0, 26)
-	pad.PaddingBottom = UDim.new(0, 24)
+	pad.PaddingBottom = UDim.new(0, UITheme.Space.LG)
 	pad.Parent = content
 
 	local title = Instance.new("TextLabel")
 	title.Size = UDim2.new(1, 0, 0, 22)
 	title.Position = UDim2.fromOffset(0, 0)
 	title.BackgroundTransparency = 1
-	title.TextColor3 = TEXT
-	title.Font = FONT_BLK
-	title.TextSize = 18
+	title.TextColor3 = C.TEXT
+	title.Font = F.DISPLAY
+	title.TextSize = TS.TITLE
 	title.TextXAlignment = Enum.TextXAlignment.Left
 	title.Text = "SETTINGS"
 	title.Parent = content
@@ -261,7 +256,7 @@ function SettingsMenu.init(fpsCam: typeof(fpsCamRef))
 	local div = Instance.new("Frame")
 	div.Size = UDim2.new(1, 0, 0, 1)
 	div.Position = UDim2.fromOffset(0, 32)
-	div.BackgroundColor3 = BORDER
+	div.BackgroundColor3 = C.BORDER
 	div.BorderSizePixel = 0
 	div.Parent = content
 
@@ -281,23 +276,23 @@ function SettingsMenu.init(fpsCam: typeof(fpsCamRef))
 	closeBtn.Size = UDim2.fromOffset(100, 36)
 	closeBtn.AnchorPoint = Vector2.new(1, 1)
 	closeBtn.Position = UDim2.fromScale(1, 1)
-	closeBtn.BackgroundColor3 = BTN_BG
+	closeBtn.BackgroundColor3 = C.SURFACE_RAISED
 	closeBtn.BorderSizePixel = 0
-	closeBtn.TextColor3 = MUTED
-	closeBtn.Font = FONT_BD
-	closeBtn.TextSize = 13
+	closeBtn.TextColor3 = C.TEXT_DIM
+	closeBtn.Font = F.LABEL
+	closeBtn.TextSize = TS.BODY
 	closeBtn.Text = "CLOSE"
 	closeBtn.AutoButtonColor = false
 	closeBtn.Parent = content
-	addCorner(closeBtn, 3)
-	addStroke(closeBtn, BORDER, 1)
+	addCorner(closeBtn, R.MD)
+	addStroke(closeBtn, C.BORDER, THIN)
 
 	closeBtn.MouseEnter:Connect(function()
-		TweenService:Create(closeBtn, TWEEN_FAST, { TextColor3 = TEXT, BackgroundColor3 = Color3.fromRGB(24, 36, 56) })
-			:Play()
+		TweenService:Create(closeBtn, TWEEN_FAST, { TextColor3 = C.TEXT, BackgroundColor3 = C.SURFACE_HOVER }):Play()
 	end)
 	closeBtn.MouseLeave:Connect(function()
-		TweenService:Create(closeBtn, TWEEN_FAST, { TextColor3 = MUTED, BackgroundColor3 = BTN_BG }):Play()
+		TweenService:Create(closeBtn, TWEEN_FAST, { TextColor3 = C.TEXT_DIM, BackgroundColor3 = C.SURFACE_RAISED })
+			:Play()
 	end)
 	closeBtn.MouseButton1Click:Connect(function()
 		setOpen(false)

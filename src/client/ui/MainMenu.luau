@@ -1,22 +1,17 @@
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local UITheme = require(ReplicatedStorage.Shared.UITheme)
 
 local MainMenu = {}
 
-local BG = Color3.fromRGB(9, 13, 20)
-local SURFACE = Color3.fromRGB(14, 20, 32)
-local BORDER = Color3.fromRGB(28, 42, 62)
-local ACCENT = Color3.fromRGB(205, 38, 38)
-local ACCENT_HOV = Color3.fromRGB(228, 68, 68)
-local TEXT = Color3.fromRGB(220, 230, 245)
-local MUTED = Color3.fromRGB(72, 92, 120)
-local BTN_BG = Color3.fromRGB(18, 28, 44)
+local C = UITheme.Color
+local F = UITheme.Font
+local TS = UITheme.TextSize
+local R = UITheme.Radius
 
-local FONT_BLK = Enum.Font.GothamBlack
-local FONT_BD = Enum.Font.GothamBold
-local FONT_REG = Enum.Font.Gotham
-
-local TWEEN_FAST = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local TWEEN_FAST = TweenInfo.new(UITheme.Motion.FAST, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
 local gui: ScreenGui
 local onPlayCallback: (() -> ())?
@@ -41,23 +36,22 @@ local function makeGhostButton(parent: Instance, text: string, yOff: number): Te
 	local btn = Instance.new("TextButton")
 	btn.Size = UDim2.new(1, 0, 0, 40)
 	btn.Position = UDim2.fromOffset(0, yOff)
-	btn.BackgroundColor3 = BTN_BG
+	btn.BackgroundColor3 = C.SURFACE_RAISED
 	btn.BorderSizePixel = 0
 	btn.Text = text
-	btn.TextColor3 = MUTED
-	btn.Font = FONT_BD
-	btn.TextSize = 13
+	btn.TextColor3 = C.TEXT_DIM
+	btn.Font = F.LABEL
+	btn.TextSize = TS.BODY
 	btn.AutoButtonColor = false
 	btn.Parent = parent
-	addCorner(btn, 3)
-	addStroke(btn, BORDER, 1)
+	addCorner(btn, R.MD)
+	addStroke(btn, C.BORDER, UITheme.Stroke.THIN)
 
 	btn.MouseEnter:Connect(function()
-		TweenService:Create(btn, TWEEN_FAST, { TextColor3 = TEXT, BackgroundColor3 = Color3.fromRGB(24, 36, 56) })
-			:Play()
+		TweenService:Create(btn, TWEEN_FAST, { TextColor3 = C.TEXT, BackgroundColor3 = C.SURFACE_HOVER }):Play()
 	end)
 	btn.MouseLeave:Connect(function()
-		TweenService:Create(btn, TWEEN_FAST, { TextColor3 = MUTED, BackgroundColor3 = BTN_BG }):Play()
+		TweenService:Create(btn, TWEEN_FAST, { TextColor3 = C.TEXT_DIM, BackgroundColor3 = C.SURFACE_RAISED }):Play()
 	end)
 	return btn
 end
@@ -76,14 +70,14 @@ function MainMenu.init(onPlay: () -> (), onInfos: () -> (), onFeedback: () -> ()
 
 	local bg = Instance.new("Frame")
 	bg.Size = UDim2.fromScale(1, 1)
-	bg.BackgroundColor3 = BG
+	bg.BackgroundColor3 = C.BG
 	bg.BorderSizePixel = 0
 	bg.Parent = gui
 
 	local bgGrad = Instance.new("UIGradient")
 	bgGrad.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(12, 18, 30)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(6, 9, 15)),
+		ColorSequenceKeypoint.new(0, C.BG_GRAD_TOP),
+		ColorSequenceKeypoint.new(1, C.BG_GRAD_BOTTOM),
 	})
 	bgGrad.Rotation = 135
 	bgGrad.Parent = bg
@@ -92,21 +86,21 @@ function MainMenu.init(onPlay: () -> (), onInfos: () -> (), onFeedback: () -> ()
 	card.Size = UDim2.fromOffset(300, 318)
 	card.AnchorPoint = Vector2.new(0.5, 0.5)
 	card.Position = UDim2.fromScale(0.5, 0.5)
-	card.BackgroundColor3 = SURFACE
+	card.BackgroundColor3 = C.SURFACE
 	card.BorderSizePixel = 0
 	card.Parent = bg
-	addCorner(card, 6)
-	addStroke(card, BORDER, 1)
+	addCorner(card, R.LG)
+	addStroke(card, C.BORDER, UITheme.Stroke.THIN)
 
 	-- Left accent stripe (signature element)
 	local stripe = Instance.new("Frame")
-	stripe.Size = UDim2.new(0, 3, 0.64, 0)
+	stripe.Size = UDim2.new(0, UITheme.Stroke.STRIPE, 0.64, 0)
 	stripe.AnchorPoint = Vector2.new(0, 0.5)
 	stripe.Position = UDim2.fromScale(0, 0.5)
-	stripe.BackgroundColor3 = ACCENT
+	stripe.BackgroundColor3 = C.ACCENT
 	stripe.BorderSizePixel = 0
 	stripe.Parent = card
-	addCorner(stripe, 2)
+	addCorner(stripe, R.SM)
 
 	local content = Instance.new("Frame")
 	content.Size = UDim2.fromScale(1, 1)
@@ -115,20 +109,20 @@ function MainMenu.init(onPlay: () -> (), onInfos: () -> (), onFeedback: () -> ()
 	content.Parent = card
 
 	local pad = Instance.new("UIPadding")
-	pad.PaddingLeft = UDim.new(0, 32)
-	pad.PaddingRight = UDim.new(0, 24)
+	pad.PaddingLeft = UDim.new(0, UITheme.Space.XL)
+	pad.PaddingRight = UDim.new(0, UITheme.Space.LG)
 	pad.PaddingTop = UDim.new(0, 30)
-	pad.PaddingBottom = UDim.new(0, 24)
+	pad.PaddingBottom = UDim.new(0, UITheme.Space.LG)
 	pad.Parent = content
 
 	local eyebrow = Instance.new("TextLabel")
 	eyebrow.Size = UDim2.new(1, 0, 0, 14)
 	eyebrow.Position = UDim2.fromOffset(0, 0)
 	eyebrow.BackgroundTransparency = 1
-	eyebrow.Text = "SURF · FFA"
-	eyebrow.TextColor3 = ACCENT
-	eyebrow.Font = FONT_BD
-	eyebrow.TextSize = 11
+	eyebrow.Text = UITheme.Brand.TAGLINE
+	eyebrow.TextColor3 = C.ACCENT
+	eyebrow.Font = F.LABEL
+	eyebrow.TextSize = TS.LABEL
 	eyebrow.TextXAlignment = Enum.TextXAlignment.Left
 	eyebrow.Parent = content
 
@@ -136,38 +130,38 @@ function MainMenu.init(onPlay: () -> (), onInfos: () -> (), onFeedback: () -> ()
 	title.Size = UDim2.new(1, 0, 0, 50)
 	title.Position = UDim2.fromOffset(0, 18)
 	title.BackgroundTransparency = 1
-	title.Text = "SURF FFA"
-	title.TextColor3 = TEXT
-	title.Font = FONT_BLK
-	title.TextSize = 38
+	title.Text = UITheme.Brand.NAME
+	title.TextColor3 = C.TEXT
+	title.Font = F.DISPLAY
+	title.TextSize = TS.LOGO
 	title.TextXAlignment = Enum.TextXAlignment.Left
 	title.Parent = content
 
 	local div = Instance.new("Frame")
 	div.Size = UDim2.new(1, 0, 0, 1)
 	div.Position = UDim2.fromOffset(0, 76)
-	div.BackgroundColor3 = BORDER
+	div.BackgroundColor3 = C.BORDER
 	div.BorderSizePixel = 0
 	div.Parent = content
 
 	local playBtn = Instance.new("TextButton")
 	playBtn.Size = UDim2.new(1, 0, 0, 46)
 	playBtn.Position = UDim2.fromOffset(0, 94)
-	playBtn.BackgroundColor3 = ACCENT
+	playBtn.BackgroundColor3 = C.ACCENT
 	playBtn.BorderSizePixel = 0
 	playBtn.Text = "PLAY"
-	playBtn.TextColor3 = Color3.fromRGB(240, 230, 230)
-	playBtn.Font = FONT_BLK
-	playBtn.TextSize = 16
+	playBtn.TextColor3 = C.ON_ACCENT
+	playBtn.Font = F.HEADING
+	playBtn.TextSize = TS.BUTTON
 	playBtn.AutoButtonColor = false
 	playBtn.Parent = content
-	addCorner(playBtn, 3)
+	addCorner(playBtn, R.MD)
 
 	playBtn.MouseEnter:Connect(function()
-		TweenService:Create(playBtn, TWEEN_FAST, { BackgroundColor3 = ACCENT_HOV }):Play()
+		TweenService:Create(playBtn, TWEEN_FAST, { BackgroundColor3 = C.ACCENT_HOVER }):Play()
 	end)
 	playBtn.MouseLeave:Connect(function()
-		TweenService:Create(playBtn, TWEEN_FAST, { BackgroundColor3 = ACCENT }):Play()
+		TweenService:Create(playBtn, TWEEN_FAST, { BackgroundColor3 = C.ACCENT }):Play()
 	end)
 
 	local infosBtn = makeGhostButton(content, "INFOS", 150)
@@ -194,10 +188,10 @@ function MainMenu.init(onPlay: () -> (), onInfos: () -> (), onFeedback: () -> ()
 	ver.AnchorPoint = Vector2.new(1, 1)
 	ver.Position = UDim2.new(1, -10, 1, -8)
 	ver.BackgroundTransparency = 1
-	ver.Text = "v0.1"
-	ver.TextColor3 = Color3.fromRGB(32, 48, 68)
-	ver.Font = FONT_REG
-	ver.TextSize = 11
+	ver.Text = UITheme.Brand.VERSION
+	ver.TextColor3 = C.FAINT
+	ver.Font = F.BODY
+	ver.TextSize = TS.LABEL
 	ver.TextXAlignment = Enum.TextXAlignment.Right
 	ver.Parent = bg
 end

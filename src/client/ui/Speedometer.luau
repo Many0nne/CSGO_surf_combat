@@ -1,9 +1,13 @@
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local UITheme = require(ReplicatedStorage.Shared.UITheme)
 
 local Speedometer = {}
 
-local ACCENT = Color3.fromRGB(205, 38, 38)
-local MUTED = Color3.fromRGB(72, 92, 120)
+local C = UITheme.Color
+local F = UITheme.Font
+local TS = UITheme.TextSize
 
 local speedLabel: TextLabel?
 
@@ -33,9 +37,9 @@ function Speedometer.init()
 	tag.Position = UDim2.fromOffset(0, 0)
 	tag.BackgroundTransparency = 1
 	tag.Text = "SPD"
-	tag.TextColor3 = MUTED
-	tag.Font = Enum.Font.GothamBold
-	tag.TextSize = 10
+	tag.TextColor3 = C.MUTED
+	tag.Font = F.LABEL
+	tag.TextSize = TS.CAPTION
 	tag.TextXAlignment = Enum.TextXAlignment.Center
 	tag.Parent = container
 
@@ -45,9 +49,9 @@ function Speedometer.init()
 	numLbl.Position = UDim2.fromOffset(0, 14)
 	numLbl.BackgroundTransparency = 1
 	numLbl.Text = "0"
-	numLbl.TextColor3 = ACCENT
-	numLbl.Font = Enum.Font.Code
-	numLbl.TextSize = 28
+	numLbl.TextColor3 = C.ACCENT
+	numLbl.Font = F.MONO
+	numLbl.TextSize = TS.NUMERIC
 	numLbl.TextXAlignment = Enum.TextXAlignment.Right
 	numLbl.Parent = container
 
@@ -57,9 +61,9 @@ function Speedometer.init()
 	unitLbl.Position = UDim2.new(1, 0, 1, -2)
 	unitLbl.BackgroundTransparency = 1
 	unitLbl.Text = "u/s"
-	unitLbl.TextColor3 = MUTED
-	unitLbl.Font = Enum.Font.GothamBold
-	unitLbl.TextSize = 10
+	unitLbl.TextColor3 = C.MUTED
+	unitLbl.Font = F.LABEL
+	unitLbl.TextSize = TS.CAPTION
 	unitLbl.TextXAlignment = Enum.TextXAlignment.Left
 	unitLbl.Parent = container
 

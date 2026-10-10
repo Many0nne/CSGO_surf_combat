@@ -1,19 +1,15 @@
 local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local UITheme = require(ReplicatedStorage.Shared.UITheme)
 
 local RoundHUD = {}
 
-local SURFACE = Color3.fromRGB(14, 20, 32)
-local BORDER = Color3.fromRGB(28, 42, 62)
-local ACCENT = Color3.fromRGB(205, 38, 38)
-local WARN = Color3.fromRGB(235, 110, 40)
-local TEXT = Color3.fromRGB(220, 230, 245)
-local MUTED = Color3.fromRGB(72, 92, 120)
-local ROW_ALT = Color3.fromRGB(18, 28, 44)
-
-local FONT_BLK = Enum.Font.GothamBlack
-local FONT_BD = Enum.Font.GothamBold
-local FONT_REG = Enum.Font.Gotham
-local FONT_MON = Enum.Font.Code
+local C = UITheme.Color
+local F = UITheme.Font
+local TS = UITheme.TextSize
+local R = UITheme.Radius
+local THIN = UITheme.Stroke.THIN
 
 local gui: ScreenGui
 local timerLabel: TextLabel
@@ -43,13 +39,13 @@ end
 
 local function addStripe(parent: GuiObject, color: Color3)
 	local stripe = Instance.new("Frame")
-	stripe.Size = UDim2.new(0, 3, 0.65, 0)
+	stripe.Size = UDim2.new(0, UITheme.Stroke.STRIPE, 0.65, 0)
 	stripe.AnchorPoint = Vector2.new(0, 0.5)
 	stripe.Position = UDim2.fromScale(0, 0.5)
 	stripe.BackgroundColor3 = color
 	stripe.BorderSizePixel = 0
 	stripe.Parent = parent
-	addCorner(stripe, 2)
+	addCorner(stripe, R.SM)
 end
 
 -- ── Timer ──────────────────────────────────────────────────────────────────────
@@ -59,19 +55,20 @@ local function buildTimer(parent: Frame)
 	frame.Size = UDim2.fromOffset(112, 38)
 	frame.AnchorPoint = Vector2.new(0.5, 0)
 	frame.Position = UDim2.new(0.5, 0, 0, 12)
-	frame.BackgroundColor3 = SURFACE
+	frame.BackgroundColor3 = C.SURFACE
+	frame.BackgroundTransparency = UITheme.Transparency.HUD
 	frame.BorderSizePixel = 0
 	frame.Parent = parent
-	addCorner(frame, 4)
-	addStroke(frame, BORDER, 1)
+	addCorner(frame, R.MD)
+	addStroke(frame, C.BORDER, THIN)
 
 	timerLabel = Instance.new("TextLabel")
 	timerLabel.Size = UDim2.fromScale(1, 1)
 	timerLabel.BackgroundTransparency = 1
 	timerLabel.Text = "5:00"
-	timerLabel.TextColor3 = TEXT
-	timerLabel.Font = FONT_MON
-	timerLabel.TextSize = 20
+	timerLabel.TextColor3 = C.TEXT
+	timerLabel.Font = F.MONO
+	timerLabel.TextSize = TS.TIMER
 	timerLabel.Parent = frame
 end
 
@@ -82,13 +79,13 @@ local function buildLeaderboard(parent: Frame)
 	leaderboardFrame.Size = UDim2.fromOffset(400, 440)
 	leaderboardFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 	leaderboardFrame.Position = UDim2.fromScale(0.5, 0.46)
-	leaderboardFrame.BackgroundColor3 = SURFACE
+	leaderboardFrame.BackgroundColor3 = C.SURFACE
 	leaderboardFrame.BorderSizePixel = 0
 	leaderboardFrame.Visible = false
 	leaderboardFrame.Parent = parent
-	addCorner(leaderboardFrame, 6)
-	addStroke(leaderboardFrame, BORDER, 1)
-	addStripe(leaderboardFrame, ACCENT)
+	addCorner(leaderboardFrame, R.LG)
+	addStroke(leaderboardFrame, C.BORDER, THIN)
+	addStripe(leaderboardFrame, C.ACCENT)
 
 	local titleRow = Instance.new("Frame")
 	titleRow.Size = UDim2.new(1, -24, 0, 44)
@@ -100,9 +97,9 @@ local function buildLeaderboard(parent: Frame)
 	titleLbl.Size = UDim2.fromScale(1, 1)
 	titleLbl.BackgroundTransparency = 1
 	titleLbl.Text = "LEADERBOARD"
-	titleLbl.TextColor3 = TEXT
-	titleLbl.Font = FONT_BLK
-	titleLbl.TextSize = 14
+	titleLbl.TextColor3 = C.TEXT
+	titleLbl.Font = F.DISPLAY
+	titleLbl.TextSize = TS.BUTTON
 	titleLbl.TextXAlignment = Enum.TextXAlignment.Left
 	titleLbl.Parent = titleRow
 
@@ -118,9 +115,9 @@ local function buildLeaderboard(parent: Frame)
 		lbl.Position = UDim2.fromScale(xScale, 0)
 		lbl.BackgroundTransparency = 1
 		lbl.Text = text
-		lbl.TextColor3 = MUTED
-		lbl.Font = FONT_BD
-		lbl.TextSize = 11
+		lbl.TextColor3 = C.MUTED
+		lbl.Font = F.LABEL
+		lbl.TextSize = TS.LABEL
 		lbl.TextXAlignment = align
 		lbl.Parent = colRow
 	end
@@ -133,7 +130,7 @@ local function buildLeaderboard(parent: Frame)
 	local sep = Instance.new("Frame")
 	sep.Size = UDim2.new(1, -24, 0, 1)
 	sep.Position = UDim2.fromOffset(12, 68)
-	sep.BackgroundColor3 = BORDER
+	sep.BackgroundColor3 = C.BORDER
 	sep.BorderSizePixel = 0
 	sep.Parent = leaderboardFrame
 
@@ -156,20 +153,20 @@ local function buildRespawnOverlay(parent: Frame)
 	respawnFrame.Size = UDim2.fromOffset(280, 56)
 	respawnFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 	respawnFrame.Position = UDim2.fromScale(0.5, 0.5)
-	respawnFrame.BackgroundColor3 = SURFACE
+	respawnFrame.BackgroundColor3 = C.SURFACE
 	respawnFrame.BorderSizePixel = 0
 	respawnFrame.Visible = false
 	respawnFrame.Parent = parent
-	addCorner(respawnFrame, 4)
-	addStroke(respawnFrame, ACCENT, 1)
-	addStripe(respawnFrame, ACCENT)
+	addCorner(respawnFrame, R.MD)
+	addStroke(respawnFrame, C.COMBAT, THIN)
+	addStripe(respawnFrame, C.COMBAT)
 
 	respawnLabel = Instance.new("TextLabel")
 	respawnLabel.Size = UDim2.fromScale(1, 1)
 	respawnLabel.BackgroundTransparency = 1
-	respawnLabel.TextColor3 = TEXT
-	respawnLabel.Font = FONT_BD
-	respawnLabel.TextSize = 14
+	respawnLabel.TextColor3 = C.TEXT
+	respawnLabel.Font = F.LABEL
+	respawnLabel.TextSize = TS.BUTTON
 	respawnLabel.Parent = respawnFrame
 end
 
@@ -180,27 +177,27 @@ local function buildResultBanner(parent: Frame)
 	resultFrame.Size = UDim2.fromOffset(480, 84)
 	resultFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 	resultFrame.Position = UDim2.fromScale(0.5, 0.4)
-	resultFrame.BackgroundColor3 = SURFACE
+	resultFrame.BackgroundColor3 = C.SURFACE
 	resultFrame.BorderSizePixel = 0
 	resultFrame.Visible = false
 	resultFrame.Parent = parent
-	addCorner(resultFrame, 6)
-	addStroke(resultFrame, ACCENT, 1)
+	addCorner(resultFrame, R.LG)
+	addStroke(resultFrame, C.COMBAT, THIN)
 
 	local topLine = Instance.new("Frame")
 	topLine.Size = UDim2.new(0.38, 0, 0, 2)
 	topLine.AnchorPoint = Vector2.new(0.5, 0)
 	topLine.Position = UDim2.fromScale(0.5, 0)
-	topLine.BackgroundColor3 = ACCENT
+	topLine.BackgroundColor3 = C.COMBAT
 	topLine.BorderSizePixel = 0
 	topLine.Parent = resultFrame
 
 	resultLabel = Instance.new("TextLabel")
 	resultLabel.Size = UDim2.fromScale(1, 1)
 	resultLabel.BackgroundTransparency = 1
-	resultLabel.TextColor3 = TEXT
-	resultLabel.Font = FONT_BLK
-	resultLabel.TextSize = 20
+	resultLabel.TextColor3 = C.TEXT
+	resultLabel.Font = F.HEADING
+	resultLabel.TextSize = TS.BANNER
 	resultLabel.Parent = resultFrame
 end
 
@@ -262,7 +259,7 @@ function RoundHUD.updateTimer(seconds: number)
 	local m = math.floor(seconds / 60)
 	local s = seconds % 60
 	timerLabel.Text = string.format("%d:%02d", m, s)
-	timerLabel.TextColor3 = seconds <= 30 and WARN or TEXT
+	timerLabel.TextColor3 = seconds <= 30 and C.WARN or C.TEXT
 end
 
 type Score = { name: string, kills: number, deaths: number }
@@ -292,20 +289,20 @@ function RoundHUD.updateScores(scores: { [number]: Score })
 		local isTop = i == 1
 		local row = Instance.new("Frame")
 		row.Size = UDim2.new(1, 0, 0, 30)
-		row.BackgroundColor3 = i % 2 == 0 and ROW_ALT or SURFACE
-		row.BackgroundTransparency = i % 2 == 0 and 0 or 0.5
+		row.BackgroundColor3 = i % 2 == 0 and C.SURFACE_RAISED or C.SURFACE
+		row.BackgroundTransparency = i % 2 == 0 and 0 or UITheme.Transparency.ROW_ODD
 		row.BorderSizePixel = 0
 		row.LayoutOrder = i
 		row.Parent = leaderboardList
-		addCorner(row, 2)
+		addCorner(row, R.SM)
 
 		local rankLbl = Instance.new("TextLabel")
 		rankLbl.Size = UDim2.fromScale(0.08, 1)
 		rankLbl.BackgroundTransparency = 1
 		rankLbl.Text = tostring(i)
-		rankLbl.TextColor3 = isTop and ACCENT or MUTED
-		rankLbl.Font = isTop and FONT_BLK or FONT_BD
-		rankLbl.TextSize = 12
+		rankLbl.TextColor3 = isTop and C.ACCENT or C.MUTED
+		rankLbl.Font = isTop and F.HEADING or F.LABEL
+		rankLbl.TextSize = TS.BODY
 		rankLbl.Parent = row
 
 		local nameLbl = Instance.new("TextLabel")
@@ -313,9 +310,9 @@ function RoundHUD.updateScores(scores: { [number]: Score })
 		nameLbl.Position = UDim2.fromScale(0.08, 0)
 		nameLbl.BackgroundTransparency = 1
 		nameLbl.Text = score.name
-		nameLbl.TextColor3 = isTop and TEXT or Color3.fromRGB(180, 195, 215)
-		nameLbl.Font = isTop and FONT_BD or FONT_REG
-		nameLbl.TextSize = 13
+		nameLbl.TextColor3 = isTop and C.TEXT or C.TEXT_DIM
+		nameLbl.Font = isTop and F.LABEL or F.BODY
+		nameLbl.TextSize = TS.BODY
 		nameLbl.TextXAlignment = Enum.TextXAlignment.Left
 		nameLbl.Parent = row
 
@@ -324,9 +321,9 @@ function RoundHUD.updateScores(scores: { [number]: Score })
 		killLbl.Position = UDim2.fromScale(0.62, 0)
 		killLbl.BackgroundTransparency = 1
 		killLbl.Text = tostring(score.kills)
-		killLbl.TextColor3 = isTop and ACCENT or TEXT
-		killLbl.Font = FONT_BD
-		killLbl.TextSize = 13
+		killLbl.TextColor3 = isTop and C.ACCENT or C.TEXT
+		killLbl.Font = F.MONO
+		killLbl.TextSize = TS.BODY
 		killLbl.Parent = row
 
 		local deathLbl = Instance.new("TextLabel")
@@ -334,9 +331,9 @@ function RoundHUD.updateScores(scores: { [number]: Score })
 		deathLbl.Position = UDim2.fromScale(0.81, 0)
 		deathLbl.BackgroundTransparency = 1
 		deathLbl.Text = tostring(score.deaths)
-		deathLbl.TextColor3 = MUTED
-		deathLbl.Font = FONT_REG
-		deathLbl.TextSize = 13
+		deathLbl.TextColor3 = C.MUTED
+		deathLbl.Font = F.MONO
+		deathLbl.TextSize = TS.BODY
 		deathLbl.Parent = row
 	end
 end
