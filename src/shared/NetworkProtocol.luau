@@ -12,6 +12,8 @@ Protocol.Names = {
 	SCORE_UPDATE = "ScoreUpdate",
 	ROUND_RESULT = "RoundResult",
 	PLAYER_DIED = "PlayerDied",
+	-- Arme 3e personne (#5) : client → serveur, action visuelle ("Shoot" | "Reload")
+	WEAPON_ACTION = "WeaponAction",
 	-- Feedback
 	SEND_FEEDBACK = "SendFeedback",
 	FEEDBACK_ACK = "FeedbackAck",

@@ -28,13 +28,10 @@ return {
 	-- ── Combat ──────────────────────────────────────────────────────────────
 	-- Which weapon the bots use. Damage AND fire rate are read from
 	-- WeaponConfig.Weapons[WEAPON] — bots fire the exact same weapon as players
-	-- (no bot-specific damage/fire-rate). The third-person weapon model is also
-	-- cloned from ReplicatedStorage.ViewModels[WEAPON].
+	-- (no bot-specific damage/fire-rate). The third-person weapon model is
+	-- cloned from ReplicatedStorage.ViewModels[WEAPON]; scale and grip come from
+	-- WeaponConfig.Weapons[WEAPON].ThirdPerson (shared with players, #5).
 	WEAPON        = "AWP",
-	-- Viewmodel guns are oversized for the camera; scale the third-person clone.
-	WEAPON_SCALE  = 0.5,
-	-- Fine-tune where the gun sits relative to the hand.
-	WEAPON_GRIP_OFFSET = Vector3.new(0, -0.2, 0),
 	-- Delay before a bot fires at a freshly spotted enemy (gives you a chance).
 	REACTION_TIME = 0.45,
 	-- Bot aim error in degrees (the "skill" knob — shots are real raycasts, so

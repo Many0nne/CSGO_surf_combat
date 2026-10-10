@@ -2,9 +2,9 @@
 -- Server-controlled AI bots (Phase 1: roam + fight). Bots fill empty combatant
 -- slots so a lone player always has opponents. They spawn as real R15 avatar
 -- rigs (the same kind of character LoadCharacter gives players) so they are
--- visually identical to players — note that in this game the weapon is a
--- first-person viewmodel (camera-only), so even real players show no weapon in
--- third person; nothing extra is needed on the bot for visual parity.
+-- visually identical to players. The third-person weapon (model, grip, hold
+-- pose, shoot/equip actions) comes from the same shared module as players
+-- (WeaponThirdPerson, #5).
 --
 -- Bots use a standard enabled Humanoid for locomotion (unlike players, whose
 -- Humanoid is disabled in favour of the custom client CFrame movement) —
@@ -28,6 +28,7 @@ local WeaponConfig = require(Shared:WaitForChild("WeaponConfig"))
 local CharacterConfig = require(Shared:WaitForChild("CharacterConfig"))
 local CharacterAppearance = require(Shared:WaitForChild("CharacterAppearance"))
 local CharacterAnimator = require(Shared:WaitForChild("CharacterAnimator"))
+local WeaponThirdPerson = require(Shared:WaitForChild("WeaponThirdPerson"))
 
 -- Bots fire the exact same weapon as players (damage + fire rate from config).
 local WEAPON = WeaponConfig.Weapons[BotConfig.WEAPON] or WeaponConfig.Weapons.AWP
@@ -186,108 +187,6 @@ local function buildRig(name: string): Model
 	return model
 end
 
--- Attach a visible third-person weapon to the bot's hand by cloning the gun
--- parts out of the first-person viewmodel (ReplicatedStorage.ViewModels.<name>)
--- and welding them to the rig's hand. The viewmodel's arms / fake camera /
--- humanoid are stripped so only the gun shows.
-local VIEWMODEL_EXCLUDE = {
-	LeftArm = true,
-	RightArm = true,
-	Humanoid = true,
-	HumanoidRootPart = true,
-	FakeCamera = true,
-	Animations = true,
-	AnimSaves = true,
-	Sounds = true,
-}
-
-local function attachWeapon(model: Model)
-	local container = ReplicatedStorage:FindFirstChild("ViewModels")
-	local template = container and container:FindFirstChild(BotConfig.WEAPON)
-	if not (template and template:IsA("Model")) then
-		return
-	end
-
-	local hand = model:FindFirstChild("RightHand") or model:FindFirstChild("Right Arm")
-	if not hand or not hand:IsA("BasePart") then
-		return
-	end
-
-	local handleSrc = template:FindFirstChild("Handle")
-	if not (handleSrc and handleSrc:IsA("BasePart")) then
-		return
-	end
-
-	-- Container model holds the gun parts so it's easy to clean up.
-	local gun = Instance.new("Model")
-	gun.Name = "BotWeapon"
-
-	-- Clone every gun BasePart (skip arms / camera / humanoid / folders).
-	local handle: BasePart?
-	for _, child in template:GetChildren() do
-		if not VIEWMODEL_EXCLUDE[child.Name] then
-			local clone = child:Clone()
-			if clone:IsA("BasePart") then
-				clone.CanCollide = false
-				clone.Massless = true
-				clone.Anchored = false
-				clone.Parent = gun
-				if clone.Name == "Handle" then
-					handle = clone
-				end
-			end
-		end
-	end
-	if not handle then
-		gun:Destroy()
-		return
-	end
-
-	-- Rebuild the gun's internal layout relative to its handle (full scale).
-	local handleOffset = handleSrc.CFrame:Inverse()
-	for _, part in gun:GetChildren() do
-		if part:IsA("BasePart") and part ~= handle then
-			local src = template:FindFirstChild(part.Name)
-			if src and src:IsA("BasePart") then
-				local weld = Instance.new("Weld")
-				weld.Part0 = handle
-				weld.Part1 = part
-				weld.C0 = handleOffset * src.CFrame
-				weld.Parent = handle
-			end
-		end
-	end
-
-	-- Copy the weapon's sounds onto the handle so shots are audible to everyone
-	-- (positional 3D sound from the gun). The viewmodel keeps these in a Sounds
-	-- folder; players hear them via the client viewmodel, bots play them here.
-	local soundsFolder = template:FindFirstChild("Sounds")
-	if soundsFolder then
-		for _, s in soundsFolder:GetChildren() do
-			if s:IsA("Sound") then
-				s:Clone().Parent = handle
-			end
-		end
-	end
-
-	-- Viewmodel guns are oversized for the camera — shrink to character scale.
-	gun.PrimaryPart = handle
-	gun.Parent = model
-	gun:ScaleTo(BotConfig.WEAPON_SCALE)
-
-	-- Grip: orient the handle in world space so the barrel (handle local +X)
-	-- points where the rig faces (-Z) and the scope (local +Y) points up, then
-	-- weld it to the hand at that relative offset.
-	local desiredPos = hand.Position + BotConfig.WEAPON_GRIP_OFFSET
-	local desiredWorld = CFrame.fromMatrix(desiredPos, Vector3.new(0, 0, -1), Vector3.new(0, 1, 0))
-	handle.CFrame = desiredWorld
-	local handWeld = Instance.new("Weld")
-	handWeld.Part0 = hand
-	handWeld.Part1 = handle
-	handWeld.C0 = hand.CFrame:Inverse() * desiredWorld
-	handWeld.Parent = hand
-end
-
 -- ── combatant queries ───────────────────────────────────────────────────────
 
 type Combatant = { id: number, char: Model, hum: Humanoid, root: BasePart }
@@ -358,7 +257,7 @@ local function spawnRig(bot: Bot)
 	model:SetAttribute("IsBot", true)
 	model:SetAttribute("BotId", bot.id)
 
-	attachWeapon(model)
+	WeaponThirdPerson.attach(model, BotConfig.WEAPON)
 
 	local cf = SpawnManager.getRandomSpawnCFrame()
 	model:PivotTo(cf)
@@ -509,7 +408,7 @@ end
 
 local function playShootSound(bot: Bot)
 	local model = bot.model
-	local gun = model and model:FindFirstChild("BotWeapon")
+	local gun = model and model:FindFirstChild(WeaponThirdPerson.MODEL_NAME)
 	local handle = gun and gun:FindFirstChild("Handle")
 	local s = handle and handle:FindFirstChild("Shoot")
 	if s and s:IsA("Sound") then
@@ -524,6 +423,9 @@ local function fireAt(bot: Bot, target: Combatant)
 	end
 	bot.nextShot = os.clock() + (WEAPON.FireDelay or 1)
 	playShootSound(bot)
+	if bot.model then
+		WeaponThirdPerson.setAction(bot.model, "Shoot")
+	end
 
 	-- Real hitscan from the bot's head toward the target, with aim error that
 	-- grows with the target's speed (fast movement = harder to hit). Cover

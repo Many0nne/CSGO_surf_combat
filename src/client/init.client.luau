@@ -7,6 +7,7 @@ local CharacterDimensions = require(script.systems.movement.CharacterDimensions)
 local MovementController = require(script.systems.movement.MovementController)
 local ViewmodelSystem = require(script.systems.weapon.ViewmodelSystem)
 local WeaponSystem = require(script.systems.weapon.WeaponSystem)
+local WeaponThirdPersonView = require(script.systems.weapon.WeaponThirdPersonView)
 local FPSCamera = require(script.camera.FPSCamera)
 local SettingsMenu = require(script.ui.SettingsMenu)
 local Speedometer = require(script.ui.Speedometer)
@@ -16,6 +17,7 @@ local player = Players.LocalPlayer
 
 ViewmodelSystem.init(player)
 WeaponSystem.init(player)
+WeaponThirdPersonView.init()
 
 local stateConn: RBXScriptConnection?
 

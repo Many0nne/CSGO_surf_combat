@@ -22,6 +22,13 @@ WeaponConfig.Weapons = {
 		ScopeFov1 = 40,
 		ScopeFov2 = 10,
 		ScopeTweenTime = 0.1,
+		-- Modèle 3e personne (#5) : échelle du clone du viewmodel, grip (CFrame de la poignée dans le
+		-- repère de la main) et pose de tenue des épaules (cf. WeaponThirdPerson.POSES).
+		ThirdPerson = {
+			Scale = 0.5,
+			Grip = CFrame.fromMatrix(Vector3.new(0, -0.2, 0), Vector3.new(0, -1, 0), Vector3.new(0, 0, -1)),
+			Pose = "Rifle",
+		},
 		AnimationSounds = {
 			Equip = { "Bolt", "Draw" },
 			Shoot = { "Shoot", "Bolt" },
@@ -41,6 +48,11 @@ WeaponConfig.Weapons = {
 		IsMelee = true,
 		MeleeRange = 7.5,
 		BackstabMultiplier = 2,
+		ThirdPerson = {
+			Scale = 0.5,
+			Grip = CFrame.fromMatrix(Vector3.new(0, -0.2, 0), Vector3.new(0, -1, 0), Vector3.new(0, 0, -1)),
+			Pose = "Melee",
+		},
 		AnimationSounds = {
 			Equip = { "Equip" },
 			Shoot = {},

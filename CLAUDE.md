@@ -51,6 +51,7 @@ CSGO/
           ScopeSystem.luau
           ViewmodelSystem.luau
           WeaponSystem.luau
+          WeaponThirdPersonView.luau
       ui/
         InfosScreen.luau
         MainMenu.luau
@@ -75,6 +76,7 @@ CSGO/
       NetworkProtocol.luau
       PhysicsUtils.luau
       WeaponConfig.luau
+      WeaponThirdPerson.luau
   tests/
     run.luau
     lib/
@@ -147,6 +149,7 @@ CSGO/
 - `src/client/systems/weapon/ScopeSystem.luau`: gestion du scope (FOV, GUI, sensibilité caméra) pour les armes à lunette.
 - `src/client/systems/weapon/ViewmodelSystem.luau`: gestion du viewmodel, des animations et des sons des armes en vue FPS.
 - `src/client/systems/weapon/WeaponSystem.luau`: logique client des armes, munitions, recharge et vitesse liée à l'arme.
+- `src/client/systems/weapon/WeaponThirdPersonView.luau`: rendu client des armes 3e personne de tous les personnages (décalage procédural du grip pour tir/recharge/switch, modèle 3P masqué pour soi en 1re personne).
 - `src/client/systems/game/GameStateController.luau`: machine d'état client (MENU/INFOS/SPAWNING/IN_ROUND/DEAD/RESULT), caméra lobby, coordination UI ↔ remotes.
 - `src/client/ui/InfosScreen.luau`: overlay Infos (comment surfer, contrôles, crédits).
 - `src/client/ui/MainMenu.luau`: menu d'accueil avec boutons Play et Infos.
@@ -166,9 +169,10 @@ CSGO/
 - `src/shared/GameConfig.luau`: constantes jeu (ROUND_DURATION=300, RESPAWN_DELAY=2.5, RESULT_DURATION=6, AUTO_SAVE_INTERVAL=120).
 - `src/shared/MovementConfig.luau`: constantes physique du mouvement uniquement (vitesses, accel, friction, saut, pentes, bhop, réseau, hitbox).
 - `src/shared/MovementState.luau`: structure d'état partagée pour le mouvement du joueur.
-- `src/shared/NetworkProtocol.luau`: noms des RemoteEvents et helper getRemote(name). Remotes : MeleeDamage, HitscanDamage, RequestSpawn, RoundState, ScoreUpdate, RoundResult, PlayerDied.
+- `src/shared/NetworkProtocol.luau`: noms des RemoteEvents et helper getRemote(name). Remotes : MeleeDamage, HitscanDamage, RequestSpawn, RoundState, ScoreUpdate, RoundResult, PlayerDied, WeaponAction.
 - `src/shared/PhysicsUtils.luau`: fonctions utilitaires pour la physique.
-- `src/shared/WeaponConfig.luau`: définitions partagées des armes et de leurs paramètres par défaut.
+- `src/shared/WeaponConfig.luau`: définitions partagées des armes et de leurs paramètres par défaut (dont `ThirdPerson` : échelle, grip, pose 3P).
+- `src/shared/WeaponThirdPerson.luau`: arme 3e personne commune joueurs/bots : construction du modèle 3P depuis `ViewModels`, grip soudé à la main, pose des épaules, actions répliquées en attributs (`Weapon3PAction`/`Weapon3PActionAt`), règles pures (grip, décalages d'action, visibilité).
 
 ## Common Commands
 
