@@ -110,10 +110,10 @@ local function reloadTool(tool, cfg)
 
 	ScopeSystem.resetVisuals()
 	weaponState = "RELOADING"
-	ViewmodelSystem.playReload(ViewmodelSystem.getActiveViewmodel())
+	local reloadTime = cfg and cfg.ReloadTime or 2
+	ViewmodelSystem.play("Reload", reloadTime)
 	replicateAction("Reload")
 
-	local reloadTime = cfg and cfg.ReloadTime or 2
 	local thread = task.delay(reloadTime, function()
 		cancelReload = nil
 		if currentTool ~= tool then
@@ -157,21 +157,21 @@ local function onToolActivated(tool)
 	s.lastFire = now
 	weaponState = "FIRING"
 	replicateAction("Shoot")
+	local shootAnimTime = cfg and cfg.ShootAnimTime or 0.4
 	if cfg and cfg.IsMelee then
-		local markerOverrides: { [string]: string | () -> string } = {
-			["Stab Sound"] = function()
+		-- Le coup est résolu au marqueur "Stab" du clip (moment où la lame passe devant la caméra)
+		ViewmodelSystem.play("Shoot", shootAnimTime, {
+			Stab = function()
 				return MeleeHitDetection.resolveHit(cfg, ViewmodelSystem.getActiveViewmodel())
 			end,
-		}
-		ViewmodelSystem.playAnimation("Shoot", markerOverrides)
+		})
 	else
-		ViewmodelSystem.playAnimation("Shoot")
+		ViewmodelSystem.play("Shoot", shootAnimTime)
 	end
 	ScopeSystem.resetVisuals()
 	if not (cfg and cfg.IsMelee) then
 		HitscanSystem.resolveHit(cfg, ViewmodelSystem.getActiveViewmodel())
 	end
-	local shootAnimTime = cfg and cfg.ShootAnimTime or 0.4
 	task.delay(shootAnimTime, function()
 		if currentTool == tool and weaponState == "FIRING" then
 			weaponState = "IDLE"
@@ -193,10 +193,9 @@ local function onToolEquipped(tool, char)
 		createSpeedValueForChar(char, cfg.RunSpeedMultiplier)
 	end
 
+	-- L'animation d'equip du viewmodel est étirée sur EquipTime : l'arme est prête quand elle se termine
 	local equipTime = cfg and cfg.EquipTime or 0.8
-	local animLength = ViewmodelSystem.getPreloadedTrackLength("Equip")
-	local actualEquipTime = (animLength > 0 and animLength) or equipTime
-	task.delay(actualEquipTime, function()
+	task.delay(equipTime, function()
 		if currentTool == tool and weaponState == "EQUIPPING" then
 			weaponState = "IDLE"
 		end
@@ -211,6 +210,7 @@ local function onToolEquipped(tool, char)
 				if not canAct() then
 					return
 				end
+				ViewmodelSystem.stopAction()
 				weaponState = ScopeSystem.toggle(cfg)
 			end
 		end)
@@ -259,6 +259,18 @@ local function hookTool(tool, player)
 	end)
 end
 
+-- Cette méthode permet de lancer l'inspection de l'arme (touche F) lorsqu'elle est au repos et non zoomée ;
+-- purement visuelle, elle est interrompue par toute autre action (tir, recharge, lunette, changement d'arme).
+local function inspectTool()
+	if weaponState ~= "IDLE" or not currentTool then
+		return
+	end
+	if ViewmodelSystem.getAction() == "Inspect" then
+		return
+	end
+	ViewmodelSystem.play("Inspect")
+end
+
 function WeaponSystem.getState(): string
 	return weaponState
 end
@@ -297,6 +309,9 @@ function WeaponSystem.init(player)
 	RunService.Heartbeat:Connect(function()
 		if InputModule.isReloadPressed() and currentTool and currentCfg then
 			reloadTool(currentTool, currentCfg)
+		end
+		if InputModule.isInspectPressed() then
+			inspectTool()
 		end
 	end)
 
