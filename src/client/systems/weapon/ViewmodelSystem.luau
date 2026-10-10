@@ -12,9 +12,9 @@ local currentAnimSounds = nil :: { [string]: { string } }?
 local preloadedTracks = {} :: { [string]: AnimationTrack }
 local markerConns = {} :: { RBXScriptConnection }
 local boundStepName = "ViewmodelUpdate"
-local equipTrack = nil :: AnimationTrack?
-local shootTrack = nil :: AnimationTrack?
-local actionTrack = nil :: AnimationTrack?
+local actionTrack = nil :: AnimationTrack? -- Equip / Shoot / Reload / Inspect : une seule piste d'action à la fois
+local idleTrack = nil :: AnimationTrack? -- piste "Idle" bouclée sous les actions, si l'asset existe
+local currentWeaponCfg = nil
 local lastCamCFrame = nil :: CFrame?
 local swayPos = Vector3.zero
 local swayVel = Vector3.zero
@@ -32,9 +32,31 @@ local SWAY_MAX = math.rad(6)
 local SWAY_SPEED = 18
 local SWAY_DAMPING = 1
 
-local function stopTrack(track: AnimationTrack?)
+-- Réglages de lecture des pistes du viewmodel (fondus en secondes).
+local ANIM_FADE_IN = 0.08 -- entrée d'une action (tir, recharge, equip) : court pour rester réactif
+local ANIM_FADE_OUT = 0.15 -- sortie d'une action interrompue par une autre : évite le "snap" de pose
+local IDLE_FADE_IN = 0.2 -- retour progressif vers l'idle bouclé
+local MATCH_RELOAD_TIME = true -- cale la vitesse de l'anim Reload sur WeaponConfig.ReloadTime
+local RELOAD_SPEED_MIN = 0.75
+local RELOAD_SPEED_MAX = 1.5
+local IDLE_ANIMATION_NAME = "Idle"
+
+-- Cette méthode permet d'arrêter une piste avec un fondu explicite lorsqu'elle existe.
+local function stopTrack(track: AnimationTrack?, fade: number?)
 	if track then
-		track:Stop()
+		track:Stop(fade or ANIM_FADE_OUT)
+	end
+end
+
+-- Cette méthode permet de fixer priorité et bouclage d'une piste lorsqu'elle entre dans le cache :
+-- l'idle reste sous les actions (priorité Idle, bouclé), toute autre piste passe en Action non bouclée.
+local function configureTrack(name: string, track: AnimationTrack)
+	if name == IDLE_ANIMATION_NAME then
+		track.Priority = Enum.AnimationPriority.Idle
+		track.Looped = true
+	else
+		track.Priority = Enum.AnimationPriority.Action
+		track.Looped = false
 	end
 end
 
@@ -52,13 +74,22 @@ end
 local activeViewmodelName = "" -- tracks which cache key is active for fast visibility toggle
 
 local function clearViewmodel()
-	stopTrack(equipTrack)
-	equipTrack = nil
-	stopTrack(shootTrack)
-	shootTrack = nil
-	stopTrack(actionTrack)
+	-- Fondu 0 : le modèle est masqué tout de suite, il ne doit pas réapparaître au prochain equip en fin de fondu.
+	stopTrack(actionTrack, 0)
 	actionTrack = nil
+	stopTrack(idleTrack, 0)
+	idleTrack = nil
+	currentWeaponCfg = nil
 	if activeViewmodel then
+		-- Coupe les sons encore en cours (ex. ClipIn d'une recharge annulée) : sinon ils continuent après le switch.
+		-- Seuls les bruitages mécaniques (Equip/Reload) sont coupés ; le coup de feu garde sa traîne.
+		local foley = {}
+		for _, list in { currentAnimSounds and currentAnimSounds.Equip, currentAnimSounds and currentAnimSounds.Reload } do
+			for _, n in list or {} do
+				table.insert(foley, n)
+			end
+		end
+		AnimationSoundSystem.stopSounds(activeViewmodel, foley)
 		setModelVisibility(activeViewmodelName, false)
 		activeViewmodel = nil
 		activeViewmodelName = ""
@@ -69,10 +100,7 @@ local function clearViewmodel()
 	currentAnimSounds = nil
 	preloadedTracks = {}
 	currentOffset = CFrame.new()
-	for _, c in markerConns do
-		c:Disconnect()
-	end
-	markerConns = {}
+	AnimationSoundSystem.disconnectAll(markerConns)
 end
 
 local function springUpdate(
@@ -172,7 +200,7 @@ local function prewarmViewmodel(tool: Instance)
 			for _, obj in folder:GetChildren() do
 				if obj:IsA("Animation") then
 					local t = animator:LoadAnimation(obj)
-					t.Looped = false
+					configureTrack(obj.Name, t)
 					tracks[obj.Name] = t
 				end
 			end
@@ -183,18 +211,65 @@ local function prewarmViewmodel(tool: Instance)
 	tracksCache[viewmodelName] = tracks
 end
 
-local function playEquipAnimation(model: Model)
-	local track = preloadedTracks["Equip"]
+-- Cette méthode permet de récupérer (ou charger puis mettre en cache) la piste `name` du viewmodel actif
+-- lorsqu'une animation est demandée ; évite de recharger une piste à chaque tir quand le prewarm l'a ratée.
+local function getTrack(name: string): AnimationTrack?
+	local cached = preloadedTracks[name]
+	if cached then
+		return cached
+	end
+	if not activeViewmodel then
+		return nil
+	end
+	local folder = activeViewmodel:FindFirstChild("Animations") or activeViewmodel:FindFirstChild("AnimSaves")
+	local anim = folder and folder:FindFirstChild(name)
+	if not anim or not anim:IsA("Animation") then
+		return nil
+	end
+	local animator = AnimationSoundSystem.getAnimator(activeViewmodel)
+	if not animator then
+		return nil
+	end
+	local track = animator:LoadAnimation(anim)
+	configureTrack(name, track)
+	preloadedTracks[name] = track
+	return track
+end
+
+-- Cette méthode permet de lancer l'idle bouclé sous les actions lorsque le viewmodel en possède un,
+-- pour que la fin d'une action se fonde dans une pose vivante au lieu de retomber sur la pose du rig.
+local function ensureIdle(fade: number)
+	local track = getTrack(IDLE_ANIMATION_NAME)
+	if track and not track.IsPlaying then
+		track:Play(fade)
+	end
+	idleTrack = track
+end
+
+-- Cette méthode permet de démarrer une piste d'action en remplaçant la précédente (fondu croisé) lorsque
+-- l'arme tire, recharge ou s'équipe ; les connexions de marqueurs de l'ancienne piste sont coupées.
+local function startAction(name: string, speed: number?): AnimationTrack?
+	local track = getTrack(name)
 	if not track then
+		return nil
+	end
+	AnimationSoundSystem.disconnectAll(markerConns)
+	-- Même piste relancée (tir répété) : Stop sans fondu pour repartir proprement de 0.
+	stopTrack(actionTrack, if actionTrack == track then 0 else ANIM_FADE_OUT)
+	track:Play(ANIM_FADE_IN, 1, speed or 1)
+	actionTrack = track
+	ensureIdle(IDLE_FADE_IN)
+	return track
+end
+
+-- Cette méthode permet de brancher les sons de WeaponConfig.AnimationSounds[name] sur une piste lorsque
+-- celle-ci vient d'être lancée ; les marqueurs déjà pris par `overrides` sont ignorés pour ne pas jouer deux sons.
+local function connectConfiguredSounds(track: AnimationTrack, name: string, overrides: { [string]: any }?)
+	if not activeViewmodel then
 		return
 	end
-
-	equipTrack = track
-	equipTrack:Play()
-
-	local sounds = currentAnimSounds and currentAnimSounds["Equip"] or {}
-	local newConns = AnimationSoundSystem.connectSoundMarkers(equipTrack, model, sounds)
-	for _, c in newConns do
+	local sounds = AnimationSoundSystem.withoutOverridden(currentAnimSounds and currentAnimSounds[name], overrides)
+	for _, c in AnimationSoundSystem.connectSoundMarkers(track, activeViewmodel, sounds) do
 		table.insert(markerConns, c)
 	end
 end
@@ -209,6 +284,7 @@ local function equipTool(tool: Tool)
 
 	local weaponName = tool:GetAttribute("WeaponName") or tool.Name
 	local cfg = WeaponConfig.Weapons and WeaponConfig.Weapons[weaponName]
+	currentWeaponCfg = cfg
 	currentAnimSounds = cfg and cfg.AnimationSounds or nil
 
 	if not viewmodelCache[viewmodelName] then
@@ -234,7 +310,11 @@ local function equipTool(tool: Tool)
 	end
 	setModelVisibility(viewmodelName, true)
 
-	playEquipAnimation(activeViewmodel)
+	ensureIdle(0)
+	local track = startAction("Equip")
+	if track then
+		connectConfiguredSounds(track, "Equip")
+	end
 end
 
 local function hookTool(tool: Instance)
@@ -247,6 +327,10 @@ local function hookTool(tool: Instance)
 		return
 	end
 	hookedTools[tool :: Tool] = true
+	-- Libère la garde quand l'outil est détruit (respawn) : sinon la table grossit à chaque vie.
+	tool.Destroying:Connect(function()
+		hookedTools[tool :: Tool] = nil
+	end)
 
 	prewarmViewmodel(tool)
 
@@ -272,32 +356,10 @@ function ViewmodelSystem.playAnimation(name: string, markerOverrides: { [string]
 	if not activeViewmodel then
 		return
 	end
-	local animations = activeViewmodel:FindFirstChild("Animations") or activeViewmodel:FindFirstChild("AnimSaves")
-	if not animations then
+	local track = startAction(name)
+	if not track then
 		return
 	end
-	local anim = animations:FindFirstChild(name)
-	if not anim or not anim:IsA("Animation") then
-		return
-	end
-	local animator = AnimationSoundSystem.getAnimator(activeViewmodel)
-	if not animator then
-		return
-	end
-
-	stopTrack(equipTrack)
-	equipTrack = nil
-	stopTrack(actionTrack)
-	actionTrack = nil
-
-	local track = preloadedTracks[name] or animator:LoadAnimation(anim)
-	track.Looped = false
-	track:Play()
-	actionTrack = track
-	for _, c in markerConns do
-		c:Disconnect()
-	end
-	markerConns = {}
 	if markerOverrides then
 		for markerName, value in markerOverrides do
 			local c
@@ -310,13 +372,9 @@ function ViewmodelSystem.playAnimation(name: string, markerOverrides: { [string]
 				table.insert(markerConns, c)
 			end
 		end
-	else
-		local sounds = currentAnimSounds and currentAnimSounds[name] or {}
-		local newConns = AnimationSoundSystem.connectSoundMarkers(track, activeViewmodel, sounds)
-		for _, c in newConns do
-			table.insert(markerConns, c)
-		end
 	end
+	-- Les overrides complètent les sons de WeaponConfig au lieu de les remplacer entièrement.
+	connectConfiguredSounds(track, name, markerOverrides)
 end
 
 function ViewmodelSystem.setVisible(visible: boolean)
@@ -349,35 +407,23 @@ function ViewmodelSystem.getPreloadedTrackLength(name: string): number
 	return t and t.Length or 0
 end
 
-function ViewmodelSystem.playReload(model: Model?)
-	local m = model or activeViewmodel
-	if not m then
+function ViewmodelSystem.playReload(_model: Model?)
+	if not activeViewmodel then
 		return
 	end
-	local animations = m:FindFirstChild("Animations") or m:FindFirstChild("AnimSaves")
-	if not animations then
-		return
+	local speed = 1
+	local reloadTrack = getTrack("Reload")
+	if MATCH_RELOAD_TIME and reloadTrack and currentWeaponCfg then
+		speed = AnimationSoundSystem.computePlaybackSpeed(
+			reloadTrack.Length,
+			currentWeaponCfg.ReloadTime,
+			RELOAD_SPEED_MIN,
+			RELOAD_SPEED_MAX
+		)
 	end
-	local reloadAnim = animations:FindFirstChild("Reload")
-	if not reloadAnim or not reloadAnim:IsA("Animation") then
-		return
-	end
-	local animator = AnimationSoundSystem.getAnimator(m)
-	if not animator then
-		return
-	end
-	stopTrack(equipTrack)
-	equipTrack = nil
-	stopTrack(actionTrack)
-	actionTrack = nil
-	local track = preloadedTracks["Reload"] or animator:LoadAnimation(reloadAnim)
-	track.Looped = false
-	track:Play()
-	actionTrack = track
-	local sounds = currentAnimSounds and currentAnimSounds["Reload"] or {}
-	local newConns = AnimationSoundSystem.connectSoundMarkers(track, m, sounds)
-	for _, c in newConns do
-		table.insert(markerConns, c)
+	local track = startAction("Reload", speed)
+	if track then
+		connectConfiguredSounds(track, "Reload")
 	end
 end
 
