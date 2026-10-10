@@ -9,11 +9,14 @@ local MainMenu = require(script.Parent.Parent.Parent.ui.MainMenu)
 local InfosScreen = require(script.Parent.Parent.Parent.ui.InfosScreen)
 local RoundHUD = require(script.Parent.Parent.Parent.ui.RoundHUD)
 local FeedbackModal = require(script.Parent.Parent.Parent.ui.FeedbackModal)
+local SettingsMenu = require(script.Parent.Parent.Parent.ui.SettingsMenu)
+local Transition = require(script.Parent.Parent.Parent.ui.Transition)
 
 local GameStateController = {}
 
--- Caméra lobby : position fixe en attendant la map définitive
-local LOBBY_CAM_CF = CFrame.new(0, 45, 75) * CFrame.Angles(math.rad(-22), 0, 0)
+-- Caméra lobby : vue d'ensemble de la map actuelle, visible derrière le menu semi-transparent
+local LOBBY_CAM_POS = Vector3.new(469.6, 70.8, 57.5)
+local LOBBY_CAM_CF = CFrame.lookAt(LOBBY_CAM_POS, LOBBY_CAM_POS + Vector3.new(0.792, -0.536, -0.292))
 
 type State = "MENU" | "INFOS" | "SPAWNING" | "IN_ROUND" | "DEAD" | "RESULT"
 
@@ -46,6 +49,7 @@ local function setState(newState: State)
 	state = newState
 
 	if newState == "MENU" then
+		SettingsMenu.close()
 		MainMenu.show()
 		InfosScreen.hide()
 		RoundHUD.hide()
@@ -53,14 +57,23 @@ local function setState(newState: State)
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 		UserInputService.MouseIconEnabled = true
 	elseif newState == "INFOS" then
+		SettingsMenu.close()
 		InfosScreen.show()
+		MainMenu.setPage("infos")
 	elseif newState == "SPAWNING" then
-		MainMenu.hide()
-		InfosScreen.hide()
+		-- Le menu reste visible sous les volets qui se ferment ; il est masqué une fois l'écran couvert
+		SettingsMenu.close()
 		FeedbackModal.hide()
+		Transition.close(function()
+			if state == "SPAWNING" then
+				MainMenu.hide()
+				InfosScreen.hide()
+			end
+		end)
 	elseif newState == "IN_ROUND" then
 		MainMenu.hide()
 		InfosScreen.hide()
+		Transition.open()
 		RoundHUD.show()
 		RoundHUD.hideRespawning()
 		deactivateLobbyCamera()
@@ -168,8 +181,8 @@ function GameStateController.init(player: Player, setupCharacter: (char: Model) 
 
 	-- UI
 	FeedbackModal.init()
-	MainMenu.init(function() -- Play
-		if state ~= "MENU" then
+	MainMenu.init(function() -- Play (depuis l'accueil, Infos ou Settings)
+		if state ~= "MENU" and state ~= "INFOS" then
 			return
 		end
 		setState("SPAWNING")
@@ -180,11 +193,32 @@ function GameStateController.init(player: Player, setupCharacter: (char: Model) 
 		setState("INFOS")
 	end, function() -- Feedback
 		FeedbackModal.show()
+	end, function() -- Settings (page sous la navigation)
+		if state ~= "MENU" and state ~= "INFOS" then
+			return
+		end
+		if state == "INFOS" then
+			setState("MENU")
+		end
+		SettingsMenu.open("page")
+		MainMenu.setPage("settings")
+	end, function() -- Accueil
+		if state == "INFOS" then
+			setState("MENU")
+		end
+		SettingsMenu.close()
+		MainMenu.setPage("home")
+	end)
+	SettingsMenu.setOnClosed(function()
+		if state == "MENU" then
+			MainMenu.setPage("home")
+		end
 	end)
 	InfosScreen.init(function() -- fermer infos
 		setState("MENU")
 	end)
 	RoundHUD.init()
+	Transition.init()
 
 	-- Connexions personnage
 	player.CharacterAdded:Connect(onCharacterAdded)

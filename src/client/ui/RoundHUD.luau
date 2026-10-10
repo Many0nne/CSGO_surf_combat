@@ -1,238 +1,448 @@
+-- HUD de round (direction « Tactical ») : timer et rang en haut, classement (Tab maintenu),
+-- overlay de réapparition (décor désaturé) et bandeau ambre de fin de round.
+local Lighting = game:GetService("Lighting")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
+
+local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
+local UIKit = require(script.Parent.UIKit)
+local HUDRules = require(script.Parent.HUDRules)
+
+local C = UITheme.Colors
+local F = UITheme.Fonts
+local T = UITheme.TextSize
+local Motion = UITheme.Motion
 
 local RoundHUD = {}
 
-local SURFACE = Color3.fromRGB(14, 20, 32)
-local BORDER = Color3.fromRGB(28, 42, 62)
-local ACCENT = Color3.fromRGB(205, 38, 38)
-local WARN = Color3.fromRGB(235, 110, 40)
-local TEXT = Color3.fromRGB(220, 230, 245)
-local MUTED = Color3.fromRGB(72, 92, 120)
-local ROW_ALT = Color3.fromRGB(18, 28, 44)
-
-local FONT_BLK = Enum.Font.GothamBlack
-local FONT_BD = Enum.Font.GothamBold
-local FONT_REG = Enum.Font.Gotham
-local FONT_MON = Enum.Font.Code
+-- Colonnes du classement : largeur fixe (px), alignement ; JOUEUR prend la place restante
+local LB_WIDTH = 700
+local LB_PAD = 22
+local LB_HEADER = 52
+local LB_COLUMNS = 34
+local LB_ROW = 42
+local COL_RANK = 56
+local COL_STAT = 80
 
 local gui: ScreenGui
 local timerLabel: TextLabel
-local leaderboardFrame: Frame
+local timerBar: Frame
+local blinkTween: Tween?
+local lowTime = false
+local rankLabel: TextLabel
+local leaderboard: CanvasGroup
+local leaderboardTimer: TextLabel
 local leaderboardList: Frame
-local respawnFrame: Frame
+local respawnRoot: Frame
+local respawnDim: Frame
+local respawnPanel: CanvasGroup
+local respawnCount: TextLabel
+local respawnCountScale: UIScale
 local respawnLabel: TextLabel
-local resultFrame: Frame
+local deathGrade: ColorCorrectionEffect
+local resultRoot: Frame
+local resultDim: Frame
+local resultBand: Frame
+local resultContent: CanvasGroup
 local resultLabel: TextLabel
 
 local tabConn: RBXScriptConnection?
+local tabEndConn: RBXScriptConnection?
 local respawnTask: thread?
 
-local function addCorner(parent: GuiObject, r: number)
-	local c = Instance.new("UICorner")
-	c.CornerRadius = UDim.new(0, r)
-	c.Parent = parent
+-- ── Timer et rang ──────────────────────────────────────────────────────────────
+
+-- Cette méthode permet de construire le bloc timer + rang collé en haut de l'écran lorsque le HUD est initialisé.
+local function buildTimer(root: Frame)
+	local block = UIKit.frame({
+		Name = "TimerBlock",
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, -1),
+		Size = UDim2.fromOffset(222, 59),
+		BackgroundColor3 = C.PanelDark,
+		BackgroundTransparency = 0.12,
+		Parent = root,
+	})
+	UIKit.stroke(block, C.Border)
+
+	timerLabel = UIKit.text({
+		Name = "Timer",
+		Text = "5:00",
+		FontFace = F.MonoBold,
+		TextSize = 26,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Position = UDim2.fromOffset(0, 8),
+		Size = UDim2.fromOffset(150, 30),
+		Parent = block,
+	})
+	UIKit.text({
+		Text = "FREE FOR ALL",
+		FontFace = F.DisplayMedium,
+		TextSize = T.Micro,
+		TextColor3 = C.Muted,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Position = UDim2.fromOffset(0, 37),
+		Size = UDim2.fromOffset(150, 14),
+		Parent = block,
+	})
+	timerBar = UIKit.frame({
+		Name = "TimerBar",
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.fromScale(0, 1),
+		Size = UDim2.fromOffset(150, 3),
+		BackgroundColor3 = C.Text,
+		Parent = block,
+	})
+	UIKit.frame({
+		Name = "Divider",
+		Position = UDim2.fromOffset(150, 0),
+		Size = UDim2.new(0, 1, 1, 0),
+		BackgroundColor3 = C.Border,
+		Parent = block,
+	})
+	rankLabel = UIKit.text({
+		Name = "Rank",
+		Text = "—",
+		RichText = true,
+		FontFace = F.Display,
+		TextSize = T.Title,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Position = UDim2.fromOffset(151, 9),
+		Size = UDim2.fromOffset(71, 28),
+		Parent = block,
+	})
+	UIKit.text({
+		Text = "RANG",
+		FontFace = F.DisplayMedium,
+		TextSize = 10,
+		TextColor3 = C.Muted,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Position = UDim2.fromOffset(151, 37),
+		Size = UDim2.fromOffset(71, 14),
+		Parent = block,
+	})
 end
 
-local function addStroke(parent: GuiObject, color: Color3, thick: number)
-	local s = Instance.new("UIStroke")
-	s.Color = color
-	s.Thickness = thick
-	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	s.Parent = parent
-end
-
-local function addStripe(parent: GuiObject, color: Color3)
-	local stripe = Instance.new("Frame")
-	stripe.Size = UDim2.new(0, 3, 0.65, 0)
-	stripe.AnchorPoint = Vector2.new(0, 0.5)
-	stripe.Position = UDim2.fromScale(0, 0.5)
-	stripe.BackgroundColor3 = color
-	stripe.BorderSizePixel = 0
-	stripe.Parent = parent
-	addCorner(stripe, 2)
-end
-
--- ── Timer ──────────────────────────────────────────────────────────────────────
-
-local function buildTimer(parent: Frame)
-	local frame = Instance.new("Frame")
-	frame.Size = UDim2.fromOffset(112, 38)
-	frame.AnchorPoint = Vector2.new(0.5, 0)
-	frame.Position = UDim2.new(0.5, 0, 0, 12)
-	frame.BackgroundColor3 = SURFACE
-	frame.BorderSizePixel = 0
-	frame.Parent = parent
-	addCorner(frame, 4)
-	addStroke(frame, BORDER, 1)
-
-	timerLabel = Instance.new("TextLabel")
-	timerLabel.Size = UDim2.fromScale(1, 1)
-	timerLabel.BackgroundTransparency = 1
-	timerLabel.Text = "5:00"
-	timerLabel.TextColor3 = TEXT
-	timerLabel.Font = FONT_MON
-	timerLabel.TextSize = 20
-	timerLabel.Parent = frame
-end
-
--- ── Leaderboard ────────────────────────────────────────────────────────────────
-
-local function buildLeaderboard(parent: Frame)
-	leaderboardFrame = Instance.new("Frame")
-	leaderboardFrame.Size = UDim2.fromOffset(400, 440)
-	leaderboardFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-	leaderboardFrame.Position = UDim2.fromScale(0.5, 0.46)
-	leaderboardFrame.BackgroundColor3 = SURFACE
-	leaderboardFrame.BorderSizePixel = 0
-	leaderboardFrame.Visible = false
-	leaderboardFrame.Parent = parent
-	addCorner(leaderboardFrame, 6)
-	addStroke(leaderboardFrame, BORDER, 1)
-	addStripe(leaderboardFrame, ACCENT)
-
-	local titleRow = Instance.new("Frame")
-	titleRow.Size = UDim2.new(1, -24, 0, 44)
-	titleRow.Position = UDim2.fromOffset(12, 0)
-	titleRow.BackgroundTransparency = 1
-	titleRow.Parent = leaderboardFrame
-
-	local titleLbl = Instance.new("TextLabel")
-	titleLbl.Size = UDim2.fromScale(1, 1)
-	titleLbl.BackgroundTransparency = 1
-	titleLbl.Text = "LEADERBOARD"
-	titleLbl.TextColor3 = TEXT
-	titleLbl.Font = FONT_BLK
-	titleLbl.TextSize = 14
-	titleLbl.TextXAlignment = Enum.TextXAlignment.Left
-	titleLbl.Parent = titleRow
-
-	local colRow = Instance.new("Frame")
-	colRow.Size = UDim2.new(1, -24, 0, 24)
-	colRow.Position = UDim2.fromOffset(12, 44)
-	colRow.BackgroundTransparency = 1
-	colRow.Parent = leaderboardFrame
-
-	local function colHeader(text: string, xScale: number, wScale: number, align: Enum.TextXAlignment)
-		local lbl = Instance.new("TextLabel")
-		lbl.Size = UDim2.fromScale(wScale, 1)
-		lbl.Position = UDim2.fromScale(xScale, 0)
-		lbl.BackgroundTransparency = 1
-		lbl.Text = text
-		lbl.TextColor3 = MUTED
-		lbl.Font = FONT_BD
-		lbl.TextSize = 11
-		lbl.TextXAlignment = align
-		lbl.Parent = colRow
+-- Cette méthode permet de passer le timer en alerte (rouge + clignotement) ou de l'en sortir lorsque le seuil des 30 s est franchi.
+local function setLowTime(low: boolean)
+	if low == lowTime then
+		return
 	end
-
-	colHeader("#", 0, 0.08, Enum.TextXAlignment.Center)
-	colHeader("JOUEUR", 0.08, 0.54, Enum.TextXAlignment.Left)
-	colHeader("K", 0.62, 0.19, Enum.TextXAlignment.Center)
-	colHeader("D", 0.81, 0.19, Enum.TextXAlignment.Center)
-
-	local sep = Instance.new("Frame")
-	sep.Size = UDim2.new(1, -24, 0, 1)
-	sep.Position = UDim2.fromOffset(12, 68)
-	sep.BackgroundColor3 = BORDER
-	sep.BorderSizePixel = 0
-	sep.Parent = leaderboardFrame
-
-	leaderboardList = Instance.new("Frame")
-	leaderboardList.Size = UDim2.new(1, -24, 1, -76)
-	leaderboardList.Position = UDim2.fromOffset(12, 74)
-	leaderboardList.BackgroundTransparency = 1
-	leaderboardList.Parent = leaderboardFrame
-
-	local layout = Instance.new("UIListLayout")
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Padding = UDim.new(0, 2)
-	layout.Parent = leaderboardList
+	lowTime = low
+	local color = low and C.Alert or C.Text
+	UIKit.tween(timerLabel, Motion.Color, { TextColor3 = color })
+	UIKit.tween(timerBar, Motion.Color, { BackgroundColor3 = color })
+	if blinkTween then
+		blinkTween:Cancel()
+		blinkTween = nil
+	end
+	timerLabel.TextTransparency = 0
+	if low then
+		blinkTween = UIKit.tween(timerLabel, Motion.Blink, { TextTransparency = 0.65 })
+	end
 end
 
--- ── Respawn overlay ────────────────────────────────────────────────────────────
+-- ── Classement ─────────────────────────────────────────────────────────────────
 
-local function buildRespawnOverlay(parent: Frame)
-	respawnFrame = Instance.new("Frame")
-	respawnFrame.Size = UDim2.fromOffset(280, 56)
-	respawnFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-	respawnFrame.Position = UDim2.fromScale(0.5, 0.5)
-	respawnFrame.BackgroundColor3 = SURFACE
-	respawnFrame.BorderSizePixel = 0
-	respawnFrame.Visible = false
-	respawnFrame.Parent = parent
-	addCorner(respawnFrame, 4)
-	addStroke(respawnFrame, ACCENT, 1)
-	addStripe(respawnFrame, ACCENT)
-
-	respawnLabel = Instance.new("TextLabel")
-	respawnLabel.Size = UDim2.fromScale(1, 1)
-	respawnLabel.BackgroundTransparency = 1
-	respawnLabel.TextColor3 = TEXT
-	respawnLabel.Font = FONT_BD
-	respawnLabel.TextSize = 14
-	respawnLabel.Parent = respawnFrame
+-- Cette méthode permet de poser les cinq cellules d'une ligne du classement (colonnes fixes) lorsqu'un en-tête ou un joueur est ajouté.
+local function fillColumns(
+	row: GuiObject,
+	values: { string },
+	font: Font,
+	colors: { Color3 },
+	size: number
+): { TextLabel }
+	local labels = {}
+	local rightEdges = { LB_PAD + COL_STAT * 2, LB_PAD + COL_STAT, LB_PAD }
+	labels[1] = UIKit.text({
+		Text = values[1],
+		FontFace = values[1] == "#" and font or F.MonoBold,
+		TextSize = values[1] == "#" and size or T.Small,
+		TextColor3 = colors[1],
+		Position = UDim2.fromOffset(LB_PAD, 0),
+		Size = UDim2.new(0, COL_RANK, 1, 0),
+		Parent = row,
+	})
+	labels[2] = UIKit.text({
+		Text = values[2],
+		FontFace = font,
+		TextSize = size,
+		TextColor3 = colors[2],
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Position = UDim2.fromOffset(LB_PAD + COL_RANK, 0),
+		Size = UDim2.new(1, -(LB_PAD * 2 + COL_RANK + COL_STAT * 3), 1, 0),
+		Parent = row,
+	})
+	for i = 3, 5 do
+		labels[i] = UIKit.text({
+			Text = values[i],
+			FontFace = font,
+			TextSize = size,
+			TextColor3 = colors[i],
+			TextXAlignment = Enum.TextXAlignment.Right,
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.new(1, -rightEdges[i - 2], 0, 0),
+			Size = UDim2.new(0, COL_STAT, 1, 0),
+			Parent = row,
+		})
+	end
+	return labels
 end
 
--- ── Result banner ──────────────────────────────────────────────────────────────
+-- Cette méthode permet de construire le panneau du classement (bandeau ambre, en-têtes, liste) lorsque le HUD est initialisé.
+local function buildLeaderboard(root: Frame)
+	leaderboard = UIKit.create("CanvasGroup", {
+		Name = "Leaderboard",
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 96),
+		Size = UDim2.fromOffset(LB_WIDTH, LB_HEADER + LB_COLUMNS),
+		BackgroundColor3 = C.PanelDark,
+		BackgroundTransparency = 0.05,
+		BorderSizePixel = 0,
+		Visible = false,
+		Parent = root,
+	})
+	UIKit.stroke(leaderboard, C.Border)
 
-local function buildResultBanner(parent: Frame)
-	resultFrame = Instance.new("Frame")
-	resultFrame.Size = UDim2.fromOffset(480, 84)
-	resultFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-	resultFrame.Position = UDim2.fromScale(0.5, 0.4)
-	resultFrame.BackgroundColor3 = SURFACE
-	resultFrame.BorderSizePixel = 0
-	resultFrame.Visible = false
-	resultFrame.Parent = parent
-	addCorner(resultFrame, 6)
-	addStroke(resultFrame, ACCENT, 1)
+	local band = UIKit.frame({
+		Name = "Band",
+		Size = UDim2.new(1, 0, 0, LB_HEADER),
+		BackgroundColor3 = C.Accent,
+		Parent = leaderboard,
+	})
+	UIKit.text({
+		Text = "LEADERBOARD",
+		FontFace = F.Display,
+		TextSize = 20,
+		TextColor3 = C.Ground,
+		Position = UDim2.fromOffset(LB_PAD, 0),
+		Size = UDim2.fromScale(0.6, 1),
+		Parent = band,
+	})
+	leaderboardTimer = UIKit.text({
+		Text = "5:00",
+		FontFace = F.MonoBold,
+		TextSize = T.Small,
+		TextColor3 = C.Ground,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -LB_PAD, 0, 0),
+		Size = UDim2.fromScale(0.3, 1),
+		Parent = band,
+	})
 
-	local topLine = Instance.new("Frame")
-	topLine.Size = UDim2.new(0.38, 0, 0, 2)
-	topLine.AnchorPoint = Vector2.new(0.5, 0)
-	topLine.Position = UDim2.fromScale(0.5, 0)
-	topLine.BackgroundColor3 = ACCENT
-	topLine.BorderSizePixel = 0
-	topLine.Parent = resultFrame
+	local columns = UIKit.frame({
+		Name = "Columns",
+		Position = UDim2.fromOffset(0, LB_HEADER),
+		Size = UDim2.new(1, 0, 0, LB_COLUMNS),
+		BackgroundTransparency = 1,
+		Parent = leaderboard,
+	})
+	local m = C.Muted
+	fillColumns(columns, { "#", "JOUEUR", "K", "D", "K/D" }, F.DisplayMedium, { m, m, m, m, m }, T.Caption)
+	UIKit.frame({
+		Name = "Divider",
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.fromScale(0, 1),
+		Size = UDim2.new(1, 0, 0, 1),
+		BackgroundColor3 = C.Border,
+		Parent = columns,
+	})
 
-	resultLabel = Instance.new("TextLabel")
-	resultLabel.Size = UDim2.fromScale(1, 1)
-	resultLabel.BackgroundTransparency = 1
-	resultLabel.TextColor3 = TEXT
-	resultLabel.Font = FONT_BLK
-	resultLabel.TextSize = 20
-	resultLabel.Parent = resultFrame
+	leaderboardList = UIKit.frame({
+		Name = "Rows",
+		Position = UDim2.fromOffset(0, LB_HEADER + LB_COLUMNS),
+		Size = UDim2.new(1, 0, 1, -(LB_HEADER + LB_COLUMNS)),
+		BackgroundTransparency = 1,
+		Parent = leaderboard,
+	})
+end
+
+-- Cette méthode permet d'afficher le classement en fondu et de faire glisser ses lignes une à une lorsque Tab est enfoncé.
+local function openLeaderboard()
+	if leaderboard.Visible then
+		return
+	end
+	leaderboard.Visible = true
+	leaderboard.GroupTransparency = 1
+	UIKit.tween(leaderboard, Motion.Hover, { GroupTransparency = 0 })
+	for _, row in leaderboardList:GetChildren() do
+		local order = row:GetAttribute("Order")
+		local content = row:FindFirstChild("Content")
+		if order and content and content:IsA("GuiObject") then
+			content.Position = UDim2.fromOffset(0, -6)
+			task.delay(order * Motion.Stagger, function()
+				UIKit.tween(content, Motion.Enter, { Position = UDim2.fromOffset(0, 0) })
+			end)
+		end
+	end
+end
+
+-- ── Réapparition ───────────────────────────────────────────────────────────────
+
+-- Cette méthode permet de construire l'overlay de mort (voile, bloc rouge du compte à rebours, texte) lorsque le HUD est initialisé.
+local function buildRespawnOverlay(root: Frame)
+	respawnRoot = UIKit.frame({
+		Name = "Respawn",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		Visible = false,
+		Parent = root,
+	})
+	respawnDim = UIKit.frame({
+		Name = "Dim",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundColor3 = Color3.new(0, 0, 0),
+		BackgroundTransparency = 0.65,
+		Parent = respawnRoot,
+	})
+	respawnPanel = UIKit.create("CanvasGroup", {
+		Name = "Panel",
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.5, 0, 1, -120),
+		Size = UDim2.fromOffset(460, 78),
+		BackgroundColor3 = C.PanelDark,
+		BackgroundTransparency = 0.05,
+		BorderSizePixel = 0,
+		Parent = respawnRoot,
+	})
+	UIKit.stroke(respawnPanel, C.Border)
+	local block = UIKit.frame({
+		Name = "CountBlock",
+		Size = UDim2.new(0, 96, 1, 0),
+		BackgroundColor3 = C.Danger,
+		Parent = respawnPanel,
+	})
+	respawnCount = UIKit.text({
+		Text = "3",
+		FontFace = F.Display,
+		TextSize = T.Count,
+		TextColor3 = C.White,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromScale(1, 1),
+		Parent = block,
+	})
+	respawnCountScale = UIKit.create("UIScale", { Parent = respawnCount })
+	UIKit.text({
+		Text = "ÉLIMINÉ",
+		FontFace = F.Display,
+		TextSize = T.Title,
+		Position = UDim2.fromOffset(116, 12),
+		Size = UDim2.new(1, -136, 0, 28),
+		Parent = respawnPanel,
+	})
+	respawnLabel = UIKit.text({
+		Text = "",
+		TextSize = 15,
+		TextColor3 = C.TextSoft,
+		Position = UDim2.fromOffset(116, 42),
+		Size = UDim2.new(1, -136, 0, 22),
+		Parent = respawnPanel,
+	})
+end
+
+-- Cette méthode permet d'afficher le nouveau chiffre du compte à rebours avec une pulsation lorsqu'une seconde passe.
+local function popCount(value: number)
+	respawnCount.Text = tostring(value)
+	respawnCount.TextTransparency = 1
+	respawnCountScale.Scale = 1.4
+	UIKit.tween(respawnCount, Motion.Pop, { TextTransparency = 0 })
+	UIKit.tween(respawnCountScale, Motion.Pop, { Scale = 1 })
+end
+
+-- ── Fin de round ───────────────────────────────────────────────────────────────
+
+-- Cette méthode permet de construire le bandeau ambre pleine largeur de fin de round lorsque le HUD est initialisé.
+local function buildResultBanner(root: Frame)
+	resultRoot = UIKit.frame({
+		Name = "Result",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		ClipsDescendants = true,
+		Visible = false,
+		Parent = root,
+	})
+	resultDim = UIKit.frame({
+		Name = "Dim",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundColor3 = Color3.fromRGB(10, 12, 14),
+		BackgroundTransparency = 0.45,
+		Parent = resultRoot,
+	})
+	resultBand = UIKit.frame({
+		Name = "Band",
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.fromScale(0, 0.465),
+		Size = UDim2.new(1, 0, 0, 150),
+		BackgroundColor3 = C.Accent,
+		Parent = resultRoot,
+	})
+	resultContent = UIKit.create("CanvasGroup", {
+		Name = "Content",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Parent = resultBand,
+	})
+	UIKit.text({
+		Text = "ROUND TERMINÉ",
+		FontFace = F.DisplayMedium,
+		TextSize = T.Body,
+		TextColor3 = C.Ground,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Position = UDim2.fromOffset(0, 30),
+		Size = UDim2.new(1, 0, 0, 22),
+		Parent = resultContent,
+	})
+	resultLabel = UIKit.text({
+		Text = "",
+		FontFace = F.Display,
+		TextSize = T.Banner,
+		TextColor3 = C.Ground,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		TextScaled = false,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Position = UDim2.fromOffset(40, 56),
+		Size = UDim2.new(1, -80, 0, 60),
+		Parent = resultContent,
+	})
 end
 
 -- ── API publique ───────────────────────────────────────────────────────────────
 
 function RoundHUD.init()
-	gui = Instance.new("ScreenGui")
-	gui.Name = "RoundHUD"
-	gui.ResetOnSpawn = false
-	gui.IgnoreGuiInset = true
-	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	gui.Enabled = false
-	gui.Parent = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+	gui = UIKit.create("ScreenGui", {
+		Name = "RoundHUD",
+		ResetOnSpawn = false,
+		IgnoreGuiInset = true,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+		Enabled = false,
+		Parent = Players.LocalPlayer:WaitForChild("PlayerGui"),
+	})
+	deathGrade = UIKit.create("ColorCorrectionEffect", {
+		Name = "DeathGrade",
+		Saturation = 0,
+		Enabled = false,
+		Parent = Lighting,
+	})
+	local root = UIKit.scaledRoot(gui)
 
-	local root = Instance.new("Frame")
-	root.Size = UDim2.fromScale(1, 1)
-	root.BackgroundTransparency = 1
-	root.Parent = gui
-
+	buildRespawnOverlay(root)
 	buildTimer(root)
 	buildLeaderboard(root)
-	buildRespawnOverlay(root)
 	buildResultBanner(root)
 
 	tabConn = UserInputService.InputBegan:Connect(function(input, _processed)
 		if input.KeyCode == Enum.KeyCode.Tab then
-			leaderboardFrame.Visible = true
+			openLeaderboard()
 		end
 	end)
-	UserInputService.InputEnded:Connect(function(input)
+	tabEndConn = UserInputService.InputEnded:Connect(function(input)
 		if input.KeyCode == Enum.KeyCode.Tab then
-			leaderboardFrame.Visible = false
+			leaderboard.Visible = false
 		end
 	end)
 end
@@ -241,11 +451,11 @@ function RoundHUD.show()
 	if gui then
 		gui.Enabled = true
 	end
-	if respawnFrame then
-		respawnFrame.Visible = false
+	if respawnRoot then
+		respawnRoot.Visible = false
 	end
-	if resultFrame then
-		resultFrame.Visible = false
+	if resultRoot then
+		resultRoot.Visible = false
 	end
 end
 
@@ -253,120 +463,133 @@ function RoundHUD.hide()
 	if gui then
 		gui.Enabled = false
 	end
+	if deathGrade then
+		deathGrade.Enabled = false
+	end
 end
 
 function RoundHUD.updateTimer(seconds: number)
 	if not timerLabel then
 		return
 	end
-	local m = math.floor(seconds / 60)
-	local s = seconds % 60
-	timerLabel.Text = string.format("%d:%02d", m, s)
-	timerLabel.TextColor3 = seconds <= 30 and WARN or TEXT
+	local text = HUDRules.formatTimer(seconds)
+	timerLabel.Text = text
+	leaderboardTimer.Text = text
+	setLowTime(HUDRules.isLowTime(seconds))
 end
 
-type Score = { name: string, kills: number, deaths: number }
+type Score = HUDRules.Score
 
 function RoundHUD.updateScores(scores: { [number]: Score })
 	if not leaderboardList then
 		return
 	end
 	for _, child in leaderboardList:GetChildren() do
-		if not child:IsA("UIListLayout") then
-			child:Destroy()
-		end
+		child:Destroy()
 	end
 
-	local sorted = {}
-	for _, s in pairs(scores) do
-		table.insert(sorted, s)
-	end
-	table.sort(sorted, function(a, b)
-		if a.kills ~= b.kills then
-			return a.kills > b.kills
-		end
-		return a.deaths < b.deaths
-	end)
+	local sorted = HUDRules.sortScores(scores)
+	local localName = Players.LocalPlayer.Name
+	local rank = HUDRules.rankOf(sorted, localName)
+	rankLabel.Text = rank and string.format('%d<font size="14" color="#9AA0A8">/%d</font>', rank, #sorted) or "—"
 
 	for i, score in sorted do
-		local isTop = i == 1
-		local row = Instance.new("Frame")
-		row.Size = UDim2.new(1, 0, 0, 30)
-		row.BackgroundColor3 = i % 2 == 0 and ROW_ALT or SURFACE
-		row.BackgroundTransparency = i % 2 == 0 and 0 or 0.5
-		row.BorderSizePixel = 0
-		row.LayoutOrder = i
-		row.Parent = leaderboardList
-		addCorner(row, 2)
-
-		local rankLbl = Instance.new("TextLabel")
-		rankLbl.Size = UDim2.fromScale(0.08, 1)
-		rankLbl.BackgroundTransparency = 1
-		rankLbl.Text = tostring(i)
-		rankLbl.TextColor3 = isTop and ACCENT or MUTED
-		rankLbl.Font = isTop and FONT_BLK or FONT_BD
-		rankLbl.TextSize = 12
-		rankLbl.Parent = row
-
-		local nameLbl = Instance.new("TextLabel")
-		nameLbl.Size = UDim2.fromScale(0.54, 1)
-		nameLbl.Position = UDim2.fromScale(0.08, 0)
-		nameLbl.BackgroundTransparency = 1
-		nameLbl.Text = score.name
-		nameLbl.TextColor3 = isTop and TEXT or Color3.fromRGB(180, 195, 215)
-		nameLbl.Font = isTop and FONT_BD or FONT_REG
-		nameLbl.TextSize = 13
-		nameLbl.TextXAlignment = Enum.TextXAlignment.Left
-		nameLbl.Parent = row
-
-		local killLbl = Instance.new("TextLabel")
-		killLbl.Size = UDim2.fromScale(0.19, 1)
-		killLbl.Position = UDim2.fromScale(0.62, 0)
-		killLbl.BackgroundTransparency = 1
-		killLbl.Text = tostring(score.kills)
-		killLbl.TextColor3 = isTop and ACCENT or TEXT
-		killLbl.Font = FONT_BD
-		killLbl.TextSize = 13
-		killLbl.Parent = row
-
-		local deathLbl = Instance.new("TextLabel")
-		deathLbl.Size = UDim2.fromScale(0.19, 1)
-		deathLbl.Position = UDim2.fromScale(0.81, 0)
-		deathLbl.BackgroundTransparency = 1
-		deathLbl.Text = tostring(score.deaths)
-		deathLbl.TextColor3 = MUTED
-		deathLbl.Font = FONT_REG
-		deathLbl.TextSize = 13
-		deathLbl.Parent = row
+		local isMe = score.name == localName
+		local row = UIKit.frame({
+			Name = "Row" .. i,
+			Position = UDim2.fromOffset(0, (i - 1) * LB_ROW),
+			Size = UDim2.new(1, 0, 0, LB_ROW),
+			BackgroundColor3 = C.Accent,
+			BackgroundTransparency = isMe and 0.86 or 1,
+			Parent = leaderboardList,
+		})
+		row:SetAttribute("Order", i)
+		UIKit.frame({
+			Name = "Divider",
+			AnchorPoint = Vector2.new(0, 1),
+			Position = UDim2.fromScale(0, 1),
+			Size = UDim2.new(1, 0, 0, 1),
+			BackgroundColor3 = C.Raised,
+			Parent = row,
+		})
+		if isMe then
+			UIKit.frame({ Name = "MeBar", Size = UDim2.new(0, 3, 1, 0), BackgroundColor3 = C.Accent, Parent = row })
+		end
+		local content = UIKit.frame({
+			Name = "Content",
+			Size = UDim2.fromScale(1, 1),
+			BackgroundTransparency = 1,
+			Parent = row,
+		})
+		local nameColor = C.Text
+		fillColumns(
+			content,
+			{
+				tostring(i),
+				isMe and (score.name .. " (toi)") or score.name,
+				tostring(score.kills),
+				tostring(score.deaths),
+				HUDRules.formatKD(score.kills, score.deaths),
+			},
+			isMe and F.BodyBold or F.Body,
+			{
+				i == 1 and C.Accent or C.Muted,
+				nameColor,
+				C.Text,
+				C.Muted,
+				C.Muted,
+			},
+			T.Body
+		)
 	end
+
+	leaderboard.Size = UDim2.fromOffset(LB_WIDTH, LB_HEADER + LB_COLUMNS + #sorted * LB_ROW + 6)
 end
 
 function RoundHUD.showRespawning(delaySeconds: number)
-	if not respawnFrame then
+	if not respawnRoot then
 		return
 	end
-	respawnFrame.Visible = true
-	local endTime = tick() + delaySeconds
+	respawnRoot.Visible = true
+	respawnDim.BackgroundTransparency = 1
+	UIKit.tween(respawnDim, Motion.Enter, { BackgroundTransparency = 0.65 })
+	UIKit.reveal(respawnPanel, 0, 16)
+	deathGrade.Enabled = true
+	deathGrade.Saturation = 0
+	UIKit.tween(deathGrade, Motion.Enter, { Saturation = -1 })
 
+	local endTime = os.clock() + delaySeconds
+	local shown = -1
 	if respawnTask then
 		task.cancel(respawnTask)
 	end
 	respawnTask = task.spawn(function()
-		while respawnFrame.Visible do
-			local remaining = math.ceil(endTime - tick())
+		while respawnRoot.Visible do
+			local remaining = HUDRules.secondsLeft(endTime, os.clock())
 			if remaining <= 0 then
 				respawnLabel.Text = "Réapparition..."
 				break
 			end
-			respawnLabel.Text = string.format("Réapparition dans %ds", remaining)
-			task.wait(0.1)
+			if remaining ~= shown then
+				shown = remaining
+				popCount(remaining)
+				respawnLabel.Text = string.format("Réapparition dans %ds", remaining)
+			end
+			task.wait(0.05)
 		end
 	end)
 end
 
 function RoundHUD.hideRespawning()
-	if respawnFrame then
-		respawnFrame.Visible = false
+	if respawnRoot then
+		respawnRoot.Visible = false
+	end
+	if deathGrade then
+		UIKit.tween(deathGrade, Motion.Exit, { Saturation = 0 }).Completed:Connect(function()
+			if not (respawnRoot and respawnRoot.Visible) then
+				deathGrade.Enabled = false
+			end
+		end)
 	end
 	if respawnTask then
 		task.cancel(respawnTask)
@@ -375,16 +598,26 @@ function RoundHUD.hideRespawning()
 end
 
 function RoundHUD.showResult(winnerName: string)
-	if not resultFrame then
+	if not resultRoot then
 		return
 	end
-	resultLabel.Text = string.format("🏆  %s  remporte le round !", winnerName)
-	resultFrame.Visible = true
+	leaderboard.Visible = false
+	resultLabel.Text = string.upper(winnerName) .. " REMPORTE LE ROUND !"
+	resultRoot.Visible = true
+	resultDim.BackgroundTransparency = 1
+	UIKit.tween(resultDim, Motion.Enter, { BackgroundTransparency = 0.45 })
+	resultBand.Position = UDim2.fromScale(-1, 0.465)
+	UIKit.tween(resultBand, Motion.Band, { Position = UDim2.fromScale(0, 0.465) })
+	resultContent.GroupTransparency = 1
+	resultContent.Position = UDim2.fromOffset(40, 0)
+	task.delay(0.35, function()
+		UIKit.tween(resultContent, Motion.Enter, { GroupTransparency = 0, Position = UDim2.fromOffset(0, 0) })
+	end)
 end
 
 function RoundHUD.hideResult()
-	if resultFrame then
-		resultFrame.Visible = false
+	if resultRoot then
+		resultRoot.Visible = false
 	end
 end
 
@@ -392,6 +625,13 @@ function RoundHUD.destroy()
 	if tabConn then
 		tabConn:Disconnect()
 		tabConn = nil
+	end
+	if tabEndConn then
+		tabEndConn:Disconnect()
+		tabEndConn = nil
+	end
+	if deathGrade then
+		deathGrade:Destroy()
 	end
 	if gui then
 		gui:Destroy()
