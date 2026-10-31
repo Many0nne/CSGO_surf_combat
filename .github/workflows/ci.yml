@@ -10,6 +10,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # les .rbxm de assets/rbx/ sont en LFS : sans cela, rojo build lirait des pointeurs
+          lfs: true
 
       - uses: CompeyDev/setup-rokit@v0.2.1
         with:
@@ -21,3 +24,6 @@ jobs:
 
       - name: Build Rojo
         run: rojo build default.project.json -o CSGO.rbxlx
+
+      - name: Viewmodels et Tools dans la place
+        run: lune run tools/rbxm/verify_place.luau CSGO.rbxlx
