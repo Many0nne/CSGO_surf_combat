@@ -12,3 +12,6 @@ tools/globalTypes*.d.luau
 
 # Sauvegardes automatiques de Blender
 *.blend1
+
+# Worktrees de travail en parallele (scripts/csgo-worktree.ps1)
+/worktrees/

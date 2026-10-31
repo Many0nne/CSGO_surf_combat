@@ -86,6 +86,49 @@ CSGO/
       *.spec.luau
 ```
 
+## Workflow d'une tâche (feature, bug…)
+
+1. Créer le worktree et démarrer son serveur Rojo : `.\scripts\csgo-worktree.ps1 <feature|fix>/<n>-<slug>` (le thread T3
+   courant est inscrit comme propriétaire pour le nettoyage). Travailler uniquement dans ce worktree.
+2. Implémenter, puis `bash tools/check.sh` dans le worktree. Vérifier en jeu via le MCP Studio si le changement le demande
+   (Studio connecté au port du worktree, voir ci-dessous).
+3. Besoin d'un avis de l'utilisateur (gameplay, rendu, UI) : lui donner le port Rojo du worktree (`34872+N`), la procédure
+   de connexion Studio ci-dessous, et le scénario à suivre (étapes, ce qu'il faut observer). Attendre son retour.
+4. Fonctionnement vérifié (et validé par l'utilisateur si l'étape 3 s'appliquait) : commit, push, `gh pr create --base main`
+   avec `Closes #<n>` dans la description si une issue est liée, puis fermer le thread (settle via `t3_thread_organize`).
+5. Pas de merge sans ordre explicite. Le nettoyage automatique arrête Rojo une fois le thread fermé, et supprime le worktree
+   et la branche locale une fois la PR mergée (à la main : `.\scripts\csgo-worktree.ps1 <branche> -Remove`).
+
+## Worktrees (travail en parallèle)
+
+Une branche = un worktree `worktrees/csgo-<slug>/` (slug = branche avec `/` → `-`) = un `rojo serve` sur son propre port.
+Script idempotent, à relancer au début de chaque tâche (PowerShell, depuis la racine du checkout principal) :
+
+```powershell
+.\scripts\csgo-worktree.ps1 feature/x             # crée/réutilise, lance rojo serve, vérifie [OK (200)]
+.\scripts\csgo-worktree.ps1 fix/y -Base feature/x # nouvelle branche depuis une autre base (défaut : main)
+.\scripts\csgo-worktree.ps1 feature/x -NoUp       # sans démarrer Rojo
+.\scripts\csgo-worktree.ps1 feature/x -Stop       # arrête Rojo
+.\scripts\csgo-worktree.ps1 feature/x -Remove     # arrête Rojo, supprime le worktree (branche gardée)
+```
+
+- Ports par slot N : checkout principal = slot 0 = `34872` (`rojo serve` lancé à la main), worktrees `34872+N` (34873, 34874…).
+- Port, pid et journal du serveur d'un worktree : `worktrees/.run/<slug>.port|.pid|.log` (hors du worktree, rien de versionné).
+- Connecter Studio à un worktree (le plugin Rojo ne se connecte qu'en mode **Edit** ; en Play il renvoie
+  `Http requests can only be executed by game server`) :
+  1. Studio en mode Edit (arrêter le playtest s'il tourne), Disconnect dans le plugin Rojo s'il est connecté ailleurs.
+  2. Plugin Rojo : saisir le port du worktree (affiché par le script), Connect.
+  3. Pour revenir au checkout principal : Disconnect, port `34872`, Connect.
+- Une fenêtre Studio ne suit qu'un serveur Rojo à la fois : deux tâches qui doivent tester en jeu en même temps ont besoin
+  de deux fenêtres Studio (le MCP cible alors l'instance choisie, voir `list_roblox_studios`), sinon elles se relaient.
+- Lancer `bash tools/check.sh`, `rojo build` et `lune run …` depuis le worktree concerné.
+- Nettoyage auto (registre `worktrees/.owners.json`) : `scripts/csgo-worktree-cleanup.ps1` arrête Rojo quand les threads T3
+  du worktree ne sont plus actifs (settled, archivés), et supprime le worktree quand la PR de la branche est mergée
+  (ou fermée sans merge) et que tout est poussé ; la branche locale est aussi supprimée si la PR est mergée. Fermer ou
+  archiver un thread ne supprime jamais rien à lui seul. Tâche planifiée (toutes les 10 min, à réinstaller sur un nouveau
+  poste) : `scripts/install-cleanup-task.ps1`. À chaque passage, elle avance aussi le checkout principal sur `origin/main`
+  (fast-forward, seulement s'il est sur `main` sans modification).
+
 ## Rojo Mapping
 
 - `src/shared` -> `ReplicatedStorage/Shared`
@@ -177,7 +220,7 @@ CSGO/
 ## Common Commands
 
 ```bash
-rojo serve
+rojo serve                  # checkout principal, port 34872 (worktrees : scripts/csgo-worktree.ps1)
 rojo build -o "CSGO.rbxlx"
 bash tools/check.sh         # selene + stylua --check + luau-lsp analyze sur src/, puis tests Lune
 lune run tests/run.luau     # tests unitaires seuls
