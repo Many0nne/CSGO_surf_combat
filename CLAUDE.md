@@ -158,22 +158,27 @@ Mettre à jour un `.rbxm` (après modification d'une arme dans Studio, ou pour a
 
 1. Dans Studio (mode Edit), modifier ou ajouter l'instance sous `ReplicatedStorage.ViewModels` ou dans `StarterPack`
    (noms en `[A-Za-z0-9_-]`). Rojo n'écrit jamais vers les fichiers : la modification n'existe que dans Studio.
-2. Depuis la racine du worktree : `lune run tools/rbxm/receive.luau` (serveur local, port 34990, attend Studio).
+2. Depuis la racine du worktree : `lune run tools/rbxm/receive.luau` (serveur local, port fixe 34990, attend Studio ;
+   un seul export à la fois, tous worktrees confondus).
 3. Exécuter `tools/rbxm/studio_export.luau` dans Studio : via le MCP (`execute_luau`, contexte Edit, coller le contenu du
-   fichier) ou la barre de commande. Il sérialise (`SerializationService`) chaque viewmodel et chaque Tool et les envoie
-   au serveur, qui écrit `assets/rbx/ViewModels/<Nom>.rbxm` et `assets/rbx/Tools/<Nom>.rbxm`, puis s'arrête.
+   fichier) ou la barre de commande (exige Game Settings > Security > *Allow HTTP Requests*). Il vérifie les noms (un
+   fichier par instance, sans doublon) et que `StarterPack` ne contient que des Tools, sérialise (`SerializationService`)
+   chaque viewmodel et chaque Tool et les envoie au serveur, qui écrit `assets/rbx/ViewModels/<Nom>.rbxm` et
+   `assets/rbx/Tools/<Nom>.rbxm`, supprime les `.rbxm` qui n'existent plus dans la place, puis s'arrête. Si l'export
+   échoue dans Studio, le serveur s'arrête en erreur sans rien supprimer.
    Sans MCP : clic droit sur l'instance > *Save to File…* > `assets/rbx/<Dossier>/<Nom>.rbxm` (format binaire).
 4. `rojo build default.project.json -o CSGO.rbxlx && lune run tools/rbxm/verify_place.luau` : relit la place produite,
    liste viewmodels et Tools (animations, sons, scripts, MeshParts, attributs), échoue si un viewmodel ou un Tool manque,
    si un `ViewmodelName` ne pointe vers aucun viewmodel, ou si une animation ou un mesh n'a pas d'id ; signale les Tools
    sans entrée dans `WeaponConfig.Weapons` (attribut `WeaponName`, sinon nom du Tool). Lancé aussi par la CI.
-5. Relire `git diff --stat` (seuls les fichiers voulus doivent changer : l'export réécrit tout) et commiter.
+5. Relire `git status` (l'export réécrit tous les fichiers : seuls ceux des armes modifiées doivent différer) et commiter.
 
 Notes :
 - Studio écrit les ids sous leurs noms récents (`AnimationContent`, `AudioContent`, `MeshContent`) : Lune 0.9 ne les
   expose pas tous ni ne relit tous les `.rbxm` de Studio (`Animation.Tags`), d'où la vérification sur la place XML
   produite par Rojo plutôt que sur les `.rbxm`.
-- Le plugin Rojo crée les MeshParts via `/api/serialize` (le `MeshId` n'est pas modifiable par un plugin).
+- `MeshPart.MeshId` n'est pas modifiable par un plugin : Rojo 7.7 passe par son endpoint `/api/serialize` pour créer
+  ces instances. Après une synchro, vérifier que les MeshParts ont bien leur mesh (voir la transition ci-dessous).
 
 Transition d'une place qui contient déjà ces instances (une fois, pour éviter les doublons et l'ancienne version) :
 1. Studio en mode Edit, plugin Rojo déconnecté. Supprimer `ReplicatedStorage.ViewModels` (le dossier entier) et les Tools

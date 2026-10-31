@@ -31,14 +31,27 @@ local function rbxmNames(dir: string): { string }
 	return names
 end
 
+-- propriétés d'id par classe : nom récent écrit par Studio, puis ancien nom
+local ID_PROPS = {
+	Animation = { "AnimationContent", "AnimationId" },
+	Sound = { "AudioContent", "SoundId" },
+	MeshPart = { "MeshContent", "MeshId" },
+}
+
 -- Cette méthode permet de relever les ids d'assets (animations, sons, meshes) en lisant le XML de la place
 -- lorsque Studio les écrit sous leurs noms récents (AnimationContent, AudioContent, MeshContent), que Lune 0.9 ignore.
 local function scanAssetIds(xml: string): { [string]: { { name: string, uri: string? } } }
 	local found = { Animation = {}, Sound = {}, MeshPart = {} }
 	for class, props in string.gmatch(xml, '<Item class="(%w+)" referent="[^"]*">%s*<Properties>(.-)</Properties>') do
-		if found[class] then
-			local uri = string.match(props, '<Content name="%w+">%s*<uri>(.-)</uri>')
-				or string.match(props, '<Content name="%w+">%s*<url>(.-)</url>')
+		local idProps = ID_PROPS[class]
+		if idProps then
+			-- seulement la propriété d'id de la classe (pas TextureID ni une autre Content du même item)
+			local uri
+			for _, prop in idProps do
+				uri = uri
+					or string.match(props, '<Content name="' .. prop .. '">%s*<uri>(.-)</uri>')
+					or string.match(props, '<Content name="' .. prop .. '">%s*<url>(.-)</url>')
+			end
 			table.insert(found[class], { name = string.match(props, '<string name="Name">(.-)</string>'), uri = uri })
 		end
 	end
@@ -72,10 +85,15 @@ local function summarize(inst): string
 	)
 end
 
--- clés de WeaponConfig.Weapons (lecture textuelle : entrées au premier niveau d'indentation de la table)
+-- clés de WeaponConfig.Weapons (lecture textuelle, limitée au bloc de la table : entrées indentées d'une tabulation)
 local weaponKeys = {}
-for key in string.gmatch(fs.readFile("src/shared/WeaponConfig.luau"), "\n\t([%w_]+) = {") do
-	weaponKeys[key] = true
+local weaponsBlock = string.match(fs.readFile("src/shared/WeaponConfig.luau"), "\nWeaponConfig%.Weapons = {(.-)\n}")
+if not weaponsBlock then
+	fail("bloc WeaponConfig.Weapons introuvable dans src/shared/WeaponConfig.luau")
+else
+	for key in string.gmatch(weaponsBlock, '\n\t%[?"?([%w_]+)"?%]?%s*=%s*{') do
+		weaponKeys[key] = true
+	end
 end
 
 local viewModels = game.ReplicatedStorage:FindFirstChild("ViewModels")
