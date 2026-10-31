@@ -186,7 +186,7 @@ bash tools/check.sh --fix   # idem, en appliquant le formatage StyLua
 
 ## Outillage qualité
 
-- Outils gérés par Aftman (`aftman.toml`) : `stylua`, `selene`, `luau-lsp`. Binaires dans `~/.aftman/bin`.
+- Outils déclarés dans `aftman.toml` (`rojo`, `stylua`, `selene`, `luau-lsp`, `lune`) : installés en local par Rokit (binaires dans `~/.rokit/bin`), par Aftman en CI (`~/.aftman/bin`). `tools/check.sh` ajoute les deux dossiers au PATH.
 - Configs : `stylua.toml` (tabs, guillemets doubles, 120 colonnes), `selene.toml` (std roblox, règles par défaut), `.luaurc` (mode `nonstrict`).
 - Les fichiers de constantes (`CameraConfig`, `GameConfig`, `MovementConfig`, `BotConfig`) sont exclus de StyLua via `-- stylua: ignore` pour garder l'alignement en colonnes : respecter cet alignement à la main quand on les modifie.
 - Après toute modification de code `.luau`, lancer `bash tools/check.sh` et ne pas introduire de nouvel avertissement.

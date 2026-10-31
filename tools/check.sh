@@ -3,7 +3,8 @@
 # Usage : bash tools/check.sh [--fix]   (--fix applique le formatage StyLua)
 set -u
 cd "$(dirname "$0")/.."
-export PATH="$HOME/.aftman/bin:$PATH"
+# Binaires installés par Rokit (lit aftman.toml) en local, Aftman en CI
+export PATH="$HOME/.rokit/bin:$HOME/.aftman/bin:$PATH"
 
 # Définitions de types alignées sur la version de luau-lsp déclarée dans aftman.toml
 LSP_VERSION=$(sed -n 's/^luau-lsp *= *"[^@]*@\([0-9.]*\)".*/\1/p' aftman.toml)
