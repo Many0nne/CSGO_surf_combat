@@ -9,3 +9,6 @@ sourcemap.json
 
 # Définitions de types Roblox pour luau-lsp (téléchargées par tools/check.sh)
 tools/globalTypes*.d.luau
+
+# Sauvegardes automatiques de Blender
+*.blend1

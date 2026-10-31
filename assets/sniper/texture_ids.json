@@ -1,0 +1,7 @@
+{
+  "WOOD":    { "Color": "rbxassetid://75868329868329",  "Normal": "rbxassetid://84923351785061",  "Roughness": "rbxassetid://73421055939422" },
+  "METAL_A": { "Color": "rbxassetid://124363113073590", "Normal": "rbxassetid://120164289556718", "Roughness": "rbxassetid://93691038410316",  "Metalness": "rbxassetid://79763104248462" },
+  "METAL_B": { "Color": "rbxassetid://110609219703262", "Normal": "rbxassetid://137832408025031", "Roughness": "rbxassetid://107951938915101", "Metalness": "rbxassetid://75587214683153" },
+  "SCOPE":   { "Color": "rbxassetid://133882205783830", "Normal": "rbxassetid://122773989905220", "Roughness": "rbxassetid://121667095634301", "Metalness": "rbxassetid://135259496881594" },
+  "_parts":  { "WOOD": ["Stock", "Handguard"], "METAL_A": ["Handle", "Bolt", "Magazine", "Trigger"], "METAL_B": ["Barrel", "Fittings"], "SCOPE": ["Scope"], "GLASS": ["ScopeLens"] }
+}

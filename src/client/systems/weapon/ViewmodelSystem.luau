@@ -12,6 +12,7 @@ local currentAnimSounds = nil :: { [string]: { string } }?
 local preloadedTracks = {} :: { [string]: AnimationTrack }
 local markerConns = {} :: { RBXScriptConnection }
 local boundStepName = "ViewmodelUpdate"
+local idleTrack = nil :: AnimationTrack?
 local equipTrack = nil :: AnimationTrack?
 local shootTrack = nil :: AnimationTrack?
 local actionTrack = nil :: AnimationTrack?
@@ -31,6 +32,7 @@ local SWAY_STRENGTH = 3.5
 local SWAY_MAX = math.rad(6)
 local SWAY_SPEED = 18
 local SWAY_DAMPING = 1
+local IDLE_ANIMATION = "Idle"
 
 local function stopTrack(track: AnimationTrack?)
 	if track then
@@ -52,6 +54,8 @@ end
 local activeViewmodelName = "" -- tracks which cache key is active for fast visibility toggle
 
 local function clearViewmodel()
+	stopTrack(idleTrack)
+	idleTrack = nil
 	stopTrack(equipTrack)
 	equipTrack = nil
 	stopTrack(shootTrack)
@@ -172,7 +176,12 @@ local function prewarmViewmodel(tool: Instance)
 			for _, obj in folder:GetChildren() do
 				if obj:IsA("Animation") then
 					local t = animator:LoadAnimation(obj)
-					t.Looped = false
+					-- "Idle" = pose de tenue en boucle, jouée sous les actions (Equip/Shoot/Reload)
+					local isIdle = obj.Name == IDLE_ANIMATION
+					t.Looped = isIdle
+					if isIdle then
+						t.Priority = Enum.AnimationPriority.Idle
+					end
 					tracks[obj.Name] = t
 				end
 			end
@@ -181,6 +190,17 @@ local function prewarmViewmodel(tool: Instance)
 
 	viewmodelCache[viewmodelName] = model
 	tracksCache[viewmodelName] = tracks
+end
+
+-- Cette méthode permet de lancer la boucle Idle du viewmodel (si l'arme en a une) dès l'équipement,
+-- pour que la tenue reste vivante entre deux actions au lieu de revenir à la pose de repos du rig.
+local function playIdleAnimation()
+	local track = preloadedTracks[IDLE_ANIMATION]
+	if not track then
+		return
+	end
+	idleTrack = track
+	track:Play(0)
 end
 
 local function playEquipAnimation(model: Model)
@@ -234,6 +254,7 @@ local function equipTool(tool: Tool)
 	end
 	setModelVisibility(viewmodelName, true)
 
+	playIdleAnimation()
 	playEquipAnimation(activeViewmodel)
 end
 
