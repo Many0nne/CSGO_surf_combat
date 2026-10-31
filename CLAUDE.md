@@ -191,6 +191,7 @@ bash tools/check.sh --fix   # idem, en appliquant le formatage StyLua
 - Les fichiers de constantes (`CameraConfig`, `GameConfig`, `MovementConfig`, `BotConfig`) sont exclus de StyLua via `-- stylua: ignore` pour garder l'alignement en colonnes : respecter cet alignement à la main quand on les modifie.
 - Après toute modification de code `.luau`, lancer `bash tools/check.sh` et ne pas introduire de nouvel avertissement.
 - Tests unitaires (Lune, hors Roblox) dans `tests/specs/*.spec.luau` : chaque spec retourne `function(T, Loader)`. `Loader.new({ Players = mock }):require("src/...")` charge un module de `src/` en simulant `game:GetService` et le `require` d'Instances Rojo ; les services non simulés lèvent une erreur. Seuls les modules sans raycast/`workspace` sont testables (physique pure, `Validator`). Ajouter un test pour toute correction de bug physique.
+- Git LFS : les binaires d'assets (`*.blend`, `*.fbx`, `*.obj`, images, sons) sont suivis par LFS via `.gitattributes`. Installer `git lfs` puis `git lfs install` avant de cloner. Un nouveau format binaire doit être ajouté à `.gitattributes` avant son premier commit.
 - CI GitHub Actions (`.github/workflows/ci.yml`) : sur chaque PR et push sur `main`, lance `tools/check.sh` puis `rojo build`. Les définitions de types luau-lsp sont téléchargées pour la version déclarée dans `rokit.toml`.
 
 ## Roblox Studio MCP
