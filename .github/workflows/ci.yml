@@ -11,9 +11,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: ok-nick/setup-aftman@v0.4.2
+      - uses: CompeyDev/setup-rokit@v0.2.1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          version: v1.2.0
+          cache: true
 
       - name: Lint, format et typecheck
         run: bash tools/check.sh

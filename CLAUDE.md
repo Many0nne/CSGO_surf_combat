@@ -8,7 +8,7 @@ Projet Rojo qui synchronise une expérience Roblox depuis l'arborescence `src/`.
 
 ```text
 CSGO/
-  aftman.toml
+  rokit.toml
   CLAUDE.md
   CSGO.rbxlx
   default.project.json
@@ -95,7 +95,7 @@ CSGO/
 ## Description des fichiers
 
 - `default.project.json`: configuration Rojo qui mappe l'arborescence `src/` vers le projet Roblox.
-- `aftman.toml`: gère la version et la configuration de Rojo (outil de synchronisation/build).
+- `rokit.toml`: versions des outils (Rojo, StyLua, Selene, luau-lsp, Lune) gérées par Rokit.
 - `CLAUDE.md`: guide de contexte et conventions pour travailler dans ce dépôt.
 - `SPEC.md`: spécification détaillée du projet (mappings, architecture, constantes). Utilisez-le comme source de vérité.
 - `src/`: code source organisé par rôle : `client/`, `server/`, `shared/`.
@@ -112,7 +112,7 @@ CSGO/
 ## Notes
 
 - Garder `default.project.json` synchronisé avec l'arborescence `src/` (mappings Rojo).
-- `aftman.toml` gère la version de Rojo utilisée.
+- `rokit.toml` gère la version de Rojo et des outils qualité (`rokit install` pour les installer).
 - `SPEC.md` contient la spécification détaillée (mappings, architecture, constantes). Utilisez-le comme source de vérité pour la structure des fichiers.
 - Valeurs récentes : `RUN_SPEED=30`, `AIR_SPEED_CAP=6`, `AIR_ACCEL=150`, `GROUND_ACCEL=12`, `GRAVITY=-110`, `MAX_FALL_SPEED=130`, `AUTO_BHOP=true`.
 - Consigne de lecture : pour les revues de code, analyses ou demandes de modification, ne lire que les fichiers strictement concernés par l'étape ou la demande.
@@ -186,12 +186,12 @@ bash tools/check.sh --fix   # idem, en appliquant le formatage StyLua
 
 ## Outillage qualité
 
-- Outils gérés par Aftman (`aftman.toml`) : `stylua`, `selene`, `luau-lsp`. Binaires dans `~/.aftman/bin`.
+- Outils gérés par Rokit (`rokit.toml`) : `rojo`, `stylua`, `selene`, `luau-lsp`, `lune`. Binaires dans `~/.rokit/bin` ; installer avec `rokit install`.
 - Configs : `stylua.toml` (tabs, guillemets doubles, 120 colonnes), `selene.toml` (std roblox, règles par défaut), `.luaurc` (mode `nonstrict`).
 - Les fichiers de constantes (`CameraConfig`, `GameConfig`, `MovementConfig`, `BotConfig`) sont exclus de StyLua via `-- stylua: ignore` pour garder l'alignement en colonnes : respecter cet alignement à la main quand on les modifie.
 - Après toute modification de code `.luau`, lancer `bash tools/check.sh` et ne pas introduire de nouvel avertissement.
 - Tests unitaires (Lune, hors Roblox) dans `tests/specs/*.spec.luau` : chaque spec retourne `function(T, Loader)`. `Loader.new({ Players = mock }):require("src/...")` charge un module de `src/` en simulant `game:GetService` et le `require` d'Instances Rojo ; les services non simulés lèvent une erreur. Seuls les modules sans raycast/`workspace` sont testables (physique pure, `Validator`). Ajouter un test pour toute correction de bug physique.
-- CI GitHub Actions (`.github/workflows/ci.yml`) : sur chaque PR et push sur `main`, lance `tools/check.sh` puis `rojo build`. Les définitions de types luau-lsp sont téléchargées pour la version déclarée dans `aftman.toml`.
+- CI GitHub Actions (`.github/workflows/ci.yml`) : sur chaque PR et push sur `main`, lance `tools/check.sh` puis `rojo build`. Les définitions de types luau-lsp sont téléchargées pour la version déclarée dans `rokit.toml`.
 
 ## Roblox Studio MCP
 

@@ -3,10 +3,10 @@
 # Usage : bash tools/check.sh [--fix]   (--fix applique le formatage StyLua)
 set -u
 cd "$(dirname "$0")/.."
-export PATH="$HOME/.aftman/bin:$PATH"
+export PATH="$HOME/.rokit/bin:$PATH"
 
-# Définitions de types alignées sur la version de luau-lsp déclarée dans aftman.toml
-LSP_VERSION=$(sed -n 's/^luau-lsp *= *"[^@]*@\([0-9.]*\)".*/\1/p' aftman.toml)
+# Définitions de types alignées sur la version de luau-lsp déclarée dans rokit.toml
+LSP_VERSION=$(sed -n 's/^luau-lsp *= *"[^@]*@\([0-9.]*\)".*/\1/p' rokit.toml)
 DEFS="tools/globalTypes-$LSP_VERSION.d.luau"
 if [ ! -f "$DEFS" ]; then
 	curl -sSfL -o "$DEFS" "https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/$LSP_VERSION/scripts/globalTypes.d.luau" || exit 1
