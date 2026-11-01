@@ -1,5 +1,9 @@
 # RETEX : viewmodel M9 Bayonet (modèle Blender + animations), 2026-10-31
 
+> Mise à jour (issue #26) : le modèle procédural a été remplacé par le mesh du Creator Store `18775128699`, et
+> `build_knife.py`, le `.blend` et le FBX ont été retirés (voir l'historique git). `build_viewmodel.py` reste la source
+> des animations Equip et Shoot, avec un simple volume à la place du couteau.
+
 Session interrompue avant validation : le modèle procédural n'était pas assez bon et le slash n'a jamais pu être
 testé en jeu. Ce document liste ce qui a bloqué, ce qui a marché, et ce qu'il faut mettre en place pour aller plus vite.
 

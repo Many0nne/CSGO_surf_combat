@@ -48,11 +48,12 @@ WeaponConfig.Weapons = {
 		IsMelee = true,
 		MeleeRange = 7.5,
 		BackstabMultiplier = 2,
-		-- Pièces dans le repère de la Handle : +Z = axe du couteau (vers la pointe), +X = tranchant.
+		-- Mesh unique dans le repère de la Handle : +Z = axe du couteau (vers la pointe), +X = tranchant.
+		-- Son origine est le centre du mesh : le centre du manche est à 1,21 stud derrière (Z = -1,21 × Scale).
 		-- Prise marteau : lame dressée hors du poing, tranchant vers l'avant de l'avant-bras.
 		ThirdPerson = {
-			Scale = 0.35,
-			Grip = CFrame.fromMatrix(Vector3.new(0, -0.15, 0), Vector3.new(0, -1, 0), Vector3.new(-1, 0, 0)),
+			Scale = 0.6,
+			Grip = CFrame.fromMatrix(Vector3.new(0, -0.13, -0.726), Vector3.new(0, -1, 0), Vector3.new(-1, 0, 0)),
 			Pose = "Melee",
 		},
 		AnimationSounds = {
