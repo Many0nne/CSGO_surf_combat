@@ -12,6 +12,16 @@ CSGO/
   CLAUDE.md
   CSGO.rbxlx
   default.project.json
+  assets/
+    rbx/
+      ViewModels/*.rbxm
+      Tools/*.rbxm
+  tools/
+    check.sh
+    rbxm/
+      receive.luau
+      studio_export.luau
+      verify_place.luau
   feedback.md
   GAME_SYSTEM_SPEC.md
   logs.md
@@ -134,10 +144,60 @@ Script idempotent, à relancer au début de chaque tâche (PowerShell, depuis la
 - `src/shared` -> `ReplicatedStorage/Shared`
 - `src/server` -> `ServerScriptService/Server`
 - `src/client` -> `StarterPlayerScripts/Client`
+- `assets/rbx/ViewModels/<Nom>.rbxm` -> `ReplicatedStorage/ViewModels/<Nom>` (viewmodels FPS, aussi clonés pour l'arme 3P)
+- `assets/rbx/Tools/<Nom>.rbxm` -> `StarterPack/<Nom>` (Tools des armes, attribut `ViewmodelName`)
+
+## Viewmodels et Tools (.rbxm)
+
+Les viewmodels et les Tools sont versionnés en `.rbxm` binaires (Git LFS, `assets/rbx/**`) et synchronisés par Rojo :
+une branche peut modifier une arme sans manipulation dans la place. Un fichier = une instance racine, nommée d'après le
+fichier. Rojo gère `ReplicatedStorage.ViewModels` et `StarterPack` : une instance ajoutée à la main dans Studio devrait y
+être supprimée à la connexion (déduit du comportement de `$path`, pas encore testé en synchro live), et toute modification
+faite dans Studio est perdue si elle n'est pas réexportée.
+
+Mettre à jour un `.rbxm` (après modification d'une arme dans Studio, ou pour ajouter une arme) :
+
+1. Dans Studio (mode Edit), modifier ou ajouter l'instance sous `ReplicatedStorage.ViewModels` ou dans `StarterPack`
+   (noms en `[A-Za-z0-9_-]`). Rojo n'écrit jamais vers les fichiers : la modification n'existe que dans Studio.
+2. Depuis la racine du worktree : `lune run tools/rbxm/receive.luau` (serveur local, port fixe 34990, attend Studio ;
+   un seul export à la fois, tous worktrees confondus).
+3. Exécuter `tools/rbxm/studio_export.luau` dans Studio : via le MCP (`execute_luau`, contexte Edit, coller le contenu du
+   fichier) ou la barre de commande (exige Game Settings > Security > *Allow HTTP Requests*). Il vérifie les noms (un
+   fichier par instance, sans doublon) et que `StarterPack` ne contient que des Tools, sérialise (`SerializationService`)
+   chaque viewmodel et chaque Tool et les envoie au serveur, qui écrit `assets/rbx/ViewModels/<Nom>.rbxm` et
+   `assets/rbx/Tools/<Nom>.rbxm`, supprime les `.rbxm` qui n'existent plus dans la place, puis s'arrête. Si l'export
+   échoue dans Studio, le serveur s'arrête en erreur sans rien supprimer.
+   Sans MCP : clic droit sur l'instance > *Save to File…* > `assets/rbx/<Dossier>/<Nom>.rbxm` (format binaire).
+4. `rojo build default.project.json -o CSGO.rbxlx && lune run tools/rbxm/verify_place.luau` : relit la place produite,
+   liste viewmodels et Tools (animations, sons, scripts, MeshParts, attributs), échoue si un viewmodel ou un Tool manque,
+   si un `ViewmodelName` ne pointe vers aucun viewmodel, ou si une animation ou un mesh n'a pas d'id ; signale les Tools
+   sans entrée dans `WeaponConfig.Weapons` (attribut `WeaponName`, sinon nom du Tool). Lancé aussi par la CI.
+5. Relire `git status` (l'export réécrit tous les fichiers) et commiter. Un `.rbxm` d'arme non modifiée peut différer de
+   quelques octets d'un export à l'autre (constaté sur `AWP.rbxm` : 1 octet, ids identiques, cause inconnue).
+
+Notes :
+- Studio écrit les ids sous leurs noms récents (`AnimationContent`, `AudioContent`, `MeshContent`) : Lune 0.9 ne les
+  expose pas tous ni ne relit tous les `.rbxm` de Studio (`Animation.Tags`), d'où la vérification sur la place XML
+  produite par Rojo plutôt que sur les `.rbxm`.
+- `MeshPart.MeshId` n'est pas modifiable par un plugin : Rojo 7.7 devrait passer par son endpoint `/api/serialize` pour
+  créer ces instances, mais la synchro live n'a pas encore été testée. Après une synchro, vérifier que les MeshParts ont
+  bien leur mesh (voir la transition ci-dessous).
+
+Transition d'une place qui contient déjà ces instances (une fois, pour éviter les doublons et l'ancienne version) :
+1. Studio en mode Edit, plugin Rojo déconnecté. Supprimer `ReplicatedStorage.ViewModels` (le dossier entier) et les Tools
+   de `StarterPack` (`AWP`, `M9Bayonet`).
+2. Connecter le plugin Rojo (port du checkout ou du worktree) : Rojo recrée le dossier et les Tools depuis `assets/rbx/`.
+3. Vérifier qu'il y a un seul exemplaire de chaque, que les MeshParts sont visibles (pas de bloc gris) et qu'une arme
+   s'équipe en playtest, puis sauvegarder la place (File > Save to Roblox).
+   Si un MeshPart est vide : clic droit sur `ReplicatedStorage` > *Insert from File…* > le `.rbxm`, et le signaler.
 
 ## Description des fichiers
 
-- `default.project.json`: configuration Rojo qui mappe l'arborescence `src/` vers le projet Roblox.
+- `default.project.json`: configuration Rojo qui mappe `src/` et `assets/rbx/` (viewmodels, Tools) vers le projet Roblox.
+- `assets/rbx/ViewModels/*.rbxm`, `assets/rbx/Tools/*.rbxm`: viewmodels et Tools des armes (binaires LFS, voir « Viewmodels et Tools »).
+- `tools/rbxm/receive.luau`: serveur Lune local qui reçoit les `.rbxm` exportés de Studio et les écrit sous `assets/rbx/`.
+- `tools/rbxm/studio_export.luau`: script à exécuter dans Studio qui sérialise viewmodels et Tools et les envoie à `receive.luau`.
+- `tools/rbxm/verify_place.luau`: relit la place construite par Rojo et vérifie viewmodels, Tools, ids d'assets et noms d'armes.
 - `rokit.toml`: versions des outils (Rojo, StyLua, Selene, luau-lsp, Lune) gérées par Rokit.
 - `CLAUDE.md`: guide de contexte et conventions pour travailler dans ce dépôt.
 - `SPEC.md`: spécification détaillée du projet (mappings, architecture, constantes). Utilisez-le comme source de vérité.
@@ -234,8 +294,8 @@ bash tools/check.sh --fix   # idem, en appliquant le formatage StyLua
 - Les fichiers de constantes (`CameraConfig`, `GameConfig`, `MovementConfig`, `BotConfig`) sont exclus de StyLua via `-- stylua: ignore` pour garder l'alignement en colonnes : respecter cet alignement à la main quand on les modifie.
 - Après toute modification de code `.luau`, lancer `bash tools/check.sh` et ne pas introduire de nouvel avertissement.
 - Tests unitaires (Lune, hors Roblox) dans `tests/specs/*.spec.luau` : chaque spec retourne `function(T, Loader)`. `Loader.new({ Players = mock }):require("src/...")` charge un module de `src/` en simulant `game:GetService` et le `require` d'Instances Rojo ; les services non simulés lèvent une erreur. Seuls les modules sans raycast/`workspace` sont testables (physique pure, `Validator`). Ajouter un test pour toute correction de bug physique.
-- Git LFS : les binaires d'assets (`*.blend`, `*.fbx`, `*.obj`, images, sons) sont suivis par LFS via `.gitattributes`. Installer `git lfs` puis `git lfs install` avant de cloner. Un nouveau format binaire doit être ajouté à `.gitattributes` avant son premier commit.
-- CI GitHub Actions (`.github/workflows/ci.yml`) : sur chaque PR et push sur `main`, lance `tools/check.sh` puis `rojo build`. Les définitions de types luau-lsp sont téléchargées pour la version déclarée dans `rokit.toml`.
+- Git LFS : les binaires d'assets (`*.blend`, `*.fbx`, `*.obj`, images, sons) sont suivis par LFS via `.gitattributes`. Installer `git lfs` puis `git lfs install` avant de cloner. Un nouveau format binaire doit être ajouté à `.gitattributes` avant son premier commit. Les `.rbxm` de `assets/rbx/` sont aussi en LFS (le checkout de la CI utilise `lfs: true`).
+- CI GitHub Actions (`.github/workflows/ci.yml`) : sur chaque PR et push sur `main`, lance `tools/check.sh`, `rojo build`, puis `tools/rbxm/verify_place.luau`. Les définitions de types luau-lsp sont téléchargées pour la version déclarée dans `rokit.toml`.
 
 ## Roblox Studio MCP
 

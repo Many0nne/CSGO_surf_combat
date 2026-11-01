@@ -6,6 +6,9 @@
     "ReplicatedStorage": {
       "Shared": {
         "$path": "src/shared"
+      },
+      "ViewModels": {
+        "$path": "assets/rbx/ViewModels"
       }
     },
 
@@ -13,6 +16,10 @@
       "Server": {
         "$path": "src/server"
       }
+    },
+
+    "StarterPack": {
+      "$path": "assets/rbx/Tools"
     },
 
     "StarterPlayer": {
