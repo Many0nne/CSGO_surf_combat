@@ -33,11 +33,6 @@ local function getSpawnCFrame(): CFrame
 	return CFrame.new(pt.Position + Vector3.new(0, 5, 0))
 end
 
--- Exposed so bots can reuse the same spawn points as players.
-function SpawnManager.getRandomSpawnCFrame(): CFrame
-	return getSpawnCFrame()
-end
-
 function SpawnManager.spawnPlayer(player: Player)
 	local cf = getSpawnCFrame()
 	-- Connexion avant LoadCharacter pour ne pas manquer CharacterAdded
@@ -50,7 +45,7 @@ function SpawnManager.spawnPlayer(player: Player)
 			root.CFrame = cf
 		end
 	end)
-	-- Rig = StarterCharacter, skin appliqué dans CharacterAdded : identiques aux bots (#1).
+	-- Rig = StarterCharacter, skin appliqué dans CharacterAdded (#1).
 	player:LoadCharacterAsync()
 end
 

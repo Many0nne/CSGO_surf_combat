@@ -7,9 +7,7 @@ local RoundManager = {}
 
 local state = "idle" -- "idle" | "active" | "result"
 local timeLeft = 0
--- Combatant id: real players use their positive UserId, bots use a synthetic
--- negative id. Both slot into these [number]-keyed tables.
-local scores: { [number]: Score } = {} -- keyed by combatant id
+local scores: { [number]: Score } = {} -- keyed by UserId
 local lastAttacker: { [number]: number } = {} -- victim id → attacker id
 
 local roundStateRmt: RemoteEvent
@@ -29,22 +27,13 @@ local function broadcastScores()
 	scoreUpdateRmt:FireAllClients(scores)
 end
 
-function RoundManager.ensureScoreById(id: number, name: string): Score
+local function ensureScore(player: Player): Score
+	local id = player.UserId
 	if not scores[id] then
-		scores[id] = { name = name, kills = 0, deaths = 0, firstKillTick = 0 }
+		scores[id] = { name = player.Name, kills = 0, deaths = 0, firstKillTick = 0 }
 		broadcastScores()
 	end
 	return scores[id]
-end
-
-function RoundManager.removeScoreById(id: number)
-	scores[id] = nil
-	lastAttacker[id] = nil
-	broadcastScores()
-end
-
-local function ensureScore(player: Player): Score
-	return RoundManager.ensureScoreById(player.UserId, player.Name)
 end
 
 local function computeWinner(): string
@@ -129,28 +118,22 @@ end
 
 -- ── combat recording ───────────────────────────────────────────────────────
 
-function RoundManager.recordDamageById(attackerId: number, victimId: number)
-	if attackerId ~= victimId then
-		lastAttacker[victimId] = attackerId
-	end
-end
-
 function RoundManager.recordDamage(attacker: Player, victim: Player)
-	if victim then
-		RoundManager.recordDamageById(attacker.UserId, victim.UserId)
+	if victim and attacker ~= victim then
+		lastAttacker[victim.UserId] = attacker.UserId
 	end
 end
 
--- Generic death/attribution for any tracked combatant (player or bot).
--- Returns the attacker id (or nil) so callers can decide on persistent stats.
-function RoundManager.onCombatantDied(victimId: number, victimPlayer: Player?): number?
+-- Cette méthode permet de compter la mort d'un joueur et le kill de son dernier attaquant lorsqu'un round est actif.
+local function recordDeath(victim: Player)
 	if state ~= "active" then
-		return nil
+		return
 	end
 
+	local victimId = victim.UserId
 	local victimScore = scores[victimId]
 	if not victimScore then
-		return nil
+		return
 	end
 	victimScore.deaths += 1
 
@@ -168,24 +151,19 @@ function RoundManager.onCombatantDied(victimId: number, victimPlayer: Player?): 
 	end
 
 	broadcastScores()
-	if victimPlayer then
-		playerDiedRmt:FireClient(victimPlayer, { killerId = attackerId })
-	end
-	return attackerId
+	playerDiedRmt:FireClient(victim, { killerId = attackerId })
 end
 
--- Player wrapper: handles death + the player-specific respawn schedule.
--- Returns the attacker id so init.server can gate persistent stats.
-function RoundManager.onCharacterDied(victim: Player, spawnFn: (Player) -> ()): number?
+-- Handles a player's death and schedules their respawn.
+function RoundManager.onCharacterDied(victim: Player, spawnFn: (Player) -> ())
 	ensureScore(victim)
-	local attackerId = RoundManager.onCombatantDied(victim.UserId, victim)
+	recordDeath(victim)
 
 	task.delay(2.5, function() -- RESPAWN_DELAY
 		if state == "active" and victim.Parent then
 			spawnFn(victim)
 		end
 	end)
-	return attackerId
 end
 
 -- ── player lifecycle ───────────────────────────────────────────────────────

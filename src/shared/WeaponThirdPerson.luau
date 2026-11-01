@@ -1,5 +1,5 @@
 -- WeaponThirdPerson.luau
--- Arme en 3e personne commune joueurs/bots (#5).
+-- Arme en 3e personne des joueurs (#5).
 --   • Modèle 3P : pièces de l'arme clonées depuis ReplicatedStorage.ViewModels.<nom> (sans bras,
 --     caméra ni humanoid), réduites à l'échelle du personnage et soudées à la main par une Weld
 --     "Grip3P" dont le C0 vaut le grip défini par arme (WeaponConfig.Weapons.<nom>.ThirdPerson).
@@ -206,7 +206,7 @@ local function buildModel(viewmodelName: string, scale: number): (Model?, BasePa
 		end
 	end
 
-	-- Sons de l'arme sur la poignée : audibles en 3D par tout le monde (tirs des bots).
+	-- Sons de l'arme sur la poignée : audibles en 3D par tout le monde.
 	local sounds = template:FindFirstChild("Sounds")
 	if sounds then
 		for _, s in sounds:GetChildren() do
@@ -243,7 +243,7 @@ function WeaponThirdPerson.detach(character: Model)
 	character:SetAttribute(WeaponThirdPerson.ACTION_AT_ATTR, nil)
 end
 
--- Cette méthode permet d'attacher le modèle 3P d'une arme à la main d'un personnage (joueur ou bot) côté
+-- Cette méthode permet d'attacher le modèle 3P d'une arme à la main d'un personnage côté
 -- serveur lorsqu'il l'équipe : grip de WeaponConfig, pose de tenue, action "Equip" ; renvoie le modèle.
 function WeaponThirdPerson.attach(character: Model, weaponName: string, viewmodelName: string?): Model?
 	WeaponThirdPerson.detach(character)

@@ -1,5 +1,5 @@
 -- WeaponThirdPersonView.luau
--- Rendu client des armes 3e personne (#5) de tous les personnages (joueurs et bots).
+-- Rendu client des armes 3e personne (#5) de tous les personnages.
 -- Le serveur attache les modèles (WeaponThirdPerson.attach, tag "Weapon3P") et pose l'action
 -- courante en attributs ; ici, chaque frame : décalage procédural du grip (tir/recharge/switch)
 -- et visibilité (le joueur local ne voit pas son propre modèle 3P en 1re personne).

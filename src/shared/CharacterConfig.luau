@@ -1,6 +1,6 @@
 -- CharacterConfig.luau
--- Rig, skin et animations 3e personne communs aux joueurs et aux bots (#1).
--- Une seule source de vérité : joueurs et bots partagent le même rig
+-- Rig, skin et animations 3e personne communs à tous les joueurs (#1).
+-- Une seule source de vérité : les joueurs partagent le même rig
 -- (StarterCharacter) et le même skin (CharacterAppearance), et
 -- CharacterAnimator choisit les pistes depuis la même table d'animations.
 
