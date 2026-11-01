@@ -44,7 +44,9 @@ WeaponConfig.Weapons = {
 		Penetration = 0,
 		RunSpeedMultiplier = 1.0,
 		EquipTime = 1.0,
-		ShootAnimTime = 0.7, -- durée de l'animation Shoot (slash) du viewmodel
+		ShootAnimTime = 0.7, -- durée des animations de slash du viewmodel
+		ShootAnimations = { "Shoot", "Shoot2" }, -- slashs joués en alternance (droite → gauche, puis revers)
+		InspectAnimation = "Inspect", -- touche F : purement visuel, interrompu par une attaque
 		IsMelee = true,
 		MeleeRange = 7.5,
 		BackstabMultiplier = 2,
@@ -59,6 +61,8 @@ WeaponConfig.Weapons = {
 		AnimationSounds = {
 			Equip = { "Equip" },
 			Shoot = {},
+			Shoot2 = {},
+			Inspect = { "Equip" },
 		},
 	},
 }

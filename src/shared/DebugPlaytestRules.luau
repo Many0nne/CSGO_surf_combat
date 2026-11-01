@@ -36,6 +36,11 @@ function DebugPlaytestRules.resolveToolName(available: { string }, selector: any
 	return caseInsensitive
 end
 
+-- Cette méthode permet de lister les animations d'attaque d'une arme lorsqu'on doit reconnaître un tir, alterné ou non.
+function DebugPlaytestRules.attackAnimations(cfg: any): { string }
+	return cfg and cfg.ShootAnimations or { "Shoot" }
+end
+
 -- Cette méthode permet de lister les marqueurs d'animation à surveiller pour une piste lorsque l'arme déclare
 -- ses sons (convention « X Sound ») ; le tir de mêlée ajoute le marqueur dynamique « Stab Sound ».
 function DebugPlaytestRules.markersFor(cfg: any, animName: string): { string }
@@ -46,7 +51,8 @@ function DebugPlaytestRules.markersFor(cfg: any, animName: string): { string }
 			table.insert(markers, soundName .. " Sound")
 		end
 	end
-	if cfg and cfg.IsMelee and animName == "Shoot" and not table.find(markers, DebugPlaytestRules.MELEE_MARKER) then
+	local isAttack = table.find(DebugPlaytestRules.attackAnimations(cfg), animName) ~= nil
+	if cfg and cfg.IsMelee and isAttack and not table.find(markers, DebugPlaytestRules.MELEE_MARKER) then
 		table.insert(markers, DebugPlaytestRules.MELEE_MARKER)
 	end
 	return markers

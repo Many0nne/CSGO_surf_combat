@@ -12,6 +12,7 @@ local KEY_MAP = {
 	[Enum.KeyCode.RightControl] = "Ctrl",
 	[Enum.KeyCode.Space] = "Space",
 	[Enum.KeyCode.R] = "R",
+	[Enum.KeyCode.F] = "F",
 }
 
 local held = {
@@ -23,11 +24,13 @@ local held = {
 	Ctrl = false,
 	Space = false,
 	R = false,
+	F = false,
 }
 
 local jumpPressedEdge = false
 local jumpPressTime = -math.huge
 local reloadPressedEdge = false
+local inspectPressedEdge = false
 local lastWishdir = Vector3.zero
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -46,6 +49,8 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		jumpPressTime = tick()
 	elseif key == "R" then
 		reloadPressedEdge = true
+	elseif key == "F" and not gameProcessed then
+		inspectPressedEdge = true
 	end
 end)
 
@@ -149,6 +154,15 @@ function InputModule.isBackwardOnly(): boolean
 end
 
 -- Edge trigger : retourne true une seule fois par appui de R (consommé à la lecture).
+-- Cette méthode permet de consommer l'appui sur la touche d'inspection lorsque le système d'arme la lit à chaque frame.
+function InputModule.isInspectPressed(): boolean
+	if inspectPressedEdge then
+		inspectPressedEdge = false
+		return true
+	end
+	return false
+end
+
 function InputModule.isReloadPressed(): boolean
 	if reloadPressedEdge then
 		reloadPressedEdge = false

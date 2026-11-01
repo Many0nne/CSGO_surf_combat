@@ -106,8 +106,15 @@ local function getViewmodelTemplate(name: string): Model?
 	return nil
 end
 
+-- Cette méthode permet de garantir la pièce de référence du viewmodel lorsque sa PrimaryPart manque (synchro Rojo) :
+-- la racine ancrée du rig d'abord, car c'est elle que PivotTo doit déplacer pour que tout le modèle suive la caméra.
 local function ensurePrimaryPart(model: Model)
 	if model.PrimaryPart then
+		return
+	end
+	local root = model:FindFirstChild("HumanoidRootPart")
+	if root and root:IsA("BasePart") then
+		model.PrimaryPart = root
 		return
 	end
 	local firstPart = model:FindFirstChildWhichIsA("BasePart", true)
@@ -210,7 +217,7 @@ local function playEquipAnimation(model: Model)
 	end
 
 	equipTrack = track
-	equipTrack:Play()
+	equipTrack:Play(0) -- sans fondu : la piste démarre hors champ
 
 	local sounds = currentAnimSounds and currentAnimSounds["Equip"] or {}
 	local newConns = AnimationSoundSystem.connectSoundMarkers(equipTrack, model, sounds)
@@ -374,6 +381,12 @@ end
 function ViewmodelSystem.getPreloadedTrackLength(name: string): number
 	local t = preloadedTracks[name]
 	return t and t.Length or 0
+end
+
+-- Cette méthode permet de savoir si une animation préchargée de l'arme active est en cours, pour ne pas la relancer.
+function ViewmodelSystem.isAnimationPlaying(name: string): boolean
+	local t = preloadedTracks[name]
+	return t ~= nil and t.IsPlaying
 end
 
 function ViewmodelSystem.playReload(model: Model?)

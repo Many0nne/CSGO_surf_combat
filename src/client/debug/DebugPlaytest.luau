@@ -206,7 +206,10 @@ local function attack(payload: any): (boolean, string, any)
 	tool:Activate()
 	local cfg = getConfig(tool)
 	task.wait((cfg and cfg.ShootAnimTime or 1) + ATTACK_SETTLE)
-	local fired = table.find(events.anims, "Shoot") ~= nil
+	local fired = false
+	for _, animName in Rules.attackAnimations(cfg) do
+		fired = fired or table.find(events.anims, animName) ~= nil
+	end
 	return fired,
 		"état arme avant tir=" .. before,
 		{
