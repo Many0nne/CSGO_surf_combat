@@ -1,6 +1,7 @@
 # build_viewmodel.py
-# Construit le viewmodel M9 Bayonet dans Blender (bras droit + couteau), génère ses animations
-# (Equip, Shoot) et les exporte pour Roblox.
+# Construit le rig du viewmodel M9 Bayonet dans Blender (bras droit + volume du couteau), génère ses
+# animations (Equip, Shoot) et les exporte pour Roblox. Le modèle du couteau vit dans
+# assets/rbx/ViewModels/M9Bayonet.rbxm : ce script ne le construit pas.
 # À lancer dans Blender :
 #   exec(open(f"{D}/build_viewmodel.py").read(), {"__name__": "__main__", "ASSET_DIR": D})
 #
@@ -13,19 +14,21 @@ import json
 import math
 import os
 
+import bmesh
 import bpy
 from mathutils import Euler, Matrix, Quaternion, Vector
 
 ASSET_DIR = globals().get("ASSET_DIR") or os.path.dirname(os.path.abspath(__file__))
-_knife_ns = {"__name__": "build_knife"}
-exec(open(os.path.join(ASSET_DIR, "build_knife.py"), encoding="utf-8").read(), _knife_ns)
-globals().update({k: v for k, v in _knife_ns.items() if not k.startswith("__")})
 
 FPS = 60
 C = Matrix(((1, 0, 0, 0), (0, 0, -1, 0), (0, 1, 0, 0), (0, 0, 0, 1)))
 RIG_JSON = json.load(open(os.path.join(ASSET_DIR, "rig.json"), encoding="utf-8"))
 ARM_PARTS = ("RightUpperArm", "RightLowerArm", "RightHand")
 BONES = ("FakeCamera",) + ARM_PARTS + ("Handle",)
+
+# Volume du couteau dans le repère de prise (origine = centre du manche, +Z = pointe, +X = tranchant)
+KNIFE_SIZE = (0.926, 0.373, 3.72)
+KNIFE_CENTER = Vector((-0.05, 0, 1.21))
 
 # Géométrie du bras R15 (repères locaux des pièces, cf. Motor6D du rig Studio)
 SHOULDER_IN_UA = Vector((0, 0.699, 0))  # haut du bras = « épaule » visuelle (racine IK)
@@ -162,12 +165,41 @@ def build_motors(idle):
 # ------------------------------------------------------------------------------------------------
 
 
-# Cette méthode permet de créer une boîte de la taille d'une pièce Roblox, centrée sur son origine.
-def box_object(name, size, mat):
+# Cette méthode permet de créer (ou remplacer) un objet maillé à partir d'un bmesh.
+def mesh_object(name, bm, mat):
+	old = bpy.data.objects.get(name)
+	if old:
+		bpy.data.objects.remove(old, do_unlink=True)
+	me = bpy.data.meshes.new(name)
+	bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+	bm.to_mesh(me)
+	bm.free()
+	ob = bpy.data.objects.new(name, me)
+	bpy.context.scene.collection.objects.link(ob)
+	me.materials.append(mat)
+	return ob
+
+
+# Cette méthode permet de créer un matériau Principled de prévisualisation (le rendu final vient des
+# MeshParts dans Studio).
+def material(name, color, metallic, roughness):
+	mat = bpy.data.materials.get(name) or bpy.data.materials.new(name)
+	mat.use_nodes = True
+	bsdf = next(n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
+	bsdf.inputs["Base Color"].default_value = (*color, 1)
+	bsdf.inputs["Metallic"].default_value = metallic
+	bsdf.inputs["Roughness"].default_value = roughness
+	mat.diffuse_color = (*color, 1)
+	return mat
+
+
+# Cette méthode permet de créer une boîte de la taille d'une pièce Roblox, décalée de `center` par
+# rapport à son origine.
+def box_object(name, size, mat, center=Vector((0, 0, 0))):
 	bm = bmesh.new()
 	bmesh.ops.create_cube(bm, size=1)
 	for v in bm.verts:
-		v.co = Vector((v.co.x * size[0], v.co.y * size[1], v.co.z * size[2]))
+		v.co = Vector((v.co.x * size[0], v.co.y * size[1], v.co.z * size[2])) + center
 	return mesh_object(name, bm, mat)
 
 
@@ -180,7 +212,7 @@ def build_scene(rest):
 	for coll in (bpy.data.armatures, bpy.data.cameras, bpy.data.lights):
 		for block in list(coll):
 			coll.remove(block)
-	knife = build_knife()
+	knife = {"Handle": box_object("Handle", KNIFE_SIZE, material("Knife_Proxy", (0.05, 0.05, 0.06), 0.8, 0.4), KNIFE_CENTER)}
 	skin = material("Arm_Skin", (0.64, 0.635, 0.647), 0.0, 0.7)
 	arms = {n: box_object(n, RIG_JSON["parts"][n]["size"], skin) for n in ARM_PARTS}
 
@@ -421,39 +453,7 @@ def export_rig(rest, motors, out_dir):
 		json.dump(data, fh, indent=1)
 
 
-# Cette méthode permet d'exporter le couteau en FBX (pièces dans le repère local de la Handle,
-# orienté Y-haut comme Roblox) pour l'import 3D dans Studio.
-def export_fbx(path):
-	knife_names = KNIFE_PARTS
-	saved = {}
-	for n in knife_names:
-		ob = bpy.data.objects[n]
-		saved[n] = (ob.parent, ob.parent_type, ob.parent_bone, ob.matrix_world.copy())
-		ob.parent = None
-		ob.matrix_world = C
-	bpy.ops.object.select_all(action="DESELECT")
-	for n in knife_names:
-		bpy.data.objects[n].select_set(True)
-	bpy.ops.export_scene.fbx(
-		filepath=path,
-		use_selection=True,
-		object_types={"MESH"},
-		axis_forward="-Z",
-		axis_up="Y",
-		apply_unit_scale=True,
-		apply_scale_options="FBX_SCALE_ALL",
-		bake_space_transform=True,
-		mesh_smooth_type="FACE",
-		bake_anim=False,
-	)
-	for n, (par, ptype, pbone, mw) in saved.items():
-		ob = bpy.data.objects[n]
-		ob.parent, ob.parent_type, ob.parent_bone = par, ptype, pbone
-		bpy.context.view_layer.update()
-		ob.matrix_world = mw
-
-
-# Cette méthode permet de tout reconstruire : scène, animations, exports (JSON, rig, FBX).
+# Cette méthode permet de tout reconstruire : scène, animations, exports (JSON, rig).
 def build(export=True):
 	idle = solve_arm(IDLE_KNIFE, SHOULDER, POLE)
 	rest, motors = build_motors(idle)
@@ -471,7 +471,6 @@ def build(export=True):
 	rig.animation_data.action = None
 	if export:
 		export_rig(rest, motors, out_dir)
-		export_fbx(os.path.join(out_dir, "M9Bayonet.fbx"))
 	return results
 
 
