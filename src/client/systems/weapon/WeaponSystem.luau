@@ -245,7 +245,8 @@ local function onToolEquipped(tool, char)
 
 	local equipTime = cfg and cfg.EquipTime or 0.8
 	local animLength = ViewmodelSystem.getPreloadedTrackLength("Equip")
-	local actualEquipTime = (animLength > 0 and animLength) or equipTime
+	local equipAnimSpeed = cfg and cfg.EquipAnimSpeed or 1
+	local actualEquipTime = (animLength > 0 and animLength / equipAnimSpeed) or equipTime
 	task.delay(actualEquipTime, function()
 		if currentTool == tool and weaponState == "EQUIPPING" then
 			weaponState = "IDLE"
