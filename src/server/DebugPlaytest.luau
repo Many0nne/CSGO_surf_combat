@@ -16,6 +16,8 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local NetworkProtocol = require(Shared:WaitForChild("NetworkProtocol"))
 local WeaponConfig = require(Shared:WaitForChild("WeaponConfig"))
 local Rules = require(Shared:WaitForChild("DebugPlaytestRules"))
+local CharacterAppearance = require(Shared:WaitForChild("CharacterAppearance"))
+local CharacterConfig = require(Shared:WaitForChild("CharacterConfig"))
 
 local CLIENT_TIMEOUT = 12 -- secondes d'attente max d'une réponse client
 local DAMAGE_TIMEOUT = 3 -- secondes d'attente des dégâts sur la cible après l'attaque
@@ -24,7 +26,6 @@ local DUMMY_DISTANCE = 6 -- studs devant le joueur (dans la portée mêlée et V
 
 type Deps = {
 	roundManager: any,
-	botManager: any,
 	validator: any,
 	meleeRemote: RemoteEvent,
 	hitscanRemote: RemoteEvent,
@@ -78,6 +79,60 @@ local function clearDummy(player: Player)
 	end
 end
 
+-- Cette méthode permet de construire le rig de la cible lorsqu'un run en a besoin : clone du rig des joueurs,
+-- sans scripts (ni Animate ni régénération) et désancré, ou rig généré si la place n'a pas de StarterCharacter.
+local function buildDummyRig(): Model?
+	local template = CharacterAppearance.getTemplate()
+	if template then
+		local model = template:Clone()
+		for _, inst in model:GetDescendants() do
+			if inst:IsA("BaseScript") then
+				inst:Destroy()
+			elseif inst:IsA("BasePart") then
+				inst.Anchored = false
+			end
+		end
+		return model
+	end
+	local ok, model = pcall(function()
+		return Players:CreateHumanoidModelFromDescription(
+			CharacterAppearance.buildDescription(),
+			CharacterConfig.RIG_TYPE
+		)
+	end)
+	if ok then
+		return model
+	end
+	log("génération du rig de la cible impossible : " .. tostring(model))
+	return nil
+end
+
+-- Cette méthode permet de placer une cible immobile acceptée par le Validator lorsqu'un run atteint l'étape TARGET ;
+-- elle n'a ni score ni IA, et ses PV élevés gardent les dégâts réels de l'arme lisibles.
+local function spawnDummy(cf: CFrame, health: number): Model?
+	local model = buildDummyRig()
+	if not model then
+		return nil
+	end
+	model.Name = "DebugDummy"
+	CharacterAppearance.apply(model)
+	local humanoid = model:FindFirstChildWhichIsA("Humanoid") :: Humanoid?
+	local root = model:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not humanoid or not root then
+		model:Destroy()
+		return nil
+	end
+	humanoid.MaxHealth = health
+	humanoid.Health = health
+	humanoid.WalkSpeed = 0
+	humanoid.JumpPower = 0
+	model:SetAttribute(deps.validator.DEBUG_TARGET_ATTRIBUTE, true)
+	root.Anchored = true
+	model:PivotTo(cf)
+	model.Parent = workspace
+	return model
+end
+
 -- Cette méthode permet de lister les outils du joueur (sac et personnage) par nom lorsque le run doit en équiper un.
 local function collectTools(player: Player): { [string]: Tool }
 	local tools = {}
@@ -126,7 +181,6 @@ local function run(player: Player, selector: any)
 	local unequippedTo: string? = nil
 
 	log(string.format("début du run pour %s (sélecteur=%s)", player.Name, tostring(selector)))
-	deps.botManager.setSuspended(true)
 	clearDummy(player)
 
 	local function finish()
@@ -136,7 +190,6 @@ local function run(player: Player, selector: any)
 		callClient(player, "finish", nil, 3)
 		local line = report:summary()
 		print(line)
-		deps.botManager.setSuspended(false)
 	end
 
 	-- 1. Spawn en round : le client passe par le même chemin que le bouton Play.
@@ -199,14 +252,12 @@ local function run(player: Player, selector: any)
 		return finish()
 	end
 
-	-- 3. Cible immobile devant le joueur (rig de bot, sans IA), puis visée caméra côté client.
+	-- 3. Cible immobile devant le joueur, puis visée caméra côté client.
 	local flat = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
 	flat = if flat.Magnitude > 1e-3 then flat.Unit else Vector3.new(0, 0, -1)
 	local dummyPos = root.Position + flat * DUMMY_DISTANCE
-	local dummy = deps.botManager.spawnDummy(
-		CFrame.lookAt(dummyPos, Vector3.new(root.Position.X, dummyPos.Y, root.Position.Z)),
-		DUMMY_HEALTH
-	)
+	local dummy =
+		spawnDummy(CFrame.lookAt(dummyPos, Vector3.new(root.Position.X, dummyPos.Y, root.Position.Z)), DUMMY_HEALTH)
 	local dummyHum = dummy and dummy:FindFirstChildWhichIsA("Humanoid") :: Humanoid?
 	local dummyRoot = dummy and dummy:FindFirstChild("HumanoidRootPart") :: BasePart?
 	if
@@ -296,7 +347,6 @@ local function watchPlayer(player: Player)
 			local ok, err = pcall(run, player, selector)
 			if not ok then
 				print(Rules.line("RESULT FAIL (erreur : " .. tostring(err) .. ")"))
-				deps.botManager.setSuspended(false)
 			end
 			running[player] = nil
 			if player.Parent then

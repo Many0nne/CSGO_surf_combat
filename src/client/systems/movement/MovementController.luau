@@ -260,7 +260,7 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 			speedometer.update(spd)
 		end
 
-		-- 10. Animation 3e personne (même pipeline que les bots)
+		-- 10. Animation 3e personne
 		charAnimator:update({
 			onGround = isGroundedState,
 			crouching = crouchInfo.isCrouching,

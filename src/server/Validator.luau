@@ -7,17 +7,15 @@ local MAX_MELEE_RANGE = 10 -- studs
 
 local Validator = {}
 
+-- Attribut serveur de la cible immobile du helper de playtest ; les attributs posés par un client ne répliquent pas.
+Validator.DEBUG_TARGET_ATTRIBUTE = "DebugTarget"
+
 local function getRoot(char: Model): BasePart?
 	return char:FindFirstChild("HumanoidRootPart") :: BasePart?
 end
 
--- A bot is a server-spawned NPC tagged via the IsBot attribute (see BotManager).
-function Validator.isBot(inst: Instance): boolean
-	return inst:GetAttribute("IsBot") == true
-end
-
 -- Returns false if any basic type/ownership checks fail.
--- Valid targets are either real players (other than the attacker) or bots.
+-- Valid targets are real players (other than the attacker) or the playtest helper's target.
 local function commonChecks(
 	attacker: Player,
 	targetCharacter: Instance,
@@ -36,7 +34,7 @@ local function commonChecks(
 		if targetPlayer == attacker then
 			return false, nil, nil
 		end
-	elseif not Validator.isBot(targetCharacter) then
+	elseif targetCharacter:GetAttribute(Validator.DEBUG_TARGET_ATTRIBUTE) ~= true then
 		return false, nil, nil
 	end
 

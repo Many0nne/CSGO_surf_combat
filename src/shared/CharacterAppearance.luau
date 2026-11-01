@@ -1,8 +1,8 @@
 -- CharacterAppearance.luau
--- Rig et skin communs joueurs/bots (#1).
+-- Rig et skin communs (#1).
 --   • Rig : StarterPlayer.StarterCharacter (template unique, chargé par Roblox pour les
---     joueurs, cloné par BotManager pour les bots). À défaut, rig R15 généré depuis
---     la même description.
+--     joueurs, cloné pour la cible du helper de playtest). À défaut, rig R15 généré
+--     depuis la même description.
 --   • Skin : appliqué directement sur le modèle (BodyColors + Shirt/Pants/visage),
 --     ce qui fonctionne quel que soit le rig, contrairement à une HumanoidDescription
 --     que Roblox ignore dès qu'un StarterCharacter existe.
@@ -14,8 +14,8 @@ local CharacterConfig = require(ReplicatedStorage.Shared.CharacterConfig)
 
 local CharacterAppearance = {}
 
--- Cette méthode permet de renvoyer le rig de référence lorsqu'un bot doit être construit ;
--- nil si la place n'a pas de StarterCharacter (BotManager génère alors un rig depuis buildDescription).
+-- Cette méthode permet de renvoyer le rig de référence lorsqu'un personnage doit être construit côté serveur ;
+-- nil si la place n'a pas de StarterCharacter (un rig est alors généré depuis buildDescription).
 function CharacterAppearance.getTemplate(): Model?
 	local template = StarterPlayer:FindFirstChild("StarterCharacter")
 	if template and template:IsA("Model") then
@@ -52,7 +52,7 @@ local function replaceChild(parent: Instance, className: string, name: string): 
 	return inst
 end
 
--- Cette méthode permet d'appliquer le skin commun à un personnage (joueur ou bot) lorsqu'il spawn, côté serveur :
+-- Cette méthode permet d'appliquer le skin commun à un personnage lorsqu'il spawn, côté serveur :
 -- couleurs du corps toujours, vêtements et visage seulement si un asset est configuré.
 function CharacterAppearance.apply(model: Model)
 	local colors = replaceChild(model, "BodyColors", "Body Colors") :: BodyColors

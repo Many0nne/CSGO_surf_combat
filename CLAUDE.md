@@ -272,8 +272,8 @@ Transition d'une place qui contient déjà ces instances (une fois, pour éviter
 - `src/server/Validator.luau`: validation serveur des dégâts melee et hitscan (distance, ownership, sanity).
 - `src/shared/CameraConfig.luau`: constantes caméra (FOV, sensibilité, pitch min/max, hauteurs, lerp speed, scope sens multiplier).
 - `src/shared/CharacterConfig.luau`: rig/skin communs (couleurs, ids d'images Shirt/Pants/visage) et animations 3e personne (ids, fallbacks, seuils de vitesse, fondus).
-- `src/shared/CharacterAppearance.luau`: rig de référence (`StarterPlayer.StarterCharacter`, cloné pour les bots) et application du skin commun (BodyColors + vêtements) côté serveur.
-- `src/shared/CharacterAnimator.luau`: pipeline d'animation 3e personne commun joueurs/bots (état de mouvement → piste, fondus, vitesse de lecture) ; alimenté par `MovementController` (client, répliqué via l'Animator) et `BotManager` (serveur).
+- `src/shared/CharacterAppearance.luau`: rig de référence (`StarterPlayer.StarterCharacter`, cloné pour la cible du helper de playtest) et application du skin commun (BodyColors + vêtements) côté serveur.
+- `src/shared/CharacterAnimator.luau`: pipeline d'animation 3e personne des joueurs (état de mouvement → piste, fondus, vitesse de lecture) ; alimenté par `MovementController` (client, répliqué via l'Animator).
 - `src/shared/DebugPlaytestRules.luau`: règles pures du helper de playtest (choix de l'outil, marqueurs et dégâts attendus, visée, rapport PASS/FAIL).
 - `src/shared/GameConfig.luau`: constantes jeu (ROUND_DURATION=300, RESPAWN_DELAY=2.5, RESULT_DURATION=6, AUTO_SAVE_INTERVAL=120).
 - `src/shared/MovementConfig.luau`: constantes physique du mouvement uniquement (vitesses, accel, friction, saut, pentes, bhop, réseau, hitbox).
@@ -281,7 +281,7 @@ Transition d'une place qui contient déjà ces instances (une fois, pour éviter
 - `src/shared/NetworkProtocol.luau`: noms des RemoteEvents et helper getRemote(name). Remotes : MeleeDamage, HitscanDamage, RequestSpawn, RoundState, ScoreUpdate, RoundResult, PlayerDied, WeaponAction, DebugPlaytest (créé uniquement dans Studio).
 - `src/shared/PhysicsUtils.luau`: fonctions utilitaires pour la physique.
 - `src/shared/WeaponConfig.luau`: définitions partagées des armes et de leurs paramètres par défaut (dont `ThirdPerson` : échelle, grip, pose 3P).
-- `src/shared/WeaponThirdPerson.luau`: arme 3e personne commune joueurs/bots : construction du modèle 3P depuis `ViewModels`, grip soudé à la main, pose des épaules, actions répliquées en attributs (`Weapon3PAction`/`Weapon3PActionAt`), règles pures (grip, décalages d'action, visibilité).
+- `src/shared/WeaponThirdPerson.luau`: arme 3e personne des joueurs : construction du modèle 3P depuis `ViewModels`, grip soudé à la main, pose des épaules, actions répliquées en attributs (`Weapon3PAction`/`Weapon3PActionAt`), règles pures (grip, décalages d'action, visibilité).
 
 ## Common Commands
 
@@ -297,7 +297,7 @@ bash tools/check.sh --fix   # idem, en appliquant le formatage StyLua
 
 - Outils gérés par Rokit (`rokit.toml`) : `rojo`, `stylua`, `selene`, `luau-lsp`, `lune`. Binaires dans `~/.rokit/bin` ; installer avec `rokit install`.
 - Configs : `stylua.toml` (tabs, guillemets doubles, 120 colonnes), `selene.toml` (std roblox, règles par défaut), `.luaurc` (mode `nonstrict`).
-- Les fichiers de constantes (`CameraConfig`, `GameConfig`, `MovementConfig`, `BotConfig`) sont exclus de StyLua via `-- stylua: ignore` pour garder l'alignement en colonnes : respecter cet alignement à la main quand on les modifie.
+- Les fichiers de constantes (`CameraConfig`, `GameConfig`, `MovementConfig`) sont exclus de StyLua via `-- stylua: ignore` pour garder l'alignement en colonnes : respecter cet alignement à la main quand on les modifie.
 - Après toute modification de code `.luau`, lancer `bash tools/check.sh` et ne pas introduire de nouvel avertissement.
 - Tests unitaires (Lune, hors Roblox) dans `tests/specs/*.spec.luau` : chaque spec retourne `function(T, Loader)`. `Loader.new({ Players = mock }):require("src/...")` charge un module de `src/` en simulant `game:GetService` et le `require` d'Instances Rojo ; les services non simulés lèvent une erreur. Seuls les modules sans raycast/`workspace` sont testables (physique pure, `Validator`). Ajouter un test pour toute correction de bug physique.
 - Git LFS : les binaires d'assets (`*.blend`, `*.fbx`, `*.obj`, images, sons) sont suivis par LFS via `.gitattributes`. Installer `git lfs` puis `git lfs install` avant de cloner. Un nouveau format binaire doit être ajouté à `.gitattributes` avant son premier commit. Les `.rbxm` de `assets/rbx/` sont aussi en LFS (le checkout de la CI utilise `lfs: true`).
@@ -313,4 +313,4 @@ bash tools/check.sh --fix   # idem, en appliquant le formatage StyLua
   ```lua
   game.Players:GetPlayers()[1]:SetAttribute("DebugPlaytest", "AWP")
   ```
-  Puis `get_console_output`, lignes préfixées `[DebugPlaytest]` : un `PASS`/`FAIL` par étape (SPAWN, EQUIP, TARGET, AIM, ATTACK, SOUND, DAMAGE, STILL_EQUIPPED) et un `RESULT` final. L'attribut revient à nil en fin de run. Les bots IA sont retirés pendant le run ; la cible `DebugDummy` reste en jeu jusqu'au run suivant.
+  Puis `get_console_output`, lignes préfixées `[DebugPlaytest]` : un `PASS`/`FAIL` par étape (SPAWN, EQUIP, TARGET, AIM, ATTACK, SOUND, DAMAGE, STILL_EQUIPPED) et un `RESULT` final. L'attribut revient à nil en fin de run. La cible `DebugDummy` reste en jeu jusqu'au run suivant.

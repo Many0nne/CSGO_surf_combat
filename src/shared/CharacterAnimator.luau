@@ -1,10 +1,9 @@
 -- CharacterAnimator.luau
--- Pipeline d'animation 3e personne commun joueurs/bots (#1).
+-- Pipeline d'animation 3e personne des joueurs (#1).
 -- L'appelant fournit un état de mouvement abstrait (sol, accroupi, surf, vitesses) ;
 -- le module choisit la piste, gère les fondus et cale la vitesse de lecture.
---   • Joueur : MovementController (client) l'alimente depuis la physique custom ;
---     les pistes jouées sur l'Animator du personnage local sont répliquées par Roblox.
---   • Bot : BotManager (serveur) l'alimente depuis son Humanoid actif.
+-- MovementController (client) l'alimente depuis la physique custom ; les pistes jouées sur
+-- l'Animator du personnage local sont répliquées par Roblox.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -80,12 +79,10 @@ function CharacterAnimator.playbackSpeed(state: string, speed: number): number
 	return math.clamp(speed / ref, CharacterConfig.PLAYBACK_MIN, CharacterConfig.PLAYBACK_MAX)
 end
 
--- Cette méthode permet de créer l'animateur d'un personnage lorsqu'il spawn ; l'Animator est résolu
--- paresseusement (createAnimator=true côté serveur pour les rigs qui n'en ont pas).
-function CharacterAnimator.new(humanoid: Humanoid, createAnimator: boolean?)
+-- Cette méthode permet de créer l'animateur d'un personnage lorsqu'il spawn ; l'Animator est résolu paresseusement.
+function CharacterAnimator.new(humanoid: Humanoid)
 	local self = setmetatable({
 		humanoid = humanoid,
-		createAnimator = createAnimator == true,
 		animator = nil :: Animator?,
 		tracks = {} :: { [string]: AnimationTrack },
 		animations = {} :: { Animation },
@@ -99,7 +96,7 @@ function CharacterAnimator.new(humanoid: Humanoid, createAnimator: boolean?)
 	return self
 end
 
--- Cette méthode permet de récupérer (ou créer côté serveur) l'Animator du Humanoid lorsqu'une piste doit jouer.
+-- Cette méthode permet de récupérer l'Animator du Humanoid lorsqu'une piste doit jouer.
 function CharacterAnimator:_getAnimator(): Animator?
 	if self.animator and self.animator.Parent then
 		return self.animator
@@ -109,10 +106,6 @@ function CharacterAnimator:_getAnimator(): Animator?
 		return nil
 	end
 	local animator = humanoid:FindFirstChildOfClass("Animator")
-	if not animator and self.createAnimator then
-		animator = Instance.new("Animator")
-		animator.Parent = humanoid
-	end
 	self.animator = animator
 	if animator then
 		self:_claimLocomotion(animator)
