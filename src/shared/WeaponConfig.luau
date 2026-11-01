@@ -36,21 +36,23 @@ WeaponConfig.Weapons = {
 			Zoom = { "ZoomIn", "ZoomOut" },
 		},
 	},
-	Butterfly = {
-		Name = "Butterfly Knife",
+	M9Bayonet = {
+		Name = "M9 Bayonet",
 		Damage = 50,
 		RPM = 60,
 		FireDelay = 1,
 		Penetration = 0,
 		RunSpeedMultiplier = 1.0,
 		EquipTime = 1.0,
-		ShootAnimTime = 1.0,
+		ShootAnimTime = 0.7, -- durée de l'animation Shoot (slash) du viewmodel
 		IsMelee = true,
 		MeleeRange = 7.5,
 		BackstabMultiplier = 2,
+		-- Pièces dans le repère de la Handle : +Z = axe du couteau (vers la pointe), +X = tranchant.
+		-- Prise marteau : lame dressée hors du poing, tranchant vers l'avant de l'avant-bras.
 		ThirdPerson = {
-			Scale = 0.5,
-			Grip = CFrame.fromMatrix(Vector3.new(0, -0.2, 0), Vector3.new(0, -1, 0), Vector3.new(0, 0, -1)),
+			Scale = 0.35,
+			Grip = CFrame.fromMatrix(Vector3.new(0, -0.15, 0), Vector3.new(0, -1, 0), Vector3.new(-1, 0, 0)),
 			Pose = "Melee",
 		},
 		AnimationSounds = {
