@@ -151,8 +151,9 @@ Script idempotent, à relancer au début de chaque tâche (PowerShell, depuis la
 
 Les viewmodels et les Tools sont versionnés en `.rbxm` binaires (Git LFS, `assets/rbx/**`) et synchronisés par Rojo :
 une branche peut modifier une arme sans manipulation dans la place. Un fichier = une instance racine, nommée d'après le
-fichier. Rojo gère entièrement `ReplicatedStorage.ViewModels` et `StarterPack` : toute instance ajoutée à la main dans
-Studio y est supprimée à la connexion, et toute modification faite dans Studio est perdue si elle n'est pas réexportée.
+fichier. Rojo gère `ReplicatedStorage.ViewModels` et `StarterPack` : une instance ajoutée à la main dans Studio devrait y
+être supprimée à la connexion (déduit du comportement de `$path`, pas encore testé en synchro live), et toute modification
+faite dans Studio est perdue si elle n'est pas réexportée.
 
 Mettre à jour un `.rbxm` (après modification d'une arme dans Studio, ou pour ajouter une arme) :
 
@@ -171,14 +172,16 @@ Mettre à jour un `.rbxm` (après modification d'une arme dans Studio, ou pour a
    liste viewmodels et Tools (animations, sons, scripts, MeshParts, attributs), échoue si un viewmodel ou un Tool manque,
    si un `ViewmodelName` ne pointe vers aucun viewmodel, ou si une animation ou un mesh n'a pas d'id ; signale les Tools
    sans entrée dans `WeaponConfig.Weapons` (attribut `WeaponName`, sinon nom du Tool). Lancé aussi par la CI.
-5. Relire `git status` (l'export réécrit tous les fichiers : seuls ceux des armes modifiées doivent différer) et commiter.
+5. Relire `git status` (l'export réécrit tous les fichiers) et commiter. Un `.rbxm` d'arme non modifiée peut différer de
+   quelques octets d'un export à l'autre (constaté sur `AWP.rbxm` : 1 octet, ids identiques, cause inconnue).
 
 Notes :
 - Studio écrit les ids sous leurs noms récents (`AnimationContent`, `AudioContent`, `MeshContent`) : Lune 0.9 ne les
   expose pas tous ni ne relit tous les `.rbxm` de Studio (`Animation.Tags`), d'où la vérification sur la place XML
   produite par Rojo plutôt que sur les `.rbxm`.
-- `MeshPart.MeshId` n'est pas modifiable par un plugin : Rojo 7.7 passe par son endpoint `/api/serialize` pour créer
-  ces instances. Après une synchro, vérifier que les MeshParts ont bien leur mesh (voir la transition ci-dessous).
+- `MeshPart.MeshId` n'est pas modifiable par un plugin : Rojo 7.7 devrait passer par son endpoint `/api/serialize` pour
+  créer ces instances, mais la synchro live n'a pas encore été testée. Après une synchro, vérifier que les MeshParts ont
+  bien leur mesh (voir la transition ci-dessous).
 
 Transition d'une place qui contient déjà ces instances (une fois, pour éviter les doublons et l'ancienne version) :
 1. Studio en mode Edit, plugin Rojo déconnecté. Supprimer `ReplicatedStorage.ViewModels` (le dossier entier) et les Tools
