@@ -361,6 +361,12 @@ function ViewmodelSystem.playSound(name: string)
 	end
 end
 
+-- Cette méthode permet de précharger le viewmodel d'un outil (clone sous la caméra + pistes) lorsqu'un module
+-- doit s'y brancher avant le premier équipement (helper de playtest Studio, #30) ; sans effet s'il existe déjà.
+function ViewmodelSystem.prewarm(tool: Tool)
+	prewarmViewmodel(tool)
+end
+
 function ViewmodelSystem.getActiveViewmodel()
 	return activeViewmodel
 end

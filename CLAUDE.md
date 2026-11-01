@@ -35,6 +35,7 @@ CSGO/
       camera/
         FPSCamera.luau
       debug/
+        DebugPlaytest.luau
         Noclip.luau
       input/
         InputModule.luau
@@ -70,6 +71,7 @@ CSGO/
         Speedometer.luau
     server/
       init.server.luau
+      DebugPlaytest.luau
       RoundManager.luau
       SettingsStore.luau
       SpawnManager.luau
@@ -80,6 +82,7 @@ CSGO/
       CharacterAnimator.luau
       CharacterAppearance.luau
       CharacterConfig.luau
+      DebugPlaytestRules.luau
       GameConfig.luau
       MovementConfig.luau
       MovementState.luau
@@ -233,6 +236,7 @@ Transition d'une place qui contient déjà ces instances (une fois, pour éviter
 
 - `src/client/init.client.luau`: point d'entrée client, initialise les modules côté client.
 - `src/client/camera/FPSCamera.luau`: contrôles et logique de la caméra FPS.
+- `src/client/debug/DebugPlaytest.luau`: moitié client du helper de playtest (Studio uniquement) : exécute les commandes du serveur et observe pistes, marqueurs et sons.
 - `src/client/debug/Noclip.luau`: outil de debug pour activer/désactiver le noclip.
 - `src/client/input/InputModule.luau`: gestion des entrées utilisateur et mapping des actions.
 - `src/client/systems/movement/BhopSystem.luau`: implémentation du bunnyhop (saut en chaîne).
@@ -260,6 +264,7 @@ Transition d'une place qui contient déjà ces instances (une fois, pour éviter
 - `src/client/ui/SettingsMenu.luau`: interface des réglages côté client.
 - `src/client/ui/Speedometer.luau`: affichage de la vitesse du joueur.
 - `src/server/init.server.luau`: point d'entrée serveur — crée tous les RemoteEvents, orchestre SpawnManager, RoundManager, StatsStore.
+- `src/server/DebugPlaytest.luau`: helper de playtest (Studio uniquement) : déclenché par un attribut joueur, enchaîne spawn, équipement, cible immobile et attaque, avec un PASS/FAIL par étape.
 - `src/server/RoundManager.luau`: boucle de round FFA (timer, kills/deaths, fin de round, diffusion résultat).
 - `src/server/SettingsStore.luau`: stockage et récupération des paramètres serveur.
 - `src/server/SpawnManager.luau`: gestion du spawn différé (RequestSpawn remote, LoadCharacter, point de spawn aléatoire).
@@ -269,10 +274,11 @@ Transition d'une place qui contient déjà ces instances (une fois, pour éviter
 - `src/shared/CharacterConfig.luau`: rig/skin communs (couleurs, ids d'images Shirt/Pants/visage) et animations 3e personne (ids, fallbacks, seuils de vitesse, fondus).
 - `src/shared/CharacterAppearance.luau`: rig de référence (`StarterPlayer.StarterCharacter`, cloné pour les bots) et application du skin commun (BodyColors + vêtements) côté serveur.
 - `src/shared/CharacterAnimator.luau`: pipeline d'animation 3e personne commun joueurs/bots (état de mouvement → piste, fondus, vitesse de lecture) ; alimenté par `MovementController` (client, répliqué via l'Animator) et `BotManager` (serveur).
+- `src/shared/DebugPlaytestRules.luau`: règles pures du helper de playtest (choix de l'outil, marqueurs et dégâts attendus, visée, rapport PASS/FAIL).
 - `src/shared/GameConfig.luau`: constantes jeu (ROUND_DURATION=300, RESPAWN_DELAY=2.5, RESULT_DURATION=6, AUTO_SAVE_INTERVAL=120).
 - `src/shared/MovementConfig.luau`: constantes physique du mouvement uniquement (vitesses, accel, friction, saut, pentes, bhop, réseau, hitbox).
 - `src/shared/MovementState.luau`: structure d'état partagée pour le mouvement du joueur.
-- `src/shared/NetworkProtocol.luau`: noms des RemoteEvents et helper getRemote(name). Remotes : MeleeDamage, HitscanDamage, RequestSpawn, RoundState, ScoreUpdate, RoundResult, PlayerDied, WeaponAction.
+- `src/shared/NetworkProtocol.luau`: noms des RemoteEvents et helper getRemote(name). Remotes : MeleeDamage, HitscanDamage, RequestSpawn, RoundState, ScoreUpdate, RoundResult, PlayerDied, WeaponAction, DebugPlaytest (créé uniquement dans Studio).
 - `src/shared/PhysicsUtils.luau`: fonctions utilitaires pour la physique.
 - `src/shared/WeaponConfig.luau`: définitions partagées des armes et de leurs paramètres par défaut (dont `ThirdPerson` : échelle, grip, pose 3P).
 - `src/shared/WeaponThirdPerson.luau`: arme 3e personne commune joueurs/bots : construction du modèle 3P depuis `ViewModels`, grip soudé à la main, pose des épaules, actions répliquées en attributs (`Weapon3PAction`/`Weapon3PActionAt`), règles pures (grip, décalages d'action, visibilité).
@@ -303,3 +309,8 @@ bash tools/check.sh --fix   # idem, en appliquant le formatage StyLua
 - **Ne jamais modifier de scripts via le MCP** (`multi_edit`, `execute_luau` qui écrit dans `Source`, etc.) : la synchro Rojo va uniquement des fichiers vers Studio, toute modification de script faite dans Studio sera écrasée ou perdue. Le code se modifie exclusivement dans `src/`.
 - Usages du MCP : inspecter la scène (`search_game_tree`, `inspect_instance`), construire la map et les objets du workspace (rampes de surf, spawns, décor), chercher et insérer des assets, playtester (`start_stop_play`, simulation d'input, `get_console_output`, `screen_capture`) pour vérifier un comportement.
 - Les éléments créés dans le workspace via le MCP ne sont pas dans `src/` : penser à sauvegarder la place dans Studio.
+- Helper de playtest (Studio uniquement, inactif hors Studio) : vérifie en une commande l'équipement, l'attaque, le son et les dégâts d'une arme. Playtest lancé, en contexte `Server` (`execute_luau`), avec un nom d'outil ou un numéro de slot (ordre alphabétique) :
+  ```lua
+  game.Players:GetPlayers()[1]:SetAttribute("DebugPlaytest", "AWP")
+  ```
+  Puis `get_console_output`, lignes préfixées `[DebugPlaytest]` : un `PASS`/`FAIL` par étape (SPAWN, EQUIP, TARGET, AIM, ATTACK, SOUND, DAMAGE, STILL_EQUIPPED) et un `RESULT` final. L'attribut revient à nil en fin de run. Les bots IA sont retirés pendant le run ; la cible `DebugDummy` reste en jeu jusqu'au run suivant.

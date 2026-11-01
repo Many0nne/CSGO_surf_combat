@@ -13,6 +13,7 @@ local FPSCamera = require(script.camera.FPSCamera)
 local SettingsMenu = require(script.ui.SettingsMenu)
 local Speedometer = require(script.ui.Speedometer)
 local GameStateController = require(script.systems.game.GameStateController)
+local DebugPlaytest = require(script.debug.DebugPlaytest)
 
 local player = Players.LocalPlayer
 
@@ -69,3 +70,12 @@ SettingsMenu.init(FPSCamera)
 -- GameStateController orchestre les transitions d'état, le spawn et tous les UIs.
 -- Il appelle setupCharacter au bon moment (après LoadCharacter côté serveur).
 GameStateController.init(player, setupCharacter)
+
+-- Helper de playtest debug (#30) : ne fait rien hors Studio (garde RunService:IsStudio() dans init).
+DebugPlaytest.init({
+	player = player,
+	gameState = GameStateController,
+	weaponSystem = WeaponSystem,
+	viewmodelSystem = ViewmodelSystem,
+	fpsCamera = FPSCamera,
+})

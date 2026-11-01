@@ -170,6 +170,26 @@ local function listenToRemotes()
 	end)
 end
 
+-- ── API ────────────────────────────────────────────────────────────────────
+
+-- Cette méthode permet de lancer le spawn en round comme le bouton Play lorsqu'on est au menu ou sur Infos ;
+-- renvoie false si l'état ne le permet pas (aussi utilisée par le helper de playtest Studio, #30).
+function GameStateController.requestPlay(): boolean
+	if state ~= "MENU" and state ~= "INFOS" then
+		return false
+	end
+	setState("SPAWNING")
+	if spawnRemote then
+		spawnRemote:FireServer()
+	end
+	return true
+end
+
+-- Cette méthode permet de lire l'état client courant (MENU, IN_ROUND…) lorsqu'un module doit s'y adapter.
+function GameStateController.getState(): State
+	return state
+end
+
 -- ── Init ───────────────────────────────────────────────────────────────────
 
 function GameStateController.init(player: Player, setupCharacter: (char: Model) -> ())
@@ -182,13 +202,7 @@ function GameStateController.init(player: Player, setupCharacter: (char: Model) 
 	-- UI
 	FeedbackModal.init()
 	MainMenu.init(function() -- Play (depuis l'accueil, Infos ou Settings)
-		if state ~= "MENU" and state ~= "INFOS" then
-			return
-		end
-		setState("SPAWNING")
-		if spawnRemote then
-			spawnRemote:FireServer()
-		end
+		GameStateController.requestPlay()
 	end, function() -- Infos
 		setState("INFOS")
 	end, function() -- Feedback

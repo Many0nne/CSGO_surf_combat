@@ -94,6 +94,13 @@ function FPSCamera.getCameraPitch(): number
 	return pitch
 end
 
+-- Cette méthode permet d'orienter la caméra (yaw/pitch en degrés) lorsqu'un script doit viser sans souris,
+-- par exemple le helper de playtest Studio (#30) ; la souris reprend la main à la frame suivante.
+function FPSCamera.setAngles(newYaw: number, newPitch: number)
+	yaw = newYaw
+	pitch = math.clamp(newPitch, CameraConfig.PITCH_MIN, CameraConfig.PITCH_MAX)
+end
+
 function FPSCamera.setSensitivity(s: number)
 	baseSens = s
 	currentSens = isScoped and (baseSens * scopeSensMult) or baseSens

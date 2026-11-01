@@ -72,6 +72,8 @@ local nameCursor = 0
 local RoundManager -- injected via init
 local SpawnManager -- injected via init
 local heartbeatConn: RBXScriptConnection?
+-- Debug Studio (#30) : bots IA retirés le temps d'un run du helper de playtest, pour un test déterministe.
+local suspended = false
 
 -- ── helpers ─────────────────────────────────────────────────────────────────
 
@@ -382,7 +384,7 @@ end
 
 -- Spawn/despawn bots so total combatants approach TARGET_POPULATION.
 function BotManager.maintainPopulation()
-	if not RoundManager.isActive() or realPlayerCount() == 0 then
+	if suspended or not RoundManager.isActive() or realPlayerCount() == 0 then
 		BotManager.despawnAll()
 		return
 	end
@@ -402,6 +404,38 @@ function BotManager.maintainPopulation()
 		destroyBot(anyId)
 		current -= 1
 	end
+end
+
+-- Cette méthode permet de retirer (ou de rétablir) les bots IA lorsque le helper de playtest Studio (#30)
+-- a besoin d'un terrain sans tireurs ; la population est recalculée immédiatement.
+function BotManager.setSuspended(value: boolean)
+	suspended = value
+	BotManager.maintainPopulation()
+end
+
+-- Cette méthode permet de créer une cible immobile (même rig et skin que les bots, sans IA ni score) lorsque
+-- le helper de playtest Studio (#30) en a besoin ; refusée hors Studio.
+function BotManager.spawnDummy(cf: CFrame, health: number): Model?
+	if not RunService:IsStudio() then
+		return nil
+	end
+	local model = buildRig("DebugDummy")
+	local humanoid = model:FindFirstChildWhichIsA("Humanoid") :: Humanoid?
+	local root = model:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not humanoid or not root then
+		model:Destroy()
+		return nil
+	end
+	humanoid.MaxHealth = health
+	humanoid.Health = health
+	humanoid.WalkSpeed = 0
+	humanoid.JumpPower = 0
+	-- IsBot : cible acceptée par Validator ; pas de BotId, donc ni score ni IA (absente de `bots`).
+	model:SetAttribute("IsBot", true)
+	root.Anchored = true
+	model:PivotTo(cf)
+	model.Parent = workspace
+	return model
 end
 
 -- ── AI ────────────────────────────────────────────────────────────────────
