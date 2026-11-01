@@ -34,9 +34,9 @@ local SWAY_SPEED = 18
 local SWAY_DAMPING = 1
 local IDLE_ANIMATION = "Idle"
 
-local function stopTrack(track: AnimationTrack?)
+local function stopTrack(track: AnimationTrack?, fadeTime: number?)
 	if track then
-		track:Stop()
+		track:Stop(fadeTime)
 	end
 end
 
@@ -296,7 +296,13 @@ local function onCharacter(char: Model)
 	end)
 end
 
-function ViewmodelSystem.playAnimation(name: string, markerOverrides: { [string]: string | () -> string }?)
+-- Cette méthode permet de jouer une animation d'action de l'arme active ; fadeTime règle le fondu avec la piste
+-- précédente (défaut Roblox si absent), pour qu'un coup de couteau parte sans transition.
+function ViewmodelSystem.playAnimation(
+	name: string,
+	markerOverrides: { [string]: string | () -> string }?,
+	fadeTime: number?
+)
 	if not activeViewmodel then
 		return
 	end
@@ -313,14 +319,14 @@ function ViewmodelSystem.playAnimation(name: string, markerOverrides: { [string]
 		return
 	end
 
-	stopTrack(equipTrack)
+	stopTrack(equipTrack, fadeTime)
 	equipTrack = nil
-	stopTrack(actionTrack)
+	stopTrack(actionTrack, fadeTime)
 	actionTrack = nil
 
 	local track = preloadedTracks[name] or animator:LoadAnimation(anim)
 	track.Looped = false
-	track:Play()
+	track:Play(fadeTime)
 	actionTrack = track
 	for _, c in markerConns do
 		c:Disconnect()

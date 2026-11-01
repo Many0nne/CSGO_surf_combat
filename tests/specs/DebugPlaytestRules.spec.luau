@@ -54,6 +54,17 @@ return function(T, Loader)
 			T.expectEqual(Rules.markersFor(cfg, "Shoot2")[1], "Stab Sound")
 			T.expectEqual(#Rules.markersFor(cfg, "Inspect"), 0)
 		end)
+
+		T.it("ajoute le marqueur de coup sur l'attaque secondaire sans modifier la config", function()
+			local cfg = {
+				IsMelee = true,
+				ShootAnimations = { "Shoot" },
+				SecondaryAttack = { Animation = "Stab" },
+				AnimationSounds = {},
+			}
+			T.expectEqual(Rules.markersFor(cfg, "Stab")[1], "Stab Sound")
+			T.expectEqual(#cfg.ShootAnimations, 1)
+		end)
 	end)
 
 	T.describe("DebugPlaytestRules.expectedDamage", function()

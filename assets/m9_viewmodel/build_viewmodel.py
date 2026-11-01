@@ -1,6 +1,6 @@
 # build_viewmodel.py
 # Construit le rig du viewmodel M9 Bayonet dans Blender (bras droit + volume du couteau), génère ses
-# animations (Idle, Equip, Shoot, Shoot2, Inspect) et les exporte pour Roblox. Le modèle du couteau vit dans
+# animations (Idle, Equip, Shoot, Shoot2, Stab, Inspect) et les exporte pour Roblox. Le modèle du couteau vit dans
 # assets/rbx/ViewModels/M9Bayonet.rbxm : ce script ne le construit pas.
 # À lancer dans Blender :
 #   exec(open(f"{D}/build_viewmodel.py").read(), {"__name__": "__main__", "ASSET_DIR": D})
@@ -103,14 +103,41 @@ def grip_matrix():
 
 GRIP = grip_matrix()
 
-# Pose idle : centre de poignée, axe du couteau, direction approchée du tranchant (repère caméra).
-# Référence CS:GO : lame vers le haut-gauche de l'écran, vue presque de profil, tranchant vers le haut et l'avant.
-IDLE_POS = Vector((1.6, -0.98, -2.7))
-IDLE_AXIS = Vector((-0.85, 0.38, -0.36))
-IDLE_EDGE = Vector((0.25, 0.55, -0.8))
-SHOULDER = Vector((2.2, -2.68, -1.3))
-POLE = Vector((2.5, -3.53, -1.55))
-IDLE_KNIFE = frame(IDLE_POS, basis_zx(IDLE_AXIS, IDLE_EDGE))
+# Rendu du jeu (CameraConfig.DEFAULT_FOV = 90, vertical) et cadre de référence : sert à retrouver une pose 3D depuis une
+# position à l'écran, mesurée sur la vidéo CS:GO de référence (0,0 = haut gauche de l'écran, 1,1 = bas droite).
+SCREEN_ASPECT = 16 / 9
+GAME_FOV = 90
+GUARD_Z = 0.72  # garde dans le repère de prise
+TIP_Z = 3.07  # pointe dans le repère de prise
+FACE = (0.25, 0.55, -0.8)  # tranchant de la tenue : lame vue de plat
+HIDDEN_LEFT = Vector((-0.3, -2.6, 0.4))  # décalage qui sort la main gauche de l'écran
+
+
+# Cette méthode permet de convertir une position écran normalisée en rayon caméra (FOV vertical du jeu).
+def screen_ray(uv):
+	k = math.tan(math.radians(GAME_FOV) / 2)
+	return Vector(((2 * uv[0] - 1) * SCREEN_ASPECT * k, (1 - 2 * uv[1]) * k, -1))
+
+
+# Cette méthode permet de retrouver le repère 3D du couteau depuis la garde et la pointe à l'écran : la profondeur de
+# la garde est donnée, la longueur réelle de la lame fixe le raccourci de perspective. edge="cam" montre la tranche.
+def knife_from_screen(guard, tip, depth, edge, far=True):
+	g = screen_ray(guard) * depth
+	rt = screen_ray(tip)
+	length = TIP_Z - GUARD_Z
+	a, b, c = rt.dot(rt), -2 * rt.dot(g), g.dot(g) - length * length
+	disc = b * b - 4 * a * c
+	s = (-b + (1 if far else -1) * math.sqrt(disc)) / (2 * a) if disc > 0 else -b / (2 * a)
+	axis = (rt * s - g).normalized()
+	hint = -rt if edge == "cam" else Vector(edge)
+	return frame(g - axis * GUARD_Z, basis_zx(axis, hint))
+
+
+# Pose idle mesurée sur la référence : lame vers le haut-gauche de l'écran, vue de plat, main en bas à droite.
+IDLE_KNIFE = knife_from_screen((0.67, 0.80), (0.445, 0.59), 2.8, FACE)
+IDLE_POS = IDLE_KNIFE.translation.copy()
+SHOULDER = Vector((2.2, -2.68, -1.3)) + (IDLE_POS - Vector((1.6, -0.98, -2.7))) * 0.35
+POLE = Vector((2.5, -3.53, -1.55)) + (IDLE_POS - Vector((1.6, -0.98, -2.7))) * 0.35
 
 # Main gauche au repos : en bas à gauche de l'écran, l'avant-bras remonte vers le centre.
 LEFT_HAND_POS = Vector((-2.0, -1.35, -3.0))
@@ -145,10 +172,11 @@ def solve_limb(hand, shoulder, pole):
 	return upper, lower, frame(hand.translation, hr)
 
 
-# Cette méthode permet de résoudre le bras droit pour une pose de couteau donnée et de renvoyer le CFrame
-# (repère caméra) de chacune de ses pièces et de la Handle.
-def solve_arm(knife, shoulder, pole):
-	upper, lower, hand = solve_limb(knife @ GRIP.inverted(), shoulder, pole)
+# Cette méthode permet de résoudre le bras droit pour une pose de couteau donnée et de renvoyer le CFrame (repère
+# caméra) de chacune de ses pièces et de la Handle ; flip fait pivoter le couteau dans le poing autour de sa normale.
+def solve_arm(knife, shoulder, pole, flip=0.0):
+	spin = Matrix.Rotation(math.radians(flip), 4, "Y")
+	upper, lower, hand = solve_limb(knife @ spin.inverted() @ GRIP.inverted(), shoulder, pole)
 	return {"RightUpperArm": upper, "RightLowerArm": lower, "RightHand": hand, "Handle": knife}
 
 
@@ -258,7 +286,7 @@ def knife_object(mat):
 
 # Cette méthode permet de construire l'armature (un os par pièce animée, sans hiérarchie : les poses
 # sont écrites directement dans le repère armature), d'y attacher bras et couteau et de placer la
-# caméra du jeu (FOV vertical 70°).
+# caméra du jeu (FOV vertical du jeu, cf. GAME_FOV).
 def build_scene(rest):
 	for ob in list(bpy.data.objects):
 		bpy.data.objects.remove(ob, do_unlink=True)
@@ -293,7 +321,7 @@ def build_scene(rest):
 
 	cam_data = bpy.data.cameras.new("GameCam")
 	cam_data.sensor_fit = "VERTICAL"
-	cam_data.angle = math.radians(70)
+	cam_data.angle = math.radians(GAME_FOV)
 	cam_data.clip_start = 0.05
 	cam = bpy.data.objects.new("GameCam", cam_data)
 	cam.rotation_euler = (math.radians(90), 0, 0)
@@ -331,22 +359,27 @@ def ease(kind, s):
 	raise ValueError(kind)
 
 
-# Cette méthode permet de construire une clé de pose à l'instant t : position du manche, axe manche → pointe,
-# sens approché du tranchant et courbe d'arrivée. Sans axe ni tranchant, la clé reprend l'orientation idle.
-def P(t, pos=None, axis=None, edge=None, e="io"):
-	rot = basis_zx(Vector(axis), Vector(edge)) if axis else IDLE_KNIFE.to_3x3()
-	return (t, Vector(pos) if pos else IDLE_POS.copy(), rot.to_quaternion(), e)
+# Cette méthode permet de construire la clé de repos à l'instant t (fin ou début d'une animation).
+def P(t, e="io"):
+	return (t, IDLE_POS.copy(), IDLE_KNIFE.to_3x3().to_quaternion(), e, 0.0)
 
 
-# Cette méthode permet d'évaluer une liste de clés de pose à l'instant t (position interpolée, rotation slerp).
+# Cette méthode permet de construire une clé depuis les positions à l'écran de la garde et de la pointe (voir
+# knife_from_screen), avec la courbe d'arrivée et le pivot éventuel du couteau dans le poing.
+def S(t, guard, tip, depth, edge, flip=0.0, e="io", far=True):
+	k = knife_from_screen(guard, tip, depth, edge, far)
+	return (t, k.translation.copy(), k.to_3x3().to_quaternion(), e, flip)
+
+
+# Cette méthode permet d'évaluer une liste de clés à l'instant t (position, rotation slerp et pivot interpolés).
 def eval_keys(keys, t):
 	if t <= keys[0][0]:
-		return keys[0][1].copy(), keys[0][2].copy()
-	for (t0, p0, q0, _), (t1, p1, q1, e1) in zip(keys, keys[1:], strict=False):
+		return keys[0][1].copy(), keys[0][2].copy(), keys[0][4]
+	for (t0, p0, q0, _, f0), (t1, p1, q1, e1, f1) in zip(keys, keys[1:], strict=False):
 		if t <= t1:
 			s = ease(e1, (t - t0) / (t1 - t0)) if t1 > t0 else 1.0
-			return p0.lerp(p1, s), q0.slerp(q1, s)
-	return keys[-1][1].copy(), keys[-1][2].copy()
+			return p0.lerp(p1, s), q0.slerp(q1, s), f0 + (f1 - f0) * s
+	return keys[-1][1].copy(), keys[-1][2].copy(), keys[-1][4]
 
 
 # Cette méthode permet de faire suivre les cibles (position et rotation) par un ressort amorti, pour donner de
@@ -398,146 +431,311 @@ def spec_idle():
 	return dict(length=length, offset=offset, loop=True, step=6, markers=[])
 
 
-# Cette méthode permet de décrire l'Equip : le couteau jaillit du bas de l'écran en tournoyant, la main monte
-# le chercher et le rattrape au vol, encaisse la réception puis se cale sur la tenue. La main gauche remonte aussi.
+# Les clés ci-dessous sont mesurées sur la vidéo CS:GO de référence (ralentie d'environ 1,25 fois : les temps sont ceux
+# du jeu), puis validées à côté de leur image de référence. Les ids en commentaire renvoient aux images de cette vidéo.
+
+
+# Cette méthode permet de décrire l'Equip : la trajectoire de l'arme suit la référence image par image (voir
+# EQUIP_TRACK) ; le couteau fait son demi-tour devant le poing, puis la lame oscille, roule et descend sur la tenue.
 def spec_equip():
-	catch = 0.56
 	return dict(
 		length=1.0,
-		freq=9.0,
-		zeta=0.62,
-		settle=0.14,
-		keys=[
-			P(0.0, (2.4, -3.2, -2.4), (-0.75, 0.5, -0.43), (0.25, 0.6, -0.75)),
-			P(0.26, (2.05, -2.2, -2.6), (-0.75, 0.5, -0.43), (0.25, 0.6, -0.75), "o"),
-			P(catch, (1.5, -0.7, -2.85), (-0.75, 0.5, -0.43), (0.25, 0.6, -0.75), "io"),
-			P(catch + 0.11, (1.7, -1.25, -2.6), (-0.85, 0.25, -0.45), (0.2, 0.65, -0.75), "o"),
-			P(0.86, None, None, None, "io"),
-		],
-		flight=dict(t0=0.0, t1=catch, start=(1.2, -3.9, -3.4), height=2.1, turns=1.25, axis=(0, 1, 0), spin="o"),
-		left_in=dict(offset=(-0.3, -2.4, 0.4), until=0.5),
-		markers=[("Equip Sound", catch - 0.3)],
+		track=True,
+		settle=0.06,
+		left=[(0.0, 1.0), (0.70, 1.0), (0.92, 0.0)],
+		markers=[("Equip Sound", 0.3)],
 		step=1,
 	)
 
 
-# Cette méthode permet de décrire le slash droite → gauche : main armée en haut à droite, lame dressée, coup de
-# poignet en diagonale tranchant devant, accompagnement bas-gauche, retour sur la tenue.
+# Cette méthode permet de décrire le premier coup du clic gauche : le bras jaillit en haut à gauche en quelques images,
+# balaie vers la droite et sort en bas à droite, puis remonte du bas de l'écran. Le coup suivant coupe ce retour.
 def spec_shoot():
-	hit = 0.2
 	return dict(
 		length=0.7,
-		freq=13.0,
-		zeta=0.74,
-		settle=0.16,
 		keys=[
 			P(0.0),
-			P(0.09, (2.1, -0.55, -2.9), (0.25, 0.85, -0.45), (-0.85, 0.1, -0.5), "o"),
-			P(hit, (0.85, -0.7, -3.2), (-0.75, 0.4, -0.5), (-0.5, -0.6, 0.25), "i"),
-			P(0.3, (0.3, -1.05, -3.05), (-0.85, -0.05, -0.5), (-0.35, -0.85, 0.2), "o"),
-			P(0.62),
+			S(0.03, (0.37, 0.71), (0.18, 0.55), 3.2, FACE, e="o"),  # A2
+			S(0.10, (0.57, 0.63), (0.40, 0.52), 3.2, FACE, e="l"),  # A4
+			S(0.18, (0.79, 0.77), (0.65, 0.61), 3.2, FACE, e="l"),  # A6
+			S(0.27, (1.0, 0.95), (0.84, 0.75), 3.2, FACE, e="l"),  # A8
+			S(0.33, (1.08, 1.12), (0.95, 0.92), 3.2, FACE, e="l"),
+			S(0.42, (1.08, 1.12), (0.95, 0.92), 3.2, FACE, e="l"),
+			S(0.56, (0.72, 0.93), (0.52, 0.72), 3.0, FACE, e="o"),
+			P(0.7),
 		],
-		markers=[("Stab Sound", hit)],
-		step=2,
+		left=[(0.0, 0.0), (0.05, 1.0), (0.55, 1.0), (0.7, 0.0)],
+		markers=[("Stab Sound", 0.14)],
+		step=1,
 	)
 
 
-# Cette méthode permet de décrire le slash de revers gauche → droite : la main passe devant le torse, le poignet
-# retourne le tranchant vers la droite et la lame balaie l'écran, légèrement remontante, avant le retour.
+# Cette méthode permet de décrire le second coup du clic gauche : diagonale descendante de droite à gauche, sortie en
+# bas à gauche, puis remontée du bas de l'écran. Le coup suivant coupe ce retour.
 def spec_shoot2():
-	hit = 0.2
+	edge = (-1, 0.2, 0.2)
 	return dict(
 		length=0.7,
-		freq=13.0,
-		zeta=0.74,
-		settle=0.16,
 		keys=[
 			P(0.0),
-			P(0.1, (0.15, -1.2, -2.85), (-0.9, 0.25, -0.35), (-0.25, 0.2, -0.95), "o"),
-			P(hit, (1.35, -1.1, -3.2), (0.3, 0.75, -0.6), (0.9, -0.25, 0.1), "i"),
-			P(0.31, (1.8, -1.2, -3.05), (0.65, 0.6, -0.45), (0.65, -0.2, 0.7), "o"),
-			P(0.62),
+			S(0.04, (0.645, 0.63), (0.70, 0.47), 3.0, edge, e="o"),  # B3
+			S(0.12, (0.435, 0.72), (0.48, 0.56), 3.0, edge, e="l"),  # B5
+			S(0.20, (0.25, 0.85), (0.31, 0.66), 3.0, edge, e="l"),  # B7
+			S(0.24, (0.08, 0.95), (0.16, 0.75), 3.0, edge, e="l"),  # B8
+			S(0.31, (-0.12, 1.15), (-0.02, 0.92), 3.0, edge, e="l"),
+			S(0.42, (-0.12, 1.15), (-0.02, 0.92), 3.0, edge, e="l"),
+			S(0.56, (0.66, 0.96), (0.46, 0.74), 3.0, FACE, e="o"),
+			P(0.7),
 		],
-		markers=[("Stab Sound", hit)],
-		step=2,
+		left=[(0.0, 0.0), (0.05, 1.0), (0.55, 1.0), (0.7, 0.0)],
+		markers=[("Stab Sound", 0.12)],
+		step=1,
 	)
 
 
-# Cette méthode permet de décrire l'inspection, sans lancer : la main présente une face de la lame, le poignet
-# roule pour montrer l'autre face, puis revient sur la tenue.
+# Cette méthode permet de décrire le coup d'estoc du clic droit : la main recule, le bras se tend au centre de l'écran,
+# tient le coup, tombe hors du cadre puis remonte du bas de l'écran.
+def spec_stab():
+	edge = (-0.7, 0.7, 0.2)
+	return dict(
+		length=1.0,
+		keys=[
+			P(0.0),
+			S(0.04, (0.92, 1.05), (1.0, 0.92), 2.6, (0, 1, 0), e="o"),  # C2
+			S(0.10, (0.50, 0.62), (0.63, 0.64), 3.0, (0, 1, 0), e="o"),  # C3
+			S(0.23, (0.40, 0.60), (0.46, 0.49), 3.2, edge, e="o"),  # C5
+			S(0.44, (0.39, 0.62), (0.45, 0.50), 3.2, edge, e="l"),
+			S(0.57, (0.27, 0.85), (0.34, 0.61), 3.0, edge, e="i"),  # C10
+			S(0.64, (0.20, 1.25), (0.30, 1.0), 3.0, edge, e="l"),
+			S(0.78, (0.20, 1.25), (0.30, 1.0), 3.0, edge, e="l"),
+			S(0.90, (0.68, 0.93), (0.48, 0.71), 3.0, FACE, e="o"),
+			P(1.0),
+		],
+		left=[(0.0, 0.0), (0.03, 1.0), (0.82, 1.0), (1.0, 0.0)],
+		markers=[("Stab Sound", 0.16)],
+		step=1,
+	)
+
+
+# Cette méthode permet de décrire l'inspection : la lame se redresse à droite vue par la tranche puis de plat, le
+# poignet roule jusqu'à la tranche et revient sur la même face, avec un temps de regard entre chaque geste.
 def spec_inspect():
 	return dict(
-		length=2.9,
+		length=9.2,
 		freq=8.0,
-		zeta=0.75,
+		zeta=0.85,
 		settle=0.2,
 		keys=[
 			P(0.0),
-			P(0.4, (0.95, -0.7, -2.6), (-0.9, 0.35, -0.25), (0.3, 0.85, 0.35), "io"),
-			P(0.95, (0.92, -0.67, -2.55), (-0.88, 0.42, -0.2), (0.3, 0.8, 0.45), "l"),
-			P(1.15, (0.92, -0.72, -2.58), (-0.88, 0.42, -0.2), (0.1, 0.25, -0.95), "io"),
-			P(1.35, (0.95, -0.78, -2.6), (-0.88, 0.38, -0.25), (-0.3, -0.85, -0.35), "io"),
-			P(1.9, (0.98, -0.75, -2.55), (-0.86, 0.45, -0.2), (-0.3, -0.8, -0.45), "l"),
-			P(2.1, (1.2, -0.85, -2.62), (-0.86, 0.42, -0.28), (0.1, 0.25, -0.95), "io"),
-			P(2.65),
+			S(0.24, (0.66, 0.80), (0.49, 0.52), 2.9, FACE),  # I2
+			S(0.48, (0.67, 0.75), (0.60, 0.35), 3.0, "cam"),  # I3
+			S(0.72, (0.71, 0.72), (0.70, 0.25), 3.0, "cam"),  # I4
+			S(1.28, (0.72, 0.63), (0.75, 0.28), 3.0, (-1, 0, 0.2)),  # I6
+			S(3.2, (0.72, 0.60), (0.75, 0.22), 3.0, (-1, 0, 0.2), e="l"),
+			S(3.72, (0.68, 0.59), (0.64, 0.13), 3.0, "cam"),  # I9
+			S(6.08, (0.68, 0.60), (0.65, 0.14), 3.0, "cam", e="l"),
+			S(6.64, (0.75, 0.60), (0.78, 0.17), 3.0, (-1, 0, 0.2)),  # I12
+			S(8.08, (0.73, 0.61), (0.75, 0.24), 3.0, (-1, 0, 0.2), e="l"),
+			S(8.56, (0.71, 0.72), (0.70, 0.25), 3.0, "cam"),
+			S(8.68, (0.68, 0.76), (0.55, 0.38), 3.0, "cam"),
+			S(8.8, (0.66, 0.80), (0.41, 0.55), 2.9, FACE),  # I16
+			P(9.2),
 		],
+		left=[(0.0, 0.0), (0.35, 1.0), (8.55, 1.0), (8.9, 0.0)],
 		markers=[("Equip Sound", 1.1)],
-		step=2,
+		step=3,
 	)
 
 
-SPECS = {"Idle": spec_idle, "Equip": spec_equip, "Shoot": spec_shoot, "Shoot2": spec_shoot2, "Inspect": spec_inspect}
+SPECS = {
+	"Idle": spec_idle,
+	"Equip": spec_equip,
+	"Shoot": spec_shoot,
+	"Shoot2": spec_shoot2,
+	"Stab": spec_stab,
+	"Inspect": spec_inspect,
+}
 
 
-# Cette méthode permet de calculer la pose du couteau pendant son vol : trajet parabolique depuis un point hors
-# champ jusqu'à la main au rattrapage, avec une rotation sur lui-même.
-def flight_pose(fl, t, poses):
-	q0 = poses[int(round(fl["t0"] * FPS))][1]
-	p1, q1 = poses[int(round(fl["t1"] * FPS))]
-	p0 = Vector(fl["start"])
-	s = (t - fl["t0"]) / (fl["t1"] - fl["t0"])
-	pos = p0.lerp(p1, s) + Vector((0, fl["height"] * 4 * s * (1 - s), 0))
-	angle = (1 - ease(fl["spin"], s)) * fl["turns"] * 2 * math.pi
-	rot = q0.slerp(q1, s).to_matrix() @ Matrix.Rotation(angle, 3, Vector(fl["axis"]))
-	return frame(pos, rot)
 
 
-# Cette méthode permet de calculer le décalage de la main gauche à l'instant t : elle respire avec la droite, part
-# légèrement à l'opposé de ses gestes et, si l'animation le demande, remonte depuis le bas de l'écran.
+# Cette méthode permet de calculer le décalage de la main gauche à l'instant t : elle respire avec la droite pendant
+# l'Idle ; sinon elle suit le planning « left » de l'animation (0 = à sa place, 1 = sortie de l'écran).
 def left_offset(spec, t, right_delta):
 	if spec.get("loop"):
 		return right_delta * 0.8
-	off = right_delta * -0.08
-	entry = spec.get("left_in")
-	if entry:
-		off += Vector(entry["offset"]) * (1 - ease("o", t / entry["until"]))
-	return off
+	schedule = spec.get("left")
+	if not schedule:
+		return Vector((0, 0, 0))
+	for (t0, h0), (t1, h1) in zip(schedule, schedule[1:], strict=False):
+		if t <= t1:
+			return HIDDEN_LEFT * (h0 + (h1 - h0) * ease("io", (t - t0) / (t1 - t0)))
+	return HIDDEN_LEFT * schedule[-1][1]
 
 
-# Cette méthode permet d'échantillonner une animation (clés + ressort + vol éventuel) et de renvoyer, pour chaque
-# frame, les CFrames (repère caméra) des pièces du bras et de la Handle.
+# Trajectoire de l'Equip mesurée sur la vidéo de référence, toutes les 0,05 s de vidéo (ralentie 1,25 fois) :
+# temps vidéo, garde et pointe à l'écran, roulis de la lame (0 = de plat, tranchant à gauche d'une lame dressée ;
+# 90 = dos vers la caméra), profondeur de la garde (None = déduite de la longueur à l'écran, lame vue de plat),
+# centre de la main à l'écran tant que le couteau tourne dans le poing (None = la main tient le couteau).
+EQUIP_VIDEO_START = 0.42
+EQUIP_VIDEO_SCALE = 1.25
+EQUIP_TRACK = (
+	(0.40, (0.646, 1.20), (0.63, 1.55), 0, 2.5, (0.62, 1.15)),
+	(0.45, (0.643, 1.08), (0.625, 1.46), 0, 2.5, (0.62, 1.08)),
+	(0.50, (0.639, 1.02), (0.62, 1.40), 0, 2.5, (0.62, 0.98)),
+	(0.55, (0.633, 0.95), (0.61, 1.32), 0, 2.5, (0.63, 0.90)),
+	(0.60, (0.630, 0.89), (0.60, 1.25), 0, 2.5, (0.63, 0.84)),
+	(0.65, (0.620, 0.81), (0.58, 1.12), 0, 2.5, (0.62, 0.76)),
+	(0.70, (0.625, 0.76), (0.575, 1.10), 0, 2.5, (0.63, 0.72)),
+	(0.75, (0.623, 0.71), (0.54, 1.05), 0, 2.5, (0.66, 0.72)),
+	(0.80, (0.647, 0.68), (0.529, 0.899), 0, 2.5, (0.66, 0.70)),
+	(0.85, (0.672, 0.652), (0.529, 0.701), 0, 2.5, (0.665, 0.69)),
+	(0.90, (0.677, 0.684), (0.569, 0.464), 0, 2.5, (0.67, 0.70)),
+	(0.95, (0.659, 0.674), (0.618, 0.313), 0, 2.5, (0.665, 0.71)),
+	(1.00, (0.654, 0.645), (0.659, 0.209), 0, None, None),
+	(1.05, (0.656, 0.623), (0.694, 0.145), 0, None, None),
+	(1.10, (0.670, 0.598), (0.76, 0.107), 0, None, None),
+	(1.15, (0.696, 0.580), (0.829, 0.107), 0, None, None),
+	(1.20, (0.721, 0.558), (0.87, 0.122), 5, None, None),
+	(1.25, (0.727, 0.590), (0.854, 0.136), 15, None, None),
+	(1.30, (0.703, 0.603), (0.764, 0.145), 40, None, None),
+	(1.35, (0.691, 0.640), (0.656, 0.203), 80, None, None),
+	(1.40, (0.691, 0.754), (0.556, 0.296), 100, None, None),
+	(1.45, (0.659, 0.759), (0.485, 0.412), 115, None, None),
+	(1.50, (0.659, 0.710), (0.456, 0.516), 125, None, None),
+	(1.55, (0.667, 0.754), (0.439, 0.58), 130, None, None),
+	(1.60, (0.667, 0.806), (0.439, 0.632), 130, None, None),
+	(1.67, (0.67, 0.80), (0.445, 0.59), 130, 2.8, None),
+)
+
+
+# Cette méthode permet de lisser une colonne de mesures (filtre 1-2-1, extrémités fixes) lorsque le relevé à l'œil
+# contient un léger bruit qui ferait trembler la lame ; passes règle la force du lissage.
+def smooth_column(values, passes=2):
+	out = list(values)
+	for _ in range(passes):
+		out = [out[0]] + [(out[i - 1] + 2 * out[i] + out[i + 1]) / 4 for i in range(1, len(out) - 1)] + [out[-1]]
+	return out
+
+
+# Cette méthode permet d'interpoler une colonne de mesures à l'indice flottant u (spline de Catmull-Rom), pour que
+# la vitesse reste continue d'une mesure à l'autre, sans ralentir sur chaque point comme une clé avec courbe.
+def spline(values, u):
+	i = min(max(int(u), 0), len(values) - 2)
+	s = u - i
+	a, b, c, d = values[max(i - 1, 0)], values[i], values[i + 1], values[min(i + 2, len(values) - 1)]
+	return 0.5 * (2 * b + (c - a) * s + (2 * a - 5 * b + 4 * c - d) * s * s + (3 * b - a - 3 * c + d) * s * s * s)
+
+
+# Cette méthode permet de construire le repère du couteau depuis la garde et la pointe à l'écran et son roulis,
+# lorsque le tranchant se décrit par rapport au regard plutôt que par une direction fixe (qui tournerait avec la lame).
+def knife_from_roll(guard, tip, depth, roll):
+	k = knife_from_screen(guard, tip, depth, (0, 0, 1))
+	axis = k.to_3x3().col[2]
+	to_cam = -screen_ray(tip).normalized()
+	left = to_cam.cross(axis).normalized()
+	a = math.radians(roll)
+	return frame(k.translation, basis_zx(axis, left * math.cos(a) - to_cam * math.sin(a)))
+
+
+# Cette méthode permet de résoudre le bras gauche et le bras droit pour une frame de la trajectoire de l'Equip :
+# tant que le couteau tourne, la main reste orientée comme à la fin du demi-tour et le couteau passe devant elle.
+def equip_track_frame(track, t, hand_rot):
+	vt = EQUIP_VIDEO_START + t * EQUIP_VIDEO_SCALE
+	times = track["times"]
+	if vt >= times[-1]:
+		u = len(times) - 1.0
+	else:
+		j = next(i for i in range(len(times) - 1) if vt < times[i + 1])
+		u = j + (vt - times[j]) / (times[j + 1] - times[j])
+	guard = (spline(track["gu"], u), spline(track["gv"], u))
+	tip = (spline(track["tu"], u), spline(track["tv"], u))
+	depth = spline(track["depth"], u)
+	knife = knife_from_roll(guard, tip, depth, spline(track["roll"], u))
+	grip_hand = knife @ GRIP.inverted()
+	weight = min(max((vt - 0.95) / 0.05, 0.0), 1.0)  # la main reprend le couteau à la fin du demi-tour
+	free = frame(screen_ray((spline(track["hu"], u), spline(track["hv"], u))) * (depth + 0.55), hand_rot)
+	hand = free.lerp(grip_hand, ease("io", weight))
+	return knife, hand
+
+
+# Cette méthode permet d'échantillonner l'Equip depuis sa trajectoire mesurée et de renvoyer les CFrames de chaque frame.
+def sample_track(spec):
+	rows = EQUIP_TRACK
+	depths = []
+	for _, g, tp, _, d, _ in rows:
+		if d is not None:
+			depths.append(d)
+			continue
+		length = math.hypot((tp[0] - g[0]) * SCREEN_ASPECT, tp[1] - g[1])
+		depths.append(min(max((TIP_Z - GUARD_Z) / (2 * length), 2.1), 3.0))
+	end = len(rows) - 1
+	hands = [r[5] or rows[11][5] for r in rows]
+	track = {
+		"times": [r[0] for r in rows],
+		"gu": smooth_column([r[1][0] for r in rows]),
+		"gv": smooth_column([r[1][1] for r in rows]),
+		"tu": smooth_column([r[2][0] for r in rows]),
+		"tv": smooth_column([r[2][1] for r in rows]),
+		"roll": smooth_column([r[3] for r in rows]),
+		"depth": smooth_column(depths),
+		"hu": smooth_column([h[0] for h in hands]),
+		"hv": smooth_column([h[1] for h in hands]),
+	}
+	u_end = 12  # fin du demi-tour : ligne 1,00 s de la trajectoire
+	end_knife = knife_from_roll(
+		(track["gu"][u_end], track["gv"][u_end]),
+		(track["tu"][u_end], track["tv"][u_end]),
+		track["depth"][u_end],
+		track["roll"][u_end],
+	)
+	hand_rot = (end_knife @ GRIP.inverted()).to_3x3()
+	n = int(round(spec["length"] * FPS)) + 1
+	ts = [i / FPS for i in range(n)]
+	idle_hand = IDLE_KNIFE @ GRIP.inverted()
+	frames = []
+	for t in ts:
+		knife, hand = equip_track_frame(track, t, hand_rot)
+		blend = ease("io", (t - spec["length"] + spec["settle"]) / spec["settle"])  # finit pile sur la tenue
+		if blend > 0:
+			knife = knife.lerp(IDLE_KNIFE, blend)
+			hand = hand.lerp(idle_hand, blend)
+		pos = knife.translation
+		delta = (pos - IDLE_POS) * 0.35
+		upper, lower, solved = solve_limb(hand, SHOULDER + delta, POLE + delta)
+		arm = {"RightUpperArm": upper, "RightLowerArm": lower, "RightHand": solved, "Handle": knife}
+		arm.update(solve_left(left_offset(spec, t, pos - IDLE_POS)))
+		frames.append(arm)
+	return ts, frames
+
+
+# Cette méthode permet d'échantillonner une animation (clés, ressort optionnel, pivot dans le poing) et de renvoyer,
+# pour chaque frame, les CFrames (repère caméra) des pièces du bras et de la Handle.
 def sample(spec):
+	if spec.get("track"):
+		return sample_track(spec)
 	n = int(round(spec["length"] * FPS)) + 1
 	ts = [i / FPS for i in range(n)]
 	idle_q = IDLE_KNIFE.to_3x3().to_quaternion()
+	flips = [0.0] * n
 	if "offset" in spec:
 		poses = []
 		for t in ts:
 			dp, dq = spec["offset"](t)
 			poses.append((IDLE_POS + dp, idle_q @ dq))
 	else:
-		targets = [eval_keys(spec["keys"], t) for t in ts]
-		poses = settle_tail(spring_pose(targets, spec["freq"], spec["zeta"]), spec["settle"], (IDLE_POS, idle_q))
+		evaluated = [eval_keys(spec["keys"], t) for t in ts]
+		flips = [e[2] for e in evaluated]
+		poses = [(e[0], e[1]) for e in evaluated]
+		if spec.get("freq"):
+			poses = settle_tail(spring_pose(poses, spec["freq"], spec["zeta"]), spec["settle"], (IDLE_POS, idle_q))
 	frames = []
-	fl = spec.get("flight")
 	for i, t in enumerate(ts):
 		pos, q = poses[i]
 		# l'épaule (hors champ) accompagne la main, moins vite qu'elle
 		delta = (pos - IDLE_POS) * 0.35
-		arm = solve_arm(frame(pos, q.to_matrix()), SHOULDER + delta, POLE + delta)
+		arm = solve_arm(frame(pos, q.to_matrix()), SHOULDER + delta, POLE + delta, flips[i])
 		arm.update(solve_left(left_offset(spec, t, pos - IDLE_POS)))
-		if fl and fl["t0"] <= t < fl["t1"]:
-			arm["Handle"] = flight_pose(fl, t, poses)
 		frames.append(arm)
 	return ts, frames
 

@@ -33,8 +33,8 @@ local function isBackstab(hitInstance: Instance): boolean
 end
 
 -- Retourne le nom du son à jouer ("Shoot_void", "Shoot_human", "Shoot_wall")
--- et applique les dégâts via RemoteEvent si cible humaine.
-function MeleeHitDetection.resolveHit(cfg, activeViewmodel: Model?): string
+-- et applique les dégâts via RemoteEvent si cible humaine ; attackDamage remplace les dégâts de base de l'arme.
+function MeleeHitDetection.resolveHit(cfg, activeViewmodel: Model?, attackDamage: number?): string
 	local range = cfg and cfg.MeleeRange or 80
 	local cam = workspace.CurrentCamera
 	if not cam then
@@ -62,7 +62,7 @@ function MeleeHitDetection.resolveHit(cfg, activeViewmodel: Model?): string
 	end
 
 	local backstabMult = isBackstab(hit) and (cfg and cfg.BackstabMultiplier or 2) or 1
-	local damage = (cfg and cfg.Damage or 50) * backstabMult
+	local damage = (attackDamage or (cfg and cfg.Damage) or 50) * backstabMult
 	local targetChar = hit.Parent
 	if not targetChar:FindFirstChildWhichIsA("Humanoid") then
 		targetChar = targetChar.Parent

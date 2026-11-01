@@ -31,6 +31,7 @@ end
 local currentTool = nil :: Tool?
 local currentCfg = nil
 local scopeConn = nil :: RBXScriptConnection?
+local secondaryConn = nil :: RBXScriptConnection?
 
 -- Weapon action state machine
 -- Transitions : IDLE ↔ SCOPED, IDLE → EQUIPPING → IDLE,
@@ -51,6 +52,7 @@ local function ensureAmmoState(tool, cfg)
 	s.reserve = cfg and cfg.Reserve or 0
 	s.ammo = s.magazine
 	s.lastFire = 0
+	s.nextFireTime = 0
 	s.slashIndex = 0
 	toolState[tool] = s
 	return s
@@ -152,6 +154,41 @@ local function inspectCurrent()
 	ViewmodelSystem.playAnimation(animation)
 end
 
+-- Cette méthode permet de lancer un coup de mêlée lorsque l'arme est prête : l'animation porte le marqueur qui résout
+-- l'impact, cooldown fixe le prochain coup possible (tous clics confondus) et lockTime la durée de l'état FIRING.
+local function startMeleeAttack(tool, cfg, s, animation: string, damage: number?, cooldown: number, lockTime: number)
+	local now = tick()
+	s.lastFire = now
+	s.nextFireTime = now + cooldown
+	weaponState = "FIRING"
+	replicateAction("Shoot")
+	local markerOverrides: { [string]: string | () -> string } = {
+		["Stab Sound"] = function()
+			return MeleeHitDetection.resolveHit(cfg, ViewmodelSystem.getActiveViewmodel(), damage)
+		end,
+	}
+	ViewmodelSystem.playAnimation(animation, markerOverrides, cfg.AttackFadeTime)
+	ScopeSystem.resetVisuals()
+	task.delay(lockTime, function()
+		if currentTool == tool and weaponState == "FIRING" then
+			weaponState = "IDLE"
+		end
+	end)
+end
+
+-- Cette méthode permet de lancer l'attaque secondaire (clic droit) de l'arme en main lorsqu'elle en a une et qu'elle est prête.
+local function onSecondaryAttack(tool, cfg)
+	local attack = cfg and cfg.SecondaryAttack
+	if not attack or not canAct() then
+		return
+	end
+	local s = ensureAmmoState(tool, cfg)
+	if tick() < s.nextFireTime then
+		return
+	end
+	startMeleeAttack(tool, cfg, s, attack.Animation, attack.Damage, attack.FireDelay, attack.AnimTime)
+end
+
 local function onToolActivated(tool)
 	local cfg = getWeaponConfig(tool:GetAttribute("WeaponName") or tool.Name)
 	local s = ensureAmmoState(tool, cfg)
@@ -167,30 +204,23 @@ local function onToolActivated(tool)
 			return
 		end
 	end
-	if now - s.lastFire < firedelay then
+	if now < s.nextFireTime then
 		return
 	end
 
-	if not (cfg and cfg.IsMelee) then
-		s.ammo = s.ammo - 1
+	if cfg and cfg.IsMelee then
+		startMeleeAttack(tool, cfg, s, nextAttackAnimation(s, cfg), nil, firedelay, cfg.ShootAnimTime or 0.4)
+		return
 	end
+
+	s.ammo = s.ammo - 1
 	s.lastFire = now
+	s.nextFireTime = now + firedelay
 	weaponState = "FIRING"
 	replicateAction("Shoot")
-	if cfg and cfg.IsMelee then
-		local markerOverrides: { [string]: string | () -> string } = {
-			["Stab Sound"] = function()
-				return MeleeHitDetection.resolveHit(cfg, ViewmodelSystem.getActiveViewmodel())
-			end,
-		}
-		ViewmodelSystem.playAnimation(nextAttackAnimation(s, cfg), markerOverrides)
-	else
-		ViewmodelSystem.playAnimation("Shoot")
-	end
+	ViewmodelSystem.playAnimation("Shoot")
 	ScopeSystem.resetVisuals()
-	if not (cfg and cfg.IsMelee) then
-		HitscanSystem.resolveHit(cfg, ViewmodelSystem.getActiveViewmodel())
-	end
+	HitscanSystem.resolveHit(cfg, ViewmodelSystem.getActiveViewmodel())
 	local shootAnimTime = cfg and cfg.ShootAnimTime or 0.4
 	task.delay(shootAnimTime, function()
 		if currentTool == tool and weaponState == "FIRING" then
@@ -236,6 +266,14 @@ local function onToolEquipped(tool, char)
 		end)
 	end
 
+	if cfg and cfg.SecondaryAttack then
+		secondaryConn = UserInputService.InputBegan:Connect(function(input, gp)
+			if not gp and input.UserInputType == Enum.UserInputType.MouseButton2 then
+				onSecondaryAttack(tool, cfg)
+			end
+		end)
+	end
+
 	if not tool:GetAttribute("_WeaponSystemBound") then
 		tool.Activated:Connect(function()
 			onToolActivated(tool)
@@ -251,6 +289,10 @@ local function onToolUnequipped(char)
 	if scopeConn then
 		scopeConn:Disconnect()
 		scopeConn = nil
+	end
+	if secondaryConn then
+		secondaryConn:Disconnect()
+		secondaryConn = nil
 	end
 	ScopeSystem.reset()
 	weaponState = "IDLE"
