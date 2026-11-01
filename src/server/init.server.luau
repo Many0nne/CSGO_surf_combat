@@ -1,5 +1,6 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local NetworkProtocol = require(Shared:WaitForChild("NetworkProtocol"))
@@ -12,6 +13,7 @@ local StatsStore = require(script.StatsStore)
 local Validator = require(script.Validator)
 local FeedbackService = require(script.FeedbackService)
 local BotManager = require(script.BotManager)
+local DebugPlaytest = require(script.DebugPlaytest)
 
 -- Spawn contrôlé : on gère LoadCharacter nous-mêmes
 Players.CharacterAutoLoads = false
@@ -193,6 +195,18 @@ hitscanRmt.OnServerEvent:Connect(function(player, targetCharacter, damage)
 		humanoid:TakeDamage(damage)
 	end
 end)
+
+-- ── Helper de playtest debug (#30) : Studio uniquement ─────────────────────
+
+if RunService:IsStudio() then
+	DebugPlaytest.init({
+		roundManager = RoundManager,
+		botManager = BotManager,
+		validator = Validator,
+		meleeRemote = meleeRmt,
+		hitscanRemote = hitscanRmt,
+	})
+end
 
 -- ── Lifecycle joueurs ─────────────────────────────────────────────────────
 

@@ -17,6 +17,8 @@ Protocol.Names = {
 	-- Feedback
 	SEND_FEEDBACK = "SendFeedback",
 	FEEDBACK_ACK = "FeedbackAck",
+	-- Helper de playtest debug (#30) : créé uniquement dans Studio (RunService:IsStudio()), jamais en jeu publié
+	DEBUG_PLAYTEST = "DebugPlaytest",
 }
 
 function Protocol.getRemote(name: string): RemoteEvent
