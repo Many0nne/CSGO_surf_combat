@@ -38,7 +38,12 @@ end
 
 -- Cette méthode permet de lister les animations d'attaque d'une arme lorsqu'on doit reconnaître un tir, alterné ou non.
 function DebugPlaytestRules.attackAnimations(cfg: any): { string }
-	return cfg and cfg.ShootAnimations or { "Shoot" }
+	local animations = table.clone(cfg and cfg.ShootAnimations or { "Shoot" })
+	local secondary = cfg and cfg.SecondaryAttack
+	if secondary then
+		table.insert(animations, secondary.Animation)
+	end
+	return animations
 end
 
 -- Cette méthode permet de lister les marqueurs d'animation à surveiller pour une piste lorsque l'arme déclare

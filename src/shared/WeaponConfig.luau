@@ -39,13 +39,16 @@ WeaponConfig.Weapons = {
 	M9Bayonet = {
 		Name = "M9 Bayonet",
 		Damage = 50,
-		RPM = 60,
-		FireDelay = 1,
+		RPM = 150,
+		FireDelay = 0.4, -- cadence CS:GO du clic gauche
 		Penetration = 0,
 		RunSpeedMultiplier = 1.0,
 		EquipTime = 1.0,
-		ShootAnimTime = 0.7, -- durée des animations de slash du viewmodel
-		ShootAnimations = { "Shoot", "Shoot2" }, -- slashs joués en alternance (droite → gauche, puis revers)
+		ShootAnimTime = 0.4, -- verrou d'action : le coup suivant coupe la fin de la piste (0,7 s)
+		ShootAnimations = { "Shoot", "Shoot2" }, -- slashs du clic gauche, joués en alternance
+		AttackFadeTime = 0, -- les coups partent sans fondu : la piste commence sur la pose de repos
+		-- Clic droit : coup d'estoc, plus lourd et plus lent (dégâts et cadence CS:GO).
+		SecondaryAttack = { Animation = "Stab", Damage = 65, FireDelay = 1, AnimTime = 1 },
 		InspectAnimation = "Inspect", -- touche F : purement visuel, interrompu par une attaque
 		IsMelee = true,
 		MeleeRange = 7.5,
@@ -62,6 +65,7 @@ WeaponConfig.Weapons = {
 			Equip = { "Equip" },
 			Shoot = {},
 			Shoot2 = {},
+			Stab = {},
 			Inspect = { "Equip" },
 		},
 	},
