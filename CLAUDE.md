@@ -67,6 +67,7 @@ CSGO/
         InfosScreen.luau
         MainMenu.luau
         RoundHUD.luau
+        ScopeOverlay.luau
         SettingsMenu.luau
         Speedometer.luau
     server/
@@ -253,7 +254,7 @@ Transition d'une place qui contient déjà ces instances (une fois, pour éviter
 - `src/client/systems/movement/WallSlide.luau`: glisse le long des murs/rampe avec conservation de normale surf si on avance vers la rampe.
 - `src/client/systems/weapon/AnimationSoundSystem.luau`: gestion des marqueurs sons sur les AnimationTracks.
 - `src/client/systems/weapon/MeleeHitDetection.luau`: raycast et calcul de dégâts melee (backstab inclus).
-- `src/client/systems/weapon/ScopeSystem.luau`: gestion du scope (FOV, GUI, sensibilité caméra) pour les armes à lunette.
+- `src/client/systems/weapon/ScopeSystem.luau`: gestion du scope (FOV, affichage de la lunette, sensibilité caméra) pour les armes à lunette.
 - `src/client/systems/weapon/ViewmodelSystem.luau`: gestion du viewmodel, des animations et des sons des armes en vue FPS.
 - `src/client/systems/weapon/WeaponSystem.luau`: logique client des armes, munitions, recharge et vitesse liée à l'arme.
 - `src/client/systems/weapon/WeaponThirdPersonView.luau`: rendu client des armes 3e personne de tous les personnages (décalage procédural du grip pour tir/recharge/switch, modèle 3P masqué pour soi en 1re personne).
@@ -261,6 +262,7 @@ Transition d'une place qui contient déjà ces instances (une fois, pour éviter
 - `src/client/ui/InfosScreen.luau`: overlay Infos (comment surfer, contrôles, crédits).
 - `src/client/ui/MainMenu.luau`: menu d'accueil avec boutons Play et Infos.
 - `src/client/ui/RoundHUD.luau`: HUD en jeu (timer, leaderboard Tab, overlay respawn, bannière résultat).
+- `src/client/ui/ScopeOverlay.luau`: lunette des armes à scope, dessinée sans image (masque rond et réticule en Frames).
 - `src/client/ui/SettingsMenu.luau`: interface des réglages côté client.
 - `src/client/ui/Speedometer.luau`: affichage de la vitesse du joueur.
 - `src/server/init.server.luau`: point d'entrée serveur — crée tous les RemoteEvents, orchestre SpawnManager, RoundManager, StatsStore.
