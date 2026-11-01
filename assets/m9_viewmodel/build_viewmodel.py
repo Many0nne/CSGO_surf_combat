@@ -435,27 +435,14 @@ def spec_idle():
 # du jeu), puis validées à côté de leur image de référence. Les ids en commentaire renvoient aux images de cette vidéo.
 
 
-# Cette méthode permet de décrire l'Equip : la main monte du bas de l'écran lame en bas, le couteau pivote d'un demi-tour
-# dans le poing jusqu'à la lame dressée, le poignet oscille puis descend sur la tenue, et la main gauche revient.
+# Cette méthode permet de décrire l'Equip : la trajectoire de l'arme suit la référence image par image (voir
+# EQUIP_TRACK) ; le couteau fait son demi-tour devant le poing, puis la lame oscille, roule et descend sur la tenue.
 def spec_equip():
 	return dict(
 		length=1.0,
-		freq=12.0,
-		zeta=0.8,
-		settle=0.1,
-		keys=[
-			S(0.0, (0.66, 1.25), (0.62, 1.62), 3.0, (1, 0, 0), flip=180),
-			S(0.09, (0.64, 0.98), (0.60, 1.35), 3.0, (1, 0, 0), flip=180, e="o"),  # D2
-			S(0.26, (0.632, 0.713), (0.55, 0.99), 3.0, (1, 0, 0.3), flip=180),  # D4
-			S(0.35, (0.675, 0.665), (0.53, 0.69), 3.0, (0, 1, 0.3), flip=110),  # D5
-			S(0.43, (0.665, 0.69), (0.61, 0.31), 3.0, (-1, 0, 0.3), flip=20),  # D6
-			S(0.61, (0.69, 0.60), (0.83, 0.11), 3.0, (-1, -0.3, -0.3)),  # D8
-			S(0.78, (0.67, 0.67), (0.65, 0.21), 3.0, "cam"),  # D10
-			S(0.85, (0.65, 0.76), (0.49, 0.41), 3.0, "cam"),  # D11
-			S(0.92, (0.66, 0.78), (0.44, 0.63), 2.9, FACE),  # D12
-			P(1.0),
-		],
-		left=[(0.0, 1.0), (0.72, 1.0), (0.95, 0.0)],
+		track=True,
+		settle=0.06,
+		left=[(0.0, 1.0), (0.70, 1.0), (0.92, 0.0)],
 		markers=[("Equip Sound", 0.3)],
 		step=1,
 	)
@@ -586,9 +573,147 @@ def left_offset(spec, t, right_delta):
 	return HIDDEN_LEFT * schedule[-1][1]
 
 
+# Trajectoire de l'Equip mesurée sur la vidéo de référence, toutes les 0,05 s de vidéo (ralentie 1,25 fois) :
+# temps vidéo, garde et pointe à l'écran, roulis de la lame (0 = de plat, tranchant à gauche d'une lame dressée ;
+# 90 = dos vers la caméra), profondeur de la garde (None = déduite de la longueur à l'écran, lame vue de plat),
+# centre de la main à l'écran tant que le couteau tourne dans le poing (None = la main tient le couteau).
+EQUIP_VIDEO_START = 0.42
+EQUIP_VIDEO_SCALE = 1.25
+EQUIP_TRACK = (
+	(0.40, (0.646, 1.20), (0.63, 1.55), 0, 2.5, (0.62, 1.15)),
+	(0.45, (0.643, 1.08), (0.625, 1.46), 0, 2.5, (0.62, 1.08)),
+	(0.50, (0.639, 1.02), (0.62, 1.40), 0, 2.5, (0.62, 0.98)),
+	(0.55, (0.633, 0.95), (0.61, 1.32), 0, 2.5, (0.63, 0.90)),
+	(0.60, (0.630, 0.89), (0.60, 1.25), 0, 2.5, (0.63, 0.84)),
+	(0.65, (0.620, 0.81), (0.58, 1.12), 0, 2.5, (0.62, 0.76)),
+	(0.70, (0.625, 0.76), (0.575, 1.10), 0, 2.5, (0.63, 0.72)),
+	(0.75, (0.623, 0.71), (0.54, 1.05), 0, 2.5, (0.66, 0.72)),
+	(0.80, (0.647, 0.68), (0.529, 0.899), 0, 2.5, (0.66, 0.70)),
+	(0.85, (0.672, 0.652), (0.529, 0.701), 0, 2.5, (0.665, 0.69)),
+	(0.90, (0.677, 0.684), (0.569, 0.464), 0, 2.5, (0.67, 0.70)),
+	(0.95, (0.659, 0.674), (0.618, 0.313), 0, 2.5, (0.665, 0.71)),
+	(1.00, (0.654, 0.645), (0.659, 0.209), 0, None, None),
+	(1.05, (0.656, 0.623), (0.694, 0.145), 0, None, None),
+	(1.10, (0.670, 0.598), (0.76, 0.107), 0, None, None),
+	(1.15, (0.696, 0.580), (0.829, 0.107), 0, None, None),
+	(1.20, (0.721, 0.558), (0.87, 0.122), 5, None, None),
+	(1.25, (0.727, 0.590), (0.854, 0.136), 15, None, None),
+	(1.30, (0.703, 0.603), (0.764, 0.145), 40, None, None),
+	(1.35, (0.691, 0.640), (0.656, 0.203), 80, None, None),
+	(1.40, (0.691, 0.754), (0.556, 0.296), 100, None, None),
+	(1.45, (0.659, 0.759), (0.485, 0.412), 115, None, None),
+	(1.50, (0.659, 0.710), (0.456, 0.516), 125, None, None),
+	(1.55, (0.667, 0.754), (0.439, 0.58), 130, None, None),
+	(1.60, (0.667, 0.806), (0.439, 0.632), 130, None, None),
+	(1.67, (0.67, 0.80), (0.445, 0.59), 130, 2.8, None),
+)
+
+
+# Cette méthode permet de lisser une colonne de mesures (filtre 1-2-1, extrémités fixes) lorsque le relevé à l'œil
+# contient un léger bruit qui ferait trembler la lame ; passes règle la force du lissage.
+def smooth_column(values, passes=2):
+	out = list(values)
+	for _ in range(passes):
+		out = [out[0]] + [(out[i - 1] + 2 * out[i] + out[i + 1]) / 4 for i in range(1, len(out) - 1)] + [out[-1]]
+	return out
+
+
+# Cette méthode permet d'interpoler une colonne de mesures à l'indice flottant u (spline de Catmull-Rom), pour que
+# la vitesse reste continue d'une mesure à l'autre, sans ralentir sur chaque point comme une clé avec courbe.
+def spline(values, u):
+	i = min(max(int(u), 0), len(values) - 2)
+	s = u - i
+	a, b, c, d = values[max(i - 1, 0)], values[i], values[i + 1], values[min(i + 2, len(values) - 1)]
+	return 0.5 * (2 * b + (c - a) * s + (2 * a - 5 * b + 4 * c - d) * s * s + (3 * b - a - 3 * c + d) * s * s * s)
+
+
+# Cette méthode permet de construire le repère du couteau depuis la garde et la pointe à l'écran et son roulis,
+# lorsque le tranchant se décrit par rapport au regard plutôt que par une direction fixe (qui tournerait avec la lame).
+def knife_from_roll(guard, tip, depth, roll):
+	k = knife_from_screen(guard, tip, depth, (0, 0, 1))
+	axis = k.to_3x3().col[2]
+	to_cam = -screen_ray(tip).normalized()
+	left = to_cam.cross(axis).normalized()
+	a = math.radians(roll)
+	return frame(k.translation, basis_zx(axis, left * math.cos(a) - to_cam * math.sin(a)))
+
+
+# Cette méthode permet de résoudre le bras gauche et le bras droit pour une frame de la trajectoire de l'Equip :
+# tant que le couteau tourne, la main reste orientée comme à la fin du demi-tour et le couteau passe devant elle.
+def equip_track_frame(track, t, hand_rot):
+	vt = EQUIP_VIDEO_START + t * EQUIP_VIDEO_SCALE
+	times = track["times"]
+	if vt >= times[-1]:
+		u = len(times) - 1.0
+	else:
+		j = next(i for i in range(len(times) - 1) if vt < times[i + 1])
+		u = j + (vt - times[j]) / (times[j + 1] - times[j])
+	guard = (spline(track["gu"], u), spline(track["gv"], u))
+	tip = (spline(track["tu"], u), spline(track["tv"], u))
+	depth = spline(track["depth"], u)
+	knife = knife_from_roll(guard, tip, depth, spline(track["roll"], u))
+	grip_hand = knife @ GRIP.inverted()
+	weight = min(max((vt - 0.95) / 0.05, 0.0), 1.0)  # la main reprend le couteau à la fin du demi-tour
+	free = frame(screen_ray((spline(track["hu"], u), spline(track["hv"], u))) * (depth + 0.55), hand_rot)
+	hand = free.lerp(grip_hand, ease("io", weight))
+	return knife, hand
+
+
+# Cette méthode permet d'échantillonner l'Equip depuis sa trajectoire mesurée et de renvoyer les CFrames de chaque frame.
+def sample_track(spec):
+	rows = EQUIP_TRACK
+	depths = []
+	for _, g, tp, _, d, _ in rows:
+		if d is not None:
+			depths.append(d)
+			continue
+		length = math.hypot((tp[0] - g[0]) * SCREEN_ASPECT, tp[1] - g[1])
+		depths.append(min(max((TIP_Z - GUARD_Z) / (2 * length), 2.1), 3.0))
+	end = len(rows) - 1
+	hands = [r[5] or rows[11][5] for r in rows]
+	track = {
+		"times": [r[0] for r in rows],
+		"gu": smooth_column([r[1][0] for r in rows]),
+		"gv": smooth_column([r[1][1] for r in rows]),
+		"tu": smooth_column([r[2][0] for r in rows]),
+		"tv": smooth_column([r[2][1] for r in rows]),
+		"roll": smooth_column([r[3] for r in rows]),
+		"depth": smooth_column(depths),
+		"hu": smooth_column([h[0] for h in hands]),
+		"hv": smooth_column([h[1] for h in hands]),
+	}
+	u_end = 12  # fin du demi-tour : ligne 1,00 s de la trajectoire
+	end_knife = knife_from_roll(
+		(track["gu"][u_end], track["gv"][u_end]),
+		(track["tu"][u_end], track["tv"][u_end]),
+		track["depth"][u_end],
+		track["roll"][u_end],
+	)
+	hand_rot = (end_knife @ GRIP.inverted()).to_3x3()
+	n = int(round(spec["length"] * FPS)) + 1
+	ts = [i / FPS for i in range(n)]
+	idle_hand = IDLE_KNIFE @ GRIP.inverted()
+	frames = []
+	for t in ts:
+		knife, hand = equip_track_frame(track, t, hand_rot)
+		blend = ease("io", (t - spec["length"] + spec["settle"]) / spec["settle"])  # finit pile sur la tenue
+		if blend > 0:
+			knife = knife.lerp(IDLE_KNIFE, blend)
+			hand = hand.lerp(idle_hand, blend)
+		pos = knife.translation
+		delta = (pos - IDLE_POS) * 0.35
+		upper, lower, solved = solve_limb(hand, SHOULDER + delta, POLE + delta)
+		arm = {"RightUpperArm": upper, "RightLowerArm": lower, "RightHand": solved, "Handle": knife}
+		arm.update(solve_left(left_offset(spec, t, pos - IDLE_POS)))
+		frames.append(arm)
+	return ts, frames
+
+
 # Cette méthode permet d'échantillonner une animation (clés, ressort optionnel, pivot dans le poing) et de renvoyer,
 # pour chaque frame, les CFrames (repère caméra) des pièces du bras et de la Handle.
 def sample(spec):
+	if spec.get("track"):
+		return sample_track(spec)
 	n = int(round(spec["length"] * FPS)) + 1
 	ts = [i / FPS for i in range(n)]
 	idle_q = IDLE_KNIFE.to_3x3().to_quaternion()

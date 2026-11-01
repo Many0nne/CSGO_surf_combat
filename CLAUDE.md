@@ -195,8 +195,19 @@ Transition d'une place qui contient déjà ces instances (une fois, pour éviter
    s'équipe en playtest, puis sauvegarder la place (File > Save to Roblox).
    Si un MeshPart est vide : clic droit sur `ReplicatedStorage` > *Insert from File…* > le `.rbxm`, et le signaler.
 
+## Animations de viewmodel
+
+Avant de créer ou modifier une animation d'arme, lire `docs/animations.md` (méthode, outils, pièges). L'essentiel :
+
+- Partir d'une vidéo de référence fournie par l'utilisateur et ne pas itérer sur des descriptions.
+- Faire valider les poses, puis le mouvement avec une vidéo côte à côte (`tools/anim/side_by_side.py`), **avant de publier**,
+  même si l'utilisateur demande de finir. Des images fixes justes ne garantissent pas un mouvement juste.
+- Rendre dans Studio au FOV du jeu (90°) et juger le cadrage en 16:9, pas dans Blender avec un volume à la place de l'arme.
+
 ## Description des fichiers
 
+- `docs/animations.md`: méthode de création des animations de viewmodel (processus de validation, outils, pièges connus).
+- `tools/anim/`: outils de ces animations : mesure sur vidéo, rendu et capture dans Studio, vidéo côte à côte, publication Open Cloud.
 - `default.project.json`: configuration Rojo qui mappe `src/` et `assets/rbx/` (viewmodels, Tools) vers le projet Roblox.
 - `assets/rbx/ViewModels/*.rbxm`, `assets/rbx/Tools/*.rbxm`: viewmodels et Tools des armes (binaires LFS, voir « Viewmodels et Tools »).
 - `tools/rbxm/receive.luau`: serveur Lune local qui reçoit les `.rbxm` exportés de Studio et les écrit sous `assets/rbx/`.

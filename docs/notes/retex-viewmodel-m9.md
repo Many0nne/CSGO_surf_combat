@@ -1,5 +1,8 @@
 # RETEX : viewmodel M9 Bayonet (modèle Blender + animations), 2026-10-31
 
+> La méthode actuelle est dans `docs/animations.md`, qui prime sur ce document, notamment : prévisualisation à 90° et non
+> 70°, rendu dans Studio, publication avec `tools/anim/publish.sh`.
+
 > Mise à jour (issue #26) : le modèle procédural a été remplacé par le mesh du Creator Store `18775128699`, et
 > `build_knife.py`, le `.blend` et le FBX ont été retirés (voir l'historique git). `build_viewmodel.py` reste la source
 > des animations (Idle, Equip, Shoot, Shoot2, Inspect), avec un simple volume à la place du couteau.
