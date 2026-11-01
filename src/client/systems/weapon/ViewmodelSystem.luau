@@ -210,14 +210,14 @@ local function playIdleAnimation()
 	track:Play(0)
 end
 
-local function playEquipAnimation(model: Model)
+local function playEquipAnimation(model: Model, speed: number)
 	local track = preloadedTracks["Equip"]
 	if not track then
 		return
 	end
 
 	equipTrack = track
-	equipTrack:Play(0) -- sans fondu : la piste démarre hors champ
+	equipTrack:Play(0, 1, speed) -- sans fondu : la piste démarre hors champ
 
 	local sounds = currentAnimSounds and currentAnimSounds["Equip"] or {}
 	local newConns = AnimationSoundSystem.connectSoundMarkers(equipTrack, model, sounds)
@@ -262,7 +262,7 @@ local function equipTool(tool: Tool)
 	setModelVisibility(viewmodelName, true)
 
 	playIdleAnimation()
-	playEquipAnimation(activeViewmodel)
+	playEquipAnimation(activeViewmodel, cfg and cfg.EquipAnimSpeed or 1)
 end
 
 local function hookTool(tool: Instance)
