@@ -17,7 +17,7 @@ local outDir = process.args[2]
 assert(inDir and outDir, "usage: make_rbxm.luau <dossier_json> <dossier_sortie> [noms...]")
 local names = { table.unpack(process.args, 3) }
 if #names == 0 then
-	names = { "Equip", "Shoot" }
+	names = { "Idle", "Equip", "Shoot", "Shoot2", "Inspect" }
 end
 
 -- Cette méthode permet de construire la KeyframeSequence d'une animation lorsque son JSON

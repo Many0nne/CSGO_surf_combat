@@ -48,6 +48,12 @@ return function(T, Loader)
 		T.it("renvoie une liste vide sans config", function()
 			T.expectEqual(#Rules.markersFor(nil, "Shoot"), 0)
 		end)
+
+		T.it("ajoute le marqueur de coup sur chaque slash alterné d'une arme de mêlée", function()
+			local cfg = { IsMelee = true, ShootAnimations = { "Shoot", "Shoot2" }, AnimationSounds = {} }
+			T.expectEqual(Rules.markersFor(cfg, "Shoot2")[1], "Stab Sound")
+			T.expectEqual(#Rules.markersFor(cfg, "Inspect"), 0)
+		end)
 	end)
 
 	T.describe("DebugPlaytestRules.expectedDamage", function()

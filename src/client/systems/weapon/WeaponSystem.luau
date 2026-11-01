@@ -51,6 +51,7 @@ local function ensureAmmoState(tool, cfg)
 	s.reserve = cfg and cfg.Reserve or 0
 	s.ammo = s.magazine
 	s.lastFire = 0
+	s.slashIndex = 0
 	toolState[tool] = s
 	return s
 end
@@ -132,6 +133,25 @@ local function reloadTool(tool, cfg)
 	end
 end
 
+-- Cette méthode permet de choisir le slash suivant lorsqu'une arme de mêlée en alterne plusieurs ("Shoot" sinon).
+local function nextAttackAnimation(s, cfg): string
+	local animations = cfg.ShootAnimations
+	if not animations or #animations == 0 then
+		return "Shoot"
+	end
+	s.slashIndex = s.slashIndex % #animations + 1
+	return animations[s.slashIndex]
+end
+
+-- Cette méthode permet de lancer l'inspection de l'arme en main lorsqu'elle est au repos ; une attaque l'interrompt.
+local function inspectCurrent()
+	local animation = currentCfg and currentCfg.InspectAnimation
+	if not animation or weaponState ~= "IDLE" or ViewmodelSystem.isAnimationPlaying(animation) then
+		return
+	end
+	ViewmodelSystem.playAnimation(animation)
+end
+
 local function onToolActivated(tool)
 	local cfg = getWeaponConfig(tool:GetAttribute("WeaponName") or tool.Name)
 	local s = ensureAmmoState(tool, cfg)
@@ -163,7 +183,7 @@ local function onToolActivated(tool)
 				return MeleeHitDetection.resolveHit(cfg, ViewmodelSystem.getActiveViewmodel())
 			end,
 		}
-		ViewmodelSystem.playAnimation("Shoot", markerOverrides)
+		ViewmodelSystem.playAnimation(nextAttackAnimation(s, cfg), markerOverrides)
 	else
 		ViewmodelSystem.playAnimation("Shoot")
 	end
@@ -184,7 +204,7 @@ local function onToolEquipped(tool, char)
 		return
 	end
 	local cfg = getWeaponConfig(tool:GetAttribute("WeaponName") or tool.Name)
-	ensureAmmoState(tool, cfg)
+	ensureAmmoState(tool, cfg).slashIndex = 0
 	currentTool = tool
 	currentCfg = cfg
 	weaponState = "EQUIPPING"
@@ -297,6 +317,9 @@ function WeaponSystem.init(player)
 	RunService.Heartbeat:Connect(function()
 		if InputModule.isReloadPressed() and currentTool and currentCfg then
 			reloadTool(currentTool, currentCfg)
+		end
+		if InputModule.isInspectPressed() then
+			inspectCurrent()
 		end
 	end)
 
