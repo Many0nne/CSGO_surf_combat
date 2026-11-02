@@ -67,7 +67,7 @@ WeaponConfig.Weapons = {
 			Shoot = {},
 			Shoot2 = {},
 			Stab = {},
-			Inspect = { "Equip" },
+			Inspect = {},
 		},
 	},
 }
