@@ -6,7 +6,7 @@
 --   • Tenue : pose procédurale des épaules (C0 des Motor6D, répliqué par le serveur), sans asset.
 --   • Tir / recharge / switch : le serveur pose les attributs Weapon3PAction / Weapon3PActionAt sur
 --     le personnage ; chaque client décale localement le C0 du grip via actionOffset (visuel seul).
---   • Visibilité : le joueur local ne voit pas son propre modèle 3P en 1re personne (isVisibleTo).
+--   • Visibilité : le joueur local ne voit jamais son propre modèle 3P, le viewmodel le remplace (isVisibleTo).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -123,9 +123,10 @@ function WeaponThirdPerson.actionOffset(action: string?, elapsed: number, settin
 end
 
 -- Cette méthode permet de décider si un modèle 3P doit être rendu pour ce client lorsqu'on met à jour
--- la vue : caché seulement pour son propre personnage en 1re personne (le viewmodel le remplace).
-function WeaponThirdPerson.isVisibleTo(isOwnCharacter: boolean, firstPerson: boolean): boolean
-	return not (isOwnCharacter and firstPerson)
+-- la vue : caché pour son propre personnage, sans condition de caméra (le jeu est toujours en 1re personne,
+-- comme le corps masqué par FPSCamera), et visible pour les autres joueurs.
+function WeaponThirdPerson.isVisibleTo(isOwnCharacter: boolean): boolean
+	return not isOwnCharacter
 end
 
 -- Cette méthode permet de trouver le premier enfant (récursif) portant l'un des noms donnés lorsque
