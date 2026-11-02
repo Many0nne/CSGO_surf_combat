@@ -1,95 +1,115 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local MovementConfig = require(ReplicatedStorage.Shared.MovementConfig)
+local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 
 local MAX_HITSCAN_RANGE = 250 -- studs
 local MAX_MELEE_RANGE = 10 -- studs
+-- Secondes tolérées sur la cadence : latence réseau et écart entre les instants d'impact des attaques
+-- (marqueur « Stab Sound » à 0,12-0,16 s selon l'animation ; le serveur ne voit que l'impact, pas le clic).
+local CADENCE_TOLERANCE = 0.15
+
+type LastAttack = { at: number, delay: number }
 
 local Validator = {}
 
 -- Attribut serveur de la cible immobile du helper de playtest ; les attributs posés par un client ne répliquent pas.
 Validator.DEBUG_TARGET_ATTRIBUTE = "DebugTarget"
 
+-- Dernière attaque acceptée, par joueur et par arme (entrée de WeaponConfig), comme `nextFireTime` côté client.
+local lastAttacks: { [Player]: { [any]: LastAttack } } = {}
+
 local function getRoot(char: Model): BasePart?
 	return char:FindFirstChild("HumanoidRootPart") :: BasePart?
 end
 
--- Returns false if any basic type/ownership checks fail.
 -- Valid targets are real players (other than the attacker) or the playtest helper's target.
-local function commonChecks(
-	attacker: Player,
-	targetCharacter: Instance,
-	damage: number,
-	maxDamage: number
-): (boolean, Player?, Humanoid?)
+local function isValidTarget(attacker: Player, targetCharacter: Instance): boolean
 	if typeof(targetCharacter) ~= "Instance" then
-		return false, nil, nil
-	end
-	if typeof(damage) ~= "number" or damage <= 0 or damage > maxDamage then
-		return false, nil, nil
+		return false
 	end
 
 	local targetPlayer = Players:GetPlayerFromCharacter(targetCharacter)
 	if targetPlayer then
 		if targetPlayer == attacker then
-			return false, nil, nil
+			return false
 		end
 	elseif targetCharacter:GetAttribute(Validator.DEBUG_TARGET_ATTRIBUTE) ~= true then
-		return false, nil, nil
+		return false
 	end
 
 	local humanoid = targetCharacter:FindFirstChildWhichIsA("Humanoid") :: Humanoid?
-	if not humanoid or humanoid.Health <= 0 then
-		return false, nil, nil
-	end
-
-	return true, targetPlayer, humanoid
+	return humanoid ~= nil and humanoid.Health > 0
 end
 
-function Validator.validateHitscan(attacker: Player, targetCharacter: Instance, damage: number): boolean
-	local ok, _, _ = commonChecks(attacker, targetCharacter, damage, 1000)
-	if not ok then
-		return false
+-- Cette méthode permet de vérifier ce qui est commun à toutes les attaques (cible, arme réellement en main, portée)
+-- lorsqu'une touche arrive ; elle renvoie la config de l'arme et les deux roots, ou nil si la touche est invalide.
+local function resolveAttack(attacker: Player, targetCharacter: Instance, maxRange: number): (any, BasePart?, BasePart?)
+	if not isValidTarget(attacker, targetCharacter) then
+		return nil
 	end
-
 	local aChar = attacker.Character
-	if not aChar then
-		return false
+	local tool = aChar and aChar:FindFirstChildOfClass("Tool")
+	local cfg = tool and WeaponConfig.Weapons[tool:GetAttribute("WeaponName") or tool.Name]
+	if not cfg then
+		return nil
 	end
-	local aRoot = getRoot(aChar)
+	local aRoot = getRoot(aChar :: Model)
 	local tRoot = getRoot(targetCharacter :: Model)
-	if not aRoot or not tRoot then
-		return false
+	if not aRoot or not tRoot or (aRoot.Position - tRoot.Position).Magnitude > maxRange then
+		return nil
 	end
-
-	if (aRoot.Position - tRoot.Position).Magnitude > MAX_HITSCAN_RANGE then
-		return false
-	end
-
-	return true
+	return cfg, aRoot, tRoot
 end
 
-function Validator.validateMelee(attacker: Player, targetCharacter: Instance, damage: number): boolean
-	local ok, _, _ = commonChecks(attacker, targetCharacter, damage, 500)
-	if not ok then
-		return false
-	end
+-- Cette méthode permet de savoir si l'arme a fini sa cadence lorsqu'une touche arrive, à la tolérance près.
+local function isCadenceReady(attacker: Player, cfg: any, now: number): boolean
+	local playerAttacks = lastAttacks[attacker]
+	local last = playerAttacks and playerAttacks[cfg]
+	return last == nil or now - last.at >= last.delay - CADENCE_TOLERANCE
+end
 
-	local aChar = attacker.Character
-	if not aChar then
-		return false
+-- Cette méthode permet de démarrer la cadence de l'arme lorsqu'une attaque vient d'être acceptée.
+local function recordAttack(attacker: Player, cfg: any, delay: number, now: number)
+	local playerAttacks = lastAttacks[attacker]
+	if not playerAttacks then
+		playerAttacks = {}
+		lastAttacks[attacker] = playerAttacks
 	end
-	local aRoot = getRoot(aChar)
-	local tRoot = getRoot(targetCharacter :: Model)
-	if not aRoot or not tRoot then
-		return false
-	end
+	playerAttacks[cfg] = { at = now, delay = delay }
+end
 
-	if (aRoot.Position - tRoot.Position).Magnitude > MAX_MELEE_RANGE then
-		return false
+-- Cette méthode permet de décider un tir d'arme à distance lorsque le remote arrive : elle renvoie les dégâts
+-- de l'arme réellement en main et démarre sa cadence, ou nil si le tir est refusé.
+function Validator.authorizeHitscan(attacker: Player, targetCharacter: Instance, now: number): number?
+	local cfg = resolveAttack(attacker, targetCharacter, MAX_HITSCAN_RANGE)
+	if not cfg or cfg.IsMelee or not isCadenceReady(attacker, cfg, now) then
+		return nil
 	end
+	recordAttack(attacker, cfg, cfg.FireDelay, now)
+	return cfg.Damage
+end
 
-	return true
+-- Cette méthode permet de décider un coup de mêlée lorsque le remote arrive : elle renvoie les dégâts calculés depuis
+-- WeaponConfig (backstab recalculé d'après les positions serveur) et démarre la cadence, ou nil si le coup est refusé.
+function Validator.authorizeMelee(attacker: Player, targetCharacter: Instance, attackKind: string, now: number): number?
+	local cfg, aRoot, tRoot = resolveAttack(attacker, targetCharacter, MAX_MELEE_RANGE)
+	if not cfg or not aRoot or not tRoot then
+		return nil
+	end
+	local damage, fireDelay = WeaponConfig.getMeleeAttack(cfg, attackKind)
+	if not damage or not fireDelay or not isCadenceReady(attacker, cfg, now) then
+		return nil
+	end
+	recordAttack(attacker, cfg, fireDelay, now)
+
+	local isBackstab = (aRoot.Position - tRoot.Position):Dot(tRoot.CFrame.LookVector) < 0
+	return if isBackstab then damage * cfg.BackstabMultiplier else damage
+end
+
+-- Cette méthode permet d'oublier les cadences d'un joueur lorsqu'il réapparaît (armes neuves, comme côté client) ou s'en va.
+function Validator.forgetPlayer(player: Player)
+	lastAttacks[player] = nil
 end
 
 -- Cette méthode permet de qualifier le résultat de dégâts appliqués lorsque le tireur doit en être informé :

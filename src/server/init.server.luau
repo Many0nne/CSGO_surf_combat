@@ -120,6 +120,7 @@ weaponActionRmt.OnServerEvent:Connect(function(player, action)
 end)
 
 local function onCharacterAdded(player: Player, char: Model)
+	Validator.forgetPlayer(player)
 	trackWeapon3P(char)
 	local humanoid = char:WaitForChild("Humanoid") :: Humanoid
 	humanoid.Died:Connect(function()
@@ -176,16 +177,22 @@ local function applyHit(player: Player, targetCharacter: Instance, damage: numbe
 	end
 end
 
-meleeRmt.OnServerEvent:Connect(function(player, targetCharacter, damage)
-	if Validator.validateMelee(player, targetCharacter, damage) then
+-- Cette méthode permet de traiter le verdict du Validator lorsqu'une touche arrive : damage vaut nil si elle est refusée.
+local function onHitVerdict(player: Player, remote: RemoteEvent, targetCharacter: Instance, damage: number?)
+	DebugPlaytest.onHitReceived(player, remote.Name, targetCharacter, damage)
+	if damage then
 		applyHit(player, targetCharacter, damage)
 	end
+end
+
+meleeRmt.OnServerEvent:Connect(function(player, targetCharacter, attackKind)
+	local damage = Validator.authorizeMelee(player, targetCharacter, attackKind, os.clock())
+	onHitVerdict(player, meleeRmt, targetCharacter, damage)
 end)
 
-hitscanRmt.OnServerEvent:Connect(function(player, targetCharacter, damage)
-	if Validator.validateHitscan(player, targetCharacter, damage) then
-		applyHit(player, targetCharacter, damage)
-	end
+hitscanRmt.OnServerEvent:Connect(function(player, targetCharacter)
+	local damage = Validator.authorizeHitscan(player, targetCharacter, os.clock())
+	onHitVerdict(player, hitscanRmt, targetCharacter, damage)
 end)
 
 -- ── Helper de playtest debug (#30) : Studio uniquement ─────────────────────
@@ -194,8 +201,6 @@ if RunService:IsStudio() then
 	DebugPlaytest.init({
 		roundManager = RoundManager,
 		validator = Validator,
-		meleeRemote = meleeRmt,
-		hitscanRemote = hitscanRmt,
 	})
 end
 
@@ -215,6 +220,7 @@ end
 Players.PlayerAdded:Connect(setupPlayer)
 Players.PlayerRemoving:Connect(function(player)
 	lastWeaponAction[player] = nil
+	Validator.forgetPlayer(player)
 	RoundManager.removePlayer(player)
 end)
 

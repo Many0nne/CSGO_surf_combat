@@ -27,8 +27,6 @@ local DUMMY_DISTANCE = 6 -- studs devant le joueur (dans la portée mêlée et V
 type Deps = {
 	roundManager: any,
 	validator: any,
-	meleeRemote: RemoteEvent,
-	hitscanRemote: RemoteEvent,
 }
 
 type Reply = { ok: boolean, detail: string, data: any }
@@ -148,24 +146,21 @@ local function collectTools(player: Player): { [string]: Tool }
 	return tools
 end
 
--- Cette méthode permet de logger les remotes de dégâts reçus du joueur testé lorsque le run est en cours,
--- avec le verdict du Validator (lecture seule : l'application des dégâts reste dans init.server).
-local function watchHitRemote(rmt: RemoteEvent, validate: (Player, Instance, number) -> boolean)
-	rmt.OnServerEvent:Connect(function(player, target, damage)
-		if not running[player] then
-			return
-		end
-		local valid = typeof(target) == "Instance" and validate(player, target, damage)
-		log(
-			string.format(
-				"serveur : %s reçu (cible=%s, dégâts=%s, validation=%s)",
-				rmt.Name,
-				typeof(target) == "Instance" and target.Name or tostring(target),
-				tostring(damage),
-				valid and "OK" or "REFUS"
-			)
+-- Cette méthode permet de logger une touche reçue du joueur testé lorsqu'un run est en cours, avec le verdict
+-- déjà rendu par le Validator (il démarre la cadence de l'arme : le helper ne doit pas le rappeler).
+function DebugPlaytest.onHitReceived(player: Player, remoteName: string, target: any, damage: number?)
+	if not running[player] then
+		return
+	end
+	log(
+		string.format(
+			"serveur : %s reçu (cible=%s, dégâts=%s, validation=%s)",
+			remoteName,
+			typeof(target) == "Instance" and target.Name or tostring(target),
+			tostring(damage),
+			damage and "OK" or "REFUS"
 		)
-	end)
+	)
 end
 
 -- Cette méthode permet d'exécuter un run complet (spawn, équipement, cible, attaque, dégâts) lorsque
@@ -360,7 +355,7 @@ local function watchPlayer(player: Player)
 	end)
 end
 
--- Cette méthode permet d'activer le helper (remote, écoute de l'attribut, logs des remotes de dégâts)
+-- Cette méthode permet d'activer le helper (remote, écoute de l'attribut)
 -- lorsque le serveur tourne dans Studio ; hors Studio elle ne crée rien.
 function DebugPlaytest.init(dependencies: Deps)
 	if not RunService:IsStudio() then
@@ -377,9 +372,6 @@ function DebugPlaytest.init(dependencies: Deps)
 		end
 		replies[id] = { ok = ok == true, detail = tostring(detail or ""), data = data }
 	end)
-
-	watchHitRemote(deps.meleeRemote, deps.validator.validateMelee)
-	watchHitRemote(deps.hitscanRemote, deps.validator.validateHitscan)
 
 	for _, player in Players:GetPlayers() do
 		watchPlayer(player)
