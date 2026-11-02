@@ -1,6 +1,45 @@
 return function(T, Loader)
 	local Rules = Loader.new():require("src/shared/DebugPlaytestRules")
 
+	T.describe("DebugPlaytestRules.viewmodelInView", function()
+		T.it("accepte un viewmodel proche et devant la caméra", function()
+			local ok, distance, z = Rules.viewmodelInView({ { X = -1, Y = -1, Z = -2 }, { X = 1, Y = -1, Z = -2 } })
+			T.expectEqual(ok, true)
+			T.expectEqual(distance, math.sqrt(5))
+			T.expectEqual(z, -2)
+		end)
+
+		T.it("refuse un viewmodel resté loin de la caméra (#41)", function()
+			T.expectEqual((Rules.viewmodelInView({ { X = 0, Y = -1000000, Z = -2 } })), false)
+		end)
+
+		T.it("refuse un viewmodel derrière la caméra", function()
+			T.expectEqual((Rules.viewmodelInView({ { X = 0, Y = 0, Z = 2 } })), false)
+		end)
+
+		T.it("refuse un viewmodel sans pièce visible", function()
+			T.expectEqual((Rules.viewmodelInView({})), false)
+		end)
+	end)
+
+	T.describe("DebugPlaytestRules.viewmodelDefects", function()
+		T.it("ne signale rien sur un modèle sain", function()
+			T.expectEqual(#Rules.viewmodelDefects(true, { "LeftArm", "RightArm", "Handle" }, {}), 0)
+		end)
+
+		T.it("signale PrimaryPart absent, doublons et joints cassés (#41)", function()
+			local defects = Rules.viewmodelDefects(
+				false,
+				{ "LeftArm", "Handle", "LeftArm", "LeftArm" },
+				{ "LeftShoulder" }
+			)
+			T.expectEqual(#defects, 3)
+			T.expectEqual(defects[1], "PrimaryPart absent")
+			T.expectEqual(defects[2], "en double : LeftArm")
+			T.expectEqual(defects[3], "joints cassés : LeftShoulder")
+		end)
+	end)
+
 	T.describe("DebugPlaytestRules.resolveToolName", function()
 		local tools = { "M9Bayonet", "AWP" }
 

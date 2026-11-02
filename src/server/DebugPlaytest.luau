@@ -286,6 +286,10 @@ local function run(player: Player, selector: any)
 		return finish()
 	end
 
+	-- Le viewmodel doit suivre la caméra, y compris après la visée (#41 : modèle resté loin, sans erreur en console).
+	local viewmodelReply = callClient(player, "viewmodel")
+	step("VIEWMODEL", viewmodelReply.ok, viewmodelReply.detail)
+
 	-- 4. Attaque simulée côté client (chemin réel de l'arme), observations renvoyées par le client.
 	local attackReply = callClient(player, "attack", { tool = toolName })
 	local data = attackReply.data or {}

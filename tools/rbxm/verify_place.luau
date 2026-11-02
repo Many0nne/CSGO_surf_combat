@@ -106,6 +106,9 @@ else
 			fail("viewmodel " .. name .. " absent de la place")
 		else
 			print("ViewModels." .. name .. " " .. summarize(vm))
+			if not vm.PrimaryPart then
+				fail("viewmodel " .. name .. " sans PrimaryPart")
+			end
 		end
 	end
 end
