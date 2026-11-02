@@ -2,6 +2,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local MovementConfig = require(ReplicatedStorage.Shared.MovementConfig)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
+local HitZones = require(ReplicatedStorage.Shared.HitZones)
 
 local MAX_HITSCAN_RANGE = 250 -- studs
 local MAX_MELEE_RANGE = 10 -- studs
@@ -62,6 +63,11 @@ local function resolveAttack(attacker: Player, targetCharacter: Instance, maxRan
 	return cfg, aRoot, tRoot
 end
 
+-- Cette méthode permet de vérifier que la partie annoncée par le client appartient à la cible lorsqu'un tir arrive.
+local function isPartOfTarget(hitPart: any, targetCharacter: Instance): boolean
+	return typeof(hitPart) == "Instance" and hitPart:IsA("BasePart") and hitPart:IsDescendantOf(targetCharacter)
+end
+
 -- Cette méthode permet de savoir si l'arme a fini sa cadence lorsqu'une touche arrive, à la tolérance près.
 local function isCadenceReady(attacker: Player, cfg: any, now: number): boolean
 	local playerAttacks = lastAttacks[attacker]
@@ -79,15 +85,26 @@ local function recordAttack(attacker: Player, cfg: any, delay: number, now: numb
 	playerAttacks[cfg] = { at = now, delay = delay }
 end
 
--- Cette méthode permet de décider un tir d'arme à distance lorsque le remote arrive : elle renvoie les dégâts
--- de l'arme réellement en main et démarre sa cadence, ou nil si le tir est refusé.
-function Validator.authorizeHitscan(attacker: Player, targetCharacter: Instance, now: number): number?
+-- Cette méthode permet de décider un tir d'arme à distance lorsque le remote arrive : elle renvoie les dégâts de l'arme
+-- réellement en main selon la zone touchée et si c'est un tir à la tête, et démarre sa cadence ; nil si le tir est refusé.
+function Validator.authorizeHitscan(
+	attacker: Player,
+	targetCharacter: Instance,
+	hitPart: Instance,
+	now: number
+): (number?, boolean)
 	local cfg = resolveAttack(attacker, targetCharacter, MAX_HITSCAN_RANGE)
-	if not cfg or cfg.IsMelee or not isCadenceReady(attacker, cfg, now) then
-		return nil
+	if not cfg or cfg.IsMelee or not isPartOfTarget(hitPart, targetCharacter) then
+		return nil, false
+	end
+	if not isCadenceReady(attacker, cfg, now) then
+		return nil, false
 	end
 	recordAttack(attacker, cfg, cfg.FireDelay, now)
-	return cfg.Damage
+
+	-- Seul un enfant direct est une partie du corps : un accessoire ou l'arme 3P peut contenir une pièce nommée "Head".
+	local zone = if hitPart.Parent == targetCharacter then HitZones.zoneOf(hitPart.Name) else nil
+	return HitZones.damageFor(cfg.Damage, zone), zone == HitZones.Zone.HEAD
 end
 
 -- Cette méthode permet de décider un coup de mêlée lorsque le remote arrive : elle renvoie les dégâts calculés depuis

@@ -163,7 +163,7 @@ end
 
 -- Cette méthode permet d'appliquer des dégâts déjà validés et de confirmer la touche au tireur,
 -- seulement si les PV de la cible ont réellement baissé (le hitmarker ne s'affiche pas sinon).
-local function applyHit(player: Player, targetCharacter: Instance, damage: number)
+local function applyHit(player: Player, targetCharacter: Instance, damage: number, isHeadshot: boolean)
 	recordHit(player, targetCharacter)
 	local humanoid = targetCharacter:FindFirstChildWhichIsA("Humanoid") :: Humanoid?
 	if not humanoid then
@@ -173,26 +173,32 @@ local function applyHit(player: Player, targetCharacter: Instance, damage: numbe
 	humanoid:TakeDamage(damage)
 	local outcome = Validator.hitOutcome(healthBefore, humanoid.Health)
 	if outcome then
-		hitConfirmRmt:FireClient(player, outcome == "kill")
+		hitConfirmRmt:FireClient(player, outcome == "kill", isHeadshot)
 	end
 end
 
 -- Cette méthode permet de traiter le verdict du Validator lorsqu'une touche arrive : damage vaut nil si elle est refusée.
-local function onHitVerdict(player: Player, remote: RemoteEvent, targetCharacter: Instance, damage: number?)
+local function onHitVerdict(
+	player: Player,
+	remote: RemoteEvent,
+	targetCharacter: Instance,
+	damage: number?,
+	isHeadshot: boolean
+)
 	DebugPlaytest.onHitReceived(player, remote.Name, targetCharacter, damage)
 	if damage then
-		applyHit(player, targetCharacter, damage)
+		applyHit(player, targetCharacter, damage, isHeadshot)
 	end
 end
 
 meleeRmt.OnServerEvent:Connect(function(player, targetCharacter, attackKind)
 	local damage = Validator.authorizeMelee(player, targetCharacter, attackKind, os.clock())
-	onHitVerdict(player, meleeRmt, targetCharacter, damage)
+	onHitVerdict(player, meleeRmt, targetCharacter, damage, false)
 end)
 
-hitscanRmt.OnServerEvent:Connect(function(player, targetCharacter)
-	local damage = Validator.authorizeHitscan(player, targetCharacter, os.clock())
-	onHitVerdict(player, hitscanRmt, targetCharacter, damage)
+hitscanRmt.OnServerEvent:Connect(function(player, targetCharacter, hitPart)
+	local damage, isHeadshot = Validator.authorizeHitscan(player, targetCharacter, hitPart, os.clock())
+	onHitVerdict(player, hitscanRmt, targetCharacter, damage, isHeadshot)
 end)
 
 -- ── Helper de playtest debug (#30) : Studio uniquement ─────────────────────

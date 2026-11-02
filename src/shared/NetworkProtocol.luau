@@ -6,7 +6,7 @@ Protocol.Names = {
 	-- Combat (créés par init.server)
 	MELEE_DAMAGE = "MeleeDamage",
 	HITSCAN_DAMAGE = "HitscanDamage",
-	-- Hitmarker (#44) : serveur → tireur, touche confirmée (argument : true si la cible est morte)
+	-- Hitmarker (#44) : serveur → tireur, touche confirmée (arguments : cible morte, tir à la tête)
 	HIT_CONFIRM = "HitConfirm",
 	-- Jeu
 	REQUEST_SPAWN = "RequestSpawn",

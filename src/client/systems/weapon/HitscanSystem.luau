@@ -75,7 +75,7 @@ function HitscanSystem.resolveHit(activeViewmodel: Model?): string
 	end
 
 	if hitscanEvent and targetChar then
-		hitscanEvent:FireServer(targetChar)
+		hitscanEvent:FireServer(targetChar, hit)
 	end
 	return "Shoot_human"
 end
