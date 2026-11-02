@@ -92,6 +92,15 @@ function Validator.validateMelee(attacker: Player, targetCharacter: Instance, da
 	return true
 end
 
+-- Cette méthode permet de qualifier le résultat de dégâts appliqués lorsque le tireur doit en être informé :
+-- nil si les PV n'ont pas baissé (ForceField de spawn, par exemple), sinon "hit", ou "kill" si la cible n'a plus de PV.
+function Validator.hitOutcome(healthBefore: number, healthAfter: number): ("hit" | "kill")?
+	if healthAfter >= healthBefore then
+		return nil
+	end
+	return if healthAfter <= 0 then "kill" else "hit"
+end
+
 -- Position plausibility (for future use with position-based anti-cheat)
 function Validator.isPositionPlausible(player: Player, claimedPos: Vector3): boolean
 	local char = player.Character

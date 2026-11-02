@@ -29,6 +29,7 @@ end
 local N = NetworkProtocol.Names
 local meleeRmt = makeRemote(N.MELEE_DAMAGE)
 local hitscanRmt = makeRemote(N.HITSCAN_DAMAGE)
+local hitConfirmRmt = makeRemote(N.HIT_CONFIRM)
 local spawnRmt = makeRemote(N.REQUEST_SPAWN)
 local roundStateRmt = makeRemote(N.ROUND_STATE)
 local scoreUpdateRmt = makeRemote(N.SCORE_UPDATE)
@@ -159,25 +160,31 @@ local function recordHit(player: Player, targetCharacter: Instance)
 	end
 end
 
-meleeRmt.OnServerEvent:Connect(function(player, targetCharacter, damage)
-	if not Validator.validateMelee(player, targetCharacter, damage) then
-		return
-	end
+-- Cette méthode permet d'appliquer des dégâts déjà validés et de confirmer la touche au tireur,
+-- seulement si les PV de la cible ont réellement baissé (le hitmarker ne s'affiche pas sinon).
+local function applyHit(player: Player, targetCharacter: Instance, damage: number)
 	recordHit(player, targetCharacter)
 	local humanoid = targetCharacter:FindFirstChildWhichIsA("Humanoid") :: Humanoid?
-	if humanoid then
-		humanoid:TakeDamage(damage)
+	if not humanoid then
+		return
+	end
+	local healthBefore = humanoid.Health
+	humanoid:TakeDamage(damage)
+	local outcome = Validator.hitOutcome(healthBefore, humanoid.Health)
+	if outcome then
+		hitConfirmRmt:FireClient(player, outcome == "kill")
+	end
+end
+
+meleeRmt.OnServerEvent:Connect(function(player, targetCharacter, damage)
+	if Validator.validateMelee(player, targetCharacter, damage) then
+		applyHit(player, targetCharacter, damage)
 	end
 end)
 
 hitscanRmt.OnServerEvent:Connect(function(player, targetCharacter, damage)
-	if not Validator.validateHitscan(player, targetCharacter, damage) then
-		return
-	end
-	recordHit(player, targetCharacter)
-	local humanoid = targetCharacter:FindFirstChildWhichIsA("Humanoid") :: Humanoid?
-	if humanoid then
-		humanoid:TakeDamage(damage)
+	if Validator.validateHitscan(player, targetCharacter, damage) then
+		applyHit(player, targetCharacter, damage)
 	end
 end)
 

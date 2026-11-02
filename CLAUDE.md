@@ -66,6 +66,7 @@ CSGO/
           WeaponSystem.luau
           WeaponThirdPersonView.luau
       ui/
+        Hitmarker.luau
         InfosScreen.luau
         MainMenu.luau
         RoundHUD.luau
@@ -300,6 +301,7 @@ Avant de créer ou modifier une animation d'arme, lire `docs/animations.md` (mé
 - `src/client/systems/weapon/WeaponSystem.luau`: logique client des armes, munitions, recharge et vitesse liée à l'arme.
 - `src/client/systems/weapon/WeaponThirdPersonView.luau`: rendu client des armes 3e personne de tous les personnages (décalage procédural du grip pour tir/recharge/switch, modèle 3P masqué pour soi en 1re personne).
 - `src/client/systems/game/GameStateController.luau`: machine d'état client (MENU/INFOS/SPAWNING/IN_ROUND/DEAD/RESULT), caméra lobby, coordination UI ↔ remotes.
+- `src/client/ui/Hitmarker.luau`: marqueur de touche confirmée par le serveur (X blanc à contour noir, rouge et plus grand sur un kill).
 - `src/client/ui/InfosScreen.luau`: overlay Infos (comment surfer, contrôles, crédits).
 - `src/client/ui/MainMenu.luau`: menu d'accueil avec boutons Play et Infos.
 - `src/client/ui/RoundHUD.luau`: HUD en jeu (timer, leaderboard Tab, overlay respawn, bannière résultat).
@@ -312,7 +314,7 @@ Avant de créer ou modifier une animation d'arme, lire `docs/animations.md` (mé
 - `src/server/SettingsStore.luau`: stockage et récupération des paramètres serveur.
 - `src/server/SpawnManager.luau`: gestion du spawn différé (RequestSpawn remote, LoadCharacter, point de spawn aléatoire).
 - `src/server/StatsStore.luau`: DataStore stats joueur (kills/deaths/rounds), save périodique + déconnexion, robustesse load.
-- `src/server/Validator.luau`: validation serveur des dégâts melee et hitscan (distance, ownership, sanity).
+- `src/server/Validator.luau`: validation serveur des dégâts melee et hitscan (distance, ownership, sanity) et qualification d'une touche (hit/kill).
 - `src/shared/CameraConfig.luau`: constantes caméra (FOV, sensibilité, pitch min/max, hauteurs, lerp speed, scope sens multiplier).
 - `src/shared/CharacterConfig.luau`: rig/skin communs (couleurs, ids d'images Shirt/Pants/visage) et animations 3e personne (ids, fallbacks, seuils de vitesse, fondus).
 - `src/shared/CharacterAppearance.luau`: rig de référence (`StarterPlayer.StarterCharacter`, cloné pour la cible du helper de playtest) et application du skin commun (BodyColors + vêtements) côté serveur.
@@ -321,7 +323,7 @@ Avant de créer ou modifier une animation d'arme, lire `docs/animations.md` (mé
 - `src/shared/GameConfig.luau`: constantes jeu (ROUND_DURATION=300, RESPAWN_DELAY=2.5, RESULT_DURATION=6, AUTO_SAVE_INTERVAL=120).
 - `src/shared/MovementConfig.luau`: constantes physique du mouvement uniquement (vitesses, accel, friction, saut, pentes, bhop, réseau, hitbox).
 - `src/shared/MovementState.luau`: structure d'état partagée pour le mouvement du joueur.
-- `src/shared/NetworkProtocol.luau`: noms des RemoteEvents et helper getRemote(name). Remotes : MeleeDamage, HitscanDamage, RequestSpawn, RoundState, ScoreUpdate, RoundResult, PlayerDied, WeaponAction, DebugPlaytest (créé uniquement dans Studio).
+- `src/shared/NetworkProtocol.luau`: noms des RemoteEvents et helper getRemote(name). Remotes : MeleeDamage, HitscanDamage, HitConfirm, RequestSpawn, RoundState, ScoreUpdate, RoundResult, PlayerDied, WeaponAction, DebugPlaytest (créé uniquement dans Studio).
 - `src/shared/PhysicsUtils.luau`: fonctions utilitaires pour la physique.
 - `src/shared/WeaponConfig.luau`: définitions partagées des armes et de leurs paramètres par défaut (dont `ThirdPerson` : échelle, grip, pose 3P).
 - `src/shared/WeaponThirdPerson.luau`: arme 3e personne des joueurs : construction du modèle 3P depuis `ViewModels`, grip soudé à la main, pose des épaules, actions répliquées en attributs (`Weapon3PAction`/`Weapon3PActionAt`), règles pures (grip, décalages d'action, visibilité).

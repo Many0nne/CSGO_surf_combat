@@ -93,5 +93,17 @@ return function(T, Loader)
 			local b = makePlayer(Vector3.new(5, 0, 0))
 			T.expect(not Validator.validateHitscan({ Character = nil } :: any, b.Character, 30))
 		end)
+
+		T.it("qualifie une touche selon les PV avant et après les dégâts", function()
+			local Validator = setup()
+			T.expectEqual(Validator.hitOutcome(100, 50), "hit")
+			T.expectEqual(Validator.hitOutcome(100, 0), "kill")
+			T.expectEqual(Validator.hitOutcome(50, -15), "kill")
+		end)
+
+		T.it("ne confirme rien si les PV n'ont pas baissé (ForceField)", function()
+			local Validator = setup()
+			T.expectEqual(Validator.hitOutcome(100, 100), nil)
+		end)
 	end)
 end
