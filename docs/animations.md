@@ -50,8 +50,8 @@ uv run tools/anim/capture_server.py <dossier_captures> <frames.json>
 # Vidéo à faire valider. Viewport en pixels, à relever sur une capture : il dépend de la disposition de Studio
 uv run tools/anim/side_by_side.py <reference.mp4> <debut_video> <ralenti> <dossier_captures> <Nom> <x0,y0,x1,y1> <sortie.mp4>
 
-# Étape 4 : publier (clé demandée avec request_secret, delivery "file", puis fichier supprimé)
-ROBLOX_OPEN_CLOUD_KEY_FILE=<fichier> bash tools/anim/publish.sh assets/m9_viewmodel/export M9_ <Nom>
+# Étape 4 : publier (clé dans la variable d'environnement utilisateur ROBLOX_OPEN_CLOUD_KEY)
+bash tools/anim/publish.sh assets/m9_viewmodel/export M9_ <Nom>
 ```
 
 Après la publication : dans Studio, mettre le nouvel id sur `ViewModels.<Arme>.Animations.<Nom>`, puis coller

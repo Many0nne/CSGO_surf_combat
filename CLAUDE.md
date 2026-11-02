@@ -18,6 +18,8 @@ CSGO/
       Tools/*.rbxm
   tools/
     check.sh
+    export_mesh_fbx.py
+    publish_asset.sh
     rbxm/
       receive.luau
       studio_export.luau
@@ -195,6 +197,23 @@ Transition d'une place qui contient déjà ces instances (une fois, pour éviter
    s'équipe en playtest, puis sauvegarder la place (File > Save to Roblox).
    Si un MeshPart est vide : clic droit sur `ReplicatedStorage` > *Insert from File…* > le `.rbxm`, et le signaler.
 
+## Publier un asset (Open Cloud)
+
+Clé dans la variable d'environnement utilisateur `ROBLOX_OPEN_CLOUD_KEY` (scopes `asset:read` et `asset:write`). Créateur :
+user 434916384, propriétaire de l'expérience.
+
+```bash
+bash tools/publish_asset.sh <fichier> <Animation|Model> <nom>    # écrit l'assetId sur la sortie standard
+bash tools/anim/publish.sh <dossier> <prefixe> <Nom1> [Nom2 ...] # plusieurs animations, affiche Nom=id
+```
+
+- Animation : `.rbxm` ou `.rbxmx` contenant une KeyframeSequence. `rbxtemp://` est refusé en playtest : publier pour tester.
+- Mesh : exporter avec `blender -b <scene.blend> --factory-startup --python tools/export_mesh_fbx.py -- <sortie.fbx>`, publier
+  en `Model`, puis `insert_asset(assetId)` via le MCP Studio (mode Edit). On obtient un Model de MeshParts, sans import manuel.
+- Axes : dans Blender, l'avant du modèle est +Y et le haut +Z ; Roblox reçoit `(x, z, -y)` et 1 unité Blender = 1 stud.
+  `axis_forward` et `bake_space_transform` n'ont aucun effet : l'importeur Roblox donne toujours `(-x, z, y)` depuis un FBX
+  brut (4 combinaisons testées). `export_mesh_fbx.py` compense donc par une rotation de 180° autour de Z.
+
 ## Animations de viewmodel
 
 Avant de créer ou modifier une animation d'arme, lire `docs/animations.md` (méthode, outils, pièges). L'essentiel :
@@ -212,6 +231,8 @@ Avant de créer ou modifier une animation d'arme, lire `docs/animations.md` (mé
 - `assets/rbx/ViewModels/*.rbxm`, `assets/rbx/Tools/*.rbxm`: viewmodels et Tools des armes (binaires LFS, voir « Viewmodels et Tools »).
 - `tools/rbxm/receive.luau`: serveur Lune local qui reçoit les `.rbxm` exportés de Studio et les écrit sous `assets/rbx/`.
 - `tools/rbxm/studio_export.luau`: script à exécuter dans Studio qui sérialise viewmodels et Tools et les envoie à `receive.luau`.
+- `tools/publish_asset.sh`: publie une animation ou un modèle par Open Cloud, attend la fin de l'opération et écrit l'`assetId`.
+- `tools/export_mesh_fbx.py`: exporte les meshes d'un `.blend` en FBX avec l'orientation attendue dans Roblox.
 - `tools/rbxm/verify_place.luau`: relit la place construite par Rojo et vérifie viewmodels, Tools, ids d'assets et noms d'armes.
 - `rokit.toml`: versions des outils (Rojo, StyLua, Selene, luau-lsp, Lune) gérées par Rokit.
 - `CLAUDE.md`: guide de contexte et conventions pour travailler dans ce dépôt.
