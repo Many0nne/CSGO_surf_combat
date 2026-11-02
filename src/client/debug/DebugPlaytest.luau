@@ -17,6 +17,7 @@ local SPAWN_TIMEOUT = 10
 local EQUIP_TIMEOUT = 6
 local IDLE_TIMEOUT = 3
 local ATTACK_SETTLE = 0.5 -- secondes observées après la fin théorique de l'animation de tir
+local VIEWMODEL_SETTLE = 0.25 -- secondes laissées au viewmodel pour passer devant la caméra (frame isolée décalée)
 
 type Deps = {
 	player: Player,
@@ -191,6 +192,67 @@ local function aim(payload: any): (boolean, string)
 	return dot > 0.995, string.format("yaw=%.1f pitch=%.1f, alignement=%.3f", yaw, pitch, dot)
 end
 
+-- Cette méthode permet de relever les dégâts du modèle source d'un viewmodel lorsqu'on vérifie l'arme équipée : une
+-- pièce détachée finit détruite en tombant, seul ce contrôle la repère à coup sûr (position dépendante du timing).
+local function viewmodelTemplateDefects(name: string): { string }
+	local container = ReplicatedStorage:FindFirstChild("ViewModels")
+	local template = container and container:FindFirstChild(name)
+	if not template or not template:IsA("Model") then
+		return { "modèle source introuvable" }
+	end
+	local childNames, brokenJoints = {}, {}
+	for _, child in template:GetChildren() do
+		if child:IsA("BasePart") or child:IsA("Model") then
+			table.insert(childNames, child.Name)
+		end
+	end
+	for _, joint in template:GetDescendants() do
+		if joint:IsA("Motor6D") and not (joint.Part0 and joint.Part1) then
+			table.insert(brokenJoints, joint.Name)
+		end
+	end
+	return Rules.viewmodelDefects(template.PrimaryPart ~= nil, childNames, brokenJoints)
+end
+
+-- Cette méthode permet de vérifier le viewmodel lorsque l'Equip est terminé : modèle source intact, et pièces visibles
+-- passées devant la caméra dans VIEWMODEL_SETTLE.
+local function checkViewmodel(): (boolean, string)
+	waitFor(function()
+		return not deps.viewmodelSystem.isAnimationPlaying("Equip")
+	end, IDLE_TIMEOUT)
+	local vm = deps.viewmodelSystem.getActiveViewmodel()
+	if not vm then
+		return false, "aucun viewmodel actif"
+	end
+	local cam = workspace.CurrentCamera
+	local deadline = os.clock() + VIEWMODEL_SETTLE
+	local frames = 0
+	local ok, distance, z, pointCount = false, math.huge, 0, 0
+	repeat
+		RunService.RenderStepped:Wait()
+		frames += 1
+		local points = {}
+		for _, part in vm:GetDescendants() do
+			if part:IsA("BasePart") and part.Transparency < 1 and part.LocalTransparencyModifier < 1 then
+				table.insert(points, cam.CFrame:PointToObjectSpace(part.Position))
+			end
+		end
+		pointCount = #points
+		ok, distance, z = Rules.viewmodelInView(points)
+	until ok or os.clock() >= deadline
+	local defects = viewmodelTemplateDefects(vm.Name)
+	return ok and #defects == 0,
+		string.format(
+			"%s : centre à %.1f studs de la caméra (z=%.1f, %d frame(s)), %d pièces visibles ; modèle source : %s",
+			vm.Name,
+			distance,
+			z,
+			frames,
+			pointCount,
+			if #defects == 0 then "sain" else table.concat(defects, " ; ") .. " (reconnecter Rojo, voir CLAUDE.md)"
+		)
+end
+
 -- Cette méthode permet de simuler un clic d'attaque par le chemin réel (Tool:Activate → WeaponSystem) lorsque
 -- l'arme est prête ; renvoie les pistes, marqueurs et sons observés pendant l'attaque.
 local function attack(payload: any): (boolean, string, any)
@@ -224,6 +286,7 @@ local handlers: { [string]: (any) -> (boolean, string, any) } = {
 	watch = watch,
 	equipped = checkEquipped,
 	aim = aim,
+	viewmodel = checkViewmodel,
 	attack = attack,
 	finish = function()
 		clearWatch()

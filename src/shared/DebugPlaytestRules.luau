@@ -11,6 +11,8 @@ DebugPlaytestRules.PREFIX = "[DebugPlaytest]"
 DebugPlaytestRules.ATTRIBUTE = "DebugPlaytest"
 -- Marqueur dynamique des armes de mêlée (son résolu au moment de l'impact, cf. WeaponSystem).
 DebugPlaytestRules.MELEE_MARKER = "Stab Sound"
+-- Distance max (studs) entre la caméra et le centre des pièces visibles d'un viewmodel qui la suit.
+DebugPlaytestRules.VIEWMODEL_MAX_DISTANCE = 10
 
 -- Cette méthode permet de résoudre le nom de l'outil à équiper lorsque le sélecteur est un nom (exact, puis
 -- insensible à la casse) ou un numéro de slot (index dans les noms triés par ordre alphabétique).
@@ -88,6 +90,52 @@ function DebugPlaytestRules.yawPitchToward(
 	local yaw = math.deg(math.atan2(u.X, -u.Z))
 	local pitch = math.clamp(math.deg(math.asin(math.clamp(u.Y, -1, 1))), pitchMin, pitchMax)
 	return yaw, pitch
+end
+
+-- Cette méthode permet de juger si le viewmodel est devant la caméra lorsqu'on a ses points visibles en espace
+-- caméra (la caméra regarde vers -Z) : centre devant elle et à moins de VIEWMODEL_MAX_DISTANCE ; renvoie aussi distance et z.
+function DebugPlaytestRules.viewmodelInView(cameraSpacePoints: { any }): (boolean, number, number)
+	local count = #cameraSpacePoints
+	if count == 0 then
+		return false, math.huge, 0
+	end
+	local x, y, z = 0, 0, 0
+	for _, point in cameraSpacePoints do
+		x += point.X
+		y += point.Y
+		z += point.Z
+	end
+	x, y, z = x / count, y / count, z / count
+	local distance = math.sqrt(x * x + y * y + z * z)
+	return z < 0 and distance <= DebugPlaytestRules.VIEWMODEL_MAX_DISTANCE, distance, z
+end
+
+-- Cette méthode permet de lister les dégâts d'un modèle source de viewmodel lorsqu'une synchro Rojo a pu l'abîmer :
+-- PrimaryPart absent, enfants physiques en double, joints sans Part0/Part1 ; liste vide si le modèle est sain.
+function DebugPlaytestRules.viewmodelDefects(
+	hasPrimaryPart: boolean,
+	childNames: { string },
+	brokenJoints: { string }
+): { string }
+	local defects = {}
+	if not hasPrimaryPart then
+		table.insert(defects, "PrimaryPart absent")
+	end
+	local seen, duplicates = {}, {}
+	for _, name in childNames do
+		if seen[name] == 1 then
+			table.insert(duplicates, name)
+		end
+		seen[name] = (seen[name] or 0) + 1
+	end
+	table.sort(duplicates)
+	if #duplicates > 0 then
+		table.insert(defects, "en double : " .. table.concat(duplicates, ", "))
+	end
+	if #brokenJoints > 0 then
+		table.insert(defects, "joints cassés : " .. table.concat(brokenJoints, ", "))
+	end
+	return defects
 end
 
 -- Cette méthode permet de formater une ligne de log avec le préfixe stable lorsque le helper écrit en console.
