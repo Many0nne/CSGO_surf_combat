@@ -211,7 +211,7 @@ Clé dans la variable d'environnement utilisateur `ROBLOX_OPEN_CLOUD_KEY` (scope
 user 434916384, propriétaire de l'expérience.
 
 ```bash
-bash tools/publish_asset.sh <fichier> <Animation|Model> <nom>    # écrit l'assetId sur la sortie standard
+bash tools/publish_asset.sh <fichier> <Animation|Model|Audio> <nom>    # écrit l'assetId sur la sortie standard
 bash tools/anim/publish.sh <dossier> <prefixe> <Nom1> [Nom2 ...] # plusieurs animations, affiche Nom=id
 ```
 
@@ -239,7 +239,7 @@ Avant de créer ou modifier une animation d'arme, lire `docs/animations.md` (mé
 - `assets/rbx/ViewModels/*.rbxm`, `assets/rbx/Tools/*.rbxm`: viewmodels et Tools des armes (binaires LFS, voir « Viewmodels et Tools »).
 - `tools/rbxm/receive.luau`: serveur Lune local qui reçoit les `.rbxm` exportés de Studio et les écrit sous `assets/rbx/`.
 - `tools/rbxm/studio_export.luau`: script à exécuter dans Studio qui sérialise viewmodels et Tools et les envoie à `receive.luau`.
-- `tools/publish_asset.sh`: publie une animation ou un modèle par Open Cloud, attend la fin de l'opération et écrit l'`assetId`.
+- `tools/publish_asset.sh`: publie une animation, un modèle ou un son par Open Cloud, attend la fin de l'opération et écrit l'`assetId`.
 - `tools/export_mesh_fbx.py`: exporte les meshes d'un `.blend` en FBX avec l'orientation attendue dans Roblox.
 - `tools/rbxm/verify_place.luau`: relit la place construite par Rojo et vérifie viewmodels, Tools, ids d'assets et noms d'armes.
 - `rokit.toml`: versions des outils (Rojo, StyLua, Selene, luau-lsp, Lune) gérées par Rokit.
