@@ -34,40 +34,48 @@
       "$properties": {
         "FilteringEnabled": true
       },
-      "Baseplate": {
-        "$className": "Part",
-        "$properties": {
-          "Anchored": true,
-          "Color": [
-            0.38823,
-            0.37254,
-            0.38823
-          ],
-          "Locked": true,
-          "Position": [
-            0,
-            -10,
-            0
-          ],
-          "Size": [
-            512,
-            20,
-            512
-          ]
-        }
+      "Maps": {
+        "$path": "assets/rbx/Maps"
       }
     },
     "Lighting": {
       "$properties": {
         "Ambient": [
-          0,
-          0,
-          0
+          0.22745,
+          0.21176,
+          0.27451
         ],
-        "Brightness": 2,
+        "Brightness": 3.2,
+        "ClockTime": 17.9,
+        "ExposureCompensation": 0.2,
+        "GeographicLatitude": 0,
         "GlobalShadows": true,
+        "OutdoorAmbient": [
+          0.37255,
+          0.33333,
+          0.41176
+        ],
         "Outlines": false,
         "Technology": "Voxel"
+      },
+      "Atmosphere": {
+        "$className": "Atmosphere",
+        "$properties": {
+          "Color": [
+            1.0,
+            0.66667,
+            0.47059
+          ],
+          "Decay": [
+            0.84314,
+            0.41176,
+            0.31373
+          ],
+          "Density": 0.33,
+          "Glare": 1,
+          "Haze": 1.2,
+          "Offset": 0.05
+        }
       }
     },
     "SoundService": {

@@ -92,7 +92,8 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
 
 Sans toucher aux fichiers ni à la place : pendant un playtest, `execute_luau` en contexte `Client` peut construire une scène
 et une UI entières, et `screen_capture` montre le résultat avec l'UI. Tout disparaît à l'arrêt du playtest. Le code ainsi
-lancé ne partage pas ses modules avec le jeu (un `require` donne une autre instance). Seul Claude ne peut pas connecter le
+lancé ne partage pas ses modules avec le jeu (un `require` donne une autre instance). En mode Edit, `screen_capture` rend
+un viewport tout blanc quand la fenêtre Studio est réduite ou en arrière-plan : la mettre au premier plan. Seul Claude ne peut pas connecter le
 plugin Rojo : l'utilisateur doit le faire pour tester un worktree.
 
 ## Reste à faire

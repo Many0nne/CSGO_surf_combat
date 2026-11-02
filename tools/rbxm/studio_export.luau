@@ -1,9 +1,10 @@
 -- studio_export.luau
 -- À exécuter DANS Roblox Studio (mode Edit), pendant que `lune run tools/rbxm/receive.luau` tourne :
 -- via le MCP Studio (`execute_luau`, contexte plugin) ou la barre de commande (celle-ci exige
--- Game Settings > Security > Allow HTTP Requests). Sérialise chaque viewmodel (ReplicatedStorage.ViewModels.*)
--- et chaque Tool (StarterPack.*) en .rbxm et les envoie au serveur local, qui les écrit dans
--- assets/rbx/ViewModels/<Nom>.rbxm et assets/rbx/Tools/<Nom>.rbxm. Ne modifie rien dans la place.
+-- Game Settings > Security > Allow HTTP Requests). Sérialise chaque viewmodel (ReplicatedStorage.ViewModels.*),
+-- chaque Tool (StarterPack.*) et chaque map (Workspace.Maps.*) en .rbxm et les envoie au serveur local, qui les
+-- écrit dans assets/rbx/ViewModels/<Nom>.rbxm, assets/rbx/Tools/<Nom>.rbxm et assets/rbx/Maps/<Nom>.rbxm.
+-- Ne modifie rien dans la place.
 
 local HttpService = game:GetService("HttpService")
 local SerializationService = game:GetService("SerializationService")
@@ -53,14 +54,21 @@ local ok, err = pcall(function()
 	local viewModels = game:GetService("ReplicatedStorage"):FindFirstChild("ViewModels")
 	assert(viewModels, "ReplicatedStorage.ViewModels introuvable")
 	local starterPack = game:GetService("StarterPack")
+	local maps = workspace:FindFirstChild("Maps")
+	assert(maps, "Workspace.Maps introuvable")
 	checkChildren(viewModels, "Model")
 	checkChildren(starterPack, "Tool")
+	checkChildren(maps, "Model")
 	for _, child in viewModels:GetChildren() do
 		table.insert(exported, export(child, "ViewModels"))
 		task.wait()
 	end
 	for _, child in starterPack:GetChildren() do
 		table.insert(exported, export(child, "Tools"))
+		task.wait()
+	end
+	for _, child in maps:GetChildren() do
+		table.insert(exported, export(child, "Maps"))
 		task.wait()
 	end
 end)

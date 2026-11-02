@@ -16,6 +16,7 @@ local InputModule = require(script.Parent.Parent.Parent.input.InputModule)
 local PhysicsUtils = require(ReplicatedStorage.Shared.PhysicsUtils)
 local Config = require(ReplicatedStorage.Shared.MovementConfig)
 local MovementState = require(ReplicatedStorage.Shared.MovementState)
+local SpawnLaunch = require(ReplicatedStorage.Shared.SpawnLaunch)
 local CharacterAnimator = require(ReplicatedStorage.Shared.CharacterAnimator)
 
 local JUMP_LOCKOUT = 0.15 -- empêche re-grounding immédiat après un saut
@@ -44,6 +45,30 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 	slideParams.FilterDescendantsInstances = { char, workspace.CurrentCamera }
 
 	local wasGrounded = false
+
+	-- Lancement depuis le soleil (#69) : le serveur pose l'origine puis la vitesse sur le personnage.
+	local launched = false
+	-- Cette méthode permet d'appliquer une seule fois le lancement du serveur lorsque ses attributs sont arrivés
+	-- (déjà là à l'init, ou répliqués juste après) : position, vitesse en l'air et caméra tournée vers la ville.
+	local function applyLaunch()
+		local origin = char:GetAttribute(SpawnLaunch.ORIGIN_ATTRIBUTE)
+		local launchVelocity = char:GetAttribute(SpawnLaunch.VELOCITY_ATTRIBUTE)
+		if launched or typeof(origin) ~= "Vector3" or typeof(launchVelocity) ~= "Vector3" then
+			return
+		end
+		launched = true
+		hrp.CFrame = CFrame.new(origin) * hrp.CFrame.Rotation
+		lastSafePos = origin
+		velocity = launchVelocity
+		state = MovementState.AIRBORNE
+		surfNormal = nil
+		jumpLockout = JUMP_LOCKOUT
+		if camera and camera.setAngles and launchVelocity.Magnitude > 1e-3 then
+			camera.setAngles(SpawnLaunch.cameraAngles(launchVelocity))
+		end
+	end
+	applyLaunch()
+	char:GetAttributeChangedSignal(SpawnLaunch.VELOCITY_ATTRIBUTE):Connect(applyLaunch)
 
 	RunService.Heartbeat:Connect(function(rawDt)
 		if not hrp.Parent then
