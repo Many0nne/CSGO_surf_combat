@@ -1,7 +1,7 @@
 -- studio_save_viewmodel.luau
 -- À coller dans `execute_luau` (mode Edit, contexte Edit), pendant que tools/anim/capture_server.py tourne.
 -- Exporte UN viewmodel vers assets/rbx/ViewModels/ : contrairement à tools/rbxm/studio_export.luau, les autres armes
--- ne sont pas réécrites (leur .rbxm peut changer de quelques octets à chaque export, voir CLAUDE.md).
+-- ne sont pas réécrites (leur .rbxm peut changer de quelques octets à chaque export, voir docs/assets.md).
 
 local VIEWMODEL = "M9Bayonet"
 

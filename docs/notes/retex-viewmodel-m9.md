@@ -1,5 +1,8 @@
 # RETEX : viewmodel M9 Bayonet (modèle Blender + animations), 2026-10-31
 
+> Document historique : l'« état laissé » n'existe plus et la plupart des points « À mettre en place » sont réalisés.
+> Les règles encore valables sont reprises dans `docs/animations.md` et `docs/assets.md`.
+
 > La méthode actuelle est dans `docs/animations.md`, qui prime sur ce document, notamment : prévisualisation à 90° et non
 > 70°, rendu dans Studio, publication avec `tools/anim/publish.sh`.
 
