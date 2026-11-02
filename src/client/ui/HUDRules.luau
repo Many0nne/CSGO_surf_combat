@@ -2,7 +2,7 @@
 -- Testées sous Lune (tests/specs/HUDRules.spec.luau).
 local HUDRules = {}
 
--- Seuils des paliers de vitesse en studs/s horizontaux (course ≈ 30) et leur libellé
+-- Seuils des paliers de vitesse en studs/s horizontaux (course ≈ 30) ; le dernier passe le compteur au rouge
 HUDRules.SPEED_TIERS = {
 	{ min = 0, name = "—" },
 	{ min = 30, name = "RUN" },
@@ -10,6 +10,9 @@ HUDRules.SPEED_TIERS = {
 	{ min = 120, name = "SURF" },
 	{ min = 180, name = "MACH" },
 }
+
+-- Vitesse à laquelle la ligne du speedometer est pleine (entrée du dernier palier)
+HUDRules.SPEED_FILL_MAX = 180
 
 HUDRules.LOW_TIME_THRESHOLD = 30
 
@@ -24,6 +27,11 @@ function HUDRules.speedTier(speed: number): number
 		end
 	end
 	return index
+end
+
+-- Cette méthode permet de calculer la part remplie (0 à 1) de la ligne du speedometer lorsque la vitesse change.
+function HUDRules.speedFill(speed: number): number
+	return math.clamp(speed / HUDRules.SPEED_FILL_MAX, 0, 1)
 end
 
 -- Cette méthode permet de formater un nombre de secondes en « m:ss » lorsque le timer de round est mis à jour.
