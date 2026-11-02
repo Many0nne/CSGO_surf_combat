@@ -156,7 +156,7 @@ end
 
 -- Cette méthode permet de lancer un coup de mêlée lorsque l'arme est prête : l'animation porte le marqueur qui résout
 -- l'impact, cooldown fixe le prochain coup possible (tous clics confondus) et lockTime la durée de l'état FIRING.
-local function startMeleeAttack(tool, cfg, s, animation: string, damage: number?, cooldown: number, lockTime: number)
+local function startMeleeAttack(tool, cfg, s, animation: string, attackKind: string, cooldown: number, lockTime: number)
 	local now = tick()
 	s.lastFire = now
 	s.nextFireTime = now + cooldown
@@ -164,7 +164,7 @@ local function startMeleeAttack(tool, cfg, s, animation: string, damage: number?
 	replicateAction("Shoot")
 	local markerOverrides: { [string]: string | () -> string } = {
 		["Stab Sound"] = function()
-			return MeleeHitDetection.resolveHit(cfg, ViewmodelSystem.getActiveViewmodel(), damage)
+			return MeleeHitDetection.resolveHit(cfg, ViewmodelSystem.getActiveViewmodel(), attackKind)
 		end,
 	}
 	ViewmodelSystem.playAnimation(animation, markerOverrides, cfg.AttackFadeTime)
@@ -186,7 +186,15 @@ local function onSecondaryAttack(tool, cfg)
 	if tick() < s.nextFireTime then
 		return
 	end
-	startMeleeAttack(tool, cfg, s, attack.Animation, attack.Damage, attack.FireDelay, attack.AnimTime)
+	startMeleeAttack(
+		tool,
+		cfg,
+		s,
+		attack.Animation,
+		WeaponConfig.AttackKind.SECONDARY,
+		attack.FireDelay,
+		attack.AnimTime
+	)
 end
 
 local function onToolActivated(tool)
@@ -209,7 +217,15 @@ local function onToolActivated(tool)
 	end
 
 	if cfg and cfg.IsMelee then
-		startMeleeAttack(tool, cfg, s, nextAttackAnimation(s, cfg), nil, firedelay, cfg.ShootAnimTime or 0.4)
+		startMeleeAttack(
+			tool,
+			cfg,
+			s,
+			nextAttackAnimation(s, cfg),
+			WeaponConfig.AttackKind.PRIMARY,
+			firedelay,
+			cfg.ShootAnimTime or 0.4
+		)
 		return
 	end
 
@@ -220,7 +236,7 @@ local function onToolActivated(tool)
 	replicateAction("Shoot")
 	ViewmodelSystem.playAnimation("Shoot")
 	ScopeSystem.resetVisuals()
-	HitscanSystem.resolveHit(cfg, ViewmodelSystem.getActiveViewmodel())
+	HitscanSystem.resolveHit(ViewmodelSystem.getActiveViewmodel())
 	local shootAnimTime = cfg and cfg.ShootAnimTime or 0.4
 	task.delay(shootAnimTime, function()
 		if currentTool == tool and weaponState == "FIRING" then

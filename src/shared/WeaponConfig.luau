@@ -72,4 +72,26 @@ WeaponConfig.Weapons = {
 	},
 }
 
+-- Types d'attaque de mêlée envoyés par le client dans le remote MeleeDamage : le serveur en déduit dégâts et cadence.
+WeaponConfig.AttackKind = {
+	PRIMARY = "primary",
+	SECONDARY = "secondary",
+}
+
+-- Cette méthode permet de lire les dégâts et la cadence d'une attaque de mêlée lorsque le serveur valide un coup ;
+-- nil si l'arme n'est pas une arme de mêlée ou n'a pas cette attaque.
+function WeaponConfig.getMeleeAttack(cfg: any, attackKind: any): (number?, number?)
+	if not cfg.IsMelee then
+		return nil, nil
+	end
+	if attackKind == WeaponConfig.AttackKind.PRIMARY then
+		return cfg.Damage, cfg.FireDelay
+	end
+	local secondary = cfg.SecondaryAttack
+	if attackKind == WeaponConfig.AttackKind.SECONDARY and secondary then
+		return secondary.Damage, secondary.FireDelay
+	end
+	return nil, nil
+end
+
 return WeaponConfig

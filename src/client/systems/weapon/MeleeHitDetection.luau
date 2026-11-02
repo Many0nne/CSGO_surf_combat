@@ -8,33 +8,9 @@ function MeleeHitDetection.init(event: RemoteEvent?)
 	meleeEvent = event
 end
 
-local function isBackstab(hitInstance: Instance): boolean
-	local char = hitInstance.Parent
-	if not char then
-		return false
-	end
-	local hrp = char:FindFirstChild("HumanoidRootPart")
-	if not hrp then
-		char = char.Parent
-		if not char then
-			return false
-		end
-		hrp = char:FindFirstChild("HumanoidRootPart")
-	end
-	if not hrp then
-		return false
-	end
-	local cam = workspace.CurrentCamera
-	if not cam then
-		return false
-	end
-	local toAttacker = cam.CFrame.Position - (hrp :: BasePart).Position
-	return toAttacker:Dot((hrp :: BasePart).CFrame.LookVector) < 0
-end
-
 -- Retourne le nom du son à jouer ("Shoot_void", "Shoot_human", "Shoot_wall")
--- et applique les dégâts via RemoteEvent si cible humaine ; attackDamage remplace les dégâts de base de l'arme.
-function MeleeHitDetection.resolveHit(cfg, activeViewmodel: Model?, attackDamage: number?): string
+-- et signale la touche au serveur si cible humaine : il calcule lui-même les dégâts d'après attackKind.
+function MeleeHitDetection.resolveHit(cfg, activeViewmodel: Model?, attackKind: string): string
 	local range = cfg and cfg.MeleeRange or 80
 	local cam = workspace.CurrentCamera
 	if not cam then
@@ -61,14 +37,12 @@ function MeleeHitDetection.resolveHit(cfg, activeViewmodel: Model?, attackDamage
 		return "Shoot_wall"
 	end
 
-	local backstabMult = isBackstab(hit) and (cfg and cfg.BackstabMultiplier or 2) or 1
-	local damage = (attackDamage or (cfg and cfg.Damage) or 50) * backstabMult
 	local targetChar = hit.Parent
 	if not targetChar:FindFirstChildWhichIsA("Humanoid") then
 		targetChar = targetChar.Parent
 	end
 	if meleeEvent and targetChar then
-		meleeEvent:FireServer(targetChar, damage)
+		meleeEvent:FireServer(targetChar, attackKind)
 	end
 	return "Shoot_human"
 end

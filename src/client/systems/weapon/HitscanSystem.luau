@@ -40,7 +40,7 @@ function HitscanSystem.init(event: RemoteEvent?)
 	hitscanEvent = event
 end
 
-function HitscanSystem.resolveHit(cfg, activeViewmodel: Model?): string
+function HitscanSystem.resolveHit(activeViewmodel: Model?): string
 	local cam = workspace.CurrentCamera
 	if not cam then
 		return "Shoot_void"
@@ -74,9 +74,8 @@ function HitscanSystem.resolveHit(cfg, activeViewmodel: Model?): string
 		return "Shoot_wall"
 	end
 
-	local damage = cfg and cfg.Damage or 0
 	if hitscanEvent and targetChar then
-		hitscanEvent:FireServer(targetChar, damage)
+		hitscanEvent:FireServer(targetChar)
 	end
 	return "Shoot_human"
 end
