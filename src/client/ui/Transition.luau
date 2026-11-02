@@ -1,4 +1,4 @@
--- Volets « DÉPLOIEMENT » entre le menu et le jeu : se ferment au clic sur PLAY,
+-- Volets « DÉPLOIEMENT » entre le menu et le jeu : se ferment au tir sur JOUER,
 -- se rouvrent quand le personnage apparaît (ou après un délai de sécurité).
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -22,23 +22,14 @@ local labelScale: UIScale
 local closed = false
 local generation = 0
 
--- Cette méthode permet de créer un volet (moitié d'écran) et son liseré ambre lorsque la transition est construite.
+-- Cette méthode permet de créer un volet (moitié d'écran, couleur du soleil du menu) lorsque la transition est construite.
 local function makePanel(root: Frame, isTop: boolean): Frame
-	local panel = UIKit.frame({
+	return UIKit.frame({
 		Name = isTop and "TopPanel" or "BottomPanel",
 		Size = UDim2.fromScale(1, 0.5),
-		BackgroundColor3 = C.Ground,
+		BackgroundColor3 = C.SunWhite,
 		Parent = root,
 	})
-	UIKit.frame({
-		Name = "Edge",
-		Size = UDim2.new(1, 0, 0, 3),
-		AnchorPoint = Vector2.new(0, isTop and 1 or 0),
-		Position = UDim2.fromScale(0, isTop and 1 or 0),
-		BackgroundColor3 = C.Accent,
-		Parent = panel,
-	})
-	return panel
 end
 
 -- Cette méthode permet de placer les volets hors écran lorsque la transition est ouverte ou réinitialisée.
@@ -64,7 +55,7 @@ function Transition.init()
 		Text = "DÉPLOIEMENT",
 		FontFace = UITheme.Fonts.Display,
 		TextSize = 64,
-		TextColor3 = C.Accent,
+		TextColor3 = C.Ground,
 		TextXAlignment = Enum.TextXAlignment.Center,
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.5),
@@ -77,7 +68,7 @@ function Transition.init()
 	restOpen()
 end
 
--- Cette méthode permet de fermer les volets puis d'appeler `onClosed` lorsque le joueur clique sur PLAY.
+-- Cette méthode permet de fermer les volets puis d'appeler `onClosed` lorsque le joueur tire sur JOUER.
 function Transition.close(onClosed: (() -> ())?)
 	if not gui then
 		if onClosed then

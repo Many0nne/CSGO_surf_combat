@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # publish_asset.sh
 # Publie un asset par Open Cloud, attend la fin de l'opération et écrit son assetId sur la sortie standard.
-# Usage : bash tools/publish_asset.sh <fichier> <Animation|Model|Audio> <nom>
+# Usage : bash tools/publish_asset.sh <fichier> <Animation|Model|Audio|Decal> <nom>
 #   Animation : .rbxm ou .rbxmx contenant une KeyframeSequence
 #   Model     : .fbx, .rbxm ou .rbxmx
 #   Audio     : .wav, .mp3, .ogg ou .flac
+#   Decal     : .png ou .jpg (image d'interface) ; l'id écrit est celui du Decal : pour une ImageLabel, prendre
+#               le Texture de ce Decal (InsertService:LoadAsset(id) en contexte Server)
 # La clé (scopes asset:read et asset:write) vient de ROBLOX_OPEN_CLOUD_KEY, ou du fichier ROBLOX_OPEN_CLOUD_KEY_FILE.
 # Les assets doivent appartenir au créateur de l'expérience (434916384) pour fonctionner en jeu.
 
@@ -43,7 +45,7 @@ json_field() {
 	printf '%s' "$1" | sed -n "s/.*\"$2\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p"
 }
 
-[ $# -eq 3 ] || die "usage : bash tools/publish_asset.sh <fichier> <Animation|Model|Audio> <nom>"
+[ $# -eq 3 ] || die "usage : bash tools/publish_asset.sh <fichier> <Animation|Model|Audio|Decal> <nom>"
 file="$1"
 asset_type="$2"
 name="$3"
@@ -57,8 +59,10 @@ Audio:wav) content_type="audio/wav" ;;
 Audio:mp3) content_type="audio/mpeg" ;;
 Audio:ogg) content_type="audio/ogg" ;;
 Audio:flac) content_type="audio/flac" ;;
-Animation:* | Model:* | Audio:*) die "extension .$extension non prise en charge pour le type $asset_type" ;;
-*) die "type inconnu : $asset_type (Animation, Model ou Audio)" ;;
+Decal:png) content_type="image/png" ;;
+Decal:jpg | Decal:jpeg) content_type="image/jpeg" ;;
+Animation:* | Model:* | Audio:* | Decal:*) die "extension .$extension non prise en charge pour le type $asset_type" ;;
+*) die "type inconnu : $asset_type (Animation, Model, Audio ou Decal)" ;;
 esac
 
 key="$(read_key)"

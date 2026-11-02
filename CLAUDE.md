@@ -20,6 +20,8 @@ CSGO/
     check.sh
     export_mesh_fbx.py
     publish_asset.sh
+    ui/
+      make_menu_type.py
     rbxm/
       receive.luau
       studio_export.luau
@@ -44,6 +46,8 @@ CSGO/
       systems/
         game/
           GameStateController.luau
+          MenuScene.luau
+          MenuSceneRules.luau
         movement/
           BhopSystem.luau
           CharacterDimensions.luau
@@ -213,16 +217,22 @@ Clé dans la variable d'environnement utilisateur `ROBLOX_OPEN_CLOUD_KEY` (scope
 user 434916384, propriétaire de l'expérience.
 
 ```bash
-bash tools/publish_asset.sh <fichier> <Animation|Model|Audio> <nom>    # écrit l'assetId sur la sortie standard
+bash tools/publish_asset.sh <fichier> <Animation|Model|Audio|Decal> <nom>    # écrit l'assetId sur la sortie standard
 bash tools/anim/publish.sh <dossier> <prefixe> <Nom1> [Nom2 ...] # plusieurs animations, affiche Nom=id
 ```
 
 - Animation : `.rbxm` ou `.rbxmx` contenant une KeyframeSequence. `rbxtemp://` est refusé en playtest : publier pour tester.
+- Image d'interface : publier en `Decal`, puis prendre l'id de l'image contenue dans le Decal (voir `docs/ui.md`) : celui du Decal ne s'affiche pas.
 - Mesh : exporter avec `blender -b <scene.blend> --factory-startup --python tools/export_mesh_fbx.py -- <sortie.fbx>`, publier
   en `Model`, puis `insert_asset(assetId)` via le MCP Studio (mode Edit). On obtient un Model de MeshParts, sans import manuel.
 - Axes : dans Blender, l'avant du modèle est +Y et le haut +Z ; Roblox reçoit `(x, z, -y)` et 1 unité Blender = 1 stud.
   `axis_forward` et `bake_space_transform` n'ont aucun effet : l'importeur Roblox donne toujours `(-x, z, y)` depuis un FBX
   brut (4 combinaisons testées). `export_mesh_fbx.py` compense donc par une rotation de 180° autour de Z.
+
+## Interface et direction artistique
+
+Avant de créer ou modifier un écran, lire `docs/ui.md` : direction « Ligne de mire », pistes rejetées, construction du menu, pièges
+et écrans restant à refaire. L'essentiel : l'interface est faite de la matière du jeu, et une idée 3D se prototype dans le moteur.
 
 ## Animations de viewmodel
 
@@ -236,13 +246,15 @@ Avant de créer ou modifier une animation d'arme, lire `docs/animations.md` (mé
 ## Description des fichiers
 
 - `docs/animations.md`: méthode de création des animations de viewmodel (processus de validation, outils, pièges connus).
+- `docs/ui.md`: direction artistique de l'interface (principe, essais rejetés, construction du menu, pièges, reste à faire).
 - `tools/anim/`: outils de ces animations : mesure sur vidéo, rendu et capture dans Studio, vidéo côte à côte, publication Open Cloud.
 - `assets/awp_viewmodel/`: animations de l'AWP : trajectoires mesurées (`build_anims.py`), rig Studio (`rig.json`), build sans toucher au Blender ouvert (`run_build.py`). Sons de l'arme : découpe depuis leurs sources (`build_sounds.py`), extraits CC0 dans `sounds/` ; `Shoot` et `Bolt` (Pixabay) sont publiés sur Roblox, pas versionnés.
 - `default.project.json`: configuration Rojo qui mappe `src/` et `assets/rbx/` (viewmodels, Tools) vers le projet Roblox.
 - `assets/rbx/ViewModels/*.rbxm`, `assets/rbx/Tools/*.rbxm`: viewmodels et Tools des armes (binaires LFS, voir « Viewmodels et Tools »).
 - `tools/rbxm/receive.luau`: serveur Lune local qui reçoit les `.rbxm` exportés de Studio et les écrit sous `assets/rbx/`.
 - `tools/rbxm/studio_export.luau`: script à exécuter dans Studio qui sérialise viewmodels et Tools et les envoie à `receive.luau`.
-- `tools/publish_asset.sh`: publie une animation, un modèle ou un son par Open Cloud, attend la fin de l'opération et écrit l'`assetId`.
+- `tools/publish_asset.sh`: publie une animation, un modèle, un son ou une image par Open Cloud, attend la fin de l'opération et écrit l'`assetId`.
+- `tools/ui/make_menu_type.py`: génère le titrage du menu (lettres usées, éclats, impacts) dans `assets/ui/menu/`.
 - `tools/export_mesh_fbx.py`: exporte les meshes d'un `.blend` en FBX avec l'orientation attendue dans Roblox.
 - `tools/rbxm/verify_place.luau`: relit la place construite par Rojo et vérifie viewmodels, Tools, ids d'assets et noms d'armes.
 - `rokit.toml`: versions des outils (Rojo, StyLua, Selene, luau-lsp, Lune) gérées par Rokit.
@@ -301,10 +313,12 @@ Avant de créer ou modifier une animation d'arme, lire `docs/animations.md` (mé
 - `src/client/systems/weapon/ViewmodelSystem.luau`: gestion du viewmodel, des animations et des sons des armes en vue FPS.
 - `src/client/systems/weapon/WeaponSystem.luau`: logique client des armes, munitions, recharge et vitesse liée à l'arme.
 - `src/client/systems/weapon/WeaponThirdPersonView.luau`: rendu client des armes 3e personne de tous les personnages (décalage procédural du grip pour tir/recharge/switch, modèle 3P masqué pour soi en 1re personne).
-- `src/client/systems/game/GameStateController.luau`: machine d'état client (MENU/INFOS/SPAWNING/IN_ROUND/DEAD/RESULT), caméra lobby, coordination UI ↔ remotes.
+- `src/client/systems/game/GameStateController.luau`: machine d'état client (MENU/INFOS/SPAWNING/IN_ROUND/DEAD/RESULT), coordination UI ↔ remotes.
+- `src/client/systems/game/MenuScene.luau`: scène 3D du menu (canyon, AWP qui suit le curseur, surfeurs à abattre, plongée sur JOUER), éclairage temporaire rétabli à la sortie.
+- `src/client/systems/game/MenuSceneRules.luau`: règles pures de cette scène (amortis, angles de visée, trajectoire, touche).
 - `src/client/ui/Hitmarker.luau`: marqueur de touche confirmée par le serveur (X blanc à contour noir, rouge sur un tir à la tête, plus grand sur un kill).
 - `src/client/ui/InfosScreen.luau`: overlay Infos (comment surfer, contrôles, crédits).
-- `src/client/ui/MainMenu.luau`: menu d'accueil avec boutons Play et Infos.
+- `src/client/ui/MainMenu.luau`: menu d'accueil où l'on choisit en tirant : titre et libellés en images, hitmarker en guise de curseur, impacts de balles.
 - `src/client/ui/RoundHUD.luau`: HUD en jeu (timer, leaderboard Tab, overlay respawn, bannière résultat).
 - `src/client/ui/ScopeOverlay.luau`: lunette des armes à scope, dessinée sans image (masque rond et réticule en Frames).
 - `src/client/ui/SettingsMenu.luau`: interface des réglages côté client.
