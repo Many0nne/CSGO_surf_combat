@@ -1,6 +1,6 @@
 # Direction artistique de l'interface
 
-Référence pour refaire les autres écrans (Infos, Réglages, Feedback, HUD, fin de round) dans la direction du menu principal.
+Référence pour refaire les écrans restants (HUD, fin de round) dans la direction du menu, déjà appliquée à l'accueil, Infos, Réglages et Feedback.
 
 ## La direction : « Ligne de mire »
 
@@ -39,7 +39,10 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
 
 ## Comment c'est construit
 
-- `src/client/ui/MainMenu.luau` : titre et choix (`ImageButton`), hitmarker-curseur, impacts, tir au clic.
+- `src/client/ui/MainMenu.luau` : titre et choix de l'accueil, tir dans la scène au clic.
+- `src/client/ui/MenuPage.luau` : gabarit des écrans secondaires : pas de panneau, dégradé sombre à gauche, titre en image, action de sortie en bas à gauche.
+- `src/client/ui/MenuShot.luau` : tir sur un élément, impact, puis action ; choix en images usées communs à tous les écrans.
+- `src/client/ui/MenuCursor.luau` : hitmarker-curseur.
 - `src/client/systems/game/MenuScene.luau` : scène 3D, éclairage temporaire, visée, tir, surfeurs, plongée sur JOUER.
 - `src/client/systems/game/MenuSceneRules.luau` : règles pures testées (`tests/specs/MenuSceneRules.spec.luau`).
 - `src/client/ui/Transition.luau` : volets couleur du soleil, enchaînés à la plongée vers le soleil.
@@ -59,6 +62,12 @@ local model = game:GetService("InsertService"):LoadAsset(<id du Decal>)
 return model:FindFirstChildWhichIsA("Decal", true).Texture
 ```
 
+## Règles des écrans secondaires
+
+- Tout se tire sauf la saisie de texte. Un curseur de réglage se place d'un tir, puis se glisse sans retirer : sa poignée est un impact, sans trou ajouté à l'écran.
+- Réglages en partie (touche P) : même écran sur un voile sombre, avec le curseur système et sans son de tir, pour ne pas le confondre avec un vrai tir.
+- Les impacts sont propres à chaque écran et limités à 14 : le plus ancien disparaît.
+
 ## Pièges connus
 
 - **Id d'un Decal publié :** il ne s'affiche pas dans une `ImageLabel` (console : `Asset type does not match requested type`).
@@ -67,7 +76,7 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
   Le canyon est donc au tiers de sa taille apparente (1 000 studs de long). Un test sans la map ne le montre pas.
 - **Éclairage :** `MenuScene` remplace celui de `Lighting` et le rétablit à sa sortie. Un tween encore actif écrase les valeurs
   rétablies : l'annuler d'abord (`diveTweens`), car le joueur peut apparaître avant la fin de la plongée.
-- **Curseur :** `MainMenu` remet `MouseIconEnabled = false` à chaque image, car les autres écrans le réactivent en se fermant.
+- **Curseur :** `MenuCursor` remet `MouseIconEnabled = false` à chaque image, car les autres écrans le réactivent en se fermant.
 - **`AbsolutePosition` avec `IgnoreGuiInset` :** elle exclut la barre du haut, contrairement à `GetMouseLocation`. Préférer
   `MouseEnter`, `MouseLeave` et `Activated` à un test de zone maison.
 - **Polices :** aucune annonce officielle d'import de police trouvée (novembre 2026). Les titres passent par des images ;
@@ -84,8 +93,7 @@ plugin Rojo : l'utilisateur doit le faire pour tester un worktree.
 
 ## Reste à faire
 
-- Passer Infos, Réglages, Feedback, le HUD et la fin de round du style « Tactical » ambre à cette direction (`UITheme.luau`).
-- Traduire le panneau Infos, encore en anglais alors que le menu est en français.
+- Passer le HUD et la fin de round du style « Tactical » ambre à cette direction (`UITheme.luau`).
 - Afficher les munitions dans le HUD (`WeaponSystem` les gère, rien ne les montre) et réduire le compteur de vitesse.
 - Tester le menu au tactile et à la manette : c'est prévu dans le code, jamais essayé.
 - Ajouter un modèle de personnage dédié si l'on veut un sniper visible en 3e personne dans le menu.
