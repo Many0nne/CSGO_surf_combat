@@ -1,4 +1,4 @@
-# Scripts shell en LF partout : sous autocrlf, un CRLF ajoute un  aux variables (requêtes Open Cloud corrompues)
+# Scripts shell en LF partout : sous autocrlf, un retour chariot entrerait dans les variables (requêtes Open Cloud corrompues)
 *.sh text eol=lf
 
 # StyLua impose line_endings = "Windows" : checkout des sources Luau en CRLF sur toutes les plateformes (CI Linux incluse)
