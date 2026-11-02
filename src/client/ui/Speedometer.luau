@@ -1,5 +1,6 @@
--- Speedometer (direction « Tactical ») : vitesse horizontale en studs/s, 5 segments et nom du palier.
--- À chaque changement de palier : couleur animée et pulsation du nombre (UIScale).
+-- Speedometer (direction « Ligne de mire », piste « Titrage ») : vitesse horizontale en studs/s, en bas à gauche.
+-- Gros chiffres os penchés avec ombre décalée, nom du palier, bande ambrée en biais crantée aux seuils de palier ;
+-- au dernier palier, chiffres, palier et bande passent au rouge d'impact. Règles pures dans HUDRules.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -9,38 +10,65 @@ local HUDRules = require(script.Parent.HUDRules)
 
 local C = UITheme.Colors
 local F = UITheme.Fonts
-local T = UITheme.TextSize
 local Motion = UITheme.Motion
 
-local SEGMENT_SIZE = Vector2.new(20, 7)
-local SEGMENT_GAP = 3
-local SEGMENT_OFF_TRANSPARENCY = 0.86
+local LEAN = -6 -- inclinaison commune du texte et de la bande (degrés)
+local NUMBER_SIZE = 92
+local SHADOW_OFFSET = Vector2.new(7, 7)
+local SHADOW_TRANSPARENCY = 0.35
+local BAND_SIZE = Vector2.new(276, 9)
+local BAND_HOT_WIDTH = 34 -- zone rouge au bout de la bande, au-delà du remplissage plein
+local TRACK_TRANSPARENCY = 0.7
+local HOT_ZONE_TRANSPARENCY = 0.6
+local NOTCH_WIDTH = 3
+local SCRIM_SIZE = Vector2.new(560, 300)
+-- Fond en dégradé de coin (assets/ui/hud/scrim_coin.png, Decal 139288849836344)
+local SCRIM_IMAGE = "rbxassetid://128710099398466"
+local SCRIM_TRANSPARENCY = 0.15
 
 local Speedometer = {}
 
 local gui: ScreenGui?
 local speedLabel: TextLabel
-local speedScale: UIScale
+local shadowLabel: TextLabel
 local tierLabel: TextLabel
-local segments: { Frame } = {}
+local fill: Frame
+local hotZone: Frame
 local currentTier = 0
 local lastShown = -1
 
--- Cette méthode permet d'appliquer l'aspect d'un palier (couleurs, segments allumés, pulsation) lorsque la vitesse en change.
-local function applyTier(tier: number, speed: number)
+-- Cette méthode permet de créer un texte penché du compteur lorsque le speedometer est construit.
+local function leanText(parent: GuiObject, props: { [string]: any }): TextLabel
+	props.Rotation = LEAN
+	props.Parent = parent
+	return UIKit.text(props)
+end
+
+-- Cette méthode permet de poser le fond sombre sans bord visible lorsque le speedometer est construit :
+-- une image blanche qui s'efface vers le haut et vers la droite (tools/ui/make_corner_scrim.py), teintée en jeu.
+local function buildScrim(root: Frame)
+	UIKit.create("ImageLabel", {
+		Name = "Scrim",
+		Image = SCRIM_IMAGE,
+		ImageColor3 = C.Scrim,
+		ImageTransparency = SCRIM_TRANSPARENCY,
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.fromScale(0, 1),
+		Size = UDim2.fromOffset(SCRIM_SIZE.X, SCRIM_SIZE.Y),
+		BackgroundTransparency = 1,
+		Parent = root,
+	})
+end
+
+-- Cette méthode permet d'appliquer l'aspect d'un palier (nom, couleurs) lorsque la vitesse en change.
+local function applyTier(tier: number)
 	currentTier = tier
-	local color = UITheme.SpeedTierColors[tier]
-	UIKit.tween(speedLabel, Motion.Color, { TextColor3 = color })
-	UIKit.tween(tierLabel, Motion.Color, { TextColor3 = color })
+	local hot = tier == #HUDRules.SPEED_TIERS
 	tierLabel.Text = HUDRules.SPEED_TIERS[tier].name
-	for i, seg in segments do
-		local lit = i <= tier and speed > 0
-		UIKit.tween(seg, Motion.Color, {
-			BackgroundColor3 = lit and color or C.Text,
-			BackgroundTransparency = lit and 0 or SEGMENT_OFF_TRANSPARENCY,
-		})
-	end
-	UIKit.tween(speedScale, Motion.Pop, { Scale = UITheme.SpeedTierScales[tier] })
+	UIKit.tween(speedLabel, Motion.Color, { TextColor3 = hot and C.HitRed or C.Bone })
+	UIKit.tween(tierLabel, Motion.Color, { TextColor3 = hot and C.HitRed or C.Accent })
+	UIKit.tween(fill, Motion.Color, { BackgroundColor3 = hot and C.HitRed or C.Accent })
+	UIKit.tween(hotZone, Motion.Color, { BackgroundTransparency = hot and 0 or HOT_ZONE_TRANSPARENCY })
 end
 
 function Speedometer.init()
@@ -55,63 +83,86 @@ function Speedometer.init()
 	})
 	gui = screenGui
 	local root = UIKit.scaledRoot(screenGui)
+	buildScrim(root)
 
-	local panel = UIKit.frame({
-		Name = "Panel",
-		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -96), -- au-dessus de la hotbar d'armes Roblox
-		Size = UDim2.fromOffset(250, 46),
-		BackgroundColor3 = C.PanelDark,
-		BackgroundTransparency = 0.18,
+	local holder = UIKit.frame({
+		Name = "Holder",
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, 44, 1, -44),
+		Size = UDim2.fromOffset(BAND_SIZE.X + BAND_HOT_WIDTH, 132),
+		BackgroundTransparency = 1,
 		Parent = root,
 	})
-	UIKit.stroke(panel, C.Border)
 
-	speedLabel = UIKit.text({
+	shadowLabel = leanText(holder, {
+		Name = "SpeedShadow",
+		Text = "0",
+		FontFace = F.Display,
+		TextSize = NUMBER_SIZE,
+		TextColor3 = C.Black,
+		TextTransparency = SHADOW_TRANSPARENCY,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		Position = UDim2.fromOffset(SHADOW_OFFSET.X, SHADOW_OFFSET.Y),
+		Size = UDim2.fromOffset(170, NUMBER_SIZE),
+	})
+	speedLabel = leanText(holder, {
 		Name = "SpeedValue",
 		Text = "0",
-		FontFace = F.MonoBold,
-		TextSize = T.Speed,
-		TextColor3 = UITheme.SpeedTierColors[1],
+		FontFace = F.Display,
+		TextSize = NUMBER_SIZE,
+		TextColor3 = C.Bone,
 		TextXAlignment = Enum.TextXAlignment.Right,
-		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(0, 84, 0.5, 0),
-		Size = UDim2.fromOffset(72, 32),
-		Parent = panel,
+		Size = UDim2.fromOffset(170, NUMBER_SIZE),
 	})
-	speedScale = UIKit.create("UIScale", { Parent = speedLabel })
-	UIKit.text({
-		Text = "U/S",
-		FontFace = F.DisplayMedium,
-		TextSize = T.Micro,
-		TextColor3 = C.Muted,
-		Position = UDim2.new(0, 88, 0.5, 1),
-		Size = UDim2.fromOffset(26, 14),
-		Parent = panel,
-	})
-
-	for i = 1, #HUDRules.SPEED_TIERS do
-		segments[i] = UIKit.frame({
-			Name = "Segment" .. i,
-			Position = UDim2.fromOffset(124 + (i - 1) * (SEGMENT_SIZE.X + SEGMENT_GAP), 12),
-			Size = UDim2.fromOffset(SEGMENT_SIZE.X, SEGMENT_SIZE.Y),
-			BackgroundColor3 = C.Text,
-			BackgroundTransparency = SEGMENT_OFF_TRANSPARENCY,
-			Parent = panel,
-		})
-	end
-	tierLabel = UIKit.text({
+	tierLabel = leanText(holder, {
 		Name = "Tier",
 		Text = HUDRules.SPEED_TIERS[1].name,
 		FontFace = F.Display,
-		TextSize = T.Micro,
-		TextColor3 = UITheme.SpeedTierColors[1],
-		Position = UDim2.fromOffset(124, 23),
-		Size = UDim2.fromOffset(112, 14),
-		Parent = panel,
+		TextSize = 24,
+		TextColor3 = C.Accent,
+		Position = UDim2.fromOffset(176, 24),
+		Size = UDim2.fromOffset(110, 26),
+	})
+	leanText(holder, {
+		Name = "Unit",
+		Text = "U/S",
+		FontFace = F.DisplayMedium,
+		TextSize = 17,
+		TextColor3 = C.Accent,
+		Position = UDim2.fromOffset(178, 52),
+		Size = UDim2.fromOffset(60, 18),
 	})
 
-	applyTier(1, 0)
+	local band = UIKit.frame({
+		Name = "Band",
+		Position = UDim2.fromOffset(0, 112),
+		Size = UDim2.fromOffset(BAND_SIZE.X, BAND_SIZE.Y),
+		Rotation = LEAN,
+		BackgroundColor3 = C.Bone,
+		BackgroundTransparency = TRACK_TRANSPARENCY,
+		Parent = holder,
+	})
+	fill = UIKit.frame({ Name = "Fill", Size = UDim2.fromScale(0, 1), BackgroundColor3 = C.Accent, Parent = band })
+	for i = 2, #HUDRules.SPEED_TIERS - 1 do
+		UIKit.frame({
+			Name = "Notch" .. i,
+			Position = UDim2.fromScale(HUDRules.speedFill(HUDRules.SPEED_TIERS[i].min), 0),
+			Size = UDim2.new(0, NOTCH_WIDTH, 1, 0),
+			BackgroundColor3 = C.Black,
+			ZIndex = 2,
+			Parent = band,
+		})
+	end
+	hotZone = UIKit.frame({
+		Name = "HotZone",
+		Position = UDim2.fromScale(1, 0),
+		Size = UDim2.new(0, BAND_HOT_WIDTH, 1, 0),
+		BackgroundColor3 = C.HitRed,
+		BackgroundTransparency = HOT_ZONE_TRANSPARENCY,
+		Parent = band,
+	})
+
+	applyTier(1)
 
 	Players.LocalPlayer.CharacterRemoving:Connect(function()
 		Speedometer.update(0)
@@ -126,13 +177,14 @@ function Speedometer.update(speed: number)
 	if shown == lastShown then
 		return
 	end
-	-- Le premier segment s'éteint à l'arrêt : passer de 0 à > 0 réapplique aussi le palier
-	local stoppedChanged = (shown == 0) ~= (lastShown == 0)
 	lastShown = shown
-	speedLabel.Text = string.format("%d", shown)
+	local text = string.format("%d", shown)
+	speedLabel.Text = text
+	shadowLabel.Text = text
+	fill.Size = UDim2.fromScale(HUDRules.speedFill(speed), 1)
 	local tier = HUDRules.speedTier(speed)
-	if tier ~= currentTier or stoppedChanged then
-		applyTier(tier, speed)
+	if tier ~= currentTier then
+		applyTier(tier)
 	end
 end
 

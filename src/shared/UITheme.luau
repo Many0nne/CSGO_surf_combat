@@ -32,19 +32,6 @@ local Colors = {
 	Scrim         = rgb(10, 12, 22),    -- menu : dégradé sombre sous le texte posé sur la scène
 }
 
--- Couleur de chaque palier de vitesse (index aligné sur HUDRules.SPEED_TIERS)
--- stylua: ignore
-local SpeedTierColors = {
-	rgb(236, 232, 222), -- à l'arrêt
-	rgb(168, 216, 110), -- RUN
-	rgb(242, 169, 0),   -- FAST
-	rgb(255, 122, 26),  -- SURF
-	rgb(255, 74, 61),   -- MACH
-}
-
--- Échelle du nombre du speedometer par palier (pulsation à chaque changement)
-local SpeedTierScales = { 1, 1, 1.05, 1.1, 1.16 }
-
 local OSWALD = "rbxasset://fonts/families/Oswald.json"
 local TITILLIUM = "rbxasset://fonts/families/TitilliumWeb.json"
 local ROBOTO_MONO = "rbxasset://fonts/families/RobotoMono.json"
@@ -66,7 +53,6 @@ local TextSize = {
 	Banner  = 48,
 	H1      = 34,
 	H2      = 30,
-	Speed   = 28,
 	Count   = 44,
 	Title   = 22,
 	Nav     = 17,
@@ -88,7 +74,7 @@ local Motion = {
 	Nav     = TweenInfo.new(0.25, Style.Quint, Dir.Out),    -- soulignement de navigation
 	Shutter = TweenInfo.new(0.45, Style.Quint, Dir.InOut),  -- volets menu → jeu
 	Band    = TweenInfo.new(0.45, Style.Quint, Dir.InOut),  -- bandeau de fin de round
-	Pop     = TweenInfo.new(0.3, Style.Back, Dir.Out),      -- compteur, palier de vitesse
+	Pop     = TweenInfo.new(0.3, Style.Back, Dir.Out),      -- compteur
 	Color   = TweenInfo.new(0.2, Style.Quad, Dir.Out),      -- changement de couleur
 	Hit     = TweenInfo.new(0.25, Style.Quad, Dir.In),      -- disparition du hitmarker
 	Blink   = TweenInfo.new(0.5, Style.Linear, Dir.InOut, -1, true), -- timer < 30 s
@@ -107,8 +93,6 @@ local Layout = {
 
 return {
 	Colors = Colors,
-	SpeedTierColors = SpeedTierColors,
-	SpeedTierScales = SpeedTierScales,
 	Fonts = Fonts,
 	TextSize = TextSize,
 	Motion = Motion,

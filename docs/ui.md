@@ -1,6 +1,6 @@
 # Direction artistique de l'interface
 
-Référence pour refaire les écrans restants (HUD, fin de round) dans la direction du menu, déjà appliquée à l'accueil, Infos, Réglages et Feedback.
+Référence pour refaire les écrans restants (HUD de round, fin de round) dans la direction du menu, déjà appliquée à l'accueil, Infos, Réglages, Feedback et au compteur de vitesse.
 
 ## La direction : « Ligne de mire »
 
@@ -46,6 +46,7 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
 - `src/client/systems/game/MenuScene.luau` : scène 3D, éclairage temporaire, visée, tir, surfeurs, plongée sur JOUER.
 - `src/client/systems/game/MenuSceneRules.luau` : règles pures testées (`tests/specs/MenuSceneRules.spec.luau`).
 - `src/client/ui/Transition.luau` : volets couleur du soleil, enchaînés à la plongée vers le soleil.
+- `src/client/ui/Speedometer.luau` : compteur de vitesse, piste « Titrage » : gros chiffres os penchés (-6°) avec ombre noire décalée, nom du palier, bande ambrée en biais crantée aux seuils, tout passe au rouge d'impact au dernier palier (`HUDRules.speedTier`, `speedFill`). En bas à gauche, sur un fond sombre sans bord : image de dégradé de coin (`tools/ui/make_corner_scrim.py`, `assets/ui/hud/`) teintée par `ImageColor3`.
 - `tools/ui/make_menu_type.py` : génère le titrage dans `assets/ui/menu/` (police Anton, licence OFL).
 
 Pour un nouveau mot : l'ajouter à la fin de `make_menu_type.py`, générer, publier, puis récupérer l'id de l'image :
@@ -79,6 +80,9 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
 - **Curseur :** `MenuCursor` remet `MouseIconEnabled = false` à chaque image, car les autres écrans le réactivent en se fermant.
 - **`AbsolutePosition` avec `IgnoreGuiInset` :** elle exclut la barre du haut, contrairement à `GetMouseLocation`. Préférer
   `MouseEnter`, `MouseLeave` et `Activated` à un test de zone maison.
+- **Fondu dans deux directions** (fond qui s'efface vers le haut et vers la droite) : impossible avec des `UIGradient`.
+  Un `UIGradient` sur un `CanvasGroup` est ignoré ; un seul gradient en biais laisse une arête ; des calques très transparents
+  empilés font des bandes visibles. Utiliser une image de dégradé blanche teintée par `ImageColor3` (voir `make_corner_scrim.py`).
 - **Polices :** aucune annonce officielle d'import de police trouvée (novembre 2026). Les titres passent par des images ;
   le texte courant reste en police Roblox.
 - **Bras du viewmodel :** ils forment vite une grosse masse noire quand la souris est dans un coin. Limiter le pivot
@@ -93,8 +97,9 @@ plugin Rojo : l'utilisateur doit le faire pour tester un worktree.
 
 ## Reste à faire
 
-- Passer le HUD et la fin de round du style « Tactical » ambre à cette direction (`UITheme.luau`).
-- Afficher les munitions dans le HUD (`WeaponSystem` les gère, rien ne les montre) et réduire le compteur de vitesse.
+- Passer le HUD de round (timer, rang, classement, réapparition) et la fin de round (`RoundHUD.luau`) du style « Tactical » ambre à cette direction.
+- Afficher les munitions dans le HUD (`WeaponSystem` les gère, rien ne les montre), dans le même langage que le compteur de vitesse.
+- Piste écartée pour l'instant sur le compteur : chiffres en images usées comme le titrage, et inclinaison qui augmente avec la vitesse.
 - Tester le menu au tactile et à la manette : c'est prévu dans le code, jamais essayé.
 - Ajouter un modèle de personnage dédié si l'on veut un sniper visible en 3e personne dans le menu.
 - Trouver la source de l'erreur console `rbxassetid://203785492`, antérieure à ce menu.
