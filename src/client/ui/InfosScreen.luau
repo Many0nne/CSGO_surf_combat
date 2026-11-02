@@ -1,70 +1,72 @@
--- Page Infos (direction « Tactical ») : onglets à gauche (HOW TO SURF, CONTROLS, CREDITS, ABOUT),
--- contenu à droite, affichée sous la barre de navigation du menu principal.
-local Players = game:GetService("Players")
+-- Écran Infos (direction « Ligne de mire ») : onglets en images à tirer à gauche, contenu à droite, à même la scène.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
+local MenuPage = require(script.Parent.MenuPage)
 local UIKit = require(script.Parent.UIKit)
 
 local C = UITheme.Colors
 local F = UITheme.Fonts
-local T = UITheme.TextSize
 local Motion = UITheme.Motion
-local L = UITheme.Layout
+local Words = MenuPage.Words
 
 local InfosScreen = {}
 
-type Section = { title: string, lines: { string }?, keys: { { string } }? }
+type Section = { word: { image: string, width: number, height: number }, lines: { string }?, keys: { { string } }? }
+
+local TAB_HEIGHT = 46
+local TAB_STEP = 58
+local CONTENT_X = 340
+local CONTENT_WIDTH = 600
+local CONTENT_HEIGHT = 470
 
 local SECTIONS: { Section } = {
 	{
-		title = "HOW TO SURF",
+		word = Words.Surfer,
 		lines = {
-			"Approach a ramp and align yourself PARALLEL to its surface.",
-			"Hold A or D to press into the ramp — never use W while surfing.",
-			"Steer along the ramp's direction with your mouse to gain speed.",
-			"Stay on the ramp's sweet spot: not too high, not too low.",
-			"Chain ramps smoothly — use air strafes (A/D + mouse) between them.",
-			"Never jump onto a ramp — let gravity carry you onto it.",
+			"Approche une rampe et place-toi PARALLÈLE à sa surface.",
+			"Maintiens A ou D pour appuyer contre la rampe. Ne touche jamais à W pendant le surf.",
+			"Oriente-toi avec la souris dans le sens de la rampe pour gagner de la vitesse.",
+			"Reste sur la bonne zone de la rampe : ni trop haut, ni trop bas.",
+			"Enchaîne les rampes en douceur, avec des air strafes (A/D + souris) entre elles.",
+			"Ne saute jamais sur une rampe : laisse la gravité t'y amener.",
 		},
 	},
 	{
-		title = "CONTROLS",
+		word = Words.Commandes,
 		keys = {
-			{ "W A S D", "Movement" },
-			{ "SPACE", "Jump / Bhop (hold for long jumps)" },
-			{ "CTRL", "Crouch" },
-			{ "LEFT CLICK", "Fire" },
-			{ "R", "Reload" },
-			{ "F", "Inspect knife" },
-			{ "TAB", "Leaderboard" },
-			{ "P", "Settings" },
+			{ "W A S D", "Se déplacer" },
+			{ "ESPACE", "Sauter / bhop (maintenir pour les longs sauts)" },
+			{ "CTRL", "S'accroupir" },
+			{ "CLIC GAUCHE", "Tirer" },
+			{ "R", "Recharger" },
+			{ "F", "Inspecter le couteau" },
+			{ "TAB", "Classement" },
+			{ "P", "Réglages" },
 		},
 	},
 	{
-		title = "CREDITS",
+		word = Words.Credits,
 		lines = {
-			"Physics inspired by the Source SDK (CS:GO surf).",
+			"Physique inspirée du Source SDK (surf de CS:GO).",
 		},
 	},
 	{
-		title = "ABOUT",
+		word = Words.APropos,
 		lines = {
-			"This game is a solo passion project by a web developer learning 3D and animation on the go.",
-			"The goal isn't to clone CS:GO — it's to take what makes surf feel great and build something original on top of it.",
-			"New weapons, skins, and animations are planned, all made from scratch with originality in mind.",
-			"Thanks for playing while it's still rough around the edges.",
-			"Want to give feedback or help out? Join the Discord: discord.gg/QK66g32mbB",
+			"Ce jeu est un projet passion mené en solo par un développeur web qui apprend la 3D et l'animation en chemin.",
+			"Le but n'est pas de cloner CS:GO, mais de reprendre ce qui rend le surf génial et de bâtir quelque chose d'original dessus.",
+			"De nouvelles armes, skins et animations sont prévus, tous créés de zéro avec l'originalité en tête.",
+			"Merci de jouer alors que le jeu est encore brut de décoffrage.",
+			"Envie de donner ton avis ou de filer un coup de main ? Rejoins le Discord : discord.gg/QK66g32mbB",
 		},
 	},
 }
 
-local gui: ScreenGui
-local panel: CanvasGroup
+local page: MenuPage.Page
 local content: ScrollingFrame
-local tabs: { { button: TextButton, bar: Frame } } = {}
+local tabs = {}
 local selected = 1
-local onCloseCallback: (() -> ())?
 
 -- Cette méthode permet d'afficher une ligne de texte en fondu avec un décalage lorsqu'un onglet se remplit.
 local function fadeIn(labels: { TextLabel }, delay: number)
@@ -83,8 +85,8 @@ local function addParagraph(text: string, order: number): TextLabel
 	return UIKit.text({
 		Name = "Line" .. order,
 		Text = text,
-		TextSize = 18,
-		TextColor3 = C.TextSoft,
+		TextSize = 20,
+		TextColor3 = C.Bone,
 		TextWrapped = true,
 		LineHeight = 1.15,
 		AutomaticSize = Enum.AutomaticSize.Y,
@@ -94,7 +96,7 @@ local function addParagraph(text: string, order: number): TextLabel
 	})
 end
 
--- Cette méthode permet de créer une ligne « touche → action » soulignée lorsque l'onglet affiché est CONTROLS.
+-- Cette méthode permet de créer une ligne « touche → action » soulignée d'un trait ambré lorsque l'onglet affiché est COMMANDES.
 local function addKeyRow(key: string, action: string, order: number): { TextLabel }
 	local row = UIKit.frame({
 		Name = "Key" .. order,
@@ -108,20 +110,22 @@ local function addKeyRow(key: string, action: string, order: number): { TextLabe
 		AnchorPoint = Vector2.new(0, 1),
 		Position = UDim2.fromScale(0, 1),
 		Size = UDim2.new(1, 0, 0, 1),
-		BackgroundColor3 = C.Raised,
+		BackgroundColor3 = C.Accent,
+		BackgroundTransparency = 0.65,
 		Parent = row,
 	})
 	local keyLbl = UIKit.text({
 		Text = key,
-		FontFace = F.MonoBold,
-		TextSize = T.Small,
-		TextColor3 = C.Accent,
+		FontFace = F.Display,
+		TextSize = 19,
+		TextColor3 = C.Bone,
 		Size = UDim2.new(0, 150, 1, 0),
 		Parent = row,
 	})
 	local actionLbl = UIKit.text({
 		Text = action,
-		TextSize = 18,
+		TextSize = 19,
+		TextColor3 = C.Bone,
 		Position = UDim2.fromOffset(150, 0),
 		Size = UDim2.new(1, -150, 1, 0),
 		Parent = row,
@@ -139,17 +143,6 @@ local function renderSection(index: number)
 	content.CanvasPosition = Vector2.zero
 
 	local section = SECTIONS[index]
-	local title = UIKit.text({
-		Name = "Title",
-		Text = section.title,
-		FontFace = F.Display,
-		TextSize = T.H1,
-		Size = UDim2.new(1, 0, 0, 48),
-		LayoutOrder = 0,
-		Parent = content,
-	})
-	fadeIn({ title }, 0)
-
 	if section.keys then
 		for i, pair in section.keys do
 			fadeIn(addKeyRow(pair[1], pair[2], i), i * Motion.Stagger)
@@ -161,167 +154,66 @@ local function renderSection(index: number)
 	end
 end
 
--- Cette méthode permet de mettre en avant l'onglet choisi (fond, texte, barre ambre) lorsque l'utilisateur clique dessus.
+-- Cette méthode permet de mettre en rouge l'onglet touché et d'afficher sa section lorsque le joueur tire dessus.
 local function selectTab(index: number)
 	selected = index
 	for i, tab in tabs do
-		local active = i == index
-		UIKit.tween(tab.button, Motion.Hover, {
-			BackgroundTransparency = active and 0 or 1,
-			TextColor3 = active and C.White or C.Muted,
-		})
-		tab.bar.Visible = active
+		tab.setSelected(i == index)
 	end
 	renderSection(index)
 end
 
--- Cette méthode permet de créer la colonne d'onglets lorsque la page est construite.
-local function buildTabs(parent: CanvasGroup)
-	local column = UIKit.frame({
-		Name = "Tabs",
-		Size = UDim2.new(0, 260, 1, 0),
-		BackgroundTransparency = 1,
-		Parent = parent,
-	})
-	UIKit.padding(column, 16, 0, 16, 0)
-	UIKit.create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = column })
-	UIKit.frame({
-		Name = "Divider",
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.fromScale(1, 0),
-		Size = UDim2.new(0, 1, 1, 0),
-		BackgroundColor3 = C.Border,
-		Parent = parent,
-	})
-
-	for i, section in SECTIONS do
-		local btn = UIKit.button({
-			Name = section.title,
-			Text = "",
-			Size = UDim2.new(1, 0, 0, 48),
-			BackgroundColor3 = C.Raised,
-			BackgroundTransparency = 1,
-			TextColor3 = C.Muted,
-			LayoutOrder = i,
-			Parent = column,
-		})
-		-- Le libellé suit la couleur du bouton (TextColor3 animé sur le bouton, recopié ici)
-		local label = UIKit.text({
-			Text = section.title,
-			FontFace = F.DisplayMedium,
-			TextSize = T.Body,
-			TextColor3 = C.Muted,
-			Position = UDim2.fromOffset(21, 0),
-			Size = UDim2.new(1, -60, 1, 0),
-			Parent = btn,
-		})
-		btn:GetPropertyChangedSignal("TextColor3"):Connect(function()
-			label.TextColor3 = btn.TextColor3
-		end)
-		UIKit.text({
-			Text = string.format("%02d", i),
-			FontFace = F.Mono,
-			TextSize = T.Caption,
-			TextColor3 = C.Muted,
-			TextXAlignment = Enum.TextXAlignment.Right,
-			Position = UDim2.fromOffset(0, 0),
-			Size = UDim2.new(1, -18, 1, 0),
-			Parent = btn,
-		})
-		local bar = UIKit.frame({
-			Name = "ActiveBar",
-			Size = UDim2.new(0, 3, 1, 0),
-			BackgroundColor3 = C.Accent,
-			Visible = false,
-			Parent = btn,
-		})
-		btn.MouseEnter:Connect(function()
-			if selected ~= i then
-				UIKit.tween(btn, Motion.Hover, { BackgroundTransparency = 0, TextColor3 = C.White })
-			end
-		end)
-		btn.MouseLeave:Connect(function()
-			if selected ~= i then
-				UIKit.tween(btn, Motion.Hover, { BackgroundTransparency = 1, TextColor3 = C.Muted })
-			end
-		end)
-		btn.MouseButton1Click:Connect(function()
-			selectTab(i)
-		end)
-		tabs[i] = { button = btn, bar = bar }
-	end
-end
-
+-- Cette méthode permet de construire l'écran, ses onglets et sa zone de contenu lorsque le client démarre.
 function InfosScreen.init(onClose: () -> ())
-	onCloseCallback = onClose
-
-	gui = UIKit.create("ScreenGui", {
-		Name = "InfosScreen",
-		ResetOnSpawn = false,
-		IgnoreGuiInset = true,
-		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-		DisplayOrder = 2,
-		Enabled = false,
-		Parent = Players.LocalPlayer:WaitForChild("PlayerGui"),
-	})
-	local root = UIKit.scaledRoot(gui)
-
-	panel = UIKit.create("CanvasGroup", {
-		Name = "Panel",
-		Position = UDim2.fromOffset(L.Margin, L.ContentTop),
-		Size = UDim2.new(1, -2 * L.Margin, 0, 560),
-		BackgroundColor3 = C.Ground,
-		BackgroundTransparency = 0.05,
-		BorderSizePixel = 0,
-		Parent = root,
-	})
-	UIKit.stroke(panel, C.Border)
-	buildTabs(panel)
+	page = MenuPage.new("InfosScreen", 2, Words.Infos)
 
 	content = UIKit.create("ScrollingFrame", {
-		Name = "Content",
-		Position = UDim2.fromOffset(260, 0),
-		Size = UDim2.new(1, -260, 1, 0),
+		Name = "Text",
+		Position = UDim2.fromOffset(CONTENT_X, MenuPage.ContentTop),
+		Size = UDim2.fromOffset(CONTENT_WIDTH, CONTENT_HEIGHT),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		ScrollBarThickness = 3,
 		ScrollBarImageColor3 = C.Accent,
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		CanvasSize = UDim2.fromScale(0, 0),
-		Parent = panel,
+		Parent = page.group,
 	})
-	UIKit.padding(content, 30, 96, 30, 40)
+	UIKit.padding(content, 6, 16, 6, 0)
 	UIKit.create("UIListLayout", {
 		SortOrder = Enum.SortOrder.LayoutOrder,
 		Padding = UDim.new(0, 14),
 		Parent = content,
 	})
 
-	local close = UIKit.closeButton(panel)
-	close.AnchorPoint = Vector2.new(1, 0)
-	close.Position = UDim2.new(1, -24, 0, 24)
-	close.ZIndex = 2
-	close.MouseButton1Click:Connect(function()
-		if onCloseCallback then
-			onCloseCallback()
-		end
-	end)
+	for i, section in SECTIONS do
+		tabs[i] = page.choice({
+			word = section.word,
+			height = TAB_HEIGHT,
+			position = UDim2.fromOffset(MenuPage.WordX, MenuPage.ContentTop + (i - 1) * TAB_STEP),
+			action = function()
+				selectTab(i)
+			end,
+		})
+	end
+	page.exit(Words.Retour, onClose)
 
 	selectTab(1)
 end
 
+-- Cette méthode permet d'ouvrir l'écran sur le dernier onglet consulté lorsque le joueur tire sur INFOS.
 function InfosScreen.show()
-	if not gui or gui.Enabled then
+	if not page or page.gui.Enabled then
 		return
 	end
-	gui.Enabled = true
+	page.show()
 	selectTab(selected)
-	UIKit.reveal(panel, 0, 14)
 end
 
+-- Cette méthode permet de masquer l'écran lorsque le joueur le quitte ou que la partie démarre.
 function InfosScreen.hide()
-	if gui then
-		gui.Enabled = false
+	if page then
+		page.hide()
 	end
 end
 

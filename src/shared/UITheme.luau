@@ -28,6 +28,8 @@ local Colors = {
 	Black         = rgb(0, 0, 0),
 	HitRed        = rgb(226, 58, 40),   -- menu : cible visée, touche
 	SunWhite      = rgb(255, 241, 224), -- transition menu → jeu : soleil plein écran
+	Bone          = rgb(243, 233, 220), -- menu : texte couleur os, comme le titrage
+	Scrim         = rgb(10, 12, 22),    -- menu : dégradé sombre sous le texte posé sur la scène
 }
 
 -- Couleur de chaque palier de vitesse (index aligné sur HUDRules.SPEED_TIERS)

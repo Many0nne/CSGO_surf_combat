@@ -144,3 +144,16 @@ word("surf", "SURF", 620, 7, 90, 0.42, 900, 120, ((0.57, 0.40), (0.70, 0.66)), 1
 word("jouer", "JOUER", 300, 11, 40, 0.3, 380, 60)
 for i, (key, label) in enumerate((("infos", "INFOS"), ("reglages", "RÉGLAGES"), ("feedback", "FEEDBACK"))):
     word(key, label, 150, 20 + i, 0, 0.12, 70, 30)
+# Onglets et actions de Réglages, Infos et Feedback (graines à part : les mots ci-dessus ne changent pas)
+for i, (key, label) in enumerate(
+    (
+        ("surfer", "SURFER"),
+        ("commandes", "COMMANDES"),
+        ("credits", "CRÉDITS"),
+        ("apropos", "À PROPOS"),
+        ("retour", "RETOUR"),
+        ("envoyer", "ENVOYER"),
+        ("annuler", "ANNULER"),
+    )
+):
+    word(key, label, 150, 40 + i, 0, 0.12, 70, 30)

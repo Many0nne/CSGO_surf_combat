@@ -1,34 +1,37 @@
--- Réglages souris (direction « Tactical »). Deux présentations du même panneau :
--- « page » (sous la barre de navigation, bouton SETTINGS du menu) et « modal » (centrée, touche P).
+-- Réglages souris (direction « Ligne de mire »). Deux présentations du même écran : « page » à même la scène du menu, où
+-- l'on règle en tirant, et « modal » sur un voile sombre (touche P en partie), sans tir ni hitmarker.
 local GuiService = game:GetService("GuiService")
-local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
 local UITheme = require(ReplicatedStorage.Shared.UITheme)
+local MenuCursor = require(script.Parent.MenuCursor)
+local MenuPage = require(script.Parent.MenuPage)
+local MenuShot = require(script.Parent.MenuShot)
 local UIKit = require(script.Parent.UIKit)
 
 local C = UITheme.Colors
 local F = UITheme.Fonts
-local T = UITheme.TextSize
 local Motion = UITheme.Motion
-local L = UITheme.Layout
 
 export type Mode = "page" | "modal"
 
 local SettingsMenu = {}
 
-local PANEL_SIZE = Vector2.new(640, 266)
+local ROW_WIDTH = 620
+local ROW_STEP = 110
+local TRACK_TOP = 44
+local BACKDROP_TRANSPARENCY = 0.45
 
-local gui: ScreenGui?
-local backdrop: TextButton
-local panel: CanvasGroup
+local page: MenuPage.Page?
+local backdrop: Frame
 local open = false
 local mode: Mode = "modal"
 local savedMouseBehavior = Enum.MouseBehavior.LockCenter
 local savedMouseIcon = false
 local onClosedCallback: (() -> ())?
+local pageRequest: (() -> boolean)?
 local fpsCamRef: {
 	setSensitivity: (number) -> (),
 	getSensitivity: () -> number,
@@ -36,8 +39,13 @@ local fpsCamRef: {
 	getScopeMultiplier: () -> number,
 }?
 
--- Cette méthode permet de construire une ligne « libellé | curseur | valeur éditable » lorsqu'un réglage est ajouté ;
--- elle renvoie la fonction qui applique une valeur (bornée, formatée, transmise à `onChange`).
+-- Cette méthode permet de savoir si un geste doit tirer lorsqu'il est fait dans l'écran : jamais en partie.
+local function shoots(): boolean
+	return mode == "page"
+end
+
+-- Cette méthode permet de construire la ligne « libellé, valeur éditable, trace » lorsqu'un réglage est ajouté : un tir place
+-- la valeur, puis la poignée (un impact) se glisse sans retirer. Renvoie la fonction qui applique une valeur.
 local function makeSlider(
 	parent: GuiObject,
 	labelText: string,
@@ -53,67 +61,82 @@ local function makeSlider(
 
 	local row = UIKit.frame({
 		Name = labelText,
-		Position = UDim2.fromOffset(0, yOffset),
-		Size = UDim2.new(1, 0, 0, 78),
+		Position = UDim2.fromOffset(MenuPage.TextX, yOffset),
+		Size = UDim2.fromOffset(ROW_WIDTH, ROW_STEP - 12),
 		BackgroundTransparency = 1,
 		Parent = parent,
 	})
-	UIKit.padding(row, 0, 32, 0, 32)
 	UIKit.text({
 		Text = labelText,
 		FontFace = F.DisplayMedium,
-		TextSize = 17,
-		Size = UDim2.new(0, 180, 1, 0),
+		TextSize = 22,
+		TextColor3 = C.Bone,
+		Size = UDim2.new(1, -110, 0, 36),
 		Parent = row,
 	})
 
 	local valBox = UIKit.create("TextBox", {
-		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.fromScale(1, 0.5),
-		Size = UDim2.fromOffset(84, 36),
-		BackgroundColor3 = C.Ground,
-		BorderSizePixel = 0,
-		FontFace = F.MonoBold,
-		TextSize = T.Body,
-		TextColor3 = C.Accent,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.fromScale(1, 0),
+		Size = UDim2.fromOffset(90, 36),
+		BackgroundTransparency = 1,
+		FontFace = F.Display,
+		TextSize = 26,
+		TextColor3 = C.Bone,
+		TextXAlignment = Enum.TextXAlignment.Right,
 		ClearTextOnFocus = false,
 		Text = string.format(fmt, initVal),
 		Parent = row,
 	})
-	local valStroke = UIKit.stroke(valBox, C.BorderStrong)
+	local valLine = UIKit.frame({
+		Name = "Underline",
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.fromScale(0, 1),
+		Size = UDim2.new(1, 0, 0, 1),
+		BackgroundColor3 = C.Muted,
+		Parent = valBox,
+	})
 	valBox.Focused:Connect(function()
-		UIKit.tween(valStroke, Motion.Hover, { Color = C.Accent })
+		UIKit.tween(valLine, Motion.Hover, { BackgroundColor3 = C.Accent })
 	end)
 
-	-- Piste : zone cliquable haute (24 px) contenant la barre fine, le remplissage et la poignée
+	-- Trace : zone cliquable haute contenant le trait, la traînée ambrée et l'impact
 	local hit = UIKit.button({
 		Name = "Track",
 		Text = "",
-		AnchorPoint = Vector2.new(0, 0.5),
-		Position = UDim2.new(0, 200, 0.5, 0),
-		Size = UDim2.new(1, -304, 0, 24),
+		Position = UDim2.fromOffset(0, TRACK_TOP),
+		Size = UDim2.new(1, 0, 0, 34),
 		BackgroundTransparency = 1,
 		Parent = row,
 	})
 	local track = UIKit.frame({
 		AnchorPoint = Vector2.new(0, 0.5),
 		Position = UDim2.fromScale(0, 0.5),
-		Size = UDim2.new(1, 0, 0, 4),
-		BackgroundColor3 = C.BorderStrong,
+		Size = UDim2.new(1, 0, 0, 3),
+		BackgroundColor3 = C.Bone,
+		BackgroundTransparency = 0.65,
 		Parent = hit,
 	})
 	local fill = UIKit.frame({ Size = UDim2.fromScale(0, 1), BackgroundColor3 = C.Accent, Parent = track })
 	local handle = UIKit.frame({
-		Name = "Handle",
+		Name = "Impact",
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Size = UDim2.fromOffset(14, 14),
-		BackgroundColor3 = C.Text,
+		Size = UDim2.fromOffset(18, 18),
+		BackgroundColor3 = C.Black,
 		ZIndex = 2,
 		Parent = track,
 	})
+	UIKit.create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = handle })
+	local handleStroke = UIKit.stroke(handle, C.Bone, 2)
 	local handleScale = UIKit.create("UIScale", { Parent = handle })
 	UIKit.hover(hit, handleScale, { Scale = 1 }, { Scale = 1.25 })
-	UIKit.hover(hit, handle, { BackgroundColor3 = C.Text }, { BackgroundColor3 = C.Accent })
+	UIKit.hover(hit, handleStroke, { Color = C.Bone }, { Color = C.HitRed })
+	hit.MouseEnter:Connect(function()
+		MenuCursor.addHover(1)
+	end)
+	hit.MouseLeave:Connect(function()
+		MenuCursor.addHover(-1)
+	end)
 
 	local function applyValue(v: number)
 		v = math.clamp(v, minVal, maxVal)
@@ -126,7 +149,7 @@ local function makeSlider(
 	end
 
 	valBox.FocusLost:Connect(function()
-		UIKit.tween(valStroke, Motion.Hover, { Color = C.BorderStrong })
+		UIKit.tween(valLine, Motion.Hover, { BackgroundColor3 = C.Muted })
 		local num = tonumber(valBox.Text)
 		if num then
 			applyValue(num)
@@ -147,6 +170,9 @@ local function makeSlider(
 		if inp.UserInputType == Enum.UserInputType.MouseButton1 then
 			dragging = true
 			applyValue(valueFromMouse(inp.Position))
+			if shoots() then
+				MenuShot.fireAt(hit, inp, false)
+			end
 		end
 	end)
 	UserInputService.InputChanged:Connect(function(inp)
@@ -164,24 +190,10 @@ local function makeSlider(
 	return applyValue
 end
 
--- Cette méthode permet de placer le panneau selon la présentation (page sous la navigation ou modale centrée) lorsqu'il s'ouvre.
-local function applyLayout()
-	if mode == "page" then
-		backdrop.Visible = false
-		panel.AnchorPoint = Vector2.zero
-		panel.Position = UDim2.fromOffset(L.Margin, L.ContentTop)
-	else
-		backdrop.Visible = true
-		panel.AnchorPoint = Vector2.new(0.5, 0.5)
-		panel.Position = UDim2.fromScale(0.5, 0.5)
-	end
-	panel:SetAttribute("RestPosition", panel.Position)
-end
-
--- Cette méthode permet d'ouvrir ou fermer le panneau en sauvegardant puis restaurant l'état de la souris
--- lorsque le joueur appuie sur P, clique sur SETTINGS ou ferme le panneau.
+-- Cette méthode permet d'ouvrir ou fermer l'écran en sauvegardant puis restaurant l'état de la souris
+-- lorsque le joueur appuie sur P, tire sur RÉGLAGES ou ferme l'écran.
 local function setOpen(state: boolean)
-	if not gui or state == open then
+	if not page or state == open then
 		return
 	end
 	open = state
@@ -190,15 +202,14 @@ local function setOpen(state: boolean)
 		savedMouseIcon = UserInputService.MouseIconEnabled
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 		UserInputService.MouseIconEnabled = true
-		applyLayout()
-		gui.Enabled = true
+		backdrop.Visible = mode == "modal"
 		if mode == "modal" then
 			backdrop.BackgroundTransparency = 1
-			UIKit.tween(backdrop, Motion.Enter, { BackgroundTransparency = 0.55 })
+			UIKit.tween(backdrop, Motion.Enter, { BackgroundTransparency = BACKDROP_TRANSPARENCY })
 		end
-		UIKit.reveal(panel, 0, 14)
+		page.show()
 	else
-		gui.Enabled = false
+		page.hide()
 		UserInputService.MouseBehavior = savedMouseBehavior
 		UserInputService.MouseIconEnabled = savedMouseIcon
 		if onClosedCallback then
@@ -207,103 +218,65 @@ local function setOpen(state: boolean)
 	end
 end
 
+-- Cette méthode permet de construire l'écran et de brancher la touche P et Échap lorsque le client démarre.
 function SettingsMenu.init(fpsCam: typeof(fpsCamRef))
-	if gui then
+	if page then
 		return
 	end
 	fpsCamRef = fpsCam
 
-	local screenGui = UIKit.create("ScreenGui", {
-		Name = "SettingsMenu",
-		ResetOnSpawn = false,
-		IgnoreGuiInset = true,
-		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-		DisplayOrder = 3,
-		Enabled = false,
-		Parent = Players.LocalPlayer:WaitForChild("PlayerGui"),
-	})
-	gui = screenGui
-	local root = UIKit.scaledRoot(screenGui)
+	local built = MenuPage.new("SettingsMenu", 3, MenuPage.Words.Reglages)
+	page = built
 
-	backdrop = UIKit.button({
+	-- Le voile retient les clics pour qu'ils ne partent pas en tirs dans la partie
+	backdrop = UIKit.frame({
 		Name = "Backdrop",
-		Text = "",
+		Active = true,
 		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = Color3.new(0, 0, 0),
-		BackgroundTransparency = 0.55,
-		Parent = root,
+		BackgroundColor3 = C.Black,
+		BackgroundTransparency = BACKDROP_TRANSPARENCY,
+		ZIndex = -1,
+		Visible = false,
+		Parent = built.gui,
 	})
-	backdrop.MouseButton1Click:Connect(function()
-		setOpen(false)
-	end)
 
-	panel = UIKit.create("CanvasGroup", {
-		Name = "Panel",
-		Size = UDim2.fromOffset(PANEL_SIZE.X, PANEL_SIZE.Y),
-		BackgroundColor3 = C.Ground,
-		BackgroundTransparency = 0.05,
-		BorderSizePixel = 0,
-		Parent = root,
-	})
-	UIKit.stroke(panel, C.Border)
-
-	UIKit.text({
-		Text = "SETTINGS",
-		FontFace = F.Display,
-		TextSize = T.H1,
-		Position = UDim2.fromOffset(32, 20),
-		Size = UDim2.new(1, -120, 0, 40),
-		Parent = panel,
-	})
-	UIKit.text({
-		Text = "Souris",
-		TextSize = T.Small,
-		TextColor3 = C.Muted,
-		Position = UDim2.fromOffset(32, 60),
-		Size = UDim2.new(1, -120, 0, 20),
-		Parent = panel,
-	})
-	local close = UIKit.closeButton(panel)
-	close.AnchorPoint = Vector2.new(1, 0)
-	close.Position = UDim2.new(1, -24, 0, 24)
-	close.MouseButton1Click:Connect(function()
-		setOpen(false)
-	end)
-	for _, y in { 96, 174 } do
-		UIKit.frame({
-			Name = "Divider",
-			Position = UDim2.fromOffset(0, y),
-			Size = UDim2.new(1, 0, 0, 1),
-			BackgroundColor3 = y == 96 and C.Border or C.Raised,
-			Parent = panel,
-		})
-	end
-
-	makeSlider(panel, "Sensitivity", 96, 0.1, 5.0, CameraConfig.DEFAULT_SENS, 2, function(v)
+	makeSlider(built.group, "Sensibilité", MenuPage.ContentTop, 0.1, 5.0, CameraConfig.DEFAULT_SENS, 2, function(v)
 		if fpsCamRef then
 			fpsCamRef.setSensitivity(v)
 		end
 	end)
-	makeSlider(panel, "Scope Sens", 175, 0.1, 1.0, CameraConfig.SCOPE_SENS_MULT, 2, function(v)
-		if fpsCamRef then
-			fpsCamRef.setScopeMultiplier(v)
+	makeSlider(
+		built.group,
+		"Sensibilité à la lunette",
+		MenuPage.ContentTop + ROW_STEP,
+		0.1,
+		1.0,
+		CameraConfig.SCOPE_SENS_MULT,
+		2,
+		function(v)
+			if fpsCamRef then
+				fpsCamRef.setScopeMultiplier(v)
+			end
 		end
-	end)
+	)
+	built.exit(MenuPage.Words.Retour, function()
+		setOpen(false)
+	end, shoots)
 
 	UserInputService.InputBegan:Connect(function(inp, gameProcessed)
-		-- Échap ferme le panneau, même si Roblox traite aussi la touche (menu système)
+		-- Échap ferme l'écran, même si Roblox traite aussi la touche (menu système)
 		if inp.KeyCode == Enum.KeyCode.Escape then
 			setOpen(false)
 			return
 		end
-		if gameProcessed then
+		if gameProcessed or inp.KeyCode ~= Enum.KeyCode.P then
 			return
 		end
-		if inp.KeyCode == Enum.KeyCode.P then
-			if not open then
-				mode = "modal"
-			end
-			setOpen(not open)
+		if open then
+			setOpen(false)
+		elseif not (pageRequest and pageRequest()) then
+			mode = "modal"
+			setOpen(true)
 		end
 	end)
 	-- Échap ouvre le menu Roblox, qui peut capturer la touche avant nous : on ferme aussi à son ouverture
@@ -312,23 +285,29 @@ function SettingsMenu.init(fpsCam: typeof(fpsCamRef))
 	end)
 end
 
--- Cette méthode permet d'enregistrer une action à exécuter à chaque fermeture du panneau
--- lorsque le menu doit remettre son onglet actif sur ACCUEIL.
+-- Cette méthode permet d'enregistrer une action à exécuter à chaque fermeture de l'écran
+-- lorsque le menu doit revenir à l'accueil.
 function SettingsMenu.setOnClosed(callback: () -> ())
 	onClosedCallback = callback
 end
 
--- Cette méthode permet d'ouvrir le panneau dans une présentation donnée lorsque le menu clique sur SETTINGS.
+-- Cette méthode permet de laisser le menu traiter la touche P lorsqu'il est affiché ; le rappel renvoie true s'il s'en charge.
+function SettingsMenu.setPageRequest(callback: () -> boolean)
+	pageRequest = callback
+end
+
+-- Cette méthode permet d'ouvrir l'écran dans une présentation donnée lorsque le joueur tire sur RÉGLAGES.
 function SettingsMenu.open(newMode: Mode)
 	mode = newMode
 	setOpen(true)
 end
 
--- Cette méthode permet de fermer le panneau s'il est ouvert lorsque le joueur quitte la page (PLAY, ACCUEIL, INFOS).
+-- Cette méthode permet de fermer l'écran s'il est ouvert lorsque le joueur quitte la page ou lance une partie.
 function SettingsMenu.close()
 	setOpen(false)
 end
 
+-- Cette méthode permet de savoir si l'écran est ouvert lorsqu'un module doit s'y adapter.
 function SettingsMenu.isOpen(): boolean
 	return open
 end
