@@ -1,48 +1,74 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Debris = game:GetService("Debris")
 
 local CharacterAppearance = require(ReplicatedStorage.Shared.CharacterAppearance)
+local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local SpawnLaunch = require(ReplicatedStorage.Shared.SpawnLaunch)
 
 local SpawnManager = {}
 
-local groundSpawnsFolder: Folder?
+local mapModel: Instance?
 
-local function getGroundSpawns(): Folder?
-	if groundSpawnsFolder then
-		return groundSpawnsFolder
+-- Cette méthode permet de trouver la map (Workspace.Maps.Map) lorsqu'un joueur demande à apparaître.
+local function getMap(): Instance?
+	if mapModel and mapModel.Parent then
+		return mapModel
 	end
 	local maps = workspace:WaitForChild("Maps", 10)
 	if not maps then
 		return nil
 	end
-	local map = maps:WaitForChild("Map", 10)
-	if not map then
-		return nil
-	end
-	groundSpawnsFolder = map:WaitForChild("GroundSpawns", 10) :: Folder?
-	return groundSpawnsFolder
+	mapModel = maps:WaitForChild("Map", 10)
+	return mapModel
 end
 
-local function getSpawnCFrame(): CFrame
-	local folder = getGroundSpawns()
+-- Cette méthode permet de tirer un enfant au hasard d'un dossier de la map lorsqu'on choisit un point d'apparition.
+local function pickPoint(folderName: string): BasePart?
+	local map = getMap()
+	local folder = map and map:FindFirstChild(folderName)
 	local points = folder and folder:GetChildren() or {}
 	if #points == 0 then
-		warn("[SpawnManager] aucun point de spawn trouvé dans Maps.Map.GroundSpawns")
-		return CFrame.new(0, 10, 0)
+		return nil
 	end
-	local pt = points[math.random(1, #points)] :: BasePart
-	return CFrame.new(pt.Position + Vector3.new(0, 5, 0))
+	return points[math.random(1, #points)] :: BasePart
+end
+
+-- Cette méthode permet de rendre le joueur invulnérable pendant le lancement lorsqu'il sort du soleil
+-- (ForceField invisible : Humanoid:TakeDamage l'ignore, cf. Validator.hitOutcome).
+local function protect(char: Model)
+	local field = Instance.new("ForceField")
+	field.Visible = false
+	field.Parent = char
+	Debris:AddItem(field, GameConfig.SPAWN_PROTECTION)
 end
 
 function SpawnManager.spawnPlayer(player: Player)
-	local cf = getSpawnCFrame()
+	-- Lancement depuis le soleil (#69) si la map a des points Maps.Map.SunLaunch, sinon apparition au sol
+	local launch = pickPoint("SunLaunch")
+	local ground = if launch then nil else pickPoint("GroundSpawns")
+	if not launch and not ground then
+		warn("[SpawnManager] aucun point dans Maps.Map.SunLaunch ni Maps.Map.GroundSpawns")
+	end
 	-- Connexion avant LoadCharacter pour ne pas manquer CharacterAdded
 	local conn: RBXScriptConnection
 	conn = player.CharacterAdded:Connect(function(char)
 		conn:Disconnect()
 		CharacterAppearance.apply(char)
 		local root = char:WaitForChild("HumanoidRootPart", 5) :: BasePart?
-		if root then
-			root.CFrame = cf
+		if launch then
+			local origin = launch.Position
+			local speed = launch:GetAttribute("Speed")
+			local velocity =
+				SpawnLaunch.velocity(launch.CFrame.LookVector, if type(speed) == "number" then speed else 0)
+			protect(char)
+			if root then
+				root.CFrame = CFrame.new(origin)
+			end
+			-- Origine d'abord : le client applique le lancement quand la vitesse arrive (MovementController)
+			char:SetAttribute(SpawnLaunch.ORIGIN_ATTRIBUTE, origin)
+			char:SetAttribute(SpawnLaunch.VELOCITY_ATTRIBUTE, velocity)
+		elseif root then
+			root.CFrame = CFrame.new((if ground then ground.Position else Vector3.new(0, 5, 0)) + Vector3.new(0, 5, 0))
 		end
 	end)
 	-- Rig = StarterCharacter, skin appliqué dans CharacterAdded (#1).

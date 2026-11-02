@@ -14,6 +14,7 @@ Lire le document du domaine avant de travailler dessus, et seulement celui-là.
 | Modifier ou ajouter une arme (`.rbxm`), publier un asset ou un mesh | `docs/assets.md` |
 | Créer ou modifier un écran, direction artistique | `docs/ui.md` |
 | Créer ou modifier une animation d'arme | `docs/animations.md` |
+| Modifier la map (générateur, export, règles des rampes) | `docs/maps.md` |
 | Retours d'expérience datés (historique, le document du domaine prime) | `docs/notes/` |
 
 ## Capitaliser
@@ -70,6 +71,7 @@ Script idempotent, à relancer au début de chaque tâche (PowerShell, depuis la
 - `src/client` -> `StarterPlayerScripts/Client`
 - `assets/rbx/ViewModels/<Nom>.rbxm` -> `ReplicatedStorage/ViewModels/<Nom>` (viewmodels FPS, aussi clonés pour l'arme 3P)
 - `assets/rbx/Tools/<Nom>.rbxm` -> `StarterPack/<Nom>` (Tools des armes, attribut `ViewmodelName`)
+- `assets/rbx/Maps/<Nom>.rbxm` -> `Workspace/Maps/<Nom>` (map générée par `tools/map/build_city.luau`, cf. `docs/maps.md`)
 
 ## Viewmodels et Tools (.rbxm)
 

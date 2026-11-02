@@ -10,7 +10,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 
 - `Players.CharacterAutoLoads = false` (`init.server.luau`) : les personnages n'apparaissent que via le remote `RequestSpawn`.
 - Un round démarre quand un joueur demande à spawn alors que le round est à l'état `idle` (`init.server.luau`).
-- `SpawnManager` tire un point au hasard dans `Workspace.Maps.Map.GroundSpawns` (dans la place, pas dans `src/`) ; s'il n'en trouve aucun, il avertit et utilise `(0, 10, 0)`.
+- `SpawnManager` tire un lanceur au hasard dans `Workspace.Maps.Map.SunLaunch` (map versionnée dans `assets/rbx/Maps`, cf. `docs/maps.md`) : le joueur est projeté depuis le soleil, invulnérable `GameConfig.SPAWN_PROTECTION` secondes. Sans lanceur, il tire un point dans `GroundSpawns` ; sans aucun point, il avertit et utilise `(0, 10, 0)`.
 - `StatsStore` désactive la sauvegarde pour la session si le chargement DataStore échoue, pour ne pas écraser les données.
 - **Crash de Rojo :** `rojo serve` 7.7.1 peut s'arrêter sur `Rojo crashed!` (`change_processor.rs:172`, fichier introuvable). Constaté après la suppression puis la recréation immédiate de fichiers surveillés dans `src/` (cause probable, non reproduite) : écrire par-dessus un fichier plutôt que le supprimer d'abord. Si Rojo ne répond plus, lire `worktrees/.run/<slug>.log`, relancer `.\scripts\csgo-worktree.ps1 <branche>`, puis reconnecter le plugin.
 
@@ -20,7 +20,8 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `docs/ui.md`: direction artistique de l'interface (principe, essais rejetés, construction du menu, pièges, reste à faire).
 - `tools/anim/`: outils de ces animations : mesure sur vidéo, rendu et capture dans Studio, vidéo côte à côte, publication Open Cloud.
 - `assets/awp_viewmodel/`: animations de l'AWP : trajectoires mesurées (`build_anims.py`), rig Studio (`rig.json`), build sans toucher au Blender ouvert (`run_build.py`). Sons de l'arme : découpe depuis leurs sources (`build_sounds.py`), extraits CC0 dans `sounds/` ; `Shoot` et `Bolt` (Pixabay) sont publiés sur Roblox, pas versionnés.
-- `default.project.json`: configuration Rojo qui mappe `src/` et `assets/rbx/` (viewmodels, Tools) vers le projet Roblox.
+- `default.project.json`: configuration Rojo qui mappe `src/` et `assets/rbx/` (viewmodels, Tools, maps) vers le projet Roblox, et fixe la lumière du crépuscule (Lighting, Atmosphere).
+- `tools/map/build_city.luau`: générateur de la map, exécuté dans Studio (`tools/map/serve.luau` le sert en local), cf. `docs/maps.md`.
 - `assets/rbx/ViewModels/*.rbxm`, `assets/rbx/Tools/*.rbxm`: viewmodels et Tools des armes (binaires LFS, voir « Viewmodels et Tools »).
 - `tools/rbxm/receive.luau`: serveur Lune local qui reçoit les `.rbxm` exportés de Studio et les écrit sous `assets/rbx/`.
 - `tools/rbxm/studio_export.luau`: script à exécuter dans Studio qui sérialise viewmodels et Tools et les envoie à `receive.luau`.
@@ -80,7 +81,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/server/FeedbackService.luau`: réception des feedbacks côté serveur (longueur, délai entre deux envois, limite hebdomadaire).
 - `src/server/RoundManager.luau`: boucle de round FFA (timer, kills/deaths, fin de round, diffusion résultat).
 - `src/server/SettingsStore.luau`: module vide, non utilisé pour l'instant.
-- `src/server/SpawnManager.luau`: gestion du spawn différé (RequestSpawn remote, LoadCharacter, point de spawn aléatoire).
+- `src/server/SpawnManager.luau`: gestion du spawn différé (RequestSpawn remote, LoadCharacter, lancement depuis le soleil ou point au sol, ForceField de protection).
 - `src/server/StatsStore.luau`: DataStore stats joueur (kills/deaths/rounds), save périodique + déconnexion, robustesse load.
 - `src/server/Validator.luau`: décision serveur des touches melee et hitscan (cible, arme en main, partie touchée, portée, cadence), calcul des dégâts depuis `WeaponConfig` (zone du corps pour le hitscan, backstab pour la mêlée) et qualification d'une touche (hit/kill).
 - `src/server/init.server.luau`: point d'entrée serveur — crée tous les RemoteEvents, orchestre SpawnManager, RoundManager, StatsStore.
@@ -89,7 +90,8 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/shared/CharacterAppearance.luau`: rig de référence (`StarterPlayer.StarterCharacter`, cloné pour la cible du helper de playtest) et application du skin commun (BodyColors + vêtements) côté serveur.
 - `src/shared/CharacterConfig.luau`: rig/skin communs (couleurs, ids d'images Shirt/Pants/visage) et animations 3e personne (ids, fallbacks, seuils de vitesse, fondus).
 - `src/shared/DebugPlaytestRules.luau`: règles pures du helper de playtest (choix de l'outil, marqueurs et dégâts attendus, visée, rapport PASS/FAIL).
-- `src/shared/GameConfig.luau`: constantes jeu (ROUND_DURATION=300, RESPAWN_DELAY=2.5, RESULT_DURATION=6, AUTO_SAVE_INTERVAL=120).
+- `src/shared/GameConfig.luau`: constantes jeu (ROUND_DURATION=300, RESPAWN_DELAY=2.5, RESULT_DURATION=6, AUTO_SAVE_INTERVAL=120, SPAWN_PROTECTION=2.5).
+- `src/shared/SpawnLaunch.luau`: règles pures du lancement depuis le soleil (vitesse, angles de caméra, noms des attributs posés sur le personnage), testées (`tests/specs/SpawnLaunch.spec.luau`).
 - `src/shared/HitZones.luau`: zones du corps touchées (tête, torse, bras, jambes), multiplicateurs de dégâts des armes à distance et règle de calcul.
 - `src/shared/MovementConfig.luau`: constantes physique du mouvement uniquement (vitesses, accel, friction, saut, pentes, bhop, réseau, hitbox).
 - `src/shared/MovementState.luau`: structure d'état partagée pour le mouvement du joueur.

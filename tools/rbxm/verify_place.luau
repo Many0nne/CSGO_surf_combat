@@ -1,7 +1,8 @@
 -- verify_place.luau
--- Relit la place produite par `rojo build` et vérifie que les viewmodels (assets/rbx/ViewModels) et les Tools
--- (assets/rbx/Tools) y sont, avec leurs animations, sons, attributs et scripts. Signale aussi les Tools dont
--- le nom d'arme n'a pas d'entrée dans src/shared/WeaponConfig.luau (avertissement, sans échec).
+-- Relit la place produite par `rojo build` et vérifie que les viewmodels (assets/rbx/ViewModels), les Tools
+-- (assets/rbx/Tools) et la map (assets/rbx/Maps) y sont, avec leurs animations, sons, attributs et scripts.
+-- Signale aussi les Tools dont le nom d'arme n'a pas d'entrée dans src/shared/WeaponConfig.luau (avertissement,
+-- sans échec).
 -- Usage (racine du dépôt) : rojo build default.project.json -o CSGO.rbxlx && lune run tools/rbxm/verify_place.luau [CSGO.rbxlx]
 
 local fs = require("@lune/fs")
@@ -129,6 +130,29 @@ for _, name in rbxmNames("assets/rbx/Tools") do
 	if not weaponKeys[weaponName] then
 		print(string.format("ATTENTION : Tool %s -> arme %q absente de WeaponConfig.Weapons", name, weaponName))
 	end
+end
+
+-- map (assets/rbx/Maps, #69) : Workspace.Maps.Map avec des points d'apparition ; lanceurs du soleil avec une vitesse
+local maps = game.Workspace:FindFirstChild("Maps")
+local map = maps and maps:FindFirstChild("Map")
+if not map then
+	fail("Workspace.Maps.Map absent")
+else
+	local ground = map:FindFirstChild("GroundSpawns")
+	local launches = map:FindFirstChild("SunLaunch")
+	local nGround = if ground then #ground:GetChildren() else 0
+	local nLaunch = if launches then #launches:GetChildren() else 0
+	if nGround + nLaunch == 0 then
+		fail("Maps.Map sans point d'apparition (GroundSpawns ni SunLaunch)")
+	end
+	for _, launch in if launches then launches:GetChildren() else {} do
+		if type(launch:GetAttribute("Speed")) ~= "number" then
+			fail("Maps.Map.SunLaunch." .. launch.Name .. " sans attribut Speed")
+		end
+	end
+	print(
+		string.format("Maps.Map : %d instances, %d spawns au sol, %d lanceurs", #map:GetDescendants(), nGround, nLaunch)
+	)
 end
 
 -- ids d'assets : une animation ou un mesh sans id est une erreur ; un son sans id est seulement signalé
