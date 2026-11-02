@@ -2,10 +2,10 @@
 # Génère les animations viewmodel de l'AWP (Idle, Equip, Shoot, Reload) dans AWP_Viewmodel_Anims.blend.
 # À lancer depuis Blender (Text Editor > Run, ou exec(open(path).read())) avec le rig "Rig" déjà construit.
 #
-# Principe : chaque animation est décrite par des canaux d'intention (pose de l'arme, culasse, chargeur,
-# position des mains sur l'arme) ; l'arme passe ensuite dans un ressort amorti du second ordre pour lui
-# donner de l'inertie (démarrages lents, dépassement puis stabilisation), et les mains suivent l'arme
-# par IK. Le repère est celui de la caméra du viewmodel : X droite, Y avant, Z haut (unités = studs).
+# Principe : la pose de l'arme vient d'une trajectoire mesurée sur la vidéo de référence (position à l'écran de l'œilleton
+# et du canon, voir solve_gun) ; culasse, chargeur et mains sont décrits par canaux d'intention, et les mains suivent
+# l'arme par IK. Le repère est celui de la caméra du viewmodel : X droite, Y avant, Z haut (unités = studs).
+# FakeCamera étant recalé sur la caméra en jeu (PivotTo), tout le mouvement passe par l'arme, jamais par FakeCamera.
 
 import math
 
@@ -17,12 +17,12 @@ RIG = bpy.data.objects["Rig"]
 ARM = RIG.data
 REST = {b.name: b.matrix_local.copy() for b in ARM.bones}
 
-# --- Réglages de « poids » de l'arme -------------------------------------------------------------
-GUN_FREQ = 4.2  # Hz : fréquence propre du ressort de l'arme (plus bas = plus lourd)
-GUN_ZETA = 0.62  # amortissement (< 1 : léger dépassement avant stabilisation)
-CAM_FREQ = 5.5
-CAM_ZETA = 0.7
-RECOIL_PIVOT = Vector((1.09, -0.6, -1.0))  # creux de l'épaule : pivot du relevé au tir
+RECOIL_PIVOT = Vector((1.09, -0.6, -1.0))  # creux de l'épaule : pivot des rotations de l'arme
+
+# --- Roulis de l'arme (degrés autour de son axe), invisible sur les deux points mesurés : choisi à l'œil -----------
+RELOAD_ROLL = 6.0  # arme levée pendant le changement de chargeur
+BOLT_ROLL = 12.0  # arme penchée pour présenter la culasse à la main droite
+EQUIP_ROLL_LOW = 0.0  # arme encore basse à la sortie
 
 # --- Pose de base (tenue au repos) ------------------------------------------------------------------
 SHOULDER = {"R": Vector((1.75, 0.25, -1.95)), "L": Vector((0.05, 2.1, -2.55))}
@@ -79,37 +79,6 @@ def track(keys, t):
 			s = ease(e1, (t - t0) / (t1 - t0)) if t1 > t0 else 1.0
 			return Vector(v0).lerp(Vector(v1), s)
 	return Vector(keys[-1][1])
-
-
-# Cette méthode permet de faire suivre une cible par un ressort amorti du second ordre, avec des
-# impulsions de vitesse (recul, chocs de culasse) ; renvoie la série filtrée échantillonnée à FPS.
-def spring(targets, freq, zeta, impulses=(), substeps=8):
-	w = 2 * math.pi * freq
-	dt = 1.0 / FPS / substeps
-	pos = targets[0].copy()
-	vel = Vector((0, 0, 0))
-	out = []
-	imp = {round(t * FPS): Vector(v) for t, v in impulses}
-	for i, tgt in enumerate(targets):
-		if i in imp:
-			vel += imp[i]
-		for _ in range(substeps):
-			acc = (tgt - pos) * (w * w) - vel * (2 * zeta * w)
-			vel += acc * dt
-			pos += vel * dt
-		out.append(pos.copy())
-	return out
-
-
-# Cette méthode permet de ramener exactement une série à la pose de base sur les dernières frames
-# lorsque l'animation doit se terminer pile sur l'Idle (pas de saut au changement de piste).
-def settle_tail(series, seconds):
-	n = len(series)
-	k = max(1, int(seconds * FPS))
-	for i in range(max(0, n - k), n):
-		s = (i - (n - k)) / (k - 1) if k > 1 else 1
-		series[i] = series[i] * (1 - ease("io", s))
-	return series
 
 
 # ------------------------------------------------------------------------------------------------
@@ -213,22 +182,13 @@ def basis_for_position(bone, world_pos, pose):
 	return parent_pose.inverted() @ target
 
 
-# Cette méthode permet d'échantillonner une animation décrite par `spec`, d'appliquer le ressort à
-# l'arme, de placer mains/chargeur et d'écrire toutes les clés dans une action dédiée.
+# Cette méthode permet d'échantillonner une animation décrite par `spec`, de placer l'arme, les mains et
+# le chargeur, et d'écrire toutes les clés dans une action dédiée.
 def bake(name, spec):
 	n = int(round(spec["length"] * FPS)) + 1
 	ts = [i / FPS for i in range(n)]
 	gun_loc = [spec["gun_loc"](t) for t in ts]
 	gun_rot = [spec["gun_rot"](t) for t in ts]
-	cam_loc = [spec["cam_loc"](t) for t in ts]
-	cam_rot = [spec["cam_rot"](t) for t in ts]
-	if spec.get("spring", True):
-		gun_loc = spring(gun_loc, GUN_FREQ, GUN_ZETA, spec.get("imp_loc", ()))
-		gun_rot = spring(gun_rot, GUN_FREQ, GUN_ZETA, spec.get("imp_rot", ()))
-		cam_loc = spring(cam_loc, CAM_FREQ, CAM_ZETA, spec.get("cam_imp_loc", ()))
-		cam_rot = spring(cam_rot, CAM_FREQ, CAM_ZETA, spec.get("cam_imp_rot", ()))
-		for s in (gun_loc, gun_rot, cam_loc, cam_rot):
-			settle_tail(s, spec.get("settle", 0.25))
 	act = new_action("AWP_" + name)
 	pbs = RIG.pose.bones
 	for i, t in enumerate(ts):
@@ -236,8 +196,8 @@ def bake(name, spec):
 		ch = {
 			"gun_loc": gun_loc[i],
 			"gun_rot": gun_rot[i],
-			"cam_loc": cam_loc[i],
-			"cam_rot": cam_rot[i],
+			"cam_loc": Vector(Z),
+			"cam_rot": Vector(Z),
 			"bolt_lift": spec["bolt_lift"](t)[0],
 			"bolt_travel": spec["bolt_travel"](t)[0],
 			"trigger": spec.get("trigger", lambda _t: Vector((0, 0, 0)))(t)[0],
@@ -323,20 +283,213 @@ def K(keys):
 	return lambda t: track(keys, t)
 
 
-# Cette méthode permet de décrire le cycle de culasse (lever, tirer, pousser, rabattre) à partir de
-# l'instant t0 où la main atteint le levier ; renvoie les clés culasse et les instants clés.
-def bolt_cycle(t0, travel=0.75, lift=62):
-	t_up, t_back, t_hold, t_fwd, t_down = t0 + 0.075, t0 + 0.19, t0 + 0.235, t0 + 0.345, t0 + 0.41
-	lift_k = [(0, (0, 0, 0), "l"), (t0, (0, 0, 0), "l"), (t_up, (lift, 0, 0), "io"), (t_fwd, (lift, 0, 0), "l"), (t_down, (0, 0, 0), "o")]
-	trav_k = [(0, (0, 0, 0), "l"), (t_up, (0, 0, 0), "l"), (t_back, (travel, 0, 0), "o"), (t_hold, (travel, 0, 0), "l"), (t_fwd, (0, 0, 0), "i")]
+# ------------------------------------------------------------------------------------------------
+# Trajectoires mesurées sur la vidéo de référence (AWP CS2, voir docs/animations.md)
+# Chaque échantillon : (temps vidéo, E_x, E_y, M_x, M_y), positions à l'écran de l'œilleton (E) et du bout du canon (M)
+# relevées sur les planches de tools/anim/grid.py recadrées sur x ∈ [0,4 ; 1], en pixels d'une case de 400 × 375.
+# ------------------------------------------------------------------------------------------------
+REF_IDLE = ((212, 238), (105, 222))  # œilleton et canon de la référence au repos
+HEIGHT_OVER_WIDTH = 9 / 16  # le joueur voit du 16:9, au FOV vertical de 90° du jeu (tan 45° = 1)
+EYE_REST = Vector((1.08, 1.59, -0.15))  # œilleton de notre arme, repère caméra au repos
+MUZZLE_REST = Vector((1.074, 8.35, -0.587))  # bout du canon de notre arme, repère caméra au repos
+GUN_AXIS_REST = (MUZZLE_REST - EYE_REST).normalized()
+GUN_LENGTH = (MUZZLE_REST - EYE_REST).length
+
+EQUIP_TRACK = [
+	(1.80, 160, 425, 118, 412),
+	(1.87, 170, 360, 118, 362),
+	(1.94, 185, 295, 115, 312),
+	(2.00, 215, 250, 115, 262),
+	(2.07, 230, 222, 110, 240),
+	(2.14, 245, 217, 112, 222),
+	(2.20, 255, 230, 108, 200),
+	(2.27, 265, 250, 110, 185),
+	(2.34, 265, 265, 110, 185),
+	(2.40, 255, 265, 110, 192),
+	(2.47, 245, 257, 112, 197),
+	(2.54, 235, 250, 110, 210),
+	(2.60, 225, 235, 110, 220),
+	(2.67, 220, 235, 110, 232),
+	(2.74, 215, 232, 105, 238),
+	(2.80, 210, 230, 105, 238),
+	(2.87, 210, 235, 105, 230),
+	(2.94, 210, 237, 105, 225),
+	(3.00, 212, 238, 105, 222),
+]
+EQUIP_DEPTH = [(1.80, 0.9), (1.94, 0.9), (2.14, 1.0), (2.27, 1.1), (2.40, 1.05), (2.54, 1.0), (3.00, 1.0)]
+
+SHOOT_TRACK = [
+	(19.65, 212, 238, 105, 222),
+	(19.67, 230, 240, 115, 225),
+	(19.70, 232, 240, 110, 220),
+	(19.73, 270, 243, 105, 210),
+	(19.77, 275, 223, 105, 185),
+	(19.80, 280, 223, 105, 183),
+	(19.83, 265, 217, 105, 173),
+	(19.87, 245, 212, 103, 173),
+	(19.90, 235, 210, 103, 175),
+	(19.93, 230, 208, 103, 180),
+	(19.97, 230, 208, 103, 186),
+	(20.00, 230, 210, 103, 192),
+	(20.03, 225, 213, 103, 200),
+	(20.07, 225, 215, 105, 205),
+	(20.10, 220, 220, 105, 210),
+	(20.13, 220, 225, 105, 215),
+	(20.17, 215, 230, 105, 220),
+	(20.20, 215, 235, 105, 228),
+	(20.27, 210, 245, 105, 235),
+	(20.33, 210, 250, 105, 228),
+	(20.40, 215, 250, 105, 225),
+	(20.47, 215, 240, 105, 200),
+	(20.53, 215, 235, 105, 195),
+	(20.60, 215, 235, 105, 210),
+	(20.67, 205, 245, 110, 228),
+	(20.73, 205, 245, 110, 233),
+	(20.80, 205, 245, 105, 230),
+	(20.87, 210, 245, 105, 230),
+	(20.93, 210, 245, 105, 225),
+	(21.00, 210, 245, 105, 225),
+	(21.10, 212, 238, 105, 222),
+]
+SHOOT_DEPTH = [
+	(19.65, 1.0), (19.70, 1.03), (19.73, 1.2), (19.77, 1.35), (19.80, 1.4), (19.83, 1.3), (19.87, 1.18), (19.90, 1.08),
+	(19.97, 1.03), (20.20, 1.0), (20.40, 1.05), (20.60, 1.03), (20.80, 0.97), (21.10, 1.0),
+]
+
+RELOAD_TRACK = [
+	(22.95, 212, 238, 105, 222),
+	(23.05, 215, 235, 97, 205),
+	(23.15, 220, 232, 90, 195),
+	(23.25, 220, 235, 85, 195),
+	(23.35, 210, 235, 85, 213),
+	(23.45, 205, 237, 92, 220),
+	(23.55, 225, 242, 97, 215),
+	(23.65, 245, 237, 97, 180),
+	(23.75, 275, 250, 85, 157),
+	(23.85, 305, 260, 70, 135),
+	(23.95, 320, 262, 58, 128),
+	(24.05, 320, 262, 45, 128),
+	(24.15, 315, 255, 35, 132),
+	(24.25, 310, 255, 30, 135),
+	(24.35, 305, 255, 30, 132),
+	(24.45, 320, 240, 35, 120),
+	(24.55, 340, 235, 45, 103),
+	(24.60, 340, 232, 45, 100),
+	(24.70, 337, 240, 42, 107),
+	(24.80, 315, 240, 35, 122),
+	(24.90, 298, 240, 33, 130),
+	(25.00, 355, 240, 50, 70),
+	(25.10, 350, 232, 50, 82),
+	(25.20, 307, 230, 57, 132),
+	(25.30, 250, 249, 70, 192),
+	(25.40, 228, 252, 93, 232),
+	(25.50, 210, 239, 100, 254),
+	(25.60, 205, 229, 95, 254),
+	(25.70, 202, 234, 107, 249),
+	(25.80, 230, 249, 120, 239),
+	(25.90, 233, 254, 123, 229),
+	(26.00, 210, 241, 122, 219),
+	(26.10, 205, 241, 112, 239),
+	(26.20, 207, 241, 110, 231),
+	(26.30, 215, 241, 110, 221),
+	(26.40, 213, 236, 113, 218),
+	(26.50, 215, 236, 115, 221),
+	(26.60, 210, 233, 105, 220),
+	(26.70, 212, 238, 105, 222),
+]
+RELOAD_DEPTH = [
+	(22.95, 1.0), (23.55, 1.0), (23.85, 1.15), (24.05, 1.2), (24.35, 1.15), (24.55, 1.25), (24.90, 1.1), (25.00, 1.35),
+	(25.10, 1.3), (25.20, 1.15), (25.30, 1.05), (25.40, 1.0), (25.80, 1.1), (25.90, 1.1), (26.20, 1.0), (26.70, 1.0),
+]
+
+
+# Cette méthode permet de convertir un relevé de planche en écart à l'écran par rapport à la référence au repos,
+# en largeur et hauteur d'écran, lorsque le cadrage de repos de la référence et le nôtre diffèrent légèrement.
+def ref_delta(point, rest):
+	return Vector(((point[0] - rest[0]) / 400 * 0.6, (point[1] - rest[1]) / 375))
+
+
+# Cette méthode permet de projeter un point du repère caméra à l'écran (0,0 = haut gauche, 1,1 = bas droite).
+def project(p):
+	return Vector((0.5 + p.x / p.y * HEIGHT_OVER_WIDTH * 0.5, 0.5 - p.z / p.y * 0.5))
+
+
+# Cette méthode permet de retrouver le rayon caméra (profondeur y = 1) qui passe par un point de l'écran.
+def screen_ray(uv):
+	return Vector(((uv.x - 0.5) * 2 / HEIGHT_OVER_WIDTH, 1.0, (0.5 - uv.y) * 2))
+
+
+# Cette méthode permet de retrouver la pose de l'arme (décalage, angles en degrés) qui place l'œilleton et le canon aux
+# positions d'écran voulues ; la profondeur vient du grossissement mesuré et le roulis est un choix, invisible sur ces deux points.
+def solve_gun(eye_uv, muzzle_uv, magnify, roll_deg):
+	eye = screen_ray(eye_uv) * (EYE_REST.y / magnify)
+	ray = screen_ray(muzzle_uv)
+	a, b, c = ray.dot(ray), -2 * ray.dot(eye), eye.dot(eye) - GUN_LENGTH * GUN_LENGTH
+	depth = (-b + math.sqrt(max(b * b - 4 * a * c, 0.0))) / (2 * a)
+	axis = (ray * depth - eye).normalized()
+	rotation = Quaternion(axis, math.radians(roll_deg)) @ GUN_AXIS_REST.rotation_difference(axis)
+	loc = eye - RECOIL_PIVOT - rotation @ (EYE_REST - RECOIL_PIVOT)
+	euler = rotation.to_euler("YXZ")
+	return loc, Vector([math.degrees(v) for v in euler])
+
+
+# Cette méthode permet d'interpoler une table [(t, v1, v2, ...)] par une spline qui passe par chaque échantillon, sans
+# ramener la vitesse à zéro entre deux échantillons (voir « Ne pas poser une clé avec courbe » dans docs/animations.md).
+def spline(table, t):
+	if t <= table[0][0]:
+		return list(table[0][1:])
+	if t >= table[-1][0]:
+		return list(table[-1][1:])
+	i = next(k for k in range(len(table) - 1) if t < table[k + 1][0])
+	p0, p1 = table[max(i - 1, 0)], table[i]
+	p2, p3 = table[i + 1], table[min(i + 2, len(table) - 1)]
+	h = p2[0] - p1[0]
+	s = (t - p1[0]) / h
+	out = []
+	for c in range(1, len(p1)):
+		m1 = (p2[c] - p0[c]) / (p2[0] - p0[0])
+		m2 = (p3[c] - p1[c]) / (p3[0] - p1[0])
+		out.append(
+			(2 * s**3 - 3 * s**2 + 1) * p1[c]
+			+ (s**3 - 2 * s**2 + s) * h * m1
+			+ (-2 * s**3 + 3 * s**2) * p2[c]
+			+ (s**3 - s**2) * h * m2
+		)
+	return out
+
+
+# Cette méthode permet de construire les pistes de l'arme d'une animation depuis sa trajectoire mesurée : `t0` est l'instant
+# vidéo de la frame 0, `stretch` le rapport durée en jeu / durée vidéo, et `roll` donne le roulis en fonction du temps vidéo.
+def measured_gun(track, depth, roll, t0, stretch):
+	cache = {}
+	eye_rest_uv, muzzle_rest_uv = project(EYE_REST), project(MUZZLE_REST)
+
+	def pose(t):
+		key = round(t * FPS * 4)
+		if key not in cache:
+			video = t0 + t / stretch
+			ex, ey, mx, my = spline(track, video)
+			eye_uv = eye_rest_uv + ref_delta((ex, ey), REF_IDLE[0])
+			muzzle_uv = muzzle_rest_uv + ref_delta((mx, my), REF_IDLE[1])
+			cache[key] = solve_gun(eye_uv, muzzle_uv, spline(depth, video)[0], roll(video))
+		return cache[key]
+
+	return (lambda t: pose(t)[0]), (lambda t: pose(t)[1])
+
+
+# Cette méthode permet de décrire le cycle de culasse par ses instants (lever, recul, tenue, retour, rabattre) ; renvoie les
+# clés de la culasse et ces instants, pour y caler la main et les sons.
+def bolt_keys(t_start, t_up, t_back, t_hold, t_fwd, t_down, travel=0.75, lift=62):
+	lift_k = [(0, Z, "l"), (t_start, Z, "l"), (t_up, (lift, 0, 0), "io"), (t_fwd, (lift, 0, 0), "l"), (t_down, Z, "o")]
+	trav_k = [(0, Z, "l"), (t_up, Z, "l"), (t_back, (travel, 0, 0), "o"), (t_hold, (travel, 0, 0), "l"), (t_fwd, Z, "i")]
 	return lift_k, trav_k, dict(up=t_up, back=t_back, hold=t_hold, fwd=t_fwd, down=t_down)
 
 
 # Cette méthode permet d'avancer l'épaule droite pendant le réarmement (le tireur engage le bras
 # pour aller chercher le levier), de t_grab jusqu'au retour de la main sur la poignée.
-def shoulder_reach(t_grab, bt):
+def shoulder_reach(t_grab, t_back_on_grip):
 	reach = (0.05, 0.3, 0.2)
-	return K([(0, Z, "l"), (t_grab, Z, "l"), (t_grab + 0.13, reach, "io"), (bt["down"] + 0.02, reach, "l"), (bt["down"] + 0.22, Z, "io")])
+	return K([(0, Z, "l"), (t_grab, Z, "l"), (t_grab + 0.13, reach, "io"), (t_back_on_grip - 0.18, reach, "l"), (t_back_on_grip, Z, "io")])
 
 
 # Cette méthode permet de décrire l'Idle : respiration lente et micro-dérive de l'arme, en boucle
@@ -352,16 +505,10 @@ def spec_idle():
 		b = math.sin(2 * math.pi * t / L)
 		return Vector((0.35 * b, 0.25 * math.sin(2 * math.pi * t / 2.0 + 0.6), 0.15 * math.sin(2 * math.pi * t / L + 1.3)))
 
-	def cl(t):
-		return Vector((0, 0, 0.01 * math.sin(2 * math.pi * t / L - 0.4)))
-
 	return dict(
 		length=L,
-		spring=False,
 		gun_loc=gl,
 		gun_rot=gr,
-		cam_loc=cl,
-		cam_rot=const(),
 		bolt_lift=const(),
 		bolt_travel=const(),
 		hand_R=[(0, 0, GRIP_R, GRIP_R, Z, "l")],
@@ -369,154 +516,89 @@ def spec_idle():
 	)
 
 
-# Cette méthode permet de décrire l'Equip : l'arme remonte depuis le bas-droite avec l'inertie
-# d'une arme lourde, puis vérification de chambre (culasse) avant de revenir en position.
+# Cette méthode permet de décrire l'Equip : l'arme monte du bas de l'écran, canon vers le bas, puis contrôle de culasse
+# (référence 1,80 → 3,00 s, étirée sur les 1,58 s de sortie du jeu).
 def spec_equip():
-	L = 1.55
-	t_bolt = 0.66
-	lk, tk, bt = bolt_cycle(t_bolt + 0.06, travel=0.42, lift=58)
+	L, t0 = 1.58, 1.80
+	k = L / (3.00 - t0)
+	A = lambda video: (video - t0) * k
+	roll = lambda video: spline([(1.80, EQUIP_ROLL_LOW), (2.07, EQUIP_ROLL_LOW * 0.6), (2.27, BOLT_ROLL), (2.47, BOLT_ROLL), (2.74, 0.0), (3.00, 0.0)], video)[0]
+	gun_loc, gun_rot = measured_gun(EQUIP_TRACK, EQUIP_DEPTH, roll, t0, k)
+	lk, tk, bt = bolt_keys(A(2.14), A(2.20), A(2.30), A(2.40), A(2.47), A(2.54))
+	t_home = A(2.76)
 	return dict(
 		length=L,
-		settle=0.3,
-		gun_loc=K([
-			(0.0, (0.55, -1.0, -1.9), "l"),
-			(0.12, (0.45, -0.75, -1.35), "i"),
-			(0.42, (-0.05, 0.05, 0.06), "o"),
-			(0.6, (0, 0, 0), "io"),
-			(t_bolt, (-0.06, -0.1, -0.03), "io"),
-			(bt["down"] + 0.05, (-0.08, -0.14, -0.05), "io"),
-			(1.25, (0, 0, 0), "io"),
-		]),
-		gun_rot=K([
-			(0.0, (-38, 28, -18), "l"),
-			(0.12, (-30, 24, -14), "i"),
-			(0.42, (2.5, -3, 1.5), "o"),
-			(0.6, (0, 0, 0), "io"),
-			(t_bolt, (1.5, 9, 1.5), "io"),
-			(bt["down"] + 0.05, (2, 11, 2), "io"),
-			(1.25, (0, 0, 0), "io"),
-		]),
-		imp_loc=[(bt["back"], (0, -0.9, 0)), (bt["fwd"], (0, 1.3, 0.2))],
-		imp_rot=[(bt["back"], (0, 0, 0)), (bt["fwd"], (-8, 0, 0)), (bt["down"], (0, -40, 0))],
-		cam_loc=K([(0, (0, 0, -0.08), "l"), (0.45, (0, 0, 0), "o")]),
-		cam_rot=K([(0, (-3, 1.5, 0), "l"), (0.5, (0, 0, 0), "o")]),
+		gun_loc=gun_loc,
+		gun_rot=gun_rot,
 		bolt_lift=K(lk),
 		bolt_travel=K(tk),
-		hand_R=[(t_bolt - 0.08, t_bolt + 0.06, GRIP_R, KNOB_R, (0.15, 0, 0.2), "io"), (bt["down"] + 0.02, bt["down"] + 0.2, KNOB_R, GRIP_R, (0.2, 0, 0.1), "io")],
-		shoulder_R=lambda t: shoulder_reach(t_bolt - 0.08, bt)(t)
-		+ track([(0, (0.25, -0.15, -0.45), "l"), (0.4, Z, "io")], t),
-		# la main gauche vient « cueillir » le garde-main pendant que l'arme remonte
-		hand_L=[(0.14, 0.46, ("FC", Vector((0.2, 2.2, -3.7))), FOREND_L, (-0.2, 0, 0.1), "o")],
+		hand_R=[(A(2.00), A(2.14), GRIP_R, KNOB_R, (0.15, 0, 0.2), "io"), (A(2.56), t_home, KNOB_R, GRIP_R, (0.2, 0, 0.1), "io")],
+		shoulder_R=shoulder_reach(A(2.00), t_home),
+		hand_L=[(0, 0, FOREND_L, FOREND_L, Z, "l")],
 		markers=[("Draw Sound", 0.0), ("Bolt Sound", bt["up"] - 0.07)],
 	)
 
 
-# Cette méthode permet de décrire le Shoot : recul franc relevé autour de l'épaule, retour lourd,
-# puis réarmement complet (main droite au levier, culasse, retour à la poignée).
+# Cette méthode permet de décrire le Shoot : coup de recul vers l'œil (pic à 0,2 s) avec relevé du canon, retour rapide, puis
+# réarmement (référence 19,65 → 21,10 s, à vitesse réelle : le cycle dure environ FireDelay).
 def spec_shoot():
-	L = 1.6
-	t_grab = 0.5
-	lk, tk, bt = bolt_cycle(t_grab + 0.13, travel=0.75, lift=62)
+	L, t0 = 1.45, 19.65
+	A = lambda video: video - t0
+	roll = lambda video: spline([(19.65, 0.0), (20.20, 0.0), (20.40, BOLT_ROLL), (20.60, BOLT_ROLL), (20.87, 0.0), (21.10, 0.0)], video)[0]
+	gun_loc, gun_rot = measured_gun(SHOOT_TRACK, SHOOT_DEPTH, roll, t0, 1.0)
+	lk, tk, bt = bolt_keys(A(20.33), A(20.40), A(20.47), A(20.53), A(20.60), A(20.67))
+	t_home = A(20.85)
 	return dict(
 		length=L,
-		settle=0.3,
-		gun_loc=K([
-			(0.0, (0, 0, 0), "l"),
-			(0.4, (0, 0, 0), "l"),
-			(t_grab, (-0.05, -0.12, -0.04), "io"),
-			(bt["back"], (-0.1, -0.24, -0.1), "io"),
-			(bt["down"], (-0.08, -0.16, -0.08), "io"),
-			(1.25, (0, 0, 0), "io"),
-		]),
-		gun_rot=K([
-			(0.0, (0, 0, 0), "l"),
-			(0.4, (0, 0, 0), "l"),
-			(t_grab, (1.5, 7, 1), "io"),
-			(bt["back"], (2.5, 12, 2), "io"),
-			(bt["down"], (1.5, 9, 1), "io"),
-			(1.25, (0, 0, 0), "io"),
-		]),
-		# recul : forte impulsion vers l'arrière et muzzle up, un peu de roulis
-		imp_loc=[(0.0, (0.25, -11.0, 3.2)), (bt["back"], (0, -1.0, 0)), (bt["fwd"], (0, 1.5, 0.2))],
-		imp_rot=[(0.0, (230, -30, 25)), (bt["fwd"], (-10, 0, 0)), (bt["down"], (0, -55, 0))],
-		cam_loc=const(),
-		cam_rot=const(),
-		cam_imp_loc=[(0.0, (0, -1.6, 0.4))],
-		cam_imp_rot=[(0.0, (60, 0, 0))],
-		trigger=K([(0, (14, 0, 0), "l"), (0.12, (0, 0, 0), "o")]),
+		gun_loc=gun_loc,
+		gun_rot=gun_rot,
+		trigger=K([(0, (14, 0, 0), "l"), (0.12, Z, "o")]),
 		bolt_lift=K(lk),
 		bolt_travel=K(tk),
-		hand_R=[(t_grab, t_grab + 0.13, GRIP_R, KNOB_R, (0.15, 0, 0.2), "io"), (bt["down"] + 0.02, bt["down"] + 0.2, KNOB_R, GRIP_R, (0.2, 0, 0.1), "io")],
-		shoulder_R=shoulder_reach(t_grab, bt),
+		hand_R=[(A(20.17), A(20.33), GRIP_R, KNOB_R, (0.15, 0, 0.2), "io"), (A(20.68), t_home, KNOB_R, GRIP_R, (0.2, 0, 0.1), "io")],
+		shoulder_R=shoulder_reach(A(20.17), t_home),
 		hand_L=[(0, 0, FOREND_L, FOREND_L, Z, "l")],
 		markers=[("Shoot Sound", 0.0), ("Bolt Sound", bt["up"] - 0.07)],
 	)
 
 
-# Cette méthode permet de décrire le Reload : l'arme bascule pour exposer le puits, main gauche
-# sur le chargeur, extraction, chargeur neuf hors écran, insertion + claque, retour, réarmement.
+# Cette méthode permet de décrire le Reload : le canon monte et la crosse descend vers l'épaule, la main gauche quitte le
+# garde-main, sort le chargeur et en ramène un neuf, la claque fait sauter l'arme, puis culasse (référence 22,95 → 26,70 s).
 def spec_reload():
-	L = 3.65
-	t_out, t_in, t_hit = 0.62, 2.08, 2.16
-	t_grab_r = 2.52
-	lk, tk, bt = bolt_cycle(t_grab_r + 0.13, travel=0.75, lift=62)
-	tilt_loc = (-0.35, -0.35, 0.3)
-	tilt_rot = (9, 24, 12)
+	L, t0 = 3.70, 22.95
+	k = L / (26.70 - t0)
+	A = lambda video: (video - t0) * k
+	roll = lambda video: spline([(22.95, 0.0), (23.55, 0.0), (23.95, RELOAD_ROLL), (25.10, RELOAD_ROLL), (25.40, 4.0), (25.70, BOLT_ROLL), (25.95, BOLT_ROLL), (26.30, 0.0), (26.70, 0.0)], video)[0]
+	gun_loc, gun_rot = measured_gun(RELOAD_TRACK, RELOAD_DEPTH, roll, t0, k)
+	lk, tk, bt = bolt_keys(A(25.60), A(25.68), A(25.80), A(25.90), A(26.00), A(26.10))
+	t_out, t_in, t_hit, t_home = A(23.45), A(24.85), A(25.00), A(26.22)
+	away = ("FC", Vector((-0.2, 1.7, -3.9)))  # main gauche hors écran : elle lâche l'ancien chargeur et prend le neuf
+	under_well = ("Handle", local_to("Handle", (1.1, 2.6, -1.55)))
 	return dict(
 		length=L,
-		settle=0.35,
-		gun_loc=K([
-			(0.0, Z, "l"),
-			(0.32, tilt_loc, "io"),
-			(t_out, (-0.33, -0.32, 0.36), "io"),
-			(1.3, (-0.3, -0.3, 0.34), "io"),
-			(1.95, (-0.36, -0.36, 0.3), "io"),
-			(t_in, (-0.36, -0.34, 0.33), "o"),
-			(2.45, (-0.08, -0.15, -0.04), "io"),
-			(bt["back"], (-0.1, -0.24, -0.1), "io"),
-			(bt["down"], (-0.08, -0.16, -0.08), "io"),
-			(3.3, Z, "io"),
-		]),
-		gun_rot=K([
-			(0.0, Z, "l"),
-			(0.32, tilt_rot, "io"),
-			(t_out, (11, 25, 13), "io"),
-			(1.3, (8, 23, 11), "io"),
-			(1.95, (10, 26, 12), "io"),
-			(t_in, (9, 25, 12), "o"),
-			(2.45, (1.5, 8, 1), "io"),
-			(bt["back"], (2.5, 12, 2), "io"),
-			(bt["down"], (1.5, 9, 1), "io"),
-			(3.3, Z, "io"),
-		]),
-		# chocs : extraction (le chargeur « lâche »), insertion, claque de paume, culasse
-		imp_loc=[(t_out, (0, 0, 1.2)), (t_in, (0, 0, 2.2)), (t_hit, (0, 0.4, 3.5)), (bt["back"], (0, -1.0, 0)), (bt["fwd"], (0, 1.5, 0.2))],
-		imp_rot=[(t_out, (-12, 0, 0)), (t_in, (25, -10, 0)), (t_hit, (40, -25, 0)), (bt["fwd"], (-10, 0, 0)), (bt["down"], (0, -55, 0))],
-		cam_loc=const(),
-		cam_rot=K([(0, Z, "l"), (0.4, (0, 1.2, 0), "io"), (2.3, (0, 1.2, 0), "l"), (2.7, Z, "io")]),
-		cam_imp_rot=[(t_hit, (8, 0, 0))],
+		gun_loc=gun_loc,
+		gun_rot=gun_rot,
 		bolt_lift=K(lk),
 		bolt_travel=K(tk),
 		# décalage du chargeur dans le repère de l'arme (vers le bas = sortie du puits)
 		mag_off=K([
 			(0, Z, "l"),
-			(0.5, Z, "l"),
-			(t_out, (0, 0, -0.08), "o"),
-			(0.75, (0, 0, -0.32), "i"),
-			(1.95, (0, 0, -0.32), "l"),
-			(2.0, (0, 0, -0.06), "io"),
-			(t_in, Z, "o"),
+			(t_out - 0.05, Z, "l"),
+			(t_out + 0.05, (0, 0, -0.08), "o"),
+			(t_out + 0.2, (0, 0, -0.32), "i"),
+			(A(24.75), (0, 0, -0.32), "l"),
+			(t_in, (0, 0, -0.06), "io"),
+			(t_hit, Z, "o"),
 		]),
-		mag_in_hand=K([(0, Z, "l"), (0.6, Z, "l"), (0.7, (1, 0, 0), "io"), (1.95, (1, 0, 0), "l"), (2.03, Z, "io")]),
-		hand_R=[(t_grab_r, t_grab_r + 0.13, GRIP_R, KNOB_R, (0.15, 0, 0.2), "io"), (bt["down"] + 0.02, bt["down"] + 0.2, KNOB_R, GRIP_R, (0.2, 0, 0.1), "io")],
-		shoulder_R=lambda t: shoulder_reach(t_grab_r, bt)(t)
-		+ track([(0, Z, "l"), (0.32, (-0.05, 0.15, 0.12), "io"), (2.3, (-0.05, 0.15, 0.12), "l"), (2.5, Z, "io")], t),
+		mag_in_hand=K([(0, Z, "l"), (t_out + 0.05, Z, "l"), (t_out + 0.15, (1, 0, 0), "io"), (A(24.80), (1, 0, 0), "l"), (t_in + 0.03, Z, "io")]),
+		hand_R=[(A(25.42), A(25.60), GRIP_R, KNOB_R, (0.15, 0, 0.2), "io"), (A(26.08), t_home, KNOB_R, GRIP_R, (0.2, 0, 0.1), "io")],
+		shoulder_R=shoulder_reach(A(25.42), t_home),
 		hand_L=[
-			(0.12, 0.5, FOREND_L, MAG_L, (-0.25, 0, -0.15), "io"),
-			(0.7, 1.2, MAG_L, ("FC", Vector((-0.3, 1.6, -3.6))), (-0.3, 0, 0), "i"),
-			(1.45, 1.95, ("FC", Vector((-0.3, 1.6, -3.6))), MAG_L, (-0.35, 0, 0), "o"),
-			(t_hit, t_hit + 0.02, MAG_L, ("Handle", local_to("Handle", (1.1, 2.6, -1.55))), Z, "o"),
-			(t_hit + 0.06, 2.55, ("Handle", local_to("Handle", (1.1, 2.6, -1.55))), FOREND_L, (-0.2, 0, -0.1), "io"),
+			(A(23.00), A(23.38), FOREND_L, MAG_L, (-0.25, 0, -0.15), "io"),
+			(t_out + 0.12, A(24.02), MAG_L, away, (-0.3, 0, 0), "i"),
+			(A(24.28), A(24.80), away, MAG_L, (-0.35, 0, 0), "o"),
+			(t_hit - 0.03, t_hit + 0.02, MAG_L, under_well, Z, "o"),
+			(A(25.12), A(25.40), under_well, FOREND_L, (-0.2, 0, -0.1), "io"),
 		],
 		markers=[("ClipOut Sound", t_out), ("ClipIn Sound", t_in), ("ClipHit Sound", t_hit), ("Bolt Sound", bt["up"] - 0.07)],
 	)

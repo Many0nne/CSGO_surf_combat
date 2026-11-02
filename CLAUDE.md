@@ -235,6 +235,7 @@ Avant de créer ou modifier une animation d'arme, lire `docs/animations.md` (mé
 
 - `docs/animations.md`: méthode de création des animations de viewmodel (processus de validation, outils, pièges connus).
 - `tools/anim/`: outils de ces animations : mesure sur vidéo, rendu et capture dans Studio, vidéo côte à côte, publication Open Cloud.
+- `assets/awp_viewmodel/`: animations de l'AWP : trajectoires mesurées (`build_anims.py`), rig Studio (`rig.json`), build sans toucher au Blender ouvert (`run_build.py`).
 - `default.project.json`: configuration Rojo qui mappe `src/` et `assets/rbx/` (viewmodels, Tools) vers le projet Roblox.
 - `assets/rbx/ViewModels/*.rbxm`, `assets/rbx/Tools/*.rbxm`: viewmodels et Tools des armes (binaires LFS, voir « Viewmodels et Tools »).
 - `tools/rbxm/receive.luau`: serveur Lune local qui reçoit les `.rbxm` exportés de Studio et les écrit sous `assets/rbx/`.

@@ -7,6 +7,10 @@ local VIEWMODEL = "M9Bayonet"
 local GAME_FOV = 90 -- CameraConfig.DEFAULT_FOV : un autre FOV fausse tout le cadrage
 local BASE = "http://127.0.0.1:34991"
 local SETTLE = 0.12 -- laisse Studio afficher la frame avant la capture
+local FIRST_SETTLE = 1.5 -- la première capture sort vide si les meshes du clone n'ont pas eu le temps de s'afficher
+-- M9 : le JSON place la Handle sur la main virtuelle, à recaler sur le mesh réel. Mettre false pour un JSON qui donne la
+-- CFrame réelle de chaque pièce (AWP : assets/awp_viewmodel/run_build.py).
+local RECENTER_HANDLE = true
 
 local Http = game:GetService("HttpService")
 local cam = workspace.CurrentCamera
@@ -46,15 +50,15 @@ end
 table.sort(ids)
 
 local captured, failure = 0, nil
-for _, id in ids do
+for index, id in ids do
 	for name, values in frames[id] do
 		local cf = CFrame.new(table.unpack(values))
-		if name == "Handle" then
+		if name == "Handle" and RECENTER_HANDLE then
 			cf *= handleInHand
 		end
 		clone:FindFirstChild(name, true).CFrame = camCF * cf
 	end
-	task.wait(SETTLE)
+	task.wait(index == 1 and FIRST_SETTLE or SETTLE)
 	local reply = Http:GetAsync(BASE .. "/shot?name=" .. id)
 	if not string.find(reply, '"ok": 1') then
 		failure = id

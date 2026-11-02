@@ -25,6 +25,34 @@ avait été sautée.
 
 Rien n'est publié avant la validation de l'étape 3.
 
+## L'AWP : mesurer deux points et reconstruire la pose
+
+Méthode de la refonte de l'Equip, du Shoot et du Reload de l'AWP (référence CS2). Elle s'applique à toute arme longue.
+
+- **Mesure :** relever à l'écran l'œilleton et le bout du canon sur des planches `grid.py` zoomées (`EQUIP_TRACK`,
+  `SHOOT_TRACK` et `RELOAD_TRACK` dans `assets/awp_viewmodel/build_anims.py`), toutes les 1/30 s pendant un choc et toutes
+  les 0,1 s ailleurs. `solve_gun` en déduit la pose de l'arme ; la profondeur vient du grossissement apparent, estimé à l'œil.
+- **Le roulis est invisible sur ces deux points :** il se règle à l'œil (`BOLT_ROLL`, `RELOAD_ROLL`, `EQUIP_ROLL_LOW`).
+- **Le suivi automatique ne suffit pas ici :** la soustraction du décor prend la flamme du tir pour le canon et perd le canon
+  fin sur fond clair, et le suivi de l'œilleton dérive sous la main droite. Il a servi à repérer les instants, pas à mesurer.
+- **Mesurer un écart au repos, pas une position :** seuls les écarts à `REF_IDLE` sont repris, ce qui absorbe la petite
+  différence de cadrage entre CS2 et le jeu.
+- **Tout passe par l'arme, jamais par `FakeCamera` :** quand le `PrimaryPart` du viewmodel est `FakeCamera`, cet os est recalé
+  sur la caméra à chaque image (`PivotTo`) et son animation n'a aucun effet.
+- **Durée :** le cycle de tir CS2 dure environ `FireDelay`, et le Reload colle à `ReloadTime`. Seul l'Equip est étiré
+  (1,13 s de geste dans la vidéo, 1,58 s en jeu pour garder l'équilibrage).
+
+```bash
+# Construire sans toucher au Blender ouvert : écrit anim_<Nom>.json (make_rbxm) et frames_<Nom>.json (studio_render, à 60 images/s)
+blender -b assets/awp_viewmodel/AWP_Viewmodel_Anims.blend --python assets/awp_viewmodel/run_build.py -- <sortie> Equip Shoot Reload
+lune run assets/awp_viewmodel/make_rbxm.luau <sortie> <sortie> Equip Shoot Reload
+bash tools/anim/publish.sh <sortie> AWP_ Equip Shoot Reload
+```
+
+Pour le rendu : `VIEWMODEL = "AWP"` et `RECENTER_HANDLE = false` dans `studio_render.luau`. `dump_frames.py` ne sert qu'à la M9.
+
+Le `.blend` garde les anciennes actions : `run_build.py` les régénère à chaque lancement et ne sauvegarde pas le fichier.
+
 ## Les outils
 
 Depuis la racine du worktree. `uv` installe tout seul les dépendances des scripts Python (Pillow, ffmpeg), rien à
@@ -107,6 +135,10 @@ Si un clone reste dans `Workspace` après une erreur de rendu, supprimer `__Anim
 - **Shell :** un long heredoc contenant des apostrophes peut échouer dans l'outil Bash. Écrire le script avec un fichier.
 - **Studio et Rojo :** le code d'un worktree n'arrive dans Studio qu'après la connexion du plugin à son port (un clic
   de l'utilisateur, en mode Edit). Vérifier que le code attendu est bien là avant de conclure sur un test.
+
+- **Viewmodel dans Studio :** vérifier `PrimaryPart` avant un playtest. Il a disparu de l'instance Studio de l'AWP pendant la
+  refonte, Rojo connecté à un autre worktree, alors que le `.rbxm` exporté l'avait encore (cause non établie). Le viewmodel
+  retombe alors sur `HumanoidRootPart` et se décale de (-0,19 ; 0 ; 0,14) par rapport au rendu. Réparation : `CLAUDE.md`.
 
 ## Limites actuelles
 
