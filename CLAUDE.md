@@ -4,109 +4,21 @@
 
 Projet Rojo qui synchronise une expérience Roblox depuis l'arborescence `src/`.
 
-## Current Structure
+## Où trouver quoi
 
-```text
-CSGO/
-  rokit.toml
-  CLAUDE.md
-  CSGO.rbxlx
-  default.project.json
-  assets/
-    rbx/
-      ViewModels/*.rbxm
-      Tools/*.rbxm
-  tools/
-    check.sh
-    export_mesh_fbx.py
-    publish_asset.sh
-    ui/
-      make_menu_type.py
-    rbxm/
-      receive.luau
-      studio_export.luau
-      verify_place.luau
-  feedback.md
-  GAME_SYSTEM_SPEC.md
-  logs.md
-  README.md
-  SOURCE_ENGINE_SURF.md
-  sourcemap.json
-  SPEC.md
-  src/
-    client/
-      init.client.luau
-      camera/
-        FPSCamera.luau
-      debug/
-        DebugPlaytest.luau
-        Noclip.luau
-      input/
-        InputModule.luau
-      systems/
-        game/
-          GameStateController.luau
-          MenuScene.luau
-          MenuSceneRules.luau
-        movement/
-          BhopSystem.luau
-          CharacterDimensions.luau
-          CoyoteJump.luau
-          CrouchSystem.luau
-          GroundDetection.luau
-          HeadCollisionResolver.luau
-          MovementController.luau
-          PhysicsStepAir.luau
-          PhysicsStepGround.luau
-          SlopeSystem.luau
-          StepupSystem.luau
-          WallSlide.luau
-        weapon/
-          AnimationSoundSystem.luau
-          HitscanSystem.luau
-          MeleeHitDetection.luau
-          ScopeSystem.luau
-          ViewmodelSystem.luau
-          WeaponSystem.luau
-          WeaponThirdPersonView.luau
-      ui/
-        Hitmarker.luau
-        InfosScreen.luau
-        MainMenu.luau
-        RoundHUD.luau
-        ScopeOverlay.luau
-        SettingsMenu.luau
-        Speedometer.luau
-    server/
-      init.server.luau
-      DebugPlaytest.luau
-      RoundManager.luau
-      SettingsStore.luau
-      SpawnManager.luau
-      StatsStore.luau
-      Validator.luau
-    shared/
-      CameraConfig.luau
-      CharacterAnimator.luau
-      CharacterAppearance.luau
-      CharacterConfig.luau
-      DebugPlaytestRules.luau
-      GameConfig.luau
-      HitZones.luau
-      MovementConfig.luau
-      MovementState.luau
-      NetworkProtocol.luau
-      PhysicsUtils.luau
-      WeaponConfig.luau
-      WeaponThirdPerson.luau
-  tests/
-    run.luau
-    lib/
-      Loader.luau
-      Test.luau
-    specs/
-      *.spec.luau
-```
+Lire le document du domaine avant de travailler dessus, et seulement celui-là.
+
+| Sujet | Document |
+|---|---|
+| Où se trouve un comportement, rôle de chaque fichier | `docs/architecture.md` |
+| Modifier ou ajouter une arme (`.rbxm`), publier un asset ou un mesh | `docs/assets.md` |
+| Créer ou modifier un écran, direction artistique | `docs/ui.md` |
+| Créer ou modifier une animation d'arme | `docs/animations.md` |
+| Retours d'expérience datés (historique, le document du domaine prime) | `docs/notes/` |
+
+## Capitaliser
+
+Quand une tâche révèle un piège, une règle ou une piste rejetée qui resservira, l'ajouter dans la même PR au document du domaine (créer `docs/<domaine>.md` si le sujet revient et n'a pas de document). N'ajouter à ce fichier qu'une règle utile à presque toutes les tâches. Si le code contredit une doc, corriger la doc.
 
 ## Workflow d'une tâche (feature, bug…)
 
@@ -161,73 +73,11 @@ Script idempotent, à relancer au début de chaque tâche (PowerShell, depuis la
 
 ## Viewmodels et Tools (.rbxm)
 
-Les viewmodels et les Tools sont versionnés en `.rbxm` binaires (Git LFS, `assets/rbx/**`) et synchronisés par Rojo :
-une branche peut modifier une arme sans manipulation dans la place. Un fichier = une instance racine, nommée d'après le
-fichier. Rojo gère `ReplicatedStorage.ViewModels` et `StarterPack` : une instance ajoutée à la main dans Studio y est supprimée à la
-connexion (patch de rattrapage du plugin, testé), et toute modification faite dans Studio est perdue si elle n'est pas
-réexportée.
+Procédures complètes (export, ajout d'une arme, publication Open Cloud) : `docs/assets.md`. L'essentiel :
 
-**Ne jamais réécrire un `.rbxm` pendant que Studio est connecté à ce serveur Rojo** (export, `git checkout`, `git pull`…).
-Même à l'identique, Rojo envoie sur chaque `Model` du fichier un patch contenant `NeedsPivotMigration`, que le plugin ne peut
-pas écrire : il remplace alors le `Model` par une copie venue de `/api/serialize`, qui n'a plus de `PrimaryPart` (Rojo 7.7.1).
-Une instance créée à la main peut aussi se retrouver en double, avec un joint cassé : la pièce détachée tombe.
-**Réparation : Disconnect puis Connect, et accepter le patch de rattrapage** (`PrimaryPart` rétablis, doublons retirés). Ne pas
-sauvegarder la place avant.
-
-Mettre à jour un `.rbxm` (après modification d'une arme dans Studio, ou pour ajouter une arme) :
-
-0. Plugin Rojo : **Disconnect**, et rester déconnecté jusqu'à la fin de l'export.
-1. Dans Studio (mode Edit), modifier ou ajouter l'instance sous `ReplicatedStorage.ViewModels` ou dans `StarterPack`
-   (noms en `[A-Za-z0-9_-]`). Rojo n'écrit jamais vers les fichiers : la modification n'existe que dans Studio.
-2. Depuis la racine du worktree : `lune run tools/rbxm/receive.luau` (serveur local, port fixe 34990, attend Studio ;
-   un seul export à la fois, tous worktrees confondus).
-3. Exécuter `tools/rbxm/studio_export.luau` dans Studio : via le MCP (`execute_luau`, contexte Edit, coller le contenu du
-   fichier) ou la barre de commande (exige Game Settings > Security > *Allow HTTP Requests*). Il vérifie les noms (un
-   fichier par instance, sans doublon) et que `StarterPack` ne contient que des Tools, sérialise (`SerializationService`)
-   chaque viewmodel et chaque Tool et les envoie au serveur, qui écrit `assets/rbx/ViewModels/<Nom>.rbxm` et
-   `assets/rbx/Tools/<Nom>.rbxm`, supprime les `.rbxm` qui n'existent plus dans la place, puis s'arrête. Si l'export
-   échoue dans Studio, le serveur s'arrête en erreur sans rien supprimer.
-   Sans MCP : clic droit sur l'instance > *Save to File…* > `assets/rbx/<Dossier>/<Nom>.rbxm` (format binaire).
-4. `rojo build default.project.json -o CSGO.rbxlx && lune run tools/rbxm/verify_place.luau` : relit la place produite,
-   liste viewmodels et Tools (animations, sons, scripts, MeshParts, attributs), échoue si un viewmodel ou un Tool manque,
-   si un `ViewmodelName` ne pointe vers aucun viewmodel, ou si une animation ou un mesh n'a pas d'id ; signale les Tools
-   sans entrée dans `WeaponConfig.Weapons` (attribut `WeaponName`, sinon nom du Tool). Lancé aussi par la CI.
-5. Reconnecter le plugin Rojo et accepter le patch de rattrapage, puis lancer le helper de playtest sur l'arme (étape `VIEWMODEL`).
-6. Relire `git status` (l'export réécrit tous les fichiers) et commiter. Un `.rbxm` d'arme non modifiée peut différer de
-   quelques octets d'un export à l'autre (constaté sur `AWP.rbxm` : 1 octet, ids identiques, cause inconnue).
-
-Notes :
-- Studio écrit les ids sous leurs noms récents (`AnimationContent`, `AudioContent`, `MeshContent`) : Lune 0.9 ne les
-  expose pas tous ni ne relit tous les `.rbxm` de Studio (`Animation.Tags`), d'où la vérification sur la place XML
-  produite par Rojo plutôt que sur les `.rbxm`.
-- `MeshPart.MeshId` n'est pas modifiable par un plugin : Rojo 7.7 passe par son endpoint `/api/serialize` pour créer ces
-  instances (testé en synchro live et à la reconnexion : aucun mesh vide).
-
-Transition d'une place qui contient déjà ces instances (une fois, pour éviter les doublons et l'ancienne version) :
-1. Studio en mode Edit, plugin Rojo déconnecté. Supprimer `ReplicatedStorage.ViewModels` (le dossier entier) et les Tools
-   de `StarterPack` (`AWP`, `M9Bayonet`).
-2. Connecter le plugin Rojo (port du checkout ou du worktree) : Rojo recrée le dossier et les Tools depuis `assets/rbx/`.
-3. Vérifier qu'il y a un seul exemplaire de chaque, que les MeshParts sont visibles (pas de bloc gris) et qu'une arme
-   s'équipe en playtest, puis sauvegarder la place (File > Save to Roblox).
-   Si un MeshPart est vide : clic droit sur `ReplicatedStorage` > *Insert from File…* > le `.rbxm`, et le signaler.
-
-## Publier un asset (Open Cloud)
-
-Clé dans la variable d'environnement utilisateur `ROBLOX_OPEN_CLOUD_KEY` (scopes `asset:read` et `asset:write`). Créateur :
-user 434916384, propriétaire de l'expérience.
-
-```bash
-bash tools/publish_asset.sh <fichier> <Animation|Model|Audio|Decal> <nom>    # écrit l'assetId sur la sortie standard
-bash tools/anim/publish.sh <dossier> <prefixe> <Nom1> [Nom2 ...] # plusieurs animations, affiche Nom=id
-```
-
-- Animation : `.rbxm` ou `.rbxmx` contenant une KeyframeSequence. `rbxtemp://` est refusé en playtest : publier pour tester.
-- Image d'interface : publier en `Decal`, puis prendre l'id de l'image contenue dans le Decal (voir `docs/ui.md`) : celui du Decal ne s'affiche pas.
-- Mesh : exporter avec `blender -b <scene.blend> --factory-startup --python tools/export_mesh_fbx.py -- <sortie.fbx>`, publier
-  en `Model`, puis `insert_asset(assetId)` via le MCP Studio (mode Edit). On obtient un Model de MeshParts, sans import manuel.
-- Axes : dans Blender, l'avant du modèle est +Y et le haut +Z ; Roblox reçoit `(x, z, -y)` et 1 unité Blender = 1 stud.
-  `axis_forward` et `bake_space_transform` n'ont aucun effet : l'importeur Roblox donne toujours `(-x, z, y)` depuis un FBX
-  brut (4 combinaisons testées). `export_mesh_fbx.py` compense donc par une rotation de 180° autour de Z.
+- Les viewmodels et les Tools sont des `.rbxm` versionnés (Git LFS) et synchronisés par Rojo. Toute modification faite dans Studio est perdue si elle n'est pas réexportée, et une instance ajoutée à la main y est supprimée à la connexion.
+- **Ne jamais réécrire un `.rbxm` pendant que Studio est connecté à ce serveur Rojo** (export, `git checkout`, `git pull`…) : les `Model` perdent leur `PrimaryPart` et une instance créée à la main peut se retrouver en double.
+- **Réparation : Disconnect puis Connect, et accepter le patch de rattrapage.** Ne pas sauvegarder la place avant.
 
 ## Interface et direction artistique
 
@@ -243,106 +93,11 @@ Avant de créer ou modifier une animation d'arme, lire `docs/animations.md` (mé
   même si l'utilisateur demande de finir. Des images fixes justes ne garantissent pas un mouvement juste.
 - Rendre dans Studio au FOV du jeu (90°) et juger le cadrage en 16:9, pas dans Blender avec un volume à la place de l'arme.
 
-## Description des fichiers
-
-- `docs/animations.md`: méthode de création des animations de viewmodel (processus de validation, outils, pièges connus).
-- `docs/ui.md`: direction artistique de l'interface (principe, essais rejetés, construction du menu, pièges, reste à faire).
-- `tools/anim/`: outils de ces animations : mesure sur vidéo, rendu et capture dans Studio, vidéo côte à côte, publication Open Cloud.
-- `assets/awp_viewmodel/`: animations de l'AWP : trajectoires mesurées (`build_anims.py`), rig Studio (`rig.json`), build sans toucher au Blender ouvert (`run_build.py`). Sons de l'arme : découpe depuis leurs sources (`build_sounds.py`), extraits CC0 dans `sounds/` ; `Shoot` et `Bolt` (Pixabay) sont publiés sur Roblox, pas versionnés.
-- `default.project.json`: configuration Rojo qui mappe `src/` et `assets/rbx/` (viewmodels, Tools) vers le projet Roblox.
-- `assets/rbx/ViewModels/*.rbxm`, `assets/rbx/Tools/*.rbxm`: viewmodels et Tools des armes (binaires LFS, voir « Viewmodels et Tools »).
-- `tools/rbxm/receive.luau`: serveur Lune local qui reçoit les `.rbxm` exportés de Studio et les écrit sous `assets/rbx/`.
-- `tools/rbxm/studio_export.luau`: script à exécuter dans Studio qui sérialise viewmodels et Tools et les envoie à `receive.luau`.
-- `tools/publish_asset.sh`: publie une animation, un modèle, un son ou une image par Open Cloud, attend la fin de l'opération et écrit l'`assetId`.
-- `tools/ui/make_menu_type.py`: génère le titrage du menu (lettres usées, éclats, impacts) dans `assets/ui/menu/`.
-- `tools/export_mesh_fbx.py`: exporte les meshes d'un `.blend` en FBX avec l'orientation attendue dans Roblox.
-- `tools/rbxm/verify_place.luau`: relit la place construite par Rojo et vérifie viewmodels, Tools, ids d'assets et noms d'armes.
-- `rokit.toml`: versions des outils (Rojo, StyLua, Selene, luau-lsp, Lune) gérées par Rokit.
-- `CLAUDE.md`: guide de contexte et conventions pour travailler dans ce dépôt.
-- `SPEC.md`: spécification détaillée du projet (mappings, architecture, constantes). Utilisez-le comme source de vérité.
-- `src/`: code source organisé par rôle : `client/`, `server/`, `shared/`.
-  - `src/client`: scripts et systèmes côté client (caméra, input, UI, systèmes de mouvement).
-  - `src/server`: scripts côté serveur (stores, validateurs, logique persistante).
-  - `src/shared`: modules partagés (protocoles réseau, états, configs, utils physiques).
-- `README.md`: informations générales et instructions d'usage du dépôt.
-- `SOURCE_ENGINE_SURF.md`: notes de référence sur le surf Source et les comportements de mouvement à reproduire.
-- `CSGO.rbxlx`: artefact de build produit par `rojo build`.
-- `feedback.md`: journal de retours et notes de travail.
-- `logs.md`: journalisation et traces de debug.
-- `sourcemap.json`: mapping de source pour la synchro Rojo.
-
 ## Notes
 
 - Garder `default.project.json` synchronisé avec l'arborescence `src/` (mappings Rojo).
-- `rokit.toml` gère la version de Rojo et des outils qualité (`rokit install` pour les installer).
-- `SPEC.md` contient la spécification détaillée (mappings, architecture, constantes). Utilisez-le comme source de vérité pour la structure des fichiers.
-- Valeurs récentes : `RUN_SPEED=30`, `AIR_SPEED_CAP=6`, `AIR_ACCEL=150`, `GROUND_ACCEL=12`, `GRAVITY=-110`, `MAX_FALL_SPEED=130`, `AUTO_BHOP=true`.
 - Consigne de lecture : pour les revues de code, analyses ou demandes de modification, ne lire que les fichiers strictement concernés par l'étape ou la demande.
 - Évitez d'analyser ou d'indexer l'ensemble du dépôt sauf si la tâche l'exige explicitement. Quand vous consultez des fichiers, précisez lesquels dans votre message ou votre PR.
-
-## Notes importantes post-implémentation Phase 1
-
-- `Players.CharacterAutoLoads = false` est défini dans `init.server.luau` — les personnages ne spawnt que via `RequestSpawn` remote.
-- Le round démarre automatiquement dès qu'un joueur clique Play (état idle → active).
-- Aucun point de spawn n'existe encore dans le workspace : `SpawnManager` utilise les `SpawnLocation` Roblox ou les `Part` nommées `"SpawnPoint"` ; fallback à `(0, 10, 0)`.
-- `StatsStore` désactive la sauvegarde pour la session si le DataStore load échoue (sécurité anti-écrasement).
-- §12 question 1 résolue : stats et réglages restent dans deux DataStores séparés.
-
-## Descriptions courtes des fichiers dans `src/`
-
-- `src/client/init.client.luau`: point d'entrée client, initialise les modules côté client.
-- `src/client/camera/FPSCamera.luau`: contrôles et logique de la caméra FPS.
-- `src/client/debug/DebugPlaytest.luau`: moitié client du helper de playtest (Studio uniquement) : exécute les commandes du serveur et observe pistes, marqueurs et sons.
-- `src/client/debug/Noclip.luau`: outil de debug pour activer/désactiver le noclip.
-- `src/client/input/InputModule.luau`: gestion des entrées utilisateur et mapping des actions.
-- `src/client/systems/movement/BhopSystem.luau`: implémentation du bunnyhop (saut en chaîne).
-- `src/client/systems/movement/CharacterDimensions.luau`: calcule les dimensions du personnage et les hitboxes debout/accroupi.
-- `src/client/systems/movement/CoyoteJump.luau`: gestion du "coyote time" pour les sauts.
-- `src/client/systems/movement/CrouchSystem.luau`: logique de position accroupie, hauteur caméra et hitbox.
-- `src/client/systems/movement/GroundDetection.luau`: détection du sol et transitions air/sol.
-- `src/client/systems/movement/HeadCollisionResolver.luau`: résolution des collisions tête (plafond, mur haut) lors du déplacement.
-- `src/client/systems/movement/MovementController.luau`: orchestrateur principal du mouvement (boucle Heartbeat, transitions d'état).
-- `src/client/systems/movement/PhysicsStepAir.luau`: étape physique aérienne (air accelerate Source + cap `AIR_SPEED_CAP`).
-- `src/client/systems/movement/PhysicsStepGround.luau`: étape physique pour l'état au sol.
-- `src/client/systems/movement/SlopeSystem.luau`: gestion des pentes et adaptation du mouvement.
-- `src/client/systems/movement/StepupSystem.luau`: logique pour monter sur de petits obstacles.
-- `src/client/systems/movement/WallSlide.luau`: glisse le long des murs/rampe avec conservation de normale surf si on avance vers la rampe.
-- `src/client/systems/weapon/AnimationSoundSystem.luau`: gestion des marqueurs sons sur les AnimationTracks.
-- `src/client/systems/weapon/MeleeHitDetection.luau`: raycast melee et signalement de la touche au serveur (type d'attaque, les dégâts sont calculés côté serveur).
-- `src/client/systems/weapon/ScopeSystem.luau`: gestion du scope (FOV, affichage de la lunette, sensibilité caméra) pour les armes à lunette.
-- `src/client/systems/weapon/ViewmodelSystem.luau`: gestion du viewmodel, des animations et des sons des armes en vue FPS.
-- `src/client/systems/weapon/WeaponSystem.luau`: logique client des armes, munitions, recharge et vitesse liée à l'arme.
-- `src/client/systems/weapon/WeaponThirdPersonView.luau`: rendu client des armes 3e personne de tous les personnages (décalage procédural du grip pour tir/recharge/switch, modèle 3P masqué pour soi en 1re personne).
-- `src/client/systems/game/GameStateController.luau`: machine d'état client (MENU/INFOS/SPAWNING/IN_ROUND/DEAD/RESULT), coordination UI ↔ remotes.
-- `src/client/systems/game/MenuScene.luau`: scène 3D du menu (canyon, AWP qui suit le curseur, surfeurs à abattre, plongée sur JOUER), éclairage temporaire rétabli à la sortie.
-- `src/client/systems/game/MenuSceneRules.luau`: règles pures de cette scène (amortis, angles de visée, trajectoire, touche).
-- `src/client/ui/Hitmarker.luau`: marqueur de touche confirmée par le serveur (X blanc à contour noir, rouge sur un tir à la tête, plus grand sur un kill).
-- `src/client/ui/InfosScreen.luau`: overlay Infos (comment surfer, contrôles, crédits).
-- `src/client/ui/MainMenu.luau`: menu d'accueil où l'on choisit en tirant : titre et libellés en images, hitmarker en guise de curseur, impacts de balles.
-- `src/client/ui/RoundHUD.luau`: HUD en jeu (timer, leaderboard Tab, overlay respawn, bannière résultat).
-- `src/client/ui/ScopeOverlay.luau`: lunette des armes à scope, dessinée sans image (masque rond et réticule en Frames).
-- `src/client/ui/SettingsMenu.luau`: interface des réglages côté client.
-- `src/client/ui/Speedometer.luau`: affichage de la vitesse du joueur.
-- `src/server/init.server.luau`: point d'entrée serveur — crée tous les RemoteEvents, orchestre SpawnManager, RoundManager, StatsStore.
-- `src/server/DebugPlaytest.luau`: helper de playtest (Studio uniquement) : déclenché par un attribut joueur, enchaîne spawn, équipement, cible immobile et attaque, avec un PASS/FAIL par étape.
-- `src/server/RoundManager.luau`: boucle de round FFA (timer, kills/deaths, fin de round, diffusion résultat).
-- `src/server/SettingsStore.luau`: stockage et récupération des paramètres serveur.
-- `src/server/SpawnManager.luau`: gestion du spawn différé (RequestSpawn remote, LoadCharacter, point de spawn aléatoire).
-- `src/server/StatsStore.luau`: DataStore stats joueur (kills/deaths/rounds), save périodique + déconnexion, robustesse load.
-- `src/server/Validator.luau`: décision serveur des touches melee et hitscan (cible, arme en main, partie touchée, portée, cadence), calcul des dégâts depuis `WeaponConfig` (zone du corps pour le hitscan, backstab pour la mêlée) et qualification d'une touche (hit/kill).
-- `src/shared/CameraConfig.luau`: constantes caméra (FOV, sensibilité, pitch min/max, hauteurs, lerp speed, scope sens multiplier).
-- `src/shared/CharacterConfig.luau`: rig/skin communs (couleurs, ids d'images Shirt/Pants/visage) et animations 3e personne (ids, fallbacks, seuils de vitesse, fondus).
-- `src/shared/CharacterAppearance.luau`: rig de référence (`StarterPlayer.StarterCharacter`, cloné pour la cible du helper de playtest) et application du skin commun (BodyColors + vêtements) côté serveur.
-- `src/shared/CharacterAnimator.luau`: pipeline d'animation 3e personne des joueurs (état de mouvement → piste, fondus, vitesse de lecture) ; alimenté par `MovementController` (client, répliqué via l'Animator).
-- `src/shared/DebugPlaytestRules.luau`: règles pures du helper de playtest (choix de l'outil, marqueurs et dégâts attendus, visée, rapport PASS/FAIL).
-- `src/shared/HitZones.luau`: zones du corps touchées (tête, torse, bras, jambes), multiplicateurs de dégâts des armes à distance et règle de calcul.
-- `src/shared/GameConfig.luau`: constantes jeu (ROUND_DURATION=300, RESPAWN_DELAY=2.5, RESULT_DURATION=6, AUTO_SAVE_INTERVAL=120).
-- `src/shared/MovementConfig.luau`: constantes physique du mouvement uniquement (vitesses, accel, friction, saut, pentes, bhop, réseau, hitbox).
-- `src/shared/MovementState.luau`: structure d'état partagée pour le mouvement du joueur.
-- `src/shared/NetworkProtocol.luau`: noms des RemoteEvents et helper getRemote(name). Remotes : MeleeDamage, HitscanDamage, HitConfirm, RequestSpawn, RoundState, ScoreUpdate, RoundResult, PlayerDied, WeaponAction, DebugPlaytest (créé uniquement dans Studio).
-- `src/shared/PhysicsUtils.luau`: fonctions utilitaires pour la physique.
-- `src/shared/WeaponConfig.luau`: définitions partagées des armes et de leurs paramètres par défaut (dont `ThirdPerson` : échelle, grip, pose 3P).
-- `src/shared/WeaponThirdPerson.luau`: arme 3e personne des joueurs : construction du modèle 3P depuis `ViewModels`, grip soudé à la main, pose des épaules, actions répliquées en attributs (`Weapon3PAction`/`Weapon3PActionAt`), règles pures (grip, décalages d'action, visibilité).
 
 ## Common Commands
 

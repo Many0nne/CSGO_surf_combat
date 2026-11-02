@@ -118,6 +118,17 @@ Si un clone reste dans `Workspace` après une erreur de rendu, supprimer `__Anim
 - Ces mesures prouvent que le rig joue bien ce qui est prévu, **pas que le mouvement est beau**. Seule la vidéo côte à
   côte répond à cette question.
 
+## Rig et code du viewmodel
+
+Repris du retour d'expérience de la M9 (`docs/notes/retex-viewmodel-m9.md`).
+
+- **Rig par script :** extraire de Studio les CFrames relatifs à la `HumanoidRootPart` et les C0/C1 des Motor6D (`rig.json`), puis les reconstruire dans Blender avec `C = (x, -z, y)`. L'export applique `Transform = C0⁻¹·Part0⁻¹·Part1·C1`.
+- **La pose de repos du rig est la pose idle**, en recalculant `C1 = Part1⁻¹·Part0·C0` : sans animation Idle, le rig y revient à la fin de chaque piste, sans saut visible.
+- **IK à deux os :** si la cible est hors de portée, c'est l'épaule qui suit la main. Sinon la main se décroche de l'avant-bras, ce qui se voit à une translation non nulle de `RightHand` dans la piste. Dans le viewmodel R15, le pivot du Motor6D d'épaule est à environ 3 studs du bras (grande translation dans C1).
+- **Orientations :** ne pas deviner des angles d'Euler. Les calculer par ajustement numérique à partir de directions cibles (axe du couteau, sens du tranchant).
+- **Mêlée :** le coup est déclenché par le marqueur `Stab Sound` (`WeaponSystem`).
+- **Modèle 3e personne :** `WeaponThirdPerson` clone les pièces du viewmodel et a besoin d'une pièce `Handle`. Les CFrames en mode Edit des pièces de l'arme doivent donc être justes.
+
 ## Pièges connus
 
 - **FOV :** le jeu tourne à 90° vertical (`CameraConfig.DEFAULT_FOV`) et le joueur voit du 16:9. Juger un cadrage à un
