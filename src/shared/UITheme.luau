@@ -85,6 +85,7 @@ local Motion = {
 	Band    = TweenInfo.new(0.45, Style.Quint, Dir.InOut),  -- bandeau de fin de round
 	Pop     = TweenInfo.new(0.3, Style.Back, Dir.Out),      -- compteur, palier de vitesse
 	Color   = TweenInfo.new(0.2, Style.Quad, Dir.Out),      -- changement de couleur
+	Hit     = TweenInfo.new(0.25, Style.Quad, Dir.In),      -- disparition du hitmarker
 	Blink   = TweenInfo.new(0.5, Style.Linear, Dir.InOut, -1, true), -- timer < 30 s
 	Stagger = 0.035,                                        -- décalage entre lignes
 }

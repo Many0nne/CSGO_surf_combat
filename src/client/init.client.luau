@@ -12,6 +12,7 @@ local WeaponThirdPersonView = require(script.systems.weapon.WeaponThirdPersonVie
 local FPSCamera = require(script.camera.FPSCamera)
 local SettingsMenu = require(script.ui.SettingsMenu)
 local Speedometer = require(script.ui.Speedometer)
+local Hitmarker = require(script.ui.Hitmarker)
 local GameStateController = require(script.systems.game.GameStateController)
 local DebugPlaytest = require(script.debug.DebugPlaytest)
 
@@ -66,6 +67,7 @@ StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
 
 -- Réglages créés dès le démarrage : accessibles depuis le menu, avant tout spawn
 SettingsMenu.init(FPSCamera)
+Hitmarker.init()
 
 -- GameStateController orchestre les transitions d'état, le spawn et tous les UIs.
 -- Il appelle setupCharacter au bon moment (après LoadCharacter côté serveur).
