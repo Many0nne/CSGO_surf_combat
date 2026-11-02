@@ -132,7 +132,6 @@ for _, name in rbxmNames("assets/rbx/Tools") do
 end
 
 -- ids d'assets : une animation ou un mesh sans id est une erreur ; un son sans id est seulement signalé
--- (la place d'origine contient un Sound vide, AWP.Sounds.Sound)
 for class, entries in scanAssetIds(fs.readFile(placePath)) do
 	local withId = 0
 	for _, entry in entries do
