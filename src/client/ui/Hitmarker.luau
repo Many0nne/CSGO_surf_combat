@@ -1,5 +1,5 @@
 -- Hitmarker (#44) : X au centre de l'écran quand le serveur confirme une touche, dessiné en Frames dans le style
--- du réticule de la lunette (blanc à contour noir). Un kill l'affiche en rouge et plus grand.
+-- du réticule de la lunette (blanc à contour noir). Un tir à la tête l'affiche en rouge (#60), un kill plus grand.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -9,7 +9,7 @@ local UITheme = require(Shared:WaitForChild("UITheme"))
 local UIKit = require(script.Parent.UIKit)
 
 local HIT_COLOR = UITheme.Colors.White
-local KILL_COLOR = UITheme.Colors.Alert
+local HEADSHOT_COLOR = UITheme.Colors.Alert
 local OUTLINE_COLOR = Color3.new(0, 0, 0)
 
 -- px à la résolution de référence (720 px de haut), mis à l'échelle par UIKit.scaledRoot.
@@ -66,12 +66,12 @@ end
 
 -- Cette méthode permet d'afficher le marqueur puis de l'estomper lorsqu'une touche est confirmée ;
 -- une nouvelle touche relance l'affichage et remplace le fondu en cours.
-function Hitmarker.show(isKill: boolean)
+function Hitmarker.show(isKill: boolean, isHeadshot: boolean)
 	if not scale then
 		build()
 	end
 	(scale :: UIScale).Scale = if isKill then KILL_SCALE else 1
-	local color = if isKill then KILL_COLOR else HIT_COLOR
+	local color = if isHeadshot then HEADSHOT_COLOR else HIT_COLOR
 	for _, layers in { outlines, lines } do
 		for _, layer in layers do
 			layer.BackgroundTransparency = 0
@@ -85,9 +85,10 @@ end
 
 -- Cette méthode permet de brancher le marqueur sur la confirmation du serveur lorsque le client démarre.
 function Hitmarker.init()
-	NetworkProtocol.getRemote(NetworkProtocol.Names.HIT_CONFIRM).OnClientEvent:Connect(function(isKill: boolean)
-		Hitmarker.show(isKill == true)
-	end)
+	NetworkProtocol.getRemote(NetworkProtocol.Names.HIT_CONFIRM).OnClientEvent
+		:Connect(function(isKill: boolean, isHeadshot: boolean)
+			Hitmarker.show(isKill == true, isHeadshot == true)
+		end)
 end
 
 return Hitmarker

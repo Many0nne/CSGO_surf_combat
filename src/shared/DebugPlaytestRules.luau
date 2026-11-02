@@ -66,7 +66,7 @@ function DebugPlaytestRules.markersFor(cfg: any, animName: string): { string }
 end
 
 -- Cette méthode permet de calculer les dégâts attendus sur la cible immobile lorsqu'elle fait face au joueur
--- (pas de backstab) : ce sont les dégâts de base de l'arme.
+-- (pas de backstab) et visée au torse (×1) : ce sont les dégâts de base de l'arme.
 function DebugPlaytestRules.expectedDamage(cfg: any): number?
 	if not cfg or type(cfg.Damage) ~= "number" then
 		return nil
