@@ -14,10 +14,6 @@ local Transition = require(script.Parent.Parent.Parent.ui.Transition)
 
 local GameStateController = {}
 
--- Caméra lobby : vue d'ensemble de la map actuelle, visible derrière le menu semi-transparent
-local LOBBY_CAM_POS = Vector3.new(469.6, 70.8, 57.5)
-local LOBBY_CAM_CF = CFrame.lookAt(LOBBY_CAM_POS, LOBBY_CAM_POS + Vector3.new(0.792, -0.536, -0.292))
-
 type State = "MENU" | "INFOS" | "SPAWNING" | "IN_ROUND" | "DEAD" | "RESULT"
 
 local state: State = "MENU"
@@ -29,15 +25,9 @@ local resultTimer: thread?
 -- Remotes (résolus une seule fois)
 local spawnRemote: RemoteEvent?
 
--- ── Caméra lobby ───────────────────────────────────────────────────────────
+-- ── Caméra ─────────────────────────────────────────────────────────────────
 
-local function activateLobbyCamera()
-	local cam = workspace.CurrentCamera
-	cam.CameraType = Enum.CameraType.Scriptable
-	cam.CFrame = LOBBY_CAM_CF
-end
-
-local function deactivateLobbyCamera()
+local function deactivateMenuCamera()
 	-- FPSCamera prend la main lors du spawn ; on remet Scriptable
 	-- pour ne pas combattre avec lui (il le positionne lui-même)
 	workspace.CurrentCamera.CameraType = Enum.CameraType.Scriptable
@@ -53,9 +43,8 @@ local function setState(newState: State)
 		MainMenu.show()
 		InfosScreen.hide()
 		RoundHUD.hide()
-		activateLobbyCamera()
+		-- La caméra et le curseur (hitmarker) sont pilotés par le menu
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-		UserInputService.MouseIconEnabled = true
 	elseif newState == "INFOS" then
 		SettingsMenu.close()
 		InfosScreen.show()
@@ -76,7 +65,7 @@ local function setState(newState: State)
 		Transition.open()
 		RoundHUD.show()
 		RoundHUD.hideRespawning()
-		deactivateLobbyCamera()
+		deactivateMenuCamera()
 	elseif newState == "DEAD" then
 		RoundHUD.showRespawning(GameConfig.RESPAWN_DELAY)
 	elseif newState == "RESULT" then

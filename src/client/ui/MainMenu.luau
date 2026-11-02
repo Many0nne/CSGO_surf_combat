@@ -1,10 +1,14 @@
--- Menu principal (direction « Tactical ») : barre de navigation en haut (ACCUEIL, INFOS, SETTINGS, FEEDBACK, PLAY)
--- et page d'accueil. Infos et Settings sont des ScreenGui à part, affichés sous cette barre.
-local Lighting = game:GetService("Lighting")
+-- Menu principal (direction « Ligne de mire ») : on choisit en tirant. Le curseur est un hitmarker, l'AWP de MenuScene
+-- le suit, et les libellés sont des images usées (tools/ui/make_menu_type.py). Infos et Settings restent des ScreenGui
+-- à part, ouverts par-dessus la scène et fermés par leur propre bouton.
+local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
+local MenuScene = require(script.Parent.Parent.systems.game.MenuScene)
 local UIKit = require(script.Parent.UIKit)
 
 local C = UITheme.Colors
@@ -17,23 +21,36 @@ export type Page = "home" | "infos" | "settings"
 
 local MainMenu = {}
 
-local NAV_ITEMS: { { page: Page?, label: string } } = {
-	{ page = "home", label = "ACCUEIL" },
-	{ page = "infos", label = "INFOS" },
-	{ page = "settings", label = "SETTINGS" },
-	{ page = nil, label = "FEEDBACK" },
+-- Images publiées sur Roblox (sources : assets/ui/menu/, largeur et hauteur en px pour garder les proportions)
+local TITLE = { image = "rbxassetid://118051067256604", width = 1024, height = 369 }
+local TITLE_HEIGHT = 240
+local ITEMS = {
+	{ key = "play", image = "rbxassetid://92275875634869", width = 892, height = 277, y = 372, h = 122 },
+	{ key = "infos", image = "rbxassetid://132978783370855", width = 387, height = 136, y = 504, h = 46 },
+	{ key = "settings", image = "rbxassetid://134350858698628", width = 601, height = 168, y = 556, h = 50 },
+	{ key = "feedback", image = "rbxassetid://114862354195227", width = 635, height = 149, y = 612, h = 44 },
 }
+local ACTION_DELAY = 0.16 -- l'impact se voit avant l'ouverture de l'écran demandé
+local PLAY_DELAY = 1.3 -- la plongée vers le soleil se voit longuement avant les volets
+local HOVER_SHIFT = 10
+local HOLE_SIZE = 13
+local ARM_ANGLES = { 45, 135, 225, 315 }
 
 local gui: ScreenGui
-local grade: ColorCorrectionEffect
-local header: Frame
-local navUnderline: Frame
-local navButtons: { [Page]: TextButton } = {}
-local homeGroups: { CanvasGroup } = {}
-local currentPage: Page = "home"
+local content: Frame
+local holes: Frame
+local cursorGui: ScreenGui
+local cursor: Frame
+local arms: { { frame: Frame, angle: number } } = {}
 local callbacks: { [string]: (() -> ())? } = {}
+local currentPage: Page = "home"
+local connection: RBXScriptConnection?
+local hoverCount = 0
+local busy = false
+local gap, hitScale = 10, 1
+local hitUntil = 0
 
--- Cette méthode permet d'appeler un rappel enregistré lorsqu'un bouton du menu est cliqué.
+-- Cette méthode permet d'appeler un rappel enregistré lorsqu'un choix du menu est confirmé.
 local function fire(name: string)
 	local fn = callbacks[name]
 	if fn then
@@ -41,319 +58,184 @@ local function fire(name: string)
 	end
 end
 
--- Cette méthode permet de construire le voile dégradé plein écran lorsque le menu se pose sur la scène du lobby.
-local function buildShade()
-	local shade =
-		UIKit.frame({ Name = "Shade", Size = UDim2.fromScale(1, 1), BackgroundColor3 = C.Ground, Parent = gui })
-	UIKit.create("UIGradient", {
-		Rotation = 90,
-		Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 0.25),
-			NumberSequenceKeypoint.new(0.55, 0.45),
-			NumberSequenceKeypoint.new(1, 0.04),
-		}),
-		Parent = shade,
-	})
+-- Cette méthode permet de savoir si un écran modal (feedback) est ouvert lorsqu'un clic pourrait déclencher un tir.
+local function isModalOpen(): boolean
+	local modal = Players.LocalPlayer.PlayerGui:FindFirstChild("FeedbackModal")
+	return modal ~= nil and (modal :: ScreenGui).Enabled
 end
 
--- Cette méthode permet de construire le bloc logo (emblème + SURF FFA) lorsque la barre de navigation est créée.
-local function buildBrand(parent: Frame)
-	local brand = UIKit.frame({
-		Name = "Brand",
-		Size = UDim2.new(0, 196, 1, 0),
-		BackgroundTransparency = 1,
-		Parent = parent,
+-- Cette méthode permet de laisser un impact de balle à l'écran lorsqu'un tir touche le menu.
+local function addHole(x: number, y: number)
+	local hole = UIKit.frame({
+		Name = "BulletHole",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromOffset(x, y),
+		Size = UDim2.fromOffset(HOLE_SIZE, HOLE_SIZE),
+		BackgroundColor3 = C.Black,
+		Parent = holes,
 	})
-	local emblem = UIKit.emblem(brand)
-	emblem.AnchorPoint = Vector2.new(0, 0.5)
-	emblem.Position = UDim2.new(0, 28, 0.5, 0)
-	UIKit.text({
-		Text = 'SURF <font color="#F2A900">FFA</font>',
-		RichText = true,
-		FontFace = F.Display,
-		TextSize = T.Title,
-		Position = UDim2.fromOffset(70, 0),
-		Size = UDim2.new(1, -70, 1, 0),
-		Parent = brand,
-	})
-	UIKit.frame({
-		Name = "Divider",
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.fromScale(1, 0),
-		Size = UDim2.new(0, 1, 1, 0),
-		BackgroundColor3 = C.Border,
-		Parent = brand,
-	})
+	UIKit.create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = hole })
+	UIKit.create("UIStroke", { Color = C.HitRed, Thickness = 1, Transparency = 0.35, Parent = hole })
 end
 
--- Cette méthode permet de créer un onglet de navigation avec son soulignement de survol lorsqu'il est ajouté à la barre.
-local function buildNavButton(parent: Frame, index: number, item: { page: Page?, label: string })
-	local btn = UIKit.button({
-		Name = item.label,
-		Text = item.label,
-		Size = UDim2.new(0, L.NavItemWidth, 1, 0),
-		Position = UDim2.fromOffset((index - 1) * L.NavItemWidth, 0),
-		BackgroundTransparency = 1,
-		FontFace = F.Display,
-		TextSize = T.Nav,
-		TextColor3 = C.Muted,
-		Parent = parent,
-	})
-	local hoverLine = UIKit.frame({
-		Name = "HoverLine",
-		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -14),
-		Size = UDim2.fromOffset(0, 2),
-		BackgroundColor3 = C.Text,
-		Parent = btn,
-	})
-	btn.MouseEnter:Connect(function()
-		UIKit.tween(btn, Motion.Hover, { TextColor3 = C.White })
-		UIKit.tween(hoverLine, Motion.Hover, { Size = UDim2.fromOffset(L.NavItemWidth - 56, 2) })
-	end)
-	btn.MouseLeave:Connect(function()
-		local active = item.page ~= nil and item.page == currentPage
-		UIKit.tween(btn, Motion.Hover, { TextColor3 = active and C.White or C.Muted })
-		UIKit.tween(hoverLine, Motion.Hover, { Size = UDim2.fromOffset(0, 2) })
-	end)
-	btn.MouseButton1Click:Connect(function()
-		if item.page == "home" then
-			fire("home")
-		elseif item.page == "infos" then
-			fire("infos")
-		elseif item.page == "settings" then
-			fire("settings")
-		else
-			fire("feedback")
-		end
-	end)
-	if item.page then
-		navButtons[item.page] = btn
+-- Cette méthode permet de faire réagir le hitmarker lorsqu'un tir part ; il grossit et rougit s'il a touché un surfeur.
+local function kickCursor(hasHit: boolean)
+	hitScale = hasHit and 2.3 or 1.5
+	if hasHit then
+		hitUntil = os.clock() + 0.28
 	end
 end
 
--- Cette méthode permet de construire le gros bouton PLAY ambre avec sa flèche lorsque la barre de navigation est créée.
-local function buildPlayButton(parent: Frame)
-	local play = UIKit.button({
-		Name = "Play",
-		Text = "",
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.fromScale(1, 0),
-		Size = UDim2.new(0, 220, 1, 0),
-		BackgroundColor3 = C.Accent,
-		Parent = parent,
-	})
-	local content = UIKit.frame({
-		Name = "Content",
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.fromOffset(110, 30),
+-- Cette méthode permet de tirer sur un bouton et de déclencher son action après l'impact lorsqu'il est activé.
+local function activate(button: ImageButton, key: string, input: InputObject?)
+	if busy or currentPage ~= "home" or isModalOpen() then
+		return
+	end
+	local x, y
+	local kind = input and input.UserInputType
+	if kind == Enum.UserInputType.MouseButton1 then
+		local mouse = UserInputService:GetMouseLocation()
+		x, y = mouse.X, mouse.Y
+	else
+		-- Tactile ou manette : le tir vise le centre du bouton (AbsolutePosition exclut la barre du haut)
+		local top = GuiService:GetGuiInset().Y
+		x = button.AbsolutePosition.X + button.AbsoluteSize.X / 2
+		y = button.AbsolutePosition.Y + button.AbsoluteSize.Y / 2 + top
+	end
+	busy = true
+	local _, hasHit = MenuScene.shoot(x, y, true)
+	kickCursor(hasHit)
+	addHole(x, y)
+	if key == "play" then
+		MenuScene.dive()
+		task.delay(PLAY_DELAY, fire, key)
+	else
+		task.delay(ACTION_DELAY, function()
+			busy = false
+			fire(key)
+		end)
+	end
+end
+
+-- Cette méthode permet de créer un libellé-image cliquable avec sa réaction au survol lorsque le menu est construit.
+local function buildItem(item: { key: string, image: string, width: number, height: number, y: number, h: number })
+	local width = math.round(item.h * item.width / item.height)
+	local rest = UDim2.fromOffset(L.Margin - 26, item.y)
+	local button = UIKit.create("ImageButton", {
+		Name = item.key,
+		Image = item.image,
+		ImageColor3 = C.White,
+		AutoButtonColor = false,
 		BackgroundTransparency = 1,
-		Parent = play,
-	})
-	UIKit.text({
-		Text = "PLAY",
-		FontFace = F.Display,
-		TextSize = 26,
-		TextColor3 = C.Ground,
-		Size = UDim2.fromOffset(70, 30),
+		BorderSizePixel = 0,
+		Position = rest,
+		Size = UDim2.fromOffset(width, item.h),
 		Parent = content,
 	})
-	local arrow = UIKit.arrowIcon(content, C.Ground)
-	arrow.AnchorPoint = Vector2.new(0, 0.5)
-	arrow.Position = UDim2.new(0, 84, 0.5, 0)
-
-	UIKit.hover(play, play, { BackgroundColor3 = C.Accent }, { BackgroundColor3 = C.AccentHover })
-	UIKit.hover(play, arrow, { Position = UDim2.new(0, 84, 0.5, 0) }, { Position = UDim2.new(0, 90, 0.5, 0) })
-	play.MouseButton1Down:Connect(function()
-		UIKit.tween(play, Motion.Press, { BackgroundColor3 = C.AccentPress })
+	button.MouseEnter:Connect(function()
+		hoverCount += 1
+		UIKit.tween(button, Motion.Hover, {
+			ImageColor3 = C.HitRed,
+			Position = rest + UDim2.fromOffset(HOVER_SHIFT, 0),
+		})
 	end)
-	play.MouseButton1Click:Connect(function()
-		fire("play")
+	button.MouseLeave:Connect(function()
+		hoverCount = math.max(0, hoverCount - 1)
+		UIKit.tween(button, Motion.Hover, { ImageColor3 = C.White, Position = rest })
+	end)
+	button.Activated:Connect(function(input: InputObject)
+		activate(button, item.key, input)
 	end)
 end
 
--- Cette méthode permet de construire la barre de navigation complète lorsque le menu est initialisé.
-local function buildHeader(root: Frame)
-	header = UIKit.frame({
-		Name = "Header",
-		Size = UDim2.new(1, 0, 0, L.HeaderHeight),
-		BackgroundColor3 = C.PanelDark,
-		BackgroundTransparency = 0.06,
-		Parent = root,
-	})
-	UIKit.frame({
-		Name = "BottomBorder",
-		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.fromScale(0, 1),
-		Size = UDim2.new(1, 0, 0, 1),
-		BackgroundColor3 = C.Border,
-		Parent = header,
-	})
-	-- Logo + onglets décalés à droite des boutons Roblox (taille fixe en pixels écran, hors UIScale)
-	local bar = UIKit.frame({
-		Name = "Bar",
-		Size = UDim2.new(0, 208 + L.NavItemWidth * #NAV_ITEMS, 1, 0),
+-- Cette méthode permet de construire le titre, les choix et la légende lorsque le menu est initialisé.
+local function buildContent(root: Frame)
+	content = UIKit.frame({ Name = "Content", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = root })
+	UIKit.create("ImageLabel", {
+		Name = "Title",
+		Image = TITLE.image,
 		BackgroundTransparency = 1,
-		Parent = header,
+		BorderSizePixel = 0,
+		Position = UDim2.fromOffset(L.Margin - 40, 44),
+		Size = UDim2.fromOffset(math.round(TITLE_HEIGHT * TITLE.width / TITLE.height), TITLE_HEIGHT),
+		Parent = content,
 	})
-	local function placeBar()
-		local scale = root:GetAttribute("Scale") or 1
-		bar.Position = UDim2.fromOffset(math.ceil(L.TopbarSafeLeft / scale), 0)
+	for _, item in ITEMS do
+		buildItem(item)
 	end
-	placeBar()
-	root:GetAttributeChangedSignal("Scale"):Connect(placeBar)
-	buildBrand(bar)
-
-	local nav = UIKit.frame({
-		Name = "Nav",
-		Position = UDim2.fromOffset(208, 0),
-		Size = UDim2.new(0, L.NavItemWidth * #NAV_ITEMS, 1, 0),
-		BackgroundTransparency = 1,
-		Parent = bar,
-	})
-	for i, item in NAV_ITEMS do
-		buildNavButton(nav, i, item)
-	end
-	navUnderline = UIKit.frame({
-		Name = "ActiveLine",
-		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.fromScale(0, 1),
-		Size = UDim2.fromOffset(L.NavItemWidth, 3),
-		BackgroundColor3 = C.Accent,
-		ZIndex = 2,
-		Parent = nav,
-	})
-	buildPlayButton(header)
-end
-
--- Cette méthode permet de créer un groupe animable (fondu + glissement) de la page d'accueil lorsqu'elle est construite.
-local function homeGroup(root: Frame, props: { [string]: any }): CanvasGroup
-	props.BackgroundTransparency = props.BackgroundTransparency or 1
-	props.BorderSizePixel = 0
-	props.Parent = root
-	local group = UIKit.create("CanvasGroup", props)
-	table.insert(homeGroups, group)
-	return group
-end
-
--- Cette méthode permet de construire la page d'accueil (titre du mode, raccourcis, version) lorsque le menu est initialisé.
-local function buildHome(root: Frame)
-	local hero = homeGroup(root, {
-		Name = "Hero",
-		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.new(0, L.Margin, 1, -72),
-		Size = UDim2.fromOffset(620, 270),
-	})
 	UIKit.text({
-		Text = "MODE DE JEU",
-		FontFace = F.MonoBold,
-		TextSize = 13,
-		TextColor3 = C.Accent,
-		Size = UDim2.new(1, 0, 0, 18),
-		Parent = hero,
-	})
-	UIKit.text({
-		Text = "FREE\nFOR ALL",
-		FontFace = F.Display,
-		TextSize = T.Hero,
-		LineHeight = 0.8,
-		TextYAlignment = Enum.TextYAlignment.Top,
-		Position = UDim2.fromOffset(0, 26),
-		Size = UDim2.new(1, 0, 0, 180),
-		Parent = hero,
-	})
-	UIKit.text({
-		Text = "Rampes, air strafe et bhop façon Source. Chacun pour soi, rounds de 5 minutes.",
-		TextSize = 18,
+		Name = "Caption",
+		Text = "Free for all. Rounds de 5 minutes.   v0.1",
+		FontFace = F.Body,
+		TextSize = T.Body,
 		TextColor3 = C.TextSoft,
-		TextWrapped = true,
-		TextYAlignment = Enum.TextYAlignment.Top,
-		Position = UDim2.fromOffset(0, 214),
-		Size = UDim2.fromOffset(460, 56),
-		Parent = hero,
-	})
-
-	local card = homeGroup(root, {
-		Name = "Shortcuts",
+		TextXAlignment = Enum.TextXAlignment.Right,
 		AnchorPoint = Vector2.new(1, 1),
-		Position = UDim2.new(1, -L.Margin, 1, -72),
-		Size = UDim2.fromOffset(320, 156),
-		BackgroundColor3 = C.Panel,
-		BackgroundTransparency = 0.08,
-	})
-	UIKit.stroke(card, C.Border)
-	local cardHeader = UIKit.frame({
-		Name = "Header",
-		Size = UDim2.new(1, 0, 0, 48),
-		BackgroundTransparency = 1,
-		Parent = card,
-	})
-	UIKit.text({
-		Text = "RACCOURCIS",
-		FontFace = F.DisplayMedium,
-		TextSize = 15,
-		Position = UDim2.fromOffset(18, 0),
-		Size = UDim2.new(1, -36, 1, 0),
-		Parent = cardHeader,
-	})
-	UIKit.frame({
-		Name = "Marker",
-		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -18, 0.5, 0),
-		Size = UDim2.fromOffset(8, 8),
-		BackgroundColor3 = C.Accent,
-		Parent = cardHeader,
-	})
-	UIKit.frame({
-		Name = "Divider",
-		Position = UDim2.fromOffset(0, 48),
-		Size = UDim2.new(1, 0, 0, 1),
-		BackgroundColor3 = C.Border,
-		Parent = card,
-	})
-	for i, row in { { "Classement", "TAB" }, { "Réglages", "P" }, { "Bhop", "SPACE" } } do
-		local y = 48 + 16 + (i - 1) * 28
-		UIKit.text({
-			Text = row[1],
-			TextSize = 15,
-			TextColor3 = C.TextSoft,
-			Position = UDim2.fromOffset(18, y),
-			Size = UDim2.new(1, -36, 0, 20),
-			Parent = card,
-		})
-		UIKit.text({
-			Text = row[2],
-			FontFace = F.Mono,
-			TextSize = 15,
-			TextXAlignment = Enum.TextXAlignment.Right,
-			Position = UDim2.fromOffset(18, y),
-			Size = UDim2.new(1, -36, 0, 20),
-			Parent = card,
-		})
-	end
-
-	local version = homeGroup(root, {
-		Name = "Version",
-		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.new(0, L.Margin, 1, -24),
-		Size = UDim2.fromOffset(80, 16),
-	})
-	UIKit.text({
-		Text = "v0.1",
-		FontFace = F.Mono,
-		TextSize = T.Caption,
-		TextColor3 = C.Muted,
-		Size = UDim2.fromScale(1, 1),
-		Parent = version,
+		Position = UDim2.new(1, -L.Margin, 1, -24),
+		Size = UDim2.fromOffset(500, 22),
+		Parent = content,
 	})
 end
 
--- Cette méthode permet de rejouer l'entrée de la page d'accueil (fondu décalé de chaque bloc) lorsqu'elle redevient visible.
-local function revealHome()
-	for i, group in homeGroups do
-		group.Visible = true
-		UIKit.reveal(group, 0.08 + (i - 1) * 0.06)
+-- Cette méthode permet de construire le hitmarker qui remplace le curseur lorsque le menu est initialisé.
+local function buildCursor()
+	cursorGui = UIKit.create("ScreenGui", {
+		Name = "MenuCursor",
+		ResetOnSpawn = false,
+		IgnoreGuiInset = true,
+		DisplayOrder = 100,
+		Enabled = false,
+		Parent = Players.LocalPlayer:WaitForChild("PlayerGui"),
+	})
+	cursor =
+		UIKit.frame({ Name = "Cursor", BackgroundTransparency = 1, Size = UDim2.fromOffset(0, 0), Parent = cursorGui })
+	for _, angle in ARM_ANGLES do
+		local arm = UIKit.frame({
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			BackgroundColor3 = C.White,
+			Rotation = angle,
+			Parent = cursor,
+		})
+		UIKit.create("UIStroke", { Color = C.Black, Thickness = 1.2, Parent = arm })
+		table.insert(arms, { frame = arm, angle = math.rad(angle) })
+	end
+end
+
+-- Cette méthode permet de tirer dans la scène lorsque le joueur clique hors des boutons sur la page d'accueil.
+local function onInputBegan(input: InputObject, processed: boolean)
+	if processed or busy or currentPage ~= "home" or isModalOpen() then
+		return
+	end
+	local x, y
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		local mouse = UserInputService:GetMouseLocation()
+		x, y = mouse.X, mouse.Y
+	elseif input.UserInputType == Enum.UserInputType.Touch then
+		x, y = input.Position.X, input.Position.Y + GuiService:GetGuiInset().Y
+	else
+		return
+	end
+	local hasFired, hasHit = MenuScene.shoot(x, y)
+	if hasFired then
+		kickCursor(hasHit)
+	end
+end
+
+-- Cette méthode permet de faire suivre la souris au hitmarker lorsqu'une image est rendue : il se resserre et rougit
+-- sur une cible, et le curseur système reste masqué même si un autre écran le réactive en se fermant.
+local function updateCursor(dt: number)
+	UserInputService.MouseIconEnabled = false
+	local mouse = UserInputService:GetMouseLocation()
+	cursor.Position = UDim2.fromOffset(mouse.X, mouse.Y)
+	local hover = hoverCount > 0
+	gap += ((hover and 4 or 10) - gap) * math.min(1, dt * 22)
+	hitScale += (1 - hitScale) * math.min(1, dt * 9)
+	local color = (hover or os.clock() < hitUntil) and C.HitRed or C.White
+	for _, arm in arms do
+		local distance = (gap + 8) * hitScale
+		arm.frame.Position = UDim2.fromOffset(math.cos(arm.angle) * distance, math.sin(arm.angle) * distance)
+		arm.frame.Size = UDim2.fromOffset(16 * hitScale, 3 * math.max(1, hitScale * 0.7))
+		arm.frame.BackgroundColor3 = color
 	end
 end
 
@@ -377,69 +259,67 @@ function MainMenu.init(
 		Enabled = false,
 		Parent = Players.LocalPlayer:WaitForChild("PlayerGui"),
 	})
-	grade = UIKit.create("ColorCorrectionEffect", {
-		Name = "MenuGrade",
-		Saturation = -0.35,
-		Brightness = -0.08,
-		Enabled = false,
-		Parent = Lighting,
+	holes = UIKit.frame({
+		Name = "Holes",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		ZIndex = 2,
+		Parent = gui,
 	})
-
-	buildShade()
-	local root = UIKit.scaledRoot(gui)
-	buildHome(root)
-	buildHeader(root)
+	buildContent(UIKit.scaledRoot(gui))
+	buildCursor()
+	UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
+		if gui.Enabled then
+			onInputBegan(input, processed)
+		end
+	end)
 end
 
--- Cette méthode permet de changer la page active (soulignement, couleur des onglets, accueil visible ou non)
--- lorsque l'orchestrateur ouvre Infos, Settings ou revient à l'accueil.
+-- Cette méthode permet de changer la page active (choix visibles sur l'accueil seulement) lorsque l'orchestrateur
+-- ouvre Infos, Settings ou revient à l'accueil.
 function MainMenu.setPage(page: Page)
 	if not gui then
 		return
 	end
-	local previous = currentPage
 	currentPage = page
-	local index = page == "home" and 0 or page == "infos" and 1 or 2
-	UIKit.tween(navUnderline, Motion.Nav, { Position = UDim2.new(0, index * L.NavItemWidth, 1, 0) })
-	for name, btn in navButtons do
-		UIKit.tween(btn, Motion.Hover, { TextColor3 = name == page and C.White or C.Muted })
-	end
-	if page == "home" then
-		if previous ~= "home" then
-			revealHome()
-		end
-	else
-		for _, group in homeGroups do
-			group.Visible = false
-		end
+	content.Visible = page == "home"
+	holes.Visible = page == "home"
+	if page ~= "home" then
+		hoverCount = 0
 	end
 end
 
+-- Cette méthode permet d'afficher le menu et de lancer sa scène lorsque le joueur arrive au menu.
 function MainMenu.show()
 	if not gui then
 		return
 	end
-	local wasHidden = not gui.Enabled
-	gui.Enabled = true
-	grade.Enabled = true
-	if wasHidden then
-		header.Position = UDim2.fromOffset(0, -L.HeaderHeight)
-		UIKit.tween(header, Motion.Enter, { Position = UDim2.fromOffset(0, 0) })
-		currentPage = "home"
-		MainMenu.setPage("home")
-		revealHome()
-	else
-		MainMenu.setPage("home")
+	if not gui.Enabled then
+		busy = false
+		holes:ClearAllChildren()
 	end
+	gui.Enabled = true
+	cursorGui.Enabled = not UserInputService.TouchEnabled or UserInputService.MouseEnabled
+	MainMenu.setPage("home")
+	if not connection then
+		connection = RunService.RenderStepped:Connect(updateCursor)
+	end
+	task.spawn(MenuScene.start)
 end
 
+-- Cette méthode permet de masquer le menu, sa scène et le hitmarker lorsque la partie démarre.
 function MainMenu.hide()
-	if gui then
-		gui.Enabled = false
+	if not gui then
+		return
 	end
-	if grade then
-		grade.Enabled = false
+	gui.Enabled = false
+	cursorGui.Enabled = false
+	hoverCount = 0
+	if connection then
+		connection:Disconnect()
+		connection = nil
 	end
+	MenuScene.stop()
 end
 
 return MainMenu
