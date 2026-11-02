@@ -34,6 +34,9 @@ installer sur le système. Les fichiers temporaires vont hors du dépôt.
 # Étape 1 : planche numérotée avec grille de mesure (xmin/xmax zooment sur la zone de l'arme)
 uv run tools/anim/grid.py <video> <sortie.jpg> <debut> <fin> <pas> [colonnes] [xmin] [xmax]
 
+# Étape 1 bis : mesurer le geste image par image (caméra fixe), puis contrôler la planche produite
+uv run tools/anim/track_blade.py <video> <debut> <fin> <garde_x,garde_y> <pointe_x,pointe_y> <roulis_debut> <trajectoire.json> <controle.jpg>
+
 # Construire les animations sans toucher au Blender ouvert (la scène de la session serait effacée)
 blender -b --factory-startup --python <script qui exécute build_viewmodel.py avec __name__="__main__" et ASSET_DIR>
 lune run assets/m9_viewmodel/make_rbxm.luau assets/m9_viewmodel/export assets/m9_viewmodel/export <Nom>
@@ -63,6 +66,10 @@ Si un clone reste dans `Workspace` après une erreur de rendu, supprimer `__Anim
 - **Reproduire une référence : mesurer toute la trajectoire.** Relever la garde et la pointe à l'écran toutes les 0,05 s
   de vidéo, puis les interpoler avec une spline (voir `EQUIP_TRACK` dans `build_viewmodel.py`). C'est ce qui a donné un
   Equip fidèle.
+- **Un geste long ou rapide se mesure avec `track_blade.py`, pas à l'œil.** Le rythme vient directement de la vidéo : sur
+  l'Inspect, le relevé à l'œil avait donné un seul aller-retour du poignet au lieu de trois. La trajectoire se branche
+  avec `measured=` dans la spec (voir `spec_inspect`). Si un geste va trop vite pour le suivi, couper la mesure avant et
+  finir par le raccord `settle`.
 - **Ne pas poser une clé avec courbe au milieu d'un geste continu.** Chaque clé en `io` ramène la vitesse à zéro : la
   rotation semble interrompue. Un geste continu se décrit par une seule courbe, ou par une spline.
 - **Un objet qui tourne dans la main n'a pas la même trajectoire que la main.** Faire suivre la main au couteau la fait
@@ -104,6 +111,8 @@ Si un clone reste dans `Workspace` après une erreur de rendu, supprimer `__Anim
 ## Limites actuelles
 
 - Le rig n'a pas de doigts : le couteau tourne devant un poing fermé. C'est accepté pour la M9.
-- `Inspect`, `Shoot`, `Shoot2` et `Stab` utilisent encore des clés espacées. Elles n'ont pas eu de validation du
-  mouvement et peuvent avoir les mêmes saccades que l'ancien Equip. À reprendre avec `EQUIP_TRACK` comme modèle.
-- `sample_track` et `EQUIP_TRACK` ne servent que l'Equip : il faudra les généraliser pour une deuxième animation mesurée.
+- `Shoot`, `Shoot2` et `Stab` utilisent encore des clés espacées. Elles n'ont pas eu de validation du mouvement et
+  peuvent avoir les mêmes saccades que l'ancien Equip. À reprendre avec `track_blade.py`.
+- `track_blade.py` suppose une caméra fixe et une lame sur fond dégagé. Ses seuils (texte incrusté, ciel, largeur par la
+  tranche) sont réglés sur la vidéo de la M9 et sont à revoir pour une autre vidéo.
+- L'Equip reste sur sa trajectoire relevée à la main (`EQUIP_TRACK`, `sample_track`).
