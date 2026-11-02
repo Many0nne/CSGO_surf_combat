@@ -517,33 +517,18 @@ def spec_stab():
 	)
 
 
-# Cette méthode permet de décrire l'inspection : la lame se redresse à droite vue par la tranche puis de plat, le
-# poignet roule jusqu'à la tranche et revient sur la même face, avec un temps de regard entre chaque geste.
+# Cette méthode permet de décrire l'inspection : trois allers-retours du poignet entre la face claire (lame à droite) et
+# la face sombre (lame à gauche), à la trajectoire et au rythme mesurés image par image (voir inspect_track.json).
 def spec_inspect():
 	return dict(
-		length=9.2,
-		freq=8.0,
-		zeta=0.85,
+		length=10.26,
+		measured="inspect_track.json",
+		video_scale=1.25,
+		enter=0.12,
 		settle=0.2,
-		keys=[
-			P(0.0),
-			S(0.24, (0.66, 0.80), (0.49, 0.52), 2.9, FACE),  # I2
-			S(0.48, (0.67, 0.75), (0.60, 0.35), 3.0, "cam"),  # I3
-			S(0.72, (0.71, 0.72), (0.70, 0.25), 3.0, "cam"),  # I4
-			S(1.28, (0.72, 0.63), (0.75, 0.28), 3.0, (-1, 0, 0.2)),  # I6
-			S(3.2, (0.72, 0.60), (0.75, 0.22), 3.0, (-1, 0, 0.2), e="l"),
-			S(3.72, (0.68, 0.59), (0.64, 0.13), 3.0, "cam"),  # I9
-			S(6.08, (0.68, 0.60), (0.65, 0.14), 3.0, "cam", e="l"),
-			S(6.64, (0.75, 0.60), (0.78, 0.17), 3.0, (-1, 0, 0.2)),  # I12
-			S(8.08, (0.73, 0.61), (0.75, 0.24), 3.0, (-1, 0, 0.2), e="l"),
-			S(8.56, (0.71, 0.72), (0.70, 0.25), 3.0, "cam"),
-			S(8.68, (0.68, 0.76), (0.55, 0.38), 3.0, "cam"),
-			S(8.8, (0.66, 0.80), (0.41, 0.55), 2.9, FACE),  # I16
-			P(9.2),
-		],
-		left=[(0.0, 0.0), (0.35, 1.0), (8.55, 1.0), (8.9, 0.0)],
-		markers=[("Equip Sound", 1.1)],
-		step=3,
+		left=[(0.0, 0.0), (0.3, 1.0), (10.04, 1.0), (10.26, 0.0)],
+		markers=[("Equip Sound", 0.56)],
+		step=2,
 	)
 
 
@@ -709,11 +694,49 @@ def sample_track(spec):
 	return ts, frames
 
 
+# Cette méthode permet d'échantillonner une animation depuis une trajectoire produite par tools/anim/track_blade.py :
+# une pose par image mesurée, ramenée sur la tenue au début (enter) et à la fin (settle) pour raccorder avec l'Idle.
+def sample_measured(spec):
+	with open(os.path.join(ASSET_DIR, spec["measured"]), encoding="utf-8") as fh:
+		rows = json.load(fh)["rows"]
+	period = rows[1]["t"] - rows[0]["t"]
+	columns = {
+		"gu": [r["guard"][0] for r in rows],
+		"gv": [r["guard"][1] for r in rows],
+		"tu": [r["tip"][0] for r in rows],
+		"tv": [r["tip"][1] for r in rows],
+		"roll": [r["roll"] for r in rows],
+		"depth": [r["depth"] for r in rows],
+	}
+	n = int(round(spec["length"] * FPS)) + 1
+	ts = [i / FPS for i in range(n)]
+	idle_hand = IDLE_KNIFE @ GRIP.inverted()
+	frames = []
+	for t in ts:
+		u = min(t * spec["video_scale"] / period, len(rows) - 1.0)
+		value = {name: spline(column, u) for name, column in columns.items()}
+		knife = knife_from_roll((value["gu"], value["gv"]), (value["tu"], value["tv"]), value["depth"], value["roll"])
+		hand = knife @ GRIP.inverted()
+		blend = max(1 - t / spec["enter"], (t - spec["length"] + spec["settle"]) / spec["settle"], 0.0)
+		if blend > 0:
+			knife = knife.lerp(IDLE_KNIFE, ease("io", blend))
+			hand = hand.lerp(idle_hand, ease("io", blend))
+		pos = knife.translation
+		delta = (pos - IDLE_POS) * 0.35
+		upper, lower, solved = solve_limb(hand, SHOULDER + delta, POLE + delta)
+		arm = {"RightUpperArm": upper, "RightLowerArm": lower, "RightHand": solved, "Handle": knife}
+		arm.update(solve_left(left_offset(spec, t, pos - IDLE_POS)))
+		frames.append(arm)
+	return ts, frames
+
+
 # Cette méthode permet d'échantillonner une animation (clés, ressort optionnel, pivot dans le poing) et de renvoyer,
 # pour chaque frame, les CFrames (repère caméra) des pièces du bras et de la Handle.
 def sample(spec):
 	if spec.get("track"):
 		return sample_track(spec)
+	if spec.get("measured"):
+		return sample_measured(spec)
 	n = int(round(spec["length"] * FPS)) + 1
 	ts = [i / FPS for i in range(n)]
 	idle_q = IDLE_KNIFE.to_3x3().to_quaternion()
