@@ -152,20 +152,34 @@ Mêmes règles que les armes : ne jamais réécrire `Map.rbxm` pendant que Studi
   dans le repère du plan (même `base` que le générateur).
 
 - **Virages en segments** : avec le ClipVelocity Source, chaque jointure entre deux WedgePart retire ≈ 1 - cos de
-  l'angle entre segments ; mesuré sur l'Arène (36 segments par demi-tour) : -14 % d'énergie sur un virage (#71).
-  Jugé acceptable pour l'instant. Correction envisagée plus tard, dans le mouvement : entre deux facettes de surf
-  presque parallèles, réorienter la vitesse au lieu de la clipper (essai : -0,2 %). Piste rejetée : un mesh courbe
-  modélisé dans Blender. Il reste fait de facettes, et les requêtes spatiales lisent sa géométrie de collision
-  (décomposition convexe), plus grossière que les segments : il ne supprime pas la perte. Mesurer un virage :
+  l'angle entre segments, soit une perte en 1/N ; mesuré sur l'Arène à 36 segments par demi-tour : -14 % d'énergie
+  sur un virage (#71). Correction possible plus tard, dans le mouvement : entre deux facettes de surf presque
+  parallèles, réorienter la vitesse au lieu de la clipper (essai : -0,2 %). Mesurer un virage :
   `tools/map/measure_turn.luau` (servi par `serve.luau`, Rojo connecté au worktree) ; sans perte, l'énergie
   (½v² + g·h) reste constante, et la vitesse seule baisse normalement quand on monte la dune.
+- **Virages en mesh** : le visuel d'un virage est un mesh Blender lisse (`tools/map/build_turn_mesh.py`, 256 segments,
+  normales lissées le long de l'arc, arêtes vives ailleurs, UV en studs), sans collision ni raycast ; la collision
+  reste faite de `ARC_SEGMENTS` (36) WedgePart invisibles (`Ramps.TurnCollision`). Les lignes droites s'arrêtent pile
+  au début du mesh : un recouvrement coplanaire scintille.
+  - Refaire le mesh : `blender -b --factory-startup --python tools/map/build_turn_mesh.py -- assets/map/ArenaTurn.blend`,
+    puis `tools/export_mesh_fbx.py` (cf. `docs/assets.md`), `bash tools/publish_asset.sh assets/map/ArenaTurn.fbx
+    Model SurfFFA_ArenaTurn`, et lire les ids des MeshParts (`InsertService:LoadAsset` en mode Edit) pour
+    `TURN_BANK_MESH` / `TURN_RIDGE_MESH`. Le générateur crée les MeshParts par `AssetService:CreateMeshPartAsync`
+    (un plugin ne peut pas écrire `MeshId`). Republier un mesh identique redonne les mêmes ids.
+  - Le mesh est centré sur sa boîte englobante : le générateur le place depuis le centre du virage avec
+    `Size.Z / 2` (arc côté +Z), et tourne le virage -Z d'un demi-tour.
+  - **Pistes rejetées pour réduire la perte sans toucher au mouvement** (mesurées avec `measure_turn.luau`) : plus de
+    segments (72 : instable, de -5 % à l'arrêt ; 144 : -90 %), tranches de collision en mesh aux bouts coupés selon le
+    rayon (CollisionFidelity Hull, de 36 à 144 : le surfeur s'arrête dans tous les cas ; l'enveloppe flotte ~0,6 stud
+    au-dessus de la vraie surface). Cause probable : collé à la pente, le balayage du personnage démarre souvent dans
+    une pièce (que Roblox ignore alors) et touche la face de jointure de la voisine, prise pour un mur ; plus les
+    pièces sont fines, plus ça arrive. Seule la correction du mouvement supprime la perte.
 - **Décor sans collision** : toute pièce décorative (arêtes néon, bandes, colonnes de geyser) doit avoir `CanQuery`
   faux, sinon les raycasts du mouvement la prennent pour un mur ou une rampe.
 
 ## Reste à faire
 
-- Arène (#71) : matières définitives (MaterialVariants : sable, façades, falaise, brume, silhouettes), puis vrais
-  modèles Blender pour la place (bus, kiosque, murets) et la passerelle des snipers. Valider en jeu la visée des
+- Arène (#71) : vrais modèles Blender pour la place (bus, kiosque, murets) et la passerelle des snipers. Valider en jeu la visée des
   geysers et des sorties du soleil.
-- Plus tard : supprimer la perte de vitesse dans les virages en segments (correction du mouvement, voir les pièges).
+- Plus tard : supprimer la perte de vitesse restante dans les virages (correction du mouvement, voir les pièges).
 - Son et effet au déclenchement d'un boost.

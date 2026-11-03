@@ -19,7 +19,13 @@ local RING_W = 120
 local RING_L = 170
 local BANK_H = 55
 local BANK_SLOPE = 55
-local ARC_SEGMENTS = 36 -- segments par virage : plus il y en a, moins chaque jointure freine
+-- Virages : visuel = mesh Blender lisse (tools/map/build_turn_mesh.py, publié), collision = ARC_SEGMENTS WedgePart
+-- invisibles. Chaque jointure freine d'environ 1 - cos(180°/ARC_SEGMENTS) (-14 % mesuré). Ne pas monter au-delà de 36
+-- sans corriger le mouvement : à 72 ou 144, le surfeur s'arrête dans le virage (cf. docs/maps.md).
+local ARC_SEGMENTS = 36
+local ARC_OVERLAP = 0.01 -- recouvrement (radians) entre deux segments de collision voisins
+local TURN_BANK_MESH = "rbxassetid://71596900624624" -- talus d'un demi-tour (repère : centre du virage, arc côté +Z)
+local TURN_RIDGE_MESH = "rbxassetid://130807082256717" -- arête ambrée du même demi-tour
 
 local TOWER_DEPTH = 46
 local ISLAND_THICK = 30
@@ -152,8 +158,9 @@ local function decoSand(): Color3
 end
 
 -- Cette méthode permet de poser un segment de dune surfable (WedgePart, côté haut = +Z local) dont le dos vertical
--- suit [a, b] (plan, y = 0) et dont la pente descend vers l'intérieur, opposé à `out`.
-local function bankSegment(a: Vector3, b: Vector3, out: Vector3)
+-- suit [a, b] (plan, y = 0) et dont la pente descend vers l'intérieur, opposé à `out` ; hidden = collision seule
+-- (virages : le visuel est le mesh lisse), sans arête ambrée ni ombre.
+local function bankSegment(a: Vector3, b: Vector3, out: Vector3, hidden: boolean?)
 	local run = BANK_H / math.tan(math.rad(BANK_SLOPE))
 	local along = b - a
 	local len = along.Magnitude
@@ -162,7 +169,14 @@ local function bankSegment(a: Vector3, b: Vector3, out: Vector3)
 	-- repère local : X le long du dos, Y vertical, Z vers l'extérieur (côté haut du WedgePart)
 	local localCf =
 		CFrame.fromMatrix(Vector3.new(center.X, BANK_H / 2, center.Z), Vector3.yAxis:Cross(out), Vector3.yAxis, out)
-	part("Ramps", Vector3.new(len, BANK_H, run), base * localCf, sand(), Enum.Material.Sand, "WedgePart")
+	local color = if hidden then GROUND else sand()
+	local wedge = part("Ramps", Vector3.new(len, BANK_H, run), base * localCf, color, Enum.Material.Sand, "WedgePart")
+	if hidden then
+		wedge.Name = "TurnCollision"
+		wedge.Transparency = 1
+		wedge.CastShadow = false
+		return
+	end
 	-- arête ambrée en haut de la pente
 	local ridgeCf = CFrame.fromMatrix(
 		Vector3.new(mid.X, BANK_H + 0.2, mid.Z) - out * 0.6,
@@ -362,10 +376,11 @@ for _, layer in { { -250, 0.35 }, { -200, 0.6 }, { -160, 0.8 } } do
 	sheet.Transparency = layer[2]
 end
 
--- Anneau de dunes : deux lignes droites, puis les virages en segments
+-- Anneau de dunes : deux lignes droites, puis les virages. Les lignes droites s'arrêtent pile au début du mesh des
+-- virages (un recouvrement coplanaire scintillerait).
 for _, side in { -1, 1 } do
 	local out = Vector3.new(side, 0, 0)
-	bankSegment(Vector3.new(side * RING_W, 0, -RING_L - 1), Vector3.new(side * RING_W, 0, RING_L + 1), out)
+	bankSegment(Vector3.new(side * RING_W, 0, -RING_L), Vector3.new(side * RING_W, 0, RING_L), out)
 end
 for _, sz in { -1, 1 } do
 	local cz = sz * RING_L
@@ -375,11 +390,45 @@ for _, sz in { -1, 1 } do
 		local t0 = (if sz > 0 then 0 else math.pi) + i * step
 		local t1 = t0 + step
 		local tm = (t0 + t1) / 2
-		local over = 0.01
-		local a = Vector3.new(RING_W * math.cos(t0 - over), 0, cz + RING_W * math.sin(t0 - over))
-		local b = Vector3.new(RING_W * math.cos(t1 + over), 0, cz + RING_W * math.sin(t1 + over))
-		bankSegment(a, b, Vector3.new(math.cos(tm), 0, math.sin(tm)))
+		local a = Vector3.new(RING_W * math.cos(t0 - ARC_OVERLAP), 0, cz + RING_W * math.sin(t0 - ARC_OVERLAP))
+		local b = Vector3.new(RING_W * math.cos(t1 + ARC_OVERLAP), 0, cz + RING_W * math.sin(t1 + ARC_OVERLAP))
+		bankSegment(a, b, Vector3.new(math.cos(tm), 0, math.sin(tm)), true)
 	end
+end
+-- les 72 segments visibles d'avant tiraient chacun une teinte de sable : on garde ce tirage pour que la suite du plan
+-- (hauteurs des tours) reste identique
+for _ = 1, 72 do
+	rng:NextNumber()
+end
+
+-- Cette méthode permet de créer une pièce depuis un mesh publié lorsqu'on construit un virage ; fidelity = géométrie
+-- de collision (Box pour le décor, Hull pour une tranche convexe de collision).
+local function meshPart(
+	meshId: string,
+	color: Color3,
+	material: Enum.Material,
+	fidelity: Enum.CollisionFidelity
+): BasePart
+	local p = game:GetService("AssetService"):CreateMeshPartAsync(meshId, {
+		CollisionFidelity = fidelity,
+		RenderFidelity = Enum.RenderFidelity.Precise,
+	})
+	p.Anchored = true
+	p.Color = color
+	p.Material = material
+	p.Parent = folders.Ramps
+	return p
+end
+
+for _, sz in { -1, 1 } do
+	-- repère du mesh : centre du virage, arc côté +Z ; le virage -Z est le même tourné d'un demi-tour
+	local turn = g(0, 0, sz * RING_L) * CFrame.Angles(0, if sz > 0 then 0 else math.pi, 0)
+	local bank = ghost(meshPart(TURN_BANK_MESH, GROUND, Enum.Material.Sand, Enum.CollisionFidelity.Box), true)
+	bank.Name = "TurnBank"
+	bank.CFrame = turn * CFrame.new(0, BANK_H / 2, bank.Size.Z / 2)
+	local ridge = ghost(meshPart(TURN_RIDGE_MESH, GLOW, Enum.Material.Neon, Enum.CollisionFidelity.Box))
+	ridge.Name = "TurnRidge"
+	ridge.CFrame = turn * CFrame.new(0, BANK_H + 0.2, ridge.Size.Z / 2)
 end
 task.wait()
 
