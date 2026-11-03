@@ -29,6 +29,14 @@ slideParams.FilterType = Enum.RaycastFilterType.Exclude
 
 local MovementController = {}
 
+local lastVelocity = Vector3.zero -- vitesse du dernier pas, lue par la sonde de saccades (debug/FrameProbe)
+
+-- Cette méthode permet de lire la vitesse simulée au dernier Heartbeat lorsqu'un outil de debug la compare
+-- au déplacement réellement rendu.
+function MovementController.getVelocity(): Vector3
+	return lastVelocity
+end
+
 function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, speedometer, camera)
 	local velocity = Vector3.zero
 	local state = MovementState.GROUNDED
@@ -312,6 +320,7 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 		end
 
 		-- 9. Speedometer
+		lastVelocity = velocity
 		local spd = PhysicsUtils.getXZ(velocity).Magnitude
 
 		if speedometer then

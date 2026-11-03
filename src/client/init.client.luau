@@ -15,6 +15,7 @@ local Speedometer = require(script.ui.Speedometer)
 local Hitmarker = require(script.ui.Hitmarker)
 local GameStateController = require(script.systems.game.GameStateController)
 local DebugPlaytest = require(script.debug.DebugPlaytest)
+local FrameProbe = require(script.debug.FrameProbe)
 
 local player = Players.LocalPlayer
 
@@ -81,3 +82,6 @@ DebugPlaytest.init({
 	viewmodelSystem = ViewmodelSystem,
 	fpsCamera = FPSCamera,
 })
+
+-- Sonde de saccades : attribut joueur `FrameProbe` = true dans Studio (cf. docs/performance.md).
+FrameProbe.init({ player = player, fpsCamera = FPSCamera, movement = MovementController })

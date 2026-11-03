@@ -37,8 +37,9 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 
 ## `src/`
 
-- `src/client/camera/FPSCamera.luau`: contrôles et logique de la caméra FPS.
+- `src/client/camera/FPSCamera.luau`: contrôles et logique de la caméra FPS (position lue directement sur `hrp.Position` au rendu : l'interpolation `updateRoot` n'est appelée nulle part).
 - `src/client/debug/DebugPlaytest.luau`: moitié client du helper de playtest (Studio uniquement) : exécute les commandes du serveur et observe pistes, marqueurs et sons.
+- `src/client/debug/FrameProbe.luau`: sonde de saccades (Studio uniquement, attribut joueur `FrameProbe`) : mesure chaque frame et signale les frames anormales, cf. `docs/performance.md`.
 - `src/client/debug/Noclip.luau`: outil de debug pour activer/désactiver le noclip.
 - `src/client/init.client.luau`: point d'entrée client, initialise les modules côté client.
 - `src/client/input/InputModule.luau`: gestion des entrées utilisateur et mapping des actions.
@@ -52,7 +53,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/client/systems/movement/CrouchSystem.luau`: logique de position accroupie, hauteur caméra et hitbox.
 - `src/client/systems/movement/GroundDetection.luau`: détection du sol et transitions air/sol.
 - `src/client/systems/movement/HeadCollisionResolver.luau`: résolution des collisions tête (plafond, mur haut) lors du déplacement.
-- `src/client/systems/movement/MovementController.luau`: orchestrateur principal du mouvement (boucle Heartbeat, transitions d'état).
+- `src/client/systems/movement/MovementController.luau`: orchestrateur principal du mouvement (boucle Heartbeat, transitions d'état) ; `getVelocity()` expose la vitesse du dernier pas (lue par la sonde de saccades).
 - `src/client/systems/movement/PhysicsStepAir.luau`: étape physique aérienne (air accelerate Source + cap `AIR_SPEED_CAP`).
 - `src/client/systems/movement/PhysicsStepGround.luau`: étape physique pour l'état au sol.
 - `src/client/systems/movement/SlopeSystem.luau`: gestion des pentes et adaptation du mouvement.
@@ -93,6 +94,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/shared/CharacterAppearance.luau`: rig de référence (`StarterPlayer.StarterCharacter`, cloné pour la cible du helper de playtest) et application du skin commun (BodyColors + vêtements) côté serveur.
 - `src/shared/CharacterConfig.luau`: rig/skin communs (couleurs, ids d'images Shirt/Pants/visage) et animations 3e personne (ids, fallbacks, seuils de vitesse, fondus).
 - `src/shared/DebugPlaytestRules.luau`: règles pures du helper de playtest (choix de l'outil, marqueurs et dégâts attendus, visée, rapport PASS/FAIL).
+- `src/shared/FrameProbeRules.luau`: règles pures de la sonde de saccades (classement HITCH/STUTTER/ROTATION/TELEPORT, cause probable, bilan), testées (`tests/specs/FrameProbeRules.spec.luau`).
 - `src/shared/GameConfig.luau`: constantes jeu (ROUND_DURATION=300, RESPAWN_DELAY=2.5, RESULT_DURATION=6, AUTO_SAVE_INTERVAL=120, SPAWN_PROTECTION=2.5).
 - `src/shared/SpawnLaunch.luau`: règles pures du lancement depuis le soleil (vitesse, angles de caméra, noms des attributs posés sur le personnage), testées (`tests/specs/SpawnLaunch.spec.luau`).
 - `src/shared/HitZones.luau`: zones du corps touchées (tête, torse, bras, jambes), multiplicateurs de dégâts des armes à distance et règle de calcul.
