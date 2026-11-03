@@ -25,6 +25,42 @@ rampes longues face à face avec une ligne de tir dégagée entre elles.
   la plus proche de surf_japan) et « L'Échangeur » (viaducs ensevelis, chaque viaduc est une rampe, saut au
   croisement). Maquettes 3D des trois plans : `docs/maps/plans-arene-digue-echangeur.html` (à ouvrir dans un
   navigateur).
+- **Matières et décor** (#71, choix libres laissés à Claude) : deux MaterialVariant de `MaterialService`,
+  `ArenaFacade` (tours, silhouettes) et `ArenaCliff` (falaise). Le sable (rampes, sol, toits, Terrain) garde la
+  matière Sand de Roblox : une texture générée (`ArenaSand`, sable ondulé) a été jugée horrible par l'utilisateur.
+  Tours : toit ensablé, enseignes penchées au néon à moitié éteint. Sous l'île : falaise qui s'effile en blocs de
+  roche, mer de brume en nappes translucides d'où sortent des silhouettes à étages en retrait. Ce décor tire ses
+  valeurs de `deco`, un second `Random` : le plan jouable (hauteurs des tours, place) reste identique.
+- **Dunes en Terrain** (demande de l'utilisateur : un sol plat ne fait pas « sable », et des bosses en sphères font
+  trop « Roblox ») : le sol de l'île est un champ de dunes en Terrain Roblox (matière Sand, teinte du sol). Relief (`src/shared/DuneField.luau`, testé) : grandes dunes transverses au vent, dos en
+  pente douce, face d'éboulement raide, petites dunes obliques et rides par-dessus ; environ 21 % du sol en dunes
+  (jusqu'à ~12 studs), le reste en couloirs presque plats (premier prototype jugé trop chargé). Plat autour des points
+  d'apparition au sol et des dalles des geysers et lanceurs ; les dunes s'effacent avant le pied des rampes.
+  - Le Terrain n'est pas dans `Map.rbxm` : `src/server/MapTerrain.luau` le reconstruit au démarrage du serveur depuis
+    les attributs `DunesPlan` (repère du plan) et `DunesRing` (anneau) posés par le générateur, qui l'appelle aussi
+    pour l'aperçu en mode Edit (code du jeu synchronisé dans Studio). Sans ces attributs (ancienne ville), rien.
+  - Marchable partout : le test vérifie une pente max sous le seuil de surf, avec 3° de marge (mesuré : 40,6° pour
+    45,6°). Augmenter la hauteur ou resserrer les dunes raidit les faces : relancer le test.
+  - Le sable ne doit jamais dépasser de la surface d'une rampe : une congère au pied des rampes (prototype) y mordait
+    et aurait cassé le surf.
+  - Piste rejetée : bosses en calottes de sphère (parts), trop simplistes ; un mesh Blender aurait une collision
+    approchée (décomposition convexe), alors que celle du Terrain suit exactement la surface visible.
+
+### Matières (MaterialVariant)
+
+- Générées dans Studio par le MCP (`generate_material`, une description par matière). Chaque génération donne
+  4 variantes rangées dans un dossier de `MaterialService` : les comparer sur un mur d'échantillons, garder la
+  meilleure à la racine de `MaterialService` sous son nom définitif, supprimer le reste. Les textures sont hébergées par
+  Roblox, rien à publier.
+- Versionnées dans `assets/rbx/Materials/<Nom>.rbxm` (Rojo : `MaterialService`), exportées avec la map par
+  `studio_export.luau`. Une MaterialVariant ajoutée à la main sans être exportée est supprimée à la connexion Rojo.
+- Piège : `rojo serve` ignore un dossier `$path` créé après son démarrage (ici `assets/rbx/Materials`, créé par le
+  premier export). Il sert alors un `MaterialService` vide et, à chaque connexion, retire les matières de Studio sans
+  les recréer. Relancer le serveur (`csgo-worktree.ps1 <branche> -Stop`, puis sans option).
+- La couleur de la pièce ne teinte presque pas une MaterialVariant : la teinte vient de la texture (et de la lumière
+  du crépuscule). Pour changer la couleur, régénérer la matière.
+- `verify_place.luau` échoue si une pièce de la map pointe vers une MaterialVariant absente (sinon elle retombe en
+  silence sur sa matière de base), ou si une matière n'a pas de texture.
 
 ## La ville ensablée (ancienne map)
 
@@ -63,7 +99,7 @@ Itérer sur la map (depuis la racine du worktree, Studio en mode Edit, **plugin 
 3. Regarder le résultat (`screen_capture`, voir les pièges ci-dessous), recommencer.
 4. Exporter : `lune run tools/rbxm/receive.luau`, puis dans Studio
    `return loadstring(game:GetService("HttpService"):GetAsync("http://localhost:34992/studio_export.luau"))()`
-   (exporte aussi les armes, cf. `docs/assets.md` ; vérifier `git status`).
+   (exporte aussi les armes et les matières, cf. `docs/assets.md` ; vérifier `git status`).
 5. `rojo build default.project.json -o CSGO.rbxlx && lune run tools/rbxm/verify_place.luau` : vérifie que la map
    a des points d'apparition, que chaque lanceur a un attribut `Speed` et que chaque boost est configuré.
 6. Reconnecter le plugin Rojo et accepter le patch.
@@ -115,13 +151,21 @@ Mêmes règles que les armes : ne jamais réécrire `Map.rbxm` pendant que Studi
 - **Caméras de capture** : une caméra posée au hasard dans la ville tombe souvent dans un bloc. Calculer les positions
   dans le repère du plan (même `base` que le générateur).
 
-- **Virages en segments** : un virage fait de WedgePart en corde perd un peu de vitesse à chaque jointure (≈ 1 -
-  cos de l'angle entre segments). 36 segments par demi-tour limitent la perte ; un mesh courbe (Blender) la supprime.
+- **Virages en segments** : avec le ClipVelocity Source, chaque jointure entre deux WedgePart retire ≈ 1 - cos de
+  l'angle entre segments ; mesuré sur l'Arène (36 segments par demi-tour) : -14 % d'énergie sur un virage (#71).
+  Jugé acceptable pour l'instant. Correction envisagée plus tard, dans le mouvement : entre deux facettes de surf
+  presque parallèles, réorienter la vitesse au lieu de la clipper (essai : -0,2 %). Piste rejetée : un mesh courbe
+  modélisé dans Blender. Il reste fait de facettes, et les requêtes spatiales lisent sa géométrie de collision
+  (décomposition convexe), plus grossière que les segments : il ne supprime pas la perte. Mesurer un virage :
+  `tools/map/measure_turn.luau` (servi par `serve.luau`, Rojo connecté au worktree) ; sans perte, l'énergie
+  (½v² + g·h) reste constante, et la vitesse seule baisse normalement quand on monte la dune.
 - **Décor sans collision** : toute pièce décorative (arêtes néon, bandes, colonnes de geyser) doit avoir `CanQuery`
   faux, sinon les raycasts du mouvement la prennent pour un mur ou une rampe.
 
 ## Reste à faire
 
-- Arène : valider en jeu (vitesse sur l'anneau, perte dans les virages, visée des geysers et sorties du soleil),
-  puis modéliser les virages en courbes dans Blender.
+- Arène (#71) : matières définitives (MaterialVariants : sable, façades, falaise, brume, silhouettes), puis vrais
+  modèles Blender pour la place (bus, kiosque, murets) et la passerelle des snipers. Valider en jeu la visée des
+  geysers et des sorties du soleil.
+- Plus tard : supprimer la perte de vitesse dans les virages en segments (correction du mouvement, voir les pièges).
 - Son et effet au déclenchement d'un boost.

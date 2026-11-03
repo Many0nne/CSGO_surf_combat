@@ -1,6 +1,7 @@
 -- verify_place.luau
 -- Relit la place produite par `rojo build` et vérifie que les viewmodels (assets/rbx/ViewModels), les Tools
--- (assets/rbx/Tools) et la map (assets/rbx/Maps) y sont, avec leurs animations, sons, attributs et scripts.
+-- (assets/rbx/Tools), la map (assets/rbx/Maps) et ses matières (assets/rbx/Materials) y sont, avec leurs animations,
+-- sons, textures, attributs et scripts.
 -- Signale aussi les Tools dont le nom d'arme n'a pas d'entrée dans src/shared/WeaponConfig.luau (avertissement,
 -- sans échec).
 -- Usage (racine du dépôt) : rojo build default.project.json -o CSGO.rbxlx && lune run tools/rbxm/verify_place.luau [CSGO.rbxlx]
@@ -37,12 +38,13 @@ local ID_PROPS = {
 	Animation = { "AnimationContent", "AnimationId" },
 	Sound = { "AudioContent", "SoundId" },
 	MeshPart = { "MeshContent", "MeshId" },
+	MaterialVariant = { "ColorMapContent", "ColorMap" },
 }
 
 -- Cette méthode permet de relever les ids d'assets (animations, sons, meshes) en lisant le XML de la place
 -- lorsque Studio les écrit sous leurs noms récents (AnimationContent, AudioContent, MeshContent), que Lune 0.9 ignore.
 local function scanAssetIds(xml: string): { [string]: { { name: string, uri: string? } } }
-	local found = { Animation = {}, Sound = {}, MeshPart = {} }
+	local found = { Animation = {}, Sound = {}, MeshPart = {}, MaterialVariant = {} }
 	for class, props in string.gmatch(xml, '<Item class="(%w+)" referent="[^"]*">%s*<Properties>(.-)</Properties>') do
 		local idProps = ID_PROPS[class]
 		if idProps then
@@ -169,9 +171,29 @@ else
 			fail("Maps.Map.Boosts." .. boost.Name .. string.format(" : Kind %q inconnu", tostring(kind)))
 		end
 	end
+	-- matières (#71) : toute MaterialVariant posée sur une pièce de la map existe dans MaterialService, sinon la
+	-- pièce retombe en silence sur sa matière de base
+	local variants = {}
+	for _, v in game:GetService("MaterialService"):GetChildren() do
+		variants[v.Name] = v
+	end
+	local missing = {}
+	for _, d in map:GetDescendants() do
+		if d:IsA("BasePart") and d.MaterialVariant ~= "" and not variants[d.MaterialVariant] then
+			missing[d.MaterialVariant] = true
+		end
+	end
+	for name in missing do
+		fail("MaterialVariant " .. name .. " utilisée par Maps.Map mais absente de MaterialService")
+	end
 	local kill = map:GetAttribute("KillHeight")
 	if kill ~= nil and type(kill) ~= "number" then
 		fail("Maps.Map.KillHeight doit être un nombre")
+	end
+	-- dunes en Terrain (#71, src/server/MapTerrain.luau) : les deux attributs vont ensemble, avec le bon type
+	local dunesPlan, dunesRing = map:GetAttribute("DunesPlan"), map:GetAttribute("DunesRing")
+	if (dunesPlan ~= nil or dunesRing ~= nil) and (typeof(dunesPlan) ~= "CFrame" or typeof(dunesRing) ~= "Vector3") then
+		fail("Maps.Map : DunesPlan (CFrame) et DunesRing (Vector3) doivent être posés ensemble")
 	end
 	print(
 		string.format(
@@ -185,7 +207,8 @@ else
 	)
 end
 
--- ids d'assets : une animation ou un mesh sans id est une erreur ; un son sans id est seulement signalé
+-- ids d'assets : une animation, un mesh ou une matière sans texture est une erreur ; un son sans id est seulement
+-- signalé
 for class, entries in scanAssetIds(fs.readFile(placePath)) do
 	local withId = 0
 	for _, entry in entries do
