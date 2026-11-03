@@ -1,0 +1,721 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}</style>
+<title>Plans de la ville ensablée</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Mise en page : une maquette 3D par plan en tête, notes de jeu dessous, boosts et décision à la fin. Look unique « crépuscule » du jeu. */
+:root {
+  --night: #10142a;
+  --dusk: #1a1c33;
+  --panel: #22213a;
+  --line: #3a3550;
+  --bone: #f3e9dc;
+  --muted: #b5a797;
+  --amber: #ffaa6e;
+  --sand: #be865e;
+  --hit: #e0453a;
+  --f-display: "Anton", "Impact", "Arial Narrow", sans-serif;
+  --f-body: "Barlow", "Segoe UI", system-ui, sans-serif;
+  --f-data: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  color-scheme: dark;
+}
+body { background: var(--night); color: var(--bone); font-family: var(--f-body); font-size: 16px; line-height: 1.55; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 28px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 28px; }
+header { display: grid; gap: 10px; }
+.eyebrow { font-family: var(--f-data); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--amber); }
+h1 { font-family: var(--f-display); font-weight: 400; font-size: clamp(40px, 7vw, 76px); line-height: .95; margin: 0; transform: skewX(-6deg); transform-origin: left; text-wrap: balance; letter-spacing: .01em; }
+h1 span { color: var(--amber); }
+.lead { max-width: 68ch; color: var(--muted); margin: 0; }
+.lead b { color: var(--bone); font-weight: 600; }
+
+.tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.tab { all: unset; cursor: pointer; display: grid; gap: 4px; padding: 14px 16px; background: var(--dusk); border-top: 3px solid var(--line); transition: border-color .2s, background .2s; }
+.tab:hover { background: var(--panel); }
+.tab:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.tab[aria-selected="true"] { border-top-color: var(--amber); background: var(--panel); }
+.tab .k { font-family: var(--f-data); font-size: 11px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
+.tab .n { font-family: var(--f-display); font-size: 26px; line-height: 1.05; letter-spacing: .02em; }
+.tab .d { font-size: 14px; color: var(--muted); }
+.tab .tag { justify-self: start; font-family: var(--f-data); font-size: 11px; padding: 2px 7px; background: var(--amber); color: var(--night); margin-top: 4px; }
+.tab .tag.alt { background: transparent; color: var(--amber); outline: 1px solid var(--amber); }
+
+.viewer { position: relative; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; max-height: 74vh; background: var(--dusk); overflow: hidden; }
+.viewer canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.labels { position: absolute; inset: 0; pointer-events: none; }
+.lab { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 12.5px; font-weight: 500; color: var(--bone); text-shadow: 0 1px 3px #000, 0 0 8px #000; }
+.lab i { width: 9px; height: 9px; flex: none; transform: rotate(45deg); background: var(--amber); box-shadow: 0 0 0 2px rgba(0,0,0,.55); }
+.lab.spawn i { background: var(--bone); }
+.lab.combat i { background: var(--hit); }
+.lab.boost i { background: #ffd36e; border-radius: 50%; transform: none; }
+.legend { position: absolute; left: 12px; top: 12px; display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 8px 10px; background: rgba(16,20,42,.72); font-size: 12px; color: var(--muted); max-width: calc(100% - 24px); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 9px; height: 9px; transform: rotate(45deg); background: var(--amber); }
+.legend .sp i { background: var(--bone); } .legend .cb i { background: var(--hit); } .legend .bo i { background: #ffd36e; border-radius: 50%; transform: none; }
+.legend .pa i { width: 16px; height: 3px; transform: none; background: var(--amber); }
+.cams { position: absolute; left: 12px; bottom: 12px; right: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+.cams button { font: 500 13px var(--f-body); color: var(--bone); background: rgba(16,20,42,.8); border: 1px solid var(--line); padding: 6px 11px; cursor: pointer; }
+.cams button:hover { border-color: var(--amber); }
+.cams button:focus-visible { outline: 2px solid var(--amber); }
+.cams button[aria-pressed="true"] { background: var(--amber); color: var(--night); border-color: var(--amber); }
+.hint { position: absolute; right: 12px; top: 12px; font-size: 12px; color: var(--muted); background: rgba(16,20,42,.72); padding: 6px 9px; }
+.fail { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--muted); }
+
+.detail { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 28px; }
+.detail h2 { font-family: var(--f-display); font-weight: 400; font-size: 34px; margin: 0 0 6px; letter-spacing: .02em; }
+.detail .pitch { color: var(--muted); margin: 0 0 18px; max-width: 62ch; }
+.play { display: grid; gap: 14px; }
+.play div { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.play h3 { margin: 0; font-family: var(--f-data); font-weight: 500; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--amber); padding-top: 3px; }
+.play p { margin: 0; }
+.side { display: grid; gap: 18px; align-content: start; }
+.stats { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; background: var(--dusk); padding: 16px 18px; }
+.stats dt { color: var(--muted); font-size: 14px; }
+.stats dd { margin: 0; font-family: var(--f-data); font-size: 14px; text-align: right; font-variant-numeric: tabular-nums; }
+.note { padding: 14px 16px; border-left: 3px solid var(--hit); background: var(--dusk); font-size: 15px; }
+.note b { color: var(--bone); }
+.note.ref { border-left-color: var(--bone); }
+
+section h2.sec { font-family: var(--f-display); font-weight: 400; font-size: 40px; margin: 0 0 6px; transform: skewX(-6deg); transform-origin: left; }
+section .sub { color: var(--muted); margin: 0 0 18px; max-width: 70ch; }
+.boosts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.boost { background: var(--dusk); padding: 18px; display: grid; gap: 8px; align-content: start; }
+.boost .bn { font-family: var(--f-display); font-size: 24px; letter-spacing: .02em; }
+.boost .role { font-family: var(--f-data); font-size: 12px; color: var(--amber); text-transform: uppercase; letter-spacing: .1em; }
+.boost p { margin: 0; font-size: 15px; }
+.boost ul { margin: 0; padding-left: 18px; font-size: 14px; color: var(--muted); display: grid; gap: 4px; }
+.verdict { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+.verdict > div { background: var(--dusk); padding: 20px; }
+.verdict h3 { margin: 0 0 8px; font-family: var(--f-display); font-weight: 400; font-size: 26px; }
+.verdict p, .verdict ol { margin: 0 0 10px; }
+.verdict ol { padding-left: 20px; display: grid; gap: 8px; }
+footer { color: var(--muted); font-size: 13px; }
+
+@media (max-width: 820px) {
+  .tabs { grid-template-columns: minmax(0, 1fr); }
+  .detail, .verdict { grid-template-columns: minmax(0, 1fr); }
+  .boosts { grid-template-columns: minmax(0, 1fr); }
+  .viewer { aspect-ratio: 4 / 5; max-height: 80vh; }
+  .hint { display: none; }
+  .play div { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Ville ensablée · refonte du plan · inspiré de surf_japan</div>
+    <h1>Trois plans <span>pour surfer</span></h1>
+    <p class="lead">La DA ne change pas : sable, façades sombres, arêtes ambrées, soleil bas. Le plan change. Au lieu d'une ville où l'on surfe parfois, ces trois plans sont faits de <b>longues rampes continues</b> qui forment un circuit, avec des zones au sol pour se battre et des <b>boosts</b> pour repartir. Les maquettes sont à l'échelle, en studs (un joueur mesure 5 studs). Tourne autour avec la souris ou le doigt.</p>
+  </header>
+
+  <div class="tabs" role="tablist" aria-label="Plans proposés">
+    <button class="tab" role="tab" id="tab-0" aria-selected="true" data-i="0">
+      <span class="k">Plan A</span><span class="n">La Digue</span>
+      <span class="d">Une bande de ville au-dessus du vide, deux rampes jumelles, un village au bout.</span>
+      <span class="tag alt">Le plus proche de surf_japan</span>
+    </button>
+    <button class="tab" role="tab" id="tab-1" aria-selected="false" data-i="1">
+      <span class="k">Plan B</span><span class="n">L'Arène</span>
+      <span class="d">Un anneau de dunes adossé aux gratte-ciel, autour d'une place.</span>
+      <span class="tag">Ma recommandation</span>
+    </button>
+    <button class="tab" role="tab" id="tab-2" aria-selected="false" data-i="2">
+      <span class="k">Plan C</span><span class="n">L'Échangeur</span>
+      <span class="d">Un échangeur autoroutier enseveli : chaque viaduc devient une rampe.</span>
+      <span class="tag alt">Le plus original</span>
+    </button>
+  </div>
+
+  <div class="viewer" id="viewer">
+    <div class="labels" id="labels"></div>
+    <div class="legend" aria-hidden="true">
+      <span class="pa"><i></i>Trajet de vitesse</span>
+      <span><i></i>Surf</span>
+      <span class="cb"><i></i>Combat</span>
+      <span class="bo"><i></i>Boost</span>
+      <span class="sp"><i></i>Apparition</span>
+    </div>
+    <div class="hint">Glisser : tourner · Molette : zoom · Clic droit : déplacer</div>
+    <div class="cams" id="cams">
+      <button data-cam="over" aria-pressed="true">Vue d'ensemble</button>
+      <button data-cam="top" aria-pressed="false">Plan (dessus)</button>
+      <button data-cam="ground" aria-pressed="false">Sur la rampe</button>
+      <button data-cam="spin" aria-pressed="false" id="spinBtn">Rotation auto</button>
+    </div>
+  </div>
+
+  <div class="detail" id="detail"></div>
+
+  <section>
+    <h2 class="sec">Les boosts</h2>
+    <p class="sub">On a perdu sa vitesse, on est au sol, tout le monde nous voit. Un boost doit relancer le joueur, mais il doit aussi se voir de loin pour que l'adversaire puisse anticiper la sortie. Le spawn depuis le soleil fait déjà le travail technique : le serveur pose une vitesse sur le personnage, le client l'applique. Les trois boosts réutilisent ce mécanisme.</p>
+    <div class="boosts">
+      <div class="boost">
+        <span class="role">Relance · au sol</span>
+        <span class="bn">Geyser de sable</span>
+        <p>Une plaque ambrée au sol, surmontée d'une colonne de sable visible de loin. On marche dessus et on est projeté vers le haut, vers la rampe la plus proche.</p>
+        <ul>
+          <li>Direction fixe, posée sur la map</li>
+          <li>Remplace la vitesse : relance garantie</li>
+          <li>Recharge de 3 s par joueur</li>
+        </ul>
+      </div>
+      <div class="boost">
+        <span class="role">Accélérateur · sur la rampe</span>
+        <span class="bn">Portique</span>
+        <p>Un cadre ambré (panneau d'autoroute, arche de façade) placé sur la ligne de surf. On passe dedans et on gagne de la vitesse dans le sens où l'on va déjà.</p>
+        <ul>
+          <li>Ajoute environ +40 studs/s</li>
+          <li>Plafonné sous MAX_SPEED_SERVER (300)</li>
+          <li>Récompense ceux qui suivent bien le circuit</li>
+        </ul>
+      </div>
+      <div class="boost">
+        <span class="role">Retour · bout de circuit</span>
+        <span class="bn">Lanceur</span>
+        <p>Comme la sortie du soleil, en cours de partie : une dalle qui envoie sur un point précis, souvent le haut des rampes. Il ferme la boucle sur les plans qui en ont besoin.</p>
+        <ul>
+          <li>Trajectoire fixe et prévisible</li>
+          <li>Vulnérable en l'air : point chaud</li>
+          <li>Données déjà prévues : <code>LookVector</code> + <code>Speed</code></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="verdict">
+    <div>
+      <h3>Mon avis</h3>
+      <p><b>L'Arène</b> est le plan qui garde le mieux la vitesse : on fait un tour d'environ 1 300 studs de rampe sans jamais toucher le sol, et la place au centre donne un endroit pour se battre à pied. C'est le plus simple à rendre agréable.</p>
+      <p><b>La Digue</b> est le plus fidèle à surf_japan, mais on surfe dans un seul sens, et c'est le lanceur qui ramène en haut des rampes. <b>L'Échangeur</b> est le plus marquant visuellement, mais c'est aussi le plus long à régler.</p>
+      <p>Les éléments se combinent. On peut par exemple mettre le village et le canal de la Digue au milieu de l'Arène.</p>
+    </div>
+    <div>
+      <h3>À trancher avant la maquette grise</h3>
+      <ol>
+        <li>Quel plan je construis en gris dans Studio pour un essai en jeu (un, ou deux à comparer).</li>
+        <li>Tomber hors de la map : mort immédiate comme sur surf_japan (la Digue, au-dessus du vide), ou map fermée où l'on ne peut pas tomber (Arène, Échangeur) ?</li>
+        <li>Quels boosts au premier essai : les geysers seuls, ou les trois.</li>
+      </ol>
+    </div>
+  </section>
+
+  <footer>Maquettes de volumes, pas de rendu final. Les virages faits de segments seront modélisés en courbes dans Blender une fois le plan validé (cf. docs/maps.md). Pentes de surf à 55° (surfable entre 46° et 84°).</footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function () {
+  "use strict";
+  const PLANS = [
+    {
+      name: "La Digue",
+      pitch: "Une bande de ville de 680 × 270 studs posée sur une crête de sable, au-dessus d'une mer de brume. On sort du soleil par la tour, on descend deux grandes rampes jumelles face à face, et l'on arrive dans un village de maisons ensablées dont les toits sont surfables.",
+      rows: [
+        ["Vitesse", "Tour du soleil, puis les rampes jumelles : 315 studs de long, qui descendent de 85 à 55 studs de haut. Ensuite les toits du village (pentes à 55°, faîtage dans l'axe : on surfe d'un toit à l'autre). Au pied de la gare, un lanceur renvoie en haut des rampes."],
+        ["Combat", "D'une rampe à l'autre par-dessus le canal (60 à 100 studs), dans le village entre les maisons, et dans la gare ensevelie au bout (intérieur, couverts)."],
+        ["Boosts", "Deux geysers dans le canal : c'est là qu'on tombe quand on rate un saut. Des portiques sur les rampes, et le lanceur de la gare."],
+        ["Apparition", "Deux camps possibles : le toit de la tour côté soleil, et la gare de l'autre côté. En mêlée générale, sortie du soleil comme aujourd'hui."]
+      ],
+      stats: [["Emprise", "680 × 270"], ["Rampe continue", "2 × 315"], ["Hauteur des rampes", "85 → 55"], ["Toits surfables", "6"], ["Hors map", "vide, mort"]],
+      ref: "<b>Repris de surf_japan :</b> la bande au-dessus du vide, les deux rampes côte à côte de part et d'autre d'un canal, le village aux grands toits en pente, un grand bâtiment à chaque bout.",
+      risk: "<b>Risque :</b> plan linéaire. On surfe dans un seul sens et le retour dépend du lanceur. Une fois au village, on y reste si on rate le lanceur."
+    },
+    {
+      name: "L'Arène",
+      pitch: "Un anneau de dunes continues, adossé à une ceinture de gratte-ciel ensablés, autour d'une place de 500 × 160 studs. On tourne sans fin sur la rampe, et l'on voit tout le monde de l'autre côté.",
+      rows: [
+        ["Vitesse", "Anneau fermé : deux lignes droites de 340 studs et deux virages de 120 studs de rayon, environ 1 300 studs de rampe sans interruption. À 150 studs/s, un tour prend 8 à 9 s."],
+        ["Combat", "On se tire dessus d'un côté à l'autre de l'arène. Au centre : bus ensevelis et kiosque pour couvrir ceux qui ont perdu leur vitesse. À 78 studs de haut, une passerelle entre deux tours pour les snipers."],
+        ["Boosts", "Deux geysers sur la place, qui renvoient sur l'anneau. Un portique au milieu de chaque ligne droite. Un lanceur vers la passerelle."],
+        ["Apparition", "Sortie du soleil par-dessus les tours côté ouest, droit sur l'anneau."]
+      ],
+      stats: [["Emprise", "640 × 440"], ["Rampe continue", "≈ 1 300"], ["Hauteur des rampes", "55"], ["Diamètre intérieur", "240"], ["Hors map", "fermée"]],
+      ref: "<b>Repris de surf_japan :</b> les rampes face à face, avec une ligne de tir dégagée entre elles. Ici on les referme en boucle pour ne jamais devoir revenir en arrière.",
+      risk: "<b>Risque :</b> les virages. S'ils sont faits de segments mal raccordés, on accroche et on perd la vitesse. Il faut les modéliser en courbes (Blender) avant de juger le plan."
+    },
+    {
+      name: "L'Échangeur",
+      pitch: "Un échangeur d'autoroute enseveli. Le sable s'est accumulé contre les viaducs : chacun devient une rampe très longue, avec une chaussée plate dessus. Le viaduc haut passe par-dessus le viaduc bas.",
+      rows: [
+        ["Vitesse", "On prend la face nord du viaduc bas vers l'est, une bretelle en demi-tour, puis la face sud vers l'ouest. La dune du viaduc haut s'arrête avant le croisement : on saute par-dessus le viaduc bas et on retombe sur l'autre moitié."],
+        ["Combat", "Sur les chaussées (marchables, à découvert), au croisement sur deux niveaux, et sous les viaducs entre les voitures ensevelies."],
+        ["Boosts", "Des geysers entre les voitures, un portique-panneau sur la chaussée du viaduc bas, et un lanceur à la sortie de la bretelle vers le viaduc haut."],
+        ["Apparition", "Sortie du soleil côté ouest, au-dessus de la tête du viaduc bas."]
+      ],
+      stats: [["Emprise", "700 × 560"], ["Viaduc bas", "560 · h 40"], ["Viaduc haut", "630 · h 72"], ["Bretelle", "≈ 340"], ["Hors map", "fermée"]],
+      ref: "<b>Repris de surf_japan :</b> les rampes longues avec un dessus plat où l'on peut se poser, et le passage d'un niveau à l'autre en sautant.",
+      risk: "<b>Risque :</b> plus de pièces à régler. Il faut équilibrer deux hauteurs, ajuster le saut au croisement, et la bretelle est en courbe."
+    }
+  ];
+
+  const viewer = document.getElementById("viewer");
+  const labelsEl = document.getElementById("labels");
+  const detailEl = document.getElementById("detail");
+
+  // Cette méthode permet d'afficher le texte d'un plan sous la maquette lorsque l'onglet change.
+  function renderDetail(i) {
+    const p = PLANS[i];
+    detailEl.innerHTML =
+      '<div><h2>' + p.name + '</h2><p class="pitch">' + p.pitch + '</p><div class="play">' +
+      p.rows.map(r => '<div><h3>' + r[0] + '</h3><p>' + r[1] + '</p></div>').join("") +
+      '</div></div><div class="side"><dl class="stats">' +
+      p.stats.map(s => '<dt>' + s[0] + '</dt><dd>' + s[1] + '</dd>').join("") +
+      '</dl><div class="note ref">' + p.ref + '</div><div class="note">' + p.risk + '</div></div>';
+  }
+
+  const tabs = Array.from(document.querySelectorAll(".tab"));
+  let current = 0;
+  renderDetail(0);
+
+  if (typeof THREE === "undefined") {
+    const f = document.createElement("div"); f.className = "fail";
+    f.textContent = "La maquette 3D n'a pas pu se charger. Le détail des plans reste lisible ci-dessous.";
+    viewer.appendChild(f);
+    tabs.forEach(t => t.addEventListener("click", () => { tabs.forEach(x => x.setAttribute("aria-selected", x === t)); renderDetail(+t.dataset.i); }));
+    return;
+  }
+
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const D = Math.PI / 180;
+  const C = { sand: 0xb98257, sandHi: 0xcf9d6c, sandLo: 0x9a6a48, ground: 0xb07a55, amber: 0xffaa6e, gold: 0xffd36e, bone: 0xf3e9dc, asphalt: 0x3a3440, hit: 0xe0453a };
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  viewer.insertBefore(renderer.domElement, viewer.firstChild);
+
+  const camera = new THREE.PerspectiveCamera(50, 16 / 9, 2, 6000);
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.maxPolarAngle = 89 * D;
+  controls.minDistance = 40;
+  controls.maxDistance = 2200;
+  controls.autoRotateSpeed = 0.6;
+
+  // Ciel du crépuscule (dégradé bleu nuit vers horizon chaud) et halo du soleil
+  function gradientTexture() {
+    const c = document.createElement("canvas"); c.width = 4; c.height = 512;
+    const g = c.getContext("2d"); const gr = g.createLinearGradient(0, 0, 0, 512);
+    gr.addColorStop(0, "#0c1230"); gr.addColorStop(0.45, "#252a4c"); gr.addColorStop(0.72, "#6e4a52"); gr.addColorStop(0.86, "#c27654"); gr.addColorStop(1, "#e7a066");
+    g.fillStyle = gr; g.fillRect(0, 0, 4, 512);
+    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t;
+  }
+  function glowTexture() {
+    const c = document.createElement("canvas"); c.width = c.height = 256;
+    const g = c.getContext("2d"); const gr = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+    gr.addColorStop(0, "rgba(255,250,235,1)"); gr.addColorStop(0.12, "rgba(255,236,200,1)"); gr.addColorStop(0.3, "rgba(255,180,120,.45)"); gr.addColorStop(1, "rgba(255,150,90,0)");
+    g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+    return new THREE.CanvasTexture(c);
+  }
+  const SKY = gradientTexture();
+  const GLOW = glowTexture();
+  const SUN_DIR = new THREE.Vector3(-0.9168, 0.2, -0.3987).normalize();
+
+  const matCache = {};
+  // Cette méthode permet d'obtenir un matériau mat à facettes lorsqu'on construit un volume de couleur donnée.
+  function mat(color) {
+    if (!matCache[color]) matCache[color] = new THREE.MeshStandardMaterial({ color: color, roughness: 0.92, metalness: 0, flatShading: true });
+    return matCache[color];
+  }
+  const amberMat = new THREE.MeshBasicMaterial({ color: C.amber });
+  const goldMat = new THREE.MeshBasicMaterial({ color: C.gold });
+
+  // Générateur pseudo-aléatoire déterministe (même graine = même maquette)
+  function rng(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+  let R = rng(69);
+  function ink() { const r = 32 + R() * 26, g = 29 + R() * 16, b = 38 + R() * 14; return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b); }
+
+  function shade(m) { m.castShadow = true; m.receiveShadow = true; return m; }
+
+  // Cette méthode permet de poser une boîte par sa base lorsqu'on construit sol, bâtiments ou couverts.
+  function box(g, x, y, z, w, h, d, color, ry) {
+    const m = shade(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(color)));
+    m.position.set(x, y + h / 2, z); m.rotation.y = ry || 0; g.add(m); return m;
+  }
+
+  // Cette méthode permet de construire une rampe prismatique entre deux points (x, z) lorsqu'on lui donne hauteur et pentes.
+  // l / r : pente côté -X / +X local (90 = mur vertical), top : demi-largeur du dessus plat, drop : abaisse l'extrémité b.
+  function prism(g, a, b, o) {
+    const h = o.h, top = o.top || 0;
+    const tl = o.l >= 90 ? 0 : h / Math.tan(o.l * D), tr = o.r >= 90 ? 0 : h / Math.tan(o.r * D);
+    const s = new THREE.Shape();
+    s.moveTo(-top - tl, 0); s.lineTo(top + tr, 0); s.lineTo(top, h);
+    if (top > 0) s.lineTo(-top, h);
+    s.lineTo(-top - tl, 0);
+    const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz);
+    const geo = new THREE.ExtrudeGeometry(s, { depth: L, bevelEnabled: false });
+    geo.translate(0, 0, -L / 2);
+    const m = shade(new THREE.Mesh(geo, mat(o.color || C.sand)));
+    m.rotation.order = "YXZ"; m.rotation.y = Math.atan2(dx, dz); m.rotation.x = Math.atan2(o.drop || 0, L);
+    m.position.set((a[0] + b[0]) / 2, o.y || 0, (a[1] + b[1]) / 2);
+    if (o.ridge !== false) {
+      const xs = top > 0 ? [-top, top] : [0];
+      xs.forEach(x => { const r = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.4, L), amberMat); r.position.set(x, h, 0); m.add(r); });
+    }
+    g.add(m); return m;
+  }
+
+  // Cette méthode permet de poser une dune adossée (dos vertical) dont la pente regarde un point cible.
+  function bank(g, a, b, h, slope, target, extra) {
+    const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz);
+    const px = dz / L, pz = -dx / L, mx = (a[0] + b[0]) / 2, mz = (a[1] + b[1]) / 2;
+    const plus = (target[0] - mx) * px + (target[1] - mz) * pz > 0;
+    return prism(g, a, b, Object.assign({ h: h, l: plus ? 90 : slope, r: plus ? slope : 90 }, extra || {}));
+  }
+
+  // Cette méthode permet de construire un virage de dunes en segments lorsqu'on ferme une boucle de surf.
+  function arcBank(g, cx, cz, rad, t0, t1, segs, h, slope) {
+    const step = (t1 - t0) / segs, ov = step * 0.08;
+    for (let i = 0; i < segs; i++) {
+      const a0 = (t0 + i * step - ov) * D, a1 = (t0 + (i + 1) * step + ov) * D;
+      bank(g, [cx + rad * Math.cos(a0), cz + rad * Math.sin(a0)], [cx + rad * Math.cos(a1), cz + rad * Math.sin(a1)], h, slope, [cx, cz]);
+    }
+  }
+
+  // Cette méthode permet de poser un immeuble ensablé avec sa bande ambrée lorsqu'on habille les bords.
+  function building(g, x, z, w, d, h, ry, noBand) {
+    const m = box(g, x, 0, z, w, h, d, ink(), ry);
+    if (!noBand) { const b = new THREE.Mesh(new THREE.BoxGeometry(w + 0.8, 1.3, d + 0.8), amberMat); b.position.set(x, h - 2.5, z); b.rotation.y = ry || 0; g.add(b); }
+    if (R() < 0.6) { const c = shade(new THREE.Mesh(new THREE.ConeGeometry(Math.min(w, d) * 0.55, h * 0.22, 7), mat(C.sandLo))); c.position.set(x + (R() - 0.5) * w * 0.6, h * 0.11, z + (R() - 0.5) * d * 0.6); g.add(c); }
+    return m;
+  }
+
+  // Cette méthode permet de dresser des silhouettes lointaines sans détail lorsqu'on donne l'échelle autour de la map.
+  function skyline(g, r0, r1, n, y0, hmin, hmax) {
+    for (let i = 0; i < n; i++) {
+      const t = R() * Math.PI * 2, r = r0 + R() * (r1 - r0), w = 30 + R() * 50, h = hmin + R() * (hmax - hmin);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, w * (0.6 + R() * 0.6)), mat(0x241f2c));
+      m.position.set(Math.cos(t) * r, y0 + h / 2, Math.sin(t) * r); m.rotation.y = R() * 3; m.rotation.z = (R() - 0.5) * 0.12; g.add(m);
+    }
+  }
+
+  const pulses = [];
+  // Cette méthode permet de poser un geyser (anneau au sol et colonne pulsée) lorsqu'on place une relance.
+  function geyser(g, x, y, z) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(7, 1, 6, 24), goldMat); ring.rotation.x = Math.PI / 2; ring.position.set(x, y + 0.6, z); g.add(ring);
+    const pad = new THREE.Mesh(new THREE.CylinderGeometry(6, 6, 0.6, 24), mat(C.sandHi)); pad.position.set(x, y + 0.3, z); g.add(pad);
+    const colMat = new THREE.MeshBasicMaterial({ color: C.gold, transparent: true, opacity: 0.25, depthWrite: false, blending: THREE.AdditiveBlending });
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(3, 6, 60, 16, 1, true), colMat); col.position.set(x, y + 30, z); g.add(col);
+    pulses.push(colMat);
+  }
+  // Cette méthode permet de poser un portique accélérateur orienté selon le sens du surf.
+  function portal(g, x, y, z, yaw, tilt) {
+    const t = new THREE.Mesh(new THREE.TorusGeometry(11, 1.1, 6, 28), goldMat); t.position.set(x, y, z); t.rotation.order = "YXZ"; t.rotation.y = yaw; t.rotation.z = tilt || 0; g.add(t);
+  }
+  // Cette méthode permet de poser un lanceur (dalle et flèche) qui renvoie le joueur vers une cible.
+  function launcher(g, x, y, z, yaw) {
+    const p = new THREE.Mesh(new THREE.BoxGeometry(16, 1, 16), goldMat); p.position.set(x, y + 0.5, z); p.rotation.y = yaw; g.add(p);
+    const a = new THREE.Mesh(new THREE.ConeGeometry(4, 9, 4), goldMat); a.position.set(x, y + 8, z); g.add(a);
+  }
+  // Cette méthode permet de marquer un point d'apparition (losange os flottant).
+  function spawnMark(g, x, y, z) {
+    const m = new THREE.Mesh(new THREE.OctahedronGeometry(4), new THREE.MeshBasicMaterial({ color: C.bone })); m.position.set(x, y + 6, z); g.add(m);
+  }
+
+  // Cette méthode permet de tracer le trajet de vitesse et ses surfeurs lumineux lorsqu'on veut montrer la boucle.
+  function speedPath(g, pts, closed, nDots, dim) {
+    const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(p[0], p[1], p[2])), closed, "centripetal");
+    const tm = new THREE.MeshBasicMaterial({ color: C.amber, transparent: true, opacity: dim ? 0.35 : 0.6, depthWrite: false });
+    g.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 500, 1.1, 6, closed), tm));
+    const len = curve.getLength(), dots = [];
+    for (let i = 0; i < nDots; i++) {
+      const d = new THREE.Mesh(new THREE.SphereGeometry(2.6, 12, 8), new THREE.MeshBasicMaterial({ color: 0xfff1dc }));
+      g.add(d); dots.push({ m: d, t: i / nDots });
+    }
+    return { curve: curve, len: len, dots: dots };
+  }
+
+  function addSun(scene) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, fog: false, depthWrite: false, transparent: true, blending: THREE.AdditiveBlending }));
+    sp.scale.set(900, 900, 1); sp.position.copy(SUN_DIR.clone().multiplyScalar(2600)).setY(260); scene.add(sp);
+  }
+
+  function baseScene() {
+    const scene = new THREE.Scene();
+    scene.background = SKY;
+    scene.fog = new THREE.Fog(0x7a5250, 500, 1900);
+    scene.add(new THREE.HemisphereLight(0x55608f, 0x6a4030, 0.75));
+    const sun = new THREE.DirectionalLight(0xffcf9e, 1.5);
+    sun.position.copy(SUN_DIR.clone().multiplyScalar(1200));
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    const sc = sun.shadow.camera; sc.left = -560; sc.right = 560; sc.top = 560; sc.bottom = -560; sc.near = 100; sc.far = 2800;
+    sun.shadow.bias = -0.0006;
+    scene.add(sun); scene.add(sun.target);
+    addSun(scene);
+    return scene;
+  }
+
+  // ---------- Plan A : La Digue ----------
+  function buildDigue() {
+    R = rng(304); const s = baseScene(), g = new THREE.Group(); s.add(g);
+    // Crête de sable : tour, deux berges, fond du canal, falaise qui plonge dans la brume
+    box(g, -295, -60, 0, 90, 60, 280, C.sandLo);
+    box(g, 35, -60, -73.5, 590, 60, 123, C.ground);
+    box(g, 35, -60, 73.5, 590, 60, 123, C.ground);
+    box(g, 35, -60, 0, 590, 46, 24, 0x5b3d34);
+    box(g, 0, -260, 0, 700, 200, 250, 0x6a4636);
+    const sea = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), mat(0x4a3034)); sea.rotation.x = -Math.PI / 2; sea.position.y = -230; g.add(sea);
+    skyline(g, 700, 1500, 34, -230, 120, 420);
+    // Tour du soleil (spawn A)
+    building(g, -295, 0, 70, 130, 140);
+    spawnMark(g, -295, 140, 0);
+    // Rampes jumelles face à face (descendent vers le village)
+    prism(g, [-258, 70], [62, 70], { h: 85, l: 55, r: 55, y: -15, drop: 30 });
+    prism(g, [-258, -70], [62, -70], { h: 85, l: 55, r: 55, y: -15, drop: 30 });
+    // Village : maisons aux toits surfables (faîtage dans l'axe), passerelles sur le canal
+    [100, 165, 230].forEach((x, i) => {
+      [-1, 1].forEach(sd => {
+        const z = sd * (58 + (i % 2) * 6), w = 50, d = 52, h = 18 + (i === 1 ? 8 : 0);
+        building(g, x, z, w, d, h, 0, true);
+        prism(g, [x - w / 2 - 2, z], [x + w / 2 + 2, z], { h: (d / 2) * Math.tan(55 * D), l: 55, r: 55, y: h, color: C.sandHi });
+      });
+    });
+    [132, 198].forEach(x => { box(g, x, -1, 0, 9, 2, 30, C.sandHi); });
+    // Gare ensablée (spawn B) : salle ouverte côté village
+    box(g, 312, 0, 0, 10, 72, 200, ink());
+    box(g, 290, 0, -96, 54, 72, 8, ink()); box(g, 290, 0, 96, 54, 72, 8, ink());
+    box(g, 290, 66, 0, 56, 8, 200, ink());
+    const band = new THREE.Mesh(new THREE.BoxGeometry(57, 1.4, 201), amberMat); band.position.set(290, 64, 0); g.add(band);
+    prism(g, [262, -100], [262, -40], { h: 30, l: 35, r: 90, color: C.sandLo, ridge: false });
+    prism(g, [262, 40], [262, 100], { h: 30, l: 35, r: 90, color: C.sandLo, ridge: false });
+    spawnMark(g, 290, 74, 0);
+    // Boosts
+    geyser(g, -110, -14, 0); geyser(g, 150, -14, 0);
+    launcher(g, 250, 0, 0, 0);
+    portal(g, -140, 52, 46, 0, -35 * D); portal(g, -140, 52, -46, 0, 35 * D);
+    const path = speedPath(g, [
+      [-292, 150, 0], [-262, 105, -30], [-220, 62, -52], [-120, 52, -48], [-10, 42, -45], [62, 34, -42],
+      [105, 62, -56], [168, 62, -64], [228, 54, -58], [252, 6, -12], [250, 4, 8], [200, 120, 18], [60, 175, 30],
+      [-90, 120, 40], [-150, 62, 50], [-40, 46, 46], [62, 36, 42], [108, 62, 54], [172, 66, 66], [232, 56, 60], [252, 8, 14]
+    ], false, 5);
+    const labels = [
+      { p: [-295, 160, 0], t: "Tour du soleil : apparition", k: "spawn" },
+      { p: [-110, 92, 72], t: "Rampes jumelles, 315 studs", k: "surf" },
+      { p: [-30, 8, 0], t: "Canal : on s'y bat, on y retombe", k: "combat" },
+      { p: [165, 70, 66], t: "Toits surfables à 55°", k: "surf" },
+      { p: [150, 52, 0], t: "Geyser", k: "boost" },
+      { p: [248, 22, 0], t: "Lanceur vers le haut des rampes", k: "boost" },
+      { p: [290, 84, 0], t: "Gare ensevelie : apparition, intérieur", k: "spawn" },
+      { p: [-140, 68, -46], t: "Portique", k: "boost" },
+      { p: [0, -150, 160], t: "Vide : chute mortelle", k: "combat" }
+    ];
+    return { scene: s, path: [path], labels: labels, cams: {
+      over: { p: [430, 300, 470], t: [-10, 10, 0] }, top: { p: [0, 1100, 1], t: [0, 0, 0] }, ground: { p: [-245, 78, -40], t: [120, 40, 20] } } };
+  }
+
+  // ---------- Plan B : L'Arène ----------
+  function buildArene() {
+    R = rng(8); const s = baseScene(), g = new THREE.Group(); s.add(g);
+    const gr = shade(new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), mat(C.ground))); gr.rotation.x = -Math.PI / 2; g.add(gr);
+    skyline(g, 520, 1300, 60, 0, 60, 300);
+    const H = 55, SL = 55, Z = 120, X = 170;
+    bank(g, [-X - 4, Z], [X + 4, Z], H, SL, [0, 0]);
+    bank(g, [-X - 4, -Z], [X + 4, -Z], H, SL, [0, 0]);
+    arcBank(g, X, 0, Z, -90, 90, 10, H, SL);
+    arcBank(g, -X, 0, Z, 90, 270, 10, H, SL);
+    // Ceinture de gratte-ciel derrière les dunes
+    for (let x = -X + 10; x <= X; x += 57) {
+      [-1, 1].forEach(sd => { const d = 46, h = (Math.abs(x) < 20 ? 100 : 70 + R() * 80); building(g, x, sd * (Z + d / 2 + 1), 50, d, h); });
+    }
+    [-1, 1].forEach(sd => {
+      for (let t = -75; t <= 75; t += 30) {
+        const a = t * D, r = Z + 26, cx = sd * X + sd * r * Math.cos(a), cz = r * Math.sin(a);
+        building(g, cx, cz, 44, 44, 70 + R() * 90, -a * sd);
+      }
+    });
+    // Place centrale : bus, kiosque, murets
+    box(g, -80, 0, 32, 32, 11, 10, 0x6d5a52, 0.35).rotation.z = 0.08;
+    box(g, 70, 0, -26, 32, 11, 10, 0x6d5a52, -0.5);
+    box(g, 150, 0, 30, 28, 10, 10, 0x6d5a52, 1.2);
+    box(g, 0, 0, 0, 18, 13, 18, ink()); prism(g, [-11, 0], [11, 0], { h: 9, l: 40, r: 40, y: 13, color: C.sandHi, ridge: false });
+    box(g, -150, 0, -30, 26, 5, 3, ink(), 0.4); box(g, 40, 0, 48, 30, 5, 3, ink(), -0.2); box(g, -30, 0, -50, 20, 5, 3, ink(), 0.1);
+    prism(g, [-60, -10], [-20, -30], { h: 7, l: 30, r: 30, color: C.sandLo, ridge: false });
+    prism(g, [90, 20], [130, 50], { h: 7, l: 30, r: 30, color: C.sandLo, ridge: false });
+    // Passerelle des snipers
+    box(g, 0, 76, 0, 14, 3, 2 * (Z + 24), 0x2d2836);
+    [-7, 7].forEach(x => { const r = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 2 * (Z + 24)), amberMat); r.position.set(x, 82, 0); g.add(r); });
+    // Boosts
+    geyser(g, -120, 0, 0); geyser(g, 120, 0, 0);
+    portal(g, 0, 26, Z - 22, Math.PI / 2, 0); portal(g, 0, 26, -Z + 22, Math.PI / 2, 0);
+    launcher(g, -30, 0, 70, 0);
+    spawnMark(g, -X - 150, 160, -30);
+    const ring = [];
+    for (let i = 0; i < 48; i++) {
+      const u = i / 48;
+      const r = Z - 21, f = (u % 0.25) / 0.25;
+      let x, z, a;
+      if (u < 0.25) { x = -X + f * 2 * X; z = r; }
+      else if (u < 0.5) { a = (90 - 180 * f) * D; x = X + r * Math.cos(a); z = r * Math.sin(a); }
+      else if (u < 0.75) { x = X - f * 2 * X; z = -r; }
+      else { a = (-90 - 180 * f) * D; x = -X + r * Math.cos(a); z = r * Math.sin(a); }
+      ring.push([x, 26 + Math.sin(u * Math.PI * 8) * 5, z]);
+    }
+    const path = speedPath(g, ring, true, 6);
+    const jump = speedPath(g, [[-X - 150, 166, -30], [-X - 60, 110, -40], [-X + 10, 50, -95]], false, 1, true);
+    const labels = [
+      { p: [-X - 150, 176, -30], t: "Sortie du soleil", k: "spawn" },
+      { p: [0, 62, Z - 8], t: "Ligne droite, 340 studs", k: "surf" },
+      { p: [X + 105, 62, 0], t: "Virage relevé (à modéliser en courbe)", k: "surf" },
+      { p: [0, 90, 60], t: "Passerelle des snipers, 78 studs", k: "combat" },
+      { p: [-80, 18, 32], t: "Place : bus et kiosque", k: "combat" },
+      { p: [120, 68, 0], t: "Geyser vers l'anneau", k: "boost" },
+      { p: [0, 40, -Z + 22], t: "Portique", k: "boost" },
+      { p: [-30, 14, 70], t: "Lanceur vers la passerelle", k: "boost" }
+    ];
+    return { scene: s, path: [path, jump], labels: labels, cams: {
+      over: { p: [380, 300, 430], t: [0, 10, 0] }, top: { p: [0, 1000, 1], t: [0, 0, 0] }, ground: { p: [-150, 34, 98], t: [200, 22, 70] } } };
+  }
+
+  // ---------- Plan C : L'Échangeur ----------
+  function buildEchangeur() {
+    R = rng(3); const s = baseScene(), g = new THREE.Group(); s.add(g);
+    const gr = shade(new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), mat(C.ground))); gr.rotation.x = -Math.PI / 2; g.add(gr);
+    skyline(g, 560, 1400, 60, 0, 50, 280);
+    // Viaduc bas : dune en trapèze, chaussée dessus, têtes en demi-cône
+    prism(g, [-280, 0], [280, 0], { h: 40, l: 55, r: 55, top: 13 });
+    box(g, 0, 40, 0, 560, 3, 26, C.asphalt);
+    for (let x = -270; x < 280; x += 24) { const d = new THREE.Mesh(new THREE.BoxGeometry(10, 0.4, 0.8), amberMat); d.position.set(x, 43.3, 0); g.add(d); }
+    const capW = shade(new THREE.Mesh(new THREE.CylinderGeometry(13, 41, 40, 20, 1, false, Math.PI, Math.PI), mat(C.sand))); capW.position.set(-280, 20, 0); g.add(capW);
+    const capE = shade(new THREE.Mesh(new THREE.CylinderGeometry(13, 41, 40, 20, 1, false, 0, Math.PI), mat(C.sand))); capE.position.set(280, 20, 0); g.add(capE);
+    // Bretelle en demi-tour
+    arcBank(g, 290, 0, 115, -95, 95, 12, 40, 55);
+    // Viaduc haut, dune interrompue au croisement
+    const A = [-180, -260], B = [180, 260];
+    const lerp = t => [A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t];
+    prism(g, lerp(0), lerp(0.33), { h: 72, l: 55, r: 55, top: 12 });
+    prism(g, lerp(0.67), lerp(1), { h: 72, l: 55, r: 55, top: 12 });
+    const L = Math.hypot(B[0] - A[0], B[1] - A[1]), yaw = Math.atan2(B[0] - A[0], B[1] - A[1]);
+    const deck = shade(new THREE.Mesh(new THREE.BoxGeometry(24, 3, L), mat(C.asphalt))); deck.position.set(0, 73.5, 0); deck.rotation.y = yaw; g.add(deck);
+    [-12, 12].forEach(o => { const r = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, L), amberMat); r.position.set(o, 4, 0); deck.add(r); });
+    for (let t = 0.36; t < 0.66; t += 0.075) { const p = lerp(t); const c = shade(new THREE.Mesh(new THREE.CylinderGeometry(3.5, 3.5, 72, 10), mat(0x4a4250))); c.position.set(p[0], 36, p[1]); g.add(c); }
+    // Portique-panneau sur le viaduc bas
+    const gx = -130;
+    box(g, gx, 43, -14, 2, 22, 2, 0x4a4250); box(g, gx, 43, 14, 2, 22, 2, 0x4a4250);
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(2, 7, 30), goldMat); panel.position.set(gx, 66, 0); g.add(panel);
+    // Voitures ensevelies et immeubles des quadrants
+    for (let i = 0; i < 34; i++) {
+      const x = (R() - 0.5) * 620, z = (R() - 0.5) * 520;
+      if (Math.abs(z) < 50) continue;
+      const nx = 0.82 * x - 0.57 * z; if (Math.abs(nx) < 70) continue;
+      const c = box(g, x, -1.5, z, 11, 5, 5.5, [0x5a4a48, 0x6d5a52, 0x4b4250][i % 3], R() * 3); c.rotation.z = (R() - 0.5) * 0.4;
+    }
+    building(g, -230, 170, 60, 50, 64); building(g, 210, -210, 54, 60, 88); building(g, -40, -235, 70, 40, 52); building(g, 70, 210, 50, 50, 76);
+    bank(g, [-262, 140], [-198, 140], 26, 38, [-230, 100], { color: C.sandLo });
+    // Boosts et apparition
+    geyser(g, -150, 0, 110); geyser(g, 120, 0, -120);
+    launcher(g, 230, 0, -60, 0);
+    spawnMark(g, -470, 140, -200);
+    const loop = speedPath(g, [
+      [-470, 146, -200], [-360, 90, -110], [-262, 30, -22], [-100, 28, -21], [100, 27, -21], [255, 29, -22],
+      [328, 25, -88], [395, 25, 0], [328, 25, 88], [255, 29, 22], [100, 27, 21], [-80, 28, 22], [-250, 30, 22], [-312, 22, 0], [-262, 28, -20]
+    ], false, 5);
+    const jumpPts = [];
+    const pp = (s, off, y) => { const t = s / L, p = lerp(t); return [p[0] + off * 0.82, y, p[1] - off * 0.57]; };
+    jumpPts.push(pp(40, 31, 45), pp(130, 31, 46), pp(200, 31, 52), pp(260, 20, 80), pp(316, 10, 92), pp(380, 20, 80), pp(430, 31, 50), pp(540, 31, 46));
+    const jump = speedPath(g, jumpPts, false, 2);
+    const labels = [
+      { p: [-470, 156, -200], t: "Sortie du soleil", k: "spawn" },
+      { p: [-40, 52, -24], t: "Viaduc bas : rampe de 560 studs", k: "surf" },
+      { p: [-150, 88, -150], t: "Viaduc haut, 72 studs", k: "surf" },
+      { p: [0, 108, 0], t: "Saut par-dessus le viaduc bas", k: "surf" },
+      { p: [400, 48, 0], t: "Bretelle : demi-tour", k: "surf" },
+      { p: [gx, 78, 0], t: "Portique-panneau", k: "boost" },
+      { p: [230, 18, -60], t: "Lanceur vers le viaduc haut", k: "boost" },
+      { p: [-150, 68, 110], t: "Geyser", k: "boost" },
+      { p: [200, 10, 120], t: "Voitures ensevelies : couverts", k: "combat" },
+      { p: [80, 52, 0], t: "Chaussée : combat à découvert", k: "combat" }
+    ];
+    return { scene: s, path: [loop, jump], labels: labels, cams: {
+      over: { p: [460, 340, 520], t: [0, 20, 0] }, top: { p: [0, 1150, 1], t: [0, 0, 0] }, ground: { p: [-262, 52, 0], t: [260, 44, 0] } } };
+  }
+
+  const BUILDERS = [buildDigue, buildArene, buildEchangeur];
+  const cache = {};
+  let world = null;
+  const labelNodes = [];
+
+  // Cette méthode permet d'afficher un plan (scène, étiquettes, caméra) lorsque l'utilisateur change d'onglet.
+  function show(i) {
+    current = i;
+    pulses.length = 0;
+    if (!cache[i]) cache[i] = BUILDERS[i]();
+    world = cache[i];
+    world.scene.traverse(o => { if (o.material && o.material.blending === THREE.AdditiveBlending && o.geometry && o.geometry.type === "CylinderGeometry") pulses.push(o.material); });
+    labelsEl.innerHTML = ""; labelNodes.length = 0;
+    world.labels.forEach(l => {
+      const el = document.createElement("div"); el.className = "lab " + l.k; el.innerHTML = "<i></i><span></span>"; el.lastChild.textContent = l.t;
+      labelsEl.appendChild(el); labelNodes.push({ el: el, v: new THREE.Vector3(l.p[0], l.p[1], l.p[2]) });
+    });
+    tabs.forEach(t => t.setAttribute("aria-selected", String(+t.dataset.i === i)));
+    renderDetail(i);
+    setCam("over", true);
+  }
+
+  let tween = null;
+  // Cette méthode permet d'amener la caméra sur un point de vue prédéfini, en glissant si le mouvement est autorisé.
+  function setCam(name, instant) {
+    const c = world.cams[name]; if (!c) return;
+    document.querySelectorAll("#cams button[data-cam]").forEach(b => { if (b.dataset.cam !== "spin") b.setAttribute("aria-pressed", String(b.dataset.cam === name)); });
+    const to = { p: new THREE.Vector3().fromArray(c.p), t: new THREE.Vector3().fromArray(c.t) };
+    if (instant || reduce) { camera.position.copy(to.p); controls.target.copy(to.t); tween = null; controls.update(); return; }
+    tween = { from: { p: camera.position.clone(), t: controls.target.clone() }, to: to, start: performance.now(), dur: 1100 };
+  }
+
+  tabs.forEach(t => t.addEventListener("click", () => show(+t.dataset.i)));
+  document.getElementById("cams").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.cam === "spin") { controls.autoRotate = !controls.autoRotate; b.setAttribute("aria-pressed", String(controls.autoRotate)); return; }
+    setCam(b.dataset.cam);
+  });
+
+  function resize() {
+    const w = viewer.clientWidth, h = viewer.clientHeight;
+    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(viewer);
+  resize();
+
+  const tmp = new THREE.Vector3();
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now;
+    if (tween) {
+      let k = Math.min(1, (now - tween.start) / tween.dur); k = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      camera.position.lerpVectors(tween.from.p, tween.to.p, k); controls.target.lerpVectors(tween.from.t, tween.to.t, k);
+      if (k >= 1) tween = null;
+    }
+    controls.update();
+    const dist = camera.position.distanceTo(controls.target);
+    world.scene.fog.near = dist * 0.7; world.scene.fog.far = dist + 1500;
+    world.path.forEach(p => p.dots.forEach(d => {
+      if (!reduce) d.t = (((d.t + dt * 150 / p.len) % 1) + 1) % 1;
+      d.m.position.copy(p.curve.getPointAt(d.t));
+    }));
+    const pulse = 0.18 + 0.14 * (0.5 + 0.5 * Math.sin(now / 260));
+    pulses.forEach(m => { m.opacity = reduce ? 0.25 : pulse; });
+    renderer.render(world.scene, camera);
+    const w = viewer.clientWidth, h = viewer.clientHeight;
+    labelNodes.forEach(n => {
+      tmp.copy(n.v).project(camera);
+      const vis = tmp.z < 1 && tmp.x > -1.1 && tmp.x < 1.1 && tmp.y > -1.1 && tmp.y < 1.1;
+      n.el.style.display = vis ? "flex" : "none";
+      if (vis) n.el.style.transform = "translate(" + ((tmp.x + 1) / 2 * w - 5).toFixed(1) + "px," + ((1 - tmp.y) / 2 * h - 8).toFixed(1) + "px)";
+    });
+    requestAnimationFrame(frame);
+  }
+  show(0);
+  requestAnimationFrame(frame);
+})();
+</script>
+
+</html>

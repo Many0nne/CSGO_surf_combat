@@ -14,6 +14,9 @@ Protocol.Names = {
 	SCORE_UPDATE = "ScoreUpdate",
 	ROUND_RESULT = "RoundResult",
 	PLAYER_DIED = "PlayerDied",
+	-- Chute hors de l'île : client → serveur, le joueur est passé sous Maps.Map.KillHeight (le serveur ne voit pas
+	-- la position, le mouvement est fait par le client)
+	FELL_OUT = "FellOut",
 	-- Arme 3e personne (#5) : client → serveur, action visuelle ("Shoot" | "Reload")
 	WEAPON_ACTION = "WeaponAction",
 	-- Feedback

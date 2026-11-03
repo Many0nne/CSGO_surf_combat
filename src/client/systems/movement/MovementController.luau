@@ -11,12 +11,15 @@ local SlopeSystem = require(script.Parent.SlopeSystem)
 local CoyoteJump = require(script.Parent.CoyoteJump)
 local BhopSystem = require(script.Parent.BhopSystem)
 local CrouchSystem = require(script.Parent.CrouchSystem)
+local BoostSystem = require(script.Parent.BoostSystem)
 local WeaponSystem = require(script.Parent.Parent.weapon.WeaponSystem)
 local InputModule = require(script.Parent.Parent.Parent.input.InputModule)
 local PhysicsUtils = require(ReplicatedStorage.Shared.PhysicsUtils)
 local Config = require(ReplicatedStorage.Shared.MovementConfig)
 local MovementState = require(ReplicatedStorage.Shared.MovementState)
 local SpawnLaunch = require(ReplicatedStorage.Shared.SpawnLaunch)
+local MapRules = require(ReplicatedStorage.Shared.MapRules)
+local NetworkProtocol = require(ReplicatedStorage.Shared.NetworkProtocol)
 local CharacterAnimator = require(ReplicatedStorage.Shared.CharacterAnimator)
 
 local JUMP_LOCKOUT = 0.15 -- empêche re-grounding immédiat après un saut
@@ -42,6 +45,14 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 	HeadCollisionResolver.init(char)
 	GroundDetection.init(char)
 	WallSlide.init(char)
+	BoostSystem.init()
+
+	-- Chute hors de l'île : signalée une fois au serveur, qui tue le joueur (KillZone)
+	local fellReported = false
+	local fellOutRemote: RemoteEvent? = nil
+	task.spawn(function()
+		fellOutRemote = NetworkProtocol.getRemote(NetworkProtocol.Names.FELL_OUT)
+	end)
 	slideParams.FilterDescendantsInstances = { char, workspace.CurrentCamera }
 
 	local wasGrounded = false
@@ -276,6 +287,28 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 			else
 				surfNormal = nil
 			end
+		end
+
+		-- 8b. Boosts de la map (geyser, lanceur, portique) : un geyser ou un lanceur remet le joueur en l'air
+		local boosted, boostKind = BoostSystem.check(hrp.Position, velocity, os.clock())
+		if boosted then
+			velocity = boosted
+			if boostKind ~= "Portal" then
+				state = MovementState.AIRBORNE
+				surfNormal = nil
+				jumpLockout = JUMP_LOCKOUT
+				isGroundedState = false
+				isAirborneState = true
+			end
+		end
+
+		if
+			not fellReported
+			and fellOutRemote
+			and MapRules.isBelowKillHeight(hrp.Position.Y, BoostSystem.killHeight())
+		then
+			fellReported = true
+			fellOutRemote:FireServer()
 		end
 
 		-- 9. Speedometer
