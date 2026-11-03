@@ -57,11 +57,19 @@ local GROUND_SPAWNS = { { 0, -30 }, { -40, 20 }, { 40, 60 }, { -30, -120 }, { 30
 local GLOW = Color3.fromRGB(255, 170, 110)
 local GOLD = Color3.fromRGB(255, 211, 110)
 local GROUND = Color3.fromRGB(190, 134, 94)
-local CLIFF = Color3.fromRGB(122, 82, 60)
+local CLIFF = Color3.fromRGB(176, 116, 86)
+local FOG = Color3.fromRGB(214, 140, 112) -- couleur de l'Atmosphere du crépuscule, un ton plus sombre
+-- Matières définitives (MaterialVariant de MaterialService, exportées dans assets/rbx/Materials). Le sable garde la
+-- matière Sand de Roblox (une texture générée a été rejetée), comme le Terrain des dunes.
+local MAT_FACADE = "ArenaFacade"
+local MAT_CLIFF = "ArenaCliff"
 
 ---------------------------------------------------------------------------------------------------------------------
 
 local rng = Random.new(SEED)
+-- Décor ajouté après coup (enseignes, toits ensablés, falaise, silhouettes étagées) : tirage à part, pour ne pas
+-- décaler celui du plan jouable (hauteurs des tours, place)
+local deco = Random.new(SEED + 1000)
 local base = CFrame.lookAt(Vector3.zero, SUN_DIR)
 
 -- Cette méthode permet de passer du repère du plan au monde lorsqu'on place une pièce.
@@ -79,6 +87,9 @@ map.Name = "Map"
 map:SetAttribute("Generator", "tools/map/build_arena.luau")
 map:SetAttribute("Seed", SEED)
 map:SetAttribute("KillHeight", KILL_HEIGHT)
+-- sable en Terrain (Shared.DuneField, posé par Server.MapTerrain au démarrage) : repère du plan et anneau
+map:SetAttribute("DunesPlan", base)
+map:SetAttribute("DunesRing", Vector3.new(RING_W, RING_L, BANK_H / math.tan(math.rad(BANK_SLOPE))))
 local folders = {}
 for _, name in { "Ground", "Ramps", "Buildings", "Props", "Skyline", "Boosts", "BoostFx", "GroundSpawns", "SunLaunch" } do
 	local f = Instance.new("Folder")
@@ -101,6 +112,12 @@ local function part(folder: string, size: Vector3, cf: CFrame, color: Color3, ma
 	return p
 end
 
+-- Cette méthode permet d'habiller une pièce d'une matière définitive (MaterialVariant) lorsqu'on la crée.
+local function skin(p: BasePart, variant: string): BasePart
+	p.MaterialVariant = variant
+	return p
+end
+
 -- Cette méthode permet de rendre une pièce purement décorative (ni collision, ni raycast, ni ombre portée
 -- optionnelle) lorsqu'elle ne doit pas gêner le mouvement fait maison.
 local function ghost(p: BasePart, castShadow: boolean?): BasePart
@@ -116,9 +133,21 @@ local function ink(): Color3
 	return Color3.fromRGB(rng:NextInteger(32, 60), rng:NextInteger(29, 44), rng:NextInteger(35, 49))
 end
 
+-- Cette méthode permet de tirer une teinte de façade (même tirage que ink, un ton plus clair sous la texture)
+-- lorsqu'on crée un gratte-ciel.
+local function facade(): Color3
+	return Color3.fromRGB(rng:NextInteger(78, 104), rng:NextInteger(66, 84), rng:NextInteger(70, 88))
+end
+
 -- Cette méthode permet de tirer une teinte de sable lorsqu'on crée une dune.
 local function sand(): Color3
 	local k = rng:NextNumber()
+	return Color3.fromRGB(176 + k * 24, 118 + k * 24, 82 + k * 16)
+end
+
+-- Cette méthode permet de tirer une teinte de sable pour le décor sans toucher au tirage du plan jouable.
+local function decoSand(): Color3
+	local k = deco:NextNumber()
 	return Color3.fromRGB(176 + k * 24, 118 + k * 24, 82 + k * 16)
 end
 
@@ -149,8 +178,27 @@ end
 local function tower(x: number, z: number, w: number, d: number, h: number, facing: number)
 	local sink = ISLAND_THICK - 2
 	local cf = g(x, (h - sink) / 2, z)
-	part("Buildings", Vector3.new(d, h + sink, w), cf, ink(), Enum.Material.Concrete)
+	skin(part("Buildings", Vector3.new(d, h + sink, w), cf, facade(), Enum.Material.Concrete), MAT_FACADE)
 	ghost(part("Buildings", Vector3.new(d + 0.6, 1.2, w + 0.6), g(x, h - 2.5, z), GLOW, Enum.Material.Neon))
+	-- toit ensablé (décor : le joueur se pose sur le vrai toit, quelques dixièmes de stud plus bas)
+	local roof = Vector3.new(d - deco:NextNumber(2, 8), 0.6, w - deco:NextNumber(2, 10))
+	ghost(part("Buildings", roof, g(x, h + 0.3, z), decoSand(), Enum.Material.Sand))
+	-- enseigne ensablée sur la face tournée vers l'arène : panneau sombre penché, néon à moitié éteint
+	if deco:NextNumber() < 0.4 then
+		local sw, sh = w * deco:NextNumber(0.35, 0.6), deco:NextNumber(7, 12)
+		local sy = deco:NextNumber(BANK_H + 10, math.max(BANK_H + 12, h - sh - 6))
+		local signCf = cf
+			* CFrame.new(facing * (d / 2 + 1), sy - (h - sink) / 2, deco:NextNumber(-w / 5, w / 5))
+			* CFrame.Angles(math.rad(deco:NextNumber(-10, 10)), 0, 0)
+		ghost(part("Buildings", Vector3.new(0.6, sh, sw), signCf, Color3.fromRGB(28, 24, 30), Enum.Material.Metal))
+		local lit = sw * deco:NextNumber(0.3, 0.8)
+		local side = if deco:NextNumber() < 0.5 then -1 else 1
+		local litCf = signCf * CFrame.new(facing * 0.4, sh / 2 - 1, (sw - lit) / 2 * side)
+		ghost(part("Buildings", Vector3.new(0.3, 0.8, lit), litCf, GLOW, Enum.Material.Neon))
+		-- sable accumulé sur le haut du panneau
+		local drift = signCf * CFrame.new(0, sh / 2 + 0.3, 0)
+		ghost(part("Buildings", Vector3.new(1.4, 0.8, sw * 0.9), drift, decoSand(), Enum.Material.Sand))
+	end
 	for wy = BANK_H + 8, h - 8, 14 do
 		if rng:NextNumber() < 0.3 then
 			local win = Vector3.new(0.4, 3, w * rng:NextNumber(0.15, 0.4))
@@ -296,9 +344,23 @@ local socle = part(
 	CLIFF,
 	Enum.Material.Rock
 )
-ghost(socle, true)
--- mer de brume sous l'île (décor, sans collision : on meurt avant de la toucher)
-ghost(part("Ground", Vector3.new(4000, 2, 4000), g(0, -260, 0), Color3.fromRGB(90, 58, 52), Enum.Material.Sand))
+ghost(skin(socle, MAT_CLIFF), true)
+-- falaise qui s'effile vers la brume : blocs de roche de plus en plus étroits sous le socle
+for i = 1, 4 do
+	local k = 1 - i * 0.18
+	local chunk = Vector3.new(islandHalfW * 1.6 * k, deco:NextNumber(50, 80), RING_L * 2.2 * k)
+	local cf = g(deco:NextNumber(-20, 20), -ISLAND_THICK - 150 - i * 45, deco:NextNumber(-30, 30))
+		* CFrame.Angles(0, deco:NextNumber(-0.25, 0.25), math.rad(deco:NextNumber(-6, 6)))
+	ghost(skin(part("Ground", chunk, cf, CLIFF, Enum.Material.Rock), MAT_CLIFF), true)
+end
+-- mer de brume sous l'île (décor, sans collision : on meurt avant de la toucher) : un fond opaque et des nappes
+-- translucides, d'où sortent la falaise et les silhouettes
+local seaFloor = Color3.fromRGB(110, 66, 58)
+ghost(part("Ground", Vector3.new(4000, 2, 4000), g(0, -300, 0), seaFloor, Enum.Material.SmoothPlastic))
+for _, layer in { { -250, 0.35 }, { -200, 0.6 }, { -160, 0.8 } } do
+	local sheet = ghost(part("Ground", Vector3.new(4000, 1, 4000), g(0, layer[1], 0), FOG, Enum.Material.SmoothPlastic))
+	sheet.Transparency = layer[2]
+end
 
 -- Anneau de dunes : deux lignes droites, puis les virages en segments
 for _, side in { -1, 1 } do
@@ -425,7 +487,20 @@ for _ = 1, 50 do
 	local tilt = if rng:NextNumber() < 0.2 then math.rad(rng:NextNumber(10, 30)) else 0
 	local cf = g(math.cos(a) * dist, -260 + h / 2, math.sin(a) * dist)
 		* CFrame.Angles(0, rng:NextNumber(0, math.pi * 2), tilt)
-	ghost(part("Skyline", Vector3.new(w, h, w), cf, ink(), Enum.Material.Concrete), true)
+	ghost(skin(part("Skyline", Vector3.new(w, h, w), cf, ink(), Enum.Material.Concrete), MAT_FACADE), true)
+	-- étages en retrait et, sur certaines, un feu ambré au sommet
+	local top, tw = h / 2, w
+	for _ = 1, deco:NextInteger(0, 2) do
+		tw *= deco:NextNumber(0.55, 0.8)
+		local th = deco:NextNumber(30, 90)
+		local tint = Color3.fromRGB(deco:NextInteger(32, 60), deco:NextInteger(29, 44), deco:NextInteger(35, 49))
+		local tierCf = cf * CFrame.new(0, top + th / 2, 0)
+		ghost(skin(part("Skyline", Vector3.new(tw, th, tw), tierCf, tint, Enum.Material.Concrete), MAT_FACADE), true)
+		top += th
+	end
+	if deco:NextNumber() < 0.3 then
+		ghost(part("Skyline", Vector3.new(2, 2, 2), cf * CFrame.new(0, top + 1, 0), GLOW, Enum.Material.Neon))
+	end
 end
 
 -- Boosts
@@ -475,4 +550,12 @@ if old then
 end
 local count = #map:GetDescendants()
 map.Parent = maps
-return string.format("Map générée : %d instances", count)
+-- aperçu du sable en Terrain (même code qu'au démarrage du serveur), si le code du jeu est synchronisé dans Studio
+local server = game:GetService("ServerScriptService"):FindFirstChild("Server")
+local terrainModule = server and server:FindFirstChild("MapTerrain")
+local columns = if terrainModule then require(terrainModule:Clone()).build(map) else 0
+return string.format(
+	"Map générée : %d instances, %s",
+	count,
+	if terrainModule then columns .. " colonnes de sable" else "sable non prévisualisé (Server.MapTerrain absent)"
+)

@@ -22,6 +22,10 @@
       "$path": "assets/rbx/Tools"
     },
 
+    "MaterialService": {
+      "$path": "assets/rbx/Materials"
+    },
+
     "StarterPlayer": {
       "StarterPlayerScripts": {
         "Client": {

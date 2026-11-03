@@ -82,6 +82,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/client/ui/UIKit.luau`: briques communes des écrans (création d'Instances, texte au thème, tweens, icônes, mise à l'échelle).
 - `src/server/DebugPlaytest.luau`: helper de playtest (Studio uniquement) : déclenché par un attribut joueur, enchaîne spawn, équipement, cible immobile et attaque, avec un PASS/FAIL par étape.
 - `src/server/FeedbackService.luau`: réception des feedbacks côté serveur (longueur, délai entre deux envois, limite hebdomadaire).
+- `src/server/MapTerrain.luau`: sable de la map en Terrain, reconstruit au démarrage depuis `Shared.DuneField` et les attributs `DunesPlan` / `DunesRing` de `Maps.Map` (le Terrain n'est pas versionné).
 - `src/server/KillZone.luau`: mort par chute : tue le joueur qui signale (remote `FellOut`) être passé sous `Maps.Map.KillHeight`, détecté par `MovementController`.
 - `src/server/RoundManager.luau`: boucle de round FFA (timer, kills/deaths, fin de round, diffusion résultat).
 - `src/server/SettingsStore.luau`: module vide, non utilisé pour l'instant.
@@ -98,6 +99,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/shared/GameConfig.luau`: constantes jeu (ROUND_DURATION=300, RESPAWN_DELAY=2.5, RESULT_DURATION=6, AUTO_SAVE_INTERVAL=120, SPAWN_PROTECTION=2.5).
 - `src/shared/SpawnLaunch.luau`: règles pures du lancement depuis le soleil (vitesse, angles de caméra, noms des attributs posés sur le personnage), testées (`tests/specs/SpawnLaunch.spec.luau`).
 - `src/shared/HitZones.luau`: zones du corps touchées (tête, torse, bras, jambes), multiplicateurs de dégâts des armes à distance et règle de calcul.
+- `src/shared/DuneField.luau`: hauteur pure du champ de dunes de l'Arène (relief, zones plates, pied des rampes), testée (`tests/specs/DuneField.spec.luau`).
 - `src/shared/MapRules.luau`: règles pures de la map (volume et vitesse des boosts, hauteur de mort, tir balistique), testées (`tests/specs/MapRules.spec.luau`).
 - `src/shared/MovementConfig.luau`: constantes physique du mouvement uniquement (vitesses, accel, friction, saut, pentes, bhop, réseau, hitbox).
 - `src/shared/MovementState.luau`: structure d'état partagée pour le mouvement du joueur.
