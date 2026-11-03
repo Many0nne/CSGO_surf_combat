@@ -15,6 +15,7 @@
   A chaque passage, le checkout principal est avance en fast-forward sur origin/main s'il est sur main sans modification.
   Lance toutes les 10 minutes par la tache planifiee "CSGO worktree cleanup" (install-cleanup-task.ps1) ;
   journal dans worktrees\.cleanup.log.
+  Compte GitHub : GH_CONFIG_DIR est lu dans .claude\settings.local.json du checkout principal s'il y est declare.
 
 .EXAMPLE
   .\scripts\csgo-worktree-cleanup.ps1 -DryRun
@@ -31,6 +32,16 @@ $helper = Join-Path $PSScriptRoot 't3_threads.py'
 $worktreeScript = Join-Path $PSScriptRoot 'csgo-worktree.ps1'
 $repo = 'Many0nne/CSGO_surf_combat'
 $mainBranch = 'main'
+
+# Compte gh du projet : la tache planifiee tourne hors de Claude, elle reprend donc le GH_CONFIG_DIR declare pour Claude
+# dans .claude\settings.local.json (non versionne) ; sans ce fichier, gh utilise son compte actif par defaut.
+$localSettings = Join-Path $root '.claude\settings.local.json'
+if (-not $env:GH_CONFIG_DIR -and (Test-Path $localSettings)) {
+  try {
+    $ghConfigDir = (Get-Content $localSettings -Raw | ConvertFrom-Json).env.GH_CONFIG_DIR
+    if ($ghConfigDir) { $env:GH_CONFIG_DIR = $ghConfigDir }
+  } catch { Write-Host "settings.local.json illisible, compte gh par defaut : $_" }
+}
 
 # Cette methode permet de tracer une decision du nettoyage (console et journal) lorsqu'un worktree est arrete, garde ou supprime ;
 # avec -Once, un message deja present dans la fin du journal n'est pas repete (execution toutes les 10 minutes).
