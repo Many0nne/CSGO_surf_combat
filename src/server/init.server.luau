@@ -13,6 +13,7 @@ local StatsStore = require(script.StatsStore)
 local Validator = require(script.Validator)
 local FeedbackService = require(script.FeedbackService)
 local DebugPlaytest = require(script.DebugPlaytest)
+local KillZone = require(script.KillZone)
 
 -- Spawn contrôlé : on gère LoadCharacter nous-mêmes
 Players.CharacterAutoLoads = false
@@ -38,6 +39,7 @@ local playerDiedRmt = makeRemote(N.PLAYER_DIED)
 local sendFeedbackRmt = makeRemote(N.SEND_FEEDBACK)
 local feedbackAckRmt = makeRemote(N.FEEDBACK_ACK)
 local weaponActionRmt = makeRemote(N.WEAPON_ACTION)
+local fellOutRmt = makeRemote(N.FELL_OUT)
 
 -- ── Initialisation des sous-systèmes ──────────────────────────────────────
 
@@ -135,6 +137,9 @@ local function onCharacterAdded(player: Player, char: Model)
 end
 
 -- ── SpawnManager ──────────────────────────────────────────────────────────
+
+-- Mort par chute hors de l'île (Maps.Map.KillHeight)
+KillZone.init(fellOutRmt)
 
 SpawnManager.init(spawnRmt, function(player: Player): boolean
 	-- Refuser si déjà vivant

@@ -21,7 +21,8 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `tools/anim/`: outils de ces animations : mesure sur vidéo, rendu et capture dans Studio, vidéo côte à côte, publication Open Cloud.
 - `assets/awp_viewmodel/`: animations de l'AWP : trajectoires mesurées (`build_anims.py`), rig Studio (`rig.json`), build sans toucher au Blender ouvert (`run_build.py`). Sons de l'arme : découpe depuis leurs sources (`build_sounds.py`), extraits CC0 dans `sounds/` ; `Shoot` et `Bolt` (Pixabay) sont publiés sur Roblox, pas versionnés.
 - `default.project.json`: configuration Rojo qui mappe `src/` et `assets/rbx/` (viewmodels, Tools, maps) vers le projet Roblox, et fixe la lumière du crépuscule (Lighting, Atmosphere).
-- `tools/map/build_city.luau`: générateur de la map, exécuté dans Studio (`tools/map/serve.luau` le sert en local), cf. `docs/maps.md`.
+- `tools/map/build_arena.luau`: générateur de la map (Arène), exécuté dans Studio (`tools/map/serve.luau` le sert en local), cf. `docs/maps.md`. `tools/map/build_city.luau` : ancienne map (ville ensablée).
+- `docs/maps/plans-arene-digue-echangeur.html`: maquettes 3D des trois plans proposés (Arène retenue, Digue et Échangeur gardés de côté).
 - `assets/rbx/ViewModels/*.rbxm`, `assets/rbx/Tools/*.rbxm`: viewmodels et Tools des armes (binaires LFS, voir « Viewmodels et Tools »).
 - `tools/rbxm/receive.luau`: serveur Lune local qui reçoit les `.rbxm` exportés de Studio et les écrit sous `assets/rbx/`.
 - `tools/rbxm/studio_export.luau`: script à exécuter dans Studio qui sérialise viewmodels et Tools et les envoie à `receive.luau`.
@@ -44,6 +45,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/client/systems/game/GameStateController.luau`: machine d'état client (MENU/INFOS/SPAWNING/IN_ROUND/DEAD/RESULT), coordination UI ↔ remotes.
 - `src/client/systems/game/MenuScene.luau`: scène 3D du menu (canyon, AWP qui suit le curseur, surfeurs à abattre, plongée sur JOUER), éclairage temporaire rétabli à la sortie.
 - `src/client/systems/game/MenuSceneRules.luau`: règles pures de cette scène (amortis, angles de visée, trajectoire, touche).
+- `src/client/systems/movement/BoostSystem.luau`: boosts de la map (geysers, lanceurs, portiques de `Maps.Map.Boosts`) détectés à chaque frame, avec recharge par boost.
 - `src/client/systems/movement/BhopSystem.luau`: implémentation du bunnyhop (saut en chaîne).
 - `src/client/systems/movement/CharacterDimensions.luau`: calcule les dimensions du personnage et les hitboxes debout/accroupi.
 - `src/client/systems/movement/CoyoteJump.luau`: gestion du "coyote time" pour les sauts.
@@ -79,6 +81,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/client/ui/UIKit.luau`: briques communes des écrans (création d'Instances, texte au thème, tweens, icônes, mise à l'échelle).
 - `src/server/DebugPlaytest.luau`: helper de playtest (Studio uniquement) : déclenché par un attribut joueur, enchaîne spawn, équipement, cible immobile et attaque, avec un PASS/FAIL par étape.
 - `src/server/FeedbackService.luau`: réception des feedbacks côté serveur (longueur, délai entre deux envois, limite hebdomadaire).
+- `src/server/KillZone.luau`: mort par chute : tue le joueur qui signale (remote `FellOut`) être passé sous `Maps.Map.KillHeight`, détecté par `MovementController`.
 - `src/server/RoundManager.luau`: boucle de round FFA (timer, kills/deaths, fin de round, diffusion résultat).
 - `src/server/SettingsStore.luau`: module vide, non utilisé pour l'instant.
 - `src/server/SpawnManager.luau`: gestion du spawn différé (RequestSpawn remote, LoadCharacter, lancement depuis le soleil ou point au sol, ForceField de protection).
@@ -93,9 +96,10 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/shared/GameConfig.luau`: constantes jeu (ROUND_DURATION=300, RESPAWN_DELAY=2.5, RESULT_DURATION=6, AUTO_SAVE_INTERVAL=120, SPAWN_PROTECTION=2.5).
 - `src/shared/SpawnLaunch.luau`: règles pures du lancement depuis le soleil (vitesse, angles de caméra, noms des attributs posés sur le personnage), testées (`tests/specs/SpawnLaunch.spec.luau`).
 - `src/shared/HitZones.luau`: zones du corps touchées (tête, torse, bras, jambes), multiplicateurs de dégâts des armes à distance et règle de calcul.
+- `src/shared/MapRules.luau`: règles pures de la map (volume et vitesse des boosts, hauteur de mort, tir balistique), testées (`tests/specs/MapRules.spec.luau`).
 - `src/shared/MovementConfig.luau`: constantes physique du mouvement uniquement (vitesses, accel, friction, saut, pentes, bhop, réseau, hitbox).
 - `src/shared/MovementState.luau`: structure d'état partagée pour le mouvement du joueur.
-- `src/shared/NetworkProtocol.luau`: noms des RemoteEvents et helper getRemote(name). Remotes : MeleeDamage, HitscanDamage, HitConfirm, RequestSpawn, RoundState, ScoreUpdate, RoundResult, PlayerDied, WeaponAction, SendFeedback, FeedbackAck, DebugPlaytest (créé uniquement dans Studio).
+- `src/shared/NetworkProtocol.luau`: noms des RemoteEvents et helper getRemote(name). Remotes : MeleeDamage, HitscanDamage, HitConfirm, RequestSpawn, RoundState, ScoreUpdate, RoundResult, PlayerDied, FellOut, WeaponAction, SendFeedback, FeedbackAck, DebugPlaytest (créé uniquement dans Studio).
 - `src/shared/PhysicsUtils.luau`: fonctions utilitaires pour la physique.
 - `src/shared/UITheme.luau`: tokens de style de l'interface (couleurs, polices, tailles, durées, courbes).
 - `src/shared/WeaponConfig.luau`: définitions partagées des armes et de leurs paramètres par défaut (dont `ThirdPerson` : échelle, grip, pose 3P).

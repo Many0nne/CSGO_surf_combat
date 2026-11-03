@@ -1,8 +1,32 @@
 # Maps
 
-Référence pour modifier la map ou en construire une autre. Première map originale : la « ville ensablée » (#69).
+Référence pour modifier la map ou en construire une autre. Map actuelle : l'« Arène ». Première map originale,
+remplacée : la « ville ensablée » (#69), gardée comme seconde map possible.
 
-## La ville ensablée
+## L'Arène
+
+Même DA que la ville ensablée, plan refait pour le surf : la ville ne permettait pas d'accumuler de la vitesse
+(rampes courtes et isolées, traversée en 3 s). Référence de jeu donnée par l'utilisateur : surf_japan (CS:GO),
+rampes longues face à face avec une ligne de tir dégagée entre elles.
+
+- **Plan** : un anneau fermé de dunes surfables à 55° (deux lignes droites de 340 studs, deux virages de 120 studs de
+  rayon, environ 1 300 studs de rampe sans interruption), adossé à des gratte-ciel le long des lignes droites, autour
+  d'une place (couverts : bus, kiosque, murets, petites dunes marchables). Passerelle des snipers à 78 studs entre les
+  deux tours centrales.
+- **Île au-dessus du vide** : les virages sont ouverts sur le vide ; sortir de l'île, c'est mourir (choix de
+  l'utilisateur, comme sur surf_japan). Sous `Maps.Map.KillHeight`, le client signale sa chute (remote `FellOut`) et
+  le serveur le tue (`src/server/KillZone.luau`).
+- **Boosts** (`Maps.Map.Boosts`, règles dans `src/shared/MapRules.luau`, détection client dans
+  `BoostSystem.luau`) : deux geysers sur la place (relance vers l'anneau, recharge 3 s), un lanceur vers la
+  passerelle, un portique au milieu de chaque ligne droite (+40 studs/s dans le sens du mouvement, plafonné à
+  `MAX_SPEED_SERVER`). Geysers et lanceurs imposent une vitesse balistique calculée par le générateur pour atteindre
+  un point précis : on les règle en déplaçant la cible, pas la vitesse.
+- **Pistes gardées de côté** : « La Digue » (bande au-dessus du vide, rampes jumelles, village aux toits surfables,
+  la plus proche de surf_japan) et « L'Échangeur » (viaducs ensevelis, chaque viaduc est une rampe, saut au
+  croisement). Maquettes 3D des trois plans : `docs/maps/plans-arene-digue-echangeur.html` (à ouvrir dans un
+  navigateur).
+
+## La ville ensablée (ancienne map)
 
 Une ville moderne à moitié engloutie par le sable, au crépuscule, dans la direction « Ligne de mire » du menu
 (`docs/ui.md`) : soleil bas, ciel bleu nuit, matière brun chaud, lignes ambrées, silhouettes sombres.
@@ -25,22 +49,23 @@ Ancienne map (modèle du market, sans DA) : archivée hors du dépôt dans `work
 
 ## Générateur et export
 
-La map est construite par `tools/map/build_city.luau` à partir des données en tête de fichier (contour, rues, tours
-tombées, talus, lanceurs, spawns), puis exportée en `assets/rbx/Maps/Map.rbxm`, synchronisé par Rojo vers
+La map est construite par `tools/map/build_arena.luau` (Arène) à partir des données en tête de fichier (anneau,
+boosts, sorties du soleil, spawns) ; `tools/map/build_city.luau` reconstruit l'ancienne ville. Elle est exportée
+en `assets/rbx/Maps/Map.rbxm`, synchronisé par Rojo vers
 `Workspace.Maps.Map`. Même graine = même ville.
 
 Itérer sur la map (depuis la racine du worktree, Studio en mode Edit, **plugin Rojo déconnecté**) :
 
 1. `lune run tools/map/serve.luau` (sert les scripts sur le port 34992).
-2. Modifier les données de `build_city.luau`, puis dans Studio (MCP `execute_luau`, contexte Edit) :
-   `return loadstring(game:GetService("HttpService"):GetAsync("http://localhost:34992/build_city.luau"))()`.
+2. Modifier les données de `build_arena.luau`, puis dans Studio (MCP `execute_luau`, contexte Edit) :
+   `return loadstring(game:GetService("HttpService"):GetAsync("http://localhost:34992/build_arena.luau"))()`.
    Le générateur remplace la map générée précédente ; il refuse d'écraser une map qui ne vient pas de lui.
 3. Regarder le résultat (`screen_capture`, voir les pièges ci-dessous), recommencer.
 4. Exporter : `lune run tools/rbxm/receive.luau`, puis dans Studio
    `return loadstring(game:GetService("HttpService"):GetAsync("http://localhost:34992/studio_export.luau"))()`
    (exporte aussi les armes, cf. `docs/assets.md` ; vérifier `git status`).
 5. `rojo build default.project.json -o CSGO.rbxlx && lune run tools/rbxm/verify_place.luau` : vérifie que la map
-   a des points d'apparition et que chaque lanceur a un attribut `Speed`.
+   a des points d'apparition, que chaque lanceur a un attribut `Speed` et que chaque boost est configuré.
 6. Reconnecter le plugin Rojo et accepter le patch.
 
 Rojo gère `Workspace.Maps` : un objet posé à la main dans la map est supprimé à la connexion s'il n'est pas exporté.
@@ -53,6 +78,15 @@ Mêmes règles que les armes : ne jamais réécrire `Map.rbxm` pendant que Studi
   personnage ; `MovementController` les applique une fois (position, vitesse en l'air, caméra tournée vers la ville,
   `SpawnLaunch.cameraAngles`).
 - `Maps.Map.GroundSpawns` : repli quand la map n'a pas de lanceur.
+- `Maps.Map.Boosts` : volumes invisibles (`CanCollide`, `CanQuery`, `CanTouch` faux), attribut `Kind` :
+  `Geyser` / `Launcher` avec `Velocity` (Vector3 imposé), `Portal` avec `Boost` (studs/s ajoutés), `Cooldown`
+  optionnel. Le client teste sa position dans la boîte (marge `CHAR_RADIUS`) à chaque frame : un portique doit être
+  assez épais (14 studs) pour ne pas être traversé entre deux frames à 300 studs/s. Le visuel est à part
+  (`BoostFx`).
+- Attribut `KillHeight` sur `Maps.Map` : mort sous cette hauteur (absent : pas de mort par chute). C'est le client
+  qui détecte la chute : **le serveur ne voit pas la position des joueurs** (racine ancrée, mouvement fait par le
+  client ; côté serveur le personnage reste figé à son point d'apparition). Une première version qui testait la
+  position côté serveur ne tuait jamais personne.
 - La lumière est dans `default.project.json` (Lighting + Atmosphere), identique à celle du menu (`MenuScene`) :
   `ClockTime` 17.9 et latitude 0 placent le soleil dans la direction `SUN_DIR` du générateur. Changer l'heure oblige
   à recalculer `SUN_DIR` (`Lighting:GetSunDirection()`, Y retiré) et à régénérer, sinon on ne sort plus du soleil.
@@ -81,7 +115,13 @@ Mêmes règles que les armes : ne jamais réécrire `Map.rbxm` pendant que Studi
 - **Caméras de capture** : une caméra posée au hasard dans la ville tombe souvent dans un bloc. Calculer les positions
   dans le repère du plan (même `base` que le générateur).
 
+- **Virages en segments** : un virage fait de WedgePart en corde perd un peu de vitesse à chaque jointure (≈ 1 -
+  cos de l'angle entre segments). 36 segments par demi-tour limitent la perte ; un mesh courbe (Blender) la supprime.
+- **Décor sans collision** : toute pièce décorative (arêtes néon, bandes, colonnes de geyser) doit avoir `CanQuery`
+  faux, sinon les raycasts du mouvement la prennent pour un mur ou une rampe.
+
 ## Reste à faire
 
-- Valider le plan gris en jeu (surf, lignes de tir, lancement), puis les matières et le décor définitifs.
-- Modéliser les courbes (dune courbe, rampes en virage) dans Blender une fois le plan validé.
+- Arène : valider en jeu (vitesse sur l'anneau, perte dans les virages, visée des geysers et sorties du soleil),
+  puis modéliser les virages en courbes dans Blender.
+- Son et effet au déclenchement d'un boost.

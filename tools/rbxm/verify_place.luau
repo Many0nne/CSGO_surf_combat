@@ -132,7 +132,8 @@ for _, name in rbxmNames("assets/rbx/Tools") do
 	end
 end
 
--- map (assets/rbx/Maps, #69) : Workspace.Maps.Map avec des points d'apparition ; lanceurs du soleil avec une vitesse
+-- map (assets/rbx/Maps, #69) : Workspace.Maps.Map avec des points d'apparition ; lanceurs du soleil avec une vitesse ;
+-- boosts configurés ; hauteur de mort numérique si présente
 local maps = game.Workspace:FindFirstChild("Maps")
 local map = maps and maps:FindFirstChild("Map")
 if not map then
@@ -150,8 +151,37 @@ else
 			fail("Maps.Map.SunLaunch." .. launch.Name .. " sans attribut Speed")
 		end
 	end
+	-- boosts (MapRules) : chaque volume a un type connu et le réglage qui va avec
+	local boosts = map:FindFirstChild("Boosts")
+	local nBoost = 0
+	for _, boost in if boosts then boosts:GetChildren() else {} do
+		nBoost += 1
+		local kind = boost:GetAttribute("Kind")
+		if kind == "Geyser" or kind == "Launcher" then
+			if typeof(boost:GetAttribute("Velocity")) ~= "Vector3" then
+				fail("Maps.Map.Boosts." .. boost.Name .. " sans attribut Velocity (Vector3)")
+			end
+		elseif kind == "Portal" then
+			if type(boost:GetAttribute("Boost")) ~= "number" then
+				fail("Maps.Map.Boosts." .. boost.Name .. " sans attribut Boost")
+			end
+		else
+			fail("Maps.Map.Boosts." .. boost.Name .. string.format(" : Kind %q inconnu", tostring(kind)))
+		end
+	end
+	local kill = map:GetAttribute("KillHeight")
+	if kill ~= nil and type(kill) ~= "number" then
+		fail("Maps.Map.KillHeight doit être un nombre")
+	end
 	print(
-		string.format("Maps.Map : %d instances, %d spawns au sol, %d lanceurs", #map:GetDescendants(), nGround, nLaunch)
+		string.format(
+			"Maps.Map : %d instances, %d spawns au sol, %d lanceurs, %d boosts, KillHeight %s",
+			#map:GetDescendants(),
+			nGround,
+			nLaunch,
+			nBoost,
+			tostring(kill)
+		)
 	)
 end
 
