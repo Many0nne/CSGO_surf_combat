@@ -9,6 +9,8 @@
 --                     kind = "Part" | "WedgePart", look = "wall" }
 --   { op = "restyle", why = "...", zone = {...}, folder = "Walls", look = "decor:metal" }
 -- `folder` (facultatif) limite la zone à un dossier de Geometry (Floors, Walls, Ceilings, Ramps, Decor, Clips).
+-- `group` (facultatif, remove et restyle) limite la zone aux blocs de décor d'un groupe source (attribut `Group` posé
+-- par build_dizzy.luau : metal, stucco…), pour rhabiller une structure sans toucher aux objets posés dessous.
 -- `rotation` (facultatif, degrés) suit CFrame.Angles ; `kind` vaut Part par défaut. `look` : floor, slope, wall,
 -- ceiling, surf, clip, ou decor:<groupe> (metal, rock, plastic…), cf. LOOK et DECOR de build_dizzy.luau.
 -- Une zone qui ne contient aucune pièce est une erreur (coordonnées fausses, ou pièce déjà retirée par le relevé).
@@ -79,6 +81,9 @@ function DizzyPatches.validate(patches): { string }
 			if p.folder ~= nil and not DizzyPatches.FOLDERS[p.folder] then
 				bad(string.format("dossier %q inconnu", tostring(p.folder)))
 			end
+			if p.group ~= nil and type(p.group) ~= "string" then
+				bad("`group` doit être un nom de groupe (metal, stucco…)")
+			end
 			if p.op == "restyle" and type(p.look) ~= "string" then
 				bad("`look` manquant")
 			end
@@ -95,14 +100,18 @@ function DizzyPatches.inZone(point, zone): boolean
 end
 
 -- Cette méthode permet de lister les pièces de Geometry dont le centre est dans la zone d'une retouche, limitées à
--- son dossier s'il est donné.
+-- son dossier et à son groupe source s'ils sont donnés.
 local function matching(geometry, p)
 	local found = {}
 	for _, folder in geometry:GetChildren() do
 		if p.folder == nil or folder.Name == p.folder then
 			for _, part in folder:GetChildren() do
 				-- CFrame.Position et non Position : hors moteur (Lune), Position n'existe pas sur une pièce posée par CFrame
-				if part:IsA("BasePart") and DizzyPatches.inZone(part.CFrame.Position, p.zone) then
+				if
+					part:IsA("BasePart")
+					and (p.group == nil or part:GetAttribute("Group") == p.group)
+					and DizzyPatches.inZone(part.CFrame.Position, p.zone)
+				then
 					table.insert(found, part)
 				end
 			end

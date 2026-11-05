@@ -111,6 +111,27 @@ return function(T, Loader)
 			T.expectEqual(#styled, 2)
 		end)
 
+		T.it("limite une retouche au groupe source demandé", function()
+			local g = geometry()
+			local decor = Instance.new("Folder")
+			decor.Name = "Decor"
+			decor.Parent = g
+			for _, group in { "metal", "stucco" } do
+				local p = Instance.new("Part")
+				p.CFrame = CFrame.new(0, 0, 0)
+				p:SetAttribute("Group", group)
+				p.Parent = decor
+			end
+			local counts = DizzyPatches.apply(
+				g,
+				{ { op = "remove", why = "structure", zone = zone, folder = "Decor", group = "metal" } },
+				style
+			)
+			T.expectEqual(counts[1], 1)
+			T.expectEqual(decor:GetChildren()[1]:GetAttribute("Group"), "stucco")
+			T.expectEqual(#DizzyPatches.validate({ { op = "remove", why = "x", zone = zone, group = 3 } }), 1)
+		end)
+
 		T.it("lève une erreur sur une zone vide ou une liste invalide", function()
 			local g = geometry()
 			local far = { center = { 500, 0, 0 }, size = { 1, 1, 1 } }

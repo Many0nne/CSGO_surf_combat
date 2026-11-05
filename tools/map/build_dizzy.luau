@@ -9,6 +9,7 @@ local fs = require("@lune/fs")
 local serde = require("@lune/serde")
 local roblox = require("@lune/roblox")
 
+local DizzyDressing = require("./DizzyDressing")
 local DizzyPatches = require("./DizzyPatches")
 
 local CFrame = roblox.CFrame
@@ -34,6 +35,11 @@ local LOOK = {
 	wall = { PLASTER, Enum.Material.Plaster },
 	ceiling = { SHADOW, Enum.Material.Plaster },
 	surf = { STEEL, Enum.Material.DiamondPlate },
+	-- bois de chantier, posé par les retouches (dizzy_patches.luau) : contreplaqué des rampes, planches sur la fosse,
+	-- charpente sous les rampes
+	plywood = { Color3.fromRGB(206, 170, 118), Enum.Material.Wood },
+	planks = { Color3.fromRGB(170, 126, 82), Enum.Material.WoodPlanks },
+	timber = { Color3.fromRGB(128, 94, 64), Enum.Material.Wood },
 }
 -- Blocs de décor : d'après le groupe de surface source
 local DECOR = {
@@ -118,6 +124,10 @@ local function place(entry, parent)
 	p.CFrame = CFrame.fromMatrix(pos, x, y, z)
 	p.Size = Vector3.new(entry[16], entry[17], entry[18])
 	style(p, if role == "block" then "decor:" .. group else role)
+	if role == "block" then
+		-- groupe source, pour viser une structure sans les objets posés dessous (champ `group` des retouches)
+		p:SetAttribute("Group", group)
+	end
 	p.Parent = folder(parent, FOLDERS[role] or "Decor")
 	return p
 end
@@ -202,14 +212,16 @@ local counts = DizzyPatches.apply(geometry, patches, style)
 for i, p in patches do
 	print(string.format("  retouche %d (%s) : %s, %d pièce(s)", i, p.why, p.op, counts[i]))
 end
+local dressed = DizzyDressing.build(map, OFFSET)
 underside(map, data)
 spawns(map, data)
 fs.writeFile(OUT, roblox.serializeModel({ map }))
 print(
 	string.format(
-		"Dizzy : %d pièces relevées, %d retouche(s), %d spawns, KillHeight %.1f -> %s",
+		"Dizzy : %d pièces relevées, %d retouche(s), %d objets d'habillage, %d spawns, KillHeight %.1f -> %s",
 		#data.parts,
 		#patches,
+		dressed,
 		#data.spawns,
 		data.killY,
 		OUT
