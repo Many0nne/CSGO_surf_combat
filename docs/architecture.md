@@ -10,7 +10,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 
 - `Players.CharacterAutoLoads = false` (`init.server.luau`) : les personnages n'apparaissent que via le remote `RequestSpawn`.
 - Un round démarre quand un joueur demande à spawn alors que le round est à l'état `idle` (`init.server.luau`).
-- `SpawnManager` tire un lanceur au hasard dans `Workspace.Maps.Map.SunLaunch` (map versionnée dans `assets/rbx/Maps`, cf. `docs/maps.md`) : le joueur est projeté depuis le soleil, invulnérable `GameConfig.SPAWN_PROTECTION` secondes. Sans lanceur, il tire un point dans `GroundSpawns` ; sans aucun point, il avertit et utilise `(0, 10, 0)`.
+- `SpawnManager` tire un lanceur au hasard dans `SunLaunch` de la map jouée (map versionnée dans `assets/rbx/Maps`, cf. `docs/maps.md`) : le joueur est projeté depuis le soleil, invulnérable `GameConfig.SPAWN_PROTECTION` secondes. Sans lanceur, il tire un point dans `GroundSpawns` ; sans aucun point, il avertit et utilise `(0, 10, 0)`.
 - `StatsStore` désactive la sauvegarde pour la session si le chargement DataStore échoue, pour ne pas écraser les données.
 - **Crash de Rojo :** `rojo serve` 7.7.1 peut s'arrêter sur `Rojo crashed!` (`change_processor.rs:172`, fichier introuvable). Constaté après la suppression puis la recréation immédiate de fichiers surveillés dans `src/` (cause probable, non reproduite) : écrire par-dessus un fichier plutôt que le supprimer d'abord. Si Rojo ne répond plus, lire `worktrees/.run/<slug>.log`, relancer `.\scripts\csgo-worktree.ps1 <branche>`, puis reconnecter le plugin.
 
@@ -21,8 +21,8 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `tools/anim/`: outils de ces animations : mesure sur vidéo, rendu et capture dans Studio, vidéo côte à côte, publication Open Cloud.
 - `assets/awp_viewmodel/`: animations de l'AWP : trajectoires mesurées (`build_anims.py`), rig Studio (`rig.json`), build sans toucher au Blender ouvert (`run_build.py`). Sons de l'arme : découpe depuis leurs sources (`build_sounds.py`), extraits CC0 dans `sounds/` ; `Shoot` et `Bolt` (Pixabay) sont publiés sur Roblox, pas versionnés.
 - `default.project.json`: configuration Rojo qui mappe `src/` et `assets/rbx/` (viewmodels, Tools, maps) vers le projet Roblox, et fixe la lumière du crépuscule (Lighting, Atmosphere).
-- `tools/map/build_arena.luau`: générateur de la map (Arène), exécuté dans Studio (`tools/map/serve.luau` le sert en local), cf. `docs/maps.md`. `tools/map/build_city.luau` : ancienne map (ville ensablée). `tools/map/build_dizzy.luau` : générateur de Dizzy (map par défaut), exécuté dans Lune sans Studio, lit le plan `tools/map/dizzy_layout.json` (relevé par `tools/map/extract_dizzy.py`, contrôlé par `tools/map/verify_dizzy.py` et `tools/map/zfight_dizzy.py` pour le scintillement, tous dans Blender sans interface), puis applique les retouches locales de `tools/map/dizzy_patches.luau` (module `tools/map/DizzyPatches.luau`). `src/shared/MapSelection.luau` : choix de la map jouée (`GameConfig.ACTIVE_MAP`) parmi `Workspace.Maps`.
-- `docs/maps/plans-arene-digue-echangeur.html`: maquettes 3D des trois plans proposés (Arène retenue, Digue et Échangeur gardés de côté).
+- `tools/map/build_dizzy.luau`: générateur de Dizzy (seule map, cf. `docs/maps.md`), exécuté dans Lune sans Studio, lit le plan `tools/map/dizzy_layout.json` (relevé par `tools/map/extract_dizzy.py`, contrôlé par `tools/map/verify_dizzy.py` et `tools/map/zfight_dizzy.py` pour le scintillement, tous dans Blender sans interface), puis applique les retouches locales de `tools/map/dizzy_patches.luau` (module `tools/map/DizzyPatches.luau`). `src/shared/MapSelection.luau` : choix de la map jouée (`GameConfig.ACTIVE_MAP`) parmi `Workspace.Maps`.
+- `docs/maps/plans-arene-digue-echangeur.html`: maquettes 3D des trois plans proposés (l'Arène, retirée depuis ; Digue et Échangeur gardés de côté).
 - `assets/rbx/ViewModels/*.rbxm`, `assets/rbx/Tools/*.rbxm`: viewmodels et Tools des armes (binaires LFS, voir « Viewmodels et Tools »).
 - `tools/rbxm/receive.luau`: serveur Lune local qui reçoit les `.rbxm` exportés de Studio et les écrit sous `assets/rbx/`.
 - `tools/rbxm/studio_export.luau`: script à exécuter dans Studio qui sérialise viewmodels et Tools et les envoie à `receive.luau`.
@@ -82,7 +82,6 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/client/ui/UIKit.luau`: briques communes des écrans (création d'Instances, texte au thème, tweens, icônes, mise à l'échelle).
 - `src/server/DebugPlaytest.luau`: helper de playtest (Studio uniquement) : déclenché par un attribut joueur, enchaîne spawn, équipement, cible immobile et attaque, avec un PASS/FAIL par étape.
 - `src/server/FeedbackService.luau`: réception des feedbacks côté serveur (longueur, délai entre deux envois, limite hebdomadaire).
-- `src/server/MapTerrain.luau`: sable de la map en Terrain, reconstruit au démarrage depuis `Shared.DuneField` et les attributs `DunesPlan` / `DunesRing` de `Maps.Map` (le Terrain n'est pas versionné).
 - `src/server/KillZone.luau`: mort par chute : tue le joueur qui signale (remote `FellOut`) être passé sous `Maps.Map.KillHeight`, détecté par `MovementController`.
 - `src/server/RoundManager.luau`: boucle de round FFA (timer, kills/deaths, fin de round, diffusion résultat).
 - `src/server/SettingsStore.luau`: module vide, non utilisé pour l'instant.
@@ -99,7 +98,6 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/shared/GameConfig.luau`: constantes jeu (ROUND_DURATION=300, RESPAWN_DELAY=2.5, RESULT_DURATION=6, AUTO_SAVE_INTERVAL=120, SPAWN_PROTECTION=2.5).
 - `src/shared/SpawnLaunch.luau`: règles pures du lancement depuis le soleil (vitesse, angles de caméra, noms des attributs posés sur le personnage), testées (`tests/specs/SpawnLaunch.spec.luau`).
 - `src/shared/HitZones.luau`: zones du corps touchées (tête, torse, bras, jambes), multiplicateurs de dégâts des armes à distance et règle de calcul.
-- `src/shared/DuneField.luau`: hauteur pure du champ de dunes de l'Arène (relief, zones plates, pied des rampes), testée (`tests/specs/DuneField.spec.luau`).
 - `src/shared/MapRules.luau`: règles pures de la map (volume et vitesse des boosts, hauteur de mort, tir balistique), testées (`tests/specs/MapRules.spec.luau`).
 - `src/shared/MovementConfig.luau`: constantes physique du mouvement uniquement (vitesses, accel, friction, saut, pentes, bhop, réseau, hitbox).
 - `src/shared/MovementState.luau`: structure d'état partagée pour le mouvement du joueur.

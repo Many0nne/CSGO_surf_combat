@@ -1,4 +1,4 @@
--- Règles pures de la map (Arène) : boosts de vitesse posés dans Maps.Map.Boosts et hauteur de mort sous l'île.
+-- Règles pures des maps : boosts de vitesse posés dans Maps.Map.Boosts et hauteur de mort sous l'île.
 -- Le client détecte et applique les boosts (MovementController via BoostSystem), le serveur tue sous KillHeight.
 
 local MapRules = {}

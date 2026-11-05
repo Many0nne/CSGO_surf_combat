@@ -189,11 +189,6 @@ local function checkMap(map)
 	if kill ~= nil and type(kill) ~= "number" then
 		fail("Maps." .. map.Name .. ".KillHeight doit être un nombre")
 	end
-	-- dunes en Terrain (#71, src/server/MapTerrain.luau) : les deux attributs vont ensemble, avec le bon type
-	local dunesPlan, dunesRing = map:GetAttribute("DunesPlan"), map:GetAttribute("DunesRing")
-	if (dunesPlan ~= nil or dunesRing ~= nil) and (typeof(dunesPlan) ~= "CFrame" or typeof(dunesRing) ~= "Vector3") then
-		fail("Maps." .. map.Name .. " : DunesPlan (CFrame) et DunesRing (Vector3) doivent être posés ensemble")
-	end
 	print(
 		string.format(
 			"Maps.%s : %d instances, %d spawns au sol, %d lanceurs, %d boosts, KillHeight %s",

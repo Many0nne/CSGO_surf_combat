@@ -1,11 +1,11 @@
 -- Choix de la map jouée parmi Workspace.Maps (une map par .rbxm de assets/rbx/Maps, cf. docs/maps.md).
 -- Le serveur garde celle de GameConfig.ACTIVE_MAP, détruit les autres et pose l'attribut ActiveMap sur Workspace.Maps ;
--- le serveur et le client la retrouvent ensuite par waitForActive. Nom absent : repli sur la map « Map » (l'Arène).
+-- le serveur et le client la retrouvent ensuite par waitForActive. Nom absent : repli sur Dizzy.
 
 local MapSelection = {}
 
 MapSelection.ACTIVE_ATTRIBUTE = "ActiveMap"
-MapSelection.FALLBACK = "Map"
+MapSelection.FALLBACK = "Dizzy"
 
 -- Cette méthode permet de choisir le nom de la map jouée lorsque le serveur démarre : le nom demandé s'il existe,
 -- sinon la map de repli, sinon la première par ordre alphabétique (nil s'il n'y a aucune map).
