@@ -41,8 +41,9 @@ Viewer dans `worktrees/.tools`. Le dépôt ne contient que des cotes et des piè
    (Blender sans interface, ~10 s ; ne pas le lancer dans la session Blender de l'utilisateur, le calcul la fige).
 3. Vérifier : `blender -b --factory-startup --python tools/map/verify_dizzy.py -- ../.tools/dizzy_out tools/map/dizzy_layout.json`.
    Mêmes rayons (~500 000, verticaux et horizontaux) tirés dans la collision d'origine et dans les pièces relevées ;
-   liste les trous et les surplus groupés, avec la pièce responsable. État au relevé : 9 groupes de 3-4 rayons (fentes de
-   0,03 stud aux angles rentrants, laissées par `EPS`), 0,75 % de rayons en surplus (décor approché par sa boîte).
+   liste les trous et les surplus groupés, avec la pièce responsable. État au relevé : 3 groupes de 4 rayons (fentes de
+   0,03 stud aux angles rentrants, laissées par `EPS`), 0,7 % de rayons en surplus (décor approché par sa boîte).
+   Scintillement : `tools/map/zfight_dizzy.py` (mêmes arguments, puis la tolérance), cf. « Scintillement » ci-dessous.
 4. Générer : `lune run tools/map/build_dizzy.luau` (sans Studio, plugin Rojo déconnecté de ce serveur) écrit
    `assets/rbx/Maps/Dizzy.rbxm`. Puis `rojo build` et `verify_place.luau` comme pour l'Arène.
 
@@ -56,14 +57,48 @@ Méthode et pièges (pour ne pas les redécouvrir) :
   triangle. Couverture sans trou par construction.
 - **Jonctions en T** : un sommet posé au milieu de l'arête du voisin, partout. Regrouper les triangles par plan, pas
   par arête commune (sinon chaque triangle est isolé : 65 000 pièces). Une couverture en rectangles n'est acceptée que
-  si son aire égale celle des triangles.
+  si son aire égale celle des triangles, contrôlée par morceau source : un contrôle par triangle refuse deux
+  demi-rectangles qui forment un rectangle exact (40 000 coins).
+- **Solides qui se recouvrent** : la collision d'origine superpose des solides (moulure de 2,85 studs encastrée dans
+  un mur, gaine dans un plafond) dont les faces sont dans le même plan. Relevées morceau par morceau, elles donnaient deux
+  dalles sur la même surface, qui scintillaient (bandes horizontales sur les façades, ~8 000 paires visibles). Les faces
+  sont donc regroupées par plan sur toute la map, en amas de triangles qui se touchent (`plane_groups`), et l'union de
+  l'amas est couverte une seule fois ; les triangles identiques sont écartés (faces confondues visibles : 19 600 →
+  14 000 studs²). Sans effet visible notable : ce n'était pas la cause principale du scintillement (ci-dessous).
 - **Décor** : un bloc devient sa boîte orientée s'il est petit (< 8 studs, tuyaux) ou la remplit à 60 % ; jamais un mur
   d'air. Exiger la convexité ou 85 % doublait le nombre de pièces pour un gain faible. Axes de la boîte : écarter les
   résidus de projection (float32), sinon les axes ne sont plus orthonormés et la boîte part à 100 studs.
 - **Repère** : Blender x = y source, y = −x source (pouces × 0,0254), vérifié par raycast (les spawns tombent tous
   0,406 m au-dessus d'un sol). Roblox (X, Y, Z) = (x·10, (z − 198)·7, −y·10).
 - Écartés : boîte de ciel (`physics_sky`), échelles, fût sous 190 m (remplacé par le décor du générateur).
-- Environ 18 800 pièces ancrées, dont ~12 000 coins, surtout aux plafonds.
+- Environ 18 600 pièces ancrées, dont ~12 000 coins, surtout aux plafonds.
+
+### Scintillement (non résolu)
+
+Dizzy scintille à distance : bandes sombres dentelées sur les façades, rayures sur les rebords (signalé le 05/11/2026).
+**Cause** : à chaque arête saillante (bord d'un renfoncement, d'un rebord, d'une fenêtre), la tranche d'une dalle de sol
+ou de plafond tombe dans le plan de la face du mur voisin, `EPS` (0,03 stud) devant elle et dans une autre couleur.
+Prouvé par rayons depuis la caméra (mur à x = 2064,99, tranche de plafond à 2065,02, vus à 180 studs) et par le test
+décisif : recolorer sols et plafonds comme les murs dans Studio (temporaire) fait disparaître les bandes.
+
+Mesurer : `tools/map/zfight_dizzy.py` (faces de même sens dans le même plan à TOL près, qui se recouvrent et sont vues
+depuis l'air). État actuel : 14 000 studs² à 0,005 (faces confondues), 245 000 studs² à 0,1 (surtout tranches à
+`EPS` devant une face). Diagnostiquer en jeu : `ViewportPointToRay` + `Raycast` depuis la vue fautive (MCP Studio,
+mode Edit) donne la pièce touchée et sa position au centième.
+
+| Essai | Résultat | Statut |
+|---|---|---|
+| `EPS` 0,03 → 0,15 (retrait adaptatif sur les murs fins) | Rien de visible ; élargit les fentes des angles rentrants | Rejeté |
+| `SmoothPlastic` sur murs et plafonds, ombres coupées sur les dalles fines et les plafonds | Rien de visible | Rejeté |
+| Ombres globales coupées (test) | Rien : ce n'est pas l'éclairage, malgré le soleil rasant (`ClockTime` 17,9) | Rejeté |
+| Faces confondues fusionnées par plan (`plane_groups`) | Rien de visible, mais vraie correction (doublons, 9 → 3 groupes de trous) | Gardé |
+| Une couleur pour sols, murs et plafonds (test Studio) | Plus de bandes, mais map vide visuellement | Rejeté (DA) |
+| Bords de dalle décalés selon l'arête (`EDGE_ADJUST`) : saillante, la dalle recule de 0,18 pour cacher sa tranche ; rentrante, elle avance de 0,08 | Plus de scintillement, mais la moitié des détails des façades disparaît et des fentes claires s'ouvrent aux angles rentrants | Code gardé, désactivé |
+
+Pistes restantes : retirer ou replacer les éléments qui gênent (retouches `remove` / `add` de `dizzy_patches.luau`,
+après repérage avec `zfight_dizzy.py`) ; reprendre `EDGE_ADJUST` en ne décalant que la dalle dont la couleur diffère du
+mur, sans toucher aux angles rentrants ; séparer rendu et collision (rendu en mesh, cf. virages de l'Arène), écarté tant
+que le mesh serait tiré de la géométrie de Valve.
 
 ### Corriger un détail de Dizzy
 
