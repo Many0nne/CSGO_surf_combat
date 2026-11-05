@@ -19,7 +19,7 @@ local Vector3 = roblox.Vector3
 
 local LAYOUT = "tools/map/dizzy_layout.json"
 local OUT = "assets/rbx/Maps/Dizzy.rbxm"
--- Décalage de la map : ne pas se superposer à l'Arène en mode Edit (les deux maps sont dans Workspace.Maps)
+-- Décalage de la map : ne pas se superposer à une autre map de Workspace.Maps en mode Edit
 local OFFSET = Vector3.new(2000, 0, 0)
 
 -- Habillage par rôle de face (relevé par extract_dizzy.py) : couleur, matière

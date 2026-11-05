@@ -15,7 +15,6 @@ local Validator = require(script.Validator)
 local FeedbackService = require(script.FeedbackService)
 local DebugPlaytest = require(script.DebugPlaytest)
 local KillZone = require(script.KillZone)
-local MapTerrain = require(script.MapTerrain)
 
 -- Spawn contrôlé : on gère LoadCharacter nous-mêmes
 Players.CharacterAutoLoads = false
@@ -140,12 +139,11 @@ end
 
 -- ── SpawnManager ──────────────────────────────────────────────────────────
 
--- Mort par chute hors de l'île (Maps.Map.KillHeight)
+-- Mort par chute hors de la map (attribut KillHeight de la map jouée)
 KillZone.init(fellOutRmt)
 
--- Une seule map est jouée (GameConfig.ACTIVE_MAP) : les autres sont retirées, puis le sable en Terrain de la map
--- choisie (dunes de l'Arène) est posé avant les premières apparitions
-MapTerrain.build(MapSelection.activate(workspace:FindFirstChild("Maps"), GameConfig.ACTIVE_MAP))
+-- Une seule map est jouée (GameConfig.ACTIVE_MAP) : les autres sont retirées avant les premières apparitions
+MapSelection.activate(workspace:FindFirstChild("Maps"), GameConfig.ACTIVE_MAP)
 
 SpawnManager.init(spawnRmt, function(player: Player): boolean
 	-- Refuser si déjà vivant
