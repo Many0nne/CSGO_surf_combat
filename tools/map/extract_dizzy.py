@@ -30,13 +30,16 @@ T_MAX = 2.0  # épaisseur maximale d'une dalle (studs)
 T_MIN = 0.05
 T_OPEN = 0.4  # dalle d'une surface ouverte (pas de face opposée)
 EPS = 0.03  # retrait des dalles sous leur face : évite le scintillement entre la tranche d'une dalle et la face voisine
-# Bords de dalle décalés selon l'arête (edge_shift) : supprime le scintillement des tranches aux arêtes saillantes, mais
-# efface la moitié des détails des façades et ouvre des fentes claires aux angles rentrants (essai du 05/11/2026, cf.
-# docs/maps.md). Désactivé ; gardé comme point de départ.
-EDGE_ADJUST = False
-EDGE_HIDE = 0.15  # arête saillante : la tranche d'une dalle passe d'autant derrière la face voisine (lisible à distance)
-EDGE_FILL = 0.05  # angle rentrant : la dalle passe d'autant sous la voisine, au-delà de EPS (ferme la fente)
-EDGE_PROBE = 0.05  # studs : sondes de part et d'autre d'un bord de dalle pour le classer
+# Arêtes saillantes sol/plafond contre mur (edge_shift) : le mur garde le coin, la dalle de sol ou de plafond recule
+# derrière la dalle du mur pour que sa tranche (autre couleur) ne soit plus dans le plan du mur. Les arêtes mur/mur
+# (même couleur) et les angles rentrants ne bougent pas (cf. docs/maps.md, « Scintillement »).
+EDGE_ADJUST = True
+EDGE_OVERLAP = 0.01  # la dalle reculée garde d'autant sous la dalle du mur (pas de fente au dos du mur)
+EDGE_ROLES = ("floor", "slope", "ceiling")  # dalles qui reculent ; la dalle du mur (autre couleur) garde le coin
+# Plaque mince (sol et plafond à moins de THIN l'un de l'autre) : la face intérieure de la dalle du dessous serait à
+# quelques centièmes de la face du dessus et scintillerait à distance ; seule la dalle du dessus est gardée.
+THIN = 0.35
+BURIED_PROBE = 0.05  # studs : sonde devant une face pour savoir si elle est enfouie dans un autre solide
 DECOR_FILL = 0.6  # un bloc de décor qui remplit au moins cette part de sa boîte orientée devient cette boîte
 SMALL_DECOR = 8.0  # studs : un bloc de décor plus petit devient sa boîte orientée quel que soit son remplissage (tuyaux)
 WORLD_MIN_VERTS = 500  # au-delà, le morceau est le maillage du monde (non convexe), jamais réduit à une boîte
@@ -389,20 +392,87 @@ class Solids:
         return False
 
 
-def edge_shift(solids, pts, out, n):
-    """Cette méthode permet de décaler un bord de dalle selon l'arête qu'il borde (points du bord sur la face, normale
-    sortante dans le plan) : saillante, la dalle recule pour cacher sa tranche derrière la face voisine (positif) ;
-    rentrante, elle avance sous la voisine pour fermer la fente (négatif) ; à plat ou mixte, rien."""
-    kinds = set()
+def buried(solids, pts, n):
+    """Cette méthode permet de reconnaître une face enfouie dans un autre solide (les solides d'origine se recouvrent) :
+    tous les points sondés, juste devant la face, sont dans un solide ; sa dalle est alors écartée."""
+    return all(solids.inside(p + n * BURIED_PROBE) for p in pts)
+
+
+def thin_below(tree, pts, n):
+    """Cette méthode permet de reconnaître le dessous d'une plaque mince (face tournée vers le bas dont tous les points
+    sondés retrouvent la face du dessus à moins de THIN) : sa dalle est alors écartée."""
+    if n.y > -0.02:
+        return False
+    for c in pts:
+        hit = tree.ray_cast(c - n * 1e-3, -n, THIN)
+        if hit[0] is None or hit[1].dot(n) > -0.99:
+            return False
+    return True
+
+
+class WallSlabs:
+    """Cette méthode permet de retrouver la dalle de mur qui contient un point (index par cellules), pour connaître
+    l'épaisseur réelle de la dalle qui garde une arête saillante."""
+
+    CELL = 16.0
+
+    def __init__(self):
+        self.items, self.grid = [], {}
+
+    def add(self, center, axes, half, th, normal, wedge=False):
+        """Cette méthode permet d'ajouter une dalle de mur (centre, axes, demi-tailles, épaisseur, normale de sa face,
+        WedgePart ou non) à l'index."""
+        k = len(self.items)
+        self.items.append((center, axes, half, th, normal, wedge))
+        r = sum(half)
+        for x in range(int((center.x - r) // self.CELL), int((center.x + r) // self.CELL) + 1):
+            for y in range(int((center.y - r) // self.CELL), int((center.y + r) // self.CELL) + 1):
+                for z in range(int((center.z - r) // self.CELL), int((center.z + r) // self.CELL) + 1):
+                    self.grid.setdefault((x, y, z), []).append(k)
+
+    def thickness_at(self, q, out):
+        """Cette méthode permet de rendre la plus grande épaisseur des dalles de mur tournées vers out qui contiennent
+        le point, sinon None."""
+        best = None
+        for k in self.grid.get(tuple(int(q[a] // self.CELL) for a in range(3)), ()):
+            center, axes, half, th, normal, wedge = self.items[k]
+            if out is not None and normal.dot(out) <= 0.99:
+                continue
+            d = q - center
+            loc = [d.dot(axes[a]) for a in range(3)]
+            if not all(abs(loc[a]) <= half[a] + 1e-3 for a in range(3)):
+                continue
+            # WedgePart : seule la moitié de la boîte sous la pente (côté haut en +Z local, bas en -Y)
+            if wedge and loc[1] / half[1] > loc[2] / half[2] + 2e-3 / min(half[1], half[2]):
+                continue
+            best = th if best is None else max(best, th)
+        return best
+
+
+def covered_by_walls(walls, pts, n):
+    """Cette méthode permet de savoir si une face est entièrement couverte par les tranches des murs voisins (ailette
+    entre deux murs) : chaque point sondé, juste sous la face, est dans une dalle de mur."""
+    return all(walls.thickness_at(p - n * (EPS + 0.03), None) is not None for p in pts)
+
+
+def tri_samples(t):
+    """Cette méthode permet de choisir les points sondés d'un triangle (sommets, milieux des côtés, centre)."""
+    a, b, c = t
+    return [a, b, c, (a + b) / 2, (b + c) / 2, (c + a) / 2, (a + b + c) / 3]
+
+
+def edge_shift(walls, pts, out, n):
+    """Cette méthode permet de reculer un bord de dalle de sol ou de plafond quand une dalle de mur tournée vers
+    l'extérieur passe sous tout le bord (arête saillante) : la tranche de la dalle passe derrière la face du mur, au dos
+    de sa dalle (le mur est posé sur sa face, sans retrait) ; sinon, rien (à plat, angle rentrant, mur partiel)."""
+    shift = None
     for m in pts:
-        below = solids.inside(m + out * EDGE_PROBE - n * EDGE_PROBE)
-        above = solids.inside(m + out * EDGE_PROBE + n * EDGE_PROBE)
-        kinds.add("convex" if not below else "concave" if above else "flat")
-    if kinds == {"convex"}:
-        return EPS + EDGE_HIDE
-    if kinds == {"concave"}:
-        return -(EPS + EDGE_FILL)
-    return 0.0
+        th = walls.thickness_at(m - out * 0.02 - n * (EPS + 0.03), out)
+        if th is None:
+            return 0.0
+        # le mur le plus mince du bord : reculer plus ouvrirait un trou au-dessus de lui
+        shift = th - EDGE_OVERLAP if shift is None else min(shift, th - EDGE_OVERLAP)
+    return max(0.0, shift)
 
 
 def edge_points(a, b):
@@ -412,13 +482,14 @@ def edge_points(a, b):
 
 def count_edge(stats, d):
     """Cette méthode permet de compter les bords décalés (cachés, comblés, gardés) pour le bilan du relevé."""
-    k = "edge_hide" if d > 0 else "edge_fill" if d < 0 else "edge_keep"
+    k = "edge_hide" if d > 0 else "edge_keep"
     stats[k] = stats.get(k, 0) + 1
 
 
-def shrink_triangle(t, n, solids, stats):
+def shrink_triangle(t, n, walls, stats):
     """Cette méthode permet de décaler les trois bords d'un triangle selon leurs arêtes (edge_shift), en recoupant les
-    droites décalées ; triangle d'origine si le décalage le retourne ou l'écrase."""
+    droites décalées ; si le décalage le retourne ou l'écrase : None quand les murs le couvrent (ailette), sinon le
+    triangle d'origine."""
     u = (t[1] - t[0]).normalized()
     v = n.cross(u)
     p2 = [((x - t[0]).dot(u), (x - t[0]).dot(v)) for x in t]
@@ -428,7 +499,7 @@ def shrink_triangle(t, n, solids, stats):
         w = (b - a).cross(n).normalized()
         if w.dot(r - a) > 0:
             w = -w
-        d = edge_shift(solids, edge_points(a, b), w, n)
+        d = edge_shift(walls, edge_points(a, b), w, n)
         count_edge(stats, d)
         moved = moved or d != 0
         w2 = (w.dot(u), w.dot(v))
@@ -440,15 +511,25 @@ def shrink_triangle(t, n, solids, stats):
         (w1, c1), (w2, c2) = lines[(i + 2) % 3], lines[i]  # le sommet i est entre le bord i-1 et le bord i
         det = w1[0] * w2[1] - w1[1] * w2[0]
         if abs(det) < 1e-9:
-            return t
+            return collapsed(t, n, walls, stats)
         x = (c1 * w2[1] - c2 * w1[1]) / det
         y = (w1[0] * c2 - w2[0] * c1) / det
         out.append(t[0] + u * x + v * y)
     a0 = (t[1] - t[0]).cross(t[2] - t[0]).dot(n)
     a1 = (out[1] - out[0]).cross(out[2] - out[0]).dot(n)
     if a0 == 0 or a1 / a0 <= 0.25:
-        return t
+        return collapsed(t, n, walls, stats)
     return out
+
+
+def collapsed(t, n, walls, stats):
+    """Cette méthode permet de traiter un triangle écrasé par le recul de ses bords : écarté s'il est couvert par les
+    tranches des murs (ailette), gardé tel quel sinon."""
+    if covered_by_walls(walls, tri_samples(t), n):
+        stats["edge_fin"] = stats.get("edge_fin", 0) + 1
+        return None
+    stats["edge_collapsed"] = stats.get("edge_collapsed", 0) + 1
+    return t
 
 
 def block_entry(center, x, y, z, size):
@@ -457,9 +538,9 @@ def block_entry(center, x, y, z, size):
     return [round(center.x, 3), round(center.y, 3), round(center.z, 3)] + r + [round(s, 3) for s in size]
 
 
-def wedges(t, n, th):
+def wedges(t, n, th, eps=EPS):
     """Cette méthode permet de découper un triangle quelconque en deux triangles rectangles, chacun posé en WedgePart
-    (côté haut en +Z local, épaisseur en X), retiré de EPS sous la face."""
+    (côté haut en +Z local, épaisseur en X), retiré de eps sous la face."""
     a, b, c = t
     edges = [(a, b, c), (b, c, a), (c, a, b)]
     p, q, o = max(edges, key=lambda e: (e[1] - e[0]).length)
@@ -472,7 +553,7 @@ def wedges(t, n, th):
             continue
         zaxis, yaxis = za.normalized(), yb.normalized()
         xaxis = yaxis.cross(zaxis)
-        center = f + (leg - f) / 2 + (o - f) / 2 - n * (EPS + th / 2)
+        center = f + (leg - f) / 2 + (o - f) / 2 - n * (eps + th / 2)
         out.append(block_entry(center, xaxis, yaxis, zaxis, (th, yb.length, za.length)))
     return out
 
@@ -561,7 +642,7 @@ def extract(src, out_path):
             tris = tri_list(faces)
             if not tris:
                 continue
-            if EDGE_ADJUST and not clip:
+            if not clip:
                 solids.add(tris)
             box = is_box(tris) if len(comp) == 8 else None
             if box is None and not clip and len(comp) < WORLD_MIN_VERTS:
@@ -590,47 +671,83 @@ def extract(src, out_path):
     for clip, all_tris in tree_tris.items():
         verts = [p for t, _ in all_tris for p in t]
         trees[clip] = BVHTree.FromPolygons(verts, [(3 * i, 3 * i + 1, 3 * i + 2) for i in range(len(all_tris))])
+    walls = WallSlabs()
     for clip in (False, True):
         idx = [i for i in range(len(surf)) if clip_of[i] == clip]
         tris = [surf[i] for i in idx]
         tree = trees[clip]
         comp = [comp_of[i] for i in idx]
-        for grp in plane_groups(tris):
+        # murs d'abord : les dalles de sol et de plafond lisent l'épaisseur de la dalle du mur qui garde l'arête
+        groups = sorted(plane_groups(tris), key=lambda g: classify(tris[g[0]][1], clip) != "wall")
+        for grp in groups:
             n = tris[grp[0]][1]
             # groupe source (habillage) : celui du plus grand triangle de l'amas
             group = groups_of[idx[max(grp, key=lambda j: tri_area3(tris[j][0]))]]
             role = classify(n, clip)
+            adjust = EDGE_ADJUST and not clip and role in EDGE_ROLES
+            # mur : posé sur sa face (pas de retrait), il garde les arêtes saillantes et ferme le coin
+            eps = 0.0 if EDGE_ADJUST and role == "wall" else EPS
             covered = rectangles(tris, grp, n, comp)
             rects, rest = covered if covered is not None else ([], grp)
             if rects:
                 for origin, u, v, (u0, u1, v0, v1) in rects:
                     if u1 - u0 < 1e-3 or v1 - v0 < 1e-3:
                         continue
-                    if EDGE_ADJUST and not clip:
-                        # bords : tranche cachée aux arêtes saillantes, fente fermée aux angles rentrants
+                    c = origin + u * ((u0 + u1) / 2) + v * ((v0 + v1) / 2)
+                    du, dv = u * ((u1 - u0) * 0.4), v * ((v1 - v0) * 0.4)
+                    probes = [c, c + du + dv, c + du - dv, c - du + dv, c - du - dv]
+                    if not clip and buried(solids, probes, n):
+                        stats["buried_skip"] = stats.get("buried_skip", 0) + 1
+                        continue
+                    if not clip and thin_below(tree, probes, n):
+                        stats["thin_skip"] = stats.get("thin_skip", 0) + 1
+                        continue
+                    if adjust:
+                        # arête saillante contre un mur : la tranche passe derrière la dalle du mur
                         corner = [origin + u * a + v * b for a, b in ((u0, v0), (u0, v1), (u1, v0), (u1, v1))]
                         sides = [(-u, corner[0], corner[1]), (u, corner[2], corner[3]),
                                  (-v, corner[0], corner[2]), (v, corner[1], corner[3])]
                         d = []
                         for out, a, b in sides:
-                            d.append(edge_shift(solids, edge_points(a, b), out, n))
+                            d.append(edge_shift(walls, edge_points(a, b), out, n))
                             count_edge(edges, d[-1])
                         nu0, nu1, nv0, nv1 = u0 + d[0], u1 - d[1], v0 + d[2], v1 - d[3]
                         if nu1 - nu0 > 0.05 and nv1 - nv0 > 0.05:
                             u0, u1, v0, v1 = nu0, nu1, nv0, nv1
-                    c = origin + u * ((u0 + u1) / 2) + v * ((v0 + v1) / 2)
-                    du, dv = u * ((u1 - u0) * 0.4), v * ((v1 - v0) * 0.4)
+                        elif any(d) and covered_by_walls(
+                            walls, [origin + u * a + v * b for a in (u0, (u0 + u1) / 2, u1) for b in (v0, (v0 + v1) / 2, v1)], n
+                        ):
+                            # ailette : les tranches des deux murs couvrent déjà toute la face
+                            edges["edge_fin"] = edges.get("edge_fin", 0) + 1
+                            continue
+                        elif any(d):
+                            edges["edge_collapsed"] = edges.get("edge_collapsed", 0) + 1
+                        c = origin + u * ((u0 + u1) / 2) + v * ((v0 + v1) / 2)
+                        du, dv = u * ((u1 - u0) * 0.4), v * ((v1 - v0) * 0.4)
                     th = thickness(tree, [c, c + du + dv, c + du - dv, c - du + dv, c - du - dv], n)
-                    c = c - n * (EPS + th / 2)
+                    c = c - n * (eps + th / 2)
+                    if role == "wall" and not clip:
+                        walls.add(c, (u, n, u.cross(n)), ((u1 - u0) / 2, th / 2, (v1 - v0) / 2), th, n)
                     parts.append([group, role, 0] + block_entry(c, u, n, u.cross(n), (u1 - u0, th, v1 - v0)))
                     stats[role] = stats.get(role, 0) + 1
             if rest:
                 for j in rest:
                     t = tris[j][0]
-                    if EDGE_ADJUST and not clip:
-                        t = shrink_triangle(t, n, solids, edges)
+                    if not clip and buried(solids, [(t[0] * 4 + t[1] + t[2]) / 6, (t[0] + t[1] * 4 + t[2]) / 6, (t[0] + t[1] + t[2] * 4) / 6], n):
+                        stats["buried_skip"] = stats.get("buried_skip", 0) + 1
+                        continue
+                    if not clip and thin_below(tree, [(t[0] + t[1] + t[2]) / 3], n):
+                        stats["thin_skip"] = stats.get("thin_skip", 0) + 1
+                        continue
+                    if adjust:
+                        t = shrink_triangle(t, n, walls, edges)
+                        if t is None:
+                            continue
                     th = thickness(tree, [(t[0] + t[1] + t[2]) / 3], n)
-                    for w in wedges(t, n, th):
+                    for w in wedges(t, n, th, eps):
+                        if role == "wall" and not clip:
+                            X, Y, Z = Vector(w[3:6]), Vector(w[6:9]), Vector(w[9:12])
+                            walls.add(Vector(w[0:3]), (X, Y, Z), (w[12] / 2, w[13] / 2, w[14] / 2), th, n, True)
                         parts.append([group, role, 1] + w)
                         stats[role + "_wedge"] = stats.get(role + "_wedge", 0) + 1
     spawns = []
