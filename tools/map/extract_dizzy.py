@@ -6,9 +6,9 @@
     exec(open(r".../tools/map/extract_dizzy.py", encoding="utf-8").read())
 
 Méthode (sans échantillonnage, donc sans trou) : le monde est un maillage fermé, pas des blocs. Chaque face plane
-(triangles coplanaires voisins) devient une dalle collée à la face et épaissie vers l'intérieur du solide (moitié de
-l'épaisseur locale au plus, pour que les deux faces d'un mur fin ne se chevauchent pas), en rectangles quand le contour
-s'y prête, sinon deux WedgePart par triangle. Un bloc convexe qui est une boîte devient une seule Part.
+(triangles coplanaires qui se touchent, tous morceaux confondus : les solides source se recouvrent) devient une seule
+dalle collée à la face et épaissie vers l'intérieur du solide (moitié de l'épaisseur locale au plus, pour que les deux
+faces d'un mur fin ne se chevauchent pas), en rectangles quand le contour s'y prête, sinon deux WedgePart par triangle. Un bloc convexe qui est une boîte devient une seule Part.
 """
 
 import bisect
@@ -30,6 +30,13 @@ T_MAX = 2.0  # épaisseur maximale d'une dalle (studs)
 T_MIN = 0.05
 T_OPEN = 0.4  # dalle d'une surface ouverte (pas de face opposée)
 EPS = 0.03  # retrait des dalles sous leur face : évite le scintillement entre la tranche d'une dalle et la face voisine
+# Bords de dalle décalés selon l'arête (edge_shift) : supprime le scintillement des tranches aux arêtes saillantes, mais
+# efface la moitié des détails des façades et ouvre des fentes claires aux angles rentrants (essai du 05/11/2026, cf.
+# docs/maps.md). Désactivé ; gardé comme point de départ.
+EDGE_ADJUST = False
+EDGE_HIDE = 0.15  # arête saillante : la tranche d'une dalle passe d'autant derrière la face voisine (lisible à distance)
+EDGE_FILL = 0.05  # angle rentrant : la dalle passe d'autant sous la voisine, au-delà de EPS (ferme la fente)
+EDGE_PROBE = 0.05  # studs : sondes de part et d'autre d'un bord de dalle pour le classer
 DECOR_FILL = 0.6  # un bloc de décor qui remplit au moins cette part de sa boîte orientée devient cette boîte
 SMALL_DECOR = 8.0  # studs : un bloc de décor plus petit devient sa boîte orientée quel que soit son remplissage (tuyaux)
 WORLD_MIN_VERTS = 500  # au-delà, le morceau est le maillage du monde (non convexe), jamais réduit à une boîte
@@ -132,12 +139,45 @@ def tri_list(faces):
 
 
 def plane_groups(tris):
-    """Cette méthode permet de regrouper les triangles d'un même plan, voisins ou non : le maillage a des jonctions
-    en T (sommet au milieu de l'arête du voisin), les arêtes ne suffisent pas à relier une face."""
-    groups = {}
+    """Cette méthode permet de regrouper les triangles d'un même plan et de même sens, tous morceaux confondus, en amas
+    de triangles qui se touchent ou se chevauchent : la collision d'origine est faite de solides qui se recouvrent (une
+    moulure encastrée dans un mur), leurs faces coplanaires ne doivent donner qu'une dalle. Les arêtes ne suffisent pas
+    à relier une face (jonctions en T : sommet au milieu de l'arête du voisin)."""
+    planes = {}
     for i, (t, n) in enumerate(tris):
         k = (round(n.x, 3), round(n.y, 3), round(n.z, 3), round(n.dot(t[0]), 1))
-        groups.setdefault(k, []).append(i)
+        planes.setdefault(k, []).append(i)
+    out = []
+    for members in planes.values():
+        out += touching(tris, members)
+    return out
+
+
+def touching(tris, members, margin=1e-3):
+    """Cette méthode permet de séparer les triangles d'un plan en amas dont les boîtes englobantes se touchent (balayage
+    sur X, union-find), pour garder des grilles de couverture locales."""
+    box = {i: ([min(p[a] for p in tris[i][0]) - margin for a in range(3)], [max(p[a] for p in tris[i][0]) + margin for a in range(3)]) for i in members}
+    parent = {i: i for i in members}
+
+    def root(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    order = sorted(members, key=lambda i: box[i][0][0])
+    active = []
+    for i in order:
+        lo, hi = box[i]
+        active = [j for j in active if box[j][1][0] >= lo[0]]
+        for j in active:
+            lj, hj = box[j]
+            if all(lo[a] <= hj[a] and lj[a] <= hi[a] for a in (1, 2)):
+                parent[root(i)] = root(j)
+        active.append(i)
+    groups = {}
+    for i in members:
+        groups.setdefault(root(i), []).append(i)
     return list(groups.values())
 
 
@@ -151,6 +191,11 @@ def point_in_tri2(p, a, b, c):
     neg = d1 < -1e-6 or d2 < -1e-6 or d3 < -1e-6
     pos = d1 > 1e-6 or d2 > 1e-6 or d3 > 1e-6
     return not (neg and pos)
+
+
+def tri_area3(t):
+    """Cette méthode permet de calculer l'aire d'un triangle 3D."""
+    return (t[1] - t[0]).cross(t[2] - t[0]).length / 2
 
 
 def tri_area2(a, b, c):
@@ -183,12 +228,12 @@ def aligned(t, u, v):
     return along >= 2
 
 
-def rectangles(tris, grp, n):
+def rectangles(tris, grp, n, comp):
     """Cette méthode permet de couvrir un plan de rectangles, d'abord en entier, sinon sur ses seuls triangles alignés
     sur la grille. Renvoie (rectangles, triangles restants à poser en coins), ou None si rien ne se couvre."""
     dirs = directions(tris, grp, n)
     for u in dirs:
-        rects = cover(tris, grp, n, u)
+        rects = cover(tris, grp, n, u, comp)
         if rects is not None:
             return rects, []
     for u in dirs:
@@ -196,26 +241,29 @@ def rectangles(tris, grp, n):
         sub = [j for j in grp if aligned(tris[j][0], u, v)]
         if not sub or len(sub) == len(grp):
             continue
-        rects = cover(tris, sub, n, u)
+        rects = cover(tris, sub, n, u, comp)
         if rects is not None:
             return rects, [j for j in grp if j not in set(sub)]
     return None
 
 
-def cover(tris, grp, n, u):
-    """Cette méthode permet de couvrir des triangles coplanaires de rectangles d'axe u : grille des coordonnées de leurs
-    sommets, cellules dont le centre est dans un triangle, fusion gloutonne. None si l'aire couverte diffère."""
+def cover(tris, grp, n, u, comp):
+    """Cette méthode permet de couvrir l'union de triangles coplanaires de rectangles d'axe u : grille des coordonnées
+    de leurs sommets, cellules dont le centre est dans un triangle, fusion gloutonne. Les triangles de morceaux source
+    différents peuvent se chevaucher : l'aire couverte est contrôlée par morceau (comp[j]), None si elle diffère."""
     v = n.cross(u).normalized()
     origin = tris[grp[0]][0][0]
     proj = [[((x - origin).dot(u), (x - origin).dot(v)) for x in tris[j][0]] for j in grp]
-    area = sum(tri_area2(*p) for p in proj)
     us = sorted({round(c[0], 3) for p in proj for c in p})
     vs = sorted({round(c[1], 3) for p in proj for c in p})
     nu, nv = len(us) - 1, len(vs) - 1
     if nu < 1 or nv < 1 or nu * nv > 400000:
         return None
     cov = [bytearray(nv) for _ in range(nu)]
-    for p in proj:
+    cells, area = {}, {}
+    for j, p in zip(grp, proj):
+        mine = cells.setdefault(comp[j], set())
+        area[comp[j]] = area.get(comp[j], 0.0) + tri_area2(*p)
         i0 = max(bisect.bisect_right(us, min(c[0] for c in p) + 1e-6) - 1, 0)
         i1 = bisect.bisect_left(us, max(c[0] for c in p) - 1e-6)
         k0 = max(bisect.bisect_right(vs, min(c[1] for c in p) + 1e-6) - 1, 0)
@@ -223,11 +271,13 @@ def cover(tris, grp, n, u):
         for i in range(i0, min(i1, nu)):
             cu = (us[i] + us[i + 1]) / 2
             for k in range(k0, min(k1, nv)):
-                if not cov[i][k] and point_in_tri2((cu, (vs[k] + vs[k + 1]) / 2), *p):
+                if point_in_tri2((cu, (vs[k] + vs[k + 1]) / 2), *p):
                     cov[i][k] = 1
-    covered = sum((us[i + 1] - us[i]) * (vs[k + 1] - vs[k]) for i in range(nu) for k in range(nv) if cov[i][k])
-    if abs(covered - area) > 1e-3 * area + 1e-3:
-        return None
+                    mine.add((i, k))
+    for c, mine in cells.items():
+        covered = sum((us[i + 1] - us[i]) * (vs[k + 1] - vs[k]) for i, k in mine)
+        if abs(covered - area[c]) > 1e-3 * area[c] + 1e-3:
+            return None
     rects = []
     for i in range(nu):
         for k in range(nv):
@@ -301,6 +351,104 @@ def thickness(tree, pts, n):
     if best is None:
         return T_OPEN
     return max(T_MIN, min(T_MAX, best / 2))
+
+
+class Solids:
+    """Cette méthode permet de savoir si un point est dans un des solides d'origine (chaque morceau connexe est un
+    maillage fermé ; ils se recouvrent, d'où un test par morceau plutôt que sur l'ensemble)."""
+
+    CELL = 16.0
+    RAY = Vector((0.5774, 0.5771, 0.5777)).normalized()  # direction quelconque : évite de raser les arêtes
+
+    def __init__(self):
+        self.items, self.grid = [], {}
+
+    def add(self, tris):
+        """Cette méthode permet d'ajouter un morceau connexe (triangles en studs) au test d'appartenance."""
+        verts = [p for t, _ in tris for p in t]
+        tree = BVHTree.FromPolygons(verts, [(3 * i, 3 * i + 1, 3 * i + 2) for i in range(len(tris))])
+        lo = [min(p[a] for p in verts) for a in range(3)]
+        hi = [max(p[a] for p in verts) for a in range(3)]
+        k = len(self.items)
+        self.items.append((tree, lo, hi))
+        cells = [range(int(lo[a] // self.CELL), int(hi[a] // self.CELL) + 1) for a in range(3)]
+        for x in cells[0]:
+            for y in cells[1]:
+                for z in cells[2]:
+                    self.grid.setdefault((x, y, z), []).append(k)
+
+    def inside(self, q):
+        """Cette méthode permet de tester un point : dedans si le premier impact d'un rayon est l'envers d'une face."""
+        for k in self.grid.get(tuple(int(q[a] // self.CELL) for a in range(3)), ()):
+            tree, lo, hi = self.items[k]
+            if not all(lo[a] <= q[a] <= hi[a] for a in range(3)):
+                continue
+            hit = tree.ray_cast(q, self.RAY, 1e4)
+            if hit[0] is not None and hit[1].dot(self.RAY) > 0:
+                return True
+        return False
+
+
+def edge_shift(solids, pts, out, n):
+    """Cette méthode permet de décaler un bord de dalle selon l'arête qu'il borde (points du bord sur la face, normale
+    sortante dans le plan) : saillante, la dalle recule pour cacher sa tranche derrière la face voisine (positif) ;
+    rentrante, elle avance sous la voisine pour fermer la fente (négatif) ; à plat ou mixte, rien."""
+    kinds = set()
+    for m in pts:
+        below = solids.inside(m + out * EDGE_PROBE - n * EDGE_PROBE)
+        above = solids.inside(m + out * EDGE_PROBE + n * EDGE_PROBE)
+        kinds.add("convex" if not below else "concave" if above else "flat")
+    if kinds == {"convex"}:
+        return EPS + EDGE_HIDE
+    if kinds == {"concave"}:
+        return -(EPS + EDGE_FILL)
+    return 0.0
+
+
+def edge_points(a, b):
+    """Cette méthode permet de choisir les points de sonde d'un bord (près des bouts et au milieu)."""
+    return [a.lerp(b, f) for f in (0.15, 0.5, 0.85)]
+
+
+def count_edge(stats, d):
+    """Cette méthode permet de compter les bords décalés (cachés, comblés, gardés) pour le bilan du relevé."""
+    k = "edge_hide" if d > 0 else "edge_fill" if d < 0 else "edge_keep"
+    stats[k] = stats.get(k, 0) + 1
+
+
+def shrink_triangle(t, n, solids, stats):
+    """Cette méthode permet de décaler les trois bords d'un triangle selon leurs arêtes (edge_shift), en recoupant les
+    droites décalées ; triangle d'origine si le décalage le retourne ou l'écrase."""
+    u = (t[1] - t[0]).normalized()
+    v = n.cross(u)
+    p2 = [((x - t[0]).dot(u), (x - t[0]).dot(v)) for x in t]
+    lines, moved = [], False
+    for i in range(3):
+        a, b, r = t[i], t[(i + 1) % 3], t[(i + 2) % 3]
+        w = (b - a).cross(n).normalized()
+        if w.dot(r - a) > 0:
+            w = -w
+        d = edge_shift(solids, edge_points(a, b), w, n)
+        count_edge(stats, d)
+        moved = moved or d != 0
+        w2 = (w.dot(u), w.dot(v))
+        lines.append((w2, w2[0] * p2[i][0] + w2[1] * p2[i][1] - d))
+    if not moved:
+        return t
+    out = []
+    for i in range(3):
+        (w1, c1), (w2, c2) = lines[(i + 2) % 3], lines[i]  # le sommet i est entre le bord i-1 et le bord i
+        det = w1[0] * w2[1] - w1[1] * w2[0]
+        if abs(det) < 1e-9:
+            return t
+        x = (c1 * w2[1] - c2 * w1[1]) / det
+        y = (w1[0] * c2 - w2[0] * c1) / det
+        out.append(t[0] + u * x + v * y)
+    a0 = (t[1] - t[0]).cross(t[2] - t[0]).dot(n)
+    a1 = (out[1] - out[0]).cross(out[2] - out[0]).dot(n)
+    if a0 == 0 or a1 / a0 <= 0.25:
+        return t
+    return out
 
 
 def block_entry(center, x, y, z, size):
@@ -383,6 +531,12 @@ def extract(src, out_path):
     sc = load_scene(src)
     parts, stats = [], {}
     shaft = None
+    # surfaces à poser en dalles, de toute la map : (triangle, normale), groupe source, mur d'air ; triangles en double
+    # (solides qui se recouvrent) écartés
+    surf, groups_of, clip_of, comp_of, seen = [], [], [], [], set()
+    tree_tris = {False: [], True: []}
+    solids = Solids()
+    edges = {}
     for o in sc.objects:
         if o.type != "MESH" or o.name.startswith(SKIP):
             continue
@@ -394,10 +548,9 @@ def extract(src, out_path):
         if not all_tris:
             bm.free()
             continue
-        verts = [p for t, _ in all_tris for p in t]
-        tree = BVHTree.FromPolygons(verts, [(3 * i, 3 * i + 1, 3 * i + 2) for i in range(len(all_tris))])
+        tree_tris[clip] += all_tris
         group = o.name.split(".")[0].replace("physics_group_", "").replace("physics_", "")
-        for comp in components(bm):
+        for ci, comp in enumerate(components(bm)):
             faces = {f for v in comp for f in v.link_faces}
             if len(comp) >= WORLD_MIN_VERTS and not clip:
                 # emprise du fût de la tour (coupe à 120 m), habillé par le générateur sous le toit
@@ -408,6 +561,8 @@ def extract(src, out_path):
             tris = tri_list(faces)
             if not tris:
                 continue
+            if EDGE_ADJUST and not clip:
+                solids.add(tris)
             box = is_box(tris) if len(comp) == 8 else None
             if box is None and not clip and len(comp) < WORLD_MIN_VERTS:
                 # bloc de décor : une seule pièce s'il est petit (tuyau) ou remplit assez sa boîte orientée ; jamais un
@@ -421,29 +576,63 @@ def extract(src, out_path):
                 parts.append([group, role, 0] + box)
                 stats[role] = stats.get(role, 0) + 1
                 continue
-            for grp in plane_groups(tris):
-                n = tris[grp[0]][1]
-                role = classify(n, clip)
-                covered = rectangles(tris, grp, n)
-                rects, rest = covered if covered is not None else ([], grp)
-                if rects:
-                    for origin, u, v, (u0, u1, v0, v1) in rects:
-                        if u1 - u0 < 1e-3 or v1 - v0 < 1e-3:
-                            continue
-                        c = origin + u * ((u0 + u1) / 2) + v * ((v0 + v1) / 2)
-                        du, dv = u * ((u1 - u0) * 0.4), v * ((v1 - v0) * 0.4)
-                        th = thickness(tree, [c, c + du + dv, c + du - dv, c - du + dv, c - du - dv], n)
-                        c = c - n * (EPS + th / 2)
-                        parts.append([group, role, 0] + block_entry(c, u, n, u.cross(n), (u1 - u0, th, v1 - v0)))
-                        stats[role] = stats.get(role, 0) + 1
-                if rest:
-                    for j in rest:
-                        t = tris[j][0]
-                        th = thickness(tree, [(t[0] + t[1] + t[2]) / 3], n)
-                        for w in wedges(t, n, th):
-                            parts.append([group, role, 1] + w)
-                            stats[role + "_wedge"] = stats.get(role + "_wedge", 0) + 1
+            for t, n in tris:
+                key = (clip, frozenset((round(p.x, 3), round(p.y, 3), round(p.z, 3)) for p in t))
+                if key in seen:
+                    continue
+                seen.add(key)
+                surf.append((t, n))
+                groups_of.append(group)
+                clip_of.append(clip)
+                comp_of.append((o.name, ci))
         bm.free()
+    trees = {}
+    for clip, all_tris in tree_tris.items():
+        verts = [p for t, _ in all_tris for p in t]
+        trees[clip] = BVHTree.FromPolygons(verts, [(3 * i, 3 * i + 1, 3 * i + 2) for i in range(len(all_tris))])
+    for clip in (False, True):
+        idx = [i for i in range(len(surf)) if clip_of[i] == clip]
+        tris = [surf[i] for i in idx]
+        tree = trees[clip]
+        comp = [comp_of[i] for i in idx]
+        for grp in plane_groups(tris):
+            n = tris[grp[0]][1]
+            # groupe source (habillage) : celui du plus grand triangle de l'amas
+            group = groups_of[idx[max(grp, key=lambda j: tri_area3(tris[j][0]))]]
+            role = classify(n, clip)
+            covered = rectangles(tris, grp, n, comp)
+            rects, rest = covered if covered is not None else ([], grp)
+            if rects:
+                for origin, u, v, (u0, u1, v0, v1) in rects:
+                    if u1 - u0 < 1e-3 or v1 - v0 < 1e-3:
+                        continue
+                    if EDGE_ADJUST and not clip:
+                        # bords : tranche cachée aux arêtes saillantes, fente fermée aux angles rentrants
+                        corner = [origin + u * a + v * b for a, b in ((u0, v0), (u0, v1), (u1, v0), (u1, v1))]
+                        sides = [(-u, corner[0], corner[1]), (u, corner[2], corner[3]),
+                                 (-v, corner[0], corner[2]), (v, corner[1], corner[3])]
+                        d = []
+                        for out, a, b in sides:
+                            d.append(edge_shift(solids, edge_points(a, b), out, n))
+                            count_edge(edges, d[-1])
+                        nu0, nu1, nv0, nv1 = u0 + d[0], u1 - d[1], v0 + d[2], v1 - d[3]
+                        if nu1 - nu0 > 0.05 and nv1 - nv0 > 0.05:
+                            u0, u1, v0, v1 = nu0, nu1, nv0, nv1
+                    c = origin + u * ((u0 + u1) / 2) + v * ((v0 + v1) / 2)
+                    du, dv = u * ((u1 - u0) * 0.4), v * ((v1 - v0) * 0.4)
+                    th = thickness(tree, [c, c + du + dv, c + du - dv, c - du + dv, c - du - dv], n)
+                    c = c - n * (EPS + th / 2)
+                    parts.append([group, role, 0] + block_entry(c, u, n, u.cross(n), (u1 - u0, th, v1 - v0)))
+                    stats[role] = stats.get(role, 0) + 1
+            if rest:
+                for j in rest:
+                    t = tris[j][0]
+                    if EDGE_ADJUST and not clip:
+                        t = shrink_triangle(t, n, solids, edges)
+                    th = thickness(tree, [(t[0] + t[1] + t[2]) / 3], n)
+                    for w in wedges(t, n, th):
+                        parts.append([group, role, 1] + w)
+                        stats[role + "_wedge"] = stats.get(role + "_wedge", 0) + 1
     spawns = []
     for team, pts in SPAWNS.items():
         for x, y, z, yaw in pts:
@@ -462,7 +651,7 @@ def extract(src, out_path):
     }
     with open(out_path, "w", encoding="utf-8") as fh:
         json.dump(data, fh, ensure_ascii=False, separators=(",", ":"))
-    print("pièces", len(parts), stats)
+    print("pièces", len(parts), stats, edges)
     return data
 
 
