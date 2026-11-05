@@ -4,6 +4,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local MapRules = require(ReplicatedStorage.Shared.MapRules)
+local MapSelection = require(ReplicatedStorage.Shared.MapSelection)
 local Config = require(ReplicatedStorage.Shared.MovementConfig)
 
 type Boost = { part: BasePart, kind: string, cooldown: number }
@@ -40,8 +41,7 @@ function BoostSystem.init()
 	end
 	watching = true
 	task.spawn(function()
-		local maps = workspace:WaitForChild("Maps", 30)
-		local map = maps and maps:WaitForChild("Map", 30)
+		local map = MapSelection.waitForActive(30)
 		mapModel = map
 		local folder = map and map:WaitForChild(MapRules.BOOSTS_FOLDER, 30)
 		if not folder then

@@ -15,7 +15,7 @@ return {
 
 	-- Saut / Gravité
 	JUMP_VELOCITY    = 38,
-	GRAVITY          = -110,     -- arc ~4.8 studs (38²/300), trajectoire plus nerveuse
+	GRAVITY          = -110,     -- arc ~6.6 studs (38²/220), trajectoire plus nerveuse
 	MAX_FALL_SPEED   = 130,
 
 	-- Pentes

@@ -72,7 +72,7 @@ Script idempotent, à relancer au début de chaque tâche (PowerShell, depuis la
 - `src/client` -> `StarterPlayerScripts/Client`
 - `assets/rbx/ViewModels/<Nom>.rbxm` -> `ReplicatedStorage/ViewModels/<Nom>` (viewmodels FPS, aussi clonés pour l'arme 3P)
 - `assets/rbx/Tools/<Nom>.rbxm` -> `StarterPack/<Nom>` (Tools des armes, attribut `ViewmodelName`)
-- `assets/rbx/Maps/<Nom>.rbxm` -> `Workspace/Maps/<Nom>` (map générée par `tools/map/build_arena.luau`, cf. `docs/maps.md`)
+- `assets/rbx/Maps/<Nom>.rbxm` -> `Workspace/Maps/<Nom>` (une map par fichier, générées par `tools/map/build_*.luau`, map jouée : `GameConfig.ACTIVE_MAP`, cf. `docs/maps.md`)
 - `assets/rbx/Materials/<Nom>.rbxm` -> `MaterialService/<Nom>` (MaterialVariant des maps, cf. `docs/maps.md`)
 
 ## Viewmodels et Tools (.rbxm)

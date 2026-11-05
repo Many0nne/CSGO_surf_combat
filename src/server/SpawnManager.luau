@@ -3,22 +3,20 @@ local Debris = game:GetService("Debris")
 
 local CharacterAppearance = require(ReplicatedStorage.Shared.CharacterAppearance)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local MapSelection = require(ReplicatedStorage.Shared.MapSelection)
 local SpawnLaunch = require(ReplicatedStorage.Shared.SpawnLaunch)
 
 local SpawnManager = {}
 
 local mapModel: Instance?
 
--- Cette méthode permet de trouver la map (Workspace.Maps.Map) lorsqu'un joueur demande à apparaître.
+-- Cette méthode permet de trouver la map jouée (GameConfig.ACTIVE_MAP dans Workspace.Maps) lorsqu'un joueur demande à
+-- apparaître.
 local function getMap(): Instance?
 	if mapModel and mapModel.Parent then
 		return mapModel
 	end
-	local maps = workspace:WaitForChild("Maps", 10)
-	if not maps then
-		return nil
-	end
-	mapModel = maps:WaitForChild("Map", 10)
+	mapModel = MapSelection.waitForActive(10)
 	return mapModel
 end
 

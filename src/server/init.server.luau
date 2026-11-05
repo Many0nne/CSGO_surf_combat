@@ -5,6 +5,7 @@ local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local NetworkProtocol = require(Shared:WaitForChild("NetworkProtocol"))
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local MapSelection = require(Shared:WaitForChild("MapSelection"))
 local WeaponThirdPerson = require(Shared:WaitForChild("WeaponThirdPerson"))
 
 local SpawnManager = require(script.SpawnManager)
@@ -142,9 +143,9 @@ end
 -- Mort par chute hors de l'île (Maps.Map.KillHeight)
 KillZone.init(fellOutRmt)
 
--- Sable de la map en Terrain (dunes de l'Arène), posé avant les premières apparitions
-local maps = workspace:FindFirstChild("Maps")
-MapTerrain.build(maps and maps:FindFirstChild("Map"))
+-- Une seule map est jouée (GameConfig.ACTIVE_MAP) : les autres sont retirées, puis le sable en Terrain de la map
+-- choisie (dunes de l'Arène) est posé avant les premières apparitions
+MapTerrain.build(MapSelection.activate(workspace:FindFirstChild("Maps"), GameConfig.ACTIVE_MAP))
 
 SpawnManager.init(spawnRmt, function(player: Player): boolean
 	-- Refuser si déjà vivant

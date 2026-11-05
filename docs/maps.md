@@ -1,7 +1,77 @@
 # Maps
 
-Référence pour modifier la map ou en construire une autre. Map actuelle : l'« Arène ». Première map originale,
-remplacée : la « ville ensablée » (#69), gardée comme seconde map possible.
+Référence pour modifier une map ou en construire une autre. Map jouée par défaut : **Dizzy** (réplique de ar_dizzy).
+Autres maps : l'« Arène » (versionnée, sélectionnable) ; la « ville ensablée » (#69), ancienne map, générateur gardé.
+
+## Choisir la map jouée
+
+Chaque map est un `.rbxm` de `assets/rbx/Maps` (`Map.rbxm` = l'Arène, `Dizzy.rbxm`), toutes synchronisées dans
+`Workspace.Maps`. Au démarrage, le serveur (`src/shared/MapSelection.luau`) garde celle de `GameConfig.ACTIVE_MAP` (nom
+du `.rbxm`), détruit les autres et pose l'attribut `ActiveMap` sur `Workspace.Maps` ; le serveur (`SpawnManager`) et le
+client (`BoostSystem`) retrouvent la map jouée par `MapSelection.waitForActive`. Nom absent : repli sur `Map`. Tout code
+qui lit la map doit passer par là, jamais par `Maps.Map`. Rotation par round et vote : pas faits (une map à la fois,
+choisie dans le code).
+
+## Dizzy (map par défaut)
+
+Toit d'un gratte-ciel au-dessus des nuages, reproduit d'après `ar_dizzy` (CS:GO, port CS2 `ar_dizzy.vpk` de ModDB) :
+pièces, escaliers, mât central, deux grandes rampes de surf dans les fosses d'angle. Habillage à nous (béton, enduit,
+acier, fût de tour aux fenêtres allumées, mer de nuages au crépuscule). Jouable à pied, apparition au sol (24 points,
+`info_player_*` de l'original, attribut `Team`), pas de boosts, mouvement et gravité du jeu inchangés.
+
+- **Échelle** : 10 studs par mètre en plan, 7 en hauteur (`H_SCALE`, `V_SCALE` de `extract_dizzy.py`), environ
+  560 × 600 studs, toit à Y = 0. Rampes de surf à ~62° (69° dans l'original). Une v1 à 5 et 3,5 studs par mètre
+  (~310 × 330) a été jugée trop petite.
+- **Mort** : `KillHeight` = haut du `trigger_hurt` de l'original (−89 studs). Le fût et les nuages sont sans collision.
+- **Décalage** : la map est posée à (2000, 0, 0) pour ne pas se superposer à l'Arène en mode Edit.
+- **Murs d'air gardés** (`playerclip`, deux `func_brush` à rendu désactivé) : pièces invisibles, `CanQuery` vrai. Ils
+  font partie du jeu : pentes invisibles à 20-25° sur les escaliers (contremarches de 0,41 m = 2,9 studs, au-delà de
+  `STEPUP_HEIGHT`), bords fermés.
+
+### Relevé du plan (sans trou)
+
+Le plan `tools/map/dizzy_layout.json` est produit par `tools/map/extract_dizzy.py` : ne pas l'éditer à la main. Sources
+hors dépôt (propriété de Valve, dépôt public) : `worktrees/.archive/ar_dizzy.1/ar_dizzy.vpk`, extraction et Source 2
+Viewer dans `worktrees/.tools`. Le dépôt ne contient que des cotes et des pièces, ni maillage ni texture de Valve.
+
+1. Extraire (une fois) avec Source 2 Viewer (`worktrees/.tools/vrf/Source2Viewer-CLI.exe`) dans
+   `worktrees/.tools/dizzy_out` : `-f maps/ar_dizzy/world_physics.vmdl_c --gltf_export_format glb -d` (collision du
+   monde) et `--vpk_filepath maps/ar_dizzy/entities/ -o .../ents --gltf_export_format glb -d` (entités et brushes).
+2. Relever : `blender -b --factory-startup --python tools/map/extract_dizzy.py -- ../.tools/dizzy_out tools/map/dizzy_layout.json`
+   (Blender sans interface, ~10 s ; ne pas le lancer dans la session Blender de l'utilisateur, le calcul la fige).
+3. Vérifier : `blender -b --factory-startup --python tools/map/verify_dizzy.py -- ../.tools/dizzy_out tools/map/dizzy_layout.json`.
+   Mêmes rayons (~500 000, verticaux et horizontaux) tirés dans la collision d'origine et dans les pièces relevées ;
+   liste les trous et les surplus groupés, avec la pièce responsable. État au relevé : 9 groupes de 3-4 rayons (fentes de
+   0,03 stud aux angles rentrants, laissées par `EPS`), 0,75 % de rayons en surplus (décor approché par sa boîte).
+4. Générer : `lune run tools/map/build_dizzy.luau` (sans Studio, plugin Rojo déconnecté de ce serveur) écrit
+   `assets/rbx/Maps/Dizzy.rbxm`. Puis `rojo build` et `verify_place.luau` comme pour l'Arène.
+
+Méthode et pièges (pour ne pas les redécouvrir) :
+- **La collision du monde n'est pas faite de blocs** : c'est un maillage fermé (le toit d'un seul tenant), sols et murs
+  en surfaces. La v1 le relevait par rayons verticaux tous les 0,5 m : murs fins et bords ratés, d'où ses trous. Seul le
+  petit décor est en blocs convexes.
+- **Chaque face plane devient une dalle** collée à la face, épaissie vers l'intérieur (moitié de l'épaisseur locale au
+  plus, pour que les deux faces d'un mur fin ne se chevauchent pas), retirée de `EPS` (0,03 stud) sous la face pour ne
+  pas scintiller avec la tranche d'une dalle voisine. Rectangles quand le plan s'y prête, sinon deux `WedgePart` par
+  triangle. Couverture sans trou par construction.
+- **Jonctions en T** : un sommet posé au milieu de l'arête du voisin, partout. Regrouper les triangles par plan, pas
+  par arête commune (sinon chaque triangle est isolé : 65 000 pièces). Une couverture en rectangles n'est acceptée que
+  si son aire égale celle des triangles.
+- **Décor** : un bloc devient sa boîte orientée s'il est petit (< 8 studs, tuyaux) ou la remplit à 60 % ; jamais un mur
+  d'air. Exiger la convexité ou 85 % doublait le nombre de pièces pour un gain faible. Axes de la boîte : écarter les
+  résidus de projection (float32), sinon les axes ne sont plus orthonormés et la boîte part à 100 studs.
+- **Repère** : Blender x = y source, y = −x source (pouces × 0,0254), vérifié par raycast (les spawns tombent tous
+  0,406 m au-dessus d'un sol). Roblox (X, Y, Z) = (x·10, (z − 198)·7, −y·10).
+- Écartés : boîte de ciel (`physics_sky`), échelles, fût sous 190 m (remplacé par le décor du générateur).
+- Environ 18 800 pièces ancrées, dont ~12 000 coins, surtout aux plafonds.
+
+### Corriger un détail de Dizzy
+
+La géométrie est régénérée en entier depuis le relevé : **une retouche faite dans Studio est perdue** (Rojo la supprime
+à la connexion, la régénération l'écrase). Selon le cas :
+- habillage d'un rôle (sols, murs, rampes, plafonds, décor) : tables `LOOK` et `DECOR` de `build_dizzy.luau` ;
+- règle de relevé (échelle, épaisseur, simplification du décor) : constantes de `extract_dizzy.py`, puis relever,
+  vérifier, générer.
 
 ## L'Arène
 
