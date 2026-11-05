@@ -134,23 +134,22 @@ for _, name in rbxmNames("assets/rbx/Tools") do
 	end
 end
 
--- map (assets/rbx/Maps, #69) : Workspace.Maps.Map avec des points d'apparition ; lanceurs du soleil avec une vitesse ;
--- boosts configurés ; hauteur de mort numérique si présente
+-- maps (assets/rbx/Maps, #69) : chaque Workspace.Maps.<Nom> avec des points d'apparition ; lanceurs du soleil avec une
+-- vitesse ; boosts configurés ; hauteur de mort numérique si présente
 local maps = game.Workspace:FindFirstChild("Maps")
-local map = maps and maps:FindFirstChild("Map")
-if not map then
-	fail("Workspace.Maps.Map absent")
-else
+
+-- Cette méthode permet de contrôler une map lorsqu'on vérifie la place : spawns, lanceurs, boosts, matières, dunes.
+local function checkMap(map)
 	local ground = map:FindFirstChild("GroundSpawns")
 	local launches = map:FindFirstChild("SunLaunch")
 	local nGround = if ground then #ground:GetChildren() else 0
 	local nLaunch = if launches then #launches:GetChildren() else 0
 	if nGround + nLaunch == 0 then
-		fail("Maps.Map sans point d'apparition (GroundSpawns ni SunLaunch)")
+		fail("Maps." .. map.Name .. " sans point d'apparition (GroundSpawns ni SunLaunch)")
 	end
 	for _, launch in if launches then launches:GetChildren() else {} do
 		if type(launch:GetAttribute("Speed")) ~= "number" then
-			fail("Maps.Map.SunLaunch." .. launch.Name .. " sans attribut Speed")
+			fail("Maps." .. map.Name .. ".SunLaunch." .. launch.Name .. " sans attribut Speed")
 		end
 	end
 	-- boosts (MapRules) : chaque volume a un type connu et le réglage qui va avec
@@ -161,14 +160,14 @@ else
 		local kind = boost:GetAttribute("Kind")
 		if kind == "Geyser" or kind == "Launcher" then
 			if typeof(boost:GetAttribute("Velocity")) ~= "Vector3" then
-				fail("Maps.Map.Boosts." .. boost.Name .. " sans attribut Velocity (Vector3)")
+				fail("Maps." .. map.Name .. ".Boosts." .. boost.Name .. " sans attribut Velocity (Vector3)")
 			end
 		elseif kind == "Portal" then
 			if type(boost:GetAttribute("Boost")) ~= "number" then
-				fail("Maps.Map.Boosts." .. boost.Name .. " sans attribut Boost")
+				fail("Maps." .. map.Name .. ".Boosts." .. boost.Name .. " sans attribut Boost")
 			end
 		else
-			fail("Maps.Map.Boosts." .. boost.Name .. string.format(" : Kind %q inconnu", tostring(kind)))
+			fail("Maps." .. map.Name .. ".Boosts." .. boost.Name .. string.format(" : Kind %q inconnu", tostring(kind)))
 		end
 	end
 	-- matières (#71) : toute MaterialVariant posée sur une pièce de la map existe dans MaterialService, sinon la
@@ -184,20 +183,21 @@ else
 		end
 	end
 	for name in missing do
-		fail("MaterialVariant " .. name .. " utilisée par Maps.Map mais absente de MaterialService")
+		fail("MaterialVariant " .. name .. " utilisée par Maps." .. map.Name .. " mais absente de MaterialService")
 	end
 	local kill = map:GetAttribute("KillHeight")
 	if kill ~= nil and type(kill) ~= "number" then
-		fail("Maps.Map.KillHeight doit être un nombre")
+		fail("Maps." .. map.Name .. ".KillHeight doit être un nombre")
 	end
 	-- dunes en Terrain (#71, src/server/MapTerrain.luau) : les deux attributs vont ensemble, avec le bon type
 	local dunesPlan, dunesRing = map:GetAttribute("DunesPlan"), map:GetAttribute("DunesRing")
 	if (dunesPlan ~= nil or dunesRing ~= nil) and (typeof(dunesPlan) ~= "CFrame" or typeof(dunesRing) ~= "Vector3") then
-		fail("Maps.Map : DunesPlan (CFrame) et DunesRing (Vector3) doivent être posés ensemble")
+		fail("Maps." .. map.Name .. " : DunesPlan (CFrame) et DunesRing (Vector3) doivent être posés ensemble")
 	end
 	print(
 		string.format(
-			"Maps.Map : %d instances, %d spawns au sol, %d lanceurs, %d boosts, KillHeight %s",
+			"Maps.%s : %d instances, %d spawns au sol, %d lanceurs, %d boosts, KillHeight %s",
+			map.Name,
 			#map:GetDescendants(),
 			nGround,
 			nLaunch,
@@ -205,6 +205,15 @@ else
 			tostring(kill)
 		)
 	)
+end
+
+for _, mapName in rbxmNames("assets/rbx/Maps") do
+	local map = maps and maps:FindFirstChild(mapName)
+	if map then
+		checkMap(map)
+	else
+		fail("Workspace.Maps." .. mapName .. " absent")
+	end
 end
 
 -- ids d'assets : une animation, un mesh ou une matière sans texture est une erreur ; un son sans id est seulement
