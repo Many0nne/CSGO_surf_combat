@@ -1,13 +1,15 @@
 --!nocheck
--- Générateur de Dizzy (seconde map, d'après ar_dizzy), exécuté dans Lune sans Studio :
+-- Générateur de Dizzy (map par défaut, d'après ar_dizzy), exécuté dans Lune sans Studio :
 --   lune run tools/map/build_dizzy.luau      (racine du worktree, plugin Rojo déconnecté de ce serveur)
--- Lit le plan relevé tools/map/dizzy_layout.json (tools/map/extract_dizzy.py, à ne pas éditer à la main) et écrit
--- assets/rbx/Maps/Dizzy.rbxm (Workspace.Maps.Dizzy). Habillage à nous (béton, enduit, acier, crépuscule), cf.
--- docs/maps.md.
+-- Lit le plan relevé tools/map/dizzy_layout.json (tools/map/extract_dizzy.py, à ne pas éditer à la main), applique les
+-- retouches locales de tools/map/dizzy_patches.luau et écrit assets/rbx/Maps/Dizzy.rbxm (Workspace.Maps.Dizzy).
+-- Habillage à nous (béton, enduit, acier, crépuscule), cf. docs/maps.md.
 
 local fs = require("@lune/fs")
 local serde = require("@lune/serde")
 local roblox = require("@lune/roblox")
+
+local DizzyPatches = require("./DizzyPatches")
 
 local CFrame = roblox.CFrame
 local Color3 = roblox.Color3
@@ -77,6 +79,30 @@ local function ghost(p)
 	return p
 end
 
+-- Cette méthode permet d'habiller une pièce selon son rôle (floor, slope, wall, ceiling, surf, clip) ou son groupe de
+-- décor (decor:<groupe>), pour le plan relevé comme pour les retouches de dizzy_patches.luau.
+local function style(p, look)
+	p.Transparency = 0
+	p.CastShadow = true
+	if look == "clip" then
+		-- mur d'air (playerclip, func_brush) : invisible mais bloquant ; CanQuery reste vrai, le mouvement détecte les
+		-- collisions par raycast
+		p.Transparency = 1
+		p.CastShadow = false
+		p.Name = "Clip"
+		return
+	end
+	local group = string.match(look, "^decor:(.+)$")
+	local spec = if group then DECOR[group] or DECOR.metal else LOOK[look]
+	assert(spec, "habillage inconnu : " .. tostring(look))
+	p.Color = spec[1]
+	p.Material = spec[2]
+	p.Name = if group then "block" else look
+	if group == "chainlink" or group == "passbullets_chainlink" then
+		p.Transparency = 0.55
+	end
+end
+
 -- Cette méthode permet de poser une pièce ancrée (Part ou WedgePart) à partir d'une entrée du plan relevé.
 local function place(entry, parent)
 	local group, role, wedge = entry[1], entry[2], entry[3]
@@ -91,21 +117,7 @@ local function place(entry, parent)
 	local z = Vector3.new(entry[13], entry[14], entry[15])
 	p.CFrame = CFrame.fromMatrix(pos, x, y, z)
 	p.Size = Vector3.new(entry[16], entry[17], entry[18])
-	if role == "clip" then
-		-- mur d'air (playerclip, func_brush) : invisible mais bloquant ; CanQuery reste vrai, le mouvement détecte les
-		-- collisions par raycast
-		p.Transparency = 1
-		p.CastShadow = false
-		p.Name = "Clip"
-	else
-		local look = if role == "block" then DECOR[group] or DECOR.metal else LOOK[role]
-		p.Color = look[1]
-		p.Material = look[2]
-		p.Name = role
-		if group == "chainlink" or group == "passbullets_chainlink" then
-			p.Transparency = 0.55
-		end
-	end
+	style(p, if role == "block" then "decor:" .. group else role)
 	p.Parent = folder(parent, FOLDERS[role] or "Decor")
 	return p
 end
@@ -184,7 +196,22 @@ local geometry = folder(map, "Geometry")
 for _, entry in data.parts do
 	place(entry, geometry)
 end
+-- retouches locales (tools/map/dizzy_patches.luau), après le plan relevé et avant le décor du dessous
+local patches = require("./dizzy_patches")
+local counts = DizzyPatches.apply(geometry, patches, style)
+for i, p in patches do
+	print(string.format("  retouche %d (%s) : %s, %d pièce(s)", i, p.why, p.op, counts[i]))
+end
 underside(map, data)
 spawns(map, data)
 fs.writeFile(OUT, roblox.serializeModel({ map }))
-print(string.format("Dizzy : %d pièces, %d spawns, KillHeight %.1f -> %s", #data.parts, #data.spawns, data.killY, OUT))
+print(
+	string.format(
+		"Dizzy : %d pièces relevées, %d retouche(s), %d spawns, KillHeight %.1f -> %s",
+		#data.parts,
+		#patches,
+		#data.spawns,
+		data.killY,
+		OUT
+	)
+)

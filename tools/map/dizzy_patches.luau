@@ -1,0 +1,25 @@
+-- Retouches locales de Dizzy, appliquées dans l'ordre par build_dizzy.luau après le plan relevé (dizzy_layout.json) :
+-- elles survivent à la régénération et à un nouveau relevé. C'est ici, et pas dans Studio ni dans le JSON, qu'on
+-- corrige un détail de la map (procédure : docs/maps.md, « Corriger un détail de Dizzy »).
+--
+-- Coordonnées du monde, lues telles quelles dans Studio (propriété Position, décalage de 2000 en X compris).
+-- Champs : tools/map/DizzyPatches.luau. Chaque retouche dit pourquoi elle existe (`why`) ; une zone vide est une erreur.
+--
+-- Exemples :
+--   -- Mur d'air qui bloque le saut vers le balcon nord (signalé le 12/11)
+--   { op = "remove", why = "mur d'air du balcon nord", folder = "Clips",
+--     zone = { center = { 1880, 45, -300 }, size = { 10, 20, 10 } } },
+--
+--   -- Fente visible au coin de l'escalier CT
+--   { op = "add", why = "fente escalier CT", look = "wall",
+--     position = { 2130, 78, -126 }, size = { 2, 8, 2 } },
+--
+--   -- Caisse de couverture au milieu du toit, tournée de 30°
+--   { op = "add", why = "couvert au centre", look = "decor:metal",
+--     position = { 2000, 4, -250 }, size = { 8, 8, 8 }, rotation = { 0, 30, 0 } },
+--
+--   -- Murs trop clairs dans la salle T
+--   { op = "restyle", why = "murs salle T", folder = "Walls", look = "ceiling",
+--     zone = { center = { 1820, 50, -100 }, size = { 60, 40, 60 } } },
+
+return {}
