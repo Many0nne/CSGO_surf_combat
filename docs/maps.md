@@ -142,13 +142,48 @@ de retouches appliquées dans l'ordre après le plan relevé, qui survivent à l
      un seul dossier (`Clips` pour un mur d'air, `Floors`, `Walls`, `Ceilings`, `Ramps`, `Decor`) ;
    - `add` : ajoute une `Part` ou une `WedgePart` (`position`, `size`, `rotation` en degrés, `look` = rôle ou
      `decor:<groupe>`, `clip` pour un mur d'air) ;
-   - `restyle` : rhabille les pièces d'une zone (`look`).
+   - `restyle` : rhabille les pièces d'une zone (`look`) ;
+   - `group` (remove, restyle) : ne vise que les blocs de décor d'un groupe source (attribut `Group` : `metal`,
+     `stucco`…), pour rhabiller une structure sans les objets posés dessous.
+   **Toujours un `folder` quand la zone touche un mur d'air** : `restyle` sans dossier rend visible le `Clip` rhabillé
+   (piège rencontré sur les planches de la fosse : 10 murs d'air pris dans la zone). Comparer le nombre de pièces
+   affiché par la génération à celui attendu.
 3. Plugin Rojo déconnecté, `lune run tools/map/build_dizzy.luau` (affiche le nombre de pièces touchées par chaque
    retouche), puis reconnecter et accepter le patch.
 Une zone qui ne contient aucune pièce arrête la génération (coordonnées fausses, ou pièce disparue après un nouveau
 relevé : revoir la retouche). Une pièce issue d'une retouche porte l'attribut `Patch` (son `why`), visible dans Studio.
 Lecture de la position hors moteur : `CFrame.Position` (dans Lune, `Position` n'existe pas sur une pièce posée par
 `CFrame`).
+
+### Habillage détaillé (`tools/map/DizzyDressing.luau`)
+
+Là où le relevé ne donne qu'une boîte ou un trou, l'objet est construit pièce par pièce par `DizzyDressing.build`
+(dossier `Dressing` de la map), appelé par `build_dizzy.luau` après les retouches. Chaque objet est décrit une fois côté
+T (tables `AIR_HANDLERS`, `GARAGES`, `WINDOWS`, `LAMPS`, coordonnées du plan relevé sans le décalage) et recopié côté CT
+par `mirror` : la map est symétrique par un demi-tour autour de (0, -260,1).
+
+- **Groupes de climatisation** (6 : deux par balcon de bord, un par toit haut) : remplacent les caissons relevés en
+  boîtes empilées (retirés par `dizzy_patches.luau`). Même emprise (38 × 18) et même hauteur de caisson ; châssis sur
+  longerons, portes de visite, grille d'aspiration, deux ventilateurs carénés, coffret électrique, tuyaux frigorifiques.
+- **Extracteurs d'air « champignon »** (deux par estrade d'angle, une estrade par camp, au bord de la map) : remplacent
+  les boîtes tournées relevées. Fût rond cerclé, bande d'aspiration à lames, chapeau en dôme.
+- **Portes de garage** (une par camp) : auvent en tôle à tirants, deux lampes dessous, conduits et câble sur la façade.
+- **Murs du milieu** (façades de part et d'autre de la fosse centrale) : les deux baies par mur, relevées comme des
+  trous (tableau de 2 studs), sont vitrées (vitre, cadre à meneaux, appui) ; trois lampes murales sous les baies.
+- **Bois** (retouches `restyle`, habillages `plywood`, `planks`, `timber` de `LOOK`) : plateau en contreplaqué et
+  charpente des rampes sur pilotis, planches posées sur la fosse centrale. Les rampes de surf restent en acier.
+
+Repères : `DizzyDressing.aim(pos, look)`, jamais `CFrame.lookAt`. Sous Lune, `lookAt` a renvoyé un repère retourné
+pour une visée vers +Z (auvent du garage enfoncé dans le mur, alors que les fenêtres visées vers ±X étaient justes) et
+un repère invalide pour un tube vertical (pièce rejetée à y = -1 000 000). Contrôle : aucune pièce de `Dressing` hors
+de la map, aucune derrière le nu du mur qu'elle habille.
+
+Collision : seuls les volumes porteurs (caisson, châssis et viroles des groupes, fût et chapeau des extracteurs) la gardent ; tout le reste est sans
+collision ni requête. Lumières : `SpotLight` sans ombre (10 au total).
+
+Aperçu dans Studio sans reconnecter Rojo : le MCP refuse `HttpService` vers `localhost` (liste blanche de l'assistant),
+donc pas de `loadstring` d'un fichier servi en local depuis `execute_luau` ; il faut envoyer le code lui-même. Les
+captures (`screen_capture`) sont blanches tant que la fenêtre Studio n'est pas au premier plan.
 
 ## Maps retirées (leçons)
 
