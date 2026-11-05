@@ -41,8 +41,9 @@ Viewer dans `worktrees/.tools`. Le dépôt ne contient que des cotes et des piè
    (Blender sans interface, ~10 s ; ne pas le lancer dans la session Blender de l'utilisateur, le calcul la fige).
 3. Vérifier : `blender -b --factory-startup --python tools/map/verify_dizzy.py -- ../.tools/dizzy_out tools/map/dizzy_layout.json`.
    Mêmes rayons (~500 000, verticaux et horizontaux) tirés dans la collision d'origine et dans les pièces relevées ;
-   liste les trous et les surplus groupés, avec la pièce responsable. État au relevé : 3 groupes de 4 rayons (fentes de
-   0,03 stud aux angles rentrants, laissées par `EPS`), 0,7 % de rayons en surplus (décor approché par sa boîte).
+   liste les trous et les surplus groupés, avec la pièce responsable. État au relevé : 6 groupes de 3-4 rayons, sur une
+   seule ligne (fente d'un angle rentrant, déjà là avant les règles de bord), 0,7 % de rayons en surplus (décor approché
+   par sa boîte).
    Scintillement : `tools/map/zfight_dizzy.py` (mêmes arguments, puis la tolérance), cf. « Scintillement » ci-dessous.
 4. Générer : `lune run tools/map/build_dizzy.luau` (sans Studio, plugin Rojo déconnecté de ce serveur) écrit
    `assets/rbx/Maps/Dizzy.rbxm`. Puis `rojo build default.project.json -o CSGO.rbxlx && lune run tools/rbxm/verify_place.luau`.
@@ -52,9 +53,9 @@ Méthode et pièges (pour ne pas les redécouvrir) :
   en surfaces. La v1 le relevait par rayons verticaux tous les 0,5 m : murs fins et bords ratés, d'où ses trous. Seul le
   petit décor est en blocs convexes.
 - **Chaque face plane devient une dalle** collée à la face, épaissie vers l'intérieur (moitié de l'épaisseur locale au
-  plus, pour que les deux faces d'un mur fin ne se chevauchent pas), retirée de `EPS` (0,03 stud) sous la face pour ne
-  pas scintiller avec la tranche d'une dalle voisine. Rectangles quand le plan s'y prête, sinon deux `WedgePart` par
-  triangle. Couverture sans trou par construction.
+  plus, pour que les deux faces d'un mur fin ne se chevauchent pas). Sols, plafonds et pentes sont retirés de `EPS`
+  (0,03 stud) sous leur face ; les murs sont posés sur leur face et gardent les arêtes saillantes (cf. « Scintillement »).
+  Rectangles quand le plan s'y prête, sinon deux `WedgePart` par triangle. Couverture sans trou par construction.
 - **Jonctions en T** : un sommet posé au milieu de l'arête du voisin, partout. Regrouper les triangles par plan, pas
   par arête commune (sinon chaque triangle est isolé : 65 000 pièces). Une couverture en rectangles n'est acceptée que
   si son aire égale celle des triangles, contrôlée par morceau source : un contrôle par triangle refuse deux
@@ -71,20 +72,46 @@ Méthode et pièges (pour ne pas les redécouvrir) :
 - **Repère** : Blender x = y source, y = −x source (pouces × 0,0254), vérifié par raycast (les spawns tombent tous
   0,406 m au-dessus d'un sol). Roblox (X, Y, Z) = (x·10, (z − 198)·7, −y·10).
 - Écartés : boîte de ciel (`physics_sky`), échelles, fût sous 190 m (remplacé par le décor du générateur).
-- Environ 18 600 pièces ancrées, dont ~12 000 coins, surtout aux plafonds.
+- Environ 14 000 pièces ancrées, dont ~10 000 coins, surtout aux plafonds.
 
-### Scintillement (non résolu)
+### Scintillement (résolu le 05/11/2026)
 
-Dizzy scintille à distance : bandes sombres dentelées sur les façades, rayures sur les rebords (signalé le 05/11/2026).
-**Cause** : à chaque arête saillante (bord d'un renfoncement, d'un rebord, d'une fenêtre), la tranche d'une dalle de sol
-ou de plafond tombe dans le plan de la face du mur voisin, `EPS` (0,03 stud) devant elle et dans une autre couleur.
-Prouvé par rayons depuis la caméra (mur à x = 2064,99, tranche de plafond à 2065,02, vus à 180 studs) et par le test
-décisif : recolorer sols et plafonds comme les murs dans Studio (temporaire) fait disparaître les bandes.
+Dizzy scintillait à distance : bandes sombres dentelées sur les façades, rayures sur les rebords. Mesure de référence
+(`zfight_dizzy.py`, TOL 0,1) : 245 000 studs² de faces superposées avant, 33 000 après, dont la moitié entre murs (même
+couleur, invisible). Quatre causes, chacune traitée par une règle de `extract_dizzy.py` :
+
+1. **Tranche aux arêtes saillantes** (la principale) : la tranche d'une dalle de sol ou de plafond tombait dans le plan
+   du mur voisin, 0,03 stud devant lui et dans une autre couleur. Le mur garde maintenant le coin : posé sur sa face
+   (sans `EPS`), il monte jusqu'au plan du sol ; le sol ou le plafond recule de l'épaisseur de la dalle du mur moins
+   `EDGE_OVERLAP` (`edge_shift`, épaisseur lue dans l'index `WallSlabs`, la plus mince du bord). Arêtes mur/mur et angles
+   rentrants : rien ne bouge. Conséquence visible : le haut d'un rebord prend la couleur du mur sur l'épaisseur du mur.
+2. **Ailettes** : un dessus ou dessous encadré par deux murs, qui reculerait jusqu'à disparaître, est écarté quand les
+   tranches des murs le couvrent (`covered_by_walls`) ; sinon il est gardé tel quel (scintillement résiduel).
+3. **Plaques minces** (< `THIN`, 0,35 stud) : la face cachée de la dalle du dessous restait à quelques centièmes de la
+   face du dessus et scintillait (jusqu'à 2 400 studs² par plaque, toits métalliques). Seule la dalle du dessus est
+   gardée (`thin_below`) : le dessous prend la couleur du sol.
+4. **Faces enfouies** dans un autre solide (solides d'origine qui se recouvrent) : invisibles, mais la tranche de leur
+   dalle affleurait dans un sol. Écartées quand le devant de la face est dans un solide (`buried`, ~2 000 dalles).
+
+Les « détails » des façades qui disparaissent avec le scintillement étaient pour l'essentiel ces tranches : les rebords
+et moulures restent en relief (collision comprise), mais leur face avant est un mur, de la couleur du mur. Les redonner
+à voir est un travail d'habillage (teinte propre aux murs de faible hauteur, par exemple), pas de relevé.
+
+Pièges rencontrés :
+- un recul qui laisse un jour, même de 0,05 stud, au dos du mur ouvre une fente sur le vide (vue d'en haut) : la dalle
+  reculée passe sous le mur (`EDGE_OVERLAP`) ;
+- l'index des murs doit tester un `WedgePart` sur sa moitié de boîte, sinon un bord croit avoir un mur sous lui ;
+- prendre l'épaisseur du mur le plus épais le long d'un bord ouvre un trou au-dessus des parties plus minces ;
+- `verify_dizzy.py` (grille de 1 stud) ne voit une fente de quelques centièmes que si un rayon tombe dedans : relancer
+  après chaque changement de règle de bord et comparer au relevé précédent.
+
+Restes connus : environ 10 000 studs² de paires de couleurs différentes (plaques de toit dont le mur ne longe qu'une
+partie du bord : recul annulé pour ne pas ouvrir de trou ; une face enfouie non reconnue en (2257, 42, -393)) ; trous :
+6 groupes sur la ligne (42…62, 71, -309), fente déjà présente avant (3 groupes).
 
 Mesurer : `tools/map/zfight_dizzy.py` (faces de même sens dans le même plan à TOL près, qui se recouvrent et sont vues
-depuis l'air). État actuel : 14 000 studs² à 0,005 (faces confondues), 245 000 studs² à 0,1 (surtout tranches à
-`EPS` devant une face). Diagnostiquer en jeu : `ViewportPointToRay` + `Raycast` depuis la vue fautive (MCP Studio,
-mode Edit) donne la pièce touchée et sa position au centième.
+depuis l'air ; 0,005 : faces confondues, 0,1 : aussi les tranches proches). Diagnostiquer en jeu : `ViewportPointToRay`
++ `Raycast` depuis la vue fautive (MCP Studio, mode Edit) donne la pièce touchée et sa position au centième.
 
 | Essai | Résultat | Statut |
 |---|---|---|
@@ -93,12 +120,8 @@ mode Edit) donne la pièce touchée et sa position au centième.
 | Ombres globales coupées (test) | Rien : ce n'est pas l'éclairage, malgré le soleil rasant (`ClockTime` 17,9) | Rejeté |
 | Faces confondues fusionnées par plan (`plane_groups`) | Rien de visible, mais vraie correction (doublons, 9 → 3 groupes de trous) | Gardé |
 | Une couleur pour sols, murs et plafonds (test Studio) | Plus de bandes, mais map vide visuellement | Rejeté (DA) |
-| Bords de dalle décalés selon l'arête (`EDGE_ADJUST`) : saillante, la dalle recule de 0,18 pour cacher sa tranche ; rentrante, elle avance de 0,08 | Plus de scintillement, mais la moitié des détails des façades disparaît et des fentes claires s'ouvrent aux angles rentrants | Code gardé, désactivé |
-
-Pistes restantes : retirer ou replacer les éléments qui gênent (retouches `remove` / `add` de `dizzy_patches.luau`,
-après repérage avec `zfight_dizzy.py`) ; reprendre `EDGE_ADJUST` en ne décalant que la dalle dont la couleur diffère du
-mur, sans toucher aux angles rentrants ; séparer rendu et collision (rendu en mesh, cf. virages en mesh dans les pièges), écarté tant
-que le mesh serait tiré de la géométrie de Valve.
+| Bords décalés à toutes les arêtes (saillante : recul de 0,18 ; rentrante : avance de 0,08) | Plus de scintillement, mais détails des façades effacés et fentes claires aux angles rentrants | Rejeté |
+| Recul ciblé : seul le sol ou plafond recule derrière la dalle du mur, mur sans `EPS` ; ailettes, plaques minces et faces enfouies écartées | Plus de scintillement visible (validé en jeu) ; façades unies | Gardé |
 
 ### Corriger un détail de Dizzy
 
