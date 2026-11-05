@@ -68,10 +68,29 @@ Méthode et pièges (pour ne pas les redécouvrir) :
 ### Corriger un détail de Dizzy
 
 La géométrie est régénérée en entier depuis le relevé : **une retouche faite dans Studio est perdue** (Rojo la supprime
-à la connexion, la régénération l'écrase). Selon le cas :
+à la connexion, la régénération l'écrase), et `dizzy_layout.json` est réécrit à chaque relevé. Selon le cas :
+- **détail à un endroit** (fente, mur d'air gênant, bloc à ajouter ou à déplacer, teinte d'une salle) : une ligne dans
+  `tools/map/dizzy_patches.luau`, voir ci-dessous. Ne demande que Lune (pas les sources de Valve) ;
 - habillage d'un rôle (sols, murs, rampes, plafonds, décor) : tables `LOOK` et `DECOR` de `build_dizzy.luau` ;
 - règle de relevé (échelle, épaisseur, simplification du décor) : constantes de `extract_dizzy.py`, puis relever,
-  vérifier, générer.
+  vérifier, générer (sources de Valve nécessaires, sur le poste qui les a).
+
+**Retouches locales** (`tools/map/dizzy_patches.luau`, appliquées par `tools/map/DizzyPatches.luau`, testé) : une liste
+de retouches appliquées dans l'ordre après le plan relevé, qui survivent à la régénération et à un nouveau relevé.
+1. Repérer l'endroit dans Studio (Rojo connecté au worktree) : sélectionner la pièce, lire sa `Position`, ou poser le
+   personnage dessus en playtest. Coordonnées du monde telles quelles (la map est décalée de 2000 en X).
+2. Ajouter la retouche, avec un `why` qui dit pourquoi :
+   - `remove` : retire les pièces dont le centre est dans une zone (`zone = { center, size }`), avec `folder` pour viser
+     un seul dossier (`Clips` pour un mur d'air, `Floors`, `Walls`, `Ceilings`, `Ramps`, `Decor`) ;
+   - `add` : ajoute une `Part` ou une `WedgePart` (`position`, `size`, `rotation` en degrés, `look` = rôle ou
+     `decor:<groupe>`, `clip` pour un mur d'air) ;
+   - `restyle` : rhabille les pièces d'une zone (`look`).
+3. Plugin Rojo déconnecté, `lune run tools/map/build_dizzy.luau` (affiche le nombre de pièces touchées par chaque
+   retouche), puis reconnecter et accepter le patch.
+Une zone qui ne contient aucune pièce arrête la génération (coordonnées fausses, ou pièce disparue après un nouveau
+relevé : revoir la retouche). Une pièce issue d'une retouche porte l'attribut `Patch` (son `why`), visible dans Studio.
+Lecture de la position hors moteur : `CFrame.Position` (dans Lune, `Position` n'existe pas sur une pièce posée par
+`CFrame`).
 
 ## L'Arène
 
