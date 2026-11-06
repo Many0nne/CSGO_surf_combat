@@ -156,7 +156,7 @@ local function buildLevers(): { Lever }
 		end
 	end
 	if mapLevers == 0 then
-		-- Avec StreamingEnabled, la map n'est chargée sur le client qu'autour du personnage : rien au menu.
+		-- Si StreamingEnabled était réactivé, la map ne serait chargée qu'autour du personnage : rien au menu.
 		print("[Perf] BANC : aucun translucide de map chargé sur ce client, lancer le banc en jeu (pas au menu)")
 	end
 	return levers

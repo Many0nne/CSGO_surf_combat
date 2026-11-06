@@ -38,6 +38,16 @@ mesure.
 Tant qu'il est ouvert, une ligne `[Perf] BILAN` résume toutes les 10 s FPS, p99, max, CPU/GPU, draw calls, mémoire, réglage
 graphique et coût des scripts. À la fermeture, un dernier bilan est écrit.
 
+## Streaming désactivé (#88)
+
+`Workspace.StreamingEnabled` vaut **false**, fixé dans `default.project.json` (avant, réglage de la place : activé, rayon
+minimal 64 studs, `PauseOutsideLoadedArea`). Avec le streaming, le client ne charge la map qu'autour du personnage : en
+surf rapide (200 studs/s et plus), il charge et décharge en continu pendant le mouvement, et le moteur peut mettre le
+joueur en pause s'il sort de la zone chargée. C'était la principale cause des pertes de frames ressenties « en
+mouvement, pas à l'arrêt ». Une map de la taille de Dizzy (16 000 pièces) se charge en entier sans difficulté. Le
+mouvement (raycasts côté client) a aussi besoin de toute la géométrie autour du joueur. Ne pas le réactiver sans
+mesurer en mouvement.
+
 ## Banc F4
 
 `src/client/debug/PerfBench.luau`, mêmes droits que l'overlay (Studio, ou créateur du jeu publié). **F4** coupe les
@@ -53,7 +63,7 @@ une ligne `[Perf] BANC` : GPU moyen (écart à la référence), p95, CPU moyen, 
 rétabli à la fin ; rappuyer sur F4 annule après la phase en cours. Attribut joueur `PerfBench` = true : même effet,
 pour un banc piloté par le MCP.
 
-Conditions : **en jeu, pas au menu** (avec `StreamingEnabled`, la map n'est pas chargée au menu, le banc le signale),
+Conditions : **en jeu**, pas au menu (si le streaming était réactivé, la map n'y serait pas chargée : le banc le signale),
 immobile, la fenêtre au premier plan du début à la fin. Une phase pendant laquelle la fenêtre a perdu le focus est
 marquée `INVALIDE` : dans Studio, quitter la fenêtre pour écrire ailleurs suffit à fausser le banc (GPU à 0, 15 FPS).
 Les écarts de moins de 2 ms entre phases sont du bruit, d'où la référence de contrôle en fin de banc.
@@ -202,10 +212,9 @@ plus haut que dans le client publié (3 ms) : la qualité 10 reste à mesurer da
 Studio à qualité 10 (MCP) : couper les ombres, l'Atmosphere ou les nuages ne fait rien gagner au-delà du bruit ; les
 autres phases sont faussées par une perte de focus.
 
-`Workspace` (réglé dans la place, pas dans `default.project.json`) : `StreamingEnabled` actif, `StreamingMinRadius` 64,
-`StreamingTargetRadius` 1024, `StreamingIntegrityMode` `PauseOutsideLoadedArea`. En surf rapide, le perso peut sortir de
-la zone chargée : chargements en continu pendant le mouvement, et pause du joueur si la zone n'est pas prête. Piste à
-mesurer (#88).
+Streaming : voir « Streaming désactivé » plus haut. Une fois coupé, en mouvement à qualité 10 : p99 de 39 à 31 ms,
+max de 49-70 à 37 ms, « bien mieux » au ressenti ; restent de petites pertes de frames (CPU et GPU de rendu vers 15 ms
+dans Studio, proches des 16,7 ms d'une frame).
 
 ## Mesure du 2026-11-06 (client publié, Dizzy, qualité auto, après #91)
 
