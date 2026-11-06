@@ -13,6 +13,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `SpawnManager` tire un lanceur au hasard dans `SunLaunch` de la map jouée (map versionnée dans `assets/rbx/Maps`, cf. `docs/maps.md`) : le joueur est projeté depuis le soleil, invulnérable `GameConfig.SPAWN_PROTECTION` secondes. Sans lanceur, il tire un point dans `GroundSpawns` ; sans aucun point, il avertit et utilise `(0, 10, 0)`.
 - `StatsStore` désactive la sauvegarde pour la session si le chargement DataStore échoue, pour ne pas écraser les données.
 - **Crash de Rojo :** `rojo serve` 7.7.1 peut s'arrêter sur `Rojo crashed!` (`change_processor.rs:172`, fichier introuvable). Constaté après la suppression puis la recréation immédiate de fichiers surveillés dans `src/` (cause probable, non reproduite) : écrire par-dessus un fichier plutôt que le supprimer d'abord. Si Rojo ne répond plus, lire `worktrees/.run/<slug>.log`, relancer `.\scripts\csgo-worktree.ps1 <branche>`, puis reconnecter le plugin.
+- **Erreur console `rbxassetid://203785492` (#93) :** `ContentId: rbxassetid://203785492 failed due to: Asset type does not match requested type`, plusieurs fois au lancement d'un playtest, vient du plugin Rojo, pas du jeu. C'est son son de notification (`Rojo.Plugin.Assets`, `Sounds.Notification`, audio « Pop Close Sound »), chargé côté client par le widget `Rojo_soundPlayer`. Aucune instance de la place ne le référence. L'ignorer ; pour le faire taire, désactiver « Play Sounds » dans les réglages du plugin Rojo.
 
 ## Racine, outils et assets
 

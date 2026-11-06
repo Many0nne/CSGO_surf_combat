@@ -103,4 +103,3 @@ plugin Rojo : l'utilisateur doit le faire pour tester un worktree.
 - Piste écartée pour l'instant sur le compteur : chiffres en images usées comme le titrage, et inclinaison qui augmente avec la vitesse.
 - Tester le menu au tactile et à la manette : c'est prévu dans le code, jamais essayé.
 - Ajouter un modèle de personnage dédié si l'on veut un sniper visible en 3e personne dans le menu.
-- Trouver la source de l'erreur console `rbxassetid://203785492`, antérieure à ce menu.
