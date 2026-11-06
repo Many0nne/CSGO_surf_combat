@@ -28,6 +28,13 @@
   Pour /delegate :
   .\scripts\csgo-worktree.ps1 feature/x -NoUp -NoRegister     # creer sans inscrire la session courante
   .\scripts\csgo-worktree.ps1 feature/x -RegisterThread <id>  # inscrire seulement un thread T3 (rien d'autre)
+
+  Studio partage (une seule fenetre Studio pour tous les worktrees, verrou worktrees\.run\studio.lock) :
+  .\scripts\csgo-worktree.ps1 feature/x -AcquireStudio                # reserve Studio, ou sort en code 2 avec le detenteur
+  .\scripts\csgo-worktree.ps1 feature/x -AcquireStudio -WaitStudio 20 # attend jusqu'a 20 min qu'il se libere
+  .\scripts\csgo-worktree.ps1 feature/x -ReleaseStudio                # libere (aussi fait par -Stop et -Remove)
+  .\scripts\csgo-worktree.ps1 feature/x -StudioStatus                 # detenteur actuel et port auquel Studio est connecte
+  Un verrou est repris d'office si son detenteur n'a plus de worktree, plus de Rojo, ou plus de thread T3 actif.
 #>
 param(
   [Parameter(Position = 0, Mandatory = $true)][string]$Branch,
@@ -37,7 +44,11 @@ param(
   [switch]$Stop,
   [switch]$Remove,
   [switch]$NoRegister,
-  [string]$RegisterThread
+  [string]$RegisterThread,
+  [switch]$AcquireStudio,
+  [int]$WaitStudio = 0,
+  [switch]$ReleaseStudio,
+  [switch]$StudioStatus
 )
 
 $ErrorActionPreference = 'Stop'
@@ -150,8 +161,112 @@ function Stop-Rojo([int]$Port) {
   return $stopped
 }
 
+$studioLock = Join-Path $runDir 'studio.lock'
+
+# Cette methode permet de lire le verrou Studio (branche, port, depuis) lorsqu'on veut savoir qui utilise Studio ; $null si libre.
+function Get-StudioLock {
+  if (-not (Test-Path $studioLock)) { return $null }
+  try { return Get-Content $studioLock -Raw | ConvertFrom-Json } catch { return $null }
+}
+
+# Cette methode permet de dire pourquoi le detenteur du verrou Studio ne l'utilise plus (worktree supprime, Rojo arrete,
+# threads T3 tous termines) lorsqu'une autre branche le demande ; renvoie $null si le detenteur est encore actif.
+function Get-StudioLockStaleReason($Lock) {
+  $holderSlug = $Lock.branch -replace '[^A-Za-z0-9._-]', '-'
+  if (-not (Test-Path (Join-Path $worktrees "csgo-$holderSlug"))) { return 'worktree supprime' }
+  $holderPid = Join-Path $runDir "$holderSlug.pid"
+  if (-not ((Test-Path $holderPid) -and (Get-Process -Id ([int](Get-Content $holderPid)) -ErrorAction SilentlyContinue))) {
+    return 'Rojo arrete'
+  }
+  $entry = Get-Owners | Where-Object { $_.branch -eq $Lock.branch } | Select-Object -First 1
+  $threads = @($entry.threads | Where-Object { $_ })
+  if ($threads) {
+    $states = python -I (Join-Path $PSScriptRoot 't3_threads.py') status @threads 2>$null | ConvertFrom-Json
+    if ($states -and -not @($threads | Where-Object { $states.$_ -eq 'active' })) { return 'threads T3 termines' }
+  }
+  return $null
+}
+
+# Cette methode permet de lister les ports Rojo (checkout principal et worktrees) auxquels Studio est connecte en ce moment,
+# lorsqu'il faut dire a l'agent ou a l'utilisateur s'il doit faire Disconnect avant de se connecter ailleurs.
+function Get-StudioConnectedPorts {
+  $ports = @($basePort) + @(Get-ChildItem -Path $runDir -Filter '*.port' -File -ErrorAction SilentlyContinue |
+      ForEach-Object { [int](Get-Content $_.FullName) })
+  @(Get-NetTCPConnection -State Established -ErrorAction SilentlyContinue |
+      Where-Object { $_.LocalPort -in $ports } | Select-Object -ExpandProperty LocalPort -Unique | Sort-Object)
+}
+
+# Cette methode permet de decrire en une ligne le detenteur du verrou Studio lorsqu'on l'affiche.
+function Format-StudioLock($Lock) { "'$($Lock.branch)' (port $($Lock.port), depuis $($Lock.since))" }
+
+# Cette methode permet d'executer une action sur le verrou Studio sous un mutex systeme, lorsque deux agents le demandent en meme temps.
+function Invoke-StudioLocked([scriptblock]$Action) {
+  $m = New-Object System.Threading.Mutex($false, 'Local\csgo-studio-lock')
+  [void]$m.WaitOne()
+  try { & $Action } finally { $m.ReleaseMutex() }
+}
+
+# Cette methode permet de liberer le verrou Studio lorsqu'il est tenu par la branche courante (fin de verification, -Stop, -Remove).
+function Release-StudioLock {
+  Invoke-StudioLocked {
+    $lock = Get-StudioLock
+    if ($lock -and $lock.branch -eq $Branch) { Remove-Item -Force $studioLock; return $true }
+    return $false
+  }
+}
+
 $exists = Test-Path $dir
 $currentPort = if (Test-Path $portFile) { [int](Get-Content $portFile) } else { 0 }
+
+if ($StudioStatus) {
+  $lock = Get-StudioLock
+  Write-Host $(if ($lock) { "Studio reserve par $(Format-StudioLock $lock)." } else { 'Studio libre.' })
+  $conn = Get-StudioConnectedPorts
+  Write-Host $(if ($conn) { "Studio connecte au(x) port(s) Rojo : $($conn -join ', ')." } else { "Studio n'est connecte a aucun serveur Rojo." })
+  return
+}
+
+if ($ReleaseStudio) {
+  Write-Host $(if (Release-StudioLock) { "Studio libere par '$Branch'." } else { "Studio n'etait pas reserve par '$Branch'." })
+  return
+}
+
+if ($AcquireStudio) {
+  # Sans Rojo, le verrou serait aussitot considere comme abandonne (et Studio n'aurait rien a suivre).
+  if (-not (Test-RojoRunning)) { throw "Rojo ne tourne pas pour '$Branch' : lancer d'abord .\scripts\csgo-worktree.ps1 $Branch." }
+  $deadline = (Get-Date).AddMinutes($WaitStudio)
+  while ($true) {
+    $result = Invoke-StudioLocked {
+      $lock = Get-StudioLock
+      $taken = $null
+      if ($lock -and $lock.branch -ne $Branch) {
+        $stale = Get-StudioLockStaleReason $lock
+        if (-not $stale) { return @{ ok = $false; lock = $lock } }
+        $taken = "verrou de $(Format-StudioLock $lock) repris ($stale)"
+      }
+      New-Item -ItemType Directory -Force $runDir | Out-Null
+      $since = if ($lock -and $lock.branch -eq $Branch) { $lock.since } else { Get-Date -Format 'yyyy-MM-dd HH:mm' }
+      [pscustomobject]@{ branch = $Branch; port = $currentPort; since = $since } | ConvertTo-Json | Set-Content $studioLock
+      return @{ ok = $true; taken = $taken }
+    }
+    if ($result.ok) { break }
+    if ((Get-Date) -ge $deadline) {
+      Write-Host "Studio occupe par $(Format-StudioLock $result.lock)."
+      Write-Host "Continuer le travail sans Studio, puis relancer avec -AcquireStudio (ou -WaitStudio <minutes> pour attendre)."
+      exit 2
+    }
+    Start-Sleep -Seconds 15
+  }
+  if ($result.taken) { Write-Host "Note : $($result.taken)." }
+  Write-Host "Studio reserve pour '$Branch' (port $currentPort). Liberer des la verification finie : -ReleaseStudio."
+  $conn = Get-StudioConnectedPorts
+  if ($conn -contains $currentPort) { Write-Host "Studio est deja connecte au port $currentPort : rien a faire." }
+  else {
+    $from = if ($conn) { "Disconnect dans le plugin Rojo (connecte au port $($conn -join ', ')), puis " } else { '' }
+    Write-Host "Connexion (mode Edit, pas en Play) : $($from)plugin Rojo > port $currentPort > Connect."
+  }
+  return
+}
 
 if ($RegisterThread) {
   Register-Owner $RegisterThread
@@ -162,6 +277,7 @@ if ($RegisterThread) {
 if ($Stop -or $Remove) {
   $s = Stop-Rojo $currentPort
   Write-Host $(if ($s) { "Rojo arrete (port $currentPort)." } else { "Aucun Rojo en cours pour '$Branch'." })
+  if (Release-StudioLock) { Write-Host "Studio libere par '$Branch'." }
   if ($Stop) { return }
 }
 

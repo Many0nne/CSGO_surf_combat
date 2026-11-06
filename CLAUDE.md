@@ -26,8 +26,8 @@ Quand une tâche révèle un piège, une règle ou une piste rejetée qui resser
 
 1. Créer le worktree et démarrer son serveur Rojo : `.\scripts\csgo-worktree.ps1 <feature|fix>/<n>-<slug>` (le thread T3
    courant est inscrit comme propriétaire pour le nettoyage). Travailler uniquement dans ce worktree.
-2. Implémenter, puis `bash tools/check.sh` dans le worktree. Vérifier en jeu via le MCP Studio si le changement le demande
-   (Studio connecté au port du worktree, voir ci-dessous).
+2. Implémenter, puis `bash tools/check.sh` dans le worktree. Vérifier en jeu via le MCP Studio si le changement le demande,
+   en réservant Studio d'abord (voir « Studio et Blender partagés ») et en le libérant dès la vérification finie.
 3. Besoin d'un avis de l'utilisateur (gameplay, rendu, UI) : lui donner le port Rojo du worktree (`34872+N`), la procédure
    de connexion Studio ci-dessous, et le scénario à suivre (étapes, ce qu'il faut observer). Attendre son retour.
 4. Fonctionnement vérifié (et validé par l'utilisateur si l'étape 3 s'appliquait) : commit, push, `gh pr create --base main`
@@ -55,8 +55,6 @@ Script idempotent, à relancer au début de chaque tâche (PowerShell, depuis la
   1. Studio en mode Edit (arrêter le playtest s'il tourne), Disconnect dans le plugin Rojo s'il est connecté ailleurs.
   2. Plugin Rojo : saisir le port du worktree (affiché par le script), Connect.
   3. Pour revenir au checkout principal : Disconnect, port `34872`, Connect.
-- Une fenêtre Studio ne suit qu'un serveur Rojo à la fois : deux tâches qui doivent tester en jeu en même temps ont besoin
-  de deux fenêtres Studio (le MCP cible alors l'instance choisie, voir `list_roblox_studios`), sinon elles se relaient.
 - Lancer `bash tools/check.sh`, `rojo build` et `lune run …` depuis le worktree concerné.
 - Nettoyage auto (registre `worktrees/.owners.json`) : `scripts/csgo-worktree-cleanup.ps1` arrête Rojo quand les threads T3
   du worktree ne sont plus actifs (settled, archivés), et supprime le worktree quand la PR de la branche est mergée
@@ -64,6 +62,30 @@ Script idempotent, à relancer au début de chaque tâche (PowerShell, depuis la
   archiver un thread ne supprime jamais rien à lui seul. Tâche planifiée (toutes les 10 min, à réinstaller sur un nouveau
   poste) : `scripts/install-cleanup-task.ps1`. À chaque passage, elle avance aussi le checkout principal sur `origin/main`
   (fast-forward, seulement s'il est sur `main` sans modification).
+
+## Studio et Blender partagés
+
+Une seule fenêtre Studio sert tous les worktrees (elle ne suit qu'un serveur Rojo à la fois) : les tâches se la relaient
+par un verrou, `worktrees/.run/studio.lock`. Faire d'abord tout ce qui se passe de Studio (code, `check.sh`, tests Lune,
+`rojo build`, Blender sans interface), puis ne garder Studio que le temps de la vérification :
+
+```powershell
+.\scripts\csgo-worktree.ps1 <branche> -AcquireStudio                # réserve, ou code 2 avec le détenteur
+.\scripts\csgo-worktree.ps1 <branche> -AcquireStudio -WaitStudio 20 # attend jusqu'à 20 min
+.\scripts\csgo-worktree.ps1 <branche> -ReleaseStudio                # libère (aussi fait par -Stop et -Remove)
+.\scripts\csgo-worktree.ps1 <branche> -StudioStatus                 # détenteur et port auquel Studio est connecté
+```
+
+- Réserver avant toute action Studio (MCP, connexion du plugin, demande de test à l'utilisateur), libérer juste après.
+  Code 2 : continuer le travail sans Studio et réessayer plus tard, ou attendre avec `-WaitStudio`. Ne jamais déconnecter
+  Studio d'un autre worktree sans le verrou.
+- La réservation indique s'il faut faire Disconnect (connexions TCP établies sur les ports Rojo) et le port à saisir.
+- Un verrou est repris d'office si son détenteur n'a plus de worktree, plus de Rojo ou plus de thread T3 actif : un
+  agent qui s'arrête sans libérer ne bloque pas les autres.
+- Une tâche qui attend l'avis de l'utilisateur garde le verrou jusqu'à son retour : regrouper ces demandes.
+- Blender : la session avec interface (MCP `blender`) est unique et sert une tâche à la fois. Les traitements par
+  script passent par `blender -b --factory-startup` (un processus par commande, parallélisable), cf. `docs/maps.md` et
+  `docs/animations.md`.
 
 ## Rojo Mapping
 
