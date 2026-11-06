@@ -122,6 +122,33 @@ Un pic isolé est une frame qui s'écarte de plus de 30 % de ses deux voisines, 
 elles à 15 % près. Une accélération progressive (surf, boost) n'est donc pas signalée. En dessous de 2 studs/s et de
 20 °/s, rien n'est jugé.
 
+## Ombres de la map (#88)
+
+Les ombres du soleil sont le premier coût de rendu de Dizzy : la passe d'ombres faisait plus de draw calls que la scène,
+et la qualité graphique au maximum faisait ramer (retour du 06/11/2026). Corrections :
+
+- `CastShadow` coupé par le générateur (règle et calcul : `docs/maps.md`, « Règles de construction ») sur les petites
+  pièces et sur les pièces dont l'ombre ne se voit pas. Pièces qui projettent une ombre : de 15 319 à 1 949.
+  Contrôle indépendant sur 20 000 points pris au hasard sur les surfaces, entre les points d'échantillonnage du
+  calcul : 1 point perd son ombre (un liseré), aucun n'en gagne.
+- Réglage « Ombres » dans Réglages : coupe `Lighting.GlobalShadows` sur le poste du joueur, pour les petites machines.
+  Comme les autres réglages, il n'est pas sauvegardé (`SettingsStore` est vide).
+- Nuages : 2 nappes translucides au lieu de 4.
+- Armes : ni le viewmodel (`ViewmodelSystem`) ni l'arme en 3e personne (`WeaponThirdPerson.attach`) ne projettent
+  d'ombre. Leurs maillages faisaient **108 000 des 111 000 triangles de la passe d'ombres** (AWP en main, banc
+  ci-dessous), pour une ombre qu'on ne voit pas. Tout nouveau modèle cloné près de la caméra doit couper `CastShadow`.
+
+Banc du 06/11/2026 (Studio au premier plan, qualité 10, fenêtre 1291×647, 3 vues fixes, chaque levier coupé l'un après
+l'autre) : triangles d'ombre de 111k à 3k en coupant les ombres des armes. Mais le temps par image (15 à 24 ms) ne bouge
+avec **aucun** levier (armes, Bloom et SunRays, nuages, habillage masqué, toutes les ombres du soleil) : il varie plus
+d'une mesure à l'autre que d'un réglage à l'autre. En playtest Studio, client et serveur tournent dans le même
+processus, avec l'éditeur : ce n'est pas le rendu de la map qui limite. **Le gain réel ne se juge que dans le client
+publié.**
+
+Piège de mesure : **Studio ne rend presque rien quand sa fenêtre n'est pas au premier plan** (pas de passe d'ombres,
+GPU à 0, peu de triangles). Une mesure pilotée par le MCP pendant qu'on travaille dans une autre fenêtre ne vaut rien
+pour le rendu : mesurer Studio au premier plan, ou dans le client publié.
+
 ## Mesure du 2026-11-06 (Studio, Dizzy, fenêtre de jeu 1291×647, qualité auto, 5 morts, perso immobile)
 
 Première mesure avec l'overlay, pilotée par le MCP. Le perso ne bouge pas, car la simulation de touches n'atteint pas
@@ -139,6 +166,7 @@ le jeu : surf et combat restent à mesurer à la main, dans le client publié.
   branche un nouveau Heartbeat à chaque spawn sans débrancher l'ancien (l'ancien sort tout de suite, car `hrp.Parent`
   vaut nil, mais garde en vie sa closure et l'ancien personnage). Le nombre d'Instances reste stable (71 625), donc les
   personnages sont bien détruits côté moteur. Le coût monte avec le nombre de morts dans une session (#77).
+  Corrigé (#88) : la connexion est gardée et débranchée au spawn suivant.
 - Mémoire client en Studio : de 1 650 à 2 150 Mo, dont l'essentiel en `Internal` et `LuaHeap` (Studio et plugins
   compris). Ce chiffre ne se compare qu'au client publié.
 

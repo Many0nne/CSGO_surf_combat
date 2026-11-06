@@ -183,6 +183,8 @@ local function buildModel(viewmodelName: string, scale: number): (Model?, BasePa
 			clone.CanQuery = false
 			clone.CanTouch = false
 			clone.Massless = true
+			-- ombre d'une arme tenue : quasi invisible, mais tout le maillage passe dans la passe d'ombres (#88)
+			clone.CastShadow = false
 			clone.Parent = gun
 			if clone.Name == "Handle" then
 				handle = clone

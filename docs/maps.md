@@ -277,6 +277,21 @@ Rojo gère `Workspace.Maps` : un objet posé à la main dans une map est supprim
 - **Sol** : la `Baseplate` a été retirée du projet. Son dessus à y = 0 coïncidait avec le sol de la ville et
   scintillait.
 
+- **Ombres : décidées par le générateur, pas à la main.** `build_dizzy.luau` coupe `CastShadow` à la fin de la
+  génération (#88) :
+  - sur toute pièce de moins de 2 studs dans toutes ses dimensions (`SMALL_SHADOW`), dont l'ombre est minuscule ;
+  - sur toute pièce entièrement dans l'ombre d'autres pièces opaques (`tools/map/ShadowCulling.luau`). Son ombre tombe
+    déjà dans celle de ses masques, donc rien ne change à l'image. Avec un soleil à 1,4° au-dessus de l'horizon, c'est
+    le cas de la plupart des pièces : il reste 1 949 pièces qui projettent une ombre, sur 15 300.
+  
+  Le calcul suit la direction du soleil `SUN` de `build_dizzy.luau`, relevée dans Studio (`Lighting:GetSunDirection()`)
+  pour `ClockTime` 17,9 et `GeographicLatitude` 0. Si l'heure change (`default.project.json`, `MenuScene`), il faut la
+  relever de nouveau : le générateur refuse de tourner tant que `default.project.json` ne correspond plus. Seules les
+  boîtes et les coins opaques servent de masque : un cylindre ou une boule, approchés par leur boîte, masqueraient trop.
+  Une pièce ajoutée à la main dans Studio ne passe pas par ce calcul.
+- **Nuages** : deux nappes translucides (quatre avant #88). Chaque nappe se dessine sur tout l'écran quand on regarde
+  vers le bas, d'où un coût GPU par nappe ; l'opacité cumulée est gardée.
+
 ## Pièges
 
 - **Captures en mode Edit** (`screen_capture`) : un viewport entièrement blanc, même sur une scène connue, vient de la

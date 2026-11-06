@@ -33,6 +33,8 @@ slideParams.FilterType = Enum.RaycastFilterType.Exclude
 local MovementController = {}
 
 local lastVelocity = Vector3.zero -- vitesse du dernier pas, lue par la sonde de saccades (debug/FrameProbe)
+-- Boucle du personnage courant : débranchée au spawn suivant (sinon une boucle de plus par mort, cf. docs/performance.md)
+local stepConn: RBXScriptConnection?
 
 -- Cette méthode permet de lire la vitesse simulée au dernier Heartbeat lorsqu'un outil de debug la compare
 -- au déplacement réellement rendu.
@@ -94,7 +96,10 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 	applyLaunch()
 	char:GetAttributeChangedSignal(SpawnLaunch.VELOCITY_ATTRIBUTE):Connect(applyLaunch)
 
-	RunService.Heartbeat:Connect(PerfMarkers.wrap("mouvement", function(rawDt)
+	if stepConn then
+		stepConn:Disconnect()
+	end
+	stepConn = RunService.Heartbeat:Connect(PerfMarkers.wrap("mouvement", function(rawDt)
 		if not hrp.Parent then
 			return
 		end

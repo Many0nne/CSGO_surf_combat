@@ -21,7 +21,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `tools/anim/`: outils de ces animations : mesure sur vidéo, rendu et capture dans Studio, vidéo côte à côte, publication Open Cloud.
 - `assets/awp_viewmodel/`: animations de l'AWP : trajectoires mesurées (`build_anims.py`), rig Studio (`rig.json`), build sans toucher au Blender ouvert (`run_build.py`). Sons de l'arme : découpe depuis leurs sources (`build_sounds.py`), extraits CC0 dans `sounds/` ; `Shoot` et `Bolt` (Pixabay) sont publiés sur Roblox, pas versionnés.
 - `default.project.json`: configuration Rojo qui mappe `src/` et `assets/rbx/` (viewmodels, Tools, maps) vers le projet Roblox, et fixe la lumière du crépuscule (Lighting, Atmosphere).
-- `tools/map/build_dizzy.luau`: générateur de Dizzy (seule map, cf. `docs/maps.md`), exécuté dans Lune sans Studio, lit le plan `tools/map/dizzy_layout.json` (relevé par `tools/map/extract_dizzy.py`, contrôlé par `tools/map/verify_dizzy.py` et `tools/map/zfight_dizzy.py` pour le scintillement, tous dans Blender sans interface), puis applique les retouches locales de `tools/map/dizzy_patches.luau` (module `tools/map/DizzyPatches.luau`). `src/shared/MapSelection.luau` : choix de la map jouée (`GameConfig.ACTIVE_MAP`) parmi `Workspace.Maps`.
+- `tools/map/build_dizzy.luau`: générateur de Dizzy (seule map, cf. `docs/maps.md`), exécuté dans Lune sans Studio, lit le plan `tools/map/dizzy_layout.json` (relevé par `tools/map/extract_dizzy.py`, contrôlé par `tools/map/verify_dizzy.py` et `tools/map/zfight_dizzy.py` pour le scintillement, tous dans Blender sans interface), puis applique les retouches locales de `tools/map/dizzy_patches.luau` (module `tools/map/DizzyPatches.luau`), et coupe les ombres invisibles (`tools/map/ShadowCulling.luau`, testé par `tests/specs/ShadowCulling.spec.luau`). `src/shared/MapSelection.luau` : choix de la map jouée (`GameConfig.ACTIVE_MAP`) parmi `Workspace.Maps`.
 - `docs/maps/plans-arene-digue-echangeur.html`: maquettes 3D des trois plans proposés (l'Arène, retirée depuis ; Digue et Échangeur gardés de côté).
 - `assets/rbx/ViewModels/*.rbxm`, `assets/rbx/Tools/*.rbxm`: viewmodels et Tools des armes (binaires LFS, voir « Viewmodels et Tools »).
 - `tools/rbxm/receive.luau`: serveur Lune local qui reçoit les `.rbxm` exportés de Studio et les écrit sous `assets/rbx/`.
@@ -79,7 +79,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/client/ui/MenuShot.luau`: tir sur un élément du menu (impact, puis action) et choix en images usées.
 - `src/client/ui/RoundHUD.luau`: HUD en jeu (timer, leaderboard Tab, overlay respawn, bannière résultat).
 - `src/client/ui/ScopeOverlay.luau`: lunette des armes à scope, dessinée sans image (masque rond et réticule en Frames).
-- `src/client/ui/SettingsMenu.luau`: écran Réglages, à même la scène dans le menu (on règle en tirant), sur un voile sombre sans tir en partie (touche P).
+- `src/client/ui/SettingsMenu.luau`: écran Réglages, à même la scène dans le menu (on règle en tirant), sur un voile sombre sans tir en partie (touche P) : sensibilités, et ombres du soleil sur le poste du joueur (`Lighting.GlobalShadows`).
 - `src/client/ui/Speedometer.luau`: affichage de la vitesse du joueur.
 - `src/client/ui/Transition.luau`: volets de transition entre le menu et le jeu.
 - `src/client/ui/UIKit.luau`: briques communes des écrans (création d'Instances, texte au thème, tweens, icônes, mise à l'échelle).
