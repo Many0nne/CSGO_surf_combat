@@ -12,7 +12,7 @@ local C = UITheme.Colors
 local F = UITheme.Fonts
 local Motion = UITheme.Motion
 
-local LEAN = -6 -- inclinaison commune du texte et de la bande (degrés)
+local LEAN = UITheme.Layout.HudLean -- inclinaison commune du texte et de la bande (degrés)
 local NUMBER_SIZE = 92
 local SHADOW_OFFSET = Vector2.new(7, 7)
 local SHADOW_TRANSPARENCY = 0.35
@@ -22,8 +22,6 @@ local TRACK_TRANSPARENCY = 0.7
 local HOT_ZONE_TRANSPARENCY = 0.6
 local NOTCH_WIDTH = 3
 local SCRIM_SIZE = Vector2.new(560, 300)
--- Fond en dégradé de coin (assets/ui/hud/scrim_coin.png, Decal 139288849836344)
-local SCRIM_IMAGE = "rbxassetid://128710099398466"
 local SCRIM_TRANSPARENCY = 0.15
 
 local Speedometer = {}
@@ -42,22 +40,6 @@ local function leanText(parent: GuiObject, props: { [string]: any }): TextLabel
 	props.Rotation = LEAN
 	props.Parent = parent
 	return UIKit.text(props)
-end
-
--- Cette méthode permet de poser le fond sombre sans bord visible lorsque le speedometer est construit :
--- une image blanche qui s'efface vers le haut et vers la droite (tools/ui/make_corner_scrim.py), teintée en jeu.
-local function buildScrim(root: Frame)
-	UIKit.create("ImageLabel", {
-		Name = "Scrim",
-		Image = SCRIM_IMAGE,
-		ImageColor3 = C.Scrim,
-		ImageTransparency = SCRIM_TRANSPARENCY,
-		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.fromScale(0, 1),
-		Size = UDim2.fromOffset(SCRIM_SIZE.X, SCRIM_SIZE.Y),
-		BackgroundTransparency = 1,
-		Parent = root,
-	})
 end
 
 -- Cette méthode permet d'appliquer l'aspect d'un palier (nom, couleurs) lorsque la vitesse en change.
@@ -83,7 +65,7 @@ function Speedometer.init()
 	})
 	gui = screenGui
 	local root = UIKit.scaledRoot(screenGui)
-	buildScrim(root)
+	UIKit.cornerScrim(root, "BottomLeft", SCRIM_SIZE, SCRIM_TRANSPARENCY)
 
 	local holder = UIKit.frame({
 		Name = "Holder",

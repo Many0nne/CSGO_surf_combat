@@ -1,6 +1,6 @@
 # Direction artistique de l'interface
 
-Référence pour refaire les écrans restants (HUD de round, fin de round) dans la direction du menu, déjà appliquée à l'accueil, Infos, Réglages, Feedback et au compteur de vitesse.
+Référence pour refaire les écrans restants (réapparition, fin de round) dans la direction du menu, déjà appliquée à l'accueil, Infos, Réglages, Feedback et au HUD de partie (vitesse, barre d'armes, timer, classement).
 
 ## La direction : « Ligne de mire »
 
@@ -47,6 +47,20 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
 - `src/client/systems/game/MenuSceneRules.luau` : règles pures testées (`tests/specs/MenuSceneRules.spec.luau`).
 - `src/client/ui/Transition.luau` : volets couleur du soleil, enchaînés à la plongée vers le soleil.
 - `src/client/ui/Speedometer.luau` : compteur de vitesse, piste « Titrage » : gros chiffres os penchés (-6°) avec ombre noire décalée, nom du palier, bande ambrée en biais crantée aux seuils, tout passe au rouge d'impact au dernier palier (`HUDRules.speedTier`, `speedFill`). En bas à gauche, sur un fond sombre sans bord : image de dégradé de coin (`tools/ui/make_corner_scrim.py`, `assets/ui/hud/`) teintée par `ImageColor3`.
+- `src/client/ui/WeaponBar.luau` : barre d'armes en bas à droite, en miroir du compteur ; remplace le Backpack Roblox
+  (`CoreGuiType.Backpack` désactivé dans `init.client.luau`). Par arme : silhouette plate tirée des MeshParts de son viewmodel
+  (bras exclus) dans un `ViewportFrame` blanc teinté par `ImageColor3`, nom et touche. L'arme en main est en os, avec son
+  numéro et un trait en rouge d'impact, les autres sont grisées ; toute la barre (fond compris) disparaît 2,5 s après le dernier changement d'arme
+  (`HUDRules.WEAPON_BAR_FADE_DELAY`). Emplacements dans l'ordre alphabétique, comme le helper `DebugPlaytest`.
+  Équipement : 1 à 9, molette (vers le haut = arme précédente), toucher d'un emplacement, L1/R1 à la manette.
+  Touches réglables : #100.
+- `src/client/ui/RoundHUD.luau` : timer et rang en haut au centre (chiffres os droits avec ombre, libellés ambrés, fondu
+  sombre en deux moitiés de coin, timer en rouge d'impact sous 30 s) ; classement sous Tab : pas de panneau, voile sombre
+  central qui s'efface vers les côtés, titre « CLASSEMENT » sur un filet ambre, colonnes K / M / K/M, ligne du joueur
+  sur une bande rouge d'impact **droite** (penchée, elle se lisait mal en face des colonnes).
+- `UIKit.cornerScrim` : fond de coin du HUD (`assets/ui/hud/scrim_coin.png`) dans les quatre orientations, par rotation.
+  Seul le compteur de vitesse est penché (`UITheme.Layout.HudLean`, -6°) : l'utilisateur a préféré le timer, la barre
+  d'armes et le classement droits.
 - `tools/ui/make_menu_type.py` : génère le titrage dans `assets/ui/menu/` (police Anton, licence OFL).
 
 Pour un nouveau mot : l'ajouter à la fin de `make_menu_type.py`, générer, publier, puis récupérer l'id de l'image :
@@ -83,6 +97,13 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
 - **Fondu dans deux directions** (fond qui s'efface vers le haut et vers la droite) : impossible avec des `UIGradient`.
   Un `UIGradient` sur un `CanvasGroup` est ignoré ; un seul gradient en biais laisse une arête ; des calques très transparents
   empilés font des bandes visibles. Utiliser une image de dégradé blanche teintée par `ImageColor3` (voir `make_corner_scrim.py`).
+- **Retourner une image :** un `ImageRectSize` négatif ne retourne pas l'image dans une `ImageLabel`. Tourner l'image
+  (`UIKit.cornerScrim` : 90°, 180° ou -90° selon le coin, taille permutée pour les quarts de tour).
+- **Tools des armes :** ils sont presque vides (l'arme visible vient du viewmodel). Pour dessiner une arme hors du jeu
+  (icône, silhouette), cloner les MeshParts enfants directs de `ReplicatedStorage/ViewModels/<Nom>`, sans les bras.
+- **`CanvasGroup` et fondu :** sa `GroupTransparency` est ignorée quand Roblox retombe sur le rendu simple (qualité
+  graphique, mémoire) : le groupe reste affiché. Pour estomper un élément qui doit vraiment disparaître (barre d'armes),
+  animer la transparence de chaque enfant.
 - **Polices :** aucune annonce officielle d'import de police trouvée (novembre 2026). Les titres passent par des images ;
   le texte courant reste en police Roblox.
 - **Bras du viewmodel :** ils forment vite une grosse masse noire quand la souris est dans un coin. Limiter le pivot
@@ -98,7 +119,7 @@ plugin Rojo : l'utilisateur doit le faire pour tester un worktree.
 
 ## Reste à faire
 
-- Passer le HUD de round (timer, rang, classement, réapparition) et la fin de round (`RoundHUD.luau`) du style « Tactical » ambre à cette direction.
+- Passer l'écran de réapparition et la bannière de fin de round (`RoundHUD.luau`) du style « Tactical » ambre à cette direction.
 - Afficher les munitions dans le HUD (`WeaponSystem` les gère, rien ne les montre), dans le même langage que le compteur de vitesse.
 - Piste écartée pour l'instant sur le compteur : chiffres en images usées comme le titrage, et inclinaison qui augmente avec la vitesse.
 - Tester le menu au tactile et à la manette : c'est prévu dans le code, jamais essayé.
