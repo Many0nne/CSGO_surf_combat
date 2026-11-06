@@ -23,6 +23,7 @@ local MapRules = require(ReplicatedStorage.Shared.MapRules)
 local LadderRules = require(ReplicatedStorage.Shared.LadderRules)
 local NetworkProtocol = require(ReplicatedStorage.Shared.NetworkProtocol)
 local CharacterAnimator = require(ReplicatedStorage.Shared.CharacterAnimator)
+local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 
 local JUMP_LOCKOUT = 0.15 -- empêche re-grounding immédiat après un saut
 
@@ -93,7 +94,7 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 	applyLaunch()
 	char:GetAttributeChangedSignal(SpawnLaunch.VELOCITY_ATTRIBUTE):Connect(applyLaunch)
 
-	RunService.Heartbeat:Connect(function(rawDt)
+	RunService.Heartbeat:Connect(PerfMarkers.wrap("mouvement", function(rawDt)
 		if not hrp.Parent then
 			return
 		end
@@ -378,7 +379,7 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 		})
 
 		wasGrounded = isGroundedState
-	end)
+	end))
 end
 
 return MovementController

@@ -6,6 +6,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
 local UIKit = require(script.Parent.UIKit)
+local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 
 local C = UITheme.Colors
 
@@ -66,7 +67,7 @@ end
 function MenuCursor.show()
 	gui.Enabled = not UserInputService.TouchEnabled or UserInputService.MouseEnabled
 	if not connection then
-		connection = RunService.RenderStepped:Connect(update)
+		connection = RunService.RenderStepped:Connect(PerfMarkers.wrap("curseur menu", update))
 	end
 end
 

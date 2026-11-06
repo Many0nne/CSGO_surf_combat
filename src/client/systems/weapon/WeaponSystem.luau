@@ -12,6 +12,7 @@ local HitscanSystem = require(script.Parent.HitscanSystem)
 local FPSCamera = require(script.Parent.Parent.Parent.camera.FPSCamera)
 local InputModule = require(script.Parent.Parent.Parent.input.InputModule)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
+local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 
 -- Per-tool runtime state (stored on the client)
 local toolState = {} -- [tool] = { ammo, reserve, magazine, lastFire }
@@ -373,14 +374,14 @@ function WeaponSystem.init(player)
 	MeleeHitDetection.init(meleeEvent)
 	HitscanSystem.init(hitscanEvent)
 
-	RunService.Heartbeat:Connect(function()
+	RunService.Heartbeat:Connect(PerfMarkers.wrap("armes", function()
 		if InputModule.isReloadPressed() and currentTool and currentCfg then
 			reloadTool(currentTool, currentCfg)
 		end
 		if InputModule.isInspectPressed() then
 			inspectCurrent()
 		end
-	end)
+	end))
 
 	local backpack = pl:WaitForChild("Backpack", 5)
 	if backpack then
