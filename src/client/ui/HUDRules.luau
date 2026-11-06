@@ -1,4 +1,4 @@
--- Règles pures du HUD (sans Instance ni service) : paliers de vitesse, timer, classement.
+-- Règles pures du HUD (sans Instance ni service) : paliers de vitesse, timer, classement, barre d'armes.
 -- Testées sous Lune (tests/specs/HUDRules.spec.luau).
 local HUDRules = {}
 
@@ -15,6 +15,9 @@ HUDRules.SPEED_TIERS = {
 HUDRules.SPEED_FILL_MAX = 180
 
 HUDRules.LOW_TIME_THRESHOLD = 30
+
+-- Secondes sans changement d'arme avant que la barre ne garde que l'arme en main
+HUDRules.WEAPON_BAR_FADE_DELAY = 2.5
 
 export type Score = { name: string, kills: number, deaths: number }
 
@@ -85,6 +88,33 @@ end
 -- Cette méthode permet de calculer les secondes entières restantes avant réapparition lorsque l'overlay de mort tourne.
 function HUDRules.secondsLeft(endTime: number, now: number): number
 	return math.max(0, math.ceil(endTime - now))
+end
+
+-- Cette méthode permet de trouver l'emplacement d'arme voisin (en bouclant) lorsque la molette ou L1/R1 change d'arme ;
+-- sans arme en main, on part du premier emplacement vers l'avant et du dernier vers l'arrière.
+function HUDRules.cycleSlot(current: number?, count: number, step: number): number?
+	if count <= 0 then
+		return nil
+	end
+	if not current then
+		return step > 0 and 1 or count
+	end
+	return (current - 1 + step) % count + 1
+end
+
+-- Cette méthode permet de transformer le nom d'un outil en libellé de la barre d'armes lorsqu'un emplacement est créé :
+-- espace avant une majuscule qui suit une minuscule ou un chiffre (« M9Bayonet » → « M9 BAYONET »), puis majuscules.
+function HUDRules.weaponLabel(toolName: string): string
+	local spaced = string.gsub(toolName, "([%l%d])(%u)", "%1 %2")
+	return string.upper(spaced)
+end
+
+-- Cette méthode permet de trier les noms d'outils dans l'ordre des emplacements (alphabétique, comme le helper
+-- DebugPlaytest) lorsque la barre d'armes est reconstruite.
+function HUDRules.slotOrder(names: { string }): { string }
+	local sorted = table.clone(names)
+	table.sort(sorted)
+	return sorted
 end
 
 return HUDRules

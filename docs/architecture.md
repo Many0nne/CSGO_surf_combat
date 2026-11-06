@@ -72,17 +72,18 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/client/systems/weapon/WeaponSystem.luau`: logique client des armes, munitions, recharge et vitesse liée à l'arme.
 - `src/client/systems/weapon/WeaponThirdPersonView.luau`: rendu client des armes 3e personne de tous les personnages (décalage procédural du grip pour tir/recharge/switch, modèle 3P masqué pour soi en 1re personne).
 - `src/client/ui/FeedbackScreen.luau`: écran Feedback (message de 10 à 500 caractères envoyé au serveur, ENVOYER se tire).
-- `src/client/ui/HUDRules.luau`: règles pures du HUD (paliers de vitesse, timer, classement).
+- `src/client/ui/HUDRules.luau`: règles pures du HUD (paliers de vitesse, timer, classement, emplacements de la barre d'armes).
 - `src/client/ui/Hitmarker.luau`: marqueur de touche confirmée par le serveur (X blanc à contour noir, rouge sur un tir à la tête, plus grand sur un kill).
 - `src/client/ui/InfosScreen.luau`: écran Infos (surfer, commandes, crédits, à propos), onglets à tirer.
 - `src/client/ui/MainMenu.luau`: menu d'accueil où l'on choisit en tirant : titre et libellés en images, hitmarker en guise de curseur, impacts de balles.
 - `src/client/ui/MenuCursor.luau`: hitmarker qui remplace le curseur sur tous les écrans du menu.
 - `src/client/ui/MenuPage.luau`: gabarit des écrans secondaires du menu (dégradé, titre en image, action de sortie) et ids des mots publiés.
 - `src/client/ui/MenuShot.luau`: tir sur un élément du menu (impact, puis action) et choix en images usées.
-- `src/client/ui/RoundHUD.luau`: HUD en jeu (timer, leaderboard Tab, overlay respawn, bannière résultat).
+- `src/client/ui/RoundHUD.luau`: HUD en jeu (timer et rang, classement Tab, overlay respawn, bannière résultat).
 - `src/client/ui/ScopeOverlay.luau`: lunette des armes à scope, dessinée sans image (masque rond et réticule en Frames).
 - `src/client/ui/SettingsMenu.luau`: écran Réglages, à même la scène dans le menu (on règle en tirant), sur un voile sombre sans tir en partie (touche P) : sensibilités, et ombres du soleil sur le poste du joueur (`Lighting.GlobalShadows`).
 - `src/client/ui/Speedometer.luau`: affichage de la vitesse du joueur.
+- `src/client/ui/WeaponBar.luau`: barre d'armes (remplace le Backpack Roblox) : silhouettes des armes, équipement au clavier, à la molette, au toucher et à la manette.
 - `src/client/ui/Transition.luau`: volets de transition entre le menu et le jeu.
 - `src/client/ui/UIKit.luau`: briques communes des écrans (création d'Instances, texte au thème, tweens, icônes, mise à l'échelle).
 - `src/server/DebugPlaytest.luau`: helper de playtest (Studio uniquement) : déclenché par un attribut joueur, enchaîne spawn, équipement, cible immobile et attaque, avec un PASS/FAIL par étape.

@@ -29,6 +29,7 @@ local Colors = {
 	HitRed        = rgb(226, 58, 40),   -- menu : cible visée, touche
 	SunWhite      = rgb(255, 241, 224), -- transition menu → jeu : soleil plein écran
 	Bone          = rgb(243, 233, 220), -- menu : texte couleur os, comme le titrage
+	BoneMuted     = rgb(150, 146, 140), -- HUD : élément au repos (arme pas en main)
 	Scrim         = rgb(10, 12, 22),    -- menu : dégradé sombre sous le texte posé sur la scène
 }
 
@@ -41,6 +42,7 @@ local Fonts = {
 	Display       = Font.new(OSWALD, Enum.FontWeight.Bold),
 	DisplayMedium = Font.new(OSWALD, Enum.FontWeight.Medium),
 	Body          = Font.new(TITILLIUM, Enum.FontWeight.Regular),
+	BodySemi      = Font.new(TITILLIUM, Enum.FontWeight.SemiBold),
 	BodyBold      = Font.new(TITILLIUM, Enum.FontWeight.Bold),
 	Mono          = Font.new(ROBOTO_MONO, Enum.FontWeight.Medium),
 	MonoBold      = Font.new(ROBOTO_MONO, Enum.FontWeight.Bold),
@@ -89,6 +91,7 @@ local Layout = {
 	ContentTop      = 112,
 	NavItemWidth    = 140,
 	TopbarSafeLeft  = 224, -- px écran occupés en haut à gauche par les boutons Roblox
+	HudLean         = -6,  -- inclinaison (degrés) du compteur de vitesse, seul élément penché du HUD
 }
 
 return {

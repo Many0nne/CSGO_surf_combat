@@ -1,5 +1,5 @@
--- HUD de round (direction « Tactical ») : timer et rang en haut, classement (Tab maintenu),
--- overlay de réapparition (décor désaturé) et bandeau ambre de fin de round.
+-- HUD de round : timer et rang en haut, classement (Tab maintenu) dans la direction « Ligne de mire » ;
+-- overlay de réapparition (décor désaturé) et bandeau ambre de fin de round encore dans l'ancien style « Tactical ».
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -16,23 +16,29 @@ local Motion = UITheme.Motion
 
 local RoundHUD = {}
 
--- Colonnes du classement : largeur fixe (px), alignement ; JOUEUR prend la place restante
-local LB_WIDTH = 700
-local LB_PAD = 22
-local LB_HEADER = 52
-local LB_COLUMNS = 34
-local LB_ROW = 42
-local COL_RANK = 56
-local COL_STAT = 80
+local SHADOW_TRANSPARENCY = 0.35
+-- Fond du timer : deux moitiés de fondu de coin collées au milieu du haut de l'écran
+local TOP_SCRIM_SIZE = Vector2.new(220, 110)
+local TOP_SCRIM_TRANSPARENCY = 0.3
+-- Classement : largeur fixe (px), colonnes en px ; JOUEUR prend la place restante
+local LB_WIDTH = 620
+local LB_TOP = 118
+local LB_RULE_Y = 70
+local LB_ROW = 36
+local LB_VEIL_EXTRA = 420 -- largeur du voile au-delà du tableau, où il s'efface
+local LB_VEIL_TRANSPARENCY = 0.3
+local COL_RANK = 36
+local COL_NAME = 56
+local COL_STATS = { 80, 64, 64 } -- K, M, K/M
 
 local gui: ScreenGui
 local timerLabel: TextLabel
-local timerBar: Frame
+local timerShadow: TextLabel
 local blinkTween: Tween?
 local lowTime = false
 local rankLabel: TextLabel
+local rankShadow: TextLabel
 local leaderboard: CanvasGroup
-local leaderboardTimer: TextLabel
 local leaderboardList: Frame
 local respawnRoot: Frame
 local respawnDim: Frame
@@ -53,86 +59,91 @@ local respawnTask: thread?
 
 -- ── Timer et rang ──────────────────────────────────────────────────────────────
 
--- Cette méthode permet de construire le bloc timer + rang collé en haut de l'écran lorsque le HUD est initialisé.
+-- Cette méthode permet de poser un texte doublé d'une ombre noire décalée lorsque le titrage du HUD est construit ;
+-- renvoie le texte puis son ombre, à mettre à jour ensemble.
+local function shadowedText(parent: GuiObject, props: { [string]: any }, offset: number): (TextLabel, TextLabel)
+	local shadowProps = table.clone(props)
+	shadowProps.Name = (props.Name or "Text") .. "Shadow"
+	shadowProps.TextColor3 = C.Black
+	shadowProps.TextTransparency = SHADOW_TRANSPARENCY
+	shadowProps.Position = (props.Position or UDim2.new()) + UDim2.fromOffset(offset, offset)
+	shadowProps.Parent = parent
+	local shadow = UIKit.text(shadowProps)
+	props.Parent = parent
+	return UIKit.text(props), shadow
+end
+
+-- Cette méthode permet de construire le timer et le rang en haut au centre (chiffres os droits sur un fondu sombre,
+-- sans panneau) lorsque le HUD est initialisé.
 local function buildTimer(root: Frame)
+	local top = UDim2.fromScale(0.5, 0)
+	UIKit.cornerScrim(root, "TopRight", TOP_SCRIM_SIZE, TOP_SCRIM_TRANSPARENCY, top)
+	UIKit.cornerScrim(root, "TopLeft", TOP_SCRIM_SIZE, TOP_SCRIM_TRANSPARENCY, top)
+
 	local block = UIKit.frame({
 		Name = "TimerBlock",
+		BackgroundTransparency = 1,
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, -1),
-		Size = UDim2.fromOffset(222, 59),
-		BackgroundColor3 = C.PanelDark,
-		BackgroundTransparency = 0.12,
+		Position = UDim2.new(0.5, 0, 0, 10),
+		Size = UDim2.fromOffset(240, 80),
 		Parent = root,
 	})
-	UIKit.stroke(block, C.Border)
-
-	timerLabel = UIKit.text({
+	timerLabel, timerShadow = shadowedText(block, {
 		Name = "Timer",
 		Text = "5:00",
-		FontFace = F.MonoBold,
-		TextSize = 26,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		Position = UDim2.fromOffset(0, 8),
-		Size = UDim2.fromOffset(150, 30),
-		Parent = block,
-	})
+		FontFace = F.Display,
+		TextSize = 50,
+		TextColor3 = C.Bone,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		Size = UDim2.fromOffset(130, 54),
+	}, 4)
 	UIKit.text({
 		Text = "FREE FOR ALL",
 		FontFace = F.DisplayMedium,
-		TextSize = T.Micro,
-		TextColor3 = C.Muted,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		Position = UDim2.fromOffset(0, 37),
-		Size = UDim2.fromOffset(150, 14),
-		Parent = block,
-	})
-	timerBar = UIKit.frame({
-		Name = "TimerBar",
-		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.fromScale(0, 1),
-		Size = UDim2.fromOffset(150, 3),
-		BackgroundColor3 = C.Text,
+		TextSize = 12,
+		TextColor3 = C.Accent,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		Position = UDim2.fromOffset(0, 54),
+		Size = UDim2.fromOffset(130, 14),
 		Parent = block,
 	})
 	UIKit.frame({
 		Name = "Divider",
-		Position = UDim2.fromOffset(150, 0),
-		Size = UDim2.new(0, 1, 1, 0),
-		BackgroundColor3 = C.Border,
+		BackgroundColor3 = C.Bone,
+		BackgroundTransparency = 0.4,
+		Position = UDim2.fromOffset(142, 12),
+		Size = UDim2.fromOffset(2, 50),
 		Parent = block,
 	})
-	rankLabel = UIKit.text({
+	rankLabel, rankShadow = shadowedText(block, {
 		Name = "Rank",
 		Text = "—",
 		RichText = true,
 		FontFace = F.Display,
-		TextSize = T.Title,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		Position = UDim2.fromOffset(151, 9),
-		Size = UDim2.fromOffset(71, 28),
-		Parent = block,
-	})
+		TextSize = 34,
+		TextColor3 = C.Bone,
+		Position = UDim2.fromOffset(156, 10),
+		Size = UDim2.fromOffset(84, 40),
+	}, 3)
 	UIKit.text({
 		Text = "RANG",
 		FontFace = F.DisplayMedium,
-		TextSize = 10,
-		TextColor3 = C.Muted,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		Position = UDim2.fromOffset(151, 37),
-		Size = UDim2.fromOffset(71, 14),
+		TextSize = 12,
+		TextColor3 = C.Accent,
+		Position = UDim2.fromOffset(156, 54),
+		Size = UDim2.fromOffset(84, 14),
 		Parent = block,
 	})
 end
 
--- Cette méthode permet de passer le timer en alerte (rouge + clignotement) ou de l'en sortir lorsque le seuil des 30 s est franchi.
+-- Cette méthode permet de passer le timer en alerte (rouge d'impact + clignotement) ou de l'en sortir lorsque le seuil
+-- des 30 s est franchi.
 local function setLowTime(low: boolean)
 	if low == lowTime then
 		return
 	end
 	lowTime = low
-	local color = low and C.Alert or C.Text
-	UIKit.tween(timerLabel, Motion.Color, { TextColor3 = color })
-	UIKit.tween(timerBar, Motion.Color, { BackgroundColor3 = color })
+	UIKit.tween(timerLabel, Motion.Color, { TextColor3 = low and C.HitRed or C.Bone })
 	if blinkTween then
 		blinkTween:Cancel()
 		blinkTween = nil
@@ -145,117 +156,122 @@ end
 
 -- ── Classement ─────────────────────────────────────────────────────────────────
 
--- Cette méthode permet de poser les cinq cellules d'une ligne du classement (colonnes fixes) lorsqu'un en-tête ou un joueur est ajouté.
-local function fillColumns(
-	row: GuiObject,
-	values: { string },
-	font: Font,
-	colors: { Color3 },
-	size: number
-): { TextLabel }
-	local labels = {}
-	local rightEdges = { LB_PAD + COL_STAT * 2, LB_PAD + COL_STAT, LB_PAD }
-	labels[1] = UIKit.text({
+-- Cette méthode permet de poser les cinq cellules d'une ligne du classement (rang, joueur, K, M, K/M) lorsqu'un en-tête
+-- ou un joueur est ajouté ; `fonts` et `colors` donnent l'aspect de chaque cellule.
+local function fillColumns(row: GuiObject, values: { string }, fonts: { Font }, colors: { Color3 }, size: number)
+	UIKit.text({
 		Text = values[1],
-		FontFace = values[1] == "#" and font or F.MonoBold,
-		TextSize = values[1] == "#" and size or T.Small,
+		FontFace = fonts[1],
+		TextSize = size + 4,
 		TextColor3 = colors[1],
-		Position = UDim2.fromOffset(LB_PAD, 0),
+		TextXAlignment = Enum.TextXAlignment.Right,
 		Size = UDim2.new(0, COL_RANK, 1, 0),
 		Parent = row,
 	})
-	labels[2] = UIKit.text({
+	UIKit.text({
 		Text = values[2],
-		FontFace = font,
+		FontFace = fonts[2],
 		TextSize = size,
 		TextColor3 = colors[2],
 		TextTruncate = Enum.TextTruncate.AtEnd,
-		Position = UDim2.fromOffset(LB_PAD + COL_RANK, 0),
-		Size = UDim2.new(1, -(LB_PAD * 2 + COL_RANK + COL_STAT * 3), 1, 0),
+		Position = UDim2.fromOffset(COL_NAME, 0),
+		Size = UDim2.new(1, -(COL_NAME + COL_STATS[1] + COL_STATS[2] + COL_STATS[3]), 1, 0),
 		Parent = row,
 	})
-	for i = 3, 5 do
-		labels[i] = UIKit.text({
+	local right = 0
+	for i = 5, 3, -1 do
+		local width = COL_STATS[i - 2]
+		UIKit.text({
 			Text = values[i],
-			FontFace = font,
-			TextSize = size,
+			FontFace = fonts[i],
+			TextSize = size + 2,
 			TextColor3 = colors[i],
 			TextXAlignment = Enum.TextXAlignment.Right,
 			AnchorPoint = Vector2.new(1, 0),
-			Position = UDim2.new(1, -rightEdges[i - 2], 0, 0),
-			Size = UDim2.new(0, COL_STAT, 1, 0),
+			Position = UDim2.new(1, -right, 0, 0),
+			Size = UDim2.new(0, width, 1, 0),
 			Parent = row,
 		})
+		right += width
 	end
-	return labels
 end
 
--- Cette méthode permet de construire le panneau du classement (bandeau ambre, en-têtes, liste) lorsque le HUD est initialisé.
+-- Cette méthode permet de construire le classement (voile sombre central sans panneau, titre sur un filet ambre,
+-- en-têtes, liste) lorsque le HUD est initialisé.
 local function buildLeaderboard(root: Frame)
 	leaderboard = UIKit.create("CanvasGroup", {
 		Name = "Leaderboard",
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 96),
-		Size = UDim2.fromOffset(LB_WIDTH, LB_HEADER + LB_COLUMNS),
-		BackgroundColor3 = C.PanelDark,
-		BackgroundTransparency = 0.05,
+		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
+		Size = UDim2.fromScale(1, 1),
 		Visible = false,
 		Parent = root,
 	})
-	UIKit.stroke(leaderboard, C.Border)
-
-	local band = UIKit.frame({
-		Name = "Band",
-		Size = UDim2.new(1, 0, 0, LB_HEADER),
-		BackgroundColor3 = C.Accent,
+	local veil = UIKit.frame({
+		Name = "Veil",
+		BackgroundColor3 = C.Scrim,
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.fromScale(0.5, 0),
+		Size = UDim2.new(0, LB_WIDTH + LB_VEIL_EXTRA, 1, 0),
 		Parent = leaderboard,
 	})
-	UIKit.text({
-		Text = "LEADERBOARD",
-		FontFace = F.Display,
-		TextSize = 20,
-		TextColor3 = C.Ground,
-		Position = UDim2.fromOffset(LB_PAD, 0),
-		Size = UDim2.fromScale(0.6, 1),
-		Parent = band,
+	UIKit.create("UIGradient", {
+		Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1),
+			NumberSequenceKeypoint.new(0.3, LB_VEIL_TRANSPARENCY),
+			NumberSequenceKeypoint.new(0.7, LB_VEIL_TRANSPARENCY),
+			NumberSequenceKeypoint.new(1, 1),
+		}),
+		Parent = veil,
 	})
-	leaderboardTimer = UIKit.text({
-		Text = "5:00",
-		FontFace = F.MonoBold,
-		TextSize = T.Small,
-		TextColor3 = C.Ground,
-		TextXAlignment = Enum.TextXAlignment.Right,
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -LB_PAD, 0, 0),
-		Size = UDim2.fromScale(0.3, 1),
-		Parent = band,
+
+	local holder = UIKit.frame({
+		Name = "Board",
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, LB_TOP),
+		Size = UDim2.new(0, LB_WIDTH, 1, -LB_TOP),
+		Parent = leaderboard,
+	})
+	local head = UIKit.frame({
+		Name = "Title",
+		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(LB_WIDTH, 60),
+		Parent = holder,
+	})
+	shadowedText(head, {
+		Name = "Title",
+		Text = "CLASSEMENT",
+		FontFace = F.Display,
+		TextSize = 46,
+		TextColor3 = C.Bone,
+		Size = UDim2.fromOffset(400, 52),
+	}, 5)
+	UIKit.frame({
+		Name = "Rule",
+		BackgroundColor3 = C.Accent,
+		Position = UDim2.fromOffset(0, LB_RULE_Y),
+		Size = UDim2.fromOffset(LB_WIDTH, 3),
+		Parent = holder,
 	})
 
 	local columns = UIKit.frame({
 		Name = "Columns",
-		Position = UDim2.fromOffset(0, LB_HEADER),
-		Size = UDim2.new(1, 0, 0, LB_COLUMNS),
 		BackgroundTransparency = 1,
-		Parent = leaderboard,
+		Position = UDim2.fromOffset(0, LB_RULE_Y + 4),
+		Size = UDim2.fromOffset(LB_WIDTH, LB_ROW - 2),
+		Parent = holder,
 	})
 	local m = C.Muted
-	fillColumns(columns, { "#", "JOUEUR", "K", "D", "K/D" }, F.DisplayMedium, { m, m, m, m, m }, T.Caption)
-	UIKit.frame({
-		Name = "Divider",
-		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.fromScale(0, 1),
-		Size = UDim2.new(1, 0, 0, 1),
-		BackgroundColor3 = C.Border,
-		Parent = columns,
-	})
+	local h = F.DisplayMedium
+	fillColumns(columns, { "#", "JOUEUR", "K", "M", "K/M" }, { h, h, h, h, h }, { m, m, m, m, m }, 12)
 
 	leaderboardList = UIKit.frame({
 		Name = "Rows",
-		Position = UDim2.fromOffset(0, LB_HEADER + LB_COLUMNS),
-		Size = UDim2.new(1, 0, 1, -(LB_HEADER + LB_COLUMNS)),
 		BackgroundTransparency = 1,
-		Parent = leaderboard,
+		Position = UDim2.fromOffset(0, LB_RULE_Y + 4 + LB_ROW),
+		Size = UDim2.new(1, 0, 1, -(LB_RULE_Y + 4 + LB_ROW)),
+		Parent = holder,
 	})
 end
 
@@ -474,7 +490,7 @@ function RoundHUD.updateTimer(seconds: number)
 	end
 	local text = HUDRules.formatTimer(seconds)
 	timerLabel.Text = text
-	leaderboardTimer.Text = text
+	timerShadow.Text = text
 	setLowTime(HUDRules.isLowTime(seconds))
 end
 
@@ -491,59 +507,61 @@ function RoundHUD.updateScores(scores: { [number]: Score })
 	local sorted = HUDRules.sortScores(scores)
 	local localName = Players.LocalPlayer.Name
 	local rank = HUDRules.rankOf(sorted, localName)
-	rankLabel.Text = rank and string.format('%d<font size="14" color="#9AA0A8">/%d</font>', rank, #sorted) or "—"
+	local rankText = rank and string.format('%d<font size="18" transparency="0.4">/%d</font>', rank, #sorted) or "—"
+	rankLabel.Text = rankText
+	rankShadow.Text = rankText
 
 	for i, score in sorted do
 		local isMe = score.name == localName
 		local row = UIKit.frame({
 			Name = "Row" .. i,
+			BackgroundTransparency = 1,
 			Position = UDim2.fromOffset(0, (i - 1) * LB_ROW),
 			Size = UDim2.new(1, 0, 0, LB_ROW),
-			BackgroundColor3 = C.Accent,
-			BackgroundTransparency = isMe and 0.86 or 1,
 			Parent = leaderboardList,
 		})
 		row:SetAttribute("Order", i)
-		UIKit.frame({
-			Name = "Divider",
-			AnchorPoint = Vector2.new(0, 1),
-			Position = UDim2.fromScale(0, 1),
-			Size = UDim2.new(1, 0, 0, 1),
-			BackgroundColor3 = C.Raised,
-			Parent = row,
-		})
 		if isMe then
-			UIKit.frame({ Name = "MeBar", Size = UDim2.new(0, 3, 1, 0), BackgroundColor3 = C.Accent, Parent = row })
+			-- Bande droite, pas penchée : une ligne en biais se lit mal en face des colonnes
+			local band = UIKit.frame({
+				Name = "MeBand",
+				BackgroundColor3 = C.HitRed,
+				BackgroundTransparency = 0.2,
+				AnchorPoint = Vector2.new(0, 0.5),
+				Position = UDim2.new(0, -16, 0.5, 0),
+				Size = UDim2.new(1, 32, 0, LB_ROW - 6),
+				Parent = row,
+			})
+			UIKit.create("UIGradient", {
+				Transparency = NumberSequence.new({
+					NumberSequenceKeypoint.new(0, 0),
+					NumberSequenceKeypoint.new(0.75, 0.35),
+					NumberSequenceKeypoint.new(1, 1),
+				}),
+				Parent = band,
+			})
 		end
 		local content = UIKit.frame({
 			Name = "Content",
-			Size = UDim2.fromScale(1, 1),
 			BackgroundTransparency = 1,
+			Size = UDim2.fromScale(1, 1),
 			Parent = row,
 		})
-		local nameColor = C.Text
-		fillColumns(
-			content,
-			{
-				tostring(i),
-				isMe and (score.name .. " (toi)") or score.name,
-				tostring(score.kills),
-				tostring(score.deaths),
-				HUDRules.formatKD(score.kills, score.deaths),
-			},
-			isMe and F.BodyBold or F.Body,
-			{
-				i == 1 and C.Accent or C.Muted,
-				nameColor,
-				C.Text,
-				C.Muted,
-				C.Muted,
-			},
-			T.Body
-		)
+		local statColor = isMe and C.Bone or C.Muted
+		fillColumns(content, {
+			tostring(i),
+			isMe and (score.name .. "  (toi)") or score.name,
+			tostring(score.kills),
+			tostring(score.deaths),
+			HUDRules.formatKD(score.kills, score.deaths),
+		}, { F.Display, isMe and F.BodyBold or F.BodySemi, F.Display, F.DisplayMedium, F.DisplayMedium }, {
+			i == 1 and C.Accent or statColor,
+			isMe and C.Bone or C.Text,
+			C.Bone,
+			statColor,
+			statColor,
+		}, 16)
 	end
-
-	leaderboard.Size = UDim2.fromOffset(LB_WIDTH, LB_HEADER + LB_COLUMNS + #sorted * LB_ROW + 6)
 end
 
 function RoundHUD.showRespawning(delaySeconds: number)
