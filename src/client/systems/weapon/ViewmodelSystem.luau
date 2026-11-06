@@ -165,6 +165,8 @@ local function prewarmViewmodel(tool: Instance)
 	local parts: { BasePart } = {}
 	for _, d in model:GetDescendants() do
 		if d:IsA("BasePart") then
+			-- ombre invisible (arme collée à la caméra) mais coûteuse : ~100 000 triangles dans la passe d'ombres (#88)
+			d.CastShadow = false
 			table.insert(parts, d :: BasePart)
 		end
 	end

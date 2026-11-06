@@ -1,6 +1,7 @@
--- Réglages souris (direction « Ligne de mire »). Deux présentations du même écran : « page » à même la scène du menu, où
+-- Réglages souris et graphismes (direction « Ligne de mire »). Deux présentations du même écran : « page » à même la scène du menu, où
 -- l'on règle en tirant, et « modal » sur un voile sombre (touche P en partie), sans tir ni hitmarker.
 local GuiService = game:GetService("GuiService")
+local Lighting = game:GetService("Lighting")
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -190,6 +191,106 @@ local function makeSlider(
 	return applyValue
 end
 
+-- Cette méthode permet de construire la ligne « libellé, état, trace » d'un réglage oui/non lorsqu'il est ajouté : un tir
+-- sur la ligne bascule l'état, la poignée (un impact) passe d'un bout à l'autre de la trace. Renvoie la fonction qui
+-- applique un état.
+local function makeToggle(
+	parent: GuiObject,
+	labelText: string,
+	yOffset: number,
+	onText: string,
+	offText: string,
+	initVal: boolean,
+	onChange: (boolean) -> ()
+): (boolean) -> ()
+	local currentVal = initVal
+
+	local row = UIKit.frame({
+		Name = labelText,
+		Position = UDim2.fromOffset(MenuPage.TextX, yOffset),
+		Size = UDim2.fromOffset(ROW_WIDTH, ROW_STEP - 12),
+		BackgroundTransparency = 1,
+		Parent = parent,
+	})
+	UIKit.text({
+		Text = labelText,
+		FontFace = F.DisplayMedium,
+		TextSize = 22,
+		TextColor3 = C.Bone,
+		Size = UDim2.new(1, -160, 0, 36),
+		Parent = row,
+	})
+	local valLabel = UIKit.text({
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.fromScale(1, 0),
+		Size = UDim2.fromOffset(150, 36),
+		FontFace = F.Display,
+		TextSize = 26,
+		TextColor3 = C.Bone,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		Parent = row,
+	})
+
+	-- Toute la ligne se tire : libellé, état et trace
+	local hit = UIKit.button({
+		Name = "Track",
+		Text = "",
+		Size = UDim2.new(1, 0, 0, TRACK_TOP + 34),
+		BackgroundTransparency = 1,
+		Parent = row,
+	})
+	local track = UIKit.frame({
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.fromOffset(0, TRACK_TOP + 17),
+		Size = UDim2.new(1, 0, 0, 3),
+		BackgroundColor3 = C.Bone,
+		BackgroundTransparency = 0.65,
+		Parent = hit,
+	})
+	local fill = UIKit.frame({ Size = UDim2.fromScale(0, 1), BackgroundColor3 = C.Accent, Parent = track })
+	local handle = UIKit.frame({
+		Name = "Impact",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Size = UDim2.fromOffset(18, 18),
+		BackgroundColor3 = C.Black,
+		ZIndex = 2,
+		Parent = track,
+	})
+	UIKit.create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = handle })
+	local handleStroke = UIKit.stroke(handle, C.Bone, 2)
+	local handleScale = UIKit.create("UIScale", { Parent = handle })
+	UIKit.hover(hit, handleScale, { Scale = 1 }, { Scale = 1.25 })
+	UIKit.hover(hit, handleStroke, { Color = C.Bone }, { Color = C.HitRed })
+	hit.MouseEnter:Connect(function()
+		MenuCursor.addHover(1)
+	end)
+	hit.MouseLeave:Connect(function()
+		MenuCursor.addHover(-1)
+	end)
+
+	local function applyValue(v: boolean)
+		currentVal = v
+		local t = if v then 1 else 0
+		UIKit.tween(fill, Motion.Hover, { Size = UDim2.fromScale(t, 1) })
+		UIKit.tween(handle, Motion.Hover, { Position = UDim2.fromScale(t, 0.5) })
+		valLabel.Text = if v then onText else offText
+		valLabel.TextColor3 = if v then C.Bone else C.Muted
+		onChange(v)
+	end
+
+	hit.InputBegan:Connect(function(inp)
+		if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+			applyValue(not currentVal)
+			if shoots() then
+				MenuShot.fireAt(hit, inp, false)
+			end
+		end
+	end)
+
+	applyValue(initVal)
+	return applyValue
+end
+
 -- Cette méthode permet d'ouvrir ou fermer l'écran en sauvegardant puis restaurant l'état de la souris
 -- lorsque le joueur appuie sur P, tire sur RÉGLAGES ou ferme l'écran.
 local function setOpen(state: boolean)
@@ -257,6 +358,18 @@ function SettingsMenu.init(fpsCam: typeof(fpsCamRef))
 			if fpsCamRef then
 				fpsCamRef.setScopeMultiplier(v)
 			end
+		end
+	)
+	-- Ombres du soleil sur ce poste seulement (#88) : la passe d'ombres est le plus gros coût GPU de la map
+	makeToggle(
+		built.group,
+		"Ombres",
+		MenuPage.ContentTop + 2 * ROW_STEP,
+		"Activées",
+		"Coupées",
+		Lighting.GlobalShadows,
+		function(v)
+			Lighting.GlobalShadows = v
 		end
 	)
 	built.exit(MenuPage.Words.Retour, function()
