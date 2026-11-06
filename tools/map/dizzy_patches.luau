@@ -34,6 +34,38 @@ return {
 	{ op = "restyle", why = "plateau de la rampe T", folder = "Decor", look = "plywood",
 		zone = { center = { 1886.2, 56.4, -130.0 }, size = { 1, 0.6, 1 } } },
 
+	-- Haut des rampes sur pilotis : le muret du toit voisin (dessus à 71,34) dépassait de 0,6 stud du bout du plateau
+	-- (70,72) et accrochait le joueur. Planche de raccord en contreplaqué, du plateau (x 1931) au dessus du muret
+	-- (x 1935), pente de 24° au lieu de 16°. Côté CT : symétrique (demi-tour autour de (2000, -260,1)).
+	{ op = "add", why = "raccord du haut de la rampe T au muret", look = "plywood",
+		position = { 1933.035, 70.381, -130.05 }, size = { 4.388, 0.17, 113.79 }, rotation = { 0, 0, 24.27 } },
+	{ op = "add", why = "raccord du haut de la rampe CT au muret", look = "plywood",
+		position = { 2066.965, 70.381, -390.15 }, size = { 4.388, 0.17, 113.79 }, rotation = { 0, 0, -24.27 } },
+
+	-- Échelles des murs des rampes (T en x 1902,46, CT en x 2097,54) : relevées en boîtes (rails, barreaux, crinoline
+	-- en morceaux de sol et de plafond qui ne touchaient pas le mur) et coiffées de murs d'air qui bloquaient la tête.
+	-- Remplacées par les échelles grimpables de DizzyDressing (LADDERS).
+	{ op = "remove", why = "échelle relevée T", folder = "Decor",
+		zone = { center = { 1902.46, 89.5, -183.5 }, size = { 15, 36, 12 } } },
+	{ op = "remove", why = "crinoline relevée T (sols)", folder = "Floors",
+		zone = { center = { 1902.46, 99, -181.6 }, size = { 15, 13, 9.4 } } },
+	{ op = "remove", why = "crinoline relevée T (plafonds)", folder = "Ceilings",
+		zone = { center = { 1902.46, 99, -181.6 }, size = { 15, 13, 9.4 } } },
+	{ op = "remove", why = "crinoline relevée T (murs)", folder = "Walls",
+		zone = { center = { 1902.46, 99, -181.6 }, size = { 15, 13, 9.4 } } },
+	{ op = "remove", why = "murs d'air du haut de l'échelle T", folder = "Clips",
+		zone = { center = { 1902.46, 106.3, -192.4 }, size = { 6.5, 4.5, 11 } } },
+	{ op = "remove", why = "échelle relevée CT", folder = "Decor",
+		zone = { center = { 2097.54, 89.5, -336.7 }, size = { 15, 36, 12 } } },
+	{ op = "remove", why = "crinoline relevée CT (sols)", folder = "Floors",
+		zone = { center = { 2097.54, 99, -338.6 }, size = { 15, 13, 9.4 } } },
+	{ op = "remove", why = "crinoline relevée CT (plafonds)", folder = "Ceilings",
+		zone = { center = { 2097.54, 99, -338.6 }, size = { 15, 13, 9.4 } } },
+	{ op = "remove", why = "crinoline relevée CT (murs)", folder = "Walls",
+		zone = { center = { 2097.54, 99, -338.6 }, size = { 15, 13, 9.4 } } },
+	{ op = "remove", why = "murs d'air du haut de l'échelle CT", folder = "Clips",
+		zone = { center = { 2097.54, 106.3, -327.8 }, size = { 6.5, 4.5, 11 } } },
+
 	-- Planches posées sur la fosse centrale (passerelles), sans les poutres d'acier qui les portent. Jamais de restyle
 	-- sans `folder` sur une zone qui touche un mur d'air : il deviendrait visible.
 	{ op = "restyle", why = "planche est de la fosse", folder = "Decor", look = "planks",

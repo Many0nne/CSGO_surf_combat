@@ -38,10 +38,10 @@ local TRAIL = ColorSequence.new(Color3.fromRGB(255, 200, 150), Color3.fromRGB(25
 local LIGHTING = {
 	ClockTime = 17.9,
 	GeographicLatitude = 0,
-	Brightness = 3.2,
-	Ambient = Color3.fromRGB(58, 54, 70),
-	OutdoorAmbient = Color3.fromRGB(95, 85, 105),
-	ExposureCompensation = 0.2,
+	Brightness = 3.6,
+	Ambient = Color3.fromRGB(74, 69, 88),
+	OutdoorAmbient = Color3.fromRGB(122, 110, 130),
+	ExposureCompensation = 0.35,
 }
 local ATMOSPHERE = {
 	Density = 0.33,

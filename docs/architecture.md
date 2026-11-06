@@ -51,7 +51,8 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/client/systems/movement/CharacterDimensions.luau`: calcule les dimensions du personnage et les hitboxes debout/accroupi.
 - `src/client/systems/movement/CoyoteJump.luau`: gestion du "coyote time" pour les sauts.
 - `src/client/systems/movement/CrouchSystem.luau`: logique de position accroupie, hauteur caméra et hitbox.
-- `src/client/systems/movement/GroundDetection.luau`: détection du sol et transitions air/sol.
+- `src/client/systems/movement/GroundDetection.luau`: détection du sol et transitions air/sol (un muret plus bas que le centre du corps n'est pas pris pour le sol : `PhysicsUtils.isSideContact`).
+- `src/client/systems/movement/LadderSystem.luau`: échelles de la map (volumes de `Maps.Map.Ladders`) détectées à chaque frame ; `MovementController` y remplace la physique sol/air par la grimpe.
 - `src/client/systems/movement/HeadCollisionResolver.luau`: résolution des collisions tête (plafond, mur haut) lors du déplacement.
 - `src/client/systems/movement/MovementController.luau`: orchestrateur principal du mouvement (boucle Heartbeat, transitions d'état) ; `getVelocity()` expose la vitesse du dernier pas (lue par la sonde de saccades).
 - `src/client/systems/movement/PhysicsStepAir.luau`: étape physique aérienne (air accelerate Source + cap `AIR_SPEED_CAP`).
@@ -98,6 +99,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/shared/GameConfig.luau`: constantes jeu (ROUND_DURATION=300, RESPAWN_DELAY=2.5, RESULT_DURATION=6, AUTO_SAVE_INTERVAL=120, SPAWN_PROTECTION=2.5).
 - `src/shared/SpawnLaunch.luau`: règles pures du lancement depuis le soleil (vitesse, angles de caméra, noms des attributs posés sur le personnage), testées (`tests/specs/SpawnLaunch.spec.luau`).
 - `src/shared/HitZones.luau`: zones du corps touchées (tête, torse, bras, jambes), multiplicateurs de dégâts des armes à distance et règle de calcul.
+- `src/shared/LadderRules.luau`: règles pures des échelles (grimpe façon Source selon le regard, saut pour s'en détacher), testées (`tests/specs/LadderRules.spec.luau`).
 - `src/shared/MapRules.luau`: règles pures de la map (volume et vitesse des boosts, hauteur de mort, tir balistique), testées (`tests/specs/MapRules.spec.luau`).
 - `src/shared/MovementConfig.luau`: constantes physique du mouvement uniquement (vitesses, accel, friction, saut, pentes, bhop, réseau, hitbox).
 - `src/shared/MovementState.luau`: structure d'état partagée pour le mouvement du joueur.

@@ -444,6 +444,281 @@ local function window(parent, frame, width, height, depth)
 	return m
 end
 
+-- Cette méthode permet de construire une échelle à crinoline fixée au mur dans `frame` (origine au pied, sur le nu du
+-- mur ; -Z local vers l'extérieur) : rails, barreaux, pattes scellées, crosses qui passent par-dessus l'acrotère
+-- (`parapet` : hauteur du dessus du mur, `roof` : sol derrière) et arceaux dont les côtés touchent le mur. Décor pur :
+-- la grimpe passe par le volume de LADDERS.
+local function ladder(parent, frame, top, parapet, roof)
+	local m = New("Model")
+	m.Name = "Ladder"
+	m.Parent = parent
+	local half, off = 3.05, -1.02 -- demi-largeur entre rails, écart au mur
+	for _, x in { -half, half } do
+		piece(m, frame, V3.new(x, top / 2, off), V3.new(0.5, top, 0.5), TRIM, E.Material.Metal)
+		piece(m, frame, V3.new(x, 0.75, off), V3.new(0.76, 1.5, 0.76), TRIM, E.Material.Metal)
+		-- pattes scellées au mur
+		for _, y in { 1.8, 11.8, 21.8, 30.8 } do
+			piece(m, frame, V3.new(x, y, off / 2), V3.new(0.35, 0.6, -off), TRIM, E.Material.Metal)
+			piece(m, frame, V3.new(x, y, -0.08), V3.new(1.2, 1.4, 0.16), TRIM, E.Material.Metal)
+		end
+		-- crosse : le rail passe au-dessus de l'acrotère et redescend sur le toit
+		run(m, frame, {
+			V3.new(x, top, off),
+			V3.new(x, top, 2.6),
+			V3.new(x, roof, 2.6),
+		}, 0.5, TRIM, E.Material.Metal)
+		piece(m, frame, V3.new(x, roof + 0.08, 2.6), V3.new(1.2, 0.16, 1.2), TRIM, E.Material.Metal)
+	end
+	for y = 2.7, parapet - 0.5, 2.85 do
+		tube(m, frame, V3.new(-half, y, off), V3.new(half, y, off), 0.36, TRIM, E.Material.Metal)
+	end
+	-- crinoline : arceaux en U (côtés droits scellés au mur, demi-cercle devant) et lisses verticales
+	local W, straight, segments = 4.6, 3.6, 8
+	local hoops = { 14, 20, 26, parapet - 1 }
+	-- Cette méthode permet de placer un point du demi-cercle d'un arceau (angle 0 : côté +X, pi : côté -X).
+	local function arc(a)
+		return V3.new(W * math.cos(a), 0, -straight - W * math.sin(a))
+	end
+	for _, y in hoops do
+		for _, s in { -1, 1 } do
+			piece(m, frame, V3.new(s * W, y, -straight / 2), V3.new(0.25, 0.4, straight), TRIM, E.Material.Metal)
+			piece(m, frame, V3.new(s * W, y, -0.08), V3.new(0.8, 1, 0.16), TRIM, E.Material.Metal)
+		end
+		for k = 0, segments - 1 do
+			local a, b = arc(k * math.pi / segments), arc((k + 1) * math.pi / segments)
+			local mid = (a + b) / 2 + V3.new(0, y, 0)
+			local cf = DizzyDressing.aim(mid, b - a) * CF.Angles(0, math.pi / 2, 0)
+			piece(m, frame, cf, V3.new((b - a).Magnitude + 0.1, 0.4, 0.25), TRIM, E.Material.Metal)
+		end
+	end
+	local bars = { V3.new(-W, 0, -straight / 2), V3.new(W, 0, -straight / 2) }
+	for k = 0, 4 do
+		table.insert(bars, arc(k * math.pi / 4))
+	end
+	for _, b in bars do
+		tube(m, frame, b + V3.new(0, hoops[1], 0), b + V3.new(0, hoops[#hoops], 0), 0.25, TRIM, E.Material.Metal)
+	end
+	return m
+end
+
+-- Cette méthode permet de poser le volume de grimpe d'une échelle (LadderRules) dans `frame` (même repère que
+-- `ladder`) : boîte invisible devant le mur, du sol au-dessus de l'acrotère, LookVector = normale sortante.
+local function ladderVolume(parent, frame, bottom, top)
+	local p = New("Part")
+	p.Name = "Ladder"
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanQuery = false
+	p.CanTouch = false
+	p.Transparency = 1
+	p.CastShadow = false
+	p.Size = V3.new(5, top - bottom, 2.5)
+	p.CFrame = frame * CF.new(0, (bottom + top) / 2, -1.25)
+	p.Parent = parent
+	return p
+end
+
+-- Rhabillage d'objets relevés en boîtes (REDRESS) --------------------------------------------------------------------
+
+local BURLAP = C3.fromRGB(156, 134, 98)
+local CRATE = C3.fromRGB(168, 128, 82)
+local BATTEN = C3.fromRGB(118, 86, 56)
+local BLOCK = C3.fromRGB(150, 148, 142)
+local SHEET = C3.fromRGB(214, 212, 204)
+
+-- Cette méthode permet de varier une teinte sans hasard (même map à chaque génération) lorsque des objets répétés
+-- (sacs, parpaings) ne doivent pas être tous identiques.
+local function shade(color, k)
+	local f = 1 + 0.06 * math.sin(k * 12.9898)
+	return C3.new(math.clamp(color.R * f, 0, 1), math.clamp(color.G * f, 0, 1), math.clamp(color.B * f, 0, 1))
+end
+
+-- Cette méthode permet de ramener une boîte relevée (souvent posée de travers : axe vertical en Y, Z ou X local) à un
+-- repère dont Y est vertical, et de donner sa taille dans ce repère.
+local function upright(cf, size)
+	local axes = { { cf.RightVector, size.X }, { cf.UpVector, size.Y }, { cf.LookVector, size.Z } }
+	local best = 1
+	for i, a in axes do
+		if math.abs(a[1].Y) > math.abs(axes[best][1].Y) then
+			best = i
+		end
+	end
+	local others = {}
+	for i, a in axes do
+		if i ~= best then
+			table.insert(others, a)
+		end
+	end
+	local x = V3.new(others[1][1].X, 0, others[1][1].Z).Unit
+	local y = V3.new(0, 1, 0)
+	return CF.fromMatrix(cf.Position, x, y, x:Cross(y)), V3.new(others[1][2], axes[best][2], others[2][2])
+end
+
+-- Cette méthode permet de poser un sac de sable (corps, dessus bombé, bout cousu) de taille `size` dans `frame`.
+local function sandbag(parent, frame, size, k)
+	local base = frame * CF.Angles(0, math.rad(3 * math.sin(k * 7.1)), 0)
+	local color = shade(BURLAP, k)
+	piece(parent, base, V3.new(0, -size.Y * 0.12, 0), V3.new(size.X, size.Y * 0.76, size.Z), color, E.Material.Fabric)
+	piece(
+		parent,
+		base,
+		V3.new(0, size.Y * 0.26, 0),
+		V3.new(size.X * 0.86, size.Y * 0.4, size.Z * 0.78),
+		color,
+		E.Material.Fabric
+	)
+	piece(
+		parent,
+		base,
+		V3.new(size.X / 2 - 0.25, -size.Y * 0.05, 0),
+		V3.new(0.5, size.Y * 0.62, size.Z * 0.6),
+		shade(BURLAP, k + 3),
+		E.Material.Fabric
+	)
+end
+
+-- Cette méthode permet de remplir une boîte relevée de sacs de sable en rangs croisés (léger retrait à chaque rang) ;
+-- une boîte basse devient un ou deux sacs couchés.
+local function sandbags(parent, frame, size)
+	local m = New("Model")
+	m.Name = "Sandbags"
+	m.Parent = parent
+	local layers = math.max(1, math.floor(size.Y / 1.05 + 0.5))
+	local h = size.Y / layers
+	local k = 0
+	for layer = 0, layers - 1 do
+		local inset = if layers > 2 then layer * 0.18 else 0
+		local lx, lz = size.X - 2 * inset, size.Z - 2 * inset
+		-- rangs croisés : les sacs changent de sens d'un rang à l'autre
+		local along = layer % 2 == 0
+		local bagL, bagW = 5.6, 3.3
+		local nx = math.max(1, math.floor((if along then lx / bagL else lx / bagW) + 0.35))
+		local nz = math.max(1, math.floor((if along then lz / bagW else lz / bagL) + 0.35))
+		local sx, sz = lx / nx, lz / nz
+		for i = 0, nx - 1 do
+			for j = 0, nz - 1 do
+				k += 1
+				local at = frame
+					* CF.new(-lx / 2 + (i + 0.5) * sx, -size.Y / 2 + (layer + 0.5) * h, -lz / 2 + (j + 0.5) * sz)
+				if along then
+					sandbag(m, at, V3.new(sx * 0.96, h, sz * 0.94), k)
+				else
+					sandbag(m, at * CF.Angles(0, math.pi / 2, 0), V3.new(sz * 0.96, h, sx * 0.94), k)
+				end
+			end
+		end
+	end
+	return m
+end
+
+-- Cette méthode permet de rhabiller une boîte relevée en caisse en bois : panneaux de planches, montants et traverses
+-- sombres sur les arêtes, écharpe en diagonale sur les deux grandes faces.
+local function crate(parent, frame, size)
+	local m = New("Model")
+	m.Name = "Crate"
+	m.Parent = parent
+	piece(m, frame, V3.zero, size - V3.new(0.1, 0.1, 0.1), CRATE, E.Material.WoodPlanks)
+	local t = math.min(0.45, math.min(size.X, size.Y, size.Z) * 0.12)
+	local hx, hy, hz = size.X / 2, size.Y / 2, size.Z / 2
+	local e = t / 2 - 0.05 -- retrait d'une baguette par rapport à l'arête
+	for _, a in { -1, 1 } do
+		for _, b in { -1, 1 } do
+			piece(m, frame, V3.new(a * (hx - e), 0, b * (hz - e)), V3.new(t, size.Y, t), BATTEN, E.Material.Wood)
+			piece(m, frame, V3.new(0, a * (hy - e), b * (hz - e)), V3.new(size.X, t, t), BATTEN, E.Material.Wood)
+			piece(m, frame, V3.new(a * (hx - e), b * (hy - e), 0), V3.new(t, t, size.Z), BATTEN, E.Material.Wood)
+		end
+	end
+	-- écharpes sur les deux faces les plus grandes
+	local alongX = size.X >= size.Z
+	local w = if alongX then size.X else size.Z
+	local len = math.sqrt(w * w + size.Y * size.Y) - 2 * t
+	local ang = math.atan2(size.Y, w)
+	for _, s in { -1, 1 } do
+		local cf = if alongX
+			then CF.new(0, 0, s * (hz + 0.02)) * CF.Angles(0, 0, ang)
+			else CF.new(s * (hx + 0.02), 0, 0) * CF.Angles(0, math.pi / 2, 0) * CF.Angles(0, 0, ang)
+		piece(m, frame, cf, V3.new(len, t, 0.12), BATTEN, E.Material.Wood)
+	end
+	return m
+end
+
+-- Cette méthode permet de remplir une boîte relevée de parpaings (blocs de béton à deux alvéoles) en rangs croisés.
+local function cinderBlocks(parent, frame, size)
+	local m = New("Model")
+	m.Name = "CinderBlocks"
+	m.Parent = parent
+	local layers = math.max(1, math.floor(size.Y / 1.8 + 0.5))
+	local h = size.Y / layers
+	for layer = 0, layers - 1 do
+		-- rangs croisés : le grand côté des blocs change d'axe d'un rang à l'autre
+		local along = (layer % 2 == 0) == (size.X >= size.Z)
+		local L = if along then size.X else size.Z
+		local D = if along then size.Z else size.X
+		local per = math.max(1, math.floor(L / 4.6 + 0.4))
+		local n = math.max(1, math.floor(D / 2.3 + 0.4))
+		local bl, bd = L / per - 0.12, D / n - 0.12
+		for i = 0, per - 1 do
+			for j = 0, n - 1 do
+				local u = -L / 2 + (i + 0.5) * L / per
+				local v = -D / 2 + (j + 0.5) * D / n
+				local y = -size.Y / 2 + (layer + 0.5) * h
+				local at = if along then CF.new(u, y, v) else CF.new(v, y, u) * CF.Angles(0, math.pi / 2, 0)
+				local color = shade(BLOCK, layer * 7 + i * 3 + j)
+				piece(m, frame, at, V3.new(bl, h - 0.06, bd), color, E.Material.Concrete)
+				-- deux alvéoles sur le dessus
+				for _, s in { -1, 1 } do
+					piece(
+						m,
+						frame,
+						at * CF.new(s * bl / 4, h / 2 - 0.02, 0),
+						V3.new(bl * 0.32, 0.06, bd * 0.55),
+						C3.fromRGB(56, 54, 52),
+						E.Material.Concrete
+					)
+				end
+			end
+		end
+	end
+	return m
+end
+
+-- Cette méthode permet de rhabiller une boîte relevée en pile de plaques de plâtre : plaques empilées légèrement
+-- décalées, deux teintes alternées pour lire les tranches.
+local function drywall(parent, frame, size)
+	local m = New("Model")
+	m.Name = "Drywall"
+	m.Parent = parent
+	local n = math.max(1, math.floor(size.Y / 0.42 + 0.5))
+	local t = size.Y / n
+	for i = 0, n - 1 do
+		local dx, dz = 0.12 * math.sin(i * 2.3), 0.12 * math.cos(i * 3.1)
+		piece(
+			m,
+			frame,
+			V3.new(dx, -size.Y / 2 + (i + 0.5) * t, dz),
+			V3.new(size.X - 0.3, t - 0.03, size.Z - 0.3),
+			if i % 2 == 0 then SHEET else C3.fromRGB(196, 194, 186),
+			E.Material.SmoothPlastic
+		)
+	end
+	return m
+end
+
+-- Cette méthode permet de rhabiller une boîte relevée en bois brut (cales, chevrons) sans en changer la forme.
+local function timber(parent, frame, size)
+	local p = piece(parent, frame, V3.zero, size, BATTEN, E.Material.Wood)
+	p.Name = "Timber"
+	return p
+end
+
+local REDRESS_KINDS = {
+	sandbags = sandbags,
+	crate = crate,
+	cinder = cinderBlocks,
+	drywall = drywall,
+	timber = timber,
+}
+
 -- Repères côté T (le côté CT en est le symétrique) -----------------------------------------------------------------
 
 -- Cette méthode permet de bâtir un repère au sol tourné vers `front` (vecteur horizontal) à partir de coordonnées.
@@ -481,6 +756,85 @@ DizzyDressing.LAMPS = {
 	facing(-65.03, 89.5, -212.4, 1, 0),
 }
 
+-- échelles des murs des rampes sur pilotis (relevées en boîtes, retirées par dizzy_patches.luau) : pied sur le nu du
+-- mur ; haut des rails, dessus de l'acrotère, sol du toit et bas du volume de grimpe, relatifs au pied
+DizzyDressing.LADDERS = {
+	{ frame = facing(-97.54, 72, -188.98, 0, 1), top = 35.5, parapet = 33.39, roof = 32.65, from = -11 },
+}
+
+-- Objets relevés en boîtes, rhabillés sur place : la boîte d'origine reste (invisible) pour la collision, l'habillage
+-- est sans collision. Coordonnées du monde (comme dizzy_patches.luau), `group` = groupe source (attribut Group),
+-- `minVolume` / `maxVolume` pour trier les boîtes d'une même zone. Chantiers des étages (T vers (1925, 76, -360), CT vers
+-- (2074, 76, -160)) et tas de sacs sous la rampe CT.
+DizzyDressing.REDRESS = {
+	{ kind = "sandbags", group = "stucco", why = "sacs de sable du chantier T",
+		zone = { center = { 1912.9, 79, -384 }, size = { 12, 14, 14 } } },
+	{ kind = "sandbags", group = "stucco", why = "sacs de sable du chantier CT",
+		zone = { center = { 2086, 79, -138.5 }, size = { 12, 14, 14 } } },
+	{ kind = "sandbags", group = "stucco", why = "sacs de sable sous la rampe CT (ouest)",
+		zone = { center = { 2077, 49, -427 }, size = { 10, 10, 12 } } },
+	{ kind = "sandbags", group = "stucco", why = "sacs de sable sous la rampe CT (est)",
+		zone = { center = { 2105, 49, -427.5 }, size = { 10, 10, 12 } } },
+	{ kind = "crate", group = "metal", why = "caisse debout du chantier T",
+		zone = { center = { 1915.29, 81.94, -368.43 }, size = { 1, 1, 1 } } },
+	{ kind = "crate", group = "metal", why = "caisse debout du chantier CT",
+		zone = { center = { 2075.62, 85.32, -169.89 }, size = { 1, 1, 1 } } },
+	{ kind = "crate", group = "plastic", why = "caisses sous la caisse debout CT",
+		zone = { center = { 2073.3, 78.13, -169.4 }, size = { 3, 1, 7 } } },
+	{ kind = "cinder", group = "rock", why = "parpaings du chantier T",
+		zone = { center = { 1929.5, 78, -348 }, size = { 14, 5, 14 } } },
+	{ kind = "cinder", group = "plastic", why = "parpaings du chantier CT",
+		zone = { center = { 2072.14, 78.13, -175.77 }, size = { 1, 1, 1 } } },
+	{ kind = "drywall", group = "sheetrock", why = "plaques de plâtre du chantier T", minVolume = 100,
+		zone = { center = { 1928.36, 73.5, -357.29 }, size = { 1, 4, 1 } } },
+	{ kind = "timber", group = "sheetrock", why = "cales entre les plaques T", maxVolume = 100,
+		zone = { center = { 1928.3, 73.51, -357.3 }, size = { 14, 0.5, 26 } } },
+	{ kind = "drywall", group = "metal", why = "plaques de plâtre du chantier CT", minVolume = 1000,
+		zone = { center = { 2072.62, 73.74, -160.46 }, size = { 1, 1, 1 } } },
+	{ kind = "timber", group = "metal", why = "chants et chevrons des plaques CT", maxVolume = 100,
+		zone = { center = { 2072.6, 72.3, -160.4 }, size = { 13, 3.5, 25 } } },
+}
+
+-- Cette méthode permet de rhabiller les boîtes relevées listées dans REDRESS lorsque la géométrie est posée : chaque
+-- boîte devient invisible (collision gardée) et reçoit son habillage dans `parent`. Lève une erreur si une zone ne
+-- contient aucune boîte (relevé changé). Renvoie le nombre de boîtes rhabillées.
+function DizzyDressing.redress(map, parent)
+	local geometry = map:FindFirstChild("Geometry")
+	local decor = geometry and geometry:FindFirstChild("Decor")
+	assert(decor, "Geometry.Decor absent")
+	local total = 0
+	for _, r in DizzyDressing.REDRESS do
+		local c = V3.new(r.zone.center[1], r.zone.center[2], r.zone.center[3])
+		local s = V3.new(r.zone.size[1], r.zone.size[2], r.zone.size[3])
+		local n = 0
+		for _, p in decor:GetChildren() do
+			local d = p.CFrame.Position - c
+			local v = p.Size.X * p.Size.Y * p.Size.Z
+			if
+				p:IsA("BasePart")
+				and p.Transparency < 1
+				and p:GetAttribute("Group") == r.group
+				and math.abs(d.X) <= s.X / 2
+				and math.abs(d.Y) <= s.Y / 2
+				and math.abs(d.Z) <= s.Z / 2
+				and v >= (r.minVolume or 0)
+				and v <= (r.maxVolume or math.huge)
+			then
+				local frame, size = upright(p.CFrame, p.Size)
+				REDRESS_KINDS[r.kind](parent, frame, size)
+				p.Transparency = 1
+				p.CastShadow = false
+				p:SetAttribute("Redress", r.why)
+				n += 1
+			end
+		end
+		assert(n > 0, string.format("REDRESS %q : aucune boîte dans la zone", r.why))
+		print(string.format("  habillage %q : %d boîte(s)", r.why, n))
+		total += n
+	end
+	return total
+end
+
 -- Cette méthode permet de poser tout l'habillage détaillé dans `map` (dossier Dressing) lorsque le générateur a fini
 -- la géométrie ; `offset` est le décalage de la map. Renvoie le nombre d'objets posés.
 function DizzyDressing.build(map, offset)
@@ -510,6 +864,16 @@ function DizzyDressing.build(map, offset)
 	for _, cf in DizzyDressing.LAMPS do
 		both(wallLamp, cf, V3.new(0, 0, 0), 1.8)
 	end
+	-- échelles : décor des deux côtés, volumes de grimpe dans Maps.Map.Ladders (LadderRules.LADDERS_FOLDER)
+	local volumes = New("Folder")
+	volumes.Name = "Ladders"
+	volumes.Parent = map
+	for _, l in DizzyDressing.LADDERS do
+		both(ladder, l.frame, l.top, l.parapet, l.roof)
+		ladderVolume(volumes, shift * l.frame, l.from, l.parapet + 5.6)
+		ladderVolume(volumes, shift * DizzyDressing.mirror(l.frame), l.from, l.parapet + 5.6)
+	end
+	count += DizzyDressing.redress(map, root)
 	return count
 end
 

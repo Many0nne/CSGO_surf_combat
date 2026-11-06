@@ -12,6 +12,7 @@ local CoyoteJump = require(script.Parent.CoyoteJump)
 local BhopSystem = require(script.Parent.BhopSystem)
 local CrouchSystem = require(script.Parent.CrouchSystem)
 local BoostSystem = require(script.Parent.BoostSystem)
+local LadderSystem = require(script.Parent.LadderSystem)
 local WeaponSystem = require(script.Parent.Parent.weapon.WeaponSystem)
 local InputModule = require(script.Parent.Parent.Parent.input.InputModule)
 local PhysicsUtils = require(ReplicatedStorage.Shared.PhysicsUtils)
@@ -19,6 +20,7 @@ local Config = require(ReplicatedStorage.Shared.MovementConfig)
 local MovementState = require(ReplicatedStorage.Shared.MovementState)
 local SpawnLaunch = require(ReplicatedStorage.Shared.SpawnLaunch)
 local MapRules = require(ReplicatedStorage.Shared.MapRules)
+local LadderRules = require(ReplicatedStorage.Shared.LadderRules)
 local NetworkProtocol = require(ReplicatedStorage.Shared.NetworkProtocol)
 local CharacterAnimator = require(ReplicatedStorage.Shared.CharacterAnimator)
 
@@ -54,6 +56,8 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 	GroundDetection.init(char)
 	WallSlide.init(char)
 	BoostSystem.init()
+	LadderSystem.init()
+	local ladderRegrab = 0 -- délai avant de pouvoir reprendre une échelle après en avoir sauté
 
 	-- Chute hors de l'île : signalée une fois au serveur, qui tue le joueur (KillZone)
 	local fellReported = false
@@ -95,6 +99,7 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 		end
 		local dt = math.min(rawDt, 1 / 30)
 		jumpLockout = math.max(0, jumpLockout - dt)
+		ladderRegrab = math.max(0, ladderRegrab - dt)
 
 		-- 1. Détection sol
 		local gnd = GroundDetection.getGroundInfo(hrp, velocity.Y, wasGrounded)
@@ -140,10 +145,39 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 		end
 		wishspeed = wishspeed * WeaponSystem.getSpeedMultiplier()
 
+		-- 6b. Échelle : remplace la physique sol/air tant qu'on est dans son volume (LadderRules). Au pied, une envie
+		-- qui ne monte pas laisse la marche normale (s'écarter, longer le mur).
+		local onLadder = false
+		local ladderNormal = if ladderRegrab <= 0 then LadderSystem.find(hrp.Position) else nil
+		if ladderNormal then
+			if shouldJump then
+				velocity = LadderRules.jumpOffVelocity(ladderNormal, Config.LADDER_JUMP_OFF)
+				ladderRegrab = Config.LADDER_REGRAB
+				onLadder = true
+			else
+				local pitch = camera and camera.getCameraPitch and camera.getCameraPitch() or 0
+				local wish3D = InputModule.getWishDir3D(camera and camera.getCameraYaw() or 0, pitch)
+				local climbSpeed = Config.LADDER_CLIMB_SPEED * wishspeed / Config.RUN_SPEED
+				local climb = LadderRules.climbVelocity(wish3D, ladderNormal, climbSpeed, gnd.onGround)
+				if not (gnd.onGround and climb.Y <= 0) then
+					velocity = climb
+					onLadder = true
+				end
+			end
+			if onLadder then
+				state = MovementState.AIRBORNE
+				surfNormal = nil
+				jumpLockout = JUMP_LOCKOUT
+				isGroundedState = false
+				isAirborneState = true
+			end
+		end
+
 		-- 7. Physique
 		local velXZ = PhysicsUtils.getXZ(velocity)
 		local willJump = false -- saut effectif ce tick (visible jusqu'au déplacement étape 8)
 
+		-- sur une échelle, la vitesse est déjà posée (6b) : ni friction, ni gravité, ni saut normal
 		if isGroundedState then
 			local projWishdir = gnd.slopeAngle > 1 and SlopeSystem.projectWishDir(wishdir, gnd.normal) or wishdir
 
@@ -164,7 +198,7 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 			else
 				velocity = Vector3.new(velocity.X, 0, velocity.Z)
 			end
-		elseif isAirborneState then
+		elseif isAirborneState and not onLadder then
 			-- StartGravity : demi-pas avant déplacement (schéma leapfrog Source)
 			velocity += Vector3.new(0, Config.GRAVITY * 0.5 * dt, 0)
 			-- AirAccelerate Source (velocity 3D, surfaceFriction selon contact rampe)
@@ -280,8 +314,10 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 				lastSafePos = candidate
 			end
 
-			-- FinishGravity : demi-pas après déplacement (schéma leapfrog Source)
-			velocity += Vector3.new(0, Config.GRAVITY * 0.5 * dt, 0)
+			-- FinishGravity : demi-pas après déplacement (schéma leapfrog Source), sauf sur une échelle
+			if not onLadder then
+				velocity += Vector3.new(0, Config.GRAVITY * 0.5 * dt, 0)
+			end
 			-- Clamp fall speed uniquement hors surf
 			if not surfNormal and velocity.Y < -Config.MAX_FALL_SPEED then
 				velocity = Vector3.new(velocity.X, -Config.MAX_FALL_SPEED, velocity.Z)
@@ -290,7 +326,12 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 			-- Mise à jour de la surf normale persistante : UNIQUEMENT les vraies rampes surf
 			-- (SURF_NORMAL_MIN <= Y < SURF_NORMAL_Y). Une face quasi verticale (Y < MIN) est un MUR,
 			-- pas du surf : la stocker désactiverait à tort le clamp de chute et changerait la friction.
-			if hitNormal and hitNormal.Y >= Config.SURF_NORMAL_MIN and hitNormal.Y < Config.SURF_NORMAL_Y then
+			if
+				not onLadder
+				and hitNormal
+				and hitNormal.Y >= Config.SURF_NORMAL_MIN
+				and hitNormal.Y < Config.SURF_NORMAL_Y
+			then
 				surfNormal = hitNormal
 			else
 				surfNormal = nil

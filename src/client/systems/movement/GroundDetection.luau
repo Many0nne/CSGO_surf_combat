@@ -1,6 +1,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.MovementConfig)
+local PhysicsUtils = require(ReplicatedStorage.Shared.PhysicsUtils)
 local CharacterDimensions = require(script.Parent.CharacterDimensions)
 
 local CAST_RADIUS = Config.CHAR_RADIUS - 0.05
@@ -75,13 +76,30 @@ function GroundDetection.getGroundInfo(rootPart: BasePart, velocityY: number?, w
 		return GROUND_MISS
 	end
 
+	-- Muret plus bas que le centre du corps : la sphère accroche son arête, au-dessus de la hauteur de marche, alors que
+	-- le sol est plus bas. Ce contact n'est pas le sol (sinon : normale d'arête non marchable, joueur passé en l'air à
+	-- chaque frame, collé au muret au lieu de le longer). On relance la sonde depuis la hauteur de marche.
+	local travel = result.Distance
+	local feetY = origin.Y - HALF_HEIGHT
+	local lowOrigin = Vector3.new(origin.X, feetY + Config.STEPUP_HEIGHT + CAST_RADIUS, origin.Z)
+	local drop = origin.Y - lowOrigin.Y
+	if drop > 0 and PhysicsUtils.isSideContact(result.Position.Y, feetY, Config.STEPUP_HEIGHT) then
+		local low = workspace:Spherecast(lowOrigin, CAST_RADIUS, Vector3.new(0, -(CAST_DIST - drop), 0), params)
+		if not low or PhysicsUtils.isSideContact(low.Position.Y, feetY, Config.STEPUP_HEIGHT) then
+			return GROUND_MISS
+		end
+		result = low
+		travel = low.Distance + drop
+		origin = lowOrigin
+	end
+
 	-- NORMALE DE CLASSIFICATION : le spherecast renvoie une normale d'ARÊTE sur les
 	-- jointures entre rampes. On relance un raycast fin droit sous le centre pour
 	-- récupérer la vraie normale de FACE (stable d'un segment à l'autre).
 	-- Longueur bornée au contact réel : sinon sur rampe courbe le rayon file plus bas
 	-- et lit une face plus plate (ou le sol SOUS la rampe) → faux "marchable".
 	local normal = result.Normal
-	local probeLen = result.Distance + CAST_RADIUS + 0.1
+	local probeLen = result.Distance + CAST_RADIUS + 0.1 -- depuis `origin` (relevée si la sonde a été relancée)
 	local centerRay = workspace:Raycast(origin, Vector3.new(0, -probeLen, 0), params)
 	if centerRay then
 		normal = centerRay.Normal
@@ -109,7 +127,7 @@ function GroundDetection.getGroundInfo(rootPart: BasePart, velocityY: number?, w
 		onGround = onGround,
 		normal = normal,
 		slopeAngle = slopeAngle,
-		distance = result.Distance - HALF_HEIGHT,
+		distance = travel - HALF_HEIGHT,
 		material = result.Material,
 		hitPosition = result.Position,
 	}
