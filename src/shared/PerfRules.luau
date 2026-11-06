@@ -135,4 +135,70 @@ function PerfRules.markerReport(totals: MarkerTotals, frames: number): { MarkerL
 	return lines
 end
 
+export type BenchSummary = {
+	gpuMeanMs: number,
+	gpuP95Ms: number,
+	cpuMeanMs: number,
+	frameMedianMs: number,
+	frameP99Ms: number,
+	frames: number,
+}
+
+-- Cette méthode permet de lire le centile p (0..1) d'une liste lorsque le banc résume une phase (copie triée).
+local function percentile(values: { number }, p: number): number
+	local n = #values
+	if n == 0 then
+		return 0
+	end
+	local sorted = table.clone(values)
+	table.sort(sorted)
+	return sorted[math.clamp(math.ceil(p * n), 1, n)]
+end
+
+-- Cette méthode permet de résumer une phase du banc (F4) lorsque ses frames ont été relevées : temps GPU et CPU du
+-- rendu (ms, par frame) et durée des frames (ms).
+function PerfRules.benchSummary(gpuMs: { number }, cpuMs: { number }, frameMs: { number }): BenchSummary
+	local gpuSum, cpuSum = 0, 0
+	for _, v in gpuMs do
+		gpuSum += v
+	end
+	for _, v in cpuMs do
+		cpuSum += v
+	end
+	return {
+		gpuMeanMs = #gpuMs > 0 and gpuSum / #gpuMs or 0,
+		gpuP95Ms = percentile(gpuMs, 0.95),
+		cpuMeanMs = #cpuMs > 0 and cpuSum / #cpuMs or 0,
+		frameMedianMs = percentile(frameMs, 0.5),
+		frameP99Ms = percentile(frameMs, 0.99),
+		frames = #frameMs,
+	}
+end
+
+-- Cette méthode permet de dire si une phase du banc est exploitable lorsqu'elle se termine : fenêtre restée au premier
+-- plan, et GPU mesuré (un client en arrière-plan ne rend presque rien, GPU à 0).
+function PerfRules.benchPhaseValid(s: BenchSummary, focusLost: boolean): boolean
+	return not focusLost and s.frames > 0 and s.gpuMeanMs > 0
+end
+
+-- Cette méthode permet de rédiger la ligne de console d'une phase du banc lorsqu'elle se termine, avec l'écart de GPU
+-- par rapport à la référence (nil pour la référence elle-même).
+function PerfRules.formatBenchLine(name: string, s: BenchSummary, valid: boolean, refGpuMs: number?): string
+	local delta = ""
+	if refGpuMs and valid then
+		delta = string.format(" (%+.1f)", s.gpuMeanMs - refGpuMs)
+	end
+	return string.format(
+		"BANC %-30s GPU moy %5.1f%s p95 %5.1f | CPU moy %5.1f | frame méd %5.1f p99 %5.1f ms%s",
+		name,
+		s.gpuMeanMs,
+		delta,
+		s.gpuP95Ms,
+		s.cpuMeanMs,
+		s.frameMedianMs,
+		s.frameP99Ms,
+		valid and "" or " | INVALIDE (fenêtre en arrière-plan : refaire le banc)"
+	)
+end
+
 return PerfRules

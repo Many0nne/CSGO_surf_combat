@@ -1,0 +1,35 @@
+return function(T, Loader)
+	local StepTiming = Loader.new():require("src/shared/StepTiming")
+
+	T.describe("StepTiming.split", function()
+		T.it("frame normale : un seul pas, du dt rendu exact", function()
+			local count, step = StepTiming.split(1 / 60)
+			T.expectEqual(count, 1)
+			T.expectNear(step, 1 / 60, 1e-12)
+		end)
+
+		T.it("frame d'exactement MAX_STEP : un seul pas", function()
+			local count, step = StepTiming.split(StepTiming.MAX_STEP)
+			T.expectEqual(count, 1)
+			T.expectNear(step, StepTiming.MAX_STEP, 1e-12)
+		end)
+
+		T.it("frame lente : découpée en pas égaux sans perdre de temps", function()
+			local count, step = StepTiming.split(0.073)
+			T.expectEqual(count, 3)
+			T.expectNear(count * step, 0.073, 1e-12)
+			T.expect(step <= StepTiming.MAX_STEP, "pas plus long que MAX_STEP")
+		end)
+
+		T.it("gel du client : plafonné à MAX_STEPS pas de MAX_STEP", function()
+			local count, step = StepTiming.split(2)
+			T.expectEqual(count, StepTiming.MAX_STEPS)
+			T.expectNear(step, StepTiming.MAX_STEP, 1e-12)
+		end)
+
+		T.it("dt nul ou négatif : aucun pas", function()
+			T.expectEqual((StepTiming.split(0)), 0)
+			T.expectEqual((StepTiming.split(-0.01)), 0)
+		end)
+	end)
+end

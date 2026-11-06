@@ -24,8 +24,11 @@ local LadderRules = require(ReplicatedStorage.Shared.LadderRules)
 local NetworkProtocol = require(ReplicatedStorage.Shared.NetworkProtocol)
 local CharacterAnimator = require(ReplicatedStorage.Shared.CharacterAnimator)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
+local StepTiming = require(ReplicatedStorage.Shared.StepTiming)
 
 local JUMP_LOCKOUT = 0.15 -- empêche re-grounding immédiat après un saut
+-- Boucle de mouvement, sur le rendu juste avant la caméra (cf. docs/performance.md, « Rythme du mouvement »)
+local BIND_NAME = "MovementStep"
 
 local slideParams = RaycastParams.new()
 slideParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -33,13 +36,18 @@ slideParams.FilterType = Enum.RaycastFilterType.Exclude
 local MovementController = {}
 
 local lastVelocity = Vector3.zero -- vitesse du dernier pas, lue par la sonde de saccades (debug/FrameProbe)
--- Boucle du personnage courant : débranchée au spawn suivant (sinon une boucle de plus par mort, cf. docs/performance.md)
-local stepConn: RBXScriptConnection?
+local stepCount, simulatedTime = 0, 0 -- pas simulés et temps simulé depuis le démarrage (sonde de saccades)
 
--- Cette méthode permet de lire la vitesse simulée au dernier Heartbeat lorsqu'un outil de debug la compare
+-- Cette méthode permet de lire la vitesse simulée au dernier pas lorsqu'un outil de debug la compare
 -- au déplacement réellement rendu.
 function MovementController.getVelocity(): Vector3
 	return lastVelocity
+end
+
+-- Cette méthode permet de lire le nombre de pas et le temps simulés depuis le démarrage lorsque la sonde de saccades
+-- compare, frame par frame, le temps simulé au temps rendu.
+function MovementController.getStepStats(): (number, number)
+	return stepCount, simulatedTime
 end
 
 function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, speedometer, camera)
@@ -96,14 +104,9 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 	applyLaunch()
 	char:GetAttributeChangedSignal(SpawnLaunch.VELOCITY_ATTRIBUTE):Connect(applyLaunch)
 
-	if stepConn then
-		stepConn:Disconnect()
-	end
-	stepConn = RunService.Heartbeat:Connect(PerfMarkers.wrap("mouvement", function(rawDt)
-		if not hrp.Parent then
-			return
-		end
-		local dt = math.min(rawDt, 1 / 30)
+	-- Cette méthode permet d'avancer le personnage d'un pas de durée dt lorsque la boucle de rendu découpe sa frame
+	-- en pas (un seul pas par frame normale, plusieurs après une frame lente : cf. StepTiming).
+	local function step(dt: number)
 		jumpLockout = math.max(0, jumpLockout - dt)
 		ladderRegrab = math.max(0, ladderRegrab - dt)
 
@@ -384,7 +387,28 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 		})
 
 		wasGrounded = isGroundedState
-	end))
+		stepCount += 1
+		simulatedTime += dt
+	end
+
+	-- Sur le rendu, juste avant la caméra (priorité Camera) : le perso avance du temps de la frame affichée, et la
+	-- caméra lit dans la même frame la position que ce pas vient de poser. Sur Heartbeat, le pas suivait un autre
+	-- chronomètre que l'image et le déplacement affiché variait de 30 % d'une frame à l'autre (saccades en surf).
+	-- Rebrancher remplace la boucle du personnage précédent (sinon une boucle de plus par mort).
+	RunService:UnbindFromRenderStep(BIND_NAME)
+	RunService:BindToRenderStep(
+		BIND_NAME,
+		Enum.RenderPriority.Camera.Value - 1,
+		PerfMarkers.wrap("mouvement", function(rawDt: number)
+			if not hrp.Parent then
+				return
+			end
+			local count, dt = StepTiming.split(rawDt)
+			for _ = 1, count do
+				step(dt)
+			end
+		end)
+	)
 end
 
 return MovementController

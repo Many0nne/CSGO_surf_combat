@@ -1,6 +1,6 @@
 -- FrameProbe.luau (client)
 -- Sonde de saccades, active uniquement dans Studio quand l'attribut joueur `FrameProbe` vaut true. Mesure chaque
--- frame rendue (dt, pas Heartbeat, déplacement de la racine, vitesse simulée, rotation, mémoire Lua) et n'écrit
+-- frame rendue (dt, pas de mouvement simulés, déplacement de la racine, vitesse simulée, rotation, mémoire Lua) et n'écrit
 -- une ligne `[FrameProbe]` que pour une frame anormale (règles : shared/FrameProbeRules), plus un bilan toutes les 10 s.
 
 local Players = game:GetService("Players")
@@ -19,7 +19,7 @@ local LOG_COOLDOWN = 0.25 -- secondes minimum entre deux lignes d'un même type
 type Deps = {
 	player: Player?,
 	fpsCamera: any, -- FPSCamera (getCameraYaw)
-	movement: any, -- MovementController (getVelocity)
+	movement: any, -- MovementController (getVelocity, getStepStats)
 }
 
 type Probe = Rules.Sample & { gcDeltaKb: number, fpsMs: number? }
@@ -29,9 +29,8 @@ local FrameProbe = {}
 local deps: Deps
 local active = false
 local waiting = false -- true tant que le joueur n'a pas de personnage (menu, mort)
-local heartbeatConn: RBXScriptConnection?
 local startClock = 0
-local steps, hbDt = 0, 0
+local lastStepCount, lastSimTime = 0, 0 -- compteurs du MovementController au rendu précédent
 local lastPos: Vector3?
 local lastYaw = 0
 local lastGc = 0
@@ -97,12 +96,12 @@ local function report(kinds: { string }, source: string?, s: Probe, medianDt: nu
 	suppressed[label] = nil
 	log(
 		string.format(
-			"%s dt=%.1fms (médiane %.1fms) steps=%d hbDt=%.1fms disp=%.3f vRendue=%.1f vSim=%.1f yaw=%.0f°/s gcΔ=%+dKB arme=%s%s%s",
+			"%s dt=%.1fms (médiane %.1fms) steps=%d simDt=%.1fms disp=%.3f vRendue=%.1f vSim=%.1f yaw=%.0f°/s gcΔ=%+dKB arme=%s%s%s",
 			label,
 			s.dt * 1000,
 			medianDt * 1000,
 			s.steps,
-			s.hbDt * 1000,
+			s.simDt * 1000,
 			s.disp,
 			s.dt > 0 and s.disp / s.dt or 0,
 			s.simSpeed,
@@ -135,21 +134,24 @@ local function onRender(dt: number)
 	local pos = root.Position
 	local yaw = deps.fpsCamera.getCameraYaw()
 	local gc = gcinfo()
+	local stepCount, simTime = deps.movement.getStepStats()
+	local steps, simDt = stepCount - lastStepCount, simTime - lastSimTime
+	lastStepCount, lastSimTime = stepCount, simTime
 	if not lastPos or dt <= 0 then
-		lastPos, lastYaw, lastGc, steps, hbDt = pos, yaw, gc, 0, 0
+		lastPos, lastYaw, lastGc = pos, yaw, gc
 		return
 	end
 
 	local sample: Probe = {
 		dt = dt,
-		hbDt = hbDt,
+		simDt = simDt,
 		steps = steps,
 		disp = (pos - lastPos).Magnitude,
 		simSpeed = deps.movement.getVelocity().Magnitude,
 		yawRate = math.abs(yaw - lastYaw) / dt,
 		gcDeltaKb = gc - lastGc,
 	}
-	lastPos, lastYaw, lastGc, steps, hbDt = pos, yaw, gc, 0, 0
+	lastPos, lastYaw, lastGc = pos, yaw, gc
 
 	table.insert(dtWindow, dt)
 	if #dtWindow > WINDOW then
@@ -179,15 +181,12 @@ local function start()
 	active = true
 	startClock = os.clock()
 	lastSummary = startClock
-	steps, hbDt, lastPos, waiting = 0, 0, nil, false
+	lastStepCount, lastSimTime = deps.movement.getStepStats()
+	lastPos, waiting = nil, false
 	dtWindow, summaryDts, summaryCounts = {}, {}, {}
 	prevSample, curSample = nil, nil
 	lastLogAt, suppressed = {}, {}
-	heartbeatConn = RunService.Heartbeat:Connect(function(dt)
-		steps += 1
-		hbDt += dt
-	end)
-	-- Après la caméra (Camera) et le viewmodel (Camera + 1) : on mesure ce qui sera affiché.
+	-- Après le mouvement (Camera - 1), la caméra (Camera) et le viewmodel (Camera + 1) : on mesure ce qui sera affiché.
 	RunService:BindToRenderStep(BIND_NAME, Enum.RenderPriority.Camera.Value + 2, onRender)
 	log("ON : une ligne par frame anormale, un BILAN toutes les " .. SUMMARY_PERIOD .. " s")
 end
@@ -198,10 +197,6 @@ local function stop()
 		return
 	end
 	active = false
-	if heartbeatConn then
-		heartbeatConn:Disconnect()
-		heartbeatConn = nil
-	end
 	RunService:UnbindFromRenderStep(BIND_NAME)
 	flushSummary()
 	log("OFF")
