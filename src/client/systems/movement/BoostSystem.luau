@@ -14,7 +14,6 @@ local BoostSystem = {}
 local boosts: { Boost } = {}
 local lastUse: { [BasePart]: number } = {}
 local watching = false
-local mapModel: Instance? = nil
 
 -- Cette méthode permet d'enregistrer un volume de boost lorsqu'il apparaît dans le dossier de la map.
 local function register(inst: Instance)
@@ -42,7 +41,6 @@ function BoostSystem.init()
 	watching = true
 	task.spawn(function()
 		local map = MapSelection.waitForActive(30)
-		mapModel = map
 		local folder = map and map:WaitForChild(MapRules.BOOSTS_FOLDER, 30)
 		if not folder then
 			return
@@ -77,12 +75,6 @@ function BoostSystem.check(pos: Vector3, velocity: Vector3, now: number): (Vecto
 		end
 	end
 	return nil, nil
-end
-
--- Cette méthode permet de lire la hauteur de mort de la map (attribut KillHeight) lorsque le mouvement vérifie
--- une chute hors de l'île ; nil tant que la map n'est pas trouvée ou si elle n'en déclare pas.
-function BoostSystem.killHeight(): any
-	return mapModel and mapModel:GetAttribute(MapRules.KILL_HEIGHT_ATTRIBUTE)
 end
 
 return BoostSystem

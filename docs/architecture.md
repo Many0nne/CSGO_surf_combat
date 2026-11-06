@@ -11,6 +11,8 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `Players.CharacterAutoLoads = false` (`init.server.luau`) : les personnages n'apparaissent que via le remote `RequestSpawn`.
 - Un round démarre quand un joueur demande à spawn alors que le round est à l'état `idle` (`init.server.luau`).
 - `SpawnManager` tire un lanceur au hasard dans `SunLaunch` de la map jouée (map versionnée dans `assets/rbx/Maps`, cf. `docs/maps.md`) : le joueur est projeté depuis le soleil, invulnérable `GameConfig.SPAWN_PROTECTION` secondes. Sans lanceur, il tire un point dans `GroundSpawns` ; sans aucun point, il avertit et utilise `(0, 10, 0)`.
+- **Position des personnages (#75) :** la racine est ancrée (client et serveur, `StarterCharacter`) et déplacée à la main par `MovementController` : la physique ne réplique rien. Le client envoie sa position et son cap à `MovementConfig.NET_SYNC_RATE` (`UnreliableRemoteEvent` `CharacterSync`) ; `src/server/CharacterSync.luau` vérifie le déplacement depuis le dernier point accepté (`MAX_SPEED_SERVER`, `MAX_DELTA_POS`, règles dans `CharacterSyncRules`), pose le CFrame de la racine serveur, teste la hauteur de mort, et relaie la position horodatée aux autres clients, qui l'interpolent avec `INTERP_DELAY` de retard. Une position impossible est ignorée avec un warn, sans renvoi du client.
+- **Piège, écho serveur :** le CFrame posé par le serveur se réplique aussi au client propriétaire, avec un aller-retour de retard. `MovementController` réécrit donc son dernier CFrame (`ownCFrame`) avant chaque pas, sinon le personnage recule à chaque paquet. Tout déplacement client de la racine hors de la boucle de mouvement doit mettre `ownCFrame` à jour (cf. `applyLaunch`), et une téléportation décidée par le serveur sur un personnage vivant serait annulée par le client.
 - `StatsStore` désactive la sauvegarde pour la session si le chargement DataStore échoue, pour ne pas écraser les données.
 - **Crash de Rojo :** `rojo serve` 7.7.1 peut s'arrêter sur `Rojo crashed!` (`change_processor.rs:172`, fichier introuvable). Constaté après la suppression puis la recréation immédiate de fichiers surveillés dans `src/` (cause probable, non reproduite) : écrire par-dessus un fichier plutôt que le supprimer d'abord. Si Rojo ne répond plus, lire `worktrees/.run/<slug>.log`, relancer `.\scripts\csgo-worktree.ps1 <branche>`, puis reconnecter le plugin.
 - **Erreur console `rbxassetid://203785492` (#93) :** `ContentId: rbxassetid://203785492 failed due to: Asset type does not match requested type`, plusieurs fois au lancement d'un playtest, vient du plugin Rojo, pas du jeu. C'est son son de notification (`Rojo.Plugin.Assets`, `Sounds.Notification`, audio « Pop Close Sound »), chargé côté client par le widget `Rojo_soundPlayer`. Aucune instance de la place ne le référence. L'ignorer ; pour le faire taire, désactiver « Play Sounds » dans les réglages du plugin Rojo.
@@ -50,6 +52,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/client/systems/game/GameStateController.luau`: machine d'état client (MENU/INFOS/SPAWNING/IN_ROUND/DEAD/RESULT), coordination UI ↔ remotes.
 - `src/client/systems/game/MenuScene.luau`: scène 3D du menu (canyon, AWP qui suit le curseur, surfeurs à abattre, plongée sur JOUER), éclairage temporaire rétabli à la sortie.
 - `src/client/systems/game/MenuSceneRules.luau`: règles pures de cette scène (amortis, angles de visée, trajectoire, touche).
+- `src/client/systems/network/CharacterSync.luau`: envoi de la position du personnage local (appelé par `MovementController`) et affichage des autres joueurs à leur position relayée, interpolée (rendu, priorité `Camera - 2`).
 - `src/client/systems/movement/BoostSystem.luau`: boosts de la map (geysers, lanceurs, portiques de `Maps.Map.Boosts`) détectés à chaque frame, avec recharge par boost.
 - `src/client/systems/movement/BhopSystem.luau`: implémentation du bunnyhop (saut en chaîne).
 - `src/client/systems/movement/CharacterDimensions.luau`: calcule les dimensions du personnage et les hitboxes debout/accroupi.
@@ -88,7 +91,8 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/client/ui/UIKit.luau`: briques communes des écrans (création d'Instances, texte au thème, tweens, icônes, mise à l'échelle).
 - `src/server/DebugPlaytest.luau`: helper de playtest (Studio uniquement) : déclenché par un attribut joueur, enchaîne spawn, équipement, cible immobile et attaque, avec un PASS/FAIL par étape.
 - `src/server/FeedbackService.luau`: réception des feedbacks côté serveur (longueur, délai entre deux envois, limite hebdomadaire).
-- `src/server/KillZone.luau`: mort par chute : tue le joueur qui signale (remote `FellOut`) être passé sous `Maps.Map.KillHeight`, détecté par `MovementController`.
+- `src/server/CharacterSync.luau`: position des joueurs côté serveur : validation de la position envoyée par le client, racine serveur déplacée, relais aux autres clients (cf. « Position des personnages »).
+- `src/server/KillZone.luau`: mort par chute : tue le joueur dont la position validée par `CharacterSync` passe sous `Maps.Map.KillHeight`.
 - `src/server/RoundManager.luau`: boucle de round FFA (timer, kills/deaths, fin de round, diffusion résultat).
 - `src/server/SettingsStore.luau`: module vide, non utilisé pour l'instant.
 - `src/server/SpawnManager.luau`: gestion du spawn différé (RequestSpawn remote, LoadCharacter, lancement depuis le soleil ou point au sol, ForceField de protection).
@@ -96,6 +100,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/server/Validator.luau`: décision serveur des touches melee et hitscan (cible, arme en main, partie touchée, portée, cadence), calcul des dégâts depuis `WeaponConfig` (zone du corps pour le hitscan, backstab pour la mêlée) et qualification d'une touche (hit/kill).
 - `src/server/init.server.luau`: point d'entrée serveur — crée tous les RemoteEvents, orchestre SpawnManager, RoundManager, StatsStore.
 - `src/shared/CameraConfig.luau`: constantes caméra (FOV, sensibilité, pitch min/max, hauteurs, lerp speed, scope sens multiplier).
+- `src/shared/CharacterSyncRules.luau`: règles pures de la synchro de position (forme d'un paquet, déplacement plausible, tampon et interpolation des autres joueurs), testées (`tests/specs/CharacterSyncRules.spec.luau`).
 - `src/shared/CharacterAnimator.luau`: pipeline d'animation 3e personne des joueurs (état de mouvement → piste, fondus, vitesse de lecture) ; alimenté par `MovementController` (client, répliqué via l'Animator).
 - `src/shared/CharacterAppearance.luau`: rig de référence (`StarterPlayer.StarterCharacter`, cloné pour la cible du helper de playtest) et application du skin commun (BodyColors + vêtements) côté serveur.
 - `src/shared/CharacterConfig.luau`: rig/skin communs (couleurs, ids d'images Shirt/Pants/visage) et animations 3e personne (ids, fallbacks, seuils de vitesse, fondus).
@@ -111,7 +116,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/shared/MapRules.luau`: règles pures de la map (volume et vitesse des boosts, hauteur de mort, tir balistique), testées (`tests/specs/MapRules.spec.luau`).
 - `src/shared/MovementConfig.luau`: constantes physique du mouvement uniquement (vitesses, accel, friction, saut, pentes, bhop, réseau, hitbox).
 - `src/shared/MovementState.luau`: structure d'état partagée pour le mouvement du joueur.
-- `src/shared/NetworkProtocol.luau`: noms des RemoteEvents et helper getRemote(name). Remotes : MeleeDamage, HitscanDamage, HitConfirm, RequestSpawn, RoundState, ScoreUpdate, RoundResult, PlayerDied, FellOut, WeaponAction, SendFeedback, FeedbackAck, DebugPlaytest (créé uniquement dans Studio).
+- `src/shared/NetworkProtocol.luau`: noms des RemoteEvents et helper getRemote(name). Remotes : MeleeDamage, HitscanDamage, HitConfirm, RequestSpawn, RoundState, ScoreUpdate, RoundResult, PlayerDied, CharacterSync (non fiable), WeaponAction, SendFeedback, FeedbackAck, DebugPlaytest (créé uniquement dans Studio).
 - `src/shared/PhysicsUtils.luau`: fonctions utilitaires pour la physique.
 - `src/shared/StepTiming.luau`: découpage du dt d'une frame rendue en pas de mouvement (une frame lente donne plusieurs pas au lieu d'être tronquée), testé (`tests/specs/StepTiming.spec.luau`).
 - `src/shared/UITheme.luau`: tokens de style de l'interface (couleurs, polices, tailles, durées, courbes).

@@ -6,6 +6,7 @@ local StepupSystem = require(script.systems.movement.StepupSystem)
 local WallSlide = require(script.systems.movement.WallSlide)
 local CharacterDimensions = require(script.systems.movement.CharacterDimensions)
 local MovementController = require(script.systems.movement.MovementController)
+local CharacterSync = require(script.systems.network.CharacterSync)
 local ViewmodelSystem = require(script.systems.weapon.ViewmodelSystem)
 local WeaponSystem = require(script.systems.weapon.WeaponSystem)
 local WeaponThirdPersonView = require(script.systems.weapon.WeaponThirdPersonView)
@@ -25,6 +26,8 @@ local player = Players.LocalPlayer
 ViewmodelSystem.init(player)
 WeaponSystem.init(player)
 WeaponThirdPersonView.init()
+-- Autres joueurs affichés à la position relayée par le serveur (#75) ; notre position part de MovementController
+CharacterSync.init()
 
 local stateConn: RBXScriptConnection?
 
