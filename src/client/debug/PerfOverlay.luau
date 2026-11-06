@@ -121,12 +121,16 @@ local function buildText(markers: { PerfRules.MarkerLine }): string
 			Stats.DataSendKbps
 		),
 	}
-	local mem = {}
-	for _, entry in PerfRules.OVERLAY_TAGS do
-		table.insert(mem, string.format("%s %.0f", entry.label, tags[entry.tag] or 0))
+	if next(tags) then
+		local mem = {}
+		for _, entry in PerfRules.OVERLAY_TAGS do
+			table.insert(mem, string.format("%s %.0f", entry.label, tags[entry.tag] or 0))
+		end
+		table.insert(lines, "  " .. table.concat(mem, "  ", 1, 7))
+		table.insert(lines, "  " .. table.concat(mem, "  ", 8))
+	else
+		table.insert(lines, "  catégories : suivi mémoire désactivé par le moteur (client publié)")
 	end
-	table.insert(lines, "  " .. table.concat(mem, "  ", 1, 7))
-	table.insert(lines, "  " .. table.concat(mem, "  ", 8))
 	table.insert(lines, "Scripts           ms/frame  appels/frame  max ms")
 	for i, m in markers do
 		if i > MAX_MARKERS then

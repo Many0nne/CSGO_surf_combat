@@ -19,16 +19,6 @@ local isScoped = false
 local currentSens = baseSens
 local activeFovTween: Tween? = nil
 
--- Interpolation de position entre deux pas physiques (Heartbeat).
--- Le perso est deplace par CFrame sur Heartbeat (~60 Hz) ; la camera rend a la
--- frequence d'affichage (souvent > 60 Hz). Lire hrp.Position directement au rendu
--- donne une position en escalier => saccades quand on translate ET tourne. On
--- interpole donc entre les deux dernieres positions connues.
-local renderPrevPos: Vector3? = nil
-local renderCurPos: Vector3? = nil
-local lastStepClock = 0
-local lastStepDt = 0
-
 local function hideCharacterPart(obj: Instance)
 	if obj:IsA("BasePart") then
 		(obj :: BasePart).LocalTransparencyModifier = 1
@@ -37,8 +27,6 @@ end
 
 function FPSCamera.init(hrp: BasePart, char: Model)
 	hrpRef = hrp
-	renderPrevPos = hrp.Position
-	renderCurPos = hrp.Position
 	cam.CameraType = Enum.CameraType.Scriptable
 	cam.FieldOfView = CameraConfig.DEFAULT_FOV
 	UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
@@ -63,30 +51,14 @@ function FPSCamera.init(hrp: BasePart, char: Model)
 			yaw = yaw + delta.X * currentSens
 			pitch = math.clamp(pitch - delta.Y * currentSens, CameraConfig.PITCH_MIN, CameraConfig.PITCH_MAX)
 
-			-- Position : interpolee entre les deux derniers pas physiques.
-			local basePos: Vector3
-			if renderPrevPos and renderCurPos and lastStepDt > 0 then
-				local alpha = math.clamp((os.clock() - lastStepClock) / lastStepDt, 0, 1)
-				basePos = renderPrevPos:Lerp(renderCurPos, alpha)
-			else
-				basePos = hrpRef.Position
-			end
-
-			local headPos = basePos + Vector3.new(0, currentCamHeight, 0)
+			-- Position : celle que le MovementController vient de poser dans cette même frame (il tourne juste avant,
+			-- sur le dt du rendu), donc sans interpolation ni retard.
+			local headPos = hrpRef.Position + Vector3.new(0, currentCamHeight, 0)
 			cam.CFrame = CFrame.new(headPos)
 				* CFrame.Angles(0, math.rad(-yaw), 0)
 				* CFrame.Angles(math.rad(pitch), 0, 0)
 		end)
 	)
-end
-
--- A APPELER depuis le MovementController, sur Heartbeat, JUSTE APRES avoir pose hrp.CFrame :
---   FPSCamera.updateRoot(hrp.Position, dt)
-function FPSCamera.updateRoot(pos: Vector3, dt: number)
-	renderPrevPos = renderCurPos or pos
-	renderCurPos = pos
-	lastStepClock = os.clock()
-	lastStepDt = dt
 end
 
 function FPSCamera.setCamHeight(h: number)

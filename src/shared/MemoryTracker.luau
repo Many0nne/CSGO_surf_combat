@@ -17,9 +17,13 @@ local count = 0
 local first: PerfRules.MemorySnapshot?
 local last: PerfRules.MemorySnapshot?
 
--- Cette méthode permet de lire la mémoire de toutes les catégories lorsqu'un relevé ou l'overlay en a besoin.
+-- Cette méthode permet de lire la mémoire de toutes les catégories lorsqu'un relevé ou l'overlay en a besoin
+-- (table vide si le moteur ne suit pas la mémoire, comme dans le client publié : chaque lecture y écrirait un warning).
 function MemoryTracker.readTags(): { [string]: number }
 	local tags = {}
+	if not Stats.MemoryTrackingEnabled then
+		return tags
+	end
 	for _, item in Enum.DeveloperMemoryTag:GetEnumItems() do
 		tags[item.Name] = Stats:GetMemoryUsageMbForTag(item)
 	end

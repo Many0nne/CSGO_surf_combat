@@ -36,7 +36,8 @@
 
     "Workspace": {
       "$properties": {
-        "FilteringEnabled": true
+        "FilteringEnabled": true,
+        "StreamingEnabled": false
       },
       "Maps": {
         "$path": "assets/rbx/Maps"

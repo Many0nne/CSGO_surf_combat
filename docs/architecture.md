@@ -38,10 +38,11 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 
 ## `src/`
 
-- `src/client/camera/FPSCamera.luau`: contrôles et logique de la caméra FPS (position lue directement sur `hrp.Position` au rendu : l'interpolation `updateRoot` n'est appelée nulle part).
+- `src/client/camera/FPSCamera.luau`: contrôles et logique de la caméra FPS (rendu, priorité `Camera`) : rotation à la souris, position lue sur `hrp.Position` juste après le pas de mouvement de la même frame.
 - `src/client/debug/DebugPlaytest.luau`: moitié client du helper de playtest (Studio uniquement) : exécute les commandes du serveur et observe pistes, marqueurs et sons.
 - `src/client/debug/FrameProbe.luau`: sonde de saccades (Studio uniquement, attribut joueur `FrameProbe`) : mesure chaque frame et signale les frames anormales, cf. `docs/performance.md`.
 - `src/client/debug/PerfOverlay.luau`: overlay de performance (touche F3, Studio ou créateur du jeu publié) : frames, coût du rendu, mémoire, réseau, coût de nos boucles, bilan console toutes les 10 s ; active aussi les relevés mémoire client, cf. `docs/performance.md`.
+- `src/client/debug/PerfBench.luau`: banc de rendu (touche F4 ou attribut `PerfBench`, mêmes droits que l'overlay) : coupe les leviers de rendu un par un et écrit une ligne `[Perf] BANC` par phase ; règles de résumé dans `PerfRules`.
 - `src/client/debug/Noclip.luau`: outil de debug pour activer/désactiver le noclip.
 - `src/client/init.client.luau`: point d'entrée client, initialise les modules côté client.
 - `src/client/input/InputModule.luau`: gestion des entrées utilisateur et mapping des actions.
@@ -56,7 +57,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/client/systems/movement/GroundDetection.luau`: détection du sol et transitions air/sol (un muret plus bas que le centre du corps n'est pas pris pour le sol : `PhysicsUtils.isSideContact`).
 - `src/client/systems/movement/LadderSystem.luau`: échelles de la map (volumes de `Maps.Map.Ladders`) détectées à chaque frame ; `MovementController` y remplace la physique sol/air par la grimpe.
 - `src/client/systems/movement/HeadCollisionResolver.luau`: résolution des collisions tête (plafond, mur haut) lors du déplacement.
-- `src/client/systems/movement/MovementController.luau`: orchestrateur principal du mouvement (boucle Heartbeat, transitions d'état) ; `getVelocity()` expose la vitesse du dernier pas (lue par la sonde de saccades).
+- `src/client/systems/movement/MovementController.luau`: orchestrateur principal du mouvement (boucle sur le rendu, priorité `Camera - 1`, découpée en pas par `StepTiming` ; transitions d'état) ; `getVelocity()` et `getStepStats()` exposent la vitesse du dernier pas et les pas simulés (lus par la sonde de saccades).
 - `src/client/systems/movement/PhysicsStepAir.luau`: étape physique aérienne (air accelerate Source + cap `AIR_SPEED_CAP`).
 - `src/client/systems/movement/PhysicsStepGround.luau`: étape physique pour l'état au sol.
 - `src/client/systems/movement/SlopeSystem.luau`: gestion des pentes et adaptation du mouvement.
@@ -99,7 +100,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/shared/DebugPlaytestRules.luau`: règles pures du helper de playtest (choix de l'outil, marqueurs et dégâts attendus, visée, rapport PASS/FAIL).
 - `src/shared/PerfMarkers.luau`: repères `PerfMarkers.wrap(nom, callback)` posés sur les boucles par frame (mouvement, caméra, viewmodel, armes, armes 3P, menu, timer de round) : nommés dans le MicroProfiler, chronométrés pour l'overlay.
 - `src/shared/PerfRules.luau`: règles pures de l'environnement de performance (droit d'accès, écarts mémoire, coût des repères), testées (`tests/specs/PerfRules.spec.luau`).
-- `src/shared/MemoryTracker.luau`: relevés mémoire `[Perf] MEM` (client : démarrage, spawn, fin de round ; serveur : démarrage, fin de round, départ d'un joueur).
+- `src/shared/MemoryTracker.luau`: relevés mémoire `[Perf] MEM` (client : démarrage, spawn, fin de round ; serveur : démarrage, fin de round, départ d'un joueur). Catégories lues seulement si `Stats.MemoryTrackingEnabled` (désactivé dans le client publié).
 - `src/shared/FrameProbeRules.luau`: règles pures de la sonde de saccades (classement HITCH/STUTTER/ROTATION/TELEPORT, cause probable, bilan), testées (`tests/specs/FrameProbeRules.spec.luau`).
 - `src/shared/GameConfig.luau`: constantes jeu (ROUND_DURATION=300, RESPAWN_DELAY=2.5, RESULT_DURATION=6, AUTO_SAVE_INTERVAL=120, SPAWN_PROTECTION=2.5).
 - `src/shared/SpawnLaunch.luau`: règles pures du lancement depuis le soleil (vitesse, angles de caméra, noms des attributs posés sur le personnage), testées (`tests/specs/SpawnLaunch.spec.luau`).
@@ -110,6 +111,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/shared/MovementState.luau`: structure d'état partagée pour le mouvement du joueur.
 - `src/shared/NetworkProtocol.luau`: noms des RemoteEvents et helper getRemote(name). Remotes : MeleeDamage, HitscanDamage, HitConfirm, RequestSpawn, RoundState, ScoreUpdate, RoundResult, PlayerDied, FellOut, WeaponAction, SendFeedback, FeedbackAck, DebugPlaytest (créé uniquement dans Studio).
 - `src/shared/PhysicsUtils.luau`: fonctions utilitaires pour la physique.
+- `src/shared/StepTiming.luau`: découpage du dt d'une frame rendue en pas de mouvement (une frame lente donne plusieurs pas au lieu d'être tronquée), testé (`tests/specs/StepTiming.spec.luau`).
 - `src/shared/UITheme.luau`: tokens de style de l'interface (couleurs, polices, tailles, durées, courbes).
 - `src/shared/WeaponConfig.luau`: définitions partagées des armes et de leurs paramètres par défaut (dont `ThirdPerson` : échelle, grip, pose 3P).
 - `src/shared/WeaponThirdPerson.luau`: arme 3e personne des joueurs : construction du modèle 3P depuis `ViewModels`, grip soudé à la main, pose des épaules, actions répliquées en attributs (`Weapon3PAction`/`Weapon3PActionAt`), règles pures (grip, décalages d'action, visibilité).

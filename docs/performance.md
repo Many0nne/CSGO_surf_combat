@@ -5,6 +5,7 @@
 | Question | Outil |
 |---|---|
 | Le jeu tient-il ses FPS ? Est-ce le CPU, le GPU, la map ou nos scripts ? | overlay F3 (Studio et jeu publié) |
+| Quel réglage de rendu coûte (ombres, Atmosphere, effets, translucides) ? | banc F4 (jeu publié de préférence) |
 | Quelle frame saccade, et pourquoi ? | sonde `FrameProbe` (Studio) |
 | Qu'est-ce qui coûte, à l'intérieur d'une frame lente ? | MicroProfiler (Ctrl+F6) : nos boucles y portent leur nom |
 | La mémoire grimpe-t-elle au fil des spawns et des rounds ? | relevés `[Perf] MEM` (console F9, client et serveur) |
@@ -31,11 +32,41 @@ mesure.
 | `Heartbeat`, `Physique` | temps du pas Heartbeat (nos scripts compris) et de la simulation physique |
 | `Draw calls`, `triangles` | scène et passe d'ombres séparées : une passe d'ombres proche de la scène signale des ombres à couper |
 | `Instances`, `pièces` | totaux du jeu ; `mobiles` et `contacts` doivent rester proches de 0 (tout est ancré, le perso est déplacé par CFrame) |
-| `Mémoire`, catégories | Mo par `Enum.DeveloperMemoryTag` (Lua, Instances, Textures, Pièces…) |
+| `Mémoire`, catégories | Mo par `Enum.DeveloperMemoryTag` (Lua, Instances, Textures, Pièces…). Le client publié ne suit pas la mémoire par catégorie (`Stats.MemoryTrackingEnabled` faux) : seul le total s'affiche. Lire une catégorie quand même écrit un warning par appel (22 000 en une session avant la correction) |
 | `Scripts` | coût de nos boucles par frame (`PerfMarkers`) : ms/frame, appels/frame, max. **Plus d'un appel par frame pour une boucle signale une connexion branchée en double** (fuite au respawn, par exemple) |
 
 Tant qu'il est ouvert, une ligne `[Perf] BILAN` résume toutes les 10 s FPS, p99, max, CPU/GPU, draw calls, mémoire, réglage
 graphique et coût des scripts. À la fermeture, un dernier bilan est écrit.
+
+## Streaming désactivé (#88)
+
+`Workspace.StreamingEnabled` vaut **false**, fixé dans `default.project.json` (avant, réglage de la place : activé, rayon
+minimal 64 studs, `PauseOutsideLoadedArea`). Avec le streaming, le client ne charge la map qu'autour du personnage : en
+surf rapide (200 studs/s et plus), il charge et décharge en continu pendant le mouvement, et le moteur peut mettre le
+joueur en pause s'il sort de la zone chargée. C'était la principale cause des pertes de frames ressenties « en
+mouvement, pas à l'arrêt ». Une map de la taille de Dizzy (16 000 pièces) se charge en entier sans difficulté. Le
+mouvement (raycasts côté client) a aussi besoin de toute la géométrie autour du joueur. Ne pas le réactiver sans
+mesurer en mouvement.
+
+## Banc F4
+
+`src/client/debug/PerfBench.luau`, mêmes droits que l'overlay (Studio, ou créateur du jeu publié). **F4** coupe les
+leviers de rendu l'un après l'autre, sur le seul poste qui le lance :
+
+- ombres du soleil ;
+- `Atmosphere` ;
+- effets actifs de `Lighting` (Bloom, SunRays…) ;
+- pièces translucides de chaque dossier de la map (`LocalTransparencyModifier`).
+
+Puis tout ensemble, et une référence de contrôle. Chaque phase dure 8 s (2 s de stabilisation, 6 s mesurées) et écrit
+une ligne `[Perf] BANC` : GPU moyen (écart à la référence), p95, CPU moyen, durée médiane et p99 des frames. Tout est
+rétabli à la fin ; rappuyer sur F4 annule après la phase en cours. Attribut joueur `PerfBench` = true : même effet,
+pour un banc piloté par le MCP.
+
+Conditions : **en jeu**, pas au menu (si le streaming était réactivé, la map n'y serait pas chargée : le banc le signale),
+immobile, la fenêtre au premier plan du début à la fin. Une phase pendant laquelle la fenêtre a perdu le focus est
+marquée `INVALIDE` : dans Studio, quitter la fenêtre pour écrire ailleurs suffit à fausser le banc (GPU à 0, 15 FPS).
+Les écarts de moins de 2 ms entre phases sont du bruit, d'où la référence de contrôle en fin de banc.
 
 ## Repères de scripts (`PerfMarkers`)
 
@@ -46,7 +77,7 @@ fermé), et il est chronométré seulement quand l'overlay est ouvert. Repères 
 passer par `wrap`.
 
 Dans le MicroProfiler (Ctrl+F6, puis pause pour figer une frame lente), ces noms apparaissent sous `Heartbeat` ou
-`RenderStep` : on voit si une frame lente vient de nos scripts ou du moteur (rendu, physique, GC).
+`RenderStep` (`mouvement`, `caméra` et `viewmodel` sont sous `RenderStep`) : on voit si une frame lente vient de nos scripts ou du moteur (rendu, physique, GC).
 
 ## Relevés mémoire (fuites)
 
@@ -104,23 +135,39 @@ Pas besoin de garder le playtest ouvert pour lire le résultat : Studio écrit t
 `%LOCALAPPDATA%\Roblox\logs\*_Studio_*_last.log` (un fichier par session Studio). Un script Roblox ne peut pas écrire
 de fichier lui-même. Pour extraire la session : `grep "\[FrameProbe\]" <fichier> | grep -v SetAttribute`.
 
-Champs : `dt` (frame rendue), `steps` (nombre de Heartbeat depuis le rendu précédent, 1 attendu), `hbDt` (temps
-simulé pendant ces Heartbeat), `disp` (déplacement de la racine), `vRendue` (= `disp/dt`), `vSim` (vitesse du
+Champs : `dt` (frame rendue), `steps` (nombre de pas de mouvement depuis le rendu précédent, 1 attendu), `simDt`
+(temps simulé pendant ces pas), `disp` (déplacement de la racine), `vRendue` (= `disp/dt`), `vSim` (vitesse du
 MovementController), `yaw` (degrés/s), `gcΔ` (mémoire Lua, une forte baisse signale un passage du GC), `arme`.
 
 Causes d'un `STUTTER` (`source=`) :
 
-- `pas_physique_manquant` ou `pas_physique_double` : 0 ou 2 Heartbeat entre deux rendus. Le perso avance de 0 ou de
-  2 pas sur une frame.
+- `pas_physique_manquant` ou `pas_physique_double` : 0 ou 2 pas de mouvement entre deux rendus. Le perso avance de 0 ou
+  de 2 pas sur une frame. Depuis que le mouvement tourne sur le rendu, seul un `HITCH` découpé en pas peut en donner 2.
 - `simulation` : la vitesse simulée elle-même fait un pic (collision, rampe, boost, `commitMove`).
 - `position_hors_simulation` : la racine a bougé autrement que ce que prévoyait la vitesse simulée (correction
   serveur, téléportation partielle, step-up ou éjection de `WallSlide`).
-- `timing_rendu_vs_heartbeat` : un pas normal, mais le temps rendu diffère du temps simulé. La caméra suit un pas
-  Heartbeat qui ne dure pas autant que la frame affichée.
+- `timing_rendu_vs_simulation` : un pas normal, mais le temps rendu diffère du temps simulé. Cause dominante quand le
+  mouvement tournait sur Heartbeat (voir « Rythme du mouvement ») ; elle ne devrait plus apparaître.
 
 Un pic isolé est une frame qui s'écarte de plus de 30 % de ses deux voisines, quand ces voisines s'accordent entre
 elles à 15 % près. Une accélération progressive (surf, boost) n'est donc pas signalée. En dessous de 2 studs/s et de
 20 °/s, rien n'est jugé.
+
+## Rythme du mouvement (#88)
+
+Le perso est déplacé par script (racine ancrée), dans `MovementController`. Sa boucle tourne **sur le rendu, juste
+avant la caméra** (`BindToRenderStep`, priorité `Camera - 1`), avec le `dt` de la frame rendue : le déplacement affiché
+correspond au temps affiché, et la caméra lit dans la même frame la position que le pas vient de poser.
+
+- Avant (jusqu'au 06/11/2026), la boucle tournait sur `Heartbeat`. Son `dt` (de 14 à 21 ms) suit un autre chronomètre
+  que le rendu, et le déplacement par image variait d'environ 30 % : plus d'un stud d'écart à 200 studs/s, d'où les
+  saccades en surf rapide (54 `STUTTER` `timing_rendu_vs_heartbeat` sur 150 s, mesure du 03/11).
+- La physique reste à `dt` variable, comme avant : le ressenti ne change pas à FPS stable. Piste écartée pour l'instant :
+  un tick fixe (64 Hz, comme Source) avec interpolation de la caméra rendrait la physique indépendante du FPS, mais
+  ajoute jusqu'à un tick de retard et change le ressenti au-dessus de 60 FPS.
+- Une frame lente est découpée en pas de 1/30 s au plus (`StepTiming`, 6 pas au plus) au lieu d'être tronquée : le perso
+  parcourt tout le temps écoulé, une frame lente ne se voit plus qu'une fois.
+- Ne pas remettre d'interpolation de position dans `FPSCamera` : la position est déjà celle de la frame.
 
 ## Ombres de la map (#88)
 
@@ -148,6 +195,43 @@ publié.**
 Piège de mesure : **Studio ne rend presque rien quand sa fenêtre n'est pas au premier plan** (pas de passe d'ombres,
 GPU à 0, peu de triangles). Une mesure pilotée par le MCP pendant qu'on travaille dans une autre fenêtre ne vaut rien
 pour le rendu : mesurer Studio au premier plan, ou dans le client publié.
+
+## Mesure du 2026-11-06 (Studio, Dizzy, qualités 10, 5 et 1, après le passage du mouvement sur le rendu)
+
+Ressenti inchangé par le passage du mouvement sur le rendu. Les saccades suivent la qualité graphique :
+
+| Qualité | GPU | CPU rendu | p99 | Ressenti |
+|---|---|---|---|---|
+| 10/10 | 13,4 à 15 ms | 11 à 14,5 ms | 39 ms | lag, saccades en mouvement |
+| 5/10 | 3 à 5 ms | 10 à 12,6 ms | 34 à 36 ms | moindre |
+| 1/10 | 1,6 à 3 ms | 9 à 12 ms | 19 à 22 ms | quasi rien |
+
+Ce sont de vraies frames perdues (CPU et GPU proches des 16,7 ms d'une frame), pas un déplacement irrégulier. La
+géométrie n'y est pour rien : 16 à 32 draw calls, moins de 15k triangles. Dans Studio, le CPU de rendu est 3 à 4 fois
+plus haut que dans le client publié (3 ms) : la qualité 10 reste à mesurer dans le client publié (banc F4). Banc dans
+Studio à qualité 10 (MCP) : couper les ombres, l'Atmosphere ou les nuages ne fait rien gagner au-delà du bruit ; les
+autres phases sont faussées par une perte de focus.
+
+Streaming : voir « Streaming désactivé » plus haut. Une fois coupé, en mouvement à qualité 10 : p99 de 39 à 31 ms,
+max de 49-70 à 37 ms, « bien mieux » au ressenti ; restent de petites pertes de frames (CPU et GPU de rendu vers 15 ms
+dans Studio, proches des 16,7 ms d'une frame).
+
+## Mesure du 2026-11-06 (client publié, Dizzy, qualité auto, après #91)
+
+Parcours au couteau et à l'AWP, overlay ouvert, 7 bilans de 10 s :
+
+- 59 FPS médian (plafond à 60), p99 de 22 à 27 ms, max de 25 à 42 ms ; 73,6 ms au spawn.
+- **Le rendu ne limite plus** : CPU de rendu 2,9 à 4,0 ms, GPU 5,9 à 15,0 ms, draw calls 20 à 31 (scène) et 12 à 98
+  (ombres), triangles 10k à 70k.
+- Nos scripts : `mouvement` 0,2 ms par frame, le reste moins de 0,05 ms.
+- Mémoire client environ 1 540 Mo, stable entre les bilans. Serveur : +84 Mo et +683 Instances entre le démarrage et la
+  première fin de round (un seul relevé : à suivre sur plusieurs rounds, #77).
+- 22 000 warnings « Memory tracking is currently disabled » : l'overlay lisait les catégories de mémoire, que le client
+  publié ne suit pas. Corrigé (`MemoryTracker.readTags`).
+
+Conclusion : le GPU et la map ne sont plus en cause dans le client publié. La géométrie de la map (fusion des coins,
+plafonds, faces jamais vues) n'est pas retouchée tant qu'une mesure ne la désigne pas. Les saccades ressenties viennent
+du rythme du mouvement (section ci-dessus).
 
 ## Mesure du 2026-11-06 (Studio, Dizzy, fenêtre de jeu 1291×647, qualité auto, 5 morts, perso immobile)
 
@@ -185,8 +269,8 @@ le jeu : surf et combat restent à mesurer à la main, dans le client publié.
 
 ## Pièges connus
 
-- `FPSCamera` contient une interpolation de position (`updateRoot`) qui n'est appelée nulle part : la caméra lit
-  directement `hrp.Position` au rendu. Si on la rebranche telle quelle, elle crée des saccades. `Heartbeat` tourne une
-  fois par frame, pas à 60 Hz fixe, donc l'`alpha` basé sur `os.clock()` varie d'une frame à l'autre.
-- `MovementController` plafonne `dt` à 1/30 : après une frame lente, le perso avance moins que le temps écoulé. Un
-  `HITCH` se voit donc deux fois : l'image fige, puis le déplacement est trop court.
+- Interpoler la position de la caméra entre deux `Heartbeat` (ancien `FPSCamera.updateRoot`, supprimé) crée des
+  saccades : `Heartbeat` tourne une fois par frame, pas à 60 Hz fixe, donc l'`alpha` basé sur `os.clock()` varie d'une
+  frame à l'autre. Le mouvement tourne maintenant sur le rendu, l'interpolation n'a plus lieu d'être.
+- Tronquer `dt` (ancien `math.min(dt, 1/30)`) fait voir un `HITCH` deux fois : l'image fige, puis le déplacement est
+  trop court. Découper en pas (`StepTiming`).

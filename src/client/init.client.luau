@@ -17,6 +17,7 @@ local GameStateController = require(script.systems.game.GameStateController)
 local DebugPlaytest = require(script.debug.DebugPlaytest)
 local FrameProbe = require(script.debug.FrameProbe)
 local PerfOverlay = require(script.debug.PerfOverlay)
+local PerfBench = require(script.debug.PerfBench)
 
 local player = Players.LocalPlayer
 
@@ -87,5 +88,7 @@ DebugPlaytest.init({
 -- Sonde de saccades : attribut joueur `FrameProbe` = true dans Studio (cf. docs/performance.md).
 FrameProbe.init({ player = player, fpsCamera = FPSCamera, movement = MovementController })
 
--- Overlay de performance (F3) et relevés mémoire : Studio, ou créateur du jeu publié (cf. docs/performance.md).
+-- Overlay de performance (F3), relevés mémoire et banc de rendu (F4) : Studio, ou créateur du jeu publié
+-- (cf. docs/performance.md).
 PerfOverlay.init(player)
+PerfBench.init(player)

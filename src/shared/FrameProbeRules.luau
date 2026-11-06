@@ -16,8 +16,8 @@ FrameProbeRules.TELEPORT_DIST = 20 -- studs en une frame : respawn, lancement, k
 
 export type Sample = {
 	dt: number, -- temps entre deux RenderStep
-	hbDt: number, -- somme des dt Heartbeat écoulés depuis le rendu précédent
-	steps: number, -- nombre de Heartbeat entre les deux rendus (1 attendu)
+	simDt: number, -- temps simulé par le mouvement depuis le rendu précédent
+	steps: number, -- nombre de pas de mouvement entre les deux rendus (1 attendu)
 	disp: number, -- déplacement de la racine entre les deux rendus (studs)
 	simSpeed: number, -- norme de la vitesse simulée par le MovementController (studs/s)
 	yawRate: number, -- vitesse de rotation horizontale de la caméra (degrés/s, valeur absolue)
@@ -81,11 +81,11 @@ function FrameProbeRules.stutterSource(prev: Sample, cur: Sample, nxt: Sample): 
 	if FrameProbeRules.isIsolatedOutlier(prev.simSpeed, cur.simSpeed, nxt.simSpeed, FrameProbeRules.MIN_SPEED) then
 		return "simulation"
 	end
-	local expected = cur.simSpeed * cur.hbDt
+	local expected = cur.simSpeed * cur.simDt
 	if expected > 1e-3 and math.abs(cur.disp - expected) / expected > FrameProbeRules.OUTLIER_DEVIATION then
 		return "position_hors_simulation"
 	end
-	return "timing_rendu_vs_heartbeat"
+	return "timing_rendu_vs_simulation"
 end
 
 -- Cette méthode permet de classer la frame centrale d'un triplet lorsque la frame suivante est connue :

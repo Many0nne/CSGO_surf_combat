@@ -5,7 +5,7 @@ return function(T, Loader)
 
 	-- Cette méthode permet de construire une frame saine à 60 FPS et 16 studs/s lorsqu'un test n'en change qu'une partie.
 	local function sample(over)
-		local s = { dt = DT, hbDt = DT, steps = 1, disp = 16 * DT, simSpeed = 16, yawRate = 90 }
+		local s = { dt = DT, simDt = DT, steps = 1, disp = 16 * DT, simSpeed = 16, yawRate = 90 }
 		for k, v in over or {} do
 			s[k] = v
 		end
@@ -48,7 +48,7 @@ return function(T, Loader)
 		end)
 
 		T.it("frame lente : HITCH", function()
-			local kinds = Rules.classify(sample(), sample({ dt = 0.05, hbDt = 0.05, disp = 0.8 }), sample(), DT)
+			local kinds = Rules.classify(sample(), sample({ dt = 0.05, simDt = 0.05, disp = 0.8 }), sample(), DT)
 			T.expectEqual(kinds[1], "HITCH")
 		end)
 
@@ -60,13 +60,13 @@ return function(T, Loader)
 
 		T.it("pas physique doublé : STUTTER pas_physique_double", function()
 			local kinds, source =
-				Rules.classify(sample(), sample({ steps = 2, hbDt = 2 * DT, disp = 32 * DT }), sample(), DT)
+				Rules.classify(sample(), sample({ steps = 2, simDt = 2 * DT, disp = 32 * DT }), sample(), DT)
 			T.expectEqual(kinds[1], "STUTTER")
 			T.expectEqual(source, "pas_physique_double")
 		end)
 
 		T.it("pas physique manquant : STUTTER pas_physique_manquant", function()
-			local _, source = Rules.classify(sample(), sample({ steps = 0, hbDt = 0, disp = 0 }), sample(), DT)
+			local _, source = Rules.classify(sample(), sample({ steps = 0, simDt = 0, disp = 0 }), sample(), DT)
 			T.expectEqual(source, "pas_physique_manquant")
 		end)
 
@@ -80,10 +80,10 @@ return function(T, Loader)
 			T.expectEqual(source, "position_hors_simulation")
 		end)
 
-		T.it("pas Heartbeat plus long que la frame rendue : timing_rendu_vs_heartbeat", function()
-			local cur = sample({ dt = DT * 0.8, hbDt = DT * 1.2, disp = 16 * DT * 1.2 })
+		T.it("pas simulé plus long que la frame rendue : timing_rendu_vs_simulation", function()
+			local cur = sample({ dt = DT * 0.8, simDt = DT * 1.2, disp = 16 * DT * 1.2 })
 			local _, source = Rules.classify(sample(), cur, sample(), DT)
-			T.expectEqual(source, "timing_rendu_vs_heartbeat")
+			T.expectEqual(source, "timing_rendu_vs_simulation")
 		end)
 
 		T.it("rotation irrégulière : ROTATION", function()
