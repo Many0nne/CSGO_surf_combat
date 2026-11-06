@@ -95,6 +95,8 @@ function RoundManager.startRound(duration: number)
 	end
 	state = "active"
 	timeLeft = duration
+	-- base de comparaison du round, avant l'apparition de son premier personnage (cf. docs/performance.md)
+	MemoryTracker.snapshot(string.format("début de round (%d s)", duration))
 	broadcastState()
 	broadcastScores()
 

@@ -85,13 +85,30 @@ Dans le MicroProfiler (Ctrl+F6, puis pause pour figer une frame lente), ces noms
 `src/shared/MemoryTracker.luau` écrit une ligne `[Perf] MEM` à chaque événement du cycle de vie :
 
 - client (Studio ou créateur) : démarrage, 3 s après chaque spawn, 3 s après chaque fin de round, ouverture de l'overlay ;
-- serveur (toujours actif, la console serveur n'est lisible que par les développeurs) : démarrage, fin de round (une fois
-  les personnages détruits), 5 s après le départ d'un joueur.
+- serveur (toujours actif, la console serveur n'est lisible que par les développeurs) : démarrage, début de round (avant
+  le premier personnage), fin de round (6 s après la destruction des personnages), 5 s après le départ d'un joueur.
 
 Chaque ligne donne le total, l'écart depuis le relevé précédent et depuis le premier, le nombre d'Instances, le tas Lua et
 les catégories qui ont le plus varié. Méthode : enchaîner une dizaine de morts et deux ou trois rounds. Une valeur qui
 monte à chaque spawn sans jamais redescendre (Instances, `LuaHeap`, `Signals`) est une fuite ; une hausse unique au premier
 spawn est un chargement (textures, sons).
+
+### Mémoire serveur sur plusieurs rounds (#95)
+
+Studio fausse la mémoire serveur : client, serveur et éditeur y partagent un seul processus. Un round y a donné +1 665
+Instances et +270 Mo de `LuaHeap`. Il faut donc mesurer dans le jeu publié, et un round dure 5 min
+(`GameConfig.ROUND_DURATION`). Pour enchaîner les rounds plus vite, l'attribut Workspace `RoundDuration` (en secondes,
+10 au minimum, règle `PerfRules.roundDuration`) remplace cette durée à chaque démarrage de round. Sans l'attribut, rien
+ne change.
+
+1. Jeu publié, console F9 > Server, ligne de commande serveur : `workspace:SetAttribute("RoundDuration", 60)`.
+2. Jouer trois ou quatre rounds, avec quelques morts par round. Revenir au menu à chaque fin de round.
+3. F9 > Server > Log, filtre `[Perf] MEM` : une ligne au début et une à la fin de chaque round.
+4. Lire l'écart entre deux `début de round` consécutifs. S'il retombe près de zéro après le premier round, ce n'est
+   pas une fuite : c'est le chargement du premier round. S'il est du même ordre à chaque round, c'est une fuite : la
+   catégorie qui monte indique où chercher.
+5. Remettre la durée normale : `workspace:SetAttribute("RoundDuration", nil)`. L'attribut disparaît de toute façon au
+   redémarrage du serveur.
 
 ## Audit statique de la map
 
