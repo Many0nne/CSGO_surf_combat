@@ -10,6 +10,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local WeaponThirdPerson = require(ReplicatedStorage.Shared.WeaponThirdPerson)
+local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 
 local WeaponThirdPersonView = {}
 
@@ -65,12 +66,12 @@ end
 
 -- Cette méthode permet de démarrer la boucle de rendu des armes 3P lorsque le client s'initialise.
 function WeaponThirdPersonView.init()
-	RunService.RenderStepped:Connect(function()
+	RunService.RenderStepped:Connect(PerfMarkers.wrap("armes 3P", function()
 		local localChar = Players.LocalPlayer and Players.LocalPlayer.Character
 		for _, gun in CollectionService:GetTagged(WeaponThirdPerson.TAG) do
 			updateGun(gun, localChar)
 		end
-	end)
+	end))
 end
 
 return WeaponThirdPersonView

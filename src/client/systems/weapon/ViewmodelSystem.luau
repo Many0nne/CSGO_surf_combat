@@ -4,6 +4,7 @@ local RunService = game:GetService("RunService")
 
 local AnimationSoundSystem = require(script.Parent.AnimationSoundSystem)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
+local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 
 local ViewmodelSystem = {}
 
@@ -434,35 +435,39 @@ function ViewmodelSystem.init(player: Player?)
 	end
 
 	-- Single RenderStep for the session lifetime — no bind/unbind per equip
-	RunService:BindToRenderStep(boundStepName, Enum.RenderPriority.Camera.Value + 1, function(dt)
-		if not activeViewmodel then
-			lastCamCFrame = nil
-			swayPos = Vector3.zero
-			swayVel = Vector3.zero
-			return
-		end
-		local cam = workspace.CurrentCamera
-		if not cam then
-			return
-		end
-		dt = dt or (1 / 60)
-		if not lastCamCFrame then
+	RunService:BindToRenderStep(
+		boundStepName,
+		Enum.RenderPriority.Camera.Value + 1,
+		PerfMarkers.wrap("viewmodel", function(dt)
+			if not activeViewmodel then
+				lastCamCFrame = nil
+				swayPos = Vector3.zero
+				swayVel = Vector3.zero
+				return
+			end
+			local cam = workspace.CurrentCamera
+			if not cam then
+				return
+			end
+			dt = dt or (1 / 60)
+			if not lastCamCFrame then
+				lastCamCFrame = cam.CFrame
+			end
+			local delta = lastCamCFrame:ToObjectSpace(cam.CFrame)
+			local dx, dy = delta:ToOrientation()
 			lastCamCFrame = cam.CFrame
-		end
-		local delta = lastCamCFrame:ToObjectSpace(cam.CFrame)
-		local dx, dy = delta:ToOrientation()
-		lastCamCFrame = cam.CFrame
 
-		local targetVec = Vector3.new(-dx, -dy, 0) * SWAY_STRENGTH
-		local clamped = Vector3.new(
-			math.clamp(targetVec.X, -SWAY_MAX, SWAY_MAX),
-			math.clamp(targetVec.Y, -SWAY_MAX, SWAY_MAX),
-			math.clamp(targetVec.Z, -SWAY_MAX, SWAY_MAX)
-		)
-		swayPos, swayVel = springUpdate(swayPos, swayVel, clamped, SWAY_SPEED, SWAY_DAMPING, dt)
-		local sway = CFrame.Angles(swayPos.X, swayPos.Y, swayPos.Z)
-		activeViewmodel:PivotTo(cam.CFrame * currentOffset * sway)
-	end)
+			local targetVec = Vector3.new(-dx, -dy, 0) * SWAY_STRENGTH
+			local clamped = Vector3.new(
+				math.clamp(targetVec.X, -SWAY_MAX, SWAY_MAX),
+				math.clamp(targetVec.Y, -SWAY_MAX, SWAY_MAX),
+				math.clamp(targetVec.Z, -SWAY_MAX, SWAY_MAX)
+			)
+			swayPos, swayVel = springUpdate(swayPos, swayVel, clamped, SWAY_SPEED, SWAY_DAMPING, dt)
+			local sway = CFrame.Angles(swayPos.X, swayPos.Y, swayPos.Z)
+			activeViewmodel:PivotTo(cam.CFrame * currentOffset * sway)
+		end)
+	)
 
 	local backpack = localPlayer:WaitForChild("Backpack", 5)
 	if backpack then

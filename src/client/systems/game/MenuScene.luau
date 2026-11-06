@@ -9,6 +9,7 @@ local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
 local Rules = require(script.Parent.MenuSceneRules)
+local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 
 local MenuScene = {}
 
@@ -547,10 +548,10 @@ function MenuScene.start()
 		tracks.Idle.Looped = true
 		tracks.Idle:Play(0)
 	end
-	connection = RunService.RenderStepped:Connect(function(dt: number)
+	connection = RunService.RenderStepped:Connect(PerfMarkers.wrap("menu 3D", function(dt: number)
 		updateView(dt)
 		updateSurfers(dt, os.clock())
-	end)
+	end))
 end
 
 -- Cette méthode permet d'arrêter la scène et de rendre l'éclairage et le champ de vision à la place lorsque le menu se ferme.

@@ -15,7 +15,7 @@ Lire le document du domaine avant de travailler dessus, et seulement celui-là.
 | Créer ou modifier un écran, direction artistique | `docs/ui.md` |
 | Créer ou modifier une animation d'arme | `docs/animations.md` |
 | Modifier la map (générateur, export, règles des rampes) | `docs/maps.md` |
-| Saccades, performance, sonde `FrameProbe` | `docs/performance.md` |
+| Saccades, performance, overlay F3, fuites mémoire, sonde `FrameProbe` | `docs/performance.md` |
 | Retours d'expérience datés (historique, le document du domaine prime) | `docs/notes/` |
 
 ## Capitaliser

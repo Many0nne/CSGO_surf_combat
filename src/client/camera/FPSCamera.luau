@@ -3,6 +3,7 @@ local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
+local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 
 local cam = workspace.CurrentCamera
 local FPSCamera = {}
@@ -49,28 +50,34 @@ function FPSCamera.init(hrp: BasePart, char: Model)
 	char.DescendantAdded:Connect(hideCharacterPart)
 
 	RunService:UnbindFromRenderStep(boundStepName)
-	RunService:BindToRenderStep(boundStepName, Enum.RenderPriority.Camera.Value, function()
-		if not hrpRef or not hrpRef.Parent then
-			return
-		end
+	RunService:BindToRenderStep(
+		boundStepName,
+		Enum.RenderPriority.Camera.Value,
+		PerfMarkers.wrap("caméra", function()
+			if not hrpRef or not hrpRef.Parent then
+				return
+			end
 
-		-- Rotation : toujours a la frequence d'affichage (souris fluide).
-		local delta = UserInputService:GetMouseDelta()
-		yaw = yaw + delta.X * currentSens
-		pitch = math.clamp(pitch - delta.Y * currentSens, CameraConfig.PITCH_MIN, CameraConfig.PITCH_MAX)
+			-- Rotation : toujours a la frequence d'affichage (souris fluide).
+			local delta = UserInputService:GetMouseDelta()
+			yaw = yaw + delta.X * currentSens
+			pitch = math.clamp(pitch - delta.Y * currentSens, CameraConfig.PITCH_MIN, CameraConfig.PITCH_MAX)
 
-		-- Position : interpolee entre les deux derniers pas physiques.
-		local basePos: Vector3
-		if renderPrevPos and renderCurPos and lastStepDt > 0 then
-			local alpha = math.clamp((os.clock() - lastStepClock) / lastStepDt, 0, 1)
-			basePos = renderPrevPos:Lerp(renderCurPos, alpha)
-		else
-			basePos = hrpRef.Position
-		end
+			-- Position : interpolee entre les deux derniers pas physiques.
+			local basePos: Vector3
+			if renderPrevPos and renderCurPos and lastStepDt > 0 then
+				local alpha = math.clamp((os.clock() - lastStepClock) / lastStepDt, 0, 1)
+				basePos = renderPrevPos:Lerp(renderCurPos, alpha)
+			else
+				basePos = hrpRef.Position
+			end
 
-		local headPos = basePos + Vector3.new(0, currentCamHeight, 0)
-		cam.CFrame = CFrame.new(headPos) * CFrame.Angles(0, math.rad(-yaw), 0) * CFrame.Angles(math.rad(pitch), 0, 0)
-	end)
+			local headPos = basePos + Vector3.new(0, currentCamHeight, 0)
+			cam.CFrame = CFrame.new(headPos)
+				* CFrame.Angles(0, math.rad(-yaw), 0)
+				* CFrame.Angles(math.rad(pitch), 0, 0)
+		end)
+	)
 end
 
 -- A APPELER depuis le MovementController, sur Heartbeat, JUSTE APRES avoir pose hrp.CFrame :

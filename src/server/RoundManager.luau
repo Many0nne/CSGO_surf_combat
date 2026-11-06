@@ -1,5 +1,9 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local MemoryTracker = require(ReplicatedStorage.Shared.MemoryTracker)
+local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 
 type Score = { name: string, kills: number, deaths: number, firstKillTick: number }
 
@@ -80,6 +84,8 @@ local function endRound()
 		scores = {}
 		lastAttacker = {}
 		broadcastState()
+		-- personnages détruits depuis 6 s : ce qui reste d'un round à l'autre est candidat à une fuite
+		MemoryTracker.snapshot("fin de round")
 	end)
 end
 
@@ -94,7 +100,7 @@ function RoundManager.startRound(duration: number)
 
 	local lastBroadcastSecond = math.ceil(timeLeft)
 
-	timerConn = RunService.Heartbeat:Connect(function(dt)
+	timerConn = RunService.Heartbeat:Connect(PerfMarkers.wrap("srv round", function(dt)
 		if state ~= "active" then
 			if timerConn then
 				timerConn:Disconnect()
@@ -113,7 +119,7 @@ function RoundManager.startRound(duration: number)
 			lastBroadcastSecond = currentSecond
 			broadcastState()
 		end
-	end)
+	end))
 end
 
 -- ── combat recording ───────────────────────────────────────────────────────

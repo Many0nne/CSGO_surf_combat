@@ -30,6 +30,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `tools/ui/make_menu_type.py`: génère le titrage du menu (lettres usées, éclats, impacts) dans `assets/ui/menu/`.
 - `tools/export_mesh_fbx.py`: exporte les meshes d'un `.blend` en FBX avec l'orientation attendue dans Roblox.
 - `tools/rbxm/verify_place.luau`: relit la place construite par Rojo et vérifie viewmodels, Tools, ids d'assets et noms d'armes.
+- `tools/perf/audit_map.luau`: audit statique d'une map `.rbxm` (pièces, ombres, transparences, collisions et requêtes par dossier, lumières), cf. `docs/performance.md`.
 - `rokit.toml`: versions des outils (Rojo, StyLua, Selene, luau-lsp, Lune) gérées par Rokit.
 - `CSGO.rbxlx`: artefact de build produit par `rojo build`.
 - `sourcemap.json`: mapping de source pour la synchro Rojo.
@@ -40,6 +41,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/client/camera/FPSCamera.luau`: contrôles et logique de la caméra FPS (position lue directement sur `hrp.Position` au rendu : l'interpolation `updateRoot` n'est appelée nulle part).
 - `src/client/debug/DebugPlaytest.luau`: moitié client du helper de playtest (Studio uniquement) : exécute les commandes du serveur et observe pistes, marqueurs et sons.
 - `src/client/debug/FrameProbe.luau`: sonde de saccades (Studio uniquement, attribut joueur `FrameProbe`) : mesure chaque frame et signale les frames anormales, cf. `docs/performance.md`.
+- `src/client/debug/PerfOverlay.luau`: overlay de performance (touche F3, Studio ou créateur du jeu publié) : frames, coût du rendu, mémoire, réseau, coût de nos boucles, bilan console toutes les 10 s ; active aussi les relevés mémoire client, cf. `docs/performance.md`.
 - `src/client/debug/Noclip.luau`: outil de debug pour activer/désactiver le noclip.
 - `src/client/init.client.luau`: point d'entrée client, initialise les modules côté client.
 - `src/client/input/InputModule.luau`: gestion des entrées utilisateur et mapping des actions.
@@ -95,6 +97,9 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/shared/CharacterAppearance.luau`: rig de référence (`StarterPlayer.StarterCharacter`, cloné pour la cible du helper de playtest) et application du skin commun (BodyColors + vêtements) côté serveur.
 - `src/shared/CharacterConfig.luau`: rig/skin communs (couleurs, ids d'images Shirt/Pants/visage) et animations 3e personne (ids, fallbacks, seuils de vitesse, fondus).
 - `src/shared/DebugPlaytestRules.luau`: règles pures du helper de playtest (choix de l'outil, marqueurs et dégâts attendus, visée, rapport PASS/FAIL).
+- `src/shared/PerfMarkers.luau`: repères `PerfMarkers.wrap(nom, callback)` posés sur les boucles par frame (mouvement, caméra, viewmodel, armes, armes 3P, menu, timer de round) : nommés dans le MicroProfiler, chronométrés pour l'overlay.
+- `src/shared/PerfRules.luau`: règles pures de l'environnement de performance (droit d'accès, écarts mémoire, coût des repères), testées (`tests/specs/PerfRules.spec.luau`).
+- `src/shared/MemoryTracker.luau`: relevés mémoire `[Perf] MEM` (client : démarrage, spawn, fin de round ; serveur : démarrage, fin de round, départ d'un joueur).
 - `src/shared/FrameProbeRules.luau`: règles pures de la sonde de saccades (classement HITCH/STUTTER/ROTATION/TELEPORT, cause probable, bilan), testées (`tests/specs/FrameProbeRules.spec.luau`).
 - `src/shared/GameConfig.luau`: constantes jeu (ROUND_DURATION=300, RESPAWN_DELAY=2.5, RESULT_DURATION=6, AUTO_SAVE_INTERVAL=120, SPAWN_PROTECTION=2.5).
 - `src/shared/SpawnLaunch.luau`: règles pures du lancement depuis le soleil (vitesse, angles de caméra, noms des attributs posés sur le personnage), testées (`tests/specs/SpawnLaunch.spec.luau`).

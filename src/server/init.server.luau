@@ -7,6 +7,7 @@ local NetworkProtocol = require(Shared:WaitForChild("NetworkProtocol"))
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local MapSelection = require(Shared:WaitForChild("MapSelection"))
 local WeaponThirdPerson = require(Shared:WaitForChild("WeaponThirdPerson"))
+local MemoryTracker = require(Shared:WaitForChild("MemoryTracker"))
 
 local SpawnManager = require(script.SpawnManager)
 local RoundManager = require(script.RoundManager)
@@ -232,11 +233,17 @@ local function setupPlayer(player: Player)
 	end
 end
 
+-- Relevés mémoire du serveur : toujours actifs, la console serveur (F9) n'est lisible que par les développeurs du jeu.
+MemoryTracker.enable()
+MemoryTracker.snapshot("démarrage")
+
 Players.PlayerAdded:Connect(setupPlayer)
 Players.PlayerRemoving:Connect(function(player)
 	lastWeaponAction[player] = nil
 	Validator.forgetPlayer(player)
 	RoundManager.removePlayer(player)
+	-- départ d'un joueur : ses Instances et connexions doivent avoir disparu au relevé (cf. docs/performance.md)
+	task.delay(5, MemoryTracker.snapshot, "départ de " .. player.Name)
 end)
 
 for _, player in Players:GetPlayers() do
