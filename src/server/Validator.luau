@@ -1,6 +1,5 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local MovementConfig = require(ReplicatedStorage.Shared.MovementConfig)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 local HitZones = require(ReplicatedStorage.Shared.HitZones)
 
@@ -136,19 +135,6 @@ function Validator.hitOutcome(healthBefore: number, healthAfter: number): ("hit"
 		return nil
 	end
 	return if healthAfter <= 0 then "kill" else "hit"
-end
-
--- Position plausibility (for future use with position-based anti-cheat)
-function Validator.isPositionPlausible(player: Player, claimedPos: Vector3): boolean
-	local char = player.Character
-	if not char then
-		return false
-	end
-	local root = getRoot(char)
-	if not root then
-		return false
-	end
-	return (root.Position - claimedPos).Magnitude <= MovementConfig.MAX_DELTA_POS * 5
 end
 
 return Validator

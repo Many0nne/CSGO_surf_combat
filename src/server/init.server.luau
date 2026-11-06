@@ -16,6 +16,7 @@ local Validator = require(script.Validator)
 local FeedbackService = require(script.FeedbackService)
 local DebugPlaytest = require(script.DebugPlaytest)
 local KillZone = require(script.KillZone)
+local CharacterSync = require(script.CharacterSync)
 
 -- Spawn contrôlé : on gère LoadCharacter nous-mêmes
 Players.CharacterAutoLoads = false
@@ -41,7 +42,10 @@ local playerDiedRmt = makeRemote(N.PLAYER_DIED)
 local sendFeedbackRmt = makeRemote(N.SEND_FEEDBACK)
 local feedbackAckRmt = makeRemote(N.FEEDBACK_ACK)
 local weaponActionRmt = makeRemote(N.WEAPON_ACTION)
-local fellOutRmt = makeRemote(N.FELL_OUT)
+-- Non fiable : un paquet de position perdu est remplacé par le suivant (cf. CharacterSync)
+local characterSyncRmt = Instance.new("UnreliableRemoteEvent")
+characterSyncRmt.Name = N.CHARACTER_SYNC
+characterSyncRmt.Parent = ReplicatedStorage
 
 -- ── Initialisation des sous-systèmes ──────────────────────────────────────
 
@@ -140,8 +144,10 @@ end
 
 -- ── SpawnManager ──────────────────────────────────────────────────────────
 
--- Mort par chute hors de la map (attribut KillHeight de la map jouée)
-KillZone.init(fellOutRmt)
+-- Position des joueurs envoyée par leur client, validée et relayée ; mort par chute hors de la map (attribut
+-- KillHeight de la map jouée) testée sur chaque position acceptée
+KillZone.init()
+CharacterSync.init(characterSyncRmt, KillZone.check)
 
 -- Une seule map est jouée (GameConfig.ACTIVE_MAP) : les autres sont retirées avant les premières apparitions
 MapSelection.activate(workspace:FindFirstChild("Maps"), GameConfig.ACTIVE_MAP)

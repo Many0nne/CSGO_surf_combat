@@ -14,14 +14,13 @@ local CrouchSystem = require(script.Parent.CrouchSystem)
 local BoostSystem = require(script.Parent.BoostSystem)
 local LadderSystem = require(script.Parent.LadderSystem)
 local WeaponSystem = require(script.Parent.Parent.weapon.WeaponSystem)
+local CharacterSync = require(script.Parent.Parent.network.CharacterSync)
 local InputModule = require(script.Parent.Parent.Parent.input.InputModule)
 local PhysicsUtils = require(ReplicatedStorage.Shared.PhysicsUtils)
 local Config = require(ReplicatedStorage.Shared.MovementConfig)
 local MovementState = require(ReplicatedStorage.Shared.MovementState)
 local SpawnLaunch = require(ReplicatedStorage.Shared.SpawnLaunch)
-local MapRules = require(ReplicatedStorage.Shared.MapRules)
 local LadderRules = require(ReplicatedStorage.Shared.LadderRules)
-local NetworkProtocol = require(ReplicatedStorage.Shared.NetworkProtocol)
 local CharacterAnimator = require(ReplicatedStorage.Shared.CharacterAnimator)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local StepTiming = require(ReplicatedStorage.Shared.StepTiming)
@@ -70,12 +69,9 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 	LadderSystem.init()
 	local ladderRegrab = 0 -- délai avant de pouvoir reprendre une échelle après en avoir sauté
 
-	-- Chute hors de l'île : signalée une fois au serveur, qui tue le joueur (KillZone)
-	local fellReported = false
-	local fellOutRemote: RemoteEvent? = nil
-	task.spawn(function()
-		fellOutRemote = NetworkProtocol.getRemote(NetworkProtocol.Names.FELL_OUT)
-	end)
+	-- Dernier CFrame posé par ce mouvement : le serveur pose aussi la racine (CharacterSync) et sa valeur, en retard
+	-- d'un aller-retour, est répliquée jusqu'ici ; on la remplace par la nôtre avant chaque pas (sinon recul à 20 Hz).
+	local ownCFrame: CFrame? = nil
 	slideParams.FilterDescendantsInstances = { char, workspace.CurrentCamera }
 
 	local wasGrounded = false
@@ -92,6 +88,7 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 		end
 		launched = true
 		hrp.CFrame = CFrame.new(origin) * hrp.CFrame.Rotation
+		ownCFrame = hrp.CFrame
 		lastSafePos = origin
 		velocity = launchVelocity
 		state = MovementState.AIRBORNE
@@ -360,15 +357,6 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 			end
 		end
 
-		if
-			not fellReported
-			and fellOutRemote
-			and MapRules.isBelowKillHeight(hrp.Position.Y, BoostSystem.killHeight())
-		then
-			fellReported = true
-			fellOutRemote:FireServer()
-		end
-
 		-- 9. Speedometer
 		lastVelocity = velocity
 		local spd = PhysicsUtils.getXZ(velocity).Magnitude
@@ -403,10 +391,16 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 			if not hrp.Parent then
 				return
 			end
+			if ownCFrame and hrp.CFrame ~= ownCFrame then
+				hrp.CFrame = ownCFrame
+			end
 			local count, dt = StepTiming.split(rawDt)
 			for _ = 1, count do
 				step(dt)
 			end
+			ownCFrame = hrp.CFrame
+			-- Position envoyée au serveur, qui la valide et la relaie aux autres joueurs (#75)
+			CharacterSync.send(hrp, rawDt)
 		end)
 	)
 end
