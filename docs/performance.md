@@ -43,10 +43,11 @@ graphique et coût des scripts. À la fermeture, un dernier bilan est écrit.
 `Workspace.StreamingEnabled` vaut **false**, fixé dans `default.project.json` (avant, réglage de la place : activé, rayon
 minimal 64 studs, `PauseOutsideLoadedArea`). Avec le streaming, le client ne charge la map qu'autour du personnage : en
 surf rapide (200 studs/s et plus), il charge et décharge en continu pendant le mouvement, et le moteur peut mettre le
-joueur en pause s'il sort de la zone chargée. C'était la principale cause des pertes de frames ressenties « en
-mouvement, pas à l'arrêt ». Une map de la taille de Dizzy (16 000 pièces) se charge en entier sans difficulté. Le
-mouvement (raycasts côté client) a aussi besoin de toute la géométrie autour du joueur. Ne pas le réactiver sans
-mesurer en mouvement.
+joueur en pause s'il sort de la zone chargée. Le gain se voit **dans Studio** (client, serveur et éditeur dans le même
+processus) : en mouvement à qualité 10, p99 de 39 à 31 ms et max de 49-70 à 37 ms. Dans le client publié, le ressenti
+n'a pas changé : le chargement n'y posait pas problème. Une map de la taille de Dizzy (16 000 pièces) se charge en
+entier sans difficulté, et le mouvement (raycasts côté client) a besoin de toute la géométrie autour du joueur. Ne pas
+le réactiver sans mesurer en mouvement, dans Studio et dans le client publié.
 
 ## Banc F4
 
@@ -214,7 +215,35 @@ autres phases sont faussées par une perte de focus.
 
 Streaming : voir « Streaming désactivé » plus haut. Une fois coupé, en mouvement à qualité 10 : p99 de 39 à 31 ms,
 max de 49-70 à 37 ms, « bien mieux » au ressenti ; restent de petites pertes de frames (CPU et GPU de rendu vers 15 ms
-dans Studio, proches des 16,7 ms d'une frame).
+dans Studio, proches des 16,7 ms d'une frame). Ces chiffres ne valent que pour Studio (mesure publiée ci-dessous).
+
+## Bilan #88 : banc F4 dans le client publié (2026-11-06, Dizzy, 1920×1080, qualité 10, écran 59 Hz)
+
+| Phase | GPU moy | CPU moy | frame médiane | p99 |
+|---|---|---|---|---|
+| référence | 8,0 ms | 2,4 ms | 17,0 ms | 19,1 ms |
+| sans ombres | 8,2 | 2,1 | 17,0 | 19 |
+| sans Atmosphere | 7,8 | 2,1 | 16,9 | 19 |
+| sans effets (SunRays, Bloom) | 8,2 | 2,1 | 16,9 | 19 |
+| sans translucides (Geometry, Underside, Dressing) | 7,8 à 8,2 | 2,1 | 16,9 à 17,0 | 18,6 à 19,1 |
+| tout coupé | 8,4 | 2,1 | 16,9 | 19 |
+| référence (contrôle) | 7,9 | 2,2 | 16,9 | 19,3 |
+
+- **Le client publié tient le rythme de l'écran (59 Hz) en qualité 10**, avec moitié de marge sur le GPU et 2 ms de
+  CPU. Les pertes de frames restantes sont négligeables au ressenti.
+- Aucun levier ne fait gagner plus de 0,4 ms, ce qui reste dans le bruit. Ombres, Atmosphere, effets, nuages et vitres
+  ne coûtent rien de mesurable à cette résolution : ne pas les dégrader pour la performance.
+- Les saccades et le lag ressentis venaient de Studio. Studio fait tourner client, serveur et éditeur dans un seul
+  processus : son CPU de rendu monte à 9-15 ms au lieu de 2. Le streaming de la map pesait aussi. **Toujours juger la
+  performance dans le client publié** ; Studio sert à comparer deux versions entre elles, pas à juger la fluidité.
+- Avant/après sur la passe #88 (#90, #91, #92) :
+  - pièces qui projettent une ombre : de 15 319 à 1 949 ;
+  - triangles de la passe d'ombres, AWP en main : de 111k à 3k ;
+  - fuite du Heartbeat de mouvement au respawn : corrigée ;
+  - 22 000 warnings par session dans le client publié : supprimés ;
+  - mouvement calé sur le rendu ;
+  - streaming coupé ;
+  - client publié en qualité 10 : 59 FPS médian, p99 19 ms.
 
 ## Mesure du 2026-11-06 (client publié, Dizzy, qualité auto, après #91)
 
@@ -230,8 +259,8 @@ Parcours au couteau et à l'AWP, overlay ouvert, 7 bilans de 10 s :
   publié ne suit pas. Corrigé (`MemoryTracker.readTags`).
 
 Conclusion : le GPU et la map ne sont plus en cause dans le client publié. La géométrie de la map (fusion des coins,
-plafonds, faces jamais vues) n'est pas retouchée tant qu'une mesure ne la désigne pas. Les saccades ressenties viennent
-du rythme du mouvement (section ci-dessus).
+plafonds, faces jamais vues) n'est pas retouchée tant qu'une mesure ne la désigne pas. Le bilan en qualité 10
+(ci-dessus) confirme que le client publié tient le rythme.
 
 ## Mesure du 2026-11-06 (Studio, Dizzy, fenêtre de jeu 1291×647, qualité auto, 5 morts, perso immobile)
 
