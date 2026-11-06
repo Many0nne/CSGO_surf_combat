@@ -34,6 +34,7 @@ local fill: Frame
 local hotZone: Frame
 local currentTier = 0
 local lastShown = -1
+local visible = false -- piloté par GameStateController ; init() peut arriver après le premier setVisible
 
 -- Cette méthode permet de créer un texte penché du compteur lorsque le speedometer est construit.
 local function leanText(parent: GuiObject, props: { [string]: any }): TextLabel
@@ -61,6 +62,7 @@ function Speedometer.init()
 		Name = "Speedometer",
 		ResetOnSpawn = false,
 		IgnoreGuiInset = true,
+		Enabled = visible,
 		Parent = Players.LocalPlayer:WaitForChild("PlayerGui"),
 	})
 	gui = screenGui
@@ -149,6 +151,15 @@ function Speedometer.init()
 	Players.LocalPlayer.CharacterRemoving:Connect(function()
 		Speedometer.update(0)
 	end)
+end
+
+-- Cette méthode permet d'afficher ou de masquer le compteur lorsque le HUD de jeu change de visibilité ;
+-- la valeur est mémorisée pour le ScreenGui créé plus tard au premier spawn.
+function Speedometer.setVisible(show: boolean)
+	visible = show
+	if gui then
+		gui.Enabled = show
+	end
 end
 
 function Speedometer.update(speed: number)

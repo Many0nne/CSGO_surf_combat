@@ -117,4 +117,10 @@ function HUDRules.slotOrder(names: { string }): { string }
 	return sorted
 end
 
+-- Cette méthode permet de savoir si le HUD de jeu (vitesse, barre d'armes, lunette) est affiché lorsque l'état client change :
+-- seulement en partie avec un personnage vivant (IN_ROUND), pas au menu, à la mort ni au résultat.
+function HUDRules.gameHudVisible(state: string): boolean
+	return state == "IN_ROUND"
+end
+
 return HUDRules

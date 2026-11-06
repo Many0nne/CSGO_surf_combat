@@ -58,6 +58,7 @@ local bar: Frame
 local scrim: ImageLabel
 local slots: { Slot } = {}
 local alive = false
+local hudVisible = false -- règle « HUD de jeu visible » (HUDRules), posée par GameStateController
 local faded = false -- barre masquée après le délai sans changement d'arme
 local fadeToken = 0
 local watchConns: { RBXScriptConnection } = {}
@@ -308,7 +309,7 @@ local function refresh()
 		end
 		bar.Size = UDim2.fromOffset(SLOT_SIZE.X, math.max(#tools, 1) * SLOT_STEP)
 	end
-	gui.Enabled = alive and #slots > 0
+	gui.Enabled = hudVisible and alive and #slots > 0
 	wake(not rebuilt)
 end
 
@@ -361,6 +362,13 @@ local function onInputChanged(input: InputObject, processed: boolean)
 		return
 	end
 	cycle(input.Position.Z > 0 and -1 or 1)
+end
+
+-- Cette méthode permet de masquer la barre hors partie lorsque le HUD de jeu change de visibilité ; elle ne se masque pas
+-- seule à la fin d'un round, car le serveur détruit le personnage sans déclencher CharacterRemoving.
+function WeaponBar.setVisible(show: boolean)
+	hudVisible = show
+	refresh()
 end
 
 function WeaponBar.init()
