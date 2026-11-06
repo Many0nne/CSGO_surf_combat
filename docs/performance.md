@@ -85,13 +85,53 @@ Dans le MicroProfiler (Ctrl+F6, puis pause pour figer une frame lente), ces noms
 `src/shared/MemoryTracker.luau` écrit une ligne `[Perf] MEM` à chaque événement du cycle de vie :
 
 - client (Studio ou créateur) : démarrage, 3 s après chaque spawn, 3 s après chaque fin de round, ouverture de l'overlay ;
-- serveur (toujours actif, la console serveur n'est lisible que par les développeurs) : démarrage, fin de round (une fois
-  les personnages détruits), 5 s après le départ d'un joueur.
+- serveur (toujours actif, la console serveur n'est lisible que par les développeurs) : démarrage, début de round (avant
+  le premier personnage), fin de round (6 s après la destruction des personnages), 5 s après le départ d'un joueur.
 
 Chaque ligne donne le total, l'écart depuis le relevé précédent et depuis le premier, le nombre d'Instances, le tas Lua et
 les catégories qui ont le plus varié. Méthode : enchaîner une dizaine de morts et deux ou trois rounds. Une valeur qui
 monte à chaque spawn sans jamais redescendre (Instances, `LuaHeap`, `Signals`) est une fuite ; une hausse unique au premier
 spawn est un chargement (textures, sons).
+
+### Mémoire serveur sur plusieurs rounds (#95)
+
+Studio fausse la mémoire serveur : client, serveur et éditeur y partagent un seul processus. Un round y a donné +1 665
+Instances et +270 Mo de `LuaHeap`. Il faut donc mesurer dans le jeu publié, et un round dure 5 min
+(`GameConfig.ROUND_DURATION`). Pour enchaîner les rounds plus vite, l'attribut Workspace `RoundDuration` (en secondes,
+10 au minimum, règle `PerfRules.roundDuration`) remplace cette durée à chaque démarrage de round. Sans l'attribut, rien
+ne change.
+
+1. Jeu publié, console F9 > Server, ligne de commande serveur : `workspace:SetAttribute("RoundDuration", 60)`.
+2. Jouer trois ou quatre rounds, avec quelques morts par round. Revenir au menu à chaque fin de round.
+3. F9 > Server > Log, filtre `[Perf] MEM` : une ligne au début et une à la fin de chaque round.
+4. Lire l'écart entre deux `début de round` consécutifs. S'il retombe près de zéro après le premier round, ce n'est
+   pas une fuite : c'est le chargement du premier round. S'il est du même ordre à chaque round, c'est une fuite : la
+   catégorie qui monte indique où chercher.
+5. Remettre la durée normale : `workspace:SetAttribute("RoundDuration", nil)`. L'attribut disparaît de toute façon au
+   redémarrage du serveur.
+
+L'attribut est lu au démarrage du round : le régler pendant un round ne change que les rounds suivants.
+
+Mesure du 2026-11-06 (Studio, Dizzy, un joueur, un round de 300 s puis trois de 60 s) : **pas de fuite**.
+
+| Relevé serveur | Total | Instances | Écart Instances |
+|---|---|---|---|
+| #1 démarrage | 1 703 Mo | 76 454 | |
+| #2 début de round 1 | 2 358 Mo | 78 115 | +1 661 |
+| #3 fin de round 1 | 2 599 Mo | 78 120 | +5 |
+| #4 début de round 2 | 2 607 Mo | 78 120 | 0 |
+| #5 fin de round 2 | 2 607 Mo | 78 120 | 0 |
+| #6 début de round 3 | 2 614 Mo | 78 120 | 0 |
+| #7 fin de round 3 | 2 615 Mo | 78 120 | 0 |
+
+- Les +1 661 Instances et +238 Mo de `LuaHeap` (l'écart cité dans #95) arrivent **avant le premier round** : entrée du
+  joueur et chargement du client. Dans Studio, client et serveur partagent un processus : les catégories du serveur
+  comptent aussi le client. Le round 1 ajoute encore 241 Mo (dont `LuaHeap` +73, `Internal` +59), une seule fois.
+- Ensuite, Instances fixes à 78 120 et total qui varie de -0,5 à +8,4 Mo d'un relevé à l'autre, sans tendance : ce que
+  le serveur crée pendant un round (personnages, armes 3P) est bien détruit.
+- Studio ajoute une charge constante (éditeur, plugins, client), pas une croissance par round : une courbe plate dans
+  Studio suffit à écarter une fuite par round. Le jeu publié reste nécessaire pour juger le niveau absolu de la mémoire.
+- Reste à vérifier, si un doute revient : plusieurs joueurs et beaucoup de morts par round (relevés `départ de …`).
 
 ## Audit statique de la map
 
@@ -254,7 +294,7 @@ Parcours au couteau et à l'AWP, overlay ouvert, 7 bilans de 10 s :
   (ombres), triangles 10k à 70k.
 - Nos scripts : `mouvement` 0,2 ms par frame, le reste moins de 0,05 ms.
 - Mémoire client environ 1 540 Mo, stable entre les bilans. Serveur : +84 Mo et +683 Instances entre le démarrage et la
-  première fin de round (un seul relevé : à suivre sur plusieurs rounds, #77).
+  première fin de round (un seul relevé ; suivi sur plusieurs rounds : pas de fuite, voir #95 plus haut).
 - 22 000 warnings « Memory tracking is currently disabled » : l'overlay lisait les catégories de mémoire, que le client
   publié ne suit pas. Corrigé (`MemoryTracker.readTags`).
 

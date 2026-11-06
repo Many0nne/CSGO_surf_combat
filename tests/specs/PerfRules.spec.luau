@@ -161,4 +161,18 @@ return function(T, Loader)
 			T.expect(string.find(Rules.formatBenchLine("x", s, false, 15), "INVALIDE", 1, true) ~= nil)
 		end)
 	end)
+
+	T.describe("PerfRules.roundDuration", function()
+		T.it("sans attribut ou attribut invalide : durée par défaut", function()
+			T.expectEqual(Rules.roundDuration(300, nil), 300)
+			T.expectEqual(Rules.roundDuration(300, "60"), 300)
+			T.expectEqual(Rules.roundDuration(300, 0 / 0), 300)
+			T.expectEqual(Rules.roundDuration(300, Rules.MIN_ROUND_DURATION - 1), 300)
+		end)
+
+		T.it("attribut valide : remplace la durée par défaut", function()
+			T.expectEqual(Rules.roundDuration(300, 60), 60)
+			T.expectEqual(Rules.roundDuration(300, Rules.MIN_ROUND_DURATION), Rules.MIN_ROUND_DURATION)
+		end)
+	end)
 end

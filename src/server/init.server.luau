@@ -8,6 +8,7 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local MapSelection = require(Shared:WaitForChild("MapSelection"))
 local WeaponThirdPerson = require(Shared:WaitForChild("WeaponThirdPerson"))
 local MemoryTracker = require(Shared:WaitForChild("MemoryTracker"))
+local PerfRules = require(Shared:WaitForChild("PerfRules"))
 
 local SpawnManager = require(script.SpawnManager)
 local RoundManager = require(script.RoundManager)
@@ -163,7 +164,10 @@ SpawnManager.init(spawnRmt, function(player: Player): boolean
 	end
 	-- Démarrer le round si idle (1er joueur à cliquer Play)
 	if RoundManager.getState() == "idle" then
-		RoundManager.startRound(GameConfig.ROUND_DURATION)
+		-- attribut Workspace RoundDuration : rounds courts pour suivre la mémoire sur plusieurs rounds (#95)
+		RoundManager.startRound(
+			PerfRules.roundDuration(GameConfig.ROUND_DURATION, workspace:GetAttribute("RoundDuration"))
+		)
 	end
 	return true
 end)

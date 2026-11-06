@@ -24,6 +24,7 @@ PerfRules.OVERLAY_TAGS = {
 
 PerfRules.MEMORY_DIFF_MIN_MB = 0.5 -- en dessous, une variation de catégorie n'est pas signalée
 PerfRules.MEMORY_DIFF_MAX = 5 -- catégories citées au plus par relevé
+PerfRules.MIN_ROUND_DURATION = 10 -- secondes : en dessous, l'attribut Workspace RoundDuration est ignoré
 
 export type MemorySnapshot = {
 	index: number,
@@ -199,6 +200,15 @@ function PerfRules.formatBenchLine(name: string, s: BenchSummary, valid: boolean
 		s.frameP99Ms,
 		valid and "" or " | INVALIDE (fenêtre en arrière-plan : refaire le banc)"
 	)
+end
+
+-- Cette méthode permet de choisir la durée d'un round lorsqu'il démarre : l'attribut Workspace `RoundDuration` (mesure
+-- mémoire sur plusieurs rounds, #95) remplace la durée par défaut s'il vaut un nombre d'au moins MIN_ROUND_DURATION.
+function PerfRules.roundDuration(default: number, override: any): number
+	if type(override) == "number" and override == override and override >= PerfRules.MIN_ROUND_DURATION then
+		return override
+	end
+	return default
 end
 
 return PerfRules
