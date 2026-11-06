@@ -173,6 +173,15 @@ par `mirror` : la map est symétrique par un demi-tour autour de (0, -260,1).
 - **Bois** (retouches `restyle`, habillages `plywood`, `planks`, `timber` de `LOOK`) : plateau en contreplaqué et
   charpente des rampes sur pilotis, planches posées sur la fosse centrale. Les rampes de surf restent en acier.
 
+- **Échelles** (une par camp, mur du bout des rampes sur pilotis) : relevées en boîtes (crinoline en morceaux de sol et
+  de plafond, décollée du mur) et coiffées de murs d'air qui bloquaient la tête ; retirées par `dizzy_patches.luau` et
+  reconstruites (`LADDERS` : rails, barreaux, pattes, crosses par-dessus l'acrotère, arceaux scellés au mur). Grimpables
+  par un volume invisible de `Maps.Map.Ladders` (cf. « Ce que le code attend de la map »).
+- **Objets rhabillés sur place** (`REDRESS`) : une boîte du relevé (repérée par zone, groupe source et volume) devient
+  invisible mais garde sa collision, et reçoit un habillage sans collision : sacs de sable en rangs croisés (`stucco`),
+  caisses en bois, parpaings, piles de plaques de plâtre, cales. Sert aux deux chantiers des étages et aux sacs sous la
+  rampe CT. Une zone vide arrête la génération, comme une retouche.
+
 Repères : `DizzyDressing.aim(pos, look)`, jamais `CFrame.lookAt`. Sous Lune, `lookAt` a renvoyé un repère retourné
 pour une visée vers +Z (auvent du garage enfoncé dans le mur, alors que les fenêtres visées vers ±X étaient justes) et
 un repère invalide pour un tube vertical (pièce rejetée à y = -1 000 000). Contrôle : aucune pièce de `Dressing` hors
@@ -233,6 +242,11 @@ Rojo gère `Workspace.Maps` : un objet posé à la main dans une map est supprim
   attribut `Speed` (studs/s). `SpawnManager` en tire une au hasard, pose `LaunchOrigin` et `LaunchVelocity` sur le
   personnage ; `MovementController` les applique une fois (position, vitesse en l'air, caméra tournée vers la map,
   `SpawnLaunch.cameraAngles`).
+- `Maps.Map.Ladders` : volumes invisibles (aucune collision ni requête), `LookVector` = normale sortante du mur. Dans
+  le volume (marge `CHAR_RADIUS`), `MovementController` remplace la physique par `LadderRules.climbVelocity` : avancer
+  monte (regard baissé : descend), reculer descend, de côté on glisse le long, saut = poussée hors du mur
+  (`LADDER_*` de `MovementConfig`). Le volume doit dépasser le haut du mur d'environ une hauteur de corps, sinon on
+  reste coincé sous l'acrotère ; aucun mur d'air ne doit avancer devant le mur à la hauteur de la grimpe.
 - `Maps.Map.GroundSpawns` : repli quand la map n'a pas de lanceur.
 - `Maps.Map.Boosts` : volumes invisibles (`CanCollide`, `CanQuery`, `CanTouch` faux), attribut `Kind` :
   `Geyser` / `Launcher` avec `Velocity` (Vector3 imposé), `Portal` avec `Boost` (studs/s ajoutés), `Cooldown`
@@ -245,7 +259,9 @@ Rojo gère `Workspace.Maps` : un objet posé à la main dans une map est supprim
   position côté serveur ne tuait jamais personne.
 - La lumière est dans `default.project.json` (Lighting + Atmosphere), identique à celle du menu (`MenuScene`) :
   `ClockTime` 17.9 et latitude 0. Des lanceurs `SunLaunch` doivent viser `Lighting:GetSunDirection()` (Y retiré) pour
-  qu'on sorte du soleil : changer l'heure oblige à les réorienter.
+  qu'on sorte du soleil : changer l'heure oblige à les réorienter. Jugée un peu sombre le 06/11/2026 : éclaircie par
+  les ambiances (`OutdoorAmbient` 122,110,130, `Ambient` 74,69,88), `Brightness` 3.6 et `ExposureCompensation` 0.35,
+  sans toucher à l'heure ni à l'Atmosphere.
 
 ## Règles de construction
 
@@ -281,6 +297,12 @@ Rojo gère `Workspace.Maps` : un objet posé à la main dans une map est supprim
     l'enveloppe flotte ~0,6 stud au-dessus de la vraie surface). Cause probable : collé à la pente, le balayage du
     personnage démarre souvent dans une pièce (que Roblox ignore alors) et touche la face de jointure de la voisine,
     prise pour un mur. Seule la correction du mouvement supprime la perte.
+- **Muret plus bas que le centre du corps** (bord de Dizzy derrière les extracteurs, 3,6 studs) : la sonde de sol (sphère
+  partie du centre du corps) accrochait son arête, prise pour un sol trop pentu, et le joueur passait en l'air à chaque
+  frame, collé au muret au lieu de le longer. Un contact plus haut que `STEPUP_HEIGHT` au-dessus des pieds est ignoré et
+  la sonde relancée depuis la hauteur de marche (`GroundDetection`, `PhysicsUtils.isSideContact`).
+- **Rebord en bout de rampe** : un écart de plus de quelques dixièmes entre la fin d'une rampe et le dessus du mur
+  voisin accroche le joueur ; le raccorder par une planche (retouche `add`) plutôt que de toucher au mur relevé.
 - **Décor sans collision** : toute pièce décorative (arêtes néon, bandes, colonnes de geyser) doit avoir `CanQuery`
   faux, sinon les raycasts du mouvement la prennent pour un mur ou une rampe.
 

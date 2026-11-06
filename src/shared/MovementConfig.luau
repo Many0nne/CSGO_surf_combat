@@ -26,6 +26,11 @@ return {
 	SURF_NORMAL_Y   = 0.7,   -- seuil unique marchable/surf (≈ cos 45.6°, comme sv_walkable_normal)
 	SURF_NORMAL_MIN = 0.1,   -- borne basse surf : sous ce seuil (face quasi verticale ≥84°) = MUR, pas surf
 
+	-- Échelles (volumes Maps.Map.Ladders, LadderRules) : grimpe façon Source
+	LADDER_CLIMB_SPEED = 20,    -- MAX_CLIMB_SPEED Source (200/250 × RUN_SPEED ≈ 24), un peu plus lent
+	LADDER_JUMP_OFF    = 30,    -- saut depuis l'échelle : poussée le long de sa normale (Source 270 u/s)
+	LADDER_REGRAB      = 0.3,   -- s avant de pouvoir reprendre l'échelle après en avoir sauté
+
 	-- Bunny hop
 	BHOP_LAND_WINDOW = 0.1,
 	AUTO_BHOP        = true,

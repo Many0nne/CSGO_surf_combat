@@ -45,19 +45,19 @@
     "Lighting": {
       "$properties": {
         "Ambient": [
-          0.22745,
-          0.21176,
-          0.27451
+          0.2902,
+          0.27059,
+          0.3451
         ],
-        "Brightness": 3.2,
+        "Brightness": 3.6,
         "ClockTime": 17.9,
-        "ExposureCompensation": 0.2,
+        "ExposureCompensation": 0.35,
         "GeographicLatitude": 0,
         "GlobalShadows": true,
         "OutdoorAmbient": [
-          0.37255,
-          0.33333,
-          0.41176
+          0.47843,
+          0.43137,
+          0.5098
         ],
         "Outlines": false,
         "Technology": "Voxel"

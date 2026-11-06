@@ -83,4 +83,10 @@ function PhysicsUtils.airStepOffset(stepHeight: number, maxStep: number, clearan
 	return math.max(stepHeight, 0) + clearance
 end
 
+-- Cette méthode permet de savoir si un contact de la sonde de sol est en fait le haut d'un muret à côté du joueur
+-- lorsque la sphère, partie du centre du corps, accroche une arête plus haute que ce qu'on peut enjamber.
+function PhysicsUtils.isSideContact(hitY: number, feetY: number, maxStep: number): boolean
+	return hitY > feetY + maxStep
+end
+
 return PhysicsUtils
