@@ -15,3 +15,6 @@ tools/globalTypes*.d.luau
 
 # Worktrees de travail en parallele (scripts/csgo-worktree.ps1)
 /worktrees/
+
+# Cache Python (scripts Blender de tools/)
+__pycache__/
