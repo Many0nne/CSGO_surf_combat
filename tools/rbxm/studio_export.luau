@@ -11,6 +11,8 @@ local HttpService = game:GetService("HttpService")
 local SerializationService = game:GetService("SerializationService")
 
 local BASE = "http://localhost:34990" -- port fixe, cf. receive.luau
+-- Dossier à exporter seul (ex. "Menu"), à passer aussi à receive.luau ; nil = export complet.
+local ONLY: string? = nil
 
 -- Cette méthode permet d'encoder un buffer en hexadécimal lorsqu'il doit transiter dans un corps HTTP texte.
 local function toHex(b: buffer): string
@@ -52,31 +54,27 @@ end
 
 local exported = {}
 local ok, err = pcall(function()
-	local viewModels = game:GetService("ReplicatedStorage"):FindFirstChild("ViewModels")
-	assert(viewModels, "ReplicatedStorage.ViewModels introuvable")
-	local starterPack = game:GetService("StarterPack")
-	local maps = workspace:FindFirstChild("Maps")
-	assert(maps, "Workspace.Maps introuvable")
-	checkChildren(viewModels, "Model")
-	checkChildren(starterPack, "Tool")
-	checkChildren(maps, "Model")
-	local materials = game:GetService("MaterialService")
-	checkChildren(materials, "MaterialVariant")
-	for _, child in viewModels:GetChildren() do
-		table.insert(exported, export(child, "ViewModels"))
-		task.wait()
+	-- Conteneurs exportés : dossier cible, conteneur dans la place, classe attendue des enfants
+	local sources = {
+		{ "ViewModels", game:GetService("ReplicatedStorage"):FindFirstChild("ViewModels"), "Model" },
+		{ "Tools", game:GetService("StarterPack"), "Tool" },
+		{ "Maps", workspace:FindFirstChild("Maps"), "Model" },
+		{ "Materials", game:GetService("MaterialService"), "MaterialVariant" },
+		{ "Menu", game:GetService("ReplicatedStorage"):FindFirstChild("MenuMirrors"), "Model" },
+	}
+	for _, source in sources do
+		if not ONLY or ONLY == source[1] then
+			assert(source[2], "conteneur introuvable pour " .. source[1])
+			checkChildren(source[2], source[3])
+		end
 	end
-	for _, child in starterPack:GetChildren() do
-		table.insert(exported, export(child, "Tools"))
-		task.wait()
-	end
-	for _, child in maps:GetChildren() do
-		table.insert(exported, export(child, "Maps"))
-		task.wait()
-	end
-	for _, child in materials:GetChildren() do
-		table.insert(exported, export(child, "Materials"))
-		task.wait()
+	for _, source in sources do
+		if not ONLY or ONLY == source[1] then
+			for _, child in source[2]:GetChildren() do
+				table.insert(exported, export(child, source[1]))
+				task.wait()
+			end
+		end
 	end
 end)
 -- toujours prévenir le serveur, avec l'erreur éventuelle, pour qu'il s'arrête sans supprimer de fichier à tort

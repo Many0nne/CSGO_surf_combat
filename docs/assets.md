@@ -31,6 +31,10 @@ Mettre à jour un `.rbxm` (après modification d'une arme dans Studio, ou pour a
    serveur, qui écrit `assets/rbx/ViewModels/<Nom>.rbxm`, `assets/rbx/Tools/<Nom>.rbxm`, `assets/rbx/Maps/<Nom>.rbxm`
    et `assets/rbx/Materials/<Nom>.rbxm`, supprime les `.rbxm` qui n'existent plus dans la place, puis s'arrête. Si l'export
    échoue dans Studio, le serveur s'arrête en erreur sans rien supprimer.
+   Export partiel : `lune run tools/rbxm/receive.luau Menu` et `ONLY = "Menu"` dans le script (seul ce dossier est
+   écrit et nettoyé) ; `assets/rbx/Menu/` reçoit les jeux d'éclats du menu (`ReplicatedStorage.MenuMirrors`, #112).
+   Le MCP refuse l'envoi tant que `localhost:34990` n'est pas dans la liste HTTP autorisée de l'Assistant
+   (« not in the Assistant HTTP allowlist », Studio > Assistant > Settings > MCP Permissions) : l'y ajouter une fois.
    Sans MCP : clic droit sur l'instance > *Save to File…* > `assets/rbx/<Dossier>/<Nom>.rbxm` (format binaire).
 4. `rojo build default.project.json -o CSGO.rbxlx && lune run tools/rbxm/verify_place.luau` : relit la place produite,
    liste viewmodels et Tools (animations, sons, scripts, MeshParts, attributs), échoue si un viewmodel ou un Tool manque,

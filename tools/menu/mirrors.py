@@ -2,7 +2,7 @@
 # de l'arme (projection depuis la caméra du menu), qui se reconstitue quand les éclats reviennent face à la caméra.
 # Usage : blender -b --factory-startup --python tools/menu/mirrors.py -- [--full] [--state assembled|half|scattered] [--anim]
 # Sortie : $MENU_OUT (défaut .maquettes/menu-miroirs/), rendus cibles versionnés dans docs/ui/menu-miroirs/.
-import sys, os, math, random
+import sys, os, math, random, json
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import blend_common as C
 import bpy, bmesh
@@ -14,7 +14,12 @@ argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
 FULL = "--full" in argv
 STATE = argv[argv.index("--state") + 1] if "--state" in argv else "assembled"
 ANIM = "--anim" in argv
-RES = (1920, 1080) if FULL else (960, 540)
+# Format de l'écran du rendu final (la découpe est toujours faite en 16:9) : 16:9, 16:10, 4:3, 21:9...
+ASPECT = argv[argv.index("--aspect") + 1] if "--aspect" in argv else "16:9"
+# Export pour Roblox (atlas, masque émissif, FBX des éclats, positions) au lieu du rendu ; découpe en pleine résolution.
+EXPORT = "--export" in argv
+WEAPON = argv[argv.index("--weapon") + 1] if "--weapon" in argv else "AWP"
+RES = (1920, 1080) if FULL or EXPORT else (960, 540)
 random.seed(7)
 
 C.reset()
@@ -24,12 +29,26 @@ try:
     s.eevee.use_raytracing = True
 except Exception:
     pass
+# Caméra du menu, 1 unité = 1 stud. FOV vertical fixe comme Camera.FieldOfView de Roblox : capteur ajusté en hauteur
+# (20,25 mm = 36 mm en 16:9), d'où 2·atan(10,125/32) ≈ 35,1° avec l'objectif de 32 mm.
 CAM_LOC, CAM_TGT = Vector((0, -17.0, 3.4)), Vector((0.6, 0, 4.6))
-cam = C.camera(tuple(CAM_LOC), tuple(CAM_TGT), lens=32, dof=17.0, fstop=6.0)
+CAM_LENS, SENSOR_H = 32, 36 * 9 / 16
+VFOV = math.degrees(2 * math.atan(SENSOR_H / 2 / CAM_LENS))
+cam = C.camera(tuple(CAM_LOC), tuple(CAM_TGT), lens=CAM_LENS, dof=17.0, fstop=6.0)
+cam.data.sensor_fit = "VERTICAL"
+cam.data.sensor_height = SENSOR_H
 
 # --- 1. Image source : l'AWP seule, éclairée en studio, sur fond transparent, depuis la caméra du menu.
 root, parts, size = C.import_awp()
-C.awp_materials(parts)
+if WEAPON == "M9":
+    # L'arme remplit la vitrine quelle qu'elle soit (décision #112) : le M9 est agrandi à une longueur proche de celle
+    # de l'AWP (M9_FILL), sa lame étant plus haute que le fusil à longueur égale.
+    for o in list(parts.values()) + [root]:
+        bpy.data.objects.remove(o, do_unlink=True)
+    M9_FILL = float(argv[argv.index("--fill") + 1]) if "--fill" in argv else 0.85
+    root, parts, size = C.import_m9(size.x * M9_FILL, flip_edge="--flip-edge" in argv)
+else:
+    C.awp_materials(parts)
 root.scale = (1.4, 1.4, 1.4)
 root.location = (1.5, 0.0, 3.0)
 root.rotation_euler = (0, math.radians(-4), math.radians(-14))
@@ -39,7 +58,7 @@ src_lights = [
     C.light("AREA", (-6, -6, 3), 200, color=C.hexc("#9aa3c4"), target=(1.3, 0, 4), size=6, shadow=False),
 ]
 s.render.film_transparent = True
-src_path = os.path.join(C.OUT, "c5_source.png")
+src_path = os.path.join(C.OUT, "c5_source_" + WEAPON + ".png")
 s.render.filepath = src_path
 bpy.ops.render.render(write_still=True)
 s.render.film_transparent = False
@@ -251,8 +270,10 @@ for poly, (cx, cy) in cells:
     o.location = p0
     for m in (face, dos, edge if random.random() < 0.25 else nette):
         me.materials.append(m)
-    bev = o.modifiers.new("Chanfrein", "BEVEL")
-    bev.width, bev.segments = 0.014, 2
+    # Pas de chanfrein à l'export : ses faces mélangeraient dans l'atlas l'image et le nuancier de la tranche.
+    if not EXPORT:
+        bev = o.modifiers.new("Chanfrein", "BEVEL")
+        bev.width, bev.segments = 0.014, 2
     shards.append((o, (cx, cy)))
 
 for m in (face, dos, edge, nette):
@@ -262,13 +283,15 @@ for m in (face, dos, edge, nette):
         print("blend", e)
 
 # Éclats vides plus loin dans la salle (même matière, sans image) : la profondeur du champ d'éclats.
+# Tirage à part : les vides sont communs aux armes, ils ne doivent pas dépendre de la découpe de l'arme.
+rv = random.Random(11)
 for k in range(26):
-    cxw, cyw, czw = random.uniform(-14, 16), random.uniform(3, 14), random.uniform(1.5, 10)
-    r = random.uniform(0.4, 1.1)
-    pts = sorted(random.uniform(0, 2 * math.pi) for _ in range(random.randint(4, 6)))
+    cxw, cyw, czw = rv.uniform(-14, 16), rv.uniform(3, 14), rv.uniform(1.5, 10)
+    r = rv.uniform(0.4, 1.1)
+    pts = sorted(rv.uniform(0, 2 * math.pi) for _ in range(rv.randint(4, 6)))
     me = bpy.data.meshes.new("Vide")
     bm = bmesh.new()
-    fv = [bm.verts.new((math.cos(a) * r * random.uniform(0.6, 1.2), 0, math.sin(a) * r * random.uniform(0.6, 1.4))) for a in pts]
+    fv = [bm.verts.new((math.cos(a) * r * rv.uniform(0.6, 1.2), 0, math.sin(a) * r * rv.uniform(0.6, 1.4))) for a in pts]
     bv = [bm.verts.new(v.co + Vector((0, THICK, 0))) for v in fv]
     f1 = bm.faces.new(fv)
     f1.material_index = 1
@@ -282,11 +305,12 @@ for k in range(26):
     bm.free()
     o = bpy.data.objects.new("Vide", me)
     s.collection.objects.link(o)
-    for m in (face, dos, edge if random.random() < 0.25 else nette):
+    for m in (face, dos, edge if rv.random() < 0.25 else nette):
         me.materials.append(m)
-    o.modifiers.new("Chanfrein", "BEVEL").width = 0.014
+    if not EXPORT:
+        o.modifiers.new("Chanfrein", "BEVEL").width = 0.014
     o.location = (cxw, cyw, czw)
-    o.rotation_euler = (random.uniform(-0.3, 0.3), 0, random.uniform(-0.9, 0.9))
+    o.rotation_euler = (rv.uniform(-0.3, 0.3), 0, rv.uniform(-0.9, 0.9))
     shards.append((o, None))
 bpy.context.view_layer.update()
 
@@ -354,17 +378,64 @@ bt.links.new(nz.outputs["Fac"], cr.inputs["Fac"])
 bt.links.new(cr.outputs["Color"], bb.inputs["Base Color"])
 bb.inputs["Roughness"].default_value = 0.85
 sol = C.mat("Sol", C.hexc("#121419"), rough=0.32)
-C.box("Sol", (80, 60, 0.2), (0, 10, -0.1), sol)
-C.box("Fond", (80, 0.5, 30), (0, 16, 15), beton)
-C.box("MurDroit", (0.5, 40, 30), (17, 4, 15), beton, rot=(0, 0, math.radians(-12)))
+room = [
+    ("Sol", (80, 60, 0.2), (0, 10, -0.1), 0, sol),
+    ("Fond", (80, 0.5, 30), (0, 16, 15), 0, beton),
+    ("MurDroit", (0.5, 40, 30), (17, 4, 15), -12, beton),
+]
 # Joints de banches sur le mur du fond (lignes horizontales du béton).
-for z in (3.2, 6.4, 9.6):
-    C.box("Joint", (80, 0.1, 0.03), (0, 15.74, z), C.mat("JointM", C.hexc("#15171c"), rough=0.9))
+joint = C.mat("JointM", C.hexc("#15171c"), rough=0.9)
+room += [("Joint", (80, 0.1, 0.03), (0, 15.74, z), 0, joint) for z in (3.2, 6.4, 9.6)]
+for name, size, loc, yaw, m in room:
+    C.box(name, size, loc, m, rot=(0, 0, math.radians(yaw)))
 
 # Lumière : douche froide zénithale sur les éclats, rasante sur le mur du fond, reflets chauds au sol.
-C.light("AREA", (1, 2, 16), 3000, color=C.hexc("#b9c2dd"), target=(1, 2, 0), size=10)
-C.light("AREA", (-10, 10, 14), 2500, color=C.hexc("#9aa3c4"), target=(-4, 16, 4), size=6, shadow=False)
-C.light("AREA", (1.5, -2, 1.0), 35, color=C.hexc("#F3E9DC"), target=(1.5, 2, 0), size=6, shadow=False)
+lights = [
+    ("Douche", (1, 2, 16), 3000, "#b9c2dd", (1, 2, 0), 10, True),
+    ("Rasante", (-10, 10, 14), 2500, "#9aa3c4", (-4, 16, 4), 6, False),
+    ("Sol", (1.5, -2, 1.0), 35, "#F3E9DC", (1.5, 2, 0), 6, False),
+]
+for name, loc, energy, color, target, size, shadow in lights:
+    lo = C.light("AREA", loc, energy, color=C.hexc(color), target=target, size=size, shadow=shadow)
+    if name == "Sol":
+        # Sans reflet : vue dans le verre vide, cette lumière donnait deux éclats gris clair sous le chargeur.
+        lo.data.specular_factor = 0.0
+
+
+# Cette méthode permet de convertir un point Blender en coordonnées Roblox (x, z, -y), 1 unité = 1 stud.
+def rb(p):
+    return [round(p[0], 3), round(p[2], 3), round(-p[1], 3)]
+
+
+# Disposition du menu pour l'intégration Roblox (#112), relative à l'origine de la scène du menu.
+layout = {
+    "camera": {"position": rb(CAM_LOC), "target": rb(CAM_TGT), "verticalFov": round(VFOV, 2), "aspectRef": 16 / 9},
+    "room": [{"name": n, "size": [sz[0], sz[2], sz[1]], "position": rb(lc), "yaw": yw} for n, sz, lc, yw, _ in room],
+    "lights": [
+        {"name": n, "position": rb(lc), "target": rb(tg), "color": col, "shadow": sh} for n, lc, _, col, tg, _, sh in lights
+    ],
+    "pivots": [
+        {"position": rb(r["piv"].location), "image": r["image"], "delay": round(r["delay"], 3)} for r in rigs
+    ],
+}
+with open(os.path.join(C.OUT, "layout.json"), "w") as f:
+    json.dump(layout, f, indent=1)
+print("layout", len(layout["pivots"]), "pivots, FOV vertical", round(VFOV, 2))
+
+if EXPORT:
+    import shard_export
+
+    shard_export.run(C.OUT, WEAPON, px.reshape(H, W, 4), shards, rigs)
+    sys.exit(0)
+
+# Rendu à un autre format d'écran : même position et orientation de caméra (la reconstitution reste alignée), largeur
+# du 16:9 gardée sur les écrans plus étroits en ouvrant le FOV vertical, comme le fera le script Roblox.
+aw, ah = (float(x) for x in ASPECT.split(":"))
+if ASPECT != "16:9":
+    s.render.resolution_x = int(round(RES[1] * aw / ah))
+    if aw / ah < 16 / 9:
+        cam.data.lens = CAM_LENS * (aw / ah) / (16 / 9)
+    print("format", ASPECT, "FOV vertical", round(math.degrees(2 * math.atan(SENSOR_H / 2 / cam.data.lens)), 2))
 if ANIM:
     FPS, DUR = 24, 7.5
     s.render.fps = FPS
@@ -379,4 +450,4 @@ if ANIM:
     s.render.filepath = os.path.join(adir, "f_")
     bpy.ops.render.render(animation=True)
 else:
-    C.render("c5_miroirs_" + STATE + ("" if FULL else "_low"))
+    C.render("c5_miroirs_" + STATE + ("" if ASPECT == "16:9" else "_" + ASPECT.replace(":", "x")) + ("" if FULL else "_low"))

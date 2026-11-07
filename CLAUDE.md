@@ -85,7 +85,8 @@ par un verrou, `worktrees/.run/studio.lock`. Faire d'abord tout ce qui se passe 
 - Une tâche qui attend l'avis de l'utilisateur garde le verrou jusqu'à son retour : regrouper ces demandes.
 - Blender : la session avec interface (MCP `blender`) est unique et sert une tâche à la fois. Les traitements par
   script passent par `blender -b --factory-startup` (un processus par commande, parallélisable), cf. `docs/maps.md` et
-  `docs/animations.md`.
+  `docs/animations.md`. Blender n'est pas dans le PATH : dans les commandes des docs, `blender` désigne
+  `"/c/Program Files/Blender Foundation/Blender 5.2/blender.exe"` (bash).
 
 ## Rojo Mapping
 

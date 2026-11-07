@@ -61,6 +61,81 @@ def import_awp(name="AWP"):
     return root, parts, (mx - mn)
 
 
+# Export Studio du M9 (Explorer > M9Bayonet > Handle > Export Selection, non versionné).
+M9_DIR = os.path.join(ROOT, ".maquettes", "m9")
+
+
+# Cette méthode permet d'importer le M9 Bayonet exporté de Studio lorsque la vitrine doit le montrer : l'export est
+# en coordonnées monde (couteau incliné dans la pose du viewmodel) et sa texture est réduite à 64 px, donc on le
+# redresse sur ses axes principaux et on lui donne deux matières nettes (acier, manche noir) choisies face par face
+# d'après la luminance de cette texture. Couteau couché le long de +X, pointe à droite, plat face à la caméra (-Y),
+# longueur `length`, origine au centre bas comme l'AWP.
+def import_m9(length, flip_edge=False):
+    import numpy as np
+
+    obj_path = os.path.join(M9_DIR, "m9.obj")
+    before = set(bpy.data.objects)
+    bpy.ops.wm.obj_import(filepath=obj_path)
+    o = next(x for x in set(bpy.data.objects) - before if x.type == "MESH")
+    me = o.data
+    me.transform(o.matrix_world)
+    o.matrix_world = Matrix.Identity(4)
+    # Axes principaux : le plus long = longueur (X), le moyen = largeur lame et garde (Z), le plus court = épaisseur (Y).
+    co = np.array([v.co[:] for v in me.vertices])
+    ctr = co.mean(0)
+    _, vecs = np.linalg.eigh(np.cov((co - ctr).T))
+    ax_len, ax_wid = Vector(vecs[:, 2]), Vector(vecs[:, 1])
+    ax_thk = ax_len.cross(ax_wid)
+    basis = Matrix((ax_len, ax_thk, ax_wid)).to_4x4()  # lignes : nouvelles coordonnées X, Y, Z
+    me.transform(basis @ Matrix.Translation(-Vector(ctr)))
+
+    # Matières d'après la texture réduite : sombre = manche, clair = acier.
+    img = bpy.data.images.load(os.path.join(M9_DIR, "Handle1_diff.png"))
+    w, h = img.size
+    px = list(img.pixels)
+    uvl = me.uv_layers.active
+    steel = mat("M9_Acier", hexc("#6f757e"), rough=0.32, metal=1.0)
+    grip = mat("M9_Manche", hexc("#141518"), rough=0.6, metal=0.0)
+    me.materials.clear()
+    me.materials.append(steel)
+    me.materials.append(grip)
+    for p in me.polygons:
+        u = sum(uvl.data[li].uv[0] for li in p.loop_indices) / len(p.loop_indices)
+        v = sum(uvl.data[li].uv[1] for li in p.loop_indices) / len(p.loop_indices)
+        x, y = min(w - 1, max(0, int(u * w))), min(h - 1, max(0, int(v * h)))
+        i = (y * w + x) * 4
+        lum = 0.3 * px[i] + 0.59 * px[i + 1] + 0.11 * px[i + 2]
+        p.material_index = 1 if lum < 0.16 else 0
+        p.use_smooth = True
+
+    # Pointe à droite : bout le plus fin en épaisseur (la lame est plate, le manche épais).
+    pts = [v.co for v in me.vertices]
+    xmin, xmax = min(p.x for p in pts), max(p.x for p in pts)
+    span = xmax - xmin
+
+    # Cette méthode permet de mesurer l'épaisseur (Y) des sommets situés dans une tranche de longueur.
+    def thick(a, b):
+        ys = [p.y for p in pts if a <= p.x <= b]
+        return max(ys) - min(ys) if ys else 0
+
+    if thick(xmax - span * 0.15, xmax) > thick(xmin, xmin + span * 0.15):
+        me.transform(Matrix.Rotation(math.pi, 4, "Z"))
+    # Scie sur le dos (en haut), tranchant en bas : l'export arrive dents en bas, d'où le retournement par défaut.
+    if not flip_edge:
+        me.transform(Matrix.Rotation(math.pi, 4, "X"))
+    pts = [v.co for v in me.vertices]
+    mn = Vector((min(p.x for p in pts), min(p.y for p in pts), min(p.z for p in pts)))
+    mx = Vector((max(p.x for p in pts), max(p.y for p in pts), max(p.z for p in pts)))
+    k = length / (mx.x - mn.x)
+    me.transform(Matrix.Diagonal((k, k, k, 1)) @ Matrix.Translation(-Vector(((mn.x + mx.x) / 2, (mn.y + mx.y) / 2, mn.z))))
+    root = bpy.data.objects.new("M9", None)
+    bpy.context.scene.collection.objects.link(root)
+    o.parent = root
+    bpy.context.view_layer.update()
+    print("M9 bbox", tuple(round(v * k, 2) for v in (mx - mn)))
+    return root, {"Handle": o}, (mx - mn) * k
+
+
 # Cette méthode permet de donner la position monde du centre de la boîte englobante d'une pièce.
 def center(o):
     pts = [o.matrix_world @ Vector(c) for c in o.bound_box]

@@ -173,9 +173,58 @@ Décisions de l'utilisateur :
 - Une découpe par arme ; échanger les jeux d'éclats pendant la dispersion, quand ils sont de profil.
 - Garder les cellules d'après une grille de points (part de pixels opaques) : un test sur quelques points perd les
   pièces fines (lunette, canon).
+- **Caméra définitive** (1 unité Blender = 1 stud, Roblox = `(x, z, -y)`, relative à l'origine de la scène du menu) :
+  position `(0, 3.4, 17)`, visée `(0.6, 4.6, 0)`, `FieldOfView` = **35,12°** (objectif 32 mm, capteur ajusté en hauteur
+  dans Blender pour un FOV vertical fixe, comme Roblox). `mirrors.py` écrit la disposition complète (caméra, salle,
+  lumières, pivots des éclats) dans `layout.json`, à côté des rendus.
+- **Écrans non 16:9** : la reconstitution ne dépend que de la position et de l'orientation de la caméra, pas du FOV.
+  Sur un écran plus étroit que 16:9, ouvrir le FOV vertical pour garder la largeur du 16:9
+  (`2·atan(tan(29,35°) / ratio)`, 45,75° en 4:3), sinon le canon sort du cadre ; sur un écran plus large, garder
+  35,12°. Vérifier avec `--aspect 4:3` ou `--aspect 21:9`.
+- **Export pour Roblox** (`mirrors.py --export --weapon AWP|M9`, module `shard_export.py`) : un MeshPart ne porte
+  qu'une `SurfaceAppearance`, donc face, dos et tranche d'un éclat partagent une texture. Par arme : `atlas.png`
+  (1024 px, morceaux d'image à pleine résolution 1080p composés sur le verre sombre, alpha 0,55 hors de l'arme ; bande
+  de nuancier en haut : dos, tranche claire, dégradé irisé), `masque.png` (opacité de l'arme, pour
+  `EmissiveMaskContent`), `eclats.fbx` (`Eclat_01`…, sans chanfrein, dont les faces mêleraient image et nuancier) et
+  `eclats.json` (centre du MeshPart, point d'attache du fil, retard de la vague, teinte, liseré). Communs aux armes :
+  `vides.fbx`, `vides.json`, `verre.png` (la bande seule ; tirage aléatoire séparé de la découpe). Le maillage est figé
+  en coordonnées monde : Roblox place chaque MeshPart au centre de sa boîte, sans rotation, et on le replace d'après
+  `center`.
+- Contrôle : `check_export.py -- <arme>` réimporte les FBX et rend `controle.png` sans éclairage depuis la caméra du
+  menu ; l'arme doit se reconstituer. Une forme qui traverse l'image dans ce contrôle vient du tri de transparence de
+  Blender (toutes les origines à zéro), pas de l'export.
+- `SurfaceAppearance` a bien `EmissiveMaskContent`, `EmissiveStrength` et `EmissiveTint` (Studio 0.746) : l'image peut
+  rester lumineuse comme dans les rendus.
+- Les assets de la Toolbox (le M9) ne s'ouvrent ni en `EditableMesh`/`EditableImage` (« no permission ») ni par
+  l'asset delivery (401, scope `legacy-asset:manage` absent) : les sortir par *Export Selection* dans Studio, dans
+  `.maquettes/m9/`. L'OBJ obtenu est en coordonnées monde (couteau incliné dans la pose du viewmodel) et sa texture
+  réduite à 64 px : `blend_common.import_m9` le redresse sur ses axes principaux (scie en haut) et lui donne deux
+  matières nettes (acier, manche) choisies face par face d'après cette texture.
+- M9 dans la vitrine : agrandi à 0,85 fois la longueur de l'AWP (décision : l'arme remplit la vitrine) ; `--fill`
+  pour régler.
+- Ids publiés : `tools/menu/published.json`. L'import Roblox du FBX garde les positions absolues des éclats (vérifié au
+  millième contre `center`) et les noms `Eclat_NN` / `Vide_NN`, sans rotation.
+- Une `SurfaceAppearance` ne se modifie pas en jeu par script (seulement en Edit, par plugin) : les deux jeux d'éclats
+  texturés sont construits d'avance (`.rbxm`) et échangés pendant la dispersion. Essai dans Studio : atlas net,
+  `EmissiveMaskContent` + `EmissiveStrength` 1,5 font ressortir l'arme sur le verre sombre.
+- **Dans Roblox** (`MenuScene.luau`, étape 3) : les jeux d'éclats texturés sont dans `assets/rbx/Menu/` (mappé sur
+  `ReplicatedStorage.MenuMirrors`), construits dans Studio par `tools/menu/studio_build.luau` puis exportés
+  (`receive.luau Menu`) ; fils, retards et teintes viennent de `MenuMirrorsData.luau`, généré par
+  `tools/menu/make_luau.py`. Après une nouvelle découpe : `--export` des deux armes, publication, mise à jour de
+  `published.json`, `make_luau.py`, construction et export dans Studio.
+- La salle est fermée (plafond, murs hors champ) : sans cela le ciel et le soleil de la map entrent. Lumières réglées
+  contre `reconstituee.jpg` : douche 6 (portée 40), rasante 8 (portée 34, angle 90), appoint 1,5, ambiance (44, 47, 58),
+  `EnvironmentDiffuseScale` 0,3. Plus sombre, le mur du fond disparaît.
+- Précharger les textures des armes (`ContentProvider:PreloadAsync` sur leurs `SurfaceAppearance`) : Roblox ne
+  télécharge une texture qu'une fois la pièce visible, et une arme jamais montrée apparaissait en éclats blancs opaques
+  pendant sa première vague.
+- Coût mesuré dans Studio (playtest, MCP actif, donc bruité) : environ 6,7 ms par image pour toute la scène, dont
+  1,8 ms pour les éclats ; fils, lumières et bloom moins de 0,4 ms chacun.
+- Un éclat vide reflète les lumières dans le verre : la lumière d'appoint au sol est sans reflet (`specular_factor = 0`),
+  sinon deux éclats sous le chargeur paraissaient gris clair. Roblox n'aura pas ce reflet.
 - Commandes :
   ```bash
-  blender -b --factory-startup --python tools/menu/mirrors.py -- --full --state assembled   # ou half, scattered
+  blender -b --factory-startup --python tools/menu/mirrors.py -- --full --state assembled   # ou half, scattered ; --aspect 4:3
   blender -b --factory-startup --python tools/menu/mirrors.py -- --anim                     # images de la vidéo
   uv run tools/menu/overlay_mockup.py <Oswald.ttf> <rendu.png> <sortie.jpg>
   uv run tools/menu/video.py <Oswald.ttf> <dossier des images> <sortie.mp4>
