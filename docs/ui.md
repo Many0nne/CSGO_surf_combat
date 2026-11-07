@@ -196,7 +196,17 @@ Décisions de l'utilisateur :
 - `SurfaceAppearance` a bien `EmissiveMaskContent`, `EmissiveStrength` et `EmissiveTint` (Studio 0.746) : l'image peut
   rester lumineuse comme dans les rendus.
 - Les assets de la Toolbox (le M9) ne s'ouvrent ni en `EditableMesh`/`EditableImage` (« no permission ») ni par
-  l'asset delivery (401, scope `legacy-asset:manage` absent) : les sortir par *Export Selection* dans Studio.
+  l'asset delivery (401, scope `legacy-asset:manage` absent) : les sortir par *Export Selection* dans Studio, dans
+  `.maquettes/m9/`. L'OBJ obtenu est en coordonnées monde (couteau incliné dans la pose du viewmodel) et sa texture
+  réduite à 64 px : `blend_common.import_m9` le redresse sur ses axes principaux (scie en haut) et lui donne deux
+  matières nettes (acier, manche) choisies face par face d'après cette texture.
+- M9 dans la vitrine : agrandi à 0,85 fois la longueur de l'AWP (décision : l'arme remplit la vitrine) ; `--fill`
+  pour régler.
+- Ids publiés : `tools/menu/published.json`. L'import Roblox du FBX garde les positions absolues des éclats (vérifié au
+  millième contre `center`) et les noms `Eclat_NN` / `Vide_NN`, sans rotation.
+- Une `SurfaceAppearance` ne se modifie pas en jeu par script (seulement en Edit, par plugin) : les deux jeux d'éclats
+  texturés sont construits d'avance (`.rbxm`) et échangés pendant la dispersion. Essai dans Studio : atlas net,
+  `EmissiveMaskContent` + `EmissiveStrength` 1,5 font ressortir l'arme sur le verre sombre.
 - Un éclat vide reflète les lumières dans le verre : la lumière d'appoint au sol est sans reflet (`specular_factor = 0`),
   sinon deux éclats sous le chargeur paraissaient gris clair. Roblox n'aura pas ce reflet.
 - Commandes :

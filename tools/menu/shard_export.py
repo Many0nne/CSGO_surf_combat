@@ -227,6 +227,7 @@ def run(out_dir, weapon, src_px, shards, rigs):
     paint_band(verre)
     save_png(verre, os.path.join(out_dir, "verre.png"), "Verre")
     vent, vobjs = [], []
+    tint_rng = random.Random(29)  # tirage propre aux vides : identiques quelle que soit l'arme exportée
     for i, (o, r) in enumerate(vides):
         irise = remap_uvs(o, None, SWATCH_W, BAND)
         o.name = o.data.name = "Vide_%02d" % (i + 1)

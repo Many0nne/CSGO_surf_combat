@@ -39,10 +39,16 @@ cam.data.sensor_fit = "VERTICAL"
 cam.data.sensor_height = SENSOR_H
 
 # --- 1. Image source : l'AWP seule, éclairée en studio, sur fond transparent, depuis la caméra du menu.
-root, parts, size = C.import_m9(size_like=C.AWP_LENGTH) if WEAPON == "M9" else C.import_awp()
-if WEAPON == "AWP":
+root, parts, size = C.import_awp()
+if WEAPON == "M9":
+    # L'arme remplit la vitrine quelle qu'elle soit (décision #112) : le M9 est agrandi à une longueur proche de celle
+    # de l'AWP (M9_FILL), sa lame étant plus haute que le fusil à longueur égale.
+    for o in list(parts.values()) + [root]:
+        bpy.data.objects.remove(o, do_unlink=True)
+    M9_FILL = float(argv[argv.index("--fill") + 1]) if "--fill" in argv else 0.85
+    root, parts, size = C.import_m9(size.x * M9_FILL, flip_edge="--flip-edge" in argv)
+else:
     C.awp_materials(parts)
-# L'arme remplit la vitrine quelle qu'elle soit (décision #112) : le M9 est agrandi à la longueur de l'AWP.
 root.scale = (1.4, 1.4, 1.4)
 root.location = (1.5, 0.0, 3.0)
 root.rotation_euler = (0, math.radians(-4), math.radians(-14))
