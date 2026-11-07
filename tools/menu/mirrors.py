@@ -16,7 +16,10 @@ STATE = argv[argv.index("--state") + 1] if "--state" in argv else "assembled"
 ANIM = "--anim" in argv
 # Format de l'écran du rendu final (la découpe est toujours faite en 16:9) : 16:9, 16:10, 4:3, 21:9...
 ASPECT = argv[argv.index("--aspect") + 1] if "--aspect" in argv else "16:9"
-RES = (1920, 1080) if FULL else (960, 540)
+# Export pour Roblox (atlas, masque émissif, FBX des éclats, positions) au lieu du rendu ; découpe en pleine résolution.
+EXPORT = "--export" in argv
+WEAPON = argv[argv.index("--weapon") + 1] if "--weapon" in argv else "AWP"
+RES = (1920, 1080) if FULL or EXPORT else (960, 540)
 random.seed(7)
 
 C.reset()
@@ -36,8 +39,10 @@ cam.data.sensor_fit = "VERTICAL"
 cam.data.sensor_height = SENSOR_H
 
 # --- 1. Image source : l'AWP seule, éclairée en studio, sur fond transparent, depuis la caméra du menu.
-root, parts, size = C.import_awp()
-C.awp_materials(parts)
+root, parts, size = C.import_m9(size_like=C.AWP_LENGTH) if WEAPON == "M9" else C.import_awp()
+if WEAPON == "AWP":
+    C.awp_materials(parts)
+# L'arme remplit la vitrine quelle qu'elle soit (décision #112) : le M9 est agrandi à la longueur de l'AWP.
 root.scale = (1.4, 1.4, 1.4)
 root.location = (1.5, 0.0, 3.0)
 root.rotation_euler = (0, math.radians(-4), math.radians(-14))
@@ -47,7 +52,7 @@ src_lights = [
     C.light("AREA", (-6, -6, 3), 200, color=C.hexc("#9aa3c4"), target=(1.3, 0, 4), size=6, shadow=False),
 ]
 s.render.film_transparent = True
-src_path = os.path.join(C.OUT, "c5_source.png")
+src_path = os.path.join(C.OUT, "c5_source_" + WEAPON + ".png")
 s.render.filepath = src_path
 bpy.ops.render.render(write_still=True)
 s.render.film_transparent = False
@@ -259,8 +264,10 @@ for poly, (cx, cy) in cells:
     o.location = p0
     for m in (face, dos, edge if random.random() < 0.25 else nette):
         me.materials.append(m)
-    bev = o.modifiers.new("Chanfrein", "BEVEL")
-    bev.width, bev.segments = 0.014, 2
+    # Pas de chanfrein à l'export : ses faces mélangeraient dans l'atlas l'image et le nuancier de la tranche.
+    if not EXPORT:
+        bev = o.modifiers.new("Chanfrein", "BEVEL")
+        bev.width, bev.segments = 0.014, 2
     shards.append((o, (cx, cy)))
 
 for m in (face, dos, edge, nette):
@@ -270,13 +277,15 @@ for m in (face, dos, edge, nette):
         print("blend", e)
 
 # Éclats vides plus loin dans la salle (même matière, sans image) : la profondeur du champ d'éclats.
+# Tirage à part : les vides sont communs aux armes, ils ne doivent pas dépendre de la découpe de l'arme.
+rv = random.Random(11)
 for k in range(26):
-    cxw, cyw, czw = random.uniform(-14, 16), random.uniform(3, 14), random.uniform(1.5, 10)
-    r = random.uniform(0.4, 1.1)
-    pts = sorted(random.uniform(0, 2 * math.pi) for _ in range(random.randint(4, 6)))
+    cxw, cyw, czw = rv.uniform(-14, 16), rv.uniform(3, 14), rv.uniform(1.5, 10)
+    r = rv.uniform(0.4, 1.1)
+    pts = sorted(rv.uniform(0, 2 * math.pi) for _ in range(rv.randint(4, 6)))
     me = bpy.data.meshes.new("Vide")
     bm = bmesh.new()
-    fv = [bm.verts.new((math.cos(a) * r * random.uniform(0.6, 1.2), 0, math.sin(a) * r * random.uniform(0.6, 1.4))) for a in pts]
+    fv = [bm.verts.new((math.cos(a) * r * rv.uniform(0.6, 1.2), 0, math.sin(a) * r * rv.uniform(0.6, 1.4))) for a in pts]
     bv = [bm.verts.new(v.co + Vector((0, THICK, 0))) for v in fv]
     f1 = bm.faces.new(fv)
     f1.material_index = 1
@@ -290,11 +299,12 @@ for k in range(26):
     bm.free()
     o = bpy.data.objects.new("Vide", me)
     s.collection.objects.link(o)
-    for m in (face, dos, edge if random.random() < 0.25 else nette):
+    for m in (face, dos, edge if rv.random() < 0.25 else nette):
         me.materials.append(m)
-    o.modifiers.new("Chanfrein", "BEVEL").width = 0.014
+    if not EXPORT:
+        o.modifiers.new("Chanfrein", "BEVEL").width = 0.014
     o.location = (cxw, cyw, czw)
-    o.rotation_euler = (random.uniform(-0.3, 0.3), 0, random.uniform(-0.9, 0.9))
+    o.rotation_euler = (rv.uniform(-0.3, 0.3), 0, rv.uniform(-0.9, 0.9))
     shards.append((o, None))
 bpy.context.view_layer.update()
 
@@ -405,6 +415,12 @@ layout = {
 with open(os.path.join(C.OUT, "layout.json"), "w") as f:
     json.dump(layout, f, indent=1)
 print("layout", len(layout["pivots"]), "pivots, FOV vertical", round(VFOV, 2))
+
+if EXPORT:
+    import shard_export
+
+    shard_export.run(C.OUT, WEAPON, px.reshape(H, W, 4), shards, rigs)
+    sys.exit(0)
 
 # Rendu à un autre format d'écran : même position et orientation de caméra (la reconstitution reste alignée), largeur
 # du 16:9 gardée sur les écrans plus étroits en ouvrant le FOV vertical, comme le fera le script Roblox.

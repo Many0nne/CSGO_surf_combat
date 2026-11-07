@@ -181,6 +181,22 @@ Décisions de l'utilisateur :
   Sur un écran plus étroit que 16:9, ouvrir le FOV vertical pour garder la largeur du 16:9
   (`2·atan(tan(29,35°) / ratio)`, 45,75° en 4:3), sinon le canon sort du cadre ; sur un écran plus large, garder
   35,12°. Vérifier avec `--aspect 4:3` ou `--aspect 21:9`.
+- **Export pour Roblox** (`mirrors.py --export --weapon AWP|M9`, module `shard_export.py`) : un MeshPart ne porte
+  qu'une `SurfaceAppearance`, donc face, dos et tranche d'un éclat partagent une texture. Par arme : `atlas.png`
+  (1024 px, morceaux d'image à pleine résolution 1080p composés sur le verre sombre, alpha 0,55 hors de l'arme ; bande
+  de nuancier en haut : dos, tranche claire, dégradé irisé), `masque.png` (opacité de l'arme, pour
+  `EmissiveMaskContent`), `eclats.fbx` (`Eclat_01`…, sans chanfrein, dont les faces mêleraient image et nuancier) et
+  `eclats.json` (centre du MeshPart, point d'attache du fil, retard de la vague, teinte, liseré). Communs aux armes :
+  `vides.fbx`, `vides.json`, `verre.png` (la bande seule ; tirage aléatoire séparé de la découpe). Le maillage est figé
+  en coordonnées monde : Roblox place chaque MeshPart au centre de sa boîte, sans rotation, et on le replace d'après
+  `center`.
+- Contrôle : `check_export.py -- <arme>` réimporte les FBX et rend `controle.png` sans éclairage depuis la caméra du
+  menu ; l'arme doit se reconstituer. Une forme qui traverse l'image dans ce contrôle vient du tri de transparence de
+  Blender (toutes les origines à zéro), pas de l'export.
+- `SurfaceAppearance` a bien `EmissiveMaskContent`, `EmissiveStrength` et `EmissiveTint` (Studio 0.746) : l'image peut
+  rester lumineuse comme dans les rendus.
+- Les assets de la Toolbox (le M9) ne s'ouvrent ni en `EditableMesh`/`EditableImage` (« no permission ») ni par
+  l'asset delivery (401, scope `legacy-asset:manage` absent) : les sortir par *Export Selection* dans Studio.
 - Un éclat vide reflète les lumières dans le verre : la lumière d'appoint au sol est sans reflet (`specular_factor = 0`),
   sinon deux éclats sous le chargeur paraissaient gris clair. Roblox n'aura pas ce reflet.
 - Commandes :
