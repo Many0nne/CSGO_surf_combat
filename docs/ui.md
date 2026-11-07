@@ -207,6 +207,19 @@ Décisions de l'utilisateur :
 - Une `SurfaceAppearance` ne se modifie pas en jeu par script (seulement en Edit, par plugin) : les deux jeux d'éclats
   texturés sont construits d'avance (`.rbxm`) et échangés pendant la dispersion. Essai dans Studio : atlas net,
   `EmissiveMaskContent` + `EmissiveStrength` 1,5 font ressortir l'arme sur le verre sombre.
+- **Dans Roblox** (`MenuScene.luau`, étape 3) : les jeux d'éclats texturés sont dans `assets/rbx/Menu/` (mappé sur
+  `ReplicatedStorage.MenuMirrors`), construits dans Studio par `tools/menu/studio_build.luau` puis exportés
+  (`receive.luau Menu`) ; fils, retards et teintes viennent de `MenuMirrorsData.luau`, généré par
+  `tools/menu/make_luau.py`. Après une nouvelle découpe : `--export` des deux armes, publication, mise à jour de
+  `published.json`, `make_luau.py`, construction et export dans Studio.
+- La salle est fermée (plafond, murs hors champ) : sans cela le ciel et le soleil de la map entrent. Lumières réglées
+  contre `reconstituee.jpg` : douche 6 (portée 40), rasante 8 (portée 34, angle 90), appoint 1,5, ambiance (44, 47, 58),
+  `EnvironmentDiffuseScale` 0,3. Plus sombre, le mur du fond disparaît.
+- Précharger les textures des armes (`ContentProvider:PreloadAsync` sur leurs `SurfaceAppearance`) : Roblox ne
+  télécharge une texture qu'une fois la pièce visible, et une arme jamais montrée apparaissait en éclats blancs opaques
+  pendant sa première vague.
+- Coût mesuré dans Studio (playtest, MCP actif, donc bruité) : environ 6,7 ms par image pour toute la scène, dont
+  1,8 ms pour les éclats ; fils, lumières et bloom moins de 0,4 ms chacun.
 - Un éclat vide reflète les lumières dans le verre : la lumière d'appoint au sol est sans reflet (`specular_factor = 0`),
   sinon deux éclats sous le chargeur paraissaient gris clair. Roblox n'aura pas ce reflet.
 - Commandes :

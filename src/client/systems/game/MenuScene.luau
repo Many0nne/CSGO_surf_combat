@@ -3,6 +3,7 @@
 -- changement d'arme, le jeu d'éclats se disperse et celui de la nouvelle arme se pose en vague de gauche à droite.
 -- Les jeux d'éclats texturés viennent de ReplicatedStorage.MenuMirrors (assets/rbx/Menu), leurs données (fils,
 -- retards) de MenuMirrorsData (généré par tools/menu). Tout est local au client ; l'éclairage est rendu à la sortie.
+local ContentProvider = game:GetService("ContentProvider")
 local Lighting = game:GetService("Lighting")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -26,21 +27,22 @@ local FLOOR = Color3.fromRGB(18, 20, 25)
 local JOINT = Color3.fromRGB(21, 23, 28)
 local WIRE = Color3.fromRGB(139, 143, 154)
 
--- Lumières de la salle (cf. tools/menu/mirrors.py) : douche froide zénithale, rasante sur le mur du fond, appoint au sol
+-- Lumières de la salle (cf. tools/menu/mirrors.py) : douche froide zénithale, rasante sur le mur du fond, appoint au
+-- sol. Valeurs réglées dans Studio contre docs/ui/menu-miroirs/reconstituee.jpg.
 local LIGHT_SETTINGS = {
-	Douche = { range = 34, angle = 110, brightness = 3 },
-	Rasante = { range = 30, angle = 75, brightness = 2.2 },
-	Sol = { range = 14, angle = 120, brightness = 0.6 },
+	Douche = { range = 40, angle = 110, brightness = 6 },
+	Rasante = { range = 34, angle = 90, brightness = 8 },
+	Sol = { range = 14, angle = 120, brightness = 1.5 },
 }
 
 -- Éclairage du menu : la salle est fermée, seule la lumière de ses projecteurs compte
 local LIGHTING = {
 	ClockTime = 0,
 	Brightness = 0,
-	Ambient = Color3.fromRGB(26, 28, 36),
-	OutdoorAmbient = Color3.fromRGB(26, 28, 36),
+	Ambient = Color3.fromRGB(44, 47, 58),
+	OutdoorAmbient = Color3.fromRGB(44, 47, 58),
 	ExposureCompensation = 0,
-	EnvironmentDiffuseScale = 0,
+	EnvironmentDiffuseScale = 0.3,
 	EnvironmentSpecularScale = 0.4,
 }
 local ATMOSPHERE = { Density = 0, Haze = 0, Glare = 0 }
@@ -332,6 +334,19 @@ local function build()
 		sets[name] = set
 		applySet(set)
 	end
+	-- Textures des armes chargées d'avance : sinon une arme encore jamais montrée apparaît en éclats blancs opaques
+	-- pendant sa première vague (Roblox ne télécharge une texture qu'une fois la pièce visible).
+	task.spawn(function()
+		local looks = {}
+		for _, set in sets do
+			local first = set.shards[1]
+			local look = first and first.part:FindFirstChildOfClass("SurfaceAppearance")
+			if look then
+				table.insert(looks, look)
+			end
+		end
+		ContentProvider:PreloadAsync(looks)
+	end)
 	vides = buildSet("Vides", anchor)
 	local emptySet = vides :: ShardSet
 	emptySet.fade = 0
