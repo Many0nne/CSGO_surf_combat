@@ -17,6 +17,9 @@ Ce que l'utilisateur a validé dans le menu principal :
 Palette du menu : ciel bleu nuit, soleil blanc chaud, lignes ambrées, rampes brun chaud, silhouettes noires, texte os
 (`243, 233, 220`), rouge d'impact (`C.HitRed`) pour ce qui est visé ou touché.
 
+Le canyon au couchant est abandonné (il collait à l'ancienne map) : le menu passe à la **salle des miroirs** (section
+dédiée plus bas, implémentation #112), avec la palette du HUD.
+
 ## Ce qui a été rejeté, et pourquoi
 
 Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vitesse ») :
@@ -36,6 +39,8 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
 - Montrer et faire essayer plutôt que décrire : l'utilisateur n'a pas d'idée précise a priori, il réagit à ce qu'il voit.
 - Pousser les idées loin, puis vérifier la lisibilité : le premier titrage était trop abîmé (« SURF » se lisait « URF »).
 - Compteur de vitesse et autres éléments de HUD : discrets, ils ne doivent pas prendre une grosse partie de l'écran.
+- Pour une scène : composer d'abord une image (plans, échelle, silhouette) dans une planche de rendus Blender, la faire
+  choisir, puis seulement la construire dans Roblox. Voir « Menu : salle des miroirs ».
 
 ## Comment c'est construit
 
@@ -118,11 +123,67 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
 
 ## Prototyper dans le moteur
 
-Sans toucher aux fichiers ni à la place : pendant un playtest, `execute_luau` en contexte `Client` peut construire une scène
+Pour vérifier la faisabilité d'une idée, pas pour chercher une composition (voir « Méthode » plus haut). Sans toucher aux fichiers ni à la place : pendant un playtest, `execute_luau` en contexte `Client` peut construire une scène
 et une UI entières, et `screen_capture` montre le résultat avec l'UI. Tout disparaît à l'arrêt du playtest. Le code ainsi
 lancé ne partage pas ses modules avec le jeu (un `require` donne une autre instance). En mode Edit, `screen_capture` rend
 un viewport tout blanc quand la fenêtre Studio est réduite ou en arrière-plan : la mettre au premier plan. Seul Claude ne peut pas connecter le
 plugin Rojo : l'utilisateur doit le faire pour tester un worktree.
+
+## Menu : salle des miroirs (#106, implémentation #112)
+
+**Piste retenue :** des éclats de verre suspendus à des fils dans une salle de béton. Chacun porte un morceau de l'image
+de l'arme. En pivotant sur leurs fils, ils la reconstituent face à la caméra. Au repos l'arme est entière ; au
+changement d'arme, les éclats se dispersent puis se reposent en vague de gauche à droite ; au tir, les éclats touchés
+pivotent puis se reposent. Rendus de référence : `docs/ui/menu-miroirs/` (`reconstituee.jpg`, `mi-rotation.jpg`,
+`dispersee.jpg`, `reconstitution.mp4`).
+
+Décisions de l'utilisateur :
+- le centre du menu est une vitrine d'arme, sans personnage ;
+- le menu ne dépend d'aucune map : plus de rampes ni de soleil couchant ;
+- l'interface reprend le style du HUD (texte os à ombre décalée, libellés ambrés Oswald, rouge d'impact rare, barres
+  segmentées), avec la disposition des maquettes ;
+- pas d'affichage de la partie en cours.
+
+**Pistes écartées** (`docs/ui/menu-miroirs/planche-ecartee.jpg` pour les quatre dernières) :
+
+| Piste | Pourquoi |
+|---|---|
+| Travelling de canyon, rampes flottantes et surfeurs fantômes, mer de brume | Liées à l'ancienne map |
+| Lobby avec personnage | Rig en blocs, ridicule |
+| Studio noir, réticule géant, stand de tir de nuit | « Pas mal mais pas assez originaux » |
+| Vue éclatée avec étiquettes, tir figé (balle et anneaux), vitrine pare-balles | Objets empilés, pas des compositions |
+| Planche Blender : établi, macro de la bouche, machine murale, éclaté sur l'axe | Correctes, mais l'utilisateur a préféré l'idée des miroirs |
+
+**Méthode** (après une douzaine de maquettes rejetées) :
+- Ne pas traduire les mots d'un concept en pièces primitives construites à la volée dans Studio (anneau = « onde »,
+  étiquette = « technique ») : cela donne des objets empilés, sans premier plan ni fond, sans rapports d'échelle.
+  L'originalité vient de la forme du décor et du cadrage, pas d'effets ajoutés.
+- Partir de références visuelles de l'utilisateur, puis faire une planche de 3 ou 4 rendus Blender au cadrage final
+  16:9, avec l'interface posée par-dessus (`tools/menu/overlay_mockup.py`). Rendus reproductibles dans Roblox :
+  matériaux PBR simples, lumières ponctuelles, pas de volumétrique.
+- Une fois l'image choisie, juger le mouvement sur une courte vidéo avant toute intégration ; l'utilisateur a demandé
+  une reconstitution plus lente que le premier essai (arme entière vers 5,5 s).
+
+**Technique** (`tools/menu/mirrors.py`, Blender en arrière-plan) :
+- Roblox n'a pas de vrais miroirs (`Reflectance` ne reflète que le ciel) : on rend l'arme seule depuis la caméra du
+  menu, on découpe la zone de l'arme en cellules de Voronoï, puis chaque cellule est reprojetée à sa propre profondeur,
+  face à la caméra, avec des UV projetés depuis la vue. Alignés, les éclats redonnent l'image exacte.
+- Les éclats pivotent autour de leur fil (axe vertical), avec un léger balancement : les fils restent justes. La
+  reconstitution est une oscillation amortie (`exp(-1.6 t) cos(2π·0.32 t)`), libérée en vague sur 2,6 s.
+- Une découpe par arme ; échanger les jeux d'éclats pendant la dispersion, quand ils sont de profil.
+- Garder les cellules d'après une grille de points (part de pixels opaques) : un test sur quelques points perd les
+  pièces fines (lunette, canon).
+- Commandes :
+  ```bash
+  blender -b --factory-startup --python tools/menu/mirrors.py -- --full --state assembled   # ou half, scattered
+  blender -b --factory-startup --python tools/menu/mirrors.py -- --anim                     # images de la vidéo
+  uv run tools/menu/overlay_mockup.py <Oswald.ttf> <rendu.png> <sortie.jpg>
+  uv run tools/menu/video.py <Oswald.ttf> <dossier des images> <sortie.mp4>
+  ```
+  Sortie dans `.maquettes/menu-miroirs/` (non versionné, `MENU_OUT` pour la changer). Environ 2 min par image en
+  1920x1080 : lancer les rendus l'un après l'autre (deux en parallèle doublent le temps de chacun).
+- La source Blender de l'AWP (`assets/awp_viewmodel/AWP_Viewmodel_Anims.blend`) est en vert uni alors que l'arme du jeu
+  a une crosse en bois : `blend_common.awp_materials` remet le bois.
 
 ## Reste à faire
 
@@ -130,4 +191,4 @@ plugin Rojo : l'utilisateur doit le faire pour tester un worktree.
 - Afficher les munitions dans le HUD (`WeaponSystem` les gère, rien ne les montre), dans le même langage que le compteur de vitesse.
 - Piste écartée pour l'instant sur le compteur : chiffres en images usées comme le titrage, et inclinaison qui augmente avec la vitesse.
 - Tester le menu au tactile et à la manette : c'est prévu dans le code, jamais essayé.
-- Ajouter un modèle de personnage dédié si l'on veut un sniper visible en 3e personne dans le menu.
+- Construire le menu « salle des miroirs » (#112).
