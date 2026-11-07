@@ -14,6 +14,15 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("HUDRules.gameHudVisible", function()
+		T.it("n'affiche le HUD de jeu qu'en partie avec un personnage vivant", function()
+			T.expectEqual(HUDRules.gameHudVisible("IN_ROUND"), true)
+			for _, state in { "MENU", "INFOS", "SPAWNING", "DEAD", "RESULT" } do
+				T.expectEqual(HUDRules.gameHudVisible(state), false)
+			end
+		end)
+	end)
+
 	T.describe("HUDRules.speedFill", function()
 		T.it("remplit la ligne proportionnellement, pleine au dernier palier, bornée à 0 et 1", function()
 			T.expectEqual(HUDRules.speedFill(0), 0)
