@@ -116,6 +116,34 @@ local function onInputBegan(input: InputObject, processed: boolean)
 	end
 end
 
+-- Touches 1 à 9 : rang de l'arme montrée dans la salle des miroirs
+local NUMBER_KEYS = {
+	Enum.KeyCode.One,
+	Enum.KeyCode.Two,
+	Enum.KeyCode.Three,
+	Enum.KeyCode.Four,
+	Enum.KeyCode.Five,
+	Enum.KeyCode.Six,
+	Enum.KeyCode.Seven,
+	Enum.KeyCode.Eight,
+	Enum.KeyCode.Nine,
+}
+
+-- Cette méthode permet de changer l'arme de la vitrine (molette, touches 1-9) lorsque le joueur est sur l'accueil.
+local function onWeaponInput(input: InputObject, processed: boolean)
+	if processed or currentPage ~= "home" then
+		return
+	end
+	if input.UserInputType == Enum.UserInputType.MouseWheel then
+		MenuScene.cycleWeapon(if input.Position.Z > 0 then -1 else 1)
+	elseif input.UserInputType == Enum.UserInputType.Keyboard then
+		local index = table.find(NUMBER_KEYS, input.KeyCode)
+		if index then
+			MenuScene.selectWeapon(index)
+		end
+	end
+end
+
 -- Cette méthode permet d'initialiser le menu et d'enregistrer les rappels lorsque le client démarre ;
 -- onSettings et onHome sont optionnels (navigation vers Settings et retour à l'accueil).
 function MainMenu.init(
@@ -142,6 +170,12 @@ function MainMenu.init(
 	UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
 		if gui.Enabled then
 			onInputBegan(input, processed)
+			onWeaponInput(input, processed)
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(input: InputObject, processed: boolean)
+		if gui.Enabled then
+			onWeaponInput(input, processed)
 		end
 	end)
 end
