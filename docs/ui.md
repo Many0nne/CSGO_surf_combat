@@ -173,9 +173,19 @@ Décisions de l'utilisateur :
 - Une découpe par arme ; échanger les jeux d'éclats pendant la dispersion, quand ils sont de profil.
 - Garder les cellules d'après une grille de points (part de pixels opaques) : un test sur quelques points perd les
   pièces fines (lunette, canon).
+- **Caméra définitive** (1 unité Blender = 1 stud, Roblox = `(x, z, -y)`, relative à l'origine de la scène du menu) :
+  position `(0, 3.4, 17)`, visée `(0.6, 4.6, 0)`, `FieldOfView` = **35,12°** (objectif 32 mm, capteur ajusté en hauteur
+  dans Blender pour un FOV vertical fixe, comme Roblox). `mirrors.py` écrit la disposition complète (caméra, salle,
+  lumières, pivots des éclats) dans `layout.json`, à côté des rendus.
+- **Écrans non 16:9** : la reconstitution ne dépend que de la position et de l'orientation de la caméra, pas du FOV.
+  Sur un écran plus étroit que 16:9, ouvrir le FOV vertical pour garder la largeur du 16:9
+  (`2·atan(tan(29,35°) / ratio)`, 45,75° en 4:3), sinon le canon sort du cadre ; sur un écran plus large, garder
+  35,12°. Vérifier avec `--aspect 4:3` ou `--aspect 21:9`.
+- Un éclat vide reflète les lumières dans le verre : la lumière d'appoint au sol est sans reflet (`specular_factor = 0`),
+  sinon deux éclats sous le chargeur paraissaient gris clair. Roblox n'aura pas ce reflet.
 - Commandes :
   ```bash
-  blender -b --factory-startup --python tools/menu/mirrors.py -- --full --state assembled   # ou half, scattered
+  blender -b --factory-startup --python tools/menu/mirrors.py -- --full --state assembled   # ou half, scattered ; --aspect 4:3
   blender -b --factory-startup --python tools/menu/mirrors.py -- --anim                     # images de la vidéo
   uv run tools/menu/overlay_mockup.py <Oswald.ttf> <rendu.png> <sortie.jpg>
   uv run tools/menu/video.py <Oswald.ttf> <dossier des images> <sortie.mp4>
