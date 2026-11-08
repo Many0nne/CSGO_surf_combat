@@ -13,7 +13,7 @@ local SettingsMenu = require(script.Parent.Parent.Parent.ui.SettingsMenu)
 local Transition = require(script.Parent.Parent.Parent.ui.Transition)
 local Speedometer = require(script.Parent.Parent.Parent.ui.Speedometer)
 local WeaponBar = require(script.Parent.Parent.Parent.ui.WeaponBar)
-local ScopeOverlay = require(script.Parent.Parent.Parent.ui.ScopeOverlay)
+local ScopeSystem = require(script.Parent.Parent.weapon.ScopeSystem)
 local HUDRules = require(script.Parent.Parent.Parent.ui.HUDRules)
 
 local GameStateController = {}
@@ -40,14 +40,14 @@ end
 -- ── Transitions d'état ─────────────────────────────────────────────────────
 
 -- Cette méthode permet d'appliquer la règle unique « HUD de jeu visible » (HUDRules.gameHudVisible) au compteur de vitesse
--- à la barre d'armes et à la lunette lorsque l'état client change ; RoundHUD suit déjà l'état. Le niveau de zoom est remis
--- à zéro par ScopeSystem au prochain personnage.
+-- à la barre d'armes et à la lunette lorsque l'état client change ; RoundHUD suit déjà l'état. HUD masqué (mort, fin de
+-- round, menu) : le zoom est remis à zéro tout de suite (FOV, viewmodel, lunette), sans attendre le prochain personnage.
 local function applyGameHud()
 	local show = HUDRules.gameHudVisible(state)
 	Speedometer.setVisible(show)
 	WeaponBar.setVisible(show)
 	if not show then
-		ScopeOverlay.setVisible(false)
+		ScopeSystem.reset()
 	end
 end
 
