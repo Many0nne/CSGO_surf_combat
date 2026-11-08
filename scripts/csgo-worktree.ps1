@@ -11,8 +11,8 @@
   reutilise (modifications et slot conserves). Par defaut le script demarre `rojo serve` en arriere-plan et attend que
   http://localhost:<port>/api/rojo reponde. -NoUp : sans demarrer.
 
-  Studio ne suit qu'un serveur Rojo par fenetre : la connexion au worktree se fait a la main (mode Edit, plugin Rojo,
-  port du worktree, Connect). Le script rappelle la procedure.
+  Studio ne suit qu'un serveur Rojo par fenetre. Avec le plugin Rojo modifie (tools\rojo-plugin), -AcquireStudio l'y
+  connecte seul et la liberation le renvoie sur 34872 ; sinon connexion a la main (mode Edit, plugin Rojo, port, Connect).
 
   Registre de nettoyage (worktrees\.owners.json, lu par csgo-worktree-cleanup.ps1) : la session Claude qui lance le
   script est inscrite comme utilisatrice du worktree. Quand ses threads T3 ne sont plus actifs, Rojo est arrete ;
@@ -206,11 +206,65 @@ function Invoke-StudioLocked([scriptblock]$Action) {
   try { & $Action } finally { $m.ReleaseMutex() }
 }
 
-# Cette methode permet de liberer le verrou Studio lorsqu'il est tenu par la branche courante (fin de verification, -Stop, -Remove).
+$studioTarget = Join-Path $runDir 'studio.target'
+$studioStateFile = Join-Path $runDir 'studio.status'
+$controlPort = 34870
+$controlPidFile = Join-Path $runDir 'rojo-control.pid'
+
+# Cette methode permet de demarrer le serveur de commande du plugin Rojo modifie (tools/rojo-plugin) lorsqu'il ne
+# tourne pas encore ; sans le plugin modifie dans Studio, il ne sert a rien mais ne gene pas.
+function Start-RojoControl {
+  $health = try { (Invoke-WebRequest "http://localhost:$controlPort/health" -TimeoutSec 3).Content } catch { $null }
+  if ($health -eq 'csgo-control 2') { return }
+  # Ancienne version encore lancee : on l'arrete avant de demarrer celle du depot.
+  @(Get-NetTCPConnection -LocalPort $controlPort -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique) |
+    Where-Object { (Get-Process -Id $_ -ErrorAction SilentlyContinue).ProcessName -eq 'lune' } | ForEach-Object { taskkill /PID $_ /T /F *> $null }
+  if (Test-Path $controlPidFile) {
+    $old = [int](Get-Content $controlPidFile)
+    if (Get-Process -Id $old -ErrorAction SilentlyContinue) { taskkill /PID $old /T /F *> $null }
+  }
+  $lune = (Get-Command lune -ErrorAction SilentlyContinue).Source
+  $server = Join-Path $PSScriptRoot '..\tools\rojo-plugin\control-server.luau'
+  if (-not ($lune -and (Test-Path $server))) { return }
+  # Dossier de travail = celui du script : le shim Rokit de lune y trouve rokit.toml.
+  $proc = Start-Process -FilePath (Get-Command pwsh).Source -WorkingDirectory (Split-Path -Parent $PSScriptRoot) `
+    -WindowStyle Hidden -PassThru -ArgumentList '-NoProfile',
+    '-NonInteractive', '-Command', "& '$lune' run '$((Resolve-Path $server).Path)' '$studioTarget' '$studioStateFile' *>'$(Join-Path $runDir 'rojo-control.log')'"
+  Set-Content -Path $controlPidFile -Value $proc.Id
+}
+
+# Cette methode permet de publier le port Rojo que Studio doit suivre lorsque le verrou change de main ;
+# chaine vide = deconnecter. Le plugin modifie ne reagit qu'au changement de `rev`, renvoyee par la methode.
+function Set-StudioTarget([string]$Port) {
+  New-Item -ItemType Directory -Force $runDir | Out-Null
+  $rev = [string](Get-Date).Ticks
+  [pscustomobject]@{ port = $Port; rev = $rev } | ConvertTo-Json -Compress | Set-Content $studioTarget
+  Start-RojoControl
+  return $rev
+}
+
+# Cette methode permet d'attendre que le plugin modifie signale sa connexion pour cette cible (meme `rev`, meme port)
+# lorsque -AcquireStudio vient de la publier ; renvoie $false apres le delai (plugin officiel, Studio ferme ou en Play).
+function Wait-StudioConnected([string]$Rev, [int]$Port, [int]$Seconds = 15) {
+  for ($i = 0; $i -lt $Seconds; $i++) {
+    $s = try { Get-Content $studioStateFile -Raw -ErrorAction Stop | ConvertFrom-Json } catch { $null }
+    if ($s -and $s.rev -eq $Rev -and $s.state -eq 'connected' -and $s.port -eq "$Port") { return $true }
+    Start-Sleep -Seconds 1
+  }
+  return $false
+}
+
+# Cette methode permet de liberer le verrou Studio lorsqu'il est tenu par la branche courante (fin de verification, -Stop, -Remove) ;
+# Studio est alors renvoye vers le checkout principal s'il sert, sinon deconnecte.
 function Release-StudioLock {
   Invoke-StudioLocked {
     $lock = Get-StudioLock
-    if ($lock -and $lock.branch -eq $Branch) { Remove-Item -Force $studioLock; return $true }
+    if ($lock -and $lock.branch -eq $Branch) {
+      Remove-Item -Force $studioLock
+      $mainUp = (Get-UrlCode "http://localhost:$basePort/api/rojo") -eq 200
+      [void](Set-StudioTarget $(if ($mainUp) { "$basePort" } else { '' }))
+      return $true
+    }
     return $false
   }
 }
@@ -247,7 +301,8 @@ if ($AcquireStudio) {
       New-Item -ItemType Directory -Force $runDir | Out-Null
       $since = if ($lock -and $lock.branch -eq $Branch) { $lock.since } else { Get-Date -Format 'yyyy-MM-dd HH:mm' }
       [pscustomobject]@{ branch = $Branch; port = $currentPort; since = $since } | ConvertTo-Json | Set-Content $studioLock
-      return @{ ok = $true; taken = $taken }
+      $rev = Set-StudioTarget "$currentPort"
+      return @{ ok = $true; taken = $taken; rev = $rev }
     }
     if ($result.ok) { break }
     if ((Get-Date) -ge $deadline) {
@@ -259,9 +314,10 @@ if ($AcquireStudio) {
   }
   if ($result.taken) { Write-Host "Note : $($result.taken)." }
   Write-Host "Studio reserve pour '$Branch' (port $currentPort). Liberer des la verification finie : -ReleaseStudio."
-  $conn = Get-StudioConnectedPorts
-  if ($conn -contains $currentPort) { Write-Host "Studio est deja connecte au port $currentPort : rien a faire." }
+  if (Wait-StudioConnected $result.rev $currentPort) { Write-Host "Studio connecte au port $currentPort (plugin Rojo CSGO autoconnect)." }
   else {
+    $conn = Get-StudioConnectedPorts
+    Write-Host "Studio ne s'est pas connecte seul (plugin officiel, Studio ferme ou en Play ? voir tools/rojo-plugin/README.md)."
     $from = if ($conn) { "Disconnect dans le plugin Rojo (connecte au port $($conn -join ', ')), puis " } else { '' }
     Write-Host "Connexion (mode Edit, pas en Play) : $($from)plugin Rojo > port $currentPort > Connect."
   }
@@ -362,5 +418,5 @@ function Format-State($Code) { if ($NoUp) { '' } elseif ($Code -eq 200) { '  [OK
 Write-Host "  rojo : http://localhost:$port$(Format-State $rojoCode)"
 if ($NoUp) { Write-Host "Rojo non demarre (-NoUp) : relancer sans -NoUp pour le demarrer."; return }
 Write-Host "  journal : $logFile"
-Write-Host "  Studio (mode Edit, pas en Play) : plugin Rojo > port $port > Connect. Disconnect pour revenir au checkout principal (34872)."
+Write-Host "  Studio : -AcquireStudio l'y connecte (plugin Rojo CSGO autoconnect), sinon plugin Rojo > port $port > Connect (mode Edit)."
 if ($rojoCode -ne 200) { throw "Rojo ne repond pas sur le port $port : voir $logFile." }
