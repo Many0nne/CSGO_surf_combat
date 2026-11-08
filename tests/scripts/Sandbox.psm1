@@ -122,16 +122,20 @@ function Use-SandboxEnv($Sb, [string]$Session, [scriptblock]$Action) {
 }
 
 # Cette methode permet de lancer un script du bac a sable dans un pwsh separe (un throw ou un exit n'arrete pas les tests) ;
-# renvoie le code de sortie et la sortie complete.
-function Invoke-SandboxScript($Sb, [string]$Name, [string[]]$ArgList = @(), [string]$Session) {
+# renvoie le code de sortie et la sortie complete. -Shell powershell : Windows PowerShell 5.1 (lancement depuis un vieux shell).
+function Invoke-SandboxScript($Sb, [string]$Name, [string[]]$ArgList = @(), [string]$Session, [string]$Shell = 'pwsh') {
   Use-SandboxEnv $Sb $Session {
-    $out = & pwsh -NoProfile -NonInteractive -File (Join-Path $Sb.Repo "scripts\$Name") @ArgList 2>&1 | Out-String
+    $shellArgs = @('-NoProfile', '-NonInteractive')
+    if ($Shell -eq 'powershell') { $shellArgs += @('-ExecutionPolicy', 'Bypass') }
+    $out = & $Shell @shellArgs -File (Join-Path $Sb.Repo "scripts\$Name") @ArgList 2>&1 | Out-String
     [pscustomobject]@{ Code = $LASTEXITCODE; Output = $out }
   }
 }
 
 # Cette methode permet de lancer csgo-worktree.ps1 du bac a sable.
-function Invoke-Wt($Sb, [string[]]$ArgList, [string]$Session) { Invoke-SandboxScript $Sb 'csgo-worktree.ps1' $ArgList $Session }
+function Invoke-Wt($Sb, [string[]]$ArgList, [string]$Session, [string]$Shell = 'pwsh') {
+  Invoke-SandboxScript $Sb 'csgo-worktree.ps1' $ArgList $Session $Shell
+}
 
 # Cette methode permet de lancer le nettoyage du bac a sable ; attend que le vrai nettoyage (meme mutex) ait fini s'il tourne.
 function Invoke-Cleanup($Sb, [string[]]$ArgList = @()) {
