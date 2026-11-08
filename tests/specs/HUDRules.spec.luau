@@ -23,6 +23,50 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("HUDRules.killFeedVisible", function()
+		T.it("affiche le kill feed en partie, vivant ou mort", function()
+			T.expectEqual(HUDRules.killFeedVisible("IN_ROUND"), true)
+			T.expectEqual(HUDRules.killFeedVisible("DEAD"), true)
+			for _, state in { "MENU", "INFOS", "SPAWNING", "RESULT" } do
+				T.expectEqual(HUDRules.killFeedVisible(state), false)
+			end
+		end)
+	end)
+
+	T.describe("HUDRules.killDetail", function()
+		T.it("donne l'arme, la tête si tir à la tête, et CHUTE sans tueur", function()
+			T.expectEqual(HUDRules.killDetail("Kev", "AWP", false), "AWP")
+			T.expectEqual(HUDRules.killDetail("Kev", "AWP", true), "AWP · TÊTE")
+			T.expectEqual(HUDRules.killDetail("Kev", "M9Bayonet", false), "M9 BAYONET")
+			T.expectEqual(HUDRules.killDetail("Kev", nil, true), "TÊTE")
+			T.expectEqual(HUDRules.killDetail(nil, "AWP", true), "CHUTE")
+		end)
+	end)
+
+	T.describe("HUDRules.pushKillFeed / pruneKillFeed", function()
+		local function entry(victim: string, at: number)
+			return { killer = "Kev", victim = victim, weapon = "AWP", headshot = false, mine = false, at = at }
+		end
+
+		T.it("met la mort la plus récente en premier et garde KILL_FEED_MAX lignes", function()
+			local feed = {}
+			for i = 1, HUDRules.KILL_FEED_MAX + 2 do
+				feed = HUDRules.pushKillFeed(feed, entry("V" .. i, i * 0.1), i * 0.1)
+			end
+			T.expectEqual(#feed, HUDRules.KILL_FEED_MAX)
+			T.expectEqual(feed[1].victim, "V" .. (HUDRules.KILL_FEED_MAX + 2))
+			T.expectEqual(feed[HUDRules.KILL_FEED_MAX].victim, "V3")
+		end)
+
+		T.it("retire les lignes affichées depuis KILL_FEED_DURATION", function()
+			local feed = { entry("Récent", 10), entry("Ancien", 10 - HUDRules.KILL_FEED_DURATION) }
+			local kept = HUDRules.pruneKillFeed(feed, 10)
+			T.expectEqual(#kept, 1)
+			T.expectEqual(kept[1].victim, "Récent")
+			T.expectEqual(#HUDRules.pushKillFeed(feed, entry("Neuf", 10), 10), 2)
+		end)
+	end)
+
 	T.describe("HUDRules.acceptsRoundResult", function()
 		T.it("n'accepte le résultat de round qu'en partie (vivant ou mort)", function()
 			T.expectEqual(HUDRules.acceptsRoundResult("IN_ROUND"), true)

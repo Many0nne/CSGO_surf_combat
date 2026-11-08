@@ -74,6 +74,8 @@ RoundManager.init({
 local equippedTools: { [Model]: Tool } = setmetatable({}, { __mode = "k" }) :: any
 local lastWeaponAction: { [Player]: number } = {}
 local WEAPON_ACTION_MIN_INTERVAL = 0.05
+-- Délai (s) entre la mort et la destruction du personnage, le temps que les clients le clonent en ragdoll (#102)
+local CORPSE_HANDOFF_DELAY = 0.3
 
 -- Cette méthode permet d'attacher le modèle 3P lorsqu'un outil arrive dans le personnage (équipement) ;
 -- les pièces propres de l'outil sont masquées pour ne pas doubler l'arme collée à la main.
@@ -141,9 +143,10 @@ local function onCharacterAdded(player: Player, char: Model)
 	humanoid.Died:Connect(function()
 		RoundManager.onCharacterDied(player, SpawnManager.spawnPlayer)
 		StatsStore.recordDeath(player)
-		task.defer(function()
-			if player.Character then
-				player.Character:Destroy()
+		-- Pas tout de suite : les clients clonent le personnage pour en faire un ragdoll à la réception de PlayerDied (#102)
+		task.delay(CORPSE_HANDOFF_DELAY, function()
+			if player.Character == char then
+				char:Destroy()
 			end
 		end)
 	end)
@@ -180,21 +183,33 @@ end)
 
 -- ── Combat : validation et attribution des dégâts ─────────────────────────
 
-local function recordHit(player: Player, targetCharacter: Instance)
+-- Cette méthode permet de lire le nom de l'arme en main du tireur lorsqu'une touche est attribuée (kill feed, #102).
+local function weaponOf(player: Player): string?
+	local tool = player.Character and equippedTools[player.Character]
+	if not tool then
+		return nil
+	end
+	local name = tool:GetAttribute("WeaponName")
+	return if type(name) == "string" and name ~= "" then name else tool.Name
+end
+
+-- Cette méthode permet d'attribuer une touche à son tireur (arme, tir à la tête) lorsqu'elle vise un joueur.
+local function recordHit(player: Player, targetCharacter: Instance, isHeadshot: boolean)
 	local targetPlayer = Players:GetPlayerFromCharacter(targetCharacter)
 	if targetPlayer then
-		RoundManager.recordDamage(player, targetPlayer)
+		RoundManager.recordDamage(player, targetPlayer, weaponOf(player), isHeadshot)
 	end
 end
 
 -- Cette méthode permet d'appliquer des dégâts déjà validés et de confirmer la touche au tireur,
 -- seulement si les PV de la cible ont réellement baissé (le hitmarker ne s'affiche pas sinon).
 local function applyHit(player: Player, targetCharacter: Instance, damage: number, isHeadshot: boolean)
-	recordHit(player, targetCharacter)
 	local humanoid = targetCharacter:FindFirstChildWhichIsA("Humanoid") :: Humanoid?
-	if not humanoid then
+	-- Corps encore en place (CORPSE_HANDOFF_DELAY) : une touche ne doit pas créditer la prochaine mort de la victime
+	if not humanoid or humanoid.Health <= 0 then
 		return
 	end
+	recordHit(player, targetCharacter, isHeadshot)
 	local healthBefore = humanoid.Health
 	humanoid:TakeDamage(damage)
 	local outcome = Validator.hitOutcome(healthBefore, humanoid.Health)
