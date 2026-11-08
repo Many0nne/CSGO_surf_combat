@@ -2,17 +2,20 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local MemoryTracker = require(ReplicatedStorage.Shared.MemoryTracker)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 
 type Score = { name: string, kills: number, deaths: number, firstKillTick: number }
+-- Dernier coup reçu par une victime : tueur crédité, arme et tir à la tête affichés à la mort (#102)
+type LastHit = { attackerId: number, weapon: string?, headshot: boolean }
 
 local RoundManager = {}
 
 local state = "idle" -- "idle" | "active" | "result"
 local timeLeft = 0
 local scores: { [number]: Score } = {} -- keyed by UserId
-local lastAttacker: { [number]: number } = {} -- victim id → attacker id
+local lastAttacker: { [number]: LastHit } = {} -- victim id → dernier coup reçu
 
 local roundStateRmt: RemoteEvent
 local scoreUpdateRmt: RemoteEvent
@@ -126,10 +129,39 @@ end
 
 -- ── combat recording ───────────────────────────────────────────────────────
 
-function RoundManager.recordDamage(attacker: Player, victim: Player)
+-- Cette méthode permet de retenir le dernier coup porté à une victime (tireur, arme, tir à la tête) lorsqu'une touche
+-- est validée ; c'est lui qui désigne le tueur à la mort.
+function RoundManager.recordDamage(attacker: Player, victim: Player, weapon: string?, headshot: boolean?)
 	if victim and attacker ~= victim then
-		lastAttacker[victim.UserId] = attacker.UserId
+		lastAttacker[victim.UserId] = { attackerId = attacker.UserId, weapon = weapon, headshot = headshot == true }
 	end
+end
+
+-- Cette méthode permet de lire la position de la racine d'un joueur lorsqu'on décrit sa mort (nil sans personnage).
+local function rootPosition(player: Player?): Vector3?
+	local char = player and player.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
+	return root and root.Position
+end
+
+-- Cette méthode permet d'annoncer une mort à tous les clients (écran du tué, kill feed, corps) lorsqu'elle est comptée ;
+-- direction = du tueur vers la victime, pour pousser le corps dans le sens du tir.
+local function announceDeath(victim: Player, hit: LastHit?)
+	local killer = hit and Players:GetPlayerByUserId(hit.attackerId)
+	local position = rootPosition(victim)
+	local killerPos = rootPosition(killer)
+	local direction = nil
+	if position and killerPos and (position - killerPos).Magnitude > 0.01 then
+		direction = (position - killerPos).Unit
+	end
+	playerDiedRmt:FireAllClients({
+		victimId = victim.UserId,
+		killerId = hit and hit.attackerId,
+		weapon = hit and hit.weapon,
+		headshot = hit ~= nil and hit.headshot,
+		position = position,
+		direction = direction,
+	})
 end
 
 -- Cette méthode permet de compter la mort d'un joueur et le kill de son dernier attaquant lorsqu'un round est actif.
@@ -145,8 +177,9 @@ local function recordDeath(victim: Player)
 	end
 	victimScore.deaths += 1
 
-	local attackerId = lastAttacker[victimId]
+	local hit = lastAttacker[victimId]
 	lastAttacker[victimId] = nil
+	local attackerId = hit and hit.attackerId
 
 	if attackerId and attackerId ~= victimId then
 		local as = scores[attackerId]
@@ -159,7 +192,7 @@ local function recordDeath(victim: Player)
 	end
 
 	broadcastScores()
-	playerDiedRmt:FireClient(victim, { killerId = attackerId })
+	announceDeath(victim, hit)
 end
 
 -- Handles a player's death and schedules their respawn.
@@ -167,7 +200,7 @@ function RoundManager.onCharacterDied(victim: Player, spawnFn: (Player) -> ())
 	ensureScore(victim)
 	recordDeath(victim)
 
-	task.delay(2.5, function() -- RESPAWN_DELAY
+	task.delay(GameConfig.RESPAWN_DELAY, function()
 		if state == "active" and victim.Parent then
 			spawnFn(victim)
 		end

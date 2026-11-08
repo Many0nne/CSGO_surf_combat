@@ -54,6 +54,11 @@ local respawnCount: TextLabel
 local respawnCountShadow: TextLabel
 local respawnCountScale: UIScale
 local respawnLabel: TextLabel
+local respawnTitle: TextLabel
+local respawnTitleShadow: TextLabel
+local respawnKiller: TextLabel
+local respawnKillerShadow: TextLabel
+local respawnDetail: TextLabel
 local deathGrade: ColorCorrectionEffect
 local resultRoot: Frame
 local resultVeil: Frame
@@ -316,11 +321,11 @@ local function buildRespawnOverlay(root: Frame)
 		BorderSizePixel = 0,
 		AnchorPoint = Vector2.new(0.5, 1),
 		Position = UDim2.new(0.5, 0, 1, -RESPAWN_BOTTOM),
-		Size = UDim2.fromOffset(RESPAWN_WIDTH, 150),
+		Size = UDim2.fromOffset(RESPAWN_WIDTH, 196),
 		Parent = respawnRoot,
 	})
 	local centered = Enum.TextXAlignment.Center
-	shadowedText(respawnPanel, {
+	respawnTitle, respawnTitleShadow = shadowedText(respawnPanel, {
 		Name = "Eliminated",
 		Text = "ÉLIMINÉ",
 		FontFace = F.Display,
@@ -329,11 +334,33 @@ local function buildRespawnOverlay(root: Frame)
 		TextXAlignment = centered,
 		Size = UDim2.new(1, 0, 0, 36),
 	}, 3)
+	-- Qui m'a tué (#102) : nom du tueur en os, arme et tir à la tête en ambre ; « CHUTE » sans tueur
+	respawnKiller, respawnKillerShadow = shadowedText(respawnPanel, {
+		Name = "Killer",
+		Text = "",
+		FontFace = F.Display,
+		TextSize = 30,
+		TextColor3 = C.Bone,
+		TextXAlignment = centered,
+		Position = UDim2.fromOffset(0, 36),
+		Size = UDim2.new(1, 0, 0, 34),
+	}, 3)
+	respawnDetail = UIKit.text({
+		Name = "Detail",
+		Text = "",
+		FontFace = F.DisplayMedium,
+		TextSize = 14,
+		TextColor3 = C.Accent,
+		TextXAlignment = centered,
+		Position = UDim2.fromOffset(0, 70),
+		Size = UDim2.new(1, 0, 0, 16),
+		Parent = respawnPanel,
+	})
 	-- Chiffre et ombre dans un cadre commun : la pulsation les agrandit ensemble
 	local count = UIKit.frame({
 		Name = "Count",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(0, 36),
+		Position = UDim2.fromOffset(0, 82),
 		Size = UDim2.new(1, 0, 0, 84),
 		Parent = respawnPanel,
 	})
@@ -354,10 +381,20 @@ local function buildRespawnOverlay(root: Frame)
 		TextSize = 14,
 		TextColor3 = C.Accent,
 		TextXAlignment = centered,
-		Position = UDim2.fromOffset(0, 124),
+		Position = UDim2.fromOffset(0, 170),
 		Size = UDim2.new(1, 0, 0, 16),
 		Parent = respawnPanel,
 	})
+end
+
+-- Cette méthode permet d'écrire le titre, le nom et le détail de l'écran de mort lorsqu'ils changent (titre et nom
+-- doublés de leur ombre).
+local function setRespawnLines(title: string, killer: string, detail: string)
+	respawnTitle.Text = title
+	respawnTitleShadow.Text = title
+	respawnKiller.Text = killer
+	respawnKillerShadow.Text = killer
+	respawnDetail.Text = detail
 end
 
 -- Cette méthode permet d'afficher le nouveau chiffre du compte à rebours avec une pulsation lorsqu'une seconde passe.
@@ -622,6 +659,7 @@ function RoundHUD.showRespawning(delaySeconds: number)
 		UIKit.tween(scrim, Motion.Enter, { ImageTransparency = RESPAWN_SCRIM_TRANSPARENCY })
 	end
 	respawnLabel.Text = "RÉAPPARITION"
+	setRespawnLines("ÉLIMINÉ", "", "")
 	UIKit.reveal(respawnPanel, 0, 16)
 	deathGrade.Enabled = true
 	deathGrade.Saturation = 0
@@ -646,6 +684,19 @@ function RoundHUD.showRespawning(delaySeconds: number)
 			task.wait(0.05)
 		end
 	end)
+end
+
+-- Cette méthode permet d'indiquer qui a tué le joueur sur l'écran de mort lorsque PlayerDied arrive (#102) :
+-- « ÉLIMINÉ PAR », nom du tueur, arme et tir à la tête ; sans tueur, « ÉLIMINÉ » et « CHUTE ».
+function RoundHUD.setDeathInfo(killer: string?, weapon: string?, headshot: boolean)
+	if not respawnTitle then
+		return
+	end
+	if killer then
+		setRespawnLines("ÉLIMINÉ PAR", string.upper(killer), HUDRules.killDetail(killer, weapon, headshot))
+	else
+		setRespawnLines("ÉLIMINÉ", HUDRules.killDetail(nil, weapon, headshot), "")
+	end
 end
 
 function RoundHUD.hideRespawning()

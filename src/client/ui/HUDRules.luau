@@ -123,6 +123,63 @@ function HUDRules.gameHudVisible(state: string): boolean
 	return state == "IN_ROUND"
 end
 
+-- Cette méthode permet de savoir si le kill feed est affiché lorsque l'état client change : en partie, vivant ou mort
+-- (le joueur tué y voit sa propre ligne), pas au menu ni au résultat.
+function HUDRules.killFeedVisible(state: string): boolean
+	return state == "IN_ROUND" or state == "DEAD"
+end
+
+-- Kill feed (#102) : lignes affichées au plus, durée d'affichage d'une ligne (s)
+HUDRules.KILL_FEED_MAX = 4
+HUDRules.KILL_FEED_DURATION = 5
+
+export type KillFeedEntry = {
+	killer: string?, -- nil : mort sans tueur (chute)
+	victim: string,
+	weapon: string?,
+	headshot: boolean,
+	mine: boolean, -- le joueur local est le tueur ou la victime
+	at: number,
+}
+
+-- Cette méthode permet de décrire l'arme d'une ligne de kill feed ou de l'écran de mort lorsqu'une mort arrive :
+-- libellé de l'arme, « TÊTE » si tir à la tête, « CHUTE » sans tueur.
+function HUDRules.killDetail(killer: string?, weapon: string?, headshot: boolean): string
+	if not killer then
+		return "CHUTE"
+	end
+	local label = if weapon then HUDRules.weaponLabel(weapon) else ""
+	if headshot then
+		return if label ~= "" then label .. " · TÊTE" else "TÊTE"
+	end
+	return label
+end
+
+-- Cette méthode permet d'ajouter une ligne au kill feed lorsqu'une mort arrive : plus récente en premier, les lignes
+-- expirées et celles au-delà de KILL_FEED_MAX sont retirées.
+function HUDRules.pushKillFeed(entries: { KillFeedEntry }, entry: KillFeedEntry, now: number): { KillFeedEntry }
+	local result = { entry }
+	for _, existing in HUDRules.pruneKillFeed(entries, now) do
+		if #result >= HUDRules.KILL_FEED_MAX then
+			break
+		end
+		table.insert(result, existing)
+	end
+	return result
+end
+
+-- Cette méthode permet de retirer les lignes du kill feed affichées depuis plus de KILL_FEED_DURATION lorsque le feed
+-- est rafraîchi.
+function HUDRules.pruneKillFeed(entries: { KillFeedEntry }, now: number): { KillFeedEntry }
+	local result = {}
+	for _, entry in entries do
+		if now - entry.at < HUDRules.KILL_FEED_DURATION then
+			table.insert(result, entry)
+		end
+	end
+	return result
+end
+
 -- Cette méthode permet de savoir si le résultat de round doit être affiché lorsque RoundResult arrive : seulement si le
 -- joueur est en partie (IN_ROUND ou DEAD), sinon l'état bloquerait en RESULT au menu ou pendant le spawn (#110).
 function HUDRules.acceptsRoundResult(state: string): boolean

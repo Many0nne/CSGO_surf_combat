@@ -75,6 +75,22 @@ function CharacterSync.init()
 	)
 end
 
+-- Cette méthode permet d'estimer la vitesse d'un autre joueur d'après ses deux dernières positions relayées lorsque son
+-- corps devient un ragdoll (#102) ; vecteur nul faute de deux positions.
+function CharacterSync.velocityOf(other: Player): Vector3
+	local entry = remotes[other]
+	local buffer = entry and entry.buffer
+	if not buffer or #buffer < 2 then
+		return Vector3.zero
+	end
+	local last, previous = buffer[#buffer], buffer[#buffer - 1]
+	local dt = last.t - previous.t
+	if dt <= 1e-3 then
+		return Vector3.zero
+	end
+	return (last.pos - previous.pos) / dt
+end
+
 -- Cette méthode permet d'envoyer la position et le cap du personnage local au serveur lorsque le mouvement vient
 -- d'avancer d'une frame (dt), au plus NET_SYNC_RATE fois par seconde.
 function CharacterSync.send(hrp: BasePart, dt: number)

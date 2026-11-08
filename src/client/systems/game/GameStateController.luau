@@ -1,3 +1,4 @@
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
@@ -15,6 +16,12 @@ local Speedometer = require(script.Parent.Parent.Parent.ui.Speedometer)
 local WeaponBar = require(script.Parent.Parent.Parent.ui.WeaponBar)
 local ScopeSystem = require(script.Parent.Parent.weapon.ScopeSystem)
 local HUDRules = require(script.Parent.Parent.Parent.ui.HUDRules)
+local KillFeed = require(script.Parent.Parent.Parent.ui.KillFeed)
+local DeathCamera = require(script.Parent.Parent.Parent.camera.DeathCamera)
+local DeathRagdoll = require(script.Parent.DeathRagdoll)
+
+-- PlayerDied et Humanoid.Died arrivent dans un ordre quelconque : l'info du tueur reste applicable ce temps-là (s)
+local DEATH_INFO_TTL = 1
 
 local GameStateController = {}
 
@@ -25,6 +32,8 @@ local localPlayer: Player
 local setupCharFn: (char: Model) -> ()
 local humDiedConn: RBXScriptConnection?
 local resultTimer: thread?
+-- Dernière mort du joueur local annoncée par le serveur (qui, avec quoi), pour l'écran de mort
+local lastDeath: { killer: string?, weapon: string?, headshot: boolean, at: number }? = nil
 
 -- Remotes (résolus une seule fois)
 local spawnRemote: RemoteEvent?
@@ -46,14 +55,30 @@ local function applyGameHud()
 	local show = HUDRules.gameHudVisible(state)
 	Speedometer.setVisible(show)
 	WeaponBar.setVisible(show)
+	KillFeed.setVisible(HUDRules.killFeedVisible(state))
 	if not show then
 		ScopeSystem.reset()
+	end
+end
+
+-- Cette méthode permet de renseigner l'écran de mort avec le tueur lorsque l'état passe à DEAD ou que PlayerDied
+-- arrive, si l'annonce du serveur est assez récente pour concerner cette mort.
+local function applyDeathInfo()
+	if state == "DEAD" and lastDeath and os.clock() - lastDeath.at < DEATH_INFO_TTL then
+		RoundHUD.setDeathInfo(lastDeath.killer, lastDeath.weapon, lastDeath.headshot)
 	end
 end
 
 local function setState(newState: State)
 	state = newState
 	applyGameHud()
+	if newState ~= "DEAD" then
+		-- Réapparition, menu ou fin de round : la caméra revient à FPSCamera ou au menu
+		DeathCamera.stop()
+	end
+	if newState == "MENU" then
+		DeathRagdoll.clear()
+	end
 
 	if newState == "MENU" then
 		SettingsMenu.close()
@@ -85,6 +110,7 @@ local function setState(newState: State)
 		deactivateMenuCamera()
 	elseif newState == "DEAD" then
 		RoundHUD.showRespawning(GameConfig.RESPAWN_DELAY)
+		applyDeathInfo()
 	elseif newState == "RESULT" then
 		RoundHUD.hide()
 		-- Tuer le personnage local pour sortir du mode FPS et libérer la souris
@@ -131,6 +157,35 @@ end
 
 -- ── Remotes serveur ────────────────────────────────────────────────────────
 
+-- Cette méthode permet de montrer une mort lorsque le serveur l'annonce (data : victimId, killerId?, weapon?,
+-- headshot, direction?) : ragdoll et ligne de kill feed en partie, écran de mort et caméra si c'est le joueur local.
+local function onPlayerDied(data: any)
+	if type(data) ~= "table" or type(data.victimId) ~= "number" then
+		return
+	end
+	-- Hors partie (menu, spawn), rien à montrer
+	if not HUDRules.killFeedVisible(state) then
+		return
+	end
+	local victim = Players:GetPlayerByUserId(data.victimId)
+	local killer = if type(data.killerId) == "number" then Players:GetPlayerByUserId(data.killerId) else nil
+	local weapon = if type(data.weapon) == "string" then data.weapon else nil
+	local headshot = data.headshot == true
+	local direction = if typeof(data.direction) == "Vector3" then data.direction else nil
+	local me = localPlayer.UserId
+
+	if victim then
+		DeathRagdoll.spawn(victim, direction, weapon, headshot)
+		KillFeed.add(killer and killer.Name, victim.Name, weapon, headshot, data.victimId == me or data.killerId == me)
+	end
+
+	if data.victimId == me then
+		lastDeath = { killer = killer and killer.Name, weapon = weapon, headshot = headshot, at = os.clock() }
+		applyDeathInfo()
+		DeathCamera.start(killer)
+	end
+end
+
 local function listenToRemotes()
 	local N = NetworkProtocol.Names
 
@@ -173,11 +228,10 @@ local function listenToRemotes()
 		end)
 	end)
 
-	-- PlayerDied (feedback mort local, le respawn est géré côté serveur)
+	-- PlayerDied (#102), envoyé à tous : corps, kill feed, et pour le tué écran de mort et caméra vers le tueur.
+	-- Le passage en DEAD reste déclenché par Humanoid.Died ; le respawn est géré côté serveur.
 	local playerDiedRmt = NetworkProtocol.getRemote(N.PLAYER_DIED)
-	playerDiedRmt.OnClientEvent:Connect(function(_data)
-		-- Déjà géré via Humanoid.Died, mais peut servir pour affichage futur
-	end)
+	playerDiedRmt.OnClientEvent:Connect(onPlayerDied)
 end
 
 -- ── API ────────────────────────────────────────────────────────────────────
@@ -259,6 +313,7 @@ function GameStateController.init(player: Player, setupCharacter: (char: Model) 
 		setState("MENU")
 	end)
 	RoundHUD.init()
+	KillFeed.init()
 	Transition.init()
 
 	-- Connexions personnage
