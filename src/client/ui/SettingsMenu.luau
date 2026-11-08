@@ -541,13 +541,45 @@ end
 -- initialisé ; les lignes de touches suivent chaque changement (échange entre deux emplacements, chargement, RÉTABLIR).
 local function buildKeysCategory(block: Frame)
 	local keys = addCategory(block, "TOUCHES")
-	local wheelOptions = {
-		{ label = "PRÉCÉDENTE", value = "previous" },
-		{ label = "SUIVANTE", value = "next" },
-		{ label = "COUPÉE", value = "off" },
+	-- Une ligne par action, la valeur est le geste : les deux lignes portent le même réglage (`wheel`) vu de chaque
+	-- côté, et suivent l'une l'autre (HAUT sur l'une met BAS sur l'autre, AUCUNE coupe la molette)
+	local wheelRows = {
+		{
+			name = "Arme suivante",
+			options = {
+				{ label = "MOLETTE BAS", value = "previous" },
+				{ label = "MOLETTE HAUT", value = "next" },
+				{ label = "AUCUNE", value = "off" },
+			},
+		},
+		{
+			name = "Arme précédente",
+			options = {
+				{ label = "MOLETTE HAUT", value = "previous" },
+				{ label = "MOLETTE BAS", value = "next" },
+				{ label = "AUCUNE", value = "off" },
+			},
+		},
 	}
-	local wheelDefault = table.find(PlayerSettings.WHEEL_MODES, PlayerSettings.DEFAULT_WHEEL) or 1
-	addPicker(keys, "Molette vers le haut", "wheel", wheelOptions, wheelDefault, wheelDefault, function() end, 150)
+	local wheelSyncs = {}
+	for _, wheelRow in wheelRows do
+		local default = 1
+		for i, option in wheelRow.options do
+			if option.value == PlayerSettings.DEFAULT_WHEEL then
+				default = i
+			end
+		end
+		addPicker(keys, wheelRow.name, "wheel", wheelRow.options, default, default, function() end, 150)
+		table.insert(wheelSyncs, keys.list[#keys.list].sync)
+	end
+	LocalSettings.onChanged(function(settings)
+		local wasSyncing = syncing
+		syncing = true
+		for _, sync in wheelSyncs do
+			sync(settings)
+		end
+		syncing = wasSyncing
+	end)
 	local refreshers = {}
 	for slot, name in weaponNames() do
 		table.insert(refreshers, addKeyBinding(keys, slot, HUDRules.weaponLabel(name)))

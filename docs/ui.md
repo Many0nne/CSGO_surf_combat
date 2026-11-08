@@ -61,7 +61,9 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   la précision de la sensibilité) et choix fermé « ‹ VALEUR › ». RÉTABLIR remet la catégorie affichée à ses valeurs par
   défaut. Ajouter un réglage : une ligne dans `buildCategories` (avec son champ dans `PlayerSettings` pour qu'il soit
   conservé) ; une catégorie sans réglage n'est pas créée.
-  TOUCHES (#100) : « Molette vers le haut » (PRÉCÉDENTE par défaut, SUIVANTE, COUPÉE), puis une ligne par arme du
+  TOUCHES (#100) : chaque ligne nomme l'action et la valeur donne le geste (choix de l'utilisateur : « Arme suivante :
+  MOLETTE BAS », pas « Molette vers le haut : PRÉCÉDENTE »). « Arme suivante » (MOLETTE BAS par défaut) et « Arme
+  précédente » (MOLETTE HAUT) portent le même réglage et se suivent ; AUCUNE coupe la molette. Puis une ligne par arme du
   StarterPack (« Arme 1 · AWP », 7 au plus, pas de défilement). On tire sur la touche, elle affiche « APPUIE… », la
   touche suivante est prise ; Échap ou un clic ailleurs annule. Une touche d'un autre emplacement est échangée ; une
   touche du jeu (déplacement, R, F, P, F3/F4…) ou hors liste (Espace, Maj, Tab…) est refusée par un message en rouge
