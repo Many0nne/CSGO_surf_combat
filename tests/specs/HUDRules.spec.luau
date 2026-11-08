@@ -23,6 +23,16 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("HUDRules.acceptsRoundResult", function()
+		T.it("n'accepte le résultat de round qu'en partie (vivant ou mort)", function()
+			T.expectEqual(HUDRules.acceptsRoundResult("IN_ROUND"), true)
+			T.expectEqual(HUDRules.acceptsRoundResult("DEAD"), true)
+			for _, state in { "MENU", "INFOS", "SPAWNING", "RESULT" } do
+				T.expectEqual(HUDRules.acceptsRoundResult(state), false)
+			end
+		end)
+	end)
+
 	T.describe("HUDRules.speedFill", function()
 		T.it("remplit la ligne proportionnellement, pleine au dernier palier, bornée à 0 et 1", function()
 			T.expectEqual(HUDRules.speedFill(0), 0)

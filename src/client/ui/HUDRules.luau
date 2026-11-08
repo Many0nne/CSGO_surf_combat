@@ -123,4 +123,10 @@ function HUDRules.gameHudVisible(state: string): boolean
 	return state == "IN_ROUND"
 end
 
+-- Cette méthode permet de savoir si le résultat de round doit être affiché lorsque RoundResult arrive : seulement si le
+-- joueur est en partie (IN_ROUND ou DEAD), sinon l'état bloquerait en RESULT au menu ou pendant le spawn (#110).
+function HUDRules.acceptsRoundResult(state: string): boolean
+	return state == "IN_ROUND" or state == "DEAD"
+end
+
 return HUDRules

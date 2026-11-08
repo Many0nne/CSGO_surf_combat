@@ -155,6 +155,10 @@ local function listenToRemotes()
 	-- RoundResult : { winnerName, scores }
 	local roundResultRmt = NetworkProtocol.getRemote(N.ROUND_RESULT)
 	roundResultRmt.OnClientEvent:Connect(function(data: { winnerName: string })
+		-- Hors partie (menu, infos, spawn en cours), ignorer : RESULT bloquerait la promotion vers IN_ROUND (#110)
+		if not HUDRules.acceptsRoundResult(state) then
+			return
+		end
 		if resultTimer then
 			task.cancel(resultTimer)
 			resultTimer = nil
