@@ -389,12 +389,22 @@ end
 -- sans réglage n'est pas créée (TOUCHES viendra avec #100).
 local function buildCategories(block: Frame)
 	local mouse = addCategory(block, "SOURIS")
-	addSlider(mouse, "Sensibilité", 0.1, 5.0, CameraConfig.DEFAULT_SENS, 2, function(v)
-		if fpsCamRef then
-			fpsCamRef.setSensitivity(v)
+	addSlider(
+		mouse,
+		"Sensibilité",
+		CameraConfig.SENS_MIN,
+		CameraConfig.SENS_MAX,
+		CameraConfig.DEFAULT_SENS,
+		2,
+		function(v)
+			if fpsCamRef then
+				fpsCamRef.setSensitivity(v)
+			end
 		end
-	end)
-	addSlider(mouse, "Sensibilité à la lunette", 0.1, 1.0, CameraConfig.SCOPE_SENS_MULT, 2, function(v)
+	)
+	-- Multiplicateur appliqué en plus du ratio du zoom (#115) : 1.00 = même vitesse à l'écran qu'au hip-fire
+	local scopeMin, scopeMax = CameraConfig.SCOPE_SENS_MIN, CameraConfig.SCOPE_SENS_MAX
+	addSlider(mouse, "Multiplicateur lunette", scopeMin, scopeMax, CameraConfig.SCOPE_SENS_MULT, 2, function(v)
 		if fpsCamRef then
 			fpsCamRef.setScopeMultiplier(v)
 		end

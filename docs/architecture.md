@@ -98,7 +98,8 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/server/StatsStore.luau`: DataStore stats joueur (kills/deaths/rounds), save périodique + déconnexion, robustesse load.
 - `src/server/Validator.luau`: décision serveur des touches melee et hitscan (cible, arme en main, partie touchée, portée, cadence), calcul des dégâts depuis `WeaponConfig` (zone du corps pour le hitscan, backstab pour la mêlée) et qualification d'une touche (hit/kill).
 - `src/server/init.server.luau`: point d'entrée serveur — crée tous les RemoteEvents, orchestre SpawnManager, RoundManager, StatsStore.
-- `src/shared/CameraConfig.luau`: constantes caméra (FOV, sensibilité, pitch min/max, hauteurs, lerp speed, scope sens multiplier).
+- `src/shared/CameraConfig.luau`: constantes caméra (FOV, sensibilité et bornes du slider, pitch min/max, hauteurs, lerp speed, multiplicateur lunette et ses bornes).
+- `src/shared/ScopeSensitivity.luau`: sensibilité à la lunette = sensi de base × ratio du zoom (`tan(fov/2) / tan(DEFAULT_FOV/2)`) × multiplicateur du joueur, testée (`tests/specs/ScopeSensitivity.spec.luau`). `ScopeSystem` passe le FOV de chaque niveau de zoom à `FPSCamera.setScoped`.
 - `src/shared/CharacterSyncRules.luau`: règles pures de la synchro de position (forme d'un paquet, déplacement plausible, tampon et interpolation des autres joueurs), testées (`tests/specs/CharacterSyncRules.spec.luau`).
 - `src/shared/CharacterAnimator.luau`: pipeline d'animation 3e personne des joueurs (état de mouvement → piste, fondus, vitesse de lecture) ; alimenté par `MovementController` (client, répliqué via l'Animator). `isAirborneAnimationId` permet aux autres clients de déduire d'une piste répliquée qu'un personnage est en l'air.
 - `src/shared/CharacterAppearance.luau`: rig de référence (`StarterPlayer.StarterCharacter`, cloné pour la cible du helper de playtest) et application du skin commun (BodyColors + vêtements) côté serveur.
