@@ -88,6 +88,53 @@ Describe 'csgo-worktree.ps1 : entrees qui se chevauchent ou echouent' {
   Remove-Sandbox $sb
 }
 
+# Issue #111 : l'inscription plantait (« propriete sessions introuvable ») selon la forme du registre ou le shell.
+Describe 'csgo-worktree.ps1 : inscription quelle que soit la forme du registre' {
+  $sb = New-Sandbox
+  Set-FakeT3 $sb -Sessions @{ 'S-r' = 'T-r' } -Threads @{ 'T-r' = 'active' }
+  $owners = (Get-SbPaths $sb 'x').Owners
+  New-Item -ItemType Directory -Force (Split-Path $owners) | Out-Null
+  $hasPs5 = [bool](Get-Command powershell -ErrorAction SilentlyContinue)
+
+  It 'registre vide : la session est inscrite, sans entree nulle' {
+    Set-Content $owners ''
+    (Invoke-Wt $sb @('feature/5-vide', '-NoUp', '-Slot', '620') 'S-r').Code | Should Be 0
+    $all = @(Get-SbOwners $sb)
+    $all.Count | Should Be 1
+    @($all[0].sessions) -contains 'S-r' | Should Be $true
+  }
+
+  It 'entree sans propriete sessions (ancien format) : la session est ajoutee, les threads gardes' {
+    Set-Content $owners '[{"branch":"feature/6-ancien","threads":["T-old"]}]'
+    (Invoke-Wt $sb @('feature/6-ancien', '-NoUp', '-Slot', '621') 'S-r').Code | Should Be 0
+    $entry = Get-SbOwners $sb | Where-Object { $_.branch -eq 'feature/6-ancien' }
+    @($entry.sessions) -contains 'S-r' | Should Be $true
+    @($entry.threads) -contains 'T-old' | Should Be $true
+    @($entry.threads) -contains 'T-r' | Should Be $true
+  }
+
+  It 'Windows PowerShell 5.1, branche deja inscrite : la relance reussit' {
+    if (-not $hasPs5) { return }
+    Set-Content $owners '[{"branch":"feature/7-ps5","sessions":["S-a"],"threads":[]},{"branch":"feature/autre","sessions":[],"threads":[]}]'
+    $r = Invoke-Wt $sb @('feature/7-ps5', '-NoUp', '-Slot', '622') 'S-r' 'powershell'
+    $r.Output | Should Not Match 'sessions'
+    $r.Code | Should Be 0
+    $entry = Get-SbOwners $sb | Where-Object { $_.branch -eq 'feature/7-ps5' }
+    @($entry.sessions) -contains 'S-a' | Should Be $true
+    @($entry.sessions) -contains 'S-r' | Should Be $true
+  }
+
+  It 'Windows PowerShell 5.1, nouvelle branche : les entrees existantes restent intactes' {
+    if (-not $hasPs5) { return }
+    Set-Content $owners '[{"branch":"feature/autre","sessions":["S-a"],"threads":[]}]'
+    (Invoke-Wt $sb @('feature/8-ps5', '-NoUp', '-Slot', '623') 'S-r' 'powershell').Code | Should Be 0
+    $branches = @(Get-SbOwners $sb | ForEach-Object { $_.branch })
+    ($branches -join ',') | Should Be 'feature/autre,feature/8-ps5'
+  }
+
+  Remove-Sandbox $sb
+}
+
 Describe 'csgo-worktree.ps1 : creations simultanees (plusieurs agents)' {
   $sb = New-Sandbox
   $branches = 1..4 | ForEach-Object { "feature/5$_-parallele" }
