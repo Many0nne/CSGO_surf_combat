@@ -1,7 +1,7 @@
 -- Scène 3D du menu principal : la salle des miroirs (#112, docs/ui.md). Des éclats de verre pendus à des fils dans une
 -- salle de béton portent chacun un morceau de l'image de l'arme choisie ; face à la caméra, ils la reconstituent. Au
--- changement d'arme, le jeu d'éclats se disperse et celui de la nouvelle arme se pose en vague de gauche à droite.
--- Les jeux d'éclats texturés viennent de ReplicatedStorage.MenuMirrors (assets/rbx/Menu), leurs données (fils,
+-- changement d'arme, le jeu d'éclats se disperse et celui de la nouvelle arme se pose en vague de gauche à droite. Un
+-- tir fait pivoter les éclats touchés (ressort amorti) ; JOUER fait exploser la vitrine vers la caméra. Les jeux d'éclats texturés viennent de ReplicatedStorage.MenuMirrors (assets/rbx/Menu), leurs données (fils,
 -- retards) de MenuMirrorsData (généré par tools/menu). Tout est local au client ; l'éclairage est rendu à la sortie.
 local ContentProvider = game:GetService("ContentProvider")
 local Lighting = game:GetService("Lighting")
@@ -21,6 +21,16 @@ local CEILING = 30 -- hauteur du plafond (studs), où s'accrochent les fils
 local FIRE_COOLDOWN = 0.7
 local FADE_START = 0.45 -- pendant la dispersion, la nouvelle arme apparaît (fondu) puis se pose
 local FADE_TIME = 0.3
+local SHOT_RANGE = 120 -- studs : toute la salle
+local SETTLED = 1e-3 -- écart (rad) et vitesse (rad/s) sous lesquels un éclat touché est revenu au repos
+-- Explosion de la vitrine (JOUER) : vitesse vers la caméra, vers l'extérieur et vers le haut (studs/s), gravité,
+-- rotation propre (rad/s), puis surexposition jusqu'au blanc des volets
+local BURST_TOWARD = NumberRange.new(9, 22)
+local BURST_OUTWARD = NumberRange.new(3, 9)
+local BURST_UP = NumberRange.new(1, 6)
+local BURST_GRAVITY = 26
+local BURST_SPIN = 10
+local BURST_FLASH = TweenInfo.new(1.1, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
 
 local CONCRETE = Color3.fromRGB(48, 51, 60)
 local FLOOR = Color3.fromRGB(18, 20, 25)
@@ -59,13 +69,22 @@ type Shard = {
 	fromAngle: number, -- pose au début de la dispersion
 	fromTilt: number,
 	beam: Beam,
+	hitOffset: number, -- écart d'angle dû aux tirs (ressort amorti, MenuSceneRules.springStep)
+	hitVelocity: number,
+	hitActive: boolean,
+	burstVelocity: Vector3, -- explosion de la vitrine
+	spinAxis: Vector3,
+	spinRate: number,
 }
 type ShardSet = {
 	name: string,
+	model: Model,
 	shards: { Shard },
 	mode: "rest" | "settle" | "scatter" | "hidden",
 	clock: number, -- temps écoulé dans le mode courant
 	fade: number, -- 0 = visible, 1 = invisible
+	hits: number, -- éclats encore en mouvement après un tir
+	burst: number?, -- temps écoulé depuis l'explosion, nil hors explosion
 }
 
 local stage: Folder?
@@ -80,10 +99,12 @@ local baseCFrame = CFrame.new()
 local aimX, aimY = 0, 0
 local kick = 0
 local lastShot = 0
-local diving = false
-local diveTweens: { Tween } = {}
+local bursting = false
+local burstTweens: { Tween } = {}
 local shotSound: Sound?
 local spinTime = 0
+local random = Random.new()
+local weaponChanged: ((string) -> ())?
 
 -- Cette méthode permet de mémoriser puis remplacer des propriétés lorsque le menu impose son éclairage.
 local function override(instance: Instance?, props: { [string]: any })
@@ -206,44 +227,69 @@ local function buildSet(name: string, anchor: BasePart): ShardSet
 	local model = source:Clone() :: Model
 	model.Parent = stage
 	local data = Data.sets[name]
-	local random = Random.new(#name * 7919)
-	local set: ShardSet = { name = name, shards = {}, mode = "hidden", clock = 0, fade = 1 }
+	local seeded = Random.new(#name * 7919)
+	local set: ShardSet = {
+		name = name,
+		model = model,
+		shards = {},
+		mode = "hidden",
+		clock = 0,
+		fade = 1,
+		hits = 0,
+		burst = nil,
+	}
 	for _, part in model:GetChildren() do
 		local info = data[part.Name]
 		if part:IsA("BasePart") and info then
 			part.CFrame = CFrame.new(ORIGIN) * part.CFrame
+			-- Seuls les éclats reçoivent les tirs du menu (le décor a CanQuery coupé)
+			part.CanQuery = true
+			part.CanCollide = false
+			part.CanTouch = false
 			local pivot = ORIGIN + info.pivot
-			local sign = if random:NextNumber() < 0.5 then -1 else 1
+			local sign = if seeded:NextNumber() < 0.5 then -1 else 1
 			table.insert(set.shards, {
 				part = part,
 				rest = part.CFrame,
 				pivot = pivot,
 				delay = info.delay,
-				scatterAngle = sign * math.rad(random:NextNumber(70, 280)),
-				scatterTilt = math.rad(random:NextNumber(-8, 8)),
+				scatterAngle = sign * math.rad(seeded:NextNumber(70, 280)),
+				scatterTilt = math.rad(seeded:NextNumber(-8, 8)),
 				angle = 0,
 				tilt = 0,
 				fromAngle = 0,
 				fromTilt = 0,
 				beam = makeWire(part, pivot, anchor),
+				hitOffset = 0,
+				hitVelocity = 0,
+				hitActive = false,
+				burstVelocity = Vector3.zero,
+				spinAxis = Vector3.yAxis,
+				spinRate = 0,
 			})
 		end
 	end
 	return set
 end
 
--- Cette méthode permet d'appliquer la pose courante (rotation autour du fil, balancement) et la transparence d'un jeu
--- d'éclats lorsqu'il a bougé ; un seul déplacement groupé pour tout le jeu.
+-- Cette méthode permet d'appliquer la pose courante (rotation autour du fil, balancement, réaction aux tirs, explosion)
+-- et la transparence d'un jeu d'éclats lorsqu'il a bougé ; un seul déplacement groupé pour tout le jeu.
 local function applySet(set: ShardSet)
 	local parts = table.create(#set.shards)
 	local frames = table.create(#set.shards)
 	local alpha = set.fade
+	local t = set.burst
 	for i, shard in set.shards do
-		local rotation = CFrame.fromAxisAngle(Vector3.yAxis, shard.angle)
+		local rotation = CFrame.fromAxisAngle(Vector3.yAxis, shard.angle + shard.hitOffset)
 			* CFrame.fromAxisAngle(Vector3.xAxis, shard.tilt)
 		local offset = shard.rest.Position - shard.pivot
+		local frame = CFrame.new(shard.pivot + rotation:VectorToWorldSpace(offset)) * rotation
+		if t then
+			local position = frame.Position + shard.burstVelocity * t - Vector3.yAxis * (BURST_GRAVITY * t * t / 2)
+			frame = CFrame.new(position) * CFrame.fromAxisAngle(shard.spinAxis, shard.spinRate * t) * rotation
+		end
 		parts[i] = shard.part
-		frames[i] = CFrame.new(shard.pivot + rotation:VectorToWorldSpace(offset)) * rotation
+		frames[i] = frame
 		if shard.part.Transparency ~= alpha then
 			shard.part.Transparency = alpha
 			shard.beam.Transparency = NumberSequence.new(0.15 + 0.85 * alpha)
@@ -288,6 +334,32 @@ local function updateSet(set: ShardSet, dt: number): boolean
 	return true
 end
 
+-- Cette méthode permet d'avancer les éclats encore secoués par un tir et l'explosion d'un jeu lorsqu'une image passe ;
+-- renvoie true si le jeu a bougé et doit être réappliqué.
+local function updateMotion(set: ShardSet, dt: number): boolean
+	local moved = false
+	if set.hits > 0 then
+		local active = 0
+		for _, shard in set.shards do
+			if shard.hitActive then
+				shard.hitOffset, shard.hitVelocity = Rules.springStep(shard.hitOffset, shard.hitVelocity, dt)
+				if math.abs(shard.hitOffset) < SETTLED and math.abs(shard.hitVelocity) < SETTLED then
+					shard.hitOffset, shard.hitVelocity, shard.hitActive = 0, 0, false
+				else
+					active += 1
+				end
+			end
+		end
+		set.hits = active
+		moved = true
+	end
+	if set.burst then
+		set.burst += dt
+		moved = true
+	end
+	return moved
+end
+
 -- Cette méthode permet de faire tourner lentement les éclats vides du fond lorsqu'une image est rendue.
 local function updateVides(dt: number)
 	if not vides then
@@ -297,6 +369,7 @@ local function updateVides(dt: number)
 	for _, shard in vides.shards do
 		shard.angle = shard.scatterAngle + Rules.IDLE_SPIN * spinTime
 	end
+	updateMotion(vides, dt)
 	applySet(vides)
 end
 
@@ -311,7 +384,7 @@ local function updateView(dt: number)
 	local angles = Rules.aimAngles(aimX, aimY, kick)
 	camera.CameraType = Enum.CameraType.Scriptable
 	camera.CFrame = baseCFrame * CFrame.Angles(math.rad(angles.camPitch), math.rad(angles.camYaw), 0)
-	if not diving and viewport.Y > 0 then
+	if viewport.Y > 0 then
 		camera.FieldOfView = Rules.fitFov(Data.camera.verticalFov, Data.camera.aspectRef, viewport.X / viewport.Y)
 	end
 end
@@ -366,9 +439,20 @@ local function build()
 	end
 end
 
+-- Cette méthode permet de remettre un jeu d'éclats sur ses fils (fin d'explosion, tirs oubliés) lorsque le menu se rouvre.
+local function resetMotion(set: ShardSet)
+	set.burst = nil
+	set.hits = 0
+	for _, shard in set.shards do
+		shard.hitOffset, shard.hitVelocity, shard.hitActive = 0, 0, false
+		shard.beam.Enabled = true
+	end
+end
+
 -- Cette méthode permet de montrer une arme reconstituée d'emblée (sans vague) lorsque le menu s'ouvre.
 local function showAtRest(name: string)
 	for setName, set in sets do
+		resetMotion(set)
 		set.mode = if setName == name then "rest" else "hidden"
 		set.fade = if setName == name then 0 else 1
 		for _, shard in set.shards do
@@ -376,17 +460,74 @@ local function showAtRest(name: string)
 		end
 		applySet(set)
 	end
+	if vides then
+		resetMotion(vides)
+		applySet(vides)
+	end
+end
+
+-- Cette méthode permet de lister les jeux d'éclats visibles (arme montrée, éclats vides) lorsqu'un tir ou l'explosion
+-- les cherche.
+local function visibleSets(): { ShardSet }
+	local list = {}
+	for _, set in sets do
+		if set.fade < 0.5 then
+			table.insert(list, set)
+		end
+	end
+	if vides then
+		table.insert(list, vides)
+	end
+	return list
+end
+
+-- Cette méthode permet de faire pivoter les éclats touchés par un tir (et leurs voisins, moins fort) lorsque la balle
+-- traverse la salle ; renvoie true si un éclat a été touché.
+local function hitShards(x: number, y: number): boolean
+	local targets = visibleSets()
+	local models = table.create(#targets)
+	for i, set in targets do
+		models[i] = set.model
+	end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Include
+	params.FilterDescendantsInstances = models
+	local ray = workspace.CurrentCamera:ViewportPointToRay(x, y)
+	local result = workspace:Raycast(ray.Origin, ray.Direction * SHOT_RANGE, params)
+	if not result then
+		return false
+	end
+	local point = result.Position
+	for _, set in targets do
+		for _, shard in set.shards do
+			local distance = if shard.part == result.Instance then 0 else (shard.part.Position - point).Magnitude
+			local velocity = Rules.hitVelocity(distance)
+			if velocity > 0 then
+				-- La balle pousse le côté touché loin de la caméra : à droite du fil, l'éclat tourne en sens positif
+				local side = if point.X >= shard.pivot.X then 1 else -1
+				shard.hitVelocity += side * velocity
+				if not shard.hitActive then
+					shard.hitActive = true
+					set.hits += 1
+				end
+			end
+		end
+	end
+	return true
 end
 
 -- Cette méthode permet de changer l'arme montrée lorsque le joueur la choisit dans le menu : le jeu courant se
 -- disperse, celui de l'arme choisie apparaît pendant la dispersion puis se pose en vague de gauche à droite.
 function MenuScene.setWeapon(name: string)
 	local target = sets[name]
-	if not target or name == current then
+	if not target or name == current or bursting then
 		return
 	end
 	local previous = sets[current]
 	current = name
+	if weaponChanged then
+		weaponChanged(name)
+	end
 	if previous and previous.mode ~= "hidden" then
 		previous.mode = "scatter"
 		previous.clock = 0
@@ -420,12 +561,22 @@ function MenuScene.getWeapon(): string
 	return current
 end
 
--- Cette méthode permet de tirer vers un point de l'écran (coordonnées viewport) lorsque le joueur clique dans le menu ;
--- `force` ignore la cadence, pour qu'un bouton du menu réponde toujours. Renvoie hasFired, hasHit (la réaction des
--- éclats touchés vient avec l'interface, #112 étape 4).
-function MenuScene.shoot(_x: number, _y: number, force: boolean?): (boolean, boolean)
+-- Cette méthode permet de lire les armes de la vitrine, dans l'ordre des touches 1-9, lorsque l'interface les compte.
+function MenuScene.getWeapons(): { string }
+	return Data.weapons
+end
+
+-- Cette méthode permet d'enregistrer le rappel appelé à chaque changement d'arme lorsque la fiche doit suivre la vitrine.
+function MenuScene.onWeaponChanged(callback: (string) -> ())
+	weaponChanged = callback
+end
+
+-- Cette méthode permet de tirer vers un point de l'écran (coordonnées viewport) lorsque le joueur clique dans le menu.
+-- `onInterface` : tir sur un bouton du menu, qui part sans attendre la cadence et s'arrête à l'interface (pas d'éclat
+-- touché). Renvoie hasFired, hasHit (un éclat touché).
+function MenuScene.shoot(x: number, y: number, onInterface: boolean?): (boolean, boolean)
 	local now = os.clock()
-	if not running or (not force and now - lastShot < FIRE_COOLDOWN) then
+	if not running or bursting or (not onInterface and now - lastShot < FIRE_COOLDOWN) then
 		return false, false
 	end
 	lastShot = now
@@ -434,21 +585,38 @@ function MenuScene.shoot(_x: number, _y: number, force: boolean?): (boolean, boo
 		shotSound:Play()
 	end
 	kick = 1
-	return true, false
+	if onInterface then
+		return true, false
+	end
+	return true, hitShards(x, y)
 end
 
--- Cette méthode permet de plonger vers l'arme (zoom et surexposition) lorsque le joueur lance une partie.
-function MenuScene.dive()
-	if not running then
+-- Cette méthode permet de faire exploser la vitrine (éclats arrachés à leurs fils, projetés vers la caméra en
+-- tournoyant, surexposition jusqu'au blanc) lorsque le joueur tire sur JOUER ; les volets suivent.
+function MenuScene.burst()
+	if not running or bursting then
 		return
 	end
-	diving = true
-	local info = TweenInfo.new(1.7, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
-	diveTweens = {
-		TweenService:Create(workspace.CurrentCamera, info, { FieldOfView = 14 }),
-		TweenService:Create(Lighting, info, { ExposureCompensation = 3 }),
-	}
-	for _, tween in diveTweens do
+	bursting = true
+	kick = 1
+	local camera = baseCFrame.Position
+	local center = ORIGIN + Data.camera.target
+	for _, set in visibleSets() do
+		set.burst = 0
+		for _, shard in set.shards do
+			local position = shard.part.Position
+			local outward = position - center
+			outward = if outward.Magnitude > 1e-3 then outward.Unit else Vector3.xAxis
+			shard.burstVelocity = (camera - position).Unit * random:NextNumber(BURST_TOWARD.Min, BURST_TOWARD.Max)
+				+ outward * random:NextNumber(BURST_OUTWARD.Min, BURST_OUTWARD.Max)
+				+ Vector3.yAxis * random:NextNumber(BURST_UP.Min, BURST_UP.Max)
+			shard.spinAxis = random:NextUnitVector()
+			shard.spinRate = random:NextNumber(-BURST_SPIN, BURST_SPIN)
+			shard.beam.Enabled = false
+		end
+	end
+	burstTweens = { TweenService:Create(Lighting, BURST_FLASH, { ExposureCompensation = 3 }) }
+	for _, tween in burstTweens do
 		tween:Play()
 	end
 end
@@ -459,7 +627,7 @@ function MenuScene.start()
 		return
 	end
 	running = true
-	diving = false
+	bursting = false
 	savedFov = workspace.CurrentCamera.FieldOfView
 	override(Lighting, LIGHTING)
 	override(Lighting:FindFirstChildOfClass("Atmosphere"), ATMOSPHERE)
@@ -482,7 +650,8 @@ function MenuScene.start()
 	connection = RunService.RenderStepped:Connect(PerfMarkers.wrap("menu 3D", function(dt: number)
 		updateView(dt)
 		for _, set in sets do
-			if updateSet(set, dt) then
+			local moved = updateSet(set, dt)
+			if updateMotion(set, dt) or moved then
 				applySet(set)
 			end
 		end
@@ -503,14 +672,14 @@ function MenuScene.stop()
 	if stage then
 		stage.Parent = nil
 	end
-	-- Une plongée encore en cours écraserait les valeurs rétablies ci-dessous
-	for _, tween in diveTweens do
+	-- Une surexposition encore en cours écraserait les valeurs rétablies ci-dessous
+	for _, tween in burstTweens do
 		tween:Cancel()
 	end
-	diveTweens = {}
+	burstTweens = {}
 	restoreOverrides()
 	workspace.CurrentCamera.FieldOfView = savedFov
-	diving = false
+	bursting = false
 end
 
 return MenuScene

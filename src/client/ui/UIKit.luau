@@ -59,6 +59,20 @@ function UIKit.text(props: { [string]: any }): TextLabel
 	return UIKit.create("TextLabel", defaults)
 end
 
+-- Cette méthode permet de poser un texte doublé d'une ombre noire décalée lorsque le titrage du HUD ou du menu est
+-- construit ; renvoie le texte puis son ombre, à mettre à jour ensemble.
+function UIKit.shadowedText(parent: GuiObject, props: { [string]: any }, offset: number): (TextLabel, TextLabel)
+	local shadowProps = table.clone(props)
+	shadowProps.Name = (props.Name or "Text") .. "Shadow"
+	shadowProps.TextColor3 = C.Black
+	shadowProps.TextTransparency = 0.35
+	shadowProps.Position = (props.Position or UDim2.new()) + UDim2.fromOffset(offset, offset)
+	shadowProps.Parent = parent
+	local shadow = UIKit.text(shadowProps)
+	props.Parent = parent
+	return UIKit.text(props), shadow
+end
+
 -- Cette méthode permet de créer un bouton texte sans effet natif lorsqu'un écran gère lui-même survol et clic.
 function UIKit.button(props: { [string]: any }): TextButton
 	local defaults = {

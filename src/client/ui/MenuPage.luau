@@ -1,5 +1,6 @@
 -- Gabarit des écrans secondaires du menu (Réglages, Infos, Feedback) : pas de panneau, le contenu est posé à même la scène
--- sur un dégradé sombre à gauche, sous un titre en image, avec une action de sortie en bas à gauche.
+-- sur un dégradé sombre à gauche, sous les onglets de l'accueil (sous un titre en image pour Réglages en partie), avec une
+-- action de sortie en bas à gauche.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -44,7 +45,7 @@ export type Page = {
 	group: CanvasGroup,
 	choice: (props: { [string]: any }) -> MenuShot.Choice,
 	exit: (word: MenuShot.Word, action: () -> (), shoots: (() -> boolean)?) -> MenuShot.Choice,
-	show: () -> (),
+	show: (withTitle: boolean?) -> (),
 	hide: () -> (),
 }
 
@@ -81,7 +82,7 @@ function MenuPage.new(name: string, displayOrder: number, title: MenuShot.Word):
 		BorderSizePixel = 0,
 		Parent = UIKit.scaledRoot(gui),
 	})
-	UIKit.create("ImageLabel", {
+	local titleLabel = UIKit.create("ImageLabel", {
 		Name = "Title",
 		Image = title.image,
 		BackgroundTransparency = 1,
@@ -114,8 +115,10 @@ function MenuPage.new(name: string, displayOrder: number, title: MenuShot.Word):
 		})
 	end
 
-	-- Cette méthode permet d'afficher l'écran en fondu et de lui rediriger les impacts lorsqu'il s'ouvre.
-	function page.show()
+	-- Cette méthode permet d'afficher l'écran en fondu et de lui rediriger les impacts lorsqu'il s'ouvre ; au menu, les
+	-- onglets de l'accueil restent affichés et l'onglet actif sert de titre, `withTitle` ne sert qu'en partie (touche P).
+	function page.show(withTitle: boolean?)
+		titleLabel.Visible = withTitle == true
 		MenuShot.useLayer(holes)
 		gui.Enabled = true
 		UIKit.reveal(group, 0, 14)
