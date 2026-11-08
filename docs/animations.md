@@ -151,6 +151,40 @@ Repris du retour d'expérience de la M9 (`docs/notes/retex-viewmodel-m9.md`).
   refonte, Rojo connecté à un autre worktree, alors que le `.rbxm` exporté l'avait encore (cause non établie). Le viewmodel
   retombe alors sur `HumanoidRootPart` et se décale de (-0,19 ; 0 ; 0,14) par rapport au rendu. Réparation : `CLAUDE.md`.
 
+## Tenue 3P du personnage (#107)
+
+Ce que voient les autres joueurs : le haut du corps tient l'arme dans tous les états, les jambes suivent les pistes de
+déplacement R15. Méthode retenue faute de vidéo de référence : une planche de poses clés numérotées, validée avant le code.
+
+- **Outils :** `tools/anim/poses3p/poses.js` est la source unique (rig aux cotes du StarterCharacter, tenues, états).
+  `planche.html` l'affiche (ouvrir dans un navigateur), `node tools/anim/poses3p/export_pose.js` produit les données Luau
+  de `WeaponThirdPerson.POSES` et les grips de `WeaponConfig`. Modifier une tenue = modifier `poses.js`, régénérer, coller.
+- **Pas d'asset publié :** les tenues sont figées, donc posées par code. Chaque client impose le `Transform` des Motor6D
+  tenus en `RunService.PreSimulation`, qui suit la mise à jour des animations : la valeur posée remplace celle de
+  l'Animator pour la frame. Les pistes de déplacement restent seules sur les jambes.
+- **Remettre au repos en `PreAnimation` :** l'Animator ne réécrit que les articulations pilotées par une piste. Sans
+  remise à zéro avant sa passe, une articulation libre (taille, cou) garderait la tenue après l'arme rangée, et le
+  fondu partirait du résultat de la frame précédente. Ne pas comparer `Transform` à la dernière valeur écrite.
+- **Côté client seulement :** le serveur voit les bras dans la pose des pistes. Sans effet tant que la validation des
+  tirs ne contrôle que la pièce touchée, à revoir si elle contrôle un jour des positions.
+- **Ne plus toucher au C0 des épaules :** l'ancienne pose (C0 tourné par le serveur) s'additionnait au `Transform` des
+  pistes R15. Au saut, les bras levés de la piste partaient en arrière par-dessus la pose. C'était le bug.
+- **Bras R15 courts :** 2,7 studs de portée pour 3,2 studs entre les épaules. Buste de face, la main gauche n'atteint
+  pas le garde-main de l'AWP : la tenue fusil tourne la taille de 40° (`Waist`).
+- **Portée réelle d'un bras :** le pivot de l'épaule est décalé de 0,79 stud de l'axe du bras. Bras tendu, la main est
+  à 2,69 studs du pivot, pas à la somme des deux os (2,81). Au-delà, l'IK produit une rotation fausse sans erreur
+  visible : `export_pose.js` refuse une main hors de portée ou un coude presque tendu.
+- **Échelle de l'AWP 3P :** 0,7 (7,1 studs). À 0,5, la crosse disparaît dans l'épaule et l'arme paraît petite de loin.
+  Agrandir l'arme éloigne le garde-main : rapprocher l'arme du corps (`gunRoot.g` de F1) puis régénérer.
+- **Couteau :** à l'échelle 0,6, le manche disparaît dans le poing (1,59 stud) et il reste environ 1 stud de lame. La
+  prise compte autant que l'échelle : lame dans l'axe de l'avant-bras, la main n'en cache que 0,24 stud.
+- **Personnage distant en l'air :** un client ne connaît pas l'état de mouvement des autres. Il le déduit des pistes
+  répliquées (`CharacterAnimator.isAirborneAnimationId`), ce qui sert au bras gauche du couteau, libre au sol.
+- **Lire un `.rbxm` hors de Studio :** `lune` échoue sur les viewmodels (`Animation.Tags`). Passer par
+  `rojo build` d'un projet qui ne contient que ce fichier, vers un `.rbxmx`, puis lire le XML.
+- **Rig :** les C0/C1 des Motor6D du StarterCharacter n'ont aucune rotation. Un `Transform` exporté s'applique donc
+  directement dans le repère de la pièce parente.
+
 ## Limites actuelles
 
 - Le rig n'a pas de doigts : le couteau tourne devant un poing fermé. C'est accepté pour la M9.

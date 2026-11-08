@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Poses 3P #107</title>
+<style>
+:root{--ink:var(--foreground,#1c1c1c);--soft:var(--muted-foreground,#6b6b6b);--line:var(--border,#dcdcdc);--panel:var(--card,#f7f7f5);--acc:var(--primary,#2f6fd6)}
+*{box-sizing:border-box}
+body{margin:0;font-family:var(--font-sans,system-ui,sans-serif);font-size:13px;line-height:1.45;color:var(--ink)}
+section{margin:0 0 22px}
+h3{font-size:14px;margin:0 0 2px;font-weight:650}
+p.sub{margin:0 0 8px;font-size:12.5px;color:var(--soft)}
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.step{border:1px solid var(--line);border-radius:var(--radius,8px);padding:7px 9px;font-size:11.5px;color:var(--soft);background:var(--panel)}
+.step b{display:block;color:var(--ink);font-size:12px;margin-bottom:2px}
+.step.now{border-color:var(--acc);box-shadow:inset 0 0 0 1px var(--acc)}
+.hyp{font-size:12px;color:var(--soft);margin:8px 0 0}
+.card{display:block;border:1px solid var(--line);border-radius:var(--radius,8px);background:var(--panel);padding:8px 10px;margin:0 0 8px}
+.card.reco{border-color:var(--acc);box-shadow:inset 0 0 0 1px var(--acc)}
+.id{font-family:var(--font-mono,monospace);font-weight:700;font-size:13px}
+.tt{font-weight:600}
+.badge{display:inline-block;font-size:10px;font-weight:600;margin-left:4px;padding:0 6px;border-radius:99px;background:var(--acc);color:var(--primary-foreground,#fff);vertical-align:1px}
+.desc{font-size:12px;margin:4px 0 2px;padding-left:16px}
+.desc li{margin:0 0 2px}
+.chip{display:inline-block;margin-left:6px;font-size:11px;padding:0 7px;border-radius:99px;border:1px solid var(--line)}
+.chip.ok{border-color:var(--success,#2a8a4a);color:var(--success,#2a8a4a)}
+.chip.ko{border-color:var(--warning,#b7791f);color:var(--warning,#b7791f)}
+.views{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.v{font-size:10.5px;color:var(--soft);text-align:center}
+svg{display:block;width:100%;height:auto;color:var(--ink)}
+.trio{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.trio .card{margin:0}
+.mgrid{display:grid;gap:2px 3px;border:1px solid var(--line);border-radius:var(--radius,8px);background:var(--panel);padding:8px;margin-bottom:8px}
+.mh{font-size:10.5px;text-align:center;color:var(--soft);line-height:1.2}
+.mh b{display:block;color:var(--ink);font-family:var(--font-mono,monospace);font-size:12px}
+.rl{font-size:11px;font-weight:600;align-self:center;line-height:1.25}
+.rl span{display:block;font-weight:400;color:var(--soft)}
+.q{border:1px solid var(--line);border-radius:var(--radius,8px);background:var(--panel);padding:7px 10px;margin:0 0 6px;font-size:12.5px}
+.q .id{margin-right:6px}
+.q .r{color:var(--soft);font-size:12px;margin-top:2px}
+@media (max-width:560px){.steps{grid-template-columns:1fr 1fr}.card{grid-template-columns:1fr}.trio{grid-template-columns:1fr}}
+</style></head><body>
+<div id="app"></div>
+<script src="poses.js"></script>
+<script>
+// ── Rendu SVG orthographique ─────────────────────────────────────────────
+const VIEWS={tq:M.mul(M.x(12),M.y(-130)),tqL:M.mul(M.x(12),M.y(130)),side:M.y(-90),top:M.x(90),front:M.y(180)};
+const LIGHT=V.norm([-0.35,0.62,0.7]);
+// Cette méthode permet d'assombrir ou éclaircir une couleur lorsqu'on ombre une face.
+const shade=(c,k)=>`rgb(${c.map(x=>Math.round(Math.min(255,x*k))).join(',')})`;
+// Cette méthode permet d'écrire le tracé SVG d'une face projetée lorsqu'on dessine une vignette.
+const pth=q=>'M'+q.map(p=>p[0].toFixed(2)+' '+(-p[1]).toFixed(2)).join('L')+'Z';
+// Cette méthode permet de dessiner une vignette (faces triées du fond vers l'avant) lorsqu'on construit la planche.
+function svg(fig,view,bx){
+ const R=VIEWS[view];const faces=[];
+ // tri par pièce (centre) : les pavés et profils sont convexes ou fins, leurs faces visibles ne se recouvrent pas
+ const order=fig.parts.map(o=>({o,d:M.v(R,o.p)[2]})).sort((a,b)=>a.d-b.d);
+ for(const{o}of order)for(const f of facesOf(o)){const n=M.v(R,f.n);if(n[2]<=0.002)continue;faces.push({q:f.pts.map(p=>M.v(R,p)),n,c:f.c,w:o.w});}
+ const[x0,x1,y0,y1]=bx;let s=`<svg viewBox="${x0} ${-y1} ${x1-x0} ${y1-y0}" xmlns="http://www.w3.org/2000/svg">`;
+ if(view!=='top'){const pts=[];for(let i=0;i<28;i++){const a=i/28*2*Math.PI;pts.push(M.v(R,[Math.cos(a)*fig.shadowR,-4.77,Math.sin(a)*fig.shadowR*0.75]));}
+  s+=`<path d="${pth(pts)}" fill="currentColor" opacity="${fig.shadowO.toFixed(3)}"/>`;}
+ for(const f of faces){const k=0.58+0.42*Math.max(0,V.dot(f.n,LIGHT));s+=`<path d="${pth(f.q)}" fill="${shade(f.c,k)}" stroke="${f.w?shade(f.c,k*2.2):shade(f.c,k*0.7)}" stroke-width="${f.w?0.03:0.04}" stroke-linejoin="round"/>`;}
+ return s+'</svg>';
+}
+
+// ── Planche ─────────────────────────────────────────────────────────────
+// Cette méthode permet d'écrire un nombre à la française lorsqu'on l'affiche.
+const fmt=(x,n=1)=>x.toFixed(n).replace('.',',');
+const BX={tq:[-6,6.5,-5.4,4.4],tqL:[-6.5,6,-5.4,4.4],side:[-4.6,6.6,-5.4,4.4],top:[-5,5,-2.8,6.4],front:[-5.6,5.6,-5.4,4.4]};
+const VLAB={tq:'3/4 avant droit',tqL:'3/4 avant gauche',side:'profil droit',top:'dessus',front:'face'};
+// Cette méthode permet de produire la carte d'une tenue (texte, contrôle de portée, trois vues) lorsqu'on remplit une section.
+function card(key,title,lines,views,reco,chipFn){
+ const fig=build(key,'idle','hold');
+ return `<div class="card${reco?' reco':''}"><div><span class="id">${key}</span> <span class="tt">${title}</span>${reco?'<span class="badge">recommandé</span>':''}
+ ${chipFn?' '+chipFn(fig.info):''}<ul class="desc">${lines.map(l=>`<li>${l}</li>`).join('')}</ul></div>
+ <div class="views">${views.map(v=>`<div>${svg(fig,v,BX[v])}<div class="v">${VLAB[v]}</div></div>`).join('')}</div></div>`;
+}
+// Cette méthode permet d'indiquer si les deux mains atteignent l'arme lorsqu'on affiche une tenue de fusil.
+const reach=i=>{const m=Math.max(i.miss.R,i.miss.L);return m>0.05?`<span class="chip ko">main ${i.miss.L>i.miss.R?'gauche':'droite'} : manque ${fmt(m)} stud</span>`:'<span class="chip ok">les deux mains sur l\'arme</span>';};
+// Cette méthode permet d'afficher la longueur de lame visible lorsqu'on affiche une tenue de couteau.
+const blade=i=>`<span class="chip">lame visible ≈ ${fmt(i.visible)} stud (${Math.round(i.visible/CHAR_H*100)} % de la hauteur)</span>`;
+
+let h='';
+h+=`<section><h3>Méthode, sans vidéo de référence</h3><p class="sub">Les poses validées ici deviennent la référence des étapes suivantes.</p>
+<div class="steps"><div class="step now"><b>1. Planche (ici)</b>Poses clés figées et numérotées. Tu corriges par numéro.</div>
+<div class="step"><b>2. Mannequin 3D</b>Les mêmes poses animées en boucle (course, saut), à tourner dans le navigateur.</div>
+<div class="step"><b>3. Blender et Studio</b>Pistes sur le vrai rig, rendu au FOV 90° en 16:9.</div>
+<div class="step"><b>4. Côte à côte</b>Vidéo mannequin validé / Studio, puis publication.</div></div>
+<p class="hyp">Mannequin aux cotes du StarterCharacter relevées dans Studio (7,9 studs de haut, membres de 1,59 stud). Armes simplifiées à leur échelle 3P réelle (AWP : 0,5 = 5,1 studs en F0 et F2, 0,7 = 7,1 studs en F1 retenue). Faute de réponse, je garde les hypothèses du cadrage : une couche haut du corps par tenue, fusil et couteau seulement, pistolet reporté, jambes d'accroupi et de surf hors périmètre.</p></section>`;
+
+h+=`<section><h3>Tenue fusil (AWP)</h3><p class="sub">La couche de tenue pilote les bras, et la taille pour F1 et F2. L'arme suit le buste dans tous les états.</p>
+${card('F0','Actuel',['Bras tendus à l\'horizontale, posés par code (C0 des épaules).','La main tient l\'arme au niveau de la culasse, pas de la poignée.','Toute piste qui bouge les épaules s\'ajoute par-dessus : c\'est le bug.'],['tqL','side','top'])}
+${card('F1','Épaulé, buste tourné',['Taille tournée de 40° vers la droite, épaule gauche en avant.','Crosse à l\'épaule, lunette à hauteur du bas du visage, canon horizontal.','Main droite sur la poignée, main gauche sous le garde-main.'],['tqL','side','top'],true,reach)}
+${card('F2','Garde basse',['Même buste (35°), canon incliné de 28° vers le sol.','Plus détendu, mais la direction de visée se lit moins bien.'],['tqL','side','top'],false,reach)}
+</section>`;
+
+h+=`<section><h3>Tenue couteau (M9)</h3><p class="sub">Bras droit et couteau. Le bras gauche est discuté en Q4.</p>
+${card('C0','Actuel',['Bras droit tendu à 60°, lame dressée vers le haut.','Échelle 0,6 : le manche disparaît dans le poing.'],['tq','side','front'],false,blade)}
+${card('C1','Garde basse, lame en avant',['Coude plié à 70°, poing devant la hanche.','Lame dans l\'axe de l\'avant-bras, pointe relevée de 15°, tranchant vers le bas.','Échelle 1,0.'],['tq','side','front'],true,blade)}
+${card('C2','Garde haute',['Poing devant la poitrine, lame vers l\'avant et le haut.','Bras gauche en garde. Plus agressif, cache une partie du buste.','Échelle 1,0.'],['tq','side','front'],false,blade)}
+</section>`;
+
+const sizes=[['T1',0.6,'actuel'],['T2',1.0,''],['T3',1.3,'']];
+h+=`<section><h3>Taille du couteau 3P</h3><p class="sub">Avec la tenue C1, vue de profil. Le viewmodel 1P ne change pas.</p><div class="trio">${sizes.map(([k,s,n])=>{
+ HOLDS['_'+k]={...HOLDS.C1,scale:s};const f=build('_'+k,'idle','hold');
+ return `<div class="card${k==='T2'?' reco':''}"><span class="id">${k}</span> <span class="tt">échelle ${fmt(s)}</span>${n?` <span class="v">(${n})</span>`:''}${k==='T2'?'<span class="badge">recommandé</span>':''}
+ <div>${svg(f,'side',[-3.4,5.6,-5.4,4.4])}</div><div class="v">longueur ${fmt(f.info.total)} stud, lame visible ≈ ${fmt(f.info.visible)} stud (${Math.round(f.info.visible/CHAR_H*100)} %)</div></div>`;}).join('')}</div></section>`;
+
+const ROWS=[['F0','today','Aujourd\'hui','AWP : pose + piste R15'],['F1','hold','Fusil F1','proposé'],['C1','hold','Couteau C1','proposé']];
+// Cette méthode permet de construire la grille des états (colonnes) pour chaque tenue (lignes) lorsqu'on découpe le mouvement.
+function mgrid(cols){
+ let g=`<div class="mgrid" style="grid-template-columns:62px repeat(${cols.length},1fr)"><div></div>`;
+ g+=cols.map(([n,st,l1,l2])=>`<div class="mh"><b>${n}</b>${l1}${l2?`<br>${l2}`:''}</div>`).join('');
+ for(const[k,mode,l,sub]of ROWS){g+=`<div class="rl">${l}<span>${sub}</span></div>`;
+  g+=cols.map(([n,st])=>`<div>${svg(build(k,st,mode),'side',[-4.8,6.2,-5.4,7.4])}</div>`).join('');}
+ return g+'</div>';
+}
+h+=`<section><h3>Découpage du mouvement</h3><p class="sub">Les jambes et le torse viennent des pistes de déplacement (approximation des pistes R15 actuelles). Vue de profil droit. La couche de tenue remplace seulement les bras, et la taille pour le fusil. Le couteau C1 laisse le bras gauche libre au sol (Q4).</p>
+${mgrid([['M1','idle','idle',''],['M2','run1','course','contact D'],['M3','run2','course','passage'],['M4','run3','course','contact G'],['M5','run4','course','passage']])}
+${mgrid([['M6','jump1','saut','impulsion'],['M7','jump2','saut','sommet'],['M8','jump3','saut','descente'],['M9','fall','chute',''],['M10','surf','surf','= chute'],['M11','crouch','accroupi','= idle']])}
+<p class="sub">M10 et M11 : jambes inchangées (pas de piste de surf ni d'accroupi aujourd'hui), seule la tenue des bras change.</p></section>`;
+
+const Q=[['Q1','Tenue du fusil : F1, F2 ou garder F0 ?','Recommandé : F1. La direction de visée se lit de loin, et c\'est la tenue de CS.'],
+ ['Q2','Tenue du couteau : C1, C2 ou garder C0 ?','Recommandé : C1. Lame lisible sans masquer le buste, proche de la course au couteau de CS.'],
+ ['Q3','Taille du couteau 3P : T1, T2 ou T3 ?','Recommandé : T2 (1,0). Lame bien visible sans paraître démesurée.'],
+ ['Q4','Couteau : bras gauche libre au sol, ou toujours tenu ?','Recommandé : libre au sol (il balance en course, piste de déplacement), tenu baissé en l\'air (plus de bras levés). Toujours tenu est plus simple, mais raide en course.'],
+ ['Q5','Fusil : la couche pilote aussi la taille ?','Recommandé : oui. Les bras mesurent 2,8 studs pour 3,2 entre les épaules : buste de face, la main gauche n\'atteint pas le garde-main. En échange, le buste ne suit plus le léger roulis de la course.'],
+ ['Q6','Pose figée ou vivante ?','Recommandé : une pose figée par tenue, le mouvement vient des jambes et du torse. Un balancement propre à l\'arme pourra venir après le mannequin.'],
+ ['Q7','Hors de cette issue ?','Recommandé : visée verticale (le buste suit le regard), jambes d\'accroupi et de surf, tenue pistolet, chacun dans une issue séparée.']];
+h+=`<section><h3>À trancher</h3>${Q.map(([k,q,r])=>`<div class="q"><span class="id">${k}</span>${q}<div class="r">${r}</div></div>`).join('')}</section>`;
+document.getElementById('app').innerHTML=h;
+</script>
+</body></html>

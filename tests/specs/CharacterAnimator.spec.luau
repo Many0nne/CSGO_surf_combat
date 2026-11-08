@@ -59,6 +59,20 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("CharacterAnimator.isAirborneAnimationId", function()
+		T.it("saut, chute et surf sont aériens ; idle, course et accroupi ne le sont pas", function()
+			for _, state in { "JUMP", "FALL", "SURF" } do
+				local id = CharacterAnimator.resolveAnimationId(state) :: string
+				T.expect(CharacterAnimator.isAirborneAnimationId(id), state .. " aérien")
+			end
+			for _, state in { "IDLE", "WALK", "RUN", "CROUCH_IDLE", "CROUCH_WALK" } do
+				local id = CharacterAnimator.resolveAnimationId(state) :: string
+				T.expect(not CharacterAnimator.isAirborneAnimationId(id), state .. " au sol")
+			end
+			T.expect(not CharacterAnimator.isAirborneAnimationId("rbxassetid://0"), "id inconnu")
+		end)
+	end)
+
 	T.describe("CharacterAnimator.playbackSpeed", function()
 		T.it("proportionnelle à la vitesse et bornée", function()
 			T.expectNear(CharacterAnimator.playbackSpeed("RUN", Config.REF_SPEED.RUN), 1)

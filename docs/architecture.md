@@ -73,7 +73,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/client/systems/weapon/ScopeSystem.luau`: gestion du scope (FOV, affichage de la lunette, sensibilité caméra) pour les armes à lunette.
 - `src/client/systems/weapon/ViewmodelSystem.luau`: gestion du viewmodel, des animations et des sons des armes en vue FPS.
 - `src/client/systems/weapon/WeaponSystem.luau`: logique client des armes, munitions, recharge et vitesse liée à l'arme.
-- `src/client/systems/weapon/WeaponThirdPersonView.luau`: rendu client des armes 3e personne de tous les personnages (décalage procédural du grip pour tir/recharge/switch, modèle 3P masqué pour soi en 1re personne).
+- `src/client/systems/weapon/WeaponThirdPersonView.luau`: rendu client des armes 3e personne de tous les personnages (décalage procédural du grip pour tir/recharge/switch, modèle 3P masqué pour soi en 1re personne) et tenue du haut du corps des personnages armés (Transform des Motor6D posé en `PreSimulation`, après l'Animator, #107).
 - `src/client/ui/FeedbackScreen.luau`: écran Feedback (message de 10 à 500 caractères envoyé au serveur, ENVOYER se tire).
 - `src/client/ui/HUDRules.luau`: règles pures du HUD (paliers de vitesse, timer, classement, emplacements de la barre d'armes).
 - `src/client/ui/Hitmarker.luau`: marqueur de touche confirmée par le serveur (X blanc à contour noir, rouge sur un tir à la tête, plus grand sur un kill).
@@ -101,7 +101,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/server/init.server.luau`: point d'entrée serveur — crée tous les RemoteEvents, orchestre SpawnManager, RoundManager, StatsStore.
 - `src/shared/CameraConfig.luau`: constantes caméra (FOV, sensibilité, pitch min/max, hauteurs, lerp speed, scope sens multiplier).
 - `src/shared/CharacterSyncRules.luau`: règles pures de la synchro de position (forme d'un paquet, déplacement plausible, tampon et interpolation des autres joueurs), testées (`tests/specs/CharacterSyncRules.spec.luau`).
-- `src/shared/CharacterAnimator.luau`: pipeline d'animation 3e personne des joueurs (état de mouvement → piste, fondus, vitesse de lecture) ; alimenté par `MovementController` (client, répliqué via l'Animator).
+- `src/shared/CharacterAnimator.luau`: pipeline d'animation 3e personne des joueurs (état de mouvement → piste, fondus, vitesse de lecture) ; alimenté par `MovementController` (client, répliqué via l'Animator). `isAirborneAnimationId` permet aux autres clients de déduire d'une piste répliquée qu'un personnage est en l'air.
 - `src/shared/CharacterAppearance.luau`: rig de référence (`StarterPlayer.StarterCharacter`, cloné pour la cible du helper de playtest) et application du skin commun (BodyColors + vêtements) côté serveur.
 - `src/shared/CharacterConfig.luau`: rig/skin communs (couleurs, ids d'images Shirt/Pants/visage) et animations 3e personne (ids, fallbacks, seuils de vitesse, fondus).
 - `src/shared/DebugPlaytestRules.luau`: règles pures du helper de playtest (choix de l'outil, marqueurs et dégâts attendus, visée, rapport PASS/FAIL).
@@ -121,4 +121,4 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/shared/StepTiming.luau`: découpage du dt d'une frame rendue en pas de mouvement (une frame lente donne plusieurs pas au lieu d'être tronquée), testé (`tests/specs/StepTiming.spec.luau`).
 - `src/shared/UITheme.luau`: tokens de style de l'interface (couleurs, polices, tailles, durées, courbes).
 - `src/shared/WeaponConfig.luau`: définitions partagées des armes et de leurs paramètres par défaut (dont `ThirdPerson` : échelle, grip, pose 3P).
-- `src/shared/WeaponThirdPerson.luau`: arme 3e personne des joueurs : construction du modèle 3P depuis `ViewModels`, grip soudé à la main, pose des épaules, actions répliquées en attributs (`Weapon3PAction`/`Weapon3PActionAt`), règles pures (grip, décalages d'action, visibilité).
+- `src/shared/WeaponThirdPerson.luau`: arme 3e personne des joueurs : construction du modèle 3P depuis `ViewModels`, grip soudé à la main, tenues du haut du corps (`POSES`, générées par `tools/anim/poses3p/export_pose.js`), actions répliquées en attributs (`Weapon3PAction`/`Weapon3PActionAt`), règles pures (grip, décalages d'action, cible de tenue par articulation, visibilité).

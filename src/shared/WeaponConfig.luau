@@ -22,11 +22,26 @@ WeaponConfig.Weapons = {
 		ScopeFov1 = 40,
 		ScopeFov2 = 10,
 		ScopeTweenTime = 0.1,
-		-- Modèle 3e personne (#5) : échelle du clone du viewmodel, grip (CFrame de la poignée dans le
-		-- repère de la main) et pose de tenue des épaules (cf. WeaponThirdPerson.POSES).
+		-- Modèle 3e personne (#5, #107) : échelle du clone du viewmodel, grip (CFrame de la poignée dans le
+		-- repère de la main) et tenue du haut du corps (cf. WeaponThirdPerson.POSES).
+		-- Tenue F1 : main droite sur la poignée pistolet (grip généré par tools/anim/poses3p/export_pose.js) ;
+		-- échelle 0,7 (7,1 studs) : la crosse disparaît dans l'épaule, l'arme doit rester lisible de loin.
 		ThirdPerson = {
-			Scale = 0.5,
-			Grip = CFrame.fromMatrix(Vector3.new(0, -0.2, 0), Vector3.new(0, -1, 0), Vector3.new(0, 0, -1)),
+			Scale = 0.7,
+			Grip = CFrame.new(
+				0.29883,
+				-1.0026,
+				-0.08662,
+				0.55516,
+				-0.547,
+				0.62657,
+				-0.80806,
+				-0.53317,
+				0.25051,
+				0.19704,
+				-0.64538,
+				-0.73801
+			),
 			Pose = "Rifle",
 		},
 		AnimationSounds = {
@@ -56,10 +71,11 @@ WeaponConfig.Weapons = {
 		BackstabMultiplier = 2,
 		-- Mesh unique dans le repère de la Handle : +Z = axe du couteau (vers la pointe), +X = tranchant.
 		-- Son origine est le centre du mesh : le centre du manche est à 1,21 stud derrière (Z = -1,21 × Scale).
-		-- Prise marteau : lame dressée hors du poing, tranchant vers l'avant de l'avant-bras.
+		-- Tenue C1 (#107) : lame dans l'axe de l'avant-bras, pointe relevée de 15°, tranchant vers le bas ; échelle 1
+		-- pour que la lame dépasse nettement du poing (1,59 stud). Grip généré par tools/anim/poses3p/export_pose.js.
 		ThirdPerson = {
-			Scale = 0.6,
-			Grip = CFrame.fromMatrix(Vector3.new(0, -0.13, -0.726), Vector3.new(0, -1, 0), Vector3.new(-1, 0, 0)),
+			Scale = 1,
+			Grip = CFrame.new(0, -1.16877, -0.31317, 0, -1, 0, -0.25882, 0, -0.96593, 0.96593, 0, -0.25882),
 			Pose = "Melee",
 		},
 		AnimationSounds = {

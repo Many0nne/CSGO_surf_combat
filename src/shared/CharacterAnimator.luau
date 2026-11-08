@@ -69,6 +69,26 @@ function CharacterAnimator.resolveAnimationId(state: string): string?
 	return nil
 end
 
+local airborneIds: { [string]: boolean }? = nil
+
+-- Cette méthode permet de savoir si une piste de déplacement est aérienne (saut, chute, surf) lorsqu'un autre client
+-- doit déduire l'état d'un personnage distant de ses pistes répliquées (tenue 3P, #107).
+function CharacterAnimator.isAirborneAnimationId(id: string): boolean
+	local ids = airborneIds
+	if not ids then
+		local built: { [string]: boolean } = {}
+		for state in AIR_STATES do
+			local resolved = CharacterAnimator.resolveAnimationId(state)
+			if resolved then
+				built[resolved] = true
+			end
+		end
+		airborneIds = built
+		ids = built
+	end
+	return (ids :: { [string]: boolean })[id] == true
+end
+
 -- Cette méthode permet de calculer la vitesse de lecture d'une piste lorsque l'état est un cycle de pas,
 -- proportionnelle à la vitesse réelle (bornée) ; 1 pour les états sans référence de vitesse.
 function CharacterAnimator.playbackSpeed(state: string, speed: number): number
