@@ -19,6 +19,8 @@ local MAX_CHARS = 500
 local FIELD_WIDTH = 640
 local FIELD_TOP = MenuPage.ContentTop + 34
 local FIELD_HEIGHT = 270
+local ACTION_SIZE = 30
+local ACTION_GAP = 46
 local CLOSE_DELAY = 2 -- le message de réussite reste lisible avant le retour à l'accueil
 
 local page: MenuPage.Page
@@ -81,7 +83,7 @@ end
 local function buildField(parent: Instance)
 	local field = UIKit.frame({
 		Name = "Message",
-		Position = UDim2.fromOffset(MenuPage.TextX, FIELD_TOP),
+		Position = UDim2.fromOffset(0, FIELD_TOP),
 		Size = UDim2.fromOffset(FIELD_WIDTH, FIELD_HEIGHT),
 		BackgroundColor3 = C.Black,
 		BackgroundTransparency = 0.55,
@@ -134,16 +136,27 @@ function FeedbackScreen.init(onClose: () -> ())
 	local sendRmt = NetworkProtocol.getRemote(N.SEND_FEEDBACK)
 	local ackRmt = NetworkProtocol.getRemote(N.FEEDBACK_ACK)
 
-	page = MenuPage.new("FeedbackScreen", 2, MenuPage.Words.Feedback)
-	UIKit.text({
-		Text = "Signale un bug ou partage une idée",
-		TextSize = 19,
-		TextColor3 = C.Bone,
-		Position = UDim2.fromOffset(MenuPage.TextX, MenuPage.ContentTop),
-		Size = UDim2.fromOffset(FIELD_WIDTH, 26),
+	page = MenuPage.new("FeedbackScreen", 2, "FEEDBACK")
+	-- Colonne centrée : toutes les positions ci-dessous sont relatives à elle
+	local column = UIKit.frame({
+		Name = "Column",
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.fromScale(0.5, 0),
+		Size = UDim2.new(0, FIELD_WIDTH, 1, 0),
 		Parent = page.group,
 	})
-	buildField(page.group)
+	UIKit.text({
+		Text = "SIGNALE UN BUG OU PARTAGE UNE IDÉE",
+		FontFace = F.DisplayMedium,
+		TextSize = 15,
+		TextColor3 = C.Accent,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Position = UDim2.fromOffset(0, MenuPage.ContentTop + 8),
+		Size = UDim2.fromOffset(FIELD_WIDTH, 18),
+		Parent = column,
+	})
+	buildField(column)
 
 	local belowField = FIELD_TOP + FIELD_HEIGHT + 8
 	charCountLabel = UIKit.text({
@@ -151,28 +164,46 @@ function FeedbackScreen.init(onClose: () -> ())
 		FontFace = F.Mono,
 		TextSize = T.Caption,
 		TextColor3 = C.Muted,
-		Position = UDim2.fromOffset(MenuPage.TextX, belowField),
+		Position = UDim2.fromOffset(0, belowField),
 		Size = UDim2.fromOffset(120, 20),
-		Parent = page.group,
+		Parent = column,
 	})
 	statusLabel = UIKit.text({
 		Text = "",
 		TextSize = T.Small,
 		TextColor3 = C.Bone,
 		TextXAlignment = Enum.TextXAlignment.Right,
-		Position = UDim2.fromOffset(MenuPage.TextX + 130, belowField),
+		Position = UDim2.fromOffset(130, belowField),
 		Size = UDim2.fromOffset(FIELD_WIDTH - 130, 20),
-		Parent = page.group,
+		Parent = column,
 	})
+	-- Actions côte à côte sous le champ : ANNULER, puis ENVOYER (action principale, en os vif)
+	local actions = UIKit.frame({
+		Name = "Actions",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(0, belowField + 34),
+		Size = UDim2.fromOffset(FIELD_WIDTH, 44),
+		Parent = column,
+	})
+	UIKit.create("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		HorizontalAlignment = Enum.HorizontalAlignment.Center,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, ACTION_GAP),
+		Parent = actions,
+	})
+	page.choice({ text = "ANNULER", size = ACTION_SIZE, layoutOrder = 1, parent = actions, action = leave })
 	sendChoice = page.choice({
-		word = MenuPage.Words.Envoyer,
-		height = 62,
-		position = UDim2.fromOffset(MenuPage.WordX, belowField + 30),
+		text = "ENVOYER",
+		size = ACTION_SIZE,
+		layoutOrder = 2,
+		parent = actions,
 		action = function()
 			send(sendRmt)
 		end,
 	})
-	page.exit(MenuPage.Words.Annuler, leave)
+	sendChoice.setSelected(true)
 
 	ackRmt.OnClientEvent:Connect(function(success: boolean, message: string)
 		sending = false

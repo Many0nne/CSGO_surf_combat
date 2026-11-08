@@ -1,5 +1,5 @@
--- HUD de round : timer et rang en haut, classement (Tab maintenu) dans la direction « Ligne de mire » ;
--- overlay de réapparition (décor désaturé) et bandeau ambre de fin de round encore dans l'ancien style « Tactical ».
+-- HUD de round, direction « Ligne de mire » : timer et rang en haut, classement (Tab maintenu), écran de réapparition
+-- (scène désaturée, compte à rebours en bas au centre) et écran de fin de round (voile central, nom du vainqueur).
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -11,7 +11,6 @@ local HUDRules = require(script.Parent.HUDRules)
 
 local C = UITheme.Colors
 local F = UITheme.Fonts
-local T = UITheme.TextSize
 local Motion = UITheme.Motion
 
 local RoundHUD = {}
@@ -29,6 +28,15 @@ local LB_VEIL_TRANSPARENCY = 0.3
 local COL_RANK = 36
 local COL_NAME = 56
 local COL_STATS = { 80, 64, 64 } -- K, M, K/M
+-- Réapparition : bloc en bas au centre sur deux moitiés de fondu de coin, scène désaturée sans voile plein
+local RESPAWN_SCRIM_SIZE = Vector2.new(260, 230)
+local RESPAWN_SCRIM_TRANSPARENCY = 0.2
+local RESPAWN_WIDTH = 400
+local RESPAWN_BOTTOM = 40
+-- Fin de round : même voile central que le classement, un peu plus dense
+local RESULT_WIDTH = 720
+local RESULT_RULE_WIDTH = 420
+local RESULT_VEIL_TRANSPARENCY = 0.2
 
 local gui: ScreenGui
 local timerLabel: TextLabel
@@ -40,16 +48,19 @@ local rankShadow: TextLabel
 local leaderboard: CanvasGroup
 local leaderboardList: Frame
 local respawnRoot: Frame
-local respawnDim: Frame
+local respawnScrims: { ImageLabel }
 local respawnPanel: CanvasGroup
 local respawnCount: TextLabel
+local respawnCountShadow: TextLabel
 local respawnCountScale: UIScale
 local respawnLabel: TextLabel
 local deathGrade: ColorCorrectionEffect
 local resultRoot: Frame
-local resultDim: Frame
-local resultBand: Frame
+local resultVeil: Frame
 local resultContent: CanvasGroup
+local resultMeBand: Frame
+local resultName: TextLabel
+local resultNameShadow: TextLabel
 local resultLabel: TextLabel
 
 local tabConn: RBXScriptConnection?
@@ -284,7 +295,8 @@ end
 
 -- ── Réapparition ───────────────────────────────────────────────────────────────
 
--- Cette méthode permet de construire l'overlay de mort (voile, bloc rouge du compte à rebours, texte) lorsque le HUD est initialisé.
+-- Cette méthode permet de construire l'écran de mort (fondu sombre en bas au centre, « ÉLIMINÉ » en rouge d'impact,
+-- compte à rebours en chiffres os à ombre, libellé ambré) lorsque le HUD est initialisé ; la scène reste visible, désaturée.
 local function buildRespawnOverlay(root: Frame)
 	respawnRoot = UIKit.frame({
 		Name = "Respawn",
@@ -293,123 +305,172 @@ local function buildRespawnOverlay(root: Frame)
 		Visible = false,
 		Parent = root,
 	})
-	respawnDim = UIKit.frame({
-		Name = "Dim",
-		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = Color3.new(0, 0, 0),
-		BackgroundTransparency = 0.65,
-		Parent = respawnRoot,
-	})
+	local bottom = UDim2.fromScale(0.5, 1)
+	respawnScrims = {
+		UIKit.cornerScrim(respawnRoot, "BottomRight", RESPAWN_SCRIM_SIZE, 1, bottom),
+		UIKit.cornerScrim(respawnRoot, "BottomLeft", RESPAWN_SCRIM_SIZE, 1, bottom),
+	}
 	respawnPanel = UIKit.create("CanvasGroup", {
 		Name = "Panel",
-		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -120),
-		Size = UDim2.fromOffset(460, 78),
-		BackgroundColor3 = C.PanelDark,
-		BackgroundTransparency = 0.05,
+		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.5, 0, 1, -RESPAWN_BOTTOM),
+		Size = UDim2.fromOffset(RESPAWN_WIDTH, 150),
 		Parent = respawnRoot,
 	})
-	UIKit.stroke(respawnPanel, C.Border)
-	local block = UIKit.frame({
-		Name = "CountBlock",
-		Size = UDim2.new(0, 96, 1, 0),
-		BackgroundColor3 = C.Danger,
-		Parent = respawnPanel,
-	})
-	respawnCount = UIKit.text({
-		Text = "3",
-		FontFace = F.Display,
-		TextSize = T.Count,
-		TextColor3 = C.White,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.fromScale(1, 1),
-		Parent = block,
-	})
-	respawnCountScale = UIKit.create("UIScale", { Parent = respawnCount })
-	UIKit.text({
+	local centered = Enum.TextXAlignment.Center
+	shadowedText(respawnPanel, {
+		Name = "Eliminated",
 		Text = "ÉLIMINÉ",
 		FontFace = F.Display,
-		TextSize = T.Title,
-		Position = UDim2.fromOffset(116, 12),
-		Size = UDim2.new(1, -136, 0, 28),
+		TextSize = 30,
+		TextColor3 = C.HitRed,
+		TextXAlignment = centered,
+		Size = UDim2.new(1, 0, 0, 36),
+	}, 3)
+	-- Chiffre et ombre dans un cadre commun : la pulsation les agrandit ensemble
+	local count = UIKit.frame({
+		Name = "Count",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(0, 36),
+		Size = UDim2.new(1, 0, 0, 84),
 		Parent = respawnPanel,
 	})
+	respawnCountScale = UIKit.create("UIScale", { Parent = count })
+	respawnCount, respawnCountShadow = shadowedText(count, {
+		Name = "Count",
+		Text = "3",
+		FontFace = F.Display,
+		TextSize = 80,
+		TextColor3 = C.Bone,
+		TextXAlignment = centered,
+		Size = UDim2.fromScale(1, 1),
+	}, 4)
 	respawnLabel = UIKit.text({
-		Text = "",
-		TextSize = 15,
-		TextColor3 = C.TextSoft,
-		Position = UDim2.fromOffset(116, 42),
-		Size = UDim2.new(1, -136, 0, 22),
+		Name = "Label",
+		Text = "RÉAPPARITION",
+		FontFace = F.DisplayMedium,
+		TextSize = 14,
+		TextColor3 = C.Accent,
+		TextXAlignment = centered,
+		Position = UDim2.fromOffset(0, 124),
+		Size = UDim2.new(1, 0, 0, 16),
 		Parent = respawnPanel,
 	})
 end
 
 -- Cette méthode permet d'afficher le nouveau chiffre du compte à rebours avec une pulsation lorsqu'une seconde passe.
 local function popCount(value: number)
-	respawnCount.Text = tostring(value)
+	local text = tostring(value)
+	respawnCount.Text = text
+	respawnCountShadow.Text = text
 	respawnCount.TextTransparency = 1
+	respawnCountShadow.TextTransparency = 1
 	respawnCountScale.Scale = 1.4
 	UIKit.tween(respawnCount, Motion.Pop, { TextTransparency = 0 })
+	UIKit.tween(respawnCountShadow, Motion.Pop, { TextTransparency = 0.35 })
 	UIKit.tween(respawnCountScale, Motion.Pop, { Scale = 1 })
 end
 
 -- ── Fin de round ───────────────────────────────────────────────────────────────
 
--- Cette méthode permet de construire le bandeau ambre pleine largeur de fin de round lorsque le HUD est initialisé.
+-- Cette méthode permet de construire l'écran de fin de round (voile central qui s'efface vers les côtés, libellé ambré,
+-- nom du vainqueur en os géant sur un filet ambre, bande rouge d'impact si c'est le joueur) lorsque le HUD est initialisé.
 local function buildResultBanner(root: Frame)
 	resultRoot = UIKit.frame({
 		Name = "Result",
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
-		ClipsDescendants = true,
 		Visible = false,
 		Parent = root,
 	})
-	resultDim = UIKit.frame({
-		Name = "Dim",
-		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = Color3.fromRGB(10, 12, 14),
-		BackgroundTransparency = 0.45,
+	resultVeil = UIKit.frame({
+		Name = "Veil",
+		BackgroundColor3 = C.Scrim,
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.fromScale(0.5, 0),
+		Size = UDim2.new(0, RESULT_WIDTH + LB_VEIL_EXTRA, 1, 0),
 		Parent = resultRoot,
 	})
-	resultBand = UIKit.frame({
-		Name = "Band",
-		AnchorPoint = Vector2.new(0, 0.5),
-		Position = UDim2.fromScale(0, 0.465),
-		Size = UDim2.new(1, 0, 0, 150),
-		BackgroundColor3 = C.Accent,
-		Parent = resultRoot,
+	UIKit.create("UIGradient", {
+		Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1),
+			NumberSequenceKeypoint.new(0.3, RESULT_VEIL_TRANSPARENCY),
+			NumberSequenceKeypoint.new(0.7, RESULT_VEIL_TRANSPARENCY),
+			NumberSequenceKeypoint.new(1, 1),
+		}),
+		Parent = resultVeil,
 	})
 	resultContent = UIKit.create("CanvasGroup", {
 		Name = "Content",
-		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		Parent = resultBand,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.45),
+		Size = UDim2.fromOffset(RESULT_WIDTH, 200),
+		Parent = resultRoot,
 	})
+	local centered = Enum.TextXAlignment.Center
 	UIKit.text({
+		Name = "Over",
 		Text = "ROUND TERMINÉ",
 		FontFace = F.DisplayMedium,
-		TextSize = T.Body,
-		TextColor3 = C.Ground,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		Position = UDim2.fromOffset(0, 30),
-		Size = UDim2.new(1, 0, 0, 22),
+		TextSize = 16,
+		TextColor3 = C.Accent,
+		TextXAlignment = centered,
+		Size = UDim2.new(1, 0, 0, 20),
+		Parent = resultContent,
+	})
+	-- Bande rouge d'impact derrière le nom quand le joueur gagne, comme sa ligne du classement
+	resultMeBand = UIKit.frame({
+		Name = "MeBand",
+		BackgroundColor3 = C.HitRed,
+		BackgroundTransparency = 0.2,
+		Position = UDim2.fromOffset(0, 34),
+		Size = UDim2.new(1, 0, 0, 82),
+		Visible = false,
+		Parent = resultContent,
+	})
+	UIKit.create("UIGradient", {
+		Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1),
+			NumberSequenceKeypoint.new(0.25, 0.2),
+			NumberSequenceKeypoint.new(0.75, 0.2),
+			NumberSequenceKeypoint.new(1, 1),
+		}),
+		Parent = resultMeBand,
+	})
+	resultName, resultNameShadow = shadowedText(resultContent, {
+		Name = "Winner",
+		Text = "",
+		FontFace = F.Display,
+		TextSize = 72,
+		TextColor3 = C.Bone,
+		TextXAlignment = centered,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Position = UDim2.fromOffset(0, 32),
+		Size = UDim2.new(1, 0, 0, 84),
+		ZIndex = 2,
+	}, 5)
+	resultNameShadow.ZIndex = 2
+	UIKit.frame({
+		Name = "Rule",
+		BackgroundColor3 = C.Accent,
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 128),
+		Size = UDim2.fromOffset(RESULT_RULE_WIDTH, 3),
 		Parent = resultContent,
 	})
 	resultLabel = UIKit.text({
+		Name = "Wins",
 		Text = "",
-		FontFace = F.Display,
-		TextSize = T.Banner,
-		TextColor3 = C.Ground,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		TextScaled = false,
-		TextTruncate = Enum.TextTruncate.AtEnd,
-		Position = UDim2.fromOffset(40, 56),
-		Size = UDim2.new(1, -80, 0, 60),
+		FontFace = F.DisplayMedium,
+		TextSize = 22,
+		TextColor3 = C.Bone,
+		TextXAlignment = centered,
+		Position = UDim2.fromOffset(0, 140),
+		Size = UDim2.new(1, 0, 0, 28),
 		Parent = resultContent,
 	})
 end
@@ -556,8 +617,11 @@ function RoundHUD.showRespawning(delaySeconds: number)
 		return
 	end
 	respawnRoot.Visible = true
-	respawnDim.BackgroundTransparency = 1
-	UIKit.tween(respawnDim, Motion.Enter, { BackgroundTransparency = 0.65 })
+	for _, scrim in respawnScrims do
+		scrim.ImageTransparency = 1
+		UIKit.tween(scrim, Motion.Enter, { ImageTransparency = RESPAWN_SCRIM_TRANSPARENCY })
+	end
+	respawnLabel.Text = "RÉAPPARITION"
 	UIKit.reveal(respawnPanel, 0, 16)
 	deathGrade.Enabled = true
 	deathGrade.Saturation = 0
@@ -572,13 +636,12 @@ function RoundHUD.showRespawning(delaySeconds: number)
 		while respawnRoot.Visible do
 			local remaining = HUDRules.secondsLeft(endTime, os.clock())
 			if remaining <= 0 then
-				respawnLabel.Text = "Réapparition..."
+				respawnLabel.Text = "RÉAPPARITION…"
 				break
 			end
 			if remaining ~= shown then
 				shown = remaining
 				popCount(remaining)
-				respawnLabel.Text = string.format("Réapparition dans %ds", remaining)
 			end
 			task.wait(0.05)
 		end
@@ -607,17 +670,16 @@ function RoundHUD.showResult(winnerName: string)
 		return
 	end
 	leaderboard.Visible = false
-	resultLabel.Text = string.upper(winnerName) .. " REMPORTE LE ROUND !"
+	local isMe = winnerName == Players.LocalPlayer.Name
+	local name = string.upper(winnerName)
+	resultName.Text = name
+	resultNameShadow.Text = name
+	resultMeBand.Visible = isMe
+	resultLabel.Text = if isMe then "TU REMPORTES LE ROUND" else "REMPORTE LE ROUND"
 	resultRoot.Visible = true
-	resultDim.BackgroundTransparency = 1
-	UIKit.tween(resultDim, Motion.Enter, { BackgroundTransparency = 0.45 })
-	resultBand.Position = UDim2.fromScale(-1, 0.465)
-	UIKit.tween(resultBand, Motion.Band, { Position = UDim2.fromScale(0, 0.465) })
-	resultContent.GroupTransparency = 1
-	resultContent.Position = UDim2.fromOffset(40, 0)
-	task.delay(0.35, function()
-		UIKit.tween(resultContent, Motion.Enter, { GroupTransparency = 0, Position = UDim2.fromOffset(0, 0) })
-	end)
+	resultVeil.BackgroundTransparency = 1
+	UIKit.tween(resultVeil, Motion.Enter, { BackgroundTransparency = 0 })
+	UIKit.reveal(resultContent, 0.15, 16)
 end
 
 function RoundHUD.hideResult()

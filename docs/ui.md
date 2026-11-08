@@ -1,6 +1,7 @@
 # Direction artistique de l'interface
 
-Référence pour refaire les écrans restants (réapparition, fin de round) dans la direction du menu, déjà appliquée à l'accueil, Infos, Réglages, Feedback et au HUD de partie (vitesse, barre d'armes, timer, classement).
+Référence pour tout nouvel écran. La direction est appliquée à tous les écrans existants : accueil, Infos, Réglages, Feedback,
+HUD de partie (vitesse, barre d'armes, timer, classement), réapparition et fin de round (#117).
 
 ## La direction : « Ligne de mire »
 
@@ -47,11 +48,21 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
 - `src/client/ui/MainMenu.luau` : accueil de la salle des miroirs (titre, onglets, fiche d'arme, sélecteur), tir dans la
   scène au clic. Les onglets sont dans leur propre `ScreenGui` (`MenuTabs`, DisplayOrder 4), au-dessus des écrans
   secondaires.
-- `src/client/ui/MenuPage.luau` : gabarit des écrans secondaires : pas de panneau, dégradé sombre à gauche, action de
-  sortie en bas à gauche. Le titre en image n'est montré qu'en partie (Réglages par la touche P) : au menu, l'onglet
-  actif sert de titre.
-- `src/client/ui/MenuShot.luau` : tir sur un élément, impact, puis action ; choix en images usées (écrans secondaires) et
-  choix en texte à ombre décalée (`textChoice` : onglets, flèches).
+- `src/client/ui/MenuPage.luau` : gabarit des écrans secondaires, sans panneau : bloc centré sur le voile du classement,
+  actions côte à côte en bas au centre (`MenuPage.ExitY`). Choix de l'utilisateur en #117, après un premier passage en
+  colonne sur un dégradé à gauche jugé peu changé. Infos et Réglages partagent la même disposition (catégories à gauche
+  avec barre ambrée sur l'active, contenu à droite, bloc de 780 px). Le titre en texte (Oswald à ombre, en
+  haut au centre, à la place des onglets) n'est montré qu'en partie (Réglages par la touche P) : au menu, l'onglet actif
+  sert de titre. `page.choice` : choix en texte, os atténué au repos, os vif une fois choisi (`setSelected`, aussi pour
+  l'action principale comme ENVOYER ou RETOUR), rouge d'impact au survol.
+- Réglages (`SettingsMenu.luau`, disposition C des schémas de #117, préférée aux sous-onglets en haut et à la liste
+  unique qui défile) : catégories à tirer à gauche (barre ambrée sur l'active), lignes de 54 px à droite (nom, contrôle,
+  valeur os à ombre, filet). Contrôles : curseur (trace continue, poignée en impact ; une barre segmentée ferait perdre
+  la précision de la sensibilité) et choix fermé « ‹ VALEUR › ». RÉTABLIR remet la catégorie affichée à ses valeurs par
+  défaut. Ajouter un réglage : une ligne dans `buildCategories` ; une catégorie sans réglage n'est pas créée (TOUCHES
+  arrivera avec #100).
+- `src/client/ui/MenuShot.luau` : tir sur un élément, impact, puis action ; choix en texte à ombre décalée
+  (`textChoice`, l'ombre s'estompe avec le choix désactivé).
 - `src/client/ui/MenuCursor.luau` : hitmarker-curseur.
 - `src/client/systems/game/MenuScene.luau` : salle des miroirs, éclairage temporaire, visée, tir sur les éclats,
   explosion sur JOUER.
@@ -70,16 +81,21 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   sombre en deux moitiés de coin, timer en rouge d'impact sous 30 s) ; classement sous Tab : pas de panneau, voile sombre
   central qui s'efface vers les côtés, titre « CLASSEMENT » sur un filet ambre, colonnes K / M / K/M, ligne du joueur
   sur une bande rouge d'impact **droite** (penchée, elle se lisait mal en face des colonnes).
+  Réapparition : la scène reste visible, désaturée (`ColorCorrectionEffect`), sans voile plein ; en bas au centre, sur
+  deux moitiés de fondu de coin, « ÉLIMINÉ » en rouge d'impact (le joueur a été touché), compte à rebours en gros
+  chiffres os à ombre, libellé ambré « RÉAPPARITION ». Place laissée pour le nom du tueur (#102).
+  Fin de round : voile central du classement, « ROUND TERMINÉ » ambré, nom du vainqueur en os géant, filet ambre,
+  « REMPORTE LE ROUND » ; le rouge d'impact n'apparaît que si le joueur gagne (bande derrière son nom).
 - `UIKit.cornerScrim` : fond de coin du HUD (`assets/ui/hud/scrim_coin.png`) dans les quatre orientations, par rotation.
   Seul le compteur de vitesse est penché (`UITheme.Layout.HudLean`, -6°) : l'utilisateur a préféré le timer, la barre
   d'armes et le classement droits.
-- `tools/ui/make_menu_type.py` : génère le titrage dans `assets/ui/menu/` (police Anton, licence OFL).
+- Titrage en images usées (police Anton, `tools/ui/make_menu_type.py`) : abandonné en #117 au profit du texte Oswald à
+  ombre partout ; script et images supprimés (dans l'historique git avant #117).
 
-Pour un nouveau mot : l'ajouter à la fin de `make_menu_type.py`, générer, publier, puis récupérer l'id de l'image :
+Pour une image d'interface (fond de coin…) : la publier, puis récupérer l'id de l'image :
 
 ```bash
-uv run tools/ui/make_menu_type.py <Anton-Regular.ttf> assets/ui/menu
-bash tools/publish_asset.sh assets/ui/menu/<mot>.png Decal "SurfFFA_Menu_<mot>"
+bash tools/publish_asset.sh <image>.png Decal "SurfFFA_<nom>"
 ```
 
 Puis, en playtest, contexte `Server` (`execute_luau`), lire l'id de l'image à mettre dans le code :
@@ -123,8 +139,8 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
 - **`CanvasGroup` et fondu :** sa `GroupTransparency` est ignorée quand Roblox retombe sur le rendu simple (qualité
   graphique, mémoire) : le groupe reste affiché. Pour estomper un élément qui doit vraiment disparaître (barre d'armes),
   animer la transparence de chaque enfant.
-- **Polices :** aucune annonce officielle d'import de police trouvée (novembre 2026). Les titres passent par des images ;
-  le texte courant reste en police Roblox.
+- **Polices :** aucune annonce officielle d'import de police trouvée (novembre 2026). Tout le texte est en polices
+  Roblox (Oswald pour les titres et libellés, Titillium pour le texte courant).
 - **Bras du viewmodel :** ils forment vite une grosse masse noire quand la souris est dans un coin. Limiter le pivot
   (`MenuSceneRules.aimAngles`) et garder le soleil dégagé.
 
@@ -264,10 +280,8 @@ Décisions de l'utilisateur :
 
 ## Reste à faire
 
-- Passer l'écran de réapparition et la bannière de fin de round (`RoundHUD.luau`) du style « Tactical » ambre à cette direction.
 - Afficher les munitions dans le HUD (`WeaponSystem` les gère, rien ne les montre), dans le même langage que le compteur de vitesse.
 - Piste écartée pour l'instant sur le compteur : chiffres en images usées comme le titrage, et inclinaison qui augmente avec la vitesse.
 - Tester le menu au tactile et à la manette : c'est prévu dans le code (flèches ‹ › tirables), jamais essayé.
-- Écrans Infos, Réglages et Feedback : encore en images usées sous des onglets en Oswald net, à passer au style du HUD.
 - Première vague d'une arme jamais montrée : ses éclats passent encore en blanc opaque le temps du chargement, malgré
   `PreloadAsync` (constaté en Studio sur le M9).

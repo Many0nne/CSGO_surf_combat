@@ -1,4 +1,5 @@
--- Écran Infos (direction « Ligne de mire ») : onglets en images à tirer à gauche, contenu à droite, à même la scène.
+-- Écran Infos (direction « Ligne de mire ») : même disposition que les Réglages, bloc centré sur un voile, onglets en
+-- texte à tirer à gauche (barre ambrée sur l'actif), contenu à droite, RETOUR en bas au centre.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
@@ -8,21 +9,23 @@ local UIKit = require(script.Parent.UIKit)
 local C = UITheme.Colors
 local F = UITheme.Fonts
 local Motion = UITheme.Motion
-local Words = MenuPage.Words
 
 local InfosScreen = {}
 
-type Section = { word: { image: string, width: number, height: number }, lines: { string }?, keys: { { string } }? }
+type Section = { title: string, lines: { string }?, keys: { { string } }? }
 
-local TAB_HEIGHT = 46
-local TAB_STEP = 58
-local CONTENT_X = 340
-local CONTENT_WIDTH = 600
-local CONTENT_HEIGHT = 470
+-- Bloc centré, mêmes cotes que les Réglages (px à 720 de haut)
+local BLOCK_WIDTH = 780
+local TAB_SIZE = 24
+local TAB_STEP = 42
+local CONTENT_X = 220
+local CONTENT_TOP = MenuPage.ContentTop - 10
+local CONTENT_WIDTH = BLOCK_WIDTH - CONTENT_X
+local CONTENT_HEIGHT = MenuPage.ExitY - 20 - CONTENT_TOP
 
 local SECTIONS: { Section } = {
 	{
-		word = Words.Surfer,
+		title = "SURFER",
 		lines = {
 			"Approche une rampe et place-toi PARALLÈLE à sa surface.",
 			"Maintiens A ou D pour appuyer contre la rampe. Ne touche jamais à W pendant le surf.",
@@ -33,7 +36,7 @@ local SECTIONS: { Section } = {
 		},
 	},
 	{
-		word = Words.Commandes,
+		title = "COMMANDES",
 		keys = {
 			{ "W A S D", "Se déplacer" },
 			{ "ESPACE", "Sauter / bhop (maintenir pour les longs sauts)" },
@@ -46,13 +49,13 @@ local SECTIONS: { Section } = {
 		},
 	},
 	{
-		word = Words.Credits,
+		title = "CRÉDITS",
 		lines = {
 			"Physique inspirée du Source SDK (surf de CS:GO).",
 		},
 	},
 	{
-		word = Words.APropos,
+		title = "À PROPOS",
 		lines = {
 			"Ce jeu est un projet passion mené en solo par un développeur web qui apprend la 3D et l'animation en chemin.",
 			"Le but n'est pas de cloner CS:GO, mais de reprendre ce qui rend le surf génial et de bâtir quelque chose d'original dessus.",
@@ -66,6 +69,7 @@ local SECTIONS: { Section } = {
 local page: MenuPage.Page
 local content: ScrollingFrame
 local tabs = {}
+local tabBars: { Frame } = {}
 local selected = 1
 
 -- Cette méthode permet d'afficher une ligne de texte en fondu avec un décalage lorsqu'un onglet se remplit.
@@ -159,17 +163,26 @@ local function selectTab(index: number)
 	selected = index
 	for i, tab in tabs do
 		tab.setSelected(i == index)
+		tabBars[i].Visible = i == index
 	end
 	renderSection(index)
 end
 
 -- Cette méthode permet de construire l'écran, ses onglets et sa zone de contenu lorsque le client démarre.
 function InfosScreen.init(onClose: () -> ())
-	page = MenuPage.new("InfosScreen", 2, Words.Infos)
+	page = MenuPage.new("InfosScreen", 2, "INFOS")
+	local block = UIKit.frame({
+		Name = "Block",
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.fromScale(0.5, 0),
+		Size = UDim2.new(0, BLOCK_WIDTH, 1, 0),
+		Parent = page.group,
+	})
 
 	content = UIKit.create("ScrollingFrame", {
 		Name = "Text",
-		Position = UDim2.fromOffset(CONTENT_X, MenuPage.ContentTop),
+		Position = UDim2.fromOffset(CONTENT_X, CONTENT_TOP),
 		Size = UDim2.fromOffset(CONTENT_WIDTH, CONTENT_HEIGHT),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
@@ -177,7 +190,7 @@ function InfosScreen.init(onClose: () -> ())
 		ScrollBarImageColor3 = C.Accent,
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		CanvasSize = UDim2.fromScale(0, 0),
-		Parent = page.group,
+		Parent = block,
 	})
 	UIKit.padding(content, 6, 16, 6, 0)
 	UIKit.create("UIListLayout", {
@@ -188,15 +201,25 @@ function InfosScreen.init(onClose: () -> ())
 
 	for i, section in SECTIONS do
 		tabs[i] = page.choice({
-			word = section.word,
-			height = TAB_HEIGHT,
-			position = UDim2.fromOffset(MenuPage.WordX, MenuPage.ContentTop + (i - 1) * TAB_STEP),
+			text = section.title,
+			size = TAB_SIZE,
+			position = UDim2.fromOffset(0, MenuPage.ContentTop + (i - 1) * TAB_STEP),
+			parent = block,
 			action = function()
 				selectTab(i)
 			end,
 		})
+		tabBars[i] = UIKit.frame({
+			Name = "Bar",
+			AnchorPoint = Vector2.new(0, 0.5),
+			Position = UDim2.new(0, -15, 0.5, 0),
+			Size = UDim2.new(0, 3, 0.7, 0),
+			BackgroundColor3 = C.Accent,
+			Visible = false,
+			Parent = tabs[i].button,
+		})
 	end
-	page.exit(Words.Retour, onClose)
+	page.exit("RETOUR", onClose)
 
 	selectTab(1)
 end
