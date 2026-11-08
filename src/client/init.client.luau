@@ -12,6 +12,7 @@ local WeaponSystem = require(script.systems.weapon.WeaponSystem)
 local WeaponThirdPersonView = require(script.systems.weapon.WeaponThirdPersonView)
 local FPSCamera = require(script.camera.FPSCamera)
 local SettingsMenu = require(script.ui.SettingsMenu)
+local LocalSettings = require(script.systems.settings.LocalSettings)
 local Speedometer = require(script.ui.Speedometer)
 local WeaponBar = require(script.ui.WeaponBar)
 local Hitmarker = require(script.ui.Hitmarker)
@@ -73,6 +74,8 @@ end
 StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
 -- Barre d'outils native désactivée : la barre d'armes du jeu (WeaponBar) la remplace, équipement compris
 StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
+-- Réglages sauvegardés (#100) : demandés au serveur dès le démarrage, appliqués à leur arrivée
+LocalSettings.init()
 WeaponBar.init()
 
 -- Réglages créés dès le démarrage : accessibles depuis le menu, avant tout spawn

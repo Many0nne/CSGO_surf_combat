@@ -13,6 +13,7 @@ local PerfRules = require(Shared:WaitForChild("PerfRules"))
 local SpawnManager = require(script.SpawnManager)
 local RoundManager = require(script.RoundManager)
 local StatsStore = require(script.StatsStore)
+local SettingsStore = require(script.SettingsStore)
 local Validator = require(script.Validator)
 local FeedbackService = require(script.FeedbackService)
 local DebugPlaytest = require(script.DebugPlaytest)
@@ -43,6 +44,10 @@ local playerDiedRmt = makeRemote(N.PLAYER_DIED)
 local sendFeedbackRmt = makeRemote(N.SEND_FEEDBACK)
 local feedbackAckRmt = makeRemote(N.FEEDBACK_ACK)
 local weaponActionRmt = makeRemote(N.WEAPON_ACTION)
+local saveSettingsRmt = makeRemote(N.SAVE_SETTINGS)
+local getSettingsRmt = Instance.new("RemoteFunction")
+getSettingsRmt.Name = N.GET_SETTINGS
+getSettingsRmt.Parent = ReplicatedStorage
 -- Non fiable : un paquet de position perdu est remplacé par le suivant (cf. CharacterSync)
 local characterSyncRmt = Instance.new("UnreliableRemoteEvent")
 characterSyncRmt.Name = N.CHARACTER_SYNC
@@ -51,6 +56,7 @@ characterSyncRmt.Parent = ReplicatedStorage
 -- ── Initialisation des sous-systèmes ──────────────────────────────────────
 
 StatsStore.init()
+SettingsStore.init(getSettingsRmt, saveSettingsRmt)
 FeedbackService.init(sendFeedbackRmt, feedbackAckRmt)
 
 RoundManager.init({
@@ -249,6 +255,7 @@ end
 
 local function setupPlayer(player: Player)
 	task.spawn(StatsStore.load, player)
+	task.spawn(SettingsStore.load, player)
 	RoundManager.addPlayer(player)
 	player.CharacterAdded:Connect(function(char)
 		onCharacterAdded(player, char)

@@ -1,14 +1,19 @@
 -- Réglages (direction « Ligne de mire », disposition C de #117) : bloc centré sur un voile, catégories à tirer à gauche,
 -- lignes de réglages à droite (nom, contrôle, valeur), RÉTABLIR et RETOUR en bas au centre. Deux présentations du même
 -- écran : « page » à même la scène du menu, où l'on règle en tirant, et « modal » sur un voile sombre (touche P en
--- partie), sans tir ni hitmarker. Pour ajouter un réglage : une entrée dans `buildCategories`.
+-- partie), sans tir ni hitmarker. Pour ajouter un réglage : une entrée dans `buildCategories`, et un champ dans
+-- PlayerSettings s'il doit être conservé entre les sessions (LocalSettings, #100).
 local GuiService = game:GetService("GuiService")
 local Lighting = game:GetService("Lighting")
+local StarterPack = game:GetService("StarterPack")
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
+local PlayerSettings = require(ReplicatedStorage.Shared.PlayerSettings)
 local UITheme = require(ReplicatedStorage.Shared.UITheme)
+local LocalSettings = require(script.Parent.Parent.systems.settings.LocalSettings)
+local HUDRules = require(script.Parent.HUDRules)
 local MenuCursor = require(script.Parent.MenuCursor)
 local MenuPage = require(script.Parent.MenuPage)
 local MenuShot = require(script.Parent.MenuShot)
@@ -39,9 +44,13 @@ local PICK_WIDTH = 120
 local ACTION_SIZE = 30
 local ACTION_GAP = 46
 local BACKDROP_TRANSPARENCY = 0.45
+local KEY_HINT_TIME = 1.5 -- s d'affichage du refus d'une touche (« RÉSERVÉE AU JEU »)
 
-type Row = { reset: () -> () }
-type Category = { title: string, rows: Frame, list: { Row } }
+-- `sync` reporte sur la ligne les réglages sauvegardés, une fois arrivés du serveur
+type Row = { reset: () -> (), sync: (PlayerSettings.Settings) -> () }
+type Category = { title: string, rows: Frame, list: { Row }, rowCount: number }
+-- Saisie d'une touche en cours : emplacement, choix affiché, rappel qui remet la ligne au repos
+type Capture = { slot: number, finish: () -> () }
 
 local page: MenuPage.Page?
 local backdrop: Frame
@@ -61,6 +70,19 @@ local categories: { Category } = {}
 local categoryTabs: { MenuShot.Choice } = {}
 local categoryBars: { Frame } = {}
 local selected = 1
+-- Vrai pendant la construction et le report des réglages chargés : les lignes appliquent leur valeur sans la renvoyer
+-- comme un choix du joueur (LocalSettings garderait sinon les valeurs par défaut à la place des réglages sauvegardés)
+local syncing = false
+local capture: Capture?
+local keyHandlers: { [number]: (Enum.KeyCode) -> () } = {}
+
+-- Cette méthode permet d'enregistrer un réglage choisi par le joueur lorsqu'une ligne change de valeur, sauf pendant
+-- la construction de l'écran ou le report des réglages chargés.
+local function store(field: string, value: any)
+	if not syncing then
+		LocalSettings.update({ [field] = value })
+	end
+end
 
 -- Cette méthode permet de savoir si un geste doit tirer lorsqu'il est fait dans l'écran : jamais en partie.
 local function shoots(): boolean
@@ -91,7 +113,8 @@ end
 -- Cette méthode permet de créer une ligne vide (nom à gauche, filet en bas) sous les lignes existantes d'une catégorie
 -- lorsqu'un réglage y est ajouté ; renvoie la ligne et son nom.
 local function makeRow(category: Category, name: string): (Frame, TextLabel)
-	local index = #category.list
+	local index = category.rowCount
+	category.rowCount += 1
 	local row = UIKit.frame({
 		Name = name,
 		BackgroundTransparency = 1,
@@ -121,10 +144,12 @@ local function makeRow(category: Category, name: string): (Frame, TextLabel)
 end
 
 -- Cette méthode permet d'ajouter un réglage à curseur (trace, poignée en impact, valeur éditable) à une catégorie lorsque
--- l'écran est construit : un tir place la valeur, puis la poignée se glisse sans retirer.
+-- l'écran est construit : un tir place la valeur, puis la poignée se glisse sans retirer ; `field` est le champ de
+-- PlayerSettings où la valeur est conservée.
 local function addSlider(
 	category: Category,
 	name: string,
+	field: string,
 	minVal: number,
 	maxVal: number,
 	default: number,
@@ -212,6 +237,7 @@ local function addSlider(
 		handle.Position = UDim2.fromScale(t, 0.5)
 		valBox.Text = string.format(fmt, v)
 		onChange(v)
+		store(field, v)
 	end
 
 	valBox.FocusLost:Connect(function()
@@ -257,18 +283,24 @@ local function addSlider(
 		reset = function()
 			applyValue(default)
 		end,
+		sync = function(settings)
+			applyValue((settings :: any)[field])
+		end,
 	})
 end
 
 -- Cette méthode permet d'ajouter un réglage à choix fermé (« ‹ VALEUR › », flèches à tirer, en boucle) à une catégorie
--- lorsque l'écran est construit ; `options` donne les libellés et valeurs, `initial` l'indice de départ.
+-- lorsque l'écran est construit ; `options` donne les libellés et valeurs, `initial` l'indice de départ, `field` le champ
+-- de PlayerSettings où la valeur est conservée et `width` la largeur de la valeur (PICK_WIDTH par défaut).
 local function addPicker(
 	category: Category,
 	name: string,
+	field: string,
 	options: { { label: string, value: any } },
 	initial: number,
 	default: number,
-	onChange: (any) -> ()
+	onChange: (any) -> (),
+	width: number?
 )
 	local current = initial
 	local row = makeRow(category, name)
@@ -292,7 +324,7 @@ local function addPicker(
 		Name = "ValueHolder",
 		BackgroundTransparency = 1,
 		LayoutOrder = 2,
-		Size = UDim2.fromOffset(PICK_WIDTH, 36),
+		Size = UDim2.fromOffset(width or PICK_WIDTH, 36),
 		Parent = picker,
 	})
 	local value = UIKit.text({
@@ -311,6 +343,7 @@ local function addPicker(
 		current = (index - 1) % #options + 1
 		value.Text = options[current].label
 		onChange(options[current].value)
+		store(field, options[current].value)
 	end
 
 	assert(page, "SettingsMenu : la page doit exister avant ses lignes")
@@ -333,7 +366,113 @@ local function addPicker(
 		reset = function()
 			apply(default)
 		end,
+		-- Un champ resté à nil (ombres jamais choisies) garde la valeur affichée
+		sync = function(settings)
+			for i, option in options do
+				if option.value == (settings :: any)[field] then
+					apply(i)
+				end
+			end
+		end,
 	})
+end
+
+-- Cette méthode permet de remplacer le texte d'un choix et de son ombre lorsque la touche affichée change.
+local function setChoiceText(choice: MenuShot.Choice, text: string)
+	for _, child in choice.button:GetChildren() do
+		if child:IsA("TextLabel") then
+			child.Text = text
+		end
+	end
+end
+
+-- Cette méthode permet de terminer la saisie de touche en cours (la ligne revient à sa touche) lorsque le joueur a
+-- choisi, annule, tire ailleurs ou ferme l'écran.
+local function endCapture()
+	local active = capture
+	capture = nil
+	if active then
+		active.finish()
+	end
+end
+
+-- Cette méthode permet d'ajouter la ligne d'un emplacement de la barre d'armes (nom de l'arme, touche à tirer) lorsque
+-- l'écran est construit : un tir sur la touche attend la suivante, Échap annule, une touche du jeu est refusée.
+local function addKeyBinding(category: Category, slot: number, weaponLabel: string): () -> ()
+	assert(page, "SettingsMenu : la page doit exister avant ses lignes")
+	local row = makeRow(category, string.format("Arme %d · %s", slot, weaponLabel))
+	local choice: MenuShot.Choice
+	local hint = UIKit.text({
+		Name = "Hint",
+		Text = "",
+		FontFace = F.DisplayMedium,
+		TextSize = 15,
+		TextColor3 = C.HitRed,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -(VALUE_WIDTH + 50), 0.5, 0),
+		Size = UDim2.fromOffset(180, 24),
+		Parent = row,
+	})
+	local hintToken = 0
+
+	local function refresh()
+		if not (capture and capture.slot == slot) then
+			setChoiceText(choice, LocalSettings.keyText(LocalSettings.get().slotKeys[slot]))
+		end
+	end
+
+	choice = page.choice({
+		text = LocalSettings.keyText(LocalSettings.get().slotKeys[slot]),
+		size = VALUE_SIZE,
+		anchor = Vector2.new(1, 0.5),
+		position = UDim2.fromScale(1, 0.5),
+		parent = row,
+		shoots = shoots,
+		action = function()
+			endCapture()
+			capture = {
+				slot = slot,
+				finish = function()
+					hint.Text = ""
+					choice.setSelected(false)
+					refresh()
+				end,
+			}
+			choice.setSelected(true)
+			setChoiceText(choice, "APPUIE…")
+		end,
+	})
+
+	-- Cette méthode permet de traiter la touche pressée pendant la saisie de cet emplacement : touche acceptée (échange
+	-- éventuel avec un autre emplacement), ou refus affiché un instant en gardant la saisie ouverte.
+	local function onKey(keyCode: Enum.KeyCode)
+		local keys, reason = PlayerSettings.assignKey(LocalSettings.get().slotKeys, slot, keyCode.Name)
+		if keys then
+			endCapture()
+			LocalSettings.update({ slotKeys = keys })
+			return
+		end
+		hintToken += 1
+		local token = hintToken
+		hint.Text = if reason == "reserved" then "RÉSERVÉE AU JEU" else "TOUCHE NON PROPOSÉE"
+		task.delay(KEY_HINT_TIME, function()
+			if token == hintToken then
+				hint.Text = ""
+			end
+		end)
+	end
+
+	table.insert(category.list, {
+		-- Toutes les touches ensemble : remettre un seul emplacement pourrait laisser un doublon après des échanges
+		reset = function()
+			endCapture()
+			LocalSettings.update({ slotKeys = table.clone(PlayerSettings.DEFAULT_SLOT_KEYS) })
+		end,
+		sync = function() end, -- suivi par LocalSettings.onChanged (refresh)
+	})
+	keyHandlers[slot] = onKey
+	return refresh
 end
 
 -- Cette méthode permet d'afficher les lignes de la catégorie choisie et de marquer son onglet (os vif, barre ambrée)
@@ -360,7 +499,7 @@ local function addCategory(block: Frame, title: string): Category
 		Visible = false,
 		Parent = block,
 	})
-	local category: Category = { title = title, rows = rows, list = {} }
+	local category: Category = { title = title, rows = rows, list = {}, rowCount = 0 }
 	categories[index] = category
 	local tab = page.choice({
 		text = title,
@@ -385,13 +524,81 @@ local function addCategory(block: Frame, title: string): Category
 	return category
 end
 
+-- Cette méthode permet de lister les noms d'armes dans l'ordre des emplacements de la barre lorsque la catégorie TOUCHES
+-- est construite (une ligne par arme du StarterPack, MAX_ROWS au plus).
+local function weaponNames(): { string }
+	local names = {}
+	for _, child in StarterPack:GetChildren() do
+		if child:IsA("Tool") and not table.find(names, child.Name) then
+			table.insert(names, child.Name)
+		end
+	end
+	local ordered = HUDRules.slotOrder(names)
+	return table.move(ordered, 1, math.min(#ordered, PlayerSettings.MAX_ROWS), 1, {})
+end
+
+-- Cette méthode permet de construire la catégorie TOUCHES (molette, puis une touche par arme) lorsque l'écran est
+-- initialisé ; les lignes de touches suivent chaque changement (échange entre deux emplacements, chargement, RÉTABLIR).
+local function buildKeysCategory(block: Frame)
+	local keys = addCategory(block, "TOUCHES")
+	-- Une ligne par action, la valeur est le geste : les deux lignes portent le même réglage (`wheel`) vu de chaque
+	-- côté, et suivent l'une l'autre (HAUT sur l'une met BAS sur l'autre, AUCUNE coupe la molette)
+	local wheelRows = {
+		{
+			name = "Arme suivante",
+			options = {
+				{ label = "MOLETTE BAS", value = "previous" },
+				{ label = "MOLETTE HAUT", value = "next" },
+				{ label = "AUCUNE", value = "off" },
+			},
+		},
+		{
+			name = "Arme précédente",
+			options = {
+				{ label = "MOLETTE HAUT", value = "previous" },
+				{ label = "MOLETTE BAS", value = "next" },
+				{ label = "AUCUNE", value = "off" },
+			},
+		},
+	}
+	local wheelSyncs = {}
+	for _, wheelRow in wheelRows do
+		local default = 1
+		for i, option in wheelRow.options do
+			if option.value == PlayerSettings.DEFAULT_WHEEL then
+				default = i
+			end
+		end
+		addPicker(keys, wheelRow.name, "wheel", wheelRow.options, default, default, function() end, 150)
+		table.insert(wheelSyncs, keys.list[#keys.list].sync)
+	end
+	LocalSettings.onChanged(function(settings)
+		local wasSyncing = syncing
+		syncing = true
+		for _, sync in wheelSyncs do
+			sync(settings)
+		end
+		syncing = wasSyncing
+	end)
+	local refreshers = {}
+	for slot, name in weaponNames() do
+		table.insert(refreshers, addKeyBinding(keys, slot, HUDRules.weaponLabel(name)))
+	end
+	LocalSettings.onChanged(function()
+		for _, refresh in refreshers do
+			refresh()
+		end
+	end)
+end
+
 -- Cette méthode permet de construire les catégories et leurs réglages lorsque l'écran est initialisé ; une catégorie
--- sans réglage n'est pas créée (TOUCHES viendra avec #100).
+-- sans réglage n'est pas créée.
 local function buildCategories(block: Frame)
 	local mouse = addCategory(block, "SOURIS")
 	addSlider(
 		mouse,
 		"Sensibilité",
+		"sensitivity",
 		CameraConfig.SENS_MIN,
 		CameraConfig.SENS_MAX,
 		CameraConfig.DEFAULT_SENS,
@@ -404,18 +611,21 @@ local function buildCategories(block: Frame)
 	)
 	-- Multiplicateur appliqué en plus du ratio du zoom (#115) : 1.00 = même vitesse à l'écran qu'au hip-fire
 	local scopeMin, scopeMax = CameraConfig.SCOPE_SENS_MIN, CameraConfig.SCOPE_SENS_MAX
-	addSlider(mouse, "Multiplicateur lunette", scopeMin, scopeMax, CameraConfig.SCOPE_SENS_MULT, 2, function(v)
+	local scopeDefault = CameraConfig.SCOPE_SENS_MULT
+	addSlider(mouse, "Multiplicateur lunette", "scopeMultiplier", scopeMin, scopeMax, scopeDefault, 2, function(v)
 		if fpsCamRef then
 			fpsCamRef.setScopeMultiplier(v)
 		end
 	end)
+
+	buildKeysCategory(block)
 
 	local graphics = addCategory(block, "GRAPHISMES")
 	-- Ombres du soleil sur ce poste seulement (#88) : la passe d'ombres est le plus gros coût GPU de la map ;
 	-- par défaut, l'état de la place
 	local shadowOptions = { { label = "ACTIVÉES", value = true }, { label = "COUPÉES", value = false } }
 	local shadowDefault = if Lighting.GlobalShadows then 1 else 2
-	addPicker(graphics, "Ombres", shadowOptions, shadowDefault, shadowDefault, function(v)
+	addPicker(graphics, "Ombres", "shadows", shadowOptions, shadowDefault, shadowDefault, function(v)
 		Lighting.GlobalShadows = v
 	end)
 end
@@ -448,6 +658,7 @@ local function setOpen(state: boolean)
 		page.show(mode == "modal")
 		selectCategory(selected)
 	else
+		endCapture()
 		page.hide()
 		UserInputService.MouseBehavior = savedMouseBehavior
 		UserInputService.MouseIconEnabled = savedMouseIcon
@@ -526,11 +737,37 @@ function SettingsMenu.init(fpsCam: typeof(fpsCamRef))
 		Size = UDim2.new(0, BLOCK_WIDTH, 1, 0),
 		Parent = built.group,
 	})
+	syncing = true
 	buildCategories(block)
+	syncing = false
 	buildActions(built)
 	selectCategory(1)
+	-- Réglages sauvegardés arrivés du serveur : chaque ligne les affiche et les applique (caméra, ombres)
+	LocalSettings.onLoaded(function(settings)
+		syncing = true
+		for _, category in categories do
+			for _, row in category.list do
+				row.sync(settings)
+			end
+		end
+		syncing = false
+	end)
 
 	UserInputService.InputBegan:Connect(function(inp, gameProcessed)
+		-- Saisie d'une touche : la touche pressée va à l'emplacement (Échap annule sans fermer l'écran), un clic ailleurs
+		-- annule
+		local active = capture
+		if active then
+			if inp.KeyCode == Enum.KeyCode.Escape then
+				endCapture()
+				return
+			elseif inp.UserInputType == Enum.UserInputType.Keyboard then
+				keyHandlers[active.slot](inp.KeyCode)
+				return
+			elseif inp.UserInputType == Enum.UserInputType.MouseButton1 then
+				endCapture()
+			end
+		end
 		-- Échap ferme l'écran, même si Roblox traite aussi la touche (menu système)
 		if inp.KeyCode == Enum.KeyCode.Escape then
 			setOpen(false)

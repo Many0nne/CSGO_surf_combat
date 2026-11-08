@@ -66,10 +66,22 @@ $logFile = Join-Path $runDir "$slug.log"
 $ownersFile = Join-Path $worktrees '.owners.json'
 $basePort = 34872
 
-# Cette methode permet de lire le registre des worktrees lorsqu'on doit l'enrichir ou le nettoyer.
+# Cette methode permet de lire le registre des worktrees lorsqu'on doit l'enrichir ou le nettoyer, en ramenant chaque
+# entree a la forme { branch, sessions[], threads[] } quel que soit l'etat du fichier (vide, ancien format, PS 5.1).
 function Get-Owners {
-  if (Test-Path $ownersFile) { return @(Get-Content $ownersFile -Raw | ConvertFrom-Json) }
-  return @()
+  if (-not (Test-Path $ownersFile)) { return @() }
+  $raw = Get-Content $ownersFile -Raw
+  if (-not "$raw".Trim()) { return @() }
+  # foreach deroule le tableau JSON : Windows PowerShell 5.1 le renvoie d'un bloc (un seul objet Object[]).
+  $parsed = $raw | ConvertFrom-Json
+  return @(foreach ($o in $parsed) {
+      if (-not $o.branch) { continue }
+      [pscustomobject]@{
+        branch = [string]$o.branch
+        sessions = @($o.sessions | Where-Object { $_ })
+        threads = @($o.threads | Where-Object { $_ })
+      }
+    })
 }
 
 # Cette methode permet d'inscrire la session Claude courante (ou le thread T3 donne) comme utilisatrice de la branche
