@@ -1,0 +1,178 @@
+diff --git a/plugin/src/App/init.lua b/plugin/src/App/init.lua
+index e6e4dee..2956f1a 100644
+--- a/plugin/src/App/init.lua
++++ b/plugin/src/App/init.lua
+@@ -2,6 +2,12 @@ local ChangeHistoryService = game:GetService("ChangeHistoryService")
+ local Players = game:GetService("Players")
+ local ServerStorage = game:GetService("ServerStorage")
+ local RunService = game:GetService("RunService")
++local HttpService = game:GetService("HttpService")
++
++-- CSGO autoconnect : point HTTP local qui donne le port Rojo cible (tools/rojo-plugin/control-server.luau).
++local CONTROL_URL = "http://localhost:34870/target"
++local CONTROL_STATUS_URL = "http://localhost:34870/status"
++local CONTROL_POLL_SECONDS = 1
+ 
+ local Rojo = script:FindFirstAncestor("Rojo")
+ local Plugin = Rojo.Plugin
+@@ -154,6 +160,8 @@ function App:init()
+ 				self:checkSyncReminder()
+ 			end
+ 		end)
++
++		self:startControlPolling()
+ 	end
+ 
+ 	if self:isAutoConnectPlaytestServerAvailable() then
+@@ -186,6 +194,7 @@ function App:willUnmount()
+ 	end
+ 
+ 	self:stopSyncReminderPolling()
++	self:stopControlPolling()
+ 
+ 	self.autoConnectPlaytestServerListener()
+ 	self:clearRunningConnectionInfo()
+@@ -600,7 +609,101 @@ function App:useRunningConnectionInfo()
+ 	self.setPort(port)
+ end
+ 
+-function App:startSession()
++-- Cette methode permet de lire le port cible publie par csgo-worktree.ps1 lorsque la boucle de commande s'execute ;
++-- renvoie nil si le serveur de commande ne repond pas (le plugin se comporte alors comme l'officiel).
++function App:fetchControlTarget(): { port: string, rev: string }?
++	local ok, response = pcall(HttpService.RequestAsync, HttpService, { Url = CONTROL_URL, Method = "GET" })
++	if not ok or not response.Success then
++		return nil
++	end
++	local decoded, target = pcall(HttpService.JSONDecode, HttpService, response.Body)
++	if not decoded or type(target) ~= "table" or target.rev == nil then
++		return nil
++	end
++	return { port = tostring(target.port or ""), rev = tostring(target.rev) }
++end
++
++-- Cette methode permet de renvoyer l'etat reel de la session au serveur de commande lorsqu'il change, pour que
++-- csgo-worktree.ps1 sache si la connexion a abouti (les connexions TCP inactives de Studio ne le disent pas).
++function App:reportControlStatus(state: string, port: string)
++	if self.controlRev == nil then
++		return
++	end
++	local body = HttpService:JSONEncode({ rev = self.controlRev, port = port, state = state })
++	task.spawn(function()
++		pcall(HttpService.RequestAsync, HttpService, {
++			Url = CONTROL_STATUS_URL,
++			Method = "POST",
++			Headers = { ["Content-Type"] = "application/json" },
++			Body = body,
++		})
++	end)
++end
++
++-- Cette methode permet de suivre le port cible lorsqu'il change (reservation ou liberation du verrou Studio) :
++-- deconnexion, puis connexion au nouveau port avec acceptation du patch, ou deconnexion seule si la cible est vide.
++function App:applyControlTarget(target: { port: string, rev: string })
++	if target.rev == self.controlRev then
++		-- Cible inchangee : une connexion manuelle faite depuis est respectee.
++		return
++	end
++	local firstPoll = self.controlRev == nil
++	self.controlRev = target.rev
++
++	if firstPoll and target.port == "" then
++		-- Cible vide laissee par une ancienne liberation : ne pas couper une connexion faite a l'ouverture de Studio.
++		return
++	end
++
++	if self.serveSession ~= nil and self.sessionPort == target.port then
++		Log.trace("CSGO autoconnect: already connected to port {}", target.port)
++		self:reportControlStatus("connected", target.port)
++		return
++	end
++
++	self:endSession()
++	if target.port == "" then
++		Log.info("CSGO autoconnect: disconnected (no target)")
++		self:reportControlStatus("disconnected", "")
++		return
++	end
++
++	Log.info("CSGO autoconnect: connecting to port {}", target.port)
++	self.setHost(Config.defaultHost)
++	self.setPort(target.port)
++	self:startSession(true)
++end
++
++-- Cette methode permet de lancer la boucle qui interroge le serveur de commande lorsque le plugin demarre en mode Edit.
++function App:startControlPolling()
++	if self.controlPollingThread ~= nil then
++		return
++	end
++	self.controlPollingThread = task.spawn(function()
++		-- Laisse d'abord l'auto-reconnect officiel finir, pour ne pas ouvrir deux sessions au demarrage.
++		task.wait(5)
++		while self.controlPollingThread ~= nil do
++			local target = self:fetchControlTarget()
++			if target then
++				self:applyControlTarget(target)
++			end
++			task.wait(CONTROL_POLL_SECONDS)
++		end
++	end)
++end
++
++-- Cette methode permet d'arreter la boucle de commande lorsque le plugin est decharge.
++function App:stopControlPolling()
++	if self.controlPollingThread then
++		local thread = self.controlPollingThread
++		self.controlPollingThread = nil
++		if coroutine.status(thread) ~= "running" then
++			task.cancel(thread)
++		end
++	end
++end
++
++function App:startSession(autoAccept: boolean?)
+ 	local claimedLock, priorOwner = self:claimSyncLock()
+ 	if not claimedLock then
+ 		local msg = string.format("Could not sync because user '%s' is already syncing", tostring(priorOwner))
+@@ -699,8 +802,11 @@ function App:startSession()
+ 			self:addNotification({
+ 				text = string.format("Connected to session '%s' at %s.", details, address),
+ 			})
++			self:reportControlStatus("connected", port)
+ 		elseif status == ServeSession.Status.Disconnected then
+ 			self.serveSession = nil
++			self.sessionPort = nil
++			self:reportControlStatus("disconnected", "")
+ 			self:releaseSyncLock()
+ 			self:clearRunningConnectionInfo()
+ 			self:setState({
+@@ -744,6 +850,12 @@ function App:startSession()
+ 			return "Accept"
+ 		end
+ 
++		-- CSGO autoconnect : la connexion pilotee par le verrou Studio n'attend pas de clic.
++		if autoAccept then
++			Log.trace("Accepting patch without confirmation because of CSGO autoconnect")
++			return "Accept"
++		end
++
+ 		-- Play solo auto-connect does not require confirmation
+ 		if self:isAutoConnectPlaytestServerAvailable() then
+ 			Log.trace("Accepting patch without confirmation because play solo auto-connect is enabled")
+@@ -827,6 +939,7 @@ function App:startSession()
+ 	serveSession:start()
+ 
+ 	self.serveSession = serveSession
++	self.sessionPort = port
+ end
+ 
+ function App:endSession()
+@@ -838,6 +951,7 @@ function App:endSession()
+ 
+ 	self.serveSession:stop()
+ 	self.serveSession = nil
++	self.sessionPort = nil
+ 	self:setState({
+ 		appStatus = AppStatus.NotConnected,
+ 	})
