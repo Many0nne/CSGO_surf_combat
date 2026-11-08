@@ -62,6 +62,9 @@ Script idempotent, à relancer au début de chaque tâche (PowerShell, depuis la
   archiver un thread ne supprime jamais rien à lui seul. Tâche planifiée (toutes les 10 min, à réinstaller sur un nouveau
   poste) : `scripts/install-cleanup-task.ps1`. À chaque passage, elle avance aussi le checkout principal sur `origin/main`
   (fast-forward, seulement s'il est sur `main` sans modification).
+- Tests de limites des scripts (bac à sable jetable dans `%TEMP%`, faux `gh`/T3/Rojo, ~3 min, Windows seulement, hors CI) :
+  `Import-Module Pester -RequiredVersion 3.4.0; Invoke-Pester tests/scripts`. À lancer après toute modification de
+  `scripts/csgo-worktree*.ps1` ; un cas limite découvert devient un test dans `tests/scripts/worktree.Tests.ps1`.
 
 ## Studio et Blender partagés
 
