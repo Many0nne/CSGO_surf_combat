@@ -1,6 +1,7 @@
--- Gabarit des écrans secondaires du menu (Réglages, Infos, Feedback) : pas de panneau, le contenu est posé à même la scène
--- sur un dégradé sombre à gauche, sous les onglets de l'accueil (sous un titre en image pour Réglages en partie), avec une
--- action de sortie en bas à gauche.
+-- Gabarit des écrans secondaires du menu (Réglages, Infos, Feedback) : pas de panneau, le contenu est un bloc centré posé
+-- à même la scène sur un voile qui s'efface vers les côtés, sous les onglets de l'accueil (sous un titre en texte pour
+-- Réglages en partie), avec les actions de sortie en bas au centre. Tous les choix sont en texte à ombre décalée
+-- (`MenuShot.textChoice`).
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -10,47 +11,66 @@ local MenuShot = require(script.Parent.MenuShot)
 local UIKit = require(script.Parent.UIKit)
 
 local C = UITheme.Colors
-local L = UITheme.Layout
+local F = UITheme.Fonts
 
 local MenuPage = {}
 
--- Images publiées sur Roblox (sources : assets/ui/menu/)
--- stylua: ignore
-MenuPage.Words = {
-	Infos     = { image = "rbxassetid://132978783370855", width = 387, height = 136 },
-	Reglages  = { image = "rbxassetid://134350858698628", width = 601, height = 168 },
-	Feedback  = { image = "rbxassetid://114862354195227", width = 635, height = 149 },
-	Surfer    = { image = "rbxassetid://84010579642000",  width = 520, height = 138 },
-	Commandes = { image = "rbxassetid://77773685751565",  width = 823, height = 138 },
-	Credits   = { image = "rbxassetid://100034354187500", width = 494, height = 169 },
-	APropos   = { image = "rbxassetid://104908705930354", width = 578, height = 166 },
-	Retour    = { image = "rbxassetid://118226314006213", width = 548, height = 136 },
-	Envoyer   = { image = "rbxassetid://125140269715556", width = 517, height = 135 },
-	Annuler   = { image = "rbxassetid://113586882195068", width = 560, height = 134 },
-}
-
--- Colonne commune (px à la hauteur de référence de 720) : les images débordent à gauche à cause de leurs éclats
-MenuPage.WordX = L.Margin - 26
-MenuPage.TextX = L.Margin
+-- Cotes communes (px à la hauteur de référence de 720)
 MenuPage.ContentTop = 150
+MenuPage.ExitY = 632 -- ligne des actions de sortie (RETOUR, ANNULER…)
 
-local TITLE_Y = 34
-local TITLE_HEIGHT = 96
-local EXIT_Y = 636
-local EXIT_HEIGHT = 44
-local SCRIM_WIDTH = 0.74
+local TITLE_Y = 20 -- à la place des onglets de l'accueil, absents en partie
+local TITLE_SIZE = 34
+local EXIT_Y = MenuPage.ExitY
+local EXIT_SIZE = 30
+local VEIL_WIDTH = 1100 -- voile qui s'efface vers les côtés, comme le classement
+local VEIL_TRANSPARENCY = 0.18
+
+export type ChoiceProps = {
+	text: string,
+	size: number?,
+	position: UDim2?,
+	anchor: Vector2?,
+	layoutOrder: number?,
+	parent: Instance?,
+	action: () -> (),
+	shoots: (() -> boolean)?,
+}
 
 export type Page = {
 	gui: ScreenGui,
 	group: CanvasGroup,
-	choice: (props: { [string]: any }) -> MenuShot.Choice,
-	exit: (word: MenuShot.Word, action: () -> (), shoots: (() -> boolean)?) -> MenuShot.Choice,
+	choice: (props: ChoiceProps) -> MenuShot.Choice,
+	exit: (text: string, action: () -> (), shoots: (() -> boolean)?) -> MenuShot.Choice,
 	show: (withTitle: boolean?) -> (),
 	hide: () -> (),
 }
 
--- Cette méthode permet de construire le fond d'un écran secondaire (dégradé, titre, calque d'impacts) lorsqu'il s'initialise.
-function MenuPage.new(name: string, displayOrder: number, title: MenuShot.Word): Page
+-- Cette méthode permet de poser le voile central (sombre au milieu, effacé vers les côtés) d'un écran secondaire lorsqu'il
+-- s'initialise.
+local function buildVeil(root: Frame)
+	local veil = UIKit.frame({
+		Name = "Veil",
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.fromScale(0.5, 0),
+		Size = UDim2.new(0, VEIL_WIDTH, 1, 0),
+		BackgroundColor3 = C.Scrim,
+		ZIndex = 0,
+		Parent = root,
+	})
+	UIKit.create("UIGradient", {
+		Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1),
+			NumberSequenceKeypoint.new(0.26, VEIL_TRANSPARENCY),
+			NumberSequenceKeypoint.new(0.74, VEIL_TRANSPARENCY),
+			NumberSequenceKeypoint.new(1, 1),
+		}),
+		Parent = veil,
+	})
+end
+
+-- Cette méthode permet de construire le fond d'un écran secondaire (voile, titre, calque d'impacts) lorsqu'il s'initialise.
+function MenuPage.new(name: string, displayOrder: number, title: string): Page
 	local gui = UIKit.create("ScreenGui", {
 		Name = name,
 		ResetOnSpawn = false,
@@ -60,56 +80,66 @@ function MenuPage.new(name: string, displayOrder: number, title: MenuShot.Word):
 		Enabled = false,
 		Parent = Players.LocalPlayer:WaitForChild("PlayerGui"),
 	})
-	local scrim = UIKit.frame({
-		Name = "Scrim",
-		Size = UDim2.fromScale(SCRIM_WIDTH, 1),
-		BackgroundColor3 = C.Scrim,
-		ZIndex = 0,
-		Parent = gui,
-	})
-	UIKit.create("UIGradient", {
-		Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 0.08),
-			NumberSequenceKeypoint.new(0.6, 0.3),
-			NumberSequenceKeypoint.new(1, 1),
-		}),
-		Parent = scrim,
-	})
+	local root = UIKit.scaledRoot(gui)
+	buildVeil(root)
 	local group = UIKit.create("CanvasGroup", {
 		Name = "Content",
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		Parent = UIKit.scaledRoot(gui),
+		Parent = root,
 	})
-	local titleLabel = UIKit.create("ImageLabel", {
+	local titleFrame = UIKit.frame({
 		Name = "Title",
-		Image = title.image,
 		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		Position = UDim2.fromOffset(MenuPage.WordX, TITLE_Y),
-		Size = UDim2.fromOffset(math.round(TITLE_HEIGHT * title.width / title.height), TITLE_HEIGHT),
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, TITLE_Y),
+		Size = UDim2.fromOffset(400, TITLE_SIZE + 8),
+		Visible = false,
 		Parent = group,
 	})
+	UIKit.shadowedText(titleFrame, {
+		Name = "Title",
+		Text = title,
+		FontFace = F.Display,
+		TextSize = TITLE_SIZE,
+		TextColor3 = C.Bone,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Size = UDim2.fromScale(1, 1),
+		ZIndex = 2,
+	}, 3)
 	local holes = MenuShot.createLayer(gui)
 	local choices: { MenuShot.Choice } = {}
 
 	local page = { gui = gui, group = group }
 
-	-- Cette méthode permet d'ajouter un choix à l'écran lorsque celui-ci doit remettre son survol à zéro en changeant de page.
-	function page.choice(props: { [string]: any }): MenuShot.Choice
-		props.parent = props.parent or group
-		local created = MenuShot.choice(props :: any)
+	-- Cette méthode permet d'ajouter un choix en texte (os au repos, os vif une fois choisi, rouge d'impact au survol) à
+	-- l'écran lorsque celui-ci doit remettre son survol à zéro en changeant de page.
+	function page.choice(props: ChoiceProps): MenuShot.Choice
+		local created = MenuShot.textChoice({
+			text = props.text,
+			font = F.Display,
+			size = props.size or 24,
+			color = C.TextSoft,
+			selectedColor = C.Bone,
+			position = props.position,
+			anchor = props.anchor,
+			layoutOrder = props.layoutOrder,
+			parent = props.parent or group,
+			action = props.action,
+			shoots = props.shoots,
+		})
 		table.insert(choices, created)
 		return created
 	end
 
 	-- Cette méthode permet de poser l'action de sortie (RETOUR, ANNULER) à son emplacement commun lorsque l'écran est construit.
-	function page.exit(word: MenuShot.Word, action: () -> (), shoots: (() -> boolean)?): MenuShot.Choice
+	function page.exit(text: string, action: () -> (), shoots: (() -> boolean)?): MenuShot.Choice
 		return page.choice({
-			word = word,
-			height = EXIT_HEIGHT,
-			position = UDim2.fromOffset(MenuPage.WordX, EXIT_Y),
+			text = text,
+			size = EXIT_SIZE,
+			position = UDim2.new(0.5, 0, 0, EXIT_Y),
+			anchor = Vector2.new(0.5, 0),
 			action = action,
 			shoots = shoots,
 		})
@@ -118,7 +148,7 @@ function MenuPage.new(name: string, displayOrder: number, title: MenuShot.Word):
 	-- Cette méthode permet d'afficher l'écran en fondu et de lui rediriger les impacts lorsqu'il s'ouvre ; au menu, les
 	-- onglets de l'accueil restent affichés et l'onglet actif sert de titre, `withTitle` ne sert qu'en partie (touche P).
 	function page.show(withTitle: boolean?)
-		titleLabel.Visible = withTitle == true
+		titleFrame.Visible = withTitle == true
 		MenuShot.useLayer(holes)
 		gui.Enabled = true
 		UIKit.reveal(group, 0, 14)

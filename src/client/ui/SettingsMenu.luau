@@ -1,5 +1,7 @@
--- Réglages souris et graphismes (direction « Ligne de mire »). Deux présentations du même écran : « page » à même la scène du menu, où
--- l'on règle en tirant, et « modal » sur un voile sombre (touche P en partie), sans tir ni hitmarker.
+-- Réglages (direction « Ligne de mire », disposition C de #117) : bloc centré sur un voile, catégories à tirer à gauche,
+-- lignes de réglages à droite (nom, contrôle, valeur), RÉTABLIR et RETOUR en bas au centre. Deux présentations du même
+-- écran : « page » à même la scène du menu, où l'on règle en tirant, et « modal » sur un voile sombre (touche P en
+-- partie), sans tir ni hitmarker. Pour ajouter un réglage : une entrée dans `buildCategories`.
 local GuiService = game:GetService("GuiService")
 local Lighting = game:GetService("Lighting")
 local UserInputService = game:GetService("UserInputService")
@@ -20,10 +22,26 @@ export type Mode = "page" | "modal"
 
 local SettingsMenu = {}
 
-local ROW_WIDTH = 620
-local ROW_STEP = 110
-local TRACK_TOP = 44
+-- Bloc centré (px à 720 de haut) : catégories à gauche, lignes à droite
+local BLOCK_WIDTH = 780
+local CATS_TOP = MenuPage.ContentTop
+local CAT_SIZE = 24
+local CAT_STEP = 42
+local ROWS_X = 220
+local ROWS_TOP = MenuPage.ContentTop - 10
+local ROW_WIDTH = BLOCK_WIDTH - ROWS_X
+local ROW_HEIGHT = 54
+local NAME_WIDTH = 246
+local VALUE_WIDTH = 70
+local VALUE_SIZE = 26
+local VALUE_SHADOW = 3
+local PICK_WIDTH = 120
+local ACTION_SIZE = 30
+local ACTION_GAP = 46
 local BACKDROP_TRANSPARENCY = 0.45
+
+type Row = { reset: () -> () }
+type Category = { title: string, rows: Frame, list: { Row } }
 
 local page: MenuPage.Page?
 local backdrop: Frame
@@ -39,74 +57,120 @@ local fpsCamRef: {
 	setScopeMultiplier: (number) -> (),
 	getScopeMultiplier: () -> number,
 }?
+local categories: { Category } = {}
+local categoryTabs: { MenuShot.Choice } = {}
+local categoryBars: { Frame } = {}
+local selected = 1
 
 -- Cette méthode permet de savoir si un geste doit tirer lorsqu'il est fait dans l'écran : jamais en partie.
 local function shoots(): boolean
 	return mode == "page"
 end
 
--- Cette méthode permet de construire la ligne « libellé, valeur éditable, trace » lorsqu'un réglage est ajouté : un tir place
--- la valeur, puis la poignée (un impact) se glisse sans retirer. Renvoie la fonction qui applique une valeur.
-local function makeSlider(
-	parent: GuiObject,
-	labelText: string,
-	yOffset: number,
-	minVal: number,
-	maxVal: number,
-	initVal: number,
-	decimals: number,
-	onChange: (number) -> ()
-): (number) -> ()
-	local fmt = "%." .. decimals .. "f"
-	local currentVal = initVal
-
-	local row = UIKit.frame({
-		Name = labelText,
-		Position = UDim2.fromOffset(MenuPage.TextX, yOffset),
-		Size = UDim2.fromOffset(ROW_WIDTH, ROW_STEP - 12),
-		BackgroundTransparency = 1,
-		Parent = parent,
+-- Cette méthode permet de doubler la valeur d'une ligne d'une ombre noire décalée qui suit son texte lorsqu'elle est construite.
+local function shadowValue(value: TextBox | TextLabel)
+	local shadow = UIKit.text({
+		Name = value.Name .. "Shadow",
+		Text = value.Text,
+		FontFace = value.FontFace,
+		TextSize = value.TextSize,
+		TextColor3 = C.Black,
+		TextTransparency = 0.35,
+		TextXAlignment = value.TextXAlignment,
+		AnchorPoint = value.AnchorPoint,
+		Position = value.Position + UDim2.fromOffset(VALUE_SHADOW, VALUE_SHADOW),
+		Size = value.Size,
+		ZIndex = value.ZIndex - 1,
+		Parent = value.Parent,
 	})
-	UIKit.text({
-		Text = labelText,
-		FontFace = F.DisplayMedium,
-		TextSize = 22,
-		TextColor3 = C.Bone,
-		Size = UDim2.new(1, -110, 0, 36),
+	value:GetPropertyChangedSignal("Text"):Connect(function()
+		shadow.Text = value.Text
+	end)
+end
+
+-- Cette méthode permet de créer une ligne vide (nom à gauche, filet en bas) sous les lignes existantes d'une catégorie
+-- lorsqu'un réglage y est ajouté ; renvoie la ligne et son nom.
+local function makeRow(category: Category, name: string): (Frame, TextLabel)
+	local index = #category.list
+	local row = UIKit.frame({
+		Name = name,
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(0, index * ROW_HEIGHT),
+		Size = UDim2.fromOffset(ROW_WIDTH, ROW_HEIGHT),
+		Parent = category.rows,
+	})
+	UIKit.frame({
+		Name = "Rule",
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.fromScale(0, 1),
+		Size = UDim2.new(1, 0, 0, 1),
+		BackgroundColor3 = C.Bone,
+		BackgroundTransparency = 0.88,
 		Parent = row,
 	})
+	local label = UIKit.text({
+		Name = "Name",
+		Text = name,
+		FontFace = F.DisplayMedium,
+		TextSize = 19,
+		TextColor3 = C.Bone,
+		Size = UDim2.new(0, NAME_WIDTH, 1, 0),
+		Parent = row,
+	})
+	return row, label
+end
+
+-- Cette méthode permet d'ajouter un réglage à curseur (trace, poignée en impact, valeur éditable) à une catégorie lorsque
+-- l'écran est construit : un tir place la valeur, puis la poignée se glisse sans retirer.
+local function addSlider(
+	category: Category,
+	name: string,
+	minVal: number,
+	maxVal: number,
+	default: number,
+	decimals: number,
+	onChange: (number) -> ()
+)
+	local fmt = "%." .. decimals .. "f"
+	local currentVal = default
+	local row, label = makeRow(category, name)
 
 	local valBox = UIKit.create("TextBox", {
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.fromScale(1, 0),
-		Size = UDim2.fromOffset(90, 36),
+		Name = "Value",
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.fromScale(1, 0.5),
+		Size = UDim2.fromOffset(VALUE_WIDTH, 36),
 		BackgroundTransparency = 1,
 		FontFace = F.Display,
-		TextSize = 26,
+		TextSize = VALUE_SIZE,
 		TextColor3 = C.Bone,
 		TextXAlignment = Enum.TextXAlignment.Right,
 		ClearTextOnFocus = false,
-		Text = string.format(fmt, initVal),
+		Text = string.format(fmt, default),
+		ZIndex = 2,
 		Parent = row,
 	})
+	shadowValue(valBox)
 	local valLine = UIKit.frame({
 		Name = "Underline",
 		AnchorPoint = Vector2.new(0, 1),
 		Position = UDim2.fromScale(0, 1),
 		Size = UDim2.new(1, 0, 0, 1),
-		BackgroundColor3 = C.Muted,
+		BackgroundColor3 = C.Accent,
+		BackgroundTransparency = 1,
 		Parent = valBox,
 	})
 	valBox.Focused:Connect(function()
-		UIKit.tween(valLine, Motion.Hover, { BackgroundColor3 = C.Accent })
+		UIKit.tween(valLine, Motion.Hover, { BackgroundTransparency = 0 })
 	end)
 
-	-- Trace : zone cliquable haute contenant le trait, la traînée ambrée et l'impact
+	-- Trace entre le nom et la valeur : zone cliquable haute contenant le trait, la traînée ambrée et l'impact
 	local hit = UIKit.button({
 		Name = "Track",
 		Text = "",
-		Position = UDim2.fromOffset(0, TRACK_TOP),
-		Size = UDim2.new(1, 0, 0, 34),
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, NAME_WIDTH + 10, 0.5, 0),
+		Size = UDim2.new(1, -(NAME_WIDTH + 10 + VALUE_WIDTH + 16), 0, 34),
 		BackgroundTransparency = 1,
 		Parent = row,
 	})
@@ -122,7 +186,7 @@ local function makeSlider(
 	local handle = UIKit.frame({
 		Name = "Impact",
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Size = UDim2.fromOffset(18, 18),
+		Size = UDim2.fromOffset(16, 16),
 		BackgroundColor3 = C.Black,
 		ZIndex = 2,
 		Parent = track,
@@ -132,6 +196,7 @@ local function makeSlider(
 	local handleScale = UIKit.create("UIScale", { Parent = handle })
 	UIKit.hover(hit, handleScale, { Scale = 1 }, { Scale = 1.25 })
 	UIKit.hover(hit, handleStroke, { Color = C.Bone }, { Color = C.HitRed })
+	UIKit.hover(hit, label, { TextColor3 = C.Bone }, { TextColor3 = C.HitRed })
 	hit.MouseEnter:Connect(function()
 		MenuCursor.addHover(1)
 	end)
@@ -150,7 +215,7 @@ local function makeSlider(
 	end
 
 	valBox.FocusLost:Connect(function()
-		UIKit.tween(valLine, Motion.Hover, { BackgroundColor3 = C.Muted })
+		UIKit.tween(valLine, Motion.Hover, { BackgroundTransparency = 1 })
 		local num = tonumber(valBox.Text)
 		if num then
 			applyValue(num)
@@ -187,108 +252,170 @@ local function makeSlider(
 		end
 	end)
 
-	applyValue(initVal)
-	return applyValue
+	applyValue(default)
+	table.insert(category.list, {
+		reset = function()
+			applyValue(default)
+		end,
+	})
 end
 
--- Cette méthode permet de construire la ligne « libellé, état, trace » d'un réglage oui/non lorsqu'il est ajouté : un tir
--- sur la ligne bascule l'état, la poignée (un impact) passe d'un bout à l'autre de la trace. Renvoie la fonction qui
--- applique un état.
-local function makeToggle(
-	parent: GuiObject,
-	labelText: string,
-	yOffset: number,
-	onText: string,
-	offText: string,
-	initVal: boolean,
-	onChange: (boolean) -> ()
-): (boolean) -> ()
-	local currentVal = initVal
-
-	local row = UIKit.frame({
-		Name = labelText,
-		Position = UDim2.fromOffset(MenuPage.TextX, yOffset),
-		Size = UDim2.fromOffset(ROW_WIDTH, ROW_STEP - 12),
+-- Cette méthode permet d'ajouter un réglage à choix fermé (« ‹ VALEUR › », flèches à tirer, en boucle) à une catégorie
+-- lorsque l'écran est construit ; `options` donne les libellés et valeurs, `initial` l'indice de départ.
+local function addPicker(
+	category: Category,
+	name: string,
+	options: { { label: string, value: any } },
+	initial: number,
+	default: number,
+	onChange: (any) -> ()
+)
+	local current = initial
+	local row = makeRow(category, name)
+	local picker = UIKit.frame({
+		Name = "Picker",
 		BackgroundTransparency = 1,
-		Parent = parent,
-	})
-	UIKit.text({
-		Text = labelText,
-		FontFace = F.DisplayMedium,
-		TextSize = 22,
-		TextColor3 = C.Bone,
-		Size = UDim2.new(1, -160, 0, 36),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.fromScale(1, 0.5),
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 36),
 		Parent = row,
 	})
-	local valLabel = UIKit.text({
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.fromScale(1, 0),
-		Size = UDim2.fromOffset(150, 36),
+	UIKit.create("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		HorizontalAlignment = Enum.HorizontalAlignment.Right,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Parent = picker,
+	})
+	local holder = UIKit.frame({
+		Name = "ValueHolder",
+		BackgroundTransparency = 1,
+		LayoutOrder = 2,
+		Size = UDim2.fromOffset(PICK_WIDTH, 36),
+		Parent = picker,
+	})
+	local value = UIKit.text({
+		Name = "Value",
 		FontFace = F.Display,
-		TextSize = 26,
+		TextSize = 20,
 		TextColor3 = C.Bone,
-		TextXAlignment = Enum.TextXAlignment.Right,
-		Parent = row,
-	})
-
-	-- Toute la ligne se tire : libellé, état et trace
-	local hit = UIKit.button({
-		Name = "Track",
-		Text = "",
-		Size = UDim2.new(1, 0, 0, TRACK_TOP + 34),
-		BackgroundTransparency = 1,
-		Parent = row,
-	})
-	local track = UIKit.frame({
-		AnchorPoint = Vector2.new(0, 0.5),
-		Position = UDim2.fromOffset(0, TRACK_TOP + 17),
-		Size = UDim2.new(1, 0, 0, 3),
-		BackgroundColor3 = C.Bone,
-		BackgroundTransparency = 0.65,
-		Parent = hit,
-	})
-	local fill = UIKit.frame({ Size = UDim2.fromScale(0, 1), BackgroundColor3 = C.Accent, Parent = track })
-	local handle = UIKit.frame({
-		Name = "Impact",
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Size = UDim2.fromOffset(18, 18),
-		BackgroundColor3 = C.Black,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Size = UDim2.fromScale(1, 1),
 		ZIndex = 2,
-		Parent = track,
+		Parent = holder,
 	})
-	UIKit.create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = handle })
-	local handleStroke = UIKit.stroke(handle, C.Bone, 2)
-	local handleScale = UIKit.create("UIScale", { Parent = handle })
-	UIKit.hover(hit, handleScale, { Scale = 1 }, { Scale = 1.25 })
-	UIKit.hover(hit, handleStroke, { Color = C.Bone }, { Color = C.HitRed })
-	hit.MouseEnter:Connect(function()
-		MenuCursor.addHover(1)
-	end)
-	hit.MouseLeave:Connect(function()
-		MenuCursor.addHover(-1)
-	end)
+	shadowValue(value)
 
-	local function applyValue(v: boolean)
-		currentVal = v
-		local t = if v then 1 else 0
-		UIKit.tween(fill, Motion.Hover, { Size = UDim2.fromScale(t, 1) })
-		UIKit.tween(handle, Motion.Hover, { Position = UDim2.fromScale(t, 0.5) })
-		valLabel.Text = if v then onText else offText
-		valLabel.TextColor3 = if v then C.Bone else C.Muted
-		onChange(v)
+	local function apply(index: number)
+		current = (index - 1) % #options + 1
+		value.Text = options[current].label
+		onChange(options[current].value)
 	end
 
-	hit.InputBegan:Connect(function(inp)
-		if inp.UserInputType == Enum.UserInputType.MouseButton1 then
-			applyValue(not currentVal)
-			if shoots() then
-				MenuShot.fireAt(hit, inp, false)
-			end
+	assert(page, "SettingsMenu : la page doit exister avant ses lignes")
+	for _, arrow in { { text = "‹", step = -1, order = 1 }, { text = "›", step = 1, order = 3 } } do
+		local choice = page.choice({
+			text = arrow.text,
+			size = 22,
+			layoutOrder = arrow.order,
+			parent = picker,
+			shoots = shoots,
+			action = function()
+				apply(current + arrow.step)
+			end,
+		})
+		UIKit.padding(choice.button :: any, 0, 8, 2, 8)
+	end
+
+	apply(initial)
+	table.insert(category.list, {
+		reset = function()
+			apply(default)
+		end,
+	})
+end
+
+-- Cette méthode permet d'afficher les lignes de la catégorie choisie et de marquer son onglet (os vif, barre ambrée)
+-- lorsque le joueur tire sur une catégorie ou rouvre l'écran.
+local function selectCategory(index: number)
+	selected = index
+	for i, category in categories do
+		local on = i == index
+		category.rows.Visible = on
+		categoryTabs[i].setSelected(on)
+		categoryBars[i].Visible = on
+	end
+end
+
+-- Cette méthode permet de créer une catégorie (onglet à gauche, conteneur de lignes à droite) lorsque l'écran est construit.
+local function addCategory(block: Frame, title: string): Category
+	assert(page, "SettingsMenu : la page doit exister avant ses catégories")
+	local index = #categories + 1
+	local rows = UIKit.frame({
+		Name = title,
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(ROWS_X, ROWS_TOP),
+		Size = UDim2.new(0, ROW_WIDTH, 1, -ROWS_TOP),
+		Visible = false,
+		Parent = block,
+	})
+	local category: Category = { title = title, rows = rows, list = {} }
+	categories[index] = category
+	local tab = page.choice({
+		text = title,
+		size = CAT_SIZE,
+		position = UDim2.fromOffset(0, CATS_TOP + (index - 1) * CAT_STEP),
+		parent = block,
+		shoots = shoots,
+		action = function()
+			selectCategory(index)
+		end,
+	})
+	categoryTabs[index] = tab
+	categoryBars[index] = UIKit.frame({
+		Name = "Bar",
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, -15, 0.5, 0),
+		Size = UDim2.new(0, 3, 0.7, 0),
+		BackgroundColor3 = C.Accent,
+		Visible = false,
+		Parent = tab.button,
+	})
+	return category
+end
+
+-- Cette méthode permet de construire les catégories et leurs réglages lorsque l'écran est initialisé ; une catégorie
+-- sans réglage n'est pas créée (TOUCHES viendra avec #100).
+local function buildCategories(block: Frame)
+	local mouse = addCategory(block, "SOURIS")
+	addSlider(mouse, "Sensibilité", 0.1, 5.0, CameraConfig.DEFAULT_SENS, 2, function(v)
+		if fpsCamRef then
+			fpsCamRef.setSensitivity(v)
+		end
+	end)
+	addSlider(mouse, "Sensibilité à la lunette", 0.1, 1.0, CameraConfig.SCOPE_SENS_MULT, 2, function(v)
+		if fpsCamRef then
+			fpsCamRef.setScopeMultiplier(v)
 		end
 	end)
 
-	applyValue(initVal)
-	return applyValue
+	local graphics = addCategory(block, "GRAPHISMES")
+	-- Ombres du soleil sur ce poste seulement (#88) : la passe d'ombres est le plus gros coût GPU de la map ;
+	-- par défaut, l'état de la place
+	local shadowOptions = { { label = "ACTIVÉES", value = true }, { label = "COUPÉES", value = false } }
+	local shadowDefault = if Lighting.GlobalShadows then 1 else 2
+	addPicker(graphics, "Ombres", shadowOptions, shadowDefault, shadowDefault, function(v)
+		Lighting.GlobalShadows = v
+	end)
+end
+
+-- Cette méthode permet de remettre aux valeurs par défaut les réglages de la catégorie affichée lorsque le joueur tire
+-- sur RÉTABLIR.
+local function resetCategory()
+	for _, row in categories[selected].list do
+		row.reset()
+	end
 end
 
 -- Cette méthode permet d'ouvrir ou fermer l'écran en sauvegardant puis restaurant l'état de la souris
@@ -309,6 +436,7 @@ local function setOpen(state: boolean)
 			UIKit.tween(backdrop, Motion.Enter, { BackgroundTransparency = BACKDROP_TRANSPARENCY })
 		end
 		page.show(mode == "modal")
+		selectCategory(selected)
 	else
 		page.hide()
 		UserInputService.MouseBehavior = savedMouseBehavior
@@ -319,6 +447,45 @@ local function setOpen(state: boolean)
 	end
 end
 
+-- Cette méthode permet de poser RÉTABLIR et RETOUR côte à côte en bas au centre lorsque l'écran est construit.
+local function buildActions(built: MenuPage.Page)
+	local actions = UIKit.frame({
+		Name = "Actions",
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, MenuPage.ExitY),
+		Size = UDim2.fromOffset(BLOCK_WIDTH, 44),
+		Parent = built.group,
+	})
+	UIKit.create("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		HorizontalAlignment = Enum.HorizontalAlignment.Center,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, ACTION_GAP),
+		Parent = actions,
+	})
+	built.choice({
+		text = "RÉTABLIR",
+		size = ACTION_SIZE,
+		layoutOrder = 1,
+		parent = actions,
+		shoots = shoots,
+		action = resetCategory,
+	})
+	local back = built.choice({
+		text = "RETOUR",
+		size = ACTION_SIZE,
+		layoutOrder = 2,
+		parent = actions,
+		shoots = shoots,
+		action = function()
+			setOpen(false)
+		end,
+	})
+	back.setSelected(true)
+end
+
 -- Cette méthode permet de construire l'écran et de brancher la touche P et Échap lorsque le client démarre.
 function SettingsMenu.init(fpsCam: typeof(fpsCamRef))
 	if page then
@@ -326,7 +493,7 @@ function SettingsMenu.init(fpsCam: typeof(fpsCamRef))
 	end
 	fpsCamRef = fpsCam
 
-	local built = MenuPage.new("SettingsMenu", 3, MenuPage.Words.Reglages)
+	local built = MenuPage.new("SettingsMenu", 3, "RÉGLAGES")
 	page = built
 
 	-- Le voile retient les clics pour qu'ils ne partent pas en tirs dans la partie
@@ -341,40 +508,17 @@ function SettingsMenu.init(fpsCam: typeof(fpsCamRef))
 		Parent = built.gui,
 	})
 
-	makeSlider(built.group, "Sensibilité", MenuPage.ContentTop, 0.1, 5.0, CameraConfig.DEFAULT_SENS, 2, function(v)
-		if fpsCamRef then
-			fpsCamRef.setSensitivity(v)
-		end
-	end)
-	makeSlider(
-		built.group,
-		"Sensibilité à la lunette",
-		MenuPage.ContentTop + ROW_STEP,
-		0.1,
-		1.0,
-		CameraConfig.SCOPE_SENS_MULT,
-		2,
-		function(v)
-			if fpsCamRef then
-				fpsCamRef.setScopeMultiplier(v)
-			end
-		end
-	)
-	-- Ombres du soleil sur ce poste seulement (#88) : la passe d'ombres est le plus gros coût GPU de la map
-	makeToggle(
-		built.group,
-		"Ombres",
-		MenuPage.ContentTop + 2 * ROW_STEP,
-		"Activées",
-		"Coupées",
-		Lighting.GlobalShadows,
-		function(v)
-			Lighting.GlobalShadows = v
-		end
-	)
-	built.exit(MenuPage.Words.Retour, function()
-		setOpen(false)
-	end, shoots)
+	local block = UIKit.frame({
+		Name = "Block",
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.fromScale(0.5, 0),
+		Size = UDim2.new(0, BLOCK_WIDTH, 1, 0),
+		Parent = built.group,
+	})
+	buildCategories(block)
+	buildActions(built)
+	selectCategory(1)
 
 	UserInputService.InputBegan:Connect(function(inp, gameProcessed)
 		-- Échap ferme l'écran, même si Roblox traite aussi la touche (menu système)

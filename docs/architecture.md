@@ -30,7 +30,6 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `tools/rbxm/receive.luau`: serveur Lune local qui reçoit les `.rbxm` exportés de Studio et les écrit sous `assets/rbx/`.
 - `tools/rbxm/studio_export.luau`: script à exécuter dans Studio qui sérialise viewmodels et Tools et les envoie à `receive.luau`.
 - `tools/publish_asset.sh`: publie une animation, un modèle, un son ou une image par Open Cloud, attend la fin de l'opération et écrit l'`assetId`.
-- `tools/ui/make_menu_type.py`: génère le titrage du menu (lettres usées, éclats, impacts) dans `assets/ui/menu/`.
 - `tools/export_mesh_fbx.py`: exporte les meshes d'un `.blend` en FBX avec l'orientation attendue dans Roblox.
 - `tools/rbxm/verify_place.luau`: relit la place construite par Rojo et vérifie viewmodels, Tools, ids d'assets et noms d'armes.
 - `tools/perf/audit_map.luau`: audit statique d'une map `.rbxm` (pièces, ombres, transparences, collisions et requêtes par dossier, lumières), cf. `docs/performance.md`.
@@ -77,14 +76,14 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/client/ui/FeedbackScreen.luau`: écran Feedback (message de 10 à 500 caractères envoyé au serveur, ENVOYER se tire).
 - `src/client/ui/HUDRules.luau`: règles pures du HUD (paliers de vitesse, timer, classement, emplacements de la barre d'armes).
 - `src/client/ui/Hitmarker.luau`: marqueur de touche confirmée par le serveur (X blanc à contour noir, rouge sur un tir à la tête, plus grand sur un kill).
-- `src/client/ui/InfosScreen.luau`: écran Infos (surfer, commandes, crédits, à propos), onglets à tirer.
-- `src/client/ui/MainMenu.luau`: menu d'accueil où l'on choisit en tirant : titre et libellés en images, hitmarker en guise de curseur, impacts de balles.
+- `src/client/ui/InfosScreen.luau`: écran Infos (surfer, commandes, crédits, à propos), même disposition que les Réglages, onglets à tirer.
+- `src/client/ui/MainMenu.luau`: menu d'accueil (salle des miroirs) où l'on choisit en tirant : titre, onglets, fiche d'arme et sélecteur en texte à ombre, hitmarker en guise de curseur, impacts de balles.
 - `src/client/ui/MenuCursor.luau`: hitmarker qui remplace le curseur sur tous les écrans du menu.
-- `src/client/ui/MenuPage.luau`: gabarit des écrans secondaires du menu (dégradé, titre en image, action de sortie) et ids des mots publiés.
-- `src/client/ui/MenuShot.luau`: tir sur un élément du menu (impact, puis action) et choix en images usées.
-- `src/client/ui/RoundHUD.luau`: HUD en jeu (timer et rang, classement Tab, overlay respawn, bannière résultat).
+- `src/client/ui/MenuPage.luau`: gabarit des écrans secondaires du menu (bloc centré sur un voile, titre en texte pour Réglages en partie, choix et action de sortie en texte).
+- `src/client/ui/MenuShot.luau`: tir sur un élément du menu (impact, puis action) et choix en texte à ombre décalée.
+- `src/client/ui/RoundHUD.luau`: HUD en jeu (timer et rang, classement Tab, écran de réapparition, écran de fin de round).
 - `src/client/ui/ScopeOverlay.luau`: lunette des armes à scope, dessinée sans image (masque rond et réticule en Frames).
-- `src/client/ui/SettingsMenu.luau`: écran Réglages, à même la scène dans le menu (on règle en tirant), sur un voile sombre sans tir en partie (touche P) : sensibilités, et ombres du soleil sur le poste du joueur (`Lighting.GlobalShadows`).
+- `src/client/ui/SettingsMenu.luau`: écran Réglages par catégories (SOURIS, GRAPHISMES), à même la scène dans le menu (on règle en tirant), sur un voile sombre sans tir en partie (touche P) : sensibilités, ombres du soleil sur le poste du joueur (`Lighting.GlobalShadows`), RÉTABLIR par catégorie.
 - `src/client/ui/Speedometer.luau`: affichage de la vitesse du joueur.
 - `src/client/ui/WeaponBar.luau`: barre d'armes (remplace le Backpack Roblox) : silhouettes des armes, équipement au clavier, à la molette, au toucher et à la manette.
 - `src/client/ui/Transition.luau`: volets de transition entre le menu et le jeu.

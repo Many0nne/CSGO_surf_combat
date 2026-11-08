@@ -1,6 +1,5 @@
 -- Tir dans les écrans du menu : l'AWP de MenuScene fait feu sur l'élément choisi, l'impact reste, puis l'action se déclenche.
--- Fournit les choix en images usées (tools/ui/make_menu_type.py) des écrans secondaires, et les choix en texte à ombre
--- décalée (onglets et flèches de l'accueil).
+-- Fournit les choix en texte à ombre décalée (onglets et flèches de l'accueil, choix des écrans secondaires).
 local GuiService = game:GetService("GuiService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -13,7 +12,6 @@ local UIKit = require(script.Parent.UIKit)
 local C = UITheme.Colors
 local Motion = UITheme.Motion
 
-export type Word = { image: string, width: number, height: number }
 export type Choice = {
 	button: GuiButton,
 	setSelected: (boolean) -> (),
@@ -24,7 +22,6 @@ export type Choice = {
 local MenuShot = {}
 
 local ACTION_DELAY = 0.16 -- l'impact se voit avant l'ouverture de l'écran demandé
-local HOVER_SHIFT = 10
 local HOLE_SIZE = 13
 local MAX_HOLES = 14 -- par écran, le plus ancien disparaît
 local DISABLED_TRANSPARENCY = 0.6
@@ -189,43 +186,10 @@ local function bindShot(button: GuiButton, props: ShotProps, paint: (boolean, bo
 	}
 end
 
--- Cette méthode permet de créer un choix en image à tirer (survol rouge et décalé) lorsqu'un écran du menu est construit ;
--- `shoots` peut couper le tir (Réglages en partie), `onFired` et `delay` servent aux actions longues, `locks` les garde exclusives.
-function MenuShot.choice(props: {
-	word: Word,
-	height: number,
-	position: UDim2,
-	parent: Instance,
-	action: () -> (),
-	shoots: (() -> boolean)?,
-	onFired: (() -> ())?,
-	delay: number?,
-	locks: boolean?,
-}): Choice
-	local rest = props.position
-	local button = UIKit.create("ImageButton", {
-		Name = props.word.image,
-		Image = props.word.image,
-		ImageColor3 = C.White,
-		AutoButtonColor = false,
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		Position = rest,
-		Size = UDim2.fromOffset(math.round(props.height * props.word.width / props.word.height), props.height),
-		Parent = props.parent,
-	})
-	return bindShot(button, props, function(hovering: boolean, selected: boolean, enabled: boolean)
-		local lit = enabled and (hovering or selected)
-		UIKit.tween(button, Motion.Hover, {
-			ImageColor3 = lit and C.HitRed or C.White,
-			ImageTransparency = enabled and 0 or DISABLED_TRANSPARENCY,
-			Position = lit and rest + UDim2.fromOffset(HOVER_SHIFT, 0) or rest,
-		})
-	end)
-end
-
--- Cette méthode permet de créer un choix en texte à ombre décalée (onglets, flèches du menu) lorsqu'un écran est
--- construit : rouge d'impact au survol, `selectedColor` pour l'élément actif. Le bouton prend la taille de son texte.
+-- Cette méthode permet de créer un choix en texte à ombre décalée (onglets, flèches, actions des écrans secondaires)
+-- lorsqu'un écran est construit : rouge d'impact au survol, `selectedColor` pour l'élément actif. Le bouton prend la
+-- taille de son texte ; `shoots` peut couper le tir (Réglages en partie), `onFired` et `delay` servent aux actions
+-- longues, `locks` les garde exclusives.
 function MenuShot.textChoice(props: {
 	text: string,
 	font: Font,
@@ -264,8 +228,9 @@ function MenuShot.textChoice(props: {
 		AutomaticSize = Enum.AutomaticSize.XY,
 		Size = UDim2.new(),
 		ZIndex = 2,
-	}, 2)
+	}, if props.size >= 26 then 3 else 2)
 	shadow.ZIndex = 1
+	local shadowRest = shadow.TextTransparency
 	return bindShot(button, props, function(hovering: boolean, selected: boolean, enabled: boolean)
 		local color = if enabled and hovering
 			then C.HitRed
@@ -275,6 +240,7 @@ function MenuShot.textChoice(props: {
 			TextColor3 = color,
 			TextTransparency = enabled and 0 or DISABLED_TRANSPARENCY,
 		})
+		UIKit.tween(shadow, Motion.Hover, { TextTransparency = enabled and shadowRest or 0.9 })
 	end)
 end
 
