@@ -74,11 +74,12 @@ Les écarts de moins de 2 ms entre phases sont du bruit, d'où la référence de
 `src/shared/PerfMarkers.luau` : `PerfMarkers.wrap("nom", callback)` entoure un callback sans valeur de retour (Heartbeat,
 RenderStepped, BindToRenderStep). Le repère est toujours posé (`debug.profilebegin`, coût négligeable si le profiler est
 fermé), et il est chronométré seulement quand l'overlay est ouvert. Repères posés : `mouvement`, `caméra`, `viewmodel`,
-`armes`, `armes 3P`, `menu 3D`, `curseur menu` (client), `srv round` (serveur). Toute nouvelle boucle par frame doit
+`armes`, `armes 3P`, `tenue 3P` (sous `PreSimulation`), `menu 3D`, `curseur menu` (client), `srv round` (serveur). Toute nouvelle boucle par frame doit
 passer par `wrap`.
 
 Dans le MicroProfiler (Ctrl+F6, puis pause pour figer une frame lente), ces noms apparaissent sous `Heartbeat` ou
-`RenderStep` (`mouvement`, `caméra` et `viewmodel` sont sous `RenderStep`) : on voit si une frame lente vient de nos scripts ou du moteur (rendu, physique, GC).
+`RenderStep` (`mouvement`, `caméra` et `viewmodel` sont sous `RenderStep`, `tenue 3P` sous `PreAnimation` et
+`PreSimulation`) : on voit si une frame lente vient de nos scripts ou du moteur (rendu, physique, GC).
 
 ## Relevés mémoire (fuites)
 
