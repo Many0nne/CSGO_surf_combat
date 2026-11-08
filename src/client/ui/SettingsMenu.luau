@@ -308,7 +308,7 @@ local function setOpen(state: boolean)
 			backdrop.BackgroundTransparency = 1
 			UIKit.tween(backdrop, Motion.Enter, { BackgroundTransparency = BACKDROP_TRANSPARENCY })
 		end
-		page.show()
+		page.show(mode == "modal")
 	else
 		page.hide()
 		UserInputService.MouseBehavior = savedMouseBehavior

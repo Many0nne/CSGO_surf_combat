@@ -80,4 +80,60 @@ return function(T, Loader)
 			T.expectEqual(math.abs(posed) < 0.005, true)
 		end)
 	end)
+
+	T.describe("MenuSceneRules.hitVelocity", function()
+		T.it("est pleine au point d'impact, décroît puis s'annule au-delà du rayon", function()
+			local full = Rules.hitVelocity(0)
+			T.expectEqual(full > 0, true)
+			T.expectEqual(Rules.hitVelocity(Rules.HIT_RADIUS / 2) < full, true)
+			T.expectEqual(Rules.hitVelocity(Rules.HIT_RADIUS), 0)
+			T.expectEqual(Rules.hitVelocity(Rules.HIT_RADIUS * 3), 0)
+		end)
+	end)
+
+	T.describe("MenuSceneRules.springStep", function()
+		-- Cette méthode permet de suivre le ressort image par image lorsqu'un test simule la réaction d'un éclat.
+		local function run(velocity, duration, dt)
+			local offset, peak = 0, 0
+			local elapsed = 0
+			while elapsed < duration do
+				offset, velocity = Rules.springStep(offset, velocity, dt)
+				peak = math.max(peak, math.abs(offset))
+				elapsed += dt
+			end
+			return offset, peak
+		end
+
+		T.it("part dans le sens de l'élan, sans saut", function()
+			local offset = Rules.springStep(0, 1, 1 / 60)
+			T.expectEqual(offset > 0 and offset < 0.02, true)
+		end)
+
+		T.it("pivote d'environ la moitié de HIT_ANGLE puis revient au repos", function()
+			local final, peak = run(Rules.hitVelocity(0), Rules.HIT_TIME, 1 / 60)
+			T.expectEqual(near(peak, Rules.HIT_ANGLE / 2, 0.15), true)
+			T.expectEqual(math.abs(final) < 0.02, true)
+		end)
+
+		T.it("reste stable sur des images longues", function()
+			local final = run(Rules.hitVelocity(0), Rules.HIT_TIME, 0.25)
+			T.expectEqual(math.abs(final) < 0.02, true)
+		end)
+	end)
+
+	T.describe("MenuSceneRules.statSegments", function()
+		T.it("remplit toute la barre pour l'arme la plus forte", function()
+			T.expectEqual(Rules.statSegments(115, 115, 10), 10)
+		end)
+
+		T.it("arrondit au segment et garde au moins un segment pour une valeur positive", function()
+			T.expectEqual(Rules.statSegments(50, 115, 10), 4)
+			T.expectEqual(Rules.statSegments(1, 1000, 10), 1)
+		end)
+
+		T.it("laisse la barre vide sans valeur ni maximum", function()
+			T.expectEqual(Rules.statSegments(0, 115, 10), 0)
+			T.expectEqual(Rules.statSegments(5, 0, 10), 0)
+		end)
+	end)
 end

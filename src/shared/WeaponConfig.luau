@@ -6,6 +6,10 @@ local WeaponConfig = {}
 WeaponConfig.Weapons = {
 	AWP = {
 		Name = "AWP",
+		-- Fiche de la vitrine du menu (#112) : catégorie en capitales (string.upper ignore les accents), et précision
+		-- affichée de 0 à 1 (la dispersion n'est pas simulée)
+		Category = "FUSIL DE PRÉCISION",
+		Accuracy = 0.9,
 		Damage = 115,
 		RPM = 41,
 		FireDelay = 60 / 41, -- seconds between shots
@@ -38,6 +42,8 @@ WeaponConfig.Weapons = {
 	},
 	M9Bayonet = {
 		Name = "M9 Bayonet",
+		Category = "COUTEAU",
+		Accuracy = 0.7,
 		Damage = 50,
 		RPM = 150,
 		FireDelay = 0.4, -- cadence CS:GO du clic gauche

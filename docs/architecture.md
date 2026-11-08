@@ -50,7 +50,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/client/init.client.luau`: point d'entrée client, initialise les modules côté client.
 - `src/client/input/InputModule.luau`: gestion des entrées utilisateur et mapping des actions.
 - `src/client/systems/game/GameStateController.luau`: machine d'état client (MENU/INFOS/SPAWNING/IN_ROUND/DEAD/RESULT), coordination UI ↔ remotes.
-- `src/client/systems/game/MenuScene.luau`: scène 3D du menu (canyon, AWP qui suit le curseur, surfeurs à abattre, plongée sur JOUER), éclairage temporaire rétabli à la sortie.
+- `src/client/systems/game/MenuScene.luau`: scène 3D du menu (salle des miroirs : éclats qui reconstituent l'arme, tir sur les éclats, explosion sur JOUER), éclairage temporaire rétabli à la sortie.
 - `src/client/systems/game/MenuSceneRules.luau`: règles pures de cette scène (amortis, angles de visée, trajectoire, touche).
 - `src/client/systems/network/CharacterSync.luau`: envoi de la position du personnage local (appelé par `MovementController`) et affichage des autres joueurs à leur position relayée, interpolée (rendu, priorité `Camera - 2`).
 - `src/client/systems/movement/BoostSystem.luau`: boosts de la map (geysers, lanceurs, portiques de `Maps.Map.Boosts`) détectés à chaque frame, avec recharge par boost.

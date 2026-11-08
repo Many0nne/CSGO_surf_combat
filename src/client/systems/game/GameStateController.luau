@@ -234,10 +234,11 @@ function GameStateController.init(player: Player, setupCharacter: (char: Model) 
 		FeedbackScreen.show()
 	end, function() -- Réglages
 		openSettingsPage()
-	end, function() -- Accueil
+	end, function() -- Accueil (onglet ARMES, ou changement d'onglet depuis un écran ouvert)
 		if state == "INFOS" then
 			setState("MENU")
 		end
+		FeedbackScreen.hide()
 		SettingsMenu.close()
 		MainMenu.setPage("home")
 	end)

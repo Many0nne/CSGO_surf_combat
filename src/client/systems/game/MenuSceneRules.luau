@@ -16,6 +16,13 @@ MenuSceneRules.SWING_HZ = 0.32
 MenuSceneRules.TILT_HZ = 0.6
 -- Au-delà de cette durée après sa libération, un éclat est considéré posé (amplitude < 0,1 %)
 MenuSceneRules.SETTLE_TIME = 4.5
+-- Éclat touché par un tir : élan (rad, la pointe atteint environ la moitié), amortissement (1/s), fréquence (Hz),
+-- rayon (studs) dans lequel les voisins réagissent aussi, durée au-delà de laquelle il est revenu au repos (s)
+MenuSceneRules.HIT_ANGLE = math.rad(220)
+MenuSceneRules.HIT_DAMPING = 1.8
+MenuSceneRules.HIT_HZ = 0.55
+MenuSceneRules.HIT_RADIUS = 2.6
+MenuSceneRules.HIT_TIME = 3.5
 
 -- Cette méthode permet de rapprocher une valeur de sa cible à chaque image lorsqu'un mouvement doit rester souple,
 -- sans jamais la dépasser même sur une image très longue.
@@ -63,6 +70,41 @@ function MenuSceneRules.settle(angle: number, tilt: number, lt: number): (number
 	local k = math.exp(-MenuSceneRules.DAMPING * lt)
 	return angle * k * math.cos(2 * math.pi * MenuSceneRules.SWING_HZ * lt),
 		tilt * k * math.cos(2 * math.pi * MenuSceneRules.TILT_HZ * lt)
+end
+
+local HIT_OMEGA = 2 * math.pi * MenuSceneRules.HIT_HZ
+local HIT_STIFFNESS = HIT_OMEGA * HIT_OMEGA + MenuSceneRules.HIT_DAMPING * MenuSceneRules.HIT_DAMPING
+local SPRING_STEP = 1 / 120
+
+-- Cette méthode permet de donner l'élan (rad/s) donné à un éclat lorsqu'un tir le touche ou touche un voisin à
+-- `distance` studs : plein au point d'impact, nul au-delà du rayon. L'écart maximal vaut environ HIT_ANGLE / 2.
+function MenuSceneRules.hitVelocity(distance: number): number
+	if distance >= MenuSceneRules.HIT_RADIUS then
+		return 0
+	end
+	return MenuSceneRules.HIT_ANGLE * (1 - distance / MenuSceneRules.HIT_RADIUS) * HIT_OMEGA
+end
+
+-- Cette méthode permet d'avancer le ressort amorti d'un éclat touché (écart d'angle et vitesse) lorsqu'une image passe :
+-- l'éclat part d'un coup puis revient à sa pose en oscillant, et deux tirs rapprochés se cumulent sans saut.
+-- Pas fixes de 1/120 s, pour rester stable sur une image longue.
+function MenuSceneRules.springStep(offset: number, velocity: number, dt: number): (number, number)
+	local steps = math.max(1, math.ceil(dt / SPRING_STEP))
+	local h = dt / steps
+	for _ = 1, steps do
+		velocity += (-HIT_STIFFNESS * offset - 2 * MenuSceneRules.HIT_DAMPING * velocity) * h
+		offset += velocity * h
+	end
+	return offset, velocity
+end
+
+-- Cette méthode permet de compter les segments pleins d'une barre de la fiche d'arme lorsque la valeur est rapportée au
+-- maximum des armes de la vitrine : au moins un segment pour une valeur positive.
+function MenuSceneRules.statSegments(value: number, max: number, count: number): number
+	if max <= 0 or value <= 0 then
+		return 0
+	end
+	return math.clamp(math.round(value / max * count), 1, count)
 end
 
 return MenuSceneRules

@@ -44,13 +44,20 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
 
 ## Comment c'est construit
 
-- `src/client/ui/MainMenu.luau` : titre et choix de l'accueil, tir dans la scène au clic.
-- `src/client/ui/MenuPage.luau` : gabarit des écrans secondaires : pas de panneau, dégradé sombre à gauche, titre en image, action de sortie en bas à gauche.
-- `src/client/ui/MenuShot.luau` : tir sur un élément, impact, puis action ; choix en images usées communs à tous les écrans.
+- `src/client/ui/MainMenu.luau` : accueil de la salle des miroirs (titre, onglets, fiche d'arme, sélecteur), tir dans la
+  scène au clic. Les onglets sont dans leur propre `ScreenGui` (`MenuTabs`, DisplayOrder 4), au-dessus des écrans
+  secondaires.
+- `src/client/ui/MenuPage.luau` : gabarit des écrans secondaires : pas de panneau, dégradé sombre à gauche, action de
+  sortie en bas à gauche. Le titre en image n'est montré qu'en partie (Réglages par la touche P) : au menu, l'onglet
+  actif sert de titre.
+- `src/client/ui/MenuShot.luau` : tir sur un élément, impact, puis action ; choix en images usées (écrans secondaires) et
+  choix en texte à ombre décalée (`textChoice` : onglets, flèches).
 - `src/client/ui/MenuCursor.luau` : hitmarker-curseur.
-- `src/client/systems/game/MenuScene.luau` : scène 3D, éclairage temporaire, visée, tir, surfeurs, plongée sur JOUER.
+- `src/client/systems/game/MenuScene.luau` : salle des miroirs, éclairage temporaire, visée, tir sur les éclats,
+  explosion sur JOUER.
 - `src/client/systems/game/MenuSceneRules.luau` : règles pures testées (`tests/specs/MenuSceneRules.spec.luau`).
-- `src/client/ui/Transition.luau` : volets couleur du soleil, enchaînés à la plongée vers le soleil.
+- `src/client/ui/Transition.luau` : volets blancs, enchaînés à l'explosion de la vitrine.
+- `UIKit.shadowedText` : texte os doublé d'une ombre noire décalée, commun au HUD et au menu.
 - `src/client/ui/Speedometer.luau` : compteur de vitesse, piste « Titrage » : gros chiffres os penchés (-6°) avec ombre noire décalée, nom du palier, bande ambrée en biais crantée aux seuils, tout passe au rouge d'impact au dernier palier (`HUDRules.speedTier`, `speedFill`). En bas à gauche, sur un fond sombre sans bord : image de dégradé de coin (`tools/ui/make_corner_scrim.py`, `assets/ui/hud/`) teintée par `ImageColor3`.
 - `src/client/ui/WeaponBar.luau` : barre d'armes en bas à droite, en miroir du compteur ; remplace le Backpack Roblox
   (`CoreGuiType.Backpack` désactivé dans `init.client.luau`). Par arme : silhouette plate tirée des MeshParts de son viewmodel
@@ -102,7 +109,7 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
 - **Distance d'affichage :** Roblox la réduit selon la charge, et le décor lointain disparaît d'un coup avec la map chargée.
   Le canyon est donc au tiers de sa taille apparente (1 000 studs de long). Un test sans la map ne le montre pas.
 - **Éclairage :** `MenuScene` remplace celui de `Lighting` et le rétablit à sa sortie. Un tween encore actif écrase les valeurs
-  rétablies : l'annuler d'abord (`diveTweens`), car le joueur peut apparaître avant la fin de la plongée.
+  rétablies : l'annuler d'abord (`burstTweens`), car le joueur peut apparaître avant la fin de l'explosion.
 - **Curseur :** `MenuCursor` remet `MouseIconEnabled = false` à chaque image, car les autres écrans le réactivent en se fermant.
 - **`AbsolutePosition` avec `IgnoreGuiInset` :** elle exclut la barre du haut, contrairement à `GetMouseLocation`. Préférer
   `MouseEnter`, `MouseLeave` et `Activated` à un test de zone maison.
@@ -234,10 +241,33 @@ Décisions de l'utilisateur :
 - La source Blender de l'AWP (`assets/awp_viewmodel/AWP_Viewmodel_Anims.blend`) est en vert uni alors que l'arme du jeu
   a une crosse en bois : `blend_common.awp_materials` remet le bois.
 
+**Interface et tir** (étape 4) :
+- Décisions de l'utilisateur : ARMES est l'accueil (la vitrine) ; JOUER, plus grand et souligné de rouge d'impact, est
+  l'appel à l'action ; les onglets restent affichés sur Infos, Réglages et Feedback, qui s'ouvrent dessous ; un tir dans
+  la scène ne laisse pas de trou dessiné, seul un tir sur un bouton en laisse un ; JOUER fait exploser la vitrine.
+- Fiche d'arme : DÉGÂTS et CADENCE (RPM) rapportés à la meilleure arme de la vitrine, PRÉCISION lue dans
+  `WeaponConfig.Accuracy` (valeur d'affichage, la dispersion n'est pas simulée), catégorie dans `WeaponConfig.Category`
+  en capitales (`string.upper` ne passe pas « é » en « É »). Barre pleine : dernier segment en rouge d'impact.
+- Tir : rayon depuis le curseur sur les jeux d'éclats visibles (`CanQuery` activé sur eux seuls). L'éclat touché et ses
+  voisins (2,6 studs) reçoivent un élan autour de leur fil, dans un ressort amorti (`MenuSceneRules.springStep`) : deux
+  tirs rapprochés se cumulent sans saut ; pointe vers 110°, retour au repos en 3,5 s.
+- Explosion : chaque éclat quitte son fil (Beam coupé) avec une vitesse vers la caméra, vers l'extérieur et vers le haut,
+  sous gravité, en tournoyant ; surexposition jusqu'au blanc, puis les volets (`PLAY_DELAY` 1 s). `showAtRest` remet tout
+  sur les fils au retour au menu.
+- Coût mesuré dans Studio (overlay F3, 1291x647, MCP actif) : boucle `menu 3D` 0,25 ms par image au repos, 0,32 ms
+  pendant une série de tirs (pointe 0,64 ms), 0,40 ms pendant l'explosion (pointe 0,83 ms) ; curseur 0,02 ms ; 159 draw
+  calls, CPU rendu 6 à 7 ms, GPU 8 à 10 ms.
+- Vérifier au MCP : `user_mouse_input` prend des coordonnées d'écran, pas celles de `screen_capture` (0,8 fois celles de
+  la capture sur ce poste) ; préférer `instance_path` pour viser un bouton. La capture arrive plusieurs centaines de ms
+  après l'action : un mouvement bref (pivot, explosion) se mesure par script (échantillonnage des CFrame dans une boucle
+  lancée avant le clic), pas sur une capture.
+
 ## Reste à faire
 
 - Passer l'écran de réapparition et la bannière de fin de round (`RoundHUD.luau`) du style « Tactical » ambre à cette direction.
 - Afficher les munitions dans le HUD (`WeaponSystem` les gère, rien ne les montre), dans le même langage que le compteur de vitesse.
 - Piste écartée pour l'instant sur le compteur : chiffres en images usées comme le titrage, et inclinaison qui augmente avec la vitesse.
-- Tester le menu au tactile et à la manette : c'est prévu dans le code, jamais essayé.
-- Construire le menu « salle des miroirs » (#112).
+- Tester le menu au tactile et à la manette : c'est prévu dans le code (flèches ‹ › tirables), jamais essayé.
+- Écrans Infos, Réglages et Feedback : encore en images usées sous des onglets en Oswald net, à passer au style du HUD.
+- Première vague d'une arme jamais montrée : ses éclats passent encore en blanc opaque le temps du chargement, malgré
+  `PreloadAsync` (constaté en Studio sur le M9).

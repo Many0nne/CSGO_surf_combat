@@ -16,7 +16,6 @@ local Motion = UITheme.Motion
 
 local RoundHUD = {}
 
-local SHADOW_TRANSPARENCY = 0.35
 -- Fond du timer : deux moitiés de fondu de coin collées au milieu du haut de l'écran
 local TOP_SCRIM_SIZE = Vector2.new(220, 110)
 local TOP_SCRIM_TRANSPARENCY = 0.3
@@ -59,19 +58,7 @@ local respawnTask: thread?
 
 -- ── Timer et rang ──────────────────────────────────────────────────────────────
 
--- Cette méthode permet de poser un texte doublé d'une ombre noire décalée lorsque le titrage du HUD est construit ;
--- renvoie le texte puis son ombre, à mettre à jour ensemble.
-local function shadowedText(parent: GuiObject, props: { [string]: any }, offset: number): (TextLabel, TextLabel)
-	local shadowProps = table.clone(props)
-	shadowProps.Name = (props.Name or "Text") .. "Shadow"
-	shadowProps.TextColor3 = C.Black
-	shadowProps.TextTransparency = SHADOW_TRANSPARENCY
-	shadowProps.Position = (props.Position or UDim2.new()) + UDim2.fromOffset(offset, offset)
-	shadowProps.Parent = parent
-	local shadow = UIKit.text(shadowProps)
-	props.Parent = parent
-	return UIKit.text(props), shadow
-end
+local shadowedText = UIKit.shadowedText
 
 -- Cette méthode permet de construire le timer et le rang en haut au centre (chiffres os droits sur un fondu sombre,
 -- sans panneau) lorsque le HUD est initialisé.
