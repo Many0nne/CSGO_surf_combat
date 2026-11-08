@@ -59,8 +59,14 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   unique qui défile) : catégories à tirer à gauche (barre ambrée sur l'active), lignes de 54 px à droite (nom, contrôle,
   valeur os à ombre, filet). Contrôles : curseur (trace continue, poignée en impact ; une barre segmentée ferait perdre
   la précision de la sensibilité) et choix fermé « ‹ VALEUR › ». RÉTABLIR remet la catégorie affichée à ses valeurs par
-  défaut. Ajouter un réglage : une ligne dans `buildCategories` ; une catégorie sans réglage n'est pas créée (TOUCHES
-  arrivera avec #100).
+  défaut. Ajouter un réglage : une ligne dans `buildCategories` (avec son champ dans `PlayerSettings` pour qu'il soit
+  conservé) ; une catégorie sans réglage n'est pas créée.
+  TOUCHES (#100) : « Molette vers le haut » (PRÉCÉDENTE par défaut, SUIVANTE, COUPÉE), puis une ligne par arme du
+  StarterPack (« Arme 1 · AWP », 7 au plus, pas de défilement). On tire sur la touche, elle affiche « APPUIE… », la
+  touche suivante est prise ; Échap ou un clic ailleurs annule. Une touche d'un autre emplacement est échangée ; une
+  touche du jeu (déplacement, R, F, P, F3/F4…) ou hors liste (Espace, Maj, Tab…) est refusée par un message en rouge
+  d'impact sur la ligne. Seules les lettres, les chiffres du haut et les touches F sont proposées : libellés courts dans
+  la barre d'armes. RÉTABLIR remet molette et touches ensemble.
 - `src/client/ui/MenuShot.luau` : tir sur un élément, impact, puis action ; choix en texte à ombre décalée
   (`textChoice`, l'ombre s'estompe avec le choix désactivé).
 - `src/client/ui/MenuCursor.luau` : hitmarker-curseur.
@@ -75,8 +81,9 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   (bras exclus) dans un `ViewportFrame` blanc teinté par `ImageColor3`, nom et touche. L'arme en main est en os, avec son
   numéro et un trait en rouge d'impact, les autres sont grisées ; toute la barre (fond compris) disparaît 2,5 s après le dernier changement d'arme
   (`HUDRules.WEAPON_BAR_FADE_DELAY`). Emplacements dans l'ordre alphabétique, comme le helper `DebugPlaytest`.
-  Équipement : 1 à 9, molette (vers le haut = arme précédente), toucher d'un emplacement, L1/R1 à la manette.
-  Touches réglables : #100.
+  Équipement : touches des emplacements (1 à 9 par défaut) et molette (vers le haut = arme précédente par défaut),
+  réglables dans Réglages > TOUCHES (#100) ; toucher d'un emplacement, L1/R1 à la manette (fixes). La barre ignore
+  touches et molette pendant que l'écran Réglages est ouvert.
 - `src/client/ui/RoundHUD.luau` : timer et rang en haut au centre (chiffres os droits avec ombre, libellés ambrés, fondu
   sombre en deux moitiés de coin, timer en rouge d'impact sous 30 s) ; classement sous Tab : pas de panneau, voile sombre
   central qui s'efface vers les côtés, titre « CLASSEMENT » sur un filet ambre, colonnes K / M / K/M, ligne du joueur
@@ -120,6 +127,12 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
   référencé) : un élément qui ne suit que la vie du personnage reste affiché au menu (cas de `WeaponBar`). Tout nouvel élément du HUD de jeu doit brancher sur cette règle, pas sur un état à lui.
   `Speedometer.init()` tourne au premier spawn, après le premier `setVisible` : le module mémorise donc la visibilité.
 
+- **Libellé d'une touche (#100) :** `Enum.KeyCode` désigne la position sur un clavier QWERTY. Sur un clavier AZERTY,
+  `KeyCode.Q` est la touche imprimée « A » : afficher `UserInputService:GetStringForKeyCode` (`LocalSettings.keyText`),
+  sauf pour les chiffres du haut, qui donneraient « & » ou « é ».
+- **Écran Réglages piloté au MCP :** `user_mouse_input` prend ici les coordonnées de l'`AbsolutePosition` des boutons
+  (`ScreenGui` en `IgnoreGuiInset`), et un refus de touche (affiché 1,5 s) se lit avec un relevé branché avant l'appui :
+  deux appels MCP successifs prennent plus de temps que ça.
 - **Id d'un Decal publié :** il ne s'affiche pas dans une `ImageLabel` (console : `Asset type does not match requested type`).
   Il faut l'id de l'image contenue dans le Decal (voir ci-dessus).
 - **Distance d'affichage :** Roblox la réduit selon la charge, et le décor lointain disparaît d'un coup avec la map chargée.

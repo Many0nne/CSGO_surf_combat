@@ -2,14 +2,19 @@
 -- Remplace le Backpack Roblox (désactivé dans init.client) : par arme, silhouette tirée de son viewmodel, nom et touche.
 -- Texte droit (seul le compteur de vitesse est penché). L'arme en main est en os avec son numéro et un trait rouge
 -- d'impact. Toute la barre s'estompe peu après un changement d'arme et revient au suivant.
--- Équipement : touches 1 à 9, molette, toucher d'un emplacement (tactile), L1/R1 (manette). Règles pures dans HUDRules.
+-- Équipement : touches des emplacements et molette réglables (#100, LocalSettings, 1 à 9 par défaut), toucher d'un
+-- emplacement (tactile), L1/R1 (manette). Rien ne change d'arme pendant que l'écran Réglages est ouvert.
+-- Règles pures dans HUDRules et PlayerSettings.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
+local PlayerSettings = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("PlayerSettings"))
 local UIKit = require(script.Parent.UIKit)
 local HUDRules = require(script.Parent.HUDRules)
+local SettingsMenu = require(script.Parent.SettingsMenu)
+local LocalSettings = require(script.Parent.Parent.systems.settings.LocalSettings)
 
 local C = UITheme.Colors
 local F = UITheme.Fonts
@@ -26,18 +31,9 @@ local IDLE_TRANSPARENCY = 0.3 -- silhouette, nom et numéro d'une arme pas en ma
 local SCRIM_SIZE = Vector2.new(460, 250)
 local SCRIM_SHOWN = 0.15
 local MARGIN = Vector2.new(44, 40)
-
-local SLOT_KEYS = {
-	[Enum.KeyCode.One] = 1,
-	[Enum.KeyCode.Two] = 2,
-	[Enum.KeyCode.Three] = 3,
-	[Enum.KeyCode.Four] = 4,
-	[Enum.KeyCode.Five] = 5,
-	[Enum.KeyCode.Six] = 6,
-	[Enum.KeyCode.Seven] = 7,
-	[Enum.KeyCode.Eight] = 8,
-	[Enum.KeyCode.Nine] = 9,
-}
+-- Taille du libellé de touche (en main, au repos) : un caractère, ou plusieurs (« F10 ») pour tenir dans sa colonne
+local KEY_SIZE_SHORT = Vector2.new(30, 20)
+local KEY_SIZE_LONG = Vector2.new(18, 13)
 
 type Slot = {
 	tool: Tool,
@@ -200,7 +196,7 @@ local function buildSlot(tool: Tool, index: number): Slot
 		}),
 		key = UIKit.text({
 			Name = "Key",
-			Text = tostring(index),
+			Text = LocalSettings.keyText(LocalSettings.get().slotKeys[index]),
 			FontFace = F.Display,
 			TextXAlignment = Enum.TextXAlignment.Right,
 			AnchorPoint = Vector2.new(1, 0),
@@ -261,7 +257,8 @@ local function applySlots(animate: boolean)
 		slot.name.TextSize = active and 22 or 16
 		slot.name.TextColor3 = color
 		slot.name.Position = UDim2.new(1, -KEY_WIDTH, 0, iconSize.Y - 10)
-		slot.key.TextSize = active and 30 or 20
+		local keySize = if utf8.len(slot.key.Text) == 1 then KEY_SIZE_SHORT else KEY_SIZE_LONG
+		slot.key.TextSize = active and keySize.X or keySize.Y
 		slot.key.TextColor3 = active and C.HitRed or color
 		slot.key.Position = UDim2.new(1, 0, 0, active and 10 or 12)
 		slot.tick.Visible = active
@@ -341,12 +338,30 @@ local function watchCharacter(character: Model)
 	refresh()
 end
 
+-- Cette méthode permet de savoir si les entrées doivent changer d'arme lorsqu'une touche ou la molette est utilisée :
+-- barre affichée et écran Réglages fermé (on peut y réaffecter une touche).
+local function acceptsInput(processed: boolean): boolean
+	return not processed and gui ~= nil and gui.Enabled and not SettingsMenu.isOpen()
+end
+
+-- Cette méthode permet de remettre à jour les libellés de touche des emplacements lorsque le joueur les réaffecte.
+local function refreshKeyLabels()
+	local keys = LocalSettings.get().slotKeys
+	for i, slot in slots do
+		slot.key.Text = LocalSettings.keyText(keys[i])
+	end
+	if gui then
+		applySlots(false)
+	end
+end
+
 -- Cette méthode permet de traduire les entrées (touches, manette) en changement d'arme lorsque la barre est affichée.
 local function onInputBegan(input: InputObject, processed: boolean)
-	if processed or not (gui and gui.Enabled) then
+	if not acceptsInput(processed) then
 		return
 	end
-	local index = SLOT_KEYS[input.KeyCode]
+	local index = input.UserInputType == Enum.UserInputType.Keyboard
+		and PlayerSettings.slotForKey(LocalSettings.get().slotKeys, input.KeyCode.Name)
 	if index then
 		equipSlot(index)
 	elseif input.KeyCode == Enum.KeyCode.ButtonR1 then
@@ -356,12 +371,16 @@ local function onInputBegan(input: InputObject, processed: boolean)
 	end
 end
 
--- Cette méthode permet de changer d'arme à la molette lorsque la barre est affichée : vers le haut, arme précédente.
+-- Cette méthode permet de changer d'arme à la molette lorsque la barre est affichée, dans le sens réglé par le joueur
+-- (par défaut vers le haut = arme précédente), ou pas du tout si la molette est coupée.
 local function onInputChanged(input: InputObject, processed: boolean)
-	if processed or input.UserInputType ~= Enum.UserInputType.MouseWheel or not (gui and gui.Enabled) then
+	if input.UserInputType ~= Enum.UserInputType.MouseWheel or not acceptsInput(processed) then
 		return
 	end
-	cycle(input.Position.Z > 0 and -1 or 1)
+	local step = PlayerSettings.wheelStep(LocalSettings.get().wheel, input.Position.Z)
+	if step then
+		cycle(step)
+	end
 end
 
 -- Cette méthode permet de masquer la barre hors partie lorsque le HUD de jeu change de visibilité ; elle ne se masque pas
@@ -396,6 +415,7 @@ function WeaponBar.init()
 
 	UserInputService.InputBegan:Connect(onInputBegan)
 	UserInputService.InputChanged:Connect(onInputChanged)
+	LocalSettings.onChanged(refreshKeyLabels)
 	player.CharacterAdded:Connect(watchCharacter)
 	-- Le sac est recréé à chaque apparition : suivre le nouveau s'il arrive après le personnage
 	player.ChildAdded:Connect(function(child)

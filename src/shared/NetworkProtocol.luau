@@ -22,6 +22,10 @@ Protocol.Names = {
 	-- Feedback
 	SEND_FEEDBACK = "SendFeedback",
 	FEEDBACK_ACK = "FeedbackAck",
+	-- Réglages du joueur (#100), cf. server/SettingsStore : RemoteFunction client → serveur (réglages sauvegardés),
+	-- puis RemoteEvent client → serveur à chaque changement (réglages complets, validés par le serveur)
+	GET_SETTINGS = "GetSettings",
+	SAVE_SETTINGS = "SaveSettings",
 	-- Helper de playtest debug (#30) : créé uniquement dans Studio (RunService:IsStudio()), jamais en jeu publié
 	DEBUG_PLAYTEST = "DebugPlaytest",
 }
