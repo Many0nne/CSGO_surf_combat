@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
+local ScopeSensitivity = require(ReplicatedStorage.Shared.ScopeSensitivity)
 
 local cam = workspace.CurrentCamera
 local FPSCamera = {}
@@ -15,7 +16,7 @@ local boundStepName = "FPSCameraUpdate"
 local currentCamHeight = CameraConfig.CAM_HEIGHT_STAND
 local baseSens = CameraConfig.DEFAULT_SENS
 local scopeSensMult = CameraConfig.SCOPE_SENS_MULT
-local isScoped = false
+local scopeFov: number? = nil -- FOV du niveau de zoom, nil hors lunette
 local currentSens = baseSens
 local activeFovTween: Tween? = nil
 
@@ -80,9 +81,15 @@ function FPSCamera.setAngles(newYaw: number, newPitch: number)
 	pitch = math.clamp(newPitch, CameraConfig.PITCH_MIN, CameraConfig.PITCH_MAX)
 end
 
+-- Cette méthode permet de recalculer la sensibilité appliquée lorsque la sensi de base, le multiplicateur lunette
+-- ou le niveau de zoom change.
+local function refreshSens()
+	currentSens = ScopeSensitivity.effective(baseSens, scopeFov, CameraConfig.DEFAULT_FOV, scopeSensMult)
+end
+
 function FPSCamera.setSensitivity(s: number)
 	baseSens = s
-	currentSens = isScoped and (baseSens * scopeSensMult) or baseSens
+	refreshSens()
 end
 
 function FPSCamera.getSensitivity(): number
@@ -91,16 +98,18 @@ end
 
 function FPSCamera.setScopeMultiplier(m: number)
 	scopeSensMult = m
-	currentSens = isScoped and (baseSens * scopeSensMult) or baseSens
+	refreshSens()
 end
 
 function FPSCamera.getScopeMultiplier(): number
 	return scopeSensMult
 end
 
-function FPSCamera.setScoped(scoped: boolean)
-	isScoped = scoped
-	currentSens = isScoped and (baseSens * scopeSensMult) or baseSens
+-- Cette méthode permet d'appliquer la sensibilité de la lunette lorsque le joueur zoome (`fov` = FOV du niveau de zoom)
+-- ou dézoome (`scoped` faux) ; changer de niveau de zoom la met à jour.
+function FPSCamera.setScoped(scoped: boolean, fov: number?)
+	scopeFov = if scoped then (fov or CameraConfig.DEFAULT_FOV) else nil
+	refreshSens()
 end
 
 function FPSCamera.setFOV(targetFov: number, duration: number?)

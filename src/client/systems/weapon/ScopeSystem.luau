@@ -48,14 +48,14 @@ function ScopeSystem.toggle(cfg): string
 		return "IDLE"
 	elseif level == 1 then
 		cameraRef.setFOV(cfg.ScopeFov1, cfg.ScopeTweenTime)
-		cameraRef.setScoped(true)
+		cameraRef.setScoped(true, cfg.ScopeFov1)
 		viewmodelRef.setVisible(false)
 		ScopeOverlay.setVisible(true)
 		viewmodelRef.playSound("ZoomIn")
 		return "SCOPED"
 	else
 		cameraRef.setFOV(cfg.ScopeFov2, cfg.ScopeTweenTime)
-		cameraRef.setScoped(true)
+		cameraRef.setScoped(true, cfg.ScopeFov2)
 		ScopeOverlay.setVisible(true)
 		viewmodelRef.playSound("ZoomIn")
 		return "SCOPED"
