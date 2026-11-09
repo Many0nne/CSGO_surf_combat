@@ -37,13 +37,43 @@ prêt (ils tombent du soleil pendant ce temps).
 viennent avec #141), chemin A* de case en case (`NavRules.findPath`, coût pondéré par type d'arête), puis à chaque tick :
 - cible = la case la plus lointaine qu'on rejoint en ligne droite (`NavRules.lookAhead`, arêtes de marche seulement) ;
 - saut quand le rebord (milieu de l'arête) est à moins de `vitesse × NAV_JUMP_LEAD_TIME` + rayon ; en l'air, il ne vise
-  sa cible que sur une arête de saut ou d'échelle (sinon pas d'air control, le surf n'est pas simulé) ;
+  sa cible que sur une arête de saut ou d'échelle (sinon pas d'air control hors bunny hop, cf. ci-dessous ; le surf n'est pas simulé) ;
 - échelle : dans le volume, vitesse de `LadderRules.climbVelocity` en poussant vers le mur, comme le joueur ;
 - gêne : sans se rapprocher de sa cible pendant `NAV_STUCK_TIME`, nouveau chemin ; après `NAV_MAX_REPATH` essais sur
   la même case, l'arête est écartée `NAV_BAN_TIME` s pour ce bot (warn `[Nav] arête … ratée`) et il change de
   destination ; tombé sous le trajet, il repart de là où il est.
 
 Mesure (5 bots, 2 min 30) : 33 destinations atteintes, 0 arête ratée, 23 descentes, 9 sauts, 13 échelles franchis.
+
+## Bunny hop et air strafe (#151)
+
+Réglages `BHOP_*` de `BotConfig`, règles pures dans `BotRules` (strafe, vitesse visée) et `NavRules` (largeur,
+portion de marche, avancée, virages). Le bot ne cherche pas de lignes droites : comme un joueur, il **tourne en
+l'air** en strafant, et ne ralentit que pour les virages trop serrés pour sa vitesse.
+- **Largeur de passage** (`NavRules.clearance`, au démarrage) : pas de marche jusqu'à la case de bord la plus proche
+  (bord = moins de 8 voisines à pied : mur ou vide à côté). Les cases de bord coûtent plus à la recherche de chemin
+  (`NAV_BORDER_COST`) : les chemins passent au milieu des passages au lieu de raser les murs.
+- **Portion de marche** (`walkStretchEnd`) : jusqu'au prochain saut, échelle, descente de rebord ou à la destination
+  (pentes et marches se survolent). Une série commence (tirage `BHOP_CHANCE` par portion) s'il reste au moins
+  `BHOP_MIN_RUN` studs, et ressaute à chaque atterrissage, sans friction, tant que le saut suivant tient dans ce qui
+  reste (`keepBhopping`). Sinon atterrissage normal. `BotNavigator:setBhopAllowed(false)` la coupe (états de #141).
+- **Avancée** : en l'air, les cases passent selon l'avancée le long du chemin (`advanceAlong`, hauteur ignorée).
+- **Poursuite** : il vise le point du chemin à `vitesse × BHOP_LOOK_TIME` devant (`pointAlong`), décalé de
+  ±`BHOP_ZIGZAG_ANGLE` d'un saut à l'autre.
+- **Vitesse visée** (`bhopTargetSpeed`) : au plus `BHOP_MAX_SPEED`, la vitesse des virages à `vitesse ×
+  BHOP_BRAKE_TIME` devant (`cornerSpeed` : rayon mesuré sur `BHOP_CURVE_CELLS` cases, agrandi d'une part de la
+  largeur, vitesse `√(2·L·R/dt) × BHOP_TURN_SAFETY`, `BHOP_NARROW_SPEED` le long d'un bord), et assez lente pour que
+  la fin du saut et le suivant tiennent dans la portion. `BotRules.airStrafe` la tient : gain sous la vitesse visée,
+  **freinage en l'air** au-dessus (viser à l'opposé de la vitesse retire jusqu'à `AIR_ACCEL·w·dt` par tick, `w` dosé
+  pour perdre juste l'excès), plané ou virage sans gain (angle `acos(−L/|v|)`) à la vitesse visée.
+- **Regard** : suit la vitesse (comme la caméra d'un joueur qui strafe), à `NAV_TURN_RATE`.
+- Imperfections : `BHOP_STRAFE_NOISE` (écart à l'angle optimal), `BHOP_MISS_CHANCE` (saut en retard, avec friction).
+
+Mesure sur Dizzy (09/11/2026, 5 bots, ~12 min) : 109 séries, 639 sauts (~6 par série), 90 studs/s au plus d'après
+le bilan (pointes à ~100 mesurées par position), 67 destinations, 2 arêtes ratées (3 en 2 min 30 bhop coupé : arêtes
+connues du plan, dont la marche en (1930, 69, −184)). Ce qui borne la vitesse visée : fin de portion ~55 %, plafond
+~16 %, virages ~14 %, bord ~9 % ; les destinations tirées au hasard sont proches, les états de #141 changeront ça.
+Une chute hors de la map (Y −94) vue une fois, non reproduite en 7 min 30 de capture.
 
 ## Debug (Studio)
 
@@ -62,3 +92,15 @@ Mesure (5 bots, 2 min 30) : 33 destinations atteintes, 0 arête ratée, 23 desce
 - Le temps affiché est surtout de l'attente entre frames : le calcul est découpé par tranches de `NAV_BUILD_BUDGET`.
   Le monter raccourcit la construction mais charge les frames serveur du début de partie.
 - Les dessus des murs d'air (escaliers) sont de vraies cases : c'est là que marchent les joueurs.
+- **Air strafe : alterner pendant le saut, pas d'un saut à l'autre.** Avec `AIR_SPEED_CAP` = 6, un strafe à 90°
+  tourne la vitesse d'environ 11° par tick à 30 studs/s : tenir un côté tout un saut fait une spirale. Le côté suit
+  l'écart au cap à chaque tick, et le zigzag visible vient du cap visé décalé d'un saut à l'autre.
+- **La fenêtre de gain est étroite** : le strafe ne fait gagner que si |v|·cos θ < L, soit ±asin(L/|v|) autour de 90°
+  (±11° à 30, ±8° à 45). Au-delà il freine. Un bruit d'angle en degrés fixes (15°) faisait perdre de la vitesse :
+  `BHOP_STRAFE_NOISE` est une part de cette fenêtre.
+- **Pas de lignes droites.** Première version : bhop seulement si le saut suivant tenait dans une ligne droite du
+  chemin, sinon atterrissage avec friction. Les chemins A* en grille zigzaguent et Dizzy a peu de longues lignes :
+  ~2 sauts par série, 43 studs/s au plus. Le strafe fait tourner en gagnant de la vitesse (rayon ≈ |v|²·dt / L,
+  26 studs à 100), et le freinage en l'air est presque instantané : suivre le chemin courbe à une vitesse réglée par
+  ses virages suffit. Une portion qui s'arrêtait à chaque montée de plus d'une marche bridait encore les séries.
+- Gain par saut : environ 36 × 44 ticks ≈ 1 600 de |v|² en strafe parfait, donc 6 sauts de 30 à 100, pas 3.

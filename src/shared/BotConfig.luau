@@ -1,5 +1,5 @@
 -- Réglages des bots (#133). Étape 4/9 (#140) : plan de navigation (graphe de la map, notes des points, suivi de
--- chemin) ; le bot va d'un point tiré au hasard à un autre, en attendant les états (#141).
+-- chemin) ; le bot va d'un point tiré au hasard à un autre, en attendant les états (#141). Bunny hop : #151.
 -- Alignement en colonnes conservé volontairement
 -- stylua: ignore
 return {
@@ -37,6 +37,7 @@ return {
 	-- Coût des arêtes pour la recherche de chemin (multiplie la longueur, plus un forfait en studs)
 	NAV_COST_FACTOR     = { 1, 1.1, 1.4, 1.6 }, -- marche, descente, saut, échelle
 	NAV_COST_EXTRA      = { 0, 2, 6, 10 },
+	NAV_BORDER_COST     = 3,      -- surcoût d'une case au bord d'un passage (moitié à un pas du bord, studs)
 
 	-- Suivi de chemin (BotNavigator)
 	NAV_REACH_RADIUS    = 1.6,    -- case atteinte à moins de tant à l'horizontale (studs)
@@ -51,6 +52,32 @@ return {
 	NAV_HOLD_MIN        = 0.5,    -- attente sur une destination atteinte (s), avant la suivante
 	NAV_HOLD_MAX        = 3,
 	NAV_TURN_RATE       = 540,    -- rotation du regard (°/s)
+
+	-- Bunny hop et air strafe (#151) : sur une portion de marche du chemin, sauts enchaînés sans friction et strafe
+	-- en l'air vers un point du chemin devant lui (poursuite) ; vitesse réglée en l'air (gain, plané, freinage) selon
+	-- les virages devant et la marche restante ; atterrissage normal avant un saut, une échelle ou la destination
+	BHOP_ENABLED        = true,
+	BHOP_CHANCE         = 0.6,    -- probabilité de bhopper sur une portion de marche (tirée une fois par portion)
+	BHOP_MIN_RUN        = 48,     -- marche restante minimale pour commencer (studs, le long du chemin)
+	BHOP_MAX_SPEED      = 100,    -- vitesse plafond (studs/s)
+	BHOP_LAND_MARGIN    = 10,     -- marche restante exigée en plus d'un saut pour ressauter (studs)
+	BHOP_LOOK_TIME      = 0.15,   -- point visé à vitesse × tant devant lui sur le chemin (s)
+	BHOP_LOOK_MIN       = 6,      -- et au moins à tant (studs)
+	BHOP_BRAKE_TIME     = 0.5,    -- virages pris en compte à vitesse × tant devant lui (s)
+	BHOP_CURVE_CELLS    = 3,      -- rayon d'un virage mesuré entre les cases à tant de part et d'autre
+	BHOP_WIDTH_USE      = 0.5,    -- part de la largeur de passage ajoutée au rayon (il coupe le virage)
+	BHOP_TURN_SAFETY    = 0.6,    -- part de la vitesse qui tient le virage, gardée par prudence
+	BHOP_NARROW_SPEED   = 50,     -- vitesse au plus le long d'un mur ou d'un vide (case de bord, studs/s)
+	BHOP_CLEARANCE_MAX  = 8,      -- largeur de passage mesurée au plus (pas de grille)
+	BHOP_ADVANCE_WINDOW = 12,     -- segments du chemin examinés devant lui pour suivre son avancée en l'air
+	BHOP_SPEED_TOL      = 2,      -- au-delà de la vitesse visée de tant, il freine (studs/s)
+	BHOP_ALIGN_TOL      = 8,      -- à la vitesse visée, écart de cap toléré sans corriger (°)
+	BHOP_ZIGZAG_ANGLE   = 6,      -- écart du cap visé au chemin, alterné d'un saut à l'autre (°)
+	BHOP_ZIGZAG_FLIP    = 0.8,    -- probabilité de changer de côté à un saut
+	BHOP_STRAFE_NOISE   = 0.5,    -- écart à l'angle optimal, en part de la fenêtre qui fait gagner (±asin(L/|v|)),
+	                              -- tiré à chaque saut (0 = parfait, 0,5 garde au moins 75 % du gain, 1 = aucun gain)
+	BHOP_MISS_CHANCE    = 0.1,    -- probabilité de rater le timing d'un saut
+	BHOP_MISS_DELAY     = 0.12,   -- retard d'un saut raté, passé au sol avec friction (s)
 
 	-- Outillage Studio : attributs de Workspace
 	DEBUG_ATTRIBUTE     = "DebugBots", -- nombre de bots voulus (0 = aucun)

@@ -44,6 +44,7 @@ export type Plan = {
 	cellColumn: { number },
 	slope: { [number]: boolean }, -- case en pente (normale < 0,97)
 	keep: { [number]: boolean },
+	clearance: { number }, -- largeur de passage de chaque case (pas jusqu'au bord, NavRules.clearance ; bhop #151)
 	waypoints: { PlanWaypoint },
 	cellWaypoint: { [number]: number },
 	waypointEdges: { { [number]: number } },
@@ -354,6 +355,9 @@ function NavBuilder.build(map: Instance): Plan
 	end
 	local keep = if seed then NavRules.stronglyConnected(graph, seed) else {}
 	slice()
+	local clearance = NavRules.clearance(graph, BotConfig.BHOP_CLEARANCE_MAX)
+	graph.cellCost = NavRules.borderCosts(clearance)
+	slice()
 
 	-- 4. Points de passage et notes
 	local clusters, cellWaypoint =
@@ -469,6 +473,7 @@ function NavBuilder.build(map: Instance): Plan
 		cellColumn = cellColumn,
 		slope = slope,
 		keep = keep,
+		clearance = clearance,
 		waypoints = waypoints,
 		cellWaypoint = cellWaypoint,
 		waypointEdges = waypointEdges,

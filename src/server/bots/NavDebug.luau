@@ -152,12 +152,15 @@ function NavDebug.init(navigators: () -> { any })
 				nextReport = os.clock() + 30
 				print(
 					string.format(
-						"[Nav] bilan : %d destinations atteintes, %d arêtes ratées ; franchies : %d descentes, %d sauts, %d échelles",
+						"[Nav] bilan : %d destinations atteintes, %d arêtes ratées ; franchies : %d descentes, %d sauts, %d échelles ; bhop : %d séries, %d sauts, %.0f studs/s au plus",
 						BotNavigator.stats.reached,
 						BotNavigator.stats.banned,
 						BotNavigator.stats.passed[NavRules.DROP],
 						BotNavigator.stats.passed[NavRules.JUMP],
-						BotNavigator.stats.passed[NavRules.LADDER]
+						BotNavigator.stats.passed[NavRules.LADDER],
+						BotNavigator.stats.bhopRuns,
+						BotNavigator.stats.bhopJumps,
+						BotNavigator.stats.bhopTopSpeed
 					)
 				)
 			end
