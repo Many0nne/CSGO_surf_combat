@@ -225,21 +225,28 @@ local function recordHit(attacker: Participants.Participant, targetCharacter: In
 	end
 end
 
--- Cette méthode permet d'appliquer des dégâts déjà validés et de confirmer la touche au tireur,
--- seulement si les PV de la cible ont réellement baissé (le hitmarker ne s'affiche pas sinon).
-local function applyHit(player: Player, targetCharacter: Instance, damage: number, isHeadshot: boolean)
+-- Cette méthode permet d'appliquer des dégâts déjà validés (tireur joueur ou bot) et de confirmer la touche à un
+-- tireur joueur, seulement si les PV de la cible ont réellement baissé (le hitmarker ne s'affiche pas sinon).
+local function applyHit(
+	attacker: Participants.Participant,
+	targetCharacter: Instance,
+	damage: number,
+	isHeadshot: boolean
+): ("hit" | "kill")?
 	local humanoid = targetCharacter:FindFirstChildWhichIsA("Humanoid") :: Humanoid?
 	-- Corps encore en place (CORPSE_HANDOFF_DELAY) : une touche ne doit pas créditer la prochaine mort de la victime
 	if not humanoid or humanoid.Health <= 0 then
-		return
+		return nil
 	end
-	recordHit(Participants.fromPlayer(player), targetCharacter, isHeadshot)
+	recordHit(attacker, targetCharacter, isHeadshot)
 	local healthBefore = humanoid.Health
 	humanoid:TakeDamage(damage)
 	local outcome = Validator.hitOutcome(healthBefore, humanoid.Health)
-	if outcome then
+	local player = attacker.player
+	if outcome and player then
 		hitConfirmRmt:FireClient(player, outcome == "kill", isHeadshot)
 	end
+	return outcome
 end
 
 -- Cette méthode permet de traiter le verdict du Validator lorsqu'une touche arrive : damage vaut nil si elle est refusée.
@@ -252,7 +259,7 @@ local function onHitVerdict(
 )
 	DebugPlaytest.onHitReceived(player, remote.Name, targetCharacter, damage)
 	if damage then
-		applyHit(player, targetCharacter, damage, isHeadshot)
+		applyHit(Participants.fromPlayer(player), targetCharacter, damage, isHeadshot)
 	end
 end
 
@@ -273,6 +280,15 @@ BotManager.init({
 	onCharacter = onParticipantCharacter,
 	place = SpawnManager.place,
 	relay = CharacterSync.relayBot,
+	-- Touches d'un bot (#143) : même validation (arme en main, portée, cadence) et mêmes dégâts qu'un joueur
+	hitscan = function(bot, targetCharacter, hitPart)
+		local damage, isHeadshot = Validator.authorizeHitscan(bot, targetCharacter, hitPart, os.clock())
+		return if damage then applyHit(bot, targetCharacter, damage, isHeadshot) else nil
+	end,
+	melee = function(bot, targetCharacter)
+		local damage = Validator.authorizeMelee(bot, targetCharacter, "primary", os.clock())
+		return if damage then applyHit(bot, targetCharacter, damage, false) else nil
+	end,
 	roundManager = RoundManager,
 })
 

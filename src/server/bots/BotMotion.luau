@@ -94,6 +94,13 @@ function BotMotion.new(
 	return self
 end
 
+-- Cette méthode permet de régler la vitesse de course lorsque le bot change d'arme (couteau plus rapide que l'AWP).
+function BotMotion.setWeapon(self: BotMotion, weaponName: string?)
+	local runSpeed = runSpeedFor(weaponName)
+	self.wishSpeed = runSpeed
+	self.navigator.runSpeed = runSpeed
+end
+
 -- Cette méthode permet de figer ou relâcher un bot lorsqu'un outil de debug le demande : figé, il ne veut plus avancer
 -- ni sauter, mais la gravité et les collisions continuent.
 function BotMotion.setFrozen(self: BotMotion, frozen: boolean)

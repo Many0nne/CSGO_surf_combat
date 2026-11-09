@@ -3,12 +3,15 @@
 -- fait de ce savoir (états chercher, enquêter, combattre, se replacer ; décision 3 de #133).
 -- Il commande le suivi de chemin (destination choisie ou imposée, attente sur un point) et le regard de BotMotion.
 -- En combat il garde sa course (pas de poursuite, bhop non coupé) et se tourne vers la cible le temps d'un tir, puis
--- rend son regard à sa course ; le tir lui-même vient avec #143 (onFire), ici il est seulement compté.
--- Règles pures : BotBehaviorRules.
+-- rend son regard à sa course. Le tir (#143) part de son regard réel, une fois tourné vers la cible, hors délai de
+-- grâce, avec une dispersion selon la vitesse de la cible ; couteau au contact (BotArsenal).
+-- Règles pures : BotBehaviorRules, BotCombatRules.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local BotBehaviorRules = require(ReplicatedStorage.Shared.BotBehaviorRules)
+local BotCombatRules = require(ReplicatedStorage.Shared.BotCombatRules)
 local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
+local BotArsenal = require(script.Parent.BotArsenal)
 local BotMotion = require(script.Parent.BotMotion)
 local NavPlan = require(script.Parent.NavPlan)
 
@@ -18,12 +21,14 @@ type Memory = BotBehaviorRules.Memory
 -- Ce que le gestionnaire des bots fournit au comportement
 export type Env = {
 	id: number, -- id du participant (bot)
-	-- Autres participants en vie : id, humain ou bot, personnage
-	others: () -> { { id: number, isHuman: boolean, character: Model } },
+	-- Autres participants en vie : id, humain ou bot, personnage, instant d'apparition (os.clock, délai de grâce)
+	others: () -> { { id: number, isHuman: boolean, character: Model, spawnedAt: number? } },
 	-- Destinations des autres bots (point → nombre)
 	claimed: (selfId: number) -> { [number]: number },
 	-- Murs d'air de la map : ne bloquent pas la vue
 	clips: Instance?,
+	-- Tir de ce bot (position du tireur) : entendu par les autres bots
+	onShot: ((Vector3) -> ())?,
 }
 
 local BotBrain = {}
@@ -34,6 +39,7 @@ export type BotBrain = typeof(setmetatable(
 		env: Env,
 		char: Model,
 		motion: BotMotion.BotMotion,
+		arsenal: BotArsenal.BotArsenal?,
 		rng: Random,
 		rand: () -> number,
 		params: RaycastParams,
@@ -51,6 +57,10 @@ export type BotBrain = typeof(setmetatable(
 		perceptionTimer: number,
 		targetId: number?,
 		targetPos: Vector3?,
+		targetChar: Model?,
+		targetSpawnedAt: number?,
+		targetSpeed: number, -- vitesse estimée de la cible entre deux regards (studs/s)
+		lastSeen: { [number]: { position: Vector3, at: number } }, -- par participant vu, pour estimer sa vitesse
 		targetVisible: boolean, -- vue à ce regard (sinon gardée en tête un instant, sans tir)
 		seenSince: number, -- instant où la cible courante a été vue
 		lastShot: number?,
@@ -61,10 +71,19 @@ export type BotBrain = typeof(setmetatable(
 ))
 
 -- Bilan de tous les bots (debug : NavDebug l'affiche dans la console)
-BotBrain.stats = { combats = 0, shots = 0, heard = 0, investigations = 0, replacements = 0, holds = 0, biased = 0 }
-
--- Rappel posé par le combat (#143) : appelé quand un bot tire (bot, participant visé, position visée)
-BotBrain.onFire = nil :: ((BotBrain, number, Vector3) -> ())?
+BotBrain.stats = {
+	combats = 0,
+	shots = 0,
+	stabs = 0,
+	hits = 0, -- touches appliquées (fusil et couteau), comptées par BotManager
+	kills = 0,
+	graceHolds = 0, -- regards de visée où le tir est retenu par le délai de grâce de la cible
+	heard = 0,
+	investigations = 0,
+	replacements = 0,
+	holds = 0,
+	biased = 0,
+}
 
 -- Cette méthode permet de lire un point de passage sous la forme attendue par les règles lorsqu'un choix de
 -- destination les note.
@@ -73,7 +92,7 @@ local function waypointInfos(plan: NavPlan.Plan): { BotBehaviorRules.WaypointInf
 end
 
 -- Cette méthode permet de créer le comportement d'un bot lorsqu'il apparaît, branché sur son mouvement.
-function BotBrain.new(env: Env, char: Model, motion: BotMotion.BotMotion): BotBrain
+function BotBrain.new(env: Env, char: Model, motion: BotMotion.BotMotion, arsenal: BotArsenal.BotArsenal?): BotBrain
 	local rng = motion.rng
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
@@ -85,6 +104,7 @@ function BotBrain.new(env: Env, char: Model, motion: BotMotion.BotMotion): BotBr
 		env = env,
 		char = char,
 		motion = motion,
+		arsenal = arsenal,
 		rng = rng,
 		rand = function()
 			return rng:NextNumber()
@@ -104,6 +124,10 @@ function BotBrain.new(env: Env, char: Model, motion: BotMotion.BotMotion): BotBr
 		perceptionTimer = rng:NextNumber() * BotConfig.PERCEPTION_INTERVAL, -- bots décalés entre eux
 		targetId = nil,
 		targetPos = nil,
+		targetChar = nil,
+		targetSpawnedAt = nil,
+		targetSpeed = 0,
+		lastSeen = {},
 		targetVisible = false,
 		seenSince = 0,
 		lastShot = nil,
@@ -168,6 +192,7 @@ function BotBrain._perceive(self: BotBrain, now: number)
 	local yaw = self.motion.yaw
 	local candidates: { BotBehaviorRules.Candidate } = {}
 	local positions: { [number]: Vector3 } = {}
+	local seenOthers: { [number]: { character: Model, spawnedAt: number?, speed: number } } = {}
 	for _, other in self.env.others() do
 		local root = other.character:FindFirstChild("HumanoidRootPart") :: BasePart?
 		local head = other.character:FindFirstChild("Head") :: BasePart?
@@ -184,6 +209,14 @@ function BotBrain._perceive(self: BotBrain, now: number)
 			then
 				BotBehaviorRules.remember(self.memory, other.id, torso, now, true, other.isHuman)
 				positions[other.id] = if head then head.Position else torso
+				-- Vitesse estimée depuis le regard précédent (racine ancrée : pas de vitesse physique à lire)
+				local previous = self.lastSeen[other.id]
+				local speed = 0
+				if previous and now - previous.at > 1e-3 and now - previous.at < 1 then
+					speed = (torso - previous.position).Magnitude / (now - previous.at)
+				end
+				self.lastSeen[other.id] = { position = torso, at = now }
+				seenOthers[other.id] = { character = other.character, spawnedAt = other.spawnedAt, speed = speed }
 				table.insert(candidates, { id = other.id, isHuman = other.isHuman, distance = distance })
 				self.lastContact = now
 			end
@@ -201,6 +234,8 @@ function BotBrain._perceive(self: BotBrain, now: number)
 		end
 		self.targetPos = positions[target.id]
 		self.targetVisible = true
+		local seen = seenOthers[target.id]
+		self.targetChar, self.targetSpawnedAt, self.targetSpeed = seen.character, seen.spawnedAt, seen.speed
 	elseif self.targetId then
 		local last = self.memory[self.targetId]
 		if last and last.seen and BotBehaviorRules.keepTarget(last.at, now) then
@@ -211,6 +246,7 @@ function BotBrain._perceive(self: BotBrain, now: number)
 		else
 			-- Perdue de vue : il reprend sa course, et n'enquête que parfois (pas de poursuite systématique)
 			self.targetId, self.targetPos, self.lastShot, self.targetVisible = nil, nil, nil, false
+			self.targetChar, self.targetSpawnedAt, self.targetSpeed = nil, nil, 0
 			if not BotBehaviorRules.investigateLost(self.rng:NextNumber()) then
 				-- Contacts jusqu'ici tenus pour fouillés ; un tir entendu à ce même regard reste à enquêter
 				self.investigated = now - 1e-3
@@ -234,6 +270,11 @@ function BotBrain._perceive(self: BotBrain, now: number)
 	end
 	table.clear(self.heard)
 	self.freshest = BotBehaviorRules.forget(self.memory, now, BotConfig.MEMORY_TIME)
+	for id, seen in self.lastSeen do
+		if now - seen.at > 1 then
+			self.lastSeen[id] = nil
+		end
+	end
 end
 
 -- Cette méthode permet de trouver le point de passage le plus proche d'une position lorsque le bot doit y aller
@@ -400,6 +441,15 @@ function BotBrain.update(self: BotBrain, dt: number)
 		self:_startInvestigation(plan, self.freshest)
 	end
 
+	local arsenal = self.arsenal
+	if arsenal then
+		arsenal:update(now, state ~= "combattre")
+		-- Arme selon la distance à la cible : couteau au contact, fusil sinon
+		local targetRoot = self.targetChar and self.targetChar:FindFirstChild("HumanoidRootPart") :: BasePart?
+		local distance = if targetRoot then (targetRoot.Position - self.motion:position()).Magnitude else nil
+		arsenal:equip(BotCombatRules.chooseWeapon(arsenal.current or BotCombatRules.RIFLE, distance), now)
+	end
+
 	-- Regard : cible en combat le temps d'un tir, angle tenu à l'arrêt, sinon où il va
 	local gaze = self.motion.gaze
 	gaze.lookAt, gaze.aiming = nil, false
@@ -410,15 +460,57 @@ function BotBrain.update(self: BotBrain, dt: number)
 			gaze.lookAt, gaze.aiming = self.targetPos, true
 		end
 		if fire and self.targetVisible then
-			self.lastShot = now
-			BotBrain.stats.shots += 1
-			local onFire = BotBrain.onFire
-			if onFire and self.targetId then
-				onFire(self, self.targetId, self.targetPos)
-			end
+			self:_tryFire(now)
 		end
 	elseif self.holdLook and self.motion.navigator:isHolding() then
 		gaze.lookAt = self.holdLook
+	end
+end
+
+-- Cette méthode permet de tirer sur la cible lorsque le temps de réaction et de visée est passé : seulement si son
+-- regard réel est tourné vers elle, hors délai de grâce, arme prête et à portée ; tir dispersé selon sa vitesse.
+function BotBrain._tryFire(self: BotBrain, now: number)
+	local arsenal, target = self.arsenal, self.targetChar
+	if not arsenal or not target then
+		return
+	end
+	local aimPart = (target:FindFirstChild("UpperTorso") or target:FindFirstChild("HumanoidRootPart")) :: BasePart?
+	if not aimPart then
+		return
+	end
+	local eye = self:_eye()
+	local point = aimPart.Position
+	local inGrace = BotCombatRules.inSpawnGrace(self.targetSpawnedAt, now)
+	local ok = BotCombatRules.canFire({
+		visible = self.targetVisible,
+		inGrace = inGrace,
+		ready = arsenal:isReady(now),
+		yawError = BotCombatRules.yawError(eye, self.motion.yaw, point),
+		distance = (point - eye).Magnitude,
+		range = arsenal:range(),
+	})
+	if not ok then
+		if inGrace then
+			BotBrain.stats.graceHolds += 1
+		end
+		return
+	end
+	local cfg = arsenal:config()
+	local melee = cfg ~= nil and cfg.IsMelee == true
+	local direction = BotCombatRules.scatter(
+		BotCombatRules.aimDirection(eye, self.motion.yaw, point),
+		BotCombatRules.spread(self.targetSpeed),
+		self.rand
+	)
+	arsenal:fire(now, eye, direction, target)
+	self.lastShot = now
+	if melee then
+		BotBrain.stats.stabs += 1
+	else
+		BotBrain.stats.shots += 1
+		if self.env.onShot then
+			self.env.onShot(self.motion:position())
+		end
 	end
 end
 

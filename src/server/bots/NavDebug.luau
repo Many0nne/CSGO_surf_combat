@@ -206,9 +206,13 @@ function NavDebug.init(navigators: () -> { Entry })
 				local b = BotBrain.stats
 				print(
 					string.format(
-						"[Bots] bilan : %d combats, %d tirs (simulés avant #143), %d tirs entendus, %d enquêtes, %d replis, %d angles tenus, %d destinations biaisées vers un humain",
+						"[Bots] bilan : %d combats, %d tirs (%d touches, %d kills), %d coups de couteau, %d visées retenues par le délai de grâce, %d tirs entendus, %d enquêtes, %d replis, %d angles tenus, %d destinations biaisées vers un humain",
 						b.combats,
 						b.shots,
+						b.hits,
+						b.kills,
+						b.stabs,
+						b.graceHolds,
 						b.heard,
 						b.investigations,
 						b.replacements,
