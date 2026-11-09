@@ -1,5 +1,5 @@
--- Règles pures des bots (#133), testées (tests/specs/BotRules.spec.luau). Étape 3/9 (#139) : marche d'essai
--- (direction, sauts, demi-tour quand il est gêné), choix du nom et du nombre de bots demandé en Studio.
+-- Règles pures des bots (#133), testées (tests/specs/BotRules.spec.luau) : cap et regard, gêne, choix du nom et du
+-- nombre de bots demandé en Studio. Règles de navigation : NavRules.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
@@ -18,9 +18,21 @@ function BotRules.headingRotation(yawDeg: number): CFrame
 	return CFrame.Angles(0, math.rad(-yawDeg), 0)
 end
 
--- Cette méthode permet de tirer le délai avant le prochain saut lorsque le bot vient de sauter ; roll ∈ [0, 1].
-function BotRules.nextJumpDelay(roll: number): number
-	return BotConfig.WANDER_JUMP_MIN + (BotConfig.WANDER_JUMP_MAX - BotConfig.WANDER_JUMP_MIN) * roll
+-- Cette méthode permet de donner le cap (degrés, convention de la caméra FPS) d'une direction horizontale lorsque le
+-- bot doit regarder où il va ; nil pour une direction nulle.
+function BotRules.yawOf(dir: Vector3): number?
+	if dir.X * dir.X + dir.Z * dir.Z < 1e-8 then
+		return nil
+	end
+	return math.deg(math.atan2(dir.X, -dir.Z)) % 360
+end
+
+-- Cette méthode permet de tourner le regard du bot vers un cap à vitesse limitée lorsqu'il change de direction
+-- (rate en °/s), par le plus court côté.
+function BotRules.turnToward(yawDeg: number, targetDeg: number, rate: number, dt: number): number
+	local delta = (targetDeg - yawDeg + 180) % 360 - 180
+	local maxStep = rate * dt
+	return (yawDeg + math.clamp(delta, -maxStep, maxStep)) % 360
 end
 
 -- Cette méthode permet de mettre à jour le temps passé gêné lorsqu'un tick au sol est joué : il grandit tant que la
@@ -30,17 +42,6 @@ function BotRules.stuckTime(previous: number, grounded: boolean, speed: number, 
 		return 0
 	end
 	return previous + dt
-end
-
--- Cette méthode permet de savoir si le bot doit faire demi-tour lorsqu'il est gêné depuis stuck secondes.
-function BotRules.shouldTurn(stuck: number): boolean
-	return stuck >= BotConfig.STUCK_TIME
-end
-
--- Cette méthode permet de choisir le nouveau cap après un demi-tour lorsque le bot bute sur un mur ; roll ∈ [0, 1].
-function BotRules.turnedYaw(yawDeg: number, roll: number): number
-	local turn = BotConfig.TURN_MIN + (BotConfig.TURN_MAX - BotConfig.TURN_MIN) * roll
-	return (yawDeg + turn) % 360
 end
 
 -- Cette méthode permet de donner un nom à un nouveau bot lorsqu'il entre en jeu : le premier nom de la liste qui
