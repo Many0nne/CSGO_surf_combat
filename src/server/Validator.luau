@@ -1,7 +1,10 @@
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 local HitZones = require(ReplicatedStorage.Shared.HitZones)
+local Participants = require(ServerScriptService.Server.Participants)
+
+type Participant = Participants.Participant
 
 local MAX_HITSCAN_RANGE = 250 -- studs
 local MAX_MELEE_RANGE = 10 -- studs
@@ -16,22 +19,23 @@ local Validator = {}
 -- Attribut serveur de la cible immobile du helper de playtest ; les attributs posés par un client ne répliquent pas.
 Validator.DEBUG_TARGET_ATTRIBUTE = "DebugTarget"
 
--- Dernière attaque acceptée, par joueur et par arme (entrée de WeaponConfig), comme `nextFireTime` côté client.
-local lastAttacks: { [Player]: { [any]: LastAttack } } = {}
+-- Dernière attaque acceptée, par participant et par arme (entrée de WeaponConfig), comme `nextFireTime` côté client.
+local lastAttacks: { [Participant]: { [any]: LastAttack } } = {}
 
 local function getRoot(char: Model): BasePart?
 	return char:FindFirstChild("HumanoidRootPart") :: BasePart?
 end
 
--- Valid targets are real players (other than the attacker) or the playtest helper's target.
-local function isValidTarget(attacker: Player, targetCharacter: Instance): boolean
+-- Cette méthode permet de vérifier la cible d'une touche lorsqu'elle arrive : le personnage d'un autre participant
+-- (joueur ou bot) ou la cible du helper de playtest, encore en vie.
+local function isValidTarget(attacker: Participant, targetCharacter: Instance): boolean
 	if typeof(targetCharacter) ~= "Instance" then
 		return false
 	end
 
-	local targetPlayer = Players:GetPlayerFromCharacter(targetCharacter)
-	if targetPlayer then
-		if targetPlayer == attacker then
+	local target = Participants.fromCharacter(targetCharacter)
+	if target then
+		if target == attacker then
 			return false
 		end
 	elseif targetCharacter:GetAttribute(Validator.DEBUG_TARGET_ATTRIBUTE) ~= true then
@@ -44,11 +48,15 @@ end
 
 -- Cette méthode permet de vérifier ce qui est commun à toutes les attaques (cible, arme réellement en main, portée)
 -- lorsqu'une touche arrive ; elle renvoie la config de l'arme et les deux roots, ou nil si la touche est invalide.
-local function resolveAttack(attacker: Player, targetCharacter: Instance, maxRange: number): (any, BasePart?, BasePart?)
+local function resolveAttack(
+	attacker: Participant,
+	targetCharacter: Instance,
+	maxRange: number
+): (any, BasePart?, BasePart?)
 	if not isValidTarget(attacker, targetCharacter) then
 		return nil
 	end
-	local aChar = attacker.Character
+	local aChar = Participants.characterOf(attacker)
 	local tool = aChar and aChar:FindFirstChildOfClass("Tool")
 	local cfg = tool and WeaponConfig.Weapons[tool:GetAttribute("WeaponName") or tool.Name]
 	if not cfg then
@@ -68,14 +76,14 @@ local function isPartOfTarget(hitPart: any, targetCharacter: Instance): boolean
 end
 
 -- Cette méthode permet de savoir si l'arme a fini sa cadence lorsqu'une touche arrive, à la tolérance près.
-local function isCadenceReady(attacker: Player, cfg: any, now: number): boolean
+local function isCadenceReady(attacker: Participant, cfg: any, now: number): boolean
 	local playerAttacks = lastAttacks[attacker]
 	local last = playerAttacks and playerAttacks[cfg]
 	return last == nil or now - last.at >= last.delay - CADENCE_TOLERANCE
 end
 
 -- Cette méthode permet de démarrer la cadence de l'arme lorsqu'une attaque vient d'être acceptée.
-local function recordAttack(attacker: Player, cfg: any, delay: number, now: number)
+local function recordAttack(attacker: Participant, cfg: any, delay: number, now: number)
 	local playerAttacks = lastAttacks[attacker]
 	if not playerAttacks then
 		playerAttacks = {}
@@ -87,7 +95,7 @@ end
 -- Cette méthode permet de décider un tir d'arme à distance lorsque le remote arrive : elle renvoie les dégâts de l'arme
 -- réellement en main selon la zone touchée et si c'est un tir à la tête, et démarre sa cadence ; nil si le tir est refusé.
 function Validator.authorizeHitscan(
-	attacker: Player,
+	attacker: Participant,
 	targetCharacter: Instance,
 	hitPart: Instance,
 	now: number
@@ -108,7 +116,12 @@ end
 
 -- Cette méthode permet de décider un coup de mêlée lorsque le remote arrive : elle renvoie les dégâts calculés depuis
 -- WeaponConfig (backstab recalculé d'après les positions serveur) et démarre la cadence, ou nil si le coup est refusé.
-function Validator.authorizeMelee(attacker: Player, targetCharacter: Instance, attackKind: string, now: number): number?
+function Validator.authorizeMelee(
+	attacker: Participant,
+	targetCharacter: Instance,
+	attackKind: string,
+	now: number
+): number?
 	local cfg, aRoot, tRoot = resolveAttack(attacker, targetCharacter, MAX_MELEE_RANGE)
 	if not cfg or not aRoot or not tRoot then
 		return nil
@@ -123,9 +136,10 @@ function Validator.authorizeMelee(attacker: Player, targetCharacter: Instance, a
 	return if isBackstab then damage * cfg.BackstabMultiplier else damage
 end
 
--- Cette méthode permet d'oublier les cadences d'un joueur lorsqu'il réapparaît (armes neuves, comme côté client) ou s'en va.
-function Validator.forgetPlayer(player: Player)
-	lastAttacks[player] = nil
+-- Cette méthode permet d'oublier les cadences d'un participant lorsqu'il réapparaît (armes neuves, comme côté client)
+-- ou s'en va.
+function Validator.forget(participant: Participant)
+	lastAttacks[participant] = nil
 end
 
 -- Cette méthode permet de qualifier le résultat de dégâts appliqués lorsque le tireur doit en être informé :

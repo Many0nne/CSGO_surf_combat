@@ -5,6 +5,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
+local ParticipantRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ParticipantRules"))
 local UIKit = require(script.Parent.UIKit)
 local HUDRules = require(script.Parent.HUDRules)
 
@@ -24,10 +25,7 @@ local gui: ScreenGui? = nil
 local list: Frame? = nil
 local entries: { HUDRules.KillFeedEntry } = {}
 
--- Cette méthode permet d'échapper un nom de joueur avant de l'insérer dans un texte RichText.
-local function escape(text: string): string
-	return (string.gsub(string.gsub(string.gsub(text, "&", "&amp;"), "<", "&lt;"), ">", "&gt;"))
-end
+local escape = HUDRules.escapeRichText
 
 -- Cette méthode permet de composer le texte d'une ligne (en couleurs, ou brut pour l'ombre) lorsqu'elle est affichée.
 local function lineText(entry: HUDRules.KillFeedEntry, colored: boolean): string
@@ -39,12 +37,17 @@ local function lineText(entry: HUDRules.KillFeedEntry, colored: boolean): string
 		end
 		return string.format("<font%s>%s</font>", attrs, text)
 	end
+	-- Préfixe BOT atténué devant le nom d'un bot : il se lit sans prendre le pas sur le nom (décision 5 de #133)
+	local function name(text: string, isBot: boolean?): string
+		local painted = paint(escape(text), C.Bone)
+		return if isBot then paint(ParticipantRules.BOT_PREFIX, C.Muted) .. " " .. painted else painted
+	end
 	local parts = {}
 	if entry.killer then
-		table.insert(parts, paint(escape(entry.killer), C.Bone))
+		table.insert(parts, name(entry.killer, entry.killerIsBot))
 	end
 	table.insert(parts, paint(detail, C.Accent, DETAIL_SIZE))
-	table.insert(parts, paint(escape(entry.victim), C.Bone))
+	table.insert(parts, name(entry.victim, entry.victimIsBot))
 	return table.concat(parts, "   ")
 end
 
@@ -139,14 +142,16 @@ end
 
 -- Cette méthode permet d'ajouter une mort au feed lorsque PlayerDied arrive ; la ligne disparaît d'elle-même après
 -- KILL_FEED_DURATION.
-function KillFeed.add(killer: string?, victim: string, weapon: string?, headshot: boolean, mine: boolean)
+function KillFeed.add(death: HUDRules.Death)
 	local now = os.clock()
 	entries = HUDRules.pushKillFeed(entries, {
-		killer = killer,
-		victim = victim,
-		weapon = weapon,
-		headshot = headshot,
-		mine = mine,
+		killer = death.killer,
+		killerIsBot = death.killerIsBot,
+		victim = death.victim,
+		victimIsBot = death.victimIsBot,
+		weapon = death.weapon,
+		headshot = death.headshot,
+		mine = death.mine,
 		at = now,
 	}, now)
 	render()

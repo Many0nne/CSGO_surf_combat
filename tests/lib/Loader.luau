@@ -18,6 +18,12 @@ Loader.__index = Loader
 local function pathNode(path: string)
 	return setmetatable({ __path = path }, {
 		__index = function(_, name)
+			-- `X:WaitForChild("Y")` se résout comme `X.Y` : les modules sont là dès le chargement
+			if name == "WaitForChild" then
+				return function(_, child: string)
+					return pathNode(path .. "/" .. child)
+				end
+			end
 			return pathNode(path .. "/" .. name)
 		end,
 	})
@@ -32,13 +38,17 @@ local function rootNode(spec)
 	for name, child in spec do
 		node[name] = rootNode(child)
 	end
+	function node.WaitForChild(_, name: string)
+		return node[name]
+	end
 	return node
 end
 
 -- Cette méthode permet de créer un contexte de chargement isolé lorsqu'un test démarre ;
--- `services` remplace des services Roblox par des mocks (ex. Players).
-function Loader.new(services: { [string]: any }?)
-	local self = setmetatable({ cache = {}, services = services or {} }, Loader)
+-- `services` remplace des services Roblox par des mocks (ex. Players), `globals` ajoute des globales Roblox simulées
+-- (ex. un faux `task` dont le test déclenche lui-même les délais).
+function Loader.new(services: { [string]: any }?, globals: { [string]: any }?)
+	local self = setmetatable({ cache = {}, services = services or {}, globals = globals or {} }, Loader)
 	self.game = {
 		GetService = function(_, name: string)
 			if self.services[name] then
@@ -82,6 +92,9 @@ function Loader:require(target: any)
 			Color3 = roblox.Color3,
 			Enum = roblox.Enum,
 		}
+		for name, value in self.globals do
+			env[name] = value
+		end
 		local chunk = luau.load(fs.readFile(file), { debugName = file, environment = env })
 		self.cache[file] = chunk()
 	end

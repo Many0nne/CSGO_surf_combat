@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
+local ParticipantRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ParticipantRules"))
 local UIKit = require(script.Parent.UIKit)
 local HUDRules = require(script.Parent.HUDRules)
 
@@ -173,6 +174,7 @@ local function fillColumns(row: GuiObject, values: { string }, fonts: { Font }, 
 	})
 	UIKit.text({
 		Text = values[2],
+		RichText = true, -- préfixe BOT atténué devant le nom d'un bot
 		FontFace = fonts[2],
 		TextSize = size,
 		TextColor3 = colors[2],
@@ -581,6 +583,19 @@ end
 
 type Score = HUDRules.Score
 
+-- Cette méthode permet de composer le nom d'une ligne du classement lorsqu'il est reconstruit : « (toi) » pour le joueur
+-- local, préfixe BOT atténué pour un bot (décision 5 de #133) ; le nom est échappé pour le RichText.
+local function scoreName(score: Score, isMe: boolean): string
+	local name = HUDRules.escapeRichText(score.name)
+	if isMe then
+		return name .. "  (toi)"
+	end
+	if score.isBot then
+		return string.format('<font color="#%s">%s</font> %s', C.Muted:ToHex(), ParticipantRules.BOT_PREFIX, name)
+	end
+	return name
+end
+
 function RoundHUD.updateScores(scores: { [number]: Score })
 	if not leaderboardList then
 		return
@@ -597,7 +612,7 @@ function RoundHUD.updateScores(scores: { [number]: Score })
 	rankShadow.Text = rankText
 
 	for i, score in sorted do
-		local isMe = score.name == localName
+		local isMe = not score.isBot and score.name == localName
 		local row = UIKit.frame({
 			Name = "Row" .. i,
 			BackgroundTransparency = 1,
@@ -635,7 +650,7 @@ function RoundHUD.updateScores(scores: { [number]: Score })
 		local statColor = isMe and C.Bone or C.Muted
 		fillColumns(content, {
 			tostring(i),
-			isMe and (score.name .. "  (toi)") or score.name,
+			scoreName(score, isMe),
 			tostring(score.kills),
 			tostring(score.deaths),
 			HUDRules.formatKD(score.kills, score.deaths),

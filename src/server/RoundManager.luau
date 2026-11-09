@@ -1,12 +1,17 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local MemoryTracker = require(ReplicatedStorage.Shared.MemoryTracker)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
+local ParticipantRules = require(ReplicatedStorage.Shared.ParticipantRules)
+local Participants = require(ServerScriptService.Server.Participants)
 
-type Score = { name: string, kills: number, deaths: number, firstKillTick: number }
+type Participant = Participants.Participant
+-- Score d'un participant (joueur ou bot), envoyé tel quel aux clients (classement, préfixe BOT)
+type Score = { name: string, isBot: boolean, kills: number, deaths: number, firstKillTick: number }
 -- Dernier coup reçu par une victime : tueur crédité, arme et tir à la tête affichés à la mort (#102)
 type LastHit = { attackerId: number, weapon: string?, headshot: boolean }
 
@@ -14,8 +19,8 @@ local RoundManager = {}
 
 local state = "idle" -- "idle" | "active" | "result"
 local timeLeft = 0
-local scores: { [number]: Score } = {} -- keyed by UserId
-local lastAttacker: { [number]: LastHit } = {} -- victim id → dernier coup reçu
+local scores: { [number]: Score } = {} -- par id de participant
+local lastAttacker: { [number]: LastHit } = {} -- id de la victime → dernier coup reçu
 
 local roundStateRmt: RemoteEvent
 local scoreUpdateRmt: RemoteEvent
@@ -34,10 +39,10 @@ local function broadcastScores()
 	scoreUpdateRmt:FireAllClients(scores)
 end
 
-local function ensureScore(player: Player): Score
-	local id = player.UserId
+local function ensureScore(participant: Participant): Score
+	local id = participant.id
 	if not scores[id] then
-		scores[id] = { name = player.Name, kills = 0, deaths = 0, firstKillTick = 0 }
+		scores[id] = { name = participant.name, isBot = participant.isBot, kills = 0, deaths = 0, firstKillTick = 0 }
 		broadcastScores()
 	end
 	return scores[id]
@@ -57,7 +62,7 @@ local function computeWinner(): string
 			bestKills = score.kills
 			bestDeaths = score.deaths
 			bestTick = score.firstKillTick
-			bestName = score.name
+			bestName = ParticipantRules.displayName(score.name, score.isBot)
 		end
 	end
 	return bestName
@@ -75,10 +80,11 @@ local function endRound()
 	local winnerName = computeWinner()
 	roundResultRmt:FireAllClients({ winnerName = winnerName, scores = scores })
 
-	-- Destroy all characters so clients return to lobby state
-	for _, player in Players:GetPlayers() do
-		if player.Character then
-			player.Character:Destroy()
+	-- Personnages détruits (joueurs et bots) : les clients repassent par le menu
+	for _, participant in Participants.all() do
+		local character = Participants.characterOf(participant)
+		if character then
+			character:Destroy()
 		end
 	end
 
@@ -131,23 +137,22 @@ end
 
 -- Cette méthode permet de retenir le dernier coup porté à une victime (tireur, arme, tir à la tête) lorsqu'une touche
 -- est validée ; c'est lui qui désigne le tueur à la mort.
-function RoundManager.recordDamage(attacker: Player, victim: Player, weapon: string?, headshot: boolean?)
+function RoundManager.recordDamage(attacker: Participant, victim: Participant, weapon: string?, headshot: boolean?)
 	if victim and attacker ~= victim then
-		lastAttacker[victim.UserId] = { attackerId = attacker.UserId, weapon = weapon, headshot = headshot == true }
+		lastAttacker[victim.id] = { attackerId = attacker.id, weapon = weapon, headshot = headshot == true }
 	end
 end
 
--- Cette méthode permet de lire la position de la racine d'un joueur lorsqu'on décrit sa mort (nil sans personnage).
-local function rootPosition(player: Player?): Vector3?
-	local char = player and player.Character
+-- Cette méthode permet de lire la position de la racine d'un participant lorsqu'on décrit sa mort (nil sans personnage).
+local function rootPosition(participant: Participant?): Vector3?
+	local char = participant and Participants.characterOf(participant)
 	local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
 	return root and root.Position
 end
 
 -- Cette méthode permet d'annoncer une mort à tous les clients (écran du tué, kill feed, corps) lorsqu'elle est comptée ;
--- direction = du tueur vers la victime, pour pousser le corps dans le sens du tir.
-local function announceDeath(victim: Player, hit: LastHit?)
-	local killer = hit and Players:GetPlayerByUserId(hit.attackerId)
+-- noms et drapeaux bot inclus, le client ne trouvant pas de Player pour un bot ; direction = du tueur vers la victime.
+local function announceDeath(victim: Participant, hit: LastHit?, killer: Participant?)
 	local position = rootPosition(victim)
 	local killerPos = rootPosition(killer)
 	local direction = nil
@@ -155,8 +160,12 @@ local function announceDeath(victim: Player, hit: LastHit?)
 		direction = (position - killerPos).Unit
 	end
 	playerDiedRmt:FireAllClients({
-		victimId = victim.UserId,
-		killerId = hit and hit.attackerId,
+		victimId = victim.id,
+		victimName = victim.name,
+		victimIsBot = victim.isBot,
+		killerId = killer and killer.id,
+		killerName = killer and killer.name,
+		killerIsBot = killer ~= nil and killer.isBot,
 		weapon = hit and hit.weapon,
 		headshot = hit ~= nil and hit.headshot,
 		position = position,
@@ -164,59 +173,66 @@ local function announceDeath(victim: Player, hit: LastHit?)
 	})
 end
 
--- Cette méthode permet de compter la mort d'un joueur et le kill de son dernier attaquant lorsqu'un round est actif.
-local function recordDeath(victim: Player)
+-- Cette méthode permet de compter la mort d'un participant et le kill de son dernier attaquant lorsqu'un round est
+-- actif ; elle renvoie le tueur crédité (nil pour une chute, ou un tueur parti depuis).
+local function recordDeath(victim: Participant): Participant?
 	if state ~= "active" then
-		return
+		return nil
 	end
 
-	local victimId = victim.UserId
+	local victimId = victim.id
 	local victimScore = scores[victimId]
 	if not victimScore then
-		return
+		return nil
 	end
 	victimScore.deaths += 1
 
 	local hit = lastAttacker[victimId]
 	lastAttacker[victimId] = nil
-	local attackerId = hit and hit.attackerId
+	local killer = if hit and hit.attackerId ~= victimId then Participants.get(hit.attackerId) else nil
 
-	if attackerId and attackerId ~= victimId then
-		local as = scores[attackerId]
+	if killer then
+		local as = scores[killer.id]
 		if as then
 			as.kills += 1
 			if as.firstKillTick == 0 then
-				as.firstKillTick = tick()
+				as.firstKillTick = os.clock()
 			end
 		end
 	end
 
 	broadcastScores()
-	announceDeath(victim, hit)
+	announceDeath(victim, hit, killer)
+	return killer
 end
 
--- Handles a player's death and schedules their respawn.
-function RoundManager.onCharacterDied(victim: Player, spawnFn: (Player) -> ())
+-- Cette méthode permet de compter la mort d'un participant et de programmer sa réapparition lorsqu'il meurt ; elle
+-- renvoie le tueur crédité, pour décider si la mort compte dans les stats persistantes (ParticipantRules.countsInStats).
+function RoundManager.onCharacterDied(victim: Participant, respawn: () -> ()): Participant?
 	ensureScore(victim)
-	recordDeath(victim)
+	local killer = recordDeath(victim)
 
 	task.delay(GameConfig.RESPAWN_DELAY, function()
-		if state == "active" and victim.Parent then
-			spawnFn(victim)
+		if state == "active" and Participants.isRegistered(victim) then
+			respawn()
 		end
 	end)
+	return killer
 end
 
--- ── player lifecycle ───────────────────────────────────────────────────────
+-- ── participant lifecycle ──────────────────────────────────────────────────
 
-function RoundManager.addPlayer(player: Player)
-	ensureScore(player)
+-- Cette méthode permet d'inscrire un participant (joueur ou bot) au classement lorsqu'il entre dans le jeu.
+function RoundManager.addParticipant(participant: Participant)
+	ensureScore(participant)
 	broadcastScores()
 end
 
-function RoundManager.removePlayer(player: Player)
-	scores[player.UserId] = nil
-	lastAttacker[player.UserId] = nil
+-- Cette méthode permet de retirer un participant du classement lorsqu'il quitte le jeu ; le round s'arrête quand il
+-- ne reste plus aucun joueur (des bots seuls ne le font pas durer).
+function RoundManager.removeParticipant(participant: Participant)
+	scores[participant.id] = nil
+	lastAttacker[participant.id] = nil
 	broadcastScores()
 	if state == "active" and #Players:GetPlayers() == 0 then
 		if timerConn then

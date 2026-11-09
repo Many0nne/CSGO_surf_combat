@@ -5,6 +5,7 @@ local UserInputService = game:GetService("UserInputService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local NetworkProtocol = require(Shared:WaitForChild("NetworkProtocol"))
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local ParticipantRules = require(Shared:WaitForChild("ParticipantRules"))
 
 local MainMenu = require(script.Parent.Parent.Parent.ui.MainMenu)
 local InfosScreen = require(script.Parent.Parent.Parent.ui.InfosScreen)
@@ -157,30 +158,30 @@ end
 
 -- ── Remotes serveur ────────────────────────────────────────────────────────
 
--- Cette méthode permet de montrer une mort lorsque le serveur l'annonce (data : victimId, killerId?, weapon?,
--- headshot, direction?) : ragdoll et ligne de kill feed en partie, écran de mort et caméra si c'est le joueur local.
+-- Cette méthode permet de montrer une mort lorsque le serveur l'annonce (HUDRules.readDeath) : ligne de kill feed et
+-- ragdoll en partie, écran de mort et caméra si c'est le joueur local. Tueur ou victime bot : pas de Player, le corps et
+-- la caméra vers un bot viendront avec le bot lui-même (#139).
 local function onPlayerDied(data: any)
-	if type(data) ~= "table" or type(data.victimId) ~= "number" then
-		return
-	end
+	local death = HUDRules.readDeath(data, localPlayer.UserId)
 	-- Hors partie (menu, spawn), rien à montrer
-	if not HUDRules.killFeedVisible(state) then
+	if not death or not HUDRules.killFeedVisible(state) then
 		return
 	end
-	local victim = Players:GetPlayerByUserId(data.victimId)
-	local killer = if type(data.killerId) == "number" then Players:GetPlayerByUserId(data.killerId) else nil
-	local weapon = if type(data.weapon) == "string" then data.weapon else nil
-	local headshot = data.headshot == true
-	local direction = if typeof(data.direction) == "Vector3" then data.direction else nil
-	local me = localPlayer.UserId
+	local victim = if death.victimIsBot then nil else Players:GetPlayerByUserId(death.victimId)
+	local killer = if death.killerId and not death.killerIsBot then Players:GetPlayerByUserId(death.killerId) else nil
 
 	if victim then
-		DeathRagdoll.spawn(victim, direction, weapon, headshot)
-		KillFeed.add(killer and killer.Name, victim.Name, weapon, headshot, data.victimId == me or data.killerId == me)
+		DeathRagdoll.spawn(victim, death.direction, death.weapon, death.headshot)
 	end
+	KillFeed.add(death)
 
-	if data.victimId == me then
-		lastDeath = { killer = killer and killer.Name, weapon = weapon, headshot = headshot, at = os.clock() }
+	if victim == localPlayer then
+		lastDeath = {
+			killer = death.killer and ParticipantRules.displayName(death.killer, death.killerIsBot),
+			weapon = death.weapon,
+			headshot = death.headshot,
+			at = os.clock(),
+		}
 		applyDeathInfo()
 		DeathCamera.start(killer)
 	end
