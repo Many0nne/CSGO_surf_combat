@@ -59,18 +59,19 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/client/systems/network/CharacterSync.luau`: envoi de la position du personnage local (appelé par `MovementController`) et affichage des autres joueurs à leur position relayée, interpolée (rendu, priorité `Camera - 2`).
 - `src/client/systems/movement/BoostSystem.luau`: boosts de la map (geysers, lanceurs, portiques de `Maps.Map.Boosts`) détectés à chaque frame, avec recharge par boost.
 - `src/client/systems/movement/BhopSystem.luau`: implémentation du bunnyhop (saut en chaîne).
-- `src/client/systems/movement/CharacterDimensions.luau`: calcule les dimensions du personnage et les hitboxes debout/accroupi.
+- `src/shared/movement/CharacterDimensions.luau`: calcule les dimensions du personnage et les hitboxes debout/accroupi.
 - `src/client/systems/movement/CoyoteJump.luau`: gestion du "coyote time" pour les sauts.
 - `src/client/systems/movement/CrouchSystem.luau`: logique de position accroupie, hauteur caméra et hitbox.
-- `src/client/systems/movement/GroundDetection.luau`: détection du sol et transitions air/sol (un muret plus bas que le centre du corps n'est pas pris pour le sol : `PhysicsUtils.isSideContact`).
+- `src/shared/movement/GroundDetection.luau`: détection du sol et transitions air/sol (un muret plus bas que le centre du corps n'est pas pris pour le sol : `PhysicsUtils.isSideContact`).
 - `src/client/systems/movement/LadderSystem.luau`: échelles de la map (volumes de `Maps.Map.Ladders`) détectées à chaque frame ; `MovementController` y remplace la physique sol/air par la grimpe.
-- `src/client/systems/movement/HeadCollisionResolver.luau`: résolution des collisions tête (plafond, mur haut) lors du déplacement.
+- `src/shared/movement/HeadCollisionResolver.luau`: résolution des collisions tête (plafond, mur haut) lors du déplacement.
 - `src/client/systems/movement/MovementController.luau`: orchestrateur principal du mouvement (boucle sur le rendu, priorité `Camera - 1`, physique en ticks fixes de 64 Hz par `StepTiming`, position affichée interpolée entre les deux derniers ticks ; transitions d'état) ; `getVelocity()` et `getStepStats()` exposent la vitesse du dernier pas et les pas simulés (lus par la sonde de saccades).
+- Piège `src/shared/movement/` (#138) : `WallSlide`, `GroundDetection`, `StepupSystem`, `HeadCollisionResolver`, `CharacterDimensions` gardent l'état d'UN seul personnage au niveau du module (`init(char)`), et filtrent `workspace.CurrentCamera` (nil côté serveur). Les bots devront les rendre par instance avant de les utiliser à plusieurs ; `WallSlide.init` parente aussi une sonde `penProbe` dans `workspace`.
 - `src/client/systems/movement/PhysicsStepAir.luau`: étape physique aérienne (air accelerate Source + cap `AIR_SPEED_CAP`).
-- `src/client/systems/movement/PhysicsStepGround.luau`: étape physique pour l'état au sol.
-- `src/client/systems/movement/SlopeSystem.luau`: gestion des pentes et adaptation du mouvement.
-- `src/client/systems/movement/StepupSystem.luau`: logique pour monter sur de petits obstacles.
-- `src/client/systems/movement/WallSlide.luau`: glisse le long des murs/rampe avec conservation de normale surf si on avance vers la rampe.
+- `src/shared/movement/PhysicsStepGround.luau`: étape physique pour l'état au sol. Tout `src/shared/movement/` (pas de sol et ses dépendances) est partagé client/serveur, pour que les futurs bots bougent comme les joueurs (#138) ; le surf (`PhysicsStepAir`) reste côté client.
+- `src/shared/movement/SlopeSystem.luau`: gestion des pentes et adaptation du mouvement.
+- `src/shared/movement/StepupSystem.luau`: logique pour monter sur de petits obstacles.
+- `src/shared/movement/WallSlide.luau`: glisse le long des murs/rampe avec conservation de normale surf si on avance vers la rampe.
 - `src/client/systems/weapon/AnimationSoundSystem.luau`: gestion des marqueurs sons sur les AnimationTracks.
 - `src/client/systems/weapon/HitscanSystem.luau`: raycast des armes à distance, traceur du tir et signalement de la touche au serveur.
 - `src/client/systems/weapon/MeleeHitDetection.luau`: raycast melee et signalement de la touche au serveur (type d'attaque, les dégâts sont calculés côté serveur).

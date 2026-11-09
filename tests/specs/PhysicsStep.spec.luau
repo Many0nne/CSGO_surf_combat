@@ -1,7 +1,7 @@
 return function(T, Loader)
 	local loader = Loader.new()
 	local Config = loader:require("src/shared/MovementConfig")
-	local Ground = loader:require("src/client/systems/movement/PhysicsStepGround")
+	local Ground = loader:require("src/shared/movement/PhysicsStepGround")
 	local Air = loader:require("src/client/systems/movement/PhysicsStepAir")
 	local DT = 1 / 60
 

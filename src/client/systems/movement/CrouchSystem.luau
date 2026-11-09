@@ -1,7 +1,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
-local CharacterDimensions = require(script.Parent.CharacterDimensions)
+local CharacterDimensions = require(ReplicatedStorage.Shared.movement.CharacterDimensions)
 local InputModule = require(script.Parent.Parent.Parent.input.InputModule)
 
 local STAND_HALF = 0

@@ -55,7 +55,7 @@ local WallSlide = {}
 
 function WallSlide.init(character: Model)
 	castParams.FilterDescendantsInstances = { character, workspace.CurrentCamera }
-	penOP.FilterDescendantsInstances = { character, workspace.CurrentCamera, penProbe }
+	penOP.FilterDescendantsInstances = { character, penProbe, workspace.CurrentCamera }
 	penProbe.Parent = workspace
 end
 
