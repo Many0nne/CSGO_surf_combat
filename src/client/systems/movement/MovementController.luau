@@ -1,13 +1,7 @@
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local HeadCollisionResolver = require(ReplicatedStorage.Shared.movement.HeadCollisionResolver)
-local GroundDetection = require(ReplicatedStorage.Shared.movement.GroundDetection)
-local PhysicsStepGround = require(ReplicatedStorage.Shared.movement.PhysicsStepGround)
-local PhysicsStepAir = require(script.Parent.PhysicsStepAir)
-local StepupSystem = require(ReplicatedStorage.Shared.movement.StepupSystem)
-local WallSlide = require(ReplicatedStorage.Shared.movement.WallSlide)
-local SlopeSystem = require(ReplicatedStorage.Shared.movement.SlopeSystem)
+local CharacterMotor = require(ReplicatedStorage.Shared.movement.CharacterMotor)
 local CoyoteJump = require(script.Parent.CoyoteJump)
 local BhopSystem = require(script.Parent.BhopSystem)
 local CrouchSystem = require(script.Parent.CrouchSystem)
@@ -18,19 +12,14 @@ local CharacterSync = require(script.Parent.Parent.network.CharacterSync)
 local InputModule = require(script.Parent.Parent.Parent.input.InputModule)
 local PhysicsUtils = require(ReplicatedStorage.Shared.PhysicsUtils)
 local Config = require(ReplicatedStorage.Shared.MovementConfig)
-local MovementState = require(ReplicatedStorage.Shared.MovementState)
 local SpawnLaunch = require(ReplicatedStorage.Shared.SpawnLaunch)
 local LadderRules = require(ReplicatedStorage.Shared.LadderRules)
 local CharacterAnimator = require(ReplicatedStorage.Shared.CharacterAnimator)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local StepTiming = require(ReplicatedStorage.Shared.StepTiming)
 
-local JUMP_LOCKOUT = 0.15 -- empêche re-grounding immédiat après un saut
 -- Boucle de mouvement, sur le rendu juste avant la caméra (cf. docs/performance.md, « Rythme du mouvement »)
 local BIND_NAME = "MovementStep"
-
-local slideParams = RaycastParams.new()
-slideParams.FilterType = Enum.RaycastFilterType.Exclude
 
 local MovementController = {}
 
@@ -50,21 +39,13 @@ function MovementController.getStepStats(): (number, number)
 end
 
 function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, speedometer, camera)
-	local velocity = Vector3.zero
-	local state = MovementState.GROUNDED
-	local jumpLockout = 0
-	local surfNormal: Vector3? = nil -- normale de la rampe surf en contact (nil si aucune)
+	-- Physique et collisions communes avec les bots (#139) ; la racine est écrite à chaque tick (échelles, boosts et
+	-- accroupi lisent hrp.Position)
+	local motor = CharacterMotor.new(char, hrp, true)
 	local hitboxLogged = false
-	local lastSafePos = hrp.Position
 	-- Animations 3e personne : jouées sur l'Animator du personnage local, donc répliquées aux autres clients.
 	local charAnimator = CharacterAnimator.new(hum)
-	CrouchSystem.init(hrp)
-	HeadCollisionResolver.init(char)
-
-	CrouchSystem.init(hrp)
-	HeadCollisionResolver.init(char)
-	GroundDetection.init(char)
-	WallSlide.init(char)
+	CrouchSystem.init(hrp, motor.dims)
 	BoostSystem.init()
 	LadderSystem.init()
 	local ladderRegrab = 0 -- délai avant de pouvoir reprendre une échelle après en avoir sauté
@@ -75,9 +56,6 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 	local ownCFrame: CFrame? = nil
 	local prevCFrame: CFrame? = nil
 	local tickAccumulator = 0 -- temps rendu pas encore simulé (< un tick)
-	slideParams.FilterDescendantsInstances = { char, workspace.CurrentCamera }
-
-	local wasGrounded = false
 
 	-- Lancement depuis le soleil (#69) : le serveur pose l'origine puis la vitesse sur le personnage.
 	local launched = false
@@ -90,15 +68,12 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 			return
 		end
 		launched = true
-		hrp.CFrame = CFrame.new(origin) * hrp.CFrame.Rotation
+		motor:teleport(CFrame.new(origin) * hrp.CFrame.Rotation)
 		-- Téléportation : pas d'interpolation depuis l'ancienne position (sinon traînée d'une frame vers le soleil)
 		ownCFrame = hrp.CFrame
 		prevCFrame = hrp.CFrame
-		lastSafePos = origin
-		velocity = launchVelocity
-		state = MovementState.AIRBORNE
-		surfNormal = nil
-		jumpLockout = JUMP_LOCKOUT
+		motor.velocity = launchVelocity
+		motor:setAirborne()
 		if camera and camera.setAngles and launchVelocity.Magnitude > 1e-3 then
 			camera.setAngles(SpawnLaunch.cameraAngles(launchVelocity))
 		end
@@ -109,11 +84,10 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 	-- Cette méthode permet d'avancer le personnage d'un tick fixe de durée dt lorsque la boucle de rendu a accumulé
 	-- assez de temps (0, 1 ou plusieurs ticks par frame selon le FPS : cf. StepTiming).
 	local function step(dt: number)
-		jumpLockout = math.max(0, jumpLockout - dt)
 		ladderRegrab = math.max(0, ladderRegrab - dt)
 
 		-- 1. Détection sol
-		local gnd = GroundDetection.getGroundInfo(hrp, velocity.Y, wasGrounded)
+		local gnd = motor:beginTick(dt)
 
 		-- 2. Crouch (avant transitions d'état pour connaître halfHeight)
 		local crouchInfo = CrouchSystem.update(dt)
@@ -125,20 +99,7 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 		end
 
 		-- 3. Transitions d'état
-		local isOnGround = gnd.onGround and jumpLockout <= 0
-		if isOnGround then
-			if state == MovementState.AIRBORNE or state == MovementState.CROUCHING then
-				velocity = Vector3.new(velocity.X, 0, velocity.Z)
-				surfNormal = nil
-			end
-			state = crouchInfo.isCrouching and MovementState.CROUCHING or MovementState.GROUNDED
-		elseif not gnd.onGround then
-			state = crouchInfo.isCrouching and MovementState.CROUCHING or MovementState.AIRBORNE
-		end
-		-- gnd.onGround=true mais jumpLockout>0 → state reste AIRBORNE/CROUCHING
-
-		local isGroundedState = state == MovementState.GROUNDED or (state == MovementState.CROUCHING and isOnGround)
-		local isAirborneState = state == MovementState.AIRBORNE or (state == MovementState.CROUCHING and not isOnGround)
+		local _, isGroundedState, isAirborneState = motor:updateState(gnd, crouchInfo.isCrouching)
 
 		-- 4. Saut (coyote + buffer + normal) — consomme isJumpPressed() en interne
 		local shouldJump = CoyoteJump.update(gnd.onGround, dt)
@@ -162,7 +123,7 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 		local ladderNormal = if ladderRegrab <= 0 then LadderSystem.find(hrp.Position) else nil
 		if ladderNormal then
 			if shouldJump then
-				velocity = LadderRules.jumpOffVelocity(ladderNormal, Config.LADDER_JUMP_OFF)
+				motor.velocity = LadderRules.jumpOffVelocity(ladderNormal, Config.LADDER_JUMP_OFF)
 				ladderRegrab = Config.LADDER_REGRAB
 				onLadder = true
 			else
@@ -171,56 +132,33 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 				local climbSpeed = Config.LADDER_CLIMB_SPEED * wishspeed / Config.RUN_SPEED
 				local climb = LadderRules.climbVelocity(wish3D, ladderNormal, climbSpeed, gnd.onGround)
 				if not (gnd.onGround and climb.Y <= 0) then
-					velocity = climb
+					motor.velocity = climb
 					onLadder = true
 				end
 			end
 			if onLadder then
-				state = MovementState.AIRBORNE
-				surfNormal = nil
-				jumpLockout = JUMP_LOCKOUT
+				motor:setAirborne()
 				isGroundedState = false
 				isAirborneState = true
 			end
 		end
 
-		-- 7. Physique
-		local velXZ = PhysicsUtils.getXZ(velocity)
+		-- 7. Physique ; sur une échelle, la vitesse est déjà posée (6b) : ni friction, ni gravité, ni saut normal
 		local willJump = false -- saut effectif ce tick (visible jusqu'au déplacement étape 8)
-
-		-- sur une échelle, la vitesse est déjà posée (6b) : ni friction, ni gravité, ni saut normal
 		if isGroundedState then
-			local projWishdir = gnd.slopeAngle > 1 and SlopeSystem.projectWishDir(wishdir, gnd.normal) or wishdir
-
 			local bhop = BhopSystem.update(gnd.onGround, shouldJump, dt)
-
-			if bhop.skipFriction then
-				velXZ = PhysicsUtils.accelerate(velXZ, projWishdir, wishspeed, Config.GROUND_ACCEL, dt)
-			else
-				velXZ = PhysicsStepGround.step(velXZ, projWishdir, wishspeed, dt)
-			end
-			velocity = PhysicsUtils.setXZ(velocity, velXZ)
-
-			willJump = shouldJump or bhop.forceJump
-			if willJump then
-				velocity = Vector3.new(velocity.X, Config.JUMP_VELOCITY, velocity.Z)
-				jumpLockout = JUMP_LOCKOUT
-				state = crouchInfo.isCrouching and MovementState.CROUCHING or MovementState.AIRBORNE
-			else
-				velocity = Vector3.new(velocity.X, 0, velocity.Z)
-			end
+			willJump = motor:groundPhysics(
+				gnd,
+				wishdir,
+				wishspeed,
+				dt,
+				shouldJump or bhop.forceJump,
+				bhop.skipFriction,
+				crouchInfo.isCrouching
+			)
 		elseif isAirborneState and not onLadder then
-			-- StartGravity : demi-pas avant déplacement (schéma leapfrog Source)
-			velocity += Vector3.new(0, Config.GRAVITY * 0.5 * dt, 0)
-			-- AirAccelerate Source (velocity 3D, surfaceFriction selon contact rampe)
-			local surfFric = surfNormal and Config.SURF_FRICTION or 1.0
-			velocity = PhysicsStepAir.step(velocity, wishdir, wishspeed, surfFric, dt)
 			-- Coyote jump : Space pressé dans la fenêtre coyote
-			if shouldJump then
-				velocity = Vector3.new(velocity.X, Config.JUMP_VELOCITY, velocity.Z)
-				jumpLockout = JUMP_LOCKOUT
-				surfNormal = nil
-			end
+			motor:airPhysics(wishdir, wishspeed, dt, shouldJump)
 		end
 
 		-- 8. Déplacer le character
@@ -228,141 +166,21 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 		if camera and camera.getCameraYaw then
 			targetRot = CFrame.Angles(0, math.rad(-camera.getCameraYaw()), 0)
 		end
-		if isGroundedState then
-			local snapY = gnd.hitPosition.Y + crouchInfo.rootToBottom
-			local moveVec = Vector3.new(velocity.X * dt, 0, velocity.Z * dt)
-
-			local stepYOffset, wallNormal, slideNormal = StepupSystem.tryStepup(hrp, moveVec)
-
-			if slideNormal then
-				-- Ignorer si c'est la pente sur laquelle on se tient déjà (snapY gère le Y).
-				-- Clipper uniquement pour les jointures / angles inattendus.
-				local isCurrentGround = gnd.normal and slideNormal:Dot(gnd.normal) > 0.9
-				if not isCurrentGround and not willJump then -- en bhop la rampe marchable ne mange pas la vitesse
-					local d = velocity:Dot(slideNormal)
-					if d < 0 then
-						velocity = velocity - slideNormal * d
-					end
-					moveVec = Vector3.new(velocity.X * dt, 0, velocity.Z * dt)
-				end
-			elseif wallNormal and not stepYOffset then
-				-- Vrai mur, stepup impossible → projeter la velocity sur le mur.
-				local velXZ2 = PhysicsUtils.projectOnPlane(PhysicsUtils.getXZ(velocity), wallNormal)
-				velocity = PhysicsUtils.setXZ(velocity, velXZ2)
-				moveVec = Vector3.new(velocity.X * dt, 0, velocity.Z * dt)
-			end
-
-			local targetY = stepYOffset and (hrp.Position.Y + stepYOffset) or snapY
-			local newPos = Vector3.new(hrp.Position.X + moveVec.X, targetY, hrp.Position.Z + moveVec.Z)
-
-			-- Re-snap Y au sol à la DESTINATION : suit la rampe à la jointure plat→pente.
-			-- Sans ça, à grande vitesse le déplacement XZ dépasse là où la rampe monte alors que
-			-- le Y reste au niveau du sol actuel → on s'enfonce dans la pente → blocage/rollback
-			-- en bhop. On ne fait MONTER que vers une surface marchable (jamais tomber dans un trou).
-			if not stepYOffset and moveVec.Magnitude > 1e-3 then
-				local up = Config.STEPUP_HEIGHT
-				local org = Vector3.new(newPos.X, hrp.Position.Y + up, newPos.Z)
-				local down = Vector3.new(0, -(up + crouchInfo.rootToBottom + 0.6), 0)
-				local destHit = workspace:Spherecast(org, crouchInfo.radius * 0.9, down, slideParams)
-				if destHit and destHit.Normal.Y >= Config.SURF_NORMAL_Y then
-					local destSnapY = destHit.Position.Y + crouchInfo.rootToBottom
-					if destSnapY > targetY then
-						targetY = destSnapY
-						newPos = Vector3.new(newPos.X, targetY, newPos.Z)
-					end
-				end
-			end
-
-			local headMoveVec =
-				Vector3.new(newPos.X - hrp.Position.X, newPos.Y - hrp.Position.Y, newPos.Z - hrp.Position.Z)
-			local clippedHead, headBlocked = HeadCollisionResolver.resolve(headMoveVec, hrp.Position, crouchInfo)
-			if headBlocked then
-				newPos = hrp.Position + clippedHead
-				if math.abs(clippedHead.Y - headMoveVec.Y) > 1e-3 then
-					velocity = Vector3.new(velocity.X, 0, velocity.Z)
-				end
-			end
-
-			-- StepupSystem gère déjà la détection de murs (wallNormal) en grounded.
-			-- commitMove causerait des faux positifs sur les pentes (hull cast diagonal → slope face).
-			hrp.CFrame = CFrame.new(newPos) * targetRot
-			if not WallSlide.penInfo(newPos, crouchInfo) then
-				lastSafePos = newPos
-			end
-		elseif isAirborneState then
-			-- Wallslide + surf via ClipVelocity (multi-pass + probe maintien de contact)
-			local sBefore = PhysicsUtils.getXZ(velocity).Magnitude
-			local newVel, moveVec, hitNormal, stepped = WallSlide.resolve(hrp, velocity, dt, surfNormal, crouchInfo)
-			velocity = newVel
-			local sResolve = PhysicsUtils.getXZ(velocity).Magnitude
-			local candidate = hrp.Position + moveVec
-			if stepped then
-				-- Rebord enjambé en l'air : commitMove re-clipperait la face verticale, on l'évite.
-				candidate = WallSlide.ejectUp(candidate, lastSafePos, crouchInfo)
-			else
-				candidate, velocity = WallSlide.commitMove(lastSafePos, candidate, velocity, crouchInfo)
-			end
-			if Config.MOVE_DEBUG then
-				local sCommit = PhysicsUtils.getXZ(velocity).Magnitude
-				local pen = WallSlide.penInfo(candidate, crouchInfo) ~= nil
-				print(
-					string.format(
-						"[AIR] pos=%s velY=%.0f xz: before=%.0f afterResolve=%.0f afterCommit=%.0f disp=%.2f stepped=%s surf=%s pen=%s",
-						tostring(hrp.Position),
-						velocity.Y,
-						sBefore,
-						sResolve,
-						sCommit,
-						moveVec.Magnitude,
-						tostring(stepped),
-						surfNormal and ("Y" .. string.format("%.2f", surfNormal.Y)) or "nil",
-						tostring(pen)
-					)
-				)
-			end
-			hrp.CFrame = CFrame.new(candidate) * targetRot
-			if not WallSlide.penInfo(candidate, crouchInfo) then
-				lastSafePos = candidate
-			end
-
-			-- FinishGravity : demi-pas après déplacement (schéma leapfrog Source), sauf sur une échelle
-			if not onLadder then
-				velocity += Vector3.new(0, Config.GRAVITY * 0.5 * dt, 0)
-			end
-			-- Clamp fall speed uniquement hors surf
-			if not surfNormal and velocity.Y < -Config.MAX_FALL_SPEED then
-				velocity = Vector3.new(velocity.X, -Config.MAX_FALL_SPEED, velocity.Z)
-			end
-
-			-- Mise à jour de la surf normale persistante : UNIQUEMENT les vraies rampes surf
-			-- (SURF_NORMAL_MIN <= Y < SURF_NORMAL_Y). Une face quasi verticale (Y < MIN) est un MUR,
-			-- pas du surf : la stocker désactiverait à tort le clamp de chute et changerait la friction.
-			if
-				not onLadder
-				and hitNormal
-				and hitNormal.Y >= Config.SURF_NORMAL_MIN
-				and hitNormal.Y < Config.SURF_NORMAL_Y
-			then
-				surfNormal = hitNormal
-			else
-				surfNormal = nil
-			end
-		end
+		motor:move(gnd, dt, crouchInfo, targetRot, isGroundedState, isAirborneState, willJump, onLadder)
 
 		-- 8b. Boosts de la map (geyser, lanceur, portique) : un geyser ou un lanceur remet le joueur en l'air
-		local boosted, boostKind = BoostSystem.check(hrp.Position, velocity, os.clock())
+		local boosted, boostKind = BoostSystem.check(hrp.Position, motor.velocity, os.clock())
 		if boosted then
-			velocity = boosted
+			motor.velocity = boosted
 			if boostKind ~= "Portal" then
-				state = MovementState.AIRBORNE
-				surfNormal = nil
-				jumpLockout = JUMP_LOCKOUT
+				motor:setAirborne()
 				isGroundedState = false
 				isAirborneState = true
 			end
 		end
 
 		-- 9. Speedometer
+		local velocity = motor.velocity
 		lastVelocity = velocity
 		local spd = PhysicsUtils.getXZ(velocity).Magnitude
 
@@ -374,12 +192,12 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 		charAnimator:update({
 			onGround = isGroundedState,
 			crouching = crouchInfo.isCrouching,
-			surfing = isAirborneState and surfNormal ~= nil,
+			surfing = isAirborneState and motor.surfNormal ~= nil,
 			speed = spd,
 			verticalSpeed = velocity.Y,
 		})
 
-		wasGrounded = isGroundedState
+		motor:endTick(isGroundedState)
 		stepCount += 1
 		simulatedTime += dt
 	end
@@ -400,6 +218,7 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 			if ownCFrame and hrp.CFrame ~= ownCFrame then
 				hrp.CFrame = ownCFrame
 			end
+			motor:syncFromRoot()
 			local ticks, alpha
 			ticks, tickAccumulator, alpha = StepTiming.advance(tickAccumulator, rawDt)
 			for _ = 1, ticks do

@@ -21,6 +21,7 @@ local FeedbackService = require(script.FeedbackService)
 local DebugPlaytest = require(script.DebugPlaytest)
 local KillZone = require(script.KillZone)
 local CharacterSync = require(script.CharacterSync)
+local BotManager = require(script.bots.BotManager)
 
 -- Spawn contrôlé : on gère LoadCharacter nous-mêmes
 Players.CharacterAutoLoads = false
@@ -138,25 +139,31 @@ weaponActionRmt.OnServerEvent:Connect(function(player, action)
 	WeaponThirdPerson.setAction(char, action)
 end)
 
-local function onCharacterAdded(player: Player, char: Model)
-	local participant = Participants.fromPlayer(player)
+-- Cette méthode permet de brancher le personnage d'un participant (joueur ou bot, #139) lorsqu'il apparaît : arme 3P
+-- suivie, mort comptée dans le round (et dans les stats pour un joueur), corps laissé aux clients le temps du ragdoll.
+local function onParticipantCharacter(participant: Participants.Participant, char: Model, respawn: () -> ())
 	Validator.forget(participant)
 	trackWeapon3P(char)
 	local humanoid = char:WaitForChild("Humanoid") :: Humanoid
 	humanoid.Died:Connect(function()
-		local killer = RoundManager.onCharacterDied(participant, function()
-			SpawnManager.spawnPlayer(player)
-		end)
+		local killer = RoundManager.onCharacterDied(participant, respawn)
 		-- Une mort infligée par un bot ne compte que dans le round (décision 6 de #133)
-		if ParticipantRules.countsInStats(false, killer and killer.isBot) then
+		local player = participant.player
+		if player and ParticipantRules.countsInStats(participant.isBot, killer and killer.isBot) then
 			StatsStore.recordDeath(player)
 		end
 		-- Pas tout de suite : les clients clonent le personnage pour en faire un ragdoll à la réception de PlayerDied (#102)
 		task.delay(CORPSE_HANDOFF_DELAY, function()
-			if player.Character == char then
+			if Participants.characterOf(participant) == char then
 				char:Destroy()
 			end
 		end)
+	end)
+end
+
+local function onCharacterAdded(player: Player, char: Model)
+	onParticipantCharacter(Participants.fromPlayer(player), char, function()
+		SpawnManager.spawnPlayer(player)
 	end)
 end
 
@@ -251,6 +258,15 @@ hitscanRmt.OnServerEvent:Connect(function(player, targetCharacter, hitPart)
 		Validator.authorizeHitscan(Participants.fromPlayer(player), targetCharacter, hitPart, os.clock())
 	onHitVerdict(player, hitscanRmt, targetCharacter, damage, isHeadshot)
 end)
+
+-- ── Bots (#133) : personnages serveur, sans client ────────────────────────
+
+BotManager.init({
+	onCharacter = onParticipantCharacter,
+	place = SpawnManager.place,
+	relay = CharacterSync.relayBot,
+	roundManager = RoundManager,
+})
 
 -- ── Helper de playtest debug (#30) : Studio uniquement ─────────────────────
 

@@ -40,34 +40,42 @@ local function protect(char: Model)
 	Debris:AddItem(field, GameConfig.SPAWN_PROTECTION)
 end
 
-function SpawnManager.spawnPlayer(player: Player)
-	-- Lancement depuis le soleil (#69) si la map a des points Maps.Map.SunLaunch, sinon apparition au sol
+-- Cette méthode permet de placer un personnage qui vient d'apparaître (joueur ou bot, #139) : lancé depuis le soleil
+-- (#69) si la map a des points Maps.Map.SunLaunch, sinon posé sur un point au sol. Lancement : ForceField de protection,
+-- origine puis vitesse posées en attributs (lues par MovementController, ou BotMotion pour un bot) ; renvoie la vitesse
+-- du lancement (nil pour une apparition au sol).
+function SpawnManager.place(char: Model): Vector3?
 	local launch = pickPoint("SunLaunch")
 	local ground = if launch then nil else pickPoint("GroundSpawns")
 	if not launch and not ground then
 		warn("[SpawnManager] aucun point dans Maps.Map.SunLaunch ni Maps.Map.GroundSpawns")
 	end
+	local root = char:WaitForChild("HumanoidRootPart", 5) :: BasePart?
+	if launch then
+		local origin = launch.Position
+		local speed = launch:GetAttribute("Speed")
+		local velocity = SpawnLaunch.velocity(launch.CFrame.LookVector, if type(speed) == "number" then speed else 0)
+		protect(char)
+		if root then
+			root.CFrame = CFrame.new(origin)
+		end
+		-- Origine d'abord : le client applique le lancement quand la vitesse arrive (MovementController)
+		char:SetAttribute(SpawnLaunch.ORIGIN_ATTRIBUTE, origin)
+		char:SetAttribute(SpawnLaunch.VELOCITY_ATTRIBUTE, velocity)
+		return velocity
+	elseif root then
+		root.CFrame = CFrame.new((if ground then ground.Position else Vector3.new(0, 5, 0)) + Vector3.new(0, 5, 0))
+	end
+	return nil
+end
+
+function SpawnManager.spawnPlayer(player: Player)
 	-- Connexion avant LoadCharacter pour ne pas manquer CharacterAdded
 	local conn: RBXScriptConnection
 	conn = player.CharacterAdded:Connect(function(char)
 		conn:Disconnect()
 		CharacterAppearance.apply(char)
-		local root = char:WaitForChild("HumanoidRootPart", 5) :: BasePart?
-		if launch then
-			local origin = launch.Position
-			local speed = launch:GetAttribute("Speed")
-			local velocity =
-				SpawnLaunch.velocity(launch.CFrame.LookVector, if type(speed) == "number" then speed else 0)
-			protect(char)
-			if root then
-				root.CFrame = CFrame.new(origin)
-			end
-			-- Origine d'abord : le client applique le lancement quand la vitesse arrive (MovementController)
-			char:SetAttribute(SpawnLaunch.ORIGIN_ATTRIBUTE, origin)
-			char:SetAttribute(SpawnLaunch.VELOCITY_ATTRIBUTE, velocity)
-		elseif root then
-			root.CFrame = CFrame.new((if ground then ground.Position else Vector3.new(0, 5, 0)) + Vector3.new(0, 5, 0))
-		end
+		SpawnManager.place(char)
 	end)
 	-- Rig = StarterCharacter, skin appliqué dans CharacterAdded (#1).
 	player:LoadCharacterAsync()

@@ -10,6 +10,7 @@ local CROUCH_ROOT_TOP = 0
 local UNCROUCH_CAST_DIST = 0
 
 local hrpRef: BasePart? = nil
+local dimsRef: CharacterDimensions.CharacterDimensions? = nil
 local crouching = false
 local camHeight = CameraConfig.CAM_HEIGHT_STAND
 local halfHeight = STAND_HALF
@@ -31,12 +32,13 @@ end
 
 local CrouchSystem = {}
 
-function CrouchSystem.init(hrp: BasePart)
+function CrouchSystem.init(hrp: BasePart, dims: CharacterDimensions.CharacterDimensions)
 	hrpRef = hrp
+	dimsRef = dims
 	crouching = false
 	camHeight = CameraConfig.CAM_HEIGHT_STAND
-	local standDims = CharacterDimensions.getStand()
-	local crouchDims = CharacterDimensions.getCrouch()
+	local standDims = dims:getStand()
+	local crouchDims = dims:getCrouch()
 	STAND_HALF = standDims.halfHeight
 	STAND_ROOT_TOP = standDims.rootToTop
 	CROUCH_ROOT_TOP = crouchDims.rootToTop
@@ -73,7 +75,8 @@ function CrouchSystem.update(dt: number): {
 	local targetCamHeight = crouching and CameraConfig.CAM_HEIGHT_CROUCH or CameraConfig.CAM_HEIGHT_STAND
 	camHeight = camHeight + (targetCamHeight - camHeight) * math.min(1, CameraConfig.CAM_LERP_SPEED * dt)
 
-	local dims = crouching and CharacterDimensions.getCrouch() or CharacterDimensions.getStand()
+	local source = dimsRef :: CharacterDimensions.CharacterDimensions
+	local dims = crouching and source:getCrouch() or source:getStand()
 	halfHeight = dims.halfHeight
 	rootToBottom = dims.rootToBottom
 	rootToTop = dims.rootToTop

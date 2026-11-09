@@ -3,6 +3,8 @@
 -- le serveur vérifie qu'elle est possible depuis le dernier point accepté, la pose sur la racine (Validator, hauteur de
 -- mort, scripts serveur lisent ainsi la vraie position), puis la relaie horodatée aux autres clients, qui l'interpolent.
 -- Une position impossible est ignorée (dernier point valide gardé) avec un warn, sans renvoyer le client en arrière.
+-- Les bots (#139) n'ont pas de client : leur position, calculée par le serveur (BotMotion), passe par relayBot et suit
+-- le même relais. Le relais désigne le personnage (Model), pas le Player, pour servir aux deux.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -10,6 +12,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CharacterSyncRules = require(ReplicatedStorage.Shared.CharacterSyncRules)
 
 local CharacterSync = {}
+
+local relayRemote: UnreliableRemoteEvent? = nil
+local acceptedCallback: ((Model, Vector3) -> ())? = nil
 
 -- Délai minimal entre deux warns de rejet pour un même joueur (s).
 local WARN_INTERVAL = 2
@@ -88,7 +93,7 @@ local function onClientPosition(
 	local stamp = workspace:GetServerTimeNow()
 	for _, other in Players:GetPlayers() do
 		if other ~= player then
-			remote:FireClient(other, player, pos, yaw, stamp)
+			remote:FireClient(other, char, pos, yaw, stamp)
 		end
 	end
 	onAccepted(char, pos)
@@ -97,12 +102,29 @@ end
 -- Cette méthode permet de brancher la réception des positions lorsque le serveur démarre ; onAccepted reçoit chaque
 -- position acceptée (hauteur de mort).
 function CharacterSync.init(remote: UnreliableRemoteEvent, onAccepted: (Model, Vector3) -> ())
+	relayRemote = remote
+	acceptedCallback = onAccepted
 	remote.OnServerEvent:Connect(function(player, pos, yaw)
 		onClientPosition(remote, onAccepted, player, pos, yaw)
 	end)
 	Players.PlayerRemoving:Connect(function(player)
 		tracks[player] = nil
 	end)
+end
+
+-- Cette méthode permet de publier la position d'un bot lorsque son mouvement serveur atteint la cadence réseau : racine
+-- serveur posée (Validator, hauteur de mort), position relayée horodatée à tous les clients, comme celle d'un joueur.
+function CharacterSync.relayBot(char: Model, root: BasePart, cf: CFrame)
+	root.CFrame = cf
+	local remote = relayRemote
+	if not remote then
+		return
+	end
+	local pos = cf.Position
+	remote:FireAllClients(char, pos, CharacterSyncRules.yawOf(cf.LookVector), workspace:GetServerTimeNow())
+	if acceptedCallback then
+		acceptedCallback(char, pos)
+	end
 end
 
 return CharacterSync

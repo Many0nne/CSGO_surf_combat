@@ -139,13 +139,14 @@ local function rigClone(clone: Model): ({ BasePart }, { Decal })
 	return parts, decals
 end
 
--- Cette méthode permet de lire la vitesse d'un joueur au moment de sa mort lorsque son corps est créé : simulée pour
--- le joueur local, estimée d'après les positions relayées pour les autres.
-local function velocityAtDeath(victim: Player): Vector3
-	if victim == Players.LocalPlayer then
+-- Cette méthode permet de lire la vitesse d'un personnage au moment de sa mort lorsque son corps est créé : simulée
+-- pour le joueur local, estimée d'après les positions relayées pour les autres (joueurs et bots).
+local function velocityAtDeath(char: Model): Vector3
+	local localPlayer = Players.LocalPlayer
+	if localPlayer and char == localPlayer.Character then
 		return MovementController.getVelocity()
 	end
-	return CharacterSync.velocityOf(victim)
+	return CharacterSync.velocityOf(char)
 end
 
 -- Cette méthode permet de retirer un corps et ses pièces lorsqu'il a fini de s'effacer ou qu'il faut faire de la place.
@@ -180,10 +181,9 @@ local function stepFade()
 	end
 end
 
--- Cette méthode permet de remplacer le personnage d'un joueur tué par son ragdoll lorsque PlayerDied arrive ;
+-- Cette méthode permet de remplacer le personnage tué (joueur ou bot) par son ragdoll lorsque PlayerDied arrive ;
 -- direction = du tueur vers la victime (nil pour une chute). Sans personnage encore présent, rien n'est créé.
-function DeathRagdoll.spawn(victim: Player, direction: Vector3?, weapon: string?, headshot: boolean)
-	local char = victim.Character
+function DeathRagdoll.spawn(char: Model?, direction: Vector3?, weapon: string?, headshot: boolean)
 	if not char or not char.Parent then
 		return
 	end
@@ -207,9 +207,9 @@ function DeathRagdoll.spawn(victim: Player, direction: Vector3?, weapon: string?
 	while #corpses >= DeathRules.MAX_RAGDOLLS do
 		removeCorpse(1)
 	end
-	clone.Name = victim.Name .. "_Ragdoll"
+	clone.Name = char.Name .. "_Ragdoll"
 	clone.Parent = corpseFolder()
-	local velocity = DeathRules.ragdollVelocity(velocityAtDeath(victim), direction, weapon, headshot)
+	local velocity = DeathRules.ragdollVelocity(velocityAtDeath(char), direction, weapon, headshot)
 	for _, part in parts do
 		part.AssemblyLinearVelocity = velocity
 	end

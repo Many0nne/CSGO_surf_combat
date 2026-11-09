@@ -29,6 +29,8 @@ local SNAP_IN = 1.4 -- distance (en rayons) vers la surface
 local SNAP_MAX = 1.0 -- decalage max (en rayons) qu'un snap peut appliquer
 local LEAVE_SPEED = 0 -- au-dela de cette vitesse SORTANTE, on ne recolle pas (saut/ejection)
 
+-- Sonde de pénétration unique pour tous les personnages (#139) : elle est replacée juste avant chaque requête, et
+-- chaque instance l'exclut de ses propres OverlapParams.
 local penProbe = Instance.new("Part")
 penProbe.Anchored = true
 penProbe.CanCollide = false
@@ -37,40 +39,57 @@ penProbe.CanTouch = false
 penProbe.Transparency = 1
 penProbe.Name = "PenProbe"
 
-local penOP = OverlapParams.new()
-penOP.FilterType = Enum.RaycastFilterType.Exclude
+local WallSlide = {}
+WallSlide.__index = WallSlide
 
-local function penInfoRaw(pos: Vector3, radius: number, rtb: number, rtt: number): BasePart?
+export type WallSlide = typeof(setmetatable({} :: { castParams: RaycastParams, penOP: OverlapParams }, WallSlide))
+
+local function penInfoRaw(self: WallSlide, pos: Vector3, radius: number, rtb: number, rtt: number): BasePart?
 	local centerY = (rtt - rtb) * 0.5
 	penProbe.Size = Vector3.new(radius * 2, rtt + rtb, radius * 2) * 0.9
 	penProbe.CFrame = CFrame.new(pos + Vector3.new(0, centerY, 0))
-	local parts = workspace:GetPartsInPart(penProbe, penOP)
+	local parts = workspace:GetPartsInPart(penProbe, self.penOP)
 	return parts[1]
 end
 
-local castParams = RaycastParams.new()
-castParams.FilterType = Enum.RaycastFilterType.Exclude
-
-local WallSlide = {}
-
-function WallSlide.init(character: Model)
+-- Cette méthode permet de préparer le glissement le long des murs et rampes d'un personnage lorsqu'il apparaît (ses
+-- pièces et la sonde exclues des requêtes).
+function WallSlide.new(character: Model): WallSlide
+	local castParams = RaycastParams.new()
+	castParams.FilterType = Enum.RaycastFilterType.Exclude
 	castParams.FilterDescendantsInstances = { character, workspace.CurrentCamera }
+	local penOP = OverlapParams.new()
+	penOP.FilterType = Enum.RaycastFilterType.Exclude
 	penOP.FilterDescendantsInstances = { character, penProbe, workspace.CurrentCamera }
-	penProbe.Parent = workspace
+	if penProbe.Parent ~= workspace then
+		penProbe.Parent = workspace
+	end
+	return setmetatable({ castParams = castParams, penOP = penOP }, WallSlide)
 end
 
-function WallSlide.penInfo(pos: Vector3, ci: { rootToTop: number, rootToBottom: number, radius: number }): BasePart?
-	return penInfoRaw(pos, ci.radius - 0.05, ci.rootToBottom, ci.rootToTop)
+function WallSlide.penInfo(
+	self: WallSlide,
+	pos: Vector3,
+	ci: { rootToTop: number, rootToBottom: number, radius: number }
+): BasePart?
+	return penInfoRaw(self, pos, ci.radius - 0.05, ci.rootToBottom, ci.rootToTop)
 end
 
-local function hullCast(pos: Vector3, radius: number, rtb: number, rtt: number, moveVec: Vector3): RaycastResult?
+local function hullCast(
+	self: WallSlide,
+	pos: Vector3,
+	radius: number,
+	rtb: number,
+	rtt: number,
+	moveVec: Vector3
+): RaycastResult?
 	if moveVec.Magnitude < 1e-5 then
 		return nil
 	end
 	local centerY = (rtt - rtb) * 0.5
 	local cf = CFrame.new(pos + Vector3.new(0, centerY, 0))
 	local size = Vector3.new(radius * 2, rtt + rtb, radius * 2)
-	return workspace:Blockcast(cf, size, moveVec, castParams)
+	return workspace:Blockcast(cf, size, moveVec, self.castParams)
 end
 
 local function clipVelocity(vel: Vector3, normal: Vector3, overbounce: number): Vector3
@@ -89,23 +108,30 @@ end
 -- ces rebords ; en l'air rien ne le faisait. On sonde donc : (1) degagement vers le haut sur
 -- STEPUP_HEIGHT, (2) degagement vers l'avant a la hauteur surelevee, (3) surface MARCHABLE sous
 -- le point sureleve+avance. Si OK, renvoie le yOffset a appliquer (on monte + on garde la vitesse).
-local function airStepUp(origin: Vector3, horizDir: Vector3, radius: number, rtb: number, rtt: number): number?
+local function airStepUp(
+	self: WallSlide,
+	origin: Vector3,
+	horizDir: Vector3,
+	radius: number,
+	rtb: number,
+	rtt: number
+): number?
 	if horizDir.Magnitude < 1e-3 then
 		return nil
 	end
 	local up = Config.STEPUP_HEIGHT
 	local fwd = horizDir.Unit * (radius + 0.3)
 	-- 1. Peut-on monter de STEPUP_HEIGHT sans cogner un plafond ?
-	if hullCast(origin, radius, rtb, rtt, Vector3.new(0, up, 0)) then
+	if hullCast(self, origin, radius, rtb, rtt, Vector3.new(0, up, 0)) then
 		return nil
 	end
 	-- 2. A la hauteur surelevee, l'avant est-il degage (le rebord est passe sous nous) ?
 	local raised = origin + Vector3.new(0, up, 0)
-	if hullCast(raised, radius, rtb, rtt, fwd) then
+	if hullCast(self, raised, radius, rtb, rtt, fwd) then
 		return nil
 	end
 	-- 3. Surface marchable sous le point sureleve + avance ?
-	local down = hullCast(raised + fwd, radius, rtb, rtt, Vector3.new(0, -(up + 0.5), 0))
+	local down = hullCast(self, raised + fwd, radius, rtb, rtt, Vector3.new(0, -(up + 0.5), 0))
 	if not down or down.Normal.Y < Config.SURF_NORMAL_Y then
 		return nil
 	end
@@ -119,6 +145,7 @@ end
 
 -- Collide-and-slide d'UN sous-pas. Renvoie (velocity, displacement, surfNormal?).
 local function slideOnce(
+	self: WallSlide,
 	origin: Vector3,
 	velocity: Vector3,
 	dt: number,
@@ -144,7 +171,7 @@ local function slideOnce(
 			break
 		end
 
-		local hit = hullCast(pos, radius, rtb, rtt, moveVec)
+		local hit = hullCast(self, pos, radius, rtb, rtt, moveVec)
 		if not hit then
 			disp += moveVec
 			break
@@ -163,7 +190,7 @@ local function slideOnce(
 		if hitNormal.Y < SURF_THRESHOLD then
 			-- Rayon fin depuis le centre du joueur jusqu'a la face (le hit.Position du Blockcast
 			-- est sur la boite balayee, decale d'un rayon ; on vise donc hit.Distance + radius).
-			local probe = workspace:Raycast(pos, moveDir * (hit.Distance + radius + 0.5), castParams)
+			local probe = workspace:Raycast(pos, moveDir * (hit.Distance + radius + 0.5), self.castParams)
 			if probe and probe.Normal.Y >= SURF_THRESHOLD then
 				hitNormal = probe.Normal
 			end
@@ -265,7 +292,8 @@ local function slideOnce(
 end
 
 function WallSlide.resolve(
-	hrp: BasePart,
+	self: WallSlide,
+	rootPosition: Vector3,
 	velocity: Vector3,
 	dt: number,
 	lastSurfNormal: Vector3?,
@@ -307,7 +335,7 @@ function WallSlide.resolve(
 		subDt
 	)
 
-	local origin = hrp.Position
+	local origin = rootPosition
 	local totalDisp = Vector3.zero
 	local foundNormal: Vector3? = nil
 	local surfRef: Vector3? = lastSurfNormal
@@ -316,7 +344,7 @@ function WallSlide.resolve(
 		if velocity.Magnitude < 1e-5 then
 			break
 		end
-		local v, disp, n = slideOnce(origin, velocity, subDt, radius, rtb, rtt)
+		local v, disp, n = slideOnce(self, origin, velocity, subDt, radius, rtb, rtt)
 		velocity = v
 		origin += disp
 		totalDisp += disp
@@ -336,7 +364,7 @@ function WallSlide.resolve(
 		local outDist = radius * SNAP_OUT
 		local inDist = radius * (SNAP_OUT + SNAP_IN)
 		local snapPos = origin + n * outDist
-		local hit = hullCast(snapPos, radius, rtb, rtt, -n * inDist)
+		local hit = hullCast(self, snapPos, radius, rtb, rtt, -n * inDist)
 		if hit and hit.Normal.Y < SURF_THRESHOLD then
 			-- shift le long de n pour reposer a SKIN de la surface (recolle des deux cotes)
 			local shiftAmt = outDist - hit.Distance + SKIN
@@ -372,7 +400,7 @@ function WallSlide.resolve(
 		and inHoriz.Magnitude > 1e-2
 		and outHoriz.Magnitude < inHoriz.Magnitude - 1.0 -- l'horizontale a bien chute
 	then
-		local stepY = airStepUp(origin, inHoriz, radius, rtb, rtt)
+		local stepY = airStepUp(self, origin, inHoriz, radius, rtb, rtt)
 		if stepY then
 			local shift = Vector3.new(0, stepY, 0)
 			origin += shift
@@ -388,6 +416,7 @@ function WallSlide.resolve(
 end
 
 function WallSlide.commitMove(
+	self: WallSlide,
 	fromSafe: Vector3,
 	candidate: Vector3,
 	velocity: Vector3,
@@ -401,10 +430,10 @@ function WallSlide.commitMove(
 	end
 	local dir = delta.Unit
 
-	local hit = hullCast(fromSafe, r, rtb, rtt, delta)
+	local hit = hullCast(self, fromSafe, r, rtb, rtt, delta)
 	if not hit then
 		-- Le hull n'a rien touche sur tout le trajet → aucun obstacle frontal reel.
-		if penInfoRaw(candidate, r - 0.05, rtb, rtt) then
+		if penInfoRaw(self, candidate, r - 0.05, rtb, rtt) then
 			-- Le point final PENETRE une part. Une fois dedans, tous les casts partant de
 			-- l'interieur renvoient nil (Roblox) : resolve ne voit plus rien et GroundDetection
 			-- ne grounde pas → joueur coince invisible, vitesse gardee mais 0 deplacement.
@@ -413,7 +442,7 @@ function WallSlide.commitMove(
 			local pos = candidate
 			local freed = false
 			for _ = 1, 12 do
-				if not penInfoRaw(pos, r - 0.05, rtb, rtt) then
+				if not penInfoRaw(self, pos, r - 0.05, rtb, rtt) then
 					freed = true
 					break
 				end
@@ -432,7 +461,7 @@ function WallSlide.commitMove(
 	-- Le hull touche deja la rampe → distance ≈ 0, mais ce n'est pas un obstacle frontal.
 	-- On garde le candidat tant qu'il ne penetre pas.
 	if dir:Dot(hit.Normal) > -0.1 then
-		if penInfoRaw(candidate, r - 0.05, rtb, rtt) then
+		if penInfoRaw(self, candidate, r - 0.05, rtb, rtt) then
 			dbg(
 				"commitMove grazing PEN",
 				"hitN=",
@@ -479,18 +508,19 @@ end
 -- collision par airStepUp) et on applique seulement la securite anti-penetration : si le point
 -- penetre une part, on ejecte vers le haut ; en dernier recours on retombe sur fromSafe.
 function WallSlide.ejectUp(
+	self: WallSlide,
 	candidate: Vector3,
 	fromSafe: Vector3,
 	crouchInfo: { rootToTop: number, rootToBottom: number, radius: number }
 ): Vector3
 	local r = crouchInfo.radius - 0.05
 	local rtb, rtt = crouchInfo.rootToBottom, crouchInfo.rootToTop
-	if not penInfoRaw(candidate, r - 0.05, rtb, rtt) then
+	if not penInfoRaw(self, candidate, r - 0.05, rtb, rtt) then
 		return candidate
 	end
 	local pos = candidate
 	for _ = 1, 12 do
-		if not penInfoRaw(pos, r - 0.05, rtb, rtt) then
+		if not penInfoRaw(self, pos, r - 0.05, rtb, rtt) then
 			return pos
 		end
 		pos += Vector3.new(0, 0.15, 0)

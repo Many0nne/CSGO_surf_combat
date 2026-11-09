@@ -1,26 +1,39 @@
+-- Collisions de la tête (plafond, mur haut) pendant un déplacement. Une instance par personnage (#139).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local PhysicsUtils = require(ReplicatedStorage.Shared.PhysicsUtils)
 
 local HeadCollisionResolver = {}
+HeadCollisionResolver.__index = HeadCollisionResolver
 
-local castParams: RaycastParams
+export type HeadCollisionResolver = typeof(setmetatable(
+	{} :: { castParams: RaycastParams, lastSafeCenter: Vector3? },
+	HeadCollisionResolver
+))
 
 local SKIN = 0.05 -- studs, marge anti-pénétration
 
-function HeadCollisionResolver.init(char: Model)
-	castParams = RaycastParams.new()
+-- Cette méthode permet de préparer les collisions de tête d'un personnage lorsqu'il apparaît (ses pièces exclues).
+function HeadCollisionResolver.new(char: Model): HeadCollisionResolver
+	local castParams = RaycastParams.new()
 	castParams.FilterType = Enum.RaycastFilterType.Exclude
 	castParams.FilterDescendantsInstances = { char, workspace.CurrentCamera }
+	return setmetatable({ castParams = castParams, lastSafeCenter = nil }, HeadCollisionResolver)
 end
 
-function HeadCollisionResolver.getHeadHitAlongMove(startPos: Vector3, moveVec: Vector3, radius: number): RaycastResult?
+function HeadCollisionResolver.getHeadHitAlongMove(
+	self: HeadCollisionResolver,
+	startPos: Vector3,
+	moveVec: Vector3,
+	radius: number
+): RaycastResult?
 	if moveVec.Magnitude < 1e-4 then
 		return nil
 	end
-	return workspace:Spherecast(startPos, radius, moveVec, castParams)
+	return workspace:Spherecast(startPos, radius, moveVec, self.castParams)
 end
 
 function HeadCollisionResolver.resolve(
+	self: HeadCollisionResolver,
 	moveVec: Vector3,
 	hrpPos: Vector3,
 	info: { rootToTop: number, radius: number }
@@ -34,7 +47,7 @@ function HeadCollisionResolver.resolve(
 	local dir = moveVec.Unit
 	local dist = moveVec.Magnitude
 	-- on recule de SKIN : détecte le contact AVANT la pénétration
-	local hit = workspace:Spherecast(headCenter - dir * SKIN, info.radius, dir * (dist + SKIN), castParams)
+	local hit = workspace:Spherecast(headCenter - dir * SKIN, info.radius, dir * (dist + SKIN), self.castParams)
 	if not hit then
 		return moveVec, false
 	end
@@ -52,31 +65,29 @@ function HeadCollisionResolver.resolve(
 	return clipped, true
 end
 
-local lastSafeCenter: Vector3? = nil
-
 local function headCenterOf(hrpPos, info)
 	return Vector3.new(hrpPos.X, hrpPos.Y + info.rootToTop - info.radius, hrpPos.Z)
 end
 
 -- renvoie le déplacement réellement applicable + la vélocité clippée
-function HeadCollisionResolver.sweep(moveVec, hrpPos, info)
-	local from = lastSafeCenter or headCenterOf(hrpPos, info)
+function HeadCollisionResolver.sweep(self: HeadCollisionResolver, moveVec, hrpPos, info)
+	local from = self.lastSafeCenter or headCenterOf(hrpPos, info)
 	local target = headCenterOf(hrpPos, info) + moveVec
 	local delta = target - from
 	if delta.Magnitude < 1e-4 then
-		lastSafeCenter = from
+		self.lastSafeCenter = from
 		return moveVec, moveVec, false
 	end
 
-	local hit = workspace:Spherecast(from, info.radius, delta, castParams)
+	local hit = workspace:Spherecast(from, info.radius, delta, self.castParams)
 	if not hit then
-		lastSafeCenter = target
+		self.lastSafeCenter = target
 		return moveVec, moveVec, false
 	end
 
 	local allowed = math.max(0, hit.Distance - SKIN)
 	local stop = from + delta.Unit * allowed
-	lastSafeCenter = stop
+	self.lastSafeCenter = stop
 
 	local vel = moveVec
 	if moveVec:Dot(hit.Normal) < 0 then

@@ -1,4 +1,3 @@
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
@@ -6,6 +5,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local NetworkProtocol = require(Shared:WaitForChild("NetworkProtocol"))
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local ParticipantRules = require(Shared:WaitForChild("ParticipantRules"))
+local BotCharacters = require(Shared:WaitForChild("BotCharacters"))
 
 local MainMenu = require(script.Parent.Parent.Parent.ui.MainMenu)
 local InfosScreen = require(script.Parent.Parent.Parent.ui.InfosScreen)
@@ -159,23 +159,21 @@ end
 -- ── Remotes serveur ────────────────────────────────────────────────────────
 
 -- Cette méthode permet de montrer une mort lorsque le serveur l'annonce (HUDRules.readDeath) : ligne de kill feed et
--- ragdoll en partie, écran de mort et caméra si c'est le joueur local. Tueur ou victime bot : pas de Player, le corps et
--- la caméra vers un bot viendront avec le bot lui-même (#139).
+-- ragdoll en partie, écran de mort et caméra si c'est le joueur local. Tueur ou victime bot : pas de Player, son
+-- personnage est retrouvé par son tag (BotCharacters, #139).
 local function onPlayerDied(data: any)
 	local death = HUDRules.readDeath(data, localPlayer.UserId)
 	-- Hors partie (menu, spawn), rien à montrer
 	if not death or not HUDRules.killFeedVisible(state) then
 		return
 	end
-	local victim = if death.victimIsBot then nil else Players:GetPlayerByUserId(death.victimId)
-	local killer = if death.killerId and not death.killerIsBot then Players:GetPlayerByUserId(death.killerId) else nil
+	local victimChar = BotCharacters.characterOf(death.victimId, death.victimIsBot)
+	local killerChar = if death.killerId then BotCharacters.characterOf(death.killerId, death.killerIsBot) else nil
 
-	if victim then
-		DeathRagdoll.spawn(victim, death.direction, death.weapon, death.headshot)
-	end
+	DeathRagdoll.spawn(victimChar, death.direction, death.weapon, death.headshot)
 	KillFeed.add(death)
 
-	if victim == localPlayer then
+	if not death.victimIsBot and death.victimId == localPlayer.UserId then
 		lastDeath = {
 			killer = death.killer and ParticipantRules.displayName(death.killer, death.killerIsBot),
 			weapon = death.weapon,
@@ -183,7 +181,7 @@ local function onPlayerDied(data: any)
 			at = os.clock(),
 		}
 		applyDeathInfo()
-		DeathCamera.start(killer)
+		DeathCamera.start(killerChar, death.killer and ParticipantRules.displayName(death.killer, death.killerIsBot))
 	end
 end
 
