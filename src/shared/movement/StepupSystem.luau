@@ -1,39 +1,51 @@
+-- Montée de petits obstacles au sol. Une instance par personnage (#139) : filtre de rayons et dimensions propres.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage.Shared.MovementConfig)
 local CharacterDimensions = require(script.Parent.CharacterDimensions)
 
-local HALF_HEIGHT = Config.CHAR_HEIGHT_STAND / 2
-local CENTER_OFFSET = 0
-local RADIUS = Config.CHAR_RADIUS - 0.05
-
-local castParams = RaycastParams.new()
-castParams.FilterType = Enum.RaycastFilterType.Exclude
-
 local StepupSystem = {}
+StepupSystem.__index = StepupSystem
 
-function StepupSystem.init(character: Model)
+export type StepupSystem = typeof(setmetatable(
+	{} :: { castParams: RaycastParams, halfHeight: number, centerOffset: number, radius: number },
+	StepupSystem
+))
+
+-- Cette méthode permet de préparer la montée de marches d'un personnage lorsqu'il apparaît (ses pièces exclues des
+-- rayons, dimensions debout).
+function StepupSystem.new(character: Model, dims: CharacterDimensions.CharacterDimensions): StepupSystem
+	local castParams = RaycastParams.new()
+	castParams.FilterType = Enum.RaycastFilterType.Exclude
 	castParams.FilterDescendantsInstances = { character, workspace.CurrentCamera }
-	local stand = CharacterDimensions.getStand()
-	HALF_HEIGHT = stand.halfHeight
-	CENTER_OFFSET = stand.centerOffset
-	RADIUS = stand.radius - 0.05
+	local stand = dims:getStand()
+	return setmetatable({
+		castParams = castParams,
+		halfHeight = stand.halfHeight,
+		centerOffset = stand.centerOffset,
+		radius = stand.radius - 0.05,
+	}, StepupSystem)
 end
 
--- Retourne (yOffset, wallNormal, slideNormal).
+-- Retourne (yOffset, wallNormal, slideNormal) pour la racine placée en rootPosition.
 -- yOffset non-nil     → stepup réussi, ajouter au Y.
 -- wallNormal non-nil  → vrai mur (raide), projeter la velocity dessus.
 -- slideNormal non-nil → pente/jointure marchable, clipper la velocity 3D dessus (glisser).
 -- les trois nil       → aucun obstacle, déplacement libre.
-function StepupSystem.tryStepup(hrp: BasePart, moveVec: Vector3): (number?, Vector3?, Vector3?)
+function StepupSystem.tryStepup(
+	self: StepupSystem,
+	rootPosition: Vector3,
+	moveVec: Vector3
+): (number?, Vector3?, Vector3?)
 	if moveVec.Magnitude < 1e-4 then
 		return nil, nil, nil
 	end
+	local castParams, radius = self.castParams, self.radius
 
-	local origin = hrp.Position + Vector3.new(0, CENTER_OFFSET, 0)
+	local origin = rootPosition + Vector3.new(0, self.centerOffset, 0)
 	local upVec = Vector3.new(0, Config.STEPUP_HEIGHT, 0)
 
 	-- 1. Bloqué horizontalement ?
-	local horizHit = workspace:Spherecast(origin, RADIUS, moveVec, castParams)
+	local horizHit = workspace:Spherecast(origin, radius, moveVec, castParams)
 	if not horizHit then
 		return nil, nil, nil
 	end
@@ -50,19 +62,19 @@ function StepupSystem.tryStepup(hrp: BasePart, moveVec: Vector3): (number?, Vect
 		or Vector3.new(-moveVec.X, 0, -moveVec.Z).Unit
 
 	-- 2. Plafond bloque la montée ?
-	if workspace:Spherecast(origin, RADIUS, upVec, castParams) then
+	if workspace:Spherecast(origin, radius, upVec, castParams) then
 		return nil, wallNormal, nil
 	end
 
 	-- 3. Encore bloqué à la hauteur surélevée ?
-	if workspace:Spherecast(origin + upVec, RADIUS, moveVec, castParams) then
+	if workspace:Spherecast(origin + upVec, radius, moveVec, castParams) then
 		return nil, wallNormal, nil
 	end
 
 	-- 4. Trouver la surface exacte de la marche par cast descendant
 	local downHit = workspace:Spherecast(
 		origin + upVec + moveVec,
-		RADIUS,
+		radius,
 		Vector3.new(0, -(Config.STEPUP_HEIGHT + 0.5), 0),
 		castParams
 	)
@@ -70,7 +82,7 @@ function StepupSystem.tryStepup(hrp: BasePart, moveVec: Vector3): (number?, Vect
 		return nil, wallNormal, nil
 	end
 
-	local stepHeight = downHit.Position.Y - (origin.Y - HALF_HEIGHT)
+	local stepHeight = downHit.Position.Y - (origin.Y - self.halfHeight)
 	if stepHeight <= 0 or stepHeight > Config.STEPUP_HEIGHT then
 		return nil, wallNormal, nil
 	end

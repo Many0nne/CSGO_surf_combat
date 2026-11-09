@@ -1,10 +1,6 @@
 local Players = game:GetService("Players")
 local StarterGui = game:GetService("StarterGui")
 
-local GroundDetection = require(game:GetService("ReplicatedStorage").Shared.movement.GroundDetection)
-local StepupSystem = require(game:GetService("ReplicatedStorage").Shared.movement.StepupSystem)
-local WallSlide = require(game:GetService("ReplicatedStorage").Shared.movement.WallSlide)
-local CharacterDimensions = require(game:GetService("ReplicatedStorage").Shared.movement.CharacterDimensions)
 local MovementController = require(script.systems.movement.MovementController)
 local CharacterSync = require(script.systems.network.CharacterSync)
 local ViewmodelSystem = require(script.systems.weapon.ViewmodelSystem)
@@ -61,10 +57,6 @@ local function setupCharacter(char: Model)
 		end
 	end)
 
-	CharacterDimensions.init(char, rootPart)
-	GroundDetection.init(char)
-	StepupSystem.init(char)
-	WallSlide.init(char)
 	FPSCamera.init(rootPart, char)
 	Speedometer.init()
 	MovementController.init(char, rootPart, humanoid, Speedometer, FPSCamera)

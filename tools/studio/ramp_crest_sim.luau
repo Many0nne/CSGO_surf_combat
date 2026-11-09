@@ -1,6 +1,6 @@
 -- Harnais de repro de l'issue #7 (perte de vitesse a la jonction rampe montante -> sol).
 -- A executer en mode Edit dans Studio (barre de commande ou MCP `execute_luau`), sources synchro par Rojo.
--- Rejoue la boucle de MovementController (modules reels, clones pour contourner le cache de require)
+-- Rejoue la boucle de MovementController (modules reels, copie fraiche de Shared pour contourner le cache de require)
 -- avec les dimensions du StarterCharacter, sur les deux rampes 30° de la map, en bhop et en course,
 -- et compte les "cognements" : perte > 15 % de la vitesse XZ en une frame a moins de 4 studs de l'arete.
 -- Attendu apres le correctif : crestHits=0 et notCrossed=0 pour chaque rampe.
@@ -14,27 +14,22 @@ realShared.Name = "Shared__simReal"
 freshShared.Parent = game.ReplicatedStorage
 
 local out = {}
-local tmp, char
+local char
 -- Tout le setup est dans le pcall : Shared est restaure meme si un require echoue.
 local ok, err = pcall(function()
 	local Config = require(freshShared.MovementConfig)
 	local PhysicsUtils = require(freshShared.PhysicsUtils)
-	tmp = Instance.new("Folder")
-	tmp.Name = "SimTmp"
-	local mv = game.StarterPlayer.StarterPlayerScripts.Client.systems.movement:Clone()
-	mv.Parent = tmp
-	tmp.Parent = game.ServerStorage
 	local CharacterDimensions = require(freshShared.movement.CharacterDimensions)
 	local GroundDetection = require(freshShared.movement.GroundDetection)
 	local StepupSystem = require(freshShared.movement.StepupSystem)
 	local WallSlide = require(freshShared.movement.WallSlide)
 	local HeadCollisionResolver = require(freshShared.movement.HeadCollisionResolver)
-	local PhysicsStepAir = require(mv.PhysicsStepAir)
+	local PhysicsStepAir = require(freshShared.movement.PhysicsStepAir)
 	local SlopeSystem = require(freshShared.movement.SlopeSystem)
 
 	local rig = game.StarterPlayer.StarterCharacter:Clone()
 	rig.Parent = workspace
-	CharacterDimensions.init(rig, rig.HumanoidRootPart)
+	local dimensions = CharacterDimensions.new(rig, rig.HumanoidRootPart)
 	rig:Destroy()
 
 	char = Instance.new("Model")
@@ -49,11 +44,12 @@ local ok, err = pcall(function()
 	local slideParams = RaycastParams.new()
 	slideParams.FilterType = Enum.RaycastFilterType.Exclude
 	slideParams.FilterDescendantsInstances = { char, workspace.CurrentCamera }
-	GroundDetection.init(char)
-	StepupSystem.init(char)
-	WallSlide.init(char)
-	HeadCollisionResolver.init(char)
-	local dims = CharacterDimensions.getStand()
+	-- Une instance par personnage (#139)
+	local ground = GroundDetection.new(char, dimensions)
+	local stepup = StepupSystem.new(char, dimensions)
+	local wallSlide = WallSlide.new(char)
+	local head = HeadCollisionResolver.new(char)
+	local dims = dimensions:getStand()
 	local ci = {
 		isCrouching = false,
 		halfHeight = dims.halfHeight,
@@ -80,7 +76,7 @@ local ok, err = pcall(function()
 		for _ = 1, 400 do
 			local dt = DT
 			jumpLockout = math.max(0, jumpLockout - dt)
-			local gnd = GroundDetection.getGroundInfo(hrp, velocity.Y, wasGrounded)
+			local gnd = ground:getGroundInfo(hrp.Position, velocity.Y, wasGrounded)
 			local isOnGround = gnd.onGround and jumpLockout <= 0
 			if isOnGround then
 				if state == "A" then
@@ -117,7 +113,7 @@ local ok, err = pcall(function()
 			if isG then
 				local snapY = gnd.hitPosition.Y + ci.rootToBottom
 				local moveVec = Vector3.new(velocity.X * dt, 0, velocity.Z * dt)
-				local stepYOffset, wallNormal, slideNormal = StepupSystem.tryStepup(hrp, moveVec)
+				local stepYOffset, wallNormal, slideNormal = stepup:tryStepup(hrp.Position, moveVec)
 				if slideNormal then
 					local isCurrentGround = gnd.normal and slideNormal:Dot(gnd.normal) > 0.9
 					if not isCurrentGround and not willJump then
@@ -146,25 +142,25 @@ local ok, err = pcall(function()
 						end
 					end
 				end
-				local clipped, blocked = HeadCollisionResolver.resolve(newPos - hrp.Position, hrp.Position, ci)
+				local clipped, blocked = head:resolve(newPos - hrp.Position, hrp.Position, ci)
 				if blocked then
 					newPos = hrp.Position + clipped
 				end
 				hrp.CFrame = CFrame.new(newPos)
-				if not WallSlide.penInfo(newPos, ci) then
+				if not wallSlide:penInfo(newPos, ci) then
 					lastSafePos = newPos
 				end
 			elseif isA then
-				local newVel, moveVec, hitNormal, stepped = WallSlide.resolve(hrp, velocity, dt, surfNormal, ci)
+				local newVel, moveVec, hitNormal, stepped = wallSlide:resolve(hrp.Position, velocity, dt, surfNormal, ci)
 				velocity = newVel
 				local cand = hrp.Position + moveVec
 				if stepped then
-					cand = WallSlide.ejectUp(cand, lastSafePos, ci)
+					cand = wallSlide:ejectUp(cand, lastSafePos, ci)
 				else
-					cand, velocity = WallSlide.commitMove(lastSafePos, cand, velocity, ci)
+					cand, velocity = wallSlide:commitMove(lastSafePos, cand, velocity, ci)
 				end
 				hrp.CFrame = CFrame.new(cand)
-				if not WallSlide.penInfo(cand, ci) then
+				if not wallSlide:penInfo(cand, ci) then
 					lastSafePos = cand
 				end
 				velocity += Vector3.new(0, Config.GRAVITY * 0.5 * dt, 0)
@@ -217,9 +213,6 @@ if not ok then
 end
 if char then
 	char:Destroy()
-end
-if tmp then
-	tmp:Destroy()
 end
 freshShared:Destroy()
 realShared.Name = "Shared"
