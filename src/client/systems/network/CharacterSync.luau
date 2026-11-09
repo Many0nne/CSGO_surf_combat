@@ -1,8 +1,8 @@
 -- Moitié client de la synchro de position (#75, cf. server/CharacterSync) : envoie la position du personnage local à
--- NET_SYNC_RATE, et affiche les autres joueurs à la position relayée par le serveur, interpolée avec INTERP_DELAY de
--- retard (les racines sont ancrées : sans cela, ils restent figés à leur point d'apparition).
+-- NET_SYNC_RATE, et affiche les autres personnages (joueurs et bots, #139) à la position relayée par le serveur,
+-- interpolée avec INTERP_DELAY de retard (les racines sont ancrées : sans cela, ils restent figés à leur apparition).
+-- Le relais désigne le personnage (Model) : un bot n'a pas de Player.
 
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
@@ -10,40 +10,42 @@ local CharacterSyncRules = require(ReplicatedStorage.Shared.CharacterSyncRules)
 local NetworkProtocol = require(ReplicatedStorage.Shared.NetworkProtocol)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 
--- Avant le mouvement local et la caméra : les autres joueurs sont placés avant que la frame ne soit dessinée.
+-- Avant le mouvement local et la caméra : les autres personnages sont placés avant que la frame ne soit dessinée.
 local BIND_NAME = "RemoteCharacters"
 
 local CharacterSync = {}
 
-type Remote = { char: Model?, buffer: { CharacterSyncRules.Snapshot } }
+type Remote = { buffer: { CharacterSyncRules.Snapshot } }
 
 local remote: UnreliableRemoteEvent? = nil
-local remotes: { [Player]: Remote } = {}
+local remotes: { [Model]: Remote } = {}
 local sendAccumulator = 0
 
--- Cette méthode permet de ranger la position d'un autre joueur lorsque le serveur la relaie ; un personnage neuf
--- (réapparition) repart d'un tampon vide pour ne pas glisser depuis le lieu de sa mort.
-local function onRelayed(other: Player, pos: any, yaw: any, stamp: any)
-	if typeof(other) ~= "Instance" or not other:IsA("Player") or type(stamp) ~= "number" then
+-- Cette méthode permet de ranger la position d'un autre personnage lorsque le serveur la relaie ; un personnage neuf
+-- (réapparition) a son propre tampon et ne glisse donc pas depuis le lieu de sa mort. Un personnage pas encore
+-- répliqué arrive à nil : paquet ignoré, le suivant le remplace.
+local function onRelayed(char: any, pos: any, yaw: any, stamp: any)
+	if typeof(char) ~= "Instance" or not char:IsA("Model") or type(stamp) ~= "number" then
 		return
 	end
 	if not CharacterSyncRules.isWellFormed(pos, yaw) then
 		return
 	end
-	local entry = remotes[other]
-	if not entry or entry.char ~= other.Character then
-		entry = { char = other.Character, buffer = {} }
-		remotes[other] = entry
+	local entry = remotes[char]
+	if not entry then
+		entry = { buffer = {} }
+		remotes[char] = entry
 	end
 	CharacterSyncRules.push(entry.buffer, { t = stamp, pos = pos, yaw = yaw })
 end
 
--- Cette méthode permet de placer chaque autre joueur à sa position interpolée lorsque le client dessine une frame.
+-- Cette méthode permet de placer chaque autre personnage à sa position interpolée lorsque le client dessine une
+-- frame ; un personnage retiré du jeu (mort, joueur parti, bot retiré) est oublié.
 local function placeRemoteCharacters()
 	local renderTime = workspace:GetServerTimeNow() - CharacterSyncRules.INTERP_DELAY
-	for other, entry in remotes do
-		local char = other.Character
-		if not char or char ~= entry.char then
+	for char, entry in remotes do
+		if not char.Parent then
+			remotes[char] = nil
 			continue
 		end
 		local root = char:FindFirstChild("HumanoidRootPart") :: BasePart?
@@ -54,7 +56,7 @@ local function placeRemoteCharacters()
 	end
 end
 
--- Cette méthode permet de démarrer la réception et l'affichage des autres joueurs lorsque le client démarre.
+-- Cette méthode permet de démarrer la réception et l'affichage des autres personnages lorsque le client démarre.
 function CharacterSync.init()
 	task.spawn(function()
 		local found = ReplicatedStorage:WaitForChild(NetworkProtocol.Names.CHARACTER_SYNC, 15)
@@ -65,9 +67,6 @@ function CharacterSync.init()
 		remote = found
 		found.OnClientEvent:Connect(onRelayed)
 	end)
-	Players.PlayerRemoving:Connect(function(other)
-		remotes[other] = nil
-	end)
 	RunService:BindToRenderStep(
 		BIND_NAME,
 		Enum.RenderPriority.Camera.Value - 2,
@@ -75,10 +74,10 @@ function CharacterSync.init()
 	)
 end
 
--- Cette méthode permet d'estimer la vitesse d'un autre joueur d'après ses deux dernières positions relayées lorsque son
--- corps devient un ragdoll (#102) ; vecteur nul faute de deux positions.
-function CharacterSync.velocityOf(other: Player): Vector3
-	local entry = remotes[other]
+-- Cette méthode permet d'estimer la vitesse d'un autre personnage d'après ses deux dernières positions relayées
+-- lorsque son corps devient un ragdoll (#102) ; vecteur nul faute de deux positions.
+function CharacterSync.velocityOf(char: Model): Vector3
+	local entry = remotes[char]
 	local buffer = entry and entry.buffer
 	if not buffer or #buffer < 2 then
 		return Vector3.zero

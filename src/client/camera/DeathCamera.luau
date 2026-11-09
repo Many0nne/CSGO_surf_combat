@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
+local BotCharacters = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("BotCharacters"))
 local DeathRules = require(script.Parent.Parent.systems.game.DeathRules)
 local UIKit = require(script.Parent.Parent.ui.UIKit)
 
@@ -24,16 +25,16 @@ local active = false
 local marker: BillboardGui? = nil
 
 -- Cette méthode permet de trouver le point à regarder sur le tueur (tête, sinon racine) lorsqu'une frame est dessinée.
-local function killerFocus(killer: Player?): BasePart?
-	local char = killer and killer.Character
-	if not char then
+local function killerFocus(char: Model?): BasePart?
+	if not char or not char.Parent then
 		return nil
 	end
-	return (char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")) :: BasePart?
+	local focus = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
+	return if focus and focus:IsA("BasePart") then focus else nil
 end
 
 -- Cette méthode permet de construire le repère du tueur (losange, nom et distance) lorsque la caméra de mort démarre.
-local function buildMarker(killer: Player): (BillboardGui, TextLabel, TextLabel)
+local function buildMarker(killerName: string): (BillboardGui, TextLabel, TextLabel)
 	local gui = UIKit.create("BillboardGui", {
 		Name = "KillerMarker",
 		AlwaysOnTop = true,
@@ -55,7 +56,7 @@ local function buildMarker(killer: Player): (BillboardGui, TextLabel, TextLabel)
 	UIKit.stroke(gui:FindFirstChild("Diamond") :: Frame, C.HitRed, 2)
 	local label, shadow = UIKit.shadowedText(gui, {
 		Name = "Label",
-		Text = string.upper(killer.Name),
+		Text = killerName,
 		FontFace = F.Display,
 		TextSize = 16,
 		TextColor3 = C.HitRed,
@@ -70,12 +71,7 @@ end
 -- (DeathRules.cameraOffset), arrêtée avant un mur ; personnages et corps sont ignorés.
 local function cameraSpot(eye: Vector3, look: Vector3): Vector3
 	local offset = DeathRules.cameraOffset(look)
-	local exclude: { Instance } = {}
-	for _, player in Players:GetPlayers() do
-		if player.Character then
-			table.insert(exclude, player.Character)
-		end
-	end
+	local exclude: { Instance } = BotCharacters.allCharacters() :: any
 	local ragdolls = workspace:FindFirstChild("Ragdolls")
 	if ragdolls then
 		table.insert(exclude, ragdolls)
@@ -91,8 +87,9 @@ local function cameraSpot(eye: Vector3, look: Vector3): Vector3
 end
 
 -- Cette méthode permet de prendre la main sur la caméra lorsque le joueur local meurt : elle recule au-dessus du corps
--- et pivote vers le tueur (nil pour une chute : orientation figée).
-function DeathCamera.start(killer: Player?)
+-- et pivote vers le personnage du tueur, joueur ou bot (nil pour une chute : orientation figée) ; killerName est le
+-- nom affiché sur son repère (« BOT MARCEL » pour un bot).
+function DeathCamera.start(killer: Model?, killerName: string?)
 	DeathCamera.stop()
 	active = true
 	local cam = workspace.CurrentCamera
@@ -101,10 +98,10 @@ function DeathCamera.start(killer: Player?)
 	local current = cam.CFrame
 
 	local label, shadow
-	local killerName = killer and string.upper(killer.Name)
+	local markerName = string.upper(killerName or (killer and killer.Name) or "")
 	if killer then
 		local gui
-		gui, label, shadow = buildMarker(killer)
+		gui, label, shadow = buildMarker(markerName)
 		marker = gui
 	end
 
@@ -125,7 +122,7 @@ function DeathCamera.start(killer: Player?)
 				marker.Enabled = true
 				local text = string.format(
 					"%s · %s",
-					killerName,
+					markerName,
 					DeathRules.formatDistance((focus.Position - origin).Magnitude)
 				)
 				label.Text = text
