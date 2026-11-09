@@ -1,7 +1,7 @@
--- Réglages (direction « Ligne de mire », disposition C de #117) : bloc centré sur un voile, catégories à tirer à gauche,
+-- Réglages (direction « Ligne de mire », disposition C de #117) : bloc centré sur un voile, catégories à gauche,
 -- lignes de réglages à droite (nom, contrôle, valeur), RÉTABLIR et RETOUR en bas au centre. Deux présentations du même
--- écran : « page » à même la scène du menu, où l'on règle en tirant, et « modal » sur un voile sombre (touche P en
--- partie), sans tir ni hitmarker. Pour ajouter un réglage : une entrée dans `buildCategories`, et un champ dans
+-- écran : « page » à même la scène du menu et « modal » sur un voile sombre (touche P en
+-- partie), toutes deux à la souris système (#130). Pour ajouter un réglage : une entrée dans `buildCategories`, et un champ dans
 -- PlayerSettings s'il doit être conservé entre les sessions (LocalSettings, #100).
 local GuiService = game:GetService("GuiService")
 local Lighting = game:GetService("Lighting")
@@ -14,7 +14,6 @@ local PlayerSettings = require(ReplicatedStorage.Shared.PlayerSettings)
 local UITheme = require(ReplicatedStorage.Shared.UITheme)
 local LocalSettings = require(script.Parent.Parent.systems.settings.LocalSettings)
 local HUDRules = require(script.Parent.HUDRules)
-local MenuCursor = require(script.Parent.MenuCursor)
 local MenuPage = require(script.Parent.MenuPage)
 local MenuShot = require(script.Parent.MenuShot)
 local UIKit = require(script.Parent.UIKit)
@@ -84,11 +83,6 @@ local function store(field: string, value: any)
 	end
 end
 
--- Cette méthode permet de savoir si un geste doit tirer lorsqu'il est fait dans l'écran : jamais en partie.
-local function shoots(): boolean
-	return mode == "page"
-end
-
 -- Cette méthode permet de doubler la valeur d'une ligne d'une ombre noire décalée qui suit son texte lorsqu'elle est construite.
 local function shadowValue(value: TextBox | TextLabel)
 	local shadow = UIKit.text({
@@ -144,7 +138,7 @@ local function makeRow(category: Category, name: string): (Frame, TextLabel)
 end
 
 -- Cette méthode permet d'ajouter un réglage à curseur (trace, poignée en impact, valeur éditable) à une catégorie lorsque
--- l'écran est construit : un tir place la valeur, puis la poignée se glisse sans retirer ; `field` est le champ de
+-- l'écran est construit : un clic place la valeur, puis la poignée se glisse ; `field` est le champ de
 -- PlayerSettings où la valeur est conservée.
 local function addSlider(
 	category: Category,
@@ -209,25 +203,19 @@ local function addSlider(
 	})
 	local fill = UIKit.frame({ Size = UDim2.fromScale(0, 1), BackgroundColor3 = C.Accent, Parent = track })
 	local handle = UIKit.frame({
-		Name = "Impact",
+		Name = "Handle",
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Size = UDim2.fromOffset(16, 16),
-		BackgroundColor3 = C.Black,
+		Size = UDim2.fromOffset(14, 14),
+		BackgroundColor3 = C.Bone,
 		ZIndex = 2,
 		Parent = track,
 	})
 	UIKit.create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = handle })
-	local handleStroke = UIKit.stroke(handle, C.Bone, 2)
+	UIKit.stroke(handle, C.Black, 1.5)
 	local handleScale = UIKit.create("UIScale", { Parent = handle })
 	UIKit.hover(hit, handleScale, { Scale = 1 }, { Scale = 1.25 })
-	UIKit.hover(hit, handleStroke, { Color = C.Bone }, { Color = C.HitRed })
+	UIKit.hover(hit, handle, { BackgroundColor3 = C.Bone }, { BackgroundColor3 = C.HitRed })
 	UIKit.hover(hit, label, { TextColor3 = C.Bone }, { TextColor3 = C.HitRed })
-	hit.MouseEnter:Connect(function()
-		MenuCursor.addHover(1)
-	end)
-	hit.MouseLeave:Connect(function()
-		MenuCursor.addHover(-1)
-	end)
 
 	local function applyValue(v: number)
 		v = math.clamp(v, minVal, maxVal)
@@ -262,9 +250,6 @@ local function addSlider(
 		if inp.UserInputType == Enum.UserInputType.MouseButton1 then
 			dragging = true
 			applyValue(valueFromMouse(inp.Position))
-			if shoots() then
-				MenuShot.fireAt(hit, inp, false)
-			end
 		end
 	end)
 	UserInputService.InputChanged:Connect(function(inp)
@@ -289,7 +274,7 @@ local function addSlider(
 	})
 end
 
--- Cette méthode permet d'ajouter un réglage à choix fermé (« ‹ VALEUR › », flèches à tirer, en boucle) à une catégorie
+-- Cette méthode permet d'ajouter un réglage à choix fermé (« ‹ VALEUR › », flèches à cliquer, en boucle) à une catégorie
 -- lorsque l'écran est construit ; `options` donne les libellés et valeurs, `initial` l'indice de départ, `field` le champ
 -- de PlayerSettings où la valeur est conservée et `width` la largeur de la valeur (PICK_WIDTH par défaut).
 local function addPicker(
@@ -353,7 +338,6 @@ local function addPicker(
 			size = 22,
 			layoutOrder = arrow.order,
 			parent = picker,
-			shoots = shoots,
 			action = function()
 				apply(current + arrow.step)
 			end,
@@ -387,7 +371,7 @@ local function setChoiceText(choice: MenuShot.Choice, text: string)
 end
 
 -- Cette méthode permet de terminer la saisie de touche en cours (la ligne revient à sa touche) lorsque le joueur a
--- choisi, annule, tire ailleurs ou ferme l'écran.
+-- choisi, annule, clique ailleurs ou ferme l'écran.
 local function endCapture()
 	local active = capture
 	capture = nil
@@ -396,8 +380,8 @@ local function endCapture()
 	end
 end
 
--- Cette méthode permet d'ajouter la ligne d'un emplacement de la barre d'armes (nom de l'arme, touche à tirer) lorsque
--- l'écran est construit : un tir sur la touche attend la suivante, Échap annule, une touche du jeu est refusée.
+-- Cette méthode permet d'ajouter la ligne d'un emplacement de la barre d'armes (nom de l'arme, touche à cliquer) lorsque
+-- l'écran est construit : un clic sur la touche attend la suivante, Échap annule, une touche du jeu est refusée.
 local function addKeyBinding(category: Category, slot: number, weaponLabel: string): () -> ()
 	assert(page, "SettingsMenu : la page doit exister avant ses lignes")
 	local row = makeRow(category, string.format("Arme %d · %s", slot, weaponLabel))
@@ -428,7 +412,6 @@ local function addKeyBinding(category: Category, slot: number, weaponLabel: stri
 		anchor = Vector2.new(1, 0.5),
 		position = UDim2.fromScale(1, 0.5),
 		parent = row,
-		shoots = shoots,
 		action = function()
 			endCapture()
 			capture = {
@@ -476,7 +459,7 @@ local function addKeyBinding(category: Category, slot: number, weaponLabel: stri
 end
 
 -- Cette méthode permet d'afficher les lignes de la catégorie choisie et de marquer son onglet (os vif, barre ambrée)
--- lorsque le joueur tire sur une catégorie ou rouvre l'écran.
+-- lorsque le joueur clique sur une catégorie ou rouvre l'écran.
 local function selectCategory(index: number)
 	selected = index
 	for i, category in categories do
@@ -506,7 +489,6 @@ local function addCategory(block: Frame, title: string): Category
 		size = CAT_SIZE,
 		position = UDim2.fromOffset(0, CATS_TOP + (index - 1) * CAT_STEP),
 		parent = block,
-		shoots = shoots,
 		action = function()
 			selectCategory(index)
 		end,
@@ -630,7 +612,7 @@ local function buildCategories(block: Frame)
 	end)
 end
 
--- Cette méthode permet de remettre aux valeurs par défaut les réglages de la catégorie affichée lorsque le joueur tire
+-- Cette méthode permet de remettre aux valeurs par défaut les réglages de la catégorie affichée lorsque le joueur clique
 -- sur RÉTABLIR.
 local function resetCategory()
 	for _, row in categories[selected].list do
@@ -639,7 +621,7 @@ local function resetCategory()
 end
 
 -- Cette méthode permet d'ouvrir ou fermer l'écran en sauvegardant puis restaurant l'état de la souris
--- lorsque le joueur appuie sur P, tire sur RÉGLAGES ou ferme l'écran.
+-- lorsque le joueur appuie sur P, clique sur RÉGLAGES ou ferme l'écran.
 local function setOpen(state: boolean)
 	if not page or state == open then
 		return
@@ -691,7 +673,6 @@ local function buildActions(built: MenuPage.Page)
 		size = ACTION_SIZE,
 		layoutOrder = 1,
 		parent = actions,
-		shoots = shoots,
 		action = resetCategory,
 	})
 	local back = built.choice({
@@ -699,7 +680,6 @@ local function buildActions(built: MenuPage.Page)
 		size = ACTION_SIZE,
 		layoutOrder = 2,
 		parent = actions,
-		shoots = shoots,
 		action = function()
 			setOpen(false)
 		end,
@@ -800,7 +780,7 @@ function SettingsMenu.setPageRequest(callback: () -> boolean)
 	pageRequest = callback
 end
 
--- Cette méthode permet d'ouvrir l'écran dans une présentation donnée lorsque le joueur tire sur RÉGLAGES.
+-- Cette méthode permet d'ouvrir l'écran dans une présentation donnée lorsque le joueur clique sur RÉGLAGES.
 function SettingsMenu.open(newMode: Mode)
 	mode = newMode
 	setOpen(true)

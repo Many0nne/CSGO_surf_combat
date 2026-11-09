@@ -1,6 +1,6 @@
--- Menu principal, salle des miroirs (#112, docs/ui.md) : on choisit en tirant. Le curseur est un hitmarker, un tir dans
--- la scène fait pivoter les éclats touchés. Disposition de la maquette (docs/ui/menu-miroirs/reconstituee.jpg) : titre en
--- haut à gauche, onglets ARMES · INFOS · JOUER · RÉGLAGES · FEEDBACK en haut au centre (au-dessus des écrans secondaires,
+-- Menu principal, salle des miroirs (#112, docs/ui.md) : on choisit à la souris système, seule l'arme de la vitrine se
+-- tire (hitmarker à son survol, le tir fait pivoter les éclats touchés, #130). Disposition de la maquette
+-- (docs/ui/menu-miroirs/reconstituee.jpg) : titre en haut à gauche, onglets ARMES · INFOS · JOUER · RÉGLAGES · FEEDBACK en haut au centre (au-dessus des écrans secondaires,
 -- qui s'ouvrent dessous), fiche de l'arme de la vitrine en bas à gauche, sélecteur d'arme en bas à droite.
 local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
@@ -48,7 +48,6 @@ local STATS = {
 local gui: ScreenGui
 local tabsGui: ScreenGui
 local content: Frame
-local holes: Frame
 local card: CanvasGroup
 local cardName: TextLabel
 local cardNameShadow: TextLabel
@@ -105,7 +104,7 @@ local function buildTitle(root: Frame)
 	})
 end
 
--- Cette méthode permet de construire la barre d'onglets à tirer lorsque le menu est initialisé : JOUER, plus grand et
+-- Cette méthode permet de construire la barre d'onglets lorsque le menu est initialisé : JOUER, plus grand et
 -- souligné de rouge d'impact, lance la partie après l'explosion de la vitrine.
 local function buildTabs(root: Frame)
 	local bar = UIKit.frame({
@@ -232,7 +231,7 @@ local function buildCard(root: Frame)
 	end
 end
 
--- Cette méthode permet de construire le sélecteur d'arme en bas à droite (flèches à tirer, rappel molette et touches)
+-- Cette méthode permet de construire le sélecteur d'arme en bas à droite (flèches, rappel molette et touches)
 -- lorsque le menu est initialisé ; les flèches remplacent la molette au tactile et à la manette.
 local function buildSelector(root: Frame)
 	local row = UIKit.frame({
@@ -332,9 +331,10 @@ local function buildContent(root: Frame)
 	MenuScene.onWeaponChanged(showWeapon)
 end
 
--- Cette méthode permet de tirer dans la scène lorsque le joueur clique hors des boutons, sur n'importe quel écran du menu.
+-- Cette méthode permet de tirer sur l'arme de la vitrine lorsque le joueur clique hors des boutons, sur l'accueil
+-- seulement ; un clic à côté de l'arme ne tire pas.
 local function onInputBegan(input: InputObject, processed: boolean)
-	if processed or MenuShot.isBusy() then
+	if processed or currentPage ~= "home" or MenuShot.isBusy() then
 		return
 	end
 	local x, y
@@ -346,9 +346,8 @@ local function onInputBegan(input: InputObject, processed: boolean)
 	else
 		return
 	end
-	local hasFired, hasHit = MenuScene.shoot(x, y)
-	if hasFired then
-		MenuCursor.kick(hasHit)
+	if MenuScene.shoot(x, y) then
+		MenuCursor.kick()
 	end
 end
 
@@ -407,11 +406,12 @@ function MainMenu.init(
 	gui = makeGui("MainMenu", 1)
 	-- Les onglets passent au-dessus des écrans secondaires (DisplayOrder 2 et 3), qui s'ouvrent dessous
 	tabsGui = makeGui("MenuTabs", 4)
-	holes = MenuShot.createLayer(gui)
 	buildContent(UIKit.scaledRoot(gui))
 	buildTabs(UIKit.scaledRoot(tabsGui))
 	MainMenu.setPage("home")
-	MenuCursor.init()
+	MenuCursor.init(function(x: number, y: number): boolean
+		return currentPage == "home" and not MenuShot.isBusy() and MenuScene.isAimingWeapon(x, y)
+	end)
 	UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
 		if gui.Enabled then
 			onInputBegan(input, processed)
@@ -433,13 +433,10 @@ function MainMenu.setPage(page: Page)
 	end
 	currentPage = page
 	content.Visible = page == "home"
-	holes.Visible = page == "home"
 	for key, tab in tabs do
 		tab.setSelected(key == page)
 	end
-	if page == "home" then
-		MenuShot.useLayer(holes)
-	else
+	if page ~= "home" then
 		for _, choice in homeChoices do
 			choice.reset()
 		end
