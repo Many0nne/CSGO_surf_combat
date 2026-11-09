@@ -1,4 +1,4 @@
--- Règles des bots (#139) : marche d'essai, nom, nombre demandé en Studio.
+-- Règles des bots (#139, #140) : cap et regard, gêne, nom, nombre demandé en Studio.
 return function(T, Loader)
 	local Rules = Loader.new():require("src/shared/BotRules")
 	local Config = Loader.new():require("src/shared/BotConfig")
@@ -19,9 +19,16 @@ return function(T, Loader)
 			near(look.Z, east.Z, "la racine regarde où il marche")
 		end)
 
-		T.it("tire le délai du prochain saut dans les bornes", function()
-			near(Rules.nextJumpDelay(0), Config.WANDER_JUMP_MIN)
-			near(Rules.nextJumpDelay(1), Config.WANDER_JUMP_MAX)
+		T.it("donne le cap d'une direction, nil pour une direction nulle", function()
+			near(Rules.yawOf(Vector3.new(0, 0, -1)) :: number, 0, "vers -Z")
+			near(Rules.yawOf(Vector3.new(1, 5, 0)) :: number, 90, "vers +X, hauteur ignorée")
+			T.expectEqual(Rules.yawOf(Vector3.new(0, 3, 0)), nil)
+		end)
+
+		T.it("tourne le regard à vitesse bornée, par le plus court côté", function()
+			near(Rules.turnToward(10, 350, 100, 1), 350, "20° en arrière : atteint")
+			near(Rules.turnToward(350, 10, 100, 0.1), 0, "passe par 0 : 10° par tick")
+			near(Rules.turnToward(0, 170, 90, 1), 90, "borné à rate × dt")
 		end)
 
 		T.it("compte le temps gêné seulement au sol et lent", function()
@@ -31,17 +38,6 @@ return function(T, Loader)
 			T.expectEqual(Rules.stuckTime(0.3, true, wish, wish, 0.1), 0, "à pleine vitesse : remis à 0")
 			T.expectEqual(Rules.stuckTime(0.3, false, 0, wish, 0.1), 0, "en l'air : jamais gêné")
 			T.expectEqual(Rules.stuckTime(0.3, true, 0, 0, 0.1), 0, "sans envie d'avancer : jamais gêné")
-		end)
-
-		T.it("fait demi-tour après STUCK_TIME", function()
-			T.expectEqual(Rules.shouldTurn(Config.STUCK_TIME - 0.01), false)
-			T.expectEqual(Rules.shouldTurn(Config.STUCK_TIME), true)
-		end)
-
-		T.it("tourne d'un angle borné et reste dans [0, 360[", function()
-			near(Rules.turnedYaw(0, 0), Config.TURN_MIN)
-			near(Rules.turnedYaw(300, 1), (300 + Config.TURN_MAX) % 360)
-			T.expectEqual(Rules.turnedYaw(350, 0.5) < 360, true)
 		end)
 
 		T.it("donne le premier nom libre, puis un nom numéroté", function()

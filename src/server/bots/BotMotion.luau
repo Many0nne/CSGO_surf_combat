@@ -1,18 +1,22 @@
 -- Mouvement d'un bot côté serveur (#139) : même physique que le joueur (CharacterMotor), en ticks fixes de 64 Hz
 -- (StepTiming), animations 3e personne jouées sur son Animator (répliquées par Roblox), position publiée aux clients à
 -- la cadence réseau d'un joueur (CharacterSync.relayBot) pour être interpolée comme la sienne.
--- Intention de l'étape 3/9 : avancer tout droit, sauter de temps en temps, faire demi-tour contre un mur (BotRules).
--- La navigation (#140) remplacera cette intention, pas le reste.
+-- L'intention (direction, saut, grimpe) vient du suivi de chemin (BotNavigator, #140) ; sur une échelle, la vitesse
+-- est celle du joueur (LadderRules), en poussant vers le mur.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
 local BotRules = require(ReplicatedStorage.Shared.BotRules)
 local CharacterAnimator = require(ReplicatedStorage.Shared.CharacterAnimator)
 local CharacterMotor = require(ReplicatedStorage.Shared.movement.CharacterMotor)
 local CharacterSyncRules = require(ReplicatedStorage.Shared.CharacterSyncRules)
+local LadderRules = require(ReplicatedStorage.Shared.LadderRules)
 local Config = require(ReplicatedStorage.Shared.MovementConfig)
 local PhysicsUtils = require(ReplicatedStorage.Shared.PhysicsUtils)
 local StepTiming = require(ReplicatedStorage.Shared.StepTiming)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
+local BotNavigator = require(script.Parent.BotNavigator)
+local NavPlan = require(script.Parent.NavPlan)
 
 local BotMotion = {}
 BotMotion.__index = BotMotion
@@ -27,9 +31,8 @@ export type BotMotion = typeof(setmetatable(
 		animator: any,
 		relay: Relay,
 		rng: Random,
+		navigator: BotNavigator.BotNavigator,
 		yaw: number,
-		jumpIn: number,
-		stuck: number,
 		tickAccumulator: number,
 		sendAccumulator: number,
 		frozen: boolean,
@@ -64,9 +67,8 @@ function BotMotion.new(
 		animator = CharacterAnimator.new(humanoid),
 		relay = relay,
 		rng = rng,
+		navigator = BotNavigator.new(rng),
 		yaw = rng:NextNumber(0, 360),
-		jumpIn = BotRules.nextJumpDelay(rng:NextNumber()),
-		stuck = 0,
 		tickAccumulator = 0,
 		sendAccumulator = 0,
 		frozen = false,
@@ -90,41 +92,52 @@ function BotMotion.setFrozen(self: BotMotion, frozen: boolean)
 	self.frozen = frozen
 end
 
--- Cette méthode permet d'avancer le bot d'un tick fixe lorsque la boucle serveur en joue un : intention (cap, saut,
--- demi-tour), puis le même pas que le joueur (sol, transitions, physique, collisions), puis l'animation.
+-- Cette méthode permet d'avancer le bot d'un tick fixe lorsque la boucle serveur en joue un : intention du suivi de
+-- chemin, échelle si le bot est dans son volume, puis le même pas que le joueur (sol, transitions, physique,
+-- collisions), puis le regard et l'animation.
 function BotMotion._tick(self: BotMotion, dt: number)
 	local motor = self.motor
 	local gnd = motor:beginTick(dt)
 	local _, isGroundedState, isAirborneState = motor:updateState(gnd, false)
 	local ci = motor:standInfo()
+	local pos = motor.cframe.Position
+	local foot = pos - Vector3.new(0, ci.rootToBottom, 0)
+	local speedBefore = PhysicsUtils.getXZ(motor.velocity).Magnitude
 
-	local wishdir = if self.frozen then Vector3.zero else BotRules.headingDir(self.yaw)
-	local wishspeed = if self.frozen then 0 else self.wishSpeed
-	local jump = false
-	if not self.frozen and isGroundedState then
-		self.jumpIn -= dt
-		if self.jumpIn <= 0 then
-			jump = true
-			self.jumpIn = BotRules.nextJumpDelay(self.rng:NextNumber())
+	local intent = self.navigator:update(NavPlan.get(), foot, isGroundedState, speedBefore, dt)
+	local frozen = self.frozen
+	local wishdir = if frozen then Vector3.zero else intent.wishdir
+	local wishspeed = if frozen or wishdir.Magnitude < 1e-3 then 0 else self.wishSpeed
+	local jump = not frozen and intent.jump
+
+	-- Échelle (comme MovementController) : pousser vers le mur fait monter ; ni friction, ni gravité, ni saut normal
+	local onLadder = false
+	local plan = NavPlan.get()
+	if not frozen and intent.climb and plan then
+		local normal = NavPlan.ladderAt(plan, pos)
+		if normal then
+			motor.velocity = LadderRules.climbVelocity(-normal, normal, Config.LADDER_CLIMB_SPEED, gnd.onGround)
+			motor:setAirborne()
+			onLadder, isGroundedState, isAirborneState = true, false, true
+			wishdir = -normal
 		end
 	end
 
 	local willJump = false
 	if isGroundedState then
 		willJump = motor:groundPhysics(gnd, wishdir, wishspeed, dt, jump, false, false)
-	elseif isAirborneState then
-		-- En l'air, pas d'air strafe : le bot garde sa trajectoire (le surf n'est pas simulé, cf. #133)
-		motor:airPhysics(Vector3.zero, wishspeed, dt, false)
+	elseif isAirborneState and not onLadder then
+		-- En l'air, pas d'air strafe (le surf n'est pas simulé, cf. #133) ; seul un saut sur un rebord vise sa cible
+		motor:airPhysics(if intent.airControl then wishdir else Vector3.zero, wishspeed, dt, false)
 	end
-	motor:move(gnd, dt, ci, BotRules.headingRotation(self.yaw), isGroundedState, isAirborneState, willJump, false)
+
+	local wantedYaw = BotRules.yawOf(wishdir)
+	if wantedYaw then
+		self.yaw = BotRules.turnToward(self.yaw, wantedYaw, BotConfig.NAV_TURN_RATE, dt)
+	end
+	motor:move(gnd, dt, ci, BotRules.headingRotation(self.yaw), isGroundedState, isAirborneState, willJump, onLadder)
 
 	local speed = PhysicsUtils.getXZ(motor.velocity).Magnitude
-	self.stuck = BotRules.stuckTime(self.stuck, isGroundedState and not willJump, speed, wishspeed, dt)
-	if BotRules.shouldTurn(self.stuck) then
-		self.yaw = BotRules.turnedYaw(self.yaw, self.rng:NextNumber())
-		self.stuck = 0
-	end
-
 	self.animator:update({
 		onGround = isGroundedState,
 		crouching = false,

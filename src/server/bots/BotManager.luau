@@ -1,8 +1,10 @@
--- Bots du round (#133), étape 3/9 (#139) : un bot est un participant sans Player (Participants.addBot) dont le
+-- Bots du round (#133), étapes 3/9 (#139) et 4/9 (#140) : un bot est un participant sans Player (Participants.addBot) dont le
 -- personnage est construit par le serveur (rig de référence, skin commun, AWP), lancé depuis le soleil comme un
 -- joueur, déplacé par BotMotion et branché comme un joueur sur l'arme 3P, la mort et le corps (onCharacter).
 -- Il réapparaît RESPAWN_DELAY après sa mort, et au début de chaque round, tant que le round est actif.
--- Outillage Studio : l'attribut Workspace DebugBots fixe le nombre de bots (0 pour tous les retirer).
+-- Le plan de navigation de la map est construit au démarrage (NavPlan) ; chaque bot le suit (BotNavigator).
+-- Outillage Studio : l'attribut Workspace DebugBots fixe le nombre de bots (0 pour tous les retirer), DebugNav affiche
+-- le plan (NavDebug).
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -15,9 +17,12 @@ local BotRules = require(ReplicatedStorage.Shared.BotRules)
 local CharacterAppearance = require(ReplicatedStorage.Shared.CharacterAppearance)
 local CharacterConfig = require(ReplicatedStorage.Shared.CharacterConfig)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local MapSelection = require(ReplicatedStorage.Shared.MapSelection)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local Participants = require(ServerScriptService.Server.Participants)
 local BotMotion = require(script.Parent.BotMotion)
+local NavDebug = require(script.Parent.NavDebug)
+local NavPlan = require(script.Parent.NavPlan)
 
 -- Arme tenue par les bots (décision 4 de #133 : AWP ; le couteau viendra avec le combat, #143)
 local BOT_WEAPON = "AWP"
@@ -245,6 +250,23 @@ end
 -- Cette méthode permet de démarrer la gestion des bots lorsque le serveur démarre.
 function BotManager.init(dependencies: Deps)
 	deps = dependencies
+	task.spawn(function()
+		local map = MapSelection.waitForActive(30)
+		if map then
+			NavPlan.start(map)
+		else
+			warn("[BotManager] pas de map jouée : pas de plan de navigation, les bots restent sur place")
+		end
+	end)
+	NavDebug.init(function()
+		local list = {}
+		for _, bot in bots do
+			if bot.motion then
+				table.insert(list, bot.motion.navigator)
+			end
+		end
+		return list
+	end)
 	RunService.Heartbeat:Connect(PerfMarkers.wrap("srv bots", step))
 	if RunService:IsStudio() then
 		workspace:GetAttributeChangedSignal(BotConfig.DEBUG_ATTRIBUTE):Connect(applyDebugCount)
