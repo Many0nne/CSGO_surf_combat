@@ -16,8 +16,8 @@ FrameProbeRules.TELEPORT_DIST = 20 -- studs en une frame : respawn, lancement, k
 
 export type Sample = {
 	dt: number, -- temps entre deux RenderStep
-	simDt: number, -- temps simulé par le mouvement depuis le rendu précédent
-	steps: number, -- nombre de pas de mouvement entre les deux rendus (1 attendu)
+	simDt: number, -- temps simulé par le mouvement depuis le rendu précédent (multiple du tick, affiché seulement)
+	steps: number, -- nombre de ticks de mouvement entre les deux rendus (0, 1 ou plus, affiché seulement)
 	disp: number, -- déplacement de la racine entre les deux rendus (studs)
 	simSpeed: number, -- norme de la vitesse simulée par le MovementController (studs/s)
 	yawRate: number, -- vitesse de rotation horizontale de la caméra (degrés/s, valeur absolue)
@@ -71,21 +71,18 @@ local function isNormalDt(dt: number, medianDt: number): boolean
 	return dt <= medianDt * FrameProbeRules.NORMAL_DT_RATIO
 end
 
--- Cette méthode permet d'attribuer une cause à un déplacement irrégulier lorsque la frame a un dt normal :
--- pas physique manquant ou doublé, simulation elle-même irrégulière, position modifiée hors simulation, ou décalage
--- entre le temps de rendu et le temps simulé.
+-- Cette méthode permet d'attribuer une cause à un déplacement irrégulier lorsque la frame a un dt normal : simulation
+-- elle-même irrégulière, position modifiée hors simulation, sinon interpolation entre les ticks. Le nombre de ticks
+-- par frame (0, 1 ou 2 à 60 FPS, tick fixe #96) n'est pas une cause : l'affichage est interpolé au temps rendu.
 function FrameProbeRules.stutterSource(prev: Sample, cur: Sample, nxt: Sample): string
-	if cur.steps ~= 1 then
-		return cur.steps == 0 and "pas_physique_manquant" or "pas_physique_double"
-	end
 	if FrameProbeRules.isIsolatedOutlier(prev.simSpeed, cur.simSpeed, nxt.simSpeed, FrameProbeRules.MIN_SPEED) then
 		return "simulation"
 	end
-	local expected = cur.simSpeed * cur.simDt
+	local expected = cur.simSpeed * cur.dt
 	if expected > 1e-3 and math.abs(cur.disp - expected) / expected > FrameProbeRules.OUTLIER_DEVIATION then
 		return "position_hors_simulation"
 	end
-	return "timing_rendu_vs_simulation"
+	return "interpolation"
 end
 
 -- Cette méthode permet de classer la frame centrale d'un triplet lorsque la frame suivante est connue :
