@@ -1,6 +1,7 @@
 -- Affichage de debug du plan de navigation (#140), Studio uniquement : attribut Workspace DebugNav.
 -- - true : points de passage (couleur et étiquette = note, type), arêtes entre points (gris marche, bleu descente,
---   orange saut, vert échelle), chemin restant de chaque bot (jaune) ;
+--   orange saut, vert échelle), chemin restant de chaque bot (jaune), état et destination au-dessus de chaque bot,
+--   trait rouge vers sa cible en combat (#141) ;
 -- - "cases" : en plus, chaque case du plan (vert : gardée, rouge : écartée, hors de la composante principale).
 -- Tout est posé dans Workspace.NavDebug, créé par le serveur (visible par tous les clients du playtest). Bilan des
 -- bots dans la console toutes les 30 s ([Nav] bilan), arêtes ratées en warn au fil de l'eau.
@@ -9,6 +10,7 @@ local RunService = game:GetService("RunService")
 
 local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
 local NavRules = require(ReplicatedStorage.Shared.NavRules)
+local BotBrain = require(script.Parent.BotBrain)
 local BotNavigator = require(script.Parent.BotNavigator)
 local NavPlan = require(script.Parent.NavPlan)
 
@@ -21,6 +23,16 @@ local KIND_COLORS = {
 	[NavRules.LADDER] = Color3.fromRGB(60, 220, 90),
 }
 local PATH_COLOR = Color3.fromRGB(255, 230, 40)
+local TARGET_COLOR = Color3.fromRGB(255, 40, 40)
+local STATE_COLORS = {
+	chercher = Color3.fromRGB(230, 230, 230),
+	enqueter = Color3.fromRGB(255, 200, 60),
+	combattre = Color3.fromRGB(255, 70, 70),
+	replacer = Color3.fromRGB(90, 170, 255),
+}
+
+-- Bot vu par l'affichage : suivi de chemin, comportement (nil avant le plan), racine
+export type Entry = { navigator: any, brain: any, root: BasePart }
 local LIFT = Vector3.new(0, 0.6, 0)
 
 local root: Folder? = nil
@@ -130,9 +142,37 @@ local function clear()
 	root, pathsFolder = nil, nil
 end
 
+-- Cette méthode permet d'écrire l'état d'un bot au-dessus de lui lorsque l'affichage est redessiné (état, destination,
+-- cible), avec un trait vers sa cible en combat.
+local function drawBrain(parent: Instance, entry: Entry)
+	local brain = entry.brain
+	if not brain then
+		return
+	end
+	local color = STATE_COLORS[brain.state] or Color3.new(1, 1, 1)
+	local anchor = debugPart(parent, Vector3.one * 0.2, entry.root.CFrame, color, Enum.PartType.Ball)
+	anchor.Transparency = 1
+	local gui = Instance.new("BillboardGui")
+	gui.Size = UDim2.fromOffset(180, 22)
+	gui.StudsOffset = Vector3.new(0, 4.5, 0)
+	gui.AlwaysOnTop = true
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.TextColor3 = color
+	label.TextStrokeTransparency = 0.3
+	label.TextScaled = true
+	label.Text = brain:describe()
+	label.Parent = gui
+	gui.Parent = anchor
+	if brain.state == "combattre" and brain.targetPos then
+		segment(parent, entry.root.Position, brain.targetPos, TARGET_COLOR, 0.15)
+	end
+end
+
 -- Cette méthode permet de démarrer l'affichage de debug lorsque le serveur démarre en Studio ; navigators liste
--- le suivi de chemin des bots en jeu (chemins redessinés 4 fois par seconde).
-function NavDebug.init(navigators: () -> { any })
+-- les bots en jeu (chemins et états redessinés 4 fois par seconde).
+function NavDebug.init(navigators: () -> { Entry })
 	if not RunService:IsStudio() then
 		return
 	end
@@ -163,6 +203,19 @@ function NavDebug.init(navigators: () -> { any })
 						BotNavigator.stats.bhopTopSpeed
 					)
 				)
+				local b = BotBrain.stats
+				print(
+					string.format(
+						"[Bots] bilan : %d combats, %d tirs (simulés avant #143), %d tirs entendus, %d enquêtes, %d replis, %d angles tenus, %d destinations biaisées vers un humain",
+						b.combats,
+						b.shots,
+						b.heard,
+						b.investigations,
+						b.replacements,
+						b.holds,
+						b.biased
+					)
+				)
 			end
 			local plan = NavPlan.get()
 			if wanted and wanted ~= false and plan then
@@ -171,8 +224,9 @@ function NavDebug.init(navigators: () -> { any })
 				end
 				local paths = pathsFolder :: Folder
 				paths:ClearAllChildren()
-				for _, navigator in navigators() do
-					local path = navigator:remainingPath()
+				for _, entry in navigators() do
+					drawBrain(paths, entry)
+					local path = entry.navigator:remainingPath()
 					if path then
 						for i = 2, #path do
 							segment(paths, path[i - 1] + LIFT * 2, path[i] + LIFT * 2, PATH_COLOR, 0.4)
