@@ -6,7 +6,6 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
-local MenuCursor = require(script.Parent.MenuCursor)
 local MenuShot = require(script.Parent.MenuShot)
 local UIKit = require(script.Parent.UIKit)
 
@@ -34,14 +33,13 @@ export type ChoiceProps = {
 	layoutOrder: number?,
 	parent: Instance?,
 	action: () -> (),
-	shoots: (() -> boolean)?,
 }
 
 export type Page = {
 	gui: ScreenGui,
 	group: CanvasGroup,
 	choice: (props: ChoiceProps) -> MenuShot.Choice,
-	exit: (text: string, action: () -> (), shoots: (() -> boolean)?) -> MenuShot.Choice,
+	exit: (text: string, action: () -> ()) -> MenuShot.Choice,
 	show: (withTitle: boolean?) -> (),
 	hide: () -> (),
 }
@@ -69,7 +67,7 @@ local function buildVeil(root: Frame)
 	})
 end
 
--- Cette méthode permet de construire le fond d'un écran secondaire (voile, titre, calque d'impacts) lorsqu'il s'initialise.
+-- Cette méthode permet de construire le fond d'un écran secondaire (voile, titre) lorsqu'il s'initialise.
 function MenuPage.new(name: string, displayOrder: number, title: string): Page
 	local gui = UIKit.create("ScreenGui", {
 		Name = name,
@@ -108,7 +106,6 @@ function MenuPage.new(name: string, displayOrder: number, title: string): Page
 		Size = UDim2.fromScale(1, 1),
 		ZIndex = 2,
 	}, 3)
-	local holes = MenuShot.createLayer(gui)
 	local choices: { MenuShot.Choice } = {}
 
 	local page = { gui = gui, group = group }
@@ -127,29 +124,26 @@ function MenuPage.new(name: string, displayOrder: number, title: string): Page
 			layoutOrder = props.layoutOrder,
 			parent = props.parent or group,
 			action = props.action,
-			shoots = props.shoots,
 		})
 		table.insert(choices, created)
 		return created
 	end
 
 	-- Cette méthode permet de poser l'action de sortie (RETOUR, ANNULER) à son emplacement commun lorsque l'écran est construit.
-	function page.exit(text: string, action: () -> (), shoots: (() -> boolean)?): MenuShot.Choice
+	function page.exit(text: string, action: () -> ()): MenuShot.Choice
 		return page.choice({
 			text = text,
 			size = EXIT_SIZE,
 			position = UDim2.new(0.5, 0, 0, EXIT_Y),
 			anchor = Vector2.new(0.5, 0),
 			action = action,
-			shoots = shoots,
 		})
 	end
 
-	-- Cette méthode permet d'afficher l'écran en fondu et de lui rediriger les impacts lorsqu'il s'ouvre ; au menu, les
+	-- Cette méthode permet d'afficher l'écran en fondu lorsqu'il s'ouvre ; au menu, les
 	-- onglets de l'accueil restent affichés et l'onglet actif sert de titre, `withTitle` ne sert qu'en partie (touche P).
 	function page.show(withTitle: boolean?)
 		titleFrame.Visible = withTitle == true
-		MenuShot.useLayer(holes)
 		gui.Enabled = true
 		UIKit.reveal(group, 0, 14)
 	end
@@ -160,7 +154,6 @@ function MenuPage.new(name: string, displayOrder: number, title: string): Page
 		for _, created in choices do
 			created.reset()
 		end
-		MenuCursor.resetHover()
 	end
 
 	return page :: any

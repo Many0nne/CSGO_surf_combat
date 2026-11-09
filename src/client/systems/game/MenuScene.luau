@@ -481,22 +481,27 @@ local function visibleSets(): { ShardSet }
 	return list
 end
 
--- Cette méthode permet de faire pivoter les éclats touchés par un tir (et leurs voisins, moins fort) lorsque la balle
--- traverse la salle ; renvoie true si un éclat a été touché.
-local function hitShards(x: number, y: number): boolean
+-- Cette méthode permet de lancer un rayon depuis un point de l'écran sur les éclats visibles lorsque le joueur vise
+-- ou tire dans la vitrine ; seuls les éclats de l'arme comptent (pas les éclats vides du fond). Renvoie le résultat
+-- (nil hors de l'arme) et les jeux visibles, que la balle fait aussi pivoter.
+local function raycastShards(x: number, y: number): (RaycastResult?, { ShardSet })
 	local targets = visibleSets()
-	local models = table.create(#targets)
-	for i, set in targets do
-		models[i] = set.model
+	local models = {}
+	for _, set in targets do
+		if set ~= vides then
+			table.insert(models, set.model)
+		end
 	end
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Include
 	params.FilterDescendantsInstances = models
 	local ray = workspace.CurrentCamera:ViewportPointToRay(x, y)
-	local result = workspace:Raycast(ray.Origin, ray.Direction * SHOT_RANGE, params)
-	if not result then
-		return false
-	end
+	return workspace:Raycast(ray.Origin, ray.Direction * SHOT_RANGE, params), targets
+end
+
+-- Cette méthode permet de faire pivoter les éclats touchés par un tir (et leurs voisins, moins fort) lorsque la balle
+-- traverse la salle à l'endroit donné par `raycastShards`.
+local function hitShards(result: RaycastResult, targets: { ShardSet })
 	local point = result.Position
 	for _, set in targets do
 		for _, shard in set.shards do
@@ -513,7 +518,6 @@ local function hitShards(x: number, y: number): boolean
 			end
 		end
 	end
-	return true
 end
 
 -- Cette méthode permet de changer l'arme montrée lorsque le joueur la choisit dans le menu : le jeu courant se
@@ -571,13 +575,25 @@ function MenuScene.onWeaponChanged(callback: (string) -> ())
 	weaponChanged = callback
 end
 
--- Cette méthode permet de tirer vers un point de l'écran (coordonnées viewport) lorsque le joueur clique dans le menu.
--- `onInterface` : tir sur un bouton du menu, qui part sans attendre la cadence et s'arrête à l'interface (pas d'éclat
--- touché). Renvoie hasFired, hasHit (un éclat touché).
-function MenuScene.shoot(x: number, y: number, onInterface: boolean?): (boolean, boolean)
+-- Cette méthode permet de savoir si un point de l'écran (coordonnées viewport) vise l'arme de la vitrine lorsque le
+-- curseur du menu choisit entre souris système et hitmarker.
+function MenuScene.isAimingWeapon(x: number, y: number): boolean
+	if not running or bursting then
+		return false
+	end
+	return raycastShards(x, y) ~= nil
+end
+
+-- Cette méthode permet de tirer vers un point de l'écran (coordonnées viewport) lorsque le joueur clique sur l'accueil ;
+-- seul un clic sur l'arme fait feu (#130). Renvoie true si le tir est parti (et a donc touché un éclat).
+function MenuScene.shoot(x: number, y: number): boolean
 	local now = os.clock()
-	if not running or bursting or (not onInterface and now - lastShot < FIRE_COOLDOWN) then
-		return false, false
+	if not running or bursting or now - lastShot < FIRE_COOLDOWN then
+		return false
+	end
+	local result, targets = raycastShards(x, y)
+	if not result then
+		return false
 	end
 	lastShot = now
 	if shotSound then
@@ -585,10 +601,8 @@ function MenuScene.shoot(x: number, y: number, onInterface: boolean?): (boolean,
 		shotSound:Play()
 	end
 	kick = 1
-	if onInterface then
-		return true, false
-	end
-	return true, hitShards(x, y)
+	hitShards(result, targets)
+	return true
 end
 
 -- Cette méthode permet de faire exploser la vitrine (éclats arrachés à leurs fils, projetés vers la caméra en

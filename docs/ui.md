@@ -11,7 +11,7 @@ d'armes est faite d'encre, de sang et de vrais sabres. Ici, la matière est le c
 Ce que l'utilisateur a validé dans le menu principal :
 
 - une vraie scène 3D dans le moteur, avec les assets du jeu, plutôt que des formes dessinées ;
-- on choisit en tirant : le curseur est un hitmarker, l'arme le suit, le tir a le vrai son et la vraie animation, l'impact reste ;
+- on choisit à la souris système ; seule l'arme de la vitrine se tire : à son survol le curseur devient un hitmarker, l'AWP le suit, le tir a le vrai son et la vraie animation (#130 : les impacts sur les boutons et le hitmarker partout ont été retirés, jugés peu lisibles) ;
 - la vitesse passe par le mouvement réel (surfeurs et traînées), pas par des effets graphiques posés sur une image ;
 - un titrage en images usées : lettres penchées arrachées par le vent, éclats, impacts de balles.
 
@@ -45,8 +45,8 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
 
 ## Comment c'est construit
 
-- `src/client/ui/MainMenu.luau` : accueil de la salle des miroirs (titre, onglets, fiche d'arme, sélecteur), tir dans la
-  scène au clic. Les onglets sont dans leur propre `ScreenGui` (`MenuTabs`, DisplayOrder 4), au-dessus des écrans
+- `src/client/ui/MainMenu.luau` : accueil de la salle des miroirs (titre, onglets, fiche d'arme, sélecteur), tir sur l'arme de la
+  vitrine au clic (accueil seulement). Les onglets sont dans leur propre `ScreenGui` (`MenuTabs`, DisplayOrder 4), au-dessus des écrans
   secondaires.
 - `src/client/ui/MenuPage.luau` : gabarit des écrans secondaires, sans panneau : bloc centré sur le voile du classement,
   actions côte à côte en bas au centre (`MenuPage.ExitY`). Choix de l'utilisateur en #117, après un premier passage en
@@ -56,23 +56,23 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   sert de titre. `page.choice` : choix en texte, os atténué au repos, os vif une fois choisi (`setSelected`, aussi pour
   l'action principale comme ENVOYER ou RETOUR), rouge d'impact au survol.
 - Réglages (`SettingsMenu.luau`, disposition C des schémas de #117, préférée aux sous-onglets en haut et à la liste
-  unique qui défile) : catégories à tirer à gauche (barre ambrée sur l'active), lignes de 54 px à droite (nom, contrôle,
-  valeur os à ombre, filet). Contrôles : curseur (trace continue, poignée en impact ; une barre segmentée ferait perdre
+  unique qui défile) : catégories à gauche (barre ambrée sur l'active), lignes de 54 px à droite (nom, contrôle,
+  valeur os à ombre, filet). Contrôles : curseur (trace continue, poignée en pastille os, rouge au survol ; une barre segmentée ferait perdre
   la précision de la sensibilité) et choix fermé « ‹ VALEUR › ». RÉTABLIR remet la catégorie affichée à ses valeurs par
   défaut. Ajouter un réglage : une ligne dans `buildCategories` (avec son champ dans `PlayerSettings` pour qu'il soit
   conservé) ; une catégorie sans réglage n'est pas créée.
   TOUCHES (#100) : chaque ligne nomme l'action et la valeur donne le geste (choix de l'utilisateur : « Arme suivante :
   MOLETTE BAS », pas « Molette vers le haut : PRÉCÉDENTE »). « Arme suivante » (MOLETTE BAS par défaut) et « Arme
   précédente » (MOLETTE HAUT) portent le même réglage et se suivent ; AUCUNE coupe la molette. Puis une ligne par arme du
-  StarterPack (« Arme 1 · AWP », 7 au plus, pas de défilement). On tire sur la touche, elle affiche « APPUIE… », la
+  StarterPack (« Arme 1 · AWP », 7 au plus, pas de défilement). On clique sur la touche, elle affiche « APPUIE… », la
   touche suivante est prise ; Échap ou un clic ailleurs annule. Une touche d'un autre emplacement est échangée ; une
   touche du jeu (déplacement, R, F, P, F3/F4…) ou hors liste (Espace, Maj, Tab…) est refusée par un message en rouge
   d'impact sur la ligne. Seules les lettres, les chiffres du haut et les touches F sont proposées : libellés courts dans
   la barre d'armes. RÉTABLIR remet molette et touches ensemble.
-- `src/client/ui/MenuShot.luau` : tir sur un élément, impact, puis action ; choix en texte à ombre décalée
-  (`textChoice`, l'ombre s'estompe avec le choix désactivé).
-- `src/client/ui/MenuCursor.luau` : hitmarker-curseur.
-- `src/client/systems/game/MenuScene.luau` : salle des miroirs, éclairage temporaire, visée, tir sur les éclats,
+- `src/client/ui/MenuShot.luau` : choix en texte à ombre décalée (`textChoice`, l'ombre s'estompe avec le choix
+  désactivé) ; un clic déclenche l'action, sans tir (JOUER : explosion de la vitrine, puis action après `PLAY_DELAY`).
+- `src/client/ui/MenuCursor.luau` : souris système, hitmarker au survol de l'arme (`MenuScene.isAimingWeapon`, accueil seulement).
+- `src/client/systems/game/MenuScene.luau` : salle des miroirs, éclairage temporaire, visée, tir sur les éclats de l'arme (un clic à côté ne tire pas),
   explosion sur JOUER.
 - `src/client/systems/game/MenuSceneRules.luau` : règles pures testées (`tests/specs/MenuSceneRules.spec.luau`).
 - `src/client/ui/Transition.luau` : volets blancs, enchaînés à l'explosion de la vitrine.
@@ -122,9 +122,9 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
 
 ## Règles des écrans secondaires
 
-- Tout se tire sauf la saisie de texte. Un curseur de réglage se place d'un tir, puis se glisse sans retirer : sa poignée est un impact, sans trou ajouté à l'écran.
-- Réglages en partie (touche P) : même écran sur un voile sombre, avec le curseur système et sans son de tir, pour ne pas le confondre avec un vrai tir.
-- Les impacts sont propres à chaque écran et limités à 14 : le plus ancien disparaît.
+- Rien ne se tire (#130) : souris système, un clic agit tout de suite. Un curseur de réglage se place d'un clic, puis se glisse.
+- Réglages en partie (touche P) : même écran sur un voile sombre.
+- Piste rejetée (#130) : un impact de balle laissé sur chaque élément cliqué, et le hitmarker comme curseur partout. Peu beau et peu lisible.
 
 ## Pièges connus
 
@@ -147,7 +147,7 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
   Le canyon est donc au tiers de sa taille apparente (1 000 studs de long). Un test sans la map ne le montre pas.
 - **Éclairage :** `MenuScene` remplace celui de `Lighting` et le rétablit à sa sortie. Un tween encore actif écrase les valeurs
   rétablies : l'annuler d'abord (`burstTweens`), car le joueur peut apparaître avant la fin de l'explosion.
-- **Curseur :** `MenuCursor` remet `MouseIconEnabled = false` à chaque image, car les autres écrans le réactivent en se fermant.
+- **Curseur :** `MenuCursor` réimpose `MouseIconEnabled` à chaque image (faux sur l'arme, vrai ailleurs), car les autres écrans le changent en s'ouvrant ou se fermant.
 - **`AbsolutePosition` avec `IgnoreGuiInset` :** elle exclut la barre du haut, contrairement à `GetMouseLocation`. Préférer
   `MouseEnter`, `MouseLeave` et `Activated` à un test de zone maison.
 - **Fondu dans deux directions** (fond qui s'efface vers le haut et vers la droite) : impossible avec des `UIGradient`.
@@ -280,12 +280,12 @@ Décisions de l'utilisateur :
 
 **Interface et tir** (étape 4) :
 - Décisions de l'utilisateur : ARMES est l'accueil (la vitrine) ; JOUER, plus grand et souligné de rouge d'impact, est
-  l'appel à l'action ; les onglets restent affichés sur Infos, Réglages et Feedback, qui s'ouvrent dessous ; un tir dans
-  la scène ne laisse pas de trou dessiné, seul un tir sur un bouton en laisse un ; JOUER fait exploser la vitrine.
+  l'appel à l'action ; les onglets restent affichés sur Infos, Réglages et Feedback, qui s'ouvrent dessous ; seule l'arme
+  se tire, sans trou dessiné (#130 : plus de tir ni d'impact sur les boutons) ; JOUER fait exploser la vitrine.
 - Fiche d'arme : DÉGÂTS et CADENCE (RPM) rapportés à la meilleure arme de la vitrine, PRÉCISION lue dans
   `WeaponConfig.Accuracy` (valeur d'affichage, la dispersion n'est pas simulée), catégorie dans `WeaponConfig.Category`
   en capitales (`string.upper` ne passe pas « é » en « É »). Barre pleine : dernier segment en rouge d'impact.
-- Tir : rayon depuis le curseur sur les jeux d'éclats visibles (`CanQuery` activé sur eux seuls). L'éclat touché et ses
+- Tir : rayon depuis le curseur sur les éclats de l'arme montrée (les éclats vides du fond ne déclenchent pas le tir mais pivotent avec), parmi les jeux d'éclats visibles (`CanQuery` activé sur eux seuls). L'éclat touché et ses
   voisins (2,6 studs) reçoivent un élan autour de leur fil, dans un ressort amorti (`MenuSceneRules.springStep`) : deux
   tirs rapprochés se cumulent sans saut ; pointe vers 110°, retour au repos en 3,5 s.
 - Explosion : chaque éclat quitte son fil (Beam coupé) avec une vitesse vers la caméra, vers l'extérieur et vers le haut,
@@ -303,6 +303,6 @@ Décisions de l'utilisateur :
 
 - Afficher les munitions dans le HUD (`WeaponSystem` les gère, rien ne les montre), dans le même langage que le compteur de vitesse.
 - Piste écartée pour l'instant sur le compteur : chiffres en images usées comme le titrage, et inclinaison qui augmente avec la vitesse.
-- Tester le menu au tactile et à la manette : c'est prévu dans le code (flèches ‹ › tirables), jamais essayé.
+- Tester le menu au tactile et à la manette : c'est prévu dans le code (flèches ‹ ›), jamais essayé.
 - Première vague d'une arme jamais montrée : ses éclats passent encore en blanc opaque le temps du chargement, malgré
   `PreloadAsync` (constaté en Studio sur le M9).
