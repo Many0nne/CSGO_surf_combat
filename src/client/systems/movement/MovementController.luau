@@ -69,9 +69,12 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 	LadderSystem.init()
 	local ladderRegrab = 0 -- délai avant de pouvoir reprendre une échelle après en avoir sauté
 
-	-- Dernier CFrame posé par ce mouvement : le serveur pose aussi la racine (CharacterSync) et sa valeur, en retard
-	-- d'un aller-retour, est répliquée jusqu'ici ; on la remplace par la nôtre avant chaque pas (sinon recul à 20 Hz).
+	-- CFrame simulé au dernier tick : le serveur pose aussi la racine (CharacterSync) et sa valeur, en retard d'un
+	-- aller-retour, est répliquée jusqu'ici ; on la remplace par la nôtre avant chaque tick (sinon recul à 20 Hz).
+	-- La racine affiche ensuite une position interpolée entre prevCFrame (avant-dernier tick) et ownCFrame (#96).
 	local ownCFrame: CFrame? = nil
+	local prevCFrame: CFrame? = nil
+	local tickAccumulator = 0 -- temps rendu pas encore simulé (< un tick)
 	slideParams.FilterDescendantsInstances = { char, workspace.CurrentCamera }
 
 	local wasGrounded = false
@@ -88,7 +91,9 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 		end
 		launched = true
 		hrp.CFrame = CFrame.new(origin) * hrp.CFrame.Rotation
+		-- Téléportation : pas d'interpolation depuis l'ancienne position (sinon traînée d'une frame vers le soleil)
 		ownCFrame = hrp.CFrame
+		prevCFrame = hrp.CFrame
 		lastSafePos = origin
 		velocity = launchVelocity
 		state = MovementState.AIRBORNE
@@ -101,8 +106,8 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 	applyLaunch()
 	char:GetAttributeChangedSignal(SpawnLaunch.VELOCITY_ATTRIBUTE):Connect(applyLaunch)
 
-	-- Cette méthode permet d'avancer le personnage d'un pas de durée dt lorsque la boucle de rendu découpe sa frame
-	-- en pas (un seul pas par frame normale, plusieurs après une frame lente : cf. StepTiming).
+	-- Cette méthode permet d'avancer le personnage d'un tick fixe de durée dt lorsque la boucle de rendu a accumulé
+	-- assez de temps (0, 1 ou plusieurs ticks par frame selon le FPS : cf. StepTiming).
 	local function step(dt: number)
 		jumpLockout = math.max(0, jumpLockout - dt)
 		ladderRegrab = math.max(0, ladderRegrab - dt)
@@ -379,9 +384,9 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 		simulatedTime += dt
 	end
 
-	-- Sur le rendu, juste avant la caméra (priorité Camera) : le perso avance du temps de la frame affichée, et la
-	-- caméra lit dans la même frame la position que ce pas vient de poser. Sur Heartbeat, le pas suivait un autre
-	-- chronomètre que l'image et le déplacement affiché variait de 30 % d'une frame à l'autre (saccades en surf).
+	-- Sur le rendu, juste avant la caméra (priorité Camera) : la physique joue les ticks fixes (64 Hz) contenus dans
+	-- le temps de la frame, puis la racine est posée entre les deux derniers ticks, au prorata du temps restant, et la
+	-- caméra lit cette position dans la même frame. Ticks fixes : même trajectoire quel que soit le FPS (#96).
 	-- Rebrancher remplace la boucle du personnage précédent (sinon une boucle de plus par mort).
 	RunService:UnbindFromRenderStep(BIND_NAME)
 	RunService:BindToRenderStep(
@@ -391,14 +396,19 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 			if not hrp.Parent then
 				return
 			end
+			-- La simulation repart toujours de la position simulée, pas de celle affichée ni de l'écho serveur
 			if ownCFrame and hrp.CFrame ~= ownCFrame then
 				hrp.CFrame = ownCFrame
 			end
-			local count, dt = StepTiming.split(rawDt)
-			for _ = 1, count do
-				step(dt)
+			local ticks, alpha
+			ticks, tickAccumulator, alpha = StepTiming.advance(tickAccumulator, rawDt)
+			for _ = 1, ticks do
+				prevCFrame = hrp.CFrame
+				step(StepTiming.TICK)
 			end
 			ownCFrame = hrp.CFrame
+			prevCFrame = prevCFrame or ownCFrame
+			hrp.CFrame = (prevCFrame :: CFrame):Lerp(ownCFrame :: CFrame, alpha)
 			-- Position envoyée au serveur, qui la valide et la relaie aux autres joueurs (#75)
 			CharacterSync.send(hrp, rawDt)
 		end)

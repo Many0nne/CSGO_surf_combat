@@ -177,39 +177,45 @@ Pas besoin de garder le playtest ouvert pour lire le résultat : Studio écrit t
 `%LOCALAPPDATA%\Roblox\logs\*_Studio_*_last.log` (un fichier par session Studio). Un script Roblox ne peut pas écrire
 de fichier lui-même. Pour extraire la session : `grep "\[FrameProbe\]" <fichier> | grep -v SetAttribute`.
 
-Champs : `dt` (frame rendue), `steps` (nombre de pas de mouvement depuis le rendu précédent, 1 attendu), `simDt`
-(temps simulé pendant ces pas), `disp` (déplacement de la racine), `vRendue` (= `disp/dt`), `vSim` (vitesse du
-MovementController), `yaw` (degrés/s), `gcΔ` (mémoire Lua, une forte baisse signale un passage du GC), `arme`.
+Champs : `dt` (frame rendue), `steps` (ticks de mouvement depuis le rendu précédent : 0, 1 ou 2 à 60 FPS, c'est
+normal), `simDt` (temps simulé pendant ces ticks), `disp` (déplacement affiché de la racine, interpolé), `vRendue`
+(= `disp/dt`), `vSim` (vitesse du MovementController), `yaw` (degrés/s), `gcΔ` (mémoire Lua, une forte baisse signale
+un passage du GC), `arme`.
 
 Causes d'un `STUTTER` (`source=`) :
 
-- `pas_physique_manquant` ou `pas_physique_double` : 0 ou 2 pas de mouvement entre deux rendus. Le perso avance de 0 ou
-  de 2 pas sur une frame. Depuis que le mouvement tourne sur le rendu, seul un `HITCH` découpé en pas peut en donner 2.
 - `simulation` : la vitesse simulée elle-même fait un pic (collision, rampe, boost, `commitMove`).
-- `position_hors_simulation` : la racine a bougé autrement que ce que prévoyait la vitesse simulée (correction
-  serveur, téléportation partielle, step-up ou éjection de `WallSlide`).
-- `timing_rendu_vs_simulation` : un pas normal, mais le temps rendu diffère du temps simulé. Cause dominante quand le
-  mouvement tournait sur Heartbeat (voir « Rythme du mouvement ») ; elle ne devrait plus apparaître.
+- `position_hors_simulation` : la racine affichée a bougé autrement que `vSim × dt` (correction serveur, téléportation
+  partielle, step-up ou éjection de `WallSlide`, ou interpolation cassée).
+- `interpolation` : déplacement irrégulier qu'aucune des deux causes ci-dessus n'explique ; ne devrait pas apparaître.
+
+Depuis le tick fixe (#96), le nombre de ticks par frame n'est plus une cause : l'affichage est interpolé au temps rendu.
+Les anciennes causes `pas_physique_manquant`, `pas_physique_double` et `timing_rendu_vs_simulation` ont disparu.
 
 Un pic isolé est une frame qui s'écarte de plus de 30 % de ses deux voisines, quand ces voisines s'accordent entre
 elles à 15 % près. Une accélération progressive (surf, boost) n'est donc pas signalée. En dessous de 2 studs/s et de
 20 °/s, rien n'est jugé.
 
-## Rythme du mouvement (#88)
+## Rythme du mouvement (#88, #96)
 
 Le perso est déplacé par script (racine ancrée), dans `MovementController`. Sa boucle tourne **sur le rendu, juste
-avant la caméra** (`BindToRenderStep`, priorité `Camera - 1`), avec le `dt` de la frame rendue : le déplacement affiché
-correspond au temps affiché, et la caméra lit dans la même frame la position que le pas vient de poser.
+avant la caméra** (`BindToRenderStep`, priorité `Camera - 1`). La physique avance par **ticks fixes de 1/64 s**
+(`StepTiming`, comme Source) : à entrées égales, la trajectoire de surf est la même pour tous, quel que soit le FPS
+(choix d'équité, #96). Chaque frame joue les ticks entiers contenus dans son temps (0, 1 ou plusieurs), puis pose la
+racine **entre les deux derniers ticks**, au prorata du temps restant ; la caméra lit cette position dans la même frame.
 
+- Coût : l'affichage a jusqu'à un tick (15,6 ms) de retard sur la simulation. La rotation de la caméra, elle, reste
+  lue à chaque frame : seule la position est en retard.
+- La simulation repart toujours de la position du dernier tick (`ownCFrame`), jamais de la position affichée ni de
+  l'écho serveur. Toute téléportation client doit poser `ownCFrame` **et** `prevCFrame` (cf. `applyLaunch`), sinon la
+  racine est interpolée depuis l'ancienne position pendant une frame.
 - Avant (jusqu'au 06/11/2026), la boucle tournait sur `Heartbeat`. Son `dt` (de 14 à 21 ms) suit un autre chronomètre
   que le rendu, et le déplacement par image variait d'environ 30 % : plus d'un stud d'écart à 200 studs/s, d'où les
   saccades en surf rapide (54 `STUTTER` `timing_rendu_vs_heartbeat` sur 150 s, mesure du 03/11).
-- La physique reste à `dt` variable, comme avant : le ressenti ne change pas à FPS stable. Piste écartée pour l'instant :
-  un tick fixe (64 Hz, comme Source) avec interpolation de la caméra rendrait la physique indépendante du FPS, mais
-  ajoute jusqu'à un tick de retard et change le ressenti au-dessus de 60 FPS.
-- Une frame lente est découpée en pas de 1/30 s au plus (`StepTiming`, 6 pas au plus) au lieu d'être tronquée : le perso
-  parcourt tout le temps écoulé, une frame lente ne se voit plus qu'une fois.
-- Ne pas remettre d'interpolation de position dans `FPSCamera` : la position est déjà celle de la frame.
+- Du 06/11 au tick fixe, la physique avançait au `dt` de chaque frame : un joueur à 144 FPS gagnait plus de vitesse en
+  air strafe qu'un joueur à 60 FPS (l'air accelerate de Source dépend du pas). Pas d'ancien mode gardé activable.
+- Une frame lente joue jusqu'à 13 ticks (0,2 s) ; au-delà (gel, fenêtre en arrière-plan), le retard est abandonné.
+- Ne pas remettre d'interpolation de position dans `FPSCamera` : elle est déjà faite par `MovementController`.
 
 ## Ombres de la map (#88)
 

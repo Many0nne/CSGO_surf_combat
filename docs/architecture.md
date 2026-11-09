@@ -65,7 +65,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/client/systems/movement/GroundDetection.luau`: détection du sol et transitions air/sol (un muret plus bas que le centre du corps n'est pas pris pour le sol : `PhysicsUtils.isSideContact`).
 - `src/client/systems/movement/LadderSystem.luau`: échelles de la map (volumes de `Maps.Map.Ladders`) détectées à chaque frame ; `MovementController` y remplace la physique sol/air par la grimpe.
 - `src/client/systems/movement/HeadCollisionResolver.luau`: résolution des collisions tête (plafond, mur haut) lors du déplacement.
-- `src/client/systems/movement/MovementController.luau`: orchestrateur principal du mouvement (boucle sur le rendu, priorité `Camera - 1`, découpée en pas par `StepTiming` ; transitions d'état) ; `getVelocity()` et `getStepStats()` exposent la vitesse du dernier pas et les pas simulés (lus par la sonde de saccades).
+- `src/client/systems/movement/MovementController.luau`: orchestrateur principal du mouvement (boucle sur le rendu, priorité `Camera - 1`, physique en ticks fixes de 64 Hz par `StepTiming`, position affichée interpolée entre les deux derniers ticks ; transitions d'état) ; `getVelocity()` et `getStepStats()` exposent la vitesse du dernier pas et les pas simulés (lus par la sonde de saccades).
 - `src/client/systems/movement/PhysicsStepAir.luau`: étape physique aérienne (air accelerate Source + cap `AIR_SPEED_CAP`).
 - `src/client/systems/movement/PhysicsStepGround.luau`: étape physique pour l'état au sol.
 - `src/client/systems/movement/SlopeSystem.luau`: gestion des pentes et adaptation du mouvement.
@@ -126,7 +126,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/shared/MovementState.luau`: structure d'état partagée pour le mouvement du joueur.
 - `src/shared/NetworkProtocol.luau`: noms des RemoteEvents et helper getRemote(name). Remotes : MeleeDamage, HitscanDamage, HitConfirm, RequestSpawn, RoundState, ScoreUpdate, RoundResult, PlayerDied, CharacterSync (non fiable), WeaponAction, SendFeedback, FeedbackAck, DebugPlaytest (créé uniquement dans Studio).
 - `src/shared/PhysicsUtils.luau`: fonctions utilitaires pour la physique.
-- `src/shared/StepTiming.luau`: découpage du dt d'une frame rendue en pas de mouvement (une frame lente donne plusieurs pas au lieu d'être tronquée), testé (`tests/specs/StepTiming.spec.luau`).
+- `src/shared/StepTiming.luau`: tick fixe du mouvement (64 Hz, #96) : ticks à jouer dans une frame rendue et fraction d'interpolation de l'affichage, testé (`tests/specs/StepTiming.spec.luau`).
 - `src/shared/UITheme.luau`: tokens de style de l'interface (couleurs, polices, tailles, durées, courbes).
 - `src/shared/WeaponConfig.luau`: définitions partagées des armes et de leurs paramètres par défaut (dont `ThirdPerson` : échelle, grip, pose 3P).
 - `src/shared/WeaponThirdPerson.luau`: arme 3e personne des joueurs : construction du modèle 3P depuis `ViewModels`, grip soudé à la main, tenues du haut du corps (`POSES`, générées par `tools/anim/poses3p/export_pose.js`), actions répliquées en attributs (`Weapon3PAction`/`Weapon3PActionAt`), règles pures (grip, décalages d'action, cible de tenue par articulation, visibilité).
