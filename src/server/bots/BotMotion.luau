@@ -1,8 +1,8 @@
 -- Mouvement d'un bot côté serveur (#139) : même physique que le joueur (CharacterMotor), en ticks fixes de 64 Hz
 -- (StepTiming), animations 3e personne jouées sur son Animator (répliquées par Roblox), position publiée aux clients à
 -- la cadence réseau d'un joueur (CharacterSync.relayBot) pour être interpolée comme la sienne.
--- L'intention (direction, saut, grimpe) vient du suivi de chemin (BotNavigator, #140) ; sur une échelle, la vitesse
--- est celle du joueur (LadderRules), en poussant vers le mur.
+-- L'intention (direction, saut, grimpe, bhop) vient du suivi de chemin (BotNavigator, #140, #151) ; sur une échelle,
+-- la vitesse est celle du joueur (LadderRules), en poussant vers le mur ; en bhop, air strafe (BotRules).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
@@ -60,6 +60,7 @@ function BotMotion.new(
 	relay: Relay
 ): BotMotion
 	local rng = Random.new()
+	local runSpeed = runSpeedFor(weaponName)
 	local self = setmetatable({
 		char = char,
 		root = root,
@@ -67,12 +68,12 @@ function BotMotion.new(
 		animator = CharacterAnimator.new(humanoid),
 		relay = relay,
 		rng = rng,
-		navigator = BotNavigator.new(rng),
+		navigator = BotNavigator.new(rng, runSpeed),
 		yaw = rng:NextNumber(0, 360),
 		tickAccumulator = 0,
 		sendAccumulator = 0,
 		frozen = false,
-		wishSpeed = runSpeedFor(weaponName),
+		wishSpeed = runSpeed,
 	}, BotMotion)
 	if launchVelocity then
 		self.motor.velocity = launchVelocity
@@ -104,7 +105,7 @@ function BotMotion._tick(self: BotMotion, dt: number)
 	local foot = pos - Vector3.new(0, ci.rootToBottom, 0)
 	local speedBefore = PhysicsUtils.getXZ(motor.velocity).Magnitude
 
-	local intent = self.navigator:update(NavPlan.get(), foot, isGroundedState, speedBefore, dt)
+	local intent = self.navigator:update(NavPlan.get(), foot, isGroundedState, speedBefore, motor.velocity.Y, dt)
 	local frozen = self.frozen
 	local wishdir = if frozen then Vector3.zero else intent.wishdir
 	local wishspeed = if frozen or wishdir.Magnitude < 1e-3 then 0 else self.wishSpeed
@@ -123,15 +124,25 @@ function BotMotion._tick(self: BotMotion, dt: number)
 		end
 	end
 
+	local bhop = not frozen and intent.bhop
 	local willJump = false
 	if isGroundedState then
-		willJump = motor:groundPhysics(gnd, wishdir, wishspeed, dt, jump, false, false)
+		-- Bhop (#151) : ressaut à l'atterrissage sans friction, la vitesse gagnée en l'air est gardée
+		willJump = motor:groundPhysics(gnd, wishdir, wishspeed, dt, jump, bhop and jump, false)
 	elseif isAirborneState and not onLadder then
-		-- En l'air, pas d'air strafe (le surf n'est pas simulé, cf. #133) ; seul un saut sur un rebord vise sa cible
-		motor:airPhysics(if intent.airControl then wishdir else Vector3.zero, wishspeed, dt, false)
+		if bhop then
+			-- Air strafe vers le cap visé : gain sous la vitesse visée, freinage au-dessus, sinon plane ou tourne
+			wishdir, wishspeed =
+				BotRules.airStrafe(motor.velocity, wishdir, intent.targetSpeed, wishspeed, dt, intent.strafeNoise)
+		elseif not intent.airControl then
+			-- Hors bhop, pas d'air strafe ; seul un saut sur un rebord vise sa cible
+			wishdir = Vector3.zero
+		end
+		motor:airPhysics(wishdir, wishspeed, dt, false)
 	end
 
-	local wantedYaw = BotRules.yawOf(wishdir)
+	-- Regard : en bhop, il suit la vitesse (comme la caméra d'un joueur qui strafe), sinon la direction voulue
+	local wantedYaw = BotRules.yawOf(if bhop then motor.velocity else wishdir)
 	if wantedYaw then
 		self.yaw = BotRules.turnToward(self.yaw, wantedYaw, BotConfig.NAV_TURN_RATE, dt)
 	end

@@ -5,6 +5,11 @@ return function(T, Loader)
 	local Config = Loader.new():require("src/shared/BotConfig")
 	local Movement = Loader.new():require("src/shared/MovementConfig")
 
+	-- Cette méthode permet de comparer deux nombres à 1e-6 près lorsqu'un test mesure une distance.
+	local function near(a: number, b: number, msg: string?)
+		T.expectEqual(math.abs(a - b) < 1e-6, true, (msg or "") .. " : " .. tostring(a) .. " ≠ " .. tostring(b))
+	end
+
 	-- Cette méthode permet de construire un graphe de test lorsqu'un cas a besoin de cases et d'arêtes.
 	local function graph(positions, edges)
 		local out, outKind = {}, {}
@@ -202,6 +207,116 @@ return function(T, Loader)
 				Rules.lookAhead(Vector3.new(0, 0, 0), corner, { W, W, W, W, W }, 2),
 				3,
 				"virage : pas de coin coupé"
+			)
+		end)
+
+		T.it("mesure la largeur de passage de chaque case (#151)", function()
+			-- Grille 7 × 7 reliée à pied dans les 8 directions : bord = 0, centre = 3
+			local positions, edges, id = {}, {}, {}
+			for x = 0, 6 do
+				for z = 0, 6 do
+					table.insert(positions, Vector3.new(x * 4, 0, z * 4))
+					id[x * 10 + z] = #positions
+				end
+			end
+			for x = 0, 6 do
+				for z = 0, 6 do
+					for dx = -1, 1 do
+						for dz = -1, 1 do
+							local other = id[(x + dx) * 10 + (z + dz)]
+							if
+								(dx ~= 0 or dz ~= 0)
+								and other
+								and x + dx >= 0
+								and x + dx <= 6
+								and z + dz >= 0
+								and z + dz <= 6
+							then
+								table.insert(edges, { id[x * 10 + z], other })
+							end
+						end
+					end
+				end
+			end
+			local steps = Rules.clearance(graph(positions, edges), 8)
+			T.expectEqual(steps[id[0]], 0, "coin : bord")
+			T.expectEqual(steps[id[3]], 0, "côté : bord")
+			T.expectEqual(steps[id[11]], 1, "un pas du bord")
+			T.expectEqual(steps[id[33]], 3, "centre")
+			T.expectEqual(Rules.clearance(graph(positions, edges), 2)[id[33]], 2, "borné")
+			local costs = Rules.borderCosts(steps)
+			T.expectEqual(costs[id[0]], Config.NAV_BORDER_COST, "bord : surcoût plein")
+			T.expectEqual(costs[id[11]], Config.NAV_BORDER_COST / 2, "un pas du bord : moitié")
+			T.expectEqual(costs[id[33]], 0, "centre : aucun")
+		end)
+
+		T.it("suit le chemin d'un bot qui bhoppe, hauteur ignorée (#151)", function()
+			local W, J = Rules.WALK, Rules.JUMP
+			local line, kinds = {}, {}
+			for i = 1, 20 do
+				line[i], kinds[i] = Vector3.new((i - 1) * 4, 0, 0), W
+			end
+			T.expectEqual(Rules.walkStretchEnd(line, kinds, 2), 20, "marche jusqu'au bout")
+			kinds[10] = J
+			T.expectEqual(Rules.walkStretchEnd(line, kinds, 2), 9, "s'arrête avant un saut")
+			kinds[10] = W
+			line[8] = Vector3.new(28, 3, 0)
+			T.expectEqual(Rules.walkStretchEnd(line, kinds, 2), 20, "une pente se survole")
+			line[8] = Vector3.new(28, 0, 0)
+
+			-- 6 studs au-dessus de x = 21 : sur le segment 6 → 7 (x 20 à 24)
+			T.expectEqual(Rules.advanceAlong(Vector3.new(21, 6, 0.5), line, 2, 20), 7, "survolé : avance quand même")
+			T.expectEqual(Rules.advanceAlong(Vector3.new(21, -8, 0), line, 2, 20), 2, "sous le trajet : n'avance pas")
+			T.expectEqual(
+				Rules.advanceAlong(Vector3.new(70, 6, 0), line, 2, 20),
+				2 + Config.BHOP_ADVANCE_WINDOW,
+				"fenêtre bornée"
+			)
+
+			near(Rules.distanceAlong(Vector3.new(2, 5, 0), line, 2, 20), 74, "longueur horizontale restante")
+			local aim = Rules.pointAlong(Vector3.new(2, 0, 0), line, 2, 20, 10)
+			near(aim.X, 12, "point visé 10 studs devant")
+			near(Rules.pointAlong(Vector3.new(2, 0, 0), line, 2, 20, 1000).X, 76, "borné au bout")
+		end)
+
+		T.it("ralentit avant un virage serré, pas en ligne droite (#151)", function()
+			local dt = 1 / 64
+			T.expectEqual(
+				Rules.circumradius(Vector3.new(0, 0, 0), Vector3.new(4, 0, 0), Vector3.new(8, 0, 0)),
+				math.huge
+			)
+			near(Rules.circumradius(Vector3.new(10, 0, 0), Vector3.new(0, 0, 10), Vector3.new(-10, 0, 0)), 10, "cercle")
+			-- Ligne droite puis angle droit à x = 40
+			local corner, widths = {}, {}
+			for i = 1, 11 do
+				corner[i], widths[i] = Vector3.new((i - 1) * 4, 0, 0), 8
+			end
+			for i = 1, 10 do
+				corner[11 + i], widths[11 + i] = Vector3.new(40, 0, i * 4), 8
+			end
+			local foot = Vector3.new(0, 0, 0)
+			T.expectEqual(
+				Rules.cornerSpeed(foot, corner, widths, 2, 21, 20, dt),
+				math.huge,
+				"angle trop loin : ignoré"
+			)
+			local slow = Rules.cornerSpeed(foot, corner, widths, 2, 21, 60, dt)
+			T.expectEqual(slow < 100, true, "angle droit dans l'horizon : ralentit (" .. slow .. ")")
+			local wide = {}
+			for i = 1, 21 do
+				wide[i] = 32
+			end
+			T.expectEqual(
+				Rules.cornerSpeed(foot, corner, wide, 2, 21, 60, dt) > slow,
+				true,
+				"passage large : plus vite"
+			)
+			local edge = table.clone(widths)
+			edge[4] = 0
+			T.expectEqual(
+				Rules.cornerSpeed(foot, corner, edge, 2, 21, 20, dt),
+				Config.BHOP_NARROW_SPEED,
+				"le long d'un bord"
 			)
 		end)
 

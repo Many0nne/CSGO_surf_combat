@@ -5,6 +5,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
+local BotRules = require(ReplicatedStorage.Shared.BotRules)
 local MovementConfig = require(ReplicatedStorage.Shared.MovementConfig)
 
 local NavRules = {}
@@ -20,6 +21,7 @@ export type Graph = {
 	positions: { Vector3 }, -- point du sol de chaque case
 	out: { { number } }, -- cases d'arrivée des arêtes sortantes
 	outKind: { { number } }, -- type de chaque arête sortante
+	cellCost: { number }?, -- surcoût d'arrivée sur chaque case (bord d'un passage, #151), en studs
 }
 
 -- Cette méthode permet de donner la clé d'une arête orientée lorsqu'on veut la mettre à l'écart (ids < 1e6).
@@ -57,7 +59,7 @@ function NavRules.findPath(graph: Graph, start: number, goal: number, banned: { 
 	if start == goal then
 		return { start }
 	end
-	local positions, out, outKind = graph.positions, graph.out, graph.outKind
+	local positions, out, outKind, cellCost = graph.positions, graph.out, graph.outKind, graph.cellCost
 	local goalPos = positions[goal]
 	local gScore: { [number]: number } = { [start] = 0 }
 	local cameFrom: { [number]: number } = {}
@@ -121,7 +123,9 @@ function NavRules.findPath(graph: Graph, start: number, goal: number, banned: { 
 			local targets, kinds = out[node], outKind[node]
 			for k, to in targets do
 				if not closed[to] and not (banned and banned[NavRules.edgeKey(node, to)]) then
-					local g = base + NavRules.edgeCost(nodePos, positions[to], kinds[k])
+					local g = base
+						+ NavRules.edgeCost(nodePos, positions[to], kinds[k])
+						+ (if cellCost then cellCost[to] else 0)
 					local known = gScore[to]
 					if known == nil or g < known then
 						gScore[to] = g
@@ -418,6 +422,168 @@ function NavRules.lookAhead(foot: Vector3, points: { Vector3 }, kinds: { number 
 			break
 		end
 		best = k
+	end
+	return best
+end
+
+-- Bunny hop (#151) --------------------------------------------------------------------------------------------------
+
+-- Cette méthode permet de donner la distance horizontale entre deux points lorsqu'on mesure un trajet.
+local function flatDist(a: Vector3, b: Vector3): number
+	local dx, dz = b.X - a.X, b.Z - a.Z
+	return math.sqrt(dx * dx + dz * dz)
+end
+
+-- Cette méthode permet de mesurer la largeur de passage de chaque case lorsque le plan est construit : nombre de pas
+-- de marche jusqu'à la case de bord la plus proche (bord : moins de 8 voisines rejointes à pied, donc un mur ou un
+-- vide à côté), borné à maxSteps. 0 = case de bord.
+function NavRules.clearance(graph: Graph, maxSteps: number): { number }
+	local out, outKind = graph.out, graph.outKind
+	local count = #graph.positions
+	local steps = table.create(count, maxSteps)
+	local queue = {}
+	for id = 1, count do
+		local walks = 0
+		for k in out[id] do
+			if outKind[id][k] == NavRules.WALK then
+				walks += 1
+			end
+		end
+		if walks < 8 then
+			steps[id] = 0
+			table.insert(queue, id)
+		end
+	end
+	local head = 1
+	while head <= #queue do
+		local node = queue[head]
+		head += 1
+		local nextSteps = steps[node] + 1
+		if nextSteps < maxSteps then
+			for k, to in out[node] do
+				if outKind[node][k] == NavRules.WALK and steps[to] > nextSteps then
+					steps[to] = nextSteps
+					table.insert(queue, to)
+				end
+			end
+		end
+	end
+	return steps
+end
+
+-- Cette méthode permet de trouver le bout de la portion de marche devant un bot qui bhoppe lorsqu'il suit son
+-- chemin : dernier index atteint par des arêtes de marche (pentes et marches se survolent ; un saut, une échelle ou
+-- une descente de rebord se prennent à vitesse de course). kinds[i] doit être une marche.
+function NavRules.walkStretchEnd(points: { Vector3 }, kinds: { number }, i: number): number
+	local k = i
+	while k < #points and kinds[k + 1] == NavRules.WALK do
+		k += 1
+	end
+	return k
+end
+
+-- Cette méthode permet de donner le surcoût d'arrivée sur chaque case lorsque le plan est construit : les cases au
+-- bord d'un passage (largeur 0 ou 1, NavRules.clearance) coûtent plus, pour que les chemins passent au milieu (plus
+-- naturel, et le bot y bhoppe plus vite).
+function NavRules.borderCosts(clearance: { number }): { number }
+	local costs = table.create(#clearance, 0)
+	for id, steps in clearance do
+		if steps <= 0 then
+			costs[id] = BotConfig.NAV_BORDER_COST
+		elseif steps == 1 then
+			costs[id] = BotConfig.NAV_BORDER_COST / 2
+		end
+	end
+	return costs
+end
+
+-- Cette méthode permet d'avancer dans le chemin d'un bot qui bhoppe lorsqu'il le survole : index de la fin du segment
+-- le plus proche à l'horizontale (hauteur ignorée, sauf sous le trajet), entre i et last. En l'air, les cases ne
+-- sont jamais « atteintes » (pieds trop hauts) : c'est l'avancée le long du chemin qui compte.
+function NavRules.advanceAlong(foot: Vector3, points: { Vector3 }, i: number, last: number): number
+	if i < 2 then
+		return i
+	end
+	local best, bestDist = i, math.huge
+	for j = i, math.min(last, i + BotConfig.BHOP_ADVANCE_WINDOW) do
+		local a, b = points[j - 1], points[j]
+		if foot.Y >= math.min(a.Y, b.Y) - BotConfig.NAV_REACH_DY then
+			local d = distToSegmentXZ(foot, a, b)
+			if d < bestDist then
+				best, bestDist = j, d
+			end
+		end
+	end
+	return best
+end
+
+-- Cette méthode permet de mesurer la longueur horizontale du chemin restant de foot jusqu'à l'index last lorsqu'un
+-- bot décide de ressauter.
+function NavRules.distanceAlong(foot: Vector3, points: { Vector3 }, i: number, last: number): number
+	local total, cur = 0, foot
+	for j = i, last do
+		total += flatDist(cur, points[j])
+		cur = points[j]
+	end
+	return total
+end
+
+-- Cette méthode permet de donner le point du chemin situé dist studs devant foot (à l'horizontale, sans dépasser
+-- l'index last) lorsqu'un bot qui bhoppe choisit où viser (poursuite).
+function NavRules.pointAlong(foot: Vector3, points: { Vector3 }, i: number, last: number, dist: number): Vector3
+	local cur = foot
+	for j = i, last do
+		local p = points[j]
+		local seg = flatDist(cur, p)
+		if seg >= dist and seg > 1e-6 then
+			return cur:Lerp(p, dist / seg)
+		end
+		dist -= seg
+		cur = p
+	end
+	return points[last]
+end
+
+-- Cette méthode permet de donner le rayon du cercle passant par trois points (à l'horizontale) lorsqu'on mesure un
+-- virage ; math.huge s'ils sont alignés.
+function NavRules.circumradius(a: Vector3, b: Vector3, c: Vector3): number
+	local cross = (b.X - a.X) * (c.Z - a.Z) - (b.Z - a.Z) * (c.X - a.X)
+	if math.abs(cross) < 1e-6 then
+		return math.huge
+	end
+	return flatDist(a, b) * flatDist(b, c) * flatDist(c, a) / (2 * math.abs(cross))
+end
+
+-- Cette méthode permet de donner la vitesse permise par les virages du chemin dans les horizon studs devant foot
+-- lorsqu'un bot qui bhoppe règle sa vitesse : à chaque case, rayon du virage mesuré sur BHOP_CURVE_CELLS cases de
+-- part et d'autre, agrandi d'une part de la largeur de passage (widths, studs : il coupe le virage), puis vitesse
+-- qui tient ce rayon (BotRules.turnSpeed) ; BHOP_NARROW_SPEED au plus sur une case de bord.
+function NavRules.cornerSpeed(
+	foot: Vector3,
+	points: { Vector3 },
+	widths: { number },
+	i: number,
+	last: number,
+	horizon: number,
+	dt: number
+): number
+	local span = BotConfig.BHOP_CURVE_CELLS
+	local first = math.max(i - span, 1)
+	local best = math.huge
+	local travelled, cur = 0, foot
+	for j = i, last do
+		travelled += flatDist(cur, points[j])
+		cur = points[j]
+		if travelled > horizon then
+			break
+		end
+		local width = widths[j] or 0
+		local radius =
+			NavRules.circumradius(points[math.max(j - span, first)], points[j], points[math.min(j + span, last)])
+		best = math.min(best, BotRules.turnSpeed(radius + width * BotConfig.BHOP_WIDTH_USE, dt))
+		if width <= 0 then
+			best = math.min(best, BotConfig.BHOP_NARROW_SPEED)
+		end
 	end
 	return best
 end
