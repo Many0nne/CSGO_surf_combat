@@ -40,6 +40,8 @@ return function(T, Loader)
 
 	-- Cette méthode permet de créer un Validator avec un service Players simulé lorsque les tests
 	-- ont besoin d'associer des personnages à des joueurs ; makePlayer peut lui donner une arme en main.
+	-- Le Validator reçoit des participants : l'enveloppe convertit le tireur comme le fait init.server (fromPlayer),
+	-- et makeBot inscrit un bot (participant sans Player) ; un bot s'y passe tel quel.
 	local function setup()
 		local owners = {}
 		local Players = {
@@ -47,17 +49,80 @@ return function(T, Loader)
 				return owners[character]
 			end,
 		}
-		local Validator = Loader.new({ Players = Players }):require("src/server/Validator")
+		local loader = Loader.new({ Players = Players })
+		local Real = loader:require("src/server/Validator")
+		local Participants = loader:require("src/server/Participants")
+		local nextUserId = 0
+		local function participantOf(attacker)
+			return if attacker.isBot then attacker else Participants.fromPlayer(attacker)
+		end
+		local Validator = {
+			DEBUG_TARGET_ATTRIBUTE = Real.DEBUG_TARGET_ATTRIBUTE,
+			hitOutcome = Real.hitOutcome,
+			authorizeHitscan = function(attacker, ...)
+				return Real.authorizeHitscan(participantOf(attacker), ...)
+			end,
+			authorizeMelee = function(attacker, ...)
+				return Real.authorizeMelee(participantOf(attacker), ...)
+			end,
+			forget = function(attacker)
+				Real.forget(participantOf(attacker))
+			end,
+		}
 		local function makePlayer(position: Vector3, weapon: string?, health: number?, facing: Vector3?)
-			local player = { Character = makeCharacter(position, health, facing) }
+			nextUserId += 1
+			local player = {
+				UserId = nextUserId,
+				Name = "Joueur" .. nextUserId,
+				Character = makeCharacter(position, health, facing),
+			}
 			owners[player.Character] = player
+			-- inscrit comme à son arrivée en jeu (init.server : setupPlayer)
+			Participants.fromPlayer(player :: any)
 			if weapon then
 				equip(player, weapon)
 			end
 			return player
 		end
-		return Validator, makePlayer
+		local function makeBot(position: Vector3, weapon: string?)
+			local bot = Participants.addBot("Marcel")
+			Participants.setCharacter(bot, makeCharacter(position))
+			-- equip lit .Character : même forme qu'un faux joueur
+			bot.Character = bot.character
+			if weapon then
+				equip(bot, weapon)
+			end
+			return bot
+		end
+		return Validator, makePlayer, makeBot
 	end
+
+	T.describe("Validator : bots (#137)", function()
+		T.it("accepte un tir d'un joueur sur un bot", function()
+			local Validator, makePlayer, makeBot = setup()
+			local a, bot = makePlayer(Vector3.zero, "AWP"), makeBot(Vector3.new(100, 0, 0))
+			T.expectEqual(Validator.authorizeHitscan(a, bot.character, rootOf(bot.character), 0), 115)
+		end)
+
+		T.it("accepte un tir d'un bot sur un joueur", function()
+			local Validator, makePlayer, makeBot = setup()
+			local bot, b = makeBot(Vector3.zero, "AWP"), makePlayer(Vector3.new(100, 0, 0))
+			T.expectEqual(Validator.authorizeHitscan(bot, b.Character, rootOf(b.Character), 0), 115)
+		end)
+
+		T.it("refuse qu'un bot se touche lui-même", function()
+			local Validator, _, makeBot = setup()
+			local bot = makeBot(Vector3.zero, "AWP")
+			T.expectEqual(Validator.authorizeHitscan(bot, bot.character, rootOf(bot.character), 0), nil)
+		end)
+
+		T.it("refuse un personnage sans participant", function()
+			local Validator, makePlayer = setup()
+			local a = makePlayer(Vector3.zero, "AWP")
+			local orphan = makeCharacter(Vector3.new(50, 0, 0))
+			T.expectEqual(Validator.authorizeHitscan(a, orphan, rootOf(orphan), 0), nil)
+		end)
+	end)
 
 	T.describe("Validator : cibles", function()
 		T.it("accepte un tir valide entre deux joueurs", function()
@@ -112,7 +177,12 @@ return function(T, Loader)
 			local Validator, makePlayer = setup()
 			local b = makePlayer(Vector3.new(5, 0, 0))
 			T.expectEqual(
-				Validator.authorizeHitscan({ Character = nil } :: any, b.Character, rootOf(b.Character), 0),
+				Validator.authorizeHitscan(
+					{ UserId = 99, Name = "SansPerso" } :: any,
+					b.Character,
+					rootOf(b.Character),
+					0
+				),
 				nil
 			)
 		end)
@@ -271,7 +341,7 @@ return function(T, Loader)
 			local Validator, makePlayer = setup()
 			local a, b = makePlayer(Vector3.zero, "M9Bayonet"), makePlayer(Vector3.new(5, 0, 0))
 			T.expectEqual(Validator.authorizeMelee(a, b.Character, "secondary", 10), 65)
-			Validator.forgetPlayer(a)
+			Validator.forget(a)
 			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 10.1), 50)
 		end)
 	end)

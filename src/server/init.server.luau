@@ -9,12 +9,14 @@ local MapSelection = require(Shared:WaitForChild("MapSelection"))
 local WeaponThirdPerson = require(Shared:WaitForChild("WeaponThirdPerson"))
 local MemoryTracker = require(Shared:WaitForChild("MemoryTracker"))
 local PerfRules = require(Shared:WaitForChild("PerfRules"))
+local ParticipantRules = require(Shared:WaitForChild("ParticipantRules"))
 
 local SpawnManager = require(script.SpawnManager)
 local RoundManager = require(script.RoundManager)
 local StatsStore = require(script.StatsStore)
 local SettingsStore = require(script.SettingsStore)
 local Validator = require(script.Validator)
+local Participants = require(script.Participants)
 local FeedbackService = require(script.FeedbackService)
 local DebugPlaytest = require(script.DebugPlaytest)
 local KillZone = require(script.KillZone)
@@ -137,12 +139,18 @@ weaponActionRmt.OnServerEvent:Connect(function(player, action)
 end)
 
 local function onCharacterAdded(player: Player, char: Model)
-	Validator.forgetPlayer(player)
+	local participant = Participants.fromPlayer(player)
+	Validator.forget(participant)
 	trackWeapon3P(char)
 	local humanoid = char:WaitForChild("Humanoid") :: Humanoid
 	humanoid.Died:Connect(function()
-		RoundManager.onCharacterDied(player, SpawnManager.spawnPlayer)
-		StatsStore.recordDeath(player)
+		local killer = RoundManager.onCharacterDied(participant, function()
+			SpawnManager.spawnPlayer(player)
+		end)
+		-- Une mort infligée par un bot ne compte que dans le round (décision 6 de #133)
+		if ParticipantRules.countsInStats(false, killer and killer.isBot) then
+			StatsStore.recordDeath(player)
+		end
 		-- Pas tout de suite : les clients clonent le personnage pour en faire un ragdoll à la réception de PlayerDied (#102)
 		task.delay(CORPSE_HANDOFF_DELAY, function()
 			if player.Character == char then
@@ -184,8 +192,9 @@ end)
 -- ── Combat : validation et attribution des dégâts ─────────────────────────
 
 -- Cette méthode permet de lire le nom de l'arme en main du tireur lorsqu'une touche est attribuée (kill feed, #102).
-local function weaponOf(player: Player): string?
-	local tool = player.Character and equippedTools[player.Character]
+local function weaponOf(attacker: Participants.Participant): string?
+	local char = Participants.characterOf(attacker)
+	local tool = char and equippedTools[char]
 	if not tool then
 		return nil
 	end
@@ -193,11 +202,11 @@ local function weaponOf(player: Player): string?
 	return if type(name) == "string" and name ~= "" then name else tool.Name
 end
 
--- Cette méthode permet d'attribuer une touche à son tireur (arme, tir à la tête) lorsqu'elle vise un joueur.
-local function recordHit(player: Player, targetCharacter: Instance, isHeadshot: boolean)
-	local targetPlayer = Players:GetPlayerFromCharacter(targetCharacter)
-	if targetPlayer then
-		RoundManager.recordDamage(player, targetPlayer, weaponOf(player), isHeadshot)
+-- Cette méthode permet d'attribuer une touche à son tireur (arme, tir à la tête) lorsqu'elle vise un participant.
+local function recordHit(attacker: Participants.Participant, targetCharacter: Instance, isHeadshot: boolean)
+	local target = Participants.fromCharacter(targetCharacter)
+	if target then
+		RoundManager.recordDamage(attacker, target, weaponOf(attacker), isHeadshot)
 	end
 end
 
@@ -209,7 +218,7 @@ local function applyHit(player: Player, targetCharacter: Instance, damage: numbe
 	if not humanoid or humanoid.Health <= 0 then
 		return
 	end
-	recordHit(player, targetCharacter, isHeadshot)
+	recordHit(Participants.fromPlayer(player), targetCharacter, isHeadshot)
 	local healthBefore = humanoid.Health
 	humanoid:TakeDamage(damage)
 	local outcome = Validator.hitOutcome(healthBefore, humanoid.Health)
@@ -233,12 +242,13 @@ local function onHitVerdict(
 end
 
 meleeRmt.OnServerEvent:Connect(function(player, targetCharacter, attackKind)
-	local damage = Validator.authorizeMelee(player, targetCharacter, attackKind, os.clock())
+	local damage = Validator.authorizeMelee(Participants.fromPlayer(player), targetCharacter, attackKind, os.clock())
 	onHitVerdict(player, meleeRmt, targetCharacter, damage, false)
 end)
 
 hitscanRmt.OnServerEvent:Connect(function(player, targetCharacter, hitPart)
-	local damage, isHeadshot = Validator.authorizeHitscan(player, targetCharacter, hitPart, os.clock())
+	local damage, isHeadshot =
+		Validator.authorizeHitscan(Participants.fromPlayer(player), targetCharacter, hitPart, os.clock())
 	onHitVerdict(player, hitscanRmt, targetCharacter, damage, isHeadshot)
 end)
 
@@ -256,7 +266,7 @@ end
 local function setupPlayer(player: Player)
 	task.spawn(StatsStore.load, player)
 	task.spawn(SettingsStore.load, player)
-	RoundManager.addPlayer(player)
+	RoundManager.addParticipant(Participants.fromPlayer(player))
 	player.CharacterAdded:Connect(function(char)
 		onCharacterAdded(player, char)
 	end)
@@ -272,8 +282,10 @@ MemoryTracker.snapshot("démarrage")
 Players.PlayerAdded:Connect(setupPlayer)
 Players.PlayerRemoving:Connect(function(player)
 	lastWeaponAction[player] = nil
-	Validator.forgetPlayer(player)
-	RoundManager.removePlayer(player)
+	local participant = Participants.fromPlayer(player)
+	Validator.forget(participant)
+	RoundManager.removeParticipant(participant)
+	Participants.remove(participant)
 	-- départ d'un joueur : ses Instances et connexions doivent avoir disparu au relevé (cf. docs/performance.md)
 	task.delay(5, MemoryTracker.snapshot, "départ de " .. player.Name)
 end)

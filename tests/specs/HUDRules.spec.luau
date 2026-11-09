@@ -171,4 +171,59 @@ return function(T, Loader)
 			T.expectEqual(names[1], "M9Bayonet")
 		end)
 	end)
+
+	T.describe("HUDRules : annonce de mort (#137)", function()
+		T.it("lit les noms et drapeaux bot sans Player", function()
+			local death = HUDRules.readDeath({
+				victimId = 7,
+				victimName = "Alice",
+				victimIsBot = false,
+				killerId = -1,
+				killerName = "Marcel",
+				killerIsBot = true,
+				weapon = "AWP",
+				headshot = true,
+			}, 7)
+			T.expectEqual(death.victim, "Alice")
+			T.expectEqual(death.killer, "Marcel")
+			T.expectEqual(death.killerIsBot, true)
+			T.expectEqual(death.victimIsBot, false)
+			T.expectEqual(death.mine, true, "le joueur local est la victime")
+		end)
+
+		T.it("reconnaît le joueur local tueur d'un bot", function()
+			local death = HUDRules.readDeath(
+				{ victimId = -2, victimName = "Lucie", victimIsBot = true, killerId = 7, killerName = "Alice" },
+				7
+			)
+			T.expectEqual(death.mine, true)
+			T.expectEqual(death.victimIsBot, true)
+			T.expectEqual(death.killerIsBot, false)
+		end)
+
+		T.it("traite une mort sans tueur comme une chute", function()
+			local death = HUDRules.readDeath({ victimId = -2, victimName = "Lucie", victimIsBot = true }, 7)
+			T.expectEqual(death.killer, nil)
+			T.expectEqual(death.killerId, nil)
+			T.expectEqual(death.mine, false)
+			T.expectEqual(HUDRules.killDetail(death.killer, death.weapon, death.headshot), "CHUTE")
+		end)
+
+		T.it("refuse une annonce mal formée", function()
+			T.expectEqual(HUDRules.readDeath(nil, 7), nil)
+			T.expectEqual(HUDRules.readDeath({ victimId = 7 }, 7), nil, "sans nom de victime")
+		end)
+
+		T.it("ne prend pas un bot homonyme pour le joueur local au classement", function()
+			local sorted = {
+				{ name = "Alice", isBot = true, kills = 3, deaths = 0 },
+				{ name = "Alice", isBot = false, kills = 1, deaths = 0 },
+			}
+			T.expectEqual(HUDRules.rankOf(sorted, "Alice"), 2)
+		end)
+
+		T.it("échappe un nom pour le RichText", function()
+			T.expectEqual(HUDRules.escapeRichText("<a&b>"), "&lt;a&amp;b&gt;")
+		end)
+	end)
 end

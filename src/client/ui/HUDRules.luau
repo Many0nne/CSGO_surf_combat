@@ -19,7 +19,7 @@ HUDRules.LOW_TIME_THRESHOLD = 30
 -- Secondes sans changement d'arme avant que la barre ne garde que l'arme en main
 HUDRules.WEAPON_BAR_FADE_DELAY = 2.5
 
-export type Score = { name: string, kills: number, deaths: number }
+export type Score = { name: string, isBot: boolean?, kills: number, deaths: number }
 
 -- Cette méthode permet de trouver l'index du palier atteint lorsque le speedometer reçoit une vitesse.
 function HUDRules.speedTier(speed: number): number
@@ -70,7 +70,8 @@ end
 -- Cette méthode permet de retrouver le rang d'un joueur dans un classement trié lorsque le HUD affiche « rang/total ».
 function HUDRules.rankOf(sorted: { Score }, name: string): number?
 	for i, score in sorted do
-		if score.name == name then
+		-- Un bot peut porter le même nom qu'un joueur : le rang affiché est celui du joueur
+		if score.name == name and not score.isBot then
 			return i
 		end
 	end
@@ -135,12 +136,55 @@ HUDRules.KILL_FEED_DURATION = 5
 
 export type KillFeedEntry = {
 	killer: string?, -- nil : mort sans tueur (chute)
+	killerIsBot: boolean?,
 	victim: string,
+	victimIsBot: boolean?,
 	weapon: string?,
 	headshot: boolean,
 	mine: boolean, -- le joueur local est le tueur ou la victime
 	at: number,
 }
+
+-- Cette méthode permet d'échapper un nom de joueur ou de bot avant de l'insérer dans un texte RichText.
+function HUDRules.escapeRichText(text: string): string
+	return (string.gsub(string.gsub(string.gsub(text, "&", "&amp;"), "<", "&lt;"), ">", "&gt;"))
+end
+
+-- Mort annoncée par le serveur (PlayerDied), lue sans Player : un bot n'en a pas (#137)
+export type Death = {
+	victimId: number,
+	victim: string,
+	victimIsBot: boolean,
+	killerId: number?,
+	killer: string?, -- nil : mort sans tueur (chute) ou tueur parti
+	killerIsBot: boolean,
+	weapon: string?,
+	headshot: boolean,
+	direction: Vector3?,
+	mine: boolean, -- le joueur local est le tueur ou la victime
+}
+
+-- Cette méthode permet de lire une annonce de mort (PlayerDied) lorsqu'elle arrive du serveur : nil si elle est mal
+-- formée ; les noms viennent de l'annonce, le joueur local se reconnaît à son UserId.
+function HUDRules.readDeath(data: any, localUserId: number): Death?
+	if type(data) ~= "table" or type(data.victimId) ~= "number" or type(data.victimName) ~= "string" then
+		return nil
+	end
+	local killerId = if type(data.killerId) == "number" then data.killerId else nil
+	local killer = if killerId and type(data.killerName) == "string" then data.killerName else nil
+	return {
+		victimId = data.victimId,
+		victim = data.victimName,
+		victimIsBot = data.victimIsBot == true,
+		killerId = if killer then killerId else nil,
+		killer = killer,
+		killerIsBot = killer ~= nil and data.killerIsBot == true,
+		weapon = if type(data.weapon) == "string" then data.weapon else nil,
+		headshot = data.headshot == true,
+		direction = if typeof(data.direction) == "Vector3" then data.direction else nil,
+		mine = data.victimId == localUserId or (killer ~= nil and killerId == localUserId),
+	}
+end
 
 -- Cette méthode permet de décrire l'arme d'une ligne de kill feed ou de l'écran de mort lorsqu'une mort arrive :
 -- libellé de l'arme, « TÊTE » si tir à la tête, « CHUTE » sans tueur.
