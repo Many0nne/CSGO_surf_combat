@@ -75,13 +75,41 @@ connues du plan, dont la marche en (1930, 69, −184)). Ce qui borne la vitesse 
 ~16 %, virages ~14 %, bord ~9 % ; les destinations tirées au hasard sont proches, les états de #141 changeront ça.
 Une chute hors de la map (Y −94) vue une fois, non reproduite en 7 min 30 de capture.
 
+## Comportement (#141)
+
+`BotBrain` (un par bot vivant, appelé avant `BotMotion` à chaque Heartbeat), règles pures dans `BotBehaviorRules`,
+réglages dans `BotConfig` (section « Comportement »). Il commande le suivi de chemin (`chooseDestination`,
+`onArrive`, `setDestination`) et le regard de `BotMotion` (`gaze`).
+- **Perception** (tous les `PERCEPTION_INTERVAL`) : un autre participant en vie est vu s'il est dans `VIEW_FOV` (100°)
+  autour du regard, à moins de `VIEW_RANGE`, et si un rayon des yeux vers sa tête ou son torse n'est coupé que par
+  lui (murs d'air ignorés). Cible : un humain plutôt qu'un bot, puis la plus proche.
+- **Ouïe** : `BotManager.hearShot` (appelé par `init.server` sur l'action `Shoot` d'un joueur ; #143 l'appellera pour
+  les tirs des bots). À moins de `HEARING_RADIUS` (200), position faussée d'au plus `HEARING_FUZZ` (20 %) de la distance.
+- **Mémoire** : dernière position vue ou entendue par cible, oubliée après `MEMORY_TIME`.
+- **États** (`nextState`) : combattre (cible vue) > se replacer (après un kill, ou touché sous `REPLACE_HEALTH` en
+  combat) > enquêter (contact pas encore fouillé : dernière position, puis `INVESTIGATE_POINTS` points voisins) >
+  chercher (note dynamique : note fixe, passage récent, autres bots, distance, hasard ; à l'arrivée, angle tenu avec
+  `HOLD_CHANCE`, regard vers un point visible lointain, liste `visible` des points calculée par `NavBuilder`).
+- **Biais vers les humains** : sans contact depuis `BIAS_DELAY` (15 s), bonus aux points proches d'une zone décalée
+  de `BIAS_SPREAD` autour de l'humain le plus proche.
+- **Combat sans poursuite** (choix de l'utilisateur) : le bot garde sa destination et son bhop. Il se tourne vers la
+  cible (`COMBAT_TURN_RATE`), « tire » après `REACTION_TIME` + `COMBAT_AIM_TIME` (compté seulement, le tir réel vient
+  avec #143 via `BotBrain.onFire`), puis rend son regard à sa course pendant `COMBAT_COOLDOWN`. En l'air, la visée
+  coupe le gain d'air strafe (il glisse et garde sa vitesse).
+
+Mesure (09/11/2026, 5 bots + 1 joueur immobile, 2 min) : 24 combats, 7 enquêtes, 281 sauts de bhop, 0 arête ratée.
+
 ## Debug (Studio)
 
 - `workspace:SetAttribute("DebugBots", 5)` : nombre de bots (un round doit être actif : un joueur a demandé à apparaître).
 - `workspace:SetAttribute("DebugNav", true)` : points (couleur du rouge au vert et étiquette = numéro, type, note),
   arêtes entre points (gris marche, bleu descente, orange saut, vert échelle ; trait court = sens unique), chemin
-  restant de chaque bot en jaune. `"cases"` : en plus chaque case (vert gardée, rouge écartée), lourd (~40 000 pièces).
-- Console : `[Nav] Dizzy : …` à la fin de la construction (durée par phase), `[Nav] bilan` toutes les 30 s.
+  restant de chaque bot en jaune, au-dessus de chaque bot son état, sa destination et sa cible (blanc chercher,
+  jaune enquêter, rouge combattre, bleu se replacer), trait rouge vers la cible en combat. `"cases"` : en plus chaque case (vert gardée, rouge écartée), lourd (~40 000 pièces).
+- Console : `[Nav] Dizzy : …` à la fin de la construction (durée par phase), `[Nav] bilan` et `[Bots] bilan`
+  (combats, tirs simulés, tirs entendus, enquêtes, replis, angles tenus, destinations biaisées) toutes les 30 s.
+- Le playtest démarre sans round : `ReplicatedStorage.RequestSpawn:FireServer()` en contexte Client fait apparaître
+  le joueur et lance le round (piège du `require` depuis le MCP : `docs/architecture.md`).
 
 ## Pièges
 
@@ -103,4 +131,9 @@ Une chute hors de la map (Y −94) vue une fois, non reproduite en 7 min 30 de c
   ~2 sauts par série, 43 studs/s au plus. Le strafe fait tourner en gagnant de la vitesse (rayon ≈ |v|²·dt / L,
   26 studs à 100), et le freinage en l'air est presque instantané : suivre le chemin courbe à une vitesse réglée par
   ses virages suffit. Une portion qui s'arrêtait à chaque montée de plus d'une marche bridait encore les séries.
+- **Une cible qui sort du champ n'est pas perdue.** En rendant son regard à sa course après un tir, le bot sort sa
+  cible de son champ : la lâcher aussitôt relançait le temps de réaction et une enquête sur sa dernière position à
+  chaque tir (45 combats et 44 enquêtes en 30 s, une poursuite de fait). Elle reste en tête `TARGET_KEEP_TIME`
+  (regard vers sa dernière position vue, pas de tir sans la revoir), et une cible perdue n'est fouillée qu'avec
+  `LOST_CHASE_CHANCE` ; un tir entendu l'est toujours.
 - Gain par saut : environ 36 × 44 ticks ≈ 1 600 de |v|² en strafe parfait, donc 6 sauts de 30 à 100, pas 3.

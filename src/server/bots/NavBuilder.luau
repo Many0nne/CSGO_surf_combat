@@ -31,6 +31,7 @@ export type PlanWaypoint = {
 	kind: string,
 	score: number,
 	view: number,
+	visible: { number }, -- points visibles depuis celui-ci, à hauteur des yeux (regard quand il tient un angle, #141)
 	cover: number,
 }
 
@@ -382,6 +383,10 @@ function NavBuilder.build(map: Instance): Plan
 
 	phaseStart = os.clock()
 	local views = table.create(#clusters, 0)
+	local visible: { { number } } = {}
+	for i = 1, #clusters do
+		visible[i] = {}
+	end
 	local eye = Vector3.new(0, BotConfig.NAV_EYE_HEIGHT, 0)
 	local range2 = BotConfig.NAV_VIEW_RANGE * BotConfig.NAV_VIEW_RANGE
 	for i = 1, #clusters do
@@ -391,6 +396,8 @@ function NavBuilder.build(map: Instance): Plan
 			if delta:Dot(delta) <= range2 and not workspace:Raycast(from, delta, viewParams) then
 				views[i] += 1
 				views[j] += 1
+				table.insert(visible[i], j)
+				table.insert(visible[j], i)
 			end
 		end
 		slice()
@@ -454,6 +461,7 @@ function NavBuilder.build(map: Instance): Plan
 			kind = kind,
 			score = NavRules.fixedScore(views[i], viewMax, height, cover, kind),
 			view = views[i],
+			visible = visible[i],
 			cover = cover,
 		}
 		slice()

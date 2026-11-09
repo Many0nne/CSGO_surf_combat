@@ -1,5 +1,5 @@
--- Réglages des bots (#133). Étape 4/9 (#140) : plan de navigation (graphe de la map, notes des points, suivi de
--- chemin) ; le bot va d'un point tiré au hasard à un autre, en attendant les états (#141). Bunny hop : #151.
+-- Réglages des bots (#133). Plan de navigation (#140 : graphe de la map, notes des points, suivi de chemin), bunny
+-- hop (#151), comportement (#141 : perception, mémoire, états, note dynamique des destinations, biais vers les humains).
 -- Alignement en colonnes conservé volontairement
 -- stylua: ignore
 return {
@@ -78,6 +78,53 @@ return {
 	                              -- tiré à chaque saut (0 = parfait, 0,5 garde au moins 75 % du gain, 1 = aucun gain)
 	BHOP_MISS_CHANCE    = 0.1,    -- probabilité de rater le timing d'un saut
 	BHOP_MISS_DELAY     = 0.12,   -- retard d'un saut raté, passé au sol avec friction (s)
+
+	-- Comportement (#141) : perception, mémoire, états (BotBrain, règles dans BotBehaviorRules)
+	PERCEPTION_INTERVAL = 0.1,    -- regard autour de lui tous les tant (s)
+	VIEW_FOV            = 100,    -- champ de vision, angle total autour du regard (°)
+	VIEW_RANGE          = 400,    -- distance de vue au plus (studs)
+	EYE_HEIGHT          = 1.5,    -- yeux au-dessus de la racine (studs)
+	HEARING_RADIUS      = 200,    -- tir entendu à moins de tant (studs)
+	HEARING_FUZZ        = 0.2,    -- position entendue faussée d'au plus tant × distance
+	MEMORY_TIME         = 8,      -- cible oubliée après tant de secondes sans contact
+	INVESTIGATE_POINTS  = 2,      -- points voisins fouillés après la dernière position connue
+
+	-- Combat (#141 : regard seulement, le tir vient avec #143) : il garde sa course et se tourne pour tirer
+	REACTION_TIME       = 0.45,   -- avant de pouvoir tirer, depuis qu'il voit la cible (s)
+	COMBAT_AIM_TIME     = 0.3,    -- visée avant le tir, une fois réagi (s)
+	COMBAT_COOLDOWN     = 1.2,    -- après un tir, regard rendu à la course (réarmement de l'AWP, s)
+	COMBAT_TURN_RATE    = 720,    -- rotation du regard vers la cible (°/s)
+	TARGET_KEEP_TIME    = 2,      -- cible sortie du champ gardée en tête tant (s) : il se retourne vers elle
+	LOST_CHASE_CHANCE   = 0.35,   -- cible perdue de vue : probabilité d'enquêter (sinon il reprend sa course)
+
+	-- Se replacer : après un kill, ou touché sous tant de ses PV en combat (duel perdu d'avance)
+	REPLACE_HEALTH      = 0.5,    -- part des PV
+	REPLACE_RADIUS      = 90,     -- point de repli cherché à moins de tant (studs)
+	REPLACE_MIN_DIST    = 16,     -- et à plus de tant (studs)
+	REPLACE_W_COVER     = 1.0,    -- poids du couvert du point
+	REPLACE_W_AWAY      = 1.0,    -- poids de l'éloignement de la menace
+
+	-- Note dynamique d'une destination en état « chercher » (décision 3 de #133)
+	DEST_WEIGHT_FIXED   = 1.0,    -- note fixe (0 à ~1,6)
+	DEST_RECENT_TIME    = 60,     -- point visité par ce bot il y a moins de tant (s) : malus dégressif
+	DEST_RECENT_MALUS   = 1.5,
+	DEST_CLAIMED_MALUS  = 1.0,    -- par autre bot qui y va déjà
+	DEST_DISTANCE_SCALE = 400,    -- malus de distance plein à tant de studs
+	DEST_DISTANCE_MALUS = 0.4,
+	DEST_RANDOM         = 0.6,    -- part de hasard (ajout tiré dans [0, tant[)
+
+	-- Tenir un angle à l'arrivée sur un point (état « chercher »)
+	HOLD_CHANCE         = 0.4,
+	HOLD_MIN            = 2,      -- durée (s)
+	HOLD_MAX            = 5,
+	HOLD_LOOK_MIN       = 24,     -- regard vers un point visible à au moins tant (studs)
+
+	-- Biais vers les humains : sans contact depuis tant (s, 0 = désactivé), il cherche du côté de l'humain le plus
+	-- proche, dans une zone décalée au hasard (il ne connaît pas sa position)
+	BIAS_DELAY          = 15,
+	BIAS_SPREAD         = 60,     -- décalage de la zone (studs)
+	BIAS_RADIUS         = 160,    -- bonus dégressif jusqu'à tant de la zone (studs)
+	BIAS_BONUS          = 1.5,
 
 	-- Outillage Studio : attributs de Workspace
 	DEBUG_ATTRIBUTE     = "DebugBots", -- nombre de bots voulus (0 = aucun)

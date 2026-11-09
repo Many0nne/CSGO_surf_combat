@@ -1,5 +1,5 @@
--- Suivi de chemin d'un bot (#140) : choisit une destination (au hasard parmi les points de passage, en attendant les
--- états de #141), cherche le chemin de case à case (NavPlan), puis donne à chaque tick l'intention de mouvement à
+-- Suivi de chemin d'un bot (#140) : reçoit sa destination du comportement du bot (BotBrain, #141 : choisie à la
+-- demande ou imposée), cherche le chemin de case à case (NavPlan), puis donne à chaque tick l'intention de mouvement à
 -- BotMotion : direction (raccourcie en ligne droite quand les cases sont alignées), saut devant un rebord à monter,
 -- grimpe d'une échelle. Un bot qui ne se rapproche plus de sa cible recalcule son chemin ; après NAV_MAX_REPATH
 -- essais, l'arête ratée est écartée NAV_BAN_TIME secondes et il change de destination.
@@ -43,6 +43,9 @@ export type BotNavigator = typeof(setmetatable(
 		stalled: number,
 		repaths: number,
 		hold: number,
+		-- Comportement (#141) : choix de la prochaine destination, arrivée sur un point (renvoie l'attente, nil : courte)
+		chooseDestination: ((foot: Vector3) -> number?)?,
+		onArrive: ((waypoint: number?) -> number?)?,
 		banned: { [number]: number }, -- clé d'arête → fin de la mise à l'écart (os.clock)
 		runSpeed: number, -- vitesse de course du bot (arme tenue)
 		bhopAllowed: boolean, -- coupé par les états (#141) : combat, angle tenu
@@ -83,6 +86,8 @@ function BotNavigator.new(rng: Random, runSpeed: number): BotNavigator
 		rng = rng,
 		destination = nil,
 		lastWaypoint = nil,
+		chooseDestination = nil,
+		onArrive = nil,
 		cells = nil,
 		points = {},
 		kinds = {},
@@ -128,7 +133,10 @@ function BotNavigator._plan(self: BotNavigator, plan: NavPlan.Plan, foot: Vector
 	local bans = self:_activeBans()
 	for _ = 1, 4 do
 		if not self.destination then
-			self.destination = NavPlan.randomWaypoint(plan, self.rng, self.lastWaypoint)
+			local choose = self.chooseDestination
+			self.destination = if choose
+				then choose(foot)
+				else NavPlan.randomWaypoint(plan, self.rng, self.lastWaypoint)
 		end
 		local wp = self.destination and plan.waypoints[self.destination]
 		if not wp then
@@ -164,6 +172,22 @@ function BotNavigator._dropPath(self: BotNavigator)
 	self.cells = nil
 	self.best, self.stalled = math.huge, 0
 	self.bhopping = false
+end
+
+-- Cette méthode permet d'imposer une destination lorsque le comportement du bot change de but (enquête, repli) :
+-- chemin recalculé et attente interrompue, sauf si c'est déjà sa destination.
+function BotNavigator.setDestination(self: BotNavigator, waypoint: number)
+	if self.destination == waypoint and self.cells then
+		return
+	end
+	self.destination = waypoint
+	self.hold = 0
+	self:_dropPath()
+end
+
+-- Cette méthode permet de savoir si le bot attend sur un point lorsque le comportement décide où il regarde.
+function BotNavigator.isHolding(self: BotNavigator): boolean
+	return self.hold > 0
 end
 
 -- Cette méthode permet d'autoriser ou d'interdire le bunny hop lorsque l'état du bot change (#141 : coupé en combat
@@ -318,12 +342,15 @@ function BotNavigator.update(
 		self.best, self.stalled, self.repaths = math.huge, 0, 0
 	end
 	if self.index > #points then
-		-- Arrivé : courte pause, puis destination suivante
-		self.lastWaypoint = self.destination
+		-- Arrivé : pause (choisie par le comportement, sinon courte), puis destination suivante
+		local arrived = self.destination
+		self.lastWaypoint = arrived
 		self.destination = nil
 		BotNavigator.stats.reached += 1
 		self:_dropPath()
-		self.hold = BotConfig.NAV_HOLD_MIN + (BotConfig.NAV_HOLD_MAX - BotConfig.NAV_HOLD_MIN) * self.rng:NextNumber()
+		local wait = if self.onArrive then self.onArrive(arrived) else nil
+		self.hold = wait
+			or BotConfig.NAV_HOLD_MIN + (BotConfig.NAV_HOLD_MAX - BotConfig.NAV_HOLD_MIN) * self.rng:NextNumber()
 		return IDLE
 	end
 

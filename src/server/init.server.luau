@@ -137,6 +137,10 @@ weaponActionRmt.OnServerEvent:Connect(function(player, action)
 	end
 	lastWeaponAction[player] = now
 	WeaponThirdPerson.setAction(char, action)
+	if action == "Shoot" then
+		-- Ouïe des bots (#141) : un tir s'entend autour du tireur
+		BotManager.hearShot(Participants.fromPlayer(player), char:GetPivot().Position)
+	end
 end)
 
 -- Cette méthode permet de brancher le personnage d'un participant (joueur ou bot, #139) lorsqu'il apparaît : arme 3P
@@ -147,6 +151,10 @@ local function onParticipantCharacter(participant: Participants.Participant, cha
 	local humanoid = char:WaitForChild("Humanoid") :: Humanoid
 	humanoid.Died:Connect(function()
 		local killer = RoundManager.onCharacterDied(participant, respawn)
+		if killer then
+			-- Un bot qui vient de tuer se replace (#141)
+			BotManager.notifyKill(killer)
+		end
 		-- Une mort infligée par un bot ne compte que dans le round (décision 6 de #133)
 		local player = participant.player
 		if player and ParticipantRules.countsInStats(participant.isBot, killer and killer.isBot) then

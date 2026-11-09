@@ -2,7 +2,8 @@
 -- personnage est construit par le serveur (rig de référence, skin commun, AWP), lancé depuis le soleil comme un
 -- joueur, déplacé par BotMotion et branché comme un joueur sur l'arme 3P, la mort et le corps (onCharacter).
 -- Il réapparaît RESPAWN_DELAY après sa mort, et au début de chaque round, tant que le round est actif.
--- Le plan de navigation de la map est construit au démarrage (NavPlan) ; chaque bot le suit (BotNavigator).
+-- Le plan de navigation de la map est construit au démarrage (NavPlan) ; chaque bot le suit (BotNavigator), guidé par
+-- son comportement (BotBrain, #141 : perception, mémoire, états), qui entend les tirs relayés par hearShot.
 -- Outillage Studio : l'attribut Workspace DebugBots fixe le nombre de bots (0 pour tous les retirer), DebugNav affiche
 -- le plan (NavDebug).
 local Players = game:GetService("Players")
@@ -20,6 +21,7 @@ local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local MapSelection = require(ReplicatedStorage.Shared.MapSelection)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local Participants = require(ServerScriptService.Server.Participants)
+local BotBrain = require(script.Parent.BotBrain)
 local BotMotion = require(script.Parent.BotMotion)
 local NavDebug = require(script.Parent.NavDebug)
 local NavPlan = require(script.Parent.NavPlan)
@@ -47,6 +49,7 @@ type Bot = {
 	participant: Participant,
 	character: Model?,
 	motion: BotMotion.BotMotion?,
+	brain: BotBrain.BotBrain?,
 	diedAt: number, -- os.clock() de la dernière mort (-inf : jamais mort, apparaît dès que le round est actif)
 	frozen: boolean,
 }
@@ -55,6 +58,34 @@ local BotManager = {}
 
 local deps: Deps
 local bots: { Bot } = {}
+local clips: Instance? = nil -- murs d'air de la map jouée (ne bloquent pas la vue des bots)
+
+-- Cette méthode permet de lister les autres participants en vie lorsqu'un bot regarde autour de lui ou cherche un
+-- humain (biais) : id, humain ou bot, personnage.
+local function aliveOthers(selfId: number): { { id: number, isHuman: boolean, character: Model } }
+	local list = {}
+	for _, participant in Participants.all() do
+		local char = Participants.characterOf(participant)
+		local humanoid = char and char.Parent and char:FindFirstChildOfClass("Humanoid")
+		if participant.id ~= selfId and humanoid and humanoid.Health > 0 then
+			table.insert(list, { id = participant.id, isHuman = not participant.isBot, character = char :: Model })
+		end
+	end
+	return list
+end
+
+-- Cette méthode permet de compter les bots qui vont vers chaque point lorsqu'un bot choisit sa destination (malus :
+-- les bots se répartissent sur la map).
+local function claimedDestinations(selfId: number): { [number]: number }
+	local claimed = {}
+	for _, bot in bots do
+		local destination = bot.motion and bot.motion.navigator.destination
+		if destination and bot.participant.id ~= selfId then
+			claimed[destination] = (claimed[destination] or 0) + 1
+		end
+	end
+	return claimed
+end
 
 -- Cette méthode permet de construire un personnage de bot hors jeu lorsqu'il doit apparaître : copie du rig de
 -- référence sans scripts (sinon rig généré), racine ancrée et déplacée à la main comme celle d'un joueur.
@@ -132,6 +163,7 @@ end
 -- détruit après sa mort, fin de round) ou que le bot est retiré.
 local function dropCharacter(bot: Bot)
 	bot.motion = nil
+	bot.brain = nil
 	local char = bot.character
 	bot.character = nil
 	Participants.setCharacter(bot.participant, nil)
@@ -159,6 +191,7 @@ local function spawnBot(bot: Bot)
 	humanoid.Died:Connect(function()
 		bot.diedAt = os.clock()
 		bot.motion = nil
+		bot.brain = nil
 	end)
 	char.Parent = workspace
 	local weaponName = giveWeapon(char)
@@ -166,6 +199,15 @@ local function spawnBot(bot: Bot)
 	local motion = BotMotion.new(char, root, humanoid, launchVelocity, weaponName, deps.relay)
 	motion:setFrozen(bot.frozen)
 	bot.motion = motion
+	local id = bot.participant.id
+	bot.brain = BotBrain.new({
+		id = id,
+		others = function()
+			return aliveOthers(id)
+		end,
+		claimed = claimedDestinations,
+		clips = clips,
+	}, char, motion)
 	-- Première position publiée tout de suite : pas d'attente du premier envoi pour apparaître chez les clients
 	deps.relay(char, root, root.CFrame)
 end
@@ -181,6 +223,9 @@ local function step(dt: number)
 			dropCharacter(bot)
 		end
 		if bot.motion then
+			if bot.brain and not bot.frozen then
+				bot.brain:update(dt)
+			end
 			bot.motion:update(dt)
 		elseif not bot.character and active and now - bot.diedAt >= GameConfig.RESPAWN_DELAY then
 			spawnBot(bot)
@@ -201,7 +246,7 @@ function BotManager.add(): Participant?
 	local participant = Participants.addBot(BotRules.pickName(taken))
 	table.insert(
 		bots,
-		{ participant = participant, character = nil, motion = nil, diedAt = -math.huge, frozen = false }
+		{ participant = participant, character = nil, motion = nil, brain = nil, diedAt = -math.huge, frozen = false }
 	)
 	deps.roundManager.addParticipant(participant)
 	return participant
@@ -217,6 +262,25 @@ function BotManager.removeLast()
 	dropCharacter(bot)
 	deps.roundManager.removeParticipant(bot.participant)
 	Participants.remove(bot.participant)
+end
+
+-- Cette méthode permet de faire entendre un tir aux bots lorsqu'un participant tire (position du tireur) ; chacun le
+-- perçoit selon sa distance (BotBrain : rayon et flou de l'ouïe).
+function BotManager.hearShot(shooter: Participant, position: Vector3)
+	for _, bot in bots do
+		if bot.brain then
+			bot.brain:hearShot(shooter.id, position, not shooter.isBot)
+		end
+	end
+end
+
+-- Cette méthode permet de prévenir un bot qu'il vient de tuer lorsqu'une mort est attribuée (il se replace).
+function BotManager.notifyKill(killer: Participant)
+	for _, bot in bots do
+		if bot.participant == killer and bot.brain then
+			bot.brain:notifyKill()
+		end
+	end
 end
 
 -- Cette méthode permet de figer ou relâcher tous les bots lorsqu'un outil de debug le demande.
@@ -253,6 +317,7 @@ function BotManager.init(dependencies: Deps)
 	task.spawn(function()
 		local map = MapSelection.waitForActive(30)
 		if map then
+			clips = map:FindFirstChild("Clips")
 			NavPlan.start(map)
 		else
 			warn("[BotManager] pas de map jouée : pas de plan de navigation, les bots restent sur place")
@@ -262,7 +327,7 @@ function BotManager.init(dependencies: Deps)
 		local list = {}
 		for _, bot in bots do
 			if bot.motion then
-				table.insert(list, bot.motion.navigator)
+				table.insert(list, { navigator = bot.motion.navigator, brain = bot.brain, root = bot.motion.root })
 			end
 		end
 		return list
