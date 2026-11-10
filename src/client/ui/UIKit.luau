@@ -224,15 +224,65 @@ function UIKit.cornerScrim(
 	})
 end
 
--- Cette méthode permet de faire apparaître un groupe en fondu avec un léger glissement lorsqu'un écran entre ;
+-- Propriété de transparence à animer selon la classe (pas de CanvasGroup : sa texture devient floue à basse qualité).
+local FADE_PROPS = {
+	Frame = { "BackgroundTransparency" },
+	TextLabel = { "BackgroundTransparency", "TextTransparency", "TextStrokeTransparency" },
+	TextButton = { "BackgroundTransparency", "TextTransparency", "TextStrokeTransparency" },
+	ImageLabel = { "BackgroundTransparency", "ImageTransparency" },
+	ImageButton = { "BackgroundTransparency", "ImageTransparency" },
+	UIStroke = { "Transparency" },
+}
+
+-- Reliquats de transparence d'un fondu en cours, par racine : un second fondu lancé en plein vol repart des vraies valeurs.
+local activeFades: { [Instance]: { [Instance]: { [string]: number } } } = setmetatable({}, { __mode = "k" }) :: any
+
+-- Cette méthode permet de faire apparaître une arborescence d'éléments en jouant la transparence de chacun lorsqu'un
+-- groupe doit apparaître sans CanvasGroup ; `delay` retarde le début.
+function UIKit.fadeIn(root: Instance, info: TweenInfo, delay: number?)
+	local rest = activeFades[root]
+	if not rest then
+		rest = {}
+		for _, inst in root:GetDescendants() do
+			local props = FADE_PROPS[inst.ClassName]
+			if props then
+				local values = {}
+				for _, prop in props do
+					values[prop] = (inst :: any)[prop]
+				end
+				rest[inst] = values
+			end
+		end
+		activeFades[root] = rest
+	end
+	for inst, values in rest do
+		for prop in values do
+			(inst :: any)[prop] = 1
+		end
+	end
+	task.delay(delay or 0, function()
+		for inst, values in rest do
+			if inst.Parent then
+				UIKit.tween(inst, info, values)
+			end
+		end
+		task.delay(info.Time, function()
+			if activeFades[root] == rest then
+				activeFades[root] = nil
+			end
+		end)
+	end)
+end
+
+-- Cette méthode permet de faire apparaître un cadre en fondu avec un léger glissement lorsqu'un écran entre ;
 -- `dy` est le décalage vertical de départ (px), `delay` le retard avant l'animation.
-function UIKit.reveal(group: CanvasGroup, delay: number?, dy: number?)
+function UIKit.reveal(group: GuiObject, delay: number?, dy: number?)
 	local target = group:GetAttribute("RestPosition") or group.Position
 	group:SetAttribute("RestPosition", target)
-	group.GroupTransparency = 1
 	group.Position = target + UDim2.fromOffset(0, dy or 14)
+	UIKit.fadeIn(group, Motion.Enter, delay)
 	task.delay(delay or 0, function()
-		UIKit.tween(group, Motion.Enter, { GroupTransparency = 0, Position = target })
+		UIKit.tween(group, Motion.Enter, { Position = target })
 	end)
 end
 

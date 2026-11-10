@@ -37,7 +37,7 @@ export type ChoiceProps = {
 
 export type Page = {
 	gui: ScreenGui,
-	group: CanvasGroup,
+	group: Frame,
 	choice: (props: ChoiceProps) -> MenuShot.Choice,
 	exit: (text: string, action: () -> ()) -> MenuShot.Choice,
 	show: (withTitle: boolean?) -> (),
@@ -80,7 +80,7 @@ function MenuPage.new(name: string, displayOrder: number, title: string): Page
 	})
 	local root = UIKit.scaledRoot(gui)
 	buildVeil(root)
-	local group = UIKit.create("CanvasGroup", {
+	local group = UIKit.create("Frame", {
 		Name = "Content",
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,

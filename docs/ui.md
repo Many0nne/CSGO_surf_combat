@@ -157,9 +157,12 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
   (`UIKit.cornerScrim` : 90°, 180° ou -90° selon le coin, taille permutée pour les quarts de tour).
 - **Tools des armes :** ils sont presque vides (l'arme visible vient du viewmodel). Pour dessiner une arme hors du jeu
   (icône, silhouette), cloner les MeshParts enfants directs de `ReplicatedStorage/ViewModels/<Nom>`, sans les bras.
-- **`CanvasGroup` et fondu :** sa `GroupTransparency` est ignorée quand Roblox retombe sur le rendu simple (qualité
-  graphique, mémoire) : le groupe reste affiché. Pour estomper un élément qui doit vraiment disparaître (barre d'armes),
-  animer la transparence de chaque enfant.
+- **`CanvasGroup` interdit (#155) :** Roblox le rend dans une texture dont la résolution baisse avec la qualité graphique
+  (et la mémoire) : texte flou, illisible au minimum. Sa `GroupTransparency` est aussi ignorée dans ce rendu simple : le
+  groupe reste affiché. Les écrans (classement, réapparition, résultat, Infos, Réglages, fiche d'arme) sont des `Frame` ;
+  `UIKit.reveal` / `UIKit.fadeIn` animent la transparence de chaque enfant (fond, texte, image, `UIStroke`) à partir des
+  valeurs relevées au lancement. Un élément ajouté pendant le fondu n'est pas animé. Vérifier toute nouvelle interface à
+  la qualité graphique minimale et maximale.
 - **Polices :** aucune annonce officielle d'import de police trouvée (novembre 2026). Tout le texte est en polices
   Roblox (Oswald pour les titres et libellés, Titillium pour le texte courant).
 - **Bras du viewmodel :** ils forment vite une grosse masse noire quand la souris est dans un coin. Limiter le pivot
