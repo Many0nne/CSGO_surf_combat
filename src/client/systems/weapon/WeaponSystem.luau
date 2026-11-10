@@ -108,9 +108,6 @@ local function reloadTool(tool, cfg)
 	if s.ammo >= (cfg and cfg.Magazine or 0) then
 		return
 	end
-	if s.reserve <= 0 then
-		return
-	end
 
 	ScopeSystem.resetVisuals()
 	weaponState = "RELOADING"
@@ -123,10 +120,7 @@ local function reloadTool(tool, cfg)
 		if currentTool ~= tool then
 			return
 		end
-		local needed = (cfg and cfg.Magazine or 0) - s.ammo
-		local used = math.min(needed, s.reserve)
-		s.ammo = s.ammo + used
-		s.reserve = s.reserve - used
+		s.ammo = cfg and cfg.Magazine or 0 -- réserve illimitée : le chargeur est toujours rempli
 		weaponState = "IDLE"
 	end)
 

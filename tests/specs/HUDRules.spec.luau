@@ -162,6 +162,14 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("HUDRules.formatReserve (#165)", function()
+		T.it("affiche ∞ pour une réserve illimitée et le nombre sinon", function()
+			T.expectEqual(HUDRules.formatReserve(math.huge), "/ ∞")
+			T.expectEqual(HUDRules.formatReserve(10), "/ 10")
+			T.expectEqual(HUDRules.formatReserve(0), "/ 0")
+		end)
+	end)
+
 	T.describe("HUDRules.slotOrder", function()
 		T.it("trie par ordre alphabétique sans modifier la liste reçue", function()
 			local names = { "M9Bayonet", "AWP" }

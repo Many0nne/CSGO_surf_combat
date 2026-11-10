@@ -27,7 +27,6 @@ export type BotArsenal = typeof(setmetatable(
 		current: string?,
 		readyAt: number, -- arme sortie et réarmée à partir de cet instant (os.clock)
 		ammo: number,
-		reserve: number,
 		reloadEndsAt: number?,
 		params: RaycastParams,
 		onHit: OnHit,
@@ -77,7 +76,6 @@ function BotArsenal.new(char: Model, onHit: OnHit, onWeapon: (string) -> ()): Bo
 		current = nil,
 		readyAt = 0,
 		ammo = rifle.Magazine or 0,
-		reserve = rifle.Reserve or 0,
 		reloadEndsAt = nil,
 		params = params,
 		onHit = onHit,
@@ -111,27 +109,25 @@ function BotArsenal.equip(self: BotArsenal, name: string, now: number)
 	self.onWeapon(name)
 end
 
--- Cette méthode permet de lancer un rechargement du fusil lorsque son chargeur n'est pas plein et qu'il reste une
--- réserve (chargeur vide, ou rien à viser).
+-- Cette méthode permet de lancer un rechargement du fusil lorsque son chargeur n'est pas plein (réserve
+-- illimitée : chargeur vide, ou rien à viser).
 function BotArsenal._startReload(self: BotArsenal, now: number)
 	local cfg = self:config()
-	if self.reloadEndsAt or not cfg or cfg.IsMelee or self.reserve <= 0 or self.ammo >= (cfg.Magazine or 0) then
+	if self.reloadEndsAt or not cfg or cfg.IsMelee or self.ammo >= (cfg.Magazine or 0) then
 		return
 	end
 	self.reloadEndsAt = now + (cfg.ReloadTime or 0)
 	WeaponThirdPerson.setAction(self.char, "Reload")
 end
 
--- Cette méthode permet de faire avancer les armes lorsque le bot réfléchit : rechargement terminé (chargeur rempli
--- depuis la réserve), ou lancé s'il n'a rien à viser et que son chargeur n'est pas plein.
+-- Cette méthode permet de faire avancer les armes lorsque le bot réfléchit : rechargement terminé (chargeur rempli), ou lancé
+-- s'il n'a rien à viser et que son chargeur n'est pas plein.
 function BotArsenal.update(self: BotArsenal, now: number, idle: boolean)
 	local endsAt = self.reloadEndsAt
 	if endsAt and now >= endsAt then
 		self.reloadEndsAt = nil
 		local cfg = WeaponConfig.Weapons[BotCombatRules.RIFLE]
-		local moved = math.min((cfg.Magazine or 0) - self.ammo, self.reserve)
-		self.ammo += moved
-		self.reserve -= moved
+		self.ammo = cfg.Magazine or 0 -- réserve illimitée : le chargeur est toujours rempli
 	elseif idle and self.current == BotCombatRules.RIFLE then
 		self:_startReload(now)
 	end
