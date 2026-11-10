@@ -11,6 +11,7 @@ local SettingsMenu = require(script.ui.SettingsMenu)
 local LocalSettings = require(script.systems.settings.LocalSettings)
 local Speedometer = require(script.ui.Speedometer)
 local WeaponBar = require(script.ui.WeaponBar)
+local AmmoCounter = require(script.ui.AmmoCounter)
 local Hitmarker = require(script.ui.Hitmarker)
 local GameStateController = require(script.systems.game.GameStateController)
 local DebugPlaytest = require(script.debug.DebugPlaytest)
@@ -69,6 +70,7 @@ StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
 -- Réglages sauvegardés (#100) : demandés au serveur dès le démarrage, appliqués à leur arrivée
 LocalSettings.init()
 WeaponBar.init()
+AmmoCounter.init()
 
 -- Réglages créés dès le démarrage : accessibles depuis le menu, avant tout spawn
 SettingsMenu.init(FPSCamera)
