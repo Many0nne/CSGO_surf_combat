@@ -343,6 +343,16 @@ function WeaponSystem.getState(): string
 	return weaponState
 end
 
+-- Cette méthode permet de lire les munitions (chargeur, réserve) d'une arme lorsque le HUD les affiche ; renvoie nil
+-- pour une arme sans chargeur (couteau) ou sans état de munitions connu.
+function WeaponSystem.getAmmo(tool: Tool?): (number?, number?)
+	local s = tool and toolState[tool]
+	if not s or s.magazine <= 0 then
+		return nil, nil
+	end
+	return s.ammo, s.reserve
+end
+
 function WeaponSystem.getSpeedMultiplier()
 	local player = Players.LocalPlayer
 	local char = player and player.Character

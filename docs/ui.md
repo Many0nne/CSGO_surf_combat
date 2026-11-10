@@ -86,6 +86,11 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   Équipement : touches des emplacements (1 à 9 par défaut) et molette (vers le haut = arme précédente par défaut),
   réglables dans Réglages > TOUCHES (#100) ; toucher d'un emplacement, L1/R1 à la manette (fixes). La barre ignore
   touches et molette pendant que l'écran Réglages est ouvert.
+- `src/client/ui/AmmoCounter.luau` (#158) : « chargeur / réserve » en bas à droite, à gauche de la barre d'armes (chiffre du
+  chargeur os à ombre, réserve atténuée, libellé ambré « MUNITIONS », chargeur vide en rouge d'impact). Lit
+  `WeaponSystem.getAmmo` à chaque Heartbeat (met à jour les textes seulement si les valeurs changent), masqué sans
+  chargeur (couteau) et hors partie (`HUDRules.gameHudVisible`, via `GameStateController.applyGameHud`). Contrairement à
+  la barre d'armes, il ne s'estompe pas.
 - `src/client/ui/RoundHUD.luau` : timer et rang en haut au centre (chiffres os droits avec ombre, libellés ambrés, fondu
   sombre en deux moitiés de coin, timer en rouge d'impact sous 30 s) ; classement sous Tab : pas de panneau, voile sombre
   central qui s'efface vers les côtés, titre « CLASSEMENT » sur un filet ambre, colonnes K / M / K/M, ligne du joueur
@@ -304,7 +309,6 @@ Décisions de l'utilisateur :
 
 ## Reste à faire
 
-- Afficher les munitions dans le HUD (`WeaponSystem` les gère, rien ne les montre), dans le même langage que le compteur de vitesse.
 - Piste écartée pour l'instant sur le compteur : chiffres en images usées comme le titrage, et inclinaison qui augmente avec la vitesse.
 - Tester le menu au tactile et à la manette : c'est prévu dans le code (flèches ‹ ›), jamais essayé.
 - Première vague d'une arme jamais montrée : ses éclats passent encore en blanc opaque le temps du chargement, malgré
