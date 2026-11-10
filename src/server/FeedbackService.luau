@@ -1,7 +1,12 @@
-local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 local DataStoreService = game:GetService("DataStoreService")
+
+local CheatLog = require(ServerScriptService.Server.CheatLog)
+local NetworkProtocol = require(ReplicatedStorage.Shared.NetworkProtocol)
+local RemoteGuard = require(ServerScriptService.Server.RemoteGuard)
+local Webhook = require(ServerScriptService.Server.Webhook)
 
 local FeedbackService = {}
 
@@ -15,23 +20,14 @@ local rateStore = DataStoreService:GetDataStore("FeedbackRateV1")
 
 local lastSent: { [number]: number } = {}
 
-local function getWebhookUrl(): string?
-	local v = ServerScriptService:FindFirstChild("FeedbackWebhookUrl")
-	if v and v:IsA("StringValue") and v.Value ~= "" then
-		return v.Value
-	end
-	return nil
-end
-
-local function buildPayload(player: Player, text: string): string
-	local embed = {
+-- Cette méthode permet de mettre en forme un feedback pour le webhook lorsqu'il va être envoyé.
+local function buildEmbed(player: Player, text: string): { [string]: any }
+	return {
 		title = "Feedback joueur",
 		description = text,
 		color = 3626380,
 		footer = { text = player.Name .. "  |  UserId " .. player.UserId },
-		timestamp = os.date("!%Y-%m-%dT%H:%M:%S.000Z"),
 	}
-	return HttpService:JSONEncode({ embeds = { embed } })
 end
 
 -- Charge les timestamps de la semaine écoulée, ajoute now si fourni, sauvegarde.
@@ -73,7 +69,13 @@ end
 
 function FeedbackService.init(sendFeedbackRmt: RemoteEvent, feedbackAckRmt: RemoteEvent)
 	sendFeedbackRmt.OnServerEvent:Connect(function(player: Player, text: unknown)
-		if type(text) ~= "string" then
+		-- Garde commune (#170) : débit et type, avant tout accès DataStore
+		if not CheatLog.admit(player, NetworkProtocol.Names.SEND_FEEDBACK, text) or type(text) ~= "string" then
+			-- Texte refusé pour débit : l'écran attend un accusé pour permettre un nouvel envoi (rien pour un type forgé
+			-- ni pour un joueur parti)
+			if type(text) == "string" and #text <= RemoteGuard.FEEDBACK_MAX_BYTES and player.Parent then
+				feedbackAckRmt:FireClient(player, false, "Trop d'envois, réessaie dans quelques secondes.")
+			end
 			return
 		end
 
@@ -103,15 +105,13 @@ function FeedbackService.init(sendFeedbackRmt: RemoteEvent, feedbackAckRmt: Remo
 			return
 		end
 
-		local webhookUrl = getWebhookUrl()
+		local webhookUrl = Webhook.url("FeedbackWebhookUrl")
 		if not webhookUrl then
 			feedbackAckRmt:FireClient(player, false, "Système indisponible.")
 			return
 		end
 
-		local postOk, err = pcall(function()
-			HttpService:PostAsync(webhookUrl, buildPayload(player, trimmed), Enum.HttpContentType.ApplicationJson)
-		end)
+		local postOk, err = Webhook.post(webhookUrl, buildEmbed(player, trimmed))
 
 		if postOk then
 			lastSent[player.UserId] = now

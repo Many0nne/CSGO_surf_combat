@@ -5,8 +5,10 @@
 local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 
 local PlayerSettings = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("PlayerSettings"))
+local CheatLog = require(ServerScriptService.Server.CheatLog)
 
 local SCHEMA_VERSION = 1
 local SAVE_DELAY = 10 -- s entre un changement et l'écriture (un curseur qu'on glisse envoie beaucoup de changements)
@@ -131,8 +133,21 @@ end
 
 -- Cette méthode permet de brancher les remotes, le départ des joueurs et l'arrêt du serveur lorsque le serveur démarre.
 function SettingsStore.init(getRemote: RemoteFunction, saveRemote: RemoteEvent)
-	getRemote.OnServerInvoke = onGetSettings
-	saveRemote.OnServerEvent:Connect(onSaveSettings)
+	-- Garde commune (#170) : débit (GetSettings borne aussi les demandes en attente du chargement) et type
+	getRemote.OnServerInvoke = function(player: Player)
+		if not CheatLog.admit(player, getRemote.Name) then
+			-- Sans attendre : réglages déjà chargés (rien d'écrasé par un retour vide), nil pendant le chargement. Pas
+			-- d'error() : chaque appel refusé écrirait une erreur dans la console serveur.
+			local profile = profiles[player]
+			return if profile and profile.loaded then profile.settings else nil
+		end
+		return onGetSettings(player)
+	end
+	saveRemote.OnServerEvent:Connect(function(player: Player, raw: any)
+		if CheatLog.admit(player, saveRemote.Name, raw) then
+			onSaveSettings(player, raw)
+		end
+	end)
 
 	Players.PlayerRemoving:Connect(function(player)
 		SettingsStore.save(player)

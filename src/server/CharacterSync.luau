@@ -8,8 +8,10 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 
 local CharacterSyncRules = require(ReplicatedStorage.Shared.CharacterSyncRules)
+local CheatLog = require(ServerScriptService.Server.CheatLog)
 
 local CharacterSync = {}
 
@@ -105,6 +107,10 @@ function CharacterSync.init(remote: UnreliableRemoteEvent, onAccepted: (Model, V
 	relayRemote = remote
 	acceptedCallback = onAccepted
 	remote.OnServerEvent:Connect(function(player, pos, yaw)
+		-- Garde commune (#170) : débit et types (Vector3 et angle finis)
+		if not CheatLog.admit(player, remote.Name, pos, yaw) then
+			return
+		end
 		onClientPosition(remote, onAccepted, player, pos, yaw)
 	end)
 	Players.PlayerRemoving:Connect(function(player)

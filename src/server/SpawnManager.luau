@@ -1,4 +1,5 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 local Debris = game:GetService("Debris")
 
 local BotCombatRules = require(ReplicatedStorage.Shared.BotCombatRules)
@@ -6,6 +7,7 @@ local CharacterAppearance = require(ReplicatedStorage.Shared.CharacterAppearance
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local MapSelection = require(ReplicatedStorage.Shared.MapSelection)
 local SpawnLaunch = require(ReplicatedStorage.Shared.SpawnLaunch)
+local CheatLog = require(ServerScriptService.Server.CheatLog)
 
 local SpawnManager = {}
 
@@ -86,7 +88,8 @@ end
 
 function SpawnManager.init(requestSpawnRemote: RemoteEvent, canSpawn: (Player) -> boolean)
 	requestSpawnRemote.OnServerEvent:Connect(function(player)
-		if canSpawn(player) then
+		-- Garde commune (#170) : débit
+		if CheatLog.admit(player, requestSpawnRemote.Name) and canSpawn(player) then
 			SpawnManager.spawnPlayer(player)
 		end
 	end)

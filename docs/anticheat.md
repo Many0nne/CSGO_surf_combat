@@ -1,7 +1,8 @@
 # Anti-triche
 
-État des lieux, menaces classées et plan d'implémentation (#160). Rien de ce document n'est encore implémenté, sauf ce
-qui est décrit dans « Aujourd'hui ». Les issues proposées sont à la fin, dans « Plan ».
+État des lieux, menaces classées et plan d'implémentation (#160). Est implémenté ce qui est décrit dans « Ce qui est
+déjà en place », dans les paragraphes « Aujourd'hui » et dans « Journaliser » (#170 : `CheatLog`, `RemoteGuard`) ; le
+reste est à faire. Les issues proposées sont à la fin, dans « Plan ».
 
 ## Principe
 
@@ -27,6 +28,7 @@ envoyant des données plausibles. Là, on ne peut que détecter statistiquement,
 | Réglages | Réglages entièrement assainis par `PlayerSettings.sanitize`, une écriture DataStore au plus toutes les 10 s | `src/server/SettingsStore.luau:113-130` |
 | Feedback | Type `string`, longueur 10 à 500, délai de 60 s après un envoi réussi, 5 envois par semaine (DataStore) | `src/server/FeedbackService.luau:76-104` |
 | Debug | Remote `DebugPlaytest` créé seulement dans Studio | `src/server/DebugPlaytest.luau:365-372` |
+| Tous les remotes C→S | Garde commune (#170) : débit par joueur et par remote, types des arguments, violations journalisées, kick à 3 violations fortes | `src/server/RemoteGuard.luau`, `src/server/CheatLog.luau` |
 
 Les bots (`src/server/bots/`) passent par le même `Validator` (`src/server/init.server.luau:285-292`) : leurs tirs sont
 des raycasts serveur (`src/server/bots/BotArsenal.luau:184`), leurs munitions et leur temps de sortie sont gérés par
@@ -242,8 +244,10 @@ limite déjà en partie.
 
 ### Inventaire
 
-Créés dans `src/server/init.server.luau:40-58`, noms dans `src/shared/NetworkProtocol.luau`. Seuls les remotes écoutés
+Créés dans `src/server/init.server.luau`, noms dans `src/shared/NetworkProtocol.luau`. Seuls les remotes écoutés
 par le serveur (C→S) sont une surface d'attaque ; un `FireServer` sur un remote S→C n'a pas d'écouteur et est ignoré.
+Depuis #170, chaque remote C→S de ce tableau (sauf `DebugPlaytest`, Studio seulement) passe d'abord par la garde
+commune (débit et types, voir R1) ; la colonne « Validation actuelle » décrit ce que fait ensuite le handler.
 
 | Remote | Sens | Arguments | Validation actuelle | Manque |
 |---|---|---|---|---|
@@ -278,12 +282,28 @@ serveur, partagé avec `SettingsStore` et `StatsStore`, dont le chargement écho
 le quota hebdomadaire à zéro. Parade : délai en mémoire posé à chaque demande qui atteint le DataStore, quel que soit le
 résultat, et pas d'écriture du quota quand la lecture a échoué.
 
-**Garde commune.** Un petit module serveur `RemoteGuard` (pur, testable sous Lune) : seau à jetons par joueur et par
-remote (débit et rafale), vérification de types simple (`"Instance"`, `"Vector3"` fini, `"string"` borné, valeur
-d'énumération). Un dépassement de débit est ignoré ; un argument de type impossible pour un client honnête est
-journalisé comme violation forte (voir « Réponse »). Roblox limite déjà le débit client → serveur par type de remote,
-mais globalement, et sans le dire au jeu : la limite par remote est à faire soi-même
-([Remote events](https://create.roblox.com/docs/scripting/events/remote),
+**Garde commune (fait, #170).** `src/server/RemoteGuard.luau` (pur, testé par `tests/specs/RemoteGuard.spec.luau`) :
+seau à jetons par joueur et par remote (débit et rafale), contrôles de type (`instance`, `vector3` fini, `number` fini,
+`string` bornée, `enum`, `table`). Les règles de chaque remote sont dans `RemoteGuard.RULES`, branchées par
+`CheatLog.admit(player, nomDuRemote, ...)` en tête de chaque handler (`init.server.luau`, `CharacterSync`,
+`SpawnManager`, `FeedbackService`, `SettingsStore`). Débit d'abord (un appel en trop n'est pas analysé), puis types :
+
+- débit dépassé : appel ignoré, violation faible `RemoteRate` ;
+- type impossible pour notre client : appel ignoré, violation forte `RemoteArgs` ;
+- Instance absente (`nil`) : appel ignoré **sans** violation. Une Instance qui n'existe que chez le client (corps en
+  ragdoll cloné localement par `DeathRagdoll`, décor du menu) arrive en `nil` au serveur : un client honnête qui tire
+  sur un corps local en envoie. Ne jamais traiter un `nil` d'Instance comme une triche.
+
+Débits (`RemoteGuard.RULES`, en appels/s et rafale) calibrés au-dessus du client honnête, rafale réseau comprise :
+`MeleeDamage` 5/5 (couteau : 2,5/s au plus), `HitscanDamage` 5/5 (AWP : 0,7/s), `WeaponAction` 8/8 (un `Shoot` par tir
+ou coup, un `Reload`), `CharacterSync` 40/60 (20 Hz, 3 s de paquets groupés après une coupure), `RequestSpawn` 1/3,
+`SendFeedback` 0,5/3, `SaveSettings` 2/5 (1 envoi/s au plus), `GetSettings` 0,2/3 (une demande au démarrage ; borne
+aussi les demandes en attente du chargement). **Une nouvelle arme plus rapide (automatique) demande de relever
+`HitscanDamage` et `WeaponAction`**, et un nouveau remote C→S doit avoir sa règle (sinon tout appel est refusé, sans
+violation, avec un warn `remote sans règle`) et un cas dans le test « accepte les appels de notre client ». Un appel
+arrivé après le départ du joueur (`player.Parent` nil, ex. juste après un kick) est ignoré sans rien recréer.
+Roblox limite déjà le débit client → serveur par type de remote, mais globalement, et sans le dire au jeu : la limite
+par remote est à faire soi-même ([Remote events](https://create.roblox.com/docs/scripting/events/remote),
 [Rate limiter module](https://devforum.roblox.com/t/rate-limiter-module-for-remotes/616268)).
 
 **`WeaponAction`.** Ne relayer (#156) et ne faire entendre aux bots que des tirs acceptés par le serveur : brancher le
@@ -341,15 +361,37 @@ de positions envoyées. Complexité : très élevée (refonte de `CharacterSync`
 
 ## Réponse aux triches
 
-### Journaliser
+### Journaliser (fait, #170)
 
-Module serveur `CheatLog` : chaque parade y signale une violation `(participant, catégorie, gravité, détail)`.
+Module serveur `src/server/CheatLog.luau` (testé par `tests/specs/CheatLog.spec.luau`). API pour les parades :
 
-- `warn` limité (comme `CharacterSync.luau:44-58`) pour la console serveur en développement ;
-- compteurs par joueur et par catégorie, avec un score qui décroît dans le temps (seau qui fuit) ;
-- en jeu publié, résumé envoyé au départ du joueur s'il a des violations (webhook comme `FeedbackService`, ou
-  DataStore/MemoryStore à relire) : nom, UserId, compteurs, pire violation.
-- bots ignorés (`participant.isBot`), Studio : journal seulement.
+```lua
+CheatLog.report(participant, CheatLog.Category.MOVEMENT, CheatLog.Severity.MEDIUM, "téléport de 300 studs", source?)
+CheatLog.admit(player, NetworkProtocol.Names.X, ...) -- garde des remotes : true si le handler peut continuer
+CheatLog.summary(participant.id) -- bilan (compteurs, score présent, pire violation), nil sans violation
+```
+
+- **Gravités** (`CheatLog.Severity`) : `LOW`, `MEDIUM`, `HIGH`, au sens de « Classer les violations » ci-dessous.
+- **Catégories** (`CheatLog.Category`) : `RemoteRate`, `RemoteArgs` (garde des remotes), et réservées aux parades
+  suivantes : `Spawn` (#171), `Movement` (#172), `Hitscan` (#174, #175), `Melee` (#176). Une nouvelle parade
+  ajoute sa catégorie à `CheatLog.Category` et ici, pour garder des noms stables dans le journal.
+- `warn` `[CheatLog]` limité à un toutes les `WARN_INTERVAL` (2 s) par joueur, le suivant dit combien ont été tus ;
+  détail coupé à `MAX_DETAIL` octets sans couper de caractère, octets non UTF-8 remplacés par `?` (il peut contenir une
+  valeur forgée par le client, et `HttpService:JSONEncode` du webhook échoue sur du texte non UTF-8).
+- Compteurs par joueur, catégorie et gravité ; score en seau qui fuit (poids `SCORE_WEIGHT` : 1, 5, 20 ; décroissance
+  `SCORE_DECAY` = 1 point/s), score maximal gardé au bilan. Le kick sur score moyen n'est pas branché (voir « Kick »).
+- Kick (`player:Kick`) à `KICK_HIGH_COUNT` = 3 violations fortes dans la session, une seule fois. Une même source
+  (5e argument `source` de `report`, le remote pour la garde, la catégorie par défaut) ne compte qu'une violation forte
+  par `HIGH_SOURCE_INTERVAL` (1 s) : un bug de notre client sur un remote à 20 Hz (position NaN) laisse le temps de
+  le voir au journal au lieu d'expulser en 150 ms. Toutes restent comptées au journal et au score.
+- Au départ d'un joueur qui a une violation moyenne ou forte, ou au moins `SUMMARY_MIN_LOW` (10) violations faibles
+  (en dessous, une rafale réseau ne fait pas de bruit au webhook) : résumé (nom, UserId, compteurs par catégorie,
+  score max, pire violation, kick) posté au webhook en jeu publié, par `src/server/Webhook.luau` (mécanisme de `FeedbackService`) :
+  StringValue `CheatLogWebhookUrl` dans ServerScriptService, sinon `FeedbackWebhookUrl`. Pas de cumul entre sessions
+  (DataStore/MemoryStore) : il relève du bannissement (#179). À l'arrêt du serveur, les résumés des joueurs encore là sont envoyés
+  et attendus (`CLOSE_TIMEOUT`, 20 s). Une violation signalée pour un joueur déjà parti est ignorée.
+- Bots ignorés (`participant.isBot`) ; Studio : journal seulement (aucun kick, résumé affiché en console au lieu du
+  webhook).
 
 ### Classer les violations
 
@@ -400,7 +442,7 @@ Issues proposées, dans l'ordre d'implémentation. **À valider avant création 
 mode « journal seul » (violation comptée, action appliquée quand même) quand elle risque des faux positifs, puis en
 mode bloquant une fois mesurée.
 
-### 1. Anti-triche : journal des violations et garde des remotes — P1
+### 1. Anti-triche : journal des violations et garde des remotes — P1 (fait, #170)
 
 - **Résumé.** Module `CheatLog` (violations, score décroissant, résumé au départ) et module pur `RemoteGuard` (seau à
   jetons par joueur et remote, vérifications de type). Branché sur tous les remotes C→S de l'inventaire.
