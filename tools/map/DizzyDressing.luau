@@ -776,10 +776,6 @@ local function cement(parent, frame, size)
 	return m
 end
 
--- Cette méthode permet de rendre une boîte relevée invisible sans l'habiller (sa collision reste) lorsqu'un objet
--- construit à part (DizzyDressing) la remplace à l'image.
-local function hide() end
-
 local REDRESS_KINDS = {
 	sandbags = sandbags,
 	cement = cement,
@@ -787,7 +783,7 @@ local REDRESS_KINDS = {
 	cinder = cinderBlocks,
 	drywall = drywall,
 	timber = timber,
-	hide = hide,
+	-- « hide » : pas d'habillage, la boîte devient seulement invisible (cf. redress)
 }
 
 -- Bardage, grue, porte, groupes du toit, zone de stockage (#166) ----------------------------------------------------
