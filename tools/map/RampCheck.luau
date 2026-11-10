@@ -1,13 +1,18 @@
 --!nocheck
 -- RampCheck.luau
 -- Mesure, sur chaque rampe de surf d'une map, ce qui dépasse de la surface de glisse (#136, cf. docs/maps.md
--- « Rebord sur une rampe »). Un rayon est tiré tous les STEP studs le long de la normale de la rampe, de HEIGHT studs
+-- « Rampes de surf : surface continue »). Un rayon est tiré tous les STEP studs le long de la normale de la rampe, de HEIGHT studs
 -- au-dessus vers la pente, dans toutes les pièces bloquantes (CanCollide ou CanQuery) : la hauteur du premier contact
 -- au-dessus du plan de la dalle principale donne le profil de la rampe. La surface de glisse est la hauteur la plus
 -- fréquente (le mur d'air posé sur l'acier, s'il y en a un) ; tout point plus haut de plus de TOL est un rebord, tout
 -- point plus bas un creux (la marche de l'autre côté arrête le joueur), tout rayon qui ne touche rien un trou.
 -- Mesure en arithmétique pure sur des boîtes (format ShadowCulling.Box) ; `check` lit une map (Instances) et mesure
 -- la collision puis le rendu. Testé : tests/specs/RampEdges.spec.luau (describe « RampCheck »).
+-- Repère d'une rampe (RampCheck.ramps) : { main, members (indices des dalles de la rampe), n, u (longueur), v (pente),
+-- top (plan de la dalle principale, sur n), u0, u1, v0, v1 (emprise) }. Bilan d'une mesure (RampCheck.measure) :
+-- { surface, above, below (plus grands écarts au-dessus et au-dessous de la surface), area, samples, holes = { {u, v} },
+-- offenders = { [indice de boîte] = { count, height (écart signé), u0, u1, v0, v1 } } } ; hauteurs depuis le plan de
+-- la dalle principale, positions en studs depuis le début de l'emprise.
 
 local ShadowCulling = require("./ShadowCulling")
 
@@ -77,10 +82,8 @@ function RampCheck.topFace(b)
 end
 local topFace = RampCheck.topFace
 
--- Cette méthode permet de retrouver les rampes de surf parmi les dalles de surf d'une map : une rampe par grande dalle
--- (MIN_AREA), son emprise prolongée par les dalles parallèles voisines à moins de BAND de son plan. Renvoie des
--- repères { main, members, n, u, v, top, u0, u1, v0, v1 } (top : distance du plan de la dalle principale, sur n ;
--- members : indices des dalles de la rampe, la principale comprise).
+-- Cette méthode permet de retrouver les rampes parmi les dalles de surf : une par grande dalle (MIN_AREA), emprise
+-- prolongée par les dalles parallèles voisines à moins de BAND de son plan ; renvoie leurs repères.
 function RampCheck.ramps(surf)
 	local ramps = {}
 	-- grandes dalles de la plus grande à la plus petite ; une dalle déjà prise par une rampe n'en ouvre pas une autre
@@ -97,7 +100,8 @@ function RampCheck.ramps(surf)
 		local b = surf[i]
 		if not member[i] then
 			local n, top = topFace(b)
-			local u = { b.xx, b.xy, b.xz }
+			-- longueur : l'axe horizontal de la dalle (X ou Z), la normale étant son axe Y
+			local u = if math.abs(b.xy) <= math.abs(b.zy) then { b.xx, b.xy, b.xz } else { b.zx, b.zy, b.zz }
 			local v = { n[2] * u[3] - n[3] * u[2], n[3] * u[1] - n[1] * u[3], n[1] * u[2] - n[2] * u[1] }
 			local frame = { main = i, members = { i }, n = n, u = u, v = v, top = top }
 			local r = bounds(b, frame)
@@ -147,11 +151,8 @@ local function spread(a, b, step)
 	return out
 end
 
--- Cette méthode permet de mesurer une rampe : tire les rayons sur son emprise dans les boîtes bloquantes `solids` et
--- renvoie { surface, above, below, area, samples, holes = { {u, v} }, offenders = { [indice de boîte] = { count,
--- height, u0, u1, v0, v1 } } } (hauteurs depuis le plan de la dalle principale ; above et below : plus grands écarts
--- au-dessus et au-dessous de la surface de glisse ; height : écart signé ; holes : rayons sans contact ; u, v :
--- position en studs depuis le début de l'emprise en longueur et en pente).
+-- Cette méthode permet de mesurer une rampe en tirant les rayons sur son emprise dans les boîtes `solids` ; renvoie
+-- le bilan (surface de glisse, écarts, trous, pièces responsables).
 function RampCheck.measure(ramp, solids)
 	local H = RampCheck.HEIGHT
 	-- boîtes candidates : celles qui touchent le volume au-dessus de l'emprise
@@ -293,9 +294,8 @@ local PASSES = {
 	},
 }
 
--- Cette méthode permet de mesurer toutes les rampes d'une map (Model avec Geometry.Ramps), en collision puis en
--- rendu : renvoie le bilan (lignes de texte, rampe par rampe, avec les pièces responsables) et le plus grand écart
--- trouvé par rapport à la surface de glisse (dépassement ou creux ; math.huge s'il y a un trou).
+-- Cette méthode permet de mesurer toutes les rampes d'une map en collision puis en rendu : renvoie le bilan en lignes
+-- de texte et le plus grand écart à la surface de glisse (math.huge s'il y a un trou).
 function RampCheck.check(map)
 	local geometry = map:FindFirstChild("Geometry")
 	local rampFolder = geometry and geometry:FindFirstChild("Ramps")

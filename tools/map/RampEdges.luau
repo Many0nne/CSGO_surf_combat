@@ -1,7 +1,7 @@
 --!nocheck
 -- RampEdges.luau
--- Rend la surface de glisse des rampes de surf continue jusqu'à leurs bords (#136, cf. docs/maps.md « Rebord sur une
--- rampe »), appliqué par build_dizzy.luau après les retouches. Rampe par rampe (RampCheck.ramps) :
+-- Rend la surface de glisse des rampes de surf continue jusqu'à leurs bords (#136, cf. docs/maps.md « Rampes de surf :
+-- surface continue »), appliqué par build_dizzy.luau après les retouches. Rampe par rampe (RampCheck.ramps) :
 -- 1. Peau : une seule dalle d'acier de SKIN studs couvre toute l'emprise, dessus au niveau des bandes de rive (plus
 --    hautes que la dalle principale de 0,17 et 0,34 stud sur ar_dizzy). La surface visible est plate.
 -- 2. Sous la peau : toute autre pièce qui y entre (dalles d'acier d'origine, tranche des murs des bouts posés sur leur
@@ -12,7 +12,12 @@
 --    la longueur, est gardé. La découpe est exacte : la section de la pièce (perpendiculaire à la longueur de la rampe)
 --    est coupée, puis reposée en coins.
 -- Une pièce qui dépasse sans être extrudée dans la longueur de la rampe n'est pas touchée : la mesure de contrôle
--- (RampCheck.check, appelée par build_dizzy.luau) arrête alors la génération.
+-- (RampCheck.check, appelée par build_dizzy.luau) arrête alors la génération. Une pièce qui monte à plus de MAX_RISE
+-- au-dessus de la surface traverse la rampe (mur, poteau) : la génération s'arrête au lieu de la rogner.
+-- Section d'une pièce : polygone {{v, h}, ...} dans le plan perpendiculaire à la longueur (v : pente, h : hauteur sur la
+-- normale), étendue [a0, a1] le long de la rampe. Morceaux d'une découpe : { range = {a0, a1}, poly = section } (poly
+-- nil : section d'origine sur cette étendue). Bilan d'une rampe : { center, surface (peau au-dessus de la dalle
+-- principale d'origine), trimmed, placed, rise (plus haut rebord rogné) }.
 -- Testé : tests/specs/RampEdges.spec.luau.
 
 local roblox = if Vector3 then nil else require("@lune/roblox")
@@ -33,6 +38,7 @@ RampEdges.MAX_RISE = 1.5
 RampEdges.TOUCH = 0.05 -- studs : une pièce posée sur la surface à ça près y entre (au-delà : obstacle, laissé)
 RampEdges.MIN_LEG = 0.002 -- studs : un coin plus mince n'est pas posé
 RampEdges.ATTRIBUTE = "RampEdge" -- posé sur les pièces modifiées, visible dans Studio
+RampEdges.PARALLEL = 1 - 1e-6 -- cosinus : un axe plus écarté (0,08°) n'est pas parallèle (découpe décalée au bout)
 
 -- propriétés recopiées d'une pièce rognée sur ses morceaux
 local PROPS = {
@@ -101,15 +107,14 @@ function RampEdges.clip(poly, a, b, c)
 	return out
 end
 
--- Cette méthode permet de découper une pièce extrudée dans la longueur d'une rampe : renvoie l'indice de l'axe
--- parallèle à la longueur, la section {{v, h}, ...} (polygone convexe) et l'étendue [a0, a1] le long de la rampe ;
--- nil si la pièce n'est pas extrudée dans la longueur (coin tourné autrement, pièce de biais).
+-- Cette méthode permet de donner l'axe d'une pièce parallèle à la longueur d'une rampe, sa section et son étendue
+-- lorsqu'elle y est extrudée ; nil sinon (coin tourné autrement, pièce de biais).
 function RampEdges.section(b, ramp)
 	local axes = { { b.xx, b.xy, b.xz }, { b.yx, b.yy, b.yz }, { b.zx, b.zy, b.zz } }
 	local sizes = { b.sx, b.sy, b.sz }
 	local along
 	for i, a in axes do
-		if math.abs(dot(a, ramp.u)) > 0.9999 then
+		if math.abs(dot(a, ramp.u)) > RampEdges.PARALLEL then
 			along = i
 		end
 	end
@@ -136,8 +141,8 @@ function RampEdges.section(b, ramp)
 	return along, poly, cu - sizes[along] / 2, cu + sizes[along] / 2
 end
 
--- Cette méthode permet de poser un triangle de section {{v, h}, ×3}, extrudé de u0 à u1 le long de la rampe, en un ou
--- deux coins (triangles rectangles, comme extract_dizzy.py) : renvoie des { cframe, size }.
+-- Cette méthode permet de poser un triangle de section, extrudé de u0 à u1 le long de la rampe, en un ou deux coins
+-- (triangles rectangles, comme extract_dizzy.py) : renvoie des { cframe, size }.
 function RampEdges.wedges(tri, ramp, u0, u1)
 	local mid, len = (u0 + u1) / 2, u1 - u0
 	local pts = {}
@@ -177,12 +182,8 @@ function RampEdges.wedges(tri, ramp, u0, u1)
 	return out
 end
 
--- Cette méthode permet de calculer ce qui reste d'une pièce qui monte dans la peau d'une rampe par en dessous, après
--- la découpe au-dessus de son emprise (hauteur > surface - SKIN sur v0..v1) : liste des morceaux
--- { range = {a0, a1}, poly = section } (poly nil : section d'origine), puis le dépassement au-dessus de la surface
--- avant découpe ; nil si la pièce reste sous la peau, est
--- entièrement au-dessus de la surface (obstacle, pas un rebord) ou n'est pas extrudée dans la longueur (la mesure de
--- contrôle la signalera).
+-- Cette méthode permet de découper une pièce qui monte dans la peau d'une rampe par en dessous : morceaux restants et
+-- dépassement avant découpe ; nil si elle reste sous la peau, passe au-dessus (obstacle) ou n'est pas extrudée.
 function RampEdges.cut(b, ramp, surface)
 	local r = RampCheck.bounds(b, ramp)
 	local e = 1e-3
@@ -255,6 +256,30 @@ local function sibling(part, class)
 	return p
 end
 
+-- Cette méthode permet de retrouver une section rectangulaire alignée sur les axes i, j d'une boîte lorsqu'une découpe
+-- parallèle à une face la laisse rectangle : renvoie les bornes locales {i0, i1, j0, j1}, sinon nil.
+local function alignedRect(poly, ramp, c, axisI, axisJ)
+	if #poly ~= 4 then
+		return nil
+	end
+	local is, js = {}, {}
+	for _, q in poly do
+		local p = add(add(add({ 0, 0, 0 }, ramp.v, q[1]), ramp.n, q[2]), c, -1)
+		table.insert(is, dot(p, axisI))
+		table.insert(js, dot(p, axisJ))
+	end
+	local i0, i1 = math.min(table.unpack(is)), math.max(table.unpack(is))
+	local j0, j1 = math.min(table.unpack(js)), math.max(table.unpack(js))
+	for k = 1, 4 do
+		local onI = math.abs(is[k] - i0) < 1e-4 or math.abs(is[k] - i1) < 1e-4
+		local onJ = math.abs(js[k] - j0) < 1e-4 or math.abs(js[k] - j1) < 1e-4
+		if not (onI and onJ) then
+			return nil
+		end
+	end
+	return { i0, i1, j0, j1 }
+end
+
 -- Cette méthode permet de remplacer une pièce par ses morceaux après découpe ; renvoie le nombre de pièces posées.
 local function replace(part, b, ramp, pieces)
 	local along, _, a0, a1 = RampEdges.section(b, ramp)
@@ -276,12 +301,33 @@ local function replace(part, b, ramp, pieces)
 			p.CFrame = part.CFrame + axis * (shift * sign)
 			placed += 1
 		else
-			for i = 2, #piece.poly - 1 do
-				for _, w in RampEdges.wedges({ piece.poly[1], piece.poly[i], piece.poly[i + 1] }, ramp, u0, u1) do
-					local p = sibling(part, "WedgePart")
-					p.CFrame = w.cframe
-					p.Size = w.size
-					placed += 1
+			-- boîte coupée parallèlement à une face : une boîte plus courte plutôt que des coins
+			local axes = { part.CFrame.XVector, part.CFrame.YVector, part.CFrame.ZVector }
+			local i, j = along % 3 + 1, (along + 1) % 3 + 1
+			local c = { b.px, b.py, b.pz }
+			local ai, aj = axes[i], axes[j]
+			local rect = part.ClassName == "Part"
+				and alignedRect(piece.poly, ramp, c, { ai.X, ai.Y, ai.Z }, { aj.X, aj.Y, aj.Z })
+			if rect then
+				local p = sibling(part, "Part")
+				local size = { 0, 0, 0 }
+				size[along], size[i], size[j] = u1 - u0, rect[2] - rect[1], rect[4] - rect[3]
+				p.Size = V3.new(size[1], size[2], size[3])
+				local sign = if dot({ axis.X, axis.Y, axis.Z }, ramp.u) > 0 then 1 else -1
+				p.CFrame = part.CFrame
+					+ axis * (((u0 + u1) / 2 - (a0 + a1) / 2) * sign)
+					+ ai * ((rect[1] + rect[2]) / 2)
+					+ aj * ((rect[3] + rect[4]) / 2)
+				placed += 1
+			else
+				for k = 2, #piece.poly - 1 do
+					local tri = { piece.poly[1], piece.poly[k], piece.poly[k + 1] }
+					for _, w in RampEdges.wedges(tri, ramp, u0, u1) do
+						local p = sibling(part, "WedgePart")
+						p.CFrame = w.cframe
+						p.Size = w.size
+						placed += 1
+					end
 				end
 			end
 		end
@@ -290,14 +336,14 @@ local function replace(part, b, ramp, pieces)
 	return placed
 end
 
--- Cette méthode permet de dire si une pièce est une dalle parallèle à la rampe qui la couvre sur toute sa longueur,
--- sans dépasser de la surface (le mur d'air d'origine) : d'un seul tenant, elle n'a aucune face en travers du surf.
+-- Cette méthode permet de reconnaître une dalle parallèle à la rampe, dessus à la surface, qui la couvre sur toute sa
+-- longueur (le mur d'air d'origine) : d'un seul tenant, elle n'a aucune face en travers du surf.
 local function wholeSlab(b, ramp, surface)
-	if math.abs(b.yx * ramp.n[1] + b.yy * ramp.n[2] + b.yz * ramp.n[3]) < 0.9999 then
+	if math.abs(b.yx * ramp.n[1] + b.yy * ramp.n[2] + b.yz * ramp.n[3]) < RampEdges.PARALLEL then
 		return false
 	end
 	local r = RampCheck.bounds(b, ramp)
-	return r[1] <= ramp.u0 + 1e-3 and r[2] >= ramp.u1 - 1e-3 and r[6] <= surface + RampEdges.TRIM_TOL
+	return r[1] <= ramp.u0 + 1e-3 and r[2] >= ramp.u1 - 1e-3 and math.abs(r[6] - surface) <= RampEdges.TRIM_TOL
 end
 
 -- Cette méthode permet de poser la peau d'acier d'une rampe : une seule dalle de SKIN studs sur toute l'emprise,
@@ -318,10 +364,8 @@ local function skin(model, ramp, surface)
 	return p
 end
 
--- Cette méthode permet d'appliquer la règle à toutes les rampes d'une géométrie de map (dossier Ramps et autres
--- dossiers de pièces) lorsque le générateur l'a posée ; renvoie un bilan par rampe
--- { center, surface, trimmed, placed, rise } (surface : hauteur de la peau au-dessus de la dalle principale d'origine ;
--- rise : plus haut dépassement rogné). Lève une erreur si une pièce traverse la rampe (MAX_RISE).
+-- Cette méthode permet d'appliquer la règle à toutes les rampes d'une géométrie de map lorsque le générateur l'a
+-- posée : un bilan par rampe ; erreur si une pièce traverse une rampe.
 function RampEdges.apply(geometry)
 	local folder = geometry:FindFirstChild("Ramps")
 	assert(folder, "Geometry.Ramps introuvable")
@@ -342,6 +386,8 @@ function RampEdges.apply(geometry)
 		end
 		-- marque temporaire (et non une table indexée par pièce : sous Lune, une même Instance peut revenir sous deux
 		-- références différentes d'un appel à l'autre)
+		-- dalle principale rognée par une rampe voisine : les deux rampes se chevauchent, cas non traité
+		assert(steel[ramp.main].Parent, "deux rampes de surf se chevauchent : dalle principale déjà rognée")
 		skin(steel[ramp.main], ramp, surface):SetAttribute(OWN, true)
 		local trimmed, placed, rise = 0, 0, 0
 		for _, p in geometry:GetDescendants() do

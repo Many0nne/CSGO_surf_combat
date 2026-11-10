@@ -18,9 +18,9 @@ return function(T, Loader)
 		return p
 	end
 
-	-- Cette méthode permet de construire une map d'essai : dalle principale, bande de rive relevée, tranche de mur et
-	-- coin au bout, dalle de plafond horizontale qui traverse le bas de la pente et déborde en longueur, bloc au loin.
-	-- `poke` : dépassement des murs du bout au-dessus de la rive (0,03 sur Dizzy ; plus pour échantillonner la découpe).
+	-- Scène : dalle principale, rive relevée, tranche de mur et coin au bout, dalle horizontale qui perce le bas de la
+	-- pente et déborde en longueur, mur d'air d'un seul tenant, bloc au loin. `poke` : dépassement des murs du bout.
+	-- Cette méthode permet de construire la map d'essai lorsqu'un test a besoin d'une rampe complète.
 	local function scene(poke)
 		poke = poke or 0.03
 		local map = Instance.new("Model")
