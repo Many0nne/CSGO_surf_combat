@@ -262,7 +262,8 @@ ombre (+3 % avec).
 Avant d'intégrer un habillage dans Roblox, le faire valider sur une planche rendue depuis les points de vue des
 captures de l'utilisateur, avec exactement les pièces du générateur :
 1. `lune run tools/map/build_dizzy.luau` (plugin Rojo déconnecté de ce serveur), puis
-   `lune run tools/map/dump_parts.luau -- <sortie.json> [x y z rayon]` (pièces visibles du `.rbxm`, lumières comprises).
+   `lune run tools/map/dump_parts.luau -- <sortie.json> [x y z rayon]` (pièces visibles du `.rbxm` et leurs SpotLight ; blocs, coins, cylindres et boules seulement, les autres formes sont
+   signalées et sautées au rendu).
 2. Écrire les vues (`[{ "name", "position", "target", "fov"?, "res"?, "percent"? }]`, coordonnées du monde, FOV
    vertical 90 par défaut comme le jeu), puis
    `blender -b --factory-startup --python tools/map/render_dizzy.py -- <pièces.json> <vues.json> <dossier>`.

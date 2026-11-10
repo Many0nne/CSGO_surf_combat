@@ -42,7 +42,7 @@ def lin(c):
 
 # Cette méthode permet de donner les sommets locaux (unités de demi-taille) et les faces d'une forme Roblox.
 def shape_geometry(shape):
-    if shape in ("Block", "Part"):
+    if shape == "Block":
         v = [(x, y, z) for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)]
         f = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
         return v, f
@@ -128,6 +128,7 @@ def material(key):
     return m
 
 
+SKIPPED = {}  # formes non reconstruites (CornerWedge, MeshPart…), signalées à la fin du chargement
 TILE = 100  # studs : côté des tuiles de la map (une tuile = un objet Blender, masqué loin de la vue)
 MATS = {}
 
@@ -137,8 +138,10 @@ MATS = {}
 def build(parts):
     tiles = {}
     for p in parts:
-        # une grande pièce (sol, mur, fût) déborde de sa tuile : toujours rendue
-        key = "big" if max(p[13], p[15]) > TILE else (int(p[1] // TILE), int(p[3] // TILE))
+        # une grande pièce (sol, mur, fût) déborde de sa tuile : toujours rendue ; étendue en plan de sa boîte orientée
+        ex = abs(p[4]) * p[13] + abs(p[7]) * p[14] + abs(p[10]) * p[15]
+        ez = abs(p[6]) * p[13] + abs(p[9]) * p[14] + abs(p[12]) * p[15]
+        key = "big" if max(ex, ez) > TILE else (int(p[1] // TILE), int(p[3] // TILE))
         tiles.setdefault(key, []).append(p)
     out = []
     for key, group in tiles.items():
@@ -158,8 +161,9 @@ def build_tile(parts, name):
     keys = {}
     for p in parts:
         shape = p[0]
-        geom = GEOMS.get("Block" if shape == "Block" else shape)
-        if geom is None or geom[0] is None:
+        geom = GEOMS.get(shape)
+        if geom is None:
+            SKIPPED[shape] = SKIPPED.get(shape, 0) + 1
             continue
         gv, gf = geom
         pos = Vector(p[1:4])
@@ -296,6 +300,8 @@ for o in list(bpy.data.objects):
     bpy.data.objects.remove(o, do_unlink=True)
 data = json.load(open(PARTS, encoding="utf-8"))
 tiles = build(data["parts"])
+if SKIPPED:
+    print("formes non rendues :", ", ".join(f"{k} ×{n}" for k, n in SKIPPED.items()))
 world()
 lights(data.get("lights", []))
 setup()

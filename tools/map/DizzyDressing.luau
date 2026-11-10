@@ -460,7 +460,8 @@ local function ladder(parent, frame, top, parapet, roof)
 		-- pattes scellées au mur
 		for _, y in { 1.8, 11.8, 21.8, 30.8 } do
 			piece(m, frame, V3.new(x, y, off / 2), V3.new(0.35, 0.6, -off), TRIM, E.Material.Metal)
-			piece(m, frame, V3.new(x, y, -0.08), V3.new(1.2, 1.4, 0.16), TRIM, E.Material.Metal)
+			-- platines posées sur les nervures du bardage (0,3 stud devant le nu du mur)
+			piece(m, frame, V3.new(x, y, -0.38), V3.new(1.2, 1.4, 0.16), TRIM, E.Material.Metal)
 		end
 		-- crosse : le rail passe au-dessus de l'acrotère et redescend sur le toit
 		run(m, frame, {
@@ -483,7 +484,7 @@ local function ladder(parent, frame, top, parapet, roof)
 	for _, y in hoops do
 		for _, s in { -1, 1 } do
 			piece(m, frame, V3.new(s * W, y, -straight / 2), V3.new(0.25, 0.4, straight), TRIM, E.Material.Metal)
-			piece(m, frame, V3.new(s * W, y, -0.08), V3.new(0.8, 1, 0.16), TRIM, E.Material.Metal)
+			piece(m, frame, V3.new(s * W, y, -0.38), V3.new(0.8, 1, 0.16), TRIM, E.Material.Metal)
 		end
 		for k = 0, segments - 1 do
 			local a, b = arc(k * math.pi / segments), arc((k + 1) * math.pi / segments)
@@ -853,7 +854,7 @@ local function cladding(parent, frame, width, height, band)
 	if band > 0 then
 		piece(m, frame, V3.new(0, band, -0.3), V3.new(width, 0.3, 0.3), TRIM, E.Material.Metal)
 	end
-	piece(m, frame, V3.new(0, height - 0.3, -0.32), V3.new(width + 0.3, 0.6, 0.64), GALVA, E.Material.Metal)
+	piece(m, frame, V3.new(0, height - 0.3, -0.32), V3.new(width, 0.6, 0.64), GALVA, E.Material.Metal)
 	for _, s in { -1, 1 } do
 		-- cornières arrêtées sous la couvertine (faces confondues sinon)
 		local ch = height - 0.6
@@ -1137,7 +1138,8 @@ local function bucketPallets(parent, frame)
 	local m = New("Model")
 	m.Name = "Buckets"
 	m.Parent = parent
-	pallet(m, frame * CF.new(0, 0, -0.8) * CF.Angles(math.rad(-84), 0, 0) * CF.new(0, 0, 4), 11, 8)
+	-- palette debout : son haut s'arrête devant les nervures du bardage (0,3 stud)
+	pallet(m, frame * CF.new(0, 0, -1.4) * CF.Angles(math.rad(-84), 0, 0) * CF.new(0, 0, 4), 11, 8)
 	pallet(m, frame * CF.new(0, 0, -6.2), 11, 8)
 	for i, at in { V3.new(-2.6, 1, -5.2), V3.new(0.2, 1, -6.8), V3.new(2.8, 1, -5) } do
 		local col = if i == 2 then C3.fromRGB(214, 168, 64) else BUCKET
@@ -1300,15 +1302,17 @@ function DizzyDressing.redress(map, parent)
 		for _, name in r.folders or { "Decor" } do
 			local f = geometry:FindFirstChild(name)
 			for _, p in if f then f:GetChildren() else {} do
-				table.insert(candidates, p)
+				-- seules les pièces ont une position (un dossier ajouté par une retouche ferait échouer la lecture)
+				if p:IsA("BasePart") then
+					table.insert(candidates, p)
+				end
 			end
 		end
 		for _, p in candidates do
 			local d = p.CFrame.Position - c
 			local v = p.Size.X * p.Size.Y * p.Size.Z
 			if
-				p:IsA("BasePart")
-				and p.Transparency < 1
+				p.Transparency < 1
 				and (r.group == nil or p:GetAttribute("Group") == r.group)
 				and math.abs(d.X) <= s.X / 2
 				and math.abs(d.Y) <= s.Y / 2
