@@ -310,7 +310,7 @@ function RampCheck.check(map)
 	assert(#ramps > 0, "aucune rampe de surf trouvée dans Geometry.Ramps")
 	-- boîtes de chaque mesure, construites une fois pour toutes les rampes
 	local sets = {}
-	for k, pass in PASSES do
+	for k in PASSES do
 		sets[k] = { parts = {}, solids = {} }
 	end
 	for _, p in map:GetDescendants() do
