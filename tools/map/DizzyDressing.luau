@@ -822,9 +822,8 @@ local function flat(model)
 	return model
 end
 
--- Cette méthode permet d'habiller un pan de mur de tôle ondulée dans `frame` (origine au milieu du bas du pan, sur le
--- nu du mur, -Z local vers l'extérieur) : tôle, nervures tous les ~1,6 stud, bande basse ocre de hauteur `band`
--- (0 : pas de bande), couvertine en haut et cornières aux deux bouts.
+-- Cette méthode permet d'habiller de tôle ondulée (nervures, bande basse ocre de hauteur `band`, couvertine, cornières)
+-- un pan de mur dont `frame` est le milieu du bas, sur le nu du mur, -Z local vers l'extérieur.
 local function cladding(parent, frame, width, height, band)
 	local m = New("Model")
 	m.Name = "Cladding"
@@ -856,14 +855,15 @@ local function cladding(parent, frame, width, height, band)
 	end
 	piece(m, frame, V3.new(0, height - 0.3, -0.32), V3.new(width + 0.3, 0.6, 0.64), GALVA, E.Material.Metal)
 	for _, s in { -1, 1 } do
-		piece(m, frame, V3.new(s * (width / 2 - 0.3), height / 2, -0.32), V3.new(0.6, height, 0.64), GALVA, E.Material.Metal)
+		-- cornières arrêtées sous la couvertine (faces confondues sinon)
+		local ch = height - 0.6
+		piece(m, frame, V3.new(s * (width / 2 - 0.3), ch / 2, -0.32), V3.new(0.6, ch, 0.64), GALVA, E.Material.Metal)
 	end
 	return flat(m)
 end
 
--- Cette méthode permet d'habiller une face du socle de la grue en barricade de contreplaqué dans `frame` (origine au
--- milieu du bas de la face, -Z local vers l'extérieur) : fond sombre, panneaux séparés par des joints, vis le long
--- des chants verticaux.
+-- Cette méthode permet d'habiller une face du socle de la grue en barricade de contreplaqué (panneaux, joints, vis)
+-- lorsque `frame` est le milieu du bas de la face, -Z local vers l'extérieur.
 local function barricade(parent, frame, width, height)
 	piece(parent, frame, V3.new(0, height / 2, -0.08), V3.new(width, height, 0.16), BEAM, E.Material.Wood)
 	local cols = math.max(1, math.floor(width / 12.2 + 0.5))
@@ -890,11 +890,8 @@ local function barricade(parent, frame, width, height)
 	end
 end
 
--- Cette méthode permet de construire la grue dans `frame` (origine au pied du socle, au centre ; -Z local vers la
--- charge suspendue) : socle en barricade de contreplaqué, mât en treillis jaune (le bloc relevé reste invisible pour la
--- collision), plateforme, flèche et contre-flèche en treillis, cabine, pylône et tirants, câble de levage jusqu'à la
--- charge relevée. `top` : haut du mât, `hook` et `load` : hauteurs du chariot et du dessus de la charge, `reach` :
--- distance du mât au chariot (relevés), toutes locales.
+-- Cette méthode permet de construire la grue (socle en contreplaqué, mât et flèche en treillis, câbles jusqu'à la charge)
+-- au pied `frame`, -Z vers la charge ; hauteurs `top`, `hook`, `load` et portée `reach` relevées (cf. CRANE).
 local function crane(parent, frame, top, hook, load, reach)
 	local m = New("Model")
 	m.Name = "Crane"
@@ -1020,9 +1017,8 @@ local function crane(parent, frame, top, hook, load, reach)
 	return m
 end
 
--- Cette méthode permet de construire une double porte dans `frame` (origine au milieu du bas de l'aplat relevé, sur
--- sa face ; -Z local vers l'extérieur ; le nu du mur est 0,28 stud derrière) : bâti, deux battants à oculus, plaques
--- de propreté et poignées, couvre-joint, seuil, plaque jaune et lampe au-dessus.
+-- Cette méthode permet de construire une double porte (bâti, vantaux à oculus, poignées, plaque, lampe) sur l'aplat
+-- relevé, `frame` au milieu du bas de sa face, -Z vers l'extérieur (nu du mur 0,28 stud derrière).
 local function door(parent, frame, w, h)
 	local m = New("Model")
 	m.Name = "DoubleDoor"
@@ -1032,7 +1028,7 @@ local function door(parent, frame, w, h)
 	for _, sgn in { -1, 1 } do
 		piece(m, frame, V3.new(sgn * (lw + jamb) / 2, h / 2, -0.25), V3.new(jamb, h, 0.5), TRIM, E.Material.Metal)
 	end
-	piece(m, frame, V3.new(0, (lh + h) / 2, -0.25), V3.new(w, h - lh, 0.5), TRIM, E.Material.Metal)
+	piece(m, frame, V3.new(0, (lh + h) / 2, -0.25), V3.new(lw, h - lh, 0.5), TRIM, E.Material.Metal)
 	for _, sgn in { -1, 1 } do
 		local cx = sgn * lw / 4
 		piece(m, frame, V3.new(cx, lh / 2, -0.12), V3.new(lw / 2 - 0.12, lh - 0.1, 0.24), DOOR, E.Material.Metal)
@@ -1056,9 +1052,8 @@ local function door(parent, frame, w, h)
 	return flat(m)
 end
 
--- Cette méthode permet de construire un groupe de ventilation de toit dans `frame` (origine au bas du caisson, au
--- centre ; -Z local vers la façade) : caisson blanc à montants sombres, ventilateur sur le dessus, capot avant à
--- grille à lames qui dépasse au-dessus de la façade, étiquette jaune.
+-- Cette méthode permet de construire un groupe de ventilation de toit (caisson, ventilateur, capot à lames) lorsque
+-- `frame` est le bas du caisson, au centre, -Z vers la façade.
 local function roofUnit(parent, frame)
 	local m = New("Model")
 	m.Name = "RoofUnit"
@@ -1115,15 +1110,16 @@ local function cableReels(parent, frame)
 	local m = New("Model")
 	m.Name = "CableReels"
 	m.Parent = parent
-	local D, t, hgt = 18.4, 0.5, 9.1
+	-- joues de la taille des plaques relevées (15,1) : plus larges, elles entreraient dans le mur voisin (axe à 8,1 du nu)
+	local D, t, hgt = 15.1, 0.5, 9.3
 	for r = 0, 1 do
 		local y0 = r * (hgt + 0.1)
 		for _, y in { y0 + t / 2, y0 + hgt - t / 2 } do
 			disc(m, frame, V3.new(0, y, 0), D, t, shade(PLY, y), E.Material.Wood)
 		end
-		disc(m, frame, V3.new(0, y0 + hgt / 2, 0), 11.6, hgt - 2 * t, INSUL, E.Material.Fabric)
+		disc(m, frame, V3.new(0, y0 + hgt / 2, 0), 10.6, hgt - 2 * t, INSUL, E.Material.Fabric)
 		for k = 1, 4 do
-			disc(m, frame, V3.new(0, y0 + t + k * (hgt - 2 * t) / 5, 0), 11.9, 0.25, GRILLE, E.Material.Fabric)
+			disc(m, frame, V3.new(0, y0 + t + k * (hgt - 2 * t) / 5, 0), 10.9, 0.25, GRILLE, E.Material.Fabric)
 		end
 		local cap = y0 + hgt
 		disc(m, frame, V3.new(0, cap + 0.02, 0), 3, 0.06, GRILLE, E.Material.Metal)
@@ -1230,9 +1226,10 @@ DizzyDressing.BUCKETS = { facing(-67.87, 70.56, -330.81, 0.894, -0.447) }
 
 -- Objets relevés en boîtes, rhabillés sur place : la boîte d'origine reste (invisible) pour la collision, l'habillage
 -- est sans collision. Coordonnées du monde (comme dizzy_patches.luau), `group` = groupe source (attribut Group),
--- `minVolume` / `maxVolume` pour trier les boîtes d'une même zone, `zone.radius` pour une zone ronde (en plan), `folders` pour viser d'autres dossiers que Decor
--- (sans `group`). `hide` : la boîte devient invisible et un objet construit à part la remplace à l'image. Chantiers des
--- étages (T vers (1925, 76, -360), CT vers (2074, 76, -160)) et tas de sacs sous la rampe CT.
+-- `minVolume` / `maxVolume` pour trier les boîtes d'une même zone, `zone.radius` pour une zone ronde (en plan),
+-- `folders` pour viser d'autres dossiers que Decor (sans `group`). `hide` : la boîte devient invisible et un objet
+-- construit à part la remplace à l'image. Chantiers des étages (T vers (1925, 76, -360), CT vers (2074, 76, -160)) et
+-- tas de sacs sous la rampe CT.
 DizzyDressing.REDRESS = {
 	{ kind = "cement", group = "stucco", why = "sacs de ciment du chantier T",
 		zone = { center = { 1912.9, 79, -384 }, size = { 12, 14, 14 } } },

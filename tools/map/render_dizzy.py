@@ -14,9 +14,15 @@ argv = sys.argv[sys.argv.index("--") + 1 :]
 PARTS, VIEWS, OUT = argv[0], argv[1], argv[2]
 os.makedirs(OUT, exist_ok=True)
 
-# direction vers le soleil (Roblox), SUN de build_dizzy.luau
+# direction vers le soleil (Roblox), SUN de build_dizzy.luau, valable pour l'heure et la latitude ci-dessous ; l'ambiance
+# est lue dans default.project.json, qui doit garder cette heure (sinon relever SUN, comme pour build_dizzy.luau)
 SUN = (-0.9167592525482178, 0.024006040766835213, -0.39871811866760254)
-AMBIENT = (0.47843, 0.43137, 0.5098)  # OutdoorAmbient
+SUN_CLOCK, SUN_LATITUDE = 17.9, 0
+ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+_lighting = json.load(open(os.path.join(ROOT, "default.project.json"), encoding="utf-8"))["tree"]["Lighting"]["$properties"]
+if _lighting["ClockTime"] != SUN_CLOCK or _lighting["GeographicLatitude"] != SUN_LATITUDE:
+    raise SystemExit("Lighting de default.project.json ≠ SUN de render_dizzy.py : relever SUN (cf. build_dizzy.luau)")
+AMBIENT = tuple(_lighting["OutdoorAmbient"])
 CYL_SEGMENTS = 20
 
 
@@ -131,9 +137,15 @@ MATS = {}
 def build(parts):
     tiles = {}
     for p in parts:
-        tiles.setdefault((int(p[1] // TILE), int(p[3] // TILE)), []).append(p)
+        # une grande pièce (sol, mur, fût) déborde de sa tuile : toujours rendue
+        key = "big" if max(p[13], p[15]) > TILE else (int(p[1] // TILE), int(p[3] // TILE))
+        tiles.setdefault(key, []).append(p)
     out = []
-    for (i, j), group in tiles.items():
+    for key, group in tiles.items():
+        if key == "big":
+            out.append((build_tile(group, "Big"), None))
+            continue
+        i, j = key
         obj = build_tile(group, f"Tile_{i}_{j}")
         out.append((obj, Vector(((i + 0.5) * TILE, (j + 0.5) * TILE))))
     return out
@@ -245,9 +257,8 @@ def lights(spots):
         bpy.context.scene.collection.objects.link(o)
 
 
-# Cette méthode permet de régler le moteur de rendu lorsque la scène est prête : Workbench par défaut (couleurs
-# d'attribut, ombres dans la direction du soleil du jeu, fond de crépuscule ; quelques secondes par vue), ou EEVEE avec
-# DIZZY_EEVEE=1 (éclairage du crépuscule, plusieurs minutes par vue sur une carte graphique intégrée).
+# Cette méthode permet de régler le moteur de rendu lorsque la scène est prête : Workbench par défaut (secondes par vue,
+# ombres orientées comme le soleil du jeu), EEVEE avec DIZZY_EEVEE=1 (crépuscule, minutes par vue).
 def setup():
     s = bpy.context.scene
     if not os.environ.get("DIZZY_EEVEE"):
@@ -283,7 +294,7 @@ def setup():
 
 for o in list(bpy.data.objects):
     bpy.data.objects.remove(o, do_unlink=True)
-data = json.load(open(PARTS))
+data = json.load(open(PARTS, encoding="utf-8"))
 tiles = build(data["parts"])
 world()
 lights(data.get("lights", []))
@@ -295,15 +306,14 @@ cam_data.clip_end = 5000
 cam = bpy.data.objects.new("Cam", cam_data)
 bpy.context.scene.collection.objects.link(cam)
 bpy.context.scene.camera = cam
-for v in json.load(open(VIEWS)):
+for v in json.load(open(VIEWS, encoding="utf-8")):
     s = bpy.context.scene
     s.render.resolution_x, s.render.resolution_y = v.get("res", [1613, 761])
     s.render.resolution_percentage = v.get("percent", 100)
     # tuiles à plus de `radius` studs (en plan) de la caméra : masquées
     eye = Vector((v["position"][0], v["position"][2]))
     for obj, c in tiles:
-        far = (Vector((c.x, c.y)) - eye).length > v.get("radius", 300) + TILE * 0.71
-        obj.hide_render = far
+        obj.hide_render = c is not None and (c - eye).length > v.get("radius", 300) + TILE * 0.71
     cam_data.angle_y = math.radians(v.get("fov", 90))
     pos, target = bl(v["position"]), bl(v["target"])
     cam.location = pos
