@@ -94,4 +94,100 @@ return function(T, Loader)
 			T.expect(not ok, "une zone vide doit lever une erreur")
 		end)
 	end)
+
+	-- Cette méthode permet de vérifier qu'aucune pièce d'un habillage ne bloque les raycasts du mouvement ni les joueurs.
+	local function ghostsOnly(dressing)
+		local n = 0
+		for _, d in dressing:GetDescendants() do
+			if d:IsA("BasePart") then
+				n += 1
+				if d.CanCollide or d.CanQuery then
+					return false, d.Name
+				end
+			end
+		end
+		return n > 0, "aucune pièce"
+	end
+
+	T.describe("DizzyDressing.redress (lot #187)", function()
+		T.it(
+			"rhabille une clôture : grillage en texture des deux côtés, panneau invisible, collision d'origine gardée",
+			function()
+				local m = map()
+				local panel = part(
+					m:FindFirstChild("Geometry"):FindFirstChild("Decor"),
+					Vector3.new(0, 20, 0),
+					Vector3.new(0.5, 22.8, 65),
+					"passbullets_chainlink"
+				)
+				panel.Transparency = 0.55
+				local ok, n, dressing = redress(m, {
+					{
+						kind = "fence",
+						group = "passbullets_chainlink",
+						why = "clôture",
+						zone = { center = { 0, 20, 0 }, size = { 2, 2, 2 } },
+					},
+				})
+				T.expect(ok, tostring(n))
+				T.expectEqual(n, 1)
+				T.expectEqual(panel.Transparency, 1)
+				T.expect(panel.CanCollide and panel.CanQuery, "la clôture relevée garde sa collision")
+				local faces = {}
+				for _, t in dressing:GetDescendants() do
+					if t:IsA("Texture") then
+						T.expectEqual(t.Texture, DizzyDressing.CHAINLINK)
+						T.expectEqual(t.Parent.Transparency, 1)
+						faces[t.Face.Name] = true
+					end
+				end
+				T.expect(faces.Front and faces.Back, "grillage visible des deux côtés")
+				T.expect(DizzyDressing.CHAINLINK ~= "rbxassetid://0", "id de l'image du grillage à renseigner")
+				local ghosts, why = ghostsOnly(dressing)
+				T.expect(ghosts, tostring(why))
+			end
+		)
+
+		T.it("rhabille fûts et parpaings sans pièce qui accroche le mouvement", function()
+			local m = map()
+			part(
+				m:FindFirstChild("Geometry"):FindFirstChild("Decor"),
+				Vector3.new(0, 10, 0),
+				Vector3.new(7.1, 8, 7.1),
+				"rock"
+			)
+			part(
+				m:FindFirstChild("Geometry"):FindFirstChild("Decor"),
+				Vector3.new(0, 30, 0),
+				Vector3.new(2.5, 5.6, 1.8),
+				"rock"
+			)
+			local ok, n, dressing = redress(m, {
+				{
+					kind = "barrel",
+					group = "rock",
+					minVolume = 300,
+					why = "fût",
+					zone = { center = { 0, 10, 0 }, size = { 2, 2, 2 } },
+				},
+				{
+					kind = "hollowblock",
+					group = "rock",
+					maxVolume = 40,
+					why = "parpaing",
+					zone = { center = { 0, 30, 0 }, size = { 2, 2, 2 } },
+				},
+			})
+			T.expect(ok, tostring(n))
+			T.expectEqual(n, 2)
+			local ghosts, why = ghostsOnly(dressing)
+			T.expect(ghosts, tostring(why))
+			-- parpaing debout : cloisons dans l'axe le plus long (vertical ici), aucune pièce hors de la boîte relevée
+			for _, d in dressing:GetDescendants() do
+				if d:IsA("BasePart") and d.Parent.Name == "CinderBlock" then
+					T.expect(math.abs(d.CFrame.Position.Y - 30) <= 2.81, "cloison hors de la boîte")
+				end
+			end
+		end)
+	end)
 end

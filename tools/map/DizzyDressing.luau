@@ -3,7 +3,8 @@
 -- pièce par pièce là où le relevé ne donne qu'une boîte ou un trou (groupes de climatisation, extracteurs d'air des
 -- estrades, auvents et câbles des
 -- portes de garage, fenêtres et lampes des murs du milieu ; grue, bardage en tôle ondulée, double porte, groupes du
--- toit du garage, zone de stockage du lot #166). Coordonnées du plan relevé (sans le décalage de la map,
+-- toit du garage, zone de stockage du lot #166 ; fûts, parpaings, contreplaqué et baladeuses de la fosse centrale,
+-- charge de la grue et clôtures grillagées du lot #187). Coordonnées du plan relevé (sans le décalage de la map,
 -- ajouté par `build`). La map est symétrique par rotation d'un demi-tour autour de (0, -260,1) : chaque objet est
 -- décrit une fois côté T et recopié côté CT par `mirror`. Cf. docs/maps.md, « Habillage détaillé ».
 --
@@ -887,9 +888,13 @@ local function barricade(parent, frame, width, height)
 	end
 end
 
+-- charge de la grue, définie avec les habillages du lot #187
+local girderLoad
+
 -- Cette méthode permet de construire la grue (socle en contreplaqué, mât et flèche en treillis, câbles jusqu'à la charge)
--- au pied `frame`, -Z vers la charge ; hauteurs `top`, `hook`, `load` et portée `reach` relevées (cf. CRANE).
-local function crane(parent, frame, top, hook, load, reach)
+-- au pied `frame`, -Z vers la charge ; hauteurs `top`, `hook`, `load` et portée `reach` relevées, boîte `bundle` de la
+-- charge (cf. CRANE).
+local function crane(parent, frame, top, hook, load, reach, bundle)
 	local m = New("Model")
 	m.Name = "Crane"
 	m.Parent = parent
@@ -1007,9 +1012,7 @@ local function crane(parent, frame, top, hook, load, reach)
 	end
 	piece(m, frame, V3.new(0, load + 4.5, -reach), V3.new(3, 3, 2), CRANE, E.Material.Metal)
 	piece(m, frame, V3.new(0, load + 2.2, -reach), V3.new(1, 1.6, 1), TRIM, E.Material.Metal)
-	for _, z in { -30, 30 } do
-		tube(lattice, frame, V3.new(0, load + 2, -reach), V3.new(0, load, -reach + z), 0.3, INSUL, E.Material.Metal)
-	end
+	girderLoad(m, frame, bundle.center, bundle.size, V3.new(0, load + 1.4, -reach))
 	-- treillis, tirants et câbles : barres fines, ombre coupée (un trait étiré par le soleil rasant)
 	flat(lattice)
 	return m
@@ -1147,6 +1150,239 @@ local function bucketPallets(parent, frame)
 	return m
 end
 
+-- Fosse aux fûts, charge de la grue, clôtures grillagées (#187) ----------------------------------------------------
+
+local DRUM = C3.fromRGB(150, 58, 42) -- fûts rouges
+local DRUM_RIM = C3.fromRGB(112, 42, 32)
+local LABEL = C3.fromRGB(222, 216, 196)
+local STRAP = C3.fromRGB(46, 48, 52) -- feuillards des piles de contreplaqué
+local GIRDER = C3.fromRGB(172, 184, 192) -- poutrelles de la charge de la grue
+local SLING = C3.fromRGB(196, 84, 40) -- élingues textiles
+local CORD = C3.fromRGB(24, 24, 26) -- câble électrique des baladeuses
+
+-- image du grillage (tools/map/chainlink.png publiée en Decal ; id de l'image contenue, cf. docs/maps.md)
+DizzyDressing.CHAINLINK = "rbxassetid://76216722967371" -- Decal 99427681323673
+
+-- Cette méthode permet de rhabiller une boîte relevée en fût métallique (corps, cercles de roulement, rebord, bondes,
+-- étiquette) ; teinte et orientation de l'étiquette varient avec la position du fût.
+local function barrel(parent, frame, size)
+	local m = New("Model")
+	m.Name = "Barrel"
+	m.Parent = parent
+	local k = frame.Position.X * 0.37 + frame.Position.Z * 0.11
+	local d, h = math.min(size.X, size.Z) - 0.1, size.Y
+	local body, rim = shade(DRUM, k), shade(DRUM_RIM, k)
+	disc(m, frame, V3.new(0, -0.05, 0), d - 0.2, h - 0.1, body, E.Material.Metal)
+	for _, y in { -h * 0.18, h * 0.18 } do
+		disc(m, frame, V3.new(0, y, 0), d, 0.32, rim, E.Material.Metal)
+	end
+	-- rebords du haut et du bas, un peu sous les fonds (le fond garde la couleur du corps)
+	for _, s in { -1, 1 } do
+		disc(m, frame, V3.new(0, s * (h / 2 - 0.4), 0), d - 0.05, 0.3, rim, E.Material.Metal)
+	end
+	local top = h / 2 - 0.1
+	for _, b in { { 0.28, 0.75 }, { -0.3, 0.45 } } do
+		disc(m, frame, V3.new(d * b[1], top + 0.05, 0), b[2], 0.1, rim, E.Material.Metal)
+	end
+	-- étiquette : plaque à peine enfoncée dans le corps (ses bords affleurent la courbe)
+	local face = CF.Angles(0, k, 0) * CF.new(0, 0, -((d - 0.2) / 2 - 0.03))
+	piece(m, frame, face, V3.new(1.4, 2.3, 0.06), LABEL, E.Material.SmoothPlastic)
+	piece(m, frame, face * CF.new(0, 0.3, -0.04) * CF.Angles(0, 0, math.pi / 4), V3.new(0.55, 0.55, 0.02), HAZARD, E.Material.SmoothPlastic)
+	return m
+end
+
+-- Cette méthode permet de rhabiller une boîte relevée en parpaing creux : deux parois, trois cloisons, alvéoles
+-- ouvertes dans l'axe de la dimension moyenne de la boîte (le bloc relevé peut être couché ou debout).
+local function hollowBlock(parent, frame, size)
+	local axes = { { V3.new(1, 0, 0), size.X }, { V3.new(0, 1, 0), size.Y }, { V3.new(0, 0, 1), size.Z } }
+	table.sort(axes, function(a, b)
+		return a[2] > b[2]
+	end)
+	local x, y = axes[1][1], axes[2][1]
+	local f = frame * CF.fromMatrix(V3.zero, x, y, x:Cross(y))
+	local L, H, T = axes[1][2], axes[2][2], axes[3][2]
+	local m = New("Model")
+	m.Name = "CinderBlock"
+	m.Parent = parent
+	local color = shade(BLOCK, frame.Position.X * 0.7 + frame.Position.Z)
+	local w = math.min(0.32, T / 4)
+	for _, s in { -1, 1 } do
+		piece(m, f, V3.new(0, 0, s * (T / 2 - w / 2)), V3.new(L - 0.06, H - 0.06, w), color, E.Material.Concrete)
+	end
+	for _, cx in { -(L / 2 - w / 2), 0, L / 2 - w / 2 } do
+		piece(m, f, V3.new(cx, 0, 0), V3.new(w, H - 0.06, T - 2 * w), color, E.Material.Concrete)
+	end
+	return m
+end
+
+-- Cette méthode permet de rhabiller une boîte relevée en pile de contreplaqué (plaques légèrement décalées, deux
+-- feuillards sur les piles assez larges) ; une planche debout du relevé devient la tranche d'une pile.
+local function plyStack(parent, frame, size)
+	local m = New("Model")
+	m.Name = "PlywoodStack"
+	m.Parent = parent
+	local n = math.max(1, math.floor(size.Y / 0.45 + 0.5))
+	local t = size.Y / n
+	for i = 0, n - 1 do
+		piece(
+			m,
+			frame,
+			V3.new(0.1 * math.sin(i * 2.3), -size.Y / 2 + (i + 0.5) * t, 0.1 * math.cos(i * 3.1)),
+			V3.new(math.max(0.1, size.X - 0.25), t - 0.04, math.max(0.1, size.Z - 0.25)),
+			shade(PLY, i * 1.7),
+			E.Material.Wood
+		)
+	end
+	if math.min(size.X, size.Z) > 2 then
+		-- repère où X suit la longueur de la pile
+		local f = if size.X >= size.Z then frame else frame * CF.Angles(0, math.pi / 2, 0)
+		local L, W = math.max(size.X, size.Z), math.min(size.X, size.Z)
+		for _, u in { -L / 4, L / 4 } do
+			piece(m, f, V3.new(u, size.Y / 2 + 0.005, 0), V3.new(0.35, 0.05, W + 0.1), STRAP, E.Material.Metal)
+			for _, s in { -1, 1 } do
+				piece(m, f, V3.new(u, 0, s * (W / 2 + 0.03)), V3.new(0.35, size.Y, 0.05), STRAP, E.Material.Metal)
+			end
+		end
+	end
+	return m
+end
+
+-- Cette méthode permet de rhabiller une boîte relevée en bois de palette (planche ou longeron, sans en changer la forme).
+local function palletWood(parent, frame, size)
+	local p = piece(parent, frame, V3.zero, size, shade(PALLET, frame.Position.X + frame.Position.Z * 3), E.Material.Wood)
+	p.Name = "PalletWood"
+	return p
+end
+
+-- Cette méthode permet de rhabiller une boîte relevée en clôture de chantier : poteaux et lisses en tube galvanisé,
+-- grillage en losanges (texture sur un panneau invisible, on voit et on tire au travers comme avant).
+local function fence(parent, frame, size)
+	local m = New("Model")
+	m.Name = "Fence"
+	m.Parent = parent
+	local f = if size.X >= size.Z then frame else frame * CF.Angles(0, math.pi / 2, 0)
+	local L, H = math.max(size.X, size.Z), size.Y
+	local mesh = piece(m, f, V3.zero, V3.new(L - 0.2, H - 0.6, 0.05), GALVA, E.Material.Metal)
+	mesh.Name = "Mesh"
+	mesh.Transparency = 1
+	for _, face in { E.NormalId.Front, E.NormalId.Back } do
+		local tex = New("Texture")
+		tex.Texture = DizzyDressing.CHAINLINK
+		tex.Face = face
+		tex.StudsPerTileU = 2.4
+		tex.StudsPerTileV = 2.4
+		tex.Parent = mesh
+	end
+	local bays = math.max(1, math.floor(L / 11 + 0.5))
+	for i = 0, bays do
+		local x = math.clamp(-L / 2 + i * L / bays, -L / 2 + 0.25, L / 2 - 0.25)
+		tube(m, f, V3.new(x, -H / 2, 0), V3.new(x, H / 2, 0), 0.5, GALVA, E.Material.Metal)
+	end
+	for _, y in { -H / 2 + 0.3, 0, H / 2 - 0.3 } do
+		tube(m, f, V3.new(-L / 2 + 0.25, y, 0), V3.new(L / 2 - 0.25, y, 0), 0.35, GALVA, E.Material.Metal)
+	end
+	return flat(m)
+end
+
+-- Cette méthode permet de rhabiller un poteau de clôture relevé en tube galvanisé coiffé, dans l'axe de la boîte.
+local function fencePost(parent, frame, size)
+	local m = New("Model")
+	m.Name = "FencePost"
+	m.Parent = parent
+	local d = math.min(size.X, size.Z)
+	tube(m, frame, V3.new(0, -size.Y / 2, 0), V3.new(0, size.Y / 2 - 0.15, 0), d * 0.8, GALVA, E.Material.Metal)
+	disc(m, frame, V3.new(0, size.Y / 2 - 0.075, 0), d, 0.15, TRIM, E.Material.Metal)
+	return flat(m)
+end
+
+REDRESS_KINDS.barrel = barrel
+REDRESS_KINDS.hollowblock = hollowBlock
+REDRESS_KINDS.plystack = plyStack
+REDRESS_KINDS.pallet = palletWood
+REDRESS_KINDS.fence = fence
+REDRESS_KINDS.fencepost = fencePost
+
+-- Cette méthode permet de suspendre une baladeuse (fil, douille, ampoule sous cage, SpotLight sans ombre) à `drop`
+-- studs sous le point d'attache `frame` (dessous d'une poutre de la pergola).
+local function cageLamp(parent, frame, drop)
+	local m = New("Model")
+	m.Name = "CageLamp"
+	m.Parent = parent
+	tube(m, frame, V3.zero, V3.new(0, -drop, 0), 0.15, CORD, E.Material.SmoothPlastic)
+	disc(m, frame, V3.new(0, -drop - 0.3, 0), 0.6, 0.6, CORD, E.Material.SmoothPlastic)
+	disc(m, frame, V3.new(0, -drop - 0.65, 0), 1.3, 0.1, TRIM, E.Material.Metal)
+	local bulb = piece(m, frame, V3.new(0, -drop - 1.25, 0), V3.new(0.8, 0.8, 0.8), LAMP, E.Material.Neon)
+	bulb.Shape = E.PartType.Ball
+	for k = 0, 3 do
+		local a = k * math.pi / 2 + math.pi / 4
+		local c = V3.new(math.cos(a) * 0.6, 0, math.sin(a) * 0.6)
+		bar(m, frame, c + V3.new(0, -drop - 0.65, 0), c * 0.4 + V3.new(0, -drop - 2, 0), 0.08, TRIM, E.Material.Metal)
+	end
+	disc(m, frame, V3.new(0, -drop - 2, 0), 0.5, 0.1, TRIM, E.Material.Metal)
+	local light = New("SpotLight")
+	light.Face = E.NormalId.Bottom
+	light.Angle = 120
+	light.Range = 30
+	light.Brightness = 1.6
+	light.Color = LAMP
+	light.Shadows = false
+	light.Parent = bulb
+	return flat(m)
+end
+
+-- Cette méthode permet de tendre une ligne de baladeuses sous une poutre de la pergola : fil en guirlande d'une lampe
+-- à l'autre (creux au milieu), une lampe à chaque point de `zs`, dans le repère `frame` (poutre le long de Z).
+local function lampLine(parent, frame, zs, drop, sag)
+	local m = New("Model")
+	m.Name = "LampLine"
+	m.Parent = parent
+	for i, z in zs do
+		cageLamp(m, frame * CF.new(0, 0, z), drop)
+		if i > 1 then
+			local z0 = zs[i - 1]
+			run(m, frame, { V3.new(0, -0.1, z0), V3.new(0, -sag, (z0 + z) / 2), V3.new(0, -0.1, z) }, 0.15, CORD, E.Material.SmoothPlastic)
+		end
+	end
+	return flat(m)
+end
+
+-- Cette méthode permet de construire la charge de la grue (poutrelles en H sur deux rangs, cales en bois, deux
+-- élingues ceinturées et leurs brins jusqu'au crochet) dans la boîte `center`/`size` du repère `frame` (X en largeur,
+-- Z en longueur) ; `hook` est le point d'accroche des brins.
+function girderLoad(parent, frame, center, size, hook)
+	local m = New("Model")
+	m.Name = "GirderLoad"
+	m.Parent = parent
+	local f = frame * CF.new(center)
+	local cols, rows, gap = 4, 2, 0.6
+	local bw, bh = size.X / cols, (size.Y - gap) / rows
+	local fl = 0.55 -- épaisseur des ailes
+	for r = 0, rows - 1 do
+		local y0 = -size.Y / 2 + r * (bh + gap)
+		for c = 0, cols - 1 do
+			local x = -size.X / 2 + (c + 0.5) * bw
+			local col = shade(GIRDER, r * 4 + c)
+			-- poutrelles un peu décalées en longueur (bouts jamais dans le même plan)
+			local dz, L = if (r + c) % 2 == 0 then 0.6 else -0.6, size.Z - 1.2
+			piece(m, f, V3.new(x, y0 + fl / 2, dz), V3.new(bw - 0.3, fl, L), col, E.Material.Metal)
+			piece(m, f, V3.new(x, y0 + bh - fl / 2, dz), V3.new(bw - 0.3, fl, L), col, E.Material.Metal)
+			piece(m, f, V3.new(x, y0 + bh / 2, dz), V3.new(0.45, bh - 2 * fl, L), col, E.Material.Metal)
+		end
+	end
+	for _, z in { -size.Z / 3, 0, size.Z / 3 } do
+		piece(m, f, V3.new(0, -size.Y / 2 + bh + gap / 2, z), V3.new(size.X, gap, 1.2), BEAM, E.Material.Wood)
+	end
+	-- élingues : une ceinture par point de levage, deux brins jusqu'au crochet
+	for _, z in { -size.Z * 0.28, size.Z * 0.28 } do
+		for _, s in { -1, 1 } do
+			piece(m, f, V3.new(0, s * (size.Y / 2 + 0.075), z), V3.new(size.X + 0.3, 0.15, 1.4), SLING, E.Material.Fabric)
+			piece(m, f, V3.new(s * (size.X / 2 + 0.075), 0, z), V3.new(0.15, size.Y + 0.3, 1.4), SLING, E.Material.Fabric)
+			tube(m, frame, hook, center + V3.new(s * (size.X / 2), size.Y / 2 + 0.15, z), 0.35, SLING, E.Material.Fabric)
+		end
+	end
+	return m
+end
+
 -- Repères côté T (le côté CT en est le symétrique) -----------------------------------------------------------------
 
 -- Cette méthode permet de bâtir un repère au sol tourné vers `front` (vecteur horizontal) à partir de coordonnées.
@@ -1192,9 +1428,17 @@ DizzyDressing.LADDERS = {
 
 -- Habillages du lot #166 (côté T, recopiés côté CT ; la grue est unique, au milieu du bord nord) ---------------------
 
--- grue : pied du socle au centre ; haut du mât, bas du chariot, dessus de la charge suspendue et portée du chariot,
+-- grue : pied du socle au centre ; haut du mât, bas du chariot, hauteur de la moufle et portée du chariot,
 -- relatifs au pied (blocs relevés : mât (0, 310,2, -81,3), chariot (0, 545,3, -268,2), charge (-2, 159,5, -268,9))
-DizzyDressing.CRANE = { frame = facing(0, 70.55, -81.3, 0, -1), top = 479.25, hook = 473.7, load = 98.55, reach = 186.9 }
+DizzyDressing.CRANE = {
+	frame = facing(0, 70.55, -81.3, 0, -1),
+	top = 479.25,
+	hook = 473.7,
+	load = 125, -- moufle : relevée de 98,55 pour que les élingues tombent à ~45° (#187)
+	reach = 186.9,
+	-- charge (poutrelles), boîte relevée (-2, 159,5, -268,9) dans le repère du pied : X en largeur, Z en longueur
+	bundle = { center = V3.new(-1.99, 88.96, -187.56), size = V3.new(29.96, 13.95, 108.06) },
+}
 -- pans de tôle ondulée : milieu du bas du pan sur le nu du mur, -Z vers l'extérieur ; `band` : hauteur de la bande
 -- ocre au-dessus du bas du pan (le sol devant les façades du garage est à 42,09)
 DizzyDressing.CLADDING = {
@@ -1222,6 +1466,15 @@ DizzyDressing.REELS = {
 	facing(74.9, 76.25, -157.3, -0.894, 0.447), -- CT
 }
 DizzyDressing.BUCKETS = { facing(-67.87, 70.56, -330.81, 0.894, -0.447) }
+
+-- Fosse centrale (#187, unique : le milieu de la map) : lignes de baladeuses sous les deux poutres longitudinales de la
+-- pergola (dessous à 70,71) ; repère au dessous de la poutre, Z le long de la poutre
+DizzyDressing.PIT_LAMPS = {
+	lines = { facing(-20.32, 70.71, -260.1, 0, -1), facing(19.81, 70.71, -260.1, 0, -1) },
+	zs = { -27, 0, 27 }, -- le long de la poutre, depuis le milieu de la fosse
+	drop = 6,
+	sag = 4,
+}
 
 -- Objets relevés en boîtes, rhabillés sur place : la boîte d'origine reste (invisible) pour la collision, l'habillage
 -- est sans collision. Coordonnées du monde (comme dizzy_patches.luau), `group` = groupe source (attribut Group),
@@ -1282,6 +1535,25 @@ DizzyDressing.REDRESS = {
 		zone = { center = { 2072.62, 73.74, -160.46 }, size = { 1, 1, 1 } } },
 	{ kind = "timber", group = "metal", why = "chants et chevrons des plaques CT", maxVolume = 100,
 		zone = { center = { 2072.6, 72.3, -160.4 }, size = { 13, 3.5, 25 } } },
+	-- lot #187 : fosse centrale (fûts sur palettes, piles de contreplaqué, parpaings), charge de la grue, clôtures
+	{ kind = "barrel", group = "rock", minVolume = 300, why = "fûts de la fosse centrale",
+		zone = { center = { 2000, 50, -260 }, size = { 90, 24, 100 } } },
+	{ kind = "barrel", group = "metal_barrel", why = "fût isolé de la fosse centrale",
+		zone = { center = { 1975.87, 37.6, -258.06 }, size = { 1, 1, 1 } } },
+	{ kind = "hollowblock", group = "rock", maxVolume = 40, why = "parpaings de la fosse centrale",
+		zone = { center = { 2000, 36, -260 }, size = { 90, 10, 100 } } },
+	{ kind = "plystack", group = "metal", minVolume = 20, why = "piles de contreplaqué de la fosse",
+		zone = { center = { 2000, 36.8, -260 }, size = { 90, 1, 100 } } },
+	{ kind = "pallet", group = "metal", maxVolume = 12, why = "palettes sous les fûts de la fosse",
+		zone = { center = { 2000, 45, -260 }, size = { 90, 14, 100 } } },
+	{ kind = "timber", group = "metal", maxVolume = 12, why = "chevrons au sol de la fosse",
+		zone = { center = { 2000, 33.95, -260 }, size = { 90, 1, 100 } } },
+	{ kind = "hide", group = "metal", why = "charge de la grue (poutrelles de DizzyDressing)",
+		zone = { center = { 1998.01, 159.51, -268.86 }, size = { 1, 1, 1 } } },
+	{ kind = "fence", group = "passbullets_chainlink", why = "clôtures grillagées",
+		zone = { center = { 2000, 80, -260 }, size = { 600, 100, 600 } } },
+	{ kind = "fencepost", group = "chainlink", why = "poteaux des clôtures grillagées",
+		zone = { center = { 2000, 80, -260 }, size = { 600, 100, 600 } } },
 }
 
 -- Cette méthode permet de rhabiller les boîtes relevées listées dans REDRESS lorsque la géométrie est posée : chaque
@@ -1375,7 +1647,7 @@ function DizzyDressing.build(map, offset)
 	end
 	-- lot #166 : grue (unique), bardage, groupes du toit, portes, zone de stockage
 	local c = DizzyDressing.CRANE
-	crane(root, shift * c.frame, c.top, c.hook, c.load, c.reach)
+	crane(root, shift * c.frame, c.top, c.hook, c.load, c.reach, c.bundle)
 	count += 1
 	for _, w in DizzyDressing.CLADDING do
 		both(cladding, w.frame, w.width, w.height, w.band)
@@ -1392,6 +1664,12 @@ function DizzyDressing.build(map, offset)
 	end
 	for _, cf in DizzyDressing.BUCKETS do
 		both(bucketPallets, cf)
+	end
+	-- lot #187 : baladeuses de la fosse centrale (unique)
+	local pit = DizzyDressing.PIT_LAMPS
+	for _, cf in pit.lines do
+		lampLine(root, shift * cf, pit.zs, pit.drop, pit.sag)
+		count += 1
 	end
 	count += DizzyDressing.redress(map, root)
 	return count

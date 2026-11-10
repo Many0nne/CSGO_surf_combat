@@ -247,6 +247,20 @@ par `mirror` : la map est symétrique par un demi-tour autour de (0, -260,1).
   (restes beiges vus en jeu). Zone ronde (`zone.radius`) et `maxVolume` pour épargner le mur et les parpaings. Côté CT,
   elle n'est pas le symétrique exact du côté T (2 studs d'écart) : `REELS` donne une bobine par côté, pas `mirror`.
 
+- **Fosse centrale** (#187, unique, sous la pergola) : fûts rouges cerclés à la place des cubes relevés (`barrel`, groupe
+  `rock` de plus de 300 studs³, plus le fût isolé `metal_barrel`), parpaings creux (`hollowblock` : alvéoles ouvertes
+  dans l'axe de la dimension moyenne, le bloc relevé peut être couché ou debout), piles de contreplaqué cerclées de
+  feuillards (`plystack` ; une planche debout du relevé devient la tranche d'une pile), palettes et chevrons en bois.
+  Six baladeuses sous cage (`PIT_LAMPS`, fil en guirlande sous les deux poutres longitudinales, SpotLight sans ombre).
+- **Charge de la grue** (#187) : fagot de poutrelles en H sur deux rangs, cales en bois, deux élingues ceinturées et
+  quatre brins jusqu'à la moufle (`CRANE.bundle` = boîte relevée, gardée invisible pour la collision). La moufle a été
+  remontée (`CRANE.load` 98,55 → 125) pour que les brins tombent à ~45°.
+- **Clôtures grillagées** (#187, groupes `passbullets_chainlink` et `chainlink`) : poteaux et lisses en tube
+  galvanisé, grillage en losanges rendu par une `Texture` sur les deux faces d'un panneau invisible (`Transparency` 1 :
+  la texture reste affichée). La boîte relevée garde sa collision. Image : `tools/map/chainlink.py` →
+  `tools/map/chainlink.png`, publiée en Decal, id de l'image dans `DizzyDressing.CHAINLINK`. La planche Blender ne
+  montre pas le grillage (pièce invisible) : le juger dans Studio.
+
 Rhabillages sans habillage (`kind = "hide"` de `REDRESS`) : la boîte devient invisible et garde sa collision, l'objet
 est construit à part (grue, porte, groupes du toit, bobines). `folders` vise d'autres dossiers que `Decor` (la bobine
 relevée est faite de murs, sols et plafonds) ; sans `group`, toutes les pièces visibles dont le centre est dans la zone
@@ -281,7 +295,7 @@ un repère invalide pour un tube vertical (pièce rejetée à y = -1 000 000). C
 de la map, aucune derrière le nu du mur qu'elle habille.
 
 Collision : seuls les volumes porteurs (caisson, châssis et viroles des groupes, fût et chapeau des extracteurs) la gardent ; tout le reste est sans
-collision ni requête. Lumières : `SpotLight` sans ombre (10 au total).
+collision ni requête. Lumières : `SpotLight` sans ombre (18 au total).
 
 Aperçu dans Studio sans reconnecter Rojo : le MCP refuse `HttpService` vers `localhost` (liste blanche de l'assistant),
 donc pas de `loadstring` d'un fichier servi en local depuis `execute_luau` ; il faut envoyer le code lui-même. Les
@@ -420,8 +434,8 @@ Rojo gère `Workspace.Maps` : un objet posé à la main dans une map est supprim
 ## Reste à faire
 
 - Habillage de Dizzy (#166, lots suivants) : bardage en tôle ondulée sur les autres murs (le premier lot n'a traité que
-  les murs des captures : façade du garage, volume de l'échelle, mur du stockage) ; charge suspendue sous la grue
-  (bloc brut) ; aplat de porte en (1885, 115, -323), côté T seulement.
+  les murs des captures : façade du garage, volume de l'échelle, mur du stockage) ; aplat de porte en
+  (1885, 115, -323), côté T seulement ; façades blanc cassé à bande bleu clair de la référence (teinte des murs).
 
 - Plus tard : supprimer la perte de vitesse restante dans les virages (correction du mouvement, voir les pièges).
 - Son et effet au déclenchement d'un boost.
