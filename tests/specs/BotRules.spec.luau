@@ -52,15 +52,6 @@ return function(T, Loader)
 			all[extra] = true
 			T.expectEqual(Rules.pickName(all) ~= extra, true, "deux noms numérotés différents")
 		end)
-
-		T.it("borne le nombre de bots demandé", function()
-			T.expectEqual(Rules.requestedCount(nil), 0)
-			T.expectEqual(Rules.requestedCount("3"), 0)
-			T.expectEqual(Rules.requestedCount(0 / 0), 0, "NaN")
-			T.expectEqual(Rules.requestedCount(2.7), 2)
-			T.expectEqual(Rules.requestedCount(-1), 0)
-			T.expectEqual(Rules.requestedCount(99), Config.MAX_BOTS)
-		end)
 	end)
 
 	T.describe("BotRules bunny hop (#151)", function()

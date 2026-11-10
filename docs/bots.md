@@ -124,9 +124,26 @@ Règles pures dans `BotCombatRules`, armes dans `BotArsenal` (une par bot vivant
 Mesure (09/11/2026, 5 bots + 1 joueur immobile au sol, 1 min) : 40 tirs, 23 touches, 22 kills (le joueur immobile
 est tué environ toutes les 7 s une fois son délai de grâce passé), 0 coup de couteau (les bots ne poursuivent pas).
 
+## Population (#144)
+
+Règles pures dans `BotPopulationRules`, appliquées par `BotManager` (`adjustPopulation`, toutes les
+`POPULATION_INTERVAL` s). Réglages `TARGET_POPULATION` (6), `MAX_BOTS` (5), `POPULATION_DUEL_TIME` (4 s).
+- **Bots voulus** = `TARGET_POPULATION` − joueurs connectés, borné à `MAX_BOTS` ; aucun sans joueur. Ils apparaissent
+  dès que le round est actif (un joueur a cliqué Play).
+- **Retrait** à l'arrivée d'un joueur, **un bot par passage** : d'abord un bot hors du jeu (mort), sinon le vivant le plus
+  longtemps sans contact avec une cible. Jamais un bot « en duel » (état combattre, ou contact depuis moins de
+  `POPULATION_DUEL_TIME` s) : si tous le sont, le retrait est reporté au passage suivant. `lastContact` compte aussi un
+  tir entendu, donc un bot qui vient d'entendre un tir est protégé quelques secondes (prudent, pas gênant).
+- Noms : liste fixe `BotConfig.NAMES`, premier nom libre (préfixe `BOT` ajouté à l'affichage par `ParticipantRules`).
+- **DebugPlaytest** : `BotManager.setPaused(true)` pendant un run retire tous les bots (forcé, même en duel), rétablis
+  à la fin (compteur, plusieurs runs possibles).
+
 ## Debug (Studio)
 
-- `workspace:SetAttribute("DebugBots", 5)` : nombre de bots (un round doit être actif : un joueur a demandé à apparaître).
+- `workspace:SetAttribute("DebugBots", 5)` : fixe le nombre de bots (un round doit être actif : un joueur a demandé à
+  apparaître). `"+"` / `"-"` : un de plus / de moins (l'attribut est remplacé par le nombre obtenu), `0` : aucun,
+  `nil` ou `"auto"` : retour à la population automatique. Un nombre fixé retire sans attendre la fin des duels.
+- `workspace:SetAttribute("DebugBotsFreeze", true)` : fige les bots (ni mouvement ni tir), `false` ou `nil` les relâche.
 - `workspace:SetAttribute("DebugNav", true)` : points (couleur du rouge au vert et étiquette = numéro, type, note),
   arêtes entre points (gris marche, bleu descente, orange saut, vert échelle ; trait court = sens unique), chemin
   restant de chaque bot en jaune, au-dessus de chaque bot son état, sa destination et sa cible (blanc chercher,

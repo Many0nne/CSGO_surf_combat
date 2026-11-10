@@ -27,6 +27,7 @@ local DUMMY_DISTANCE = 6 -- studs devant le joueur (dans la portée mêlée et V
 type Deps = {
 	roundManager: any,
 	validator: any,
+	setBotsPaused: (boolean) -> (),
 }
 
 type Reply = { ok: boolean, detail: string, data: any }
@@ -343,7 +344,10 @@ local function watchPlayer(player: Player)
 		end
 		running[player] = true
 		task.spawn(function()
+			-- Aucun bot pendant le run (ils tireraient sur le joueur ou la cible), rétablis après même en cas d'erreur
+			deps.setBotsPaused(true)
 			local ok, err = pcall(run, player, selector)
+			deps.setBotsPaused(false)
 			if not ok then
 				print(Rules.line("RESULT FAIL (erreur : " .. tostring(err) .. ")"))
 			end
