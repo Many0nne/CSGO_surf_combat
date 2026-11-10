@@ -77,6 +77,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/shared/movement/StepupSystem.luau`: logique pour monter sur de petits obstacles.
 - `src/shared/movement/WallSlide.luau`: glisse le long des murs/rampe avec conservation de normale surf si on avance vers la rampe.
 - `src/client/systems/weapon/AnimationSoundSystem.luau`: gestion des marqueurs sons sur les AnimationTracks.
+- `src/client/systems/weapon/EquipRules.luau`: règles pures de l'equip (#159) : durée (piste `Equip` du viewmodel de l'outil / vitesse, sinon `EquipTime`) et jeton d'equip qui périme le délai d'un equip antérieur (changement d'arme puis retour rapide). Piège : lire la durée sur le viewmodel de l'outil équipé (`ViewmodelSystem.getToolTrackLength`), pas sur l'arme active, l'ordre des connexions `Equipped` entre systèmes n'étant pas garanti. Clic droit pendant l'equip : ignoré. Testé (`tests/specs/EquipRules.spec.luau`).
 - `src/client/systems/weapon/HitscanSystem.luau`: raycast des armes à distance, traceur du tir et signalement de la touche au serveur.
 - `src/client/systems/weapon/MeleeHitDetection.luau`: raycast melee et signalement de la touche au serveur (type d'attaque, les dégâts sont calculés côté serveur).
 - `src/client/systems/weapon/ScopeSystem.luau`: gestion du scope (FOV, affichage de la lunette, sensibilité caméra) pour les armes à lunette.

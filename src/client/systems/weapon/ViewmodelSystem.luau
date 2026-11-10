@@ -387,8 +387,18 @@ function ViewmodelSystem.getActiveViewmodel()
 	return activeViewmodel
 end
 
-function ViewmodelSystem.getPreloadedTrackLength(name: string): number
-	local t = preloadedTracks[name]
+-- Cette méthode permet de lire la longueur d'une piste du viewmodel d'un outil donné lorsque l'outil vient d'être
+-- équipé, sans dépendre de l'arme active (ordre des connexions Equipped non garanti) ; 0 si inconnue.
+function ViewmodelSystem.getToolTrackLength(tool: Tool, name: string): number
+	local viewmodelName = tool:GetAttribute("ViewmodelName")
+	if type(viewmodelName) ~= "string" or viewmodelName == "" then
+		return 0
+	end
+	if not tracksCache[viewmodelName] then
+		prewarmViewmodel(tool)
+	end
+	local tracks = tracksCache[viewmodelName]
+	local t = tracks and tracks[name]
 	return t and t.Length or 0
 end
 
