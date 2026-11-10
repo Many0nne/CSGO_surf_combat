@@ -47,6 +47,8 @@ Viewer dans `worktrees/.tools`. Le dépôt ne contient que des cotes et des piè
    Scintillement : `tools/map/zfight_dizzy.py` (mêmes arguments, puis la tolérance), cf. « Scintillement » ci-dessous.
 4. Générer : `lune run tools/map/build_dizzy.luau` (sans Studio, plugin Rojo déconnecté de ce serveur) écrit
    `assets/rbx/Maps/Dizzy.rbxm`. Puis `rojo build default.project.json -o CSGO.rbxlx && lune run tools/rbxm/verify_place.luau`.
+   Le générateur mesure les rampes de surf et refuse d'écrire la map s'il reste un rebord (cf. « Rampes de surf :
+   surface continue ») ; même mesure à la main : `lune run tools/map/verify_ramps.luau`.
 
 Méthode et pièges (pour ne pas les redécouvrir) :
 - **La collision du monde n'est pas faite de blocs** : c'est un maillage fermé (le toit d'un seul tenant), sols et murs
@@ -122,6 +124,48 @@ depuis l'air ; 0,005 : faces confondues, 0,1 : aussi les tranches proches). Diag
 | Une couleur pour sols, murs et plafonds (test Studio) | Plus de bandes, mais map vide visuellement | Rejeté (DA) |
 | Bords décalés à toutes les arêtes (saillante : recul de 0,18 ; rentrante : avance de 0,08) | Plus de scintillement, mais détails des façades effacés et fentes claires aux angles rentrants | Rejeté |
 | Recul ciblé : seul le sol ou plafond recule derrière la dalle du mur, mur sans `EPS` ; ailettes, plaques minces et faces enfouies écartées | Plus de scintillement visible (validé en jeu) ; façades unies | Gardé |
+
+### Rampes de surf : surface continue (#136)
+
+Les deux grandes rampes (T vers (1805, 47, -414), CT vers (2195, 47, -107), 130 × 104 studs, 62°) avaient un rebord sur
+leurs bouts latéraux : le joueur qui les longeait s'arrêtait net. Origine, identique sur les deux rampes (relevé, pas
+habillage ni retouche) :
+- **bandes de rive** d'ar_dizzy : dalles d'acier de 1,5 et 4,6 studs de large à chaque bout, 0,17 et 0,34 stud plus
+  hautes que la dalle principale. Un mur d'air (`playerclip` d'origine) couvre toute la rampe au niveau des rives : c'est
+  lui la surface de glisse, l'acier du milieu est 0,34 plus bas (rebord visible) ;
+- **tranche des murs** : les murs sont posés sur leur face sans retrait (règle anti-scintillement), alors que les dalles
+  de pente et les murs d'air sont retirés de `EPS` (0,03) : la tranche des murs des bouts et des marches des rives
+  dépasse de 0,03 stud sur 1,5 à 2,6 studs de large. Le mouvement fait des `Blockcast` avec une peau de 0,015 stud :
+  0,03 suffit à arrêter le surfeur ;
+- **angles aigus** du bas et du haut de la pente : une dalle de plafond (dessous de la rampe) ou de mur (dos de la crête)
+  épaissie vers l'intérieur perce la pente sur 1 à 2 studs (+0,5 à +0,8).
+
+Correctif : règle du générateur (`tools/map/RampEdges.luau`, appliquée après les retouches, testée), pas une retouche
+par coordonnées. Par rampe : une **peau** d'acier d'un seul tenant (0,6 stud) couvre toute l'emprise au niveau des
+rives ; toute autre pièce qui entre dans la peau est rognée à son dos, découpe exacte en coins (section perpendiculaire
+à la longueur de la rampe). Le mur d'air d'origine, d'un seul tenant, reste. Mesure (`RampCheck`, rayons tous les
+0,5 stud le long de la normale, collision puis rendu, tolérance 0,02 stud) :
+
+| Rampe | Avant (collision / rendu) | Après |
+|---|---|---|
+| T | +0,52 sur 1 070 studs² / +0,86 sur 2 170 studs² | 0,000 / 0,000 |
+| CT | +0,79 sur 930 studs² / +1,13 sur 2 080 studs² | 0,000 / 0,000 |
+
+En jeu, lancé à 40 studs/s le long de chaque rampe vers chaque bout, en haut et en bas de la pente : vitesse constante
+jusqu'au vide (bout ouvert) ou jusqu'au mur de la fosse (bout fermé, x 1870 et 2130 : mur relevé, pas un rebord),
+hauteur au-dessus de la pente constante. Aucune pièce décorative n'est posée sur les rampes.
+
+Pièges :
+- **le joueur s'enfonce d'environ 0,3 stud** en atterrissant sur une rampe (mouvement, mesuré en jeu sur la rampe CT) :
+  une face cachée juste sous la surface l'arrête. Première version rejetée : acier remonté au niveau des rives et seules
+  les pièces qui dépassaient rognées ; la surface était plate, mais le joueur lancé en haut de la rampe CT s'arrêtait à
+  8 studs du bout sur la tranche d'un mur enfoui (marche d'origine des rives). D'où la peau de 0,6 stud sans aucune
+  face en travers dessous. Toute rampe de surf doit en être là ;
+- une pièce qui dépasse sans être extrudée dans la longueur de la rampe n'est pas rognée : la mesure arrête alors la
+  génération (bilan pièce par pièce). Le mur qui remonte après la crête de la rampe CT entre de quelques centièmes dans
+  l'emprise (angle rentrant, parallèle au surf) : les rayons du bord sont tirés à 0,05 stud de l'arête ;
+- un relevé neuf (`extract_dizzy.py`, Blender 5.2.3) ne redonne pas le `dizzy_layout.json` versionné (14 606 pièces
+  au lieu de 14 019) : ne pas corriger les rampes en relançant le relevé sans comparer toute la map.
 
 ### Corriger un détail de Dizzy
 
@@ -318,6 +362,9 @@ Rojo gère `Workspace.Maps` : un objet posé à la main dans une map est supprim
   la sonde relancée depuis la hauteur de marche (`GroundDetection`, `PhysicsUtils.isSideContact`).
 - **Rebord en bout de rampe** : un écart de plus de quelques dixièmes entre la fin d'une rampe et le dessus du mur
   voisin accroche le joueur ; le raccorder par une planche (retouche `add`) plutôt que de toucher au mur relevé.
+- **Rebord sur une rampe de surf** : quelques centièmes de marche en travers du surf suffisent à arrêter le joueur, et
+  il s'enfonce d'environ 0,3 stud à l'atterrissage. Sur une rampe de surf : une seule pièce en surface, aucune face en
+  travers à moins de 0,6 stud dessous (`RampEdges`, cf. « Rampes de surf : surface continue »).
 - **Décor sans collision** : toute pièce décorative (arêtes néon, bandes, colonnes de geyser) doit avoir `CanQuery`
   faux, sinon les raycasts du mouvement la prennent pour un mur ou une rampe.
 

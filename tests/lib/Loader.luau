@@ -84,6 +84,10 @@ function Loader:require(target: any)
 		local env = {
 			game = self.game,
 			require = function(t)
+				-- chemin relatif (outils hors Rojo, ex. tools/map) : depuis le dossier du module qui le demande
+				if type(t) == "string" and string.sub(t, 1, 2) == "./" then
+					t = (string.match(file, "^(.*)/[^/]*$") or ".") .. string.sub(t, 2)
+				end
 				return self:require(t)
 			end,
 			Vector3 = roblox.Vector3,

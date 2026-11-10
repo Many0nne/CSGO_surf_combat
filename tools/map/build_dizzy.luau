@@ -11,6 +11,8 @@ local roblox = require("@lune/roblox")
 
 local DizzyDressing = require("./DizzyDressing")
 local DizzyPatches = require("./DizzyPatches")
+local RampCheck = require("./RampCheck")
+local RampEdges = require("./RampEdges")
 local ShadowCulling = require("./ShadowCulling")
 
 local CFrame = roblox.CFrame
@@ -284,9 +286,35 @@ local counts = DizzyPatches.apply(geometry, patches, style)
 for i, p in patches do
 	print(string.format("  retouche %d (%s) : %s, %d pièce(s)", i, p.why, p.op, counts[i]))
 end
+-- rampes de surf : rien ne dépasse de la surface de glisse (#136), puis mesure de contrôle sur la map complète
+for _, r in RampEdges.apply(geometry) do
+	print(
+		string.format(
+			"  rampe (%.0f, %.0f, %.0f) : peau d'acier au niveau des rives (%+.3f), %d pièce(s) rognée(s) en %d",
+			r.center[1],
+			r.center[2],
+			r.center[3],
+			r.surface,
+			r.trimmed,
+			r.placed
+		)
+	)
+end
 local dressed = DizzyDressing.build(map, OFFSET)
 underside(map, data)
 spawns(map, data)
+local rampLines, rampWorst = RampCheck.check(map)
+if rampWorst > RampCheck.TOL then
+	-- bilan en entier (un message d'erreur long est tronqué), puis arrêt avant d'écrire la map
+	print(table.concat(rampLines, "\n"))
+	error(
+		string.format(
+			"rebord de %.3f stud sur une rampe de surf (tolérance %.2f), map non écrite",
+			rampWorst,
+			RampCheck.TOL
+		)
+	)
+end
 local t0 = os.clock()
 local small, culled, kept = cullShadows(map)
 print(
