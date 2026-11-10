@@ -53,9 +53,9 @@ local function halfExtents(b: Box): (number, number, number)
 		math.abs(b.xz) * hx + math.abs(b.yz) * hy + math.abs(b.zz) * hz
 end
 
--- Cette méthode permet de dire si le rayon (o + t·d, 0 ≤ t ≤ maxT) traverse une boîte ou un coin lorsqu'on cherche
--- un masque entre un point et le soleil (un point déjà à l'intérieur compte comme masqué).
-function ShadowCulling.rayHits(
+-- Cette méthode permet de calculer où le rayon (o + t·d, 0 ≤ t ≤ maxT) entre dans une boîte ou un coin : t d'entrée
+-- (0 si l'origine est déjà dedans), nil s'il la manque. Sert aussi à RampCheck (premier contact au-dessus d'une rampe).
+function ShadowCulling.rayEntry(
 	b: Box,
 	ox: number,
 	oy: number,
@@ -64,7 +64,7 @@ function ShadowCulling.rayHits(
 	dy: number,
 	dz: number,
 	maxT: number
-)
+): number?
 	local rx, ry, rz = ox - b.px, oy - b.py, oz - b.pz
 	-- origine et direction en repère local
 	local lo =
@@ -77,7 +77,7 @@ function ShadowCulling.rayHits(
 		local o, d, h = lo[a], ld[a], half[a]
 		if math.abs(d) < EPS then
 			if o < -h or o > h then
-				return false
+				return nil
 			end
 		else
 			local t1, t2 = (-h - o) / d, (h - o) / d
@@ -91,7 +91,7 @@ function ShadowCulling.rayHits(
 				tmax = t2
 			end
 			if tmin > tmax then
-				return false
+				return nil
 			end
 		end
 	end
@@ -101,7 +101,7 @@ function ShadowCulling.rayHits(
 		local fd = ld[2] * b.sz - ld[3] * b.sy
 		if math.abs(fd) < EPS then
 			if fo > 0 then
-				return false
+				return nil
 			end
 		elseif fd > 0 then
 			tmax = math.min(tmax, -fo / fd)
@@ -109,10 +109,25 @@ function ShadowCulling.rayHits(
 			tmin = math.max(tmin, -fo / fd)
 		end
 		if tmin > tmax then
-			return false
+			return nil
 		end
 	end
-	return true
+	return tmin
+end
+
+-- Cette méthode permet de dire si le rayon (o + t·d, 0 ≤ t ≤ maxT) traverse une boîte ou un coin lorsqu'on cherche
+-- un masque entre un point et le soleil (un point déjà à l'intérieur compte comme masqué).
+function ShadowCulling.rayHits(
+	b: Box,
+	ox: number,
+	oy: number,
+	oz: number,
+	dx: number,
+	dy: number,
+	dz: number,
+	maxT: number
+): boolean
+	return ShadowCulling.rayEntry(b, ox, oy, oz, dx, dy, dz, maxT) ~= nil
 end
 
 -- Cette méthode permet de produire les points d'échantillonnage des faces d'une boîte tournées vers le soleil
