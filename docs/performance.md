@@ -10,6 +10,7 @@
 | Qu'est-ce qui coûte, à l'intérieur d'une frame lente ? | MicroProfiler (Ctrl+F6) : nos boucles y portent leur nom |
 | La mémoire grimpe-t-elle au fil des spawns et des rounds ? | relevés `[Perf] MEM` (console F9, client et serveur) |
 | Combien la map coûte-t-elle (pièces, ombres, transparences) ? | `lune run tools/perf/audit_map.luau` (sans Studio) |
+| Combien coûte le serveur (bots, round) ? Quelle frame serveur est lente ? | sonde serveur `PerfServer` (lignes `[Perf] SRV`, console F9 > Server) |
 
 Pour comparer deux postes : ouvrir l'overlay sur chacun et faire le même parcours dans le jeu publié, puis relever les
 lignes `[Perf] BILAN` de la console F9 (onglet Log, filtre `[Perf]`). Le réglage graphique est dans la ligne : à
@@ -37,6 +38,58 @@ mesure.
 
 Tant qu'il est ouvert, une ligne `[Perf] BILAN` résume toutes les 10 s FPS, p99, max, CPU/GPU, draw calls, mémoire, réglage
 graphique et coût des scripts. À la fermeture, un dernier bilan est écrit.
+
+## Sonde serveur `PerfServer` (#145)
+
+`src/server/ServerPerf.luau`. Les repères `PerfMarkers` du serveur (`srv bots`, `srv round`…) ne sont chronométrés que
+si `PerfMarkers.timing` est vrai ; l'overlay F3 ne le règle que sur le client. La sonde le règle sur le serveur :
+`workspace:SetAttribute("PerfServer", true)` (`false` : dernier bilan puis arrêt). Toujours disponible, comme les
+relevés mémoire du serveur : la console serveur n'est lisible que par les développeurs. Une ligne toutes les 10 s :
+
+```
+[Perf] SRV t=60s Heartbeat méd 28.2ms p99 57.9ms max 59.7ms | bots 5 (4 en jeu) | mém … | scripts : srv bots 2.0ms×1.0 (max 7.8),
+bots mouvement …, bots chemin …, bots cerveau …, srv round …
+```
+
+- `Heartbeat méd/p99/max` : durée des frames serveur. Dans Studio, elle suit le client (même processus) : ne vaut que
+  pour comparer deux versions.
+- Repères des bots : `srv bots` (total) = `bots mouvement` (physique, **recherche de chemin comprise**) + `bots
+  cerveau` (perception, état) + apparitions ; `bots chemin` isole la recherche de chemin (appels par frame < 1 :
+  une recherche étalée sur plusieurs ticks). `×N` = appels par frame, `(max …)` = pire appel en ms.
+- Piège : le `max` dit ce qui fait la saccade, la moyenne non. Une moyenne de 2 ms cachait des pics de 150 ms.
+- Méthode pour les bots : `workspace:SetAttribute("DebugBots", 5)`, la sonde, puis `RequestSpawn:FireServer()` en
+  contexte Client (le round démarre) ; attendre 2 minutes de jeu.
+
+## Coût de la population maximale de bots (#145, mesure du 2026-11-10)
+
+Studio, Dizzy, 5 bots (`MAX_BOTS`), qualité 10, fenêtre de jeu 1291×647, joueur immobile, 2 min de jeu après
+apparition, avec l'overlay F3 et la sonde `PerfServer`. Studio fait tourner client, serveur et éditeur dans un seul
+processus : les chiffres en ms ne valent que pour comparer, le jugement final se fait dans le client publié.
+
+| | Avant (A* complet) | Après (A* étalé, poids 2) |
+|---|---|---|
+| `srv bots` moyenne par frame | 2,0 à 4,5 ms | 1,8 à 3,5 ms |
+| `srv bots` pire appel | 48 à 255 ms | 8 à 20 ms (28 ms à l'apparition des 5 bots) |
+| `bots chemin` pire appel | 22 à 128 ms | 1,7 à 4 ms |
+| `bots cerveau` moyenne / pire | 0,2 à 0,4 / 1 à 3 ms | idem |
+| `Heartbeat` serveur méd / p99 | 28-34 / 59-107 ms | 27-38 / 55-81 ms |
+
+- **Coût moyen des bots : environ 0,5 ms par bot et par frame** (mouvement 85 %, cerveau 12 %), soit 2 à 3,5 ms pour 5.
+  La physique est celle du joueur (`CharacterMotor`, 64 Hz) : deux ticks par frame à 30 FPS, un à 60.
+- Le `Heartbeat` serveur médian est le même **sans bot** en jeu (28,2 à 29 ms avant l'apparition) et avec 5 : les bots ne
+  changent pas la cadence de Studio, qui est limitée par le rendu (GPU 23-30 ms dans cette petite fenêtre).
+- **Pics corrigés** : à chaque nouvelle destination, `NavRules.findPath` explorait jusqu'aux 29 000 cases (80 à 150 ms
+  dans Studio) ; voir `docs/bots.md` (« Suivi de chemin »). Le pic de 450 à 790 ms du `Heartbeat` à l'apparition du
+  joueur est le chargement de son personnage (client), présent avant les bots.
+- **Client** (overlay F3, avec 5 bots en jeu et leurs armes 3P) : `autres joueurs` 0,35 à 0,42 ms par frame, `armes 3P`
+  0,25 à 0,40 ms, `tenue 3P` 0,15 à 0,2 ms (2 appels par frame : `PreAnimation` et `PreSimulation`, normal),
+  `mouvement` 0,2 à 0,3 ms. Au total moins de 1,5 ms par frame pour les 5 bots, contre moins de 0,1 ms sans bot.
+  FPS (34 à 35) et p99 (58 à 68 ms) identiques avec et sans bots dans Studio ; mémoire client stable (≈ +0 Mo entre
+  les spawns, pas de fuite visible : Instances 73 086 à 73 287 d'un spawn à l'autre).
+- Mémoire serveur : `Lua` autour de 30 à 45 Mo pendant les combats (apparitions et morts de bots), sans tendance.
+- **Reste à faire dans le client publié** (le critère « aucune nouvelle saccade » ne se juge que là) : parcours de 2 à
+  3 minutes avec 5 bots, overlay F3 ouvert, comparer `FPS médian`, `p99` et `max` des lignes `[Perf] BILAN` à ceux d'une
+  partie sans bot (`DebugBots` = 0), même qualité fixée à la main.
 
 ## Streaming désactivé (#88)
 
@@ -74,7 +127,8 @@ Les écarts de moins de 2 ms entre phases sont du bruit, d'où la référence de
 `src/shared/PerfMarkers.luau` : `PerfMarkers.wrap("nom", callback)` entoure un callback sans valeur de retour (Heartbeat,
 RenderStepped, BindToRenderStep). Le repère est toujours posé (`debug.profilebegin`, coût négligeable si le profiler est
 fermé), et il est chronométré seulement quand l'overlay est ouvert. Repères posés : `mouvement`, `caméra`, `viewmodel`,
-`armes`, `armes 3P`, `tenue 3P` (sous `PreSimulation`), `menu 3D`, `curseur menu` (client), `srv round` (serveur). Toute nouvelle boucle par frame doit
+`armes`, `armes 3P`, `tenue 3P` (sous `PreSimulation`), `menu 3D`, `curseur menu`, `autres joueurs` (client),
+`srv round`, `srv bots` et ses sous-repères `bots mouvement`, `bots cerveau`, `bots chemin` (serveur, sonde `PerfServer`). Toute nouvelle boucle par frame doit
 passer par `wrap`.
 
 Dans le MicroProfiler (Ctrl+F6, puis pause pour figer une frame lente), ces noms apparaissent sous `Heartbeat` ou

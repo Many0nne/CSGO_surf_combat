@@ -55,17 +55,41 @@ end
 
 -- Cette méthode permet de chercher le plus court chemin entre deux cases lorsqu'un bot choisit où aller (A*, tas
 -- binaire) ; banned écarte des arêtes (clés edgeKey). Renvoie la liste des cases, départ et arrivée compris, ou nil.
-function NavRules.findPath(graph: Graph, start: number, goal: number, banned: { [number]: boolean }?): { number }?
+-- Recherche reprenable : `run(budget)` explore au plus budget cases puis renvoie "running" (à reprendre au prochain
+-- appel), "found" (le chemin est dans `path`) ou "none" (aucun chemin).
+export type Search = { path: { number }?, run: (budget: number) -> string }
+
+-- Cette méthode permet de préparer une recherche de chemin lorsqu'un bot doit l'étaler sur plusieurs ticks (#145) : même
+-- A* que findPath, que l'appelant fait avancer par tranches de cases pour ne pas figer une frame serveur.
+function NavRules.newSearch(
+	graph: Graph,
+	start: number,
+	goal: number,
+	banned: { [number]: boolean }?,
+	weight: number?
+): Search
+	local search: Search = {
+		path = nil,
+		run = function(_budget: number): string
+			return "none"
+		end,
+	}
 	if start == goal then
-		return { start }
+		search.path = { start }
+		search.run = function(_budget: number): string
+			return "found"
+		end
+		return search
 	end
+	-- weight > 1 : heuristique pondérée, bien moins de cases explorées pour un chemin au plus weight fois plus long
+	local w = weight or 1
 	local positions, out, outKind, cellCost = graph.positions, graph.out, graph.outKind, graph.cellCost
 	local goalPos = positions[goal]
 	local gScore: { [number]: number } = { [start] = 0 }
 	local cameFrom: { [number]: number } = {}
 	local closed: { [number]: boolean } = {}
 	local heapNode: { number } = { start }
-	local heapF: { number } = { (positions[start] - goalPos).Magnitude }
+	local heapF: { number } = { (positions[start] - goalPos).Magnitude * w }
 
 	local function push(node: number, f: number)
 		local i = #heapNode + 1
@@ -107,36 +131,62 @@ function NavRules.findPath(graph: Graph, start: number, goal: number, banned: { 
 		return top
 	end
 
-	while #heapNode > 0 do
-		local node = pop()
-		if node == goal then
-			local path = { goal }
-			while cameFrom[path[1]] do
-				table.insert(path, 1, cameFrom[path[1]])
-			end
-			return path
+	search.run = function(budget: number): string
+		if search.path then
+			return "found"
 		end
-		if not closed[node] then
-			closed[node] = true
-			local base = gScore[node]
-			local nodePos = positions[node]
-			local targets, kinds = out[node], outKind[node]
-			for k, to in targets do
-				if not closed[to] and not (banned and banned[NavRules.edgeKey(node, to)]) then
-					local g = base
-						+ NavRules.edgeCost(nodePos, positions[to], kinds[k])
-						+ (if cellCost then cellCost[to] else 0)
-					local known = gScore[to]
-					if known == nil or g < known then
-						gScore[to] = g
-						cameFrom[to] = node
-						push(to, g + (positions[to] - goalPos).Magnitude)
+		local expanded = 0
+		while #heapNode > 0 do
+			if expanded >= budget then
+				return "running"
+			end
+			expanded += 1
+			local node = pop()
+			if node == goal then
+				local path = { goal }
+				while cameFrom[path[1]] do
+					table.insert(path, 1, cameFrom[path[1]])
+				end
+				search.path = path
+				return "found"
+			end
+			if not closed[node] then
+				closed[node] = true
+				local base = gScore[node]
+				local nodePos = positions[node]
+				local targets, kinds = out[node], outKind[node]
+				for k, to in targets do
+					if not closed[to] and not (banned and banned[NavRules.edgeKey(node, to)]) then
+						local g = base
+							+ NavRules.edgeCost(nodePos, positions[to], kinds[k])
+							+ (if cellCost then cellCost[to] else 0)
+						local known = gScore[to]
+						if known == nil or g < known then
+							gScore[to] = g
+							cameFrom[to] = node
+							push(to, g + (positions[to] - goalPos).Magnitude * w)
+						end
 					end
 				end
 			end
 		end
+		return "none"
 	end
-	return nil
+	return search
+end
+
+-- Cette méthode permet de chercher le plus court chemin entre deux cases d'une traite (tests, outils) : voir newSearch
+-- pour la version étalée sur plusieurs ticks.
+function NavRules.findPath(
+	graph: Graph,
+	start: number,
+	goal: number,
+	banned: { [number]: boolean }?,
+	weight: number?
+): { number }?
+	local search = NavRules.newSearch(graph, start, goal, banned, weight)
+	search.run(math.huge)
+	return search.path
 end
 
 -- Cette méthode permet de garder les cases d'où l'on peut aller partout et revenir lorsque le plan est construit :

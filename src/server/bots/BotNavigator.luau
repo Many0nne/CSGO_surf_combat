@@ -13,11 +13,24 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
 local BotRules = require(ReplicatedStorage.Shared.BotRules)
 local NavRules = require(ReplicatedStorage.Shared.NavRules)
+local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local StepTiming = require(ReplicatedStorage.Shared.StepTiming)
 local NavPlan = require(script.Parent.NavPlan)
 
 local BotNavigator = {}
 BotNavigator.__index = BotNavigator
+
+-- Cette méthode permet de faire avancer une recherche de chemin d'une tranche de cases en relevant son coût lorsque la
+-- sonde de performance est active (#145) : la recherche A* est ce qui pèse le plus sur une frame serveur.
+local function timedRun(search: NavRules.Search, budget: number): string
+	if not PerfMarkers.timing then
+		return search.run(budget)
+	end
+	local t0 = os.clock()
+	local status = search.run(budget)
+	PerfMarkers.record("bots chemin", os.clock() - t0)
+	return status
+end
 
 export type Intent = {
 	wishdir: Vector3, -- direction horizontale voulue (zéro : rester sur place) ; en bhop : cap visé
@@ -35,6 +48,7 @@ export type BotNavigator = typeof(setmetatable(
 		destination: number?, -- point de passage visé
 		lastWaypoint: number?,
 		cells: { number }?,
+		search: NavRules.Search?, -- recherche de chemin en cours, étalée sur plusieurs ticks (#145)
 		points: { Vector3 },
 		kinds: { number },
 		widths: { number }, -- largeur de passage de chaque case du chemin (studs)
@@ -89,6 +103,7 @@ function BotNavigator.new(rng: Random, runSpeed: number): BotNavigator
 		chooseDestination = nil,
 		onArrive = nil,
 		cells = nil,
+		search = nil,
 		points = {},
 		kinds = {},
 		widths = {},
@@ -126,12 +141,12 @@ end
 -- Cette méthode permet de calculer un chemin de la case sous les pieds vers la destination lorsque le bot n'en a pas
 -- (nouvelle destination tirée si besoin) ; renvoie false si aucun chemin n'est possible pour l'instant.
 function BotNavigator._plan(self: BotNavigator, plan: NavPlan.Plan, foot: Vector3): boolean
-	local start = NavPlan.nearestCell(plan, foot, BotConfig.NAV_NEAREST_RADIUS)
-	if not start then
-		return false
-	end
-	local bans = self:_activeBans()
-	for _ = 1, 4 do
+	local search = self.search
+	if not search then
+		local start = NavPlan.nearestCell(plan, foot, BotConfig.NAV_NEAREST_RADIUS)
+		if not start then
+			return false
+		end
 		if not self.destination then
 			local choose = self.chooseDestination
 			self.destination = if choose
@@ -142,34 +157,43 @@ function BotNavigator._plan(self: BotNavigator, plan: NavPlan.Plan, foot: Vector
 		if not wp then
 			return false
 		end
-		local cells = NavPlan.findPath(plan, start, wp.cell, bans)
-		if cells then
-			local positions, out, outKind = plan.graph.positions, plan.graph.out, plan.graph.outKind
-			local points, kinds, widths = {}, {}, {}
-			for i, cell in cells do
-				points[i] = positions[cell]
-				widths[i] = (plan.clearance[cell] or 0) * plan.grid
-				kinds[i] = NavRules.WALK
-				if i > 1 then
-					local prev = cells[i - 1]
-					local k = table.find(out[prev], cell)
-					kinds[i] = if k then outKind[prev][k] else NavRules.WALK
-				end
-			end
-			self.cells, self.points, self.kinds, self.widths = cells, points, kinds, widths
-			self.index = math.min(2, #cells)
-			self.best, self.stalled = math.huge, 0
-			self.bhopping, self.bhopRolled = false, 0
-			return true
-		end
-		self.destination = nil -- injoignable avec les arêtes écartées : autre tirage
+		search = NavPlan.newSearch(plan, start, wp.cell, self:_activeBans(), BotConfig.NAV_PATH_WEIGHT)
+		self.search = search
 	end
-	return false
+	-- Recherche étalée (#145) : au plus NAV_SEARCH_BUDGET cases par tick, le bot attend sur place tant qu'elle court
+	local status = timedRun(search :: NavRules.Search, BotConfig.NAV_SEARCH_BUDGET)
+	if status == "running" then
+		return false
+	end
+	self.search = nil
+	local cells = (search :: NavRules.Search).path
+	if not cells then
+		self.destination = nil -- injoignable avec les arêtes écartées : autre tirage au prochain tick
+		return false
+	end
+	local positions, out, outKind = plan.graph.positions, plan.graph.out, plan.graph.outKind
+	local points, kinds, widths = {}, {}, {}
+	for i, cell in cells do
+		points[i] = positions[cell]
+		widths[i] = (plan.clearance[cell] or 0) * plan.grid
+		kinds[i] = NavRules.WALK
+		if i > 1 then
+			local prev = cells[i - 1]
+			local k = table.find(out[prev], cell)
+			kinds[i] = if k then outKind[prev][k] else NavRules.WALK
+		end
+	end
+	self.cells, self.points, self.kinds, self.widths = cells, points, kinds, widths
+	self.index = math.min(2, #cells)
+	self.best, self.stalled = math.huge, 0
+	self.bhopping, self.bhopRolled = false, 0
+	return true
 end
 
 -- Cette méthode permet d'oublier le chemin courant lorsqu'il faut le recalculer (gêne, chute hors du trajet).
 function BotNavigator._dropPath(self: BotNavigator)
 	self.cells = nil
+	self.search = nil -- une recherche en cours visait l'ancienne destination ou l'ancien départ
 	self.best, self.stalled = math.huge, 0
 	self.bhopping = false
 end

@@ -96,8 +96,26 @@ end
 
 -- Cette méthode permet de chercher un chemin de case à case lorsqu'un bot change de destination ou se replace ;
 -- banned écarte les arêtes ratées par ce bot.
-function NavPlan.findPath(plan: Plan, from: number, to: number, banned: { [number]: boolean }?): { number }?
-	return NavRules.findPath(plan.graph, from, to, banned)
+function NavPlan.findPath(
+	plan: Plan,
+	from: number,
+	to: number,
+	banned: { [number]: boolean }?,
+	weight: number?
+): { number }?
+	return NavRules.findPath(plan.graph, from, to, banned, weight)
+end
+
+-- Cette méthode permet de préparer une recherche de chemin étalée sur plusieurs ticks lorsqu'un bot change de
+-- destination ou se replace (#145) ; banned écarte les arêtes ratées par ce bot.
+function NavPlan.newSearch(
+	plan: Plan,
+	from: number,
+	to: number,
+	banned: { [number]: boolean }?,
+	weight: number?
+): NavRules.Search
+	return NavRules.newSearch(plan.graph, from, to, banned, weight)
 end
 
 -- Cette méthode permet de tirer une destination lorsqu'un bot n'en a plus (#140 : au hasard, hors du point où il

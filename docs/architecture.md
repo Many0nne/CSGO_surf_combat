@@ -135,6 +135,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/shared/PerfMarkers.luau`: repères `PerfMarkers.wrap(nom, callback)` posés sur les boucles par frame (mouvement, caméra, viewmodel, armes, armes 3P, menu, timer de round) : nommés dans le MicroProfiler, chronométrés pour l'overlay.
 - `src/shared/PerfRules.luau`: règles pures de l'environnement de performance (droit d'accès, écarts mémoire, coût des repères), testées (`tests/specs/PerfRules.spec.luau`).
 - `src/shared/MemoryTracker.luau`: relevés mémoire `[Perf] MEM` (client : démarrage, spawn, fin de round ; serveur : démarrage, fin de round, départ d'un joueur). Catégories lues seulement si `Stats.MemoryTrackingEnabled` (désactivé dans le client publié).
+- `src/server/ServerPerf.luau`: sonde de coût du serveur (attribut Workspace `PerfServer`) : chronomètre les repères `PerfMarkers` du serveur (dont `srv bots`) et écrit `[Perf] SRV` toutes les 10 s, cf. `docs/performance.md`.
 - `src/shared/FrameProbeRules.luau`: règles pures de la sonde de saccades (classement HITCH/STUTTER/ROTATION/TELEPORT, cause probable, bilan), testées (`tests/specs/FrameProbeRules.spec.luau`).
 - `src/shared/GameConfig.luau`: constantes jeu (ROUND_DURATION=300, RESPAWN_DELAY=2.5, RESULT_DURATION=6, AUTO_SAVE_INTERVAL=120, SPAWN_PROTECTION=2.5).
 - `src/shared/SpawnLaunch.luau`: règles pures du lancement depuis le soleil (vitesse, angles de caméra, noms des attributs posés sur le personnage), testées (`tests/specs/SpawnLaunch.spec.luau`).

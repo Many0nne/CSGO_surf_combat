@@ -97,6 +97,27 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("PerfRules.frameStats", function()
+		T.it("médiane, p99 et max en ms, FPS déduit de la médiane", function()
+			local dts = {}
+			for _ = 1, 99 do
+				table.insert(dts, 0.016)
+			end
+			table.insert(dts, 0.05)
+			local s = Rules.frameStats(dts)
+			T.expectEqual(s.frames, 100)
+			T.expectNear(s.medianMs, 16, 1e-9)
+			T.expectNear(s.maxMs, 50, 1e-9)
+			T.expectNear(s.fps, 62.5, 1e-9)
+		end)
+
+		T.it("aucune frame : zéros", function()
+			local s = Rules.frameStats({})
+			T.expectEqual(s.frames, 0)
+			T.expectEqual(s.fps, 0)
+		end)
+	end)
+
 	T.describe("PerfMarkers", function()
 		T.it("transmet les arguments, ne compte que si timing est actif, collect remet à zéro", function()
 			local seen = {}

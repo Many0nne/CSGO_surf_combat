@@ -77,6 +77,62 @@ return function(T, Loader)
 			T.expectEqual(table.concat(Rules.findPath(g, 2, 2) :: { number }, ","), "2", "départ = arrivée")
 		end)
 
+		T.it("heuristique pondérée : chemin valide et au plus weight fois plus long que l'optimal", function()
+			-- Grille 10×10 de cases à 4 studs, arêtes de marche entre voisines (4 directions)
+			local positions, edges = {}, {}
+			for z = 0, 9 do
+				for x = 0, 9 do
+					positions[z * 10 + x + 1] = Vector3.new(x * 4, 0, z * 4)
+					if x < 9 then
+						table.insert(edges, { z * 10 + x + 1, z * 10 + x + 2, nil, true })
+					end
+					if z < 9 then
+						table.insert(edges, { z * 10 + x + 1, (z + 1) * 10 + x + 1, nil, true })
+					end
+				end
+			end
+			local g = graph(positions, edges)
+			local function length(path: { number }): number
+				local total = 0
+				for i = 2, #path do
+					total += (positions[path[i]] - positions[path[i - 1]]).Magnitude
+				end
+				return total
+			end
+			local optimal = Rules.findPath(g, 1, 100) :: { number }
+			local fast = Rules.findPath(g, 1, 100, nil, 2) :: { number }
+			T.expectEqual(fast[1], 1)
+			T.expectEqual(fast[#fast], 100)
+			T.expect(length(fast) <= length(optimal) * 2)
+		end)
+
+		T.it("recherche étalée : même chemin que d'une traite, rendu par tranches de cases", function()
+			local positions = row(6)
+			local edges = {}
+			for i = 1, 5 do
+				table.insert(edges, { i, i + 1, nil, true })
+			end
+			local g = graph(positions, edges)
+			local search = Rules.newSearch(g, 1, 6)
+			local runs = 0
+			local status = search.run(2)
+			while status == "running" do
+				runs += 1
+				status = search.run(2)
+			end
+			T.expectEqual(status, "found")
+			T.expect(runs >= 1, "la recherche a été interrompue au moins une fois")
+			T.expectEqual(
+				table.concat(search.path :: { number }, ","),
+				table.concat(Rules.findPath(g, 1, 6) :: { number }, ",")
+			)
+			T.expectEqual(
+				Rules.newSearch(g, 6, 1, { [Rules.edgeKey(6, 5)] = true }).run(100),
+				"none",
+				"arête écartée : aucun chemin"
+			)
+		end)
+
 		T.it("respecte le sens des arêtes (descente sans retour)", function()
 			local g = graph({ Vector3.new(0, 10, 0), Vector3.new(4, 0, 0) }, { { 1, 2, Rules.DROP } })
 			T.expectEqual(Rules.findPath(g, 1, 2) ~= nil, true)

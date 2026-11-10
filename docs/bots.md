@@ -45,6 +45,14 @@ viennent avec #141), chemin A* de case en case (`NavRules.findPath`, coût pond�
 
 Mesure (5 bots, 2 min 30) : 33 destinations atteintes, 0 arête ratée, 23 descentes, 9 sauts, 13 échelles franchis.
 
+**La recherche de chemin est étalée sur plusieurs ticks (#145).** Sur Dizzy (29 000 cases), un A* complet coûtait
+80 à 150 ms dans Studio : un pic de frame serveur à chaque nouvelle destination. `NavRules.newSearch` rend une recherche
+reprenable (`run(budget)` : `"running"`, `"found"` ou `"none"`), que `BotNavigator._plan` fait avancer de
+`NAV_SEARCH_BUDGET` cases par tick ; le bot attend sur place tant qu'elle court (de 1 à quelques ticks en général).
+`NAV_PATH_WEIGHT` (2) pondère l'heuristique : bien moins de cases explorées, pour un chemin au plus 2 fois plus long
+que l'optimal. `NavRules.findPath` reste la version d'une traite (tests, outils). Ne pas rappeler `findPath` depuis
+le jeu : il fige la frame.
+
 ## Bunny hop et air strafe (#151)
 
 Réglages `BHOP_*` de `BotConfig`, règles pures dans `BotRules` (strafe, vitesse visée) et `NavRules` (largeur,
@@ -151,6 +159,8 @@ Règles pures dans `BotPopulationRules`, appliquées par `BotManager` (`adjustPo
 - Console : `[Nav] Dizzy : …` à la fin de la construction (durée par phase), `[Nav] bilan` et `[Bots] bilan`
   (combats, tirs, touches et kills, coups de couteau, visées retenues par le délai de grâce, tirs entendus, enquêtes,
   replis, angles tenus, destinations biaisées) toutes les 30 s.
+- `workspace:SetAttribute("PerfServer", true)` : sonde de coût du serveur, une ligne `[Perf] SRV` toutes les 10 s
+  (méthode et lecture : `docs/performance.md`).
 - Le playtest démarre sans round : `ReplicatedStorage.RequestSpawn:FireServer()` en contexte Client fait apparaître
   le joueur et lance le round (piège du `require` depuis le MCP : `docs/architecture.md`).
 
