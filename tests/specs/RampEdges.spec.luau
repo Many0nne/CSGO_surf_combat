@@ -67,14 +67,15 @@ return function(T, Loader)
 			Vector3.new(130, 1.2, 6),
 			"ceiling"
 		)
-		-- mur d'air d'un seul tenant sur toute la longueur, dessus au niveau de la rive : gardé tel quel
-		part(
+		-- mur d'air (invisible) d'un seul tenant sur toute la longueur, dessus au niveau de la rive : gardé tel quel
+		local clip = part(
 			folders.Clips,
 			"Part",
 			CFrame.new(3, 0, 0) * ROT * CFrame.new(0, 1 + RAISE - 0.3, 0),
 			Vector3.new(106, 0.6, 80),
 			"clip"
 		)
+		clip.Transparency = 1
 		-- bloc loin au-dessus de la rampe, le long de sa normale : pas un rebord
 		local far = (ROT * CFrame.new(0, 30, 0)).Position
 		part(folders.Decor, "Part", CFrame.new(far), Vector3.new(4, 4, 4), "far")

@@ -24,6 +24,7 @@ local roblox = if Vector3 then nil else require("@lune/roblox")
 local V3 = if roblox then roblox.Vector3 else Vector3
 local CF = if roblox then roblox.CFrame else CFrame
 local New = if roblox then roblox.Instance.new else Instance.new
+local PartType = if roblox then roblox.Enum.PartType else Enum.PartType
 
 local RampCheck = require("./RampCheck")
 
@@ -242,8 +243,9 @@ function RampEdges.cut(b, ramp, surface)
 	return pieces, hmax - surface
 end
 
--- Cette méthode permet de créer une pièce de même habillage qu'une autre (classe donnée), rangée à côté d'elle.
-local function sibling(part, class)
+-- Cette méthode permet de créer une pièce de même habillage et mêmes attributs qu'une autre (classe donnée), rangée à
+-- côté d'elle et marquée `tag`.
+local function sibling(part, class, tag)
 	local p = New(class)
 	for _, name in PROPS do
 		p[name] = part[name]
@@ -251,7 +253,7 @@ local function sibling(part, class)
 	for k, v in part:GetAttributes() do
 		p:SetAttribute(k, v)
 	end
-	p:SetAttribute(RampEdges.ATTRIBUTE, "rognée sous la surface de glisse")
+	p:SetAttribute(RampEdges.ATTRIBUTE, tag or "rognée sous la surface de glisse")
 	p.Parent = part.Parent
 	return p
 end
@@ -263,8 +265,10 @@ local function alignedRect(poly, ramp, c, axisI, axisJ)
 		return nil
 	end
 	local is, js = {}, {}
+	local cu = dot(c, ramp.u)
 	for _, q in poly do
-		local p = add(add(add({ 0, 0, 0 }, ramp.v, q[1]), ramp.n, q[2]), c, -1)
+		-- point de la section dans le plan du centre (même position en longueur), puis relatif au centre
+		local p = add(world(ramp, cu, q[1], q[2]), c, -1)
 		table.insert(is, dot(p, axisI))
 		table.insert(js, dot(p, axisJ))
 	end
@@ -349,18 +353,10 @@ end
 -- Cette méthode permet de poser la peau d'acier d'une rampe : une seule dalle de SKIN studs sur toute l'emprise,
 -- dessus à `surface`, habillée comme la dalle principale `model`.
 local function skin(model, ramp, surface)
-	local p = New("Part")
-	for _, name in PROPS do
-		p[name] = model[name]
-	end
-	for k, v in model:GetAttributes() do
-		p:SetAttribute(k, v)
-	end
+	local p = sibling(model, "Part", "peau d'acier continue de la rampe")
 	local center = world(ramp, (ramp.u0 + ramp.u1) / 2, (ramp.v0 + ramp.v1) / 2, surface - RampEdges.SKIN / 2)
 	p.CFrame = CF.fromMatrix(vec(center), vec(ramp.u), vec(ramp.n), vec(cross(ramp.u, ramp.n)))
 	p.Size = V3.new(ramp.u1 - ramp.u0, RampEdges.SKIN, ramp.v1 - ramp.v0)
-	p:SetAttribute(RampEdges.ATTRIBUTE, "peau d'acier continue de la rampe")
-	p.Parent = model.Parent
 	return p
 end
 
@@ -384,16 +380,19 @@ function RampEdges.apply(geometry)
 			local _, top = RampCheck.topFace(boxes[j])
 			surface = math.max(surface, top)
 		end
-		-- marque temporaire (et non une table indexée par pièce : sous Lune, une même Instance peut revenir sous deux
-		-- références différentes d'un appel à l'autre)
 		-- dalle principale rognée par une rampe voisine : les deux rampes se chevauchent, cas non traité
 		assert(steel[ramp.main].Parent, "deux rampes de surf se chevauchent : dalle principale déjà rognée")
+		-- marque temporaire (et non une table indexée par pièce : sous Lune, une même Instance peut revenir sous deux
+		-- références différentes d'un appel à l'autre)
 		skin(steel[ramp.main], ramp, surface):SetAttribute(OWN, true)
 		local trimmed, placed, rise = 0, 0, 0
 		for _, p in geometry:GetDescendants() do
-			if p:IsA("BasePart") and not p:GetAttribute(OWN) then
+			-- seules les boîtes et les coins se découpent (cylindre, maillage : la mesure finale les signalera)
+			local trimmable = p.ClassName == "WedgePart" or (p.ClassName == "Part" and p.Shape == PartType.Block)
+			if trimmable and not p:GetAttribute(OWN) then
 				local b = RampCheck.box(p)
-				if wholeSlab(b, ramp, surface) then
+				-- visible, elle scintillerait avec la peau dans le même plan : seule l'invisible (mur d'air) reste
+				if p.Transparency == 1 and wholeSlab(b, ramp, surface) then
 					p:SetAttribute(OWN, true)
 				else
 					local pieces, up = RampEdges.cut(b, ramp, surface)

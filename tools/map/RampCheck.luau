@@ -113,7 +113,7 @@ function RampCheck.ramps(surf)
 			while grown do
 				grown = false
 				for j, o in surf do
-					if not taken[j] and not o.wedge then
+					if not taken[j] and not member[j] and not o.wedge then
 						local on, otop = topFace(o)
 						if dot(on, n) > 0.999 and math.abs(otop - top) <= RampCheck.BAND then
 							local ob = bounds(o, frame)
@@ -208,7 +208,8 @@ function RampCheck.measure(ramp, solids)
 	-- surface de glisse : hauteur la plus fréquente
 	local mode, most = 0, -1
 	for key, c in counts do
-		if c > most then
+		-- à égalité, la plus haute : le résultat ne dépend pas de l'ordre de parcours
+		if c > most or (c == most and key > mode) then
 			mode, most = key, c
 		end
 	end
