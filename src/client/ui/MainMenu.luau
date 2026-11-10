@@ -48,7 +48,7 @@ local STATS = {
 local gui: ScreenGui
 local tabsGui: ScreenGui
 local content: Frame
-local card: CanvasGroup
+local card: Frame
 local cardName: TextLabel
 local cardNameShadow: TextLabel
 local cardCategory: TextLabel
@@ -199,7 +199,7 @@ end
 -- Cette méthode permet de construire la fiche de l'arme (nom, catégorie, barres) en bas à gauche lorsque le menu est
 -- initialisé.
 local function buildCard(root: Frame)
-	card = UIKit.create("CanvasGroup", {
+	card = UIKit.create("Frame", {
 		Name = "WeaponCard",
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,

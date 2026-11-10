@@ -89,7 +89,7 @@ local function addParagraph(text: string, order: number): TextLabel
 	return UIKit.text({
 		Name = "Line" .. order,
 		Text = text,
-		TextSize = 20,
+		TextSize = 22,
 		TextColor3 = C.Bone,
 		TextWrapped = true,
 		LineHeight = 1.15,
@@ -121,14 +121,14 @@ local function addKeyRow(key: string, action: string, order: number): { TextLabe
 	local keyLbl = UIKit.text({
 		Text = key,
 		FontFace = F.Display,
-		TextSize = 19,
+		TextSize = 22,
 		TextColor3 = C.Bone,
 		Size = UDim2.new(0, 150, 1, 0),
 		Parent = row,
 	})
 	local actionLbl = UIKit.text({
 		Text = action,
-		TextSize = 19,
+		TextSize = 22,
 		TextColor3 = C.Bone,
 		Position = UDim2.fromOffset(150, 0),
 		Size = UDim2.new(1, -150, 1, 0),

@@ -23,7 +23,7 @@ local TOP_SCRIM_TRANSPARENCY = 0.3
 local LB_WIDTH = 620
 local LB_TOP = 118
 local LB_RULE_Y = 70
-local LB_ROW = 36
+local LB_ROW = 40
 local LB_VEIL_EXTRA = 420 -- largeur du voile au-delà du tableau, où il s'efface
 local LB_VEIL_TRANSPARENCY = 0.3
 local COL_RANK = 36
@@ -46,11 +46,11 @@ local blinkTween: Tween?
 local lowTime = false
 local rankLabel: TextLabel
 local rankShadow: TextLabel
-local leaderboard: CanvasGroup
+local leaderboard: Frame
 local leaderboardList: Frame
 local respawnRoot: Frame
 local respawnScrims: { ImageLabel }
-local respawnPanel: CanvasGroup
+local respawnPanel: Frame
 local respawnCount: TextLabel
 local respawnCountShadow: TextLabel
 local respawnCountScale: UIScale
@@ -63,7 +63,7 @@ local respawnDetail: TextLabel
 local deathGrade: ColorCorrectionEffect
 local resultRoot: Frame
 local resultVeil: Frame
-local resultContent: CanvasGroup
+local resultContent: Frame
 local resultMeBand: Frame
 local resultName: TextLabel
 local resultNameShadow: TextLabel
@@ -204,7 +204,7 @@ end
 -- Cette méthode permet de construire le classement (voile sombre central sans panneau, titre sur un filet ambre,
 -- en-têtes, liste) lorsque le HUD est initialisé.
 local function buildLeaderboard(root: Frame)
-	leaderboard = UIKit.create("CanvasGroup", {
+	leaderboard = UIKit.create("Frame", {
 		Name = "Leaderboard",
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
@@ -269,7 +269,7 @@ local function buildLeaderboard(root: Frame)
 	})
 	local m = C.Muted
 	local h = F.DisplayMedium
-	fillColumns(columns, { "#", "JOUEUR", "K", "M", "K/M" }, { h, h, h, h, h }, { m, m, m, m, m }, 12)
+	fillColumns(columns, { "#", "JOUEUR", "K", "M", "K/M" }, { h, h, h, h, h }, { m, m, m, m, m }, 15)
 
 	leaderboardList = UIKit.frame({
 		Name = "Rows",
@@ -286,8 +286,7 @@ local function openLeaderboard()
 		return
 	end
 	leaderboard.Visible = true
-	leaderboard.GroupTransparency = 1
-	UIKit.tween(leaderboard, Motion.Hover, { GroupTransparency = 0 })
+	UIKit.fadeIn(leaderboard, Motion.Hover)
 	for _, row in leaderboardList:GetChildren() do
 		local order = row:GetAttribute("Order")
 		local content = row:FindFirstChild("Content")
@@ -317,7 +316,7 @@ local function buildRespawnOverlay(root: Frame)
 		UIKit.cornerScrim(respawnRoot, "BottomRight", RESPAWN_SCRIM_SIZE, 1, bottom),
 		UIKit.cornerScrim(respawnRoot, "BottomLeft", RESPAWN_SCRIM_SIZE, 1, bottom),
 	}
-	respawnPanel = UIKit.create("CanvasGroup", {
+	respawnPanel = UIKit.create("Frame", {
 		Name = "Panel",
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
@@ -441,7 +440,7 @@ local function buildResultBanner(root: Frame)
 		}),
 		Parent = resultVeil,
 	})
-	resultContent = UIKit.create("CanvasGroup", {
+	resultContent = UIKit.create("Frame", {
 		Name = "Content",
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
@@ -660,7 +659,7 @@ function RoundHUD.updateScores(scores: { [number]: Score })
 			C.Bone,
 			statColor,
 			statColor,
-		}, 16)
+		}, 20)
 	end
 end
 
