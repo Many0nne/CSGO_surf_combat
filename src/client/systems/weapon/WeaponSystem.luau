@@ -7,6 +7,7 @@ local WeaponSystem = {}
 
 local ViewmodelSystem = require(script.Parent.ViewmodelSystem)
 local ScopeSystem = require(script.Parent.ScopeSystem)
+local EquipRules = require(script.Parent.EquipRules)
 local MeleeHitDetection = require(script.Parent.MeleeHitDetection)
 local HitscanSystem = require(script.Parent.HitscanSystem)
 local FPSCamera = require(script.Parent.Parent.Parent.camera.FPSCamera)
@@ -39,6 +40,7 @@ local secondaryConn = nil :: RBXScriptConnection?
 --               IDLE → RELOADING → IDLE, IDLE/SCOPED → FIRING → IDLE/SCOPED
 local weaponState: string = "IDLE"
 local cancelReload: (() -> ())? = nil
+local equipGate = EquipRules.newGate()
 
 local function canAct(): boolean
 	return weaponState == "IDLE" or weaponState == "SCOPED"
@@ -254,15 +256,28 @@ local function onToolEquipped(tool, char)
 		createSpeedValueForChar(char, cfg.RunSpeedMultiplier)
 	end
 
+	-- Durée lue sur la piste Equip du viewmodel de CET outil (pas de l'arme précédemment active, l'ordre des
+	-- connexions Equipped entre systèmes n'étant pas garanti) ; le jeton périme le délai d'un equip antérieur.
 	local equipTime = cfg and cfg.EquipTime or 0.8
-	local animLength = ViewmodelSystem.getPreloadedTrackLength("Equip")
+	local animLength = ViewmodelSystem.getToolTrackLength(tool, "Equip")
 	local equipAnimSpeed = cfg and cfg.EquipAnimSpeed or 1
-	local actualEquipTime = (animLength > 0 and animLength / equipAnimSpeed) or equipTime
+	local actualEquipTime = EquipRules.duration(animLength, equipAnimSpeed, equipTime)
+	local token = equipGate.begin()
 	task.delay(actualEquipTime, function()
-		if currentTool == tool and weaponState == "EQUIPPING" then
+		if equipGate.isCurrent(token) and currentTool == tool and weaponState == "EQUIPPING" then
 			weaponState = "IDLE"
 		end
 	end)
+
+	-- Un Equipped sans Unequipped préalable ne doit pas empiler les connexions (double bascule de la lunette).
+	if scopeConn then
+		scopeConn:Disconnect()
+		scopeConn = nil
+	end
+	if secondaryConn then
+		secondaryConn:Disconnect()
+		secondaryConn = nil
+	end
 
 	if cfg and cfg.HasScope then
 		scopeConn = UserInputService.InputBegan:Connect(function(input, gp)
@@ -294,7 +309,12 @@ local function onToolEquipped(tool, char)
 	end
 end
 
-local function onToolUnequipped(char)
+-- Cette méthode permet de ranger l'arme lorsque l'outil rangé est bien l'arme courante ; un Unequipped tardif d'une
+-- ancienne arme ne doit pas annuler l'equip de la nouvelle.
+local function onToolUnequipped(tool, char)
+	if tool ~= currentTool then
+		return
+	end
 	if cancelReload then
 		cancelReload()
 	end
@@ -306,6 +326,7 @@ local function onToolUnequipped(char)
 		secondaryConn:Disconnect()
 		secondaryConn = nil
 	end
+	equipGate.invalidate()
 	ScopeSystem.reset()
 	weaponState = "IDLE"
 	currentTool = nil
@@ -326,7 +347,7 @@ local function hookTool(tool, player)
 		onToolEquipped(tool, player.Character)
 	end)
 	tool.Unequipped:Connect(function()
-		onToolUnequipped(player.Character)
+		onToolUnequipped(tool, player.Character)
 	end)
 	tool.Destroying:Connect(function()
 		clearAmmoState(tool)
@@ -406,6 +427,7 @@ function WeaponSystem.init(player)
 		if cancelReload then
 			cancelReload()
 		end
+		equipGate.invalidate()
 		ScopeSystem.reset()
 		weaponState = "IDLE"
 		currentTool = nil

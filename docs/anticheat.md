@@ -127,10 +127,10 @@ par le client (`init.server.luau:127-140`) ; un changement d'arme l'annule, comm
 Bots : exclus (`BotArsenal` fait déjà respecter chargeur et rechargement, `BotArsenal.luau:116-148`), ou bien
 `BotArsenal._startReload` appelle le même point d'entrée serveur. Coût : un compteur par participant et par arme.
 
-**Durée d'equip, aujourd'hui.** Le client bloque tir et lunette pendant `EQUIPPING` (`canAct`,
-`WeaponSystem.luau:43-45`, état posé `:257-271`), avec une durée tirée de la longueur de l'animation et non de
-`EquipTime` (`:263-266`) ; #159 constate pourtant une visée et un tir possibles avant la fin de l'animation. Le serveur
-ne contrôle rien.
+**Durée d'equip, aujourd'hui.** Le client bloque tir et lunette pendant `EQUIPPING` (`canAct`, `WeaponSystem`), avec
+une durée tirée de la longueur de la piste `Equip` du viewmodel de l'outil (`EquipRules.duration`) et non de
+`EquipTime`. Un jeton d'equip (`EquipRules.newGate`) empêche le délai d'un equip antérieur de terminer le nouveau
+(#159, volet client corrigé). Le serveur ne contrôle rien.
 
 **Durée d'equip, risque.** Moyen : un client modifié tire dès la sortie de l'arme (AWP : 1,58 s de gagnées,
 `WeaponConfig.luau:23`), ce qui compte en duel après un changement d'arme.
