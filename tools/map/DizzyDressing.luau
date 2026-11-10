@@ -2,7 +2,8 @@
 -- Habillage détaillé de Dizzy, posé par build_dizzy.luau après le plan relevé et les retouches : objets construits
 -- pièce par pièce là où le relevé ne donne qu'une boîte ou un trou (groupes de climatisation, extracteurs d'air des
 -- estrades, auvents et câbles des
--- portes de garage, fenêtres et lampes des murs du milieu). Coordonnées du plan relevé (sans le décalage de la map,
+-- portes de garage, fenêtres et lampes des murs du milieu ; grue, bardage en tôle ondulée, double porte, groupes du
+-- toit du garage, zone de stockage du lot #166). Coordonnées du plan relevé (sans le décalage de la map,
 -- ajouté par `build`). La map est symétrique par rotation d'un demi-tour autour de (0, -260,1) : chaque objet est
 -- décrit une fois côté T et recopié côté CT par `mirror`. Cf. docs/maps.md, « Habillage détaillé ».
 --
@@ -711,13 +712,445 @@ local function timber(parent, frame, size)
 	return p
 end
 
+local PALLET = C3.fromRGB(184, 146, 98)
+local PAPER = C3.fromRGB(186, 182, 170) -- sacs de ciment
+
+-- Cette méthode permet de poser une palette (trois longerons, planches du dessus et du dessous) dont `frame` est le
+-- centre du dessous ; L le long de X, W le long de Z, hauteur 1 stud.
+local function pallet(parent, frame, L, W)
+	local m = New("Model")
+	m.Name = "Pallet"
+	m.Parent = parent
+	for _, z in { -W / 2 + 0.45, 0, W / 2 - 0.45 } do
+		piece(m, frame, V3.new(0, 0.5, z), V3.new(L, 0.6, 0.9), shade(PALLET, z + 3), E.Material.Wood)
+	end
+	local n = 7
+	for i = 0, n - 1 do
+		local x = -L / 2 + (i + 0.5) * L / n
+		piece(m, frame, V3.new(x, 0.9, 0), V3.new(L / n - 0.45, 0.2, W), shade(PALLET, i), E.Material.Wood)
+	end
+	for _, x in { -L / 2 + 0.6, 0, L / 2 - 0.6 } do
+		piece(m, frame, V3.new(x, 0.1, 0), V3.new(1.2, 0.2, W), shade(PALLET, x), E.Material.Wood)
+	end
+	return m
+end
+
+-- Cette méthode permet de remplir une boîte relevée de sacs de ciment couchés à plat, en rangs croisés, sur une
+-- palette (le bas de la boîte) ; une boîte basse (moins de 2 studs) devient un rang de sacs sans palette.
+local function cement(parent, frame, size)
+	local m = New("Model")
+	m.Name = "CementSacks"
+	m.Parent = parent
+	local bottom = -size.Y / 2
+	if size.Y >= 2 then
+		pallet(m, frame * CF.new(0, bottom, 0), size.X - 0.2, size.Z - 0.2)
+		bottom += 1
+	end
+	local top = size.Y / 2
+	local layers = math.max(1, math.floor((top - bottom) / 0.95 + 0.5))
+	local h = (top - bottom) / layers
+	local k = 0
+	for layer = 0, layers - 1 do
+		local along = layer % 2 == 0
+		local lx, lz = size.X - 0.3, size.Z - 0.3
+		local bagL, bagW = 5.2, 3.4
+		local nx = math.max(1, math.floor((if along then lx / bagL else lx / bagW) + 0.35))
+		local nz = math.max(1, math.floor((if along then lz / bagW else lz / bagL) + 0.35))
+		local sx, sz = lx / nx, lz / nz
+		for i = 0, nx - 1 do
+			for j = 0, nz - 1 do
+				k += 1
+				local at = frame * CF.new(-lx / 2 + (i + 0.5) * sx, bottom + (layer + 0.5) * h, -lz / 2 + (j + 0.5) * sz)
+				piece(
+					m,
+					at * CF.Angles(0, math.rad(2 * math.sin(k * 5.3)), 0),
+					V3.zero,
+					V3.new(sx * 0.95, h * 0.94, sz * 0.93),
+					shade(PAPER, k),
+					E.Material.Fabric
+				)
+			end
+		end
+	end
+	return m
+end
+
+-- Cette méthode permet de rendre une boîte relevée invisible sans l'habiller (sa collision reste) lorsqu'un objet
+-- construit à part (DizzyDressing) la remplace à l'image.
+local function hide() end
+
 local REDRESS_KINDS = {
 	sandbags = sandbags,
+	cement = cement,
 	crate = crate,
 	cinder = cinderBlocks,
 	drywall = drywall,
 	timber = timber,
+	hide = hide,
 }
+
+-- Bardage, grue, porte, groupes du toit, zone de stockage (#166) ----------------------------------------------------
+
+local CLAD = C3.fromRGB(178, 182, 184) -- tôle nervurée
+local OCHRE = C3.fromRGB(200, 156, 72) -- bande basse du bardage
+local PLY = C3.fromRGB(206, 170, 118) -- contreplaqué (même teinte que LOOK.plywood)
+local BEAM = C3.fromRGB(128, 94, 64) -- bois de charpente (LOOK.timber)
+local CRANE = C3.fromRGB(228, 180, 44) -- treillis de la grue
+local DOOR = C3.fromRGB(122, 134, 142)
+local BUCKET = C3.fromRGB(226, 224, 216)
+
+-- Cette méthode permet de poser une barre de section carrée entre deux points locaux du repère `frame`.
+local function bar(parent, frame, a, b, width, color, material)
+	return piece(
+		parent,
+		frame,
+		DizzyDressing.aim((a + b) / 2, b - a),
+		V3.new(width, width, (b - a).Magnitude),
+		color,
+		material
+	)
+end
+
+-- Cette méthode permet de couper l'ombre de toutes les pièces d'un objet plaqué contre un mur, dont l'ombre se
+-- confond avec celle du mur (bardage, barricade, porte) : la passe d'ombres est le premier coût de rendu de Dizzy.
+local function flat(model)
+	for _, p in model:GetDescendants() do
+		if p:IsA("BasePart") then
+			p.CastShadow = false
+		end
+	end
+	return model
+end
+
+-- Cette méthode permet d'habiller un pan de mur de tôle ondulée dans `frame` (origine au milieu du bas du pan, sur le
+-- nu du mur, -Z local vers l'extérieur) : tôle, nervures tous les ~1,6 stud, bande basse ocre de hauteur `band`
+-- (0 : pas de bande), couvertine en haut et cornières aux deux bouts.
+local function cladding(parent, frame, width, height, band)
+	local m = New("Model")
+	m.Name = "Cladding"
+	m.Parent = parent
+	band = math.clamp(band, 0, height)
+	-- tôle : deux plaques (bande et haut) côte à côte, jamais l'une sur l'autre (scintillement)
+	if band > 0 then
+		piece(m, frame, V3.new(0, band / 2, -0.06), V3.new(width, band, 0.12), OCHRE, E.Material.Metal)
+	end
+	piece(m, frame, V3.new(0, (band + height) / 2, -0.06), V3.new(width, height - band, 0.12), CLAD, E.Material.Metal)
+	local n = math.max(1, math.floor(width / 1.6 + 0.5))
+	local step = width / n
+	for i = 0, n - 1 do
+		local x = -width / 2 + (i + 0.5) * step
+		if band > 0 then
+			piece(m, frame, V3.new(x, band / 2, -0.21), V3.new(0.5, band, 0.18), shade(OCHRE, i), E.Material.Metal)
+		end
+		piece(
+			m,
+			frame,
+			V3.new(x, (band + height) / 2, -0.21),
+			V3.new(0.5, height - band, 0.18),
+			shade(CLAD, i),
+			E.Material.Metal
+		)
+	end
+	if band > 0 then
+		piece(m, frame, V3.new(0, band, -0.3), V3.new(width, 0.3, 0.3), TRIM, E.Material.Metal)
+	end
+	piece(m, frame, V3.new(0, height - 0.3, -0.32), V3.new(width + 0.3, 0.6, 0.64), GALVA, E.Material.Metal)
+	for _, s in { -1, 1 } do
+		piece(m, frame, V3.new(s * (width / 2 - 0.3), height / 2, -0.32), V3.new(0.6, height, 0.64), GALVA, E.Material.Metal)
+	end
+	return flat(m)
+end
+
+-- Cette méthode permet d'habiller une face du socle de la grue en barricade de contreplaqué dans `frame` (origine au
+-- milieu du bas de la face, -Z local vers l'extérieur) : fond sombre, panneaux séparés par des joints, vis le long
+-- des chants verticaux.
+local function barricade(parent, frame, width, height)
+	piece(parent, frame, V3.new(0, height / 2, -0.08), V3.new(width, height, 0.16), BEAM, E.Material.Wood)
+	local cols = math.max(1, math.floor(width / 12.2 + 0.5))
+	local rows = 3
+	local pw, ph = width / cols, height / rows
+	for c = 0, cols - 1 do
+		for r = 0, rows - 1 do
+			local x, y = -width / 2 + (c + 0.5) * pw, (r + 0.5) * ph
+			piece(
+				parent,
+				frame,
+				V3.new(x, y, -0.32),
+				V3.new(pw - 0.22, ph - 0.22, 0.3),
+				shade(PLY, c * 3 + r * 7 + width),
+				E.Material.Wood
+			)
+			for _, s in { -1, 1 } do
+				for k = 0, 3 do
+					local sy = y - ph / 2 + (k + 0.5) * ph / 4
+					piece(parent, frame, V3.new(x + s * (pw / 2 - 0.7), sy, -0.5), V3.new(0.32, 0.32, 0.08), TRIM, E.Material.Metal)
+				end
+			end
+		end
+	end
+end
+
+-- Cette méthode permet de construire la grue dans `frame` (origine au pied du socle, au centre ; -Z local vers la
+-- charge suspendue) : socle en barricade de contreplaqué, mât en treillis jaune (le bloc relevé reste invisible pour la
+-- collision), plateforme, flèche et contre-flèche en treillis, cabine, pylône et tirants, câble de levage jusqu'à la
+-- charge relevée. `top` : haut du mât, `hook` et `load` : hauteurs du chariot et du dessus de la charge, `reach` :
+-- distance du mât au chariot (relevés), toutes locales.
+local function crane(parent, frame, top, hook, load, reach)
+	local m = New("Model")
+	m.Name = "Crane"
+	m.Parent = parent
+	local HX, HZ, H = 24.4, 24.25, 45.5
+	local base0 = New("Model")
+	base0.Name = "Barricade"
+	base0.Parent = m
+	local lattice = New("Model")
+	lattice.Name = "Lattice"
+	lattice.Parent = m
+	-- socle : quatre faces de contreplaqué, cornières en bois, lisse haute, dessus fermé
+	for _, f in {
+		{ V3.new(0, 0, -HZ), V3.new(0, 0, -1), 2 * HX },
+		{ V3.new(0, 0, HZ), V3.new(0, 0, 1), 2 * HX },
+		{ V3.new(-HX, 0, 0), V3.new(-1, 0, 0), 2 * HZ },
+		{ V3.new(HX, 0, 0), V3.new(1, 0, 0), 2 * HZ },
+	} do
+		local face = frame * DizzyDressing.aim(f[1], f[2])
+		barricade(base0, face, f[3], H)
+		piece(base0, face, V3.new(0, H - 0.5, -0.75), V3.new(f[3] + 1.6, 1, 0.9), BEAM, E.Material.Wood)
+		piece(base0, face, V3.new(0, 0.5, -0.7), V3.new(f[3] + 1.6, 1, 0.8), BEAM, E.Material.Wood)
+	end
+	for _, x in { -1, 1 } do
+		for _, z in { -1, 1 } do
+			piece(base0, frame, V3.new(x * (HX + 0.45), H / 2, z * (HZ + 0.45)), V3.new(1.1, H, 1.1), BEAM, E.Material.Wood)
+		end
+	end
+	piece(base0, frame, V3.new(0, H + 0.05, 0), V3.new(2 * HX, 0.1, 2 * HZ), PLY, E.Material.Wood)
+	flat(base0)
+	-- mât : quatre membrures, entretoises et diagonales en zigzag sur chaque face
+	local s = 15.2
+	local n = math.max(1, math.floor((top - H) / 32 + 0.5))
+	local sh = (top - H) / n
+	for _, x in { -s, s } do
+		for _, z in { -s, s } do
+			piece(m, frame, V3.new(x, (H + top) / 2, z), V3.new(1.6, top - H, 1.6), CRANE, E.Material.Metal)
+		end
+	end
+	for k = 0, n do
+		local y = H + k * sh
+		for _, z in { -s, s } do
+			piece(lattice, frame, V3.new(0, y, z), V3.new(2 * s, 0.9, 0.9), CRANE, E.Material.Metal)
+		end
+		for _, x in { -s, s } do
+			piece(lattice, frame, V3.new(x, y, 0), V3.new(0.9, 0.9, 2 * s), CRANE, E.Material.Metal)
+		end
+	end
+	for k = 0, n - 1 do
+		local y0, y1 = H + k * sh, H + (k + 1) * sh
+		local d = if k % 2 == 0 then 1 else -1
+		for _, z in { -s, s } do
+			bar(lattice, frame, V3.new(-d * s, y0, z), V3.new(d * s, y1, z), 0.8, CRANE, E.Material.Metal)
+		end
+		for _, x in { -s, s } do
+			bar(lattice, frame, V3.new(x, y0, d * s), V3.new(x, y1, -d * s), 0.8, CRANE, E.Material.Metal)
+		end
+	end
+	-- plateforme d'orientation
+	piece(m, frame, V3.new(0, top + 1.25, 0), V3.new(36, 2.5, 36), TRIM, E.Material.Metal)
+	disc(m, frame, V3.new(0, top + 3, 0), 26, 1, GRILLE, E.Material.Metal)
+	local base = top + 3.5
+	-- flèche : section triangulaire (deux membrures basses, une haute), treillis en zigzag
+	local L, half, jh, bay = reach + 45, 4, 8, 10
+	local z0 = -s
+	for _, x in { -half, half } do
+		piece(m, frame, V3.new(x, base, z0 - L / 2), V3.new(0.9, 0.9, L), CRANE, E.Material.Metal)
+	end
+	piece(m, frame, V3.new(0, base + jh, z0 - L / 2), V3.new(0.9, 0.9, L), CRANE, E.Material.Metal)
+	local bays = math.floor(L / bay)
+	for i = 0, bays - 1 do
+		local za, zb = z0 - i * bay, z0 - (i + 1) * bay
+		piece(lattice, frame, V3.new(0, base, za), V3.new(2 * half, 0.6, 0.6), CRANE, E.Material.Metal)
+		for _, x in { -half, half } do
+			bar(lattice, frame, V3.new(x, base, za), V3.new(0, base + jh, (za + zb) / 2), 0.6, CRANE, E.Material.Metal)
+			bar(lattice, frame, V3.new(0, base + jh, (za + zb) / 2), V3.new(x, base, zb), 0.6, CRANE, E.Material.Metal)
+		end
+	end
+	-- contre-flèche : poutres, plancher, lest en béton et treuil
+	local cl = 62
+	for _, x in { -half, half } do
+		piece(m, frame, V3.new(x, base + 0.6, s + cl / 2), V3.new(1.2, 2, cl), CRANE, E.Material.Metal)
+	end
+	piece(m, frame, V3.new(0, base + 0.2, s + cl / 2), V3.new(2 * half, 0.3, cl), GRILLE, E.Material.Metal)
+	for i = 0, 3 do
+		piece(
+			m,
+			frame,
+			V3.new(0, base - 3, s + cl - 3 - i * 4.2),
+			V3.new(12, 9, 3.8),
+			shade(C3.fromRGB(150, 146, 140), i),
+			E.Material.Concrete
+		)
+	end
+	piece(m, frame, V3.new(0, base + 3, s + 22), V3.new(9, 5, 10), PAINT, E.Material.Metal)
+	-- cabine contre le mât, côté flèche
+	piece(m, frame, V3.new(s + 5, top - 4, -s + 6), V3.new(8, 9, 9), PAINT, E.Material.Metal)
+	local glass = piece(m, frame, V3.new(s + 5, top - 3, -s + 1.4), V3.new(7, 5, 0.2), GLASS, E.Material.Glass)
+	glass.Reflectance = 0.25
+	-- pylône et tirants vers la flèche et la contre-flèche
+	local apex = V3.new(0, base + 42, 0)
+	for _, x in { -6, 6 } do
+		for _, z in { -6, 6 } do
+			bar(m, frame, V3.new(x, base, z), apex, 1.2, CRANE, E.Material.Metal)
+		end
+	end
+	tube(lattice, frame, apex, V3.new(0, base + jh, z0 - L * 0.7), 0.4, TRIM, E.Material.Metal)
+	tube(lattice, frame, apex, V3.new(0, base + 2, s + cl - 1), 0.4, TRIM, E.Material.Metal)
+	-- chariot (bloc relevé sous la flèche), câbles de levage et moufle au-dessus de la charge
+	for _, x in { -2.5, 2.5 } do
+		piece(m, frame, V3.new(x, (hook + base) / 2, -reach), V3.new(0.6, base - hook, 1.4), TRIM, E.Material.Metal)
+	end
+	for _, x in { -0.8, 0.8 } do
+		tube(lattice, frame, V3.new(x, hook, -reach), V3.new(x, load + 6, -reach), 0.3, INSUL, E.Material.Metal)
+	end
+	piece(m, frame, V3.new(0, load + 4.5, -reach), V3.new(3, 3, 2), CRANE, E.Material.Metal)
+	piece(m, frame, V3.new(0, load + 2.2, -reach), V3.new(1, 1.6, 1), TRIM, E.Material.Metal)
+	for _, z in { -30, 30 } do
+		tube(lattice, frame, V3.new(0, load + 2, -reach), V3.new(0, load, -reach + z), 0.3, INSUL, E.Material.Metal)
+	end
+	-- treillis, tirants et câbles : barres fines, ombre coupée (un trait étiré par le soleil rasant)
+	flat(lattice)
+	return m
+end
+
+-- Cette méthode permet de construire une double porte dans `frame` (origine au milieu du bas de l'aplat relevé, sur
+-- sa face ; -Z local vers l'extérieur ; le nu du mur est 0,28 stud derrière) : bâti, deux battants à oculus, plaques
+-- de propreté et poignées, couvre-joint, seuil, plaque jaune et lampe au-dessus.
+local function door(parent, frame, w, h)
+	local m = New("Model")
+	m.Name = "DoubleDoor"
+	m.Parent = parent
+	local lw, lh = 15.24, 19.56 -- vantaux (plaque relevée)
+	local jamb = (w - lw) / 2
+	for _, sgn in { -1, 1 } do
+		piece(m, frame, V3.new(sgn * (lw + jamb) / 2, h / 2, -0.25), V3.new(jamb, h, 0.5), TRIM, E.Material.Metal)
+	end
+	piece(m, frame, V3.new(0, (lh + h) / 2, -0.25), V3.new(w, h - lh, 0.5), TRIM, E.Material.Metal)
+	for _, sgn in { -1, 1 } do
+		local cx = sgn * lw / 4
+		piece(m, frame, V3.new(cx, lh / 2, -0.12), V3.new(lw / 2 - 0.12, lh - 0.1, 0.24), DOOR, E.Material.Metal)
+		-- oculus : vitre sombre dans un cadre
+		local oy = lh * 0.68
+		piece(m, frame, V3.new(cx, oy, -0.26), V3.new(2.8, 6, 0.05), TRIM, E.Material.Metal)
+		local g = piece(m, frame, V3.new(cx, oy, -0.29), V3.new(2.2, 5.4, 0.04), ROOM, E.Material.Glass)
+		g.Reflectance = 0.3
+		piece(m, frame, V3.new(cx, 1.4, -0.26), V3.new(lw / 2 - 1, 2.4, 0.05), GALVA, E.Material.Metal)
+		-- poignée verticale près du battement
+		local hx = sgn * 1.2
+		tube(m, frame, V3.new(hx, lh * 0.4, -0.75), V3.new(hx, lh * 0.4 + 3.6, -0.75), 0.32, GALVA, E.Material.Metal)
+		for _, dy in { 0.3, 3.3 } do
+			piece(m, frame, V3.new(hx, lh * 0.4 + dy, -0.47), V3.new(0.25, 0.25, 0.5), GALVA, E.Material.Metal)
+		end
+	end
+	piece(m, frame, V3.new(0, lh / 2, -0.3), V3.new(0.4, lh, 0.32), TRIM, E.Material.Metal)
+	piece(m, frame, V3.new(0, 0.08, -0.55), V3.new(w, 0.16, 1.1), GALVA, E.Material.Metal)
+	piece(m, frame, V3.new(0, h + 1.5, 0.24), V3.new(5, 1.3, 0.08), HAZARD, E.Material.SmoothPlastic)
+	wallLamp(m, frame, V3.new(0, h + 4.2, 0.28), 1.8)
+	return flat(m)
+end
+
+-- Cette méthode permet de construire un groupe de ventilation de toit dans `frame` (origine au bas du caisson, au
+-- centre ; -Z local vers la façade) : caisson blanc à montants sombres, ventilateur sur le dessus, capot avant à
+-- grille à lames qui dépasse au-dessus de la façade, étiquette jaune.
+local function roofUnit(parent, frame)
+	local m = New("Model")
+	m.Name = "RoofUnit"
+	m.Parent = parent
+	local b, h = 12.4, 8.9
+	piece(m, frame, V3.new(0, h / 2, 0), V3.new(b - 0.2, h - 0.2, b - 0.2), PAINT, E.Material.Metal)
+	for _, x in { -1, 1 } do
+		for _, z in { -1, 1 } do
+			piece(m, frame, V3.new(x * b / 2, h / 2, z * b / 2), V3.new(0.6, h, 0.6), TRIM, E.Material.Metal)
+		end
+		-- panneau de visite et raidisseurs sur les côtés
+		piece(m, frame, V3.new(x * (b / 2 - 0.05), h / 2, 1), V3.new(0.1, h - 2, 7), C3.fromRGB(176, 178, 172), E.Material.Metal)
+		piece(m, frame, V3.new(x * (b / 2 + 0.05), h / 2, 3.8), V3.new(0.2, 1.4, 0.3), TRIM, E.Material.Metal)
+	end
+	piece(m, frame, V3.new(0, h + 0.1, 0), V3.new(b + 0.3, 0.2, b + 0.3), TRIM, E.Material.Metal)
+	disc(m, frame, V3.new(0, h + 0.5, 1), 8.6, 0.6, PAINT, E.Material.Metal)
+	disc(m, frame, V3.new(0, h + 0.85, 1), 7.6, 0.1, GRILLE, E.Material.Metal)
+	disc(m, frame, V3.new(0, h + 0.95, 1), 1.6, 0.2, TRIM, E.Material.Metal)
+	for _, a in { 0, math.pi / 2 } do
+		piece(
+			m,
+			frame,
+			CF.new(0, h + 0.95, 1) * CF.Angles(0, a, 0),
+			V3.new(7.6, 0.12, 0.12),
+			TRIM,
+			E.Material.Metal
+		)
+	end
+	-- capot avant : joues, toit, grille à lames
+	local d = 6.45
+	local zc = -b / 2 - d / 2
+	for _, x in { -1, 1 } do
+		piece(m, frame, V3.new(x * (b / 2 - 0.15), 4.45, zc), V3.new(0.3, 6.8, d), PAINT, E.Material.Metal)
+	end
+	piece(m, frame, V3.new(0, 8, zc), V3.new(b, 0.3, d), PAINT, E.Material.Metal)
+	piece(m, frame, V3.new(0, 4.45, -b / 2 - d + 0.2), V3.new(b - 0.6, 6.6, 0.1), GRILLE, E.Material.Metal)
+	for k = 0, 8 do
+		piece(
+			m,
+			frame,
+			CF.new(0, 1.5 + k * 0.72, -b / 2 - d + 0.05) * CF.Angles(math.rad(35), 0, 0),
+			V3.new(b - 0.6, 0.12, 0.7),
+			TRIM,
+			E.Material.Metal
+		)
+	end
+	piece(m, frame, V3.new(b / 2 + 0.12, 6.8, -2.5), V3.new(0.06, 0.9, 2.6), HAZARD, E.Material.SmoothPlastic)
+	return m
+end
+
+-- Cette méthode permet de construire deux bobines de câble empilées dans `frame` (origine au pied, au centre) :
+-- joues rondes en contreplaqué, tambour enroulé de câble noir, spires en relief, moyeu et boulons.
+local function cableReels(parent, frame)
+	local m = New("Model")
+	m.Name = "CableReels"
+	m.Parent = parent
+	local D, t, hgt = 18.4, 0.5, 9.1
+	for r = 0, 1 do
+		local y0 = r * (hgt + 0.1)
+		for _, y in { y0 + t / 2, y0 + hgt - t / 2 } do
+			disc(m, frame, V3.new(0, y, 0), D, t, shade(PLY, y), E.Material.Wood)
+		end
+		disc(m, frame, V3.new(0, y0 + hgt / 2, 0), 11.6, hgt - 2 * t, INSUL, E.Material.Fabric)
+		for k = 1, 4 do
+			disc(m, frame, V3.new(0, y0 + t + k * (hgt - 2 * t) / 5, 0), 11.9, 0.25, GRILLE, E.Material.Fabric)
+		end
+		local cap = y0 + hgt
+		disc(m, frame, V3.new(0, cap + 0.02, 0), 3, 0.06, GRILLE, E.Material.Metal)
+		for k = 0, 3 do
+			local a = k * math.pi / 2 + math.pi / 4
+			piece(m, frame, V3.new(math.cos(a) * 3, cap + 0.06, math.sin(a) * 3), V3.new(0.4, 0.12, 0.4), TRIM, E.Material.Metal)
+		end
+	end
+	return m
+end
+
+-- Cette méthode permet de poser une palette au sol chargée de trois seaux de peinture, et une palette debout contre le
+-- mur derrière, dans `frame` (origine au sol, au pied du mur ; -Z local vers l'extérieur).
+local function bucketPallets(parent, frame)
+	local m = New("Model")
+	m.Name = "Buckets"
+	m.Parent = parent
+	pallet(m, frame * CF.new(0, 0, -0.8) * CF.Angles(math.rad(-84), 0, 0) * CF.new(0, 0, 4), 11, 8)
+	pallet(m, frame * CF.new(0, 0, -6.2), 11, 8)
+	for i, at in { V3.new(-2.6, 1, -5.2), V3.new(0.2, 1, -6.8), V3.new(2.8, 1, -5) } do
+		local col = if i == 2 then C3.fromRGB(214, 168, 64) else BUCKET
+		disc(m, frame, at + V3.new(0, 1.35, 0), 2.6, 2.7, col, E.Material.SmoothPlastic)
+		disc(m, frame, at + V3.new(0, 2.75, 0), 2.75, 0.12, shade(col, 9), E.Material.SmoothPlastic)
+		disc(m, frame, at + V3.new(0, 1, 0), 2.7, 0.5, shade(col, 5), E.Material.SmoothPlastic)
+	end
+	return m
+end
 
 -- Repères côté T (le côté CT en est le symétrique) -----------------------------------------------------------------
 
@@ -762,15 +1195,75 @@ DizzyDressing.LADDERS = {
 	{ frame = facing(-97.54, 72, -188.98, 0, 1), top = 35.5, parapet = 33.39, roof = 32.65, from = -11 },
 }
 
+-- Habillages du lot #166 (côté T, recopiés côté CT ; la grue est unique, au milieu du bord nord) ---------------------
+
+-- grue : pied du socle au centre ; haut du mât, bas du chariot, dessus de la charge suspendue et portée du chariot,
+-- relatifs au pied (blocs relevés : mât (0, 310,2, -81,3), chariot (0, 545,3, -268,2), charge (-2, 159,5, -268,9))
+DizzyDressing.CRANE = { frame = facing(0, 70.55, -81.3, 0, -1), top = 479.25, hook = 473.7, load = 98.55, reach = 186.9 }
+-- pans de tôle ondulée : milieu du bas du pan sur le nu du mur, -Z vers l'extérieur ; `band` : hauteur de la bande
+-- ocre au-dessus du bas du pan (le sol devant les façades du garage est à 42,09)
+DizzyDressing.CLADDING = {
+	{ frame = facing(-251.3, 42.09, -195.07, 0, 1), width = 17.6, height = 54.85, band = 9 }, -- garage, trumeau gauche
+	{ frame = facing(-211.25, 61.25, -195.07, 0, 1), width = 62.5, height = 35.69, band = 0 }, -- garage, au-dessus
+	{ frame = facing(-155.025, 42.09, -195.07, 0, 1), width = 49.95, height = 54.85, band = 9 }, -- garage, droite
+	{ frame = facing(-130.05, 42.09, -192.02, -1, 0), width = 6.1, height = 54.1, band = 9 }, -- retour vers l'échelle
+	{ frame = facing(-97.5, 42.09, -188.97, 0, 1), width = 65, height = 63.36, band = 9 }, -- volume de l'échelle
+	{ frame = facing(-81.28, 70.56, -357.63, 0.894, -0.447), width = 72.7, height = 34.1, band = 7 }, -- mur du stockage
+}
+-- groupes de ventilation du toit du garage : bas du caisson, au centre ; capot vers la façade
+DizzyDressing.ROOF_UNITS = {
+	facing(-247.9, 98.95, -207.4, 0, 1),
+	facing(-231.6, 98.95, -207.4, 0, 1),
+}
+-- double porte (aplat relevé) : milieu du bas, sur la face de l'aplat ; largeur et hauteur de l'aplat
+DizzyDressing.DOORS = {
+	{ frame = facing(-65.3, 42.09, -53.35, -1, 0), width = 20.11, height = 21.25 },
+}
+-- zone de stockage des chantiers, au pied du mur en tôle : bobines (sur la pile de plaques, à la place de la bobine
+-- relevée), palettes et seaux. Bobines posées de chaque côté : la bobine relevée côté CT n'est pas le symétrique exact
+-- de celle du côté T (2 studs d'écart), repère au centre des joues relevées.
+DizzyDressing.REELS = {
+	facing(-73.8, 76.25, -360.8, 0.894, -0.447), -- T
+	facing(74.9, 76.25, -157.3, -0.894, 0.447), -- CT
+}
+DizzyDressing.BUCKETS = { facing(-67.87, 70.56, -330.81, 0.894, -0.447) }
+
 -- Objets relevés en boîtes, rhabillés sur place : la boîte d'origine reste (invisible) pour la collision, l'habillage
 -- est sans collision. Coordonnées du monde (comme dizzy_patches.luau), `group` = groupe source (attribut Group),
--- `minVolume` / `maxVolume` pour trier les boîtes d'une même zone. Chantiers des étages (T vers (1925, 76, -360), CT vers
--- (2074, 76, -160)) et tas de sacs sous la rampe CT.
+-- `minVolume` / `maxVolume` pour trier les boîtes d'une même zone, `zone.radius` pour une zone ronde (en plan), `folders` pour viser d'autres dossiers que Decor
+-- (sans `group`). `hide` : la boîte devient invisible et un objet construit à part la remplace à l'image. Chantiers des
+-- étages (T vers (1925, 76, -360), CT vers (2074, 76, -160)) et tas de sacs sous la rampe CT.
 DizzyDressing.REDRESS = {
-	{ kind = "sandbags", group = "stucco", why = "sacs de sable du chantier T",
+	{ kind = "cement", group = "stucco", why = "sacs de ciment du chantier T",
 		zone = { center = { 1912.9, 79, -384 }, size = { 12, 14, 14 } } },
-	{ kind = "sandbags", group = "stucco", why = "sacs de sable du chantier CT",
+	{ kind = "cement", group = "stucco", why = "sacs de ciment du chantier CT",
 		zone = { center = { 2086, 79, -138.5 }, size = { 12, 14, 14 } } },
+	{ kind = "hide", group = "metal", why = "mât de la grue (treillis de DizzyDressing)",
+		zone = { center = { 2000, 310.2, -81.3 }, size = { 1, 1, 1 } } },
+	{ kind = "hide", group = "metal", why = "aplat de la porte T (DizzyDressing.DOORS)",
+		zone = { center = { 1935.9, 47.4, -53.35 }, size = { 1, 12, 2 } } },
+	{ kind = "hide", group = "metal", why = "aplat de la porte CT (DizzyDressing.DOORS)",
+		zone = { center = { 2064.1, 47.4, -466.85 }, size = { 1, 12, 1 } } },
+	{ kind = "hide", group = "metal", why = "groupe du toit du garage T (gauche)",
+		zone = { center = { 1752.1, 103.15, -202.3 }, size = { 1, 1.5, 11 } } },
+	{ kind = "hide", group = "metal", why = "groupe du toit du garage T (droite)",
+		zone = { center = { 1768.4, 103.15, -202.3 }, size = { 1, 1.5, 11 } } },
+	{ kind = "hide", group = "metal", why = "groupe du toit du garage CT (gauche)",
+		zone = { center = { 2247.9, 103.15, -317.9 }, size = { 1, 1.5, 11 } } },
+	{ kind = "hide", group = "metal", why = "groupe du toit du garage CT (droite)",
+		zone = { center = { 2231.6, 103.15, -317.9 }, size = { 1, 1.5, 11 } } },
+	-- bobines relevées : faces du tambour et des joues (murs, sols, plafonds, pentes rangées en rampes) jusqu'à 10 studs
+	-- de l'axe, puis les deux plaques carrées des joues ; zone ronde et petites pièces seulement (mur voisin, parpaings)
+	{ kind = "hide", folders = { "Walls", "Ceilings", "Floors", "Ramps" }, maxVolume = 100,
+		why = "bobine relevée du chantier T",
+		zone = { center = { 1926.2, 85.75, -360.8 }, radius = 10.5, size = { 21, 19.5, 21 } } },
+	{ kind = "hide", group = "metal", why = "joues relevées de la bobine T",
+		zone = { center = { 1926.2, 85.6, -360.8 }, size = { 3, 19.5, 3 } } },
+	{ kind = "hide", folders = { "Walls", "Ceilings", "Floors", "Ramps" }, maxVolume = 100,
+		why = "bobine relevée du chantier CT",
+		zone = { center = { 2074.9, 85.75, -157.3 }, radius = 10.5, size = { 21, 19.5, 21 } } },
+	{ kind = "hide", group = "metal", why = "joues relevées de la bobine CT",
+		zone = { center = { 2074.9, 85.6, -157.3 }, size = { 3, 19.5, 3 } } },
 	{ kind = "sandbags", group = "stucco", why = "sacs de sable sous la rampe CT (ouest)",
 		zone = { center = { 2077, 49, -427 }, size = { 10, 10, 12 } } },
 	{ kind = "sandbags", group = "stucco", why = "sacs de sable sous la rampe CT (est)",
@@ -800,23 +1293,30 @@ DizzyDressing.REDRESS = {
 -- contient aucune boîte (relevé changé). Renvoie le nombre de boîtes rhabillées.
 function DizzyDressing.redress(map, parent)
 	local geometry = map:FindFirstChild("Geometry")
-	local decor = geometry and geometry:FindFirstChild("Decor")
-	assert(decor, "Geometry.Decor absent")
+	assert(geometry and geometry:FindFirstChild("Decor"), "Geometry.Decor absent")
 	local total = 0
 	for _, r in DizzyDressing.REDRESS do
 		local c = V3.new(r.zone.center[1], r.zone.center[2], r.zone.center[3])
 		local s = V3.new(r.zone.size[1], r.zone.size[2], r.zone.size[3])
 		local n = 0
-		for _, p in decor:GetChildren() do
+		local candidates = {}
+		for _, name in r.folders or { "Decor" } do
+			local f = geometry:FindFirstChild(name)
+			for _, p in if f then f:GetChildren() else {} do
+				table.insert(candidates, p)
+			end
+		end
+		for _, p in candidates do
 			local d = p.CFrame.Position - c
 			local v = p.Size.X * p.Size.Y * p.Size.Z
 			if
 				p:IsA("BasePart")
 				and p.Transparency < 1
-				and p:GetAttribute("Group") == r.group
+				and (r.group == nil or p:GetAttribute("Group") == r.group)
 				and math.abs(d.X) <= s.X / 2
 				and math.abs(d.Y) <= s.Y / 2
 				and math.abs(d.Z) <= s.Z / 2
+				and (r.zone.radius == nil or d.X * d.X + d.Z * d.Z <= r.zone.radius ^ 2)
 				and v >= (r.minVolume or 0)
 				and v <= (r.maxVolume or math.huge)
 			then
@@ -872,6 +1372,26 @@ function DizzyDressing.build(map, offset)
 		both(ladder, l.frame, l.top, l.parapet, l.roof)
 		ladderVolume(volumes, shift * l.frame, l.from, l.parapet + 5.6)
 		ladderVolume(volumes, shift * DizzyDressing.mirror(l.frame), l.from, l.parapet + 5.6)
+	end
+	-- lot #166 : grue (unique), bardage, groupes du toit, portes, zone de stockage
+	local c = DizzyDressing.CRANE
+	crane(root, shift * c.frame, c.top, c.hook, c.load, c.reach)
+	count += 1
+	for _, w in DizzyDressing.CLADDING do
+		both(cladding, w.frame, w.width, w.height, w.band)
+	end
+	for _, cf in DizzyDressing.ROOF_UNITS do
+		both(roofUnit, cf)
+	end
+	for _, d in DizzyDressing.DOORS do
+		both(door, d.frame, d.width, d.height)
+	end
+	for _, cf in DizzyDressing.REELS do
+		cableReels(root, shift * cf)
+		count += 1
+	end
+	for _, cf in DizzyDressing.BUCKETS do
+		both(bucketPallets, cf)
 	end
 	count += DizzyDressing.redress(map, root)
 	return count
