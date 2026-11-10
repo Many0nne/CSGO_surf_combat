@@ -1,6 +1,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Debris = game:GetService("Debris")
 
+local BotCombatRules = require(ReplicatedStorage.Shared.BotCombatRules)
 local CharacterAppearance = require(ReplicatedStorage.Shared.CharacterAppearance)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local MapSelection = require(ReplicatedStorage.Shared.MapSelection)
@@ -51,6 +52,8 @@ function SpawnManager.place(char: Model): Vector3?
 		warn("[SpawnManager] aucun point dans Maps.Map.SunLaunch ni Maps.Map.GroundSpawns")
 	end
 	local root = char:WaitForChild("HumanoidRootPart", 5) :: BasePart?
+	-- Délai de grâce : un bot ne tire pas sur un participant qui vient d'apparaître (#143)
+	char:SetAttribute(BotCombatRules.SPAWNED_AT_ATTRIBUTE, os.clock())
 	if launch then
 		local origin = launch.Position
 		local speed = launch:GetAttribute("Speed")

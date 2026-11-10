@@ -4,15 +4,17 @@
 -- Il réapparaît RESPAWN_DELAY après sa mort, et au début de chaque round, tant que le round est actif.
 -- Le plan de navigation de la map est construit au démarrage (NavPlan) ; chaque bot le suit (BotNavigator), guidé par
 -- son comportement (BotBrain, #141 : perception, mémoire, états), qui entend les tirs relayés par hearShot.
+-- Combat (#143) : armes du bot (BotArsenal), touches validées et appliquées par le serveur comme celles d'un joueur
+-- (deps.hitscan, deps.melee), tirs entendus par les autres bots.
 -- Outillage Studio : l'attribut Workspace DebugBots fixe le nombre de bots (0 pour tous les retirer), DebugNav affiche
 -- le plan (NavDebug).
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local StarterPack = game:GetService("StarterPack")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local BotCharacters = require(ReplicatedStorage.Shared.BotCharacters)
+local BotCombatRules = require(ReplicatedStorage.Shared.BotCombatRules)
 local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
 local BotRules = require(ReplicatedStorage.Shared.BotRules)
 local CharacterAppearance = require(ReplicatedStorage.Shared.CharacterAppearance)
@@ -21,13 +23,11 @@ local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local MapSelection = require(ReplicatedStorage.Shared.MapSelection)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local Participants = require(ServerScriptService.Server.Participants)
+local BotArsenal = require(script.Parent.BotArsenal)
 local BotBrain = require(script.Parent.BotBrain)
 local BotMotion = require(script.Parent.BotMotion)
 local NavDebug = require(script.Parent.NavDebug)
 local NavPlan = require(script.Parent.NavPlan)
-
--- Arme tenue par les bots (décision 4 de #133 : AWP ; le couteau viendra avec le combat, #143)
-local BOT_WEAPON = "AWP"
 
 type Participant = Participants.Participant
 
@@ -38,6 +38,10 @@ export type Deps = {
 	place: (Model) -> Vector3?,
 	-- Publication de la position aux clients (CharacterSync.relayBot)
 	relay: (Model, BasePart, CFrame) -> (),
+	-- Touches d'un bot, validées et appliquées comme celles d'un joueur (tireur, personnage visé, partie touchée) ;
+	-- renvoient "hit", "kill", ou nil si la touche est refusée ou sans effet
+	hitscan: (Participant, Model, BasePart) -> ("hit" | "kill")?,
+	melee: (Participant, Model) -> ("hit" | "kill")?,
 	roundManager: {
 		isActive: () -> boolean,
 		addParticipant: (Participant) -> (),
@@ -61,14 +65,20 @@ local bots: { Bot } = {}
 local clips: Instance? = nil -- murs d'air de la map jouée (ne bloquent pas la vue des bots)
 
 -- Cette méthode permet de lister les autres participants en vie lorsqu'un bot regarde autour de lui ou cherche un
--- humain (biais) : id, humain ou bot, personnage.
-local function aliveOthers(selfId: number): { { id: number, isHuman: boolean, character: Model } }
+-- humain (biais) : id, humain ou bot, personnage, instant d'apparition (délai de grâce).
+local function aliveOthers(selfId: number): { { id: number, isHuman: boolean, character: Model, spawnedAt: number? } }
 	local list = {}
 	for _, participant in Participants.all() do
 		local char = Participants.characterOf(participant)
 		local humanoid = char and char.Parent and char:FindFirstChildOfClass("Humanoid")
 		if participant.id ~= selfId and humanoid and humanoid.Health > 0 then
-			table.insert(list, { id = participant.id, isHuman = not participant.isBot, character = char :: Model })
+			local spawnedAt = (char :: Model):GetAttribute(BotCombatRules.SPAWNED_AT_ATTRIBUTE)
+			table.insert(list, {
+				id = participant.id,
+				isHuman = not participant.isBot,
+				character = char :: Model,
+				spawnedAt = if type(spawnedAt) == "number" then spawnedAt else nil,
+			})
 		end
 	end
 	return list
@@ -141,24 +151,6 @@ local function buildCharacter(name: string): Model?
 	return model
 end
 
--- Cette méthode permet de donner son arme au bot lorsqu'il apparaît : copie de l'outil du StarterPack, sans scripts
--- (logique d'arme côté client), mise en main ; le modèle 3P est attaché par onCharacter.
-local function giveWeapon(char: Model): string?
-	local source = StarterPack:FindFirstChild(BOT_WEAPON)
-	if not source or not source:IsA("Tool") then
-		warn("[BotManager] outil " .. BOT_WEAPON .. " introuvable dans StarterPack")
-		return nil
-	end
-	local tool = source:Clone()
-	for _, inst in tool:GetDescendants() do
-		if inst:IsA("BaseScript") then
-			inst:Destroy()
-		end
-	end
-	tool.Parent = char
-	return BOT_WEAPON
-end
-
 -- Cette méthode permet de retirer le personnage d'un bot et d'arrêter son mouvement lorsqu'il a disparu (corps
 -- détruit après sa mort, fin de round) ou que le bot est retiré.
 local function dropCharacter(bot: Bot)
@@ -194,12 +186,24 @@ local function spawnBot(bot: Bot)
 		bot.brain = nil
 	end)
 	char.Parent = workspace
-	local weaponName = giveWeapon(char)
 	local launchVelocity = deps.place(char)
-	local motion = BotMotion.new(char, root, humanoid, launchVelocity, weaponName, deps.relay)
+	local motion = BotMotion.new(char, root, humanoid, launchVelocity, BotCombatRules.RIFLE, deps.relay)
 	motion:setFrozen(bot.frozen)
 	bot.motion = motion
-	local id = bot.participant.id
+	local participant = bot.participant
+	-- Armes : fusil en main (modèle 3P attaché par onCharacter), couteau rangé ; touches validées par le serveur
+	local arsenal = BotArsenal.new(char, function(target: Model, hitPart: BasePart?)
+		local outcome = if hitPart then deps.hitscan(participant, target, hitPart) else deps.melee(participant, target)
+		if outcome then
+			BotBrain.stats.hits += 1
+			if outcome == "kill" then
+				BotBrain.stats.kills += 1
+			end
+		end
+	end, function(weaponName: string)
+		motion:setWeapon(weaponName)
+	end)
+	local id = participant.id
 	bot.brain = BotBrain.new({
 		id = id,
 		others = function()
@@ -207,7 +211,10 @@ local function spawnBot(bot: Bot)
 		end,
 		claimed = claimedDestinations,
 		clips = clips,
-	}, char, motion)
+		onShot = function(position: Vector3)
+			BotManager.hearShot(participant, position)
+		end,
+	}, char, motion, arsenal)
 	-- Première position publiée tout de suite : pas d'attente du premier envoi pour apparaître chez les clients
 	deps.relay(char, root, root.CFrame)
 end

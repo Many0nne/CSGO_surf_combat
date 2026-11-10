@@ -83,7 +83,7 @@ réglages dans `BotConfig` (section « Comportement »). Il commande le suivi de
 - **Perception** (tous les `PERCEPTION_INTERVAL`) : un autre participant en vie est vu s'il est dans `VIEW_FOV` (100°)
   autour du regard, à moins de `VIEW_RANGE`, et si un rayon des yeux vers sa tête ou son torse n'est coupé que par
   lui (murs d'air ignorés). Cible : un humain plutôt qu'un bot, puis la plus proche.
-- **Ouïe** : `BotManager.hearShot` (appelé par `init.server` sur l'action `Shoot` d'un joueur ; #143 l'appellera pour
+- **Ouïe** : `BotManager.hearShot` (appelé par `init.server` sur l'action `Shoot` d'un joueur, et par `BotBrain` pour
   les tirs des bots). À moins de `HEARING_RADIUS` (200), position faussée d'au plus `HEARING_FUZZ` (20 %) de la distance.
 - **Mémoire** : dernière position vue ou entendue par cible, oubliée après `MEMORY_TIME`.
 - **États** (`nextState`) : combattre (cible vue) > se replacer (après un kill, ou touché sous `REPLACE_HEALTH` en
@@ -93,11 +93,36 @@ réglages dans `BotConfig` (section « Comportement »). Il commande le suivi de
 - **Biais vers les humains** : sans contact depuis `BIAS_DELAY` (15 s), bonus aux points proches d'une zone décalée
   de `BIAS_SPREAD` autour de l'humain le plus proche.
 - **Combat sans poursuite** (choix de l'utilisateur) : le bot garde sa destination et son bhop. Il se tourne vers la
-  cible (`COMBAT_TURN_RATE`), « tire » après `REACTION_TIME` + `COMBAT_AIM_TIME` (compté seulement, le tir réel vient
-  avec #143 via `BotBrain.onFire`), puis rend son regard à sa course pendant `COMBAT_COOLDOWN`. En l'air, la visée
-  coupe le gain d'air strafe (il glisse et garde sa vitesse).
+  cible (`COMBAT_TURN_RATE`), tire après `REACTION_TIME` + `COMBAT_AIM_TIME` (cf. « Combat »), puis rend son regard
+  à sa course pendant `COMBAT_COOLDOWN`. En l'air, la visée coupe le gain d'air strafe (il glisse et garde sa vitesse).
 
 Mesure (09/11/2026, 5 bots + 1 joueur immobile, 2 min) : 24 combats, 7 enquêtes, 281 sauts de bhop, 0 arête ratée.
+
+## Combat (#143)
+
+Règles pures dans `BotCombatRules`, armes dans `BotArsenal` (une par bot vivant), réglages dans `BotConfig` (section
+« Combat » : c'est là que se règle la difficulté, un seul niveau).
+- **Jamais d'arrêt** (choix de l'utilisateur) : en l'air comme au sol, le bot se tourne vers la cible, tire et reprend
+  sa trajectoire, comme un joueur. Pas de pas de côté ni de poursuite ajoutés pour le duel.
+- **Tir** : seulement sur une cible vue à ce regard (champ de vision et ligne de vue de #141), après `REACTION_TIME` +
+  `COMBAT_AIM_TIME`, une fois son **cap réel** à moins de `FIRE_YAW_TOLERANCE` de la cible (le regard tourne à
+  `COMBAT_TURN_RATE`, jamais de visée instantanée), et à moins de `FIRE_RANGE`. Le rayon part des yeux selon ce cap
+  (`aimDirection`), visé au haut du torse, écarté dans un cône de `spread` (`scatter`).
+- **Dispersion** : `AIM_SPREAD` + `AIM_SPREAD_SPEED` × vitesse de la cible (estimée entre deux regards, la racine
+  étant ancrée), plafonnée à `AIM_SPREAD_MAX`. **Aucun malus selon la vitesse du bot**, ni en l'air ni en bhop :
+  un joueur n'en a pas (choix de l'utilisateur).
+- **Validation** : la touche passe par `Validator.authorizeHitscan` / `authorizeMelee` (arme en main, portée,
+  cadence) puis le même `applyHit` qu'un joueur (`deps.hitscan`, `deps.melee` de `BotManager`) : dégâts par zone,
+  kill feed, mort, ragdoll, caméra du tué. Le hitmarker n'est envoyé qu'à un tireur joueur.
+- **Armes** : AWP en main, couteau dans le dossier `BotBag` du personnage. Couteau sorti sous `KNIFE_RANGE`, fusil
+  repris au-delà de `KNIFE_DROP_RANGE`. Temps de sortie, cadence, chargeur, réserve et rechargement de `WeaponConfig`
+  (rechargement aussi quand il n'a rien à viser) ; vitesse de course selon l'arme (`BotMotion:setWeapon`).
+- **Délai de grâce** : `SpawnManager.place` pose l'attribut serveur `SpawnedAt` (os.clock) sur tout personnage ; un
+  bot ne tire pas sur un participant apparu depuis moins de `SPAWN_GRACE` (4 s, lancement depuis le soleil compris).
+- **Cible** : un humain plutôt qu'un bot, puis la plus proche (`pickTarget` de #141) ; les bots se tirent dessus.
+
+Mesure (09/11/2026, 5 bots + 1 joueur immobile au sol, 1 min) : 40 tirs, 23 touches, 22 kills (le joueur immobile
+est tué environ toutes les 7 s une fois son délai de grâce passé), 0 coup de couteau (les bots ne poursuivent pas).
 
 ## Debug (Studio)
 
@@ -107,7 +132,8 @@ Mesure (09/11/2026, 5 bots + 1 joueur immobile, 2 min) : 24 combats, 7 enquêtes
   restant de chaque bot en jaune, au-dessus de chaque bot son état, sa destination et sa cible (blanc chercher,
   jaune enquêter, rouge combattre, bleu se replacer), trait rouge vers la cible en combat. `"cases"` : en plus chaque case (vert gardée, rouge écartée), lourd (~40 000 pièces).
 - Console : `[Nav] Dizzy : …` à la fin de la construction (durée par phase), `[Nav] bilan` et `[Bots] bilan`
-  (combats, tirs simulés, tirs entendus, enquêtes, replis, angles tenus, destinations biaisées) toutes les 30 s.
+  (combats, tirs, touches et kills, coups de couteau, visées retenues par le délai de grâce, tirs entendus, enquêtes,
+  replis, angles tenus, destinations biaisées) toutes les 30 s.
 - Le playtest démarre sans round : `ReplicatedStorage.RequestSpawn:FireServer()` en contexte Client fait apparaître
   le joueur et lance le round (piège du `require` depuis le MCP : `docs/architecture.md`).
 
@@ -137,3 +163,5 @@ Mesure (09/11/2026, 5 bots + 1 joueur immobile, 2 min) : 24 combats, 7 enquêtes
   (regard vers sa dernière position vue, pas de tir sans la revoir), et une cible perdue n'est fouillée qu'avec
   `LOST_CHASE_CHANCE` ; un tir entendu l'est toujours.
 - Gain par saut : environ 36 × 44 ticks ≈ 1 600 de |v|² en strafe parfait, donc 6 sauts de 30 à 100, pas 3.
+- **Tests Lune : `Vector3` est en simple précision.** Un angle recalculé par `acos` d'un produit scalaire d'unitaires
+  s'écarte de ~1e-5° de la valeur exacte : comparer les angles à 1e-3 près, pas à 1e-6.

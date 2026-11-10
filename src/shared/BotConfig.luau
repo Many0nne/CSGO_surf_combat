@@ -89,11 +89,21 @@ return {
 	MEMORY_TIME         = 8,      -- cible oubliée après tant de secondes sans contact
 	INVESTIGATE_POINTS  = 2,      -- points voisins fouillés après la dernière position connue
 
-	-- Combat (#141 : regard seulement, le tir vient avec #143) : il garde sa course et se tourne pour tirer
+	-- Combat (#141, #143) : il garde sa course (jamais d'arrêt ni de poursuite), se tourne vers la cible, tire et
+	-- reprend sa trajectoire. Difficulté unique : REACTION_TIME, COMBAT_AIM_TIME, COMBAT_TURN_RATE et AIM_SPREAD*
 	REACTION_TIME       = 0.45,   -- avant de pouvoir tirer, depuis qu'il voit la cible (s)
 	COMBAT_AIM_TIME     = 0.3,    -- visée avant le tir, une fois réagi (s)
-	COMBAT_COOLDOWN     = 1.2,    -- après un tir, regard rendu à la course (réarmement de l'AWP, s)
+	COMBAT_COOLDOWN     = 1.5,    -- après un tir, regard rendu à la course (au moins la cadence de l'AWP, 1,46 s)
 	COMBAT_TURN_RATE    = 720,    -- rotation du regard vers la cible (°/s)
+	FIRE_YAW_TOLERANCE  = 2,      -- tire seulement si son cap est à moins de tant de la cible (°)
+	AIM_SPREAD          = 1.5,    -- dispersion d'un tir sur une cible immobile (demi-angle du cône, °)
+	AIM_SPREAD_SPEED    = 0.05,   -- en plus par stud/s de vitesse de la cible (° ; aucun malus selon sa propre vitesse)
+	AIM_SPREAD_MAX      = 6,      -- dispersion au plus (°)
+	FIRE_RANGE          = 240,    -- tir au fusil à moins de tant (studs ; le serveur refuse au-delà de 250)
+	SPAWN_GRACE         = 4,      -- pas de tir sur un participant apparu depuis moins de tant (s, lancement compris)
+	KNIFE_RANGE         = 6,      -- cible à moins de tant : il sort le couteau (studs, entre les racines)
+	KNIFE_DROP_RANGE    = 14,     -- cible au-delà de tant : il reprend le fusil
+	KNIFE_HIT_RANGE     = 6.5,    -- coup de couteau porté à moins de tant (portée de l'arme : 7,5)
 	TARGET_KEEP_TIME    = 2,      -- cible sortie du champ gardée en tête tant (s) : il se retourne vers elle
 	LOST_CHASE_CHANCE   = 0.35,   -- cible perdue de vue : probabilité d'enquêter (sinon il reprend sa course)
 
