@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = ["DracoPy", "numpy"]
 # ///
 """Reconstruit en .glb un viewmodel tel qu'il est dans le jeu, pour les aperçus three.js, sans Studio ni Blender.
 
@@ -147,7 +147,7 @@ def download(aid, cache_dir, key):
 
 
 # ---------------------------------------------------------------------------------------------------------------------
-# Format de mesh Roblox (versions 2 à 7, sans compression Draco)
+# Format de mesh Roblox (versions 2 à 7, Draco compris)
 
 
 def read_vertices(buf, off, count, stride):
@@ -173,8 +173,43 @@ def lod0(faces, lods):
 	return faces
 
 
+# Cette méthode permet de calculer des normales lissées (moyenne pondérée par l'aire des triangles) lorsque le mesh
+# n'en fournit pas, comme ceux décodés depuis Draco.
+def smooth_normals(pos, faces):
+	acc = [[0.0, 0.0, 0.0] for _ in pos]
+	for i in range(0, len(faces), 3):
+		a, b, c = faces[i : i + 3]
+		ax, ay, az = pos[a]
+		ux, uy, uz = pos[b][0] - ax, pos[b][1] - ay, pos[b][2] - az
+		vx, vy, vz = pos[c][0] - ax, pos[c][1] - ay, pos[c][2] - az
+		n = (uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx)
+		for k in (a, b, c):
+			acc[k][0] += n[0]
+			acc[k][1] += n[1]
+			acc[k][2] += n[2]
+	out = []
+	for x, y, z in acc:
+		length = (x * x + y * y + z * z) ** 0.5 or 1
+		out.append((x / length, y / length, z / length))
+	return out
+
+
+# Cette méthode permet de décoder le bloc COREMESH version 2 (taille sur 4 octets puis flux Draco standard) lorsque le
+# mesh a été publié récemment : Roblox compresse désormais les nouveaux meshs ainsi.
+def decode_draco(buf, data):
+	import DracoPy
+
+	size = struct.unpack_from("<I", buf, data)[0]
+	mesh = DracoPy.decode(bytes(buf[data + 4 : data + 4 + size]))
+	pos = [tuple(float(c) for c in p) for p in mesh.points]
+	faces = [int(i) for i in mesh.faces.reshape(-1)]
+	uv = [tuple(float(c) for c in t) for t in mesh.tex_coord] if mesh.tex_coord is not None else [(0.0, 0.0)] * len(pos)
+	nrm = [tuple(float(c) for c in n) for n in mesh.normals] if mesh.normals is not None else smooth_normals(pos, faces)
+	return pos, nrm, uv, faces
+
+
 # Cette méthode permet de décoder un mesh Roblox (positions, normales, UV, triangles du LOD 0) lorsqu'on reconstruit une
-# pièce ; les versions 6 et 7 compressées en Draco ne sont pas prises en charge.
+# pièce, quelle que soit sa version (texte 1.x exclu).
 def parse_mesh(buf):
 	nl = buf.index(b"\n")
 	version = buf[:nl].decode("ascii").strip()
@@ -209,8 +244,10 @@ def parse_mesh(buf):
 			cver, csize = struct.unpack_from("<II", buf, off + 8)
 			data = off + 16
 			if ctype == "COREMESH":
-				if cver != 1:
-					raise SystemExit("[fetch_viewmodel] mesh compressé (Draco) : non pris en charge")
+				if cver == 2:
+					pos, nrm, uv, faces = decode_draco(buf, data)
+					off = data + csize
+					continue
 				nverts = struct.unpack_from("<I", buf, data)[0]
 				pos, nrm, uv, p = read_vertices(buf, data + 4, nverts, 40)
 				nfaces = struct.unpack_from("<I", buf, p)[0]

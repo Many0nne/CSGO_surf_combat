@@ -98,7 +98,7 @@ jamais d'un effet propre à three.js. C'est ce qui permet de publier telle quell
    - depuis le jeu, pour une arme sans source Blender (la M9, mesh du Creator Store) ou pour voir ce que le jeu affiche :
      lit la place construite par Rojo, télécharge meshs et cartes par Open Cloud (un matériau par pièce, nommé comme
      elle ; bras ignorés ; dépliage UV en SVG comme ci-dessus). La clé `ROBLOX_OPEN_CLOUD_KEY` doit avoir le scope `legacy-asset:manage` (Asset Delivery) ;
-     sans lui : `Scope not authorized`. Meshs Roblox v2 à v7 lus, sauf ceux compressés en Draco.
+     sans lui : `Scope not authorized`. Meshs Roblox v2 à v7 lus, y compris compressés en Draco (cas des meshs publiés récemment ; normales recalculées).
      ```bash
      uv run tools/preview/fetch_viewmodel.py M9Bayonet "$TEMP/preview/m9/m9.glb"
      ```

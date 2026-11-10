@@ -127,6 +127,7 @@ function layout() {
 		c.tag.style.left = view.offsetLeft + x + 8 + "px";
 		c.tag.style.top = view.offsetTop + y + 8 + "px";
 	});
+	frameCamera();
 }
 
 function frame() {
@@ -149,7 +150,11 @@ let radius = 1, center = new THREE.Vector3();
 function frameCamera() {
 	const dir = camera.position.clone().sub(controls.target).normalize();
 	if (dir.lengthSq() === 0 || !isFinite(dir.x)) dir.set(1, 0.35, 1).normalize();
-	const dist = radius / Math.sin(THREE.MathUtils.degToRad(camera.fov) / 2) * 0.75;
+	const cell = (cells.find((c) => c.rect) || {}).rect;
+	const aspect = cell ? cell.w / cell.h : 1;
+	const vfov = THREE.MathUtils.degToRad(camera.fov);
+	const hfov = 2 * Math.atan(Math.tan(vfov / 2) * aspect);
+	const dist = radius / Math.sin(Math.min(vfov, hfov) / 2) * 0.85;
 	controls.target.copy(center);
 	camera.position.copy(center).addScaledVector(dir, dist);
 	camera.near = dist / 100; camera.far = dist * 100;
@@ -188,7 +193,6 @@ new GLTFLoader().parse(bytes.buffer, "", (gltf) => {
 		document.body.appendChild(tag);
 		cells.push({ scene, tag, rect: null });
 	});
-	frameCamera();
 	layout();
 	frame();
 }, (err) => {
