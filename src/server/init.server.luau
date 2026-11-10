@@ -298,6 +298,8 @@ if RunService:IsStudio() then
 	DebugPlaytest.init({
 		roundManager = RoundManager,
 		validator = Validator,
+		-- Bots retirés pendant un run, pour un test déterministe (#144)
+		setBotsPaused = BotManager.setPaused,
 	})
 end
 

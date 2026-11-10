@@ -6,6 +6,10 @@ return {
 	-- Noms tirés d'une liste fixe (décision 5 de #133), affichés « BOT <nom> » dans le kill feed et le classement
 	NAMES = { "Marcel", "Lucie", "Gaston", "Odette", "Raymond", "Simone", "Lucien", "Paulette" },
 	MAX_BOTS            = 5,      -- plafond de bots en jeu (décision 2 de #133)
+	TARGET_POPULATION   = 6,      -- joueurs + bots : les bots comblent les places vides (décision 1 de #133)
+	POPULATION_DUEL_TIME = 4,     -- un bot qui a vu une cible depuis moins de tant (s) est en duel : jamais retiré
+	POPULATION_INTERVAL = 1,      -- population réajustée tous les tant (s) (retrait différé tant que tous sont en duel)
+	DEBUG_FREEZE_ATTRIBUTE = "DebugBotsFreeze", -- vrai : bots figés (ni mouvement ni tir)
 
 	-- Gêne : au sol, sous cette part de la vitesse voulue, le bot n'avance pas comme il le veut
 	STUCK_SPEED_RATIO   = 0.3,

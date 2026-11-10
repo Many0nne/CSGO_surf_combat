@@ -6,8 +6,9 @@
 -- son comportement (BotBrain, #141 : perception, mémoire, états), qui entend les tirs relayés par hearShot.
 -- Combat (#143) : armes du bot (BotArsenal), touches validées et appliquées par le serveur comme celles d'un joueur
 -- (deps.hitscan, deps.melee), tirs entendus par les autres bots.
--- Outillage Studio : l'attribut Workspace DebugBots fixe le nombre de bots (0 pour tous les retirer), DebugNav affiche
--- le plan (NavDebug).
+-- Population (#144) : les bots comblent les places vides (BotPopulationRules), un par un à l'arrivée d'un joueur, hors duel.
+-- Outillage Studio : l'attribut Workspace DebugBots fixe le nombre de bots (nombre, "+", "-", 0 pour tous les retirer,
+-- nil ou "auto" pour la population automatique), DebugBotsFreeze fige les bots, DebugNav affiche le plan (NavDebug).
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -16,6 +17,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local BotCharacters = require(ReplicatedStorage.Shared.BotCharacters)
 local BotCombatRules = require(ReplicatedStorage.Shared.BotCombatRules)
 local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
+local BotPopulationRules = require(ReplicatedStorage.Shared.BotPopulationRules)
 local BotRules = require(ReplicatedStorage.Shared.BotRules)
 local CharacterAppearance = require(ReplicatedStorage.Shared.CharacterAppearance)
 local CharacterConfig = require(ReplicatedStorage.Shared.CharacterConfig)
@@ -63,6 +65,8 @@ local BotManager = {}
 local deps: Deps
 local bots: { Bot } = {}
 local clips: Instance? = nil -- murs d'air de la map jouée (ne bloquent pas la vue des bots)
+local debugCount: number? = nil -- nombre de bots fixé par DebugBots (nil : population automatique)
+local pauseCount = 0 -- runs de DebugPlaytest en cours (population suspendue, aucun bot)
 
 -- Cette méthode permet de lister les autres participants en vie lorsqu'un bot regarde autour de lui ou cherche un
 -- humain (biais) : id, humain ou bot, personnage, instant d'apparition (délai de grâce).
@@ -259,10 +263,10 @@ function BotManager.add(): Participant?
 	return participant
 end
 
--- Cette méthode permet de retirer un bot du jeu lorsqu'on en demande un de moins : le dernier ajouté, personnage
--- détruit, sorti du classement et du registre.
-function BotManager.removeLast()
-	local bot = table.remove(bots)
+-- Cette méthode permet de retirer un bot du jeu lorsqu'on en demande un de moins : le bot d'index donné (le dernier par
+-- défaut), personnage détruit, sorti du classement et du registre.
+function BotManager.removeAt(index: number?)
+	local bot = table.remove(bots, index or #bots)
 	if not bot then
 		return
 	end
@@ -305,17 +309,69 @@ function BotManager.count(): number
 	return #bots
 end
 
--- Cette méthode permet d'ajuster le nombre de bots à l'attribut de debug lorsqu'il change (Studio).
-local function applyDebugCount()
-	local wanted = BotRules.requestedCount(workspace:GetAttribute(BotConfig.DEBUG_ATTRIBUTE))
+-- Cette méthode permet de lister les bots comme candidats au retrait lorsque la population est trop grande : en jeu ou
+-- non, en duel ou non, temps depuis leur dernier contact avec une cible.
+local function removalCandidates(): { BotPopulationRules.Candidate }
+	local now = os.clock()
+	local list = {}
+	for index, bot in bots do
+		local brain = bot.brain
+		local sinceContact = if brain then now - brain.lastContact else math.huge
+		table.insert(list, {
+			index = index,
+			alive = bot.motion ~= nil,
+			inDuel = brain ~= nil and BotPopulationRules.isInDuel(brain.state, sinceContact),
+			sinceContact = sinceContact,
+		})
+	end
+	return list
+end
+
+-- Cette méthode permet d'ajuster le nombre de bots lorsque la population change (joueur arrivé ou parti, commande de
+-- debug, pause) : tous les manquants arrivent d'un coup ; les surnuméraires partent un par un, hors duel (un retrait
+-- reporté tant que tous combattent), ou tous d'un coup si la demande est forcée (debug, pause).
+local function adjustPopulation()
+	local forced = debugCount ~= nil or pauseCount > 0
+	local wanted = debugCount or BotPopulationRules.wantedBots(#Players:GetPlayers(), pauseCount > 0)
 	while #bots < wanted do
 		if not BotManager.add() then
 			break
 		end
 	end
 	while #bots > wanted do
-		BotManager.removeLast()
+		local index = BotPopulationRules.pickRemoval(removalCandidates(), forced)
+		if not index then
+			break -- tous en duel : on réessaie au prochain passage
+		end
+		BotManager.removeAt(index)
+		if not forced then
+			break
+		end
 	end
+end
+
+-- Cette méthode permet de suspendre la population automatique lorsqu'un run de DebugPlaytest démarre (tous les bots
+-- sont retirés, test déterministe), et de la rétablir quand il finit.
+function BotManager.setPaused(paused: boolean)
+	pauseCount = math.max(pauseCount + (if paused then 1 else -1), 0)
+	adjustPopulation()
+end
+
+-- Cette méthode permet de lire la commande de debug Studio lorsque l'attribut DebugBots change : nombre fixe, "+" ou
+-- "-", sinon (nil, "auto") retour à la population automatique ; "+" et "-" sont remplacés par le nombre obtenu.
+local function applyDebugCommand()
+	local value = workspace:GetAttribute(BotConfig.DEBUG_ATTRIBUTE)
+	debugCount = BotPopulationRules.debugCommand(value, #bots)
+	if type(value) == "string" and debugCount ~= nil then
+		workspace:SetAttribute(BotConfig.DEBUG_ATTRIBUTE, debugCount) -- relance applyDebugCommand
+		return
+	end
+	adjustPopulation()
+end
+
+-- Cette méthode permet de figer ou relâcher les bots lorsque l'attribut DebugBotsFreeze change (Studio).
+local function applyDebugFreeze()
+	BotManager.setFrozen(workspace:GetAttribute(BotConfig.DEBUG_FREEZE_ATTRIBUTE) == true)
 end
 
 -- Cette méthode permet de démarrer la gestion des bots lorsque le serveur démarre.
@@ -340,9 +396,18 @@ function BotManager.init(dependencies: Deps)
 		return list
 	end)
 	RunService.Heartbeat:Connect(PerfMarkers.wrap("srv bots", step))
+	-- Population automatique : bots qui comblent les places vides, réajustée régulièrement (retraits un par un)
+	task.spawn(function()
+		while true do
+			adjustPopulation()
+			task.wait(BotConfig.POPULATION_INTERVAL)
+		end
+	end)
 	if RunService:IsStudio() then
-		workspace:GetAttributeChangedSignal(BotConfig.DEBUG_ATTRIBUTE):Connect(applyDebugCount)
-		applyDebugCount()
+		workspace:GetAttributeChangedSignal(BotConfig.DEBUG_ATTRIBUTE):Connect(applyDebugCommand)
+		workspace:GetAttributeChangedSignal(BotConfig.DEBUG_FREEZE_ATTRIBUTE):Connect(applyDebugFreeze)
+		applyDebugCommand()
+		applyDebugFreeze()
 	end
 end
 

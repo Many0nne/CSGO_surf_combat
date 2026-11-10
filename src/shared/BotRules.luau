@@ -60,15 +60,6 @@ function BotRules.pickName(taken: { [string]: boolean }): string
 	return "Bot" .. n
 end
 
--- Cette méthode permet de lire le nombre de bots demandé par l'attribut de debug lorsqu'il change : entier borné à
--- [0, MAX_BOTS], 0 pour une valeur absente ou invalide.
-function BotRules.requestedCount(value: any): number
-	if type(value) ~= "number" or value ~= value then
-		return 0
-	end
-	return math.clamp(math.floor(value), 0, BotConfig.MAX_BOTS)
-end
-
 -- Bunny hop et air strafe (#151) -----------------------------------------------------------------------------------
 
 -- Cette méthode permet de donner la durée d'un saut sur sol plat lorsqu'on estime la distance parcourue en l'air.
