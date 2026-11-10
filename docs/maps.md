@@ -228,6 +228,53 @@ par `mirror` : la map est symétrique par un demi-tour autour de (0, -260,1).
   caisses en bois, parpaings, piles de plaques de plâtre, cales. Sert aux deux chantiers des étages et aux sacs sous la
   rampe CT. Une zone vide arrête la génération, comme une retouche.
 
+- **Grue** (#166, unique, au bord nord) : socle en barricade de contreplaqué (`CRANE` : quatre faces de 4 × 3 panneaux,
+  joints sombres, vis le long des chants, cornières et lisses en bois) ; mât en treillis jaune (membrures, entretoises,
+  diagonales en zigzag), plateforme, flèche jusqu'au chariot relevé, contre-flèche lestée, cabine, pylône et tirants,
+  câbles de levage jusqu'à la charge relevée. Le bloc du mât reste (invisible) pour la collision.
+- **Bardage** (`CLADDING`) : pans de tôle ondulée (nervures tous les ~1,6 stud, bande basse ocre, couvertine,
+  cornières) sur la façade du garage éclairé, le volume de l'échelle et le mur de la zone de stockage. Un pan est un
+  rectangle sur le nu du mur : laisser les ouvertures hors des rectangles.
+- **Porte** (`DOORS`) : double porte (bâti, vantaux à oculus, poignées, plaques de propreté, seuil, plaque jaune,
+  lampe) sur l'aplat sombre relevé près de la rampe sur pilotis. Côté T, le relevé n'a que le vantail (pas d'aplat) :
+  zone élargie en conséquence.
+- **Groupes du toit du garage** (`ROOF_UNITS`) : caisson blanc, ventilateur sur le dessus, capot à lames qui dépasse
+  au-dessus de la façade, sur le socle relevé (gardé).
+- **Zone de stockage** (chantiers des étages, contre le mur en tôle) : deux bobines de câble empilées à la place de la
+  bobine relevée (environ 740 faces par côté, rendues invisibles), palette debout et palette au sol chargée de seaux
+  (`BUCKETS`), sacs de ciment sur palette à la place des sacs de sable (`cement`). Piège : la bobine relevée a des faces
+  jusqu'à 10 studs de son axe, dont des pentes rangées dans `Ramps` ; une zone carrée de 11 studs en laissait la moitié
+  (restes beiges vus en jeu). Zone ronde (`zone.radius`) et `maxVolume` pour épargner le mur et les parpaings. Côté CT,
+  elle n'est pas le symétrique exact du côté T (2 studs d'écart) : `REELS` donne une bobine par côté, pas `mirror`.
+
+Rhabillages sans habillage (`kind = "hide"` de `REDRESS`) : la boîte devient invisible et garde sa collision, l'objet
+est construit à part (grue, porte, groupes du toit, bobines). `folders` vise d'autres dossiers que `Decor` (la bobine
+relevée est faite de murs, sols et plafonds) ; sans `group`, toutes les pièces visibles dont le centre est dans la zone
+sont prises : garder la zone serrée (le mur voisin y entrerait). Contrôle : la colonne `collide` de `audit_map` ne doit
+pas bouger.
+
+Ombres : un objet plaqué contre un mur (bardage, barricade, porte) a l'ombre coupée (`flat`), elle se confond avec
+celle du mur ; idem pour les barres fines du treillis. Sans ça, le lot #166 ajoutait 17 % de pièces qui projettent une
+ombre (+3 % avec).
+
+#### Planche Blender d'un habillage
+
+Avant d'intégrer un habillage dans Roblox, le faire valider sur une planche rendue depuis les points de vue des
+captures de l'utilisateur, avec exactement les pièces du générateur :
+1. `lune run tools/map/build_dizzy.luau` (plugin Rojo déconnecté de ce serveur), puis
+   `lune run tools/map/dump_parts.luau -- <sortie.json> [x y z rayon]` (pièces visibles du `.rbxm` et leurs SpotLight ; blocs, coins, cylindres et boules seulement, les autres formes sont
+   signalées et sautées au rendu).
+2. Écrire les vues (`[{ "name", "position", "target", "fov"?, "res"?, "percent"? }]`, coordonnées du monde, FOV
+   vertical 90 par défaut comme le jeu), puis
+   `blender -b --factory-startup --python tools/map/render_dizzy.py -- <pièces.json> <vues.json> <dossier>`.
+   Par défaut Workbench : couleurs des pièces, ombres dans la direction du soleil du jeu, ~1 s par vue. EEVEE
+   (`DIZZY_EEVEE=1`, éclairage du crépuscule) prend 5 minutes par vue sur la carte graphique intégrée du poste (plus de
+   30 min pour une planche de 7 vues, jugé trop long) : ne s'en servir que pour une image finale isolée. Les tuiles de
+   la map à plus de `radius` studs de la caméra (300 par défaut) ne sont pas rendues.
+3. Retrouver un point de vue d'une capture : la hauteur d'œil est à ~5 studs au-dessus du sol, le FOV vertical est 90 ;
+   comparer la vue rapide à la capture et ajuster.
+La planche n'a ni les textures des matières Roblox ni l'Atmosphere : elle juge la composition, pas le rendu final.
+
 Repères : `DizzyDressing.aim(pos, look)`, jamais `CFrame.lookAt`. Sous Lune, `lookAt` a renvoyé un repère retourné
 pour une visée vers +Z (auvent du garage enfoncé dans le mur, alors que les fenêtres visées vers ±X étaient justes) et
 un repère invalide pour un tube vertical (pièce rejetée à y = -1 000 000). Contrôle : aucune pièce de `Dressing` hors
@@ -371,6 +418,10 @@ Rojo gère `Workspace.Maps` : un objet posé à la main dans une map est supprim
   faux, sinon les raycasts du mouvement la prennent pour un mur ou une rampe.
 
 ## Reste à faire
+
+- Habillage de Dizzy (#166, lots suivants) : bardage en tôle ondulée sur les autres murs (le premier lot n'a traité que
+  les murs des captures : façade du garage, volume de l'échelle, mur du stockage) ; charge suspendue sous la grue
+  (bloc brut) ; aplat de porte en (1885, 115, -323), côté T seulement.
 
 - Plus tard : supprimer la perte de vitesse restante dans les virages (correction du mouvement, voir les pièges).
 - Son et effet au déclenchement d'un boost.
