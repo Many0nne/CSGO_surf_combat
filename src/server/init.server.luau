@@ -23,6 +23,7 @@ local KillZone = require(script.KillZone)
 local CharacterSync = require(script.CharacterSync)
 local BotManager = require(script.bots.BotManager)
 local ServerPerf = require(script.ServerPerf)
+local CheatLog = require(script.CheatLog)
 
 -- Spawn contrôlé : on gère LoadCharacter nous-mêmes
 Players.CharacterAutoLoads = false
@@ -59,6 +60,8 @@ characterSyncRmt.Parent = ReplicatedStorage
 
 -- ── Initialisation des sous-systèmes ──────────────────────────────────────
 
+-- Journal anti-triche (#170) : avant les remotes, qui passent tous par CheatLog.admit
+CheatLog.init()
 StatsStore.init()
 SettingsStore.init(getSettingsRmt, saveSettingsRmt)
 FeedbackService.init(sendFeedbackRmt, feedbackAckRmt)
@@ -125,6 +128,9 @@ local function trackWeapon3P(char: Model)
 end
 
 weaponActionRmt.OnServerEvent:Connect(function(player, action)
+	if not CheatLog.admit(player, N.WEAPON_ACTION, action) then
+		return
+	end
 	if action ~= "Shoot" and action ~= "Reload" then
 		return
 	end
@@ -265,11 +271,17 @@ local function onHitVerdict(
 end
 
 meleeRmt.OnServerEvent:Connect(function(player, targetCharacter, attackKind)
+	if not CheatLog.admit(player, N.MELEE_DAMAGE, targetCharacter, attackKind) then
+		return
+	end
 	local damage = Validator.authorizeMelee(Participants.fromPlayer(player), targetCharacter, attackKind, os.clock())
 	onHitVerdict(player, meleeRmt, targetCharacter, damage, false)
 end)
 
 hitscanRmt.OnServerEvent:Connect(function(player, targetCharacter, hitPart)
+	if not CheatLog.admit(player, N.HITSCAN_DAMAGE, targetCharacter, hitPart) then
+		return
+	end
 	local damage, isHeadshot =
 		Validator.authorizeHitscan(Participants.fromPlayer(player), targetCharacter, hitPart, os.clock())
 	onHitVerdict(player, hitscanRmt, targetCharacter, damage, isHeadshot)
