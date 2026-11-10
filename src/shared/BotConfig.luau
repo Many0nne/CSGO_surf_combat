@@ -41,7 +41,9 @@ return {
 	-- Coût des arêtes pour la recherche de chemin (multiplie la longueur, plus un forfait en studs)
 	NAV_COST_FACTOR     = { 1, 1.1, 1.4, 1.6 }, -- marche, descente, saut, échelle
 	NAV_COST_EXTRA      = { 0, 2, 6, 10 },
-	NAV_BORDER_COST     = 3,      -- surcoût d'une case au bord d'un passage (moitié à un pas du bord, studs)
+	NAV_PATH_WEIGHT     = 2,      -- poids de l'heuristique de l'A* (#145) : 1 = chemin optimal, plus = moins de cases vues
+	NAV_SEARCH_BUDGET   = 400,    -- cases explorées par tick et par bot pendant une recherche de chemin (#145)
+	NAV_BORDER_COST     = 3,    -- surcoût d'une case au bord d'un passage (moitié à un pas du bord, studs)
 
 	-- Suivi de chemin (BotNavigator)
 	NAV_REACH_RADIUS    = 1.6,    -- case atteinte à moins de tant à l'horizontale (studs)

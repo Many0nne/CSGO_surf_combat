@@ -22,6 +22,7 @@ local DebugPlaytest = require(script.DebugPlaytest)
 local KillZone = require(script.KillZone)
 local CharacterSync = require(script.CharacterSync)
 local BotManager = require(script.bots.BotManager)
+local ServerPerf = require(script.ServerPerf)
 
 -- Spawn contrôlé : on gère LoadCharacter nous-mêmes
 Players.CharacterAutoLoads = false
@@ -320,6 +321,10 @@ end
 -- Relevés mémoire du serveur : toujours actifs, la console serveur (F9) n'est lisible que par les développeurs du jeu.
 MemoryTracker.enable()
 MemoryTracker.snapshot("démarrage")
+-- Sonde de coût du serveur (attribut Workspace PerfServer, #145) : inactive tant que l'attribut n'est pas posé
+ServerPerf.init(function()
+	return BotManager.count(), BotManager.aliveCount()
+end)
 
 Players.PlayerAdded:Connect(setupPlayer)
 Players.PlayerRemoving:Connect(function(player)

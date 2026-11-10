@@ -223,6 +223,21 @@ local function spawnBot(bot: Bot)
 	deps.relay(char, root, root.CFrame)
 end
 
+-- Repères de coût (#145) : apparition, cerveau (perception, chemin) et mouvement, sous le repère « srv bots », pour
+-- savoir d'où vient un pic de frame serveur.
+local timedBrain: (BotBrain.BotBrain, number) -> () = PerfMarkers.wrap(
+	"bots cerveau",
+	function(brain: BotBrain.BotBrain, dt: number)
+		brain:update(dt)
+	end
+)
+local timedMotion: (BotMotion.BotMotion, number) -> () = PerfMarkers.wrap(
+	"bots mouvement",
+	function(motion: BotMotion.BotMotion, dt: number)
+		motion:update(dt)
+	end
+)
+
 -- Cette méthode permet de faire vivre les bots lorsque Heartbeat passe : mouvement des bots en jeu, personnages
 -- disparus oubliés, apparition des bots morts depuis RESPAWN_DELAY quand le round est actif.
 local function step(dt: number)
@@ -235,9 +250,9 @@ local function step(dt: number)
 		end
 		if bot.motion then
 			if bot.brain and not bot.frozen then
-				bot.brain:update(dt)
+				timedBrain(bot.brain, dt)
 			end
-			bot.motion:update(dt)
+			timedMotion(bot.motion, dt)
 		elseif not bot.character and active and now - bot.diedAt >= GameConfig.RESPAWN_DELAY then
 			spawnBot(bot)
 		end
@@ -307,6 +322,17 @@ end
 -- Cette méthode permet de lire le nombre de bots en jeu lorsqu'un outil de debug le demande.
 function BotManager.count(): number
 	return #bots
+end
+
+-- Cette méthode permet de lire le nombre de bots en jeu (personnage vivant) lorsque la sonde de performance écrit son bilan.
+function BotManager.aliveCount(): number
+	local alive = 0
+	for _, bot in bots do
+		if bot.motion then
+			alive += 1
+		end
+	end
+	return alive
 end
 
 -- Cette méthode permet de lister les bots comme candidats au retrait lorsque la population est trop grande : en jeu ou

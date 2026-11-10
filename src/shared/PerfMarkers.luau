@@ -39,6 +39,24 @@ function PerfMarkers.wrap<A...>(label: string, fn: (A...) -> ()): (A...) -> ()
 	end
 end
 
+-- Cette méthode permet d'ajouter un temps mesuré à la main sous un nom lorsqu'un appel renvoie une valeur (que `wrap`
+-- ne gère pas) ; sans effet si le chronométrage est inactif.
+function PerfMarkers.record(label: string, seconds: number)
+	if not PerfMarkers.timing then
+		return
+	end
+	local entry = totals[label]
+	if not entry then
+		entry = { time = 0, calls = 0, max = 0 }
+		totals[label] = entry
+	end
+	entry.time += seconds
+	entry.calls += 1
+	if seconds > entry.max then
+		entry.max = seconds
+	end
+end
+
 -- Cette méthode permet de relever les totaux accumulés depuis le relevé précédent puis de les remettre à zéro
 -- lorsque l'overlay rafraîchit son affichage.
 function PerfMarkers.collect(): { [string]: { time: number, calls: number, max: number } }

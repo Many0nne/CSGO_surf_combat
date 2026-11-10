@@ -156,6 +156,27 @@ local function percentile(values: { number }, p: number): number
 	return sorted[math.clamp(math.ceil(p * n), 1, n)]
 end
 
+export type FrameStats = { frames: number, medianMs: number, p99Ms: number, maxMs: number, fps: number }
+
+-- Cette méthode permet de résumer la durée des frames d'une période lorsque le serveur écrit son bilan (secondes en
+-- entrée, millisecondes en sortie ; FPS déduit de la médiane).
+function PerfRules.frameStats(dts: { number }): FrameStats
+	local ms = {}
+	local maxMs = 0
+	for i, dt in dts do
+		ms[i] = dt * 1000
+		maxMs = math.max(maxMs, ms[i])
+	end
+	local median = percentile(ms, 0.5)
+	return {
+		frames = #ms,
+		medianMs = median,
+		p99Ms = percentile(ms, 0.99),
+		maxMs = maxMs,
+		fps = if median > 0 then 1000 / median else 0,
+	}
+end
+
 -- Cette méthode permet de résumer une phase du banc (F4) lorsque ses frames ont été relevées : temps GPU et CPU du
 -- rendu (ms, par frame) et durée des frames (ms).
 function PerfRules.benchSummary(gpuMs: { number }, cpuMs: { number }, frameMs: { number }): BenchSummary
