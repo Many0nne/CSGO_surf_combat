@@ -15,7 +15,7 @@ WeaponConfig.Weapons = {
 		FireDelay = 60 / 41, -- seconds between shots
 		ReloadTime = 3.7,
 		Magazine = 5,
-		Reserve = 10,
+		Reserve = math.huge, -- réserve illimitée (#165) : le rechargement remplit toujours le chargeur
 		Penetration = 250, -- TODO: implement penetration handling
 		-- Recommended run speed multiplier while holding this weapon (client-side).
 		-- Not a fixed game-units value; movement system multiplies wishspeed by this.

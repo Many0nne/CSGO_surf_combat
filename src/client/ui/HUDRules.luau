@@ -110,6 +110,15 @@ function HUDRules.weaponLabel(toolName: string): string
 	return string.upper(spaced)
 end
 
+-- Cette méthode permet de formater la réserve du compteur de munitions lorsque le HUD se met à jour :
+-- « / ∞ » pour une réserve illimitée (math.huge), « / n » sinon.
+function HUDRules.formatReserve(reserve: number): string
+	if reserve == math.huge then
+		return "/ ∞"
+	end
+	return "/ " .. tostring(reserve)
+end
+
 -- Cette méthode permet de trier les noms d'outils dans l'ordre des emplacements (alphabétique, comme le helper
 -- DebugPlaytest) lorsque la barre d'armes est reconstruite.
 function HUDRules.slotOrder(names: { string }): { string }

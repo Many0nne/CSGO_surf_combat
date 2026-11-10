@@ -7,6 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
+local HUDRules = require(script.Parent.HUDRules)
 local UIKit = require(script.Parent.UIKit)
 local WeaponSystem = require(script.Parent.Parent.systems.weapon.WeaponSystem)
 
@@ -48,7 +49,7 @@ local function update()
 	magazineText.Text = tostring(ammo)
 	magazineShadow.Text = tostring(ammo)
 	magazineText.TextColor3 = if ammo <= 0 then C.HitRed else C.Bone
-	reserveText.Text = "/ " .. tostring(reserve)
+	reserveText.Text = HUDRules.formatReserve(reserve)
 	reserveShadow.Text = reserveText.Text
 end
 
