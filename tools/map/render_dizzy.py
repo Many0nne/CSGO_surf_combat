@@ -22,7 +22,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), 
 _lighting = json.load(open(os.path.join(ROOT, "default.project.json"), encoding="utf-8"))["tree"]["Lighting"]["$properties"]
 if _lighting["ClockTime"] != SUN_CLOCK or _lighting["GeographicLatitude"] != SUN_LATITUDE:
     raise SystemExit("Lighting de default.project.json ≠ SUN de render_dizzy.py : relever SUN (cf. build_dizzy.luau)")
-AMBIENT = tuple(_lighting["OutdoorAmbient"])
+_AMBIENT_SRGB = _lighting["OutdoorAmbient"]
 CYL_SEGMENTS = 20
 
 
@@ -49,7 +49,7 @@ def shape_geometry(shape):
     if shape == "WedgePart":
         # bas complet, dos (+Z) complet, pente du haut du dos vers le bas de l'avant (-Z)
         v = [(-1, -1, -1), (1, -1, -1), (1, -1, 1), (-1, -1, 1), (-1, 1, 1), (1, 1, 1)]
-        f = [(0, 3, 2, 1), (3, 4, 5, 2), (0, 1, 5, 4), (0, 4, 3), (1, 2, 5)]
+        f = [(0, 1, 2, 3), (3, 2, 5, 4), (0, 4, 5, 1), (0, 3, 4), (1, 5, 2)]  # faces tournées vers l'extérieur
         return v, f
     if shape == "Cylinder":
         n = CYL_SEGMENTS
@@ -223,7 +223,7 @@ def world():
     mid.color = (*lin((120, 100, 140)), 1)
     path = nt.nodes.new("ShaderNodeLightPath")
     mix = nt.nodes.new("ShaderNodeMixRGB")
-    mix.inputs["Color1"].default_value = (*AMBIENT, 1)
+    mix.inputs["Color1"].default_value = (*lin([v * 255 for v in _AMBIENT_SRGB]), 1)
     nt.links.new(path.outputs["Is Camera Ray"], mix.inputs["Fac"])
     nt.links.new(ramp.outputs["Color"], mix.inputs["Color2"])
     nt.links.new(mix.outputs["Color"], bg.inputs["Color"])

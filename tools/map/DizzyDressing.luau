@@ -913,12 +913,13 @@ local function crane(parent, frame, top, hook, load, reach)
 	} do
 		local face = frame * DizzyDressing.aim(f[1], f[2])
 		barricade(base0, face, f[3], H)
-		piece(base0, face, V3.new(0, H - 0.5, -0.75), V3.new(f[3] + 1.6, 1, 0.9), BEAM, E.Material.Wood)
-		piece(base0, face, V3.new(0, 0.5, -0.7), V3.new(f[3] + 1.6, 1, 0.8), BEAM, E.Material.Wood)
+		-- lisses arrêtées aux cornières (elles se croiseraient dans le même plan aux angles)
+		piece(base0, face, V3.new(0, H - 0.5, -0.75), V3.new(f[3], 1, 0.9), BEAM, E.Material.Wood)
+		piece(base0, face, V3.new(0, 0.5, -0.7), V3.new(f[3], 1, 0.8), BEAM, E.Material.Wood)
 	end
 	for _, x in { -1, 1 } do
 		for _, z in { -1, 1 } do
-			piece(base0, frame, V3.new(x * (HX + 0.45), H / 2, z * (HZ + 0.45)), V3.new(1.1, H, 1.1), BEAM, E.Material.Wood)
+			piece(base0, frame, V3.new(x * (HX + 0.45), H / 2 + 0.1, z * (HZ + 0.45)), V3.new(1.1, H + 0.2, 1.1), BEAM, E.Material.Wood)
 		end
 	end
 	piece(base0, frame, V3.new(0, H + 0.05, 0), V3.new(2 * HX, 0.1, 2 * HZ), PLY, E.Material.Wood)
@@ -1321,8 +1322,10 @@ function DizzyDressing.redress(map, parent)
 				and v >= (r.minVolume or 0)
 				and v <= (r.maxVolume or math.huge)
 			then
-				local frame, size = upright(p.CFrame, p.Size)
-				REDRESS_KINDS[r.kind](parent, frame, size)
+				if r.kind ~= "hide" then
+					local frame, size = upright(p.CFrame, p.Size)
+					REDRESS_KINDS[r.kind](parent, frame, size)
+				end
 				p.Transparency = 1
 				p.CastShadow = false
 				p:SetAttribute("Redress", r.why)
