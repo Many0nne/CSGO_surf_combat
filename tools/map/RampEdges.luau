@@ -26,6 +26,10 @@ local RampEdges = {}
 
 RampEdges.SKIN = 0.6 -- studs : épaisseur de la peau d'acier, plus que l'enfoncement du joueur à l'atterrissage (0,33)
 RampEdges.TRIM_TOL = 0.005 -- studs : une pièce qui entre de moins que ça dans la peau n'est pas touchée
+-- studs : une pièce qui monte plus haut au-dessus de la surface n'est pas un rebord mais un obstacle qui traverse la
+-- rampe (mur, poteau) : la génération s'arrête au lieu de la rogner en silence. Plus haut rebord rogné sur Dizzy :
+-- 0,99 (dalle du bas de la rampe CT).
+RampEdges.MAX_RISE = 1.5
 RampEdges.TOUCH = 0.05 -- studs : une pièce posée sur la surface à ça près y entre (au-delà : obstacle, laissé)
 RampEdges.MIN_LEG = 0.002 -- studs : un coin plus mince n'est pas posé
 RampEdges.ATTRIBUTE = "RampEdge" -- posé sur les pièces modifiées, visible dans Studio
@@ -175,7 +179,8 @@ end
 
 -- Cette méthode permet de calculer ce qui reste d'une pièce qui monte dans la peau d'une rampe par en dessous, après
 -- la découpe au-dessus de son emprise (hauteur > surface - SKIN sur v0..v1) : liste des morceaux
--- { range = {a0, a1}, poly = section } (poly nil : section d'origine) ; nil si la pièce reste sous la peau, est
+-- { range = {a0, a1}, poly = section } (poly nil : section d'origine), puis le dépassement au-dessus de la surface
+-- avant découpe ; nil si la pièce reste sous la peau, est
 -- entièrement au-dessus de la surface (obstacle, pas un rebord) ou n'est pas extrudée dans la longueur (la mesure de
 -- contrôle la signalera).
 function RampEdges.cut(b, ramp, surface)
@@ -232,7 +237,8 @@ function RampEdges.cut(b, ramp, surface)
 			table.insert(pieces, { range = { m0, m1 }, poly = k })
 		end
 	end
-	return pieces
+	-- second résultat : de combien la pièce montait au-dessus de la surface (au-delà de MAX_RISE, plus un rebord)
+	return pieces, hmax - surface
 end
 
 -- Cette méthode permet de créer une pièce de même habillage qu'une autre (classe donnée), rangée à côté d'elle.
@@ -314,7 +320,8 @@ end
 
 -- Cette méthode permet d'appliquer la règle à toutes les rampes d'une géométrie de map (dossier Ramps et autres
 -- dossiers de pièces) lorsque le générateur l'a posée ; renvoie un bilan par rampe
--- { center, surface, trimmed, placed } (surface : hauteur de la peau au-dessus de la dalle principale d'origine).
+-- { center, surface, trimmed, placed, rise } (surface : hauteur de la peau au-dessus de la dalle principale d'origine ;
+-- rise : plus haut dépassement rogné). Lève une erreur si une pièce traverse la rampe (MAX_RISE).
 function RampEdges.apply(geometry)
 	local folder = geometry:FindFirstChild("Ramps")
 	assert(folder, "Geometry.Ramps introuvable")
@@ -325,7 +332,7 @@ function RampEdges.apply(geometry)
 			table.insert(boxes, RampCheck.box(p))
 		end
 	end
-	local report = {}
+	local report, errors = {}, {}
 	for _, ramp in RampCheck.ramps(boxes) do
 		-- surface de glisse : la plus haute des dalles d'acier de la rampe (les rives relevées)
 		local surface = ramp.top
@@ -336,16 +343,31 @@ function RampEdges.apply(geometry)
 		-- marque temporaire (et non une table indexée par pièce : sous Lune, une même Instance peut revenir sous deux
 		-- références différentes d'un appel à l'autre)
 		skin(steel[ramp.main], ramp, surface):SetAttribute(OWN, true)
-		local trimmed, placed = 0, 0
+		local trimmed, placed, rise = 0, 0, 0
 		for _, p in geometry:GetDescendants() do
 			if p:IsA("BasePart") and not p:GetAttribute(OWN) then
 				local b = RampCheck.box(p)
 				if wholeSlab(b, ramp, surface) then
 					p:SetAttribute(OWN, true)
 				else
-					local pieces = RampEdges.cut(b, ramp, surface)
-					if pieces then
+					local pieces, up = RampEdges.cut(b, ramp, surface)
+					if pieces and up > RampEdges.MAX_RISE then
+						local c = p.CFrame.Position
+						table.insert(
+							errors,
+							string.format(
+								"%s/%s (%.2f, %.2f, %.2f) traverse la rampe (%.2f stud au-dessus de la surface)",
+								p.Parent.Name,
+								p.Name,
+								c.X,
+								c.Y,
+								c.Z,
+								up
+							)
+						)
+					elseif pieces then
 						trimmed += 1
+						rise = math.max(rise, up)
 						placed += replace(p, b, ramp, pieces)
 					end
 				end
@@ -360,8 +382,15 @@ function RampEdges.apply(geometry)
 			surface = surface - ramp.top,
 			trimmed = trimmed,
 			placed = placed,
+			rise = rise,
 			center = { boxes[ramp.main].px, boxes[ramp.main].py, boxes[ramp.main].pz },
 		})
+	end
+	if #errors > 0 then
+		error(
+			"obstacle à travers une rampe de surf, à traiter à part (retouche) :\n  " .. table.concat(errors, "\n  "),
+			2
+		)
 	end
 	return report
 end

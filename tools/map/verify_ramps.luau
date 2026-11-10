@@ -17,5 +17,11 @@ local lines, worst = RampCheck.check(map)
 for _, line in lines do
 	print(line)
 end
-print(string.format("tolérance %.2f stud : %s", RampCheck.TOL, if worst > RampCheck.TOL then "REBORD" else "OK"))
+print(
+	string.format(
+		"tolérance %.2f stud : %s",
+		RampCheck.TOL,
+		if worst > RampCheck.TOL then "REBORD, CREUX OU TROU" else "OK"
+	)
+)
 process.exit(if worst > RampCheck.TOL then 1 else 0)

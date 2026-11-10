@@ -232,27 +232,8 @@ local function cullShadows(map)
 				p.CastShadow = false
 				small += 1
 			else
-				local cf = p.CFrame
-				local x, y, z = cf.XVector, cf.YVector, cf.ZVector
 				table.insert(parts, p)
-				table.insert(boxes, {
-					px = cf.Position.X,
-					py = cf.Position.Y,
-					pz = cf.Position.Z,
-					xx = x.X,
-					xy = x.Y,
-					xz = x.Z,
-					yx = y.X,
-					yy = y.Y,
-					yz = y.Z,
-					zx = z.X,
-					zy = z.Y,
-					zz = z.Z,
-					sx = s.X,
-					sy = s.Y,
-					sz = s.Z,
-					wedge = p.ClassName == "WedgePart",
-				})
+				table.insert(boxes, RampCheck.box(p))
 				local i = #boxes
 				candidates[i] = true
 				-- seules les vraies boîtes et les coins arrêtent la lumière (un cylindre traité en boîte masquerait trop)
@@ -290,13 +271,15 @@ end
 for _, r in RampEdges.apply(geometry) do
 	print(
 		string.format(
-			"  rampe (%.0f, %.0f, %.0f) : peau d'acier au niveau des rives (%+.3f), %d pièce(s) rognée(s) en %d",
+			"  rampe (%.0f, %.0f, %.0f) : peau d'acier au niveau des rives (%+.3f), %d pièce(s) rognée(s) en %d"
+				.. " (plus haut rebord rogné : %.3f)",
 			r.center[1],
 			r.center[2],
 			r.center[3],
 			r.surface,
 			r.trimmed,
-			r.placed
+			r.placed,
+			r.rise
 		)
 	)
 end
@@ -309,7 +292,7 @@ if rampWorst > RampCheck.TOL then
 	print(table.concat(rampLines, "\n"))
 	error(
 		string.format(
-			"rebord de %.3f stud sur une rampe de surf (tolérance %.2f), map non écrite",
+			"rebord, creux ou trou de %.3f stud sur une rampe de surf (tolérance %.2f), map non écrite",
 			rampWorst,
 			RampCheck.TOL
 		)

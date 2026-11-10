@@ -143,13 +143,15 @@ habillage ni retouche) :
 Correctif : règle du générateur (`tools/map/RampEdges.luau`, appliquée après les retouches, testée), pas une retouche
 par coordonnées. Par rampe : une **peau** d'acier d'un seul tenant (0,6 stud) couvre toute l'emprise au niveau des
 rives ; toute autre pièce qui entre dans la peau est rognée à son dos, découpe exacte en coins (section perpendiculaire
-à la longueur de la rampe). Le mur d'air d'origine, d'un seul tenant, reste. Mesure (`RampCheck`, rayons tous les
-0,5 stud le long de la normale, collision puis rendu, tolérance 0,02 stud) :
+à la longueur de la rampe). Le mur d'air d'origine, d'un seul tenant, reste. Une pièce qui monterait à plus de 1,5 stud
+au-dessus de la surface (`MAX_RISE`, plus haut rebord rogné sur Dizzy : 0,99) traverse la rampe : la génération
+s'arrête au lieu de la rogner. Mesure (`RampCheck`, rayons le long de la normale tous les 0,25 stud en longueur et
+0,5 en pente, collision puis rendu, tolérance 0,02 stud ; signale rebords, creux et trous) :
 
 | Rampe | Avant (collision / rendu) | Après |
 |---|---|---|
-| T | +0,52 sur 1 070 studs² / +0,86 sur 2 170 studs² | 0,000 / 0,000 |
-| CT | +0,79 sur 930 studs² / +1,13 sur 2 080 studs² | 0,000 / 0,000 |
+| T | +0,52 et creux de 0,28, sur 1 140 studs² / +0,86 sur 2 120 studs² | 0,000 / 0,000, aucun trou |
+| CT | +0,79 et creux de 0,28, sur 1 000 studs² / +1,13 sur 2 030 studs² | 0,000 / 0,000, aucun trou |
 
 En jeu, lancé à 40 studs/s le long de chaque rampe vers chaque bout, en haut et en bas de la pente : vitesse constante
 jusqu'au vide (bout ouvert) ou jusqu'au mur de la fosse (bout fermé, x 1870 et 2130 : mur relevé, pas un rebord),

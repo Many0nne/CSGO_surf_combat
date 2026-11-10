@@ -63,8 +63,8 @@ return function(T, Loader)
 		part(
 			folders.Ramps.Parent.Ceilings,
 			"Part",
-			CFrame.new(foot.X, foot.Y, foot.Z - 1),
-			Vector3.new(130, 2, 6),
+			CFrame.new(foot.X, foot.Y - 0.2, foot.Z - 1),
+			Vector3.new(130, 1.2, 6),
 			"ceiling"
 		)
 		-- mur d'air d'un seul tenant sur toute la longueur, dessus au niveau de la rive : gardé tel quel
@@ -212,6 +212,19 @@ return function(T, Loader)
 			end
 		)
 
+		T.it("un poteau qui traverse la rampe arrête la génération au lieu d'être rogné", function()
+			local map, folders = scene()
+			part(
+				folders.Decor,
+				"Part",
+				CFrame.new(10, 0, 0) * ROT * CFrame.new(0, 1, 0),
+				Vector3.new(2, 6, 2),
+				"pillar"
+			)
+			local ok, err = pcall(RampEdges.apply, map.Geometry)
+			T.expect(not ok and string.find(tostring(err), "traverse") ~= nil, tostring(err))
+		end)
+
 		T.it("la découpe est exacte (dalles d'acier, boîte débordant en longueur, tranche de mur, coin)", function()
 			local map, folders = scene(0.8)
 			local surf = {}
@@ -249,6 +262,30 @@ return function(T, Loader)
 			RampEdges.apply(map.Geometry)
 			local _, after = RampCheck.check(map)
 			T.expect(after <= RampCheck.TOL)
+		end)
+
+		T.it("signale un creux et un trou", function()
+			local main = RampCheck.box(part(nil, "Part", ROT, Vector3.new(100, 2, 80), "main"))
+			local strip = RampCheck.box(part(nil, "Part", CFrame.new(53, 0, 0) * ROT, Vector3.new(6, 2, 80), "strip"))
+			local ramp = RampCheck.ramps({ main, strip })[1]
+			-- trou : la rive n'est pas posée
+			local holed = RampCheck.measure(ramp, { main })
+			T.expect(#holed.holes > 0, "trou non vu")
+			-- creux : la rive est 0,3 plus bas
+			local low = RampCheck.box(
+				part(nil, "Part", CFrame.new(53, 0, 0) * ROT * CFrame.new(0, -0.3, 0), Vector3.new(6, 2, 80), "low")
+			)
+			local dipped = RampCheck.measure(ramp, { main, low })
+			T.expectNear(dipped.below, 0.3, 0.02)
+			T.expectEqual(#dipped.holes, 0)
+		end)
+
+		T.it("une rampe de deux grandes dalles n'est comptée qu'une fois", function()
+			local a = RampCheck.box(part(nil, "Part", ROT, Vector3.new(100, 2, 80), "a"))
+			local b = RampCheck.box(part(nil, "Part", CFrame.new(100, 0, 0) * ROT, Vector3.new(100, 2, 80), "b"))
+			local ramps = RampCheck.ramps({ a, b })
+			T.expectEqual(#ramps, 1)
+			T.expectNear(ramps[1].u1 - ramps[1].u0, 200, 1e-3)
 		end)
 
 		T.it("une petite dalle de surf n'est pas une rampe", function()
