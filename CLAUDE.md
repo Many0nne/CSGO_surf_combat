@@ -17,6 +17,7 @@ Lire le document du domaine avant de travailler dessus, et seulement celui-là.
 | Modifier la map (générateur, export, règles des rampes) | `docs/maps.md` |
 | Bots : plan de navigation, suivi de chemin, debug `DebugBots`/`DebugNav` | `docs/bots.md` |
 | Saccades, performance, overlay F3, fuites mémoire, sonde `FrameProbe` | `docs/performance.md` |
+| Anti-triche : menaces, validations serveur des remotes, plan | `docs/anticheat.md` |
 | Retours d'expérience datés (historique, le document du domaine prime) | `docs/notes/` |
 
 ## Capitaliser
