@@ -11,7 +11,7 @@ Lire le document du domaine avant de travailler dessus, et seulement celui-là.
 | Sujet | Document |
 |---|---|
 | Où se trouve un comportement, rôle de chaque fichier | `docs/architecture.md` |
-| Modifier ou ajouter une arme (`.rbxm`), publier un asset ou un mesh | `docs/assets.md` |
+| Modifier ou ajouter une arme (`.rbxm`), skin, aperçu three.js, publier un asset ou un mesh | `docs/assets.md` |
 | Créer ou modifier un écran, direction artistique | `docs/ui.md` |
 | Créer ou modifier une animation d'arme | `docs/animations.md` |
 | Modifier la map (générateur, export, règles des rampes) | `docs/maps.md` |

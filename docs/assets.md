@@ -76,3 +76,73 @@ bash tools/anim/publish.sh <dossier> <prefixe> <Nom1> [Nom2 ...] # plusieurs ani
 - Axes : dans Blender, l'avant du modèle est +Y et le haut +Z ; Roblox reçoit `(x, z, -y)` et 1 unité Blender = 1 stud.
   `axis_forward` et `bake_space_transform` n'ont aucun effet : l'importeur Roblox donne toujours `(-x, z, y)` depuis un FBX
   brut (4 combinaisons testées). `export_mesh_fbx.py` compense donc par une rotation de 180° autour de Z.
+
+## Aperçus three.js (skins, nouveaux modèles)
+
+Tant qu'un élément n'est pas défini (skin, matière, nouvelle arme), on ne cherche ni dans le Blender ouvert ni dans
+Studio : on montre à l'utilisateur une page three.js avec des variantes numérotées sur le vrai modèle, il répond par
+numéro (« la 3 avec la lame de la 5 »), on refait la page. Ce n'est pas un outil qu'il manipule : il regarde et tourne le
+modèle, les variantes sont produites par Claude.
+
+**Règle : une variante est faite de PNG** (`Color`, `Rough`, `Metal`, `Normal`, les cartes de la `SurfaceAppearance`),
+jamais d'un effet propre à three.js. C'est ce qui permet de publier telle quelle la version retenue. Le rendu three.js
+(éclairage neutre, ACES) reste proche de Roblox sans être identique : la validation finale se fait en jeu.
+
+1. **Le modèle en `.glb`**, hors du dépôt (`%TEMP%/preview/<arme>/`), avec un manifeste `.json` qui liste les textures
+   actuelles de chaque matériau :
+   - depuis la source Blender (l'AWP : `assets/sniper/Sniper.blend`) ; écrit aussi le dépliage UV de chaque matériau en
+     SVG (`<sortie>_uv_<MATERIAU>.svg`), pour dessiner une texture qui tombe au bon endroit :
+     ```bash
+     blender -b assets/sniper/Sniper.blend --factory-startup --python tools/preview/export_glb.py -- "$TEMP/preview/awp/awp.glb" assets/sniper/textures
+     ```
+   - depuis le jeu, pour une arme sans source Blender (la M9, mesh du Creator Store) ou pour voir ce que le jeu affiche :
+     lit la place construite par Rojo, télécharge meshs et cartes par Open Cloud (un matériau par pièce, nommé comme
+     elle ; bras ignorés ; dépliage UV en SVG comme ci-dessus). La clé `ROBLOX_OPEN_CLOUD_KEY` doit avoir le scope `legacy-asset:manage` (Asset Delivery) ;
+     sans lui : `Scope not authorized`. Meshs Roblox v2 à v7 lus, y compris compressés en Draco (cas des meshs publiés récemment ; normales recalculées).
+     ```bash
+     uv run tools/preview/fetch_viewmodel.py M9Bayonet "$TEMP/preview/m9/m9.glb"
+     ```
+2. **Les variantes** dans un `spec.json` (format en tête de `tools/preview/make_preview.py`) : chaque variante remplace,
+   matériau par matériau, les cartes du manifeste par un PNG, une teinte (`"#rrggbb"`) ou un nombre (rugosité, métal).
+   Les PNG des pistes vont à côté du spec, hors du dépôt.
+3. **La page** : `uv run tools/preview/make_preview.py <spec.json> <sortie.html>`. Tout est dans le fichier (seul three.js
+   vient de jsDelivr). Avec `"height": 560` et `"maxSize": 512` dans le spec, elle s'affiche dans la conversation
+   (`html_render` de T3) ; sans, elle prend tout l'écran du navigateur. L'aperçu sans GPU de T3 (`html_preview`) dépasse
+   son délai au-delà d'environ 3 Mo : réduire `maxSize` pour un contrôle.
+4. **Version retenue** : ses PNG à pleine résolution dans `assets/skins/<Viewmodel>/<skin>/` (LFS), avec le `spec.json`
+   qui l'a produite. Puis l'appliquer dans le jeu (ci-dessous).
+
+### Appliquer un skin dans le jeu
+
+1. Publier chaque PNG (`bash tools/publish_asset.sh <png> Decal <nom>`) et relever l'id de l'image contenue dans le
+   Decal (procédure dans `docs/ui.md` : l'id du Decal lui-même ne s'affiche pas). Noter les ids dans
+   `assets/skins/<Viewmodel>/<skin>/ids.json`.
+2. Studio réservé et connecté au worktree, mode Edit : poser les ids sur la `SurfaceAppearance` de chaque pièce du
+   viewmodel (`ColorMapContent`, `RoughnessMapContent`, `MetalnessMapContent`, `NormalMapContent`, avec
+   `Content.fromUri("rbxassetid://…")`), via `execute_luau`.
+3. Réexporter le viewmodel (« Mettre à jour un `.rbxm` » ci-dessus), puis vérifier en jeu (helper de playtest, étape
+   `VIEWMODEL`) et faire juger le rendu par l'utilisateur. Le modèle 3P clone les pièces du viewmodel : il suit. La
+   vitrine du menu, elle, est une image précalculée (`MenuMirrorsData`) : elle garde l'ancien rendu.
+
+## Ajouter un couteau
+
+Un couteau qui se joue comme la M9, avec un autre modèle et d'autres animations. Le comportement de mêlée est piloté par
+la config (`IsMelee`), pas par le nom de l'arme ; seuls quelques endroits nomment la M9.
+
+1. **Modèle** : chercher la forme par aperçus three.js (ci-dessus), puis le modéliser dans Blender par script avec des
+   UV propres et les cartes PBR en PNG, publier (« Publier un asset » ci-dessus, point Mesh), `insert_asset`.
+2. **Viewmodel** : copier `ViewModels.M9Bayonet` (bras, `FakeCamera`, `HumanoidRootPart`, Motor6D), remplacer la pièce
+   `Handle` par le nouveau mesh, en gardant son nom (le 3P en a besoin) et ses joints. Réexporter.
+3. **Animations** : `Equip`, `Shoot`, `Shoot2`, `Stab`, `Inspect` (noms lus par `WeaponConfig`), méthode de
+   `docs/animations.md` à partir d'une vidéo de référence ; le rig de `assets/m9_viewmodel/` (`rig.json`,
+   `build_viewmodel.py`) sert de base. Le coup part au marqueur `Stab Sound`.
+4. **Tool** : copier `StarterPack.M9Bayonet`, attributs `ViewmodelName` (le nouveau viewmodel) et `WeaponName` (la
+   nouvelle entrée de config).
+5. **Config** : une entrée dans `WeaponConfig.Weapons` (copier `M9Bayonet` : mêmes dégâts et cadences pour un couteau
+   identique en jeu ; refaire `ThirdPerson.Grip` pour le nouveau mesh, `tools/anim/poses3p/`), et une poussée dans
+   `DeathRules.PUSH_BY_WEAPON` (sinon `DEFAULT_PUSH`).
+6. **Endroits qui nomment la M9**, à décider selon que le couteau la remplace ou s'y ajoute : `BotCombatRules.KNIFE`
+   (couteau des bots), `MainMenu.CONFIG_KEYS` et `MenuMirrorsData` (vitrine du menu, qui demande un jeu d'éclats
+   recalculé, `tools/menu/`).
+7. `rojo build` + `tools/rbxm/verify_place.luau` (signale un Tool sans entrée de config), puis le helper de playtest sur
+   le nouveau Tool.
