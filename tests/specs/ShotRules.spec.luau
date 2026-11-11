@@ -264,10 +264,28 @@ return function(T, Loader)
 			T.expectEqual((ShotRules.checkMeleeOrientation(look, Vector3.zero, Vector3.new(0, 4, 0))), true)
 		end)
 
+		T.it("accepte tout cap pour une cible à l'aplomb, nettement plus bas (tireur sur sa tête)", function()
+			-- 0,5 stud derrière, 5 studs plus bas : le regard vers le bas touche son corps
+			local ok = ShotRules.checkMeleeOrientation(Vector3.new(1, 0, 0), Vector3.zero, Vector3.new(-0.5, -5, 0))
+			T.expectEqual(ok, true)
+			-- À même hauteur, collée dans le dos : toujours refusée
+			ok = ShotRules.checkMeleeOrientation(Vector3.new(1, 0, 0), Vector3.zero, Vector3.new(-1.5, 0, 0))
+			T.expectEqual(ok, false)
+		end)
+
+		T.it("teste toujours la borne de rembobinage, même hors multiple du pas", function()
+			local step = ShotRules.MELEE_REWIND_STEP
+			ShotRules.MELEE_REWIND_STEP = 0.15
+			local times = ShotRules.meleeRewindTimes(100)
+			ShotRules.MELEE_REWIND_STEP = step
+			T.expect(math.abs(times[#times] - 99.6) < 1e-6, "dernier instant " .. times[#times])
+			T.expectEqual(#times, 4)
+		end)
+
 		T.it("n'ouvre pas l'angle pour une cible proche à l'horizontale mais loin en hauteur (rampe)", function()
-			-- 1,5 stud à l'horizontale, 6 studs plus bas, 150° du cap : permis 70° + asin(2 / 6,2) ≈ 89°
+			-- 2,5 studs à l'horizontale (hors de l'aplomb), 6 studs plus bas, 150° du cap : permis 70° + asin(2 / 6,5) ≈ 88°
 			local yaw = math.rad(150)
-			local target = Vector3.new(math.cos(yaw) * 1.5, -6, math.sin(yaw) * 1.5)
+			local target = Vector3.new(math.cos(yaw) * 2.5, -6, math.sin(yaw) * 2.5)
 			T.expectEqual((ShotRules.checkMeleeOrientation(Vector3.new(1, 0, 0), Vector3.zero, target)), false)
 		end)
 

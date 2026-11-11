@@ -334,12 +334,17 @@ function ShotRules.countShot(mag: Magazine)
 end
 
 -- Cette méthode permet de lister les instants où rembobiner la cible lorsqu'un coup de mêlée arrive (sans instant
--- annoncé) : de now à now - MAX_REWIND, tous les MELEE_REWIND_STEP, le plus récent d'abord.
+-- annoncé) : de now à now - MAX_REWIND, tous les MELEE_REWIND_STEP, le plus récent d'abord ; la borne now - MAX_REWIND
+-- est toujours testée, même si elle n'est pas un multiple du pas.
 function ShotRules.meleeRewindTimes(now: number): { number }
 	local times = {}
 	local steps = math.floor(PositionHistory.MAX_REWIND / ShotRules.MELEE_REWIND_STEP + 1e-6)
 	for i = 0, steps do
 		table.insert(times, now - i * ShotRules.MELEE_REWIND_STEP)
+	end
+	local oldest = now - PositionHistory.MAX_REWIND
+	if times[#times] - oldest > 1e-6 then
+		table.insert(times, oldest)
 	end
 	return times
 end
@@ -374,12 +379,16 @@ function ShotRules.checkMeleeOrientation(
 	attackerPos: Vector3,
 	targetPos: Vector3
 ): (boolean, number, string?)
-	local angle = ShotRules.horizontalAngle(look, attackerPos, targetPos)
-	if angle == nil then
-		-- Cible à la verticale du tireur : toute direction horizontale touche son corps
+	local angle, horizontal = ShotRules.horizontalAngle(look, attackerPos, targetPos)
+	local delta = targetPos - attackerPos
+	if
+		angle == nil or (horizontal <= ShotRules.MELEE_BODY_RADIUS and math.abs(delta.Y) > ShotRules.MELEE_BODY_RADIUS)
+	then
+		-- Cible à l'aplomb du tireur, nettement au-dessus ou au-dessous : son corps passe sous (ou sur) le tireur, un
+		-- regard vers le bas (ou le haut) la touche quel que soit le cap. À même hauteur, l'angle permis s'applique
 		return true, -math.huge, nil
 	end
-	local distance = (targetPos - attackerPos).Magnitude
+	local distance = delta.Magnitude
 	local limit = ShotRules.meleeAngleLimit(distance)
 	local excess = angle - limit
 	if excess <= 0 then

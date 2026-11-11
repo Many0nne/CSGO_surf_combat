@@ -377,7 +377,7 @@ local DEFAULT_HEAD_OFFSET = Vector3.new(0, 1.5, 0)
 
 -- Cette méthode permet de lister les positions rembobinées de la cible lorsqu'un coup de mêlée arrive (le remote
 -- n'annonce pas d'instant) : toute la borne de rembobinage, la plus récente d'abord, sans celles hors de portée du
--- tireur ; position actuelle si la cible n'a pas d'historique.
+-- tireur ; position actuelle (déjà à portée, resolveAttack) si la cible n'a pas d'historique ou aucune position à portée.
 local function meleeSamples(
 	world: ShotWorld,
 	targetCharacter: Model,
