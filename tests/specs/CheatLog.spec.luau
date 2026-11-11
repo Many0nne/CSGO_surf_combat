@@ -343,9 +343,9 @@ return function(T, Loader)
 			local env = setup()
 			local C = env.CheatLog
 			local player = fakePlayer(1, "Alice")
-			T.expectEqual(C.admit(player :: any, env.N.MELEE_DAMAGE, Instance.new("Model"), "kill"), false)
+			T.expectEqual(C.admit(player :: any, env.N.MELEE_DAMAGE, Instance.new("Model"), "kill", 0), false)
 			T.expectEqual(C.summary(1).counts.RemoteArgs.high, 1)
-			C.admit(player :: any, env.N.CHARACTER_SYNC, Vector3.new(0 / 0, 0, 0), 0)
+			C.admit(player :: any, env.N.CHARACTER_SYNC, Vector3.new(0 / 0, 0, 0), 0, 0, false)
 			C.admit(player :: any, env.N.SAVE_SETTINGS, "x")
 			T.expectEqual(player.kickedWith, C.KICK_MESSAGE)
 		end)
@@ -365,7 +365,7 @@ return function(T, Loader)
 			local C = env.CheatLog
 			local player = fakePlayer(1, "Alice")
 			player.Parent = nil
-			T.expectEqual(C.admit(player :: any, env.N.MELEE_DAMAGE, Instance.new("Model"), "kill"), false)
+			T.expectEqual(C.admit(player :: any, env.N.MELEE_DAMAGE, Instance.new("Model"), "kill", 0), false)
 			T.expectEqual(C.summary(1), nil)
 		end)
 

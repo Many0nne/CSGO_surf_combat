@@ -193,7 +193,9 @@ contrôle `ping` (`ShotRules.checkShotDelay`) borne `now - shotTime` (et `now - 
   (`init.server.luau`, `pcall`, nil pour un bot). Écarté : un RTT mesuré par `CharacterSync`, qui n'existe pas (il
   faudrait un écho horodaté), et que le client pourrait gonfler en retardant sa réponse ; `GetNetworkPing` ne dépend
   d'aucun script du client.
-- **Borne** : `ping × PING_FACTOR (2) + PING_MARGIN (0,1 s)`. Un tir honnête arrive un aller simple (≈ ping / 2)
+- **Borne** : `ping × PING_FACTOR (2) + PING_MARGIN (0,1 s)` sur `now - shotTime`. `INTERP_DELAY` n'y figure pas :
+  il ne retarde pas l'arrivée du tir, il s'ajoute après coup au rembobinage (`rewindTime` : `shotTime -
+  INTERP_DELAY`) ; le rembobinage accepté vaut donc au plus `ping × 2 + 0,1 + INTERP_DELAY`, la formule du brief. Un tir honnête arrive un aller simple (≈ ping / 2)
   plus la frame du tir, le tick réseau du client et le Heartbeat du serveur après `shotTime`. Facteur 2 (relevé en
   revue) : `HitscanDamage` comme `MeleeDamage` sont fiables, un paquet perdu est renvoyé (un aller-retour de plus) ;
   un aller peut être plus lent que le retour ; et `GetNetworkPing` est une moyenne, dont des retours du DevForum disent

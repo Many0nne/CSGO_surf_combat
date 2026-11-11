@@ -389,9 +389,8 @@ local function rewoundPose(world: ShotWorld, targetCharacter: Model, tRoot: Base
 	return { pos = pos, yaw = yaw, crouching = crouching }
 end
 
--- Cette méthode permet de replacer une partie de la cible (position sur le rig serveur) dans sa pose rembobinée
--- lorsqu'un tir ou un coup est vérifié (#213) ; l'accroupi actuel est le dernier relevé de son historique, lu
--- seulement si l'accroupi déplace les parties (CROUCH_DROP non nul).
+-- Cette méthode permet de replacer une partie de la cible dans sa pose rembobinée lorsqu'un tir ou un coup est vérifié
+-- (#213) ; accroupi actuel lu dans l'historique seulement si CROUCH_DROP est non nul.
 local function posedCenter(
 	world: ShotWorld,
 	targetCharacter: Model,

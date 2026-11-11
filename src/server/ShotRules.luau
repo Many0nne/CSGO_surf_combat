@@ -206,9 +206,8 @@ function ShotRules.maxShotDelay(ping: number): number
 	return math.max(ping, 0) * ShotRules.PING_FACTOR + ShotRules.PING_MARGIN
 end
 
--- Cette méthode permet de vérifier l'instant annoncé (shotTime, hitTime) lorsqu'un tir ou un coup arrive : pas plus
--- ancien que maxShotDelay(ping) ni en avance de plus de CLOCK_TOLERANCE sur now. Sans ping connu (nil, non fini) :
--- accepté, rien à comparer.
+-- Cette méthode permet de vérifier l'instant annoncé (shotTime, hitTime) lorsqu'un tir ou un coup arrive : au plus
+-- maxShotDelay(ping) avant now, CLOCK_TOLERANCE après ; accepté sans ping connu.
 function ShotRules.checkShotDelay(shotTime: number, now: number, ping: number?): (boolean, string?)
 	if ping == nil or not MathRules.isFinite(ping) then
 		return true
@@ -226,9 +225,7 @@ function ShotRules.checkShotDelay(shotTime: number, now: number, ping: number?):
 end
 
 -- Cette méthode permet de replacer une partie de la cible dans sa pose rembobinée lorsqu'on vérifie un tir ou un coup
--- (#213) : décalage de la partie pris sur le rig serveur dans le repère de sa racine (rootCFrame, rootPos), corrigé de
--- CROUCH_DROP si l'accroupi diffère (parties au-dessus de la racine), tourné au cap rembobiné (cap actuel s'il est
--- inconnu) et posé sur la racine rembobinée.
+-- (#213) : décalage dans le repère de la racine, corrigé de CROUCH_DROP, tourné au cap rembobiné, posé sur la racine.
 function ShotRules.posedPartCenter(
 	rootCFrame: CFrame,
 	rootPos: Vector3,
