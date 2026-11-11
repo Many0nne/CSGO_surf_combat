@@ -29,12 +29,38 @@ function CharacterSyncRules.isWellFormed(pos: any, yaw: any): boolean
 	return typeof(pos) == "Vector3" and isFinite(pos.X) and isFinite(pos.Y) and isFinite(pos.Z) and isFinite(yaw)
 end
 
--- Cette méthode permet de décider si un déplacement annoncé est possible lorsque le serveur reçoit une position :
--- distance au dernier point accepté au plus MAX_SPEED_SERVER × durée écoulée (au moins un intervalle d'envoi, pour
--- les paquets arrivés groupés) + MAX_DELTA_POS de marge.
-function CharacterSyncRules.isPlausibleMove(lastPos: Vector3, newPos: Vector3, elapsed: number): boolean
-	local dt = math.max(elapsed, CharacterSyncRules.SEND_INTERVAL)
-	return (newPos - lastPos).Magnitude <= MovementConfig.MAX_SPEED_SERVER * dt + MovementConfig.MAX_DELTA_POS
+-- Seau de distance d'un joueur (#172, docs/anticheat.md « D1 ») : `stored` = studs mis de côté (au plus MAX_DELTA_POS),
+-- `lastAt` = heure serveur du dernier paquet jugé (accepté ou refusé).
+export type MoveBudget = { stored: number, lastAt: number }
+
+-- Cette méthode permet de créer le seau de distance d'un personnage lorsque le serveur commence à suivre sa position
+-- (apparition) : plein, pour qu'un premier paquet tardif ne soit pas refusé.
+function CharacterSyncRules.newBudget(now: number): MoveBudget
+	return { stored = MovementConfig.MAX_DELTA_POS, lastAt = now }
+end
+
+-- Cette méthode permet de décider si un déplacement annoncé est possible lorsque le serveur reçoit une position : le
+-- budget du paquet est le seau plus MAX_SPEED_SERVER × durée depuis le paquet précédent, durée plafonnée à
+-- MAX_SILENCE ; un déplacement accepté le consomme, le reste (au plus MAX_DELTA_POS) est gardé pour les paquets
+-- suivants. Un refus ne consomme rien, mais le temps écoulé est compté : se taire ou se faire refuser n'accumule pas.
+function CharacterSyncRules.tryMove(budget: MoveBudget, lastPos: Vector3, newPos: Vector3, now: number): boolean
+	local elapsed = math.clamp(now - budget.lastAt, 0, MovementConfig.MAX_SILENCE)
+	local allowance = budget.stored + MovementConfig.MAX_SPEED_SERVER * elapsed
+	budget.lastAt = math.max(budget.lastAt, now)
+	local distance = (newPos - lastPos).Magnitude
+	local accepted = distance <= allowance
+	if accepted then
+		allowance -= distance
+	end
+	budget.stored = math.min(allowance, MovementConfig.MAX_DELTA_POS)
+	return accepted
+end
+
+-- Cette méthode permet de savoir si un paquet a été envoyé avant que le client n'applique la dernière correction
+-- lorsqu'il arrive (ack = numéro de la dernière correction appliquée, joint à chaque paquet) : un tel paquet part
+-- d'une position que le serveur a déjà refusée, il est ignoré sans être jugé, ce qui évite une boucle de corrections.
+function CharacterSyncRules.awaitsAck(pendingSeq: number?, ack: number): boolean
+	return pendingSeq ~= nil and ack < pendingSeq
 end
 
 -- Cette méthode permet de lire le cap horizontal (rad, autour de Y) d'une orientation lorsque le client l'envoie.

@@ -14,9 +14,13 @@ Protocol.Names = {
 	SCORE_UPDATE = "ScoreUpdate",
 	ROUND_RESULT = "RoundResult",
 	PLAYER_DIED = "PlayerDied",
-	-- Position des personnages (#75), UnreliableRemoteEvent : client → serveur (position, cap) à NET_SYNC_RATE,
-	-- puis serveur → autres clients (joueur, position, cap, horodatage serveur), cf. server/CharacterSync
+	-- Position des personnages (#75), UnreliableRemoteEvent : client → serveur (position, cap, numéro de la dernière
+	-- correction appliquée) à NET_SYNC_RATE, puis serveur → autres clients (joueur, position, cap, horodatage
+	-- serveur), cf. server/CharacterSync
 	CHARACTER_SYNC = "CharacterSync",
+	-- Correction de position (#172), RemoteEvent fiable serveur → client (personnage, dernière position acceptée,
+	-- numéro) : le client s'y replace, vitesse nulle, et joint le numéro à ses paquets CharacterSync suivants
+	MOVEMENT_CORRECTION = "MovementCorrection",
 	-- Arme 3e personne (#5) : client → serveur, action visuelle ("Shoot" | "Reload")
 	WEAPON_ACTION = "WeaponAction",
 	-- Feedback

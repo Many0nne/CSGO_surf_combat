@@ -1,8 +1,8 @@
 # Anti-triche
 
 État des lieux, menaces classées et plan d'implémentation (#160). Est implémenté ce qui est décrit dans « Ce qui est
-déjà en place », dans les paragraphes « Aujourd'hui » et dans « Journaliser » (#170 : `CheatLog`, `RemoteGuard`) ; le
-reste est à faire. Les issues proposées sont à la fin, dans « Plan ».
+déjà en place », dans les paragraphes « Aujourd'hui », dans « Journaliser » (#170 : `CheatLog`, `RemoteGuard`) et
+dans les parades marquées « fait » ; le reste est à faire. Les issues proposées sont à la fin, dans « Plan ».
 
 ## Principe
 
@@ -24,7 +24,7 @@ envoyant des données plausibles. Là, on ne peut que détecter statistiquement,
 |---|---|---|
 | Mêlée | Cible = autre participant vivant, arme de mêlée réellement en main, distance des racines ≤ 10 studs, dégâts et cadence lus dans `WeaponConfig` selon le type d'attaque, backstab recalculé sur les positions serveur (#47) | `src/server/Validator.luau:119-137` |
 | Tir | Cible valide, arme à distance en main, partie touchée appartenant à la cible, distance des racines ≤ 250 studs, cadence `FireDelay` à 0,15 s près, dégâts calculés par le serveur selon la zone | `src/server/Validator.luau:97-115` |
-| Position | Forme (Vector3 et angle finis, coordonnées ≤ 1e5), débit ≤ 2 × 20 Hz, distance ≤ `MAX_SPEED_SERVER` × durée + `MAX_DELTA_POS`, personnage vivant | `src/server/CharacterSync.luau:69-88` |
+| Position | Forme (Vector3 et angle finis, coordonnées ≤ 1e5), personnage vivant, seau de distance (300 studs/s soutenus, silence plafonné), refus journalisé et corrigé (#172) | `src/server/CharacterSync.luau:102-147`, `src/shared/CharacterSyncRules.luau:46-58` |
 | Réglages | Réglages entièrement assainis par `PlayerSettings.sanitize`, une écriture DataStore au plus toutes les 10 s | `src/server/SettingsStore.luau:113-130` |
 | Feedback | Type `string`, longueur 10 à 500, délai de 60 s après un envoi réussi, 5 envois par semaine (DataStore) | `src/server/FeedbackService.luau:76-104` |
 | Debug | Remote `DebugPlaytest` créé seulement dans Studio | `src/server/DebugPlaytest.luau:365-372` |
@@ -42,7 +42,7 @@ Impact : ce que gagne le tricheur et ce que subissent les autres. Coût : serveu
 | # | Menace | Impact aujourd'hui | Coût de la parade | Priorité |
 |---|---|---|---|---|
 | T1 | Tir sans viser, à travers les murs, hitbox agrandie (« silent aim ») | **Critique** : un tir accepté par cible à 250 studs, 1 par 1,46 s, tête choisie (460 dégâts) | Faible serveur, moyen en complexité | P1 |
-| D1 | Vitesse et téléportation | **Critique** : ~400 à 800 studs/s soutenus, téléportation de 300 studs par seconde de silence | Faible | P1 |
+| D1 | Vitesse et téléportation | Fermé (#172) : 300 studs/s soutenus au plus, saut borné à 225 studs après un silence, refus corrigé | Faible | Fait |
 | M1 | Coup de couteau dans toutes les directions (« kill aura ») | **Élevé** : one-shot de dos à 10 studs, cumulable avec D1 | Faible | P2 |
 | R1 | Remotes sans débit ni garde (respawn, feedback) | Fermé (#170, #171) : garde commune, délai de réapparition et feedback limité en mémoire | Faible | Fait |
 | T2 | Munitions et durée d'equip | **Moyen** : tir dès l'equip (#159), pas de rechargement | Faible | P2 |
@@ -182,12 +182,15 @@ juger les positions reçues.
 borne de vitesse seule ne peut pas être serrée. S'y ajoutent les boosts de la map (`Maps.Map.Boosts`, geysers et
 lanceurs à vitesse imposée, portiques qui ajoutent `Boost` studs/s, `docs/maps.md:251-254`), détectés et appliqués par
 le client seul (`src/client/systems/movement/BoostSystem.luau:1-2`) : une parade qui juge la vitesse ou la gravité
-doit les connaître (règles pures dans `src/shared/MapRules.luau`, réutilisables par le serveur). La règle actuelle :
-`|new - last| ≤ 300 × max(écoulé, 0,05) + 5` (`src/shared/CharacterSyncRules.luau:35-38`).
+doit les connaître (règles pures dans `src/shared/MapRules.luau`, réutilisables par le serveur). Attention : un
+geyser ou un lanceur impose sa vitesse (`Velocity`) sans la borner à `MAX_SPEED_SERVER` (`MapRules.velocityAfter`), et
+le lancement depuis le soleil prend l'attribut `Speed` tel quel : au-delà de 300 studs/s, le seau de D1 refuserait le
+joueur. Dizzy n'a ni boost ni `SunLaunch` aujourd'hui ; une map qui en ajoute doit rester sous 300 studs/s ou relever
+`MAX_SPEED_SERVER`.
 
-### D1. Vitesse et téléportation
+### D1. Vitesse et téléportation (fait, #172)
 
-**Aujourd'hui, failles de la règle.**
+**Avant #172, failles de la règle** `|new - last| ≤ 300 × max(écoulé, 0,05) + 5`.
 
 1. Le minimum de 0,05 s et la marge de 5 studs s'appliquent à **chaque** paquet, et le serveur accepte un paquet toutes
    les 0,025 s (`CharacterSync.luau:81`) : 20 studs par paquet, soit ~400 studs/s à 20 Hz et ~800 studs/s à 40 Hz.
@@ -201,24 +204,46 @@ doit les connaître (règles pures dans `src/shared/MapRules.luau`, réutilisabl
 acceptée est celle que le `Validator` utilise pour la portée (`Validator.luau:65-67`) : se téléporter dans le dos d'une
 cible rend le kill aura (M1) praticable sur toute la map.
 
-**Parade.**
+**Parade en place (#172).**
 
-1. Paquets groupés : remplacer le minimum par paquet par un **seau qui fuit** (leaky bucket, conseillé par la doc
-   Roblox, [Movement validation](https://create.roblox.com/docs/scripting/security/network-ownership)) : budget de
-   distance qui se remplit à `MAX_SPEED_SERVER` studs/s, plafonné (ex. 0,25 s de budget), consommé par chaque
-   déplacement accepté. La marge `MAX_DELTA_POS` est un plafond du seau, pas un bonus par paquet.
-2. Silence : plafonner la durée prise en compte (ex. 0,5 s). Au-delà, refuser et **corriger** : le serveur renvoie au
-   client sa dernière position acceptée (remote ou attribut), le client s'y replace avec vitesse nulle. Le
-   [modèle d'autorité serveur](https://create.roblox.com/docs/projects/server-authority) fait la même chose en natif.
-3. Apparitions et lancement depuis le soleil : déjà gérés (la piste repart de la racine posée par `SpawnManager`,
-   `CharacterSync.luau:32-42`) ; tout futur téléport de gameplay devra passer par le serveur et réinitialiser la piste.
-4. Option : borne d'accélération plutôt que de vitesse (la vitesse ne peut croître que de `AIR_ACCEL`/gravité × dt),
-   plus serrée mais délicate avec les rampes ; à n'envisager qu'après mesure.
+1. **Seau qui fuit** (leaky bucket, conseillé par la doc Roblox,
+   [Movement validation](https://create.roblox.com/docs/scripting/security/network-ownership)), règle pure
+   `CharacterSyncRules.tryMove` : chaque paquet a pour budget `stored + MAX_SPEED_SERVER × min(écoulé, MAX_SILENCE)`,
+   `écoulé` = temps depuis le paquet précédent jugé (accepté **ou refusé**). Un déplacement accepté consomme son budget,
+   le reste est gardé dans `stored`, plafonné à `MAX_DELTA_POS`. Un refus ne consomme rien, mais son temps est compté :
+   se taire ou se faire refuser n'accumule rien. Constantes (`src/shared/MovementConfig.luau`) :
+   `MAX_SPEED_SERVER` = 300 studs/s, `MAX_DELTA_POS` = 75 studs (0,25 s mises de côté, pour la gigue et les paquets
+   groupés), `MAX_SILENCE` = 0,5 s. Bornes : 300 studs/s soutenus quel que soit le débit d'envoi, saut d'un paquet
+   ≤ 75 + 150 = 225 studs après n'importe quel silence. Le délai minimal de 0,025 s entre deux paquets a été retiré :
+   des paquets groupés passent tous, chacun consomme le seau, le débit reste borné par la garde commune (40/s).
+2. **Refus** : journalisé `CheatLog` (`Movement`, gravité moyenne : un vrai lag peut en produire un), puis **correction**
+   : le serveur envoie au client, par le remote fiable `MovementCorrection`, `(personnage, dernière position acceptée,
+   numéro)`. `MovementController` s'y replace, vitesse nulle, sans interpolation, état recalculé au tick suivant. Le
+   client joint à chaque paquet `CharacterSync` le numéro de la dernière correction appliquée ; tant qu'il est
+   inférieur à la correction en attente, ses paquets (partis d'une position déjà refusée) sont ignorés sans être jugés
+   ni journalisés : **pas de boucle de corrections**. Correction renvoyée si elle reste sans réponse 1 s (filet). Un
+   numéro forgé ne fait que reprendre la validation : il ne donne aucun budget.
+3. Apparitions et lancement depuis le soleil : la piste (et le seau, plein) repart de la racine posée par
+   `SpawnManager` à chaque nouveau personnage ; tout futur téléport de gameplay devra passer par le serveur et
+   réinitialiser la piste.
+4. Option non faite : borne d'accélération plutôt que de vitesse (la vitesse ne peut croître que de `AIR_ACCEL`/gravité
+   × dt), plus serrée mais délicate avec les rampes ; à n'envisager qu'après mesure.
 
-**Bots.** Non concernés : leurs positions viennent du serveur (`relayBot`, `CharacterSync.luau:117-128`).
+**Pièges.** Une correction ne doit **jamais** remplir le seau : un tricheur qui enchaîne refus et numéro forgé
+gagnerait un seau plein à chaque cycle (40 cycles/s). Le numéro de correction est croissant sur toute la session du
+joueur (pas remis à zéro à la réapparition) pour qu'un ancien accusé ne valide pas une correction récente.
 
-**Coût.** Nul côté serveur (quelques nombres par joueur), un remote de correction rare. Complexité faible, sauf la
-correction côté `MovementController`, à tester en jeu (lag réel, surf rapide).
+**Réutiliser (D2, #177).** Une nouvelle règle de déplacement (noclip, vol) se branche dans `onClientPosition`, après
+le seau, et appelle `refuse(player, track, détail, now)` (`src/server/CharacterSync.luau:91`) : journal et correction
+compris.
+
+**Bots.** Non concernés : leurs positions viennent du serveur (`relayBot`), qui ne passe pas par le seau.
+
+**Vérifié.** Tests `tests/specs/CharacterSyncRules.spec.luau` (300 studs/s soutenus, surf à 220 studs/s avec 80 ms de
+gigue, paquets groupés, rafale à 40 Hz, tricheur borné à 20 et 40 Hz, silences, suite de refus, reprise après
+correction). En jeu (Studio, latence nulle) : bhop sans refus ; un paquet forgé de 400 studs pendant une course est
+refusé une fois, journalisé, corrigé, et la course reprend sans seconde correction. Reste à observer en jeu publié :
+surf rapide avec un vrai ping (journal `Movement` des joueurs honnêtes).
 
 **Impact.** Ramène le tricheur à 300 studs/s au plus et supprime la téléportation, qui est l'aide principale du kill
 aura et de l'ESP actif.
@@ -263,7 +288,8 @@ commune (débit et types, voir R1) ; la colonne « Validation actuelle » décri
 |---|---|---|---|---|
 | `MeleeDamage` | C→S | `targetChar, attackKind` | Cible, arme, portée, type d'attaque, cadence, dégâts serveur (`Validator.luau:119-137`) | Orientation, ligne de vue (M1), equip (T2), tireur vivant |
 | `HitscanDamage` | C→S | `targetChar, hitPart` | Cible, arme, partie de la cible, portée 250, cadence (`Validator.luau:97-115`) | Origine, direction, ligne de vue, rembobinage (T1), munitions, equip (T2), tireur vivant |
-| `CharacterSync` (non fiable) | C→S puis S→C | `pos, yaw` | Forme, débit 40 Hz, distance (`CharacterSync.luau:69-88`) | Seau et silence (D1), noclip, vol (D2), correction |
+| `CharacterSync` (non fiable) | C→S puis S→C | `pos, yaw, ack` | Forme, débit 40 Hz (garde), seau de distance et silence plafonné, refus corrigé (D1, `CharacterSync.luau:102-147`) | Noclip, vol (D2) |
+| `MovementCorrection` | S→C | `char, pos, seq` | — | — |
 | `WeaponAction` | C→S | `action` | Valeur `Shoot`/`Reload`, outil en main, 0,05 s mini (`init.server.luau:127-139`) | `Shoot` non lié à la cadence de l'arme : 20 faux tirs/s attirent les bots (`hearShot`, `:143`) et, avec #156, déclencheraient 20 sons chez tous |
 | `RequestSpawn` | C→S | aucun | `SpawnRules.request` : spawn en vol, personnage en place, bannière de fin, mort depuis moins de `RESPAWN_DELAY` en round actif (`SpawnManager.luau:137-169`) | Rien (R1 fermé, #171) |
 | `SendFeedback` | C→S | `text` | Type, longueur, 60 s en mémoire après toute demande valide (posé avant le DataStore, quel que soit le résultat), 5 par semaine (`UpdateAsync`), rien d'écrit si la lecture échoue (`FeedbackService.luau:113-150`) | Rien (R1 fermé, #171) |
@@ -493,7 +519,7 @@ mode bloquant une fois mesurée.
   mémoire avant tout accès DataStore, quel que soit le résultat ; tests.
 - **Dépendances.** Peut se faire avant 1 (correctif autonome), journalisation branchée ensuite. **Priorité.** P1.
 
-### 3. Déplacement : seau de distance, durée de silence plafonnée, correction serveur — P1
+### 3. Déplacement : seau de distance, durée de silence plafonnée, correction serveur — P1 (fait, #172)
 
 - **Résumé.** D1 : remplacer le minimum par paquet par un seau qui fuit, plafonner le temps de silence, renvoyer le
   client à sa dernière position acceptée après un refus.

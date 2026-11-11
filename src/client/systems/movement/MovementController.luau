@@ -81,6 +81,17 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 	applyLaunch()
 	char:GetAttributeChangedSignal(SpawnLaunch.VELOCITY_ATTRIBUTE):Connect(applyLaunch)
 
+	-- Correction du serveur (#172) : position refusée, retour à la dernière position acceptée, vitesse nulle, sans
+	-- interpolation depuis l'ancienne position ; l'état (sol, surf) est recalculé au tick suivant.
+	CharacterSync.setCorrectionHandler(char, function(pos: Vector3)
+		motor:teleport(CFrame.new(pos) * hrp.CFrame.Rotation)
+		ownCFrame = hrp.CFrame
+		prevCFrame = hrp.CFrame
+		motor.velocity = Vector3.zero
+		motor:setAirborne()
+		lastVelocity = Vector3.zero
+	end)
+
 	-- Cette méthode permet d'avancer le personnage d'un tick fixe de durée dt lorsque la boucle de rendu a accumulé
 	-- assez de temps (0, 1 ou plusieurs ticks par frame selon le FPS : cf. StepTiming).
 	local function step(dt: number)

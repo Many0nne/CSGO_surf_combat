@@ -2,6 +2,8 @@
 -- NET_SYNC_RATE, et affiche les autres personnages (joueurs et bots, #139) à la position relayée par le serveur,
 -- interpolée avec INTERP_DELAY de retard (les racines sont ancrées : sans cela, ils restent figés à leur apparition).
 -- Le relais désigne le personnage (Model) : un bot n'a pas de Player.
+-- Une position refusée par le serveur (#172) revient en correction (MovementCorrection) : MovementController s'y
+-- replace, et le numéro de la dernière correction appliquée part avec chaque paquet (le serveur ignore les précédents).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -20,6 +22,24 @@ type Remote = { buffer: { CharacterSyncRules.Snapshot } }
 local remote: UnreliableRemoteEvent? = nil
 local remotes: { [Model]: Remote } = {}
 local sendAccumulator = 0
+-- Numéro de la dernière correction appliquée, joint à chaque paquet ; personnage local et fonction qui l'y replace.
+local correctionAck = 0
+local correctionTarget: Model? = nil
+local correctionApply: ((Vector3) -> ())? = nil
+
+-- Cette méthode permet d'appliquer une correction du serveur lorsqu'elle arrive : seulement pour le personnage local
+-- actuel (pas celui d'avant une réapparition), une seule fois par numéro, et le numéro n'est retenu qu'une fois appliqué.
+local function onCorrection(char: any, pos: any, seq: any)
+	if typeof(pos) ~= "Vector3" or type(seq) ~= "number" or seq <= correctionAck then
+		return
+	end
+	local apply = correctionApply
+	if not apply or char ~= correctionTarget then
+		return
+	end
+	apply(pos)
+	correctionAck = seq
+end
 
 -- Cette méthode permet de ranger la position d'un autre personnage lorsque le serveur la relaie ; un personnage neuf
 -- (réapparition) a son propre tampon et ne glisse donc pas depuis le lieu de sa mort. Un personnage pas encore
@@ -67,6 +87,14 @@ function CharacterSync.init()
 		remote = found
 		found.OnClientEvent:Connect(onRelayed)
 	end)
+	task.spawn(function()
+		local found = ReplicatedStorage:WaitForChild(NetworkProtocol.Names.MOVEMENT_CORRECTION, 15)
+		if not found or not found:IsA("RemoteEvent") then
+			warn("[CharacterSync] remote " .. NetworkProtocol.Names.MOVEMENT_CORRECTION .. " introuvable")
+			return
+		end
+		found.OnClientEvent:Connect(onCorrection)
+	end)
 	RunService:BindToRenderStep(
 		BIND_NAME,
 		Enum.RenderPriority.Camera.Value - 2,
@@ -98,7 +126,14 @@ function CharacterSync.send(hrp: BasePart, dt: number)
 		return
 	end
 	sendAccumulator = math.min(sendAccumulator - CharacterSyncRules.SEND_INTERVAL, CharacterSyncRules.SEND_INTERVAL)
-	remote:FireServer(hrp.Position, CharacterSyncRules.yawOf(hrp.CFrame.LookVector))
+	remote:FireServer(hrp.Position, CharacterSyncRules.yawOf(hrp.CFrame.LookVector), correctionAck)
+end
+
+-- Cette méthode permet de désigner le personnage local et la fonction qui le replace lorsque son mouvement démarre
+-- (apparition) : les corrections du serveur pour ce personnage lui sont passées (position, vitesse à remettre à zéro).
+function CharacterSync.setCorrectionHandler(char: Model, apply: (Vector3) -> ())
+	correctionTarget = char
+	correctionApply = apply
 end
 
 return CharacterSync

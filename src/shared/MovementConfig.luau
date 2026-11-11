@@ -43,9 +43,10 @@ return {
 	-- STRAFE_ASSIST_DEG = 45,
 
 	-- Réseau
-	NET_SYNC_RATE   = 20,
-	MAX_SPEED_SERVER = 300,
-	MAX_DELTA_POS   = 5,
+	NET_SYNC_RATE    = 20,
+	MAX_SPEED_SERVER = 300,  -- studs/s soutenus au plus (surf 200+), remplit le seau de distance du serveur (#172)
+	MAX_DELTA_POS    = 75,   -- plafond du seau (studs) : 0,25 s à MAX_SPEED_SERVER mises de côté, pour la gigue
+	MAX_SILENCE      = 0.5,  -- s de silence au plus comptées pour un paquet : au-delà, pas plus de budget
 
 	-- Hitbox
 	HITBOX_USE_RIG_BOUNDS = true,

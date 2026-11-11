@@ -57,6 +57,8 @@ getSettingsRmt.Parent = ReplicatedStorage
 local characterSyncRmt = Instance.new("UnreliableRemoteEvent")
 characterSyncRmt.Name = N.CHARACTER_SYNC
 characterSyncRmt.Parent = ReplicatedStorage
+-- Fiable : renvoie un client dont la position est refusée à sa dernière position acceptée (#172)
+local movementCorrectionRmt = makeRemote(N.MOVEMENT_CORRECTION)
 
 -- ── Initialisation des sous-systèmes ──────────────────────────────────────
 
@@ -192,7 +194,7 @@ end
 -- Position des joueurs envoyée par leur client, validée et relayée ; mort par chute hors de la map (attribut
 -- KillHeight de la map jouée) testée sur chaque position acceptée
 KillZone.init()
-CharacterSync.init(characterSyncRmt, KillZone.check)
+CharacterSync.init(characterSyncRmt, movementCorrectionRmt, KillZone.check)
 
 -- Une seule map est jouée (GameConfig.ACTIVE_MAP) : les autres sont retirées avant les premières apparitions
 MapSelection.activate(workspace:FindFirstChild("Maps"), GameConfig.ACTIVE_MAP)
