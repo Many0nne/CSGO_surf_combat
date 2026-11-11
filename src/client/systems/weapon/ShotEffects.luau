@@ -59,26 +59,14 @@ local function flash(muzzle: Attachment)
 	end
 end
 
--- Cette méthode permet d'oublier les rayons détruits (filet Debris, Terrain vidé) lorsqu'on les compte ou les anime.
-local function prune(): number
-	for i = #tracers, 1, -1 do
-		if not tracers[i].a0.Parent then
-			tracers[i].a1:Destroy()
-			table.remove(tracers, i)
-		end
-	end
-	return #tracers
-end
-
 -- Cette méthode permet d'effacer les rayons en cours lorsqu'une frame passe, et de détruire ceux dont la vie est
--- finie ; la boucle s'arrête quand il n'en reste plus.
+-- finie (ou déjà détruits par le filet Debris) ; la boucle s'arrête quand il n'en reste plus.
 local function step()
-	prune()
 	local now = os.clock()
 	for i = #tracers, 1, -1 do
 		local tracer = tracers[i]
 		local elapsed = now - tracer.born
-		if elapsed >= ShotEffectRules.TRACER_LIFETIME then
+		if elapsed >= ShotEffectRules.TRACER_LIFETIME or not tracer.a0.Parent then
 			tracer.a0:Destroy()
 			tracer.a1:Destroy()
 			table.remove(tracers, i)
@@ -129,14 +117,18 @@ local function spawnTracer(start: Vector3, finish: Vector3)
 end
 
 -- Cette méthode permet de montrer la flamme et le rayon d'une arme lorsqu'un tir en part : rayon de la bouche du
--- canon (repli : l'origine du tir) jusqu'à endpoint, s'il n'est pas trop court.
-local function show(muzzle: Attachment?, origin: Vector3, endpoint: Vector3)
+-- canon (repli : l'origine du tir) jusqu'à endpoint, s'il n'est pas trop court ; camera : arrêté avant elle (autres).
+local function show(muzzle: Attachment?, origin: Vector3, endpoint: Vector3, camera: Vector3?)
 	if muzzle then
 		flash(muzzle)
 	end
 	local start = ShotEffectRules.tracerStart(origin, muzzle and muzzle.WorldPosition, endpoint)
-	if start then
-		spawnTracer(start, endpoint)
+	local finish: Vector3? = endpoint
+	if start and camera then
+		finish = ShotEffectRules.clipNearCamera(start, endpoint, camera)
+	end
+	if start and finish then
+		spawnTracer(start, finish)
 	end
 end
 
@@ -164,7 +156,7 @@ local function onShotFired(shooter: any, weaponName: any, origin: any, direction
 		return
 	end
 	local muzzle = muzzleOf(shooter:FindFirstChild(WeaponThirdPerson.MODEL_NAME))
-	if not ShotEffectRules.hasRoom(prune()) then
+	if not ShotEffectRules.hasRoom(#tracers) then
 		if muzzle then
 			flash(muzzle)
 		end
@@ -174,7 +166,9 @@ local function onShotFired(shooter: any, weaponName: any, origin: any, direction
 	remoteRayParams.FilterDescendantsInstances = { shooter, workspace.CurrentCamera :: Instance }
 	local range = WeaponConfig.HITSCAN_RANGE
 	local result = workspace:Raycast(origin, direction.Unit * range, remoteRayParams)
-	show(muzzle, origin, ShotEffectRules.endpoint(origin, direction, result and result.Position, range))
+	local endpoint = ShotEffectRules.endpoint(origin, direction, result and result.Position, range)
+	local camera = workspace.CurrentCamera
+	show(muzzle, origin, endpoint, camera and camera.CFrame.Position)
 end
 
 -- Cette méthode permet d'écouter les tirs relayés par le serveur lorsque le client démarre ; stateOf lit l'état du

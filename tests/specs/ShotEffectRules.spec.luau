@@ -56,6 +56,47 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("ShotEffectRules.tracerStart : tireur distant en retard (#54)", function()
+		T.it("part de l'origine quand le canon dessiné est loin de l'origine relayée (interpolation)", function()
+			local lagging = ORIGIN + Vector3.new(ShotEffectRules.MUZZLE_MAX_OFFSET + 5, 0, 0)
+			T.expectEqual(ShotEffectRules.tracerStart(ORIGIN, lagging, ORIGIN + FORWARD * 200), ORIGIN)
+		end)
+
+		T.it("garde le canon à moins de MUZZLE_MAX_OFFSET de l'origine", function()
+			local near = ORIGIN + Vector3.new(ShotEffectRules.MUZZLE_MAX_OFFSET - 1, 0, 0)
+			T.expectEqual(ShotEffectRules.tracerStart(ORIGIN, near, ORIGIN + FORWARD * 200), near)
+		end)
+	end)
+
+	T.describe("ShotEffectRules.clipNearCamera (#54)", function()
+		local start = Vector3.new(0, 10, -100)
+		local radius = ShotEffectRules.NEAR_CAMERA
+
+		T.it("ne touche pas un rayon qui passe loin de la caméra", function()
+			local endpoint = Vector3.new(0, 10, 100)
+			T.expectEqual(ShotEffectRules.clipNearCamera(start, endpoint, Vector3.new(50, 10, 0)), endpoint)
+		end)
+
+		T.it("arrête à NEAR_CAMERA de la caméra un tir qui nous touche", function()
+			local camera = Vector3.new(0, 10, 0)
+			local finish = ShotEffectRules.clipNearCamera(start, camera + Vector3.new(0, -0.5, 0), camera)
+			T.expect(finish ~= nil, "rayon supprimé")
+			T.expect(math.abs((finish - camera).Magnitude - radius) < 0.6, tostring(finish))
+			T.expect(finish.Z < camera.Z, "le rayon dépasse la caméra")
+		end)
+
+		T.it("arrête avant la caméra un tir qui la traverse (fin derrière nous)", function()
+			local camera = Vector3.new(0, 10, 0)
+			local finish = ShotEffectRules.clipNearCamera(start, Vector3.new(0, 10, 100), camera)
+			T.expectEqual(finish, Vector3.new(0, 10, -radius))
+		end)
+
+		T.it("pas de rayon quand il part déjà presque dans la caméra", function()
+			local camera = start + Vector3.new(0, 0, radius)
+			T.expectEqual(ShotEffectRules.clipNearCamera(start, Vector3.new(0, 10, 100), camera), nil)
+		end)
+	end)
+
 	T.describe("ShotEffectRules.shouldShow / hasRoom (#54)", function()
 		local shooter, me = {}, {}
 

@@ -25,7 +25,13 @@ ShotEffectRules.TRACER_LIFETIME = 0.2
 ShotEffectRules.TRACER_RGB = { 255, 240, 180 }
 -- Un rayon plus court que ça (studs) n'est pas tracé : canon collé à un mur, ou bouche du canon au-delà de l'impact.
 ShotEffectRules.TRACER_MIN_LENGTH = 1
--- Rayons en cours au plus (les tirs des autres) : au-delà, un tir de plus n'a pas de rayon (beaucoup de bots).
+-- Bouche du canon à plus de cette distance (studs) de l'origine du tir : le rayon part de l'origine. Cas d'un tireur
+-- distant rapide, dessiné en retard de son interpolation (CharacterSync) alors que l'origine relayée est à jour.
+ShotEffectRules.MUZZLE_MAX_OFFSET = 8
+-- Distance (studs) sous laquelle un rayon venu d'un autre ne s'approche pas de notre caméra : il s'arrête avant, au
+-- lieu de finir dans l'œil quand le tir nous touche (un Beam face à la caméra y couvrirait l'écran).
+ShotEffectRules.NEAR_CAMERA = 3
+-- Rayons en cours au plus (les siens compris) : au-delà, un tir relayé n'a pas de rayon, seulement sa flamme.
 ShotEffectRules.MAX_ACTIVE = 16
 -- Nom des Instances créées pour un rayon (repérables en Studio, comptées par la vérification « aucune instance »).
 ShotEffectRules.INSTANCE_NAME = "ShotTracer"
@@ -53,9 +59,13 @@ function ShotEffectRules.endpoint(origin: Vector3, direction: Vector3, hitPositi
 	return origin + unit * range
 end
 
--- Cette méthode permet de choisir le départ du rayon lorsqu'un tir part : la bouche du canon si elle est connue,
--- sinon l'origine du tir ; nil si le rayon serait trop court ou partirait d'au-delà de l'impact (canon dans un mur).
+-- Cette méthode permet de choisir le départ du rayon lorsqu'un tir part : la bouche du canon si elle est connue et
+-- proche de l'origine du tir (MUZZLE_MAX_OFFSET), sinon l'origine ; nil si le rayon serait trop court ou partirait
+-- d'au-delà de l'impact (canon dans un mur).
 function ShotEffectRules.tracerStart(origin: Vector3, muzzle: Vector3?, endpoint: Vector3): Vector3?
+	if muzzle and (muzzle - origin).Magnitude > ShotEffectRules.MUZZLE_MAX_OFFSET then
+		muzzle = nil
+	end
 	local start = muzzle or origin
 	local path = endpoint - origin
 	local length = path.Magnitude
@@ -72,14 +82,34 @@ function ShotEffectRules.tracerStart(origin: Vector3, muzzle: Vector3?, endpoint
 	return start
 end
 
+-- Cette méthode permet d'arrêter un rayon venu d'un autre avant notre caméra lorsqu'il passe à moins de NEAR_CAMERA
+-- d'elle (tir qui nous touche ou nous frôle) : fin à l'entrée de cette sphère ; nil s'il n'en reste presque rien.
+function ShotEffectRules.clipNearCamera(start: Vector3, endpoint: Vector3, camera: Vector3): Vector3?
+	local path = endpoint - start
+	local length = path.Magnitude
+	if length <= 0 then
+		return nil
+	end
+	local unit = path / length
+	local along = math.clamp((camera - start):Dot(unit), 0, length)
+	local miss = (camera - (start + unit * along)).Magnitude
+	local radius = ShotEffectRules.NEAR_CAMERA
+	if miss >= radius then
+		return endpoint
+	end
+	local cut = along - math.sqrt(radius * radius - miss * miss)
+	if cut < ShotEffectRules.TRACER_MIN_LENGTH then
+		return nil
+	end
+	return start + unit * cut
+end
+
 -- Cette méthode permet de décider si les effets d'un tir relayé sont montrés lorsqu'il arrive : le tir d'un autre
 -- (le tireur voit déjà les siens), hors écrans du menu (mêmes états que le son, la salle du menu flotte au-dessus de
 -- la map).
 function ShotEffectRules.shouldShow(shooter: any, localCharacter: any, state: string?): boolean
-	if shooter == nil or shooter == localCharacter then
-		return false
-	end
-	return state ~= nil and ShotSoundRules.AUDIBLE_STATES[state] == true
+	-- même règle que le son de ces tirs, hors limite des sons en cours
+	return ShotSoundRules.shouldPlay(shooter, localCharacter, state, 0)
 end
 
 -- Cette méthode permet de savoir si un tir relayé a droit à son rayon lorsqu'il arrive (la flamme, elle, part

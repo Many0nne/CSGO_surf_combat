@@ -43,8 +43,9 @@ function HitscanSystem.resolveHit(activeViewmodel: Model?): string
 	local ray_dir = direction * WeaponConfig.HITSCAN_RANGE
 	local result = workspace:Raycast(origin, ray_dir, params)
 	local endpoint = result and result.Position or (origin + ray_dir)
-	-- Flamme du viewmodel et rayon de son canon jusqu'à l'impact (#54)
-	ShotEffects.playLocal(activeViewmodel, origin, endpoint)
+	-- Flamme du viewmodel et rayon de son canon jusqu'à l'impact (#54) ; dans son propre fil : une erreur des effets
+	-- n'empêche pas d'envoyer la touche
+	task.spawn(ShotEffects.playLocal, activeViewmodel, origin, endpoint)
 	if not result then
 		return "Shoot_void"
 	end
