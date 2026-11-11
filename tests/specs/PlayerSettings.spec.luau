@@ -139,6 +139,7 @@ return function(T, Loader)
 			T.expectEqual(low.crosshairGap, C.gap.min)
 			T.expectEqual(low.crosshairOpacity, C.opacity.min, "un viseur invisible n'est pas permis")
 			T.expectEqual(PlayerSettings.sanitize({ crosshairLength = 7.6 }).crosshairLength, 8, "px entiers")
+			T.expectEqual(PlayerSettings.sanitize({ crosshairOpacity = 0.3333 }).crosshairOpacity, 0.33, "au centième")
 			local bad = PlayerSettings.sanitize({
 				crosshairLength = 0 / 0,
 				crosshairThickness = "3",

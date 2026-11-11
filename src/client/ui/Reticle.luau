@@ -128,17 +128,20 @@ local function drawRect(
 	})
 end
 
--- Cette méthode permet de tracer un réticule aligné sur les px entiers (crosshair, #251) lorsqu'il est construit : une
--- épaisseur impaire déborde d'un px vers le haut ou la gauche, plutôt que de tomber sur des demi-px que Roblox arrondirait
--- frame par frame (contour décollé ou mordant le trait). Le contour est un cadre autour de chaque trait, rien dessous :
--- un trait translucide ne s'assombrit pas sur le contour.
+-- Cette méthode permet de tracer un réticule aligné sur les px entiers (crosshair, #251) lorsqu'il est construit, plutôt
+-- que sur des demi-px que Roblox arrondirait frame par frame (contour décollé ou mordant le trait) : une épaisseur impaire
+-- a un px de plus en bas ou à droite de l'axe, et le centre du réticule est alors le milieu du px [0, 1] ; les branches
+-- droite et basse partent d'un px plus loin pour garder le même écart des deux côtés. Le contour est un cadre autour de
+-- chaque trait, rien dessous : un trait translucide ne s'assombrit pas sur le contour.
 local function drawAligned(parent: GuiObject, spec: Spec)
-	local t, gap, length = spec.thickness, spec.gap, spec.length
+	local t, length = spec.thickness, spec.length
+	assert(length.Scale == 0, "Reticle : un réticule aligné sur les px a une longueur en px")
 	local lo = -math.floor(t / 2) -- bord haut ou gauche du trait, en px depuis l'axe
 	local hi = lo + t
 	local color, transparency = spec.color, spec.transparency or 0
 	local outline = spec.outline
 	for _, arm in ARMS do
+		local gap = spec.gap + (if arm.sign > 0 then t % 2 else 0)
 		drawBand(parent, arm, {
 			name = arm.name,
 			start = gap,

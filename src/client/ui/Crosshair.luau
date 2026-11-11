@@ -122,12 +122,20 @@ function Crosshair.init()
 		Parent = Players.LocalPlayer:WaitForChild("PlayerGui"),
 	})
 	gui = screenGui
+	-- Centre posé sur un px entier (fenêtre de taille impaire) : le tracé aligné sur les px le reste à l'écran
 	local root = UIKit.frame({
 		Name = "Root",
 		BackgroundTransparency = 1,
-		Size = UDim2.fromScale(1, 1),
+		Size = UDim2.fromOffset(0, 0),
 		Parent = screenGui,
 	})
+	-- Cette méthode permet de recentrer le crosshair au px près lorsque la taille de l'écran change.
+	local function center()
+		local size = screenGui.AbsoluteSize
+		root.Position = UDim2.fromOffset(math.floor(size.X / 2), math.floor(size.Y / 2))
+	end
+	center()
+	screenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(center)
 	redraw = Crosshair.mount(root)
 
 	LocalSettings.onChanged(update)

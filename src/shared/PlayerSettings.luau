@@ -222,7 +222,9 @@ function PlayerSettings.sanitize(raw: any): Settings
 		settings.crosshairOutline = raw.crosshairOutline
 	end
 	local opacity = crosshair.opacity
-	settings.crosshairOpacity = clampNumber(raw.crosshairOpacity, opacity.min, opacity.max, opacity.default)
+	-- Au centième, comme le curseur : la valeur dessinée est celle affichée
+	local rawOpacity = clampNumber(raw.crosshairOpacity, opacity.min, opacity.max, opacity.default)
+	settings.crosshairOpacity = math.round(rawOpacity * 100) / 100
 	settings.slotKeys = sanitizeKeys(raw.slotKeys)
 	return settings
 end
