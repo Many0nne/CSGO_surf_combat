@@ -147,6 +147,13 @@ Repris du retour d'expérience de la M9 (`docs/notes/retex-viewmodel-m9.md`).
 - **Studio et Rojo :** le code d'un worktree n'arrive dans Studio qu'après la connexion du plugin à son port (un clic
   de l'utilisateur, en mode Edit). Vérifier que le code attendu est bien là avant de conclure sur un test.
 
+- **Fondu des pistes d'action (#42) :** `ViewmodelSystem.playAnimation(name, markerOverrides, fadeTime)` passe `fadeTime` à
+  `track:Play()` et à l'arrêt des pistes précédentes. Sans valeur, Roblox applique son fondu par défaut de 0,1 s, qui
+  absorbe l'armé d'un coup court (celui des slashs de la M9 dure 0,09 à 0,1 s) et rend le coup mou. Le réglage est **par
+  arme**, via `AttackFadeTime` dans `WeaponConfig` (lu par `startMeleeAttack`) : la M9 est à `0` (la piste démarre sur la
+  pose de repos, donc rien à fondre). Les autres armes n'ont pas le champ et gardent le défaut de 0,1 s : l'AWP (Shoot,
+  Reload, Inspect) est inchangée. Si un coup à 0 paraît saccadé, monter `AttackFadeTime` à 0,03-0,05 s plutôt que
+  d'avancer le défaut global.
 - **Viewmodel dans Studio :** vérifier `PrimaryPart` avant un playtest. Il a disparu de l'instance Studio de l'AWP pendant la
   refonte, Rojo connecté à un autre worktree, alors que le `.rbxm` exporté l'avait encore (cause non établie). Le viewmodel
   retombe alors sur `HumanoidRootPart` et se décale de (-0,19 ; 0 ; 0,14) par rapport au rendu. Réparation : `CLAUDE.md`.
