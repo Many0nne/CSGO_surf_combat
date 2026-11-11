@@ -257,10 +257,8 @@ function RoundManager.removeParticipant(participant: Participant)
 	end
 end
 
--- Cette méthode permet de retirer du round un joueur revenu au menu (#157) comme un départ : score effacé, coups en
--- attente oubliés, disparition du personnage non comptée ; il revient à sa prochaine apparition (addParticipant).
--- Touché depuis moins de LEAVE_DEATH_WINDOW (#217, LeaveRules) : le départ compte d'abord comme une mort (kill du
--- dernier attaquant, kill feed) ; renvoie alors true et le tueur crédité, pour les stats persistantes.
+-- Cette méthode permet de retirer du round un joueur revenu au menu (#157) comme un départ (score effacé, coups oubliés,
+-- disparition non comptée) ; touché juste avant (#217, LeaveRules) : mort comptée d'abord, renvoie true et le tueur.
 function RoundManager.withdraw(participant: Participant): (boolean, Participant?)
 	local id = participant.id
 	local died, killer = false, nil

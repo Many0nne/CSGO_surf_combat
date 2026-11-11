@@ -98,6 +98,7 @@ return function(T, Loader)
 				call[1](table.unpack(call, 2, call.n))
 			end
 		end
+		-- Cette méthode permet d'avancer l'horloge simulée (os.clock) lorsqu'un test fait vieillir le dernier coup reçu.
 		function env.wait(seconds: number)
 			now += seconds
 		end

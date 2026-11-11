@@ -3,8 +3,7 @@
 local LeaveRules = {}
 
 -- Cette méthode permet de décider si un départ par MENU PRINCIPAL compte comme une mort lorsque le joueur quitte le
--- round : dernier coup reçu il y a moins de `window` secondes, et son auteur toujours inscrit (vivant ou mort).
--- Auteur parti (déconnecté ou lui-même revenu au menu) : personne à créditer, le départ reste libre.
+-- round : coup reçu il y a moins de `window` s, auteur toujours inscrit (mort ou vif ; parti : départ libre).
 function LeaveRules.countsAsDeath(lastHitAt: number?, now: number, window: number, attackerPresent: boolean): boolean
 	return lastHitAt ~= nil and attackerPresent and now - lastHitAt < window
 end

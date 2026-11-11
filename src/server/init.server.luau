@@ -423,6 +423,11 @@ local function applyHit(
 	if not humanoid or humanoid.Health <= 0 then
 		return nil
 	end
+	-- Protection d'apparition : TakeDamage l'ignore, la touche n'est pas un coup reçu (ni tueur désigné, ni départ par
+	-- MENU PRINCIPAL compté comme une mort, #217)
+	if targetCharacter:FindFirstChildWhichIsA("ForceField") then
+		return nil
+	end
 	recordHit(attacker, targetCharacter, isHeadshot)
 	local healthBefore = humanoid.Health
 	humanoid:TakeDamage(damage)
