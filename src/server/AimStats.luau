@@ -46,10 +46,9 @@ AimStats.MIN_SPEED_DT = 1 / 20
 -- Direction de tir presque verticale : cap indéfini, flick non mesuré (composante horizontale minimale).
 local MIN_HORIZONTAL = 0.1
 
--- Tir récent (#216) : instant annoncé par ShotFired, arrivée, cap reçu avant le tir et son âge à l'arrivée du tir
--- (figé là : un paquet de position arrivé entre le tir et sa touche, non fiable contre fiable, ne fausse pas le
--- flick), touche déjà rattachée. Gardé ShotLinkRules.MAX_AGE, comme le registre du Validator.
-export type ShotRecord = { shotTime: number, at: number, yaw: number?, yawAge: number?, hit: boolean }
+-- Cap reçu avant un tir et son âge à l'arrivée du tir (#216), gardé avec le tir dans un registre ShotLinkRules (data) :
+-- figé là, un paquet de position arrivé entre le tir et sa touche (non fiable contre fiable) ne fausse pas le flick.
+export type ShotYaw = { yaw: number?, yawAge: number? }
 
 export type Stats = {
 	name: string,
@@ -61,7 +60,7 @@ export type Stats = {
 	measured: number, -- touches dont le flick a pu être mesuré
 	flickHits: number, -- touches précédées d'un flick
 	peakSpeed: number, -- vitesse angulaire maximale mesurée (°/s)
-	recent: { ShotRecord }, -- tirs récents, en attente de leur touche
+	recent: ShotLinkRules.Ledger, -- tirs récents en attente de leur touche (data : ShotYaw)
 	reportedShots: number, -- tirs au dernier résumé périodique
 	everFlagged: boolean, -- signalé au moins une fois dans la session (son relevé final va alors au journal)
 }
@@ -129,18 +128,6 @@ function AimStats.yawDelta(yaw: number, direction: Vector3): number?
 	return math.deg(math.abs(MathRules.angleDelta(yaw, CharacterSyncRules.yawOf(direction))))
 end
 
--- Cette méthode permet d'oublier les tirs récents trop anciens d'un joueur (ShotLinkRules.MAX_AGE, ou venus du futur)
--- lorsqu'un tir ou une touche arrive.
-local function pruneRecent(stats: Stats, now: number)
-	local recent = stats.recent
-	for i = #recent, 1, -1 do
-		local age = now - recent[i].at
-		if age > ShotLinkRules.MAX_AGE or age < 0 then
-			table.remove(recent, i)
-		end
-	end
-end
-
 -- Cette méthode permet de compter un tir accepté lorsqu'il est relayé (ShotFired) : le dernier cap reçu (lastYaw à
 -- lastYawAt, même horloge que now) est figé pour le flick de sa touche, retrouvée par shotTime. Aucun veto.
 function AimStats.noteShot(
@@ -159,32 +146,8 @@ function AimStats.noteShot(
 	if type(shotTime) ~= "number" then
 		return
 	end
-	pruneRecent(stats, now)
-	table.insert(stats.recent, {
-		shotTime = shotTime,
-		at = now,
-		yaw = lastYaw,
-		yawAge = if lastYaw and lastYawAt then now - lastYawAt else nil,
-		hit = false,
-	})
-	while #stats.recent > ShotLinkRules.MAX_ENTRIES do
-		table.remove(stats.recent, 1)
-	end
-end
-
--- Cette méthode permet de retrouver le tir récent d'instant shotTime (à LINK_TOLERANCE près) pas encore touché
--- lorsqu'une touche rattachée par le Validator arrive ; le plus proche, nil sinon.
-local function findRecent(stats: Stats, shotTime: number, now: number): ShotRecord?
-	pruneRecent(stats, now)
-	local best: ShotRecord? = nil
-	local bestGap = math.huge
-	for _, record in stats.recent do
-		local gap = math.abs(record.shotTime - shotTime)
-		if not record.hit and gap <= ShotLinkRules.LINK_TOLERANCE and gap < bestGap then
-			best, bestGap = record, gap
-		end
-	end
-	return best
+	local shotYaw: ShotYaw = { yaw = lastYaw, yawAge = if lastYaw and lastYawAt then now - lastYawAt else nil }
+	ShotLinkRules.record(stats.recent, shotTime, now, true, false, shotYaw)
 end
 
 -- Cette méthode permet de compter une touche qui a fait des dégâts lorsqu'elle est appliquée : rattachée au tir
@@ -206,7 +169,7 @@ function AimStats.noteHit(
 	if isHeadshot then
 		stats.headshots += 1
 	end
-	local record = if type(linkedShotTime) == "number" then findRecent(stats, linkedShotTime, now) else nil
+	local record = ShotLinkRules.find(stats.recent, linkedShotTime, now, "hit")
 	if not record then
 		-- Touche sans tir rattaché : comptée (tête), ni « au but » ni flick
 		stats.orphanHits += 1
@@ -214,7 +177,8 @@ function AimStats.noteHit(
 	end
 	record.hit = true
 	stats.hitShots += 1
-	local yaw, age = record.yaw, record.yawAge
+	local shotYaw: ShotYaw = record.data or {}
+	local yaw, age = shotYaw.yaw, shotYaw.yawAge
 	if not direction or not yaw or not age or age < 0 or age > AimStats.FLICK_MAX_AGE then
 		return
 	end
@@ -305,7 +269,7 @@ function AimStats.describe(stats: Stats, verdict: Verdict): string
 			stats.hitShots,
 			pct("hitRate"),
 			stats.hits,
-			stats.orphanHits or 0,
+			stats.orphanHits,
 			stats.headshots,
 			pct("headshotRate"),
 			stats.flickHits,

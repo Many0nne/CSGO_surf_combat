@@ -337,9 +337,9 @@ end
 
 -- Cette méthode permet de compter un tir dans le chargeur lorsqu'il est accepté : ShotFired relayé, ou touche orpheline
 -- appliquée (#215 : chaque tir n'est compté qu'une fois).
-function ShotRules.countShot(mag: Magazine, now: number?)
+function ShotRules.countShot(mag: Magazine, now: number)
 	mag.shots += 1
-	mag.lastShotAt = now or mag.lastShotAt
+	mag.lastShotAt = now
 end
 
 -- Cette méthode permet de lister les instants où rembobiner la cible lorsqu'un coup de mêlée arrive (sans instant

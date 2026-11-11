@@ -813,6 +813,9 @@ départ, à revoir sur le journal de production.
   touches en envoyant des tirs sans touche (cadence et chargeur respectés depuis #215). Taire ses tirs manqués ne le
   fait plus monter (#216) : ses touches deviennent orphelines, hors du taux, et journalisées. Un « orph » élevé est donc
   à regarder ; quelques-uns s'expliquent par un `ShotFired` écarté par le relais (gigue) ;
+- un client qui n'envoie **jamais** `ShotFired` sort du taux de touches et du flick (aucune touche rattachée, rien de
+  mesuré) : seul le taux de tête le juge encore. Il ne passe pas inaperçu pour autant : chaque touche est une violation
+  `shotLink` faible (10 suffisent pour le résumé du webhook, `SUMMARY_MIN_LOW`) et « orph » égale « touches » au relevé ;
 - les touches sur les bots comptent : un joueur qui ne joue que contre des bots peut ressortir face à des joueurs qui
   jouent entre eux. Regarder le contexte de la partie avant de conclure ;
 - le jugement recalcule la population pour chaque joueur (O(n²) toutes les 120 s) : négligeable aux tailles de

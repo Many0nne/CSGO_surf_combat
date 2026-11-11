@@ -24,8 +24,9 @@ ShotLinkRules.MAX_AGE = 1
 ShotLinkRules.MAX_ENTRIES = 16
 
 -- Un tir du registre : instant annoncé, arrivée sur le serveur (os.clock), ShotFired reçu, touche rattachée. Une
--- entrée créée par une touche orpheline a fired = false jusqu'à l'arrivée éventuelle de son ShotFired.
-export type Entry = { shotTime: number, at: number, fired: boolean, hit: boolean }
+-- entrée créée par une touche orpheline a fired = false jusqu'à l'arrivée éventuelle de son ShotFired. data : ce que
+-- l'appelant garde avec le tir (AimStats : cap figé à l'arrivée du tir).
+export type Entry = { shotTime: number, at: number, fired: boolean, hit: boolean, data: any? }
 export type Ledger = { Entry }
 
 -- Cette méthode permet de créer un registre vide lorsqu'un participant tire pour la première fois avec une arme.
@@ -46,9 +47,16 @@ end
 
 -- Cette méthode permet d'ajouter un tir au registre lorsqu'un ShotFired est accepté (fired) ou qu'une touche orpheline
 -- est appliquée (hit) ; le plus ancien est oublié au-delà de MAX_ENTRIES.
-function ShotLinkRules.record(ledger: Ledger, shotTime: number, now: number, fired: boolean, hit: boolean): Entry
+function ShotLinkRules.record(
+	ledger: Ledger,
+	shotTime: number,
+	now: number,
+	fired: boolean,
+	hit: boolean,
+	data: any?
+): Entry
 	ShotLinkRules.prune(ledger, now)
-	local entry = { shotTime = shotTime, at = now, fired = fired, hit = hit }
+	local entry = { shotTime = shotTime, at = now, fired = fired, hit = hit, data = data }
 	table.insert(ledger, entry)
 	while #ledger > ShotLinkRules.MAX_ENTRIES do
 		table.remove(ledger, 1)
