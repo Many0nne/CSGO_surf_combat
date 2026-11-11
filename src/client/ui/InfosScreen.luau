@@ -53,6 +53,7 @@ local SECTIONS: { Section } = {
 		title = "CRÉDITS",
 		lines = {
 			"Physique inspirée du Source SDK (surf de CS:GO).",
+			"Son de tir à la tête : « Headshot 2 » par SilverIllusionist (freesound.org/people/SilverIllusionist).",
 		},
 	},
 	{

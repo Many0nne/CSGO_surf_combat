@@ -2,6 +2,7 @@
 -- du réticule de la lunette (blanc à contour noir). Un tir à la tête l'affiche en rouge (#60), un kill plus grand.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local SoundService = game:GetService("SoundService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local NetworkProtocol = require(Shared:WaitForChild("NetworkProtocol"))
@@ -23,9 +24,15 @@ local ROUNDED_ENDS = UDim.new(0.5, 0) -- rayon égal à la moitié de l'épaisse
 -- Les diagonales ne chevauchent pas le réticule en croix de la lunette.
 local DIAGONALS = { { 1, 1 }, { -1, 1 }, { -1, -1 }, { 1, -1 } }
 
+-- Ding aigu d'un tir à la tête (Headshot 2 de SilverIllusionist, freesound.org, crédité dans l'écran Infos) :
+-- source versionnée dans assets/sounds/Headshot.mp3, publiée par Open Cloud.
+local HEADSHOT_SOUND_ID = "rbxassetid://132843349237006"
+local HEADSHOT_VOLUME = 0.7
+
 local Hitmarker = {}
 
 local scale: UIScale?
+local headshotSound: Sound?
 local outlines: { Frame } = {}
 local lines: { Frame } = {}
 
@@ -64,11 +71,30 @@ local function build()
 	end
 end
 
+-- Cette méthode permet de jouer le ding du tir à la tête lorsque le serveur confirme une touche à la tête ;
+-- le son est créé une fois, puis rejoué depuis le début à chaque touche.
+local function playHeadshotSound()
+	if not headshotSound then
+		headshotSound = UIKit.create("Sound", {
+			Name = "HeadshotDing",
+			SoundId = HEADSHOT_SOUND_ID,
+			Volume = HEADSHOT_VOLUME,
+			Parent = SoundService,
+		}) :: Sound
+	end
+	local sound = headshotSound :: Sound
+	sound.TimePosition = 0
+	sound:Play()
+end
+
 -- Cette méthode permet d'afficher le marqueur puis de l'estomper lorsqu'une touche est confirmée ;
--- une nouvelle touche relance l'affichage et remplace le fondu en cours.
+-- une nouvelle touche relance l'affichage et remplace le fondu en cours. Un tir à la tête joue aussi un ding.
 function Hitmarker.show(isKill: boolean, isHeadshot: boolean)
 	if not scale then
 		build()
+	end
+	if isHeadshot then
+		playHeadshotSound()
 	end
 	(scale :: UIScale).Scale = if isKill then KILL_SCALE else 1
 	local color = if isHeadshot then HEADSHOT_COLOR else HIT_COLOR

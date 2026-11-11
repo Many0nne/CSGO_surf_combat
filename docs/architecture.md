@@ -94,7 +94,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/client/ui/FeedbackScreen.luau`: écran Feedback (message de 10 à 500 caractères envoyé au serveur, ENVOYER se tire).
 - `src/client/ui/HUDRules.luau`: règles pures du HUD (paliers de vitesse, timer, classement, emplacements de la barre d'armes, file et textes du kill feed).
 - `src/client/ui/KillFeed.luau`: kill feed en haut à droite (4 lignes, 5 s), affiché en partie vivant ou mort (`HUDRules.killFeedVisible`).
-- `src/client/ui/Hitmarker.luau`: marqueur de touche confirmée par le serveur (X blanc à contour noir, rouge sur un tir à la tête, plus grand sur un kill).
+- `src/client/ui/Hitmarker.luau`: marqueur de touche confirmée par le serveur (X blanc à contour noir, rouge sur un tir à la tête, plus grand sur un kill). Un tir à la tête joue aussi un ding (`assets/sounds/Headshot.mp3`, publié ; crédité dans Infos).
 - `src/client/ui/InfosScreen.luau`: écran Infos (surfer, commandes, crédits, à propos), même disposition que les Réglages, onglets à tirer.
 - `src/client/ui/MainMenu.luau`: menu d'accueil (salle des miroirs) où l'on choisit en tirant : titre, onglets, fiche d'arme et sélecteur en texte à ombre, hitmarker en guise de curseur, impacts de balles.
 - `src/client/ui/MenuCursor.luau`: hitmarker qui remplace le curseur sur tous les écrans du menu.
