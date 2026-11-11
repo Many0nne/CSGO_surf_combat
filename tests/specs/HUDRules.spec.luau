@@ -24,6 +24,62 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("HUDRules.keyDisplayEntries", function()
+		local function ids(mode: string): string
+			local list = {}
+			for _, entry in HUDRules.keyDisplayEntries(mode) do
+				table.insert(list, entry.id)
+			end
+			return table.concat(list, ",")
+		end
+
+		T.it("n'a aucune touche désactivé ou pour un mode inconnu", function()
+			T.expectEqual(ids("off"), "")
+			T.expectEqual(ids("nimporte"), "")
+		end)
+
+		T.it("simple : les quatre directions et le saut, sans accroupi ni actions", function()
+			T.expectEqual(ids("simple"), "forward,left,back,right,jump")
+		end)
+
+		T.it("complet : simple plus accroupi, marche lente, tir, visée, recharge et inspection, sans armes", function()
+			T.expectEqual(ids("full"), "forward,left,back,right,jump,fire,aim,reload,inspect,crouch,walk")
+		end)
+
+		T.it("place chaque touche sur une case libre de la grille", function()
+			for _, mode in { "simple", "full" } do
+				local taken = {}
+				for _, entry in HUDRules.keyDisplayEntries(mode) do
+					for col = entry.col, entry.col + entry.width - 1 do
+						local cell = col .. ":" .. entry.row
+						T.expectEqual(
+							taken[cell],
+							nil,
+							mode .. " " .. entry.id .. " chevauche " .. tostring(taken[cell])
+						)
+						taken[cell] = entry.id
+					end
+				end
+			end
+		end)
+
+		T.it("lie chaque touche à un clavier ou à un bouton de souris", function()
+			for _, entry in HUDRules.keyDisplayEntries("full") do
+				T.expectEqual(entry.keys ~= nil or entry.mouse ~= nil, true, entry.id)
+			end
+		end)
+	end)
+
+	T.describe("HUDRules.keyDisplayVisible", function()
+		T.it("n'affiche les touches que mode actif, en partie, Réglages fermés", function()
+			T.expectEqual(HUDRules.keyDisplayVisible("simple", true, false), true)
+			T.expectEqual(HUDRules.keyDisplayVisible("full", true, false), true)
+			T.expectEqual(HUDRules.keyDisplayVisible("off", true, false), false, "réglage coupé")
+			T.expectEqual(HUDRules.keyDisplayVisible("simple", false, false), false, "HUD masqué")
+			T.expectEqual(HUDRules.keyDisplayVisible("full", true, true), false, "Réglages ouverts")
+		end)
+	end)
+
 	T.describe("HUDRules.gameHudVisible", function()
 		T.it("n'affiche le HUD de jeu qu'en partie avec un personnage vivant", function()
 			T.expectEqual(HUDRules.gameHudVisible("IN_ROUND"), true)

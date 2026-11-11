@@ -98,6 +98,20 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   comme la lunette. Affichage = `HUDRules.crosshairVisible` : réglage actif, HUD de jeu visible (`GameStateController.applyGameHud`,
   donc ni menu, ni mort, ni résultat), lunette absente (`ScopeOverlay.setVisible`) et Réglages fermé (`SettingsMenu.setOpen`).
   Toutes les armes, couteau compris. Piste rejetée : point rouge central (criard, hors de la matière du HUD).
+- `src/client/ui/KeyDisplay.luau` (#197) : réglage « Affichage des touches » (Réglages > GRAPHISMES, `PlayerSettings.keyDisplay`,
+  trois valeurs `off` (défaut) / `simple` / `full`, validées par `sanitize`). Grille façon clavier en bas au centre (`BOTTOM_MARGIN`
+  40 px, `scaledRoot`, entre le compteur de vitesse à gauche et la barre d'armes à droite) : cases de `KEY_SIZE` 40 px, `KEY_GAP` 4.
+  Au repos : fond `C.Scrim` translucide (`REST_TRANSPARENCY` 0,35), trait et texte `C.BoneMuted` ; touche enfoncée : case `C.Bone`
+  pleine, texte noir. `simple` : Z/Q/S/D et Espace en barre large dessous (pas d'accroupi) ; `full` : en plus, dans un bloc séparé
+  à droite (M1, M2 / recharge, inspection / CTRL accroupi, MAJ marche lente), pas les armes. La liste, la grille et la visibilité sont
+  dans `HUDRules.keyDisplayEntries` / `keyDisplayVisible` (testées). Libellés : `LocalSettings.keyText` (disposition du clavier, AZERTY
+  = Z Q S D), libellés fixes pour Espace, Ctrl, Maj et la souris. L'état vient de `UserInputService:IsKeyDown` /
+  `IsMouseButtonPressed` à chaque Heartbeat (repeint seulement au changement). Les liaisons de déplacement sont fixes dans
+  `InputModule.KEY_MAP` : la liste de `HUDRules` les reflète, à garder synchrone si une liaison devient réglable.
+  Affichage : mode actif, HUD de jeu visible (`GameStateController.applyGameHud`), Réglages fermé (`SettingsMenu.setOpen`) ; la
+  lunette ne le masque pas (les touches restent utiles).
+  Vérifié en Studio avec `user_keyboard_input` (`keyDown` W/D/S/Espace/Ctrl/R passent en partie et allument les cases) ; le clic de
+  souris M1/M2 n'a pas été simulé. Coordonnées de clic des onglets du menu : y négatif (`AbsolutePosition` du bouton).
 - `src/client/ui/RoundHUD.luau` : timer et rang en haut au centre (chiffres os droits avec ombre, libellés ambrés, fondu
   sombre en deux moitiés de coin, timer en rouge d'impact sous 30 s) ; classement sous Tab : pas de panneau, voile sombre
   central qui s'efface vers les côtés, titre « CLASSEMENT » sur un filet ambre, colonnes K / M / K/M, ligne du joueur
@@ -154,8 +168,10 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
   `LocalSettings.update` ou `getState` n'agissent pas sur le jeu qui tourne. Lire les `ScreenGui` de `PlayerGui` (leur `Enabled`
   est réel) et passer par l'interface (`user_mouse_input` en coordonnées d'écran, soit 0,8 fois celles de `screen_capture`) ou
   par `DebugPlaytest` pour lancer la partie. Les chemins `instance_path` avec accents (« RÉGLAGES ») ne se résolvent pas, et un
-  nom en double (onglet et cadre « GRAPHISMES ») est ambigu : cliquer aux coordonnées. En partie, ni les touches (P, 1) ni le
-  clic droit (lunette) ne passent par le MCP ; équiper côté serveur (`Humanoid:EquipTool`). Les bots tuent le joueur en boucle :
+  nom en double (onglet et cadre « GRAPHISMES ») est ambigu : cliquer aux coordonnées. En partie, ni les touches P et 1 ni le
+  clic droit (lunette) ne passent par le MCP, mais `keyDown` / `keyUp` de W, A, S, D, Espace, Ctrl, R sont lus par
+  `UserInputService:IsKeyDown` (#197) ; les onglets du menu se cliquent à l'`AbsolutePosition` du bouton, y négatif compris
+  (`moveTo`, attendre, puis `mouseButtonClick`) ; équiper côté serveur (`Humanoid:EquipTool`). Les bots tuent le joueur en boucle :
   `workspace:SetAttribute("DebugBots", 0)` avant de tester.
 - **Écran Réglages piloté au MCP :** `user_mouse_input` prend ici les coordonnées de l'`AbsolutePosition` des boutons
   (`ScreenGui` en `IgnoreGuiInset`), et un refus de touche (affiché 1,5 s) se lit avec un relevé branché avant l'appui :

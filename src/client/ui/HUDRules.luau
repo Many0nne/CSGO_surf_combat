@@ -139,6 +139,57 @@ function HUDRules.crosshairVisible(enabled: boolean, hudVisible: boolean, scoped
 	return enabled and hudVisible and not scoped and not menuOpen
 end
 
+-- Affichage des touches (#197) : une entrée par touche, placée sur une grille (colonne, rangée, largeur en cases).
+-- `keys` : noms d'Enum.KeyCode (une des touches suffit à l'allumer), reflet des liaisons fixes d'InputModule.KEY_MAP ;
+-- `mouse` : bouton de souris (« 1 » ou « 2 ») ; `label` : libellé fixe, sinon celui de la disposition du clavier.
+-- `full` : l'entrée n'apparaît qu'en mode « full » ; le mode « simple » garde les directions et le saut.
+export type KeyDisplayEntry = {
+	id: string,
+	keys: { string }?,
+	mouse: number?,
+	label: string?,
+	col: number,
+	row: number,
+	width: number,
+	full: boolean,
+}
+
+-- stylua: ignore
+local KEY_DISPLAY_ENTRIES: { KeyDisplayEntry } = {
+	{ id = "forward", keys = { "W" },                         col = 1, row = 0, width = 1, full = false },
+	{ id = "left",    keys = { "A" },                         col = 0, row = 1, width = 1, full = false },
+	{ id = "back",    keys = { "S" },                         col = 1, row = 1, width = 1, full = false },
+	{ id = "right",   keys = { "D" },                         col = 2, row = 1, width = 1, full = false },
+	{ id = "jump",    keys = { "Space" }, label = "ESPACE",   col = 0, row = 2, width = 3, full = false },
+	{ id = "fire",    mouse = 1,          label = "M1",       col = 4, row = 0, width = 1, full = true },
+	{ id = "aim",     mouse = 2,          label = "M2",       col = 5, row = 0, width = 1, full = true },
+	{ id = "reload",  keys = { "R" },                         col = 4, row = 1, width = 1, full = true },
+	{ id = "inspect", keys = { "F" },                         col = 5, row = 1, width = 1, full = true },
+	{ id = "crouch",  keys = { "LeftControl", "RightControl" }, label = "CTRL", col = 4, row = 2, width = 1, full = true },
+	{ id = "walk",    keys = { "LeftShift", "RightShift" },   label = "MAJ",    col = 5, row = 2, width = 1, full = true },
+}
+
+-- Cette méthode permet de lister les touches à afficher lorsque le mode d'affichage des touches est appliqué : aucune en
+-- « off », directions et saut en « simple », toutes (accroupi, marche lente, tir, visée, recharge, inspection) en « full ».
+function HUDRules.keyDisplayEntries(mode: string): { KeyDisplayEntry }
+	local result = {}
+	if mode ~= "simple" and mode ~= "full" then
+		return result
+	end
+	for _, entry in KEY_DISPLAY_ENTRIES do
+		if mode == "full" or not entry.full then
+			table.insert(result, entry)
+		end
+	end
+	return result
+end
+
+-- Cette méthode permet de savoir si l'affichage des touches est montré lorsque le réglage, l'état du HUD de jeu ou l'écran
+-- Réglages changent : mode actif, HUD de jeu visible (donc ni menu, ni mort, ni résultat), Réglages fermé.
+function HUDRules.keyDisplayVisible(mode: string, hudVisible: boolean, menuOpen: boolean): boolean
+	return mode ~= "off" and #HUDRules.keyDisplayEntries(mode) > 0 and hudVisible and not menuOpen
+end
+
 -- Cette méthode permet de savoir si le kill feed est affiché lorsque l'état client change : en partie, vivant ou mort
 -- (le joueur tué y voit sa propre ligne), pas au menu ni au résultat.
 function HUDRules.killFeedVisible(state: string): boolean

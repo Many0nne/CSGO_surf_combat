@@ -7,6 +7,9 @@ local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
 
 export type WheelMode = "previous" | "next" | "off"
 
+-- Affichage des touches (#197) : « off » (défaut), « simple » (directions et saut), « full » (plus accroupi et actions)
+export type KeyDisplayMode = "off" | "simple" | "full"
+
 export type Settings = {
 	sensitivity: number,
 	scopeMultiplier: number,
@@ -15,6 +18,7 @@ export type Settings = {
 	wheel: WheelMode,
 	-- Visée simplifiée (#195) : crosshair au centre de l'écran, désactivé par défaut
 	simpleAim: boolean,
+	keyDisplay: KeyDisplayMode,
 	-- une touche par emplacement de la barre d'armes, dans l'ordre des emplacements
 	slotKeys: { string },
 }
@@ -28,6 +32,8 @@ PlayerSettings.DEFAULT_SLOT_KEYS = { "One", "Two", "Three", "Four", "Five", "Six
 -- Molette vers le haut : arme précédente (comportement d'origine de la barre)
 PlayerSettings.DEFAULT_WHEEL = "previous" :: WheelMode
 PlayerSettings.WHEEL_MODES = { "previous", "next", "off" } :: { WheelMode }
+PlayerSettings.DEFAULT_KEY_DISPLAY = "off" :: KeyDisplayMode
+PlayerSettings.KEY_DISPLAY_MODES = { "off", "simple", "full" } :: { KeyDisplayMode }
 
 local DIGITS = {
 	Zero = "0",
@@ -84,6 +90,7 @@ function PlayerSettings.defaults(): Settings
 		shadows = nil,
 		wheel = PlayerSettings.DEFAULT_WHEEL,
 		simpleAim = false,
+		keyDisplay = PlayerSettings.DEFAULT_KEY_DISPLAY,
 		slotKeys = table.clone(PlayerSettings.DEFAULT_SLOT_KEYS),
 	}
 end
@@ -148,6 +155,9 @@ function PlayerSettings.sanitize(raw: any): Settings
 	end
 	if type(raw.simpleAim) == "boolean" then
 		settings.simpleAim = raw.simpleAim
+	end
+	if table.find(PlayerSettings.KEY_DISPLAY_MODES, raw.keyDisplay) then
+		settings.keyDisplay = raw.keyDisplay
 	end
 	settings.slotKeys = sanitizeKeys(raw.slotKeys)
 	return settings
