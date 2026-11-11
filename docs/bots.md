@@ -122,7 +122,10 @@ Règles pures dans `BotCombatRules`, armes dans `BotArsenal` (une par bot vivant
   un joueur n'en a pas (choix de l'utilisateur).
 - **Validation** : la touche passe par `Validator.authorizeHitscan` / `authorizeMelee` (arme en main, portée,
   cadence) puis le même `applyHit` qu'un joueur (`deps.hitscan`, `deps.melee` de `BotManager`) : dégâts par zone,
-  kill feed, mort, ragdoll, caméra du tué. Le hitmarker n'est envoyé qu'à un tireur joueur.
+  kill feed, mort, ragdoll, caméra du tué. Le hitmarker n'est envoyé qu'à un tireur joueur. Chaque tir au fusil passe
+  aussi par le relais des joueurs (`relayShot`, `onFire` de `BotArsenal`) : son chez les joueurs et recul de l'arme 3P
+  (#215), jamais refusé ni compté pour un bot (`BotArsenal` tient son chargeur, `docs/anticheat.md` « Tirs comptés et
+  touches rattachées »). Le coup de couteau pose son recul 3P dans `BotArsenal.fire`.
 - **Armes** : AWP en main, couteau dans le dossier `BotBag` du personnage. Couteau sorti sous `KNIFE_RANGE`, fusil
   repris au-delà de `KNIFE_DROP_RANGE`. Temps de sortie, cadence, chargeur, réserve et rechargement de `WeaponConfig`
   (rechargement aussi quand il n'a rien à viser) ; vitesse de course selon l'arme (`BotMotion:setWeapon`).

@@ -174,15 +174,18 @@ function BotArsenal.fire(self: BotArsenal, now: number, eye: Vector3, direction:
 		return nil
 	end
 	self.readyAt = now + (cfg.FireDelay or 0)
-	WeaponThirdPerson.setAction(self.char, "Shoot")
 	if cfg.IsMelee then
+		WeaponThirdPerson.setAction(self.char, "Shoot")
 		self.onHit(target, nil)
 		return nil
 	end
 	self.ammo -= 1
-	-- Son du tir chez les joueurs (#156), avant la touche : comme chez un joueur, le tir s'entend avant ses dégâts
+	-- Son du tir chez les joueurs (#156), avant la touche : comme chez un joueur, le tir s'entend avant ses dégâts ;
+	-- le relais joue aussi le recul 3P (#215). Sans relais branché, le recul est posé ici
 	if self.onFire then
 		self.onFire(eye, direction)
+	else
+		WeaponThirdPerson.setAction(self.char, "Shoot")
 	end
 	local result = workspace:Raycast(eye, direction * WeaponConfig.HITSCAN_RANGE, self.params)
 	if result then

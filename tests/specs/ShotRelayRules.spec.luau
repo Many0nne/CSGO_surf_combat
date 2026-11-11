@@ -156,17 +156,19 @@ return function(T, Loader)
 	T.describe("RemoteGuard : règle de ShotFired (#156)", function()
 		local N = NetworkProtocol.Names
 
-		T.it("accepte origine et direction, refuse un autre type", function()
+		T.it("accepte origine, direction et instant du tir (#216), refuse un autre type", function()
 			local guard = RemoteGuard.new()
-			T.expectEqual((guard:check("p", N.SHOT_FIRED, 0, EYE, FORWARD)), "ok")
-			T.expectEqual((guard:check("p", N.SHOT_FIRED, 1, EYE, "devant")), "malformed")
-			T.expectEqual((guard:check("p", N.SHOT_FIRED, 2, nil, FORWARD)), "malformed")
+			T.expectEqual((guard:check("p", N.SHOT_FIRED, 0, EYE, FORWARD, 100)), "ok")
+			T.expectEqual((guard:check("p", N.SHOT_FIRED, 1, EYE, "devant", 100)), "malformed")
+			T.expectEqual((guard:check("p", N.SHOT_FIRED, 2, nil, FORWARD, 100)), "malformed")
+			T.expectEqual((guard:check("p", N.SHOT_FIRED, 3, EYE, FORWARD)), "malformed", "sans instant")
+			T.expectEqual((guard:check("p", N.SHOT_FIRED, 4, EYE, FORWARD, 0 / 0)), "malformed", "instant NaN")
 		end)
 
 		T.it("ne limite jamais un tireur honnête d'AWP", function()
 			local guard = RemoteGuard.new()
 			for i = 0, 40 do
-				T.expectEqual((guard:check("p", N.SHOT_FIRED, i * AWP_DELAY, EYE, FORWARD)), "ok", "tir " .. i)
+				T.expectEqual((guard:check("p", N.SHOT_FIRED, i * AWP_DELAY, EYE, FORWARD, 100 + i)), "ok", "tir " .. i)
 			end
 		end)
 	end)

@@ -7,6 +7,7 @@ local NetworkProtocol = require(Shared:WaitForChild("NetworkProtocol"))
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local MapSelection = require(Shared:WaitForChild("MapSelection"))
 local WeaponThirdPerson = require(Shared:WaitForChild("WeaponThirdPerson"))
+local WeaponConfig = require(Shared:WaitForChild("WeaponConfig"))
 local MemoryTracker = require(Shared:WaitForChild("MemoryTracker"))
 local PerfRules = require(Shared:WaitForChild("PerfRules"))
 local ParticipantRules = require(Shared:WaitForChild("ParticipantRules"))
@@ -152,6 +153,13 @@ local function trackWeapon3P(participant: Participants.Participant, char: Model)
 	end)
 end
 
+-- Cette méthode permet de savoir si un outil est une arme de mêlée (fiche WeaponConfig) lorsqu'une action de pose 3P
+-- arrive du client.
+local function isMeleeTool(tool: Tool): boolean
+	local cfg = WeaponConfig.Weapons[tool:GetAttribute("WeaponName") or tool.Name]
+	return cfg ~= nil and cfg.IsMelee == true
+end
+
 weaponActionRmt.OnServerEvent:Connect(function(player, action)
 	if not CheatLog.admit(player, N.WEAPON_ACTION, action) then
 		return
@@ -167,7 +175,13 @@ weaponActionRmt.OnServerEvent:Connect(function(player, action)
 	if action == "Reload" then
 		Validator.noteReload(Participants.fromPlayer(player), os.clock())
 	end
-	if not equippedTools[char] then
+	local tool = equippedTools[char]
+	if not tool then
+		return
+	end
+	-- Tir d'une arme à distance : pose 3P jouée par le relais d'un ShotFired accepté (relayShot, #215), pas sur la
+	-- parole du client. Seul le coup de couteau (manqué compris, sans remote de tir) passe encore par ici
+	if action == "Shoot" and not isMeleeTool(tool) then
 		return
 	end
 	local now = os.clock()
@@ -185,8 +199,14 @@ end)
 local shotRelay = ShotRelayRules.new()
 
 -- Cette méthode permet de relayer un tir à distance (joueur ou bot, touché ou manqué) aux autres clients lorsqu'il
--- part et que le serveur l'accepte (Validator, ShotRelayRules) ; celui d'un joueur est aussi entendu par les bots.
-local function relayShot(participant: Participants.Participant, origin: Vector3, direction: Vector3): boolean
+-- part et que le serveur l'accepte (Validator, ShotRelayRules) : compté dans le chargeur (#215, shotTime du joueur
+-- pour rattacher sa touche, #216), pose 3P de tir jouée chez tous ; celui d'un joueur est aussi entendu par les bots.
+local function relayShot(
+	participant: Participants.Participant,
+	origin: Vector3,
+	direction: Vector3,
+	shotTime: number?
+): boolean
 	local char = Participants.characterOf(participant)
 	local humanoid = char and char:FindFirstChildWhichIsA("Humanoid")
 	local root = char and char:FindFirstChild("HumanoidRootPart")
@@ -199,12 +219,17 @@ local function relayShot(participant: Participants.Participant, origin: Vector3,
 		return false
 	end
 	local now = os.clock()
-	if not Validator.isReadyToFire(participant, now) then
+	if not Validator.isReadyToFire(participant, now, shotTime) then
 		return false
 	end
 	if not ShotRelayRules.admit(shotRelay, participant, weaponName, origin, direction, root.Position, now) then
 		return false
 	end
+	if shotTime then
+		Validator.noteShotFired(participant, shotTime, now)
+	end
+	-- Recul de l'arme 3P vu par les autres : seulement pour un tir accepté, à sa cadence (#215)
+	WeaponThirdPerson.setAction(char, "Shoot")
 	for _, recipient in ShotRelayRules.recipients(Players:GetPlayers(), participant.player) do
 		shotFiredRmt:FireClient(recipient, char, weaponName, origin, direction)
 	end
@@ -277,13 +302,14 @@ CheatLog.onClosing(function(players, shuttingDown)
 	end
 end)
 
-shotFiredRmt.OnServerEvent:Connect(function(player, origin, direction)
-	if not CheatLog.admit(player, N.SHOT_FIRED, origin, direction) then
+shotFiredRmt.OnServerEvent:Connect(function(player, origin, direction, shotTime)
+	if not CheatLog.admit(player, N.SHOT_FIRED, origin, direction, shotTime) then
 		return
 	end
 	local participant = Participants.fromPlayer(player)
-	-- Compté après la décision du relais, qu'il ne change pas : un tir accepté (forme, cadence) entre aux statistiques
-	if relayShot(participant, origin, direction) then
+	-- Compté après la décision du relais, qu'il ne change pas : un tir accepté (forme, cadence, chargeur) entre aux
+	-- statistiques
+	if relayShot(participant, origin, direction, shotTime) then
 		-- Cap figé à l'arrivée du tir, avant sa touche (flick)
 		local yaw, yawAt = CharacterSync.lastYaw(player)
 		AimStats.noteShot(aimStats, participant, os.clock(), yaw, yawAt)

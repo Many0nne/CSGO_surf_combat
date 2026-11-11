@@ -65,10 +65,11 @@ function HitscanSystem.resolveHit(activeViewmodel: Model?): string
 	local direction = cam.CFrame.LookVector
 	-- Instant du tir sur l'horloge serveur : le serveur y rembobine la cible (#174)
 	local shotTime = workspace:GetServerTimeNow()
-	-- Tir parti, touché ou manqué : le serveur le relaie aux autres clients, qui jouent son son en 3D (#156).
-	-- Avant la touche : les deux remotes fiables arrivent dans cet ordre.
+	-- Tir parti, touché ou manqué : le serveur le compte dans le chargeur (#215) et le relaie aux autres clients, qui
+	-- jouent son son et le recul de l'arme 3P (#156). Avant la touche, avec le même shotTime, auquel le serveur la
+	-- rattache (#216) : deux RemoteEvent d'un même client arrivent dans l'ordre d'envoi.
 	if shotFiredEvent then
-		shotFiredEvent:FireServer(origin, direction)
+		shotFiredEvent:FireServer(origin, direction, shotTime)
 	end
 	local ray_dir = direction * WeaponConfig.HITSCAN_RANGE
 	local result = workspace:Raycast(origin, ray_dir, params)

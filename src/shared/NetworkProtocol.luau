@@ -9,8 +9,9 @@ Protocol.Names = {
 	-- Hitmarker (#44) : serveur → tireur, touche confirmée (arguments : cible morte, tir à la tête)
 	HIT_CONFIRM = "HitConfirm",
 	-- Tir entendu par les autres (#156) : client → serveur à chaque tir à distance, touché ou manqué (origine,
-	-- direction), puis serveur → autres clients (personnage du tireur, nom de l'arme, origine, direction), tirs de bots
-	-- compris ; le client joue le son de l'arme en 3D sur l'arme 3P du tireur (RemoteShotSounds)
+	-- direction, instant du tir : la touche s'y rattache, #216), compté dans le chargeur serveur (#215), puis serveur →
+	-- autres clients (personnage du tireur, nom de l'arme, origine, direction), tirs de bots compris ; le client joue
+	-- le son de l'arme en 3D sur l'arme 3P du tireur (RemoteShotSounds), le serveur pose le recul 3P
 	SHOT_FIRED = "ShotFired",
 	-- Jeu
 	REQUEST_SPAWN = "RequestSpawn",
@@ -28,7 +29,8 @@ Protocol.Names = {
 	-- Correction de position (#172), RemoteEvent fiable serveur → client (personnage, dernière position acceptée,
 	-- numéro) : le client s'y replace, vitesse nulle, et joint le numéro à ses paquets CharacterSync suivants
 	MOVEMENT_CORRECTION = "MovementCorrection",
-	-- Arme 3e personne (#5) : client → serveur, action visuelle ("Shoot" | "Reload")
+	-- Arme 3e personne (#5) : client → serveur, action visuelle ("Shoot" | "Reload") ; "Shoot" n'est plus suivi que
+	-- pour le couteau (le tir d'une arme à distance passe par ShotFired, #215)
 	WEAPON_ACTION = "WeaponAction",
 	-- Feedback
 	SEND_FEEDBACK = "SendFeedback",

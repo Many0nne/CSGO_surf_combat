@@ -126,14 +126,40 @@ return function(T, Loader)
 			DEBUG_TARGET_ATTRIBUTE = Real.DEBUG_TARGET_ATTRIBUTE,
 			MAX_HITSCAN_RANGE = Real.MAX_HITSCAN_RANGE,
 			hitOutcome = Real.hitOutcome,
-			-- Sans shot, un joueur tire comme notre client ; `false` envoie un tir sans shot (client modifié)
-			authorizeHitscan = function(attacker, targetCharacter, hitPart, now, shot)
+			-- Sans shot, un joueur tire comme notre client ; `false` envoie un tir sans shot (client modifié). Comme notre
+			-- client, un joueur annonce d'abord son tir (ShotFired, même shotTime), compté s'il est prêt comme dans
+			-- relayShot (#215) ; noShotFired : touche envoyée seule (client modifié, ShotFired écarté par le relais).
+			authorizeHitscan = function(attacker, targetCharacter, hitPart, now, shot, noShotFired)
 				if shot == nil and not attacker.isBot then
 					shot = honestShot(attacker, hitPart)
 				elseif shot == false then
 					shot = nil
 				end
-				return Real.authorizeHitscan(participantOf(attacker), targetCharacter, hitPart, now, shot)
+				local participant = participantOf(attacker)
+				if
+					not attacker.isBot
+					and not noShotFired
+					and type(shot) == "table"
+					and type(shot.shotTime) == "number"
+					and Real.isReadyToFire(participant, now, shot.shotTime)
+				then
+					Real.noteShotFired(participant, shot.shotTime, now)
+				end
+				return Real.authorizeHitscan(participant, targetCharacter, hitPart, now, shot)
+			end,
+			-- Cette méthode permet d'annoncer un tir accepté par le relais (ShotFired) lorsqu'un test règle l'ordre
+			-- d'arrivée lui-même : prêt (isReadyToFire), puis compté ; renvoie s'il a été accepté.
+			shotFired = function(attacker, shotTime, now)
+				local participant = participantOf(attacker)
+				if not Real.isReadyToFire(participant, now, shotTime) then
+					return false
+				end
+				Real.noteShotFired(participant, shotTime, now)
+				return true
+			end,
+			honestShot = honestShot,
+			hasEntries = function(attacker)
+				return Real.hasEntries(participantOf(attacker))
 			end,
 			authorizeMelee = function(attacker, ...)
 				return Real.authorizeMelee(participantOf(attacker), ...)
@@ -711,6 +737,181 @@ return function(T, Loader)
 				)
 			end
 			T.expectEqual(#world.reports, 0)
+		end)
+	end)
+
+	T.describe("Validator : tirs comptés et touches rattachées (#215, #216)", function()
+		local AWP_DELAY = 60 / 41
+
+		-- Cette méthode permet de construire le tir honnête d'un joueur vers sa cible avec un instant donné lorsqu'un
+		-- test règle lui-même l'ordre des remotes.
+		local function shotAt(Validator, a, b, shotTime: number)
+			local shot = Validator.honestShot(a, rootOf(b.Character))
+			shot.shotTime = shotTime
+			return shot
+		end
+
+		-- Cette méthode permet de lister les contrôles journalisés lorsqu'un test vérifie le journal.
+		local function checks(world): { string }
+			local out = {}
+			for _, r in world.reports do
+				table.insert(out, r.check)
+			end
+			return out
+		end
+
+		T.it(
+			"6e ShotFired sans rechargement refusé (chargeur de l'AWP : 5), y compris après 4 tirs manqués",
+			function()
+				local Validator, makePlayer, _, world = setup()
+				local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(50, 0, 0))
+				local t = 10
+				-- 4 tirs manqués (ShotFired seuls), puis une touche : 5 tirs comptés
+				for i = 1, 4 do
+					T.expectEqual(Validator.shotFired(a, 100 + i, t), true, "tir manqué " .. i)
+					t += 1.5
+				end
+				T.expectEqual(
+					Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), t, shotAt(Validator, a, b, 105)),
+					115
+				)
+				t += 1.5
+				-- 6e : ShotFired refusé (donc non relayé), et sa touche aussi
+				T.expectEqual(Validator.shotFired(a, 106, t), false, "6e ShotFired")
+				T.expectEqual(
+					Validator.authorizeHitscan(
+						a,
+						b.Character,
+						rootOf(b.Character),
+						t,
+						shotAt(Validator, a, b, 106),
+						true
+					),
+					nil,
+					"6e touche"
+				)
+				T.expectEqual(table.concat(checks(world), ","), "magazine")
+			end
+		)
+
+		T.it("rechargement fini puis tir accepté et compté", function()
+			local Validator, makePlayer, _, world, ShotRules = setup()
+			local a = makePlayer(Vector3.zero, "AWP")
+			local t = 10
+			for i = 1, 5 do
+				T.expectEqual(Validator.shotFired(a, 100 + i, t), true)
+				t += 1.5
+			end
+			Validator.noteReload(a, t)
+			local ready = t + 3.7 - ShotRules.RELOAD_TOLERANCE
+			T.expectEqual(Validator.shotFired(a, 200, ready - 0.05), false, "rechargement inachevé")
+			for i = 1, 5 do
+				T.expectEqual(Validator.shotFired(a, 200 + i, ready + (i - 1) * 1.5), true, "après rechargement " .. i)
+			end
+			T.expectEqual(Validator.shotFired(a, 300, ready + 7.5), false, "chargeur de nouveau vide")
+			T.expectEqual(#world.reports, 0, "un ShotFired refusé n'est pas journalisé")
+		end)
+
+		T.it("touche rattachée au bon tir, sans décompte de plus", function()
+			local Validator, makePlayer, _, world = setup()
+			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(50, 0, 0))
+			-- Deux ShotFired en attente (client modifié ou tir manqué juste avant) : la touche va au sien
+			T.expectEqual(Validator.shotFired(a, 100, 10), true)
+			T.expectEqual(Validator.shotFired(a, 100.4, 10.4), true)
+			local damage, _, linked = Validator.authorizeHitscan(
+				a,
+				b.Character,
+				rootOf(b.Character),
+				10.5,
+				shotAt(Validator, a, b, 100),
+				true
+			)
+			T.expectEqual(damage, 115)
+			T.expectEqual(linked, 100, "rattachée au premier tir, pas au dernier")
+			T.expectEqual(#world.reports, 0)
+			-- 2 tirs comptés (pas 3) : encore 3 ShotFired avant le chargeur vide
+			for i = 1, 3 do
+				T.expectEqual(Validator.shotFired(a, 101 + i, 10.5 + i * 1.5), true, "tir " .. i + 2)
+			end
+			T.expectEqual(Validator.shotFired(a, 110, 16.5), false, "6e")
+		end)
+
+		T.it("deux touches pour un même tir d'AWP : une seule rattachée (pas de pénétration)", function()
+			local Validator, makePlayer, _, world = setup()
+			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(50, 0, 0))
+			local other = makePlayer(Vector3.new(0, 0, 50))
+			T.expectEqual(Validator.shotFired(a, 100, 10), true)
+			local shot = shotAt(Validator, a, b, 100)
+			local _, _, linked = Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), 10.01, shot, true)
+			T.expectEqual(linked, 100)
+			-- Seconde touche du même tir (autre cible) : refusée par la cadence, jamais rattachée
+			local otherShot = Validator.honestShot(a, rootOf(other.Character))
+			otherShot.shotTime = 100
+			local damage, _, secondLink =
+				Validator.authorizeHitscan(a, other.Character, rootOf(other.Character), 10.02, otherShot, true)
+			T.expectEqual(damage, nil)
+			T.expectEqual(secondLink, nil)
+			T.expectEqual(#world.reports, 0, "cadence : refus sans journal, comme avant")
+		end)
+
+		-- Roblox garantit l'ordre d'envoi entre deux RemoteEvent d'un même client : seul un client modifié (ou une file
+		-- de Roblox saturée) inverse les deux ; aucun délai d'attente n'est donc accordé, mais rien n'est compté deux fois
+		T.it("HitscanDamage avant son ShotFired : tir compté une seule fois", function()
+			local Validator, makePlayer, _, world = setup()
+			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(50, 0, 0))
+			for i = 1, 5 do
+				local t = 10 + (i - 1) * 1.5
+				T.expectEqual(
+					Validator.authorizeHitscan(
+						a,
+						b.Character,
+						rootOf(b.Character),
+						t,
+						shotAt(Validator, a, b, 100 + i),
+						true
+					),
+					115,
+					"touche " .. i .. " avant son tir"
+				)
+				-- Son ShotFired arrive juste après : relayé (son, recul 3P), pas recompté, même chargeur plein au 5e
+				T.expectEqual(Validator.shotFired(a, 100 + i, t + 0.01), true, "ShotFired " .. i)
+			end
+			T.expectEqual(Validator.shotFired(a, 106, 17.5), false, "6e tir : 5 comptés, pas 10")
+			T.expectEqual(#world.reports, 0)
+		end)
+
+		T.it("rechargement borné par la cadence du dernier tir compté, même manqué", function()
+			local Validator, makePlayer, _, _, ShotRules = setup()
+			local a = makePlayer(Vector3.zero, "AWP")
+			local last = 10
+			for i = 1, 5 do
+				last = 10 + (i - 1) * 1.5
+				T.expectEqual(Validator.shotFired(a, 100 + i, last), true)
+			end
+			Validator.noteReload(a, last + 0.01) -- client modifié : recharge dès son dernier tir
+			local ready = last + AWP_DELAY - ShotRules.RELOAD_TOLERANCE + 3.7 - ShotRules.RELOAD_TOLERANCE
+			T.expectEqual(Validator.shotFired(a, 200, ready - 0.05), false)
+			T.expectEqual(Validator.shotFired(a, 201, ready + 0.01), true)
+		end)
+
+		T.it("bots : tirs relayés jamais refusés ni comptés, aucune violation", function()
+			local Validator, makePlayer, makeBot, world = setup()
+			local bot = makeBot(Vector3.zero, "AWP")
+			local b = makePlayer(Vector3.new(50, 0, 0))
+			for i = 1, 12 do
+				T.expectEqual(Validator.shotFired(bot, nil, i * 1.5), true, "tir " .. i)
+				T.expectEqual(Validator.authorizeHitscan(bot, b.Character, rootOf(b.Character), i * 1.5), 115)
+			end
+			T.expectEqual(#world.reports, 0)
+		end)
+
+		T.it("oublie les tirs récents à la réapparition", function()
+			local Validator, makePlayer = setup()
+			local a = makePlayer(Vector3.zero, "AWP")
+			T.expectEqual(Validator.shotFired(a, 100, 10), true)
+			T.expect(Validator.hasEntries(a), "registre tenu")
+			Validator.forget(a)
+			T.expectEqual(Validator.hasEntries(a), false)
 		end)
 	end)
 
