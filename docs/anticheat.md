@@ -747,7 +747,7 @@ par remote est à faire soi-même ([Remote events](https://create.roblox.com/doc
 
 **Relais des tirs (fait, #156).** Le son d'un tir chez les autres et l'ouïe des bots ne partent plus de l'action
 visuelle `WeaponAction` mais d'un tir accepté par le serveur. Le client annonce chaque tir à distance, touché ou manqué,
-par `ShotFired(origin, direction)` (`HitscanSystem`, juste avant `HitscanDamage` : les remotes fiables d'un client
+par `ShotFired(origin, direction, shotTime)` (#216 pour `shotTime`) (`HitscanSystem`, juste avant `HitscanDamage` : les remotes fiables d'un client
 arrivent dans l'ordre) ; les bots par `BotArsenal` (`onFire`, avant leur raycast). `relayShot` (`init.server.luau`)
 vérifie tireur vivant, arme à distance en main prête (`Validator.isReadyToFire` : equip et chargeur de T2, en lecture
 seule, sans journal), puis `ShotRelayRules.admit` : forme (Vector3 bornés, direction unitaire), origine à moins de
