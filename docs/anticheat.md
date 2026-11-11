@@ -24,7 +24,7 @@ envoyant des données plausibles. Là, on ne peut que détecter statistiquement,
 |---|---|---|
 | Mêlée | Cible = autre participant vivant, arme de mêlée réellement en main, distance des racines ≤ 10 studs, dégâts et cadence lus dans `WeaponConfig` selon le type d'attaque, backstab recalculé sur les positions serveur (#47) ; pour un joueur, durée d'equip (#175, voir T2) | `src/server/Validator.luau` (`authorizeMelee`) |
 | Tir | Cible valide (vivante), arme à distance en main, partie touchée appartenant à la cible, distance des racines ≤ `Validator.MAX_HITSCAN_RANGE` (~2 196 studs ; bots : 250), cadence `FireDelay` à 0,15 s près, dégâts calculés par le serveur selon la zone ; pour un joueur, forme, origine, visée sur la cible rembobinée, portée et ligne de vue (#174, voir T1), durée d'equip et chargeur (#175, voir T2 ; l'equip vaut aussi pour la mêlée) | `src/server/Validator.luau` (`authorizeHitscan`, `validateShot`), `src/server/ShotRules.luau` |
-| Position | Forme (Vector3 et angle finis, coordonnées ≤ 1e5), personnage vivant, seau de distance (300 studs/s soutenus, silence plafonné), refus journalisé et corrigé (#172) | `src/server/CharacterSync.luau:113-165`, `src/shared/CharacterSyncRules.luau:49-60` |
+| Position | Forme (Vector3 et angle finis, coordonnées ≤ 1e5), personnage vivant, seau de distance (300 studs/s soutenus, silence plafonné), refus journalisé et corrigé (#172) ; noclip et vol journalisés (#177, journal seul), joueur silencieux au-dessus du vide déclaré tombé | `src/server/CharacterSync.luau:186-275`, `src/shared/CharacterSyncRules.luau:49-60`, `src/shared/MovementGuardRules.luau` |
 | Réglages | Réglages entièrement assainis par `PlayerSettings.sanitize`, une écriture DataStore au plus toutes les 10 s | `src/server/SettingsStore.luau:113-130` |
 | Feedback | Type `string`, longueur 10 à 500, délai de 60 s après un envoi réussi, 5 envois par semaine (DataStore) | `src/server/FeedbackService.luau:76-104` |
 | Debug | Remote `DebugPlaytest` créé seulement dans Studio | `src/server/DebugPlaytest.luau:365-372` |
@@ -46,7 +46,7 @@ Impact : ce que gagne le tricheur et ce que subissent les autres. Coût : serveu
 | M1 | Coup de couteau dans toutes les directions (« kill aura ») | **Élevé** : one-shot de dos à 10 studs, cumulable avec D1 | Faible | P2 |
 | R1 | Remotes sans débit ni garde (respawn, feedback) | Fermé (#170, #171) : garde commune, délai de réapparition et feedback limité en mémoire | Faible | Fait |
 | T2 | Munitions et durée d'equip | Fermé (#175) : touche refusée pendant l'equip et au 6e tir sans rechargement | Faible | Fait |
-| D2 | Vol et noclip | **Moyen** : survivre au vide, passer les murs | Faible serveur, moyen en réglage (surf) | P2 |
+| D2 | Vol et noclip | Détecté (#177) : noclip et vol au journal (journal seul), vide fermé | Faible serveur, moyen en réglage (surf) | Fait (journal) |
 | A1 | Aimbot, triggerbot | **Élevé** mais seulement détectable | Moyen, faux positifs | P3 |
 | E1 | Wallhack, ESP | **Élevé** mais non bloquable à coût raisonnable | Très élevé | P4 (accepté) |
 
@@ -337,9 +337,9 @@ cible rend le kill aura (M1) praticable sur toute la map.
 gagnerait un seau plein à chaque cycle (40 cycles/s). Le numéro de correction est croissant sur toute la session du
 joueur (pas remis à zéro à la réapparition) pour qu'un ancien accusé ne valide pas une correction récente.
 
-**Réutiliser (D2, #177).** Une nouvelle règle de déplacement (noclip, vol) se branche dans `onClientPosition`, après
-le seau, et appelle `refuse(player, track, détail, now)` (`src/server/CharacterSync.luau:101`) : journal et correction
-compris.
+**Réutiliser.** Une nouvelle règle de déplacement se branche dans `onClientPosition`, après le seau, et appelle
+`refuse(player, track, détail, now)` (`src/server/CharacterSync.luau:186`) : journal et correction compris. C'est ce que
+fait D2 (#177, `judgeGuard`) ; `refuse` repart aussi l'enveloppe du vol de la position de correction.
 
 **Bots.** Non concernés : leurs positions viennent du serveur (`relayBot`), qui ne passe pas par le seau.
 
@@ -352,32 +352,93 @@ surf rapide avec un vrai ping (journal `Movement` des joueurs honnêtes).
 **Impact.** Ramène le tricheur à 300 studs/s au plus et supprime la téléportation, qui est l'aide principale du kill
 aura et de l'ESP actif.
 
-### D2. Vol et noclip
+### D2. Vol et noclip (fait en journal seul, #177)
 
-**Aujourd'hui.** Rien : une position est acceptée si elle respecte la distance, qu'elle soit en l'air depuis 30 s ou
-de l'autre côté d'un mur. La mort par chute (`src/server/KillZone.luau:23-32`) ne teste que les positions acceptées :
-un client qui flotte au-dessus du vide, ou qui n'envoie jamais de position sous `KillHeight`, ne meurt pas.
+**Avant #177.** Une position était acceptée si elle respectait la distance, qu'elle soit en l'air depuis 30 s ou de
+l'autre côté d'un mur. La mort par chute (`KillZone`) ne testait que les positions acceptées : un client qui flotte
+au-dessus du vide, ou qui n'envoie jamais de position sous `KillHeight`, ne mourait pas.
 
 **Risque.** Moyen : rester en l'air hors d'atteinte, se cacher dans un mur, ne jamais mourir de chute.
 
-**Parade.**
+**Parade en place.** Règles pures dans `src/shared/MovementGuardRules.luau` (testées sous Lune) ; la géométrie est
+fournie par `CharacterSync` (`buildGeometry`) : rayons et requêtes limités à la map jouée (`Include`) et à ses pièces
+qui collisionnent (`RespectCanCollide` : décor fantôme, volumes d'échelle et de boost exclus). Une position acceptée
+par le seau (D1) passe par `MovementGuardRules.judge` (`judgeGuard`, `src/server/CharacterSync.luau:200`).
 
-- **Noclip** : raycast serveur `lastPos → newPos` limité à la map. Un segment qui traverse une paroi épaisse est refusé
-  et corrigé (D1). Le rayon part du centre du personnage, qui ne traverse jamais une paroi chez un client honnête (il
-  entre en collision avec son rayon `CHAR_RADIUS`) ; tolérance pour les arêtes de rampe frôlées, et parois sans
-  collision (`CanCollide` faux, volumes de boost) exclues du raycast.
-- **Vol** : suivre le temps passé sans support. Un shapecast court sous le joueur (ou autour, pour le surf, où le
-  joueur glisse sur une rampe inclinée) dit s'il est près d'une surface. Loin de toute surface, la vitesse verticale
-  doit baisser d'environ `GRAVITY × dt` (`MovementConfig.luau:18`, -110) à la tolérance près ; sinon, point de
-  suspicion. Échelles (`LADDER_CLIMB_SPEED`), boosts et lancement depuis le soleil exemptés.
-- **Vide** : si la position n'est pas mise à jour pendant plus de N secondes alors que le joueur était en chute libre,
-  le considérer comme tombé.
+1. **Noclip** (`crossesWall`) : raycast `lastPos → newPos` (centre du personnage, qui chez un client honnête reste à
+   `CHAR_RADIUS` des parois). Touché : quatre détours sont essayés (milieu du segment décalé vers le haut, le bas et les
+   côtés de `NOCLIP_DETOUR_BASE` + `NOCLIP_DETOUR_RATIO` × longueur, deux raycasts chacun). Un détour libre = virage
+   serré autour d'un coin ou arête de rampe passée à grande vitesse (la corde coupe l'angle, pas la trajectoire) ;
+   aucun = traversée. Pas testé sur le premier paquet d'un personnage (son point de départ est la racine posée par le
+   serveur). Un raycast qui part de l'intérieur d'une pièce ne la touche pas : l'entrée dans un mur est vue, la sortie
+   non.
+2. **Vol** (`observe`) : un paquet est **porté** si une pièce de la map passe à moins de `SUPPORT_REACH` (6 studs) d'un
+   point du segment (pas de `SUPPORT_STEP`), sous le centre ou à côté et inclinée vers le haut (`supports` : point le
+   plus proche de la boîte orientée ; un mur vertical ne porte pas, une rampe de surf si ; un `WedgePart` est pris pour
+   sa boîte, plus large), ou si le segment passe dans un volume d'échelle. Porté : rien à juger. Au premier paquet en
+   l'air, une **enveloppe balistique** part de lui : vitesse verticale majorée (montée depuis le paquet précédent sur
+   `MIN_PACKET_INTERVAL` = demi-intervalle d'envoi, ou vitesse imposée d'un geyser, d'un lanceur ou du lancement depuis
+   le soleil, plus `JUMP_VELOCITY`), gravité, chute plafonnée à `MAX_FALL_SPEED`. Plus haute position permise = maximum
+   de l'enveloppe sur `[τ - FLIGHT_TIME_SLACK, τ + FLIGHT_TIME_SLACK]` (gigue, paquets groupés) +
+   `FLIGHT_HEIGHT_TOLERANCE`. Sous l'enveloppe, elle est **resserrée** à chaque paquet : la hauteur gagnée depuis le
+   premier paquet en l'air, en au moins `max(n × MIN_PACKET_INTERVAL, (n - 1) × SEND_INTERVAL)` secondes (n = paquets
+   reçus moins deux, marge pour le désordre), majore la vitesse actuelle (`maxVyAfter` + `REFINE_MARGIN`). **Deux
+   paquets de suite** au-dessus = vol (un seul : paquet ancien arrivé après un plus récent). Après un vol signalé,
+   l'enveloppe repart du point atteint, vitesse nulle : un joueur qui plane encore est signalé environ deux fois par
+   seconde, pas à chaque paquet. Lancement depuis le soleil : la vitesse `LaunchVelocity` du personnage ouvre
+   l'enveloppe. Correction (D1 ou D2) : enveloppe repartie de la position de correction avec la vitesse d'un saut.
+3. **Vide** (`fellIntoVoid`, boucle `checkVoid` toutes les 0,25 s) : joueur en l'air (dernier paquet non porté), sans
+   paquet depuis `VOID_SILENCE` (2 s), dont même la plus haute position de l'enveloppe est passée sous `KillHeight`, et
+   sans rien sous sa dernière position (sphère de 4 studs lancée jusqu'à `KillHeight`) : journalisé (`Movement`,
+   gravité faible, une coupure réseau en produit aussi) et tué (`KillZone.kill`). Un client corrigé au-dessus du vide
+   qui n'accuse jamais réception y passe aussi.
 
-**Coût.** 1 à 2 raycasts par paquet accepté et par joueur (20/s/joueur) : quelques centaines par seconde à pleine
-partie, acceptable. Complexité moyenne : le surf est le cas difficile, à régler en mode journal seul.
+**Modes** (`src/shared/MovementGuardRules.luau:23-27`) : `ENFORCE_NOCLIP = false` et `ENFORCE_FLIGHT = false` : journal
+seul (violation `Movement` moyenne comptée, position appliquée). `ENFORCE_VOID = true` : un joueur dans ce cas tombait
+de toute façon (false : journal seul, un signalement par `VOID_SILENCE`).
 
-**Impact.** Moyen : le vol et le noclip donnent surtout des positions de tir hors d'atteinte, que T1 (ligne de vue)
-limite déjà en partie.
+**Passer en bloquant.** Laisser tourner en jeu publié, puis lire le journal `Movement` des joueurs honnêtes (résumé
+webhook, ou console serveur `[CheatLog] … noclip :` / `vol :`), surtout en surf rapide, sur les échelles et aux
+boosts. Sans faux positif : `ENFORCE_NOCLIP = true` puis `ENFORCE_FLIGHT = true` (une PR chacun). Le refus passe par
+`refuse` (journal, correction, paquets périmés ignorés) ; les tests Lune couvrent les deux modes. Faux positifs
+constatés : vol → relever `FLIGHT_HEIGHT_TOLERANCE` ou `FLIGHT_TIME_SLACK` (gigue), `REFINE_MARGIN` (après une rampe) ;
+noclip → relever `NOCLIP_DETOUR_BASE` ou `NOCLIP_DETOUR_RATIO`.
+
+**Limites connues.** Un joueur qui plane à moins de `SUPPORT_REACH` d'une surface (ou le long d'une rampe, d'un bord de
+mur) n'est pas signalé ; au décollage, l'enveloppe accorde une marge (vitesse estimée doublée, plus un saut) épuisée en
+quelques dixièmes de seconde de vol libre ; un `WedgePart`, un cylindre ou une `MeshPart` portent sur toute leur boîte.
+Ces écarts vont dans le sens du joueur honnête.
+
+**Pièges.**
+
+- Les paquets non fiables peuvent arriver dans le désordre et groupés : jamais d'estimation de vitesse sur l'heure
+  d'arrivée de deux paquets successifs. Le seul temps sûr côté client est l'intervalle minimal entre deux envois
+  (`CharacterSync.send` reporte le reste : au moins une demi-période, quelle que soit la cadence d'images).
+- En chute plafonnée (`MAX_FALL_SPEED`), une parabole ne vaut plus : une borne de vitesse déduite d'une parabole doit
+  être ramenée à `-MAX_FALL_SPEED` au plus bas.
+- Raycasts `Include` sur la map et `RespectCanCollide` : un client honnête collisionne aussi avec les pièces `CanQuery`
+  sans collision ; le serveur, plus permissif, ne s'en plaint pas.
+- Vérifier en Studio : un paquet forgé s'envoie en contexte Client avec un numéro de correction élevé
+  (`CharacterSync:FireServer(pos, 0, 1000)`) ; un client figé s'obtient avec
+  `RunService:UnbindFromRenderStep("MovementStep")` (plus de mouvement ni d'envoi) ; une apparition à un endroit choisi,
+  en déplaçant les points de `Maps.Dizzy.GroundSpawns` pendant le Play.
+
+**Coût** (sonde `PerfServer`, Studio, 1 joueur, Dizzy, 5 bots) : repère `srv anti-vol` 0,01 à 0,07 ms/frame à 20
+paquets/s (0,1 à 0,4 ms par paquet au pire, un pic à 0,85 ms), `srv vide` 0,001 ms/frame. Quelques dixièmes de ms par
+frame à pleine partie.
+
+**Vérifié.** Tests `tests/specs/MovementGuardRules.spec.luau` : traversée d'un mur, chute à travers un sol, virage
+serré autour d'un coin à 100 studs/s, arête de rampe à 300 studs/s, saut, 10 s de bhop avec 80 ms de gigue, chute de
+300 studs, bhop et chute à 15/30/45/144 FPS sur 10 graines de gigue, surf sur une rampe à 60° puis sortie à 130 studs/s
+vers le haut, échelle (et la même montée sans échelle signalée), geyser, lancement depuis le soleil au premier paquet
+tardif, vol stationnaire, descente lente, les deux modes (journal seul, bloquant sans boucle de corrections), vide. En
+jeu (Studio, latence nulle) : bhop et strafes, montée à l'échelle jusqu'au toit sans violation ; client figé au-dessus
+du vide déclaré tombé après 2,1 s ; paquet forgé à travers un mur journalisé (`noclip`, puis le retour du vrai client),
+refusé et corrigé une seule fois en mode bloquant ; vol stationnaire forgé journalisé (`vol`). Non vérifié en jeu :
+surf (Dizzy n'a pas de rampe de surf), boosts et lancement depuis le soleil (absents de Dizzy), vrai ping.
+
+**Impact.** Le vide est fermé ; le noclip et le vol sont visibles au journal, bloquants après mesure. Le vol et le
+noclip donnent surtout des positions de tir hors d'atteinte, que T1 (ligne de vue) limite déjà en partie.
 
 ## Remotes
 
@@ -664,7 +725,7 @@ mode bloquant une fois mesurée.
   jeu) ; bots inchangés ; tests.
 - **Dépendances.** 4. **Priorité.** P2.
 
-### 8. Déplacement : noclip et vol — P2
+### 8. Déplacement : noclip et vol — P2 (fait en journal seul, #177)
 
 - **Résumé.** D2 : raycast `lastPos → newPos`, suivi du temps sans support et de la gravité, chute dans le vide sans
   paquet.
