@@ -10,6 +10,7 @@ return {
 	POPULATION_DUEL_TIME = 4,     -- un bot qui a vu une cible depuis moins de tant (s) est en duel : jamais retiré
 	POPULATION_INTERVAL = 1,      -- population réajustée tous les tant (s) (retrait différé tant que tous sont en duel)
 	DEBUG_FREEZE_ATTRIBUTE = "DebugBotsFreeze", -- vrai : bots figés (ni mouvement ni tir)
+	DEBUG_PASSIVE_ATTRIBUTE = "DebugBotsPassive", -- vrai : bots passifs (ils se déplacent mais ne tirent pas sur les humains)
 
 	-- Gêne : au sol, sous cette part de la vitesse voulue, le bot n'avance pas comme il le veut
 	STUCK_SPEED_RATIO   = 0.3,

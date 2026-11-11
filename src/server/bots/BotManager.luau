@@ -8,7 +8,7 @@
 -- (deps.hitscan, deps.melee), tirs entendus par les autres bots.
 -- Population (#144) : les bots comblent les places vides (BotPopulationRules), un par un à l'arrivée d'un joueur, hors duel.
 -- Outillage Studio : l'attribut Workspace DebugBots fixe le nombre de bots (nombre, "+", "-", 0 pour tous les retirer,
--- nil ou "auto" pour la population automatique), DebugBotsFreeze fige les bots, DebugNav affiche le plan (NavDebug).
+-- nil ou "auto" pour la population automatique), DebugBotsFreeze fige les bots, DebugBotsPassive les empêche de tirer sur les humains, DebugNav affiche le plan (NavDebug).
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -71,6 +71,13 @@ local bots: { Bot } = {}
 local clips: Instance? = nil -- murs d'air de la map jouée (ne bloquent pas la vue des bots)
 local debugCount: number? = nil -- nombre de bots fixé par DebugBots (nil : population automatique)
 local pauseCount = 0 -- runs de DebugPlaytest en cours (population suspendue, aucun bot)
+local passive = false -- DebugBotsPassive : les bots (présents et ajoutés ensuite) ne tirent pas sur les humains
+
+-- Cette méthode permet de lire l'état de gel voulu par le debug lorsqu'un bot est créé : l'attribut DebugBotsFreeze
+-- (Studio uniquement), pour qu'un bot ajouté après la pose de l'attribut soit figé comme les autres.
+local function debugFrozen(): boolean
+	return RunService:IsStudio() and workspace:GetAttribute(BotConfig.DEBUG_FREEZE_ATTRIBUTE) == true
+end
 
 -- Cette méthode permet de lister les autres participants en vie lorsqu'un bot regarde autour de lui ou cherche un
 -- humain (biais) : id, humain ou bot, personnage, instant d'apparition (délai de grâce).
@@ -224,6 +231,9 @@ local function spawnBot(bot: Bot)
 		onShot = function(position: Vector3)
 			BotManager.hearShot(participant, position)
 		end,
+		passive = function()
+			return passive
+		end,
 	}, char, motion, arsenal)
 	-- Première position publiée tout de suite : pas d'attente du premier envoi pour apparaître chez les clients
 	deps.relay(char, root, root.CFrame)
@@ -276,10 +286,14 @@ function BotManager.add(): Participant?
 		taken[bot.participant.name] = true
 	end
 	local participant = Participants.addBot(BotRules.pickName(taken))
-	table.insert(
-		bots,
-		{ participant = participant, character = nil, motion = nil, brain = nil, diedAt = -math.huge, frozen = false }
-	)
+	table.insert(bots, {
+		participant = participant,
+		character = nil,
+		motion = nil,
+		brain = nil,
+		diedAt = -math.huge,
+		frozen = debugFrozen(),
+	})
 	deps.roundManager.addParticipant(participant)
 	return participant
 end
@@ -408,6 +422,12 @@ local function applyDebugFreeze()
 	BotManager.setFrozen(workspace:GetAttribute(BotConfig.DEBUG_FREEZE_ATTRIBUTE) == true)
 end
 
+-- Cette méthode permet de rendre les bots passifs ou de les rétablir lorsque l'attribut DebugBotsPassive change
+-- (Studio) : ils continuent de se déplacer mais ne tirent plus sur les humains (lu à chaque tir, bots ajoutés compris).
+local function applyDebugPassive()
+	passive = workspace:GetAttribute(BotConfig.DEBUG_PASSIVE_ATTRIBUTE) == true
+end
+
 -- Cette méthode permet d'envoyer tous les bots vers un point lorsque l'attribut DebugBotsGoto change (Studio) : le
 -- point de passage le plus proche de la position donnée devient leur destination (rampes de surf #142 comprises).
 local function applyDebugGoto()
@@ -459,9 +479,11 @@ function BotManager.init(dependencies: Deps)
 	if RunService:IsStudio() then
 		workspace:GetAttributeChangedSignal(BotConfig.DEBUG_ATTRIBUTE):Connect(applyDebugCommand)
 		workspace:GetAttributeChangedSignal(BotConfig.DEBUG_FREEZE_ATTRIBUTE):Connect(applyDebugFreeze)
+		workspace:GetAttributeChangedSignal(BotConfig.DEBUG_PASSIVE_ATTRIBUTE):Connect(applyDebugPassive)
 		workspace:GetAttributeChangedSignal(BotConfig.DEBUG_GOTO_ATTRIBUTE):Connect(applyDebugGoto)
+		applyDebugPassive()
+		applyDebugFreeze() -- avant applyDebugCommand : les bots créés par DebugBots naissent déjà figés
 		applyDebugCommand()
-		applyDebugFreeze()
 	end
 end
 

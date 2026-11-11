@@ -98,6 +98,11 @@ return function(T, Loader)
 			)
 		end)
 
+		T.it("ne tire pas quand le tir est interdit (bots passifs, DebugBotsPassive)", function()
+			T.expectEqual(Rules.canFire(fireInput({ holdFire = true })), false, "tir interdit")
+			T.expectEqual(Rules.canFire(fireInput({ holdFire = false })), true, "tir rétabli")
+		end)
+
 		T.it("se règle sans toucher au code : la difficulté est dans la config", function()
 			for _, key in
 				{
