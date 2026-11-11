@@ -3,6 +3,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
+local MathRules = require(ReplicatedStorage.Shared.MathRules)
 local MovementConfig = require(ReplicatedStorage.Shared.MovementConfig)
 
 local BotRules = {}
@@ -25,13 +26,13 @@ function BotRules.yawOf(dir: Vector3): number?
 	if dir.X * dir.X + dir.Z * dir.Z < 1e-8 then
 		return nil
 	end
-	return math.deg(math.atan2(dir.X, -dir.Z)) % 360
+	return MathRules.headingDeg(dir.X, dir.Z) % 360
 end
 
 -- Cette méthode permet de tourner le regard du bot vers un cap à vitesse limitée lorsqu'il change de direction
 -- (rate en °/s), par le plus court côté.
 function BotRules.turnToward(yawDeg: number, targetDeg: number, rate: number, dt: number): number
-	local delta = (targetDeg - yawDeg + 180) % 360 - 180
+	local delta = MathRules.angleDeltaDeg(yawDeg, targetDeg)
 	local maxStep = rate * dt
 	return (yawDeg + math.clamp(delta, -maxStep, maxStep)) % 360
 end

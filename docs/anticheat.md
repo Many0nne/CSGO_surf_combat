@@ -71,7 +71,7 @@ localement les hitbox des autres (« hitbox expander ») marche aussi : le serve
 
 1. Arguments : `origin: Vector3`, `direction: Vector3` (unitaire), `hitPos: Vector3`, `shotTime: number`
    (`workspace:GetServerTimeNow()` au tir), en plus de `targetChar` et `hitPart`. Types et finitude vérifiés comme
-   `CharacterSyncRules.isWellFormed`.
+   `CharacterSyncRules.isWellFormed`, par les fonctions de `MathRules` (une seule copie de la règle « fini »).
 2. Rembobinage : le serveur garde un historique des positions acceptées de chaque personnage, une seconde à 20 Hz,
    alimenté là où elles sont posées : joueurs dans `onClientPosition` (après acceptation), bots dans `relayBot`.
    **Fait (#173)** : module pur `src/shared/PositionHistory.luau` (tampon circulaire de 35 relevés, un relevé au plus
@@ -190,7 +190,7 @@ un tir légitime lointain, devient pour les joueurs `Validator.MAX_HITSCAN_RANGE
 `MAX_SPEED_SERVER` × `MAX_REWIND`, chemin possible de la cible pendant le rembobinage, + hauteur de caméra + 25 de
 marge, calculé depuis ces constantes). Un échec `origin` ou `lineOfSight` au-delà de 250 studs reste refusé pendant la
 mesure (`LOG_ONLY_RANGE`, voir plus haut). Les bots gardent 250 studs (`BOT_HITSCAN_RANGE`, tirs inchangés) : ils
-visent à 240 au plus (`src/shared/BotConfig.luau`), mais leur rayon serveur porte à 2 048 studs (`BotArsenal.MAX_RAY`)
+visent à 240 au plus (`src/shared/BotConfig.luau`), mais leur rayon serveur porte à `WeaponConfig.HITSCAN_RANGE` = 2 048 studs (lu par `BotArsenal`)
 et toucherait sinon un joueur lointain derrière une cible manquée.
 
 ### T2. Cadence, munitions, durée d'equip
@@ -234,13 +234,22 @@ contrôles de plus. Règles pures dans `src/server/ShotRules.luau` (`checkEquip`
   ne doit pas faire refuser une touche) : le compteur serveur est toujours ≤ celui du client, jamais plus strict.
 - **Bots.** Exclus des deux contrôles (`attacker.isBot`) : `BotArsenal` fait déjà respecter equip, chargeur et
   rechargement, et ses tirs sont des raycasts serveur. Leur equip n'est pas noté (`trackWeapon3P`) : rien à retenir, et
-  `BotManager` ne rappelle pas `Validator.forget` au retrait d'un bot. Tests : 12 tirs de bot d'affilée et tir dès la
-  sortie acceptés.
+  `Validator.forget` est appelé à l'apparition d'un bot et à son retrait (#218, voir « Retrait d'un participant »).
+  Tests : 12 tirs de bot d'affilée et tir dès la sortie acceptés.
 - **Ordre.** Les contrôles T1 (`validateShot`) passent avant equip et chargeur, et tous sont évalués : un tir refusé
   pour l'equip garde ses violations d'origine ou de ligne de vue au journal (phase de mesure de T1).
 - **Réapparition et départ.** `Validator.forget` efface cadences, equip et chargeurs ; il précède le suivi des armes du
   nouveau personnage (`onParticipantCharacter`). Un outil qui entre ou sort de l'ancien corps (ragdoll) ne touche plus
   au participant.
+- **Retrait d'un participant (#218).** `forgetCombatState` (`init.server.luau`) = `Validator.forget` +
+  `ShotRelayRules.forget`, appelé à l'apparition, au départ d'un joueur, au retour au menu (`LeaveRound`) et, par
+  `BotManager.removeAt` (dépendance `forget`), au retrait d'un bot : sans cela, chaque bot retiré laissait des entrées (clés fortes du Validator) qui
+  grossissaient avec le va-et-vient de la population. `AimStats` et `CheatLog` ignorent les bots, `RoundManager` est
+  déjà prévenu, l'historique de positions part avec le corps (`Destroying`) : rien d'autre à oublier. **Règle : toute
+  nouvelle table indexée par participant (ou par bot) doit être vidée par `forgetCombatState`.** Contrôle : test
+  `tests/specs/BotManager.spec.luau` (aucune entrée après retrait, y compris 20 va-et-vient), et la ligne
+  `[Perf] SRV` de la sonde serveur (`anti-triche N suivi(s)`, `Validator.trackedCount`) qui doit retomber après
+  `workspace:SetAttribute("DebugBots", 0)`.
 - **Mesure en Studio (#175, 2026-11-11).** `DebugPlaytest` AWP et M9Bayonet : PASS 9/9. Client honnête (chemin réel
   `Tool:Activate`) : 5 touches, rechargement, 3 touches, aucune ligne `[CheatLog]`. Tir forgé envoyé 0,25 s après un
   ré-equip : refusé, journalisé `Hitscan … equip : touche 0.25 s après l'equip (min 1.38 s)`. Studio sans latence : à

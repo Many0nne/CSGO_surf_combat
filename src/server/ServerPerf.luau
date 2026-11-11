@@ -20,8 +20,8 @@ local dts: { number } = {}
 local totals: PerfRules.MarkerTotals = {}
 local openedAt = 0
 local lastLog = 0
-local botInfo: () -> (number, number) = function()
-	return 0, 0
+local botInfo: () -> (number, number, number) = function()
+	return 0, 0, 0
 end
 
 -- Cette méthode permet d'additionner les repères relevés lorsqu'un bilan accumule plusieurs relevés.
@@ -55,17 +55,18 @@ local function logSummary()
 			string.format("%s %.3fms×%.1f (max %.2f)", m.label, m.msPerFrame, m.callsPerFrame, m.maxMs)
 		)
 	end
-	local total, alive = botInfo()
+	local total, alive, tracked = botInfo()
 	print(
 		string.format(
-			"[Perf] SRV t=%.0fs Heartbeat méd %.1fms p99 %.1fms max %.1fms | bots %d (%d en jeu) | mém %.0f Mo, Lua %.1f Mo"
-				.. " | scripts : %s",
+			"[Perf] SRV t=%.0fs Heartbeat méd %.1fms p99 %.1fms max %.1fms | bots %d (%d en jeu) | anti-triche %d suivi(s)"
+				.. " | mém %.0f Mo, Lua %.1f Mo | scripts : %s",
 			os.clock() - openedAt,
 			s.medianMs,
 			s.p99Ms,
 			s.maxMs,
 			total,
 			alive,
+			tracked,
 			Stats:GetTotalMemoryUsageMb(),
 			gcinfo() / 1024,
 			table.concat(scripts, ", ")
@@ -100,9 +101,9 @@ local function apply()
 	end
 end
 
--- Cette méthode permet de brancher la sonde lorsque le serveur démarre ; `info` renvoie le nombre de bots et celui des
--- bots en jeu au moment du bilan.
-function ServerPerf.init(info: () -> (number, number))
+-- Cette méthode permet de brancher la sonde lorsque le serveur démarre ; `info` renvoie le nombre de bots, celui des
+-- bots en jeu et celui des participants que le Validator suit encore (doit retomber au retrait d'un bot, #218).
+function ServerPerf.init(info: () -> (number, number, number))
 	botInfo = info
 	workspace:GetAttributeChangedSignal(ATTRIBUTE):Connect(apply)
 	apply()

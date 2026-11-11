@@ -4,6 +4,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local MathRules = require(ReplicatedStorage.Shared.MathRules)
 local MovementConfig = require(ReplicatedStorage.Shared.MovementConfig)
 
 local CharacterSyncRules = {}
@@ -22,14 +23,11 @@ CharacterSyncRules.ENFORCE_MOVEMENT = true
 
 export type Snapshot = { t: number, pos: Vector3, yaw: number }
 
--- Cette méthode permet de vérifier qu'une valeur reçue d'un client est un nombre fini lorsqu'on décode un paquet.
-local function isFinite(n: any): boolean
-	return type(n) == "number" and n == n and math.abs(n) <= CharacterSyncRules.MAX_COORD
-end
-
--- Cette méthode permet de vérifier la forme d'un paquet client lorsqu'il arrive : un Vector3 fini et un angle fini.
+-- Cette méthode permet de vérifier la forme d'un paquet client lorsqu'il arrive : un Vector3 et un angle finis, de
+-- valeur absolue au plus MAX_COORD.
 function CharacterSyncRules.isWellFormed(pos: any, yaw: any): boolean
-	return typeof(pos) == "Vector3" and isFinite(pos.X) and isFinite(pos.Y) and isFinite(pos.Z) and isFinite(yaw)
+	return MathRules.isBoundedVector3(pos, CharacterSyncRules.MAX_COORD)
+		and MathRules.isBounded(yaw, CharacterSyncRules.MAX_COORD)
 end
 
 -- Seau de distance d'un joueur (#172, docs/anticheat.md « D1 ») : `stored` = studs mis de côté (au plus MAX_DELTA_POS),
@@ -91,11 +89,6 @@ function CharacterSyncRules.push(buffer: { Snapshot }, snap: Snapshot)
 	end
 end
 
--- Cette méthode permet de trouver la plus courte rotation de a vers b lorsqu'on interpole un cap (passage par ±π).
-local function angleDelta(a: number, b: number): number
-	return (b - a + math.pi) % (2 * math.pi) - math.pi
-end
-
 -- Cette méthode permet de calculer la position et le cap affichés d'un autre joueur à l'instant renderTime lorsque le
 -- client dessine une frame : interpolation entre les deux paquets qui l'encadrent, le plus ancien avant le tampon,
 -- le dernier reçu après (sans extrapoler). nil si le tampon est vide.
@@ -111,7 +104,7 @@ function CharacterSyncRules.sample(buffer: { Snapshot }, renderTime: number): (V
 		local a, b = buffer[i], buffer[i + 1]
 		if renderTime <= b.t then
 			local alpha = (renderTime - a.t) / (b.t - a.t)
-			return a.pos + (b.pos - a.pos) * alpha, a.yaw + angleDelta(a.yaw, b.yaw) * alpha
+			return a.pos + (b.pos - a.pos) * alpha, a.yaw + MathRules.angleDelta(a.yaw, b.yaw) * alpha
 		end
 	end
 	return buffer[count].pos, buffer[count].yaw

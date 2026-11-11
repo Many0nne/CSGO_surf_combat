@@ -46,6 +46,8 @@ export type Deps = {
 	melee: (Participant, Model) -> ("hit" | "kill")?,
 	-- Tir au fusil parti (touché ou manqué), relayé aux joueurs pour le son (#156) : tireur, origine, direction
 	shotFired: (Participant, Vector3, Vector3) -> (),
+	-- Oubli de l'état de combat d'un participant retiré (cadence, equip, chargeur, relais des tirs ; #218)
+	forget: (Participant) -> (),
 	roundManager: {
 		isActive: () -> boolean,
 		addParticipant: (Participant) -> (),
@@ -283,13 +285,15 @@ function BotManager.add(): Participant?
 end
 
 -- Cette méthode permet de retirer un bot du jeu lorsqu'on en demande un de moins : le bot d'index donné (le dernier par
--- défaut), personnage détruit, sorti du classement et du registre.
+-- défaut), personnage détruit, sorti du classement et du registre, état de combat oublié (#218 : sans cela le
+-- Validator et le relais des tirs gardent une entrée par bot retiré).
 function BotManager.removeAt(index: number?)
 	local bot = table.remove(bots, index or #bots)
 	if not bot then
 		return
 	end
 	dropCharacter(bot)
+	deps.forget(bot.participant)
 	deps.roundManager.removeParticipant(bot.participant)
 	Participants.remove(bot.participant)
 end

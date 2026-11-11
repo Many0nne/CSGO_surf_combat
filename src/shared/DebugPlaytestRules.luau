@@ -1,7 +1,12 @@
 -- DebugPlaytestRules.luau
 -- Règles pures du helper de playtest debug (Studio uniquement, #30) : choix de l'outil, marqueurs attendus,
--- dégâts attendus, visée caméra et rapport PASS/FAIL. Aucune dépendance Roblox au-delà des types de base,
--- pour rester testable sous Lune. Le helper lui-même vit dans `server/DebugPlaytest` et `client/debug/DebugPlaytest`.
+-- dégâts attendus, visée caméra et rapport PASS/FAIL. Aucune dépendance Roblox au-delà des types de base et de
+-- MathRules (module partagé, sans service), pour rester testable sous Lune. Le helper lui-même vit dans
+-- `server/DebugPlaytest` et `client/debug/DebugPlaytest`.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local MathRules = require(ReplicatedStorage.Shared.MathRules)
 
 local DebugPlaytestRules = {}
 
@@ -87,7 +92,7 @@ function DebugPlaytestRules.yawPitchToward(
 		return 0, 0
 	end
 	local u = d.Unit
-	local yaw = math.deg(math.atan2(u.X, -u.Z))
+	local yaw = MathRules.headingDeg(u.X, u.Z)
 	local pitch = math.clamp(math.deg(math.asin(math.clamp(u.Y, -1, 1))), pitchMin, pitchMax)
 	return yaw, pitch
 end

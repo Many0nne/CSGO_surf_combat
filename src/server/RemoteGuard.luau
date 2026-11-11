@@ -9,6 +9,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local MathRules = require(ReplicatedStorage.Shared.MathRules)
 local NetworkProtocol = require(ReplicatedStorage.Shared.NetworkProtocol)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 
@@ -51,11 +52,6 @@ end
 
 -- ── Contrôles de type ────────────────────────────────────────────────────────
 
--- Cette méthode permet de dire si un nombre est fini lorsqu'un argument numérique arrive (NaN et ±inf refusés).
-local function isFiniteNumber(n: any): boolean
-	return type(n) == "number" and n == n and n ~= math.huge and n ~= -math.huge
-end
-
 -- Cette méthode permet de décrire le type reçu lorsqu'un contrôle échoue (raison du journal).
 local function describe(value: any): string
 	return typeof(value)
@@ -81,7 +77,7 @@ function RemoteGuard.vector3(): Check
 		if typeof(value) ~= "Vector3" then
 			return "malformed", "Vector3 attendu, reçu " .. describe(value)
 		end
-		if not (isFiniteNumber(value.X) and isFiniteNumber(value.Y) and isFiniteNumber(value.Z)) then
+		if not MathRules.isFiniteVector3(value) then
 			return "malformed", "Vector3 non fini"
 		end
 		return "ok"
@@ -91,7 +87,7 @@ end
 -- Cette méthode permet de construire le contrôle « nombre fini » lorsqu'un remote reçoit un angle ou une durée.
 function RemoteGuard.number(): Check
 	return function(value)
-		if not isFiniteNumber(value) then
+		if not MathRules.isFinite(value) then
 			return "malformed", "nombre fini attendu, reçu " .. describe(value)
 		end
 		return "ok"

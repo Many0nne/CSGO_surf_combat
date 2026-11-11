@@ -5,6 +5,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
+local MathRules = require(ReplicatedStorage.Shared.MathRules)
 
 local BotCombatRules = {}
 
@@ -24,12 +25,7 @@ end
 -- Cette méthode permet de mesurer l'écart entre le cap du bot et la direction d'un point lorsqu'il vise (°, de 0 à
 -- 180, hauteur ignorée) ; 0 si le point est à la verticale des yeux.
 function BotCombatRules.yawError(eye: Vector3, yawDeg: number, point: Vector3): number
-	local flat = Vector3.new(point.X - eye.X, 0, point.Z - eye.Z)
-	if flat.Magnitude < 1e-6 then
-		return 0
-	end
-	local cos = math.clamp(flat.Unit:Dot(BotCombatRules.forwardOf(yawDeg)), -1, 1)
-	return math.deg(math.acos(cos))
+	return MathRules.horizontalAngle(point - eye, BotCombatRules.forwardOf(yawDeg), 1e-6) or 0
 end
 
 -- Cette méthode permet de calculer la direction (unitaire) d'un tir lorsque le bot tire : cap réel du bot à

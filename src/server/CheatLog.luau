@@ -9,37 +9,19 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
 
+local CheatTypes = require(ServerScriptService.Server.CheatTypes)
 local Participants = require(ServerScriptService.Server.Participants)
 local RemoteGuard = require(ServerScriptService.Server.RemoteGuard)
 local Webhook = require(ServerScriptService.Server.Webhook)
 
 local CheatLog = {}
 
-export type Severity = "low" | "medium" | "high"
+export type Severity = CheatTypes.Severity
 
--- Gravités (docs/anticheat.md « Classer les violations ») :
--- - LOW : comptée seulement, l'action est déjà ignorée (débit dépassé, tir un peu tôt) ; faux positifs fréquents ;
--- - MEDIUM : suspecte mais explicable par le réseau (tir sans ligne de vue, téléport refusé) ; entre dans le score ;
--- - HIGH : impossible pour notre client (type d'argument, remote de debug en jeu) ; kick à KICK_HIGH_COUNT.
-CheatLog.Severity = {
-	LOW = "low" :: Severity,
-	MEDIUM = "medium" :: Severity,
-	HIGH = "high" :: Severity,
-}
-
--- Catégories : une par parade. Les suivantes sont réservées aux issues du plan (#160) pour garder des noms stables
--- dans le journal ; toute nouvelle parade ajoute la sienne ici et dans docs/anticheat.md.
-CheatLog.Category = {
-	REMOTE_RATE = "RemoteRate", -- débit d'un remote dépassé (RemoteGuard)
-	REMOTE_ARGS = "RemoteArgs", -- argument d'un type impossible (RemoteGuard)
-	SPAWN = "Spawn", -- réapparition (#171)
-	MOVEMENT = "Movement", -- vitesse, téléport, noclip, vol (#172)
-	HITSCAN = "Hitscan", -- tir : origine, direction, ligne de vue, equip, chargeur (#174, #175)
-	MELEE = "Melee", -- mêlée : equip (#175), orientation, ligne de vue (#176)
-	-- statistiques de visée signalées (#178, AimStats) : toujours faible, chiffres bruts pour revue humaine, jamais de
-	-- sanction ; un seul signalement suffit au résumé de fin de session (worthSummary)
-	AIM = "Aim",
-}
+-- Gravités et catégories : définies dans CheatTypes (une seule source, lisible par les règles pures sans services),
+-- ré-exportées ici pour les appelants du journal. Toute nouvelle parade ajoute sa catégorie dans CheatTypes.
+CheatLog.Severity = CheatTypes.Severity
+CheatLog.Category = CheatTypes.Category
 
 -- Poids d'une violation dans le score, et décroissance du score (points par seconde).
 CheatLog.SCORE_WEIGHT = { low = 1, medium = 5, high = 20 } :: { [Severity]: number }

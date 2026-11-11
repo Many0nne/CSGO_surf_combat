@@ -7,16 +7,20 @@
 -- Mêlée (#176, « M1 ») : orientation du tireur et ligne de vue vers la cible rembobinée, mêmes modes et même journal.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 
+local CheatTypes = require(ServerScriptService.Server.CheatTypes)
 local CharacterSyncRules = require(ReplicatedStorage.Shared.CharacterSyncRules)
+local MathRules = require(ReplicatedStorage.Shared.MathRules)
 local PositionHistory = require(ReplicatedStorage.Shared.PositionHistory)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 
 local ShotRules = {}
 
 export type Mode = "log" | "block"
--- Mêmes valeurs que CheatLog.Severity (ShotRules ne dépend pas de CheatLog, qui demande des services).
-export type Severity = "low" | "medium" | "high"
+-- Gravités du journal : CheatTypes, que CheatLog ré-exporte (ShotRules ne dépend pas de CheatLog, qui demande des
+-- services).
+export type Severity = CheatTypes.Severity
 export type Shot = { origin: Vector3, direction: Vector3, hitPos: Vector3, shotTime: number }
 
 ShotRules.Mode = { LOG = "log" :: Mode, BLOCK = "block" :: Mode }
@@ -34,9 +38,6 @@ ShotRules.Check = {
 	MELEE_LINE_OF_SIGHT = "meleeLineOfSight", -- aucun obstacle de la map entre tireur et cible (#176, mêlée)
 }
 
--- Catégories du journal (mêmes valeurs que CheatLog.Category) : le contrôle d'equip vaut aussi pour la mêlée.
-ShotRules.Category = { HITSCAN = "Hitscan", MELEE = "Melee" }
-
 -- Mode de chaque contrôle. "log" tant que les faux positifs ne sont pas mesurés en jeu (docs/anticheat.md, « T1 » :
 -- procédure pour passer en "block") ; forme et distance ne dépendent pas du réseau, donc bloquants d'emblée. Equip et
 -- chargeur (#175) : règles déterministes à tolérance de gigue, sans faux positif mesuré, bloquants d'emblée. Mêlée
@@ -53,18 +54,18 @@ ShotRules.MODES = {
 	meleeLineOfSight = "log",
 } :: { [string]: Mode }
 
--- Gravité d'un échec au journal (valeurs de CheatLog.Severity) : une forme impossible ne vient jamais de notre client
+-- Gravité d'un échec au journal (CheatTypes.Severity) : une forme impossible ne vient jamais de notre client
 -- (forte) ; les autres s'expliquent par le réseau ou un bug de tolérance (moyennes, docs/anticheat.md).
 ShotRules.SEVERITY = {
-	shape = "high",
-	origin = "medium",
-	direction = "medium",
-	distance = "medium",
-	lineOfSight = "medium",
-	equip = "medium",
-	magazine = "medium",
-	orientation = "medium",
-	meleeLineOfSight = "medium",
+	shape = CheatTypes.Severity.HIGH,
+	origin = CheatTypes.Severity.MEDIUM,
+	direction = CheatTypes.Severity.MEDIUM,
+	distance = CheatTypes.Severity.MEDIUM,
+	lineOfSight = CheatTypes.Severity.MEDIUM,
+	equip = CheatTypes.Severity.MEDIUM,
+	magazine = CheatTypes.Severity.MEDIUM,
+	orientation = CheatTypes.Severity.MEDIUM,
+	meleeLineOfSight = CheatTypes.Severity.MEDIUM,
 } :: { [string]: Severity }
 
 -- Ancienne borne du serveur (studs entre racines), avant #174 : tout tir au-delà était refusé. Pendant la phase de
@@ -124,17 +125,9 @@ ShotRules.MELEE_REWIND_STEP = 0.05
 -- Deux positions rembobinées plus proches que cette distance (studs) ne sont testées qu'une fois contre la map.
 ShotRules.MELEE_SAMPLE_MERGE = 0.25
 
--- Cette méthode permet de vérifier qu'un nombre est fini et borné lorsqu'un argument de tir arrive.
-local function isBounded(n: any, bound: number): boolean
-	return type(n) == "number" and n == n and math.abs(n) <= bound
-end
-
--- Cette méthode permet de vérifier qu'un Vector3 est fini et borné lorsqu'un point de tir arrive.
+-- Cette méthode permet de vérifier qu'un Vector3 est fini et borné par MAX_COORD lorsqu'un point de tir arrive.
 local function isBoundedVector(v: any): boolean
-	return typeof(v) == "Vector3"
-		and isBounded(v.X, ShotRules.MAX_COORD)
-		and isBounded(v.Y, ShotRules.MAX_COORD)
-		and isBounded(v.Z, ShotRules.MAX_COORD)
+	return MathRules.isBoundedVector3(v, ShotRules.MAX_COORD)
 end
 
 ShotRules.isBoundedVector = isBoundedVector
@@ -160,7 +153,7 @@ function ShotRules.isWellFormed(shot: any): (boolean, string?)
 	end
 	-- Instant : horloge serveur en secondes ; seul le fini compte, il est borné ensuite au rembobinage
 	local t = shot.shotTime
-	if type(t) ~= "number" or t ~= t or t == math.huge or t == -math.huge then
+	if not MathRules.isFinite(t) then
 		return false, "instant invalide"
 	end
 	return true
@@ -357,15 +350,8 @@ end
 -- Cette méthode permet de mesurer l'angle horizontal (degrés) entre un cap et la direction d'un point à un autre
 -- lorsqu'on vérifie l'orientation d'un coup ; renvoie aussi la distance horizontale (angle nil si elle est nulle).
 function ShotRules.horizontalAngle(look: Vector3, from: Vector3, to: Vector3): (number?, number)
-	local flatLook = Vector3.new(look.X, 0, look.Z)
 	local delta = to - from
-	local flat = Vector3.new(delta.X, 0, delta.Z)
-	local distance = flat.Magnitude
-	if distance < 1e-3 or flatLook.Magnitude < 1e-3 then
-		return nil, distance
-	end
-	local cos = math.clamp(flatLook.Unit:Dot(flat.Unit), -1, 1)
-	return math.deg(math.acos(cos)), distance
+	return MathRules.horizontalAngle(look, delta, 1e-3), MathRules.horizontalLength(delta)
 end
 
 -- Cette méthode permet de calculer l'angle permis (degrés) lorsqu'on vérifie l'orientation d'un coup : MELEE_MAX_ANGLE

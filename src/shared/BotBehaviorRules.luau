@@ -5,6 +5,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
+local MathRules = require(ReplicatedStorage.Shared.MathRules)
 
 local BotBehaviorRules = {}
 
@@ -58,8 +59,7 @@ function BotBehaviorRules.inFieldOfView(eye: Vector3, yawDeg: number, target: Ve
 	if dx * dx + dz * dz < 1e-6 then
 		return true
 	end
-	local targetYaw = math.deg(math.atan2(dx, -dz))
-	local delta = math.abs((targetYaw - yawDeg + 180) % 360 - 180)
+	local delta = math.abs(MathRules.angleDeltaDeg(yawDeg, MathRules.headingDeg(dx, dz)))
 	return delta <= fovDeg / 2
 end
 
