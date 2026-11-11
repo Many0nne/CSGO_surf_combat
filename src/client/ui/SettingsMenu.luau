@@ -14,6 +14,7 @@ local PlayerSettings = require(ReplicatedStorage.Shared.PlayerSettings)
 local UITheme = require(ReplicatedStorage.Shared.UITheme)
 local LocalSettings = require(script.Parent.Parent.systems.settings.LocalSettings)
 local Crosshair = require(script.Parent.Crosshair)
+local KeyDisplay = require(script.Parent.KeyDisplay)
 local HUDRules = require(script.Parent.HUDRules)
 local MenuPage = require(script.Parent.MenuPage)
 local MenuShot = require(script.Parent.MenuShot)
@@ -614,6 +615,13 @@ local function buildCategories(block: Frame)
 	-- Visée simplifiée (#195) : crosshair au centre de l'écran, coupé par défaut ; Crosshair suit LocalSettings
 	local aimOptions = { { label = "ACTIVÉE", value = true }, { label = "COUPÉE", value = false } }
 	addPicker(graphics, "Visée simplifiée", "simpleAim", aimOptions, 2, 2, function() end)
+	-- Affichage des touches (#197) : désactivé par défaut ; KeyDisplay suit LocalSettings
+	local keyDisplayOptions = {
+		{ label = "DÉSACTIVÉ", value = "off" },
+		{ label = "SIMPLE", value = "simple" },
+		{ label = "COMPLET", value = "full" },
+	}
+	addPicker(graphics, "Affichage des touches", "keyDisplay", keyDisplayOptions, 1, 1, function() end, 150)
 end
 
 -- Cette méthode permet de remettre aux valeurs par défaut les réglages de la catégorie affichée lorsque le joueur clique
@@ -632,6 +640,7 @@ local function setOpen(state: boolean)
 	end
 	open = state
 	Crosshair.setMenuOpen(state)
+	KeyDisplay.setMenuOpen(state)
 	if state then
 		savedMouseBehavior = UserInputService.MouseBehavior
 		savedMouseIcon = UserInputService.MouseIconEnabled

@@ -1,6 +1,6 @@
 local UserInputService = game:GetService("UserInputService")
 
--- Map KeyCode → nom de touche interne
+-- Map KeyCode → nom de touche interne (liaisons fixes : l'affichage des touches, HUDRules.keyDisplayEntries, les reflète)
 local KEY_MAP = {
 	[Enum.KeyCode.W] = "W",
 	[Enum.KeyCode.A] = "A",
