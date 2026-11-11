@@ -211,20 +211,26 @@ return function(T, Loader)
 			T.expectEqual(mag.shots, 0, "fini avant le changement d'arme")
 		end)
 
-		T.it("redémarre un rechargement inachevé quand Reload revient, garde les touches faites pendant", function()
+		T.it("refuse toute touche pendant un rechargement inachevé, même chargeur non vide", function()
+			local mag = ShotRules.newMagazine()
+			mag.shots = 2
+			ShotRules.startReload(mag, 3.7, 0)
+			local ok, detail = ShotRules.checkMagazine(mag, 5, 3.7, 1)
+			T.expectEqual(ok, false)
+			T.expect(string.find(detail or "", "pendant le rechargement", 1, true) ~= nil, detail)
+			T.expectEqual((ShotRules.checkMagazine(mag, 5, 3.7, 3.5)), true, "fini à la tolérance près")
+		end)
+
+		T.it("redémarre un rechargement inachevé quand Reload revient", function()
 			local mag = ShotRules.newMagazine()
 			mag.shots = 3
 			ShotRules.startReload(mag, 3.7, 0)
-			ShotRules.countShot(mag) -- touche pendant le rechargement (client modifié)
 			ShotRules.startReload(mag, 3.7, 2) -- inachevé : repart de 2
 			T.expectEqual(mag.reloadAt, 2)
-			ShotRules.settleReload(mag, 3.7, 6)
+			T.expectEqual(mag.shots, 3)
+			T.expectEqual((ShotRules.checkMagazine(mag, 5, 3.7, 5)), false, "compté depuis le second Reload")
+			T.expectEqual((ShotRules.checkMagazine(mag, 5, 3.7, 5.5)), true)
 			T.expectEqual(mag.shots, 0)
-			mag.shots = 4
-			ShotRules.startReload(mag, 3.7, 10)
-			ShotRules.countShot(mag)
-			ShotRules.settleReload(mag, 3.7, 20)
-			T.expectEqual(mag.shots, 1, "touche pendant le rechargement encore due")
 		end)
 	end)
 end

@@ -84,6 +84,17 @@ local function isValidTarget(attacker: Participant, targetCharacter: Instance): 
 	return humanoid ~= nil and humanoid.Health > 0
 end
 
+-- Cette méthode permet de lire l'outil en main d'un participant et sa fiche WeaponConfig (attribut WeaponName, sinon
+-- nom de l'outil) lorsqu'il attaque ou recharge ; nil sans outil ou sans fiche.
+local function weaponInHand(participant: Participant): (Tool?, any)
+	local char = Participants.characterOf(participant)
+	local tool = char and char:FindFirstChildOfClass("Tool")
+	if not tool then
+		return nil, nil
+	end
+	return tool, WeaponConfig.Weapons[tool:GetAttribute("WeaponName") or tool.Name]
+end
+
 -- Cette méthode permet de vérifier ce qui est commun à toutes les attaques (cible, arme réellement en main, portée)
 -- lorsqu'une touche arrive ; elle renvoie la config de l'arme, les deux roots, le personnage du tireur et l'outil en
 -- main, ou nil si la touche est invalide.
@@ -96,8 +107,7 @@ local function resolveAttack(
 		return nil
 	end
 	local aChar = Participants.characterOf(attacker)
-	local tool = aChar and aChar:FindFirstChildOfClass("Tool")
-	local cfg = tool and WeaponConfig.Weapons[tool:GetAttribute("WeaponName") or tool.Name]
+	local tool, cfg = weaponInHand(attacker)
 	if not cfg then
 		return nil
 	end
@@ -158,20 +168,37 @@ local function cancelReloads(participant: Participant, now: number)
 	end
 end
 
+-- Cette méthode permet de journaliser un contrôle en échec lorsqu'il est constaté (tir ou mêlée), au format commun :
+-- « contrôle : détail », suffixé « (journal seul) » s'il ne refuse pas la touche, ou de la raison du refus en mode "log"
+-- (tir lointain, LOG_ONLY_RANGE).
+local function reportCheck(
+	world: ShotWorld,
+	attacker: Participant,
+	check: string,
+	detail: string,
+	refuses: boolean,
+	category: string?
+)
+	local suffix = if ShotRules.blocks(check)
+		then ""
+		elseif refuses then string.format(" (refusé : au-delà de %d studs)", ShotRules.LOG_ONLY_RANGE)
+		else " (journal seul)"
+	world.report(
+		attacker,
+		check,
+		ShotRules.SEVERITY[check],
+		string.format("%s : %s%s", check, detail, suffix),
+		category
+	)
+end
+
 -- Cette méthode permet de journaliser un contrôle d'equip ou de chargeur en échec lorsqu'il est constaté ; elle
 -- renvoie true s'il refuse la touche (mode "block"). Sans monde branché, la décision s'applique sans journal.
 local function failWeaponCheck(attacker: Participant, category: string, check: string, detail: string): boolean
 	local blocks = ShotRules.blocks(check)
 	local world = shotWorld
 	if world then
-		local suffix = if blocks then "" else " (journal seul)"
-		world.report(
-			attacker,
-			check,
-			ShotRules.SEVERITY[check],
-			string.format("%s : %s%s", check, detail, suffix),
-			category
-		)
+		reportCheck(world, attacker, check, detail, blocks, category)
 	end
 	return blocks
 end
@@ -215,9 +242,7 @@ end
 -- Cette méthode permet de démarrer le rechargement de l'arme en main lorsque l'action Reload arrive (#175). Un
 -- rechargement demandé pendant l'equip ne compte qu'à partir de la fin de l'equip (le client ne peut pas recharger avant).
 function Validator.noteReload(participant: Participant, now: number)
-	local char = Participants.characterOf(participant)
-	local tool = char and char:FindFirstChildOfClass("Tool")
-	local cfg = tool and WeaponConfig.Weapons[tool:GetAttribute("WeaponName") or tool.Name]
+	local tool, cfg = weaponInHand(participant)
 	if not cfg or cfg.IsMelee or not cfg.Magazine then
 		return
 	end
@@ -272,11 +297,7 @@ local function validateShot(
 	local function fail(check: string, detail: string)
 		local refuses = ShotRules.refuses(check, rootDistance)
 		blocked = blocked or refuses
-		local suffix = if ShotRules.blocks(check)
-			then ""
-			elseif refuses then string.format(" (refusé : au-delà de %d studs)", ShotRules.LOG_ONLY_RANGE)
-			else " (journal seul)"
-		world.report(attacker, check, ShotRules.SEVERITY[check], string.format("%s : %s%s", check, detail, suffix))
+		reportCheck(world, attacker, check, detail, refuses)
 	end
 
 	local wellFormed, reason = ShotRules.isWellFormed(shot)
@@ -364,16 +385,15 @@ function Validator.authorizeHitscan(
 	if not isCadenceReady(attacker, cfg, now) then
 		return nil, false
 	end
-	-- Equip et chargeur (#175) : joueurs seulement, BotArsenal les fait déjà respecter à ses bots
-	if not attacker.isBot and not isWeaponReady(attacker, ShotRules.Category.HITSCAN, tool, cfg, now) then
-		return nil, false
-	end
-	if
-		not attacker.isBot
-		and not validateShot(attacker, aChar, aRoot, tRoot, targetCharacter :: Model, hitPart :: BasePart, shot)
-	then
-		-- Refusé : la cadence n'est pas relancée, comme pour toute touche refusée
-		return nil, false
+	if not attacker.isBot then
+		-- Géométrie du tir (#174) d'abord, puis equip et chargeur (#175, joueurs seulement : BotArsenal les fait déjà
+		-- respecter à ses bots) : tous sont évalués, pour que la phase de mesure de T1 voie aussi les tirs refusés ici
+		local shotOk = validateShot(attacker, aChar, aRoot, tRoot, targetCharacter :: Model, hitPart :: BasePart, shot)
+		local weaponOk = isWeaponReady(attacker, ShotRules.Category.HITSCAN, tool, cfg, now)
+		if not shotOk or not weaponOk then
+			-- Refusé : la cadence n'est pas relancée, comme pour toute touche refusée
+			return nil, false
+		end
 	end
 	recordAttack(attacker, cfg, cfg.FireDelay, now)
 	if not attacker.isBot and cfg.Magazine then

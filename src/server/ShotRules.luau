@@ -249,23 +249,22 @@ function ShotRules.checkEquip(equippedAt: number?, equipTime: number, now: numbe
 		string.format("touche %.2f s après l'equip (min %.2f s)", elapsed, equipTime - ShotRules.EQUIP_TOLERANCE)
 end
 
--- Chargeur d'une arme d'un participant (#175) : touches acceptées depuis le dernier rechargement fini, rechargement
--- en cours (instant de l'action Reload) et touches déjà comptées à son début (celles d'après restent dues).
-export type Magazine = { shots: number, reloadAt: number?, shotsAtReload: number }
+-- Chargeur d'une arme d'un participant (#175) : touches acceptées depuis le dernier rechargement fini, et rechargement
+-- en cours (instant de l'action Reload, nil sinon).
+export type Magazine = { shots: number, reloadAt: number? }
 
 -- Cette méthode permet de créer le chargeur plein d'une arme lorsqu'elle tire ou recharge pour la première fois.
 function ShotRules.newMagazine(): Magazine
-	return { shots = 0, reloadAt = nil, shotsAtReload = 0 }
+	return { shots = 0, reloadAt = nil }
 end
 
 -- Cette méthode permet de terminer le rechargement en cours lorsqu'il a duré reloadTime - RELOAD_TOLERANCE : le
--- chargeur est rempli (réserve illimitée, #165), seules restent dues les touches acceptées pendant le rechargement.
+-- chargeur est rempli (réserve illimitée, #165).
 function ShotRules.settleReload(mag: Magazine, reloadTime: number, now: number)
 	local reloadAt = mag.reloadAt
 	if reloadAt and now - reloadAt >= reloadTime - ShotRules.RELOAD_TOLERANCE then
-		mag.shots = math.max(0, mag.shots - mag.shotsAtReload)
+		mag.shots = 0
 		mag.reloadAt = nil
-		mag.shotsAtReload = 0
 	end
 end
 
@@ -274,7 +273,6 @@ end
 function ShotRules.startReload(mag: Magazine, reloadTime: number, now: number)
 	ShotRules.settleReload(mag, reloadTime, now)
 	mag.reloadAt = now
-	mag.shotsAtReload = mag.shots
 end
 
 -- Cette méthode permet d'annuler le rechargement en cours lorsque l'arme est rangée ou changée (comme le client) ;
@@ -282,25 +280,24 @@ end
 function ShotRules.cancelReload(mag: Magazine, reloadTime: number, now: number)
 	ShotRules.settleReload(mag, reloadTime, now)
 	mag.reloadAt = nil
-	mag.shotsAtReload = 0
 end
 
--- Cette méthode permet de vérifier le chargeur lorsqu'une touche arrive : moins de size touches acceptées depuis le
--- dernier rechargement fini.
+-- Cette méthode permet de vérifier le chargeur lorsqu'une touche arrive : aucun rechargement inachevé (le client ne
+-- tire pas pendant RELOADING ; sinon un Reload renvoyé en boucle remettrait le compteur à zéro sans pause), et moins
+-- de size touches acceptées depuis le dernier rechargement fini.
 function ShotRules.checkMagazine(mag: Magazine, size: number, reloadTime: number, now: number): (boolean, string?)
 	ShotRules.settleReload(mag, reloadTime, now)
-	if mag.shots < size then
-		return true
-	end
 	local reloadAt = mag.reloadAt
 	if reloadAt then
 		return false,
 			string.format(
-				"chargeur vide (%d touches), rechargement depuis %.2f s (min %.2f s)",
-				mag.shots,
+				"touche pendant le rechargement (depuis %.2f s, min %.2f s)",
 				now - reloadAt,
 				reloadTime - ShotRules.RELOAD_TOLERANCE
 			)
+	end
+	if mag.shots < size then
+		return true
 	end
 	return false, string.format("chargeur vide (%d touches) sans rechargement", mag.shots)
 end

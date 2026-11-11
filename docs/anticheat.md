@@ -22,7 +22,7 @@ envoyant des données plausibles. Là, on ne peut que détecter statistiquement,
 
 | Domaine | Validation actuelle | Où |
 |---|---|---|
-| Mêlée | Cible = autre participant vivant, arme de mêlée réellement en main, distance des racines ≤ 10 studs, dégâts et cadence lus dans `WeaponConfig` selon le type d'attaque, backstab recalculé sur les positions serveur (#47) | `src/server/Validator.luau:273-291` |
+| Mêlée | Cible = autre participant vivant, arme de mêlée réellement en main, distance des racines ≤ 10 studs, dégâts et cadence lus dans `WeaponConfig` selon le type d'attaque, backstab recalculé sur les positions serveur (#47) | `src/server/Validator.luau` (`authorizeMelee`) |
 | Tir | Cible valide (vivante), arme à distance en main, partie touchée appartenant à la cible, distance des racines ≤ `Validator.MAX_HITSCAN_RANGE` (~2 196 studs ; bots : 250), cadence `FireDelay` à 0,15 s près, dégâts calculés par le serveur selon la zone ; pour un joueur, forme, origine, visée sur la cible rembobinée, portée et ligne de vue (#174, voir T1), durée d'equip et chargeur (#175, voir T2 ; l'equip vaut aussi pour la mêlée) | `src/server/Validator.luau` (`authorizeHitscan`, `validateShot`), `src/server/ShotRules.luau` |
 | Position | Forme (Vector3 et angle finis, coordonnées ≤ 1e5), personnage vivant, seau de distance (300 studs/s soutenus, silence plafonné), refus journalisé et corrigé (#172) | `src/server/CharacterSync.luau:113-165`, `src/shared/CharacterSyncRules.luau:49-60` |
 | Réglages | Réglages entièrement assainis par `PlayerSettings.sanitize`, une écriture DataStore au plus toutes les 10 s | `src/server/SettingsStore.luau:113-130` |
@@ -30,7 +30,7 @@ envoyant des données plausibles. Là, on ne peut que détecter statistiquement,
 | Debug | Remote `DebugPlaytest` créé seulement dans Studio | `src/server/DebugPlaytest.luau:365-372` |
 | Tous les remotes C→S | Garde commune (#170) : débit par joueur et par remote, types des arguments, violations journalisées, kick à 3 violations fortes | `src/server/RemoteGuard.luau`, `src/server/CheatLog.luau` |
 
-Les bots (`src/server/bots/`) passent par le même `Validator` (`src/server/init.server.luau:337-351`) : leurs tirs sont
+Les bots (`src/server/bots/`) passent par le même `Validator` (`BotManager.init` dans `src/server/init.server.luau`) : leurs tirs sont
 des raycasts serveur (`src/server/bots/BotArsenal.luau:184`), leurs munitions et leur temps de sortie sont gérés par
 `BotArsenal` (`:110`, `:116-122`, `:142-148`). Toute nouvelle parade doit donc soit valoir aussi pour eux sans les gêner,
 soit être réservée aux joueurs (`participant.isBot`), ce qui est indiqué pour chaque parade.
@@ -193,8 +193,8 @@ et toucherait sinon un joueur lointain derrière une cible manquée.
 
 ### T2. Cadence, munitions, durée d'equip
 
-**Cadence (fait).** Une seule cadence par arme et par participant, à 0,15 s près (`Validator.luau:25`, `:107-121`),
-remise à zéro à l'apparition (`src/server/init.server.luau:158`). Un tir refusé ne relance pas la cadence : le spam est
+**Cadence (fait).** Une seule cadence par arme et par participant, à 0,15 s près (`CADENCE_TOLERANCE`, `isCadenceReady`
+et `recordAttack` de `Validator.luau`), remise à zéro à l'apparition (`Validator.forget` dans `onParticipantCharacter`). Un tir refusé ne relance pas la cadence : le spam est
 sans effet.
 
 **Munitions et durée d'equip (fait, #175).** Avant #175, le chargeur et l'equip n'étaient suivis que par le client
@@ -207,7 +207,7 @@ contrôles de plus. Règles pures dans `src/server/ShotRules.luau` (`checkEquip`
 | Contrôle | Règle | Mode livré | Gravité |
 |---|---|---|---|
 | `equip` | Touche acceptée à partir de `equippedAt + EquipTime - EQUIP_TOLERANCE` (0,2 s). `equippedAt` = arrivée de l'outil dans le personnage vue par le serveur (`ChildAdded` de `trackWeapon3P`, `Validator.noteEquip`). Outil en main sans arrivée notée : refusé (« sans equip vu par le serveur »), jamais accepté en silence. Tir et mêlée (catégorie `Melee` pour le couteau) | `block` | moyenne |
-| `magazine` | Arme à `Magazine` : touches **acceptées** comptées par participant et par arme ; la `Magazine`+1e est refusée tant qu'un rechargement n'a pas duré `ReloadTime - RELOAD_TOLERANCE` (0,2 s). Début du rechargement : action `Reload` du remote `WeaponAction` (`Validator.noteReload`), lue avant les filtres de la pose 3P (intervalle de 0,05 s, modèle 3P attaché) qui pourraient écarter une action honnête | `block` | moyenne |
+| `magazine` | Arme à `Magazine` : touches **acceptées** comptées par participant et par arme ; la `Magazine`+1e est refusée sans rechargement fini, et toute touche est refusée pendant un rechargement qui n'a pas encore duré `ReloadTime - RELOAD_TOLERANCE` (0,2 s). Début du rechargement : action `Reload` du remote `WeaponAction` (`Validator.noteReload`), lue avant les filtres de la pose 3P (intervalle de 0,05 s, modèle 3P attaché) qui pourraient écarter une action honnête | `block` | moyenne |
 
 - **Borne d'equip.** Le client honnête n'est jamais prêt avant `EquipTime` (#184 : il attend le chargement de la piste
   puis sa durée), sauf piste plus courte qu'`EquipTime` : couteau 1 s / 1,3 = 0,769 s pour 0,77 (couvert par la
@@ -217,16 +217,22 @@ contrôles de plus. Règles pures dans `src/server/ShotRules.luau` (`checkEquip`
   `Reload`, puis la touche) ; même ordre que `CADENCE_TOLERANCE` (0,15 s). Un tricheur gagne au plus 0,2 s sur 1,58 s
   (equip) ou 3,7 s (rechargement).
 - **Rechargement.** Fini paresseusement à la touche suivante (ou au prochain `Reload`/changement d'arme) s'il a duré
-  assez : le chargeur repart à zéro, moins les touches acceptées **pendant** le rechargement (un client honnête n'en fait
-  aucune). Sans ça, un client qui renvoie `Reload` avant chaque tir ne serait jamais bloqué. Un `Reload` pendant un
-  rechargement inachevé le redémarre. Un `Reload` pendant l'equip ne compte qu'à partir de la fin de l'equip (le client
+  assez : le chargeur repart à zéro. Une touche **pendant** un rechargement inachevé est refusée, même chargeur non vide
+  (le client ne tire pas en `RELOADING`) : sinon un client qui renvoie `Reload` toutes les 3,5 s en tirant à pleine
+  cadence verrait son compteur remis à zéro sans jamais faire de pause (piste rejetée en revue : retrancher seulement
+  les touches faites pendant le rechargement ne suffit pas). Un `Reload` pendant un rechargement inachevé le redémarre. Un `Reload` pendant l'equip ne compte qu'à partir de la fin de l'equip (le client
   ne peut pas recharger avant). Changement ou rangement d'arme (`ChildRemoved`, `Validator.noteUnequip`) : rechargement
   inachevé annulé, rechargement fini acquis. Seules les touches sont comptées (les tirs manqués n'arrivent pas au
   serveur) : le compteur serveur est toujours ≤ celui du client, jamais plus strict.
 - **Bots.** Exclus des deux contrôles (`attacker.isBot`) : `BotArsenal` fait déjà respecter equip, chargeur et
-  rechargement, et ses tirs sont des raycasts serveur. Tests : 12 tirs de bot d'affilée et tir dès la sortie acceptés.
+  rechargement, et ses tirs sont des raycasts serveur. Leur equip n'est pas noté (`trackWeapon3P`) : rien à retenir, et
+  `BotManager` ne rappelle pas `Validator.forget` au retrait d'un bot. Tests : 12 tirs de bot d'affilée et tir dès la
+  sortie acceptés.
+- **Ordre.** Les contrôles T1 (`validateShot`) passent avant equip et chargeur, et tous sont évalués : un tir refusé
+  pour l'equip garde ses violations d'origine ou de ligne de vue au journal (phase de mesure de T1).
 - **Réapparition et départ.** `Validator.forget` efface cadences, equip et chargeurs ; il précède le suivi des armes du
-  nouveau personnage (`onParticipantCharacter`). Le `ChildRemoved` de l'ancien corps ne touche plus le participant.
+  nouveau personnage (`onParticipantCharacter`). Un outil qui entre ou sort de l'ancien corps (ragdoll) ne touche plus
+  au participant.
 - **Mesure en Studio (#175, 2026-11-11).** `DebugPlaytest` AWP et M9Bayonet : PASS 9/9. Client honnête (chemin réel
   `Tool:Activate`) : 5 touches, rechargement, 3 touches, aucune ligne `[CheatLog]`. Tir forgé envoyé 0,25 s après un
   ré-equip : refusé, journalisé `Hitscan … equip : touche 0.25 s après l'equip (min 1.38 s)`. Studio sans latence : à
@@ -238,7 +244,7 @@ contrôles de plus. Règles pures dans `src/server/ShotRules.luau` (`checkEquip`
 
 ### M1. Orientation et ligne de vue
 
-**Aujourd'hui.** #47 a réglé dégâts, cadence et arme en main (`Validator.luau:273-291`). Restent : la distance est
+**Aujourd'hui.** #47 a réglé dégâts, cadence et arme en main (`Validator.authorizeMelee`). Restent : la distance est
 mesurée entre racines (10 studs, `:10`, alors que l'arme porte à 7,5, `WeaponConfig.luau:76`), sans regarder la
 direction du tireur ni les obstacles.
 
@@ -284,7 +290,7 @@ joueur. Dizzy n'a ni boost ni `SunLaunch` aujourd'hui ; une map qui en ajoute do
    joueur honnête qui a laggé.
 
 **Risque.** Critique : vitesse plus que doublée en continu, et téléportation n'importe où en se taisant. La position
-acceptée est celle que le `Validator` utilise pour la portée (`Validator.luau:95`) : se téléporter dans le dos d'une
+acceptée est celle que le `Validator` utilise pour la portée (`resolveAttack` de `Validator.luau`) : se téléporter dans le dos d'une
 cible rend le kill aura (M1) praticable sur toute la map.
 
 **Parade en place (#172).**
@@ -377,7 +383,7 @@ commune (débit et types, voir R1) ; la colonne « Validation actuelle » décri
 | `HitscanDamage` | C→S | `targetChar, hitPart, origin, direction, hitPos, shotTime` | Cible, arme, partie de la cible, portée des racines, cadence ; forme, origine, visée rembobinée, portée 2 048, ligne de vue (T1, #174 : origine, visée et ligne de vue en journal seul) ; durée d'equip et chargeur (T2, #175) | Passage en `block` après mesure (T1), tireur vivant |
 | `CharacterSync` (non fiable) | C→S puis S→C | `pos, yaw, ack` | Forme, débit 40 Hz (garde), seau de distance et silence plafonné, refus corrigé (D1, `CharacterSync.luau:113-165`) | Noclip, vol (D2) |
 | `MovementCorrection` | S→C | `char, pos, seq` | — | — |
-| `WeaponAction` | C→S | `action` | Valeur `Shoot`/`Reload`, outil en main, 0,05 s mini (`init.server.luau`) ; `Reload` démarre le rechargement suivi par le serveur avant ces filtres (T2, #175) | `Shoot` non lié à la cadence de l'arme : 20 faux tirs/s attirent les bots (`hearShot`, `:143`) et, avec #156, déclencheraient 20 sons chez tous |
+| `WeaponAction` | C→S | `action` | Valeur `Shoot`/`Reload`, outil en main, 0,05 s mini (`init.server.luau`) ; `Reload` démarre le rechargement suivi par le serveur avant ces filtres (T2, #175) | `Shoot` non lié à la cadence de l'arme : 20 faux tirs/s attirent les bots (`BotManager.hearShot` dans le handler `WeaponAction`) et, avec #156, déclencheraient 20 sons chez tous |
 | `RequestSpawn` | C→S | aucun | `SpawnRules.request` : spawn en vol, personnage en place, bannière de fin, mort depuis moins de `RESPAWN_DELAY` en round actif (`SpawnManager.luau:137-169`) | Rien (R1 fermé, #171) |
 | `SendFeedback` | C→S | `text` | Type, longueur, 60 s en mémoire après toute demande valide (posé avant le DataStore, quel que soit le résultat), 5 par semaine (`UpdateAsync`), rien d'écrit si la lecture échoue (`FeedbackService.luau:113-150`) | Rien (R1 fermé, #171) |
 | `SaveSettings` | C→S | table | `PlayerSettings.sanitize`, écriture différée de 10 s (`SettingsStore.luau:113-130`) | Débit (coût CPU seulement, faible) |

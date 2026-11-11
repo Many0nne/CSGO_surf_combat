@@ -112,15 +112,25 @@ end
 -- durée d'equip vérifiée par le Validator (#175), modèle 3P attaché à l'équipement, retiré quand l'outil correspondant
 -- quitte le personnage (rechargement annulé).
 local function trackWeapon3P(participant: Participants.Participant, char: Model)
+	-- Cette méthode permet de savoir si l'equip d'un outil de ce personnage compte pour le Validator lorsqu'il change :
+	-- joueur seulement (les bots sont exclus des contrôles, rien à retenir pour eux), et personnage encore le sien (un
+	-- ancien corps, le temps du ragdoll, ne touche pas aux armes du nouveau).
+	local function tracksEquip(): boolean
+		return not participant.isBot and Participants.characterOf(participant) == char
+	end
 	for _, child in char:GetChildren() do
 		if child:IsA("Tool") then
-			Validator.noteEquip(participant, child, os.clock())
+			if tracksEquip() then
+				Validator.noteEquip(participant, child, os.clock())
+			end
 			onToolEquipped(char, child)
 		end
 	end
 	char.ChildAdded:Connect(function(child)
 		if child:IsA("Tool") then
-			Validator.noteEquip(participant, child, os.clock())
+			if tracksEquip() then
+				Validator.noteEquip(participant, child, os.clock())
+			end
 			onToolEquipped(char, child)
 		end
 	end)
@@ -128,8 +138,7 @@ local function trackWeapon3P(participant: Participants.Participant, char: Model)
 		if not child:IsA("Tool") then
 			return
 		end
-		-- Le personnage d'un participant réapparu n'est plus le sien : son ancien corps ne touche pas aux nouvelles armes
-		if Participants.characterOf(participant) == char then
+		if tracksEquip() then
 			Validator.noteUnequip(participant, child, os.clock())
 		end
 		if equippedTools[char] == child then

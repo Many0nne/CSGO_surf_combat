@@ -595,18 +595,34 @@ return function(T, Loader)
 			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), last + 30), 115, "acquis")
 		end)
 
-		T.it("garde dues les touches acceptées pendant un rechargement (Reload en boucle sans effet)", function()
+		T.it("refuse une touche pendant un rechargement inachevé, chargeur non vide compris", function()
+			local Validator, makePlayer, _, world = setup()
+			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(50, 0, 0))
+			local last = fire(Validator, a, b, 2, 10)
+			Validator.noteReload(a, last + 1.5)
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), last + 3), nil)
+			T.expectEqual(world.reports[1].check, "magazine")
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), last + 5.2), 115, "fini")
+		end)
+
+		T.it("Reload renvoyé en boucle sans jamais attendre : tir continu impossible", function()
 			local Validator, makePlayer = setup()
 			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(50, 0, 0))
-			-- Client modifié : Reload envoyé avant chaque tir, jamais d'attente de 3,7 s
-			local t = 10
-			for i = 1, 5 do
-				Validator.noteReload(a, t - 0.1)
-				T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), t), 115, "tir " .. i)
-				t += 1.5
+			-- Client modifié : tire à pleine cadence et envoie Reload toutes les 3,5 s (ReloadTime - tolérance)
+			local accepted = 0
+			local nextReload = 10
+			for i = 0, 40 do
+				local t = 10 + i * 1.5
+				if t >= nextReload then
+					Validator.noteReload(a, nextReload)
+					nextReload += 3.5
+				end
+				if Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), t) then
+					accepted += 1
+				end
 			end
-			Validator.noteReload(a, t - 0.1)
-			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), t), nil, "6e tir")
+			-- 60 s de tir continu : 41 tirs voulus ; un client honnête en place 5 par cycle de 5 × 1,46 + 3,7 s
+			T.expect(accepted <= 5, "touches acceptées : " .. accepted)
 		end)
 
 		T.it("compte un rechargement lancé pendant l'equip à partir de la fin de l'equip", function()
