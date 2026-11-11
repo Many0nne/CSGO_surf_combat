@@ -24,17 +24,17 @@ envoyant des données plausibles. Là, on ne peut que détecter statistiquement,
 |---|---|---|
 | Mêlée | Cible = autre participant vivant, arme de mêlée réellement en main, distance des racines ≤ 10 studs, dégâts et cadence lus dans `WeaponConfig` selon le type d'attaque, backstab recalculé sur les positions serveur (#47) ; pour un joueur, durée d'equip (#175, voir T2), orientation et ligne de vue vers la cible rembobinée (#176, journal seul, voir M1) | `src/server/Validator.luau` (`authorizeMelee`), `src/server/ShotRules.luau` |
 | Tir | Cible valide (vivante), arme à distance en main, partie touchée appartenant à la cible, distance des racines ≤ `Validator.MAX_HITSCAN_RANGE` (~2 196 studs ; bots : 250), cadence `FireDelay` à 0,15 s près, dégâts calculés par le serveur selon la zone ; pour un joueur, forme, origine, visée sur la cible rembobinée, portée et ligne de vue (#174, voir T1), durée d'equip et chargeur (#175, voir T2 ; l'equip vaut aussi pour la mêlée) | `src/server/Validator.luau` (`authorizeHitscan`, `validateShot`), `src/server/ShotRules.luau` |
-| Position | Forme (Vector3 et angle finis, coordonnées ≤ 1e5), personnage vivant, seau de distance (300 studs/s soutenus, silence plafonné), refus journalisé et corrigé (#172) ; noclip et vol journalisés (#177, journal seul), joueur silencieux au-dessus du vide déclaré tombé | `src/server/CharacterSync.luau:210-309`, `src/shared/CharacterSyncRules.luau:49-60`, `src/shared/MovementGuardRules.luau` |
-| Réglages | Réglages entièrement assainis par `PlayerSettings.sanitize`, une écriture DataStore au plus toutes les 10 s | `src/server/SettingsStore.luau:113-130` |
-| Feedback | Type `string`, longueur 10 à 500, délai de 60 s après un envoi réussi, 5 envois par semaine (DataStore) | `src/server/FeedbackService.luau:76-104` |
-| Debug | Remote `DebugPlaytest` créé seulement dans Studio | `src/server/DebugPlaytest.luau:365-372` |
+| Position | Forme (Vector3 et angle finis, coordonnées ≤ 1e5), personnage vivant, seau de distance (300 studs/s soutenus, silence plafonné), refus journalisé et corrigé (#172) ; noclip et vol journalisés (#177, journal seul), joueur silencieux au-dessus du vide déclaré tombé | `src/server/CharacterSync.luau` (`refuse`, `judgeGuard`, `onClientPosition`), `src/shared/CharacterSyncRules.luau` (`tryMove`), `src/shared/MovementGuardRules.luau` |
+| Réglages | Réglages entièrement assainis par `PlayerSettings.sanitize`, une écriture DataStore au plus toutes les 10 s | `src/server/SettingsStore.luau` (`onSaveSettings`) |
+| Feedback | Type `string`, longueur 10 à 500, délai de 60 s après un envoi réussi, 5 envois par semaine (DataStore) | `src/server/FeedbackService.luau` (`init`, `COOLDOWN`, `consumeWeeklyQuota`) |
+| Debug | Remote `DebugPlaytest` créé seulement dans Studio | `src/server/DebugPlaytest.luau` (`DebugPlaytest.init`) |
 | Relais des tirs (son chez les autres) | Tireur vivant, arme à distance en main prête (equip, chargeur), forme, origine près du tireur, cadence de l'arme (#156) | `src/server/ShotRelayRules.luau`, `Validator.isReadyToFire`, `relayShot` de `src/server/init.server.luau` |
 | Statistiques de visée (#178) | Par joueur : tirs acceptés, touches, têtes, flicks suivis d'une touche ; z-score contre les autres joueurs du serveur, journal seul (A1) | `src/server/AimStats.luau`, branchement dans `src/server/init.server.luau` |
 | Tous les remotes C→S | Garde commune (#170) : débit par joueur et par remote, types des arguments, violations journalisées, kick à 3 violations fortes | `src/server/RemoteGuard.luau`, `src/server/CheatLog.luau` |
 
 Les bots (`src/server/bots/`) passent par le même `Validator` (`BotManager.init` dans `src/server/init.server.luau`) : leurs tirs sont
-des raycasts serveur (`src/server/bots/BotArsenal.luau:184`), leurs munitions et leur temps de sortie sont gérés par
-`BotArsenal` (`:110`, `:116-122`, `:142-148`). Toute nouvelle parade doit donc soit valoir aussi pour eux sans les gêner,
+des raycasts serveur (`src/server/bots/BotArsenal.luau`, tir du bot), leurs munitions et leur temps de sortie sont gérés par
+`BotArsenal` (`equip`, `_startReload`, `isReady`). Toute nouvelle parade doit donc soit valoir aussi pour eux sans les gêner,
 soit être réservée aux joueurs (`participant.isBot`), ce qui est indiqué pour chaque parade.
 
 ## Classement des menaces
@@ -63,7 +63,7 @@ serveur vérifiait la cible, l'arme, l'appartenance de la partie et la distance 
 le tir était parti. **Fait (#174)** : la parade ci-dessous, détails dans « Tolérances et modes ».
 
 **Risque.** Un client modifié envoie `HitscanDamage(n'importe quel ennemi, sa Head)` sans le regarder ni le voir :
-l'AWP fait 115 × 4 = 460 dégâts à la tête (`src/shared/WeaponConfig.luau:13`, `src/shared/HitZones.luau:16`), donc
+l'AWP fait 115 × 4 = 460 dégâts à la tête (`Damage` de l'AWP dans `src/shared/WeaponConfig.luau`, `HitZones.Multipliers` dans `src/shared/HitZones.luau`), donc
 un mort par tir (100 PV, valeur par défaut du Humanoid), toutes les 1,46 s, sur tous les participants à moins de 250 studs, à travers les murs. Agrandir
 localement les hitbox des autres (« hitbox expander ») marche aussi : le serveur ne regarde pas la géométrie.
 
@@ -82,7 +82,7 @@ localement les hitbox des autres (« hitbox expander ») marche aussi : le serve
    chaque réapparition), supprimé à `Destroying` du personnage (mort, départ, bot retiré). Point d'entrée pour #174 et
    #176 : `CharacterSync.positionAt(char, t)` (nil sans historique), aucun consommateur branché. Tests :
    `tests/specs/PositionHistory.spec.luau`.
-   Le tireur voyait la cible à `shotTime - INTERP_DELAY` (`src/shared/CharacterSyncRules.luau:14`, 0,1 s) ; ce
+   Le tireur voyait la cible à `shotTime - INTERP_DELAY` (`CharacterSyncRules.INTERP_DELAY`, 0,1 s) ; ce
    temps est borné à `[now - 0,4 s, now]` pour qu'un client ne puisse pas réclamer une position ancienne.
 3. Origine : à moins de `5 + vitesse du tireur × 0,1` studs de la position du tireur à `shotTime` (il est en avance
    sur le serveur de sa propre latence, et peut aller à 200 studs/s en surf).
@@ -92,7 +92,7 @@ localement les hitbox des autres (« hitbox expander ») marche aussi : le serve
 5. Ligne de vue : raycast serveur de `origin` à `hitPos` limité à la géométrie de la map (`Workspace.Maps`, en
    inclusion), qui ignore donc les personnages et les objets mobiles, comme conseillé sur le DevForum
    ([Shooting backend validation](https://devforum.roblox.com/t/shooting-backend-validation-inaccuracies/4633077)).
-   Un obstacle = tir refusé. Si la pénétration est implémentée un jour (`WeaponConfig.luau:19`, TODO), ce test
+   Un obstacle = tir refusé. Si la pénétration est implémentée un jour (`Penetration` de l'AWP dans `WeaponConfig.luau`, TODO), ce test
    devra en tenir compte.
 6. Distance : `|hitPos - origin|` ≤ portée de l'arme.
 
@@ -101,7 +101,7 @@ Modèle : [RollbackHitbox](https://devforum.roblox.com/t/rollbackhitbox-server-a
 dans la borne de rembobinage, d'où la borne courte
 ([Making exploiter-proof guns](https://devforum.roblox.com/t/making-exploiter-proof-guns/235423)).
 
-**Bots.** Leurs tirs sont des raycasts serveur depuis leurs yeux (`BotArsenal.luau:184`) : rembobinage à 0, origine
+**Bots.** Leurs tirs sont des raycasts serveur depuis leurs yeux (tir du bot dans `BotArsenal.luau`) : rembobinage à 0, origine
 et ligne de vue vraies par construction. Ils gardent le chemin sans `shot` (`participant.isBot` dans
 `Validator.authorizeHitscan`), couvert par le test « ne refuse aucun tir de bot, tous contrôles bloquants »
 (`tests/specs/Validator.spec.luau`).
@@ -259,11 +259,11 @@ contrôles de plus. Règles pures dans `src/server/ShotRules.luau` (`checkEquip`
 ### M1. Orientation et ligne de vue
 
 **Avant #176.** #47 a réglé dégâts, cadence et arme en main (`Validator.authorizeMelee`). Restaient : la distance est
-mesurée entre racines (10 studs, `:10`, alors que l'arme porte à 7,5, `WeaponConfig.luau:76`), sans regarder la
+mesurée entre racines (10 studs, `MAX_MELEE_RANGE` de `Validator.luau`, alors que l'arme porte à 7,5, `MeleeRange` dans `WeaponConfig.luau`), sans regarder la
 direction du tireur ni les obstacles.
 
 **Risque.** « Kill aura » : un client modifié frappe toute cible à 10 studs, dans n'importe quelle direction, à travers
-un mur fin. Frappée dans le dos, elle prend 50 × 2 = 100 dégâts (`WeaponConfig.luau:62`, `:77`), soit un mort. Couplé à
+un mur fin. Frappée dans le dos, elle prend 50 × 2 = 100 dégâts (`Damage` du M9 Bayonet dans `WeaponConfig.luau`, `HitZones.Multipliers`), soit un mort. Couplé à
 la téléportation (D1), c'est un kill par 0,4 s sur toute la map.
 
 **Parade.** (1) Angle entre le cap du tireur (yaw de sa racine serveur, mis à jour à 20 Hz) et la direction vers la
@@ -337,15 +337,15 @@ mode `block` (`Validator.spec.luau`) couvrent déjà le refus.
 ## Déplacement
 
 Le mouvement est calculé par le client sur une racine ancrée ; il envoie position et cap à 20 Hz, le serveur valide puis
-pose la racine et relaie (`src/server/CharacterSync.luau:1-7`). Le serveur n'a aucune physique à lui : il ne peut que
+pose la racine et relaie (commentaire d'en-tête de `src/server/CharacterSync.luau`). Le serveur n'a aucune physique à lui : il ne peut que
 juger les positions reçues.
 
 **Contrainte surf et bhop.** Les vitesses légitimes sont grandes : 90 studs/s mesurés en bhop de bots
 (`docs/bots.md:80`), 200 studs/s et plus en surf (`docs/performance.md:98`), d'où `MAX_SPEED_SERVER = 300`
-(`src/shared/MovementConfig.luau:47`). Le gain de vitesse en l'air vient de l'air strafe, pas d'une limite fixe : une
+(`MovementConfig.MAX_SPEED_SERVER`). Le gain de vitesse en l'air vient de l'air strafe, pas d'une limite fixe : une
 borne de vitesse seule ne peut pas être serrée. S'y ajoutent les boosts de la map (`Maps.Map.Boosts`, geysers et
 lanceurs à vitesse imposée, portiques qui ajoutent `Boost` studs/s, `docs/maps.md:251-254`), détectés et appliqués par
-le client seul (`src/client/systems/movement/BoostSystem.luau:1-2`) : une parade qui juge la vitesse ou la gravité
+le client seul (commentaire d'en-tête de `src/client/systems/movement/BoostSystem.luau`) : une parade qui juge la vitesse ou la gravité
 doit les connaître (règles pures dans `src/shared/MapRules.luau`, réutilisables par le serveur). Attention : un
 geyser ou un lanceur impose sa vitesse (`Velocity`) sans la borner à `MAX_SPEED_SERVER` (`MapRules.velocityAfter`), et
 le lancement depuis le soleil prend l'attribut `Speed` tel quel : au-delà de 300 studs/s, le seau de D1 refuserait le
@@ -402,7 +402,7 @@ gagnerait un seau plein à chaque cycle (40 cycles/s). Le numéro de correction 
 joueur (pas remis à zéro à la réapparition) pour qu'un ancien accusé ne valide pas une correction récente.
 
 **Réutiliser.** Une nouvelle règle de déplacement se branche dans `onClientPosition`, après le seau, et appelle
-`refuse(player, track, détail, now)` (`src/server/CharacterSync.luau:210`) : journal et correction compris. C'est ce que
+`refuse(player, track, détail, now)` (`src/server/CharacterSync.luau`) : journal et correction compris. C'est ce que
 fait D2 (#177, `judgeGuard`) ; `refuse` repart aussi l'enveloppe du vol de la position de correction.
 
 **Bots.** Non concernés : leurs positions viennent du serveur (`relayBot`), qui ne passe pas par le seau.
@@ -427,7 +427,7 @@ au-dessus du vide, ou qui n'envoie jamais de position sous `KillHeight`, ne mour
 **Parade en place.** Règles pures dans `src/shared/MovementGuardRules.luau` (testées sous Lune) ; la géométrie est
 fournie par `CharacterSync` (`buildGeometry`) : rayons et requêtes limités à la map jouée (`Include`) et à ses pièces
 qui collisionnent (`RespectCanCollide` : décor fantôme, volumes d'échelle et de boost exclus). Une position acceptée
-par le seau (D1) passe par `MovementGuardRules.judge` (`judgeGuard`, `src/server/CharacterSync.luau:225`).
+par le seau (D1) passe par `MovementGuardRules.judge` (`judgeGuard`, `src/server/CharacterSync.luau`).
 
 1. **Noclip** (`crossesWall`) : raycast `lastPos → newPos` (centre du personnage, qui chez un client honnête reste à
    `CHAR_RADIUS` des parois). Touché : quatre détours sont essayés (milieu du segment décalé vers le haut, le bas et les
@@ -466,7 +466,7 @@ par le seau (D1) passe par `MovementGuardRules.judge` (`judgeGuard`, `src/server
    pu revenir s'y poser) ; il reste figé côté serveur à sa dernière position. Une zone découpée dans le temps (hauteur
    possible et distance parcourue à chaque instant) serait plus serrée, sans distinguer non plus ce cas.
 
-**Modes** (`src/shared/MovementGuardRules.luau:23-27`) : `ENFORCE_NOCLIP = false` et `ENFORCE_FLIGHT = false` : journal
+**Modes** (`MovementGuardRules.ENFORCE_NOCLIP`, `ENFORCE_FLIGHT`, `ENFORCE_VOID`) : `ENFORCE_NOCLIP = false` et `ENFORCE_FLIGHT = false` : journal
 seul (violation `Movement` moyenne comptée, position appliquée). `ENFORCE_VOID = true` : un joueur dans ce cas tombait
 de toute façon (false : journal seul, un signalement par `VOID_SILENCE`).
 
@@ -535,24 +535,24 @@ commune (débit et types, voir R1) ; la colonne « Validation actuelle » décri
 |---|---|---|---|---|
 | `MeleeDamage` | C→S | `targetChar, attackKind` | Cible, arme, portée, type d'attaque, cadence, dégâts serveur, durée d'equip (T2, #175), orientation et ligne de vue (M1, #176, journal seul) (`Validator.authorizeMelee`) | Passage en `block` après mesure (M1), tireur vivant |
 | `HitscanDamage` | C→S | `targetChar, hitPart, origin, direction, hitPos, shotTime` | Cible, arme, partie de la cible, portée des racines, cadence ; forme, origine, visée rembobinée, portée 2 048, ligne de vue (T1, #174 : origine, visée et ligne de vue en journal seul) ; durée d'equip et chargeur (T2, #175) | Passage en `block` après mesure (T1), tireur vivant |
-| `CharacterSync` (non fiable) | C→S puis S→C | `pos, yaw, ack` | Forme, débit 40 Hz (garde), seau de distance et silence plafonné, refus corrigé (D1, `CharacterSync.luau:247-309`) ; noclip et vol au journal, vide (D2, #177) | Noclip et vol en mode bloquant après mesure (D2) |
+| `CharacterSync` (non fiable) | C→S puis S→C | `pos, yaw, ack` | Forme, débit 40 Hz (garde), seau de distance et silence plafonné, refus corrigé (D1, `CharacterSync.luau`, `onClientPosition`) ; noclip et vol au journal, vide (D2, #177) | Noclip et vol en mode bloquant après mesure (D2) |
 | `MovementCorrection` | S→C | `char, pos, seq` | — | — |
 | `WeaponAction` | C→S | `action` | Valeur `Shoot`/`Reload`, outil en main, 0,05 s mini (`init.server.luau`) ; `Reload` démarre le rechargement suivi par le serveur avant ces filtres (T2, #175) | `Shoot` non lié à la cadence : sans effet hors pose 3P depuis #156 (ouïe des bots et son passés sur `ShotFired`) |
 | `ShotFired` | C→S puis S→C | `origin, direction` ; relais : `char, weaponName, origin, direction` | Garde (5/s), tireur vivant, arme à distance prête (`Validator.isReadyToFire` : equip, chargeur), forme, origine à `ORIGIN_MAX` (125 studs) de la racine, cadence `FireDelay` à 0,15 s près (`ShotRelayRules`, #156) ; refus non journalisé | Rien : sans dégâts, un tir forgé ne fait qu'un son, au plus un par cadence |
-| `RequestSpawn` | C→S | aucun | `SpawnRules.request` : spawn en vol, personnage en place, bannière de fin, mort depuis moins de `RESPAWN_DELAY` en round actif (`SpawnManager.luau:137-169`) | Rien (R1 fermé, #171) |
-| `LeaveRound` | C→S | aucun | Retour au menu (#157) : `RoundManager.withdraw` (score de la manche effacé, coups en attente du joueur oubliés, disparition du personnage non comptée), puis `SpawnManager.withdraw` (personnage détruit, plus de réapparition, prochain `RequestSpawn` accepté sans `RESPAWN_DELAY`) (`init.server.luau:249-259`, `SpawnManager.luau:156-167`) | Un client modifié peut s'en servir pour échapper à une mort imminente (l'adversaire ne gagne pas le kill) ou réapparaître plus tôt : il perd à chaque fois tout son score de la manche, comme un joueur qui quitte le jeu |
-| `SendFeedback` | C→S | `text` | Type, longueur, 60 s en mémoire après toute demande valide (posé avant le DataStore, quel que soit le résultat), 5 par semaine (`UpdateAsync`), rien d'écrit si la lecture échoue (`FeedbackService.luau:113-150`) | Rien (R1 fermé, #171) |
-| `SaveSettings` | C→S | table | `PlayerSettings.sanitize`, écriture différée de 10 s (`SettingsStore.luau:113-130`) | Débit (coût CPU seulement, faible) |
-| `GetSettings` (RemoteFunction) | C→S | aucun | Attend le chargement, 20 s au plus (`SettingsStore.luau:101-109`) | Appels simultanés non bornés pendant le chargement (fils qui attendent) |
-| `DebugPlaytest` | C→S | `id, ok, detail, data` | Studio seulement, id attendu et propriétaire (`DebugPlaytest.luau:365-378`) | Rien en jeu publié |
-| `HitConfirm`, `RoundState`, `ScoreUpdate`, `RoundResult`, `PlayerDied`, `FeedbackAck` | S→C | — | — | `PlayerDied` donne la position de la victime à tous (`RoundManager.luau:162-173`) : sans effet tant que l'ESP est accepté (E1) |
+| `RequestSpawn` | C→S | aucun | `SpawnRules.request` : spawn en vol, personnage en place, bannière de fin, mort depuis moins de `RESPAWN_DELAY` en round actif (`SpawnManager.init`, handler de `RequestSpawn`) | Rien (R1 fermé, #171) |
+| `LeaveRound` | C→S | aucun | Retour au menu (#157) : `RoundManager.withdraw` (score de la manche effacé, coups en attente du joueur oubliés, disparition du personnage non comptée), puis `SpawnManager.withdraw` (personnage détruit, plus de réapparition, prochain `RequestSpawn` accepté sans `RESPAWN_DELAY`) (handler de `leaveRoundRmt` dans `init.server.luau`, `SpawnManager.withdraw`) | Un client modifié peut s'en servir pour échapper à une mort imminente (l'adversaire ne gagne pas le kill) ou réapparaître plus tôt : il perd à chaque fois tout son score de la manche, comme un joueur qui quitte le jeu |
+| `SendFeedback` | C→S | `text` | Type, longueur, 60 s en mémoire après toute demande valide (posé avant le DataStore, quel que soit le résultat), 5 par semaine (`UpdateAsync`), rien d'écrit si la lecture échoue (`FeedbackService.init`, handler de `SendFeedback`) | Rien (R1 fermé, #171) |
+| `SaveSettings` | C→S | table | `PlayerSettings.sanitize`, écriture différée de 10 s (`SettingsStore.onSaveSettings`) | Débit (coût CPU seulement, faible) |
+| `GetSettings` (RemoteFunction) | C→S | aucun | Attend le chargement, 20 s au plus (`SettingsStore.onGetSettings`) | Appels simultanés non bornés pendant le chargement (fils qui attendent) |
+| `DebugPlaytest` | C→S | `id, ok, detail, data` | Studio seulement, id attendu et propriétaire (`DebugPlaytest.init`) | Rien en jeu publié |
+| `HitConfirm`, `RoundState`, `ScoreUpdate`, `RoundResult`, `PlayerDied`, `FeedbackAck` | S→C | — | — | `PlayerDied` donne la position de la victime à tous (`RoundManager.announceDeath`) : sans effet tant que l'ESP est accepté (E1) |
 
 ### R1. Garde commune et failles constatées
 
 **Respawn (fait, #171).** Avant : le personnage mort est détruit 0,3 s après la mort (`CORPSE_HANDOFF_DELAY`,
 `init.server.luau`) et `canSpawn` ne testait que `player.Character.Parent` ; un client modifié qui envoyait
 `RequestSpawn` après 0,3 s réapparaissait tout de suite au lieu d'attendre `RESPAWN_DELAY` = 2,5 s
-(`src/shared/GameConfig.luau:5`), puis la réapparition programmée (`RoundManager.onCharacterDied`) remplaçait son
+(`GameConfig.RESPAWN_DELAY`), puis la réapparition programmée (`RoundManager.onCharacterDied`) remplaçait son
 personnage par un neuf. Le client légitime n'envoie `RequestSpawn` que depuis le menu
 (`src/client/systems/game/GameStateController.luau`, `requestPlay`). Parade en place :
 
@@ -719,10 +719,10 @@ horizontaux ne suffisent pas.
 **Aujourd'hui.** Toutes les positions sont envoyées à tous :
 
 - le relais `CharacterSync` envoie à chaque autre joueur la position de chacun, sans filtre
-  (`src/server/CharacterSync.luau:303-307`, `:408`) ;
-- le serveur pose la racine de chaque personnage (`:299`), propriété répliquée nativement à tous les clients ;
-- les personnages sont dans `Workspace`, sans streaming (`default.project.json:43`) ;
-- `PlayerDied` donne la position de chaque mort (`RoundManager.luau:162-173`), et #156 relaiera les tirs.
+  (`onClientPosition` et `CharacterSync.relayBot` dans `src/server/CharacterSync.luau`) ;
+- le serveur pose la racine de chaque personnage (`root.CFrame` dans `onClientPosition`), propriété répliquée nativement à tous les clients ;
+- les personnages sont dans `Workspace`, sans streaming (`StreamingEnabled = false` sous `Workspace` dans `default.project.json`) ;
+- `PlayerDied` donne la position de chaque mort (`RoundManager.announceDeath`), et #156 relaiera les tirs.
 
 **Risque.** Élevé : un ESP n'a qu'à lire `Workspace`. Indétectable côté serveur.
 
