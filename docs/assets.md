@@ -118,7 +118,28 @@ bash tools/anim/publish.sh <dossier> <prefixe> <Nom1> [Nom2 ...] # plusieurs ani
   `axis_forward` et `bake_space_transform` n'ont aucun effet : l'importeur Roblox donne toujours `(-x, z, y)` depuis un FBX
   brut (4 combinaisons testées). `export_mesh_fbx.py` compense donc par une rotation de 180° autour de Z.
 
+## Modèle d'arme procédural dans Blender (couteau Ka-Bar)
+
+Source : `assets/kabar_knife/` (`build_knife.py` forme + UV, `make_textures.py` cartes PBR, `render_board.py` planche).
+Dans Blender : `TEX_DIR = ".../assets/kabar_knife/textures"`, puis `exec` de `build_knife.py` **avant** `make_textures.py`
+(le second réutilise les constantes du premier), puis `render_board.py`. Unité du modèle : le pouce (à recaler sur la M9 à
+l'export). Trois objets, un par matériau (lame, ferrures, cuir), donc trois MeshParts et trois `SurfaceAppearance`.
+
+- **Juger le matériau en aperçu matériau (`look`, `shading: material`), jamais en Workbench** : Workbench n'a aucun reflet et
+  fait paraître n'importe quel métal en plastique. Se comparer à la M9 dans le même éclairage : `fetch_viewmodel.py` (section
+  ci-dessous) donne son `.glb` et ses PNG, à importer dans Blender avec ses cartes branchées.
+- **Valeurs PBR de la M9 à reprendre** : métal à 0 ou 1 (jamais 0,5), rugosité de 0,3 à 0,5 pour le métal, jamais 0,6 à 0,7.
+  Le détail vient de stries fines étirées (brossage), pas de nuages à grande échelle (ça fait « vieille texture »).
+- **Les PNG sont en sRGB direct** : une valeur de 0,07 est presque noire à l'écran, viser 0,25 à 0,4 pour de l'acier sombre.
+- **Normales** : forces modérées. Un grain de cuir trop marqué (plis profonds, cellules larges) donne un crocodile ; relief de
+  l'ordre de 0,006 en hauteur pour 1024 px. Sens des normales (Y vers le haut) à vérifier dans Studio.
+- **Dépliage** : lame à plat par côté (moitié droite de la texture pour x >= 0, marquage d'un seul côté), pièces de révolution
+  en cylindre (u = angle, v = y), garde et fonds plats en planaire dans la zone médiane de la texture (sinon stries radiales).
+
 ## Aperçus three.js (skins, nouveaux modèles)
+
+> Piste abandonnée pour créer un modèle ou un skin (essai jeté le 2026-11-10) : modéliser dans Blender (section ci-dessus). Les
+> étapes de `fetch_viewmodel.py` restent utiles pour récupérer un modèle du jeu.
 
 Tant qu'un élément n'est pas défini (skin, matière, nouvelle arme), on ne cherche ni dans le Blender ouvert ni dans
 Studio : on montre à l'utilisateur une page three.js avec des variantes numérotées sur le vrai modèle, il répond par
