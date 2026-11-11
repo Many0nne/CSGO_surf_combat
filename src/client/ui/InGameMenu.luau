@@ -130,6 +130,8 @@ local function setView(newView: View)
 		built.hide()
 	end
 	if newView == "settings" then
+		-- Une ouverture restée en cours (présentation « page ») ignorerait la nouvelle
+		SettingsMenu.close()
 		SettingsMenu.open("modal", function()
 			-- RETOUR des Réglages : retour à l'accueil du menu (rien si le menu s'est fermé entre-temps)
 			if view == "settings" then
