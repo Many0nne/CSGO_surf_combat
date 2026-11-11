@@ -97,6 +97,24 @@ function NavPlan.nearestCell(plan: Plan, foot: Vector3, radius: number, keptOnly
 	return best
 end
 
+-- Cette méthode permet de trouver le point de passage le plus proche d'une position lorsqu'un bot doit y aller (dernière
+-- position connue hors de la grille, ordre de debug DebugBotsGoto) : celui de la case la plus proche, sinon le plus près.
+function NavPlan.waypointNear(plan: Plan, position: Vector3): number?
+	local cell = NavPlan.nearestCell(plan, position, BotConfig.NAV_NEAREST_RADIUS * 2)
+	local wp = cell and plan.cellWaypoint[cell]
+	if wp then
+		return wp
+	end
+	local best, bestDist = nil, math.huge
+	for i, point in plan.waypoints do
+		local d = (point.position - position).Magnitude
+		if d < bestDist then
+			best, bestDist = i, d
+		end
+	end
+	return best
+end
+
 -- Cette méthode permet de chercher un chemin de case à case lorsqu'un bot change de destination ou se replace ;
 -- banned écarte les arêtes ratées par ce bot.
 function NavPlan.findPath(

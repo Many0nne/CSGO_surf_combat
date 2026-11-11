@@ -55,10 +55,10 @@ function NavRules.edgeCost(a: Vector3, b: Vector3, kind: number): number
 	return (b - a).Magnitude * BotConfig.NAV_COST_FACTOR[kind] + BotConfig.NAV_COST_EXTRA[kind]
 end
 
--- Cette méthode permet de donner le coût d'une arête de rampe lorsque le plan l'ajoute (#142) : distance que le bot
--- aurait courue pendant la durée du trajet, plus un forfait (risque) ; une rampe n'est prise que si elle raccourcit.
-function NavRules.rampCost(duration: number): number
-	return duration * MovementConfig.RUN_SPEED + BotConfig.RAMP_COST_EXTRA
+-- Cette méthode permet de donner le coût d'une arête de rampe lorsque le plan l'ajoute (#142) : distance courue pendant
+-- le trajet, au moins la distance à vol d'oiseau (heuristique de l'A* tenue), plus un forfait (risque).
+function NavRules.rampCost(duration: number, distance: number): number
+	return math.max(duration * MovementConfig.RUN_SPEED, distance) + BotConfig.RAMP_COST_EXTRA
 end
 
 -- Cette méthode permet de chercher le plus court chemin entre deux cases lorsqu'un bot choisit où aller (A*, tas

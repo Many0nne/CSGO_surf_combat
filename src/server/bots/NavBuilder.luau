@@ -321,7 +321,13 @@ function NavBuilder.build(map: Instance): Plan
 					for _, id in list do
 						local p = positions[id]
 						if Vector3.new(p.X - point.X, 0, p.Z - point.Z).Magnitude <= radius then
-							table.insert(found, { id = id, position = p })
+							local walks = 0
+							for _, kind in outKind[id] do
+								if kind == NavRules.WALK then
+									walks += 1
+								end
+							end
+							table.insert(found, { id = id, position = p, interior = walks >= 8 })
 						end
 					end
 				end
@@ -443,7 +449,8 @@ function NavBuilder.build(map: Instance): Plan
 					if not edgeSet[key] then
 						addEdge(best.entry, best.exit, NavRules.RAMP)
 						rampPaths[key] = best
-						rampCost[key] = NavRules.rampCost(best.duration)
+						rampCost[key] =
+							NavRules.rampCost(best.duration, (positions[best.exit] - positions[best.entry]).Magnitude)
 						print(
 							string.format(
 								"[Nav] rampe %d, sens %d : %s → %s, %.1f s, %.0f studs/s au plus (%d essais)",

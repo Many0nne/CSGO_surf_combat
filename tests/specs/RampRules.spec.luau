@@ -128,6 +128,11 @@ return function(T, Loader)
 				{ id = 4, position = Vector3.new(landX, 70, Config.RAMP_EXIT_RADIUS + 5) }, -- trop loin
 			}
 			T.expectEqual(Rules.pickLanding(pos, velocity, candidates), 1)
+			-- Une case intérieure passe avant une case de bord, même un peu plus loin du point de chute
+			local edge = { id = 5, position = Vector3.new(landX, 70, 0), interior = false }
+			local inner = { id = 6, position = Vector3.new(landX + 4, 70, 0), interior = true }
+			T.expectEqual(Rules.pickLanding(pos, velocity, { edge, inner }), 6, "case intérieure")
+			T.expectEqual(Rules.pickLanding(pos, velocity, { edge }), 5, "sans case intérieure : la plus proche")
 			T.expectEqual(Rules.pickLanding(pos, velocity, { candidates[3], candidates[4] }), nil, "aucune case")
 			local wanted = Rules.landingVelocity(pos, velocity, candidates[2].position, 30)
 			T.expectNear(wanted.X, -2 / t, 1e-4, "vitesse qui retombe sur la case visée")
@@ -191,12 +196,13 @@ return function(T, Loader)
 	end)
 
 	T.describe("NavRules : arête de rampe", function()
-		-- Cette méthode permet de construire un couloir de cases (4 studs) avec une arête de rampe de a vers b, de
-		-- durée duration, lorsqu'un cas compare le chemin avec et sans rampe.
+		-- Cette méthode permet de construire un couloir en U de cases (aller en z = 0, retour en z = 8) avec une arête de
+		-- rampe de a vers b de durée duration, lorsqu'un cas compare le chemin avec et sans rampe.
 		local function corridor(count: number, a: number, b: number, duration: number?)
 			local positions, out, outKind = {}, {}, {}
+			local half = count // 2
 			for i = 1, count do
-				positions[i] = Vector3.new((i - 1) * 4, 0, 0)
+				positions[i] = if i <= half then Vector3.new((i - 1) * 4, 0, 0) else Vector3.new((count - i) * 4, 0, 8)
 				out[i], outKind[i] = {}, {}
 			end
 			for i = 1, count - 1 do
@@ -209,25 +215,27 @@ return function(T, Loader)
 			if duration then
 				table.insert(out[a], b)
 				table.insert(outKind[a], Nav.RAMP)
-				rampCost[Nav.edgeKey(a, b)] = Nav.rampCost(duration)
+				rampCost[Nav.edgeKey(a, b)] = Nav.rampCost(duration, (positions[b] - positions[a]).Magnitude)
 			end
 			return { positions = positions, out = out, outKind = outKind, rampCost = rampCost }
 		end
 
 		T.it("coûte la distance courue pendant le trajet, plus un forfait", function()
-			T.expectNear(Nav.rampCost(4), 4 * Movement.RUN_SPEED + Config.RAMP_COST_EXTRA, 1e-6)
-			T.expect(Nav.rampCost(5) > Nav.rampCost(4), "plus long, plus cher")
+			T.expectNear(Nav.rampCost(4, 50), 4 * Movement.RUN_SPEED + Config.RAMP_COST_EXTRA, 1e-6)
+			T.expect(Nav.rampCost(5, 50) > Nav.rampCost(4, 50), "plus long, plus cher")
+			-- Trajet plus rapide que la course : jamais sous la distance à vol d'oiseau (heuristique de l'A*)
+			T.expectNear(Nav.rampCost(1, 400), 400 + Config.RAMP_COST_EXTRA, 1e-6)
 		end)
 
 		T.it("prend la rampe quand elle raccourcit le chemin", function()
-			-- 60 cases (236 studs à pied, ~8 s) ; rampe de 1 à 60 en 3 s (110 studs de coût)
+			-- 60 cases (~240 studs à pied, ~8 s) ; rampe de 1 à 60, 8 studs plus loin, en 3 s (110 studs de coût)
 			local path = Nav.findPath(corridor(60, 1, 60, 3), 1, 60)
 			T.expectEqual(#path, 2, "case d'entrée puis case de sortie")
 			T.expectEqual(path[2], 60)
 		end)
 
 		T.it("ne la prend pas quand elle n'y gagne rien", function()
-			-- Rampe de 1 à 10 en 3 s (110 studs) contre 36 studs à pied
+			-- Rampe de 1 à 10 en 3 s (110 studs) contre ~40 studs à pied
 			local path = Nav.findPath(corridor(10, 1, 10, 3), 1, 10)
 			T.expectEqual(#path, 10, "à pied")
 			-- Destination avant la sortie : la rampe ne mène pas plus près

@@ -139,7 +139,7 @@ function BotMotion._rideTick(self: BotMotion, dt: number)
 	local pos = foot + RampRules.blend(ride.offset, ride.t) + Vector3.new(0, ci.rootToBottom, 0)
 	local rotation = self:_turn(pos, velocity, dt)
 	local cf = CFrame.new(pos) * rotation
-	if ride.t >= ride.traj.duration then
+	if ride.t >= ride.traj.duration - 1e-6 then
 		motor.velocity = Vector3.new(velocity.X, 0, velocity.Z)
 		motor:teleport(cf)
 		self.ride = nil

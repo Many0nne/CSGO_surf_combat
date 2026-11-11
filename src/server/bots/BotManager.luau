@@ -416,7 +416,7 @@ local function applyDebugGoto()
 	if typeof(value) ~= "Vector3" or not plan then
 		return
 	end
-	local waypoint = BotBrain._waypointNear(plan, value)
+	local waypoint = NavPlan.waypointNear(plan, value)
 	if not waypoint then
 		return
 	end

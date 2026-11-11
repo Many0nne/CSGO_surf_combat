@@ -19,7 +19,7 @@ local StepTiming = require(ReplicatedStorage.Shared.StepTiming)
 
 local RampSim = {}
 
-export type Candidate = { id: number, position: Vector3 }
+export type Candidate = { id: number, position: Vector3, interior: boolean? } -- interior : 8 voisines à pied
 
 export type Params = {
 	frame: RampRules.Frame,
@@ -149,8 +149,10 @@ function RampSim.simulate(rig: Rig, params: Params): (RampRules.Trajectory?, str
 			if not exit then
 				return nil, string.format("atterri hors d'une case en %s", tostring(foot))
 			end
-			if settled > 0 and (speed <= run + 1 or settled >= BotConfig.RAMP_SETTLE_TIME) then
+			if settled > 0 and speed <= run + 1 then
 				return RampSim._finish(params, points, states, dt, exit)
+			elseif settled >= BotConfig.RAMP_SETTLE_TIME then
+				return nil, string.format("encore à %.0f studs/s après l'atterrissage", speed)
 			end
 			settled += dt
 			local goal = if landing then landing.position else foot

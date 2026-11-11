@@ -169,28 +169,39 @@ function RampRules.fallTime(y: number, vy: number, floorY: number): number?
 end
 
 -- Cette méthode permet de choisir la case où atterrir lorsque le bot quitte la rampe : parmi les cases plus basses à
--- moins de RAMP_EXIT_RADIUS, la plus proche du point où il retomberait sans rien changer ; nil sans case.
+-- moins de RAMP_EXIT_RADIUS, intérieures de préférence, la plus proche du point où il retomberait ; nil sans case.
 function RampRules.pickLanding(
 	pos: Vector3,
 	velocity: Vector3,
-	candidates: { { id: number, position: Vector3 } }
+	candidates: { { id: number, position: Vector3, interior: boolean? } }
 ): number?
-	local best, bestDist = nil, math.huge
-	for _, c in candidates do
-		local p = c.position
-		local flat = Vector3.new(p.X - pos.X, 0, p.Z - pos.Z).Magnitude
-		if p.Y < pos.Y - 0.5 and pos.Y - p.Y <= BotConfig.NAV_MAX_DROP and flat <= BotConfig.RAMP_EXIT_RADIUS then
-			local t = RampRules.fallTime(pos.Y, velocity.Y, p.Y)
-			if t then
-				local land = Vector3.new(pos.X + velocity.X * t, 0, pos.Z + velocity.Z * t)
-				local d = Vector3.new(p.X - land.X, 0, p.Z - land.Z).Magnitude
-				if d < bestDist or (d == bestDist and best and c.id < best) then
-					best, bestDist = c.id, d
+	-- Case intérieure (entourée de cases rejointes à pied) d'abord : sur un rebord, sa vitesse l'emporterait dans le vide
+	for _, onlyInterior in { true, false } do
+		local best, bestDist = nil, math.huge
+		for _, c in candidates do
+			local p = c.position
+			local flat = Vector3.new(p.X - pos.X, 0, p.Z - pos.Z).Magnitude
+			if
+				(c.interior or not onlyInterior)
+				and p.Y < pos.Y - 0.5
+				and pos.Y - p.Y <= BotConfig.NAV_MAX_DROP
+				and flat <= BotConfig.RAMP_EXIT_RADIUS
+			then
+				local t = RampRules.fallTime(pos.Y, velocity.Y, p.Y)
+				if t then
+					local land = Vector3.new(pos.X + velocity.X * t, 0, pos.Z + velocity.Z * t)
+					local d = Vector3.new(p.X - land.X, 0, p.Z - land.Z).Magnitude
+					if d < bestDist or (d == bestDist and best and c.id < best) then
+						best, bestDist = c.id, d
+					end
 				end
 			end
 		end
+		if best then
+			return best
+		end
 	end
-	return best
+	return nil
 end
 
 -- Cette méthode permet de rapprocher la vitesse horizontale d'une vitesse voulue lorsque le bot se dirige en l'air
