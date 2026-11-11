@@ -42,7 +42,7 @@ type CapColors = { face: Color3, side: Color3, legend: Color3 }
 
 local CAP_SIDE_DARKEN = 0.33 -- rebord : couleur du dessus assombrie d'autant vers le noir
 
--- Cette méthode permet de décrire les couleurs d'un keycap lorsque les palettes sont posées : rebord tiré du dessus.
+-- Cette méthode permet de décrire les couleurs d'un keycap lorsque ses états sont posés : rebord tiré du dessus.
 local function capColors(face: Color3, legend: Color3): CapColors
 	return { face = face, side = face:Lerp(C.Black, CAP_SIDE_DARKEN), legend = legend }
 end
