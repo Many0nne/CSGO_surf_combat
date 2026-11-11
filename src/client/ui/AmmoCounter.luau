@@ -17,7 +17,9 @@ local F = UITheme.Fonts
 -- Emprise partagée avec l'affichage des touches, qui remonte au-dessus sur écran étroit (HUDRules.keyDisplayBottom)
 local BOX = HUDRules.AMMO_BOX
 local SHADOW = 3
-local LABEL_SHADOW = 2 -- ombre du libellé, plus serrée à sa petite taille
+-- Contour noir du libellé (#247) : à 14 px, une ombre décalée double les lettres ; le contour se lit sur rampe claire
+-- comme en zone sombre (même principe que le crosshair)
+local LABEL_STROKE_TRANSPARENCY = 0.35
 
 local AmmoCounter = {}
 
@@ -81,16 +83,19 @@ function AmmoCounter.init()
 		Size = UDim2.fromOffset(BOX.width, BOX.height),
 		Parent = root,
 	})
-	-- Libellé ambré posé sur la scène sans fond (#247) : ombre noire décalée comme les chiffres, sinon illisible sur rampe claire
-	UIKit.shadowedText(box, {
+	-- Libellé ambré posé sur la scène sans fond : contour noir, sinon illisible sur rampe claire (#247)
+	UIKit.text({
 		Name = "Label",
 		Text = "MUNITIONS",
 		FontFace = F.DisplayMedium,
 		TextSize = 14,
 		TextColor3 = C.Accent,
 		TextXAlignment = Enum.TextXAlignment.Right,
+		TextStrokeColor3 = C.Black,
+		TextStrokeTransparency = LABEL_STROKE_TRANSPARENCY,
 		Size = UDim2.fromOffset(BOX.width, 16),
-	}, LABEL_SHADOW)
+		Parent = box,
+	})
 	magazineText, magazineShadow = UIKit.shadowedText(box, {
 		Name = "Magazine",
 		FontFace = F.Display,

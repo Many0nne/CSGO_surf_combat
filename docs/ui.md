@@ -102,8 +102,8 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   réglables dans Réglages > TOUCHES (#100) ; toucher d'un emplacement, L1/R1 à la manette (fixes). La barre ignore
   touches et molette pendant que le menu en partie est ouvert (`InGameMenu.isOpen`, Réglages compris).
 - `src/client/ui/AmmoCounter.luau` (#158) : « chargeur / réserve » en bas à droite, à gauche de la barre d'armes (chiffre du
-  chargeur os à ombre, réserve atténuée, libellé ambré « MUNITIONS » à ombre noire de 2 px (#247 : sans ombre, illisible sur
-  rampe claire), chargeur vide en rouge d'impact). Son emprise (`HUDRules.AMMO_BOX`) sert aussi à placer l'affichage des touches. Lit
+  chargeur os à ombre, réserve atténuée, libellé ambré « MUNITIONS » à contour noir (`TextStroke`, transparence 0,35 ; #247 :
+  sans contour, illisible sur rampe claire), chargeur vide en rouge d'impact). Son emprise (`HUDRules.AMMO_BOX`) sert aussi à placer l'affichage des touches. Lit
   `WeaponSystem.getAmmo` à chaque Heartbeat (met à jour les textes seulement si les valeurs changent), masqué sans
   chargeur (couteau) et hors partie (`HUDRules.gameHudVisible`, via `GameStateController.applyGameHud`). Contrairement à
   la barre d'armes, il ne s'estompe pas.
@@ -257,7 +257,8 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
   arêtes à moitié couvertes ne refont pas un fond plein. Un recouvrement plus large assombrit la jonction à la place. Pour un
   fond au milieu d'un bord, une seule image symétrique (`cornerScrim` « Top » / « Bottom »).
 - **Libellé posé sur la scène :** un texte ambré ou atténué sans fond se perd sur une rampe claire (`AmmoCounter`, #247).
-  Tout texte du HUD hors d'un `cornerScrim` prend l'ombre noire décalée (`UIKit.shadowedText`, 2 px aux petites tailles).
+  Tout texte du HUD hors d'un `cornerScrim` prend l'ombre noire décalée (`UIKit.shadowedText`) ; sous ~16 px, l'ombre
+  double les lettres (essai à 1 et 2 px, captures #247) : contour noir `TextStroke` à la place, comme le crosshair.
 - **Retourner une image :** un `ImageRectSize` négatif ne retourne pas l'image dans une `ImageLabel`. Tourner l'image
   (`UIKit.cornerScrim` : 90°, 180° ou -90° selon le coin, taille permutée pour les quarts de tour).
 - **Tools des armes :** ils sont presque vides (l'arme visible vient du viewmodel). Pour dessiner une arme hors du jeu
