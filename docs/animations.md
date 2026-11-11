@@ -158,7 +158,9 @@ Repris du retour d'expérience de la M9 (`docs/notes/retex-viewmodel-m9.md`).
   dépasse jamais `FireDelay`, seule cadence connue du serveur : sinon le client tire moins vite que la cadence de l'arme.
   Une piste de tir plus longue que la cadence (AWP : Shoot dure 1,63 s, cadence 60/41 = 1,46 s) est coupée par le tir
   suivant, comme les slashs de la M9 : `playAnimation` arrête la piste en cours et relance Shoot avec le fondu par défaut
-  (0,1 s). La fin de la piste Shoot de l'AWP étant déjà sur la pose de repos, la coupure ne se voit pas. Invariant testé
+  (0,1 s). Les 0,17 s coupées sont la fin du réarmement, proche de la pose de repos : rendu de la coupure à juger à
+  l'œil en jeu (non vérifié par capture, #221). Le son `Bolt` de la piste part avant la coupure (`DebugPlaytest` AWP :
+  `Bolt Sound` atteint). Vérifié en Studio : 4 clics à ~1,5 s, 4 touches serveur, aucun clic ignoré. Invariant testé
   par `tests/specs/WeaponConfig.spec.luau`.
 - **Viewmodel dans Studio :** vérifier `PrimaryPart` avant un playtest. Il a disparu de l'instance Studio de l'AWP pendant la
   refonte, Rojo connecté à un autre worktree, alors que le `.rbxm` exporté l'avait encore (cause non établie). Le viewmodel

@@ -615,6 +615,17 @@ réapparition programmée, donc un mort qui revient au menu puis clique JOUER n'
 perdu son score de la manche (`RoundManager.withdraw`). Si sa réapparition programmée chargeait encore, sa demande est
 servie à la fin de ce chargement (`SpawnRules.rejoinsInFlight`) au lieu d'être refusée `spawning`.
 
+**Fuite d'une mort par le menu (fait, #217).** Un départ moins de `GameConfig.LEAVE_DEATH_WINDOW` (5 s) après un coup
+reçu compte comme une mort (`LeaveRules.countsAsDeath`, lu par `RoundManager.withdraw`) : kill au dernier attaquant
+(mort entre-temps : crédité ; parti : départ libre), `PlayerDied`, stats comme une mort normale (`onDeathCounted`). Un
+coup absorbé par la protection d'apparition garde le tueur mais pas l'instant (`LastHit.at` nil). Limites assumées :
+quitter le jeu (déconnexion) n'est pas couvert ; un départ compté comme une mort ne retient pas `RESPAWN_DELAY` (un
+refus `early` serait journalisé et laisserait le client en `SPAWNING`).
+Vérification Studio (2026-11-11) : joueur passé à 1000 PV côté serveur (un tir d'AWP de bot ne le tue pas), menu en
+partie ouvert d'avance (`DebugInGameMenu`), attente du coup bornée à 6 s en contexte `Client`, puis clic sur
+MENU PRINCIPAL (`user_mouse_input` aux coordonnées `AbsolutePosition` + taille / 2, `InGameMenu` ignore l'inset). Départ
+1,6 s après le coup : `PlayerDied` reçu (tueur le bot, arme AWP) ; départ sans coup : rien.
+
 **Feedback (fait, #171).** Avant : `lastSent` n'était écrit qu'après un envoi réussi au webhook, alors que chaque
 demande valide lisait (et écrivait) le DataStore : sans webhook, ou la limite hebdomadaire atteinte, un spam provoquait
 un `GetAsync` par appel et épuisait le budget DataStore du serveur, partagé avec `SettingsStore` et `StatsStore`
