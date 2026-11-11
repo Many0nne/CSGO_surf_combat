@@ -26,6 +26,8 @@ local EDGE = 28 -- marge de la maquette (px à 720 de haut)
 local TITLE_Y = 46 -- sous les boutons Roblox du coin haut gauche
 local TABS_Y = 18
 local PLAY_DELAY = 1.0 -- l'explosion de la vitrine se voit avant les volets
+local NOTICE_Y = 72 -- message sous les onglets (apparition impossible, #219)
+local NOTICE_TIME = 5 -- s d'affichage de ce message
 -- Onglets, de gauche à droite ; ARMES est l'accueil (la vitrine), JOUER l'appel à l'action
 local TABS = {
 	{ key = "home", text = "ARMES" },
@@ -58,6 +60,9 @@ local choices: { MenuShot.Choice } = {}
 local homeChoices: { MenuShot.Choice } = {} -- masqués hors de l'accueil
 local callbacks: { [string]: (() -> ())? } = {}
 local currentPage: Page = "home"
+local notice: TextLabel
+local noticeShadow: TextLabel
+local noticeGeneration = 0
 
 -- Cette méthode permet d'appeler un rappel enregistré lorsqu'un choix du menu est confirmé.
 local function fire(name: string)
@@ -169,6 +174,18 @@ local function buildTabs(root: Frame)
 		tabs[tab.key] = choice
 		table.insert(choices, choice)
 	end
+	-- Message ponctuel sous les onglets (MainMenu.showNotice), visible sur toutes les pages du menu
+	notice, noticeShadow = UIKit.shadowedText(root, {
+		Name = "Notice",
+		FontFace = F.DisplayMedium,
+		TextSize = 16,
+		TextColor3 = C.HitRed,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, NOTICE_Y),
+		Size = UDim2.fromOffset(640, 20),
+		Visible = false,
+	}, 2)
 end
 
 -- Cette méthode permet de construire une barre de stat (libellé ambré, segments) de la fiche lorsque le menu est initialisé.
@@ -441,6 +458,26 @@ function MainMenu.setPage(page: Page)
 			choice.reset()
 		end
 	end
+end
+
+-- Cette méthode permet d'afficher un message sous les onglets pendant NOTICE_TIME lorsque l'orchestrateur doit
+-- expliquer un retour au menu (apparition impossible, #219) ; un nouveau message remplace le précédent.
+function MainMenu.showNotice(text: string)
+	if not notice then
+		return
+	end
+	noticeGeneration += 1
+	local generation = noticeGeneration
+	notice.Text = text
+	noticeShadow.Text = text
+	notice.Visible = true
+	noticeShadow.Visible = true
+	task.delay(NOTICE_TIME, function()
+		if generation == noticeGeneration then
+			notice.Visible = false
+			noticeShadow.Visible = false
+		end
+	end)
 end
 
 -- Cette méthode permet de lire la page active lorsque l'orchestrateur doit décider où mène une touche.

@@ -47,7 +47,8 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
 
 - `src/client/ui/MainMenu.luau` : accueil de la salle des miroirs (titre, onglets, fiche d'arme, sélecteur), tir sur l'arme de la
   vitrine au clic (accueil seulement). Les onglets sont dans leur propre `ScreenGui` (`MenuTabs`, DisplayOrder 4), au-dessus des écrans
-  secondaires.
+  secondaires. Sous les onglets, un message ponctuel (`MainMenu.showNotice`, 5 s, rouge d'impact à ombre) explique un
+  retour au menu imprévu, par exemple une apparition impossible (#219) ; rendu provisoire, pas encore validé.
 - `src/client/ui/MenuPage.luau` : gabarit des écrans secondaires, sans panneau : bloc centré sur le voile du classement,
   actions côte à côte en bas au centre (`MenuPage.ExitY`). Choix de l'utilisateur en #117, après un premier passage en
   colonne sur un dégradé à gauche jugé peu changé. Infos et Réglages partagent la même disposition (catégories à gauche

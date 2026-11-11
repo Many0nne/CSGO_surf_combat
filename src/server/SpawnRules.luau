@@ -37,6 +37,37 @@ function SpawnRules.request(r: Request): Refusal?
 	return nil
 end
 
+-- Réponse du serveur à chaque RequestSpawn (#219), renvoyée au client par le même remote : "accepted" (chargement
+-- lancé ou servi à la fin d'un chargement en vol), "failed" (LoadCharacterAsync en échec), ou le motif du refus ;
+-- retryIn = délai restant avant qu'une demande "early" soit acceptée ; live = personnage en place vivant ("alive"),
+-- que le client peut reprendre.
+export type ReplyStatus = "accepted" | "failed" | Refusal
+export type Reply = { status: ReplyStatus, retryIn: number?, live: boolean? }
+
+-- Tous les statuts de réponse, chacun traité par le client (SpawnRequestRules.onReply, test croisé)
+SpawnRules.REPLY_STATUSES = { "accepted", "failed", "spawning", "alive", "result", "early" } :: { ReplyStatus }
+
+-- Contexte de la réponse en plus de la demande : joueur revenu du menu, personnage en place vivant
+export type ReplyContext = { away: boolean?, live: boolean? }
+
+-- Cette méthode permet de construire la réponse au client lorsqu'une demande vient d'être jugée (refusal nil : acceptée) ;
+-- "spawning" non servie (joueur revenu du menu ou bannière de fin) : "result", ce chargement ne lui servira pas.
+function SpawnRules.reply(refusal: Refusal?, r: Request, context: ReplyContext?): Reply
+	if not refusal then
+		return { status = "accepted" }
+	end
+	if refusal == "spawning" and ((context and context.away) or r.roundState == "result") then
+		return { status = "result" }
+	end
+	if refusal == "early" and r.diedAt then
+		return { status = "early", retryIn = math.clamp(r.respawnDelay - (r.now - r.diedAt), 0, r.respawnDelay) }
+	end
+	if refusal == "alive" then
+		return { status = "alive", live = context ~= nil and context.live == true }
+	end
+	return { status = refusal }
+end
+
 -- Cette méthode permet de décider si une demande refusée vient d'un joueur revenu du menu pendant que sa réapparition
 -- programmée charge encore (#157) : elle est alors servie à la fin de ce chargement, sauf pendant la bannière de fin.
 function SpawnRules.rejoinsInFlight(refusal: Refusal?, away: boolean, roundState: string): boolean

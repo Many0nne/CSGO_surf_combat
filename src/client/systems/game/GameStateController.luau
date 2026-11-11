@@ -24,9 +24,12 @@ local HUDRules = require(script.Parent.Parent.Parent.ui.HUDRules)
 local KillFeed = require(script.Parent.Parent.Parent.ui.KillFeed)
 local DeathCamera = require(script.Parent.Parent.Parent.camera.DeathCamera)
 local DeathRagdoll = require(script.Parent.DeathRagdoll)
+local SpawnRequestRules = require(script.Parent.SpawnRequestRules)
 
 -- PlayerDied et Humanoid.Died arrivent dans un ordre quelconque : l'info du tueur reste applicable ce temps-là (s)
 local DEATH_INFO_TTL = 1
+-- Message du menu quand une demande d'apparition n'aboutit pas (#219, SpawnRequestRules)
+local SPAWN_FAILED_NOTICE = "IMPOSSIBLE DE REJOINDRE LA PARTIE, RÉESSAIE"
 
 local GameStateController = {}
 
@@ -44,6 +47,8 @@ local lastDeath: { killer: string?, weapon: string?, headshot: boolean, at: numb
 -- Remotes (résolus une seule fois)
 local spawnRemote: RemoteEvent?
 local leaveRemote: RemoteEvent?
+-- Demande d'apparition en cours (#219) : suivie tant que l'état est SPAWNING, nil sinon
+local spawnAttempt: SpawnRequestRules.Attempt? = nil
 
 -- ── Caméra ─────────────────────────────────────────────────────────────────
 
@@ -80,6 +85,10 @@ end
 
 local function setState(newState: State)
 	state = newState
+	if newState ~= "SPAWNING" then
+		-- La surveillance de la demande s'arrête d'elle-même (GameStateController.requestPlay)
+		spawnAttempt = nil
+	end
 	-- Avant la fermeture du menu en partie : les abonnés de HUDState voient le nouvel état menu encore ouvert (tout masqué),
 	-- jamais l'ancien état de partie menu fermé (crosshair ou touches réaffichés un instant)
 	HUDState.setGameState(newState)
@@ -202,10 +211,80 @@ local function onPlayerDied(data: any)
 	end
 end
 
+-- Cette méthode permet d'appliquer la réponse du serveur à la demande en cours (#219, rien hors SPAWNING) ; "alive" avec
+-- un personnage local vivant (ignoré pendant le menu) : il est repris comme s'il venait d'apparaître.
+local function onSpawnReply(answer: any)
+	-- setState remet spawnAttempt à nil hors SPAWNING
+	local attempt = spawnAttempt
+	if not attempt then
+		return
+	end
+	local char = localPlayer.Character
+	local humanoid = char and char.Parent and char:FindFirstChildOfClass("Humanoid")
+	local live = humanoid ~= nil and humanoid.Health > 0
+	if SpawnRequestRules.onReply(attempt, answer, os.clock(), live) == "adopt" and char then
+		onCharacterAdded(char)
+	end
+end
+
+-- Cette méthode permet de retenir le remote RequestSpawn (trouvé par getRemote, ou cherché plus tard s'il manquait,
+-- #219) et d'écouter ses réponses, une seule fois.
+local function resolveSpawnRemote(found: Instance?): RemoteEvent?
+	if spawnRemote then
+		return spawnRemote
+	end
+	local remote = found or ReplicatedStorage:FindFirstChild(NetworkProtocol.Names.REQUEST_SPAWN)
+	if remote and remote:IsA("RemoteEvent") then
+		spawnRemote = remote
+		remote.OnClientEvent:Connect(onSpawnReply)
+	end
+	return spawnRemote
+end
+
+-- Cette méthode permet d'envoyer (ou renvoyer) la demande d'apparition en cours lorsque SpawnRequestRules le décide ;
+-- rien ne part tant que le remote n'existe pas (la surveillance réessaie, puis abandonne).
+local function sendSpawnRequest(attempt: SpawnRequestRules.Attempt)
+	local remote = resolveSpawnRemote()
+	if remote then
+		SpawnRequestRules.noteSent(attempt, os.clock())
+		remote:FireServer()
+	end
+end
+
+-- Cette méthode permet d'abandonner une demande restée sans suite après ses délais (#219) : retour au menu avec un
+-- message, et LeaveRound pour qu'un personnage arrivé trop tard ne reste pas dans le round.
+local function giveUpSpawn()
+	warn("[GameState] demande d'apparition sans suite : retour au menu")
+	-- Cherché ici aussi : listenToRemotes peut encore l'attendre
+	local leave = leaveRemote or ReplicatedStorage:FindFirstChild(NetworkProtocol.Names.LEAVE_ROUND)
+	if leave and leave:IsA("RemoteEvent") then
+		leave:FireServer()
+	end
+	setState("MENU")
+	-- Les volets fermés par SPAWNING couvrent encore l'écran
+	Transition.open()
+	MainMenu.showNotice(SPAWN_FAILED_NOTICE)
+end
+
+-- Cette méthode permet de surveiller une demande d'apparition lorsqu'elle part (JOUER) : renvoi sans réponse, après un
+-- refus temporaire ou un échec, abandon après un délai borné ; s'arrête dès que l'état quitte SPAWNING.
+local function watchSpawnRequest(attempt: SpawnRequestRules.Attempt)
+	while spawnAttempt == attempt do
+		local action = SpawnRequestRules.onTick(attempt, os.clock())
+		if action == "giveUp" then
+			giveUpSpawn()
+			return
+		elseif action == "send" then
+			sendSpawnRequest(attempt)
+		end
+		task.wait(SpawnRequestRules.TICK)
+	end
+end
+
 local function listenToRemotes()
 	local N = NetworkProtocol.Names
 
-	spawnRemote = NetworkProtocol.getRemote(N.REQUEST_SPAWN)
+	resolveSpawnRemote(NetworkProtocol.getRemote(N.REQUEST_SPAWN))
 	leaveRemote = NetworkProtocol.getRemote(N.LEAVE_ROUND)
 
 	-- RoundState : { state, timeLeft }
@@ -260,9 +339,10 @@ function GameStateController.requestPlay(): boolean
 		return false
 	end
 	setState("SPAWNING")
-	if spawnRemote then
-		spawnRemote:FireServer()
-	end
+	-- Le serveur répond à chaque demande ; sans réponse ou après un refus temporaire, elle est renvoyée (#219)
+	local attempt = SpawnRequestRules.new(os.clock())
+	spawnAttempt = attempt
+	task.spawn(watchSpawnRequest, attempt)
 	return true
 end
 
