@@ -595,6 +595,28 @@ return function(T, Loader)
 			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), last + 30), 115, "acquis")
 		end)
 
+		T.it(
+			"Reload arrivé en retard puis changement d'arme dès la fin : rechargement acquis, pas de chargeur refusé",
+			function()
+				local Validator, makePlayer, _, world, ShotRules = setup()
+				local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(50, 0, 0))
+				local last = fire(Validator, a, b, 5, 10)
+				local awp = a.Character:FindFirstChildOfClass("Tool")
+				-- Reload envoyé à last + 1,5 mais reçu 0,6 s plus tard ; le client finit à last + 5,2 et range l'AWP aussitôt
+				Validator.noteReload(a, last + 2.1)
+				Validator.noteUnequip(a, awp, last + 5.25)
+				Validator.noteEquip(a, awp, last + 6)
+				T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), last + 7.6), 115)
+				T.expectEqual(#world.reports, 0)
+				-- Rechargement vraiment interrompu (plus d'une marge avant sa fin) : annulé
+				last = fire(Validator, a, b, 4, last + 9.1)
+				Validator.noteReload(a, last + 1.5)
+				Validator.noteUnequip(a, awp, last + 1.5 + 3.7 - ShotRules.RELOAD_CANCEL_TOLERANCE - 0.1)
+				Validator.noteEquip(a, awp, last + 6)
+				T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), last + 8), nil)
+			end
+		)
+
 		T.it("refuse une touche pendant un rechargement inachevé, chargeur non vide compris", function()
 			local Validator, makePlayer, _, world = setup()
 			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(50, 0, 0))

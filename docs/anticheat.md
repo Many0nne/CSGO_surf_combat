@@ -215,14 +215,19 @@ contrôles de plus. Règles pures dans `src/server/ShotRules.luau` (`checkEquip`
   ferait refuser des tirs honnêtes** : baisser `EquipTime` avec.
 - **Tolérances.** Equip et rechargement : 0,2 s chacun, la gigue entre deux paquets fiables (arrivée de l'outil ou action
   `Reload`, puis la touche) ; même ordre que `CADENCE_TOLERANCE` (0,15 s). Un tricheur gagne au plus 0,2 s sur 1,58 s
-  (equip) ou 3,7 s (rechargement).
+  (equip) ou 3,7 s (rechargement). Livrés en `block` sans phase de mesure : Studio n'a pas de latence, mais un paquet
+  retardé de plus de 0,2 s ne coûte au pire qu'une touche, la première après l'equip ou le rechargement, sans
+  cascade. Si les résumés `CheatLog` du jeu publié montrent des `equip`/`magazine` sur des joueurs honnêtes (détail :
+  écart à la borne), élargir `EQUIP_TOLERANCE`/`RELOAD_TOLERANCE` ou repasser le contrôle en `"log"` dans `ShotRules.MODES`.
 - **Rechargement.** Fini paresseusement à la touche suivante (ou au prochain `Reload`/changement d'arme) s'il a duré
   assez : le chargeur repart à zéro. Une touche **pendant** un rechargement inachevé est refusée, même chargeur non vide
   (le client ne tire pas en `RELOADING`) : sinon un client qui renvoie `Reload` toutes les 3,5 s en tirant à pleine
   cadence verrait son compteur remis à zéro sans jamais faire de pause (piste rejetée en revue : retrancher seulement
   les touches faites pendant le rechargement ne suffit pas). Un `Reload` pendant un rechargement inachevé le redémarre. Un `Reload` pendant l'equip ne compte qu'à partir de la fin de l'equip (le client
   ne peut pas recharger avant). Changement ou rangement d'arme (`ChildRemoved`, `Validator.noteUnequip`) : rechargement
-  inachevé annulé, rechargement fini acquis. Seules les touches sont comptées (les tirs manqués n'arrivent pas au
+  inachevé annulé, rechargement fini acquis, à `RELOAD_CANCEL_TOLERANCE` (1 s) près : sinon un `Reload` arrivé en
+  retard, suivi d'un changement d'arme juste après la fin du rechargement côté client, ferait refuser tout le chargeur
+  suivant. Un tricheur n'y gagne rien (ressortir l'AWP coûte 1,38 s d'equip au moins). Seules les touches sont comptées (les tirs manqués n'arrivent pas au
   serveur) : le compteur serveur est toujours ≤ celui du client, jamais plus strict.
 - **Bots.** Exclus des deux contrôles (`attacker.isBot`) : `BotArsenal` fait déjà respecter equip, chargeur et
   rechargement, et ses tirs sont des raycasts serveur. Leur equip n'est pas noté (`trackWeapon3P`) : rien à retenir, et

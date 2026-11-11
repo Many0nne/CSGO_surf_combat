@@ -199,6 +199,10 @@ local function failWeaponCheck(attacker: Participant, category: string, check: s
 	local world = shotWorld
 	if world then
 		reportCheck(world, attacker, check, detail, blocks, category)
+	elseif not warnedNoWorld then
+		-- Même avertissement que validateShot : un refus de mêlée sans journal ne doit pas passer inaperçu
+		warnedNoWorld = true
+		warn("[Validator] setShotWorld non appelé : refus d'equip et de chargeur non journalisés")
 	end
 	return blocks
 end

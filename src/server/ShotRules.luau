@@ -94,6 +94,11 @@ ShotRules.EQUIP_TOLERANCE = 0.2
 -- Chargeur (#175) : un rechargement compte comme fini ReloadTime - RELOAD_TOLERANCE après l'arrivée de l'action
 -- Reload (même gigue entre l'action et la touche suivante).
 ShotRules.RELOAD_TOLERANCE = 0.2
+-- Changement d'arme pendant un rechargement : celui-ci compte comme fini s'il ne lui manquait pas plus de
+-- RELOAD_CANCEL_TOLERANCE (s). Une action Reload arrivée en retard ne doit pas faire refuser tout le chargeur suivant à
+-- un joueur qui a fini de recharger puis changé d'arme aussitôt ; un tricheur n'y gagne rien, ressortir l'arme lui
+-- coûte son equip (AWP : 1,38 s au moins), plus que cette marge.
+ShotRules.RELOAD_CANCEL_TOLERANCE = 1
 
 -- Cette méthode permet de vérifier qu'un nombre est fini et borné lorsqu'un argument de tir arrive.
 local function isBounded(n: any, bound: number): boolean
@@ -258,11 +263,11 @@ function ShotRules.newMagazine(): Magazine
 	return { shots = 0, reloadAt = nil }
 end
 
--- Cette méthode permet de terminer le rechargement en cours lorsqu'il a duré reloadTime - RELOAD_TOLERANCE : le
--- chargeur est rempli (réserve illimitée, #165).
-function ShotRules.settleReload(mag: Magazine, reloadTime: number, now: number)
+-- Cette méthode permet de terminer le rechargement en cours lorsqu'il a duré reloadTime - tolerance (RELOAD_TOLERANCE
+-- par défaut) : le chargeur est rempli (réserve illimitée, #165).
+function ShotRules.settleReload(mag: Magazine, reloadTime: number, now: number, tolerance: number?)
 	local reloadAt = mag.reloadAt
-	if reloadAt and now - reloadAt >= reloadTime - ShotRules.RELOAD_TOLERANCE then
+	if reloadAt and now - reloadAt >= reloadTime - (tolerance or ShotRules.RELOAD_TOLERANCE) then
 		mag.shots = 0
 		mag.reloadAt = nil
 	end
@@ -276,9 +281,9 @@ function ShotRules.startReload(mag: Magazine, reloadTime: number, now: number)
 end
 
 -- Cette méthode permet d'annuler le rechargement en cours lorsque l'arme est rangée ou changée (comme le client) ;
--- un rechargement déjà fini reste acquis.
+-- un rechargement fini, à RELOAD_CANCEL_TOLERANCE près (retard de l'action Reload), reste acquis.
 function ShotRules.cancelReload(mag: Magazine, reloadTime: number, now: number)
-	ShotRules.settleReload(mag, reloadTime, now)
+	ShotRules.settleReload(mag, reloadTime, now, ShotRules.RELOAD_CANCEL_TOLERANCE)
 	mag.reloadAt = nil
 end
 
@@ -292,7 +297,8 @@ function ShotRules.checkMagazine(mag: Magazine, size: number, reloadTime: number
 		return false,
 			string.format(
 				"touche pendant le rechargement (depuis %.2f s, min %.2f s)",
-				now - reloadAt,
+				-- Un Reload reçu pendant l'equip démarre à la fin de l'equip : pas de durée négative au journal
+				math.max(0, now - reloadAt),
 				reloadTime - ShotRules.RELOAD_TOLERANCE
 			)
 	end
