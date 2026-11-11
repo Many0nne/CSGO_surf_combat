@@ -304,7 +304,32 @@ l'allonge accepté, hors de l'allonge refusé, tolérances inchangées ; `tests/
 (#240) ») : main vue tenue acceptée en mode `block` (refusée avant #240), silent aim refusé, tête et main sans rig
 inchangées.
 
-MESURE_240
+**Mesure en Studio (#240, 2026-11-11).** Méthode de #174/#213 : en Play, contexte `Client`, raycast de `HitscanSystem`
+depuis la caméra vers une partie de bras d'un bot telle que le client l'affiche (tenue comprise), `ShotFired` puis
+`HitscanDamage` au même `shotTime` ; joueur et bots à 1e6 PV ou plus (sinon chaque touche tue le bot et la boucle attend
+les réapparitions), `DebugDummy` détruit, 3 bots en mouvement (bhop jusqu'à 81 studs/s), 7 à 347 studs. Compteurs posés
+côté `Server` (`OnServerEvent` de `HitscanDamage` : touche appliquée si les PV de la cible baissent, `MessageOut` pour
+les lignes `[CheatLog]`). `DebugPlaytest` AWP : PASS 9/9.
+
+- Rig du `StarterCharacter` (échelle ~1,59) : allonge `armReach` = 3,81 studs ; déplacement de l'épaule
+  `holdShoulderShift` relevé de 0,56 à 1,71 stud selon la taille animée du bot, d'où un rayon de 4,4 à 5,5 studs
+  (+ 2 + vitesse × 0,05 de tolérance).
+- **Tirs honnêtes : 50 touches jugées, dont 42 sur un membre** (mains, avant-bras, bras, deux côtés) et 8 sur la
+  tête ou le torse ; 45 appliquées, 5 refusées par `magazine` (voir plus bas) : **aucune violation `direction`**. À
+  titre indicatif, 26 des 42 impacts sur un membre étaient à plus de l'ancienne limite (rayon de la partie + 2) de la
+  position serveur actuelle de la partie, jusqu'à 4,4 studs au-delà.
+  Autres lignes : 5 `magazine` (script de mesure qui n'attendait que 4,2 s après `Reload`, alors que le rechargement
+  ne compte qu'à partir de la cadence du dernier tir : attendre 5,5 s) et 1 `ping` (`instant 0.11 s avant l'arrivée
+  (max 0.10 s, ping 0 ms)`, frame lente de Studio, hors périmètre).
+- **Tirs truqués** (silent aim sur un membre) : 4 rayons à 9 à 13 studs du torse vu, tous signalés (« rayon à 8.3 à
+  11.5 studs de la partie (max 7.7 à 9.2) ; <membre> jugé dans l'allonge de l'épaule »), et un à 10 studs de la partie
+  vue (10,4 pour 8,6). Trois rayons décalés de 6,5 à 8 studs de la partie **vue** sont passés : la partie tenue étant
+  devant le corps, ce décalage les ramenait à moins de l'allonge + tolérance de l'épaule (bots à 20-36 studs/s, soit
+  1 à 1,8 stud de tolérance de vitesse en plus) ; c'est la marge décrite plus haut.
+- **Piège de la méthode** : `DebugPlaytest` range l'arme en fin de run ; sans arme en main, les touches sont refusées
+  avant la validation, sans journal. Rééquiper (`Humanoid:EquipTool`) avant de tirer et vérifier que les touches sont
+  appliquées. La manche dure 300 s : au-delà, le joueur repasse au menu et les bots disparaissent. Borner les boucles
+  par `workspace:GetServerTimeNow()`, pas par `os.clock()` (temps CPU dans Studio, la boucle ne s'arrête pas).
 
 ### Distance (tranché, #174)
 
