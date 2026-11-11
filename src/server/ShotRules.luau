@@ -93,6 +93,9 @@ ShotRules.HIT_ON_RAY = 0.5
 ShotRules.RANGE_TOLERANCE = 10
 -- La ligne de vue s'arrête à cette distance (studs) avant l'impact : la surface de la cible n'est pas un obstacle.
 ShotRules.LINE_OF_SIGHT_END_MARGIN = 0.5
+-- Cadence d'une arme (s) : un tir est accepté FireDelay - CADENCE_TOLERANCE après le précédent (gigue entre deux
+-- paquets). Partagée par les touches (Validator) et le relais des tirs aux autres clients (ShotRelayRules, #156).
+ShotRules.CADENCE_TOLERANCE = 0.15
 -- Fenêtre (s) sur laquelle la vitesse d'un personnage est estimée dans son historique.
 ShotRules.SPEED_WINDOW = 0.1
 -- Equip (#175) : une touche est acceptée à partir de equippedAt + EquipTime - EQUIP_TOLERANCE. equippedAt est
@@ -133,6 +136,8 @@ local function isBoundedVector(v: any): boolean
 		and isBounded(v.Y, ShotRules.MAX_COORD)
 		and isBounded(v.Z, ShotRules.MAX_COORD)
 end
+
+ShotRules.isBoundedVector = isBoundedVector
 
 -- Cette méthode permet de vérifier la forme d'un tir lorsqu'il arrive (style CharacterSyncRules.isWellFormed) :
 -- trois Vector3 finis et bornés, direction unitaire, instant fini. Renvoie false et la raison sinon.

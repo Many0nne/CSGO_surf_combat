@@ -20,6 +20,8 @@ local toolState = {} -- [tool] = { ammo, reserve, magazine, lastFire }
 
 local meleeEvent = ReplicatedStorage:WaitForChild("MeleeDamage", 10) :: RemoteEvent?
 local hitscanEvent = ReplicatedStorage:WaitForChild("HitscanDamage", 10) :: RemoteEvent?
+-- Chaque tir à distance, touché ou manqué, est annoncé au serveur pour que les autres l'entendent (#156)
+local shotFiredEvent = ReplicatedStorage:WaitForChild("ShotFired", 10) :: RemoteEvent?
 local weaponActionEvent = ReplicatedStorage:WaitForChild("WeaponAction", 10) :: RemoteEvent?
 
 -- Cette méthode permet de signaler au serveur une action d'arme lorsqu'elle démarre localement,
@@ -425,7 +427,7 @@ function WeaponSystem.init(player)
 
 	ScopeSystem.init(FPSCamera, ViewmodelSystem)
 	MeleeHitDetection.init(meleeEvent)
-	HitscanSystem.init(hitscanEvent)
+	HitscanSystem.init(hitscanEvent, shotFiredEvent)
 
 	RunService.Heartbeat:Connect(PerfMarkers.wrap("armes", function()
 		if InputModule.isReloadPressed() and currentTool and currentCfg then

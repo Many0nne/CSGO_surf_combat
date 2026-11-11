@@ -12,6 +12,8 @@ local WeaponThirdPerson = require(ReplicatedStorage.Shared.WeaponThirdPerson)
 
 -- Touche d'un bot à valider (personnage visé, partie touchée ; nil pour un coup de couteau)
 export type OnHit = (targetCharacter: Model, hitPart: BasePart?) -> ()
+-- Tir au fusil parti, touché ou manqué (origine = yeux, direction unitaire) : relayé aux joueurs pour le son (#156)
+export type OnFire = (origin: Vector3, direction: Vector3) -> ()
 
 local BotArsenal = {}
 BotArsenal.__index = BotArsenal
@@ -31,6 +33,7 @@ export type BotArsenal = typeof(setmetatable(
 		params: RaycastParams,
 		onHit: OnHit,
 		onWeapon: (string) -> (), -- arme changée (vitesse de course)
+		onFire: OnFire?,
 	},
 	BotArsenal
 ))
@@ -53,7 +56,7 @@ local function copyTool(name: string): Tool?
 end
 
 -- Cette méthode permet de créer les armes d'un bot lorsqu'il apparaît : fusil en main, couteau rangé.
-function BotArsenal.new(char: Model, onHit: OnHit, onWeapon: (string) -> ()): BotArsenal
+function BotArsenal.new(char: Model, onHit: OnHit, onWeapon: (string) -> (), onFire: OnFire?): BotArsenal
 	local bag = Instance.new("Folder")
 	bag.Name = BAG_NAME
 	bag.Parent = char
@@ -80,6 +83,7 @@ function BotArsenal.new(char: Model, onHit: OnHit, onWeapon: (string) -> ()): Bo
 		params = params,
 		onHit = onHit,
 		onWeapon = onWeapon,
+		onFire = onFire,
 	}, BotArsenal)
 	self:equip(BotCombatRules.RIFLE, os.clock())
 	return self
@@ -177,6 +181,10 @@ function BotArsenal.fire(self: BotArsenal, now: number, eye: Vector3, direction:
 		return nil
 	end
 	self.ammo -= 1
+	-- Son du tir chez les joueurs (#156), avant la touche : comme chez un joueur, le tir s'entend avant ses dégâts
+	if self.onFire then
+		self.onFire(eye, direction)
+	end
 	local result = workspace:Raycast(eye, direction * MAX_RAY, self.params)
 	if result then
 		local victim = characterOf(result.Instance)

@@ -6,6 +6,7 @@ local CharacterSync = require(script.systems.network.CharacterSync)
 local ViewmodelSystem = require(script.systems.weapon.ViewmodelSystem)
 local WeaponSystem = require(script.systems.weapon.WeaponSystem)
 local WeaponThirdPersonView = require(script.systems.weapon.WeaponThirdPersonView)
+local RemoteShotSounds = require(script.systems.weapon.RemoteShotSounds)
 local FPSCamera = require(script.camera.FPSCamera)
 local SettingsMenu = require(script.ui.SettingsMenu)
 local LocalSettings = require(script.systems.settings.LocalSettings)
@@ -83,6 +84,8 @@ Hitmarker.init()
 -- GameStateController orchestre les transitions d'état, le spawn et tous les UIs.
 -- Il appelle setupCharacter au bon moment (après LoadCharacter côté serveur).
 GameStateController.init(player, setupCharacter)
+-- Tirs des autres joueurs et des bots entendus en 3D (#156), hors écrans du menu
+RemoteShotSounds.init(GameStateController.getState)
 
 -- Helper de playtest debug (#30) : ne fait rien hors Studio (garde RunService:IsStudio() dans init).
 DebugPlaytest.init({
