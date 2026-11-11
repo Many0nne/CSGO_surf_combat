@@ -3,6 +3,10 @@
 
 local WeaponConfig = {}
 
+-- Portée (studs) du rayon des armes à distance, tirée par le client (HitscanSystem) et vérifiée par le serveur
+-- (ShotRules.checkDistance, avec une marge) : un tir légitime n'est jamais refusé pour sa distance (#174).
+WeaponConfig.HITSCAN_RANGE = 2048
+
 WeaponConfig.Weapons = {
 	AWP = {
 		Name = "AWP",

@@ -22,15 +22,15 @@ envoyant des données plausibles. Là, on ne peut que détecter statistiquement,
 
 | Domaine | Validation actuelle | Où |
 |---|---|---|
-| Mêlée | Cible = autre participant vivant, arme de mêlée réellement en main, distance des racines ≤ 10 studs, dégâts et cadence lus dans `WeaponConfig` selon le type d'attaque, backstab recalculé sur les positions serveur (#47) | `src/server/Validator.luau:119-137` |
-| Tir | Cible valide, arme à distance en main, partie touchée appartenant à la cible, distance des racines ≤ 250 studs, cadence `FireDelay` à 0,15 s près, dégâts calculés par le serveur selon la zone | `src/server/Validator.luau:97-115` |
+| Mêlée | Cible = autre participant vivant, arme de mêlée réellement en main, distance des racines ≤ 10 studs, dégâts et cadence lus dans `WeaponConfig` selon le type d'attaque, backstab recalculé sur les positions serveur (#47) | `src/server/Validator.luau:273-291` |
+| Tir | Cible valide (vivante), arme à distance en main, partie touchée appartenant à la cible, distance des racines ≤ `Validator.MAX_HITSCAN_RANGE` (~2 196 studs ; bots : 250), cadence `FireDelay` à 0,15 s près, dégâts calculés par le serveur selon la zone ; pour un joueur, forme, origine, visée sur la cible rembobinée, portée et ligne de vue (#174, voir T1) | `src/server/Validator.luau` (`authorizeHitscan`, `validateShot`), `src/server/ShotRules.luau` |
 | Position | Forme (Vector3 et angle finis, coordonnées ≤ 1e5), personnage vivant, seau de distance (300 studs/s soutenus, silence plafonné), refus journalisé et corrigé (#172) | `src/server/CharacterSync.luau:113-165`, `src/shared/CharacterSyncRules.luau:49-60` |
 | Réglages | Réglages entièrement assainis par `PlayerSettings.sanitize`, une écriture DataStore au plus toutes les 10 s | `src/server/SettingsStore.luau:113-130` |
 | Feedback | Type `string`, longueur 10 à 500, délai de 60 s après un envoi réussi, 5 envois par semaine (DataStore) | `src/server/FeedbackService.luau:76-104` |
 | Debug | Remote `DebugPlaytest` créé seulement dans Studio | `src/server/DebugPlaytest.luau:365-372` |
 | Tous les remotes C→S | Garde commune (#170) : débit par joueur et par remote, types des arguments, violations journalisées, kick à 3 violations fortes | `src/server/RemoteGuard.luau`, `src/server/CheatLog.luau` |
 
-Les bots (`src/server/bots/`) passent par le même `Validator` (`src/server/init.server.luau:285-292`) : leurs tirs sont
+Les bots (`src/server/bots/`) passent par le même `Validator` (`src/server/init.server.luau:335-349`) : leurs tirs sont
 des raycasts serveur (`src/server/bots/BotArsenal.luau:184`), leurs munitions et leur temps de sortie sont gérés par
 `BotArsenal` (`:110`, `:116-122`, `:142-148`). Toute nouvelle parade doit donc soit valoir aussi pour eux sans les gêner,
 soit être réservée aux joueurs (`participant.isBot`), ce qui est indiqué pour chaque parade.
@@ -56,9 +56,9 @@ Les sections suivantes détaillent chaque menace : ce que fait le code, le risqu
 
 ### T1. Ligne de vue, direction, distance, compensation de latence
 
-**Aujourd'hui.** Le client fait le raycast depuis la caméra (`src/client/systems/weapon/HitscanSystem.luau:57-59`) et
-envoie seulement `(targetChar, hitPart)` (`:78`). Le serveur vérifie la cible, l'arme, l'appartenance de la partie
-et la distance des racines (`src/server/Validator.luau:103-110`) ; il ne sait pas d'où ni vers où le tir est parti.
+**Avant #174.** Le client faisait le raycast depuis la caméra et envoyait seulement `(targetChar, hitPart)` ; le
+serveur vérifiait la cible, l'arme, l'appartenance de la partie et la distance des racines, sans savoir d'où ni vers où
+le tir était parti. **Fait (#174)** : la parade ci-dessous, détails dans « Tolérances et modes ».
 
 **Risque.** Un client modifié envoie `HitscanDamage(n'importe quel ennemi, sa Head)` sans le regarder ni le voir :
 l'AWP fait 115 × 4 = 460 dégâts à la tête (`src/shared/WeaponConfig.luau:13`, `src/shared/HitZones.luau:16`), donc
@@ -100,8 +100,9 @@ dans la borne de rembobinage, d'où la borne courte
 ([Making exploiter-proof guns](https://devforum.roblox.com/t/making-exploiter-proof-guns/235423)).
 
 **Bots.** Leurs tirs sont des raycasts serveur depuis leurs yeux (`BotArsenal.luau:184`) : rembobinage à 0, origine
-et ligne de vue vraies par construction. Garder pour eux le chemin actuel (`participant.isBot`) et le couvrir par un
-test pour qu'un bot ne voie aucun tir refusé.
+et ligne de vue vraies par construction. Ils gardent le chemin sans `shot` (`participant.isBot` dans
+`Validator.authorizeHitscan`), couvert par le test « ne refuse aucun tir de bot, tous contrôles bloquants »
+(`tests/specs/Validator.spec.luau`).
 
 **Coût.** Serveur : 1 raycast et quelques calculs vectoriels par tir accepté, négligeable à 41 coups/min. Mémoire :
 35 relevés par personnage au plus. Réseau : ~60 octets de plus par tir. Complexité : moyenne (historique, tolérances à régler).
@@ -111,17 +112,89 @@ test pour qu'un bot ne voie aucun tir refusé.
 **Faux positifs.** Gros ping, gigue, cible en surf rapide. Lancer d'abord la validation en mode « journal seul »
 (tirs comptés comme refusables mais appliqués), mesurer, puis l'activer.
 
-### Distance
+### Tolérances et modes (#174)
 
-`MAX_HITSCAN_RANGE = 250` (`src/server/Validator.luau:9`) alors que le client tire à 2 048 studs
-(`HitscanSystem.luau:58`) : un tir légitime au-delà de 250 studs est refusé sans retour au tireur. Les bots tirent à 240
-au plus pour cette raison (`src/shared/BotConfig.luau:108`). À trancher avec la taille des maps (voir « Trouvé » du
-compte rendu de #160) ; la borne reste nécessaire contre T1.
+Le client envoie `HitscanDamage(targetChar, hitPart, origin, direction, hitPos, shotTime)`
+(`src/client/systems/weapon/HitscanSystem.luau`) : origine et direction de la caméra, point d'impact de son raycast,
+`workspace:GetServerTimeNow()` pris juste avant. La garde commune vérifie les types (Vector3 et nombre finis) ; un ancien
+client à deux arguments est une violation forte `RemoteArgs`. Puis `Validator.authorizeHitscan` (après cible, arme,
+partie et cadence, donc un tir refusé ne relance pas la cadence) applique les règles pures de `src/server/ShotRules.luau`.
+Les accès au monde (horloge serveur, `CharacterSync.positionAt`, raycast, `CheatLog`) sont branchés par
+`Validator.setShotWorld` dans `init.server.luau`, et simulés dans les tests.
+
+| Contrôle | Règle (constantes de `ShotRules`) | Mode livré | Gravité |
+|---|---|---|---|
+| `shape` | Trois Vector3 finis et ≤ 1e5 (`MAX_COORD`), `|direction|` = 1 à `UNIT_TOLERANCE` (1e-3) près, `shotTime` fini | `block` | forte |
+| `origin` | À moins de `ORIGIN_BASE` (5) + vitesse du tireur × `ORIGIN_SPEED_FACTOR` (0,1) studs de sa racine actuelle ou de sa position à `shotTime` (borné à `[now - 0,4 s, now]`). La caméra est à 2,5 studs au-dessus de la racine | `log` | moyenne |
+| `direction` | Impact sur le rayon (à `HIT_ON_RAY` = 0,5 stud près, devant l'origine) ; rayon et impact à moins de rayon englobant de la partie (`Size.Magnitude / 2`) + `DIRECTION_BASE` (2) + vitesse de la cible × `DIRECTION_SPEED_FACTOR` (0,05) de la partie rembobinée. Partie rembobinée = racine à `shotTime - INTERP_DELAY` (borné à `[now - 0,4 s, now]`) + décalage de la partie sur le rig serveur | `log` | moyenne |
+| `distance` | `|hitPos - origin|` ≤ `WeaponConfig.HITSCAN_RANGE` (2 048, la portée du client) + `RANGE_TOLERANCE` (10) | `block` | moyenne |
+| `lineOfSight` | Raycast serveur de `origin` jusqu'à `LINE_OF_SIGHT_END_MARGIN` (0,5 stud) avant `hitPos` (avant la partie rembobinée si l'impact n'est pas sur elle : un impact forgé près de l'origine ne raccourcit pas le segment), limité à `Workspace.Maps` (inclusion) : aucun obstacle | `log` | moyenne |
+
+- Ancienne borne gardée en journal seul : un échec `origin` ou `lineOfSight` en mode `log` refuse quand même le tir si
+  les racines sont à plus de `LOG_ONLY_RANGE` = 250 studs (`ShotRules.refuses`, détail « refusé : au-delà de 250
+  studs »). Avant #174 tout tir au-delà était refusé : la phase de mesure n'ouvre donc pas le tir à travers les murs à
+  2 000 studs. `direction` n'y est pas soumis (faux positif mesuré, voir plus bas) : un tir lointain légitime ne tombe
+  pas dessus. Retirer un contrôle de `LOG_ONLY_RANGE_CHECKS` quand il passe en `block`, la liste devient alors inutile.
+- Vitesses : estimées dans l'historique (#173) sur une fenêtre de `SPEED_WINDOW` = 0,1 s autour de l'instant voulu,
+  décalée pour tenir dans la borne de rembobinage et divisée par sa vraie durée (`ShotRules.speedWindow`) ; 0 sans
+  historique (cible `DebugDummy`, personnage tout juste apparu).
+- Monde non branché (`Validator.setShotWorld` jamais appelé) : tout tir de joueur est refusé, avec un warn unique.
+  Jamais de validation qui passe tout en silence.
+- Cible vivante : vérifiée avant le rembobinage (`isValidTarget`) : `positionAt` répond encore entre la mort et la
+  destruction du corps (`CORPSE_HANDOFF_DELAY`), un tir sur le corps est refusé avant.
+- Journal : catégorie `Hitscan`, source `Hitscan:<contrôle>` (un contrôle ne compte qu'une violation forte par seconde
+  pour le kick), détail suffixé « (journal seul) » en mode `log`. Le détail d'un échec `direction` donne la partie, la
+  vitesse de la cible et le rembobinage, pour régler les tolérances.
+- Point de branchement du relais aux autres clients (#156) : le handler `HitscanDamage` de `init.server.luau`, quand
+  `damage` n'est pas nil (tir validé).
+
+**Mesure en Studio (#174, 2026-11-11).** 32 tirs honnêtes simulés depuis le client (raycast de `HitscanSystem` sur les
+bots tels que le client les affiche, bhop jusqu'à 77 studs/s, 1 à 280 studs, Studio donc sans latence) : 1 violation
+`direction` (rayon à 6,0 studs de la partie pour 5,0 permis), aucune autre. Tirs truqués : silent aim (`direction`),
+tir à travers un mur à 414 studs (`lineOfSight`), direction non unitaire (`shape`, refusé) tous signalés. Après la
+revue, 15 tirs honnêtes de plus (10 à 139 studs) sans aucune violation, et un impact forgé collé à l'origine vers une
+cible masquée à 366 studs refusé (ligne de vue testée jusqu'à la partie, `LOG_ONLY_RANGE`). À refaire en jeu publié
+avec du vrai ping avant de bloquer. Méthode : en Play, contexte `Client` d'`execute_luau`, rejouer le raycast de
+`HitscanSystem` vers la tête d'un bot et appeler `HitscanDamage:FireServer` avec les six arguments (joueur rendu
+résistant côté serveur, `DebugDummy` détruit), puis lire les lignes `[CheatLog]` (une par 2 s au plus par joueur).
+
+**Piège des tests Lune.** Une Instance de `@lune/roblox` lue par une propriété (`part.Parent`, `FindFirstChild`)
+est un nouvel userdata : `==` marche, mais elle ne retrouve pas une clé de table posée avec une autre référence au
+même objet (`t[part.Parent]` vaut nil). Passer les personnages tels que le code les a obtenus (`resolveAttack` renvoie
+`aChar`) plutôt que de les relire par `Parent`. Et une `Part` neuve n'a pas de `Position` par défaut sous Lune (erreur
+à la lecture) : la poser dans les tests (`addPart` de `Validator.spec.luau`).
+
+**Limites connues (à traiter avant `block` si la mesure les montre).** (1) Seule la racine est rembobinée : le
+décalage de la partie touchée est pris sur le rig serveur à l'arrivée du tir, pas dans la pose (accroupi, animation,
+cap) que voyait le tireur ; c'est la cause probable du faux positif mesuré sur une main. Piste : garder aussi le cap
+et l'état accroupi dans l'historique, ou élargir `DIRECTION_BASE` pour les membres. (2) `shotTime` est choisi par le
+client dans `[now - 0,4 s, now]` : un client modifié peut viser une position de la cible jusqu'à 0,4 s en arrière
+(« backtrack »). Piste : borner `now - shotTime` par la latence mesurée du joueur (RTT de `CharacterSync` ou
+`Player:GetNetworkPing()`) plus une marge.
+
+**Passer un contrôle en `block`.** 1. Laisser tourner en jeu publié en `log` (au moins quelques centaines de tirs, dont
+du surf rapide et des joueurs à fort ping). 2. Lire les résumés `CheatLog` du webhook : compter les violations
+`Hitscan` de joueurs honnêtes par contrôle, et relever dans les détails l'écart au maximum permis. 3. Si besoin,
+élargir la tolérance en cause (`ORIGIN_*`, `DIRECTION_*`) jusqu'à ne plus en avoir, sans dépasser ce qui laisse passer
+un hitbox expander utile (rester sous ~2 fois le rayon d'une tête). 4. Passer le contrôle à `"block"` dans
+`ShotRules.MODES`, mettre à jour le tableau ci-dessus et le test « livre origine, direction et ligne de vue en journal
+seul » (`tests/specs/Validator.spec.luau`). Les tests « mode block » couvrent déjà le refus.
+
+### Distance (tranché, #174)
+
+La portée du serveur est celle du client : `WeaponConfig.HITSCAN_RANGE` = 2 048 studs, tirée par `HitscanSystem` et
+vérifiée par le contrôle `distance` (+ 10 studs). L'ancienne borne de 250 studs entre racines, qui refusait sans retour
+un tir légitime lointain, devient pour les joueurs `Validator.MAX_HITSCAN_RANGE` ≈ 2 196 studs (portée +
+`MAX_SPEED_SERVER` × `MAX_REWIND`, chemin possible de la cible pendant le rembobinage, + hauteur de caméra + 25 de
+marge, calculé depuis ces constantes). Un échec `origin` ou `lineOfSight` au-delà de 250 studs reste refusé pendant la
+mesure (`LOG_ONLY_RANGE`, voir plus haut). Les bots gardent 250 studs (`BOT_HITSCAN_RANGE`, tirs inchangés) : ils
+visent à 240 au plus (`src/shared/BotConfig.luau`), mais leur rayon serveur porte à 2 048 studs (`BotArsenal.MAX_RAY`)
+et toucherait sinon un joueur lointain derrière une cible manquée.
 
 ### T2. Cadence, munitions, durée d'equip
 
-**Cadence (fait).** Une seule cadence par arme et par participant, à 0,15 s près (`Validator.luau:13`, `:79-93`),
-remise à zéro à l'apparition (`src/server/init.server.luau:150`). Un tir refusé ne relance pas la cadence : le spam est
+**Cadence (fait).** Une seule cadence par arme et par participant, à 0,15 s près (`Validator.luau:25`, `:107-121`),
+remise à zéro à l'apparition (`src/server/init.server.luau:156`). Un tir refusé ne relance pas la cadence : le spam est
 sans effet.
 
 **Munitions, aujourd'hui.** Suivies seulement par le client (`src/client/systems/weapon/WeaponSystem.luau:52-54`,
@@ -155,7 +228,7 @@ Valable pour les bots sans effet (ils attendent déjà `EquipTime`, `BotArsenal.
 
 ### M1. Orientation et ligne de vue
 
-**Aujourd'hui.** #47 a réglé dégâts, cadence et arme en main (`Validator.luau:119-137`). Restent : la distance est
+**Aujourd'hui.** #47 a réglé dégâts, cadence et arme en main (`Validator.luau:273-291`). Restent : la distance est
 mesurée entre racines (10 studs, `:10`, alors que l'arme porte à 7,5, `WeaponConfig.luau:76`), sans regarder la
 direction du tireur ni les obstacles.
 
@@ -201,7 +274,7 @@ joueur. Dizzy n'a ni boost ni `SunLaunch` aujourd'hui ; une map qui en ajoute do
    joueur honnête qui a laggé.
 
 **Risque.** Critique : vitesse plus que doublée en continu, et téléportation n'importe où en se taisant. La position
-acceptée est celle que le `Validator` utilise pour la portée (`Validator.luau:65-67`) : se téléporter dans le dos d'une
+acceptée est celle que le `Validator` utilise pour la portée (`Validator.luau:95`) : se téléporter dans le dos d'une
 cible rend le kill aura (M1) praticable sur toute la map.
 
 **Parade en place (#172).**
@@ -290,8 +363,8 @@ commune (débit et types, voir R1) ; la colonne « Validation actuelle » décri
 
 | Remote | Sens | Arguments | Validation actuelle | Manque |
 |---|---|---|---|---|
-| `MeleeDamage` | C→S | `targetChar, attackKind` | Cible, arme, portée, type d'attaque, cadence, dégâts serveur (`Validator.luau:119-137`) | Orientation, ligne de vue (M1), equip (T2), tireur vivant |
-| `HitscanDamage` | C→S | `targetChar, hitPart` | Cible, arme, partie de la cible, portée 250, cadence (`Validator.luau:97-115`) | Origine, direction, ligne de vue, rembobinage (T1), munitions, equip (T2), tireur vivant |
+| `MeleeDamage` | C→S | `targetChar, attackKind` | Cible, arme, portée, type d'attaque, cadence, dégâts serveur (`Validator.luau:273-291`) | Orientation, ligne de vue (M1), equip (T2), tireur vivant |
+| `HitscanDamage` | C→S | `targetChar, hitPart, origin, direction, hitPos, shotTime` | Cible, arme, partie de la cible, portée des racines, cadence ; forme, origine, visée rembobinée, portée 2 048, ligne de vue (T1, #174 : origine, visée et ligne de vue en journal seul) | Passage en `block` après mesure (T1), munitions, equip (T2), tireur vivant |
 | `CharacterSync` (non fiable) | C→S puis S→C | `pos, yaw, ack` | Forme, débit 40 Hz (garde), seau de distance et silence plafonné, refus corrigé (D1, `CharacterSync.luau:113-165`) | Noclip, vol (D2) |
 | `MovementCorrection` | S→C | `char, pos, seq` | — | — |
 | `WeaponAction` | C→S | `action` | Valeur `Shoot`/`Reload`, outil en main, 0,05 s mini (`init.server.luau:127-139`) | `Shoot` non lié à la cadence de l'arme : 20 faux tirs/s attirent les bots (`hearShot`, `:143`) et, avec #156, déclencheraient 20 sons chez tous |
@@ -438,7 +511,7 @@ CheatLog.summary(participant.id) -- bilan (compteurs, score présent, pire viola
 
 - **Gravités** (`CheatLog.Severity`) : `LOW`, `MEDIUM`, `HIGH`, au sens de « Classer les violations » ci-dessous.
 - **Catégories** (`CheatLog.Category`) : `RemoteRate`, `RemoteArgs` (garde des remotes), et réservées aux parades
-  suivantes : `Spawn` (#171, branchée : refus de `RequestSpawn`), `Movement` (#172), `Hitscan` (#174, #175), `Melee` (#176). Une nouvelle parade
+  suivantes : `Spawn` (#171, branchée : refus de `RequestSpawn`), `Movement` (#172), `Hitscan` (#174, branchée : contrôles du tir ; #175), `Melee` (#176). Une nouvelle parade
   ajoute sa catégorie à `CheatLog.Category` et ici, pour garder des noms stables dans le journal.
 - `warn` `[CheatLog]` limité à un toutes les `WARN_INTERVAL` (2 s) par joueur, le suivant dit combien ont été tus ;
   détail coupé à `MAX_DETAIL` octets sans couper de caractère, octets non UTF-8 remplacés par `?` (il peut contenir une
@@ -540,7 +613,7 @@ mode bloquant une fois mesurée.
   `docs/performance.md`) ; tests Lune (interpolation, bornes).
 - **Dépendances.** Aucune. **Priorité.** P1 (préalable de 5 et 7).
 
-### 5. Tir : origine, direction, ligne de vue et distance validées par le serveur — P1
+### 5. Tir : origine, direction, ligne de vue et distance validées par le serveur — P1 (fait, #174)
 
 - **Résumé.** T1 : le client envoie origine, direction, point d'impact et instant du tir ; le serveur vérifie origine,
   direction contre la cible rembobinée, ligne de vue sur la map, distance.

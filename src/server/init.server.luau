@@ -280,12 +280,55 @@ meleeRmt.OnServerEvent:Connect(function(player, targetCharacter, attackKind)
 	onHitVerdict(player, meleeRmt, targetCharacter, damage, false)
 end)
 
-hitscanRmt.OnServerEvent:Connect(function(player, targetCharacter, hitPart)
-	if not CheatLog.admit(player, N.HITSCAN_DAMAGE, targetCharacter, hitPart) then
+-- Cette méthode permet de tester la ligne de vue d'un tir lorsque le Validator la vérifie (#174) : raycast limité à la
+-- géométrie de la map jouée (Workspace.Maps, en inclusion : personnages et objets mobiles ignorés).
+-- Paramètres réutilisés tant que le dossier des maps est le même (reconstruits s'il est remplacé).
+local shotParams: RaycastParams? = nil
+local shotParamsMaps: Instance? = nil
+local warnedNoMaps = false
+local function isShotObstructed(from: Vector3, delta: Vector3): boolean
+	local maps = workspace:FindFirstChild("Maps")
+	if not maps then
+		-- Sans map, rien à tester : signalé une fois, la ligne de vue ne disparaît pas en silence
+		if not warnedNoMaps then
+			warnedNoMaps = true
+			warn("[Validator] Workspace.Maps introuvable : ligne de vue des tirs non vérifiée")
+		end
+		return false
+	end
+	if not shotParams or shotParamsMaps ~= maps then
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Include
+		params.FilterDescendantsInstances = { maps }
+		shotParams = params
+		shotParamsMaps = maps
+	end
+	return workspace:Raycast(from, delta, shotParams) ~= nil
+end
+
+-- Validation des tirs de joueurs (#174) : cible rembobinée sur l'historique de CharacterSync, échecs au journal
+Validator.setShotWorld({
+	-- Cette méthode permet de lire l'horloge serveur lorsqu'un tir est rembobiné (même horloge que l'historique).
+	serverNow = function()
+		return workspace:GetServerTimeNow()
+	end,
+	positionAt = CharacterSync.positionAt,
+	isObstructed = isShotObstructed,
+	-- Cette méthode permet de journaliser un contrôle de tir en échec lorsqu'il est constaté (catégorie Hitscan, une
+	-- source par contrôle pour le décompte des violations fortes).
+	report = function(attacker, check, severity, detail)
+		CheatLog.report(attacker, CheatLog.Category.HITSCAN, severity, detail, "Hitscan:" .. check)
+	end,
+})
+
+hitscanRmt.OnServerEvent:Connect(function(player, targetCharacter, hitPart, origin, direction, hitPos, shotTime)
+	if not CheatLog.admit(player, N.HITSCAN_DAMAGE, targetCharacter, hitPart, origin, direction, hitPos, shotTime) then
 		return
 	end
+	local shot = { origin = origin, direction = direction, hitPos = hitPos, shotTime = shotTime }
 	local damage, isHeadshot =
-		Validator.authorizeHitscan(Participants.fromPlayer(player), targetCharacter, hitPart, os.clock())
+		Validator.authorizeHitscan(Participants.fromPlayer(player), targetCharacter, hitPart, os.clock(), shot)
+	-- Tir validé (damage non nil) : point de branchement du relais aux autres clients (#156)
 	onHitVerdict(player, hitscanRmt, targetCharacter, damage, isHeadshot)
 end)
 
