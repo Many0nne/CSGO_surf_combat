@@ -8,6 +8,10 @@ Protocol.Names = {
 	HITSCAN_DAMAGE = "HitscanDamage",
 	-- Hitmarker (#44) : serveur → tireur, touche confirmée (arguments : cible morte, tir à la tête)
 	HIT_CONFIRM = "HitConfirm",
+	-- Tir entendu par les autres (#156) : client → serveur à chaque tir à distance, touché ou manqué (origine,
+	-- direction), puis serveur → autres clients (personnage du tireur, nom de l'arme, origine, direction), tirs de bots
+	-- compris ; le client joue le son de l'arme en 3D sur l'arme 3P du tireur (RemoteShotSounds)
+	SHOT_FIRED = "ShotFired",
 	-- Jeu
 	REQUEST_SPAWN = "RequestSpawn",
 	ROUND_STATE = "RoundState",

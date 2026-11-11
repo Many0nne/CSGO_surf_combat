@@ -24,6 +24,7 @@ local CharacterSync = require(script.CharacterSync)
 local BotManager = require(script.bots.BotManager)
 local ServerPerf = require(script.ServerPerf)
 local CheatLog = require(script.CheatLog)
+local ShotRelayRules = require(script.ShotRelayRules)
 
 -- Spawn contrôlé : on gère LoadCharacter nous-mêmes
 Players.CharacterAutoLoads = false
@@ -41,6 +42,8 @@ local N = NetworkProtocol.Names
 local meleeRmt = makeRemote(N.MELEE_DAMAGE)
 local hitscanRmt = makeRemote(N.HITSCAN_DAMAGE)
 local hitConfirmRmt = makeRemote(N.HIT_CONFIRM)
+-- Tirs entendus par les autres clients (#156) : client → serveur (tir), serveur → autres clients (relais)
+local shotFiredRmt = makeRemote(N.SHOT_FIRED)
 local spawnRmt = makeRemote(N.REQUEST_SPAWN)
 local roundStateRmt = makeRemote(N.ROUND_STATE)
 local scoreUpdateRmt = makeRemote(N.SCORE_UPDATE)
@@ -171,17 +174,57 @@ weaponActionRmt.OnServerEvent:Connect(function(player, action)
 		return
 	end
 	lastWeaponAction[player] = now
+	-- Pose 3P seulement : l'ouïe des bots (#141) part des tirs acceptés par le serveur (relayShot, ShotFired, #156)
 	WeaponThirdPerson.setAction(char, action)
-	if action == "Shoot" then
-		-- Ouïe des bots (#141) : un tir s'entend autour du tireur
-		BotManager.hearShot(Participants.fromPlayer(player), char:GetPivot().Position)
+end)
+
+-- ── Tirs entendus par les autres clients (#156) ───────────────────────────
+
+-- Cadence du dernier tir relayé, par tireur et par arme (ShotRelayRules)
+local shotRelay = ShotRelayRules.new()
+
+-- Cette méthode permet de relayer un tir à distance (joueur ou bot, touché ou manqué) aux autres clients lorsqu'il
+-- part et que le serveur l'accepte (Validator, ShotRelayRules) ; celui d'un joueur est aussi entendu par les bots.
+local function relayShot(participant: Participants.Participant, origin: Vector3, direction: Vector3): boolean
+	local char = Participants.characterOf(participant)
+	local humanoid = char and char:FindFirstChildWhichIsA("Humanoid")
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if not char or not humanoid or humanoid.Health <= 0 or not (root and root:IsA("BasePart")) then
+		return false
 	end
+	local tool = char:FindFirstChildOfClass("Tool")
+	local weaponName = tool and (tool:GetAttribute("WeaponName") or tool.Name)
+	if type(weaponName) ~= "string" then
+		return false
+	end
+	local now = os.clock()
+	if not Validator.isReadyToFire(participant, now) then
+		return false
+	end
+	if not ShotRelayRules.admit(shotRelay, participant, weaponName, origin, direction, root.Position, now) then
+		return false
+	end
+	for _, recipient in ShotRelayRules.recipients(Players:GetPlayers(), participant.player) do
+		shotFiredRmt:FireClient(recipient, char, weaponName, origin, direction)
+	end
+	if not participant.isBot then
+		BotManager.hearShot(participant, root.Position)
+	end
+	return true
+end
+
+shotFiredRmt.OnServerEvent:Connect(function(player, origin, direction)
+	if not CheatLog.admit(player, N.SHOT_FIRED, origin, direction) then
+		return
+	end
+	relayShot(Participants.fromPlayer(player), origin, direction)
 end)
 
 -- Cette méthode permet de brancher le personnage d'un participant (joueur ou bot, #139) lorsqu'il apparaît : arme 3P
 -- suivie, mort comptée dans le round (et dans les stats pour un joueur), corps laissé aux clients le temps du ragdoll.
 local function onParticipantCharacter(participant: Participants.Participant, char: Model, respawn: () -> ())
 	Validator.forget(participant)
+	ShotRelayRules.forget(shotRelay, participant)
 	trackWeapon3P(participant, char)
 	local humanoid = char:WaitForChild("Humanoid") :: Humanoid
 	humanoid.Died:Connect(function()
@@ -376,7 +419,7 @@ hitscanRmt.OnServerEvent:Connect(function(player, targetCharacter, hitPart, orig
 	local shot = { origin = origin, direction = direction, hitPos = hitPos, shotTime = shotTime }
 	local damage, isHeadshot =
 		Validator.authorizeHitscan(Participants.fromPlayer(player), targetCharacter, hitPart, os.clock(), shot)
-	-- Tir validé (damage non nil) : point de branchement du relais aux autres clients (#156)
+	-- Le son du tir chez les autres (#156) ne part pas d'ici : chaque tir, touché ou manqué, arrive d'abord par ShotFired
 	onHitVerdict(player, hitscanRmt, targetCharacter, damage, isHeadshot)
 end)
 
@@ -394,6 +437,10 @@ BotManager.init({
 	melee = function(bot, targetCharacter)
 		local damage = Validator.authorizeMelee(bot, targetCharacter, "primary", os.clock())
 		return if damage then applyHit(bot, targetCharacter, damage, false) else nil
+	end,
+	-- Tirs d'un bot entendus par les joueurs (#156), touchés ou manqués : même relais que ceux d'un joueur
+	shotFired = function(bot, origin, direction)
+		relayShot(bot, origin, direction)
 	end,
 	roundManager = RoundManager,
 })
@@ -437,6 +484,7 @@ Players.PlayerRemoving:Connect(function(player)
 	SpawnManager.forget(player)
 	local participant = Participants.fromPlayer(player)
 	Validator.forget(participant)
+	ShotRelayRules.forget(shotRelay, participant)
 	RoundManager.removeParticipant(participant)
 	Participants.remove(participant)
 	-- départ d'un joueur : ses Instances et connexions doivent avoir disparu au relevé (cf. docs/performance.md)

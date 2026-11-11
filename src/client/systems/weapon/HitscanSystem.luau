@@ -7,6 +7,7 @@ local WeaponConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChi
 local HitscanSystem = {}
 
 local hitscanEvent: RemoteEvent? = nil
+local shotFiredEvent: RemoteEvent? = nil
 
 local TRACER_LIFETIME = 0.1
 local TRACER_WIDTH = 0.05
@@ -39,8 +40,11 @@ local function spawnTracer(origin: Vector3, endpoint: Vector3)
 	Debris:AddItem(a1, TRACER_LIFETIME)
 end
 
-function HitscanSystem.init(event: RemoteEvent?)
+-- Cette méthode permet de brancher les remotes du tir lorsque le système d'armes démarre : touche (HitscanDamage) et
+-- tir parti, entendu par les autres joueurs (ShotFired, #156).
+function HitscanSystem.init(event: RemoteEvent?, shotEvent: RemoteEvent?)
 	hitscanEvent = event
+	shotFiredEvent = shotEvent
 end
 
 function HitscanSystem.resolveHit(activeViewmodel: Model?): string
@@ -61,6 +65,11 @@ function HitscanSystem.resolveHit(activeViewmodel: Model?): string
 	local direction = cam.CFrame.LookVector
 	-- Instant du tir sur l'horloge serveur : le serveur y rembobine la cible (#174)
 	local shotTime = workspace:GetServerTimeNow()
+	-- Tir parti, touché ou manqué : le serveur le relaie aux autres clients, qui jouent son son en 3D (#156).
+	-- Avant la touche : les deux remotes fiables arrivent dans cet ordre.
+	if shotFiredEvent then
+		shotFiredEvent:FireServer(origin, direction)
+	end
 	local ray_dir = direction * WeaponConfig.HITSCAN_RANGE
 	local result = workspace:Raycast(origin, ray_dir, params)
 	local endpoint = result and result.Position or (origin + ray_dir)

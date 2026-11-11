@@ -28,6 +28,7 @@ envoyant des données plausibles. Là, on ne peut que détecter statistiquement,
 | Réglages | Réglages entièrement assainis par `PlayerSettings.sanitize`, une écriture DataStore au plus toutes les 10 s | `src/server/SettingsStore.luau:113-130` |
 | Feedback | Type `string`, longueur 10 à 500, délai de 60 s après un envoi réussi, 5 envois par semaine (DataStore) | `src/server/FeedbackService.luau:76-104` |
 | Debug | Remote `DebugPlaytest` créé seulement dans Studio | `src/server/DebugPlaytest.luau:365-372` |
+| Relais des tirs (son chez les autres) | Tireur vivant, arme à distance en main prête (equip, chargeur), forme, origine près du tireur, cadence de l'arme (#156) | `src/server/ShotRelayRules.luau`, `Validator.isReadyToFire`, `relayShot` de `src/server/init.server.luau` |
 | Tous les remotes C→S | Garde commune (#170) : débit par joueur et par remote, types des arguments, violations journalisées, kick à 3 violations fortes | `src/server/RemoteGuard.luau`, `src/server/CheatLog.luau` |
 
 Les bots (`src/server/bots/`) passent par le même `Validator` (`BotManager.init` dans `src/server/init.server.luau`) : leurs tirs sont
@@ -145,8 +146,8 @@ Les accès au monde (horloge serveur, `CharacterSync.positionAt`, raycast, `Chea
 - Journal : catégorie `Hitscan`, source `Hitscan:<contrôle>` (un contrôle ne compte qu'une violation forte par seconde
   pour le kick), détail suffixé « (journal seul) » en mode `log`. Le détail d'un échec `direction` donne la partie, la
   vitesse de la cible et le rembobinage, pour régler les tolérances.
-- Point de branchement du relais aux autres clients (#156) : le handler `HitscanDamage` de `init.server.luau`, quand
-  `damage` n'est pas nil (tir validé).
+- Relais aux autres clients (#156) : pas depuis `HitscanDamage`, qui n'arrive que pour une touche. Chaque tir, touché
+  ou manqué, est annoncé par `ShotFired` juste avant (voir « Relais des tirs » dans « Remotes »).
 
 **Mesure en Studio (#174, 2026-11-11).** 32 tirs honnêtes simulés depuis le client (raycast de `HitscanSystem` sur les
 bots tels que le client les affiche, bhop jusqu'à 77 studs/s, 1 à 280 studs, Studio donc sans latence) : 1 violation
@@ -227,8 +228,9 @@ contrôles de plus. Règles pures dans `src/server/ShotRules.luau` (`checkEquip`
   ne peut pas recharger avant). Changement ou rangement d'arme (`ChildRemoved`, `Validator.noteUnequip`) : rechargement
   inachevé annulé, rechargement fini acquis, à `RELOAD_CANCEL_TOLERANCE` (1 s) près : sinon un `Reload` arrivé en
   retard, suivi d'un changement d'arme juste après la fin du rechargement côté client, ferait refuser tout le chargeur
-  suivant. Un tricheur n'y gagne rien (ressortir l'AWP coûte 1,38 s d'equip au moins). Seules les touches sont comptées (les tirs manqués n'arrivent pas au
-  serveur) : le compteur serveur est toujours ≤ celui du client, jamais plus strict.
+  suivant. Un tricheur n'y gagne rien (ressortir l'AWP coûte 1,38 s d'equip au moins). Seules les touches sont comptées
+  (les tirs manqués arrivent par `ShotFired` depuis #156, mais ne sont pas comptés : un `ShotFired` perdu ou refusé
+  ne doit pas faire refuser une touche) : le compteur serveur est toujours ≤ celui du client, jamais plus strict.
 - **Bots.** Exclus des deux contrôles (`attacker.isBot`) : `BotArsenal` fait déjà respecter equip, chargeur et
   rechargement, et ses tirs sont des raycasts serveur. Leur equip n'est pas noté (`trackWeapon3P`) : rien à retenir, et
   `BotManager` ne rappelle pas `Validator.forget` au retrait d'un bot. Tests : 12 tirs de bot d'affilée et tir dès la
@@ -534,7 +536,8 @@ commune (débit et types, voir R1) ; la colonne « Validation actuelle » décri
 | `HitscanDamage` | C→S | `targetChar, hitPart, origin, direction, hitPos, shotTime` | Cible, arme, partie de la cible, portée des racines, cadence ; forme, origine, visée rembobinée, portée 2 048, ligne de vue (T1, #174 : origine, visée et ligne de vue en journal seul) ; durée d'equip et chargeur (T2, #175) | Passage en `block` après mesure (T1), tireur vivant |
 | `CharacterSync` (non fiable) | C→S puis S→C | `pos, yaw, ack` | Forme, débit 40 Hz (garde), seau de distance et silence plafonné, refus corrigé (D1, `CharacterSync.luau:247-309`) ; noclip et vol au journal, vide (D2, #177) | Noclip et vol en mode bloquant après mesure (D2) |
 | `MovementCorrection` | S→C | `char, pos, seq` | — | — |
-| `WeaponAction` | C→S | `action` | Valeur `Shoot`/`Reload`, outil en main, 0,05 s mini (`init.server.luau`) ; `Reload` démarre le rechargement suivi par le serveur avant ces filtres (T2, #175) | `Shoot` non lié à la cadence de l'arme : 20 faux tirs/s attirent les bots (`BotManager.hearShot` dans le handler `WeaponAction`) et, avec #156, déclencheraient 20 sons chez tous |
+| `WeaponAction` | C→S | `action` | Valeur `Shoot`/`Reload`, outil en main, 0,05 s mini (`init.server.luau`) ; `Reload` démarre le rechargement suivi par le serveur avant ces filtres (T2, #175) | `Shoot` non lié à la cadence : sans effet hors pose 3P depuis #156 (ouïe des bots et son passés sur `ShotFired`) |
+| `ShotFired` | C→S puis S→C | `origin, direction` ; relais : `char, weaponName, origin, direction` | Garde (5/s), tireur vivant, arme à distance prête (`Validator.isReadyToFire` : equip, chargeur), forme, origine à `ORIGIN_MAX` (125 studs) de la racine, cadence `FireDelay` à 0,15 s près (`ShotRelayRules`, #156) ; refus non journalisé | Rien : sans dégâts, un tir forgé ne fait qu'un son, au plus un par cadence |
 | `RequestSpawn` | C→S | aucun | `SpawnRules.request` : spawn en vol, personnage en place, bannière de fin, mort depuis moins de `RESPAWN_DELAY` en round actif (`SpawnManager.luau:137-169`) | Rien (R1 fermé, #171) |
 | `LeaveRound` | C→S | aucun | Retour au menu (#157) : `RoundManager.withdraw` (score de la manche effacé, coups en attente du joueur oubliés, disparition du personnage non comptée), puis `SpawnManager.withdraw` (personnage détruit, plus de réapparition, prochain `RequestSpawn` accepté sans `RESPAWN_DELAY`) (`init.server.luau:249-259`, `SpawnManager.luau:156-167`) | Un client modifié peut s'en servir pour échapper à une mort imminente (l'adversaire ne gagne pas le kill) ou réapparaître plus tôt : il perd à chaque fois tout son score de la manche, comme un joueur qui quitte le jeu |
 | `SendFeedback` | C→S | `text` | Type, longueur, 60 s en mémoire après toute demande valide (posé avant le DataStore, quel que soit le résultat), 5 par semaine (`UpdateAsync`), rien d'écrit si la lecture échoue (`FeedbackService.luau:113-150`) | Rien (R1 fermé, #171) |
@@ -603,20 +606,35 @@ seau à jetons par joueur et par remote (débit et rafale), contrôles de type (
   sur un corps local en envoie. Ne jamais traiter un `nil` d'Instance comme une triche.
 
 Débits (`RemoteGuard.RULES`, en appels/s et rafale) calibrés au-dessus du client honnête, rafale réseau comprise :
-`MeleeDamage` 5/5 (couteau : 2,5/s au plus), `HitscanDamage` 5/5 (AWP : 0,7/s), `WeaponAction` 8/8 (un `Shoot` par tir
+`MeleeDamage` 5/5 (couteau : 2,5/s au plus), `HitscanDamage` et `ShotFired` 5/5 (AWP : 0,7/s), `WeaponAction` 8/8 (un `Shoot` par tir
 ou coup, un `Reload`), `CharacterSync` 40/60 (20 Hz, 3 s de paquets groupés après une coupure), `RequestSpawn` 1/3, `LeaveRound` 1/3,
 `SendFeedback` 0,5/3, `SaveSettings` 2/5 (1 envoi/s au plus), `GetSettings` 0,2/3 (une demande au démarrage ; borne
 aussi les demandes en attente du chargement). **Une nouvelle arme plus rapide (automatique) demande de relever
-`HitscanDamage` et `WeaponAction`**, et un nouveau remote C→S doit avoir sa règle (sinon tout appel est refusé, sans
+`HitscanDamage`, `ShotFired` et `WeaponAction`**, et un nouveau remote C→S doit avoir sa règle (sinon tout appel est refusé, sans
 violation, avec un warn `remote sans règle`) et un cas dans le test « accepte les appels de notre client ». Un appel
 arrivé après le départ du joueur (`player.Parent` nil, ex. juste après un kick) est ignoré sans rien recréer.
 Roblox limite déjà le débit client → serveur par type de remote, mais globalement, et sans le dire au jeu : la limite
 par remote est à faire soi-même ([Remote events](https://create.roblox.com/docs/scripting/events/remote),
 [Rate limiter module](https://devforum.roblox.com/t/rate-limiter-module-for-remotes/616268)).
 
-**`WeaponAction`.** Ne relayer (#156) et ne faire entendre aux bots que des tirs acceptés par le serveur : brancher le
-relais du son sur `Validator.authorizeHitscan` (et sur un tir « dans le vide » validé : cadence, munitions, equip), pas
-sur l'action visuelle du client.
+**Relais des tirs (fait, #156).** Le son d'un tir chez les autres et l'ouïe des bots ne partent plus de l'action
+visuelle `WeaponAction` mais d'un tir accepté par le serveur. Le client annonce chaque tir à distance, touché ou manqué,
+par `ShotFired(origin, direction)` (`HitscanSystem`, juste avant `HitscanDamage` : les remotes fiables d'un client
+arrivent dans l'ordre) ; les bots par `BotArsenal` (`onFire`, avant leur raycast). `relayShot` (`init.server.luau`)
+vérifie tireur vivant, arme à distance en main prête (`Validator.isReadyToFire` : equip et chargeur de T2, en lecture
+seule, sans journal), puis `ShotRelayRules.admit` : forme (Vector3 bornés, direction unitaire), origine à moins de
+`ORIGIN_MAX` (5 + 300 × 0,4 = 125 studs) de la racine serveur, cadence `FireDelay` à `CADENCE_TOLERANCE` (0,15 s) près,
+propre au relais (un tir refusé ne la relance pas, elle ne touche pas celle des touches). Accepté : relayé par
+`FireClient` à tous les joueurs sauf le tireur (`ShotRelayRules.recipients`), et entendu par les bots
+(`BotManager.hearShot`, joueurs seulement : ceux des bots passent par `BotBrain`). Pas de journal sur un refus : un tir
+sans dégâts ne rapporte rien, et un faux positif (gigue) n'a pas à compter. Limites : le chargeur serveur ne compte que les touches
+acceptées (T2) : un client modifié qui n'envoie que des `ShotFired` fait entendre un tir par `FireDelay` sans jamais
+recharger (sans dégâts ; compter les `ShotFired` dans le chargeur demanderait de revoir T2, une touche sans son
+`ShotFired` ne devant pas passer en douce) ; la cadence est jugée à l'arrivée, comme celle des touches : deux tirs
+groupés par une coupure réseau, le second est muet ; une touche peut être acceptée alors que son `ShotFired` a été écarté
+(son muet, dégâts appliqués) : les deux chemins sont indépendants exprès. Un coup de couteau n'est plus entendu par
+les bots (il passait par `WeaponAction`). Tests : `tests/specs/ShotRelayRules.spec.luau`, « tir relayé » de
+`tests/specs/Validator.spec.luau`.
 
 **Coût.** Négligeable. **Impact.** Ferme deux failles réelles et donne le point d'entrée commun de la journalisation.
 
@@ -896,10 +914,11 @@ mode bloquant une fois mesurée.
   faux positif (journal seul d'abord, puis test utilisateur) ; coût mesuré avec la sonde `ServerPerf`.
 - **Dépendances.** 3 (correction). **Priorité.** P2.
 
-### 9. Relais des tirs aux autres clients sur tirs validés seulement — P2 (dans #156)
+### 9. Relais des tirs aux autres clients sur tirs validés seulement — P2 (fait, #156)
 
-- **Résumé.** Pas d'issue séparée : contrainte à ajouter à #156. Le relais part d'un tir accepté par le serveur
+- **Résumé.** Pas d'issue séparée : contrainte ajoutée à #156. Le relais part d'un tir accepté par le serveur
   (cadence, munitions, equip), jamais de l'action visuelle `WeaponAction` du client ; `hearShot` des bots aussi.
+  Fait : remote `ShotFired`, voir « Relais des tirs » dans « Remotes ».
 - **Dépendances.** 6 de préférence. **Priorité.** suit #156.
 
 ### 10. Statistiques de visée (aimbot) — P3

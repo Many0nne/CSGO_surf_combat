@@ -137,6 +137,7 @@ return function(T, Loader)
 			T.expectEqual(honest(N.MELEE_DAMAGE, char, "secondary"), "ok")
 			local shot = { Vector3.new(0, 5, 0), Vector3.new(1, 0, 0), Vector3.new(80, 5, 0), 1234.5 }
 			T.expectEqual(honest(N.HITSCAN_DAMAGE, char, part, table.unpack(shot)), "ok")
+			T.expectEqual(honest(N.SHOT_FIRED, Vector3.new(0, 5, 0), Vector3.new(1, 0, 0)), "ok")
 			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.new(10, -500, 3), 3.1, 0), "ok")
 			T.expectEqual(honest(N.WEAPON_ACTION, "Shoot"), "ok")
 			T.expectEqual(honest(N.WEAPON_ACTION, "Reload"), "ok")

@@ -58,6 +58,14 @@ WeaponConfig.Weapons = {
 			Reload = { "Bolt", "ClipIn", "ClipOut", "ClipHit" },
 			Zoom = { "ZoomIn", "ZoomOut" },
 		},
+		-- Tir entendu par les autres joueurs (#156, ShotSoundRules) : son "Shoot" du viewmodel en 3D sur l'arme 3P du
+		-- tireur, plein jusqu'à RollOffMinDistance studs puis en 1/distance, coupé à RollOffMaxDistance (portée du
+		-- tir : l'AWP s'entend de loin, -20 dB à 400 studs).
+		RemoteShotSound = {
+			Sound = "Shoot",
+			RollOffMinDistance = 40,
+			RollOffMaxDistance = 2048,
+		},
 	},
 	M9Bayonet = {
 		Name = "M9 Bayonet",

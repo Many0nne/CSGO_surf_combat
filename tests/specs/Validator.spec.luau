@@ -150,6 +150,9 @@ return function(T, Loader)
 			noteEquip = function(attacker, tool, now)
 				Real.noteEquip(participantOf(attacker), tool, now)
 			end,
+			isReadyToFire = function(attacker, now)
+				return Real.isReadyToFire(participantOf(attacker), now)
+			end,
 		}
 		local function makePlayer(position: Vector3, weapon: string?, health: number?, facing: Vector3?)
 			nextUserId += 1
@@ -1250,6 +1253,85 @@ return function(T, Loader)
 		T.it("ne confirme rien si les PV n'ont pas baissé (ForceField)", function()
 			local Validator = setup()
 			T.expectEqual(Validator.hitOutcome(100, 100), nil)
+		end)
+	end)
+
+	T.describe("Validator : tir relayé aux autres clients (#156)", function()
+		T.it("prêt avec une arme à distance sortie et chargée", function()
+			local Validator, makePlayer = setup()
+			local a = makePlayer(Vector3.zero, "AWP")
+			T.expectEqual(Validator.isReadyToFire(a, 10), true)
+		end)
+
+		T.it("pas prêt sans arme, au couteau, ou avec une arme inconnue", function()
+			local Validator, makePlayer = setup()
+			T.expectEqual(Validator.isReadyToFire(makePlayer(Vector3.zero), 10), false, "sans arme")
+			T.expectEqual(Validator.isReadyToFire(makePlayer(Vector3.zero, "M9Bayonet"), 10), false, "couteau")
+			T.expectEqual(Validator.isReadyToFire(makePlayer(Vector3.zero, "Pistolet à eau"), 10), false, "inconnue")
+		end)
+
+		T.it("pas prêt pendant l'equip, prêt à EquipTime moins la tolérance", function()
+			local Validator, makePlayer, _, _, ShotRules = setup()
+			local a = makePlayer(Vector3.zero)
+			local awp = Instance.new("Tool")
+			awp.Name = "AWP"
+			awp.Parent = a.Character
+			Validator.noteEquip(a, awp, 10)
+			local ready = 10 + 1.58 - ShotRules.EQUIP_TOLERANCE
+			T.expectEqual(Validator.isReadyToFire(a, ready - 0.01), false, "pendant l'equip")
+			T.expectEqual(Validator.isReadyToFire(a, ready + 0.01), true, "equip fini")
+		end)
+
+		T.it("pas prêt chargeur vidé ou rechargement inachevé, prêt une fois rechargé", function()
+			local Validator, makePlayer, _, _, ShotRules = setup()
+			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(50, 0, 0))
+			local last = 10
+			for i = 1, 5 do
+				last = 10 + (i - 1) * 1.5
+				T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), last), 115, "tir " .. i)
+			end
+			T.expectEqual(Validator.isReadyToFire(a, last + 1.5), false, "chargeur vidé")
+			local reloadAt = last + 1.5
+			Validator.noteReload(a, reloadAt)
+			local ready = reloadAt + 3.7 - ShotRules.RELOAD_TOLERANCE
+			T.expectEqual(Validator.isReadyToFire(a, ready - 0.01), false, "rechargement inachevé")
+			T.expectEqual(Validator.isReadyToFire(a, ready + 0.01), true, "rechargé")
+		end)
+
+		T.it("ne journalise rien et ne relance pas la cadence d'une touche", function()
+			local Validator, makePlayer, _, world = setup()
+			local a, b = makePlayer(Vector3.zero), makePlayer(Vector3.new(50, 0, 0))
+			local awp = Instance.new("Tool")
+			awp.Name = "AWP"
+			awp.Parent = a.Character
+			Validator.noteEquip(a, awp, 9.9)
+			T.expectEqual(Validator.isReadyToFire(a, 10), false, "pendant l'equip")
+			T.expectEqual(#world.reports, 0, "aucune violation")
+			T.expectEqual(Validator.isReadyToFire(a, 20), true)
+			T.expectEqual(
+				Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), 20),
+				115,
+				"touche au même instant"
+			)
+		end)
+
+		T.it("un contrôle d'equip en mode log ne rend pas muet un tir que la touche accepterait", function()
+			local Validator, makePlayer, _, _, ShotRules = setup()
+			local a = makePlayer(Vector3.zero)
+			local awp = Instance.new("Tool")
+			awp.Name = "AWP"
+			awp.Parent = a.Character
+			Validator.noteEquip(a, awp, 10)
+			ShotRules.MODES.equip = "log"
+			T.expectEqual(Validator.isReadyToFire(a, 10.1), true, "equip en journal seul")
+			ShotRules.MODES.equip = "block"
+			T.expectEqual(Validator.isReadyToFire(a, 10.1), false, "equip bloquant")
+		end)
+
+		T.it("toujours prêt pour un bot armé d'un fusil (BotArsenal fait respecter equip et chargeur)", function()
+			local Validator, _, makeBot = setup()
+			T.expectEqual(Validator.isReadyToFire(makeBot(Vector3.zero, "AWP"), 0), true)
+			T.expectEqual(Validator.isReadyToFire(makeBot(Vector3.zero, "M9Bayonet"), 0), false, "couteau")
 		end)
 	end)
 end

@@ -44,6 +44,8 @@ export type Deps = {
 	-- renvoient "hit", "kill", ou nil si la touche est refusée ou sans effet
 	hitscan: (Participant, Model, BasePart) -> ("hit" | "kill")?,
 	melee: (Participant, Model) -> ("hit" | "kill")?,
+	-- Tir au fusil parti (touché ou manqué), relayé aux joueurs pour le son (#156) : tireur, origine, direction
+	shotFired: (Participant, Vector3, Vector3) -> (),
 	roundManager: {
 		isActive: () -> boolean,
 		addParticipant: (Participant) -> (),
@@ -206,6 +208,8 @@ local function spawnBot(bot: Bot)
 		end
 	end, function(weaponName: string)
 		motion:setWeapon(weaponName)
+	end, function(origin: Vector3, direction: Vector3)
+		deps.shotFired(participant, origin, direction)
 	end)
 	local id = participant.id
 	bot.brain = BotBrain.new({

@@ -91,8 +91,9 @@ réglages dans `BotConfig` (section « Comportement »). Il commande le suivi de
 - **Perception** (tous les `PERCEPTION_INTERVAL`) : un autre participant en vie est vu s'il est dans `VIEW_FOV` (100°)
   autour du regard, à moins de `VIEW_RANGE`, et si un rayon des yeux vers sa tête ou son torse n'est coupé que par
   lui (murs d'air ignorés). Cible : un humain plutôt qu'un bot, puis la plus proche.
-- **Ouïe** : `BotManager.hearShot` (appelé par `init.server` sur l'action `Shoot` d'un joueur, et par `BotBrain` pour
-  les tirs des bots). À moins de `HEARING_RADIUS` (200), position faussée d'au plus `HEARING_FUZZ` (20 %) de la distance.
+- **Ouïe** : `BotManager.hearShot` (appelé par `relayShot` d'`init.server` pour un tir au fusil d'un joueur accepté par
+  le serveur, remote `ShotFired`, #156 ; et par `BotBrain` pour les tirs des bots). Un coup de couteau ne s'entend pas,
+  ni un tir écarté du relais (cadence, equip, chargeur : cf. `docs/anticheat.md` « Relais des tirs »). À moins de `HEARING_RADIUS` (200), position faussée d'au plus `HEARING_FUZZ` (20 %) de la distance.
 - **Mémoire** : dernière position vue ou entendue par cible, oubliée après `MEMORY_TIME`.
 - **États** (`nextState`) : combattre (cible vue) > se replacer (après un kill, ou touché sous `REPLACE_HEALTH` en
   combat) > enquêter (contact pas encore fouillé : dernière position, puis `INVESTIGATE_POINTS` points voisins) >
