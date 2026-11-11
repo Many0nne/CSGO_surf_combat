@@ -8,7 +8,7 @@
 -- (deps.hitscan, deps.melee), tirs entendus par les autres bots.
 -- Population (#144) : les bots comblent les places vides (BotPopulationRules), un par un à l'arrivée d'un joueur, hors duel.
 -- Outillage Studio : l'attribut Workspace DebugBots fixe le nombre de bots (nombre, "+", "-", 0 pour tous les retirer,
--- nil ou "auto" pour la population automatique), DebugBotsFreeze fige les bots, DebugBotsPassive les empêche de tirer sur les humains, DebugNav affiche le plan (NavDebug).
+-- nil ou "auto" pour la population automatique), DebugBotsFreeze fige les bots, DebugBotsPassive les rend passifs, DebugNav affiche le plan (NavDebug).
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -482,7 +482,7 @@ function BotManager.init(dependencies: Deps)
 		workspace:GetAttributeChangedSignal(BotConfig.DEBUG_PASSIVE_ATTRIBUTE):Connect(applyDebugPassive)
 		workspace:GetAttributeChangedSignal(BotConfig.DEBUG_GOTO_ATTRIBUTE):Connect(applyDebugGoto)
 		applyDebugPassive()
-		applyDebugFreeze() -- avant applyDebugCommand : les bots créés par DebugBots naissent déjà figés
+		applyDebugFreeze() -- no-op sans bot ; ceux créés ensuite naissent figés (debugFrozen dans add)
 		applyDebugCommand()
 	end
 end

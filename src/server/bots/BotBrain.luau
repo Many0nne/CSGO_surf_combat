@@ -256,7 +256,7 @@ function BotBrain._perceive(self: BotBrain, now: number)
 		else
 			-- Perdue de vue : il reprend sa course, et n'enquête que parfois (pas de poursuite systématique)
 			self.targetId, self.targetPos, self.lastShot, self.targetVisible = nil, nil, nil, false
-			self.targetChar, self.targetSpawnedAt, self.targetSpeed = nil, nil, 0
+			self.targetChar, self.targetSpawnedAt, self.targetSpeed, self.targetIsHuman = nil, nil, 0, false
 			if not BotBehaviorRules.investigateLost(self.rng:NextNumber()) then
 				-- Contacts jusqu'ici tenus pour fouillés ; un tir entendu à ce même regard reste à enquêter
 				self.investigated = now - 1e-3
