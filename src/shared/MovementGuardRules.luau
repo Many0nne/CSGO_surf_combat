@@ -69,7 +69,8 @@ export type Box = { CFrame: CFrame, Size: Vector3 }
 
 -- Vol d'un personnage : `anchored` faux tant qu'il est porté (le prochain paquet en l'air fixe l'enveloppe) ;
 -- l'enveloppe part de (anchorAt, anchorY) avec la vitesse verticale anchorVy au plus. lastAt/lastY : dernier paquet
--- jugé. launchVy : vitesse verticale imposée connue (lancement, geyser) à prendre au prochain décollage. baseY : hauteur
+-- jugé. launchVy : vitesse verticale du lancement depuis le soleil, et boostVy : celle d'un geyser ou d'un lanceur
+-- touché (oubliée dès un paquet porté hors du volume), à prendre au prochain décollage. baseY : hauteur
 -- du premier paquet en l'air, et count : paquets en l'air reçus depuis, pour resserrer l'enveloppe. suspect : le
 -- paquet précédent dépassait l'enveloppe (un vol n'est signalé qu'au second de suite).
 export type Flight = {
@@ -80,6 +81,7 @@ export type Flight = {
 	lastAt: number,
 	lastY: number,
 	launchVy: number,
+	boostVy: number,
 	baseY: number,
 	count: number,
 	suspect: boolean,
@@ -185,6 +187,7 @@ function MovementGuardRules.newFlight(now: number, y: number, launchVy: number?)
 		lastAt = now,
 		lastY = y,
 		launchVy = math.max(launchVy or 0, 0),
+		boostVy = 0,
 		baseY = y,
 		count = 0,
 		suspect = false,
@@ -207,6 +210,7 @@ function MovementGuardRules.restart(flight: Flight, now: number, y: number)
 	flight.lastAt = now
 	flight.lastY = y
 	flight.launchVy = 0
+	flight.boostVy = 0
 	flight.baseY = y
 	flight.count = 0
 	flight.suspect = false
@@ -217,8 +221,9 @@ end
 -- rampe pendant l'intervalle), bornée par la vitesse maximale du serveur.
 local function takeoffVy(flight: Flight, y: number): number
 	local rise = math.max(0, y - flight.lastY) / MovementGuardRules.MIN_PACKET_INTERVAL
-	local cap = math.max(MovementConfig.MAX_SPEED_SERVER, flight.launchVy) + MovementConfig.JUMP_VELOCITY
-	return math.min(math.max(rise, flight.launchVy) + MovementConfig.JUMP_VELOCITY, cap)
+	local imposed = math.max(flight.launchVy, flight.boostVy)
+	local cap = math.max(MovementConfig.MAX_SPEED_SERVER, imposed) + MovementConfig.JUMP_VELOCITY
+	return math.min(math.max(rise, imposed) + MovementConfig.JUMP_VELOCITY, cap)
 end
 
 -- Cette méthode permet de majorer la vitesse verticale actuelle d'un joueur en chute libre lorsque sa hauteur a varié
@@ -273,7 +278,7 @@ function MovementGuardRules.observe(flight: Flight, now: number, y: number, supp
 	if not flight.anchored then
 		flight.anchored = true
 		flight.anchorAt, flight.anchorY, flight.anchorVy = now, y, takeoffVy(flight, y)
-		flight.launchVy = 0
+		flight.launchVy, flight.boostVy = 0, 0
 		flight.lastAt, flight.lastY = now, y
 		flight.baseY, flight.count = y, 0
 		return true, 0
@@ -333,14 +338,15 @@ function MovementGuardRules.judge(
 			return noclip
 		end
 	end
-	local supported, launchVy = geometry.support(lastPos, pos)
-	-- Vitesse imposée retenue jusqu'au décollage suivant, oubliée dès un paquet porté sans boost (boost déjà dépassé)
-	if launchVy > 0 then
-		flight.launchVy = math.max(flight.launchVy, launchVy)
+	local supported, boostVy = geometry.support(lastPos, pos)
+	-- Vitesse d'un boost retenue jusqu'au décollage suivant, oubliée dès un paquet porté hors du volume (boost dépassé) ;
+	-- celle du lancement depuis le soleil ne l'est qu'au décollage (le premier paquet peut précéder le lancement)
+	if boostVy > 0 then
+		flight.boostVy = math.max(flight.boostVy, boostVy)
 	elseif supported then
-		flight.launchVy = 0
+		flight.boostVy = 0
 	end
-	local honest, excess = MovementGuardRules.observe(flight, now, pos.Y, supported or launchVy > 0)
+	local honest, excess = MovementGuardRules.observe(flight, now, pos.Y, supported or boostVy > 0)
 	-- Journal seul : un paquet n'est signalé qu'une fois, le noclip d'abord ; le vol a quand même suivi la position
 	if noclip or honest then
 		return noclip

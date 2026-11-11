@@ -388,12 +388,15 @@ par le seau (D1) passe par `MovementGuardRules.judge` (`judgeGuard`, `src/server
    seconde, pas à chaque paquet. Lancement depuis le soleil : la vitesse `LaunchVelocity` du personnage ouvre
    l'enveloppe. Correction (D1 ou D2) : enveloppe repartie de la position de correction avec la vitesse d'un saut.
 3. **Vide** (`fellIntoVoid`, boucle `checkVoid` toutes les 0,25 s) : joueur en l'air (dernier paquet jugé non porté),
-   sans paquet reçu depuis `VOID_SILENCE` (2 s ; un paquet ignoré en attente d'accusé compte comme signe de vie), dont
-   même la plus haute position de l'enveloppe est passée sous `KillHeight`, et sans aucune pièce de la map dans la zone
-   où il a pu atterrir (`voidProbe` : boîte de la hauteur de mort au sommet de l'enveloppe, large de sa vitesse
-   horizontale majorée plus `RUN_SPEED` fois le temps écoulé, `GetPartBoundsInBox`) : journalisé (`Movement`, gravité
-   faible, une coupure réseau en produit aussi) et tué (`KillZone.kill`). Un client corrigé au-dessus du vide qui
-   n'accuse jamais réception y passe aussi.
+   sans paquet reçu depuis `VOID_SILENCE` (2 s ; un paquet ignoré en attente d'accusé compte comme signe de vie pendant
+   `VOID_SILENCE` après le refus, pas au-delà), dont même la plus haute position de l'enveloppe est passée sous
+   `KillHeight`, et sans aucune pièce de la map ni volume d'échelle ou de boost dans la zone où il a pu atterrir
+   (`voidProbe` : boîte de la hauteur de mort au sommet de l'enveloppe, large de sa vitesse horizontale majorée plus
+   `RUN_SPEED` fois le temps écoulé, `GetPartBoundsInBox`) : journalisé (`Movement`, gravité faible, une coupure réseau
+   en produit aussi) et tué (`KillZone.kill`). Un client corrigé au-dessus du vide qui n'accuse jamais réception y passe
+   aussi. La zone est volontairement large : un joueur qui se tait juste au bord de l'île n'est pas déclaré tombé (il a
+   pu revenir s'y poser) ; il reste figé côté serveur à sa dernière position. Une zone découpée dans le temps (hauteur
+   possible et distance parcourue à chaque instant) serait plus serrée, sans distinguer non plus ce cas.
 
 **Modes** (`src/shared/MovementGuardRules.luau:23-27`) : `ENFORCE_NOCLIP = false` et `ENFORCE_FLIGHT = false` : journal
 seul (violation `Movement` moyenne comptée, position appliquée). `ENFORCE_VOID = true` : un joueur dans ce cas tombait
