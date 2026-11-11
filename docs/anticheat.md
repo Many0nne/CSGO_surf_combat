@@ -279,11 +279,13 @@ historique `positionAt`, même raycast limité à `Workspace.Maps`, même journa
 | Contrôle | Règle (constantes de `ShotRules`) | Mode livré | Gravité |
 |---|---|---|---|
 | `orientation` | Angle horizontal entre le cap de la racine serveur du tireur (`LookVector`, relayé à 20 Hz, celui de sa caméra : `MovementController`) et la direction de la racine de la cible ≤ `MELEE_MAX_ANGLE` (70°) + `asin(MELEE_BODY_RADIUS / distance horizontale)` (2 studs : 15° à 7,5 studs, 90° au contact). Cible à la verticale : acceptée | `log` | moyenne |
-| `meleeLineOfSight` | Raycast sur la map de la racine du tireur à celle de la cible, ou de l'œil à l'œil (`CAM_HEIGHT_STAND`, obstacle bas par-dessus lequel la caméra frappe), jusqu'à `LINE_OF_SIGHT_END_MARGIN` avant : un segment dégagé suffit | `log` | moyenne |
+| `meleeLineOfSight` | Raycast sur la map de la racine du tireur à celle de la cible, ou de son œil (`CAM_HEIGHT_STAND`) à la tête de la cible (décalage de `Head` sur le rig serveur, 1,5 stud à défaut : pas au-dessus de la tête, sinon un mur juste plus haut que la cible laisserait passer), pour un obstacle bas par-dessus lequel la caméra frappe ; jusqu'à `LINE_OF_SIGHT_END_MARGIN` avant : un segment dégagé suffit | `log` | moyenne |
 
 - **Rembobinage sans instant.** Le remote `MeleeDamage` n'envoie pas d'instant (client hors périmètre de #176) : la
   cible est prise à `now`, `now - 0,05`, … `now - MAX_REWIND` (`MELEE_REWIND_STEP`, 9 positions, `meleeRewindTimes`),
-  ce qui couvre `INTERP_DELAY` + l'aller-retour du tireur jusqu'à 300 ms. Le coup passe l'orientation si **une**
+  ce qui couvre `INTERP_DELAY` + l'aller-retour du tireur jusqu'à 300 ms. Les positions à plus de 10 studs du tireur
+  (`MAX_MELEE_RANGE`) sont écartées (piège relevé en revue : sinon une cible en surf, à découvert à 30 studs il y a
+  0,3 s, se frappe maintenant à 5 studs derrière un mur). Le coup passe l'orientation si **une**
   position est devant le cap ; la ligne de vue n'est testée que sur ces positions (toutes si aucune, pour la mesure),
   deux positions à moins de `MELEE_SAMPLE_MERGE` (0,25 stud) testées une fois : un raycast pour un coup honnête,
   18 au pire (cible derrière un mur), sous la cadence du couteau. Sans historique (`DebugDummy`), position actuelle.
@@ -291,7 +293,12 @@ historique `positionAt`, même raycast limité à `Workspace.Maps`, même journa
   retard du cap relayé (un paquet de position toutes les 50 ms, plus la gigue), soit ~1 000°/s de rotation. Un coup
   dans le dos (180°) reste refusé même collé (160° permis au plus). Pas d'historique du cap (seule la position est
   rembobinée, `CharacterSync*` hors périmètre) : si la mesure montre des faux positifs en rotation rapide, élargir
-  `MELEE_MAX_ANGLE` (jusqu'à ~110° garde le dos fermé), ou garder le cap dans l'historique.
+  `MELEE_MAX_ANGLE` (jusqu'à ~110° garde le dos fermé), ou garder le cap dans l'historique. Le cap serveur n'avance
+  qu'avec les paquets de position acceptés : un joueur dont le mouvement est refusé (D1) ou dont les paquets (non
+  fiables) se perdent garde un cap ancien et peut être journalisé à tort ; le détail du journal permet de les écarter.
+- **Limite connue.** Sans instant annoncé, un tricheur qui fixe une direction touche une cible dont le sillage des
+  0,4 dernières secondes, à moins de 10 studs, a croisé son cône. Piste : envoyer l'instant du coup dans `MeleeDamage`
+  (comme `shotTime` de `HitscanDamage`) et réutiliser `ShotRules.rewindTime`.
 - **Position du tireur.** Racine serveur actuelle, sans rembobinage : le client est en avance de sa latence, l'écart
   est couvert par la tolérance d'angle et la portée de 10 studs (contre 7,5 côté client).
 - **Cible vivante.** Vérifiée avant (`isValidTarget`) : un corps dont l'historique répond encore est refusé.

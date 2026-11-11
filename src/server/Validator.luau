@@ -52,6 +52,7 @@ export type ShotWorld = {
 local shotWorld: ShotWorld? = nil
 local warnedNoWorld = false
 local warnedNoWorldWeapon = false
+local warnedNoWorldMelee = false
 
 -- Attribut serveur de la cible immobile du helper de playtest ; les attributs posés par un client ne répliquent pas.
 Validator.DEBUG_TARGET_ATTRIBUTE = "DebugTarget"
@@ -369,36 +370,50 @@ local function validateShot(
 	return not blocked
 end
 
--- Hauteur de la caméra au-dessus de la racine : bout des segments « œil à œil » de la ligne de vue d'un coup (#176).
+-- Hauteur de la caméra au-dessus de la racine : départ du segment « œil à tête » de la ligne de vue d'un coup (#176).
 local EYE_OFFSET = Vector3.new(0, CameraConfig.CAM_HEIGHT_STAND, 0)
+-- Centre de la tête au-dessus de la racine, si le rig serveur de la cible n'a pas de Head (R6 : 1,5 stud).
+local DEFAULT_HEAD_OFFSET = Vector3.new(0, 1.5, 0)
 
--- Cette méthode permet de vérifier un coup de mêlée de joueur lorsqu'il a passé cible, arme et cadence (#176) : une
--- position rembobinée de la cible devant le cap du tireur et sans obstacle de la map. Renvoie true s'il peut s'appliquer.
-local function validateMelee(attacker: Participant, aRoot: BasePart, tRoot: BasePart, targetCharacter: Model): boolean
-	local world = shotWorld
-	if not world then
-		if not warnedNoWorld then
-			warnedNoWorld = true
-			warn("[Validator] setShotWorld non appelé : tirs et coups de mêlée de joueurs refusés")
-		end
-		return false
-	end
-	local now = world.serverNow()
-	local look = aRoot.CFrame.LookVector
-	local attackerPos = aRoot.Position
-
-	-- Le remote n'annonce pas d'instant : chaque position de la borne de rembobinage est candidate, la plus récente
-	-- d'abord (position actuelle si la cible n'a pas d'historique)
-	local samples: { { pos: Vector3, rewind: number } } = {}
+-- Cette méthode permet de lister les positions rembobinées de la cible lorsqu'un coup de mêlée arrive (le remote
+-- n'annonce pas d'instant) : toute la borne de rembobinage, la plus récente d'abord, sans celles hors de portée du
+-- tireur ; position actuelle si la cible n'a pas d'historique.
+local function meleeSamples(
+	world: ShotWorld,
+	targetCharacter: Model,
+	tRoot: BasePart,
+	attackerPos: Vector3,
+	now: number
+): { { pos: Vector3, rewind: number } }
+	local samples = {}
 	for _, t in ShotRules.meleeRewindTimes(now) do
 		local pos = world.positionAt(targetCharacter, t)
-		if pos then
+		-- Une position lointaine du sillage ne justifie pas un coup sur une cible proche (mur entre-temps)
+		if pos and (pos - attackerPos).Magnitude <= MAX_MELEE_RANGE then
 			table.insert(samples, { pos = pos, rewind = now - t })
 		end
 	end
 	if #samples == 0 then
 		table.insert(samples, { pos = tRoot.Position, rewind = 0 })
 	end
+	return samples
+end
+
+-- Cette méthode permet de vérifier un coup de mêlée de joueur lorsqu'il a passé cible, arme et cadence (#176) : une
+-- position rembobinée de la cible devant le cap du tireur et sans obstacle de la map. Renvoie true s'il peut s'appliquer.
+local function validateMelee(attacker: Participant, aRoot: BasePart, tRoot: BasePart, targetCharacter: Model): boolean
+	local world = shotWorld
+	if not world then
+		if not warnedNoWorldMelee then
+			warnedNoWorldMelee = true
+			warn("[Validator] setShotWorld non appelé : coups de mêlée de joueurs refusés")
+		end
+		return false
+	end
+	local now = world.serverNow()
+	local look = aRoot.CFrame.LookVector
+	local attackerPos = aRoot.Position
+	local samples = meleeSamples(world, targetCharacter, tRoot, attackerPos, now)
 
 	local blocked = false
 	-- Cette méthode permet de journaliser un contrôle de mêlée en échec lorsqu'il est constaté, et de retenir s'il
@@ -411,21 +426,26 @@ local function validateMelee(attacker: Participant, aRoot: BasePart, tRoot: Base
 
 	-- Orientation : au moins une position devant le cap ; sinon la plus proche de l'angle permis va au journal
 	local facing = {}
-	local worstDetail, bestExcess, bestRewind = nil, math.huge, 0
+	local closestDetail, closestExcess, closestRewind = nil, math.huge, 0
 	for _, sample in samples do
 		local ok, excess, detail = ShotRules.checkMeleeOrientation(look, attackerPos, sample.pos)
 		if ok then
 			table.insert(facing, sample)
-		elseif excess < bestExcess then
-			bestExcess, worstDetail, bestRewind = excess, detail, sample.rewind
+		elseif excess < closestExcess then
+			closestDetail, closestExcess, closestRewind = detail, excess, sample.rewind
 		end
 	end
 	if #facing == 0 then
-		fail(ShotRules.Check.ORIENTATION, string.format("%s, rembobinée de %.2f s", worstDetail or "?", bestRewind))
+		fail(
+			ShotRules.Check.ORIENTATION,
+			string.format("%s, rembobinée de %.2f s", closestDetail or "?", closestRewind)
+		)
 	end
 
 	-- Ligne de vue : parmi les positions devant le tireur (toutes si aucune, pour la mesure), une sans obstacle suffit ;
-	-- deux positions voisines ne sont testées qu'une fois
+	-- deux positions voisines ne sont testées qu'une fois. Tête de la cible prise sur le rig serveur
+	local head = targetCharacter:FindFirstChild("Head")
+	local headOffset = if head and head:IsA("BasePart") then head.Position - tRoot.Position else DEFAULT_HEAD_OFFSET
 	local candidates = if #facing > 0 then facing else samples
 	local tested: { Vector3 } = {}
 	local clear = false
@@ -439,7 +459,7 @@ local function validateMelee(attacker: Participant, aRoot: BasePart, tRoot: Base
 		end
 		if not seen then
 			table.insert(tested, sample.pos)
-			local segments = ShotRules.meleeSightSegments(attackerPos, sample.pos, EYE_OFFSET)
+			local segments = ShotRules.meleeSightSegments(attackerPos, sample.pos, EYE_OFFSET, headOffset)
 			if #segments == 0 then
 				clear = true
 			end
@@ -455,12 +475,14 @@ local function validateMelee(attacker: Participant, aRoot: BasePart, tRoot: Base
 		end
 	end
 	if not clear then
+		local first = candidates[1]
 		fail(
 			ShotRules.Check.MELEE_LINE_OF_SIGHT,
 			string.format(
-				"obstacle de la map entre tireur et cible (%.1f studs, %d positions testées)",
-				(attackerPos - tRoot.Position).Magnitude,
-				#tested
+				"obstacle de la map (%d positions testées, la plus récente à %.1f studs, rembobinée de %.2f s)",
+				#tested,
+				(first.pos - attackerPos).Magnitude,
+				first.rewind
 			)
 		)
 	end

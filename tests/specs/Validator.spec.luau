@@ -1163,6 +1163,22 @@ return function(T, Loader)
 			T.expectEqual(reportedChecks(world), "meleeLineOfSight")
 		end)
 
+		T.it(
+			"ignore les positions rembobinées hors de portée : pas de coup à travers un mur via le sillage",
+			function()
+				local Validator, a, b, world = setupMelee(Vector3.new(1, 0, 0), ALL_BLOCK)
+				-- Cible en surf : à 30 studs à découvert il y a 0,3 s, maintenant à 5 studs derrière un mur
+				world.histories[b.Character] = function(t)
+					return if t < world.now - 0.25 then Vector3.new(30, 0, 0) else Vector3.new(5, 0, 0)
+				end
+				world.obstructed = function(_, delta: Vector3)
+					return delta.Magnitude < 10
+				end
+				T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), nil)
+				T.expectEqual(reportedChecks(world), "meleeLineOfSight")
+			end
+		)
+
 		T.it("refuse une cible morte même si son historique répond encore (corps en place)", function()
 			local Validator, a, b, world = setupMelee(nil, ALL_BLOCK)
 			world.histories[b.Character] = function()

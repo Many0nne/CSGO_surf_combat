@@ -387,16 +387,17 @@ function ShotRules.checkMeleeOrientation(
 end
 
 -- Cette méthode permet de lister les segments à tester contre la map lorsqu'on vérifie la ligne de vue d'un coup :
--- racine à racine, et œil à œil (eyeOffset, hauteur de la caméra) pour un obstacle bas par-dessus lequel la caméra
--- frappe. Un seul segment dégagé suffit ; segments nuls (cibles collées) omis.
+-- racine à racine, et œil du tireur (eyeOffset, hauteur de la caméra) à tête de la cible (headOffset) pour un obstacle
+-- bas par-dessus lequel la caméra frappe. Un seul segment dégagé suffit ; segments nuls (cibles collées) omis.
 function ShotRules.meleeSightSegments(
 	attackerPos: Vector3,
 	targetPos: Vector3,
-	eyeOffset: Vector3
+	eyeOffset: Vector3,
+	headOffset: Vector3
 ): { { from: Vector3, delta: Vector3 } }
 	local segments = {}
-	for _, offset in { Vector3.zero, eyeOffset } do
-		local from, delta = ShotRules.lineOfSightSegment(attackerPos + offset, targetPos + offset)
+	for _, ends in { { Vector3.zero, Vector3.zero }, { eyeOffset, headOffset } } do
+		local from, delta = ShotRules.lineOfSightSegment(attackerPos + ends[1], targetPos + ends[2])
 		if from and delta then
 			table.insert(segments, { from = from, delta = delta })
 		end
