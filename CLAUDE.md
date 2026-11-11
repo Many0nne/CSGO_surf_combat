@@ -158,6 +158,13 @@ bash tools/check.sh --fix   # idem, en appliquant le formatage StyLua
 - Le serveur MCP `Roblox_Studio` (officiel, intégré à Studio) est configuré en scope local. Studio doit être ouvert avec "Enable Studio as MCP server" activé.
 - **Ne jamais modifier de scripts via le MCP** (`multi_edit`, `execute_luau` qui écrit dans `Source`, etc.) : la synchro Rojo va uniquement des fichiers vers Studio, toute modification de script faite dans Studio sera écrasée ou perdue. Le code se modifie exclusivement dans `src/`.
 - Usages du MCP : inspecter la scène (`search_game_tree`, `inspect_instance`), construire la map et les objets du workspace (rampes de surf, spawns, décor), chercher et insérer des assets, playtester (`start_stop_play`, simulation d'input, `get_console_output`, `screen_capture`) pour vérifier un comportement.
+- **Appels MCP courts :** ne jamais attendre dans un `execute_luau` (boucle, `task.wait` long) : un appel qui attend peut
+  rester bloqué des heures et figer Studio pour tous les worktrees. Lancer l'action (`task.spawn`), puis lire le résultat
+  par un appel suivant (`get_console_output`).
+- **Piloter le jeu par attributs ou remotes** (`DebugPlaytest`, `DebugBots`, `DebugInGameMenu`) : un `require` depuis le
+  MCP charge une autre instance des modules (un `GameStateController.requestPlay` n'agit pas sur le vrai client). Lancer
+  une partie par le helper `DebugPlaytest`, pas par `RequestSpawn:FireServer()` : sinon le client reste sur le menu,
+  envoie des positions non physiques (faux positifs anti-triche) et bloque l'input simulé.
 - Les éléments créés dans le workspace via le MCP ne sont pas dans `src/` : penser à sauvegarder la place dans Studio.
 - Helper de playtest (Studio uniquement, inactif hors Studio) : vérifie en une commande l'équipement, l'attaque, le son et les dégâts d'une arme. Playtest lancé, en contexte `Server` (`execute_luau`), avec un nom d'outil ou un numéro de slot (ordre alphabétique) :
   ```lua
