@@ -16,6 +16,9 @@ SpawnRequestRules.RESULT_RETRY = 1.5 -- bannière de fin (6 s) : renvoi à ce ry
 SpawnRequestRules.ALIVE_RETRY = 1.2 -- personnage encore en place côté serveur (corps) : renvoi
 SpawnRequestRules.FAILED_RETRY = 1.5 -- LoadCharacterAsync échoué côté serveur : renvoi
 SpawnRequestRules.EARLY_MARGIN = 0.1 -- marge ajoutée au délai restant annoncé par le serveur
+-- Redemande en DEAD (#245) : borne stricte, chargement accepté compris (le round tourne, le joueur regarde l'écran
+-- de mort) ; un personnage arrivé après l'abandon est détruit par le serveur (LeaveRound)
+SpawnRequestRules.DEAD_GIVE_UP_AFTER = 6
 
 export type Attempt = {
 	startedAt: number,
@@ -23,14 +26,32 @@ export type Attempt = {
 	unanswered: number,
 	acceptedAt: number?,
 	retryAt: number?,
+	giveUpAfter: number,
+	strict: boolean,
+}
+
+-- Attente de la réapparition programmée en DEAD (#245) : redemande (attempt) seulement après le délai de réapparition
+-- et sa marge sans nouveau personnage
+export type DeadWatch = {
+	diedAt: number,
+	attempt: Attempt?,
 }
 
 export type TickAction = "wait" | "send" | "giveUp"
 export type ReplyAction = "wait" | "adopt"
 
--- Cette méthode permet de créer le suivi d'une demande d'apparition lorsque le joueur clique JOUER.
-function SpawnRequestRules.new(now: number): Attempt
-	return { startedAt = now, lastSendAt = nil, unanswered = 0, acceptedAt = nil, retryAt = nil }
+-- Cette méthode permet de créer le suivi d'une demande d'apparition lorsque le joueur clique JOUER, ou que la
+-- réapparition programmée tarde (#245 : strictBound, borne totale qui ne laisse pas LOAD_TIMEOUT au chargement).
+function SpawnRequestRules.new(now: number, strictBound: number?): Attempt
+	return {
+		startedAt = now,
+		lastSendAt = nil,
+		unanswered = 0,
+		acceptedAt = nil,
+		retryAt = nil,
+		giveUpAfter = strictBound or SpawnRequestRules.GIVE_UP_AFTER,
+		strict = strictBound ~= nil,
+	}
 end
 
 -- Cette méthode permet de noter qu'une demande vient de partir au serveur lorsque le client l'envoie (premier envoi
@@ -78,13 +99,16 @@ function SpawnRequestRules.onReply(attempt: Attempt, reply: any, now: number, ha
 end
 
 -- Cette méthode permet de décider, à chaque pas de la surveillance d'une demande en SPAWNING, s'il faut attendre,
--- (r)envoyer la demande ou abandonner (retour au menu) ; borné par GIVE_UP_AFTER + LOAD_TIMEOUT.
+-- (r)envoyer la demande ou abandonner (retour au menu) ; borné par giveUpAfter + LOAD_TIMEOUT (giveUpAfter si strict).
 function SpawnRequestRules.onTick(attempt: Attempt, now: number): TickAction
+	if attempt.strict and now - attempt.startedAt >= attempt.giveUpAfter then
+		return "giveUp"
+	end
 	-- Acceptée : le chargement a toujours LOAD_TIMEOUT, même accepté juste avant GIVE_UP_AFTER
 	if attempt.acceptedAt then
 		return if now - attempt.acceptedAt >= SpawnRequestRules.LOAD_TIMEOUT then "giveUp" else "wait"
 	end
-	if now - attempt.startedAt >= SpawnRequestRules.GIVE_UP_AFTER then
+	if now - attempt.startedAt >= attempt.giveUpAfter then
 		return "giveUp"
 	end
 	if attempt.retryAt then
@@ -100,6 +124,29 @@ function SpawnRequestRules.onTick(attempt: Attempt, now: number): TickAction
 		return if attempt.unanswered >= SpawnRequestRules.MAX_UNANSWERED then "giveUp" else "send"
 	end
 	return "wait"
+end
+
+-- Cette méthode permet de savoir si l'attente de la réapparition continue lorsque l'état client change : seulement en
+-- DEAD (personnage revenu → IN_ROUND, round idle ou départ → MENU, fin de round → RESULT l'annulent).
+function SpawnRequestRules.keepsDeadWatch(state: string): boolean
+	return state == "DEAD"
+end
+
+-- Cette méthode permet de commencer l'attente de la réapparition programmée lorsque le joueur local passe en DEAD.
+function SpawnRequestRules.newDeadWatch(now: number): DeadWatch
+	return { diedAt = now, attempt = nil }
+end
+
+-- Cette méthode permet de décider, à chaque pas en DEAD, s'il faut attendre la réapparition du serveur, redemander
+-- l'apparition (passé waitFor = RESPAWN_DELAY + marge, puis comme une demande, borne DEAD_GIVE_UP_AFTER) ou abandonner.
+function SpawnRequestRules.onDeadTick(watch: DeadWatch, now: number, waitFor: number): TickAction
+	if not watch.attempt then
+		if now - watch.diedAt < waitFor then
+			return "wait"
+		end
+		watch.attempt = SpawnRequestRules.new(now, SpawnRequestRules.DEAD_GIVE_UP_AFTER)
+	end
+	return SpawnRequestRules.onTick(watch.attempt :: Attempt, now)
 end
 
 return SpawnRequestRules

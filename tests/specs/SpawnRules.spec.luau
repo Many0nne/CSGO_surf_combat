@@ -145,7 +145,7 @@ return function(T, Loader)
 	-- Cette méthode permet de monter SpawnManager avec horloge, remote et services simulés lorsqu'un test passe par le
 	-- handler de RequestSpawn ; state est l'état du round renvoyé au handler.
 	local function setup()
-		local env = { clock = 0, warns = {}, state = "active", started = 0 }
+		local env = { clock = 0, warns = {}, state = "active", started = 0, workspaceAttributes = {} }
 		local loader = Loader.new({
 			Players = { PlayerRemoving = { Connect = function() end } },
 			RunService = {
@@ -167,6 +167,12 @@ return function(T, Loader)
 				table.insert(env.warns, table.concat({ ... }, " "))
 			end,
 			task = { spawn = function() end },
+			-- Attributs de debug Studio (DebugSpawnFail, #245)
+			workspace = {
+				GetAttribute = function(_, name)
+					return env.workspaceAttributes[name]
+				end,
+			},
 		})
 		env.SpawnManager = loader:require("src/server/SpawnManager")
 		env.CheatLog = loader:require("src/server/CheatLog")
@@ -422,6 +428,23 @@ return function(T, Loader)
 			T.expectEqual(p.loads, 2)
 			T.expectEqual(statuses(env, p), "accepted,failed,accepted")
 		end)
+
+		T.it(
+			"DebugSpawnFail (Studio, #245) : « failed » sans chargement, réapparition programmée sans effet",
+			function()
+				local env = setup()
+				env.workspaceAttributes.DebugSpawnFail = true
+				local p = fakePlayer(1)
+				env.handler(p)
+				T.expectEqual(statuses(env, p), "accepted,failed")
+				env.SpawnManager.respawn(p :: any)
+				T.expectEqual(p.loads, 0)
+				env.workspaceAttributes.DebugSpawnFail = nil
+				env.clock = 1.5
+				env.handler(p)
+				T.expectEqual(p.loads, 1)
+			end
+		)
 
 		T.it("« alive » sur un personnage vivant : remis au round (beforeSpawn), sans second chargement", function()
 			local env = setup()

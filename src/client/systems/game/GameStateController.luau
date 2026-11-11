@@ -30,6 +30,8 @@ local SpawnRequestRules = require(script.Parent.SpawnRequestRules)
 local DEATH_INFO_TTL = 1
 -- Message du menu quand une demande d'apparition n'aboutit pas (#219, SpawnRequestRules)
 local SPAWN_FAILED_NOTICE = "IMPOSSIBLE DE REJOINDRE LA PARTIE, RÉESSAIE"
+-- Message du menu quand la réapparition après une mort n'aboutit pas, redemande comprise (#245)
+local RESPAWN_FAILED_NOTICE = "RÉAPPARITION IMPOSSIBLE"
 
 local GameStateController = {}
 
@@ -40,6 +42,8 @@ local localPlayer: Player
 local setupCharFn: (char: Model) -> ()
 local stopCharFn: () -> ()
 local humDiedConn: RBXScriptConnection?
+-- Personnage déjà branché (mort, setup) : CharacterAdded et une reprise "alive" ne le branchent pas deux fois (#245)
+local boundChar: Model? = nil
 local resultTimer: thread?
 -- Dernière mort du joueur local annoncée par le serveur (qui, avec quoi), pour l'écran de mort
 local lastDeath: { killer: string?, weapon: string?, headshot: boolean, at: number }? = nil
@@ -49,6 +53,8 @@ local spawnRemote: RemoteEvent?
 local leaveRemote: RemoteEvent?
 -- Demande d'apparition en cours (#219) : suivie tant que l'état est SPAWNING, nil sinon
 local spawnAttempt: SpawnRequestRules.Attempt? = nil
+-- Attente de la réapparition programmée (#245) : suivie tant que l'état est DEAD, nil sinon
+local deadWatch: SpawnRequestRules.DeadWatch? = nil
 
 -- ── Caméra ─────────────────────────────────────────────────────────────────
 
@@ -83,11 +89,17 @@ local function applyDeathInfo()
 	end
 end
 
+local startRespawnWatch: () -> ()
+
 local function setState(newState: State)
 	state = newState
 	if newState ~= "SPAWNING" then
 		-- La surveillance de la demande s'arrête d'elle-même (GameStateController.requestPlay)
 		spawnAttempt = nil
+	end
+	if not SpawnRequestRules.keepsDeadWatch(newState) then
+		-- Personnage revenu, round idle, fin de round ou retour au menu : la surveillance s'arrête (watchRespawn)
+		deadWatch = nil
 	end
 	-- Avant la fermeture du menu en partie : les abonnés de HUDState voient le nouvel état menu encore ouvert (tout masqué),
 	-- jamais l'ancien état de partie menu fermé (crosshair ou touches réaffichés un instant)
@@ -101,6 +113,8 @@ local function setState(newState: State)
 	end
 	if newState == "MENU" then
 		DeathRagdoll.clear()
+		-- Mouvement et caméra coupés au menu : un personnage repris ensuite (JOUER, "alive") doit être rebranché
+		boundChar = nil
 	end
 
 	if newState == "MENU" then
@@ -134,6 +148,7 @@ local function setState(newState: State)
 	elseif newState == "DEAD" then
 		RoundHUD.showRespawning(GameConfig.RESPAWN_DELAY)
 		applyDeathInfo()
+		startRespawnWatch()
 	elseif newState == "RESULT" then
 		RoundHUD.hide()
 		-- Tuer le personnage local pour sortir du mode FPS et libérer la souris
@@ -150,13 +165,24 @@ end
 
 -- ── Liaison personnage ─────────────────────────────────────────────────────
 
+-- Cette méthode permet de savoir si le client est au menu (principal ou Infos) lorsqu'un personnage arrive, y compris
+-- après une attente (l'état a pu changer pendant le WaitForChild).
+local function atMenu(): boolean
+	return state == "MENU" or state == "INFOS"
+end
+
 local function onCharacterAdded(char: Model)
 	-- Au menu, un personnage n'est pas attendu (réapparition partie avant un retour au menu, détruite par le serveur, #157)
-	if state == "MENU" or state == "INFOS" then
+	if atMenu() then
 		return
 	end
 	-- Connecter la mort
 	local humanoid = char:WaitForChild("Humanoid") :: Humanoid
+	-- Après l'attente : retour au menu entre-temps (abandon, #245), ou personnage déjà branché par l'autre voie
+	if atMenu() or boundChar == char then
+		return
+	end
+	boundChar = char
 	if humDiedConn then
 		humDiedConn:Disconnect()
 	end
@@ -211,17 +237,18 @@ local function onPlayerDied(data: any)
 	end
 end
 
--- Cette méthode permet d'appliquer la réponse du serveur à la demande en cours (#219, rien hors SPAWNING) ; "alive" avec
--- un personnage local vivant (ignoré pendant le menu) : il est repris comme s'il venait d'apparaître.
+-- Cette méthode permet d'appliquer la réponse du serveur à la demande en cours (#219 en SPAWNING, redemande en DEAD
+-- #245, rien ailleurs) ; "alive" avec un personnage local vivant : il est repris comme s'il venait d'apparaître.
 local function onSpawnReply(answer: any)
-	-- setState remet spawnAttempt à nil hors SPAWNING
-	local attempt = spawnAttempt
+	-- setState remet spawnAttempt à nil hors SPAWNING, deadWatch hors DEAD
+	local attempt = spawnAttempt or (deadWatch and deadWatch.attempt)
 	if not attempt then
 		return
 	end
 	local char = localPlayer.Character
 	local humanoid = char and char.Parent and char:FindFirstChildOfClass("Humanoid")
 	local live = humanoid ~= nil and humanoid.Health > 0
+	-- onCharacterAdded ne branche pas deux fois le même personnage (CharacterAdded encore en attente, boundChar)
 	if SpawnRequestRules.onReply(attempt, answer, os.clock(), live) == "adopt" and char then
 		onCharacterAdded(char)
 	end
@@ -251,10 +278,10 @@ local function sendSpawnRequest(attempt: SpawnRequestRules.Attempt)
 	end
 end
 
--- Cette méthode permet d'abandonner une demande restée sans suite après ses délais (#219) : retour au menu avec un
--- message, et LeaveRound pour qu'un personnage arrivé trop tard ne reste pas dans le round.
-local function giveUpSpawn()
-	warn("[GameState] demande d'apparition sans suite : retour au menu")
+-- Cette méthode permet d'abandonner une demande restée sans suite après ses délais (#219, #245) : retour au menu avec
+-- le message notice, et LeaveRound pour qu'un personnage arrivé trop tard ne reste pas dans le round.
+local function giveUpSpawn(notice: string)
+	warn("[GameState] apparition sans suite (" .. state .. ") : retour au menu")
 	-- Cherché ici aussi : listenToRemotes peut encore l'attendre
 	local leave = leaveRemote or ReplicatedStorage:FindFirstChild(NetworkProtocol.Names.LEAVE_ROUND)
 	if leave and leave:IsA("RemoteEvent") then
@@ -263,22 +290,62 @@ local function giveUpSpawn()
 	setState("MENU")
 	-- Les volets fermés par SPAWNING couvrent encore l'écran
 	Transition.open()
-	MainMenu.showNotice(SPAWN_FAILED_NOTICE)
+	MainMenu.showNotice(notice)
+end
+
+-- Cette méthode permet de dérouler une surveillance d'apparition (JOUER #219, ou DEAD #245) tant que isCurrent() :
+-- tick décide à chaque pas d'attendre, (r)envoyer la demande getAttempt() ou abandonner vers le menu avec notice.
+local function runSpawnWatch(
+	isCurrent: () -> boolean,
+	tick: (now: number) -> SpawnRequestRules.TickAction,
+	getAttempt: () -> SpawnRequestRules.Attempt?,
+	notice: string
+)
+	while isCurrent() do
+		local action = tick(os.clock())
+		if action == "giveUp" then
+			giveUpSpawn(notice)
+			return
+		elseif action == "send" then
+			local attempt = getAttempt()
+			if attempt then
+				sendSpawnRequest(attempt)
+			end
+		end
+		task.wait(SpawnRequestRules.TICK)
+	end
 end
 
 -- Cette méthode permet de surveiller une demande d'apparition lorsqu'elle part (JOUER) : renvoi sans réponse, après un
 -- refus temporaire ou un échec, abandon après un délai borné ; s'arrête dès que l'état quitte SPAWNING.
 local function watchSpawnRequest(attempt: SpawnRequestRules.Attempt)
-	while spawnAttempt == attempt do
-		local action = SpawnRequestRules.onTick(attempt, os.clock())
-		if action == "giveUp" then
-			giveUpSpawn()
-			return
-		elseif action == "send" then
-			sendSpawnRequest(attempt)
-		end
-		task.wait(SpawnRequestRules.TICK)
-	end
+	runSpawnWatch(function()
+		return spawnAttempt == attempt
+	end, function(now)
+		return SpawnRequestRules.onTick(attempt, now)
+	end, function()
+		return attempt
+	end, SPAWN_FAILED_NOTICE)
+end
+
+-- Cette méthode permet de borner l'attente en DEAD (#245) lorsque la réapparition programmée par le serveur tarde :
+-- redemande comme JOUER passé RESPAWN_DELAY + RESPAWN_MARGIN, puis retour au menu ; s'arrête dès que l'état quitte DEAD.
+local function watchRespawn(watch: SpawnRequestRules.DeadWatch)
+	local waitFor = GameConfig.RESPAWN_DELAY + GameConfig.RESPAWN_MARGIN
+	runSpawnWatch(function()
+		return deadWatch == watch
+	end, function(now)
+		return SpawnRequestRules.onDeadTick(watch, now, waitFor)
+	end, function()
+		return watch.attempt
+	end, RESPAWN_FAILED_NOTICE)
+end
+
+-- Cette méthode permet de lancer la surveillance de la réapparition lorsque le joueur local passe en DEAD.
+function startRespawnWatch()
+	local watch = SpawnRequestRules.newDeadWatch(os.clock())
+	deadWatch = watch
+	task.spawn(watchRespawn, watch)
 end
 
 local function listenToRemotes()
@@ -325,7 +392,7 @@ local function listenToRemotes()
 	end)
 
 	-- PlayerDied (#102), envoyé à tous : corps, kill feed, et pour le tué écran de mort et caméra vers le tueur.
-	-- Le passage en DEAD reste déclenché par Humanoid.Died ; le respawn est géré côté serveur.
+	-- Le passage en DEAD reste déclenché par Humanoid.Died ; le respawn est géré côté serveur (redemande s'il tarde, #245).
 	local playerDiedRmt = NetworkProtocol.getRemote(N.PLAYER_DIED)
 	playerDiedRmt.OnClientEvent:Connect(onPlayerDied)
 end
