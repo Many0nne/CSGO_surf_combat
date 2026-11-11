@@ -81,10 +81,21 @@ return function(T, Loader)
 		T.it(
 			"« spawning » d'un joueur revenu du menu non servie (bannière) : « result », pas d'attente",
 			function()
-				T.expectEqual(SpawnRules.reply("spawning", request({}), true).status, "result")
-				T.expectEqual(SpawnRules.reply("spawning", request({}), false).status, "spawning")
+				T.expectEqual(SpawnRules.reply("spawning", request({}), { away = true }).status, "result")
+				T.expectEqual(SpawnRules.reply("spawning", request({}), { away = false }).status, "spawning")
+				T.expectEqual(
+					SpawnRules.reply("spawning", request({ roundState = "result" })).status,
+					"result",
+					"bannière : ce chargement ne servira pas"
+				)
 			end
 		)
+
+		T.it("« alive » dit si le personnage en place est vivant (reprise) ou un corps", function()
+			T.expectEqual(SpawnRules.reply("alive", request({}), { live = true }).live, true)
+			T.expectEqual(SpawnRules.reply("alive", request({}), { live = false }).live, false)
+			T.expectEqual(SpawnRules.reply("alive", request({})).live, false)
+		end)
 
 		T.it("donne le délai restant d'une demande précoce", function()
 			local answer = SpawnRules.reply("early", request({ diedAt = 99 }))
@@ -409,12 +420,14 @@ return function(T, Loader)
 			p.Character = fakeCharacter(true, 100)
 			env.handler(p)
 			T.expectEqual(statuses(env, p), "alive")
+			T.expectEqual(env.replies[1].answer.live, true)
 			T.expectEqual(env.started, 1, "beforeSpawn : le client reprend ce personnage")
 			T.expectEqual(p.loads, 0)
 			p.Character = fakeCharacter(true, 0)
 			env.clock = 5
 			env.handler(p)
 			T.expectEqual(env.started, 1, "corps : pas de reprise")
+			T.expectEqual(env.replies[2].answer.live, false)
 		end)
 
 		T.it("revenu du menu pendant une réapparition en vol, JOUER pendant la bannière : « result »", function()

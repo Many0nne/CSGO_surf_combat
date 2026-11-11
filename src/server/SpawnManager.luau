@@ -102,10 +102,10 @@ end
 
 -- Cette méthode permet de faire apparaître un joueur lorsqu'une demande ou une réapparition programmée est acceptée ;
 -- un seul LoadCharacterAsync en vol par joueur : rien si un autre est déjà en cours. Renvoie false si ce chargement
--- a échoué ou n'a pas été lancé.
+-- a échoué (true si un autre, en vol, servira la demande).
 function SpawnManager.spawnPlayer(player: Player): boolean
 	if spawning[player] then
-		return false
+		return true
 	end
 	spawning[player] = true
 	-- Connexion avant LoadCharacter pour ne pas manquer CharacterAdded
@@ -210,9 +210,10 @@ function SpawnManager.init(
 			return
 		end
 		-- Avant le journal et le chargement : le client est fixé tout de suite, même si la suite échoue
-		reply(player, SpawnRules.reply(refusal, request, away[player] == true))
+		local live = refusal == "alive" and SpawnRules.isAlive(player.Character)
+		reply(player, SpawnRules.reply(refusal, request, { away = away[player] == true, live = live }))
 		-- Personnage vivant que le client reprend (il l'avait ignoré au menu) : remis au round comme une apparition
-		if refusal == "alive" and SpawnRules.isAlive(player.Character) then
+		if live then
 			away[player] = nil
 			hooks.beforeSpawn(player)
 		end

@@ -54,7 +54,8 @@ function SpawnRequestRules.onReply(attempt: Attempt, reply: any, now: number, ha
 		attempt.retryAt = nil
 		return "wait"
 	end
-	if status == "alive" and hasLiveCharacter then
+	-- Vivant pour le serveur (live) et pour le client : jamais un corps dont la mort n'est pas encore répliquée
+	if status == "alive" and reply.live == true and hasLiveCharacter then
 		return "adopt"
 	end
 	local delay

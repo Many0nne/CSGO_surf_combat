@@ -97,11 +97,19 @@ return function(T, Loader)
 			T.expectEqual(#sends, 2)
 		end)
 
-		T.it("« alive » avec un personnage local vivant : reprise du personnage", function()
+		T.it("« alive » vivant pour le serveur et le client : reprise du personnage", function()
 			local outcome = simulate(function()
-				return { status = "alive" }, 0
+				return { status = "alive", live = true }, 0
 			end, 10, true)
 			T.expectEqual(outcome, "adopt")
+		end)
+
+		T.it("« alive » sur un corps (mort pas encore répliquée au client) : renvoi, pas de reprise", function()
+			local outcome, _, sends = simulate(function(index)
+				return { status = if index == 1 then "alive" else "accepted", live = false }, 0
+			end, 10, true)
+			T.expectEqual(outcome, "running")
+			T.expectEqual(#sends, 2)
 		end)
 
 		T.it("traite chaque statut que le serveur peut envoyer (SpawnRules.REPLY_STATUSES)", function()
