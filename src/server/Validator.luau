@@ -269,7 +269,10 @@ function Validator.isReadyToFire(participant: Participant, now: number, shotTime
 	if participant.isBot then
 		return true
 	end
-	if shotTime ~= nil and ShotLinkRules.find(ledgerOf(participant, cfg), shotTime, now, "fired") then
+	-- Lecture seule : pas de registre créé pour un tir qui sera peut-être refusé
+	local perWeapon = shotLedgers[participant]
+	local ledger = perWeapon and perWeapon[cfg]
+	if ledger and ShotLinkRules.find(ledger, shotTime, now, "fired") then
 		return true
 	end
 	local record = equips[participant]

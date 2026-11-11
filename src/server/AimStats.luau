@@ -110,7 +110,7 @@ local function statsOf(state: State, participant: any): Stats?
 			measured = 0,
 			flickHits = 0,
 			peakSpeed = 0,
-			recent = {},
+			recent = ShotLinkRules.new(),
 			reportedShots = 0,
 			everFlagged = false,
 		}

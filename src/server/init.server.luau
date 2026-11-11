@@ -563,7 +563,7 @@ BotManager.init({
 	end,
 	-- Tirs d'un bot entendus par les joueurs (#156), touchés ou manqués : même relais que ceux d'un joueur
 	shotFired = function(bot, origin, direction)
-		relayShot(bot, origin, direction)
+		return relayShot(bot, origin, direction)
 	end,
 	forget = forgetCombatState,
 	roundManager = RoundManager,

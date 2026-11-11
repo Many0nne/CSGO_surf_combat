@@ -45,7 +45,7 @@ export type Deps = {
 	hitscan: (Participant, Model, BasePart) -> ("hit" | "kill")?,
 	melee: (Participant, Model) -> ("hit" | "kill")?,
 	-- Tir au fusil parti (touché ou manqué), relayé aux joueurs pour le son (#156) : tireur, origine, direction
-	shotFired: (Participant, Vector3, Vector3) -> (),
+	shotFired: (Participant, Vector3, Vector3) -> boolean,
 	-- Oubli de l'état de combat d'un participant retiré (cadence, equip, chargeur, relais des tirs ; #218)
 	forget: (Participant) -> (),
 	roundManager: {
@@ -211,7 +211,7 @@ local function spawnBot(bot: Bot)
 	end, function(weaponName: string)
 		motion:setWeapon(weaponName)
 	end, function(origin: Vector3, direction: Vector3)
-		deps.shotFired(participant, origin, direction)
+		return deps.shotFired(participant, origin, direction)
 	end)
 	local id = participant.id
 	bot.brain = BotBrain.new({

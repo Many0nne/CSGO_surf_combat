@@ -70,7 +70,9 @@ return function(T, Loader)
 			relay = function() end,
 			hitscan = function() end,
 			melee = function() end,
-			shotFired = function() end,
+			shotFired = function()
+				return true
+			end,
 			-- Même oubli que forgetCombatState de init.server
 			forget = function(participant)
 				env.forgetCalls += 1

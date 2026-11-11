@@ -315,7 +315,8 @@ posé sur la parole du client, sans cadence. `AimStats` rattachait une touche au
   pas de son ni de dégâts). La garde accepte toujours « Shoot » (couteau).
 - **Bots.** Même point d'entrée (`relayShot` depuis `BotArsenal.fire`, `onFire`), jamais refusés : `isReadyToFire` est
   vrai pour un bot armé, `noteShotFired` ne compte rien (`BotArsenal` tient son chargeur), leurs touches gardent le
-  chemin sans `shot` (pas de rattachement). Le recul 3P d'un tir de bot vient du relais (avant : `BotArsenal`).
+  chemin sans `shot` (pas de rattachement). Le recul 3P d'un tir de bot vient du relais ; `BotArsenal.fire` le pose lui-même si le
+  relais écarte le tir (`onFire` renvoie false), le rayon partant quand même.
 - **Oubli.** Le registre est vidé par `Validator.forget` (réapparition, départ, retrait d'un bot : règle de #218) et
   compté par `Validator.trackedCount`.
 - **Limite connue.** `shotTime` est choisi par le client : il n'est borné ni par le ping ni par l'horloge serveur
