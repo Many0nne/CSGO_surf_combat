@@ -278,8 +278,7 @@ shotFiredRmt.OnServerEvent:Connect(function(player, origin, direction)
 	local participant = Participants.fromPlayer(player)
 	-- Compté après la décision du relais, qu'il ne change pas : un tir accepté (forme, cadence) entre aux statistiques
 	if relayShot(participant, origin, direction) then
-		local yaw, yawAt = CharacterSync.lastYaw(player)
-		AimStats.noteShot(aimStats, participant, direction, os.clock(), yaw, yawAt)
+		AimStats.noteShot(aimStats, participant, os.clock())
 	end
 end)
 
@@ -410,22 +409,19 @@ local function applyHit(
 end
 
 -- Cette méthode permet de traiter le verdict du Validator lorsqu'une touche arrive : damage vaut nil si elle est refusée.
+-- Renvoie le résultat des dégâts (nil si refusée ou sans effet : cible déjà morte, ForceField).
 local function onHitVerdict(
 	player: Player,
 	remote: RemoteEvent,
 	targetCharacter: Instance,
 	damage: number?,
 	isHeadshot: boolean
-)
+): ("hit" | "kill")?
 	DebugPlaytest.onHitReceived(player, remote.Name, targetCharacter, damage)
 	if damage then
-		local participant = Participants.fromPlayer(player)
-		-- Touche à distance acceptée par le Validator : statistiques de visée (#178), après coup, sans effet sur elle
-		if remote == hitscanRmt then
-			AimStats.noteHit(aimStats, participant, isHeadshot, os.clock())
-		end
-		applyHit(participant, targetCharacter, damage, isHeadshot)
+		return applyHit(Participants.fromPlayer(player), targetCharacter, damage, isHeadshot)
 	end
+	return nil
 end
 
 meleeRmt.OnServerEvent:Connect(function(player, targetCharacter, attackKind)
@@ -488,7 +484,12 @@ hitscanRmt.OnServerEvent:Connect(function(player, targetCharacter, hitPart, orig
 	local damage, isHeadshot =
 		Validator.authorizeHitscan(Participants.fromPlayer(player), targetCharacter, hitPart, os.clock(), shot)
 	-- Le son du tir chez les autres (#156) ne part pas d'ici : chaque tir, touché ou manqué, arrive d'abord par ShotFired
-	onHitVerdict(player, hitscanRmt, targetCharacter, damage, isHeadshot)
+	-- Statistiques de visée (#178), après coup et sans effet sur la touche : seulement une touche qui a fait des dégâts
+	-- (pas un corps déjà mort), flick mesuré sur sa direction validée
+	if onHitVerdict(player, hitscanRmt, targetCharacter, damage, isHeadshot) then
+		local yaw, yawAt = CharacterSync.lastYaw(player)
+		AimStats.noteHit(aimStats, Participants.fromPlayer(player), isHeadshot, os.clock(), direction, yaw, yawAt)
+	end
 end)
 
 -- ── Bots (#133) : personnages serveur, sans client ────────────────────────

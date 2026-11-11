@@ -199,10 +199,14 @@ function CheatLog.report(
 		record.counts[category] = perCategory
 	end
 	perCategory[severity] += 1
-	record.total += 1
 	if category == CheatLog.Category.AIM then
+		-- Relevé de visée (#178) : pas une violation. Compté dans sa catégorie et gardé pour le résumé, mais hors du
+		-- total, du score, de la « pire » violation et du warn limité (au plus un relevé par joueur toutes les 120 s)
 		record.aim = violation.detail
+		warn(string.format("[CheatLog] %s (%d) Aim : %s", record.name, record.id, violation.detail))
+		return
 	end
+	record.total += 1
 	record.score = decayedScore(record, t) + CheatLog.SCORE_WEIGHT[severity]
 	record.scoreAt = t
 	record.maxScore = math.max(record.maxScore, record.score)
@@ -321,8 +325,7 @@ function CheatLog.buildEmbed(record: Record): { [string]: any }
 			record.maxScore
 		),
 	}
-	-- Signalements de visée seuls : leur dernier relevé suit (« Visée »), le premier n'est pas une « pire » violation
-	if worst and worst.category ~= CheatLog.Category.AIM then
+	if worst then
 		table.insert(
 			lines,
 			string.format("Pire : %s %s — %s", worst.category, SEVERITY_LABEL[worst.severity], worst.detail)

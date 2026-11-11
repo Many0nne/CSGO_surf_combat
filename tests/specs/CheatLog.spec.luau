@@ -248,14 +248,18 @@ return function(T, Loader)
 			end
 			T.expectEqual(bob.kickedWith, nil, "aucune sanction")
 			T.expectEqual(C.summary(2).highCount, 0)
+			T.expectEqual(C.summary(2).total, 0, "un relevé de visée n'est pas une violation")
+			T.expectEqual(C.summary(2).score, 0)
+			T.expectEqual(C.summary(2).counts.Aim.low, 3 * C.KICK_HIGH_COUNT)
+			-- Une vraie violation juste après reste affichée (le relevé ne prend pas le créneau du warn limité)
+			local before = #env.warns
+			C.report(participantOf(bob), C.Category.REMOTE_RATE, C.Severity.LOW, "flood")
+			T.expectEqual(#env.warns, before + 1)
 			C.onPlayerRemoving(bob :: any)
 			T.expectEqual(#env.spawned, 1, "résumé envoyé pour revue humaine")
 			local embed = C.buildEmbed(env.spawned[1][2])
 			T.expect(string.find(embed.description, "Visée", 1, true) ~= nil, "relevé de visée au résumé")
-			T.expect(
-				string.find(embed.description, "Pire", 1, true) == nil,
-				"pas de « pire » pour un relevé de visée"
-			)
+			T.expect(string.find(embed.description, "RemoteRate", 1, true) ~= nil, "pire violation réelle au résumé")
 		end)
 
 		T.it("rappel de clôture : son signalement entre au résumé même sans Parent, avant l'oubli", function()

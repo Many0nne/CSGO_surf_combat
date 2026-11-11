@@ -1,8 +1,9 @@
 -- Statistiques de visée par joueur (#178, docs/anticheat.md « Aimbot et triggerbot ») : règles pures, sans service ni
 -- workspace, testées sous Lune (tests/specs/AimStats.spec.luau).
 -- Un aimbot envoie des tirs valides : on ne peut que le repérer statistiquement. Par joueur et par session : tirs
--- acceptés (ShotFired), touches acceptées, touches à la tête, et « flicks » (cap qui tourne d'au moins FLICK_MIN_ANGLE
--- entre le dernier cap reçu par CharacterSync et la direction du tir, en FLICK_MAX_AGE au plus) suivis d'une touche.
+-- acceptés (ShotFired), touches qui ont fait des dégâts, touches à la tête, et touches précédées d'un « flick » (cap qui
+-- tourne d'au moins FLICK_MIN_ANGLE entre le dernier cap reçu par CharacterSync et la direction de la touche, validée
+-- par le Validator, en FLICK_MAX_AGE au plus ; pas la direction de ShotFired, que rien ne vérifie contre la touche).
 -- Un joueur est signalé sur une statistique seulement si elle dépasse de Z_THRESHOLD écarts-types la moyenne des
 -- AUTRES joueurs du serveur (au moins MIN_POPULATION, chacun avec MIN_HITS touches) ET un plancher absolu (FLOOR).
 -- Sortie : chiffres bruts pour revue humaine (console, CheatLog). Jamais de sanction ni de tir refusé : rien ici ne
@@ -45,15 +46,13 @@ local MIN_HORIZONTAL = 0.1
 export type Stats = {
 	name: string,
 	shots: number, -- tirs acceptés (ShotFired relayé)
-	hits: number, -- touches acceptées par le Validator
+	hits: number, -- touches acceptées par le Validator qui ont fait des dégâts
 	headshots: number,
 	hitShots: number, -- tirs rattachés à au moins une touche
-	measured: number, -- tirs dont le flick a pu être mesuré
-	flicks: number,
-	flickHits: number, -- touches rattachées à un tir avec flick
+	measured: number, -- touches dont le flick a pu être mesuré
+	flickHits: number, -- touches précédées d'un flick
 	peakSpeed: number, -- vitesse angulaire maximale mesurée (°/s)
 	lastShotAt: number?,
-	lastShotFlick: boolean,
 	lastShotHit: boolean,
 	reportedShots: number, -- tirs au dernier résumé périodique
 	everFlagged: boolean, -- signalé au moins une fois dans la session (son relevé final va alors au journal)
@@ -95,11 +94,9 @@ local function statsOf(state: State, participant: any): Stats?
 			headshots = 0,
 			hitShots = 0,
 			measured = 0,
-			flicks = 0,
 			flickHits = 0,
 			peakSpeed = 0,
 			lastShotAt = nil,
-			lastShotFlick = false,
 			lastShotHit = false,
 			reportedShots = 0,
 			everFlagged = false,
@@ -122,16 +119,8 @@ function AimStats.yawDelta(yaw: number, direction: Vector3): number?
 	return math.deg(delta)
 end
 
--- Cette méthode permet de compter un tir accepté lorsqu'il est relayé (ShotFired) : flick mesuré contre le dernier cap
--- reçu (lastYaw, reçu à lastYawAt, même horloge que now) s'il est assez récent. Ne renvoie rien : aucun veto.
-function AimStats.noteShot(
-	state: State,
-	participant: any,
-	direction: Vector3,
-	now: number,
-	lastYaw: number?,
-	lastYawAt: number?
-)
+-- Cette méthode permet de compter un tir accepté lorsqu'il est relayé (ShotFired). Ne renvoie rien : aucun veto.
+function AimStats.noteShot(state: State, participant: any, now: number)
 	local stats = statsOf(state, participant)
 	if not stats then
 		return
@@ -139,8 +128,34 @@ function AimStats.noteShot(
 	stats.shots += 1
 	stats.lastShotAt = now
 	stats.lastShotHit = false
-	stats.lastShotFlick = false
-	if not lastYaw or not lastYawAt then
+end
+
+-- Cette méthode permet de compter une touche qui a fait des dégâts lorsqu'elle est appliquée : rattachée au dernier tir
+-- s'il est récent et pas encore touché (taux de touches), flick mesuré entre le dernier cap reçu (lastYaw à lastYawAt,
+-- même horloge que now) et la direction validée de la touche. Ne renvoie rien : aucun veto.
+function AimStats.noteHit(
+	state: State,
+	participant: any,
+	isHeadshot: boolean,
+	now: number,
+	direction: Vector3?,
+	lastYaw: number?,
+	lastYawAt: number?
+)
+	local stats = statsOf(state, participant)
+	if not stats then
+		return
+	end
+	stats.hits += 1
+	if isHeadshot then
+		stats.headshots += 1
+	end
+	local shotAt = stats.lastShotAt
+	if shotAt and not stats.lastShotHit and now - shotAt >= 0 and now - shotAt <= AimStats.HIT_LINK_WINDOW then
+		stats.lastShotHit = true
+		stats.hitShots += 1
+	end
+	if not direction or not lastYaw or not lastYawAt then
 		return
 	end
 	local age = now - lastYawAt
@@ -154,29 +169,7 @@ function AimStats.noteShot(
 	stats.measured += 1
 	stats.peakSpeed = math.max(stats.peakSpeed, delta / math.max(age, AimStats.MIN_SPEED_DT))
 	if delta >= AimStats.FLICK_MIN_ANGLE then
-		stats.flicks += 1
-		stats.lastShotFlick = true
-	end
-end
-
--- Cette méthode permet de compter une touche acceptée par le Validator lorsqu'elle est appliquée : rattachée au dernier
--- tir s'il est récent et pas encore touché (taux de touches, flick suivi d'une touche). Ne renvoie rien : aucun veto.
-function AimStats.noteHit(state: State, participant: any, isHeadshot: boolean, now: number)
-	local stats = statsOf(state, participant)
-	if not stats then
-		return
-	end
-	stats.hits += 1
-	if isHeadshot then
-		stats.headshots += 1
-	end
-	local shotAt = stats.lastShotAt
-	if shotAt and not stats.lastShotHit and now - shotAt >= 0 and now - shotAt <= AimStats.HIT_LINK_WINDOW then
-		stats.lastShotHit = true
-		stats.hitShots += 1
-		if stats.lastShotFlick then
-			stats.flickHits += 1
-		end
+		stats.flickHits += 1
 	end
 end
 
@@ -249,7 +242,7 @@ function AimStats.describe(stats: Stats, verdict: Verdict): string
 	table.insert(
 		parts,
 		string.format(
-			"tirs %d but %d (%d%%) touches %d tête %d (%d%%) flick-touche %d (%d%%) flicks %d/%d pic %.0f°/s",
+			"tirs %d but %d (%d%%) touches %d tête %d (%d%%) flick %d (%d%%) mesurés %d pic %.0f°/s",
 			stats.shots,
 			stats.hitShots,
 			pct("hitRate"),
@@ -258,7 +251,6 @@ function AimStats.describe(stats: Stats, verdict: Verdict): string
 			pct("headshotRate"),
 			stats.flickHits,
 			pct("flickRate"),
-			stats.flicks,
 			stats.measured,
 			stats.peakSpeed
 		)
