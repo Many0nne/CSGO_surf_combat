@@ -30,4 +30,27 @@ return function(T, Loader)
 			T.expectNear(awp.ShootAnimTime, awp.FireDelay, 1e-9, "verrou = cadence, comme la M9")
 		end)
 	end)
+
+	T.describe("WeaponConfig : couteaux", function()
+		T.it("donne au Ka-Bar les mêmes dégâts, cadence et portée que la M9", function()
+			local m9, kabar = WeaponConfig.Weapons.M9Bayonet, WeaponConfig.Weapons.KaBar
+			T.expect(kabar ~= nil, "KaBar absent de WeaponConfig.Weapons")
+			for _, key in { "Damage", "FireDelay", "MeleeRange", "BackstabMultiplier", "ShootAnimTime" } do
+				T.expectEqual(kabar[key], m9[key], key)
+			end
+			T.expectEqual(kabar.SecondaryAttack.Damage, m9.SecondaryAttack.Damage)
+			T.expectEqual(kabar.SecondaryAttack.FireDelay, m9.SecondaryAttack.FireDelay)
+		end)
+
+		T.it("décrit chaque piste jouée par un couteau (coups, estoc, inspection) dans AnimationSounds", function()
+			for _, name in { "M9Bayonet", "KaBar" } do
+				local cfg = WeaponConfig.Weapons[name]
+				local played = { cfg.SecondaryAttack.Animation, cfg.InspectAnimation, table.unpack(cfg.ShootAnimations) }
+				for _, animation in played do
+					T.expect(cfg.AnimationSounds[animation] ~= nil, name .. " : piste " .. animation .. " sans entrée AnimationSounds")
+				end
+				T.expect(cfg.ThirdPerson and cfg.ThirdPerson.Grip ~= nil, name .. " : tenue 3P sans Grip")
+			end
+		end)
+	end)
 end
