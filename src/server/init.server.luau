@@ -335,6 +335,10 @@ local function onDeathCounted(participant: Participants.Participant, killer: Par
 	if player and ParticipantRules.countsInStats(participant.isBot, killer and killer.isBot) then
 		StatsStore.recordDeath(player)
 	end
+	-- Le tueur joueur est crédité d'un kill sous la même règle (un bot tué ou tueur ne compte pas)
+	if killer and killer.player and ParticipantRules.killCountsInStats(participant.isBot, killer.isBot) then
+		StatsStore.recordKill(killer.player)
+	end
 end
 
 -- Cette méthode permet de brancher le personnage d'un participant (joueur ou bot, #139) lorsqu'il apparaît : arme 3P

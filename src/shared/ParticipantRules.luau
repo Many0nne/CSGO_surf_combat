@@ -32,4 +32,10 @@ function ParticipantRules.countsInStats(victimIsBot: boolean, killerIsBot: boole
 	return not victimIsBot and killerIsBot ~= true
 end
 
+-- Cette méthode permet de savoir si un kill compte dans les stats persistantes du tueur lorsqu'une mort est attribuée :
+-- même règle que la mort (countsInStats), et il faut un tueur joueur (sans tueur ou tueur bot : rien).
+function ParticipantRules.killCountsInStats(victimIsBot: boolean, killerIsBot: boolean?): boolean
+	return killerIsBot == false and ParticipantRules.countsInStats(victimIsBot, killerIsBot)
+end
+
 return ParticipantRules
