@@ -233,4 +233,87 @@ return function(T, Loader)
 			T.expectEqual(mag.shots, 0)
 		end)
 	end)
+
+	T.describe("ShotRules : orientation et ligne de vue de la mêlée (#176)", function()
+		T.it("mesure l'angle horizontal, sans tenir compte de la hauteur ni du pitch", function()
+			local angle, distance = ShotRules.horizontalAngle(Vector3.new(1, 0, 0), Vector3.zero, Vector3.new(0, 30, 5))
+			T.expect(math.abs((angle :: number) - 90) < 1e-6, "angle " .. tostring(angle))
+			T.expect(math.abs(distance - 5) < 1e-6, "distance " .. tostring(distance))
+			-- Regard vers le bas : seul le cap horizontal compte
+			angle = ShotRules.horizontalAngle(Vector3.new(1, -5, 0), Vector3.zero, Vector3.new(4, -2, 0))
+			T.expect(math.abs(angle :: number) < 1e-6, "angle " .. tostring(angle))
+			T.expectEqual((ShotRules.horizontalAngle(Vector3.new(1, 0, 0), Vector3.zero, Vector3.new(0, 3, 0))), nil)
+		end)
+
+		T.it("élargit l'angle permis de la demi-largeur du corps, jusqu'à 90° au contact", function()
+			T.expect(math.abs(ShotRules.meleeAngleLimit(1) - (ShotRules.MELEE_MAX_ANGLE + 90)) < 1e-6, "contact")
+			local far = ShotRules.meleeAngleLimit(7.5)
+			T.expect(far > ShotRules.MELEE_MAX_ANGLE and far < ShotRules.MELEE_MAX_ANGLE + 16, "à 7,5 studs : " .. far)
+		end)
+
+		T.it("accepte une cible devant, refuse une cible dans le dos même collée", function()
+			local look = Vector3.new(1, 0, 0)
+			T.expectEqual((ShotRules.checkMeleeOrientation(look, Vector3.zero, Vector3.new(7, 0, 0))), true)
+			T.expectEqual((ShotRules.checkMeleeOrientation(look, Vector3.zero, Vector3.new(-7, 0, 0))), false)
+			-- Dans le dos à 1 stud : 180° pour 160° permis au plus
+			local ok, excess, detail = ShotRules.checkMeleeOrientation(look, Vector3.zero, Vector3.new(-1, 0, 0))
+			T.expectEqual(ok, false)
+			T.expect(excess > 0, "excès " .. excess)
+			T.expect(type(detail) == "string", "détail manquant")
+			-- À la verticale : toute direction horizontale touche le corps
+			T.expectEqual((ShotRules.checkMeleeOrientation(look, Vector3.zero, Vector3.new(0, 4, 0))), true)
+		end)
+
+		T.it("accepte tout cap pour une cible à l'aplomb, nettement plus bas (tireur sur sa tête)", function()
+			-- 0,5 stud derrière, 5 studs plus bas : le regard vers le bas touche son corps
+			local ok = ShotRules.checkMeleeOrientation(Vector3.new(1, 0, 0), Vector3.zero, Vector3.new(-0.5, -5, 0))
+			T.expectEqual(ok, true)
+			-- À même hauteur, collée dans le dos : toujours refusée
+			ok = ShotRules.checkMeleeOrientation(Vector3.new(1, 0, 0), Vector3.zero, Vector3.new(-1.5, 0, 0))
+			T.expectEqual(ok, false)
+		end)
+
+		T.it("teste toujours la borne de rembobinage, même hors multiple du pas", function()
+			local step = ShotRules.MELEE_REWIND_STEP
+			ShotRules.MELEE_REWIND_STEP = 0.15
+			local times = ShotRules.meleeRewindTimes(100)
+			ShotRules.MELEE_REWIND_STEP = step
+			T.expect(math.abs(times[#times] - 99.6) < 1e-6, "dernier instant " .. times[#times])
+			T.expectEqual(#times, 4)
+		end)
+
+		T.it("n'ouvre pas l'angle pour une cible proche à l'horizontale mais loin en hauteur (rampe)", function()
+			-- 2,5 studs à l'horizontale (hors de l'aplomb), 6 studs plus bas, 150° du cap : permis 70° + asin(2 / 6,5) ≈ 88°
+			local yaw = math.rad(150)
+			local target = Vector3.new(math.cos(yaw) * 2.5, -6, math.sin(yaw) * 2.5)
+			T.expectEqual((ShotRules.checkMeleeOrientation(Vector3.new(1, 0, 0), Vector3.zero, target)), false)
+		end)
+
+		T.it("rembobine de now à now - MAX_REWIND, le plus récent d'abord", function()
+			local times = ShotRules.meleeRewindTimes(100)
+			T.expectEqual(times[1], 100)
+			T.expect(math.abs(times[#times] - 99.6) < 1e-6, "dernier instant " .. times[#times])
+			T.expectEqual(#times, 9)
+		end)
+
+		T.it("teste racine à racine et œil à tête, rien pour deux cibles collées", function()
+			local eye, head = Vector3.new(0, 2.5, 0), Vector3.new(0, 1.5, 0)
+			local segments = ShotRules.meleeSightSegments(Vector3.zero, Vector3.new(5, 0, 0), eye, head)
+			T.expectEqual(#segments, 2)
+			T.expectEqual(segments[2].from, eye)
+			-- Le segment haut finit sur la tête de la cible, pas au-dessus (mur juste plus haut qu'elle)
+			local tip = segments[2].from + segments[2].delta
+			T.expect(tip.Y > 1.5 and tip.Y < 1.6, "bout du segment haut à Y = " .. tip.Y)
+			T.expect(math.abs(segments[1].delta.Magnitude - (5 - ShotRules.LINE_OF_SIGHT_END_MARGIN)) < 1e-6, "marge")
+			local glued = ShotRules.meleeSightSegments(Vector3.zero, Vector3.new(0.2, 0, 0), Vector3.zero, Vector3.zero)
+			T.expectEqual(#glued, 0)
+		end)
+
+		T.it("livre orientation et ligne de vue de la mêlée en journal seul, gravité moyenne", function()
+			T.expectEqual(ShotRules.MODES.orientation, "log")
+			T.expectEqual(ShotRules.MODES.meleeLineOfSight, "log")
+			T.expectEqual(ShotRules.SEVERITY.orientation, "medium")
+			T.expectEqual(ShotRules.SEVERITY.meleeLineOfSight, "medium")
+		end)
+	end)
 end

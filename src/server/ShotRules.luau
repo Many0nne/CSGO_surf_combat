@@ -4,6 +4,7 @@
 -- raycast de ligne de vue sont fournis par l'appelant (Validator). Testées sous Lune (tests/specs/ShotRules.spec.luau, tests/specs/Validator.spec.luau).
 -- Chaque contrôle a un mode : "log" (violation journalisée, tir appliqué : phase de mesure) ou "block" (tir refusé).
 -- Durée d'equip et chargeur (#175, « T2 ») : règles pures ici aussi, l'état (instants, compteurs) vit dans Validator.
+-- Mêlée (#176, « M1 ») : orientation du tireur et ligne de vue vers la cible rembobinée, mêmes modes et même journal.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -29,6 +30,8 @@ ShotRules.Check = {
 	LINE_OF_SIGHT = "lineOfSight", -- aucun obstacle de la map entre origine et impact
 	EQUIP = "equip", -- arme sortie depuis sa durée d'equip (#175, tir et mêlée)
 	MAGAZINE = "magazine", -- chargeur non vide, ou rechargé (#175, tir)
+	ORIENTATION = "orientation", -- cible devant le cap du tireur (#176, mêlée)
+	MELEE_LINE_OF_SIGHT = "meleeLineOfSight", -- aucun obstacle de la map entre tireur et cible (#176, mêlée)
 }
 
 -- Catégories du journal (mêmes valeurs que CheatLog.Category) : le contrôle d'equip vaut aussi pour la mêlée.
@@ -36,7 +39,8 @@ ShotRules.Category = { HITSCAN = "Hitscan", MELEE = "Melee" }
 
 -- Mode de chaque contrôle. "log" tant que les faux positifs ne sont pas mesurés en jeu (docs/anticheat.md, « T1 » :
 -- procédure pour passer en "block") ; forme et distance ne dépendent pas du réseau, donc bloquants d'emblée. Equip et
--- chargeur (#175) : règles déterministes à tolérance de gigue, sans faux positif mesuré, bloquants d'emblée.
+-- chargeur (#175) : règles déterministes à tolérance de gigue, sans faux positif mesuré, bloquants d'emblée. Mêlée
+-- (#176) : cap du tireur relayé à 20 Hz, faux positifs possibles en rotation rapide, journal seul jusqu'à mesure en jeu.
 ShotRules.MODES = {
 	shape = "block",
 	origin = "log",
@@ -45,6 +49,8 @@ ShotRules.MODES = {
 	lineOfSight = "log",
 	equip = "block",
 	magazine = "block",
+	orientation = "log",
+	meleeLineOfSight = "log",
 } :: { [string]: Mode }
 
 -- Gravité d'un échec au journal (valeurs de CheatLog.Severity) : une forme impossible ne vient jamais de notre client
@@ -57,6 +63,8 @@ ShotRules.SEVERITY = {
 	lineOfSight = "medium",
 	equip = "medium",
 	magazine = "medium",
+	orientation = "medium",
+	meleeLineOfSight = "medium",
 } :: { [string]: Severity }
 
 -- Ancienne borne du serveur (studs entre racines), avant #174 : tout tir au-delà était refusé. Pendant la phase de
@@ -99,6 +107,19 @@ ShotRules.RELOAD_TOLERANCE = 0.2
 -- un joueur qui a fini de recharger puis changé d'arme aussitôt ; un tricheur n'y gagne rien, ressortir l'arme lui
 -- coûte son equip (AWP : 1,38 s au moins), plus que cette marge.
 ShotRules.RELOAD_CANCEL_TOLERANCE = 1
+-- Mêlée (#176) : angle horizontal maximal (degrés) entre le cap du tireur et la direction de la racine de la cible.
+-- Le rayon du client part de la caméra, au cap de la racine (MovementController) ; la géométrie seule demande
+-- asin(MELEE_BODY_RADIUS / distance), soit 15° à 7,5 studs : le reste couvre le retard du cap relayé (20 Hz, plus la
+-- gigue), environ 1 000°/s de rotation pendant 50 ms.
+ShotRules.MELEE_MAX_ANGLE = 70
+-- Demi-largeur (studs) d'un personnage vu de dessus, bras compris : le rayon peut toucher le bord du corps plutôt que
+-- son axe, l'angle permis est élargi de asin(MELEE_BODY_RADIUS / distance horizontale) (90° au contact).
+ShotRules.MELEE_BODY_RADIUS = 2
+-- Pas (s) entre deux positions rembobinées de la cible testées : le remote de mêlée n'envoie pas d'instant, la cible
+-- est cherchée sur toute la borne de rembobinage [now - MAX_REWIND, now] (INTERP_DELAY + aller-retour du tireur).
+ShotRules.MELEE_REWIND_STEP = 0.05
+-- Deux positions rembobinées plus proches que cette distance (studs) ne sont testées qu'une fois contre la map.
+ShotRules.MELEE_SAMPLE_MERGE = 0.25
 
 -- Cette méthode permet de vérifier qu'un nombre est fini et borné lorsqu'un argument de tir arrive.
 local function isBounded(n: any, bound: number): boolean
@@ -310,6 +331,89 @@ end
 -- Cette méthode permet de compter une touche acceptée dans le chargeur lorsqu'elle est appliquée.
 function ShotRules.countShot(mag: Magazine)
 	mag.shots += 1
+end
+
+-- Cette méthode permet de lister les instants où rembobiner la cible lorsqu'un coup de mêlée arrive (sans instant
+-- annoncé) : de now à now - MAX_REWIND, tous les MELEE_REWIND_STEP, le plus récent d'abord ; la borne now - MAX_REWIND
+-- est toujours testée, même si elle n'est pas un multiple du pas.
+function ShotRules.meleeRewindTimes(now: number): { number }
+	local times = {}
+	local steps = math.floor(PositionHistory.MAX_REWIND / ShotRules.MELEE_REWIND_STEP + 1e-6)
+	for i = 0, steps do
+		table.insert(times, now - i * ShotRules.MELEE_REWIND_STEP)
+	end
+	local oldest = now - PositionHistory.MAX_REWIND
+	if times[#times] - oldest > 1e-6 then
+		table.insert(times, oldest)
+	end
+	return times
+end
+
+-- Cette méthode permet de mesurer l'angle horizontal (degrés) entre un cap et la direction d'un point à un autre
+-- lorsqu'on vérifie l'orientation d'un coup ; renvoie aussi la distance horizontale (angle nil si elle est nulle).
+function ShotRules.horizontalAngle(look: Vector3, from: Vector3, to: Vector3): (number?, number)
+	local flatLook = Vector3.new(look.X, 0, look.Z)
+	local delta = to - from
+	local flat = Vector3.new(delta.X, 0, delta.Z)
+	local distance = flat.Magnitude
+	if distance < 1e-3 or flatLook.Magnitude < 1e-3 then
+		return nil, distance
+	end
+	local cos = math.clamp(flatLook.Unit:Dot(flat.Unit), -1, 1)
+	return math.deg(math.acos(cos)), distance
+end
+
+-- Cette méthode permet de calculer l'angle permis (degrés) lorsqu'on vérifie l'orientation d'un coup : MELEE_MAX_ANGLE
+-- plus l'angle sous lequel le tireur voit la demi-largeur du corps de la cible (bord du corps touché), d'après la
+-- distance 3D : une cible juste au-dessous, mais loin en hauteur, n'ouvre pas l'angle (rampe de surf).
+function ShotRules.meleeAngleLimit(distance: number): number
+	local ratio = if distance > 0 then math.min(1, ShotRules.MELEE_BODY_RADIUS / distance) else 1
+	return ShotRules.MELEE_MAX_ANGLE + math.deg(math.asin(ratio))
+end
+
+-- Cette méthode permet de vérifier qu'une position de la cible est devant le tireur lorsqu'un coup de mêlée arrive :
+-- angle horizontal entre son cap (look) et la cible au plus meleeAngleLimit. Renvoie aussi l'excès d'angle (degrés,
+-- négatif ou nul si accepté) et le détail, pour retenir la position la plus proche au journal.
+function ShotRules.checkMeleeOrientation(
+	look: Vector3,
+	attackerPos: Vector3,
+	targetPos: Vector3
+): (boolean, number, string?)
+	local angle, horizontal = ShotRules.horizontalAngle(look, attackerPos, targetPos)
+	local delta = targetPos - attackerPos
+	if
+		angle == nil or (horizontal <= ShotRules.MELEE_BODY_RADIUS and math.abs(delta.Y) > ShotRules.MELEE_BODY_RADIUS)
+	then
+		-- Cible à l'aplomb du tireur, nettement au-dessus ou au-dessous : son corps passe sous (ou sur) le tireur, un
+		-- regard vers le bas (ou le haut) la touche quel que soit le cap. À même hauteur, l'angle permis s'applique
+		return true, -math.huge, nil
+	end
+	local distance = delta.Magnitude
+	local limit = ShotRules.meleeAngleLimit(distance)
+	local excess = angle - limit
+	if excess <= 0 then
+		return true, excess, nil
+	end
+	return false, excess, string.format("cible à %.0f° du cap (max %.0f°) à %.1f studs", angle, limit, distance)
+end
+
+-- Cette méthode permet de lister les segments à tester contre la map lorsqu'on vérifie la ligne de vue d'un coup :
+-- racine à racine, et œil du tireur (eyeOffset, hauteur de la caméra) à tête de la cible (headOffset) pour un obstacle
+-- bas par-dessus lequel la caméra frappe. Un seul segment dégagé suffit ; segments nuls (cibles collées) omis.
+function ShotRules.meleeSightSegments(
+	attackerPos: Vector3,
+	targetPos: Vector3,
+	eyeOffset: Vector3,
+	headOffset: Vector3
+): { { from: Vector3, delta: Vector3 } }
+	local segments = {}
+	for _, ends in { { Vector3.zero, Vector3.zero }, { eyeOffset, headOffset } } do
+		local from, delta = ShotRules.lineOfSightSegment(attackerPos + ends[1], targetPos + ends[2])
+		if from and delta then
+			table.insert(segments, { from = from, delta = delta })
+		end
+	end
+	return segments
 end
 
 -- Cette méthode permet de savoir si l'échec d'un contrôle refuse le tir lorsqu'il est constaté (mode "block") ;

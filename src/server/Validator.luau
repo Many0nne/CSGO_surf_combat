@@ -32,7 +32,8 @@ Validator.MAX_HITSCAN_RANGE = MAX_HITSCAN_RANGE
 
 -- Accès au monde dont la validation d'un tir de joueur a besoin (#174), branchés par init.server (simulés en test) :
 -- horloge serveur, position rembobinée d'un personnage, raycast de ligne de vue sur la map, journal des violations
--- (category : ShotRules.Category, Hitscan si absente ; l'equip vaut aussi pour la mêlée, #175).
+-- (category : ShotRules.Category, Hitscan si absente ; l'equip vaut aussi pour la mêlée, #175 ; orientation et ligne de
+-- vue de la mêlée, #176).
 export type ShotWorld = {
 	serverNow: () -> number,
 	positionAt: (char: Model, t: number) -> Vector3?,
@@ -46,10 +47,12 @@ export type ShotWorld = {
 	) -> (),
 }
 
--- nil tant que setShotWorld n'a pas été appelé : les tirs de joueurs sont alors refusés (jamais validés en silence).
+-- nil tant que setShotWorld n'a pas été appelé : les tirs et coups de mêlée de joueurs sont alors refusés (jamais
+-- validés en silence).
 local shotWorld: ShotWorld? = nil
 local warnedNoWorld = false
 local warnedNoWorldWeapon = false
+local warnedNoWorldMelee = false
 
 -- Attribut serveur de la cible immobile du helper de playtest ; les attributs posés par un client ne répliquent pas.
 Validator.DEBUG_TARGET_ATTRIBUTE = "DebugTarget"
@@ -367,6 +370,125 @@ local function validateShot(
 	return not blocked
 end
 
+-- Hauteur de la caméra au-dessus de la racine : départ du segment « œil à tête » de la ligne de vue d'un coup (#176).
+local EYE_OFFSET = Vector3.new(0, CameraConfig.CAM_HEIGHT_STAND, 0)
+-- Centre de la tête au-dessus de la racine, si le rig serveur de la cible n'a pas de Head (R6 : 1,5 stud).
+local DEFAULT_HEAD_OFFSET = Vector3.new(0, 1.5, 0)
+
+-- Cette méthode permet de lister les positions rembobinées de la cible lorsqu'un coup de mêlée arrive (le remote
+-- n'annonce pas d'instant) : toute la borne de rembobinage, la plus récente d'abord, sans celles hors de portée du
+-- tireur ; position actuelle (déjà à portée, resolveAttack) si la cible n'a pas d'historique ou aucune position à portée.
+local function meleeSamples(
+	world: ShotWorld,
+	targetCharacter: Model,
+	tRoot: BasePart,
+	attackerPos: Vector3,
+	now: number
+): { { pos: Vector3, rewind: number } }
+	local samples = {}
+	for _, t in ShotRules.meleeRewindTimes(now) do
+		local pos = world.positionAt(targetCharacter, t)
+		-- Une position lointaine du sillage ne justifie pas un coup sur une cible proche (mur entre-temps)
+		if pos and (pos - attackerPos).Magnitude <= MAX_MELEE_RANGE then
+			table.insert(samples, { pos = pos, rewind = now - t })
+		end
+	end
+	if #samples == 0 then
+		table.insert(samples, { pos = tRoot.Position, rewind = 0 })
+	end
+	return samples
+end
+
+-- Cette méthode permet de vérifier un coup de mêlée de joueur lorsqu'il a passé cible, arme et cadence (#176) : une
+-- position rembobinée de la cible devant le cap du tireur et sans obstacle de la map. Renvoie true s'il peut s'appliquer.
+local function validateMelee(attacker: Participant, aRoot: BasePart, tRoot: BasePart, targetCharacter: Model): boolean
+	local world = shotWorld
+	if not world then
+		if not warnedNoWorldMelee then
+			warnedNoWorldMelee = true
+			warn("[Validator] setShotWorld non appelé : coups de mêlée de joueurs refusés")
+		end
+		return false
+	end
+	local now = world.serverNow()
+	local look = aRoot.CFrame.LookVector
+	local attackerPos = aRoot.Position
+	local samples = meleeSamples(world, targetCharacter, tRoot, attackerPos, now)
+
+	local blocked = false
+	-- Cette méthode permet de journaliser un contrôle de mêlée en échec lorsqu'il est constaté, et de retenir s'il
+	-- refuse le coup (mode "block").
+	local function fail(check: string, detail: string)
+		local refuses = ShotRules.blocks(check)
+		blocked = blocked or refuses
+		reportCheck(world, attacker, check, detail, refuses, ShotRules.Category.MELEE)
+	end
+
+	-- Orientation : au moins une position devant le cap ; sinon la plus proche de l'angle permis va au journal
+	local facing = {}
+	local closestDetail, closestExcess, closestRewind = nil, math.huge, 0
+	for _, sample in samples do
+		local ok, excess, detail = ShotRules.checkMeleeOrientation(look, attackerPos, sample.pos)
+		if ok then
+			table.insert(facing, sample)
+		elseif excess < closestExcess then
+			closestDetail, closestExcess, closestRewind = detail, excess, sample.rewind
+		end
+	end
+	if #facing == 0 then
+		fail(
+			ShotRules.Check.ORIENTATION,
+			string.format("%s, rembobinée de %.2f s", closestDetail or "?", closestRewind)
+		)
+	end
+
+	-- Ligne de vue : parmi les positions devant le tireur (toutes si aucune, pour la mesure), une sans obstacle suffit ;
+	-- deux positions voisines ne sont testées qu'une fois. Tête de la cible prise sur le rig serveur
+	local head = targetCharacter:FindFirstChild("Head")
+	local headOffset = if head and head:IsA("BasePart") then head.Position - tRoot.Position else DEFAULT_HEAD_OFFSET
+	local candidates = if #facing > 0 then facing else samples
+	local tested: { Vector3 } = {}
+	local clear = false
+	for _, sample in candidates do
+		local seen = false
+		for _, pos in tested do
+			if (pos - sample.pos).Magnitude <= ShotRules.MELEE_SAMPLE_MERGE then
+				seen = true
+				break
+			end
+		end
+		if not seen then
+			table.insert(tested, sample.pos)
+			local segments = ShotRules.meleeSightSegments(attackerPos, sample.pos, EYE_OFFSET, headOffset)
+			if #segments == 0 then
+				clear = true
+			end
+			for _, segment in segments do
+				if not world.isObstructed(segment.from, segment.delta) then
+					clear = true
+					break
+				end
+			end
+		end
+		if clear then
+			break
+		end
+	end
+	if not clear then
+		local first = candidates[1]
+		fail(
+			ShotRules.Check.MELEE_LINE_OF_SIGHT,
+			string.format(
+				"obstacle de la map (%d positions testées, la plus récente à %.1f studs, rembobinée de %.2f s)",
+				#tested,
+				(first.pos - attackerPos).Magnitude,
+				first.rewind
+			)
+		)
+	end
+	return not blocked
+end
+
 -- Cette méthode permet de décider un tir d'arme à distance lorsque le remote arrive : elle renvoie les dégâts de l'arme
 -- réellement en main selon la zone touchée et si c'est un tir à la tête, et démarre sa cadence ; nil si le tir est refusé.
 -- shot (origine, direction, impact, instant) est exigé d'un joueur et vérifié (#174) ; un bot tire depuis le serveur,
@@ -416,6 +538,7 @@ end
 
 -- Cette méthode permet de décider un coup de mêlée lorsque le remote arrive : elle renvoie les dégâts calculés depuis
 -- WeaponConfig (backstab recalculé d'après les positions serveur) et démarre la cadence, ou nil si le coup est refusé.
+-- Pour un joueur : orientation et ligne de vue vers la cible rembobinée (#176), durée d'equip (#175).
 function Validator.authorizeMelee(
 	attacker: Participant,
 	targetCharacter: Instance,
@@ -430,9 +553,15 @@ function Validator.authorizeMelee(
 	if not damage or not fireDelay or not isCadenceReady(attacker, cfg, now) then
 		return nil
 	end
-	-- Equip (#175) : joueurs seulement, comme pour le tir
-	if not attacker.isBot and not isWeaponReady(attacker, ShotRules.Category.MELEE, tool, cfg, now) then
-		return nil
+	if not attacker.isBot then
+		-- Orientation et ligne de vue (#176), puis equip (#175) : joueurs seulement (les bots frappent depuis le serveur,
+		-- face à leur cible, BotMotion) ; tous sont évalués, comme pour le tir
+		local geometryOk = validateMelee(attacker, aRoot, tRoot, targetCharacter :: Model)
+		local weaponOk = isWeaponReady(attacker, ShotRules.Category.MELEE, tool, cfg, now)
+		if not geometryOk or not weaponOk then
+			-- Refusé : la cadence n'est pas relancée
+			return nil
+		end
 	end
 	recordAttack(attacker, cfg, fireDelay, now)
 
