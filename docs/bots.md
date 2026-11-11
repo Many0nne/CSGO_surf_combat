@@ -228,8 +228,10 @@ Règles pures dans `BotPopulationRules`, appliquées par `BotManager` (`adjustPo
   replis, angles tenus, destinations biaisées) toutes les 30 s.
 - `workspace:SetAttribute("PerfServer", true)` : sonde de coût du serveur, une ligne `[Perf] SRV` toutes les 10 s
   (méthode et lecture : `docs/performance.md`).
-- Le playtest démarre sans round : `ReplicatedStorage.RequestSpawn:FireServer()` en contexte Client fait apparaître
-  le joueur et lance le round (piège du `require` depuis le MCP : `docs/architecture.md`).
+- Le playtest démarre sans round : le lancer par le helper `DebugPlaytest` (joueur apparu par le vrai client, round
+  lancé ; les bots sont retirés pendant le run et rétablis à la fin), pas par `RequestSpawn:FireServer()` : le client
+  resterait sur le menu et enverrait des positions non physiques (cf. `CLAUDE.md`, piège du `require` depuis le MCP :
+  `docs/architecture.md`).
 
 ## Pièges
 
