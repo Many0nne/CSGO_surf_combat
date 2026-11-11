@@ -264,10 +264,11 @@ function MovementGuardRules.ceiling(flight: Flight, now: number): number
 	local tau = now - flight.anchorAt
 	local slack = MovementGuardRules.FLIGHT_TIME_SLACK
 	local s = math.clamp(flight.anchorVy / GRAVITY, math.max(0, tau - slack), tau + slack)
-	-- Ancre resserrée en descente : un paquet parti avant elle peut encore arriver, plus haut d'au plus une chute
-	-- plafonnée pendant REORDER_TIME
+	-- Ancre resserrée en descente : un paquet parti jusqu'à REORDER_TIME avant elle peut encore arriver, plus haut de
+	-- la chute faite entre-temps (vitesse de l'ancre plus deux marges de resserrement, l'ancre la majorant) ; pas une
+	-- chute plafonnée, qui laisserait un tricheur osciller de ±15 studs sans être vu
 	local reorder = if flight.anchorVy < 0 and tau < MovementGuardRules.REORDER_TIME
-		then MAX_FALL * MovementGuardRules.REORDER_TIME
+		then (-flight.anchorVy + 2 * MovementGuardRules.REFINE_MARGIN) * MovementGuardRules.REORDER_TIME
 		else 0
 	return flight.anchorY
 		+ MovementGuardRules.ballistic(flight.anchorVy, s)

@@ -405,16 +405,21 @@ return function(T, Loader)
 			T.expect(#verdicts > 0, "le vol après le geyser doit être signalé")
 		end)
 
-		T.it("un tricheur qui plane en alternant un paquet haut et un paquet bas est signalé", function()
-			local i = 0
-			local function path(t: number): Vector3
-				i += 1
-				local high = if t < 1 then STAND + 40 * t else STAND + 40
-				return V(10 * t, if i % 2 == 0 then high else high - 25, 0)
+		T.it(
+			"un tricheur qui plane en alternant un paquet haut et un paquet bas (±25 ou ±15 studs) est signalé",
+			function()
+				for _, amplitude in { 25, 15 } do
+					local i = 0
+					local function path(t: number): Vector3
+						i += 1
+						local high = if t < 1 then STAND + 40 * t else STAND + 40
+						return V(10 * t, if i % 2 == 0 then high else high - amplitude, 0)
+					end
+					local verdicts = replay(packets(path, 5), geometryOf({ FLOOR }), V(0, STAND, 0))
+					T.expect(#verdicts > 0, "l'alternance de " .. amplitude .. " studs ne doit pas masquer le vol")
+				end
 			end
-			local verdicts = replay(packets(path, 5), geometryOf({ FLOOR }), V(0, STAND, 0))
-			T.expect(#verdicts > 0, "l'alternance ne doit pas masquer le vol")
-		end)
+		)
 
 		T.it("un lancement depuis le soleil n'est pas signalé, même au premier paquet tardif", function()
 			local launch = V(100, 80, 0)

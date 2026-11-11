@@ -384,7 +384,8 @@ par le seau (D1) passe par `MovementGuardRules.judge` (`judgeGuard`, `src/server
    premier paquet en l'air, en au moins `max(n × MIN_PACKET_INTERVAL, (n - 1) × SEND_INTERVAL)` secondes (n = paquets
    reçus moins deux, marge pour le désordre), majore la vitesse actuelle (`maxVyAfter` + `REFINE_MARGIN`, jamais sous
    `-MAX_FALL_SPEED`) ; juste après un resserrement en descente, un paquet plus ancien arrivé en retard peut être plus
-   haut d'une chute plafonnée pendant `REORDER_TIME` (0,1 s), toléré. **Deux paquets au-dessus à moins de
+   haut de la chute faite pendant `REORDER_TIME` (0,1 s) à la vitesse de l'ancre plus deux `REFINE_MARGIN`, toléré
+   (pas une chute plafonnée : 13 studs laisseraient un tricheur osciller sans être vu). **Deux paquets au-dessus à moins de
    `SUSPECT_WINDOW` (2) paquets d'écart** = vol (un seul : paquet ancien arrivé après un plus récent ; l'alternance
    haut/bas d'un tricheur est prise). Un vol bloquant passe avant un noclip en journal seul. Après un vol signalé,
    l'enveloppe repart du point atteint, vitesse nulle : un joueur qui plane encore est signalé environ deux fois par
@@ -444,11 +445,15 @@ frame à pleine partie.
 serré autour d'un coin à 100 studs/s, arête de rampe à 300 studs/s, saut, 10 s de bhop avec 80 ms de gigue, chute de
 300 studs, bhop et chute à 15/30/45/144 FPS sur 10 graines de gigue, surf sur une rampe à 60° puis sortie à 130 studs/s
 vers le haut, échelle (et la même montée sans échelle signalée), geyser, lancement depuis le soleil au premier paquet
-tardif, vol stationnaire, descente lente, les deux modes (journal seul, bloquant sans boucle de corrections), vide. En
-jeu (Studio, latence nulle) : bhop et strafes, montée à l'échelle jusqu'au toit sans violation ; client figé au-dessus
-du vide déclaré tombé après 2,1 s ; paquet forgé à travers un mur journalisé (`noclip`, puis le retour du vrai client),
-refusé et corrigé une seule fois en mode bloquant ; vol stationnaire forgé journalisé (`vol`). Non vérifié en jeu :
-surf (Dizzy n'a pas de rampe de surf), boosts et lancement depuis le soleil (absents de Dizzy), vrai ping.
+tardif, geyser dépassé à pied, vol stationnaire, vol en alternance haut/bas, descente lente, les deux modes (journal
+seul, bloquant sans boucle de corrections, vol bloquant prioritaire sur un noclip en journal seul), vide (sol cherché
+devant un saut par-dessus un trou, paquets en attente d'accusé). En jeu (Studio, latence nulle) : bhop et strafes,
+montée à l'échelle jusqu'au toit sans violation ; client figé au-dessus du vide déclaré tombé après 2 s (deux fois,
+avant et après les revues) ; paquet forgé à travers un mur journalisé (`noclip`, puis le retour du vrai client), refusé
+et corrigé une seule fois en mode bloquant ; vol stationnaire forgé journalisé (`vol`). Non vérifié en jeu : surf
+(Dizzy n'a pas de rampe de surf), boosts et lancement depuis le soleil (absents de Dizzy), vrai ping. Point ouvert : un
+`vol` journalisé une fois pendant une session où le personnage avait été apparu par script avec le client resté sur le
+menu (positions envoyées non physiques), non reproduit.
 
 **Impact.** Le vide est fermé ; le noclip et le vol sont visibles au journal, bloquants après mesure. Le vol et le
 noclip donnent surtout des positions de tir hors d'atteinte, que T1 (ligne de vue) limite déjà en partie.
