@@ -66,9 +66,15 @@ print(f"OK {len(data)} frames -> {out_path}")
 ASPECT = 16 / 9
 MOVE = 0.15  # écart au repos de la main (studs) en dessous duquel elle est considérée immobile
 SLOW = 0.3  # vitesse de la main (studs/s) en dessous de laquelle elle est considérée à l'arrêt
+HOLD = 1.0  # vitesse (studs/s) d'une pose tenue qui dérive lentement (le couteau CT monte encore pendant sa tenue)
+HOLD_TIME = 0.15  # durée (s) sous HOLD qui marque une tenue : un creux d'une image au milieu d'un geste n'en est pas une
+TWIST_MAX = 200  # amplitude (degrés) de la torsion de l'avant-bras : pronation et supination font ≈ 180° à elles deux
 
 # Cibles par archétype, mesurées sur le couteau CT de CS:GO (docs/animations.md) : (minimum, maximum) en secondes,
 # rapport pour la profondeur. La taille est coupée par la cadence en jeu (FireDelay), d'où sa durée minimale courte.
+# Estoc du CT, mesuré par ce script sur ses trajectoires : le pic est le saut d'une image vers l'armé (≈ 68 studs/s,
+# frappe 0,03 s), hors cadre 0,37 s, retour au repos 0,98 s après ce pic, profondeur ×2,0 (gant 1,5 fois plus petit).
+# Inspect du CT : montée 0,55 s avant la tenue qui monte lentement, descente 0,5 s ; la durée couvre aussi la M9 (10,3 s).
 RULES = {
 	"taille": {
 		"anticipation": (None, 0.25),
@@ -80,9 +86,10 @@ RULES = {
 	},
 	"estoc": {
 		"anticipation": (None, 0.20),
-		"frappe": (None, 0.20),
-		"retour": (None, 0.90),
-		"profondeur": (1.20, None),
+		"frappe": (None, 0.10),
+		"hors cadre": (0.20, None),
+		"retour": (None, 1.00),
+		"profondeur": (1.40, None),
 		"durée": (0.70, 1.30),
 	},
 	"equip": {
@@ -138,12 +145,16 @@ def profile():
 	while hi < len(speed) - 1 and speed[hi + 1] > half:
 		hi += 1
 	settle = max((i for i, d in enumerate(dist_end) if d > MOVE), default=peak)
-	# dernier mouvement franc avant le repos final : ce qui reste est la descente
-	last_fast = max((i for i in range(settle + 1) if speed[i] > max(SLOW, speed[peak] * 0.3)), default=settle)
-	# fin de la montée : première accalmie après le départ
+	# tenues : images où la main reste sous HOLD pendant au moins HOLD_TIME (une pose qui dérive lentement en est une)
+	span = max(1, round(HOLD_TIME * FPS))
+	held = [i + span <= len(speed) and all(v < HOLD for v in speed[i : i + span]) for i in range(len(speed))]
+	# fin de la montée : première tenue après le départ, loin du repos
 	rise_end = None
 	if start is not None:
-		rise_end = next((i for i in range(start, len(speed)) if speed[i] < SLOW and dist[i] > MOVE), None)
+		rise_end = next((i for i in range(start, len(speed)) if held[i] and dist[i] > MOVE), None)
+	# début de la descente : fin de la dernière tenue avant le repos final
+	last_hold = max((i for i in range(settle) if held[i] and dist_end[i] > MOVE), default=None)
+	last_fast = last_hold + span if last_hold is not None else settle
 
 	out_frames = [i for i, v in enumerate(visible) if not v]
 	exits = ""
@@ -175,13 +186,27 @@ def profile():
 		"frappe": (hi - lo + 1) / FPS,
 		"hors cadre": len(out_frames) / FPS,
 		"retour": ts[settle] - ts[peak],
-		"descente": ts[settle] - ts[last_fast],
+		"descente": ts[settle] - ts[min(last_fast, settle)],
 		"montée": (ts[rise_end] - ts[start]) if rise_end is not None else None,
 		"profondeur": max(depth) / min(depth) if min(depth) > 0 else None,
 		"durée": ts[-1],
 		"sorties": exits,
 		"arrêt": stop,
+		"torsion": twist_range(),
 	}
+
+
+# Cette méthode permet de mesurer l'amplitude (degrés) de la torsion de l'avant-bras sur tout le geste, lorsqu'on vérifie
+# qu'un roulis de la lame reste faisable par un poignet : rotation de la main autour de son axe +Y (vers le coude), cumulée
+# d'une image à l'autre (une décomposition par rapport à la première image diverge quand la main pivote de plus de 90°).
+def twist_range():
+	total = low = high = 0.0
+	for prev, cur in zip(frames, frames[1:]):
+		q = prev["RightHand"].to_3x3().to_quaternion().inverted() @ cur["RightHand"].to_3x3().to_quaternion()
+		sign = 1 if q.w >= 0 else -1  # q et -q sont la même rotation : prendre le plus court chemin
+		total += math.degrees(2 * math.atan2(sign * q.y, sign * q.w))
+		low, high = min(low, total), max(high, total)
+	return high - low
 
 
 archetype = archetype_arg or guess_archetype(anim)
@@ -198,7 +223,7 @@ else:
 		f"GRAMMAIRE {archetype} : départ {fmt(m['départ'])}, pic {fmt(m['pic'])} ({m['vitesse']:.1f} studs/s), "
 		f"frappe {fmt(m['frappe'])}, montée {fmt(m['montée'])}, hors cadre {fmt(m['hors cadre'])}"
 		f"{' (' + m['sorties'] + ')' if m['sorties'] else ''}, retour au repos {fmt(m['retour'])} après le pic, "
-		f"descente {fmt(m['descente'])}, profondeur ×{m['profondeur']:.2f}, durée {fmt(m['durée'])}"
+		f"descente {fmt(m['descente'])}, profondeur ×{m['profondeur']:.2f}, torsion {m['torsion']:.0f}°, durée {fmt(m['durée'])}"
 	)
 	gaps = 0
 	for key, (lo, hi) in RULES[archetype].items():
@@ -212,10 +237,13 @@ else:
 		if hi is not None and v > hi:
 			print(f"GRAMMAIRE ÉCART {key} {v:.2f}{unit} > {hi:.2f}{unit}")
 			gaps += 1
+	if m["torsion"] > TWIST_MAX:
+		print(f"GRAMMAIRE ÉCART torsion de l'avant-bras {m['torsion']:.0f}° > {TWIST_MAX}° (tour du couteau dans la main)")
+		gaps += 1
 	if archetype in ("taille", "estoc"):
-		# l'estoc de référence plonge sous le cadre et en revient : seule la taille change de côté
-		if archetype == "taille" and m["sorties"].endswith("(même côté)"):
-			print("GRAMMAIRE ÉCART la main revient par le côté où elle est sortie")
+		# le CT sort toujours par le bas (coin ou centre) ; il revient par le bas, au centre ou par le même coin
+		if not m["sorties"].startswith("sortie bas"):
+			print(f"GRAMMAIRE ÉCART la main ne sort pas du cadre par le bas ({m['sorties'] or 'reste dans le cadre'})")
 			gaps += 1
 		if m["arrêt"] is not None:
 			print(f"GRAMMAIRE ÉCART arrêt avant la frappe à {m['arrêt']:.2f} s (clé à vitesse nulle au milieu du geste)")
