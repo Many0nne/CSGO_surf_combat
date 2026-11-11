@@ -217,9 +217,14 @@ end
 -- ── SpawnManager ──────────────────────────────────────────────────────────
 
 -- Position des joueurs envoyée par leur client, validée et relayée ; mort par chute hors de la map (attribut
--- KillHeight de la map jouée) testée sur chaque position acceptée
+-- KillHeight de la map jouée) testée sur chaque position acceptée, et sur un joueur silencieux tombé dans le vide
 KillZone.init()
-CharacterSync.init(characterSyncRmt, movementCorrectionRmt, KillZone.check)
+CharacterSync.init(
+	characterSyncRmt,
+	movementCorrectionRmt,
+	KillZone.check,
+	{ height = KillZone.height, kill = KillZone.kill }
+)
 
 -- Une seule map est jouée (GameConfig.ACTIVE_MAP) : les autres sont retirées avant les premières apparitions
 MapSelection.activate(workspace:FindFirstChild("Maps"), GameConfig.ACTIVE_MAP)

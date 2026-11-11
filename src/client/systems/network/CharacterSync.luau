@@ -122,7 +122,9 @@ function CharacterSync.send(hrp: BasePart, dt: number)
 	if not remote or sendAccumulator < CharacterSyncRules.SEND_INTERVAL then
 		return
 	end
-	sendAccumulator = math.min(sendAccumulator - CharacterSyncRules.SEND_INTERVAL, CharacterSyncRules.SEND_INTERVAL)
+	-- Une demi-période reportée au plus : deux envois restent séparés d'au moins SEND_INTERVAL / 2, même après une
+	-- saccade (le serveur s'en sert pour majorer la vitesse verticale, MovementGuardRules.MIN_PACKET_INTERVAL)
+	sendAccumulator = math.min(sendAccumulator - CharacterSyncRules.SEND_INTERVAL, CharacterSyncRules.SEND_INTERVAL / 2)
 	remote:FireServer(hrp.Position, CharacterSyncRules.yawOf(hrp.CFrame.LookVector), correctionAck)
 end
 
