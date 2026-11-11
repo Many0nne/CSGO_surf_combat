@@ -228,10 +228,39 @@ repère de la racine du rig serveur, tourné au cap rembobiné, posé sur la rac
   Repère `srv historique` de la sonde `PerfServer` (relevé de chaque position acceptée, joueurs et bots), mesuré en
   Studio (voir « Mesure en Studio (#213, #214) »).
 - **Tolérances `DIRECTION_BASE` (2) et `DIRECTION_SPEED_FACTOR` (0,05) gardées** : voir la mesure ci-dessous ; Studio
-  n'a ni latence ni gigue, et ce sont elles que ces marges couvrent. À resserrer d'après le journal du jeu publié
-  (procédure « Passer un contrôle en `block` »).
+  n'a ni latence ni gigue, et ce sont elles que ces marges couvrent ; les membres ont un défaut à part (tenue de
+  l'arme). À resserrer d'après le journal du jeu publié (procédure « Passer un contrôle en `block` »).
 
-**Mesure en Studio (#213, #214).** À compléter.
+**Mesure en Studio (#213, #214, 2026-11-11).** Studio sans latence (`GetNetworkPing` ≈ 0,5 ms, borne 0,10 s).
+
+- `DebugPlaytest` AWP : PASS 9/9 (deux fois) ; M9Bayonet : PASS 9/9 (coup du vrai client, `hitTime` compris, validé
+  sans ligne `[CheatLog]`). Un premier run AWP a échoué à `VIEWMODEL` pendant la construction du plan de navigation
+  (19 s, frames lentes), puis est passé sans changement : hors périmètre.
+- **Tirs honnêtes** (méthode de #174 : raycast de `HitscanSystem` depuis la caméra vers une partie d'un bot, tête,
+  torse, mains, bras, jambes, `ShotFired` puis `HitscanDamage` au même `shotTime`, `Reload` tous les 5 tirs ; joueur
+  à 1e7 PV, 3 bots en mouvement jusqu'à 61 studs/s, 4 à 171 studs) : 17 touches, **aucune violation `ping`**, aucune
+  `origin`/`lineOfSight`/`shotLink`/`magazine`. **3 violations `direction`**, toutes sur un membre : main gauche
+  (4,0 studs pour 3,9 permis ; 6,8 pour 6,2 à 61 studs/s) et avant-bras gauche (3,4 pour 3,4, bot immobile).
+- **Cause, mesurée** : pas le cap ni l'accroupi. Dans le repère de la racine, la main gauche d'un bot est à
+  (-3,0 ; -1,1 ; 0,1) sur le rig serveur (bras le long du corps) et à (0,1 ; 2,2 ; -3,3) chez le client : la tenue de
+  l'arme du haut du corps (#107) est posée par chaque client (`WeaponThirdPersonView`, Motor6D locaux), jamais sur le
+  rig serveur. Environ 4 studs d'écart sur une main, alors que la tête concorde (≈ 0,2 stud). C'est aussi la cause
+  probable du faux positif de #174 (une main). **À faire avant de passer `direction` en `block`** : pour les membres
+  (mains, bras), juger la partie dans une sphère d'allonge autour de l'épaule (`UpperTorso` + longueur du bras), ou
+  reproduire la tenue de l'arme côté serveur ; les tolérances `DIRECTION_*` ne doivent pas être élargies pour ça
+  (elles valent pour la tête).
+- **Backtrack forgé** : un tir annoncé 0,35 s en arrière est signalé `ping : instant 0.38 s avant l'arrivée (max
+  0.10 s, ping 0 ms) (journal seul)`.
+- **Coups honnêtes** (méthode de #176 : boucle serveur qui envoie au client `aim` vers le bot le plus proche et
+  `attack` à moins de 6,5 studs, `W` maintenu, 90 s, 5 bots) : 13 coups reçus, **aucune violation `Melee`**
+  (`ping`, `orientation`, `meleeLineOfSight`). Une violation `Movement` « vol : 2,2 studs au-dessus de la trajectoire
+  balistique » pendant la poursuite (caméra pilotée par `aim`, hors périmètre, voir D2).
+- **Bots** : aucune ligne `[CheatLog]` (ils sont ignorés par le journal et ne passent pas par ces contrôles).
+- **Coût** (`PerfServer`, 1 joueur, 5 bots, 80 s) : repère `srv historique` 0,011 à 0,018 ms par relevé, ~2,5 relevés
+  par frame, soit 0,03 à 0,09 ms/frame (`srv bots` : 1,6 à 3 ms) ; pas de hausse notable.
+- **Valeurs gardées** : `DIRECTION_BASE`, `DIRECTION_SPEED_FACTOR`, `MELEE_MAX_ANGLE`, `PING_*`. Studio n'a ni latence ni
+  gigue, ce que couvrent ces marges, et les seuls faux positifs mesurés viennent de la tenue des bras, qu'une marge ne
+  doit pas absorber. À revoir sur les résumés `CheatLog` du jeu publié.
 
 ### Distance (tranché, #174)
 
