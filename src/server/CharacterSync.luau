@@ -52,6 +52,8 @@ type Track = {
 	refusedAt: number, -- heure du dernier refus (une correction renvoyée ne la change pas)
 	guard: MovementGuardRules.Guard, -- noclip, vol et vide (#177)
 	voidReportedAt: number, -- dernier signalement du vide (journal seul : un par VOID_SILENCE)
+	yaw: number?, -- dernier cap accepté et son heure de réception (os.clock), lus par les stats de visée (#178)
+	yawAt: number?,
 }
 
 local tracks: { [Player]: Track } = {}
@@ -296,6 +298,8 @@ local function onClientPosition(
 		return
 	end
 	track.lastPos = pos
+	track.yaw = yaw
+	track.yawAt = now
 	root.CFrame = CFrame.new(pos) * CFrame.Angles(0, yaw, 0)
 
 	local stamp = workspace:GetServerTimeNow()
@@ -409,6 +413,16 @@ function CharacterSync.relayBot(char: Model, root: BasePart, cf: CFrame)
 	if acceptedCallback then
 		acceptedCallback(char, pos)
 	end
+end
+
+-- Cette méthode permet de lire le dernier cap accepté d'un joueur et son heure de réception (os.clock) lorsqu'un tir
+-- arrive (flick, statistiques de visée #178) ; nil pour un personnage sans paquet accepté (autre que le sien actuel).
+function CharacterSync.lastYaw(player: Player): (number?, number?)
+	local track = tracks[player]
+	if not track or track.char ~= player.Character then
+		return nil, nil
+	end
+	return track.yaw, track.yawAt
 end
 
 -- Cette méthode permet de connaître la position d'un personnage à l'instant t (horloge serveur, ex. shotTime) lorsque

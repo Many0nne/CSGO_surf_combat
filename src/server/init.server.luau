@@ -25,6 +25,7 @@ local BotManager = require(script.bots.BotManager)
 local ServerPerf = require(script.ServerPerf)
 local CheatLog = require(script.CheatLog)
 local ShotRelayRules = require(script.ShotRelayRules)
+local AimStats = require(script.AimStats)
 
 -- Spawn contrôlé : on gère LoadCharacter nous-mêmes
 Players.CharacterAutoLoads = false
@@ -213,11 +214,60 @@ local function relayShot(participant: Participants.Participant, origin: Vector3,
 	return true
 end
 
+-- ── Statistiques de visée (#178) : journal pour revue humaine, jamais de sanction ni de tir refusé ──────
+
+local aimStats = AimStats.new()
+-- Période (s) du résumé des statistiques de visée (console, et CheatLog pour les joueurs signalés).
+local AIM_REPORT_INTERVAL = 120
+
+-- Cette méthode permet d'écrire le résumé de visée d'un joueur lorsqu'il est produit (périodique ou fin de session) :
+-- console pour tous, CheatLog (catégorie Aim, gravité faible) pour un joueur signalé.
+local function logAim(participant: Participants.Participant, entry: AimStats.Entry, final: boolean)
+	print(
+		string.format(
+			"[AimStats] %s%s (%d) : %s",
+			if final then "fin de session, " else "",
+			entry.stats.name,
+			entry.id,
+			entry.line
+		)
+	)
+	if #entry.verdict.flagged > 0 then
+		CheatLog.report(participant, CheatLog.Category.AIM, CheatLog.Severity.LOW, entry.line, CheatLog.Category.AIM)
+	end
+end
+
+task.spawn(function()
+	while true do
+		task.wait(AIM_REPORT_INTERVAL)
+		for _, entry in AimStats.periodic(aimStats) do
+			local participant = Participants.get(entry.id)
+			if participant then
+				logAim(participant, entry, false)
+			end
+		end
+	end
+end)
+
+-- Résumé final avant la clôture du bilan CheatLog (le signalement y entre) ; statistiques oubliées au départ.
+CheatLog.onClosing(function(player)
+	local entry = AimStats.close(aimStats, player.UserId)
+	if entry then
+		-- Participant reconstruit : celui du registre peut déjà être retiré (ordre des PlayerRemoving non garanti)
+		logAim({ id = player.UserId, name = player.Name, isBot = false, player = player }, entry, true)
+	end
+end)
+
 shotFiredRmt.OnServerEvent:Connect(function(player, origin, direction)
 	if not CheatLog.admit(player, N.SHOT_FIRED, origin, direction) then
 		return
 	end
-	relayShot(Participants.fromPlayer(player), origin, direction)
+	local participant = Participants.fromPlayer(player)
+	-- Compté après la décision du relais, qu'il ne change pas : un tir accepté (forme, cadence) entre aux statistiques
+	if relayShot(participant, origin, direction) then
+		local yaw, yawAt = CharacterSync.lastYaw(player)
+		AimStats.noteShot(aimStats, participant, direction, os.clock(), yaw, yawAt)
+	end
 end)
 
 -- Cette méthode permet de brancher le personnage d'un participant (joueur ou bot, #139) lorsqu'il apparaît : arme 3P
@@ -356,7 +406,12 @@ local function onHitVerdict(
 )
 	DebugPlaytest.onHitReceived(player, remote.Name, targetCharacter, damage)
 	if damage then
-		applyHit(Participants.fromPlayer(player), targetCharacter, damage, isHeadshot)
+		local participant = Participants.fromPlayer(player)
+		-- Touche à distance acceptée par le Validator : statistiques de visée (#178), après coup, sans effet sur elle
+		if remote == hitscanRmt then
+			AimStats.noteHit(aimStats, participant, isHeadshot, os.clock())
+		end
+		applyHit(participant, targetCharacter, damage, isHeadshot)
 	end
 end
 

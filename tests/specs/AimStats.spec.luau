@@ -1,0 +1,189 @@
+-- Statistiques de visée (#178) : accumulation, flick, z-score contre la population, planchers, bots exclus,
+-- nettoyage au départ, aucun veto sur un tir.
+return function(T, Loader)
+	local AimStats = Loader.new():require("src/server/AimStats")
+	local CharacterSyncRules = Loader.new():require("src/shared/CharacterSyncRules")
+
+	local FORWARD = Vector3.new(0, 0, -1)
+	local FORWARD_YAW = CharacterSyncRules.yawOf(FORWARD)
+
+	-- Cette méthode permet de créer un faux participant (joueur ou bot) lorsqu'un test tire avec lui.
+	local function participant(id: number, isBot: boolean?): any
+		return { id = id, name = "J" .. id, isBot = isBot == true }
+	end
+
+	-- Cette méthode permet de simuler `shots` tirs dont `hits` touchent (`heads` à la tête) lorsqu'un test construit un
+	-- joueur ; cap reçu juste avant chaque tir, déjà aligné (pas de flick).
+	local function play(state, p, shots: number, hits: number, heads: number, startAt: number?)
+		local t = startAt or 0
+		for i = 1, shots do
+			t += 2
+			AimStats.noteShot(state, p, FORWARD, t, FORWARD_YAW, t - 0.05)
+			if i <= hits then
+				AimStats.noteHit(state, p, i <= heads, t + 0.05)
+			end
+		end
+	end
+
+	-- Cette méthode permet de peupler un serveur de `n` joueurs honnêtes (ids 1..n, 32 à 45 % de tête, 40 % de
+	-- touches) lorsqu'un test a besoin d'une population.
+	local function population(state, n: number)
+		for id = 1, n do
+			play(state, participant(id), 100, 40, 12 + id)
+		end
+	end
+
+	T.describe("AimStats : accumulation", function()
+		T.it("compte tirs, touches rattachées, têtes", function()
+			local state = AimStats.new()
+			play(state, participant(1), 10, 4, 1)
+			local s = state.players[1]
+			T.expectEqual(s.shots, 10)
+			T.expectEqual(s.hits, 4)
+			T.expectEqual(s.hitShots, 4)
+			T.expectEqual(s.headshots, 1)
+			T.expectNear(AimStats.rate(s, "hitRate"), 0.4)
+			T.expectNear(AimStats.rate(s, "headshotRate"), 0.25)
+		end)
+
+		T.it("une seule touche rattachée par tir, et pas après HIT_LINK_WINDOW", function()
+			local state = AimStats.new()
+			local p = participant(1)
+			AimStats.noteShot(state, p, FORWARD, 10, nil, nil)
+			AimStats.noteHit(state, p, false, 10.1)
+			AimStats.noteHit(state, p, false, 10.2)
+			AimStats.noteShot(state, p, FORWARD, 20, nil, nil)
+			AimStats.noteHit(state, p, true, 20 + AimStats.HIT_LINK_WINDOW + 0.1)
+			local s = state.players[1]
+			T.expectEqual(s.hits, 3, "toutes les touches comptent pour la tête")
+			T.expectEqual(s.hitShots, 1)
+			T.expectEqual(s.headshots, 1)
+		end)
+
+		T.it("flick : rotation rapide mesurée contre le dernier cap, suivie d'une touche", function()
+			local state = AimStats.new()
+			local p = participant(1)
+			local right = Vector3.new(1, 0, 0) -- 90° de cap
+			AimStats.noteShot(state, p, right, 10, FORWARD_YAW, 9.95)
+			AimStats.noteHit(state, p, true, 10.05)
+			local s = state.players[1]
+			T.expectEqual(s.measured, 1)
+			T.expectEqual(s.flicks, 1)
+			T.expectEqual(s.flickHits, 1)
+			T.expectNear(s.peakSpeed, 90 / 0.05, 1)
+			-- Cap trop ancien : pas de mesure
+			AimStats.noteShot(state, p, FORWARD, 20, FORWARD_YAW + math.pi / 2, 20 - AimStats.FLICK_MAX_AGE - 0.01)
+			T.expectEqual(s.measured, 1)
+			-- Petite correction : mesurée, pas un flick
+			AimStats.noteShot(state, p, FORWARD, 30, FORWARD_YAW + math.rad(5), 29.95)
+			T.expectEqual(s.measured, 2)
+			T.expectEqual(s.flicks, 1)
+		end)
+
+		T.it("écart de cap pris par le plus court (passage de -180° à 180°)", function()
+			local d = AimStats.yawDelta(math.pi - 0.01, Vector3.new(0, 0, 1))
+			T.expect(d ~= nil and d < 2, "écart : " .. tostring(d))
+			T.expectEqual(AimStats.yawDelta(0, Vector3.new(0, 1, 0)), nil, "tir vertical : non mesuré")
+		end)
+
+		T.it("bots exclus : ni comptés, ni dans la population", function()
+			local state = AimStats.new()
+			play(state, participant(-1, true), 100, 100, 100)
+			T.expectEqual(AimStats.count(state), 0)
+			T.expectEqual(#AimStats.periodic(state), 0)
+		end)
+	end)
+
+	T.describe("AimStats : jugement contre la population", function()
+		T.it("joueur normal non signalé", function()
+			local state = AimStats.new()
+			population(state, 6)
+			play(state, participant(99), 100, 42, 16)
+			local v = AimStats.judge(state, 99)
+			T.expect(v.judged, "jugé")
+			T.expectEqual(#v.flagged, 0)
+			for id = 1, 6 do
+				T.expectEqual(#AimStats.judge(state, id).flagged, 0, "honnête " .. id)
+			end
+		end)
+
+		T.it("joueur à 90 % de tête sur 40 touches signalé", function()
+			local state = AimStats.new()
+			population(state, 6)
+			play(state, participant(99), 100, 40, 36)
+			local v = AimStats.judge(state, 99)
+			T.expect(table.find(v.flagged, "headshotRate") ~= nil, "tête signalée")
+			T.expect(v.z.headshotRate >= AimStats.Z_THRESHOLD, "z : " .. tostring(v.z.headshotRate))
+			local line = AimStats.describe(state.players[99], v)
+			T.expect(string.find(line, "SIGNALÉ", 1, true) == 1, line)
+		end)
+
+		T.it("petite population non signalée (serveur de 2 joueurs)", function()
+			local state = AimStats.new()
+			population(state, 1)
+			play(state, participant(99), 100, 40, 36)
+			local v = AimStats.judge(state, 99)
+			T.expectEqual(v.judged, false)
+			T.expectEqual(#v.flagged, 0)
+			T.expect(string.find(AimStats.describe(state.players[99], v), "population", 1, true) ~= nil)
+		end)
+
+		T.it("moins de MIN_HITS touches : non jugé", function()
+			local state = AimStats.new()
+			population(state, 6)
+			play(state, participant(99), 40, AimStats.MIN_HITS - 1, AimStats.MIN_HITS - 1)
+			T.expectEqual(AimStats.judge(state, 99).judged, false)
+		end)
+
+		T.it("plancher absolu : très au-dessus d'une population faible mais sous le plancher, non signalé", function()
+			local state = AimStats.new()
+			for id = 1, 6 do
+				play(state, participant(id), 100, 40, 2 + id % 2)
+			end
+			-- 50 % de tête : z énorme contre ~6 %, mais sous FLOOR.headshotRate
+			play(state, participant(99), 100, 40, 20)
+			local v = AimStats.judge(state, 99)
+			T.expect(v.z.headshotRate > AimStats.Z_THRESHOLD)
+			T.expectEqual(table.find(v.flagged, "headshotRate"), nil)
+		end)
+	end)
+
+	T.describe("AimStats : sortie et nettoyage", function()
+		T.it("résumé périodique : seulement les joueurs qui ont tiré depuis le précédent", function()
+			local state = AimStats.new()
+			play(state, participant(1), 3, 1, 0)
+			play(state, participant(2), 3, 1, 0)
+			T.expectEqual(#AimStats.periodic(state), 2)
+			T.expectEqual(#AimStats.periodic(state), 0, "rien de neuf")
+			play(state, participant(2), 1, 0, 0, 100)
+			local entries = AimStats.periodic(state)
+			T.expectEqual(#entries, 1)
+			T.expectEqual(entries[1].id, 2)
+		end)
+
+		T.it("départ : résumé final puis statistiques oubliées (aucune fuite)", function()
+			local state = AimStats.new()
+			population(state, 6)
+			play(state, participant(99), 100, 40, 36)
+			local entry = AimStats.close(state, 99)
+			T.expect(entry ~= nil and #entry.verdict.flagged > 0, "signalé au départ")
+			T.expectEqual(state.players[99], nil)
+			T.expectEqual(AimStats.count(state), 6)
+			for id = 1, 6 do
+				AimStats.close(state, id)
+			end
+			T.expectEqual(AimStats.count(state), 0)
+			T.expectEqual(AimStats.close(state, 42), nil, "inconnu : rien")
+		end)
+
+		T.it("aucune sanction ni tir refusé : noteShot et noteHit ne renvoient rien", function()
+			local state = AimStats.new()
+			population(state, 6)
+			local cheater = participant(99)
+			play(state, cheater, 100, 40, 36)
+			T.expectEqual(select("#", AimStats.noteShot(state, cheater, FORWARD, 1000, FORWARD_YAW, 999.95)), 0)
+			T.expectEqual(select("#", AimStats.noteHit(state, cheater, true, 1000.05)), 0)
+			T.expectEqual(state.players[99].shots, 101, "le tir du joueur signalé est compté comme les autres")
+		end)
+	end)
+end
