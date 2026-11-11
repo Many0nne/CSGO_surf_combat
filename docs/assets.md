@@ -59,6 +59,28 @@ Transition d'une place qui contient déjà ces instances (une fois, pour éviter
    s'équipe en playtest, puis sauvegarder la place (File > Save to Roblox).
    Si un MeshPart est vide : clic droit sur `ReplicatedStorage` > *Insert from File…* > le `.rbxm`, et le signaler.
 
+## Effets du tir (flamme, rayon)
+
+Code : `ShotEffects` (client), réglages et règles pures dans `ShotEffectRules` (testées). Une arme à distance porte sa
+bouche de canon dans son viewmodel : l'Attachment `Barrel.ShootPart` (chemin `ShotEffectRules.MUZZLE_PATH`, à la sortie
+du canon) et son `ParticleEmitter` `MuzzleEffect`, **désactivé** (`Enabled = false`) : le code l'allume par `Emit` à
+chaque tir. Le modèle 3P clone les pièces du viewmodel (`WeaponThirdPerson`), il a donc la même bouche de canon, réduite
+par `ScaleTo` avec le reste de l'arme.
+
+- **Flamme :** forme, taille, couleur et durée sont celles du `MuzzleEffect` du `.rbxm` (texture 421803006, vie 0,1 s,
+  `LockedToPart` pour suivre le recul). Seul le nombre de particules par tir est dans le code
+  (`MUZZLE_EMIT_COUNT`) : elles naissent au même point, en ajouter rend la flamme plus opaque, pas plus grande.
+- **Rayon :** `TRACER_WIDTH`, `TRACER_LIFETIME` (durée du fondu, courbe `tracerTransparency`), `TRACER_RGB`. Il part de la
+  bouche du canon et finit au point d'impact du raycast de visée (le vide : portée `HITSCAN_RANGE`). Canon dans un mur
+  (bouche au-delà de l'impact) ou rayon plus court que `TRACER_MIN_LENGTH` : pas de rayon.
+- **Chez les autres :** chaque `ShotFired` relayé par le serveur (joueurs et bots) allume la flamme du canon 3P du tireur
+  et trace un rayon de ce canon au point que touche, chez le client, le rayon origine + direction relayées. Au plus
+  `MAX_ACTIVE` rayons en même temps (au-delà, flamme seule).
+- **Nouvelle arme à distance :** garder `Barrel.ShootPart.MuzzleEffect` dans son viewmodel (le copier de l'AWP), sinon
+  elle tire sans flamme et son rayon part de l'œil.
+- **Vérifier qu'un tir ne laisse rien :** le rayon crée deux `Attachment` dans `Terrain` (et un `Beam`), tous nommés
+  `ShotTracer` : leur nombre revient à 0 après `TRACER_LIFETIME`.
+
 ## Publier un asset (Open Cloud)
 
 Clé dans la variable d'environnement utilisateur `ROBLOX_OPEN_CLOUD_KEY` (scopes `asset:read` et `asset:write`). Créateur :

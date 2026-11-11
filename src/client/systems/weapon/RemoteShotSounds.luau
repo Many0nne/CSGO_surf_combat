@@ -6,7 +6,7 @@
 -- l'atténuation de l'arme (ShotSoundRules), puis détruite à la fin de sa lecture. Le son du tireur n'est pas touché.
 -- Le son est porté par une Attachment du Terrain qui suit l'arme à chaque frame, pas par l'arme elle-même : le modèle
 -- 3P est détruit quand le tireur change d'arme ou meurt, ce qui couperait le son en pleine lecture.
--- Origine et direction ne servent pas encore (traçante et flamme de bouche chez les autres : #54).
+-- Origine et direction servent à la flamme de bouche et au rayon du tir chez les autres (ShotEffects, #54).
 
 local Debris = game:GetService("Debris")
 local Players = game:GetService("Players")
