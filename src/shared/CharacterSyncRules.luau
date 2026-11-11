@@ -16,6 +16,9 @@ CharacterSyncRules.INTERP_DELAY = 2 * CharacterSyncRules.SEND_INTERVAL
 CharacterSyncRules.BUFFER_SIZE = 10
 -- Au-delà de cette coordonnée (studs), une position est rejetée (valeur absurde ou forgée).
 CharacterSyncRules.MAX_COORD = 1e5
+-- Seau de distance (#172) : true = un déplacement refusé est corrigé (client renvoyé à sa dernière position acceptée) ;
+-- false = journal seul (violation comptée, déplacement appliqué), à remettre si des joueurs honnêtes sont corrigés.
+CharacterSyncRules.ENFORCE_MOVEMENT = true
 
 export type Snapshot = { t: number, pos: Vector3, yaw: number }
 
@@ -29,12 +32,45 @@ function CharacterSyncRules.isWellFormed(pos: any, yaw: any): boolean
 	return typeof(pos) == "Vector3" and isFinite(pos.X) and isFinite(pos.Y) and isFinite(pos.Z) and isFinite(yaw)
 end
 
--- Cette méthode permet de décider si un déplacement annoncé est possible lorsque le serveur reçoit une position :
--- distance au dernier point accepté au plus MAX_SPEED_SERVER × durée écoulée (au moins un intervalle d'envoi, pour
--- les paquets arrivés groupés) + MAX_DELTA_POS de marge.
-function CharacterSyncRules.isPlausibleMove(lastPos: Vector3, newPos: Vector3, elapsed: number): boolean
-	local dt = math.max(elapsed, CharacterSyncRules.SEND_INTERVAL)
-	return (newPos - lastPos).Magnitude <= MovementConfig.MAX_SPEED_SERVER * dt + MovementConfig.MAX_DELTA_POS
+-- Seau de distance d'un joueur (#172, docs/anticheat.md « D1 ») : `stored` = studs mis de côté (au plus MAX_DELTA_POS),
+-- `lastAt` = heure serveur du dernier paquet jugé (accepté ou refusé).
+export type MoveBudget = { stored: number, lastAt: number }
+
+-- Cette méthode permet de créer le seau de distance d'un personnage lorsque le serveur commence à suivre sa position
+-- (apparition) : plein, pour qu'un premier paquet tardif ne soit pas refusé.
+function CharacterSyncRules.newBudget(now: number): MoveBudget
+	return { stored = MovementConfig.MAX_DELTA_POS, lastAt = now }
+end
+
+-- Cette méthode permet de décider si un déplacement annoncé est possible lorsque le serveur reçoit une position : le
+-- budget du paquet est le seau plus MAX_SPEED_SERVER × durée depuis le paquet précédent, durée plafonnée à
+-- MAX_SILENCE ; un déplacement accepté le consomme, le reste (au plus MAX_DELTA_POS) est gardé pour les paquets
+-- suivants. Un refus ne consomme rien, mais le temps écoulé est compté : se taire ou se faire refuser n'accumule pas.
+function CharacterSyncRules.tryMove(budget: MoveBudget, lastPos: Vector3, newPos: Vector3, now: number): boolean
+	local elapsed = math.clamp(now - budget.lastAt, 0, MovementConfig.MAX_SILENCE)
+	local allowance = budget.stored + MovementConfig.MAX_SPEED_SERVER * elapsed
+	budget.lastAt = math.max(budget.lastAt, now)
+	local distance = (newPos - lastPos).Magnitude
+	local accepted = distance <= allowance
+	if accepted then
+		allowance -= distance
+	end
+	budget.stored = math.min(allowance, MovementConfig.MAX_DELTA_POS)
+	return accepted
+end
+
+-- Cette méthode permet de savoir si un paquet a été envoyé avant que le client n'applique la dernière correction
+-- lorsqu'il arrive (ack = numéro de la dernière correction appliquée, joint à chaque paquet) : un tel paquet part
+-- d'une position que le serveur a déjà refusée, il est ignoré sans être jugé, ce qui évite une boucle de corrections.
+-- requiredAck reste en place après l'accusé : un paquet plus ancien arrivé en retard (non fiable) est aussi ignoré.
+function CharacterSyncRules.awaitsAck(requiredAck: number, ack: number): boolean
+	return ack < requiredAck
+end
+
+-- Cette méthode permet au client de décider s'il applique une correction du serveur lorsqu'elle arrive : position
+-- valide, numéro plus récent que la dernière correction appliquée (ack), et pour le personnage local actuel (target).
+function CharacterSyncRules.acceptsCorrection(char: any, pos: any, seq: any, target: Model?, ack: number): boolean
+	return typeof(pos) == "Vector3" and type(seq) == "number" and seq > ack and target ~= nil and char == target
 end
 
 -- Cette méthode permet de lire le cap horizontal (rad, autour de Y) d'une orientation lorsque le client l'envoie.

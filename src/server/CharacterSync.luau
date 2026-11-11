@@ -2,7 +2,8 @@
 -- répliqué par la physique. Le client envoie sa position et son cap (remote non fiable CharacterSync, NET_SYNC_RATE) ;
 -- le serveur vérifie qu'elle est possible depuis le dernier point accepté, la pose sur la racine (Validator, hauteur de
 -- mort, scripts serveur lisent ainsi la vraie position), puis la relaie horodatée aux autres clients, qui l'interpolent.
--- Une position impossible est ignorée (dernier point valide gardé) avec un warn, sans renvoyer le client en arrière.
+-- Une position impossible (seau de distance, #172) est refusée, journalisée (CheatLog) et corrigée : le client est
+-- renvoyé à sa dernière position acceptée, et ses paquets envoyés avant d'avoir appliqué la correction sont ignorés.
 -- Les bots (#139) n'ont pas de client : leur position, calculée par le serveur (BotMotion), passe par relayBot et suit
 -- le même relais. Le relais désigne le personnage (Model), pas le Player, pour servir aux deux.
 
@@ -12,25 +13,33 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local CharacterSyncRules = require(ReplicatedStorage.Shared.CharacterSyncRules)
 local CheatLog = require(ServerScriptService.Server.CheatLog)
+local Participants = require(ServerScriptService.Server.Participants)
 local PositionHistory = require(ReplicatedStorage.Shared.PositionHistory)
 
 local CharacterSync = {}
 
 local relayRemote: UnreliableRemoteEvent? = nil
+local correctionRemote: RemoteEvent? = nil
 local acceptedCallback: ((Model, Vector3) -> ())? = nil
 
--- Délai minimal entre deux warns de rejet pour un même joueur (s).
-local WARN_INTERVAL = 2
+-- Une correction restée sans réponse (s) est renvoyée : filet si le client ne l'a pas appliquée (personnage pas prêt).
+local CORRECTION_RESEND = 1
 
 type Track = {
 	char: Model,
-	lastPos: Vector3,
-	lastAt: number,
-	lastReceivedAt: number,
-	lastWarnAt: number,
+	lastPos: Vector3, -- dernière position acceptée, posée sur la racine
+	budget: CharacterSyncRules.MoveBudget,
+	-- Numéro de la dernière correction pour ce personnage (0 : aucune) : un paquet d'un numéro inférieur est parti
+	-- d'une position déjà refusée. Gardé après l'accusé (paquets non fiables, donc parfois en désordre).
+	requiredAck: number,
+	acked: boolean, -- un paquet portant requiredAck est arrivé
+	correctedAt: number,
 }
 
 local tracks: { [Player]: Track } = {}
+-- Numéro de la dernière correction envoyée à chaque joueur : croissant sur toute la session (même à travers les
+-- réapparitions), pour qu'un accusé de réception ancien ne valide jamais une correction plus récente.
+local correctionSeqs: { [Player]: number } = {}
 
 -- Historique des positions acceptées par personnage (Model : joueurs et bots, vide à chaque réapparition), pour le
 -- rembobinage (#173). Supprimé à la destruction du personnage (mort, départ, bot retiré), clés faibles en filet.
@@ -58,39 +67,58 @@ end
 local function trackFor(player: Player, char: Model, root: BasePart, now: number): Track
 	local track = tracks[player]
 	if not track or track.char ~= char then
-		track =
-			{ char = char, lastPos = root.Position, lastAt = now, lastReceivedAt = -math.huge, lastWarnAt = -math.huge }
+		track = {
+			char = char,
+			lastPos = root.Position,
+			budget = CharacterSyncRules.newBudget(now),
+			requiredAck = 0,
+			acked = true,
+			correctedAt = -math.huge,
+		}
 		tracks[player] = track
 	end
 	return track
 end
 
--- Cette méthode permet de signaler un paquet rejeté lorsqu'il est impossible, au plus une fois par WARN_INTERVAL.
-local function warnRejected(player: Player, track: Track, pos: Vector3, now: number)
-	if now - track.lastWarnAt < WARN_INTERVAL then
-		return
+-- Cette méthode permet d'envoyer (ou de renvoyer) au client la correction en attente lorsqu'un paquet est refusé ou
+-- que la correction reste sans réponse : personnage, dernière position acceptée et numéro de la correction.
+local function fireCorrection(player: Player, track: Track, now: number)
+	track.correctedAt = now
+	if correctionRemote then
+		correctionRemote:FireClient(player, track.char, track.lastPos, track.requiredAck)
 	end
-	track.lastWarnAt = now
-	warn(
-		string.format(
-			"[CharacterSync] position rejetée pour %s : %.1f studs en %.2f s",
-			player.Name,
-			(pos - track.lastPos).Magnitude,
-			now - track.lastAt
-		)
-	)
 end
 
--- Cette méthode permet de traiter la position annoncée par un client lorsqu'elle arrive : forme, cadence et
--- plausibilité vérifiées, puis racine déplacée, hauteur de mort testée et position relayée aux autres joueurs.
+-- Cette méthode permet de journaliser un déplacement impossible lorsqu'une règle le refuse (catégorie Movement,
+-- gravité moyenne : un vrai lag peut en produire un).
+local function reportMove(player: Player, detail: string)
+	CheatLog.report(Participants.fromPlayer(player), CheatLog.Category.MOVEMENT, CheatLog.Severity.MEDIUM, detail)
+end
+
+-- Cette méthode permet de refuser un paquet lorsqu'une règle de déplacement le juge impossible (seau de distance ;
+-- réutilisable par les règles suivantes, noclip et vol #177) : violation journalisée, puis le client est renvoyé à sa
+-- dernière position acceptée et ses paquets sont ignorés jusqu'à ce qu'il l'ait appliquée.
+local function refuse(player: Player, track: Track, detail: string, now: number)
+	reportMove(player, detail)
+	local seq = (correctionSeqs[player] or 0) + 1
+	correctionSeqs[player] = seq
+	track.requiredAck = seq
+	track.acked = false
+	fireCorrection(player, track, now)
+end
+
+-- Cette méthode permet de traiter la position annoncée par un client lorsqu'elle arrive : forme vérifiée, paquet
+-- antérieur à la dernière correction ignoré, seau de distance jugé, puis racine déplacée, hauteur de mort testée et
+-- position relayée aux autres joueurs. ack = numéro de la dernière correction appliquée par le client.
 local function onClientPosition(
 	remote: UnreliableRemoteEvent,
 	onAccepted: (Model, Vector3) -> (),
 	player: Player,
 	pos: any,
-	yaw: any
+	yaw: any,
+	ack: any
 )
-	if not CharacterSyncRules.isWellFormed(pos, yaw) then
+	if not CharacterSyncRules.isWellFormed(pos, yaw) or type(ack) ~= "number" then
 		return
 	end
 	local char = player.Character
@@ -101,17 +129,29 @@ local function onClientPosition(
 	end
 	local now = os.clock()
 	local track = trackFor(player, char, root, now)
-	-- Plus de deux fois la cadence prévue : paquet en trop ignoré (flood)
-	if now - track.lastReceivedAt < CharacterSyncRules.SEND_INTERVAL * 0.5 then
+	-- Envoyé avant d'avoir appliqué la correction : ni jugé ni journalisé (le temps continue de remplir le seau)
+	if CharacterSyncRules.awaitsAck(track.requiredAck, ack) then
+		if not track.acked and now - track.correctedAt >= CORRECTION_RESEND then
+			fireCorrection(player, track, now)
+		end
 		return
 	end
-	track.lastReceivedAt = now
-	if not CharacterSyncRules.isPlausibleMove(track.lastPos, pos, now - track.lastAt) then
-		warnRejected(player, track, pos, now)
-		return
+	track.acked = true
+	-- Pas de délai minimal entre deux paquets : des paquets groupés passent, chacun consomme le seau (débit borné par
+	-- la garde commune, RemoteGuard)
+	local silence = now - track.budget.lastAt
+	if not CharacterSyncRules.tryMove(track.budget, track.lastPos, pos, now) then
+		local distance = (pos - track.lastPos).Magnitude
+		local detail = string.format("déplacement de %.1f studs en %.2f s refusé", distance, silence)
+		if CharacterSyncRules.ENFORCE_MOVEMENT then
+			refuse(player, track, detail, now)
+			return
+		end
+		-- Journal seul : violation comptée, déplacement appliqué quand même, seau vidé
+		reportMove(player, detail)
+		track.budget.stored = 0
 	end
 	track.lastPos = pos
-	track.lastAt = now
 	root.CFrame = CFrame.new(pos) * CFrame.Angles(0, yaw, 0)
 
 	local stamp = workspace:GetServerTimeNow()
@@ -125,19 +165,21 @@ local function onClientPosition(
 end
 
 -- Cette méthode permet de brancher la réception des positions lorsque le serveur démarre ; onAccepted reçoit chaque
--- position acceptée (hauteur de mort).
-function CharacterSync.init(remote: UnreliableRemoteEvent, onAccepted: (Model, Vector3) -> ())
+-- position acceptée (hauteur de mort), correction renvoie un client refusé à sa dernière position acceptée.
+function CharacterSync.init(remote: UnreliableRemoteEvent, correction: RemoteEvent, onAccepted: (Model, Vector3) -> ())
 	relayRemote = remote
+	correctionRemote = correction
 	acceptedCallback = onAccepted
-	remote.OnServerEvent:Connect(function(player, pos, yaw)
-		-- Garde commune (#170) : débit et types (Vector3 et angle finis)
-		if not CheatLog.admit(player, remote.Name, pos, yaw) then
+	remote.OnServerEvent:Connect(function(player, pos, yaw, ack)
+		-- Garde commune (#170) : débit et types (Vector3, angle et numéro de correction finis)
+		if not CheatLog.admit(player, remote.Name, pos, yaw, ack) then
 			return
 		end
-		onClientPosition(remote, onAccepted, player, pos, yaw)
+		onClientPosition(remote, onAccepted, player, pos, yaw, ack)
 	end)
 	Players.PlayerRemoving:Connect(function(player)
 		tracks[player] = nil
+		correctionSeqs[player] = nil
 	end)
 end
 

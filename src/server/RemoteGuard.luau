@@ -173,7 +173,11 @@ RemoteGuard.RULES = {
 	},
 	[N.HITSCAN_DAMAGE] = { rate = 5, burst = 5, args = { RemoteGuard.instance(), RemoteGuard.instance() } },
 	[N.WEAPON_ACTION] = { rate = 8, burst = 8, args = { RemoteGuard.enum({ "Shoot", "Reload" }) } },
-	[N.CHARACTER_SYNC] = { rate = 40, burst = 60, args = { RemoteGuard.vector3(), RemoteGuard.number() } },
+	[N.CHARACTER_SYNC] = {
+		rate = 40,
+		burst = 60,
+		args = { RemoteGuard.vector3(), RemoteGuard.number(), RemoteGuard.number() },
+	},
 	[N.REQUEST_SPAWN] = { rate = 1, burst = 3, args = {} },
 	[N.SEND_FEEDBACK] = { rate = 0.5, burst = 3, args = { RemoteGuard.string(RemoteGuard.FEEDBACK_MAX_BYTES) } },
 	[N.SAVE_SETTINGS] = { rate = 2, burst = 5, args = { RemoteGuard.table() } },

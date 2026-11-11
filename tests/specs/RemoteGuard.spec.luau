@@ -135,7 +135,7 @@ return function(T, Loader)
 			T.expectEqual(honest(N.MELEE_DAMAGE, char, "primary"), "ok")
 			T.expectEqual(honest(N.MELEE_DAMAGE, char, "secondary"), "ok")
 			T.expectEqual(honest(N.HITSCAN_DAMAGE, char, part), "ok")
-			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.new(10, -500, 3), 3.1), "ok")
+			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.new(10, -500, 3), 3.1, 0), "ok")
 			T.expectEqual(honest(N.WEAPON_ACTION, "Shoot"), "ok")
 			T.expectEqual(honest(N.WEAPON_ACTION, "Reload"), "ok")
 			T.expectEqual(honest(N.REQUEST_SPAWN), "ok")
@@ -152,8 +152,9 @@ return function(T, Loader)
 		T.it("refuse les types impossibles", function()
 			T.expectEqual(honest(N.MELEE_DAMAGE, Instance.new("Model"), "backstab"), "malformed")
 			T.expectEqual(honest(N.HITSCAN_DAMAGE, "Head", Instance.new("Part")), "malformed")
-			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.new(0 / 0, 0, 0), 0), "malformed")
-			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.zero, nil), "malformed")
+			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.new(0 / 0, 0, 0), 0, 0), "malformed")
+			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.zero, nil, 0), "malformed")
+			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.zero, 0, nil), "malformed", "numéro de correction absent")
 			T.expectEqual(honest(N.WEAPON_ACTION, "Equip"), "malformed")
 			T.expectEqual(honest(N.SEND_FEEDBACK, string.rep("a", RemoteGuard.FEEDBACK_MAX_BYTES + 1)), "malformed")
 			T.expectEqual(honest(N.SAVE_SETTINGS, "réglages"), "malformed")
@@ -165,12 +166,12 @@ return function(T, Loader)
 			local guard = RemoteGuard.new()
 			local refused = 0
 			for i = 0, 199 do
-				if guard:check("joueur", N.CHARACTER_SYNC, i / 20, Vector3.zero, 0) ~= "ok" then
+				if guard:check("joueur", N.CHARACTER_SYNC, i / 20, Vector3.zero, 0, 0) ~= "ok" then
 					refused += 1
 				end
 			end
 			for _ = 1, 40 do
-				if guard:check("joueur", N.CHARACTER_SYNC, 12, Vector3.zero, 0) ~= "ok" then
+				if guard:check("joueur", N.CHARACTER_SYNC, 12, Vector3.zero, 0, 0) ~= "ok" then
 					refused += 1
 				end
 			end
