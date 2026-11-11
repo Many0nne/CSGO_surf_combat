@@ -621,7 +621,7 @@ local function buildCategories(block: Frame)
 		{ label = "SIMPLE", value = "simple" },
 		{ label = "COMPLET", value = "full" },
 	}
-	addPicker(graphics, "Affichage des touches", "keyDisplay", keyDisplayOptions, 1, 1, function() end)
+	addPicker(graphics, "Affichage des touches", "keyDisplay", keyDisplayOptions, 1, 1, function() end, 150)
 end
 
 -- Cette méthode permet de remettre aux valeurs par défaut les réglages de la catégorie affichée lorsque le joueur clique

@@ -36,6 +36,10 @@ local menuOpen = false -- écran Réglages ouvert (SettingsMenu)
 
 -- Cette méthode permet de savoir si une touche ou un bouton de souris est enfoncé lorsque la grille est rafraîchie.
 local function isDown(entry: HUDRules.KeyDisplayEntry): boolean
+	-- Un champ de texte focalisé (chat) capte le clavier : le jeu ne reçoit pas ces touches, elles ne s'allument pas
+	if UserInputService:GetFocusedTextBox() then
+		return false
+	end
 	if entry.mouse then
 		local button = if entry.mouse == 1 then Enum.UserInputType.MouseButton1 else Enum.UserInputType.MouseButton2
 		return UserInputService:IsMouseButtonPressed(button)
@@ -121,6 +125,14 @@ local function update()
 	gui.Enabled = HUDRules.keyDisplayVisible(mode, hudVisible, menuOpen)
 	if mode ~= builtMode then
 		build(mode)
+		return
+	end
+	-- Libellés relus à chaque changement de réglage : la disposition du clavier peut avoir changé depuis la construction
+	for _, view in views do
+		local text = labelOf(view.entry)
+		if view.label.Text ~= text then
+			view.label.Text = text
+		end
 	end
 end
 
