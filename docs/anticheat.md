@@ -70,9 +70,16 @@ localement les hitbox des autres (« hitbox expander ») marche aussi : le serve
 1. Arguments : `origin: Vector3`, `direction: Vector3` (unitaire), `hitPos: Vector3`, `shotTime: number`
    (`workspace:GetServerTimeNow()` au tir), en plus de `targetChar` et `hitPart`. Types et finitude vérifiés comme
    `CharacterSyncRules.isWellFormed`.
-2. Rembobinage : le serveur garde (à créer, il n'existe pas) un historique des positions acceptées de chaque
-   personnage, une seconde à 20 Hz, alimenté là où elles sont posées : joueurs dans `onClientPosition`
-   (`src/server/CharacterSync.luau:89-91`), bots dans `relayBot` (`:117-118`).
+2. Rembobinage : le serveur garde un historique des positions acceptées de chaque personnage, une seconde à 20 Hz,
+   alimenté là où elles sont posées : joueurs dans `onClientPosition` (après acceptation), bots dans `relayBot`.
+   **Fait (#173)** : module pur `src/shared/PositionHistory.luau` (tampon circulaire de 35 relevés, un relevé au plus
+   tous les 0,03 s soit 20 Hz nominal et 33 Hz au plus, avec marge pour la gigue et le relais des bots, horloge
+   `workspace:GetServerTimeNow()`, la dernière position acceptée est toujours gardée à part ; `sampleAt(history, t, now)`
+   interpole et borne `t` à `[now - MAX_REWIND, now]`, `MAX_REWIND` = 0,4 s ≤ `DURATION` = 1 s ; entre deux relevés
+   distants de plus de `MAX_GAP` = 0,25 s, le plus proche est pris au lieu d'une ligne droite). Un historique par `Model` (joueurs et bots, vide à
+   chaque réapparition), supprimé à `Destroying` du personnage (mort, départ, bot retiré). Point d'entrée pour #174 et
+   #176 : `CharacterSync.positionAt(char, t)` (nil sans historique), aucun consommateur branché. Tests :
+   `tests/specs/PositionHistory.spec.luau`.
    Le tireur voyait la cible à `shotTime - INTERP_DELAY` (`src/shared/CharacterSyncRules.luau:14`, 0,1 s) ; ce
    temps est borné à `[now - 0,4 s, now]` pour qu'un client ne puisse pas réclamer une position ancienne.
 3. Origine : à moins de `5 + vitesse du tireur × 0,1` studs de la position du tireur à `shotTime` (il est en avance
@@ -97,7 +104,7 @@ et ligne de vue vraies par construction. Garder pour eux le chemin actuel (`part
 test pour qu'un bot ne voie aucun tir refusé.
 
 **Coût.** Serveur : 1 raycast et quelques calculs vectoriels par tir accepté, négligeable à 41 coups/min. Mémoire :
-20 relevés par personnage. Réseau : ~60 octets de plus par tir. Complexité : moyenne (historique, tolérances à régler).
+35 relevés par personnage au plus. Réseau : ~60 octets de plus par tir. Complexité : moyenne (historique, tolérances à régler).
 
 **Impact.** Supprime le silent aim, le tir à travers les murs et le hitbox expander. Reste l'aimbot (vraie visée).
 
