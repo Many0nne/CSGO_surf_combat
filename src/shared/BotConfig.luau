@@ -39,8 +39,8 @@ return {
 	NAV_SCORE_KIND      = { piece = 0, couloir = 0.1, escalier = 0.1, fosse = -0.1, rampe = 0.2, echelle = 0 },
 
 	-- Coût des arêtes pour la recherche de chemin (multiplie la longueur, plus un forfait en studs)
-	NAV_COST_FACTOR     = { 1, 1.1, 1.4, 1.6 }, -- marche, descente, saut, échelle
-	NAV_COST_EXTRA      = { 0, 2, 6, 10 },
+	NAV_COST_FACTOR     = { 1, 1.1, 1.4, 1.6, 1 }, -- marche, descente, saut, échelle, rampe (repli : coût de rampe
+	NAV_COST_EXTRA      = { 0, 2, 6, 10, 20 },    -- calculé d'après la durée du trajet, NavRules.rampCost)
 	NAV_PATH_WEIGHT     = 2,      -- poids de l'heuristique de l'A* (#145) : 1 = chemin optimal, plus = moins de cases vues
 	NAV_SEARCH_BUDGET   = 400,    -- cases explorées par tick et par bot pendant une recherche de chemin (#145)
 	NAV_BORDER_COST     = 3,    -- surcoût d'une case au bord d'un passage (moitié à un pas du bord, studs)
@@ -84,6 +84,32 @@ return {
 	                              -- tiré à chaque saut (0 = parfait, 0,5 garde au moins 75 % du gain, 1 = aucun gain)
 	BHOP_MISS_CHANCE    = 0.1,    -- probabilité de rater le timing d'un saut
 	BHOP_MISS_DELAY     = 0.12,   -- retard d'un saut raté, passé au sol avec friction (s)
+
+	-- Rampes de surf (#142) : une arête du plan par rampe et par sens, de la case d'entrée à la case de sortie, trajet
+	-- simulé une fois au démarrage (RampSim, même physique que le joueur) et rejoué par les bots (RampRules)
+	RAMP_ENABLED        = true,   -- faux : aucune arête de rampe (les bots ne surfent jamais)
+	RAMPS_FOLDER        = "Ramps", -- dossiers de la map où chercher les rampes (à toute profondeur)
+	RAMP_MIN_AREA       = 1000,   -- face de surf plus petite : pas une rampe (studs²)
+	RAMP_ENTRY_DIST     = 16,     -- cases d'entrée cherchées jusqu'à tant au-delà du bout de départ (studs)
+	RAMP_ENTRY_INSET    = 12,     -- point visé sur la rampe à tant du bout de départ (studs)
+	RAMP_ENTRY_RISE     = 2,      -- et à tant au-dessus du sol de la case d'entrée (studs, sommet du saut : 6,6)
+	RAMP_EDGE_MARGIN    = 4,      -- point visé à au moins tant du haut et du bas de la face (studs)
+	RAMP_APPROACH_OUT   = 4,      -- point de passage à tant au-delà du bout de départ (studs)
+	RAMP_APPROACH_LIFT  = 6,      -- et à tant devant la face (studs, le long de la normale)
+	RAMP_JUMP_DIST      = 8,      -- saut quand le point de passage est à moins de tant (studs, à l'horizontale)
+	RAMP_TRIES          = 6,      -- cases d'entrée essayées par rampe et par sens
+	RAMP_TRY_SPACING    = 6,      -- écart minimal entre deux cases d'entrée essayées (studs)
+	RAMP_AIR_STEER      = 120,    -- changement de vitesse horizontale en l'air hors surf (studs/s²)
+	RAMP_MAX_TIME       = 9,      -- trajet simulé au plus (s)
+	RAMP_MIN_TRAVEL     = 0.6,    -- part de la longueur de la rampe parcourue au moins
+	RAMP_EXIT_RADIUS    = 40,     -- case d'arrivée cherchée à moins de tant de la sortie de la rampe (studs)
+	RAMP_EDGE_PENALTY   = 8,      -- case d'arrivée au bord d'un vide comptée tant plus loin du point de chute (studs)
+	RAMP_LAND_RADIUS    = 3,      -- atterrissage à moins de tant d'une case (studs)
+	RAMP_SETTLE_TIME    = 0.5,    -- après l'atterrissage, freinage jusqu'à la vitesse de course en tant au plus (s)
+	RAMP_MAX_SPEED      = 200,    -- vitesse au plus le long du trajet (studs/s, sous MAX_SPEED_SERVER)
+	RAMP_COST_EXTRA     = 20,     -- forfait ajouté au coût d'une arête de rampe (studs : risque, pas de tir sûr)
+	RAMP_START_DIST     = 3,      -- trajet lancé à moins de tant de la case d'entrée (studs, à l'horizontale)
+	RAMP_BLEND_TIME     = 0.25,   -- écart entre le bot et le départ du trajet résorbé en tant (s)
 
 	-- Comportement (#141) : perception, mémoire, états (BotBrain, règles dans BotBehaviorRules)
 	PERCEPTION_INTERVAL = 0.1,    -- regard autour de lui tous les tant (s)
@@ -145,4 +171,5 @@ return {
 	-- Outillage Studio : attributs de Workspace
 	DEBUG_ATTRIBUTE     = "DebugBots", -- nombre de bots voulus (0 = aucun)
 	DEBUG_NAV_ATTRIBUTE = "DebugNav",  -- vrai : affiche le plan (points et notes, arêtes, chemins des bots)
+	DEBUG_GOTO_ATTRIBUTE = "DebugBotsGoto", -- Vector3 : tous les bots vont au point de passage le plus proche
 }

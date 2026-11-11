@@ -18,18 +18,73 @@ Construit **automatiquement au démarrage du serveur** dans la vraie collision d
      pied. Trajet en L (avancer au-dessus du vide, puis descendre) : descente dans ce sens, et saut dans l'autre si le
      rebord fait au plus `NAV_JUMP_UP_MAX` (5 studs, sommet du saut à 6,6) ;
    - échelle : une arête du pied (devant le volume de `Maps.Map.Ladders`) au haut (derrière l'acrotère), à sens unique
-     (on redescend par une descente).
+     (on redescend par une descente) ;
+   - rampe de surf : une arête par rampe et par sens, de la case d'entrée à la case de sortie, trajet simulé (cf.
+     « Rampes de surf (#142) »).
 3. **Cases gardées** : composante fortement connexe d'un point de `GroundSpawns` (on y va et on en revient). Écarte les
-   dessus de murs et les fonds sans sortie.
+   dessus de murs et les fonds sans sortie. Calculée après les rampes : une corniche qu'on ne rejoint que par une rampe,
+   et d'où l'on revient par l'autre sens, en fait partie.
 4. **Points de passage** : cases regroupées par carré de `NAV_WAYPOINT_SIZE` studs et par étage (cases reliées à pied
    dans le carré), petites zones fondues dans leur voisine. Note fixe : vue (nombre de points visibles à hauteur des
-   yeux, critère principal), hauteur, couvert (8 rayons), bonus de type (`rampe`, `echelle`, `escalier`, `fosse`,
-   `couloir`, `piece`). Les murs d'air ne bloquent ni la vue ni le couvert.
+   yeux, critère principal), hauteur, couvert (8 rayons), bonus de type (`rampe` : entrée ou sortie d'une arête de
+   rampe à moins de `NAV_RAMP_DIST`, `echelle`, `escalier`, `fosse`, `couloir`, `piece`). Les murs d'air ne bloquent ni
+   la vue ni le couvert.
 
 Mesure sur Dizzy (09/11/2026) : 40 841 cases (29 319 gardées), 1 056 points, 294 000 arêtes de marche, 9 250
 descentes, 4 500 sauts, 2 échelles ; **7,8 s** au démarrage (cases 4,0, marche 1,1, rebords 0,3, vue 2,1) avec
 `NAV_BUILD_BUDGET` = 8 ms par frame ; **~45 Mo** de mémoire Lua serveur. Les bots attendent sur place que le plan soit
 prêt (ils tombent du soleil pendant ce temps).
+
+## Rampes de surf (#142)
+
+Décision 3 de #133 : une rampe est un raccourci emprunté seulement s'il rapproche le bot de sa destination. Le surf
+n'est **pas simulé par bot** : le trajet est **calculé une fois au démarrage** avec la vraie physique, puis rejoué.
+Règles pures dans `RampRules` (et `NavRules.rampCost`), simulation dans `RampSim`, réglages `RAMP_*` de `BotConfig`.
+- **Rampes** (`NavBuilder.findRamps`) : pièces `Part` en bloc (`Shape = Block`, pas de `WedgePart`), `CanCollide`, des dossiers `RAMPS_FOLDER` (`Ramps`, à toute profondeur) dont
+  une face est dans la plage du surf (`SURF_NORMAL_MIN` à `SURF_NORMAL_Y`) et fait au moins `RAMP_MIN_AREA` studs² ;
+  repère `RampRules.frameOf` (u le long de la rampe, v vers le haut de la pente, n la normale), une seule par rampe
+  (`sameRamp`). Map sans rampe : aucune arête, rien d'autre ne change. `RAMP_ENABLED = false` les coupe toutes.
+- **Entrée** : cases à moins de `RAMP_ENTRY_DIST` au-delà du bout de départ dont le sol tombe sur la face
+  (`entryTarget` : point visé à `RAMP_ENTRY_INSET` du bout, `RAMP_ENTRY_RISE` au-dessus du sol). `RAMP_TRIES` cases
+  essayées (`pickEntries` : les plus proches du point de passage, écartées de `RAMP_TRY_SPACING`).
+- **Simulation** (`RampSim.simulate`, `CharacterMotor` du joueur sur un corps hors du Workspace, ticks de 64 Hz) :
+  course vers le **point de passage** (`approachPoint` : au-delà du bout, devant la face) puis vers le point visé,
+  saut près du point de passage ou au bord du vide ; sur la rampe, **appui vers la rampe** (direction horizontale
+  opposée à la normale) : le glissement le garde sur la face et il y **monte doucement** à ~30 studs/s, comme un
+  joueur ; au-delà du bout d'arrivée (ou décroché), case où il retomberait (`pickLanding` ; une case de bord,
+  sans ses 8 voisines à pied, comptée `RAMP_EDGE_PENALTY` studs plus loin), rejointe en l'air
+  (`landingVelocity`, `steer` à `RAMP_AIR_STEER`). Réussite : atterri à moins de `RAMP_LAND_RADIUS` d'une case, freiné
+  jusqu'à sa vitesse de course sans en sortir (`RAMP_SETTLE_TIME` au plus : le bot rejoue ce freinage et repart à
+  vitesse de course), assez de rampe parcourue (`RAMP_MIN_TRAVEL`), sous `RAMP_MAX_TIME` et `RAMP_MAX_SPEED`
+  (`accept`). Échec immédiat s'il retombe avant la rampe (saut trop court). Le plus court trajet réussi devient
+  l'arête ; `[Nav] rampe i, sens d : entrée → sortie, durée, vitesse` dans la console, ou la raison de chaque échec.
+  La simulation rend la main à chaque tick quand la tranche `NAV_BUILD_BUDGET` est écoulée.
+- **Voisins** : une arête de rampe ne relie pas deux points de passage dans `waypointEdges` (l'enquête fouille les
+  points voisins, pas le bout d'une rampe à 150 studs).
+- **Coût** : `NavRules.rampCost` = durée × `RUN_SPEED` + `RAMP_COST_EXTRA` (risque), lu par l'A* dans
+  `graph.rampCost` au lieu de la longueur : une rampe n'est prise que si elle raccourcit le chemin.
+- **Parcours** : arrivé au sol à moins de `RAMP_START_DIST` de la case d'entrée (`canStart`), `BotNavigator` renvoie
+  l'intention `ride` ; `BotMotion` rejoue le trajet (`RampRules.sample` : pieds et vitesse à l'instant t), l'écart de
+  départ résorbé en `RAMP_BLEND_TIME` (`blend`), regard et tir comme ailleurs, animation de surf. À la fin, il est
+  posé sur la case de sortie avec sa vitesse horizontale et le chemin reprend (`rideFinished`) ; si sa destination a
+  changé pendant le trajet, il repart de la case où il a atterri (comme après une chute).
+- **Anti-triche** : la position d'un bot passe par `CharacterSync.relayBot`, sans validation (pas de `[CheatLog]`
+  possible) ; le trajet reste quand même sous `RAMP_MAX_SPEED` (200, sous `MAX_SPEED_SERVER` = 450) comme un joueur.
+
+**Sur Dizzy**, les deux rampes relient la plateforme du haut de l'escalier de la fosse (Y 70, bout fermé) à une
+**corniche en cul-de-sac** au bout ouvert (Y 70, X 1722-1738 côté T, X 2259-2277 côté CT), qu'on ne rejoint pas
+autrement : 4 arêtes (2 par rampe), la corniche entre dans les cases gardées (29 555 au lieu de 29 319, 1 068 points
+au lieu de 1 056). Ce ne sont donc pas des raccourcis entre deux zones de la map, mais le seul chemin vers ces
+corniches. Mesure (11/11/2026, Studio) :
+
+| Rampe, sens | Entrée → sortie | Durée | Vitesse au plus |
+|---|---|---|---|
+| T, vers la corniche | (1874, 70, −409) → (1722, 71, −389) | 5,5 s | 72 studs/s |
+| T, vers la plateforme | (1726, 71, −389) → (1886, 71, −393) | 6,4 s | 64 studs/s |
+| CT, vers la corniche | (2126, 70, −113) → (2278, 71, −129) | 5,4 s | 72 studs/s |
+| CT, vers la plateforme | (2274, 71, −129) → (2114, 71, −129) | 6,3 s | 65 studs/s |
+
+Construction : 1,0 à 1,2 s de plus au démarrage (24 simulations).
 
 ## Suivi de chemin
 
@@ -37,7 +92,9 @@ prêt (ils tombent du soleil pendant ce temps).
 viennent avec #141), chemin A* de case en case (`NavRules.findPath`, coût pondéré par type d'arête), puis à chaque tick :
 - cible = la case la plus lointaine qu'on rejoint en ligne droite (`NavRules.lookAhead`, arêtes de marche seulement) ;
 - saut quand le rebord (milieu de l'arête) est à moins de `vitesse × NAV_JUMP_LEAD_TIME` + rayon ; en l'air, il ne vise
-  sa cible que sur une arête de saut ou d'échelle (sinon pas d'air control hors bunny hop, cf. ci-dessous ; le surf n'est pas simulé) ;
+  sa cible que sur une arête de saut, de descente ou d'échelle (sinon pas d'air control hors bunny hop, cf. ci-dessous ;
+  le surf n'est pas simulé). Descente visée depuis #142 : sans elle, un bot qui sautait du toit sur la corniche T de
+  Dizzy (35 studs plus bas, 16 de large) gardait sa vitesse de course et la dépassait, dans le vide ;
 - échelle : dans le volume, vitesse de `LadderRules.climbVelocity` en poussant vers le mur, comme le joueur ;
 - gêne : sans se rapprocher de sa cible pendant `NAV_STUCK_TIME`, nouveau chemin ; après `NAV_MAX_REPATH` essais sur
   la même case, l'arête est écartée `NAV_BAN_TIME` s pour ce bot (warn `[Nav] arête … ratée`) et il change de
@@ -156,8 +213,14 @@ Règles pures dans `BotPopulationRules`, appliquées par `BotManager` (`adjustPo
   apparaître). `"+"` / `"-"` : un de plus / de moins (l'attribut est remplacé par le nombre obtenu), `0` : aucun,
   `nil` ou `"auto"` : retour à la population automatique. Un nombre fixé retire sans attendre la fin des duels.
 - `workspace:SetAttribute("DebugBotsFreeze", true)` : fige les bots (ni mouvement ni tir), `false` ou `nil` les relâche.
+- `workspace:SetAttribute("DebugBotsGoto", Vector3.new(x, y, z))` : tous les bots vont au point de passage le plus
+  proche (corniches de Dizzy : `(1730, 70.5, -350)` côté T, `(2268, 70.5, -170)` côté CT, plateformes
+  `(1895, 70.5, -412)` et `(2110, 70.5, -115)`). Ordre prioritaire (`BotNavigator.pinDestination`) : enquête et repli
+  ne le changent pas ; le comportement reprend la main à l'arrivée, ou si la destination devient injoignable (arête
+  écartée). Remettre `nil` avant de renvoyer au même endroit (même valeur : pas de signal).
 - `workspace:SetAttribute("DebugNav", true)` : points (couleur du rouge au vert et étiquette = numéro, type, note),
-  arêtes entre points (gris marche, bleu descente, orange saut, vert échelle ; trait court = sens unique), chemin
+  arêtes entre points (gris marche, bleu descente, orange saut, vert échelle ; trait court = sens unique), trajet
+  simulé de chaque arête de rampe en violet (boule à l'entrée), chemin
   restant de chaque bot en jaune, au-dessus de chaque bot son état, sa destination et sa cible (blanc chercher,
   jaune enquêter, rouge combattre, bleu se replacer), trait rouge vers la cible en combat. `"cases"` : en plus chaque case (vert gardée, rouge écartée), lourd (~40 000 pièces).
 - Console : `[Nav] Dizzy : …` à la fin de la construction (durée par phase), `[Nav] bilan` et `[Bots] bilan`
@@ -196,3 +259,16 @@ Règles pures dans `BotPopulationRules`, appliquées par `BotManager` (`adjustPo
 - Gain par saut : environ 36 × 44 ticks ≈ 1 600 de |v|² en strafe parfait, donc 6 sauts de 30 à 100, pas 3.
 - **Tests Lune : `Vector3` est en simple précision.** Un angle recalculé par `acos` d'un produit scalaire d'unitaires
   s'écarte de ~1e-5° de la valeur exacte : comparer les angles à 1e-3 près, pas à 1e-6.
+- **Simulation de rampe et personnages présents.** `RampSim` utilise le `CharacterMotor` du joueur, dont les requêtes
+  n'excluent que le corps simulé : un joueur ou un bot debout sur une entrée de rampe pendant la construction du plan
+  (les premières secondes du serveur) peut gêner un essai. Les `RAMP_TRIES` essais par sens limitent le risque ; si une
+  arête manque au démarrage (`[Nav] rampe … : aucun trajet`), relancer le serveur.
+- **Une corniche gardée ouvre aussi ses autres accès.** Rendre une corniche joignable par une rampe (et d'où l'on
+  revient) rend aussi utilisables les descentes qui y mènent (toit → corniche de Dizzy, 35 studs). Sans air control sur
+  les descentes, le bot gardait sa vitesse de course et dépassait la corniche (16 studs de large) : la descente vise
+  désormais sa case en l'air, comme un saut.
+- **Atterrir au milieu, pas sur le rebord.** La première version visait la case la plus proche du point de chute : sur
+  Dizzy, le rebord extérieur de la corniche CT (X 2278, 1 stud de large au-dessus du vide). Le bot y arrivait à sa
+  vitesse de course vers l'extérieur et, le trajet fini, la friction ne l'arrêtait qu'au-delà : 2 chutes sur 4
+  passages. `pickLanding` pénalise désormais les cases de bord (`RAMP_EDGE_PENALTY`) sans les interdire : une
+  corniche étroite sous le point de chute reste préférée à un sol intérieur bien plus bas.

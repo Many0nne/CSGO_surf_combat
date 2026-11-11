@@ -408,6 +408,25 @@ local function applyDebugFreeze()
 	BotManager.setFrozen(workspace:GetAttribute(BotConfig.DEBUG_FREEZE_ATTRIBUTE) == true)
 end
 
+-- Cette méthode permet d'envoyer tous les bots vers un point lorsque l'attribut DebugBotsGoto change (Studio) : le
+-- point de passage le plus proche de la position donnée devient leur destination (rampes de surf #142 comprises).
+local function applyDebugGoto()
+	local value = workspace:GetAttribute(BotConfig.DEBUG_GOTO_ATTRIBUTE)
+	local plan = NavPlan.get()
+	if typeof(value) ~= "Vector3" or not plan then
+		return
+	end
+	local waypoint = NavPlan.waypointNear(plan, value)
+	if not waypoint then
+		return
+	end
+	for _, bot in bots do
+		if bot.motion then
+			bot.motion.navigator:pinDestination(waypoint)
+		end
+	end
+end
+
 -- Cette méthode permet de démarrer la gestion des bots lorsque le serveur démarre.
 function BotManager.init(dependencies: Deps)
 	deps = dependencies
@@ -440,6 +459,7 @@ function BotManager.init(dependencies: Deps)
 	if RunService:IsStudio() then
 		workspace:GetAttributeChangedSignal(BotConfig.DEBUG_ATTRIBUTE):Connect(applyDebugCommand)
 		workspace:GetAttributeChangedSignal(BotConfig.DEBUG_FREEZE_ATTRIBUTE):Connect(applyDebugFreeze)
+		workspace:GetAttributeChangedSignal(BotConfig.DEBUG_GOTO_ATTRIBUTE):Connect(applyDebugGoto)
 		applyDebugCommand()
 		applyDebugFreeze()
 	end

@@ -277,31 +277,13 @@ function BotBrain._perceive(self: BotBrain, now: number)
 	end
 end
 
--- Cette méthode permet de trouver le point de passage le plus proche d'une position lorsque le bot doit y aller
--- (dernière position connue, souvent hors de la grille : tir entendu flou, cible en l'air).
-function BotBrain._waypointNear(plan: NavPlan.Plan, position: Vector3): number?
-	local cell = NavPlan.nearestCell(plan, position, BotConfig.NAV_NEAREST_RADIUS * 2)
-	local wp = cell and plan.cellWaypoint[cell]
-	if wp then
-		return wp
-	end
-	local best, bestDist = nil, math.huge
-	for i, point in plan.waypoints do
-		local d = (point.position - position).Magnitude
-		if d < bestDist then
-			best, bestDist = i, d
-		end
-	end
-	return best
-end
-
 -- Cette méthode permet de lancer une enquête lorsqu'un contact pas encore fouillé arrive : direction le point le
 -- plus proche de la dernière position connue, puis INVESTIGATE_POINTS points voisins tirés au hasard.
 function BotBrain._startInvestigation(self: BotBrain, plan: NavPlan.Plan, memory: Memory)
 	self.investigated = memory.at
 	self.investigateDone = false
 	table.clear(self.investigateQueue)
-	local wp = BotBrain._waypointNear(plan, memory.position)
+	local wp = NavPlan.waypointNear(plan, memory.position)
 	if not wp then
 		self.investigateDone = true
 		return
