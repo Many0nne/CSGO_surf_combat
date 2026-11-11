@@ -45,9 +45,13 @@ return function(T, Loader)
 		T.it("décrit chaque piste jouée par un couteau (coups, estoc, inspection) dans AnimationSounds", function()
 			for _, name in { "M9Bayonet", "KaBar" } do
 				local cfg = WeaponConfig.Weapons[name]
-				local played = { cfg.SecondaryAttack.Animation, cfg.InspectAnimation, table.unpack(cfg.ShootAnimations) }
+				local played =
+					{ cfg.SecondaryAttack.Animation, cfg.InspectAnimation, table.unpack(cfg.ShootAnimations) }
 				for _, animation in played do
-					T.expect(cfg.AnimationSounds[animation] ~= nil, name .. " : piste " .. animation .. " sans entrée AnimationSounds")
+					T.expect(
+						cfg.AnimationSounds[animation] ~= nil,
+						name .. " : piste " .. animation .. " sans entrée AnimationSounds"
+					)
 				end
 				T.expect(cfg.ThirdPerson and cfg.ThirdPerson.Grip ~= nil, name .. " : tenue 3P sans Grip")
 			end
