@@ -97,12 +97,12 @@ return {
 
 	-- Combat (#141, #143) : il garde sa course (jamais d'arrêt ni de poursuite), se tourne vers la cible, tire et
 	-- reprend sa trajectoire. Difficulté unique : REACTION_TIME, COMBAT_AIM_TIME, COMBAT_TURN_RATE et AIM_SPREAD*
-	REACTION_TIME       = 0.45,   -- avant de pouvoir tirer, depuis qu'il voit la cible (s)
+	REACTION_TIME       = 0.55,   -- avant de pouvoir tirer, depuis qu'il voit la cible (s)
 	COMBAT_AIM_TIME     = 0.3,    -- visée avant le tir, une fois réagi (s)
 	COMBAT_COOLDOWN     = 1.5,    -- après un tir, regard rendu à la course (au moins la cadence de l'AWP, 1,46 s)
 	COMBAT_TURN_RATE    = 720,    -- rotation du regard vers la cible (°/s)
 	FIRE_YAW_TOLERANCE  = 2,      -- tire seulement si son cap est à moins de tant de la cible (°)
-	AIM_SPREAD          = 1.5,    -- dispersion d'un tir sur une cible immobile (demi-angle du cône, °)
+	AIM_SPREAD          = 2,      -- dispersion d'un tir sur une cible immobile (demi-angle du cône, °)
 	AIM_SPREAD_SPEED    = 0.05,   -- en plus par stud/s de vitesse de la cible (° ; aucun malus selon sa propre vitesse)
 	AIM_SPREAD_MAX      = 6,      -- dispersion au plus (°)
 	FIRE_RANGE          = 240,    -- tir au fusil à moins de tant (studs ; le serveur refuse au-delà de 250)
