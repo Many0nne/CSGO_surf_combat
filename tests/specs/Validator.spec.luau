@@ -1839,6 +1839,87 @@ return function(T, Loader)
 			end
 		)
 
+		-- Cette méthode permet d'ajouter un bras gauche R15 (UpperTorso, Waist, épaule, coude, poignet) à une cible
+		-- lorsqu'un test tire sur un membre (#240) ; bras le long du corps, comme sur le rig serveur. Renvoie la main et
+		-- la position de l'épaule.
+		local function addLeftArm(character)
+			local torso = addPart(character, "UpperTorso", Vector3.new(0, 1, 0))
+			local shoulderPos = torso.Position + Vector3.new(-1, 0.5, 0)
+			local function motor(name: string, holder, c0: Vector3, c1: Vector3)
+				local m = Instance.new("Motor6D")
+				m.Name = name
+				m.C0 = CFrame.new(c0)
+				m.C1 = CFrame.new(c1)
+				m.Parent = holder
+			end
+			motor("Waist", torso, Vector3.new(0, -0.2, 0), Vector3.new(0, -0.8, 0))
+			local upperArm = addPart(character, "LeftUpperArm", Vector3.new(-1, 1.1, 0))
+			upperArm.Size = Vector3.new(1, 1.2, 1)
+			motor("LeftShoulder", upperArm, Vector3.new(-1, 0.5, 0), Vector3.new(0, 0.4, 0))
+			local lowerArm = addPart(character, "LeftLowerArm", Vector3.new(-1, 0.1, 0))
+			lowerArm.Size = Vector3.new(1, 1.1, 1)
+			motor("LeftElbow", lowerArm, Vector3.new(0, -0.4, 0), Vector3.new(0, 0.2, 0))
+			local hand = addPart(character, "LeftHand", Vector3.new(-1, -0.6, 0))
+			hand.Size = Vector3.new(1, 0.3, 1)
+			motor("LeftWrist", hand, Vector3.new(0, -0.5, 0), Vector3.new(0, 0.125, 0))
+			return hand, shoulderPos
+		end
+
+		T.it(
+			"membre (#240) : main vue tenue devant la cible acceptée, silent aim hors de l'allonge refusé",
+			function()
+				local Validator, a, b, world, ShotRules = setupPose({ direction = "block" })
+				local hand, shoulder = addLeftArm(b.Character)
+				-- Le tireur voit la main tenue devant la cible (tenue de l'arme posée par les clients), à 2,2 studs de
+				-- l'épaule vers lui, quand le rig serveur la montre le long du corps : 3 studs d'écart, refusé avant #240
+				local seen = shoulder + Vector3.new(-2.2, 0, 0)
+				T.expect(
+					(seen - hand.Position).Magnitude > ShotRules.directionLimit(hand.Size.Magnitude / 2, 0),
+					"écart"
+				)
+				T.expectEqual(Validator.authorizeHitscan(a, b.Character, hand, 0, shotAt(a, seen, world.now)), 115)
+				T.expectEqual(reportedChecks(world), "", "main tenue")
+				-- Silent aim : rayon à côté de la cible, au-delà de l'allonge et de la tolérance
+				local radius = ShotRules.limbRadius({
+					shoulderC1 = Vector3.new(0, 0.4, 0),
+					elbowC0 = Vector3.new(0, -0.4, 0),
+					elbowC1 = Vector3.new(0, 0.2, 0),
+					wristC0 = Vector3.new(0, -0.5, 0),
+					wristC1 = Vector3.new(0, 0.125, 0),
+					upperArmSize = Vector3.new(1, 1.2, 1),
+					lowerArmSize = Vector3.new(1, 1.1, 1),
+					handSize = Vector3.new(1, 0.3, 1),
+					shoulderC0 = Vector3.new(-1, 0.5, 0),
+					waistC1 = CFrame.new(0, -0.8, 0),
+				})
+				local aside = shoulder + Vector3.new(0, 0, -(radius + ShotRules.DIRECTION_BASE + 1))
+				T.expectEqual(Validator.authorizeHitscan(a, b.Character, hand, 10, shotAt(a, aside, world.now)), nil)
+				T.expectEqual(reportedChecks(world), "direction")
+				T.expect(
+					string.find(world.reports[1].detail, "allonge de l'épaule", 1, true) ~= nil,
+					"détail : " .. world.reports[1].detail
+				)
+			end
+		)
+
+		T.it("membre (#240) : tête et main sans rig complet gardent la règle de la partie", function()
+			local Validator, a, b, world, ShotRules = setupPose({ direction = "block" })
+			local _, shoulder = addLeftArm(b.Character)
+			local head = addPart(b.Character, "Head", Vector3.new(0, 2, 0))
+			-- Point dans l'allonge de l'épaule mais à 3,5 studs de la tête : refusé pour une touche à la tête
+			local nearShoulder = head.Position + Vector3.new(0, 0, 3.5)
+			T.expect((nearShoulder - shoulder).Magnitude < 4, "dans l'allonge")
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, head, 0, shotAt(a, nearShoulder, world.now)), nil)
+			T.expectEqual(reportedChecks(world), "direction")
+			-- Main droite sans bras ni articulations : règle de la partie
+			Validator, a, b, world = setupPose({ direction = "block" })
+			local rightHand = addPart(b.Character, "RightHand", Vector3.new(0, 0, -2))
+			local off = rightHand.Position + Vector3.new(0, 0, -3.5)
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rightHand, 0, shotAt(a, off, world.now)), nil)
+			T.expectEqual(reportedChecks(world), "direction")
+			T.expect(ShotRules.limbSide("RightHand") == "Right", "côté")
+		end)
+
 		T.it("ne borne pas les tirs des bots par le ping", function()
 			local Validator, _, b, world, _, makeBot = setupPose({ ping = "block" })
 			world.ping = 0.03

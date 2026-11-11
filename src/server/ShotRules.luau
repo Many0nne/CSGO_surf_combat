@@ -7,6 +7,7 @@
 -- Mêlée (#176, « M1 ») : orientation du tireur et ligne de vue vers la cible rembobinée, mêmes modes et même journal.
 -- Instant annoncé (#214) : shotTime (tir) et hitTime (mêlée) bornés par le ping du tireur, contrôle « ping ».
 -- Pose rembobinée (#213) : la partie visée est replacée selon le cap et l'accroupi de la cible à l'instant rembobiné.
+-- Membres (#240) : main ou bras jugé dans la sphère d'allonge de son épaule (tenue de l'arme posée par les clients).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
@@ -16,6 +17,7 @@ local CharacterSyncRules = require(ReplicatedStorage.Shared.CharacterSyncRules)
 local MathRules = require(ReplicatedStorage.Shared.MathRules)
 local PositionHistory = require(ReplicatedStorage.Shared.PositionHistory)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
+local WeaponThirdPerson = require(ReplicatedStorage.Shared.WeaponThirdPerson)
 
 local ShotRules = {}
 
@@ -154,6 +156,85 @@ ShotRules.CLOCK_TOLERANCE = 0.05
 -- voit la cible debout, accroupie ou non, donc 0. À régler sur la piste publiée le jour où elle existe (le test
 -- « CROUCH_DROP suit la piste 3P » de ShotRules.spec.luau échoue tant que les deux ne concordent pas).
 ShotRules.CROUCH_DROP = 0
+-- Membres (#240) : parties des bras R15, rattachées à leur épaule. La tenue de l'arme (#107) n'est posée que par les
+-- clients (WeaponThirdPersonView) : sur le rig serveur, une main est à ~4 studs de là où le tireur la voit. Une touche
+-- sur ces parties est jugée dans la sphère d'allonge du bras (limbAim), pas sur la position serveur de la partie.
+ShotRules.LIMB_SIDES = {
+	LeftUpperArm = "Left",
+	LeftLowerArm = "Left",
+	LeftHand = "Left",
+	RightUpperArm = "Right",
+	RightLowerArm = "Right",
+	RightHand = "Right",
+} :: { [string]: string }
+
+-- Bras d'un rig R15, lu sur le rig serveur (Motor6D Shoulder, Elbow, Wrist d'un côté) : positions des articulations
+-- dans le repère de chaque partie, tailles des parties, et épaule et taille dans le repère de l'UpperTorso.
+export type ArmRig = {
+	shoulderC1: Vector3, -- épaule, repère UpperArm
+	elbowC0: Vector3, -- coude, repère UpperArm
+	elbowC1: Vector3, -- coude, repère LowerArm
+	wristC0: Vector3, -- poignet, repère LowerArm
+	wristC1: Vector3, -- poignet, repère Hand
+	upperArmSize: Vector3,
+	lowerArmSize: Vector3,
+	handSize: Vector3,
+	shoulderC0: Vector3, -- épaule, repère UpperTorso
+	waistC1: CFrame?, -- taille (articulation Waist, C1), repère UpperTorso ; nil sans Waist
+}
+
+-- Cette méthode permet de savoir de quel côté est une partie touchée lorsqu'on vérifie la visée : "Left" ou "Right"
+-- pour une partie de bras R15, nil pour toute autre partie (règle de la partie inchangée).
+function ShotRules.limbSide(partName: string): string?
+	return ShotRules.LIMB_SIDES[partName]
+end
+
+-- Cette méthode permet de mesurer le point d'une boîte (centrée sur l'origine de son repère) le plus loin d'un point
+-- de ce repère lorsqu'on calcule l'allonge d'un bras.
+local function farthestInBox(point: Vector3, size: Vector3): number
+	local half = size / 2
+	return Vector3.new(math.abs(point.X) + half.X, math.abs(point.Y) + half.Y, math.abs(point.Z) + half.Z).Magnitude
+end
+
+-- Cette méthode permet de calculer l'allonge d'un bras lorsqu'une touche sur un membre est vérifiée : plus grande
+-- distance entre l'épaule et un point du bras, quels que soient les angles d'épaule, de coude et de poignet.
+function ShotRules.armReach(arm: ArmRig): number
+	local upper = (arm.elbowC0 - arm.shoulderC1).Magnitude
+	local lower = (arm.wristC0 - arm.elbowC1).Magnitude
+	return math.max(
+		farthestInBox(arm.shoulderC1, arm.upperArmSize),
+		upper + farthestInBox(arm.elbowC1, arm.lowerArmSize),
+		upper + lower + farthestInBox(arm.wristC1, arm.handSize)
+	)
+end
+
+-- Cette méthode permet de mesurer de combien la tenue de l'arme déplace l'épaule lorsqu'une touche sur un membre est
+-- vérifiée : rotation de taille (Waist) des tenues de WeaponThirdPerson.POSES, absente du rig serveur ; 0 sans Waist.
+function ShotRules.holdShoulderShift(arm: ArmRig): number
+	local waist = arm.waistC1
+	if not waist then
+		return 0
+	end
+	-- La taille tourne l'UpperTorso autour de son articulation (Transform, dans le repère du joint) : l'épaule y est à
+	-- fromWaist, déplacée de |Transform × fromWaist - fromWaist|
+	local fromWaist = waist:PointToObjectSpace(arm.shoulderC0)
+	local shift = 0
+	for _, pose in WeaponThirdPerson.POSES do
+		for _, joints in { pose.Joints, pose.AirJoints } do
+			local transform = joints and joints.Waist
+			if transform then
+				shift = math.max(shift, (transform:VectorToWorldSpace(fromWaist) - fromWaist).Magnitude)
+			end
+		end
+	end
+	return shift
+end
+
+-- Cette méthode permet de calculer la sphère dans laquelle juger une touche sur un membre lorsqu'un tir arrive :
+-- rayon = allonge du bras (épaule comprise) + déplacement de l'épaule par la tenue ; le centre est l'épaule rembobinée.
+function ShotRules.limbRadius(arm: ArmRig): number
+	return ShotRules.armReach(arm) + ShotRules.holdShoulderShift(arm)
+end
 
 -- Cette méthode permet de vérifier qu'un Vector3 est fini et borné par MAX_COORD lorsqu'un point de tir arrive.
 local function isBoundedVector(v: any): boolean

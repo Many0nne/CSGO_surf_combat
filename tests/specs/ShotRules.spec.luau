@@ -217,6 +217,119 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("ShotRules : membres jugés dans l'allonge de l'épaule (#240)", function()
+		-- Bras gauche d'un rig R15 : articulations (Motor6D C0/C1) et tailles des parties
+		local function leftArm()
+			return {
+				shoulderC1 = Vector3.new(0, 0.4, 0),
+				elbowC0 = Vector3.new(0, -0.4, 0),
+				elbowC1 = Vector3.new(0, 0.2, 0),
+				wristC0 = Vector3.new(0, -0.5, 0),
+				wristC1 = Vector3.new(0, 0.125, 0),
+				upperArmSize = Vector3.new(1, 1.2, 1),
+				lowerArmSize = Vector3.new(1, 1.1, 1),
+				handSize = Vector3.new(1, 0.3, 1),
+				shoulderC0 = Vector3.new(-1, 0.56, 0),
+				waistC1 = CFrame.new(0, -0.78, 0),
+			}
+		end
+
+		-- Cette méthode permet de poser un bras aux angles donnés (épaule à l'origine) lorsqu'un test vérifie que
+		-- l'allonge contient tout le bras : renvoie le plus grand écart entre l'épaule et un coin d'une partie.
+		local function farthestCorner(arm, r1: CFrame, r2: CFrame, r3: CFrame): number
+			local upper = r1 * CFrame.new(-arm.shoulderC1)
+			local lower = upper * CFrame.new(arm.elbowC0) * r2 * CFrame.new(-arm.elbowC1)
+			local hand = lower * CFrame.new(arm.wristC0) * r3 * CFrame.new(-arm.wristC1)
+			local best = 0
+			for _, part in { { upper, arm.upperArmSize }, { lower, arm.lowerArmSize }, { hand, arm.handSize } } do
+				local half = part[2] / 2
+				for _, sx in { -1, 1 } do
+					for _, sy in { -1, 1 } do
+						for _, sz in { -1, 1 } do
+							local corner = part[1]:PointToWorldSpace(Vector3.new(sx * half.X, sy * half.Y, sz * half.Z))
+							best = math.max(best, corner.Magnitude)
+						end
+					end
+				end
+			end
+			return best
+		end
+
+		T.it("ne concerne que les mains et les bras", function()
+			for _, name in { "LeftHand", "LeftLowerArm", "LeftUpperArm" } do
+				T.expectEqual(ShotRules.limbSide(name), "Left", name)
+			end
+			for _, name in { "RightHand", "RightLowerArm", "RightUpperArm" } do
+				T.expectEqual(ShotRules.limbSide(name), "Right", name)
+			end
+			for _, name in { "Head", "UpperTorso", "LowerTorso", "HumanoidRootPart", "LeftUpperLeg", "RightFoot" } do
+				T.expectEqual(ShotRules.limbSide(name), nil, name)
+			end
+		end)
+
+		T.it("allonge = bras tendu jusqu'au coin de la main, et contient le bras dans toute pose", function()
+			local arm = leftArm()
+			-- Bras tendu : 0,8 (épaule-coude) + 0,7 (coude-poignet) + coin de la main vu du poignet
+			local expected = 0.8 + 0.7 + Vector3.new(0.5, 0.125 + 0.15, 0.5).Magnitude
+			T.expect(math.abs(ShotRules.armReach(arm) - expected) < 1e-6, "allonge " .. ShotRules.armReach(arm))
+			math.randomseed(240)
+			-- Cette méthode permet de tirer une rotation au hasard lorsqu'on pose le bras dans une pose quelconque.
+			local function randomRotation(): CFrame
+				return CFrame.Angles(
+					math.random() * 2 * math.pi,
+					math.random() * 2 * math.pi,
+					math.random() * 2 * math.pi
+				)
+			end
+			local worst = 0
+			for _ = 1, 500 do
+				worst = math.max(worst, farthestCorner(arm, randomRotation(), randomRotation(), randomRotation()))
+			end
+			worst = math.max(worst, farthestCorner(arm, CFrame.identity, CFrame.identity, CFrame.identity))
+			T.expect(worst <= ShotRules.armReach(arm) + 1e-6, string.format("coin à %.3f studs", worst))
+			-- Serrée : le bras tendu atteint presque l'allonge (à la diagonale de la main près)
+			T.expect(worst > ShotRules.armReach(arm) - 0.2, string.format("allonge lâche : %.3f", worst))
+		end)
+
+		T.it("ajoute le déplacement de l'épaule par la rotation de taille de la tenue", function()
+			local arm = leftArm()
+			-- Tenue Rifle : taille tournée de 40° ; l'épaule est à 1 stud de l'axe de la taille
+			local shift = ShotRules.holdShoulderShift(arm)
+			T.expect(math.abs(shift - 2 * math.sin(math.rad(20))) < 1e-3, "déplacement " .. shift)
+			T.expect(math.abs(ShotRules.limbRadius(arm) - (ShotRules.armReach(arm) + shift)) < 1e-9, "rayon")
+			arm.waistC1 = nil
+			T.expectEqual(ShotRules.holdShoulderShift(arm), 0, "sans Waist")
+		end)
+
+		T.it("accepte un membre au bout de l'allonge, refuse un tir hors de l'allonge", function()
+			local arm = leftArm()
+			local radius = ShotRules.limbRadius(arm)
+			local limit = ShotRules.directionLimit(radius, 0)
+			-- Épaule rembobinée à 50 studs devant le tireur ; main tenue au bout du bras, vue par le tireur
+			local shoulder = Vector3.new(50, 0, 0)
+			local held = shoulder + Vector3.new(0, 0, radius - 0.1)
+			local ok, detail = ShotRules.checkDirection(shot({ direction = held.Unit, hitPos = held }), shoulder, limit)
+			T.expect(ok, "main au bout du bras : " .. tostring(detail))
+			-- Tolérance réseau en plus de l'allonge, inchangée (DIRECTION_BASE)
+			local edge = shoulder + Vector3.new(0, 0, radius + ShotRules.DIRECTION_BASE - 0.1)
+			T.expectEqual(
+				(ShotRules.checkDirection(shot({ direction = edge.Unit, hitPos = edge }), shoulder, limit)),
+				true,
+				"bord de la tolérance"
+			)
+			-- Silent aim : rayon à 2 studs au-delà de l'allonge et de la tolérance
+			local far = shoulder + Vector3.new(0, 0, radius + ShotRules.DIRECTION_BASE + 2)
+			ok, detail = ShotRules.checkDirection(shot({ direction = far.Unit, hitPos = far }), shoulder, limit)
+			T.expectEqual(ok, false, "hors de l'allonge")
+			T.expect(string.find(detail or "", "rayon à", 1, true) ~= nil, "détail : " .. tostring(detail))
+		end)
+
+		T.it("garde les tolérances de la tête et du corps", function()
+			T.expectEqual(ShotRules.DIRECTION_BASE, 2)
+			T.expectEqual(ShotRules.DIRECTION_SPEED_FACTOR, 0.05)
+		end)
+	end)
+
 	T.describe("ShotRules : vitesse", function()
 		T.it("mesure sur une fenêtre de SPEED_WINDOW décalée dans la borne de rembobinage", function()
 			local w = ShotRules.SPEED_WINDOW
