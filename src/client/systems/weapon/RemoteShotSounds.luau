@@ -86,11 +86,11 @@ end
 -- Cette méthode permet de jouer le son d'un tir relayé par le serveur lorsqu'il arrive : copie du son de l'arme en 3D
 -- qui suit l'arme du tireur, détruite à la fin de sa lecture (ou au plus tard après sa durée de vie).
 local function onShotFired(shooter: any, weaponName: any)
-	local localPlayer = Players.LocalPlayer
-	if not ShotSoundRules.shouldPlay(shooter, localPlayer and localPlayer.Character, getState(), activeCount()) then
+	if typeof(shooter) ~= "Instance" or not shooter:IsA("Model") then
 		return
 	end
-	if typeof(shooter) ~= "Instance" or not shooter:IsA("Model") then
+	local localPlayer = Players.LocalPlayer
+	if not ShotSoundRules.shouldPlay(shooter, localPlayer and localPlayer.Character, getState(), activeCount()) then
 		return
 	end
 	local settings = ShotSoundRules.settingsFor(weaponName)

@@ -627,8 +627,11 @@ seule, sans journal), puis `ShotRelayRules.admit` : forme (Vector3 bornés, dire
 propre au relais (un tir refusé ne la relance pas, elle ne touche pas celle des touches). Accepté : relayé par
 `FireClient` à tous les joueurs sauf le tireur (`ShotRelayRules.recipients`), et entendu par les bots
 (`BotManager.hearShot`, joueurs seulement : ceux des bots passent par `BotBrain`). Pas de journal sur un refus : un tir
-sans dégâts ne rapporte rien, et un faux positif (gigue) n'a pas à compter. Limites : la cadence et le chargeur ne
-voient pas un tir dont la touche est refusée ; une touche peut être acceptée alors que son `ShotFired` a été écarté
+sans dégâts ne rapporte rien, et un faux positif (gigue) n'a pas à compter. Limites : le chargeur serveur ne compte que les touches
+acceptées (T2) : un client modifié qui n'envoie que des `ShotFired` fait entendre un tir par `FireDelay` sans jamais
+recharger (sans dégâts ; compter les `ShotFired` dans le chargeur demanderait de revoir T2, une touche sans son
+`ShotFired` ne devant pas passer en douce) ; la cadence est jugée à l'arrivée, comme celle des touches : deux tirs
+groupés par une coupure réseau, le second est muet ; une touche peut être acceptée alors que son `ShotFired` a été écarté
 (son muet, dégâts appliqués) : les deux chemins sont indépendants exprès. Un coup de couteau n'est plus entendu par
 les bots (il passait par `WeaponAction`). Tests : `tests/specs/ShotRelayRules.spec.luau`, « tir relayé » de
 `tests/specs/Validator.spec.luau`.
