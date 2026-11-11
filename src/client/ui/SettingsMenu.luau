@@ -10,7 +10,6 @@ local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
-local MovementConfig = require(ReplicatedStorage.Shared.MovementConfig)
 local PlayerSettings = require(ReplicatedStorage.Shared.PlayerSettings)
 local UITheme = require(ReplicatedStorage.Shared.UITheme)
 local LocalSettings = require(script.Parent.Parent.systems.settings.LocalSettings)
@@ -599,9 +598,9 @@ local function buildCategories(block: Frame)
 	end)
 
 	-- Auto-bhop (#255) : saut automatique tant qu'Espace est maintenu, activé par défaut ; BhopSystem suit LocalSettings
-	local bhopOptions = { { label = "ACTIVÉ", value = true }, { label = "DÉSACTIVÉ", value = false } }
+	local bhopOptions = { { label = "ACTIVÉ", value = true }, { label = "COUPÉ", value = false } }
 	local movement = addCategory(block, "MOUVEMENT")
-	local bhopDefault = if MovementConfig.AUTO_BHOP then 1 else 2
+	local bhopDefault = if PlayerSettings.DEFAULT_AUTO_BHOP then 1 else 2
 	addPicker(movement, "Auto-bhop", "autoBhop", bhopOptions, bhopDefault, bhopDefault, function() end, 150)
 
 	buildKeysCategory(block)

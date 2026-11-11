@@ -16,7 +16,7 @@ return function(T, Loader)
 				T.expectEqual(s.wheel, "previous")
 				T.expectEqual(s.simpleAim, false)
 				T.expectEqual(s.keyDisplay, "off")
-				T.expectEqual(s.autoBhop, true)
+				T.expectEqual(s.autoBhop, PlayerSettings.DEFAULT_AUTO_BHOP)
 				T.expectEqual(keysOf(s.slotKeys), keysOf(PlayerSettings.DEFAULT_SLOT_KEYS))
 			end
 		end)

@@ -164,8 +164,10 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 		-- 7. Physique ; sur une échelle, la vitesse est déjà posée (6b) : ni friction, ni gravité, ni saut normal
 		local willJump = false -- saut effectif ce tick (visible jusqu'au déplacement étape 8)
 		if isGroundedState then
-			local bhop =
-				BhopSystem.update(gnd.onGround, shouldJump, dt, InputModule.isJumpHeld(), LocalSettings.get().autoBhop)
+			local bhop = BhopSystem.update(gnd.onGround, shouldJump, dt, {
+				jumpHeld = InputModule.isJumpHeld(),
+				autoBhop = LocalSettings.get().autoBhop,
+			})
 			willJump = motor:groundPhysics(
 				gnd,
 				wishdir,

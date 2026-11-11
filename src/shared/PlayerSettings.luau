@@ -5,7 +5,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
 local KeyBindings = require(ReplicatedStorage.Shared.KeyBindings)
-local MovementConfig = require(ReplicatedStorage.Shared.MovementConfig)
 
 export type WheelMode = "previous" | "next" | "off"
 
@@ -21,7 +20,7 @@ export type Settings = {
 	-- Visée simplifiée (#195) : crosshair au centre de l'écran, désactivé par défaut
 	simpleAim: boolean,
 	keyDisplay: KeyDisplayMode,
-	-- Auto-bhop (#255) : saut automatique tant qu'Espace est maintenu ; activé par défaut (MovementConfig.AUTO_BHOP)
+	-- Auto-bhop (#255) : saut automatique tant qu'Espace est maintenu ; activé par défaut (DEFAULT_AUTO_BHOP)
 	autoBhop: boolean,
 	-- une touche par emplacement de la barre d'armes, dans l'ordre des emplacements
 	slotKeys: { string },
@@ -38,6 +37,8 @@ PlayerSettings.DEFAULT_WHEEL = "previous" :: WheelMode
 PlayerSettings.WHEEL_MODES = { "previous", "next", "off" } :: { WheelMode }
 PlayerSettings.DEFAULT_KEY_DISPLAY = "off" :: KeyDisplayMode
 PlayerSettings.KEY_DISPLAY_MODES = { "off", "simple", "full" } :: { KeyDisplayMode }
+-- Auto-bhop activé par défaut (#255) ; remplace l'ancienne constante MovementConfig.AUTO_BHOP
+PlayerSettings.DEFAULT_AUTO_BHOP = true
 -- Touche du menu en partie (#157 : reprendre, réglages, retour au menu principal), nom d'Enum.KeyCode ; au menu
 -- principal elle ouvre les Réglages. Seule source de cette touche : InGameMenu, l'écran Infos et la liste des réservées.
 PlayerSettings.MENU_KEY = "P"
@@ -100,7 +101,7 @@ function PlayerSettings.defaults(): Settings
 		wheel = PlayerSettings.DEFAULT_WHEEL,
 		simpleAim = false,
 		keyDisplay = PlayerSettings.DEFAULT_KEY_DISPLAY,
-		autoBhop = MovementConfig.AUTO_BHOP,
+		autoBhop = PlayerSettings.DEFAULT_AUTO_BHOP,
 		slotKeys = table.clone(PlayerSettings.DEFAULT_SLOT_KEYS),
 	}
 end
