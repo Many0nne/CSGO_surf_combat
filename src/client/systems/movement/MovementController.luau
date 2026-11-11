@@ -182,7 +182,8 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 		-- 8b. Boosts de la map (geyser, lanceur, portique) : un geyser ou un lanceur remet le joueur en l'air
 		local boosted, boostKind = BoostSystem.check(hrp.Position, motor.velocity, os.clock())
 		if boosted then
-			motor.velocity = boosted
+			-- Plafond horizontal tout de suite : le compteur et l'animation de ce tick ne voient jamais plus (#212)
+			motor.velocity = PhysicsUtils.clampHorizontal(boosted, Config.MAX_HORIZONTAL_SPEED)
 			if boostKind ~= "Portal" then
 				motor:setAirborne()
 				isGroundedState = false

@@ -98,7 +98,9 @@ local function buildGeometry(map: Instance): (MovementGuardRules.Geometry, (CFra
 		local velocity = part:GetAttribute(MapRules.VELOCITY_ATTRIBUTE)
 		local kind = part:GetAttribute(MapRules.KIND_ATTRIBUTE)
 		if part:IsA("BasePart") and (kind == "Geyser" or kind == "Launcher") and typeof(velocity) == "Vector3" then
-			table.insert(boosts, { part = part, vy = velocity.Y })
+			-- Vitesse réellement imposée au client (bornée comme dans BoostSystem)
+			local imposed = MapRules.imposedVelocity(velocity)
+			table.insert(boosts, { part = part, vy = imposed.Y })
 		end
 	end
 	local volumeRoots: { Instance } = {}

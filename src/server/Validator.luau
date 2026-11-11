@@ -11,7 +11,7 @@ local ShotRules = require(ServerScriptService.Server.ShotRules)
 type Participant = Participants.Participant
 
 -- Distance maximale (studs) entre les racines du tireur et de la cible : portée du client, plus le chemin qu'une cible
--- peut avoir parcouru pendant le rembobinage, la hauteur de la caméra et une marge (~2 196 studs).
+-- peut avoir parcouru pendant le rembobinage, la hauteur de la caméra et une marge (~2 256 studs).
 local MAX_HITSCAN_RANGE = WeaponConfig.HITSCAN_RANGE
 	+ MovementConfig.MAX_SPEED_SERVER * PositionHistory.MAX_REWIND
 	+ CameraConfig.CAM_HEIGHT_STAND

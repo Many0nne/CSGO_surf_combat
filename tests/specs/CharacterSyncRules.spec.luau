@@ -45,6 +45,40 @@ return function(T, Loader)
 			return seed / 2147483648
 		end
 
+		T.it("dérive la limite du serveur des plafonds du client (#212)", function()
+			local fastest = math.sqrt(MovementConfig.MAX_HORIZONTAL_SPEED ^ 2 + MovementConfig.MAX_FALL_SPEED ^ 2)
+			T.expect(maxSpeed >= fastest, "MAX_SPEED_SERVER couvre le plafond horizontal et la chute plafonnée")
+			T.expect(maxSpeed <= fastest + 20, "sans élargir plus que la marge")
+			T.expectNear(cap, maxSpeed * 0.25, 1e-6)
+		end)
+
+		T.it(
+			"accepte 420 studs/s horizontaux et une chute à MAX_FALL_SPEED, gigue 80 ms, pendant 10 s (#212)",
+			function()
+				local h, fall = MovementConfig.MAX_HORIZONTAL_SPEED, MovementConfig.MAX_FALL_SPEED
+				local packets = {}
+				local arrival = 0
+				for i = 1, 200 do
+					local sentAt = i * interval
+					arrival = math.max(arrival, sentAt + noise() * 0.08)
+					-- Diagonale horizontale : le plafond porte sur la norme XZ, pas sur chaque axe
+					local flat = Vector3.new(3, 0, 4).Unit * h * sentAt
+					table.insert(packets, { t = arrival, pos = flat + Vector3.new(0, -fall * sentAt, 0) })
+				end
+				T.expectEqual((replay(packets)), 0)
+			end
+		)
+
+		T.it("corrige un déplacement soutenu nettement au-dessus (520 studs/s horizontaux et chute)", function()
+			local packets = {}
+			for i = 1, 40 do
+				local sentAt = i * interval
+				local pos = Vector3.new(520 * sentAt, -MovementConfig.MAX_FALL_SPEED * sentAt, 0)
+				table.insert(packets, { t = sentAt, pos = pos })
+			end
+			T.expect((replay(packets)) > 0, "au moins un paquet refusé en 2 s")
+		end)
+
 		T.it("accepte 300 studs/s soutenus à 20 Hz pendant 10 s", function()
 			local packets = {}
 			for i = 1, 200 do
@@ -90,7 +124,7 @@ return function(T, Loader)
 		)
 
 		T.it(
-			"borne un tricheur à 300 studs/s, quel que soit son débit (ancienne faille : 400 à 800 studs/s)",
+			"borne un tricheur à MAX_SPEED_SERVER, quel que soit son débit (ancienne faille : 400 à 800 studs/s)",
 			function()
 				for _, rate in { 20, 40 } do
 					local budget = Rules.newBudget(0)

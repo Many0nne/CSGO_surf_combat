@@ -338,7 +338,9 @@ local function moveAirborne(self: CharacterMotor, dt: number, ci: CrouchInfo, ta
 end
 
 -- Cette méthode permet de déplacer le personnage d'un tick lorsque sa vitesse est calculée, selon l'état du tick
--- (sol ou air) ; targetRot est l'orientation à donner à la racine.
+-- (sol ou air) ; targetRot est l'orientation à donner à la racine. La vitesse horizontale est plafonnée avant et
+-- après le déplacement (CheckVelocity Source, #212) : ni le pas intégré ni la vitesse gardée ne dépassent le plafond.
+-- En surf, tout le vecteur est réduit pour rester dans le plan de la rampe (ni freinage ni décrochage au plafond).
 function CharacterMotor.move(
 	self: CharacterMotor,
 	gnd: GroundDetection.GroundInfo,
@@ -350,11 +352,14 @@ function CharacterMotor.move(
 	willJump: boolean,
 	onLadder: boolean
 )
+	self.velocity = PhysicsUtils.clampHorizontal(self.velocity, Config.MAX_HORIZONTAL_SPEED, self.surfNormal ~= nil)
 	if isGroundedState then
 		moveGrounded(self, gnd, dt, ci, targetRot, willJump)
 	elseif isAirborneState then
 		moveAirborne(self, dt, ci, targetRot, onLadder)
 	end
+	-- Le glissement sur une rampe (ClipVelocity) peut changer un peu de chute en vitesse horizontale
+	self.velocity = PhysicsUtils.clampHorizontal(self.velocity, Config.MAX_HORIZONTAL_SPEED, self.surfNormal ~= nil)
 end
 
 -- Cette méthode permet de clore un tick lorsque le déplacement est fait (hystérésis du sol au tick suivant).

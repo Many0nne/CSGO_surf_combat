@@ -19,6 +19,17 @@ function PhysicsUtils.safeNormalize(v: Vector3): Vector3
 	return v / mag
 end
 
+-- Cette méthode permet de plafonner la vitesse horizontale à maxSpeed lorsqu'elle le dépasse (sv_maxvelocity Source,
+-- #212) : vecteur rendu tel quel en dessous ; au-dessus, verticale gardée, ou réduite d'autant si scaleAll (surf).
+function PhysicsUtils.clampHorizontal(v: Vector3, maxSpeed: number, scaleAll: boolean?): Vector3
+	local speed = math.sqrt(v.X * v.X + v.Z * v.Z)
+	if speed <= maxSpeed then
+		return v
+	end
+	local k = maxSpeed / speed
+	return Vector3.new(v.X * k, if scaleAll then v.Y * k else v.Y, v.Z * k)
+end
+
 -- Projette v sur un plan défini par sa normale
 function PhysicsUtils.projectOnPlane(v: Vector3, normal: Vector3): Vector3
 	return v - normal * v:Dot(normal)

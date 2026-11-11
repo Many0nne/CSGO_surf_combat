@@ -381,7 +381,10 @@ Rojo gère `Workspace.Maps` : un objet posé à la main dans une map est supprim
 - `Maps.Map.Boosts` : volumes invisibles (`CanCollide`, `CanQuery`, `CanTouch` faux), attribut `Kind` :
   `Geyser` / `Launcher` avec `Velocity` (Vector3 imposé), `Portal` avec `Boost` (studs/s ajoutés), `Cooldown`
   optionnel. Le client teste sa position dans la boîte (marge `CHAR_RADIUS`) à chaque frame : un portique doit être
-  assez épais (14 studs) pour ne pas être traversé entre deux frames à 300 studs/s. Le visuel est à part
+  assez épais (14 studs) pour ne pas être traversé entre deux ticks (64 Hz) au plafond horizontal de 420 studs/s.
+  Les vitesses imposées (geyser, lanceur, `SunLaunch`) sont ramenées sans avertissement à `MAX_SPEED_SERVER` (450
+  studs/s, norme 3D) au plus (`MapRules.imposedVelocity`, `SpawnLaunch.velocity`), puis l'horizontale à 420 par le
+  client : un lanceur réglé au-delà rate son point de chute (`docs/anticheat.md` « D1 »). Le visuel est à part
   (`BoostFx`).
 - Attribut `KillHeight` sur `Maps.Map` : mort sous cette hauteur (absent : pas de mort par chute). C'est le client
   qui détecte la chute : **le serveur ne voit pas la position des joueurs** (racine ancrée, mouvement fait par le
