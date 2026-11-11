@@ -1,679 +1,476 @@
--- Scène 3D du menu principal : la salle des miroirs (#112, docs/ui.md). Des éclats de verre pendus à des fils dans une
--- salle de béton portent chacun un morceau de l'image de l'arme choisie ; face à la caméra, ils la reconstituent. Au
--- changement d'arme, le jeu d'éclats se disperse et celui de la nouvelle arme se pose en vague de gauche à droite. Un
--- tir fait pivoter les éclats touchés (ressort amorti) ; JOUER fait exploser la vitrine vers la caméra. Les jeux d'éclats texturés viennent de ReplicatedStorage.MenuMirrors (assets/rbx/Menu), leurs données (fils,
--- retards) de MenuMirrorsData (généré par tools/menu). Tout est local au client ; l'éclairage est rendu à la sortie.
-local ContentProvider = game:GetService("ContentProvider")
-local Lighting = game:GetService("Lighting")
+-- Scène 3D de l'accueil du menu (#253, docs/ui.md) : le personnage du jeu, de face et en pose, tient l'arme choisie
+-- dans le menu, sur une copie de la map jouée. La copie ne garde que les pièces vues par la caméra et se pose loin de la
+-- vraie map : aucun joueur ni bot n'y passe. Caméra fixe qui suit à peine le curseur, flou léger sur le fond,
+-- respiration du personnage. Tout est local au client ; l'éclairage reste celui du jeu.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
+local StarterPack = game:GetService("StarterPack")
 local UserInputService = game:GetService("UserInputService")
 
-local Data = require(script.Parent.MenuMirrorsData)
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local CharacterAppearance = require(Shared:WaitForChild("CharacterAppearance"))
+local MapSelection = require(Shared:WaitForChild("MapSelection"))
+local PerfMarkers = require(Shared:WaitForChild("PerfMarkers"))
+local WeaponConfig = require(Shared:WaitForChild("WeaponConfig"))
+local WeaponThirdPerson = require(Shared:WaitForChild("WeaponThirdPerson"))
+local MenuPoses = require(script.Parent.MenuPoses)
 local Rules = require(script.Parent.MenuSceneRules)
-local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 
 local MenuScene = {}
 
-local ORIGIN = Vector3.new(0, 900, 0) -- très au-dessus de la map : la salle fermée la cache
-local CEILING = 30 -- hauteur du plafond (studs), où s'accrochent les fils
-local FIRE_COOLDOWN = 0.7
-local FADE_START = 0.45 -- pendant la dispersion, la nouvelle arme apparaît (fondu) puis se pose
-local FADE_TIME = 0.3
-local SHOT_RANGE = 120 -- studs : toute la salle
-local SETTLED = 1e-3 -- écart (rad) et vitesse (rad/s) sous lesquels un éclat touché est revenu au repos
--- Explosion de la vitrine (JOUER) : vitesse vers la caméra, vers l'extérieur et vers le haut (studs/s), gravité,
--- rotation propre (rad/s), puis surexposition jusqu'au blanc des volets
-local BURST_TOWARD = NumberRange.new(9, 22)
-local BURST_OUTWARD = NumberRange.new(3, 9)
-local BURST_UP = NumberRange.new(1, 6)
-local BURST_GRAVITY = 26
-local BURST_SPIN = 10
-local BURST_FLASH = TweenInfo.new(1.1, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
+-- La copie est posée à ce décalage de la vraie map, hors de toute vue de jeu
+local OFFSET = Vector3.new(0, 0, 5000)
+-- FOV vertical au format de référence (16:9), ouvert sur un écran plus étroit pour garder le personnage entier
+local VERTICAL_FOV = 40
+local ASPECT_REF = 16 / 9
+-- Pièces copiées : cône de la caméra (tangente du demi-angle, large pour le 21:9 et le suivi du curseur), distance
+-- maximale, voisinage de la caméra gardé en entier (studs)
+local COPY_TAN_HALF = 1.0
+local COPY_DISTANCE = 700
+local COPY_NEAR = 40
+local MAP_WAIT = 15 -- s d'attente de la map jouée
+-- Flou du fond : netteté autour du personnage (studs), intensité du flou lointain
+local FOCUS_RADIUS = 6
+local FAR_BLUR = 0.35
+-- Lumière de portrait : le soleil couchant (1,4° au-dessus de l'horizon) laisse le personnage dans l'ombre des bords du
+-- toit. Projecteur chaud devant lui, du côté du soleil : position dans son repère (droite, haut, avant, studs)
+local KEY_OFFSET = Vector3.new(6, 4, 12)
+local KEY_AIM_HEIGHT = 1 -- studs au-dessus du centre du personnage
+local KEY_ANGLE = 50
+local KEY_RANGE = 30
+local KEY_BRIGHTNESS = 3
+local KEY_COLOR = Color3.fromRGB(255, 214, 170)
 
-local CONCRETE = Color3.fromRGB(48, 51, 60)
-local FLOOR = Color3.fromRGB(18, 20, 25)
-local JOINT = Color3.fromRGB(21, 23, 28)
-local WIRE = Color3.fromRGB(139, 143, 154)
-
--- Lumières de la salle (cf. tools/menu/mirrors.py) : douche froide zénithale, rasante sur le mur du fond, appoint au
--- sol. Valeurs réglées dans Studio contre docs/ui/menu-miroirs/reconstituee.jpg.
-local LIGHT_SETTINGS = {
-	Douche = { range = 40, angle = 110, brightness = 6 },
-	Rasante = { range = 34, angle = 90, brightness = 8 },
-	Sol = { range = 14, angle = 120, brightness = 1.5 },
+-- Plan de l'accueil par map (coordonnées de la map telle qu'elle est posée) : pieds du personnage (y relevé au sol,
+-- recalé par un rayon), direction de son regard, puis caméra devant lui à `distance`, à `eyeHeight` au-dessus des pieds,
+-- visant `lookHeight` ; `shift` décale caméra et visée sur le côté (studs, vers la droite de l'image).
+type Shot = {
+	feet: Vector3,
+	facing: Vector3,
+	distance: number,
+	eyeHeight: number,
+	lookHeight: number,
+	shift: number,
+}
+local SHOTS: { [string]: Shot } = {
+	-- Couloir du toit haut entre le grillage et le mur à bande bleue, au-dessus de la rampe ouest ; regard vers le
+	-- soleil couchant (le personnage est éclairé de face), le couloir fuit derrière lui.
+	Dizzy = {
+		feet = Vector3.new(1768, 104.65, -375),
+		facing = Vector3.new(-1, 0, 0),
+		distance = 17,
+		eyeHeight = 3.15,
+		lookHeight = 3.95,
+		shift = 0,
+	},
 }
 
--- Éclairage du menu : la salle est fermée, seule la lumière de ses projecteurs compte
-local LIGHTING = {
-	ClockTime = 0,
-	Brightness = 0,
-	Ambient = Color3.fromRGB(44, 47, 58),
-	OutdoorAmbient = Color3.fromRGB(44, 47, 58),
-	ExposureCompensation = 0,
-	EnvironmentDiffuseScale = 0.3,
-	EnvironmentSpecularScale = 0.4,
-}
-local ATMOSPHERE = { Density = 0, Haze = 0, Glare = 0 }
-
-type Shard = {
-	part: BasePart,
-	rest: CFrame, -- pose reconstituée (monde)
-	pivot: Vector3, -- point d'attache du fil (monde)
-	delay: number, -- retard dans la vague de gauche à droite (s)
-	scatterAngle: number,
-	scatterTilt: number,
-	angle: number, -- pose courante autour du fil
-	tilt: number,
-	fromAngle: number, -- pose au début de la dispersion
-	fromTilt: number,
-	beam: Beam,
-	hitOffset: number, -- écart d'angle dû aux tirs (ressort amorti, MenuSceneRules.springStep)
-	hitVelocity: number,
-	hitActive: boolean,
-	burstVelocity: Vector3, -- explosion de la vitrine
-	spinAxis: Vector3,
-	spinRate: number,
-}
-type ShardSet = {
-	name: string,
-	model: Model,
-	shards: { Shard },
-	mode: "rest" | "settle" | "scatter" | "hidden",
-	clock: number, -- temps écoulé dans le mode courant
-	fade: number, -- 0 = visible, 1 = invisible
-	hits: number, -- éclats encore en mouvement après un tir
-	burst: number?, -- temps écoulé depuis l'explosion, nil hors explosion
-}
+type Weapon = { key: string, viewmodel: string }
 
 local stage: Folder?
-local sets: { [string]: ShardSet } = {}
-local vides: ShardSet?
-local current = Data.weapons[1]
+local character: Model?
+local motors: { [string]: Motor6D } = {}
+local baseC0: { [string]: CFrame } = {}
+local pose: { [string]: CFrame } = {}
+local weapons: { Weapon }? = nil
+local current: string? = nil
 local running = false
+local building = false
 local connection: RBXScriptConnection?
-local saved: { [Instance]: { [string]: any } } = {}
+local blur: DepthOfFieldEffect?
 local savedFov = 70
 local baseCFrame = CFrame.new()
+local focusDistance = 17
 local aimX, aimY = 0, 0
-local kick = 0
-local lastShot = 0
-local bursting = false
-local burstTweens: { Tween } = {}
-local shotSound: Sound?
-local spinTime = 0
-local random = Random.new()
+local clock = 0
 local weaponChanged: ((string) -> ())?
 
--- Cette méthode permet de mémoriser puis remplacer des propriétés lorsque le menu impose son éclairage.
-local function override(instance: Instance?, props: { [string]: any })
-	if not instance then
-		return
+-- Cette méthode permet de lister les armes du menu (Tools du StarterPack connus de WeaponConfig, par attribut
+-- WeaponName ou à défaut par nom, dans l'ordre alphabétique de la barre d'armes) lorsque la scène ou la fiche en a
+-- besoin ; repli sur WeaponConfig si le StarterPack est vide.
+local function listWeapons(): { Weapon }
+	if weapons then
+		return weapons
 	end
-	local previous = saved[instance] or {}
-	for name, value in props do
-		if previous[name] == nil then
-			previous[name] = (instance :: any)[name]
-		end
-		(instance :: any)[name] = value
-	end
-	saved[instance] = previous
-end
-
--- Cette méthode permet de rendre à la place son éclairage d'origine lorsque le menu se ferme.
-local function restoreOverrides()
-	for instance, props in saved do
-		for name, value in props do
-			(instance :: any)[name] = value
+	local list: { Weapon } = {}
+	local tools = {}
+	for _, tool in StarterPack:GetChildren() do
+		if tool:IsA("Tool") then
+			table.insert(tools, tool)
 		end
 	end
-	saved = {}
-end
-
--- Cette méthode permet de créer une pièce de décor sans physique lorsque la salle est construite.
-local function makePart(size: Vector3, cf: CFrame, color: Color3, material: Enum.Material): Part
-	local part = Instance.new("Part")
-	part.Anchored = true
-	part.CanCollide = false
-	part.CanQuery = false
-	part.CanTouch = false
-	part.Size = size
-	part.CFrame = cf
-	part.Color = color
-	part.Material = material
-	part.TopSurface = Enum.SurfaceType.Smooth
-	part.BottomSurface = Enum.SurfaceType.Smooth
-	part.Parent = stage
-	return part
-end
-
--- Cette méthode permet de construire la salle de béton (murs, sol, joints de banches) puis de la fermer (plafond,
--- murs hors champ) lorsque la scène est créée : ni le ciel ni le soleil de la map n'y entrent.
-local function buildRoom()
-	for _, wall in Data.room do
-		local material = if wall.name == "Sol"
-			then Enum.Material.SmoothPlastic
-			elseif wall.name == "Joint" then Enum.Material.Plastic
-			else Enum.Material.Concrete
-		local color = if wall.name == "Sol" then FLOOR elseif wall.name == "Joint" then JOINT else CONCRETE
-		makePart(
-			wall.size,
-			CFrame.new(ORIGIN + wall.position) * CFrame.Angles(0, math.rad(wall.yaw), 0),
-			color,
-			material
-		)
+	table.sort(tools, function(a, b)
+		return a.Name < b.Name
+	end)
+	for _, tool in tools do
+		local key = tool:GetAttribute("WeaponName")
+		key = if type(key) == "string" then key else tool.Name
+		local viewmodel = tool:GetAttribute("ViewmodelName")
+		if WeaponConfig.Weapons[key] then
+			table.insert(list, { key = key, viewmodel = if type(viewmodel) == "string" then viewmodel else tool.Name })
+		end
 	end
-	makePart(
-		Vector3.new(80, 0.5, 60),
-		CFrame.new(ORIGIN + Vector3.new(0, CEILING + 0.25, -10)),
-		FLOOR,
-		Enum.Material.Concrete
-	)
-	makePart(Vector3.new(0.5, 31, 60), CFrame.new(ORIGIN + Vector3.new(-40, 15, -10)), CONCRETE, Enum.Material.Concrete)
-	makePart(Vector3.new(80, 31, 0.5), CFrame.new(ORIGIN + Vector3.new(0, 15, 20)), CONCRETE, Enum.Material.Concrete)
-end
-
--- Cette méthode permet de poser les projecteurs de la salle (SpotLight orientés vers leur cible) lorsque la scène est créée.
-local function buildLights()
-	for _, info in Data.lights do
-		local settings = LIGHT_SETTINGS[info.name]
-		local holder = makePart(
-			Vector3.one * 0.2,
-			CFrame.lookAt(ORIGIN + info.position, ORIGIN + info.target),
-			Color3.new(),
-			Enum.Material.SmoothPlastic
-		)
-		holder.Transparency = 1
-		holder.CastShadow = false
-		local light = Instance.new("SpotLight")
-		light.Face = Enum.NormalId.Front
-		light.Color = info.color
-		light.Range = settings.range
-		light.Angle = settings.angle
-		light.Brightness = settings.brightness
-		light.Shadows = info.shadow
-		light.Parent = holder
+	if #list == 0 then
+		for key in WeaponConfig.Weapons do
+			table.insert(list, { key = key, viewmodel = key })
+		end
+		table.sort(list, function(a, b)
+			return a.key < b.key
+		end)
 	end
+	weapons = list
+	return list
 end
 
--- Cette méthode permet de tendre le fil d'un éclat jusqu'au plafond (Beam entre une attache sur l'éclat et une attache
--- fixe) lorsque son jeu est construit.
-local function makeWire(part: BasePart, pivot: Vector3, anchor: BasePart): Beam
-	local bottom = Instance.new("Attachment")
-	bottom.Position = part.CFrame:PointToObjectSpace(pivot)
-	bottom.Parent = part
-	local top = Instance.new("Attachment")
-	top.Position = anchor.CFrame:PointToObjectSpace(Vector3.new(pivot.X, ORIGIN.Y + CEILING, pivot.Z))
-	top.Parent = anchor
-	local beam = Instance.new("Beam")
-	beam.Attachment0 = bottom
-	beam.Attachment1 = top
-	beam.Width0 = 0.018
-	beam.Width1 = 0.018
-	beam.Segments = 1
-	beam.FaceCamera = true
-	beam.Color = ColorSequence.new(WIRE)
-	beam.LightInfluence = 1
-	beam.Transparency = NumberSequence.new(0.15)
-	beam.Parent = part
-	return beam
-end
-
--- Cette méthode permet de cloner un jeu d'éclats dans la salle et de préparer la pose de chaque éclat (repos, fil,
--- dispersion propre à l'éclat) lorsque la scène est créée.
-local function buildSet(name: string, anchor: BasePart): ShardSet
-	local source = ReplicatedStorage:WaitForChild("MenuMirrors"):WaitForChild(name)
-	local model = source:Clone() :: Model
-	model.Parent = stage
-	local data = Data.sets[name]
-	local seeded = Random.new(#name * 7919)
-	local set: ShardSet = {
-		name = name,
-		model = model,
-		shards = {},
-		mode = "hidden",
-		clock = 0,
-		fade = 1,
-		hits = 0,
-		burst = nil,
+-- Cette méthode permet de donner le plan de l'accueil d'une map lorsque la scène se construit : celui de SHOTS, sinon
+-- devant le premier point d'apparition au sol (map sans plan réglé).
+local function shotFor(map: Instance): Shot?
+	local shot = SHOTS[map.Name]
+	if shot then
+		return shot
+	end
+	local spawns = map:FindFirstChild("GroundSpawns")
+	local spawn = spawns and spawns:FindFirstChildWhichIsA("BasePart", true)
+	if not spawn then
+		return nil
+	end
+	local look = Vector3.new(spawn.CFrame.LookVector.X, 0, spawn.CFrame.LookVector.Z)
+	return {
+		feet = spawn.Position,
+		facing = if look.Magnitude > 1e-3 then look.Unit else Vector3.xAxis,
+		distance = 17,
+		eyeHeight = 3.15,
+		lookHeight = 3.95,
+		shift = 0,
 	}
-	for _, part in model:GetChildren() do
-		local info = data[part.Name]
-		if part:IsA("BasePart") and info then
-			part.CFrame = CFrame.new(ORIGIN) * part.CFrame
-			-- Seuls les éclats reçoivent les tirs du menu (le décor a CanQuery coupé)
-			part.CanQuery = true
-			part.CanCollide = false
-			part.CanTouch = false
-			local pivot = ORIGIN + info.pivot
-			local sign = if seeded:NextNumber() < 0.5 then -1 else 1
-			table.insert(set.shards, {
-				part = part,
-				rest = part.CFrame,
-				pivot = pivot,
-				delay = info.delay,
-				scatterAngle = sign * math.rad(seeded:NextNumber(70, 280)),
-				scatterTilt = math.rad(seeded:NextNumber(-8, 8)),
-				angle = 0,
-				tilt = 0,
-				fromAngle = 0,
-				fromTilt = 0,
-				beam = makeWire(part, pivot, anchor),
-				hitOffset = 0,
-				hitVelocity = 0,
-				hitActive = false,
-				burstVelocity = Vector3.zero,
-				spinAxis = Vector3.yAxis,
-				spinRate = 0,
-			})
-		end
-	end
-	return set
 end
 
--- Cette méthode permet d'appliquer la pose courante (rotation autour du fil, balancement, réaction aux tirs, explosion)
--- et la transparence d'un jeu d'éclats lorsqu'il a bougé ; un seul déplacement groupé pour tout le jeu.
-local function applySet(set: ShardSet)
-	local parts = table.create(#set.shards)
-	local frames = table.create(#set.shards)
-	local alpha = set.fade
-	local t = set.burst
-	for i, shard in set.shards do
-		local rotation = CFrame.fromAxisAngle(Vector3.yAxis, shard.angle + shard.hitOffset)
-			* CFrame.fromAxisAngle(Vector3.xAxis, shard.tilt)
-		local offset = shard.rest.Position - shard.pivot
-		local frame = CFrame.new(shard.pivot + rotation:VectorToWorldSpace(offset)) * rotation
-		if t then
-			local position = frame.Position + shard.burstVelocity * t - Vector3.yAxis * (BURST_GRAVITY * t * t / 2)
-			frame = CFrame.new(position) * CFrame.fromAxisAngle(shard.spinAxis, shard.spinRate * t) * rotation
+-- Cette méthode permet de copier dans `folder`, décalées de OFFSET et sans physique, les pièces visibles de la map vues
+-- depuis `eye` dans la direction `forward` lorsque la scène se construit ; les pièces invisibles (murs d'air, volumes)
+-- sont ignorées. Les pièces enfants d'une autre pièce sont copiées pour elles-mêmes, pas avec leur parent.
+local function copyMap(map: Instance, eye: Vector3, forward: Vector3, folder: Folder)
+	for i, part in map:GetDescendants() do
+		if i % 4000 == 0 then
+			task.wait() -- la map compte plusieurs dizaines de milliers d'instances
 		end
-		parts[i] = shard.part
-		frames[i] = frame
-		if shard.part.Transparency ~= alpha then
-			shard.part.Transparency = alpha
-			shard.beam.Transparency = NumberSequence.new(0.15 + 0.85 * alpha)
-		end
-	end
-	workspace:BulkMoveTo(parts, frames, Enum.BulkMoveMode.FireCFrameChanged)
-end
-
--- Cette méthode permet d'avancer un jeu d'éclats d'une image selon son mode (dispersion, reconstitution, repos) ;
--- renvoie true si le jeu a bougé et doit être réappliqué.
-local function updateSet(set: ShardSet, dt: number): boolean
-	if set.mode == "rest" or set.mode == "hidden" then
-		return false
-	end
-	set.clock += dt
-	if set.mode == "scatter" then
-		local p = Rules.scatterProgress(set.clock)
-		for _, shard in set.shards do
-			shard.angle = shard.fromAngle + (shard.scatterAngle - shard.fromAngle) * p
-			shard.tilt = shard.fromTilt + (shard.scatterTilt - shard.fromTilt) * p
-		end
-		set.fade = math.clamp((set.clock - FADE_START) / FADE_TIME, 0, 1)
-		if set.clock >= FADE_START + FADE_TIME then
-			set.mode = "hidden"
-			set.fade = 1
-		end
-	else
-		local done = true
-		for _, shard in set.shards do
-			local lt = set.clock - shard.delay
-			shard.angle, shard.tilt = Rules.settle(shard.scatterAngle, shard.scatterTilt, lt)
-			done = done and lt >= Rules.SETTLE_TIME
-		end
-		set.fade = 1 - math.clamp(set.clock / FADE_TIME, 0, 1)
-		if done then
-			set.mode = "rest"
-			for _, shard in set.shards do
-				shard.angle, shard.tilt = 0, 0
-			end
-		end
-	end
-	return true
-end
-
--- Cette méthode permet d'avancer les éclats encore secoués par un tir et l'explosion d'un jeu lorsqu'une image passe ;
--- renvoie true si le jeu a bougé et doit être réappliqué.
-local function updateMotion(set: ShardSet, dt: number): boolean
-	local moved = false
-	if set.hits > 0 then
-		local active = 0
-		for _, shard in set.shards do
-			if shard.hitActive then
-				shard.hitOffset, shard.hitVelocity = Rules.springStep(shard.hitOffset, shard.hitVelocity, dt)
-				if math.abs(shard.hitOffset) < SETTLED and math.abs(shard.hitVelocity) < SETTLED then
-					shard.hitOffset, shard.hitVelocity, shard.hitActive = 0, 0, false
-				else
-					active += 1
+		if
+			part:IsA("BasePart")
+			and part.Transparency < 1
+			and Rules.inView(
+				part.Position,
+				part.Size.Magnitude / 2,
+				eye,
+				forward,
+				COPY_TAN_HALF,
+				COPY_DISTANCE,
+				COPY_NEAR
+			)
+		then
+			local copy = part:Clone()
+			for _, child in copy:GetDescendants() do
+				if
+					child:IsA("BasePart")
+					or child:IsA("JointInstance")
+					or child:IsA("Constraint")
+					or child:IsA("LuaSourceContainer")
+				then
+					child:Destroy()
 				end
 			end
+			copy.Anchored = true
+			copy.CanCollide = false
+			copy.CanQuery = false
+			copy.CanTouch = false
+			copy.CFrame = part.CFrame + OFFSET
+			copy.Parent = folder
 		end
-		set.hits = active
-		moved = true
 	end
-	if set.burst then
-		set.burst += dt
-		moved = true
-	end
-	return moved
 end
 
--- Cette méthode permet de faire tourner lentement les éclats vides du fond lorsqu'une image est rendue.
-local function updateVides(dt: number)
-	if not vides then
+-- Cette méthode permet de trouver le sol de la copie sous les pieds du personnage lorsque la scène se construit ; garde
+-- la hauteur du plan si le rayon ne touche rien.
+local function groundUnder(feet: Vector3, folder: Folder): Vector3
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Include
+	params.FilterDescendantsInstances = { folder }
+	-- Les copies ont CanQuery coupé : on le rend le temps du rayon aux seules pièces sous les pieds
+	local under = {}
+	for _, part in folder:GetChildren() do
+		if part:IsA("BasePart") and (part.Position - feet).Magnitude < part.Size.Magnitude / 2 + 2 then
+			part.CanQuery = true
+			table.insert(under, part)
+		end
+	end
+	local hit = workspace:Raycast(feet + Vector3.new(0, 6, 0), Vector3.new(0, -14, 0), params)
+	for _, part in under do
+		part.CanQuery = false
+	end
+	return if hit then hit.Position else feet
+end
+
+-- Cette méthode permet de créer le personnage du jeu (StarterCharacter, skin commun) sans script ni physique, debout
+-- sur `ground`, tourné vers `facing` et éclairé par sa lumière de portrait, lorsque la scène se construit ; nil si la
+-- place n'a pas de StarterCharacter.
+local function buildCharacter(ground: Vector3, facing: Vector3, parent: Instance): Model?
+	local template = CharacterAppearance.getTemplate()
+	if not template then
+		return nil
+	end
+	local model = template:Clone()
+	model.Name = "MenuCharacter"
+	for _, item in model:GetDescendants() do
+		if item:IsA("LuaSourceContainer") then
+			item:Destroy()
+		elseif item:IsA("BasePart") then
+			item.Anchored = false
+			item.CanCollide = false
+			item.CanQuery = false
+			item.CanTouch = false
+		end
+	end
+	CharacterAppearance.apply(model)
+	local humanoid = model:FindFirstChildOfClass("Humanoid")
+	local root = model:FindFirstChild("HumanoidRootPart")
+	if not (humanoid and root and root:IsA("BasePart")) then
+		model:Destroy()
+		return nil
+	end
+	humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+	humanoid.EvaluateStateMachine = false
+	root.Anchored = true
+	local center = ground + Vector3.new(0, humanoid.HipHeight + root.Size.Y / 2, 0)
+	local frame = CFrame.lookAt(center, center + facing)
+	model:PivotTo(frame)
+	model.Parent = parent
+
+	local holder = Instance.new("Part")
+	holder.Name = "KeyLight"
+	holder.Anchored = true
+	holder.CanCollide = false
+	holder.CanQuery = false
+	holder.CanTouch = false
+	holder.CastShadow = false
+	holder.Transparency = 1
+	holder.Size = Vector3.one * 0.2
+	local aim = center + Vector3.new(0, KEY_AIM_HEIGHT, 0)
+	local offset = frame.RightVector * KEY_OFFSET.X + Vector3.yAxis * KEY_OFFSET.Y + frame.LookVector * KEY_OFFSET.Z
+	holder.CFrame = CFrame.lookAt(aim + offset, aim)
+	local light = Instance.new("SpotLight")
+	light.Face = Enum.NormalId.Front
+	light.Angle = KEY_ANGLE
+	light.Range = KEY_RANGE
+	light.Brightness = KEY_BRIGHTNESS
+	light.Color = KEY_COLOR
+	light.Parent = holder
+	holder.Parent = parent
+
+	motors = {}
+	baseC0 = {}
+	for _, name in WeaponThirdPerson.HOLD_JOINTS do
+		local motor = model:FindFirstChild(name, true)
+		if motor and motor:IsA("Motor6D") then
+			motors[name] = motor
+			baseC0[name] = motor.C0
+		end
+	end
+	return model
+end
+
+-- Cette méthode permet de poser les articulations du personnage (tenue de l'arme montrée, respiration de la taille)
+-- lorsque l'arme change ou qu'une image passe.
+local function applyPose()
+	for name, motor in motors do
+		local joint = pose[name] or CFrame.identity
+		if name == "Waist" then
+			joint *= CFrame.Angles(Rules.breathAngle(clock), 0, 0)
+		end
+		motor.C0 = baseC0[name] * joint
+	end
+end
+
+-- Cette méthode permet de mettre l'arme `key` dans les mains du personnage, dans sa tenue du menu (fusil en travers du
+-- torse, couteau le long du corps), lorsque le joueur la choisit ou que la scène se construit.
+local function holdWeapon(key: string)
+	local model = character
+	if not model then
 		return
 	end
-	spinTime += dt
-	for _, shard in vides.shards do
-		shard.angle = shard.scatterAngle + Rules.IDLE_SPIN * spinTime
+	local entry
+	for _, weapon in listWeapons() do
+		if weapon.key == key then
+			entry = weapon
+		end
 	end
-	updateMotion(vides, dt)
-	applySet(vides)
+	if not entry then
+		return
+	end
+	local settings = WeaponThirdPerson.getSettings(key)
+	local gun = WeaponThirdPerson.attach(model, key, entry.viewmodel)
+	-- Hors du rendu des armes 3P (WeaponThirdPersonView) : la tenue et la prise sont celles du menu
+	model:SetAttribute(WeaponThirdPerson.ACTION_ATTR, nil)
+	model:SetAttribute(WeaponThirdPerson.ACTION_AT_ATTR, nil)
+	if gun then
+		gun:RemoveTag(WeaponThirdPerson.TAG)
+		if not settings.IsMelee then
+			local handle = gun.PrimaryPart
+			local weld = handle and handle:FindFirstChild(WeaponThirdPerson.WELD_NAME)
+			if weld and weld:IsA("Weld") then
+				weld.C0 = MenuPoses.Rifle.Grip
+			end
+		end
+	end
+	pose = if settings.IsMelee then MenuPoses.Melee.Joints else MenuPoses.Rifle.Joints
+	applyPose()
 end
 
--- Cette méthode permet de placer la caméra (léger suivi du curseur, recul, FOV adapté au format) lorsqu'une image est rendue.
-local function updateView(dt: number)
+-- Cette méthode permet de construire la scène une seule fois (copie de la map, personnage, arme) lorsque le menu
+-- s'ouvre pour la première fois ; la construction attend la map jouée.
+local function build()
+	if not game:IsLoaded() then
+		game.Loaded:Wait()
+	end
+	local map = MapSelection.waitForActive(MAP_WAIT)
+	local shot = map and shotFor(map)
+	if not (map and shot) then
+		return
+	end
+	local side = shot.facing:Cross(Vector3.yAxis).Unit * shot.shift
+	local up = Vector3.yAxis
+	local eye = shot.feet + shot.facing * shot.distance + up * shot.eyeHeight + side
+	local target = shot.feet + up * shot.lookHeight + side
+	focusDistance = (target - eye).Magnitude
+
+	local folder = Instance.new("Folder")
+	folder.Name = "MenuStage"
+	local mapCopy = Instance.new("Folder")
+	mapCopy.Name = "Map"
+	copyMap(map, eye, (target - eye).Unit, mapCopy)
+	mapCopy.Parent = folder
+	folder.Parent = workspace
+	stage = folder
+
+	baseCFrame = CFrame.lookAt(eye + OFFSET, target + OFFSET)
+	local ground = groundUnder(shot.feet + OFFSET, mapCopy)
+	character = buildCharacter(ground, shot.facing, folder)
+end
+
+-- Cette méthode permet de placer la caméra (léger suivi du curseur, FOV adapté au format) et de faire respirer le
+-- personnage lorsqu'une image est rendue.
+local function update(dt: number)
 	local camera = workspace.CurrentCamera
 	local mouse = UserInputService:GetMouseLocation()
 	local viewport = camera.ViewportSize
 	aimX = Rules.damp(aimX, (mouse.X / viewport.X - 0.5) * 2, dt, 4)
 	aimY = Rules.damp(aimY, (mouse.Y / viewport.Y - 0.5) * 2, dt, 4)
-	kick = Rules.decayKick(kick, dt)
-	local angles = Rules.aimAngles(aimX, aimY, kick)
+	local angles = Rules.aimAngles(aimX, aimY)
 	camera.CameraType = Enum.CameraType.Scriptable
 	camera.CFrame = baseCFrame * CFrame.Angles(math.rad(angles.camPitch), math.rad(angles.camYaw), 0)
 	if viewport.Y > 0 then
-		camera.FieldOfView = Rules.fitFov(Data.camera.verticalFov, Data.camera.aspectRef, viewport.X / viewport.Y)
+		camera.FieldOfView = Rules.fitFov(VERTICAL_FOV, ASPECT_REF, viewport.X / viewport.Y)
 	end
+	clock += dt
+	applyPose()
 end
 
--- Cette méthode permet de construire toute la scène une seule fois lorsque le menu s'ouvre pour la première fois.
-local function build()
-	local folder = Instance.new("Folder")
-	folder.Name = "MenuStage"
-	folder.Parent = workspace
-	stage = folder
-	baseCFrame = CFrame.lookAt(ORIGIN + Data.camera.position, ORIGIN + Data.camera.target)
-
-	buildRoom()
-	buildLights()
-	local anchor = makePart(Vector3.one * 0.2, CFrame.new(ORIGIN), Color3.new(), Enum.Material.SmoothPlastic)
-	anchor.Transparency = 1
-	anchor.CastShadow = false
-	for _, name in Data.weapons do
-		local set = buildSet(name, anchor)
-		sets[name] = set
-		applySet(set)
-	end
-	-- Textures des armes chargées d'avance : sinon une arme encore jamais montrée apparaît en éclats blancs opaques
-	-- pendant sa première vague (Roblox ne télécharge une texture qu'une fois la pièce visible).
-	task.spawn(function()
-		local looks = {}
-		for _, set in sets do
-			local first = set.shards[1]
-			local look = first and first.part:FindFirstChildOfClass("SurfaceAppearance")
-			if look then
-				table.insert(looks, look)
-			end
-		end
-		ContentProvider:PreloadAsync(looks)
-	end)
-	vides = buildSet("Vides", anchor)
-	local emptySet = vides :: ShardSet
-	emptySet.fade = 0
-	for _, shard in emptySet.shards do
-		shard.scatterAngle = 0
-	end
-	applySet(emptySet)
-
-	local viewModels = ReplicatedStorage:FindFirstChild("ViewModels")
-	local awp = viewModels and viewModels:FindFirstChild("AWP")
-	local sounds = awp and awp:FindFirstChild("Sounds")
-	local shoot = sounds and sounds:FindFirstChild("Shoot")
-	if shoot and shoot:IsA("Sound") then
-		local sound = shoot:Clone()
-		sound.Parent = stage
-		shotSound = sound
-	end
-end
-
--- Cette méthode permet de remettre un jeu d'éclats sur ses fils (fin d'explosion, tirs oubliés) lorsque le menu se rouvre.
-local function resetMotion(set: ShardSet)
-	set.burst = nil
-	set.hits = 0
-	for _, shard in set.shards do
-		shard.hitOffset, shard.hitVelocity, shard.hitActive = 0, 0, false
-		shard.beam.Enabled = true
-	end
-end
-
--- Cette méthode permet de montrer une arme reconstituée d'emblée (sans vague) lorsque le menu s'ouvre.
-local function showAtRest(name: string)
-	for setName, set in sets do
-		resetMotion(set)
-		set.mode = if setName == name then "rest" else "hidden"
-		set.fade = if setName == name then 0 else 1
-		for _, shard in set.shards do
-			shard.angle, shard.tilt = 0, 0
-		end
-		applySet(set)
-	end
-	if vides then
-		resetMotion(vides)
-		applySet(vides)
-	end
-end
-
--- Cette méthode permet de lister les jeux d'éclats visibles (arme montrée, éclats vides) lorsqu'un tir ou l'explosion
--- les cherche.
-local function visibleSets(): { ShardSet }
-	local list = {}
-	for _, set in sets do
-		if set.fade < 0.5 then
-			table.insert(list, set)
-		end
-	end
-	if vides then
-		table.insert(list, vides)
-	end
-	return list
-end
-
--- Cette méthode permet de lancer un rayon depuis un point de l'écran sur les éclats visibles lorsque le joueur vise
--- ou tire dans la vitrine ; seuls les éclats de l'arme comptent (pas les éclats vides du fond). Renvoie le résultat
--- (nil hors de l'arme) et les jeux visibles, que la balle fait aussi pivoter.
-local function raycastShards(x: number, y: number): (RaycastResult?, { ShardSet })
-	local targets = visibleSets()
-	local models = {}
-	for _, set in targets do
-		if set ~= vides then
-			table.insert(models, set.model)
-		end
-	end
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Include
-	params.FilterDescendantsInstances = models
-	local ray = workspace.CurrentCamera:ViewportPointToRay(x, y)
-	return workspace:Raycast(ray.Origin, ray.Direction * SHOT_RANGE, params), targets
-end
-
--- Cette méthode permet de faire pivoter les éclats touchés par un tir (et leurs voisins, moins fort) lorsque la balle
--- traverse la salle à l'endroit donné par `raycastShards`.
-local function hitShards(result: RaycastResult, targets: { ShardSet })
-	local point = result.Position
-	for _, set in targets do
-		for _, shard in set.shards do
-			local distance = if shard.part == result.Instance then 0 else (shard.part.Position - point).Magnitude
-			local velocity = Rules.hitVelocity(distance)
-			if velocity > 0 then
-				-- La balle pousse le côté touché loin de la caméra : à droite du fil, l'éclat tourne en sens positif
-				local side = if point.X >= shard.pivot.X then 1 else -1
-				shard.hitVelocity += side * velocity
-				if not shard.hitActive then
-					shard.hitActive = true
-					set.hits += 1
-				end
-			end
-		end
-	end
-end
-
--- Cette méthode permet de changer l'arme montrée lorsque le joueur la choisit dans le menu : le jeu courant se
--- disperse, celui de l'arme choisie apparaît pendant la dispersion puis se pose en vague de gauche à droite.
-function MenuScene.setWeapon(name: string)
-	local target = sets[name]
-	if not target or name == current or bursting then
+-- Cette méthode permet de changer l'arme tenue lorsque le joueur la choisit dans le menu (flèches, molette, touches).
+function MenuScene.setWeapon(key: string)
+	if key == current then
 		return
 	end
-	local previous = sets[current]
-	current = name
+	local known = false
+	for _, weapon in listWeapons() do
+		known = known or weapon.key == key
+	end
+	if not known then
+		return
+	end
+	current = key
+	holdWeapon(key)
 	if weaponChanged then
-		weaponChanged(name)
+		weaponChanged(key)
 	end
-	if previous and previous.mode ~= "hidden" then
-		previous.mode = "scatter"
-		previous.clock = 0
-		for _, shard in previous.shards do
-			shard.fromAngle, shard.fromTilt = shard.angle, shard.tilt
-		end
-	end
-	-- la nouvelle arme part de sa pose dispersée et commence sa vague quand la précédente s'efface
-	target.mode = "settle"
-	target.clock = -FADE_START
-	target.fade = 1
 end
 
--- Cette méthode permet de passer à l'arme suivante ou précédente (molette) lorsque le joueur la fait défiler.
+-- Cette méthode permet de passer à l'arme suivante ou précédente (molette, flèches) lorsque le joueur la fait défiler.
 function MenuScene.cycleWeapon(step: number)
-	local index = table.find(Data.weapons, current) or 1
-	local count = #Data.weapons
-	MenuScene.setWeapon(Data.weapons[(index - 1 + step) % count + 1])
+	local list = listWeapons()
+	local index = 1
+	for i, weapon in list do
+		if weapon.key == MenuScene.getWeapon() then
+			index = i
+		end
+	end
+	local nextWeapon = list[Rules.cycleIndex(index, step, #list)]
+	if nextWeapon then
+		MenuScene.setWeapon(nextWeapon.key)
+	end
 end
 
 -- Cette méthode permet de choisir une arme par son rang (touches 1-9) lorsque le joueur la tape.
 function MenuScene.selectWeapon(index: number)
-	local name = Data.weapons[index]
-	if name then
-		MenuScene.setWeapon(name)
+	local weapon = listWeapons()[index]
+	if weapon then
+		MenuScene.setWeapon(weapon.key)
 	end
 end
 
--- Cette méthode permet de lire l'arme montrée lorsque l'interface affiche sa fiche.
+-- Cette méthode permet de lire l'arme tenue (clé de WeaponConfig) lorsque l'interface affiche sa fiche.
 function MenuScene.getWeapon(): string
-	return current
+	if not current then
+		local first = listWeapons()[1]
+		current = if first then first.key else ""
+	end
+	return current :: string
 end
 
--- Cette méthode permet de lire les armes de la vitrine, dans l'ordre des touches 1-9, lorsque l'interface les compte.
+-- Cette méthode permet de lire les armes du menu (clés de WeaponConfig, dans l'ordre des touches 1-9) lorsque
+-- l'interface les compte.
 function MenuScene.getWeapons(): { string }
-	return Data.weapons
+	local keys = {}
+	for _, weapon in listWeapons() do
+		table.insert(keys, weapon.key)
+	end
+	return keys
 end
 
--- Cette méthode permet d'enregistrer le rappel appelé à chaque changement d'arme lorsque la fiche doit suivre la vitrine.
+-- Cette méthode permet d'enregistrer le rappel appelé à chaque changement d'arme lorsque la fiche doit suivre la scène.
 function MenuScene.onWeaponChanged(callback: (string) -> ())
 	weaponChanged = callback
 end
 
--- Cette méthode permet de savoir si un point de l'écran (coordonnées viewport) vise l'arme de la vitrine lorsque le
--- curseur du menu choisit entre souris système et hitmarker.
-function MenuScene.isAimingWeapon(x: number, y: number): boolean
-	if not running or bursting then
-		return false
-	end
-	return raycastShards(x, y) ~= nil
-end
-
--- Cette méthode permet de tirer vers un point de l'écran (coordonnées viewport) lorsque le joueur clique sur l'accueil ;
--- seul un clic sur l'arme fait feu (#130). Renvoie true si le tir est parti (et a donc touché un éclat).
-function MenuScene.shoot(x: number, y: number): boolean
-	local now = os.clock()
-	if not running or bursting or now - lastShot < FIRE_COOLDOWN then
-		return false
-	end
-	local result, targets = raycastShards(x, y)
-	if not result then
-		return false
-	end
-	lastShot = now
-	if shotSound then
-		shotSound.TimePosition = 0
-		shotSound:Play()
-	end
-	kick = 1
-	hitShards(result, targets)
-	return true
-end
-
--- Cette méthode permet de faire exploser la vitrine (éclats arrachés à leurs fils, projetés vers la caméra en
--- tournoyant, surexposition jusqu'au blanc) lorsque le joueur tire sur JOUER ; les volets suivent.
-function MenuScene.burst()
-	if not running or bursting then
-		return
-	end
-	bursting = true
-	kick = 1
-	local camera = baseCFrame.Position
-	local center = ORIGIN + Data.camera.target
-	for _, set in visibleSets() do
-		set.burst = 0
-		for _, shard in set.shards do
-			local position = shard.part.Position
-			local outward = position - center
-			outward = if outward.Magnitude > 1e-3 then outward.Unit else Vector3.xAxis
-			shard.burstVelocity = (camera - position).Unit * random:NextNumber(BURST_TOWARD.Min, BURST_TOWARD.Max)
-				+ outward * random:NextNumber(BURST_OUTWARD.Min, BURST_OUTWARD.Max)
-				+ Vector3.yAxis * random:NextNumber(BURST_UP.Min, BURST_UP.Max)
-			shard.spinAxis = random:NextUnitVector()
-			shard.spinRate = random:NextNumber(-BURST_SPIN, BURST_SPIN)
-			shard.beam.Enabled = false
-		end
-	end
-	burstTweens = { TweenService:Create(Lighting, BURST_FLASH, { ExposureCompensation = 3 }) }
-	for _, tween in burstTweens do
-		tween:Play()
-	end
-end
-
--- Cette méthode permet de lancer la scène (éclairage, caméra, boucle d'animation) lorsque le menu s'affiche.
+-- Cette méthode permet de lancer la scène (construction au premier appel, flou du fond, caméra, boucle) lorsque le
+-- menu s'affiche.
 function MenuScene.start()
 	if running then
 		return
 	end
 	running = true
-	bursting = false
 	savedFov = workspace.CurrentCamera.FieldOfView
-	override(Lighting, LIGHTING)
-	override(Lighting:FindFirstChildOfClass("Atmosphere"), ATMOSPHERE)
-	override(Lighting:FindFirstChildOfClass("DepthOfFieldEffect"), { Enabled = false })
-	override(
-		Lighting:FindFirstChildOfClass("BloomEffect"),
-		{ Enabled = true, Intensity = 0.5, Size = 24, Threshold = 1.6 }
-	)
-	override(Lighting:FindFirstChildOfClass("SunRaysEffect"), { Enabled = false })
-
-	if stage then
-		stage.Parent = workspace
-	else
+	if not stage and not building then
+		building = true
 		build()
+		building = false
+		if character then
+			holdWeapon(MenuScene.getWeapon())
+		end
 	end
-	if not running then -- le menu s'est refermé pendant la construction (attente de MenuMirrors)
+	if not running or not stage then -- menu refermé pendant la construction, ou map introuvable
 		return
 	end
-	showAtRest(current)
-	connection = RunService.RenderStepped:Connect(PerfMarkers.wrap("menu 3D", function(dt: number)
-		updateView(dt)
-		for _, set in sets do
-			local moved = updateSet(set, dt)
-			if updateMotion(set, dt) or moved then
-				applySet(set)
-			end
-		end
-		updateVides(dt)
-	end))
+	stage.Parent = workspace
+	local effect = Instance.new("DepthOfFieldEffect")
+	effect.Name = "MenuBlur"
+	effect.FocusDistance = focusDistance
+	effect.InFocusRadius = FOCUS_RADIUS
+	effect.FarIntensity = FAR_BLUR
+	effect.NearIntensity = 0
+	effect.Parent = workspace.CurrentCamera
+	blur = effect
+	connection = RunService.RenderStepped:Connect(PerfMarkers.wrap("menu 3D", update))
 end
 
--- Cette méthode permet d'arrêter la scène et de rendre l'éclairage et le champ de vision à la place lorsque le menu se ferme.
+-- Cette méthode permet d'arrêter la scène et de rendre le champ de vision lorsque le menu se ferme ; la copie de la map
+-- est gardée hors du workspace pour le prochain retour au menu.
 function MenuScene.stop()
 	if not running then
 		return
@@ -683,17 +480,14 @@ function MenuScene.stop()
 		connection:Disconnect()
 		connection = nil
 	end
+	if blur then
+		blur:Destroy()
+		blur = nil
+	end
 	if stage then
 		stage.Parent = nil
 	end
-	-- Une surexposition encore en cours écraserait les valeurs rétablies ci-dessous
-	for _, tween in burstTweens do
-		tween:Cancel()
-	end
-	burstTweens = {}
-	restoreOverrides()
 	workspace.CurrentCamera.FieldOfView = savedFov
-	bursting = false
 end
 
 return MenuScene

@@ -11,15 +11,16 @@ d'armes est faite d'encre, de sang et de vrais sabres. Ici, la matière est le c
 Ce que l'utilisateur a validé dans le menu principal :
 
 - une vraie scène 3D dans le moteur, avec les assets du jeu, plutôt que des formes dessinées ;
-- on choisit à la souris système ; seule l'arme de la vitrine se tire : à son survol le curseur devient un hitmarker, l'AWP le suit, le tir a le vrai son et la vraie animation (#130 : les impacts sur les boutons et le hitmarker partout ont été retirés, jugés peu lisibles) ;
+- on choisit à la souris système ; rien ne se tire au menu (#130 : impacts sur les boutons et hitmarker partout retirés, jugés peu lisibles ; #253 : plus d'arme à tirer à l'accueil) ;
 - la vitesse passe par le mouvement réel (surfeurs et traînées), pas par des effets graphiques posés sur une image ;
 - un titrage en images usées : lettres penchées arrachées par le vent, éclats, impacts de balles.
 
 Palette du menu : ciel bleu nuit, soleil blanc chaud, lignes ambrées, rampes brun chaud, silhouettes noires, texte os
 (`243, 233, 220`), rouge d'impact (`C.HitRed`) pour ce qui est visé ou touché.
 
-Le canyon au couchant est abandonné (il collait à l'ancienne map) : le menu passe à la **salle des miroirs** (section
-dédiée plus bas, implémentation #112), avec la palette du HUD.
+Le canyon au couchant est abandonné (il collait à l'ancienne map), puis la salle des miroirs (#112, rejetée en #253) :
+l'accueil montre le **personnage du jeu en pose sur la map** (section « Menu : accueil sur la map » plus bas), avec
+la palette du HUD.
 
 ## Ce qui a été rejeté, et pourquoi
 
@@ -40,13 +41,14 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
 - Montrer et faire essayer plutôt que décrire : l'utilisateur n'a pas d'idée précise a priori, il réagit à ce qu'il voit.
 - Pousser les idées loin, puis vérifier la lisibilité : le premier titrage était trop abîmé (« SURF » se lisait « URF »).
 - Compteur de vitesse et autres éléments de HUD : discrets, ils ne doivent pas prendre une grosse partie de l'écran.
-- Pour une scène : composer d'abord une image (plans, échelle, silhouette) dans une planche de rendus Blender, la faire
-  choisir, puis seulement la construire dans Roblox. Voir « Menu : salle des miroirs ».
+- Pour une scène inventée : composer d'abord une image (plans, échelle, silhouette) dans une planche de rendus Blender, la
+  faire choisir, puis seulement la construire dans Roblox. Pour une scène prise dans la map : chercher le cadrage
+  directement dans Studio (`screen_capture` avec position et visée), le personnage posé à la main.
 
 ## Comment c'est construit
 
-- `src/client/ui/MainMenu.luau` : accueil de la salle des miroirs (titre, onglets, fiche d'arme, sélecteur), tir sur l'arme de la
-  vitrine au clic (accueil seulement). Les onglets sont dans leur propre `ScreenGui` (`MenuTabs`, DisplayOrder 4), au-dessus des écrans
+- `src/client/ui/MainMenu.luau` : accueil (titre, onglets, fiche de l'arme tenue par le personnage, sélecteur ; rien ne se
+  tire). Les onglets sont dans leur propre `ScreenGui` (`MenuTabs`, DisplayOrder 4), au-dessus des écrans
   secondaires. Sous les onglets, un message ponctuel (`MainMenu.showNotice`, 5 s, rouge d'impact à ombre) explique un
   retour au menu imprévu, par exemple une apparition impossible (#219) ; rendu provisoire, pas encore validé.
 - `src/client/ui/MenuPage.luau` : gabarit des écrans secondaires, sans panneau : bloc centré sur le voile du classement,
@@ -85,12 +87,11 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   (testées). MENU PRINCIPAL : arme rangée, remote `LeaveRound` (le serveur retire le joueur du round, cf.
   `docs/architecture.md`), puis état `MENU` sans attendre la réponse.
 - `src/client/ui/MenuShot.luau` : choix en texte à ombre décalée (`textChoice`, l'ombre s'estompe avec le choix
-  désactivé) ; un clic déclenche l'action, sans tir (JOUER : explosion de la vitrine, puis action après `PLAY_DELAY`).
-- `src/client/ui/MenuCursor.luau` : souris système, hitmarker au survol de l'arme (`MenuScene.isAimingWeapon`, accueil seulement).
-- `src/client/systems/game/MenuScene.luau` : salle des miroirs, éclairage temporaire, visée, tir sur les éclats de l'arme (un clic à côté ne tire pas),
-  explosion sur JOUER.
+  désactivé) ; un clic déclenche l'action, sans tir. JOUER (`locks`) bloque ensuite tous les choix jusqu'à `MenuShot.reset`.
+- `src/client/ui/MenuCursor.luau` : souris système réimposée à chaque image tant que le menu est ouvert.
+- `src/client/systems/game/MenuScene.luau` : accueil sur la map (#253, section dédiée plus bas).
 - `src/client/systems/game/MenuSceneRules.luau` : règles pures testées (`tests/specs/MenuSceneRules.spec.luau`).
-- `src/client/ui/Transition.luau` : volets blancs, enchaînés à l'explosion de la vitrine.
+- `src/client/ui/Transition.luau` : volets blancs ; JOUER les ferme aussitôt (#253 : plus d'explosion avant).
 - `UIKit.shadowedText` : texte os doublé d'une ombre noire décalée, commun au HUD et au menu.
 - `src/client/ui/Speedometer.luau` : compteur de vitesse, piste « Titrage » : gros chiffres os penchés (-6°) avec ombre noire décalée, nom du palier, bande ambrée en biais crantée aux seuils, tout passe au rouge d'impact au dernier palier (`HUDRules.speedTier`, `speedFill`). En bas à gauche, sur un fond sombre sans bord : image de dégradé de coin (`tools/ui/make_corner_scrim.py`, `assets/ui/hud/`) teintée par `ImageColor3`.
 - `src/client/ui/WeaponBar.luau` : barre d'armes en bas à droite, en miroir du compteur ; remplace le Backpack Roblox
@@ -237,10 +238,8 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
 - **Id d'un Decal publié :** il ne s'affiche pas dans une `ImageLabel` (console : `Asset type does not match requested type`).
   Il faut l'id de l'image contenue dans le Decal (voir ci-dessus).
 - **Distance d'affichage :** Roblox la réduit selon la charge, et le décor lointain disparaît d'un coup avec la map chargée.
-  Le canyon est donc au tiers de sa taille apparente (1 000 studs de long). Un test sans la map ne le montre pas.
-- **Éclairage :** `MenuScene` remplace celui de `Lighting` et le rétablit à sa sortie. Un tween encore actif écrase les valeurs
-  rétablies : l'annuler d'abord (`burstTweens`), car le joueur peut apparaître avant la fin de l'explosion.
-- **Curseur :** `MenuCursor` réimpose `MouseIconEnabled` à chaque image (faux sur l'arme, vrai ailleurs), car les autres écrans le changent en s'ouvrant ou se fermant.
+  Un décor de menu construit loin de la map se juge donc map chargée.
+- **Curseur :** `MenuCursor` réimpose `MouseIconEnabled` à chaque image, car les autres écrans le changent en s'ouvrant ou se fermant.
 - **`AbsolutePosition` avec `IgnoreGuiInset` :** elle exclut la barre du haut, contrairement à `GetMouseLocation`. Préférer
   `MouseEnter`, `MouseLeave` et `Activated` à un test de zone maison.
 - **Fondu dans deux directions** (fond qui s'efface vers le haut et vers la droite) : impossible avec des `UIGradient`.
@@ -258,8 +257,6 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
   la qualité graphique minimale et maximale.
 - **Polices :** aucune annonce officielle d'import de police trouvée (novembre 2026). Tout le texte est en polices
   Roblox (Oswald pour les titres et libellés, Titillium pour le texte courant).
-- **Bras du viewmodel :** ils forment vite une grosse masse noire quand la souris est dans un coin. Limiter le pivot
-  (`MenuSceneRules.aimAngles`) et garder le soleil dégagé.
 
 ## Prototyper dans le moteur
 
@@ -276,135 +273,50 @@ studs passe devant : s'en éloigner au clavier (`user_keyboard_input`). On ne pe
 le mouvement est simulé côté client (`MovementController`) et réécrit la position de la racine à chaque tick, que le
 changement vienne du serveur ou du client. Pour allumer des touches sans bouger, appuyer sur deux directions opposées.
 
-## Menu : salle des miroirs (#106, implémentation #112)
+## Menu : accueil sur la map (#253)
 
-**Piste retenue :** des éclats de verre suspendus à des fils dans une salle de béton. Chacun porte un morceau de l'image
-de l'arme. En pivotant sur leurs fils, ils la reconstituent face à la caméra. Au repos l'arme est entière ; au
-changement d'arme, les éclats se dispersent puis se reposent en vague de gauche à droite ; au tir, les éclats touchés
-pivotent puis se reposent. Rendus de référence : `docs/ui/menu-miroirs/` (`reconstituee.jpg`, `mi-rotation.jpg`,
-`dispersee.jpg`, `reconstitution.mp4`).
+**Choix de l'utilisateur** (référence : l'accueil de CS2, un personnage en pied dans une rue de la map) : le personnage
+du jeu, de face et en grand au centre, tient l'arme choisie dans le menu, sur une copie de la map ; caméra à hauteur
+d'homme. Copie figée et isolée plutôt que la vraie map en direct (pas d'affichage de la partie en cours) ; JOUER ferme
+les volets tout de suite.
 
-Décisions de l'utilisateur :
-- le centre du menu est une vitrine d'arme, sans personnage ;
-- le menu ne dépend d'aucune map : plus de rampes ni de soleil couchant ;
-- l'interface reprend le style du HUD (texte os à ombre décalée, libellés ambrés Oswald, rouge d'impact rare, barres
-  segmentées), avec la disposition des maquettes ;
-- pas d'affichage de la partie en cours.
+**Construction** (`MenuScene.luau`, tout local au client, construit à la première ouverture puis gardé hors du
+workspace pendant la partie) :
+- Plan par map dans `SHOTS` : pieds du personnage, son regard, distance et hauteurs de la caméra, décalage latéral.
+  Dizzy : couloir du toit haut entre le grillage et le mur à bande bleue (au-dessus de la rampe ouest), regard vers le
+  couchant, le couloir fuit derrière lui. Map sans plan : devant le premier point d'apparition au sol.
+- Copie : pièces visibles de la map jouée dans le cône de la caméra (`MenuSceneRules.inView`) ou toutes proches,
+  clonées sans physique ni requête (`CanQuery` coupé) et décalées de `OFFSET` (5 000 studs en Z). Sur Dizzy : 14 300
+  pièces sur 17 500 visibles, car les murs cachent la map mais ne la retirent pas du cône. Copier toute la map visible
+  coûte environ 0,2 s de clonage et 0,1 s d'ajout au workspace (mesuré en Studio) : on n'a pas filtré davantage.
+- Personnage : `StarterCharacter` cloné, skin commun (`CharacterAppearance.apply`), sans script, racine ancrée. Arme :
+  modèle 3P du jeu (`WeaponThirdPerson.attach`), sorti du rendu des armes 3P (tag retiré) pour garder la tenue du menu.
+  Tenues (`MenuPoses.luau`, générées par `tools/anim/poses3p/export_pose.js`, tenues M1 et M2 de `poses.js`) : AWP en
+  travers du torse, canon vers le haut à gauche du personnage, avec sa propre prise ; couteau le long du corps, lame
+  vers le bas, avec la prise du jeu (même inclinaison que la garde C1). Articulations posées par `C0` (aucune piste ne
+  tourne sur ce personnage), respiration de la taille (`breathAngle`).
+- Armes : Tools du `StarterPack` (attribut `WeaponName`), dans l'ordre alphabétique de la barre d'armes. Molette,
+  touches 1-9 et flèches ‹ › changent l'arme tenue ; la fiche suit.
+- Caméra : fixe, FOV vertical 40° en 16:9 (ouvert sur un écran plus étroit, `fitFov`), léger suivi du curseur
+  (`aimAngles`). Flou du fond : `DepthOfFieldEffect` posé sous la caméra le temps du menu.
+- Éclairage : celui du jeu, plus une **lumière de portrait** (SpotLight chaud devant le personnage, du côté du soleil).
+  Avec un soleil à 1,4° au-dessus de l'horizon, les bords du toit ombrent tout le couloir : sans elle le personnage
+  est sombre. Piège : juste après le lancement, les ombres ne sont pas encore calculées et le personnage paraît au
+  soleil ; juger l'éclairage après quelques secondes, ou tester l'ombre par rayons vers `Lighting:GetSunDirection()`
+  (en ignorant les pièces invisibles, murs d'air compris).
+- Sur la place partagée, `ReplicatedStorage.MenuMirrors` reste après le merge : Rojo ne supprime pas une instance qu'il
+  ne gère plus. La supprimer à la main dans Studio une fois #253 mergée.
 
-**Pistes écartées** (`docs/ui/menu-miroirs/planche-ecartee.jpg` pour les quatre dernières) :
+**Pistes écartées pour l'accueil :**
 
 | Piste | Pourquoi |
 |---|---|
-| Travelling de canyon, rampes flottantes et surfeurs fantômes, mer de brume | Liées à l'ancienne map |
-| Lobby avec personnage | Rig en blocs, ridicule |
-| Studio noir, réticule géant, stand de tir de nuit | « Pas mal mais pas assez originaux » |
-| Vue éclatée avec étiquettes, tir figé (balle et anneaux), vitrine pare-balles | Objets empilés, pas des compositions |
-| Planche Blender : établi, macro de la bouche, machine murale, éclaté sur l'axe | Correctes, mais l'utilisateur a préféré l'idée des miroirs |
-
-**Méthode** (après une douzaine de maquettes rejetées) :
-- Ne pas traduire les mots d'un concept en pièces primitives construites à la volée dans Studio (anneau = « onde »,
-  étiquette = « technique ») : cela donne des objets empilés, sans premier plan ni fond, sans rapports d'échelle.
-  L'originalité vient de la forme du décor et du cadrage, pas d'effets ajoutés.
-- Partir de références visuelles de l'utilisateur, puis faire une planche de 3 ou 4 rendus Blender au cadrage final
-  16:9, avec l'interface posée par-dessus (`tools/menu/overlay_mockup.py`). Rendus reproductibles dans Roblox :
-  matériaux PBR simples, lumières ponctuelles, pas de volumétrique.
-- Une fois l'image choisie, juger le mouvement sur une courte vidéo avant toute intégration ; l'utilisateur a demandé
-  une reconstitution plus lente que le premier essai (arme entière vers 5,5 s).
-
-**Technique** (`tools/menu/mirrors.py`, Blender en arrière-plan) :
-- Roblox n'a pas de vrais miroirs (`Reflectance` ne reflète que le ciel) : on rend l'arme seule depuis la caméra du
-  menu, on découpe la zone de l'arme en cellules de Voronoï, puis chaque cellule est reprojetée à sa propre profondeur,
-  face à la caméra, avec des UV projetés depuis la vue. Alignés, les éclats redonnent l'image exacte.
-- Les éclats pivotent autour de leur fil (axe vertical), avec un léger balancement : les fils restent justes. La
-  reconstitution est une oscillation amortie (`exp(-1.6 t) cos(2π·0.32 t)`), libérée en vague sur 2,6 s.
-- Une découpe par arme ; échanger les jeux d'éclats pendant la dispersion, quand ils sont de profil.
-- Garder les cellules d'après une grille de points (part de pixels opaques) : un test sur quelques points perd les
-  pièces fines (lunette, canon).
-- **Caméra définitive** (1 unité Blender = 1 stud, Roblox = `(x, z, -y)`, relative à l'origine de la scène du menu) :
-  position `(0, 3.4, 17)`, visée `(0.6, 4.6, 0)`, `FieldOfView` = **35,12°** (objectif 32 mm, capteur ajusté en hauteur
-  dans Blender pour un FOV vertical fixe, comme Roblox). `mirrors.py` écrit la disposition complète (caméra, salle,
-  lumières, pivots des éclats) dans `layout.json`, à côté des rendus.
-- **Écrans non 16:9** : la reconstitution ne dépend que de la position et de l'orientation de la caméra, pas du FOV.
-  Sur un écran plus étroit que 16:9, ouvrir le FOV vertical pour garder la largeur du 16:9
-  (`2·atan(tan(29,35°) / ratio)`, 45,75° en 4:3), sinon le canon sort du cadre ; sur un écran plus large, garder
-  35,12°. Vérifier avec `--aspect 4:3` ou `--aspect 21:9`.
-- **Export pour Roblox** (`mirrors.py --export --weapon AWP|M9`, module `shard_export.py`) : un MeshPart ne porte
-  qu'une `SurfaceAppearance`, donc face, dos et tranche d'un éclat partagent une texture. Par arme : `atlas.png`
-  (1024 px, morceaux d'image à pleine résolution 1080p composés sur le verre sombre, alpha 0,55 hors de l'arme ; bande
-  de nuancier en haut : dos, tranche claire, dégradé irisé), `masque.png` (opacité de l'arme, pour
-  `EmissiveMaskContent`), `eclats.fbx` (`Eclat_01`…, sans chanfrein, dont les faces mêleraient image et nuancier) et
-  `eclats.json` (centre du MeshPart, point d'attache du fil, retard de la vague, teinte, liseré). Communs aux armes :
-  `vides.fbx`, `vides.json`, `verre.png` (la bande seule ; tirage aléatoire séparé de la découpe). Le maillage est figé
-  en coordonnées monde : Roblox place chaque MeshPart au centre de sa boîte, sans rotation, et on le replace d'après
-  `center`.
-- Contrôle : `check_export.py -- <arme>` réimporte les FBX et rend `controle.png` sans éclairage depuis la caméra du
-  menu ; l'arme doit se reconstituer. Une forme qui traverse l'image dans ce contrôle vient du tri de transparence de
-  Blender (toutes les origines à zéro), pas de l'export.
-- `SurfaceAppearance` a bien `EmissiveMaskContent`, `EmissiveStrength` et `EmissiveTint` (Studio 0.746) : l'image peut
-  rester lumineuse comme dans les rendus.
-- Les assets de la Toolbox (le M9) ne s'ouvrent ni en `EditableMesh`/`EditableImage` (« no permission ») ni par
-  l'asset delivery (401, scope `legacy-asset:manage` absent) : les sortir par *Export Selection* dans Studio, dans
-  `.maquettes/m9/`. L'OBJ obtenu est en coordonnées monde (couteau incliné dans la pose du viewmodel) et sa texture
-  réduite à 64 px : `blend_common.import_m9` le redresse sur ses axes principaux (scie en haut) et lui donne deux
-  matières nettes (acier, manche) choisies face par face d'après cette texture.
-- M9 dans la vitrine : agrandi à 0,85 fois la longueur de l'AWP (décision : l'arme remplit la vitrine) ; `--fill`
-  pour régler.
-- Ids publiés : `tools/menu/published.json`. L'import Roblox du FBX garde les positions absolues des éclats (vérifié au
-  millième contre `center`) et les noms `Eclat_NN` / `Vide_NN`, sans rotation.
-- Une `SurfaceAppearance` ne se modifie pas en jeu par script (seulement en Edit, par plugin) : les deux jeux d'éclats
-  texturés sont construits d'avance (`.rbxm`) et échangés pendant la dispersion. Essai dans Studio : atlas net,
-  `EmissiveMaskContent` + `EmissiveStrength` 1,5 font ressortir l'arme sur le verre sombre.
-- **Dans Roblox** (`MenuScene.luau`, étape 3) : les jeux d'éclats texturés sont dans `assets/rbx/Menu/` (mappé sur
-  `ReplicatedStorage.MenuMirrors`), construits dans Studio par `tools/menu/studio_build.luau` puis exportés
-  (`receive.luau Menu`) ; fils, retards et teintes viennent de `MenuMirrorsData.luau`, généré par
-  `tools/menu/make_luau.py`. Après une nouvelle découpe : `--export` des deux armes, publication, mise à jour de
-  `published.json`, `make_luau.py`, construction et export dans Studio.
-- La salle est fermée (plafond, murs hors champ) : sans cela le ciel et le soleil de la map entrent. Lumières réglées
-  contre `reconstituee.jpg` : douche 6 (portée 40), rasante 8 (portée 34, angle 90), appoint 1,5, ambiance (44, 47, 58),
-  `EnvironmentDiffuseScale` 0,3. Plus sombre, le mur du fond disparaît.
-- Précharger les textures des armes (`ContentProvider:PreloadAsync` sur leurs `SurfaceAppearance`) : Roblox ne
-  télécharge une texture qu'une fois la pièce visible, et une arme jamais montrée apparaissait en éclats blancs opaques
-  pendant sa première vague.
-- Coût mesuré dans Studio (playtest, MCP actif, donc bruité) : environ 6,7 ms par image pour toute la scène, dont
-  1,8 ms pour les éclats ; fils, lumières et bloom moins de 0,4 ms chacun.
-- Un éclat vide reflète les lumières dans le verre : la lumière d'appoint au sol est sans reflet (`specular_factor = 0`),
-  sinon deux éclats sous le chargeur paraissaient gris clair. Roblox n'aura pas ce reflet.
-- Commandes :
-  ```bash
-  blender -b --factory-startup --python tools/menu/mirrors.py -- --full --state assembled   # ou half, scattered ; --aspect 4:3
-  blender -b --factory-startup --python tools/menu/mirrors.py -- --anim                     # images de la vidéo
-  uv run tools/menu/overlay_mockup.py <Oswald.ttf> <rendu.png> <sortie.jpg>
-  uv run tools/menu/video.py <Oswald.ttf> <dossier des images> <sortie.mp4>
-  ```
-  Sortie dans `.maquettes/menu-miroirs/` (non versionné, `MENU_OUT` pour la changer). Environ 2 min par image en
-  1920x1080 : lancer les rendus l'un après l'autre (deux en parallèle doublent le temps de chacun).
-- La source Blender de l'AWP (`assets/awp_viewmodel/AWP_Viewmodel_Anims.blend`) est en vert uni alors que l'arme du jeu
-  a une crosse en bois : `blend_common.awp_materials` remet le bois.
-
-**Interface et tir** (étape 4) :
-- Décisions de l'utilisateur : ARMES est l'accueil (la vitrine) ; JOUER, plus grand et souligné de rouge d'impact, est
-  l'appel à l'action ; les onglets restent affichés sur Infos, Réglages et Feedback, qui s'ouvrent dessous ; seule l'arme
-  se tire, sans trou dessiné (#130 : plus de tir ni d'impact sur les boutons) ; JOUER fait exploser la vitrine.
-- Fiche d'arme : DÉGÂTS et CADENCE (RPM) rapportés à la meilleure arme de la vitrine, PRÉCISION lue dans
-  `WeaponConfig.Accuracy` (valeur d'affichage, la dispersion n'est pas simulée), catégorie dans `WeaponConfig.Category`
-  en capitales (`string.upper` ne passe pas « é » en « É »). Barre pleine : dernier segment en rouge d'impact.
-- Tir : rayon depuis le curseur sur les éclats de l'arme montrée (les éclats vides du fond ne déclenchent pas le tir mais pivotent avec), parmi les jeux d'éclats visibles (`CanQuery` activé sur eux seuls). L'éclat touché et ses
-  voisins (2,6 studs) reçoivent un élan autour de leur fil, dans un ressort amorti (`MenuSceneRules.springStep`) : deux
-  tirs rapprochés se cumulent sans saut ; pointe vers 110°, retour au repos en 3,5 s.
-- Explosion : chaque éclat quitte son fil (Beam coupé) avec une vitesse vers la caméra, vers l'extérieur et vers le haut,
-  sous gravité, en tournoyant ; surexposition jusqu'au blanc, puis les volets (`PLAY_DELAY` 1 s). `showAtRest` remet tout
-  sur les fils au retour au menu.
-- Coût mesuré dans Studio (overlay F3, 1291x647, MCP actif) : boucle `menu 3D` 0,25 ms par image au repos, 0,32 ms
-  pendant une série de tirs (pointe 0,64 ms), 0,40 ms pendant l'explosion (pointe 0,83 ms) ; curseur 0,02 ms ; 159 draw
-  calls, CPU rendu 6 à 7 ms, GPU 8 à 10 ms.
-- Vérifier au MCP : `user_mouse_input` prend des coordonnées d'écran, pas celles de `screen_capture` (0,8 fois celles de
-  la capture sur ce poste) ; préférer `instance_path` pour viser un bouton. La capture arrive plusieurs centaines de ms
-  après l'action : un mouvement bref (pivot, explosion) se mesure par script (échantillonnage des CFrame dans une boucle
-  lancée avant le clic), pas sur une capture.
+| Salle des miroirs (#106, #112) : éclats pendus à des fils qui reconstituent l'image de l'arme, tir sur les éclats, explosion sur JOUER | Ne collait pas à la direction artistique (#253). Code, assets (`assets/rbx/Menu`), outils Blender (`tools/menu/`) et rendus (`docs/ui/menu-miroirs/`) retirés, dans l'historique git avant #253 |
+| Silhouette en contre-jour sur le parapet, personnage surfant sur la rampe, contre-plongée depuis le vide | Captures proposées en #253 ; l'utilisateur voulait un personnage de face, en grand, à hauteur d'homme |
+| Tenue fusil du jeu (épaulé) vue de face | Le canon pointe vers la caméra et la crosse cache le buste |
+| Garde du couteau du jeu vue de face | Avant-bras levé vers la caméra : on croit qu'il salue |
 
 ## Reste à faire
 
 - Piste écartée pour l'instant sur le compteur : chiffres en images usées comme le titrage, et inclinaison qui augmente avec la vitesse.
 - Tester le menu au tactile et à la manette : c'est prévu dans le code (flèches ‹ ›), jamais essayé.
-- Première vague d'une arme jamais montrée : ses éclats passent encore en blanc opaque le temps du chargement, malgré
-  `PreloadAsync` (constaté en Studio sur le M9).

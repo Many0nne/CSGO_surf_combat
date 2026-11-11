@@ -106,8 +106,15 @@ const HOLDS={
  C0:{type:'knife',scale:0.6,knife:'C0',arms:{R:{fwd:60}}},
  C1:{type:'knife',scale:1.0,tilt:15,leftFreeOnGround:true,arms:{R:{fwd:25,out:8,el:70},L:{fwd:14,out:10,el:35}}},
  C2:{type:'knife',scale:1.0,tilt:-30,arms:{R:{fwd:38,out:4,yaw:14,el:100},L:{fwd:32,out:6,yaw:-28,el:112}}},
+ // M1 : tenue de l'accueil du menu (#253), vue de face : AWP en travers du torse, canon vers le haut à gauche du personnage.
+ // gunRoot.yaw tourne le canon vers la gauche, gunRoot.roll le relève (rotation autour de l'axe avant).
+ M1:{type:'awp',scale:0.7,yaw:0,gunRoot:{g:[0.75,-0.75,-1.35],yaw:90,roll:-32,pitch:0}},
+ // M2 : couteau à l'accueil du menu (#253) : bras droit détendu le long du corps, lame vers le bas et un peu en avant.
+ // Même inclinaison et même échelle que C1 : la prise du jeu (WeaponConfig.ThirdPerson.Grip) reste valable.
+ M2:{type:'knife',scale:1.0,tilt:15,arms:{R:{fwd:12,out:10,el:30}}},
 };
-for(const H of Object.values(HOLDS))if(H.gunRoot){const Rt0=M.y(H.yaw);const Rw0=M.x(H.gunRoot.pitch||0);
+for(const H of Object.values(HOLDS))if(H.gunRoot){const Rt0=M.y(H.yaw||0);
+ const Rw0=ch(M.z(H.gunRoot.roll||0),M.y(H.gunRoot.yaw||0),M.x(H.gunRoot.pitch||0));
  H._local={Rwl:M.mul(M.t(Rt0),Rw0),Gl:M.v(M.t(Rt0),V.sub(H.gunRoot.g,[0,0.32,0]))};}
 
 // ── États de déplacement (jambes et bras R15 approximés) ─────────────────

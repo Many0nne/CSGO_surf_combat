@@ -54,15 +54,28 @@ const knifeL = {
 	LeftWrist: M.I,
 };
 
-// Grip AWP : poignée (Handle) dans le repère de la main droite. Handle : X = canon, Y = dessus.
-const { G, Rw } = rifle.f.info.gun;
-const h = rifle.f.info.arms.R;
-const k = (P.HOLDS.F1.scale || 0.5) / 0.5; // décalages relevés sur l'AWP à l'échelle 0,5
-const handle = V.add(G, M.v(Rw, [0, 0.305 * k, -0.685 * k]));
-const xl = col(Rw, 0), yl = col(Rw, 1), zl = col(Rw, 2);
-const handleR = M.cols(V.mul(zl, -1), yl, xl);
-const RhT = M.t(h.Rh);
-const awpGrip = cf(M.mul(RhT, handleR), M.v(RhT, V.sub(handle, h.H)));
+// Cette méthode permet de calculer le grip de l'AWP (poignée dans le repère de la main droite) lorsqu'on exporte une
+// tenue fusil ; Handle : X = canon, Y = dessus. Les décalages ont été relevés sur l'AWP à l'échelle 0,5.
+function awpGripOf(key, f) {
+	const { G, Rw } = f.info.gun;
+	const h = f.info.arms.R;
+	const k = (P.HOLDS[key].scale || 0.5) / 0.5;
+	const handle = V.add(G, M.v(Rw, [0, 0.305 * k, -0.685 * k]));
+	const xl = col(Rw, 0), yl = col(Rw, 1), zl = col(Rw, 2);
+	const handleR = M.cols(V.mul(zl, -1), yl, xl);
+	const RhT = M.t(h.Rh);
+	return cf(M.mul(RhT, handleR), M.v(RhT, V.sub(handle, h.H)));
+}
+const awpGrip = awpGripOf("F1", rifle.f);
+
+// Menu M1 (#253) : tenue de l'accueil, AWP en travers du torse (MenuPoses.luau).
+const menu = joints("M1", ["R", "L"], []);
+check("M1", menu.f);
+const menuGrip = awpGripOf("M1", menu.f);
+// Menu M2 (#253) : couteau le long du corps, prise du jeu (même inclinaison que C1).
+if (P.HOLDS.M2.tilt !== P.HOLDS.C1.tilt || P.HOLDS.M2.scale !== P.HOLDS.C1.scale)
+	throw new Error("M2 : inclinaison et échelle doivent rester celles de C1 (prise du jeu)");
+const menuKnife = joints("M2", ["R"], []);
 
 // Grip couteau : centre du mesh = centre du manche + 1,21 × échelle le long de l'axe. Handle : Z = pointe, X = tranchant.
 const { ax, sp, off } = knifeR.f.info.knife;
@@ -89,4 +102,15 @@ ${fmt(knifeL)}
 -- WeaponConfig.Weapons.AWP.ThirdPerson.Grip
 ${awpGrip}
 -- WeaponConfig.Weapons.M9Bayonet.ThirdPerson (Scale = ${s})
-${knifeGrip}`);
+${knifeGrip}
+
+-- MenuPoses.Rifle (accueil du menu, #253, échelle ${P.HOLDS.M1.scale})
+Joints = {
+${fmt(menu.out)}
+},
+Grip = ${menuGrip},
+
+-- MenuPoses.Melee (accueil du menu, #253, prise du jeu)
+Joints = {
+${fmt(menuKnife.out)}
+},`);
