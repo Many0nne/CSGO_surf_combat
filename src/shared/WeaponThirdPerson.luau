@@ -6,7 +6,9 @@
 --   • Tenue (#107) : couche haut du corps posée par chaque client (WeaponThirdPersonView) sur les Motor6D, après
 --     l'Animator : les pistes de déplacement gardent les jambes, la tenue remplace bras et taille (POSES).
 --   • Tir / recharge / switch : le serveur pose les attributs Weapon3PAction / Weapon3PActionAt sur
---     le personnage ; chaque client décale localement le C0 du grip via actionOffset (visuel seul).
+--     le personnage ; chaque client décale localement le C0 du grip via actionOffset (visuel seul). Le tir d'une
+--     arme à distance est posé par le relais d'un ShotFired accepté (relayShot, #215) ; le coup de couteau et le
+--     rechargement d'un joueur par l'action WeaponAction de son client (bots : BotArsenal).
 --   • Visibilité : le joueur local ne voit jamais son propre modèle 3P, le viewmodel le remplace (isVisibleTo).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")

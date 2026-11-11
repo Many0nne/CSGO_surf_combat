@@ -12,8 +12,9 @@ local WeaponThirdPerson = require(ReplicatedStorage.Shared.WeaponThirdPerson)
 
 -- Touche d'un bot à valider (personnage visé, partie touchée ; nil pour un coup de couteau)
 export type OnHit = (targetCharacter: Model, hitPart: BasePart?) -> ()
--- Tir au fusil parti, touché ou manqué (origine = yeux, direction unitaire) : relayé aux joueurs pour le son (#156)
-export type OnFire = (origin: Vector3, direction: Vector3) -> ()
+-- Tir au fusil parti, touché ou manqué (origine = yeux, direction unitaire) : relayé aux joueurs pour le son (#156) et
+-- le recul 3P (#215) ; renvoie true si le relais l'a accepté
+export type OnFire = (origin: Vector3, direction: Vector3) -> boolean
 
 local BotArsenal = {}
 BotArsenal.__index = BotArsenal
@@ -174,15 +175,17 @@ function BotArsenal.fire(self: BotArsenal, now: number, eye: Vector3, direction:
 		return nil
 	end
 	self.readyAt = now + (cfg.FireDelay or 0)
-	WeaponThirdPerson.setAction(self.char, "Shoot")
 	if cfg.IsMelee then
+		WeaponThirdPerson.setAction(self.char, "Shoot")
 		self.onHit(target, nil)
 		return nil
 	end
 	self.ammo -= 1
-	-- Son du tir chez les joueurs (#156), avant la touche : comme chez un joueur, le tir s'entend avant ses dégâts
-	if self.onFire then
-		self.onFire(eye, direction)
+	-- Son du tir chez les joueurs (#156), avant la touche : comme chez un joueur, le tir s'entend avant ses dégâts ;
+	-- le relais joue aussi le recul 3P (#215). Sans relais branché, ou tir écarté par le relais (le rayon part quand
+	-- même), le recul est posé ici, comme avant #215
+	if not (self.onFire and self.onFire(eye, direction)) then
+		WeaponThirdPerson.setAction(self.char, "Shoot")
 	end
 	local result = workspace:Raycast(eye, direction * WeaponConfig.HITSCAN_RANGE, self.params)
 	if result then

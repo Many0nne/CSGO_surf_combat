@@ -8,6 +8,7 @@ local PositionHistory = require(ReplicatedStorage.Shared.PositionHistory)
 local Participants = require(ServerScriptService.Server.Participants)
 local CheatTypes = require(ServerScriptService.Server.CheatTypes)
 local ShotRules = require(ServerScriptService.Server.ShotRules)
+local ShotLinkRules = require(ServerScriptService.Server.ShotLinkRules)
 
 type Participant = Participants.Participant
 
@@ -64,6 +65,9 @@ local lastAttacks: { [Participant]: { [any]: LastAttack } } = {}
 local equips: { [Participant]: { tool: Instance, at: number } } = {}
 -- Chargeur de chaque arme à distance d'un participant (#175), par entrée de WeaponConfig comme les cadences.
 local magazines: { [Participant]: { [any]: ShotRules.Magazine } } = {}
+-- Tirs récents de chaque arme à distance d'un participant (#215, #216) : ShotFired acceptés et touches orphelines, pour
+-- rattacher chaque touche à son tir par shotTime (ShotLinkRules). Joueurs seulement.
+local shotLedgers: { [Participant]: { [any]: ShotLinkRules.Ledger } } = {}
 
 local function getRoot(char: Model): BasePart?
 	return char:FindFirstChild("HumanoidRootPart") :: BasePart?
@@ -161,6 +165,22 @@ local function magazineOf(participant: Participant, cfg: any): ShotRules.Magazin
 	return mag
 end
 
+-- Cette méthode permet de lire le registre des tirs d'une arme d'un participant lorsqu'un ShotFired ou une touche
+-- arrive ; il est créé vide.
+local function ledgerOf(participant: Participant, cfg: any): ShotLinkRules.Ledger
+	local perWeapon = shotLedgers[participant]
+	if not perWeapon then
+		perWeapon = {}
+		shotLedgers[participant] = perWeapon
+	end
+	local ledger = perWeapon[cfg]
+	if not ledger then
+		ledger = ShotLinkRules.new()
+		perWeapon[cfg] = ledger
+	end
+	return ledger
+end
+
 -- Cette méthode permet d'annuler les rechargements en cours d'un participant lorsqu'il range ou change d'arme (un
 -- rechargement déjà fini reste acquis).
 local function cancelReloads(participant: Participant, now: number)
@@ -212,8 +232,16 @@ local function failWeaponCheck(attacker: Participant, category: string, check: s
 end
 
 -- Cette méthode permet de vérifier qu'un joueur pouvait utiliser son arme lorsqu'une touche a passé cible, arme et
--- cadence (#175) : equip fini, et pour une arme à chargeur, chargeur non vide. Renvoie false si la touche est refusée.
-local function isWeaponReady(attacker: Participant, category: string, tool: Instance, cfg: any, now: number): boolean
+-- cadence (#175) : equip fini, et pour une arme à chargeur, chargeur non vide, sauf touche rattachée à un tir déjà
+-- compté (linked, #215). Renvoie false si la touche est refusée.
+local function isWeaponReady(
+	attacker: Participant,
+	category: string,
+	tool: Instance,
+	cfg: any,
+	now: number,
+	linked: boolean?
+): boolean
 	local blocked = false
 	local record = equips[attacker]
 	local equippedAt = if record and record.tool == tool then record.at else nil
@@ -221,7 +249,7 @@ local function isWeaponReady(attacker: Participant, category: string, tool: Inst
 	if not ok then
 		blocked = failWeaponCheck(attacker, category, ShotRules.Check.EQUIP, detail or "?") or blocked
 	end
-	if not cfg.IsMelee and cfg.Magazine then
+	if not cfg.IsMelee and cfg.Magazine and not linked then
 		ok, detail = ShotRules.checkMagazine(magazineOf(attacker, cfg), cfg.Magazine, cfg.ReloadTime or 0, now)
 		if not ok then
 			blocked = failWeaponCheck(attacker, category, ShotRules.Check.MAGAZINE, detail or "?") or blocked
@@ -231,13 +259,20 @@ local function isWeaponReady(attacker: Participant, category: string, tool: Inst
 end
 
 -- Cette méthode permet de savoir si l'arme à distance en main peut tirer lorsqu'un tir doit être relayé (#156) : equip
--- et chargeur (#175) selon leur mode, sans journal ni compte ; toujours vrai pour un bot armé (BotArsenal).
-function Validator.isReadyToFire(participant: Participant, now: number): boolean
+-- et chargeur (#175) selon leur mode, sans journal ni compte ; toujours vrai pour un bot armé (BotArsenal), et pour un
+-- ShotFired dont la touche est arrivée avant lui (shotTime, #215 : tir déjà compté par cette touche).
+function Validator.isReadyToFire(participant: Participant, now: number, shotTime: number?): boolean
 	local tool, cfg = weaponInHand(participant)
 	if not tool or not cfg or cfg.IsMelee then
 		return false
 	end
 	if participant.isBot then
+		return true
+	end
+	-- Sans créer de registre pour un tir qui sera peut-être refusé (find purge seulement les tirs trop anciens)
+	local perWeapon = shotLedgers[participant]
+	local ledger = perWeapon and perWeapon[cfg]
+	if ledger and ShotLinkRules.find(ledger, shotTime, now, "fired") then
 		return true
 	end
 	local record = equips[participant]
@@ -253,6 +288,26 @@ function Validator.isReadyToFire(participant: Participant, now: number): boolean
 		end
 	end
 	return true
+end
+
+-- Cette méthode permet de compter un tir dans le chargeur de l'arme en main lorsque son ShotFired est accepté par le
+-- relais (#215) et de l'inscrire au registre pour sa touche (#216) ; un tir déjà compté par sa touche arrivée avant
+-- lui y est seulement rattaché. Rien pour un bot (BotArsenal tient son chargeur).
+function Validator.noteShotFired(participant: Participant, shotTime: number, now: number)
+	local _, cfg = weaponInHand(participant)
+	if participant.isBot or not cfg or cfg.IsMelee then
+		return
+	end
+	local ledger = ledgerOf(participant, cfg)
+	local early = ShotLinkRules.find(ledger, shotTime, now, "fired")
+	if early then
+		early.fired = true
+		return
+	end
+	if cfg.Magazine then
+		ShotRules.countShot(magazineOf(participant, cfg), now)
+	end
+	ShotLinkRules.record(ledger, shotTime, now, true, false)
 end
 
 -- Cette méthode permet de noter l'arrivée d'un outil dans le personnage d'un participant lorsque le serveur la voit
@@ -289,7 +344,12 @@ function Validator.noteReload(participant: Participant, now: number)
 	if last then
 		start = math.max(start, last.at + last.delay - ShotRules.RELOAD_TOLERANCE)
 	end
-	ShotRules.startReload(magazineOf(participant, cfg), cfg.ReloadTime or 0, start)
+	local mag = magazineOf(participant, cfg)
+	-- Dernier tir compté, touché ou manqué (#215) : sa cadence aussi précède le rechargement
+	if mag.lastShotAt then
+		start = math.max(start, mag.lastShotAt + (cfg.FireDelay or 0) - ShotRules.RELOAD_TOLERANCE)
+	end
+	ShotRules.startReload(mag, cfg.ReloadTime or 0, start)
 end
 
 -- Cette méthode permet de brancher les accès au monde de la validation des tirs lorsque le serveur démarre (ou qu'un
@@ -516,7 +576,8 @@ local function validateMelee(attacker: Participant, aRoot: BasePart, tRoot: Base
 end
 
 -- Cette méthode permet de décider un tir d'arme à distance lorsque le remote arrive : elle renvoie les dégâts de l'arme
--- réellement en main selon la zone touchée et si c'est un tir à la tête, et démarre sa cadence ; nil si le tir est refusé.
+-- réellement en main selon la zone touchée, si c'est un tir à la tête, et l'instant du tir auquel la touche est
+-- rattachée (#216, nil si orpheline), et démarre sa cadence ; nil si le tir est refusé.
 -- shot (origine, direction, impact, instant) est exigé d'un joueur et vérifié (#174) ; un bot tire depuis le serveur,
 -- par un vrai raycast : son tir garde le chemin sans shot.
 function Validator.authorizeHitscan(
@@ -525,7 +586,7 @@ function Validator.authorizeHitscan(
 	hitPart: Instance,
 	now: number,
 	shot: any?
-): (number?, boolean)
+): (number?, boolean, number?)
 	local maxRange = if attacker.isBot then BOT_HITSCAN_RANGE else MAX_HITSCAN_RANGE
 	local cfg, aRoot, tRoot, aChar, tool = resolveAttack(attacker, targetCharacter, maxRange)
 	if
@@ -542,24 +603,46 @@ function Validator.authorizeHitscan(
 	if not isCadenceReady(attacker, cfg, now) then
 		return nil, false
 	end
+	local shotTime = if type(shot) == "table" then shot.shotTime else nil
+	local link: ShotLinkRules.Entry? = nil
 	if not attacker.isBot then
+		-- Tir de cette touche (#216) : un ShotFired accepté du même instant, déjà compté dans le chargeur (#215)
+		link = ShotLinkRules.find(ledgerOf(attacker, cfg), shotTime, now, "hit")
 		-- Géométrie du tir (#174) d'abord, puis equip et chargeur (#175, joueurs seulement : BotArsenal les fait déjà
 		-- respecter à ses bots) : tous sont évalués, pour que la phase de mesure de T1 voie aussi les tirs refusés ici
 		local shotOk = validateShot(attacker, aChar, aRoot, tRoot, targetCharacter :: Model, hitPart :: BasePart, shot)
-		local weaponOk = isWeaponReady(attacker, CheatTypes.Category.HITSCAN, tool, cfg, now)
+		local weaponOk = isWeaponReady(attacker, CheatTypes.Category.HITSCAN, tool, cfg, now, link ~= nil)
 		if not shotOk or not weaponOk then
 			-- Refusé : la cadence n'est pas relancée, comme pour toute touche refusée
 			return nil, false
 		end
+		-- Touche orpheline : journalisée seulement si rien d'autre ne la refuse (un chargeur vide explique déjà le
+		-- ShotFired écarté) ; mode "log" de shotLink jusqu'à mesure en jeu
+		if not link then
+			local detail = if type(shotTime) == "number"
+				then string.format("touche sans ShotFired accepté du même instant (%.3f)", shotTime)
+				else "touche sans instant de tir"
+			if failWeaponCheck(attacker, CheatTypes.Category.HITSCAN, ShotRules.Check.SHOT_LINK, detail) then
+				return nil, false
+			end
+		end
 	end
 	recordAttack(attacker, cfg, cfg.FireDelay, now)
-	if not attacker.isBot and cfg.Magazine then
-		ShotRules.countShot(magazineOf(attacker, cfg))
+	if link then
+		link.hit = true
+	elseif not attacker.isBot then
+		-- Tir compté par sa touche (#215), inscrit au registre : son ShotFired, s'il arrive après, n'est pas recompté
+		if cfg.Magazine then
+			ShotRules.countShot(magazineOf(attacker, cfg), now)
+		end
+		if type(shotTime) == "number" then
+			ShotLinkRules.record(ledgerOf(attacker, cfg), shotTime, now, false, true)
+		end
 	end
 
 	-- Seul un enfant direct est une partie du corps : un accessoire ou l'arme 3P peut contenir une pièce nommée "Head".
 	local zone = if hitPart.Parent == targetCharacter then HitZones.zoneOf(hitPart.Name) else nil
-	return HitZones.damageFor(cfg.Damage, zone), zone == HitZones.Zone.HEAD
+	return HitZones.damageFor(cfg.Damage, zone), zone == HitZones.Zone.HEAD, link and link.shotTime
 end
 
 -- Cette méthode permet de décider un coup de mêlée lorsque le remote arrive : elle renvoie les dégâts calculés depuis
@@ -595,18 +678,22 @@ function Validator.authorizeMelee(
 	return if isBackstab then damage * cfg.BackstabMultiplier else damage
 end
 
--- Cette méthode permet d'oublier les cadences, l'equip et les chargeurs d'un participant lorsqu'il réapparaît (armes
--- neuves, comme côté client) ou s'en va (joueur parti, bot retiré : sinon l'entrée reste en mémoire, #218).
+-- Cette méthode permet d'oublier les cadences, l'equip, les chargeurs et les tirs récents d'un participant lorsqu'il
+-- réapparaît (armes neuves, comme côté client) ou s'en va (joueur parti, bot retiré : sinon l'entrée reste, #218).
 function Validator.forget(participant: Participant)
 	lastAttacks[participant] = nil
 	equips[participant] = nil
 	magazines[participant] = nil
+	shotLedgers[participant] = nil
 end
 
 -- Cette méthode permet de savoir si le Validator retient encore quelque chose d'un participant (cadence, equip ou
 -- chargeur) lorsqu'on vérifie qu'un retrait l'a bien oublié (test, sonde de mémoire).
 function Validator.hasEntries(participant: Participant): boolean
-	return lastAttacks[participant] ~= nil or equips[participant] ~= nil or magazines[participant] ~= nil
+	return lastAttacks[participant] ~= nil
+		or equips[participant] ~= nil
+		or magazines[participant] ~= nil
+		or shotLedgers[participant] ~= nil
 end
 
 -- Cette méthode permet de compter les participants dont le Validator retient encore l'état lorsque la sonde serveur
@@ -614,7 +701,7 @@ end
 function Validator.trackedCount(): number
 	local seen: { [Participant]: boolean } = {}
 	local count = 0
-	for _, byParticipant in { lastAttacks, equips, magazines } :: { { [Participant]: any } } do
+	for _, byParticipant in { lastAttacks, equips, magazines, shotLedgers } :: { { [Participant]: any } } do
 		for participant in byParticipant do
 			if not seen[participant] then
 				seen[participant] = true

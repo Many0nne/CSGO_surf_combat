@@ -36,12 +36,15 @@ ShotRules.Check = {
 	MAGAZINE = "magazine", -- chargeur non vide, ou rechargé (#175, tir)
 	ORIENTATION = "orientation", -- cible devant le cap du tireur (#176, mêlée)
 	MELEE_LINE_OF_SIGHT = "meleeLineOfSight", -- aucun obstacle de la map entre tireur et cible (#176, mêlée)
+	SHOT_LINK = "shotLink", -- touche rattachée à un ShotFired accepté du même instant (#216, tir)
 }
 
 -- Mode de chaque contrôle. "log" tant que les faux positifs ne sont pas mesurés en jeu (docs/anticheat.md, « T1 » :
 -- procédure pour passer en "block") ; forme et distance ne dépendent pas du réseau, donc bloquants d'emblée. Equip et
 -- chargeur (#175) : règles déterministes à tolérance de gigue, sans faux positif mesuré, bloquants d'emblée. Mêlée
 -- (#176) : cap du tireur relayé à 20 Hz, faux positifs possibles en rotation rapide, journal seul jusqu'à mesure en jeu.
+-- Touche sans tir rattaché (#216) : un ShotFired écarté par le relais (cadence à la gigue près, origine) la rend
+-- orpheline chez un joueur honnête, journal seul jusqu'à mesure en jeu ; le chargeur la compte quand même.
 ShotRules.MODES = {
 	shape = "block",
 	origin = "log",
@@ -52,6 +55,7 @@ ShotRules.MODES = {
 	magazine = "block",
 	orientation = "log",
 	meleeLineOfSight = "log",
+	shotLink = "log",
 } :: { [string]: Mode }
 
 -- Gravité d'un échec au journal (CheatTypes.Severity) : une forme impossible ne vient jamais de notre client
@@ -66,6 +70,8 @@ ShotRules.SEVERITY = {
 	magazine = CheatTypes.Severity.MEDIUM,
 	orientation = CheatTypes.Severity.MEDIUM,
 	meleeLineOfSight = CheatTypes.Severity.MEDIUM,
+	-- Faible : un tir relayé écarté de peu (gigue) en produit, et le chargeur reste compté (#216)
+	shotLink = CheatTypes.Severity.LOW,
 } :: { [string]: Severity }
 
 -- Ancienne borne du serveur (studs entre racines), avant #174 : tout tir au-delà était refusé. Pendant la phase de
@@ -273,13 +279,15 @@ function ShotRules.checkEquip(equippedAt: number?, equipTime: number, now: numbe
 		string.format("touche %.2f s après l'equip (min %.2f s)", elapsed, equipTime - ShotRules.EQUIP_TOLERANCE)
 end
 
--- Chargeur d'une arme d'un participant (#175) : touches acceptées depuis le dernier rechargement fini, et rechargement
+-- Chargeur d'une arme d'un participant (#175) : tirs comptés depuis le dernier rechargement fini (ShotFired acceptés et
+-- touches orphelines, #215), et rechargement
 -- en cours (instant de l'action Reload, nil sinon).
-export type Magazine = { shots: number, reloadAt: number? }
+-- lastShotAt : arrivée du dernier tir compté (borne le début d'un rechargement, Validator.noteReload).
+export type Magazine = { shots: number, reloadAt: number?, lastShotAt: number? }
 
 -- Cette méthode permet de créer le chargeur plein d'une arme lorsqu'elle tire ou recharge pour la première fois.
 function ShotRules.newMagazine(): Magazine
-	return { shots = 0, reloadAt = nil }
+	return { shots = 0, reloadAt = nil, lastShotAt = nil }
 end
 
 -- Cette méthode permet de terminer le rechargement en cours lorsqu'il a duré reloadTime - tolerance (RELOAD_TOLERANCE
@@ -306,15 +314,16 @@ function ShotRules.cancelReload(mag: Magazine, reloadTime: number, now: number)
 	mag.reloadAt = nil
 end
 
--- Cette méthode permet de vérifier le chargeur lorsqu'une touche arrive : aucun rechargement inachevé (le client ne tire
--- pas en RELOADING, un Reload en boucle ne remet rien à zéro) et moins de size touches depuis le dernier rechargement.
+-- Cette méthode permet de vérifier le chargeur lorsqu'un tir arrive (ShotFired, ou touche orpheline) : aucun rechargement
+-- inachevé (le client ne tire pas en RELOADING, un Reload en boucle ne remet rien à zéro) et moins de size tirs comptés
+-- depuis le dernier rechargement.
 function ShotRules.checkMagazine(mag: Magazine, size: number, reloadTime: number, now: number): (boolean, string?)
 	ShotRules.settleReload(mag, reloadTime, now)
 	local reloadAt = mag.reloadAt
 	if reloadAt then
 		return false,
 			string.format(
-				"touche pendant le rechargement (depuis %.2f s, min %.2f s)",
+				"tir pendant le rechargement (depuis %.2f s, min %.2f s)",
 				-- Un Reload reçu pendant l'equip démarre à la fin de l'equip : pas de durée négative au journal
 				math.max(0, now - reloadAt),
 				reloadTime - ShotRules.RELOAD_TOLERANCE
@@ -323,12 +332,14 @@ function ShotRules.checkMagazine(mag: Magazine, size: number, reloadTime: number
 	if mag.shots < size then
 		return true
 	end
-	return false, string.format("chargeur vide (%d touches) sans rechargement", mag.shots)
+	return false, string.format("chargeur vide (%d tirs) sans rechargement", mag.shots)
 end
 
--- Cette méthode permet de compter une touche acceptée dans le chargeur lorsqu'elle est appliquée.
-function ShotRules.countShot(mag: Magazine)
+-- Cette méthode permet de compter un tir dans le chargeur lorsqu'il est accepté : ShotFired relayé, ou touche orpheline
+-- appliquée (#215 : chaque tir n'est compté qu'une fois).
+function ShotRules.countShot(mag: Magazine, now: number)
 	mag.shots += 1
+	mag.lastShotAt = now
 end
 
 -- Cette méthode permet de lister les instants où rembobiner la cible lorsqu'un coup de mêlée arrive (sans instant

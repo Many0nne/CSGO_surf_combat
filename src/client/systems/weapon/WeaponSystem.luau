@@ -239,7 +239,7 @@ local function onToolActivated(tool)
 	s.lastFire = now
 	s.nextFireTime = now + firedelay
 	weaponState = "FIRING"
-	replicateAction("Shoot")
+	-- Pas de WeaponAction "Shoot" : le serveur joue le recul 3P en relayant le ShotFired accepté (#215)
 	ViewmodelSystem.playAnimation("Shoot")
 	ScopeSystem.resetVisuals()
 	HitscanSystem.resolveHit(ViewmodelSystem.getActiveViewmodel())

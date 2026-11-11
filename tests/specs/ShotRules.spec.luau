@@ -190,7 +190,7 @@ return function(T, Loader)
 		T.it("remplit le chargeur à la fin d'un rechargement, pas avant", function()
 			local mag = ShotRules.newMagazine()
 			for _ = 1, 5 do
-				ShotRules.countShot(mag)
+				ShotRules.countShot(mag, 10)
 			end
 			T.expectEqual((ShotRules.checkMagazine(mag, 5, 3.7, 20)), false, "vide")
 			ShotRules.startReload(mag, 3.7, 20)
