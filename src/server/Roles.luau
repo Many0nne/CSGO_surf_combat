@@ -1,7 +1,7 @@
 -- Rôles des joueurs (#266), décidés par le serveur seul. Source : les listes d'UserId ci-dessous (versionnées, jamais
 -- répliquées) + game.CreatorId ajouté d'office à Admin. Passer à un groupe Roblox ne change que `compute`.
 -- L'attribut `Role` posé sur le Player est INFORMATIF (affichage client) : il n'ouvre aucun droit, le serveur relit
--- sa propre table (`hasRole`), jamais l'attribut. Ajouter un rôle = une ligne dans LISTS (et dans DISPLAY_ORDER).
+-- sa propre table (`hasRole`), jamais l'attribut. Ajouter un rôle = une ligne dans LISTS (et DISPLAY_ORDER, type Role).
 local Players = game:GetService("Players")
 local ServerScriptService = game:GetService("ServerScriptService")
 
