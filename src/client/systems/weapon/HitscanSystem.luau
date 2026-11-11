@@ -1,5 +1,8 @@
 local Players = game:GetService("Players")
 local Debris = game:GetService("Debris")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local WeaponConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WeaponConfig"))
 
 local HitscanSystem = {}
 
@@ -55,7 +58,10 @@ function HitscanSystem.resolveHit(activeViewmodel: Model?): string
 	params.FilterType = Enum.RaycastFilterType.Exclude
 
 	local origin = cam.CFrame.Position
-	local ray_dir = cam.CFrame.LookVector * 2048
+	local direction = cam.CFrame.LookVector
+	-- Instant du tir sur l'horloge serveur : le serveur y rembobine la cible (#174)
+	local shotTime = workspace:GetServerTimeNow()
+	local ray_dir = direction * WeaponConfig.HITSCAN_RANGE
 	local result = workspace:Raycast(origin, ray_dir, params)
 	local endpoint = result and result.Position or (origin + ray_dir)
 	spawnTracer(origin, endpoint)
@@ -75,7 +81,8 @@ function HitscanSystem.resolveHit(activeViewmodel: Model?): string
 	end
 
 	if hitscanEvent and targetChar then
-		hitscanEvent:FireServer(targetChar, hit)
+		-- Ce que le tir a réellement fait, vérifié par le serveur (origine, visée, ligne de vue, portée : #174)
+		hitscanEvent:FireServer(targetChar, hit, origin, direction, result.Position, shotTime)
 	end
 	return "Shoot_human"
 end

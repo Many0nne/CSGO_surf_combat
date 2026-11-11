@@ -134,7 +134,8 @@ return function(T, Loader)
 			local char, part = Instance.new("Model"), Instance.new("Part")
 			T.expectEqual(honest(N.MELEE_DAMAGE, char, "primary"), "ok")
 			T.expectEqual(honest(N.MELEE_DAMAGE, char, "secondary"), "ok")
-			T.expectEqual(honest(N.HITSCAN_DAMAGE, char, part), "ok")
+			local shot = { Vector3.new(0, 5, 0), Vector3.new(1, 0, 0), Vector3.new(80, 5, 0), 1234.5 }
+			T.expectEqual(honest(N.HITSCAN_DAMAGE, char, part, table.unpack(shot)), "ok")
 			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.new(10, -500, 3), 3.1, 0), "ok")
 			T.expectEqual(honest(N.WEAPON_ACTION, "Shoot"), "ok")
 			T.expectEqual(honest(N.WEAPON_ACTION, "Reload"), "ok")
@@ -145,13 +146,25 @@ return function(T, Loader)
 		end)
 
 		T.it("ignore sans violation un personnage propre au client (ragdoll local)", function()
-			T.expectEqual(honest(N.HITSCAN_DAMAGE, nil, nil), "missing")
+			T.expectEqual(honest(N.HITSCAN_DAMAGE, nil, nil, Vector3.zero, Vector3.xAxis, Vector3.xAxis, 0), "missing")
 			T.expectEqual(honest(N.MELEE_DAMAGE, nil, "primary"), "missing")
 		end)
 
 		T.it("refuse les types impossibles", function()
 			T.expectEqual(honest(N.MELEE_DAMAGE, Instance.new("Model"), "backstab"), "malformed")
 			T.expectEqual(honest(N.HITSCAN_DAMAGE, "Head", Instance.new("Part")), "malformed")
+			local char, part = Instance.new("Model"), Instance.new("Part")
+			T.expectEqual(honest(N.HITSCAN_DAMAGE, char, part), "malformed", "tir sans origine (ancien client)")
+			T.expectEqual(
+				honest(N.HITSCAN_DAMAGE, char, part, Vector3.zero, Vector3.new(0 / 0, 0, 0), Vector3.xAxis, 0),
+				"malformed",
+				"direction NaN"
+			)
+			T.expectEqual(
+				honest(N.HITSCAN_DAMAGE, char, part, Vector3.zero, Vector3.xAxis, Vector3.xAxis, math.huge),
+				"malformed",
+				"instant infini"
+			)
 			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.new(0 / 0, 0, 0), 0, 0), "malformed")
 			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.zero, nil, 0), "malformed")
 			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.zero, 0, nil), "malformed", "numéro de correction absent")

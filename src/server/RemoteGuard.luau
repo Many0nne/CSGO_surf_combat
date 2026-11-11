@@ -171,7 +171,19 @@ RemoteGuard.RULES = {
 			RemoteGuard.enum({ WeaponConfig.AttackKind.PRIMARY, WeaponConfig.AttackKind.SECONDARY }),
 		},
 	},
-	[N.HITSCAN_DAMAGE] = { rate = 5, burst = 5, args = { RemoteGuard.instance(), RemoteGuard.instance() } },
+	-- Cible, partie touchée, origine, direction, point d'impact, instant du tir (#174, contrôlés ensuite par ShotRules)
+	[N.HITSCAN_DAMAGE] = {
+		rate = 5,
+		burst = 5,
+		args = {
+			RemoteGuard.instance(),
+			RemoteGuard.instance(),
+			RemoteGuard.vector3(),
+			RemoteGuard.vector3(),
+			RemoteGuard.vector3(),
+			RemoteGuard.number(),
+		},
+	},
 	[N.WEAPON_ACTION] = { rate = 8, burst = 8, args = { RemoteGuard.enum({ "Shoot", "Reload" }) } },
 	[N.CHARACTER_SYNC] = {
 		rate = 40,

@@ -19,13 +19,22 @@ return function(T, Loader)
 		return character:FindFirstChild("HumanoidRootPart")
 	end
 
-	-- Cette méthode permet d'ajouter une partie sous un parent lorsqu'un test tire sur une zone donnée.
-	local function addPart(parent, name: string)
+	-- Cette méthode permet d'ajouter une partie sous un parent lorsqu'un test tire sur une zone donnée ; elle est posée
+	-- sur la racine du personnage qui la contient (Lune n'a pas de Position par défaut), décalée de offset.
+	local function addPart(parent, name: string, offset: Vector3?)
 		local part = Instance.new("Part")
 		part.Name = name
+		part.Size = Vector3.new(1, 1, 1)
+		local holder = parent
+		local root = holder:FindFirstChild("HumanoidRootPart")
+			or (holder.Parent and holder.Parent:FindFirstChild("HumanoidRootPart"))
+		part.Position = (if root then root.Position else Vector3.zero) + (offset or Vector3.zero)
 		part.Parent = parent
 		return part
 	end
+
+	-- Hauteur de la caméra au-dessus de la racine (CameraConfig.CAM_HEIGHT_STAND) : origine d'un tir honnête.
+	local EYE = Vector3.new(0, 2.5, 0)
 
 	-- Cette méthode permet de mettre un outil en main d'un joueur lorsqu'un test attaque avec une arme donnée.
 	local function equip(player, toolName: string, weaponName: string?)
@@ -52,15 +61,60 @@ return function(T, Loader)
 		local loader = Loader.new({ Players = Players })
 		local Real = loader:require("src/server/Validator")
 		local Participants = loader:require("src/server/Participants")
+		local ShotRules = loader:require("src/server/ShotRules")
+		-- Monde simulé de la validation des tirs (#174) : horloge serveur, historiques (fonction t -> position par
+		-- personnage, sinon pas d'historique), obstacle de la map, violations reçues.
+		local world = { now = 100, histories = {}, obstructed = false, reports = {} }
+		Real.setShotWorld({
+			serverNow = function()
+				return world.now
+			end,
+			positionAt = function(char, t)
+				local history = world.histories[char]
+				return if history then history(math.clamp(t, world.now - 0.4, world.now)) else nil
+			end,
+			isObstructed = function()
+				return world.obstructed
+			end,
+			report = function(attacker, check, severity, detail)
+				table.insert(
+					world.reports,
+					{ attacker = attacker, check = check, severity = severity, detail = detail }
+				)
+			end,
+		})
 		local nextUserId = 0
 		local function participantOf(attacker)
 			return if attacker.isBot then attacker else Participants.fromPlayer(attacker)
 		end
+		-- Cette méthode permet de construire le tir qu'enverrait notre client lorsqu'un test ne porte pas sur sa
+		-- validation : depuis l'œil du tireur, droit sur la partie touchée, à l'instant présent.
+		local function honestShot(attacker, hitPart)
+			local char = attacker.Character
+			local root = char and char:FindFirstChild("HumanoidRootPart")
+			if not root or typeof(hitPart) ~= "Instance" or not hitPart:IsA("BasePart") then
+				return nil
+			end
+			local origin = root.Position + EYE
+			return {
+				origin = origin,
+				direction = (hitPart.Position - origin).Unit,
+				hitPos = hitPart.Position,
+				shotTime = world.now,
+			}
+		end
 		local Validator = {
 			DEBUG_TARGET_ATTRIBUTE = Real.DEBUG_TARGET_ATTRIBUTE,
+			MAX_HITSCAN_RANGE = Real.MAX_HITSCAN_RANGE,
 			hitOutcome = Real.hitOutcome,
-			authorizeHitscan = function(attacker, ...)
-				return Real.authorizeHitscan(participantOf(attacker), ...)
+			-- Sans shot, un joueur tire comme notre client ; `false` envoie un tir sans shot (client modifié)
+			authorizeHitscan = function(attacker, targetCharacter, hitPart, now, shot)
+				if shot == nil and not attacker.isBot then
+					shot = honestShot(attacker, hitPart)
+				elseif shot == false then
+					shot = nil
+				end
+				return Real.authorizeHitscan(participantOf(attacker), targetCharacter, hitPart, now, shot)
 			end,
 			authorizeMelee = function(attacker, ...)
 				return Real.authorizeMelee(participantOf(attacker), ...)
@@ -94,7 +148,7 @@ return function(T, Loader)
 			end
 			return bot
 		end
-		return Validator, makePlayer, makeBot
+		return Validator, makePlayer, makeBot, world, ShotRules
 	end
 
 	T.describe("Validator : bots (#137)", function()
@@ -139,8 +193,16 @@ return function(T, Loader)
 
 		T.it("refuse un tir au-delà de la portée max", function()
 			local Validator, makePlayer = setup()
-			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(251, 0, 0))
+			local a = makePlayer(Vector3.zero, "AWP")
+			local b = makePlayer(Vector3.new(Validator.MAX_HITSCAN_RANGE + 1, 0, 0))
 			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), 0), nil)
+		end)
+
+		T.it("accepte un tir lointain dans la portée du client (plus de borne à 250 studs)", function()
+			local Validator, makePlayer, _, world = setup()
+			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(1500, 0, 0))
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), 0), 115)
+			T.expectEqual(#world.reports, 0, "violation pour un tir légitime")
 		end)
 
 		T.it("refuse un coup de melee au-delà de 10 studs", function()
@@ -394,6 +456,265 @@ return function(T, Loader)
 			local b = makePlayer(Vector3.new(5, 0, 0), nil, nil, Vector3.new(-1, 0, 0))
 			addPart(b.Character, "Head")
 			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), 50)
+		end)
+	end)
+
+	T.describe("Validator : validation des tirs de joueur (#174)", function()
+		-- Cette méthode permet de préparer un tireur à l'AWP, une cible à 100 studs et sa tête lorsqu'un test valide un
+		-- tir ; modes : contrôles à forcer (ex. { direction = "block" }), les autres gardent leur défaut.
+		local function setupShot(modes: { [string]: string }?)
+			local Validator, makePlayer, makeBot, world, ShotRules = setup()
+			for check, mode in modes or {} do
+				ShotRules.MODES[check] = mode
+			end
+			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(100, 0, 0))
+			local head = addPart(b.Character, "Head", Vector3.new(0, 2, 0))
+			return Validator, a, b, head, world, makeBot, ShotRules
+		end
+
+		-- Tous les contrôles bloquants : le cas le plus strict pour un tir honnête ou un tir de bot.
+		local ALL_BLOCK = {
+			shape = "block",
+			origin = "block",
+			direction = "block",
+			distance = "block",
+			lineOfSight = "block",
+		}
+
+		-- Cette méthode permet de construire un tir de a vers un point, avec un impact annoncé (le point par défaut).
+		local function shotToward(a, point: Vector3, hitPos: Vector3?, shotTime: number?)
+			local origin = rootOf(a.Character).Position + EYE
+			return {
+				origin = origin,
+				direction = (point - origin).Unit,
+				hitPos = hitPos or point,
+				shotTime = shotTime or 100,
+			}
+		end
+
+		-- Cette méthode permet de lister les contrôles signalés au journal lorsqu'un test les vérifie.
+		local function reportedChecks(world): string
+			local checks = {}
+			for _, report in world.reports do
+				table.insert(checks, report.check)
+			end
+			return table.concat(checks, ",")
+		end
+
+		T.it("accepte un tir honnête sans aucune violation, contrôles bloquants", function()
+			local Validator, a, b, head, world = setupShot(ALL_BLOCK)
+			local damage, isHeadshot = Validator.authorizeHitscan(a, b.Character, head, 0, shotToward(a, head.Position))
+			T.expectEqual(damage, 460)
+			T.expectEqual(isHeadshot, true)
+			T.expectEqual(reportedChecks(world), "")
+		end)
+
+		T.it("livre origine, direction et ligne de vue en journal seul, forme et distance bloquantes", function()
+			local _, _, _, _, _, _, ShotRules = setupShot()
+			T.expectEqual(ShotRules.MODES.origin, "log")
+			T.expectEqual(ShotRules.MODES.direction, "log")
+			T.expectEqual(ShotRules.MODES.lineOfSight, "log")
+			T.expectEqual(ShotRules.MODES.shape, "block")
+			T.expectEqual(ShotRules.MODES.distance, "block")
+		end)
+
+		T.it("refuse un tir de joueur sans origine ni direction (forme), en violation forte", function()
+			local Validator, a, b, head, world = setupShot()
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, head, 0, false), nil)
+			T.expectEqual(reportedChecks(world), "shape")
+			T.expectEqual(world.reports[1].severity, "high")
+		end)
+
+		T.it("refuse une direction non unitaire sans démarrer la cadence", function()
+			local Validator, a, b, head, world = setupShot()
+			local shot = shotToward(a, head.Position)
+			shot.direction *= 3
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, head, 10, shot), nil)
+			T.expectEqual(reportedChecks(world), "shape")
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, head, 10.1, shotToward(a, head.Position)), 460)
+		end)
+
+		T.it("tir sur une cible non visée : journalisé en mode log, refusé en mode block", function()
+			-- Silent aim : impact annoncé sur la tête, rayon tiré à 30 studs de là
+			local Validator, a, b, head, world = setupShot()
+			local shot = shotToward(a, head.Position + Vector3.new(0, 0, 30), head.Position)
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, head, 0, shot), 460, "mode log : tir appliqué")
+			T.expectEqual(reportedChecks(world), "direction")
+			T.expectEqual(world.reports[1].severity, "medium")
+
+			Validator, a, b, head, world = setupShot({ direction = "block" })
+			shot = shotToward(a, head.Position + Vector3.new(0, 0, 30), head.Position)
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, head, 0, shot), nil, "mode block : tir refusé")
+			T.expectEqual(reportedChecks(world), "direction")
+		end)
+
+		T.it("refuse en mode block un rayon qui passe à côté de la partie (hitbox agrandie)", function()
+			local Validator, a, b, head, world = setupShot({ direction = "block" })
+			-- Rayon à 6 studs de la tête, impact pris sur ce rayon : au-delà du rayon de la partie + tolérance
+			local aim = head.Position + Vector3.new(0, 0, 6)
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, head, 0, shotToward(a, aim)), nil)
+			T.expectEqual(reportedChecks(world), "direction")
+		end)
+
+		T.it("tir derrière un mur : journalisé en mode log, refusé en mode block", function()
+			local Validator, a, b, head, world = setupShot()
+			world.obstructed = true
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, head, 0, shotToward(a, head.Position)), 460)
+			T.expectEqual(reportedChecks(world), "lineOfSight")
+
+			Validator, a, b, head, world = setupShot({ lineOfSight = "block" })
+			world.obstructed = true
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, head, 0, shotToward(a, head.Position)), nil)
+			T.expectEqual(reportedChecks(world), "lineOfSight")
+		end)
+
+		T.it("origine loin du tireur : journalisée en mode log, refusée en mode block", function()
+			for _, mode in { "log", "block" } do
+				local Validator, a, b, head, world = setupShot({ origin = mode })
+				local shot = shotToward(a, head.Position)
+				shot.origin = head.Position - Vector3.new(10, 0, 0)
+				shot.direction = Vector3.new(1, 0, 0)
+				T.expectEqual(
+					Validator.authorizeHitscan(a, b.Character, head, 0, shot),
+					if mode == "log" then 460 else nil,
+					mode
+				)
+				T.expectEqual(reportedChecks(world), "origin", mode)
+			end
+		end)
+
+		T.it("tolère l'origine d'un tireur rapide (surf) selon sa vitesse dans l'historique", function()
+			local Validator, a, b, head, world = setupShot(ALL_BLOCK)
+			-- 200 studs/s vers +X : la caméra du client est 10 studs devant la racine serveur
+			world.histories[a.Character] = function(t)
+				return Vector3.new(200 * (t - world.now), 0, 0)
+			end
+			local shot = shotToward(a, head.Position)
+			shot.origin += Vector3.new(10, 0, 0)
+			shot.direction = (head.Position - shot.origin).Unit
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, head, 0, shot), 460)
+			T.expectEqual(reportedChecks(world), "")
+		end)
+
+		T.it("refuse au-delà de 250 studs un tir derrière un mur, même en journal seul", function()
+			local Validator, makePlayer, _, world = setup()
+			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(600, 0, 0))
+			local head = addPart(b.Character, "Head", Vector3.new(0, 2, 0))
+			world.obstructed = true
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, head, 0, shotToward(a, head.Position)), nil)
+			T.expectEqual(reportedChecks(world), "lineOfSight")
+			T.expect(string.find(world.reports[1].detail, "refusé", 1, true) ~= nil, "refus non indiqué au journal")
+		end)
+
+		T.it("teste la ligne de vue jusqu'à la partie quand l'impact forgé est près de l'origine", function()
+			local Validator, makePlayer, _, world = setup()
+			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(600, 0, 0))
+			local head = addPart(b.Character, "Head", Vector3.new(0, 2, 0))
+			world.obstructed = true
+			local shot = shotToward(a, head.Position)
+			shot.hitPos = shot.origin + shot.direction * 0.3
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, head, 0, shot), nil, "mur contourné")
+			T.expect(string.find(reportedChecks(world), "lineOfSight", 1, true) ~= nil, "ligne de vue non testée")
+		end)
+
+		T.it("applique un tir lointain dont seule la visée échoue, en journal seul", function()
+			local Validator, makePlayer, _, world = setup()
+			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(600, 0, 0))
+			local head = addPart(b.Character, "Head", Vector3.new(0, 2, 0))
+			local shot = shotToward(a, head.Position + Vector3.new(0, 0, 30), head.Position)
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, head, 0, shot), 460)
+			T.expectEqual(reportedChecks(world), "direction")
+		end)
+
+		T.it("refuse un tir au-delà de la portée du client", function()
+			local Validator, a, b, head, world = setupShot()
+			local shot = shotToward(a, head.Position)
+			shot.hitPos = shot.origin + shot.direction * 3000
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, head, 0, shot), nil)
+			T.expect(string.find(reportedChecks(world), "distance") ~= nil, "distance non signalée")
+		end)
+
+		T.it("vise la cible rembobinée à shotTime - INTERP_DELAY, pas sa position actuelle", function()
+			local Validator, a, b, head, world = setupShot({ direction = "block" })
+			-- La cible était à Z = 0 jusqu'à now - 0,02 s, puis a été posée 40 studs plus loin
+			world.histories[b.Character] = function(t)
+				return if t < world.now - 0.02 then Vector3.new(100, 0, 0) else Vector3.new(100, 0, 40)
+			end
+			rootOf(b.Character).Position = Vector3.new(100, 0, 40)
+			head.Position = Vector3.new(100, 2, 40)
+			local seen = Vector3.new(100, 2, 0)
+			T.expectEqual(
+				Validator.authorizeHitscan(a, b.Character, head, 10, shotToward(a, seen)),
+				460,
+				"vue du client"
+			)
+			T.expectEqual(reportedChecks(world), "")
+			T.expectEqual(
+				Validator.authorizeHitscan(a, b.Character, head, 20, shotToward(a, head.Position)),
+				nil,
+				"position actuelle, que le tireur ne voyait pas encore"
+			)
+		end)
+
+		T.it("borne le rembobinage : un shotTime très ancien ne rend pas une position ancienne", function()
+			local Validator, a, b, head, world = setupShot({ direction = "block" })
+			-- Il y a plus de 0,4 s la cible était 40 studs plus loin ; le client réclame cet instant
+			world.histories[b.Character] = function(t)
+				return if t < world.now - 0.4 then Vector3.new(100, 0, 40) else Vector3.new(100, 0, 0)
+			end
+			local old = Vector3.new(100, 2, 40)
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, head, 0, shotToward(a, old, nil, 90)), nil)
+		end)
+
+		T.it("refuse une cible morte même si son historique répond encore (corps en place)", function()
+			local Validator, a, b, head, world = setupShot()
+			world.histories[b.Character] = function()
+				return Vector3.new(100, 0, 0)
+			end
+			b.Character:FindFirstChildWhichIsA("Humanoid").Health = 0
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, head, 0, shotToward(a, head.Position)), nil)
+		end)
+
+		T.it("refuse les tirs de joueurs tant que le monde n'est pas branché, pas ceux des bots", function()
+			local owners = {}
+			local loader = Loader.new({
+				Players = {
+					GetPlayerFromCharacter = function(_, character)
+						return owners[character]
+					end,
+				},
+			}, { warn = function() end })
+			local Real = loader:require("src/server/Validator")
+			local Participants = loader:require("src/server/Participants")
+			local player = { UserId = 1, Name = "Joueur", Character = makeCharacter(Vector3.zero) }
+			owners[player.Character] = player
+			equip(player, "AWP")
+			local bot = Participants.addBot("Marcel")
+			local target = makeCharacter(Vector3.new(10, 0, 0))
+			Participants.setCharacter(bot, target)
+			local shot = shotToward(player, Vector3.new(10, 0, 0))
+			T.expectEqual(Real.authorizeHitscan(Participants.fromPlayer(player), target, rootOf(target), 0, shot), nil)
+			-- Le bot riposte : son tir ne dépend pas du monde
+			bot.Character = target
+			equip(bot, "AWP")
+			T.expectEqual(Real.authorizeHitscan(bot, player.Character, rootOf(player.Character), 0), 115)
+		end)
+
+		T.it("garde la portée des bots à 250 studs entre racines, comme avant #174", function()
+			local Validator, makePlayer, makeBot = setup()
+			local bot = makeBot(Vector3.zero, "AWP")
+			local near, far = makePlayer(Vector3.new(249, 0, 0)), makePlayer(Vector3.new(251, 0, 0))
+			T.expectEqual(Validator.authorizeHitscan(bot, near.Character, rootOf(near.Character), 0), 115)
+			T.expectEqual(Validator.authorizeHitscan(bot, far.Character, rootOf(far.Character), 2), nil)
+		end)
+
+		T.it("ne refuse aucun tir de bot, tous contrôles bloquants, et ne journalise rien", function()
+			local Validator, _, b, head, world, makeBot = setupShot(ALL_BLOCK)
+			world.obstructed = true
+			local bot = makeBot(Vector3.new(0, 0, 0), "AWP")
+			T.expectEqual(Validator.authorizeHitscan(bot, b.Character, head, 0), 460, "tir de bot refusé")
+			T.expectEqual(Validator.authorizeHitscan(bot, b.Character, rootOf(b.Character), 2), 115, "second tir")
+			T.expectEqual(reportedChecks(world), "")
 		end)
 	end)
 
