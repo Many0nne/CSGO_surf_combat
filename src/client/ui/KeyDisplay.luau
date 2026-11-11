@@ -26,7 +26,14 @@ local TEXT_SIZE_WIDE = 16 -- libellé de plus de deux caractères dans une case 
 
 local KeyDisplay = {}
 
-type KeyView = { entry: HUDRules.KeyDisplayEntry, frame: Frame, stroke: UIStroke, label: TextLabel, down: boolean }
+type KeyView = {
+	entry: HUDRules.KeyDisplayEntry,
+	codes: { Enum.KeyCode }, -- touches du clavier de l'entrée, résolues une fois à la construction
+	frame: Frame,
+	stroke: UIStroke,
+	label: TextLabel,
+	down: boolean,
+}
 
 local gui: ScreenGui?
 local grid: Frame?
@@ -35,19 +42,19 @@ local builtMode: string? -- mode dont la grille est construite
 local hudVisible = false -- règle « HUD de jeu visible » (HUDRules), posée par GameStateController
 local menuOpen = false -- écran Réglages ouvert (SettingsMenu)
 
--- Cette méthode permet de savoir si une touche ou un bouton de souris est enfoncé lorsque la grille est rafraîchie.
-local function isDown(entry: HUDRules.KeyDisplayEntry): boolean
-	if entry.mouse then
-		local button = if entry.mouse == 1 then Enum.UserInputType.MouseButton1 else Enum.UserInputType.MouseButton2
+-- Cette méthode permet de savoir si une touche ou un bouton de souris est enfoncé lorsque la grille est rafraîchie ;
+-- `typing` : un champ de texte (chat) a le focus et capte le clavier, le jeu ne reçoit pas ces touches.
+local function isDown(view: KeyView, typing: boolean): boolean
+	local mouse = view.entry.mouse
+	if mouse then
+		local button = if mouse == 1 then Enum.UserInputType.MouseButton1 else Enum.UserInputType.MouseButton2
 		return UserInputService:IsMouseButtonPressed(button)
 	end
-	-- Un champ de texte focalisé (chat) capte le clavier : le jeu ne reçoit pas ces touches, elles ne s'allument pas
-	if UserInputService:GetFocusedTextBox() then
+	if typing then
 		return false
 	end
-	local names: { string } = entry.keys or {}
-	for _, name in names do
-		if UserInputService:IsKeyDown((Enum.KeyCode :: any)[name]) then
+	for _, code in view.codes do
+		if UserInputService:IsKeyDown(code) then
 			return true
 		end
 	end
@@ -113,14 +120,19 @@ local function build(mode: string)
 			Size = UDim2.fromScale(1, 1),
 			Parent = frame,
 		})
-		local view: KeyView = { entry = entry, frame = frame, stroke = stroke, label = label, down = false }
+		local codes = {}
+		for _, name in entry.keys or {} :: { string } do
+			table.insert(codes, (Enum.KeyCode :: any)[name])
+		end
+		local view: KeyView =
+			{ entry = entry, codes = codes, frame = frame, stroke = stroke, label = label, down = false }
 		paint(view, false)
 		table.insert(views, view)
 	end
 end
 
 -- Cette méthode permet d'afficher ou de masquer la grille, et de la reconstruire si le mode a changé, lorsque le réglage,
--- le HUD ou l'écran Réglages changent.
+-- le HUD ou l'écran Réglages changent ; grille masquée, les cases repartent au repos (pas de case restée allumée).
 local function update()
 	if not gui then
 		return
@@ -129,9 +141,19 @@ local function update()
 	gui.Enabled = HUDRules.keyDisplayVisible(mode, hudVisible, menuOpen)
 	if mode ~= builtMode then
 		build(mode)
-		return
 	end
-	-- Libellés relus à chaque changement de réglage : la disposition du clavier peut avoir changé depuis la construction
+	if not gui.Enabled then
+		for _, view in views do
+			if view.down then
+				paint(view, false)
+			end
+		end
+	end
+end
+
+-- Cette méthode permet de relire les libellés des cases lorsque le HUD de jeu apparaît : la disposition du clavier a pu
+-- changer depuis la construction de la grille.
+local function refreshLabels()
 	for _, view in views do
 		local text = labelOf(view.entry)
 		if view.label.Text ~= text then
@@ -146,8 +168,9 @@ local function poll()
 	if not (gui and gui.Enabled) then
 		return
 	end
+	local typing = UserInputService:GetFocusedTextBox() ~= nil
 	for _, view in views do
-		local down = isDown(view.entry)
+		local down = isDown(view, typing)
 		if down ~= view.down then
 			paint(view, down)
 		end
@@ -156,8 +179,12 @@ end
 
 -- Cette méthode permet de savoir si le HUD de jeu est affiché lorsque l'état client change (règle HUDRules.gameHudVisible).
 function KeyDisplay.setHudVisible(show: boolean)
+	local appearing = show and not hudVisible
 	hudVisible = show
 	update()
+	if appearing then
+		refreshLabels()
+	end
 end
 
 -- Cette méthode permet de masquer les touches lorsque l'écran Réglages s'ouvre ou se ferme (SettingsMenu).
