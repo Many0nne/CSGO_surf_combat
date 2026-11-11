@@ -87,6 +87,16 @@ par `ScaleTo` avec le reste de l'arme.
   elle tire sans flamme et son rayon part de l'œil.
 - **Vérifier qu'un tir ne laisse rien :** le rayon crée deux `Attachment` dans `Terrain` (et un `Beam`), tous nommés
   `ShotTracer` : leur nombre revient à 0 après `TRACER_LIFETIME`.
+- **Mesures (#54, Studio) :** bouche du canon du viewmodel AWP à 8,5 studs de la caméra (un mur plus proche que ça :
+  pas de rayon local) ; flamme 3P à 0,7 × la taille du viewmodel (`ScaleTo` réduit aussi les particules) ; créer un
+  rayon coûte ~0,1 ms ; un tir relayé de bot donne un rayon qui part exactement du canon 3P.
+- **Juger la flamme en capture :** elle vit 0,1 s et commence invisible (taille 0, transparence 1), donc la figer
+  (`TimeScale = 0`) juste après l'`Emit` ne montre rien. Allonger plutôt `Lifetime` (par ex. 3 s, les courbes suivent),
+  `Emit`, puis capturer avec `screen_capture` du MCP. La capture de fenêtre par `PrintWindow` (`capture_server.py`)
+  montre bien le rayon, mais **pas les particules** : une flamme absente de ces images n'est pas une flamme absente.
+- **Piloter un tir de test (MCP, contexte Server) :** le remote `DebugPlaytest` accepte les commandes du helper,
+  `FireClient(player, id, "aim", { target = Vector3 })` puis `"attack", { tool = "AWP" }`. Un tir relayé de bot se
+  simule par `ShotFired:FireClient(player, botCharacter, "AWP", origine, direction)` (vrai chemin de `ShotEffects`).
 
 ## Publier un asset (Open Cloud)
 
