@@ -1116,13 +1116,29 @@ return function(T, Loader)
 			T.expectEqual(reportedChecks(world), "")
 		end)
 
-		T.it("accepte un tireur qui tourne : cible à 60° de son cap relayé", function()
-			local Validator, a, b, world = setupMelee(nil, ALL_BLOCK)
-			-- Cap relayé en retard : 60° à côté de la cible à 5 studs
-			local yaw = math.rad(60)
+		T.it("accepte un tireur qui tourne : cible à 80° de son cap relayé, à 7 studs", function()
+			local Validator, a, _, world, _, _, makePlayer = setupMelee(nil, ALL_BLOCK)
+			-- Cap relayé en retard de 80° (~1 000°/s pendant 80 ms) ; permis à 7 studs : 70° + asin(2 / 7) ≈ 86,6°
+			local far = makePlayer(Vector3.new(7, 0, 0), nil, nil, Vector3.new(-1, 0, 0))
+			local yaw = math.rad(80)
 			rootOf(a.Character).CFrame = CFrame.lookAt(Vector3.zero, Vector3.new(math.cos(yaw), 0, math.sin(yaw)))
-			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), 50)
+			T.expectEqual(Validator.authorizeMelee(a, far.Character, "primary", 0), 50)
 			T.expectEqual(reportedChecks(world), "")
+		end)
+
+		T.it("ne teste qu'une fois contre la map une cible immobile derrière un mur", function()
+			local Validator, a, b, world = setupMelee(nil, ALL_BLOCK)
+			world.histories[b.Character] = function()
+				return Vector3.new(5, 0, 0)
+			end
+			local raycasts = 0
+			world.obstructed = function()
+				raycasts += 1
+				return true
+			end
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), nil)
+			-- 9 positions identiques : une seule testée, racine à racine et œil à tête
+			T.expectEqual(raycasts, 2)
 		end)
 
 		T.it("élargit l'angle au contact : cible collée sur le côté acceptée", function()
