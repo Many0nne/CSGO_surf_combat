@@ -60,7 +60,10 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   l'action principale comme ENVOYER ou RETOUR), rouge d'impact au survol.
 - Réglages (`SettingsMenu.luau`, disposition C des schémas de #117, préférée aux sous-onglets en haut et à la liste
   unique qui défile) : catégories à gauche (barre ambrée sur l'active), lignes de 54 px à droite (nom, contrôle,
-  valeur os à ombre, filet). Contrôles : curseur (trace continue, poignée en pastille os, rouge au survol ; une barre segmentée ferait perdre
+  valeur os à ombre, filet). Place : 9 lignes au plus par catégorie avant les actions (`MenuPage.ExitY`), pas de
+  défilement ; une section qui ne tient pas devient une catégorie (VISEUR, #251). Un curseur sans décimale donne des
+  entiers (px du viseur) ; les autres gardent leur précision (ne pas arrondir : les sensibilités déjà sauvegardées
+  changeraient au chargement). Contrôles : curseur (trace continue, poignée en pastille os, rouge au survol ; une barre segmentée ferait perdre
   la précision de la sensibilité) et choix fermé « ‹ VALEUR › ». RÉTABLIR remet la catégorie affichée à ses valeurs par
   défaut. Ajouter un réglage : une ligne dans `buildCategories` (avec son champ dans `PlayerSettings` pour qu'il soit
   conservé) ; une catégorie sans réglage n'est pas créée.
@@ -109,16 +112,33 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   chargeur (couteau) et hors partie (`HUDRules.gameHudVisible`, via `GameStateController.applyGameHud`). Contrairement à
   la barre d'armes, il ne s'estompe pas.
 - Réglage « Auto-bhop » (#255) : catégorie MOUVEMENT de `SettingsMenu` (une seule ligne, ACTIVÉ par défaut), `PlayerSettings.autoBhop`, lu à chaque tick par `MovementController` et passé à `BhopSystem` : sans respawn.
-- `src/client/ui/Crosshair.luau` (#195) : réglage « Visée simplifiée » (Réglages > GRAPHISMES, `PlayerSettings.simpleAim`, coupé par
-  défaut). Quatre traits fins os (`ARM_LENGTH` 9 px, `ARM_THICKNESS` 2, `CENTER_GAP` 5) sans point central, doublés d'un contour
+- `src/client/ui/Crosshair.luau` (#195) : réglage « Visée simplifiée » (Réglages > VISEUR depuis #251, `PlayerSettings.simpleAim`, coupé par
+  défaut). Par défaut, quatre traits fins os (longueur 9 px, épaisseur 2, écart 5) sans point central, doublés d'un contour
   noir de `OUTLINE` 1 px (`OUTLINE_TRANSPARENCY` 0,1) : sur fond blanc seul le contour se lit, sur sol ou mur sombre le trait os.
+  **Viseur personnalisé (#251)** : catégorie VISEUR des Réglages, « Visée simplifiée » en tête (l'interrupteur), puis couleur
+  (palette fermée `UITheme.CrosshairPalette` : os, blanc, ambre, rouge d'impact, vert, cyan ; libellé du choix dans sa
+  couleur), longueur 2 à 20 px, épaisseur 1 à 6, écart central 0 à 15, point central, contour, opacité 0,20 à 1 (pas
+  d'invisible). Bornes et défauts : `PlayerSettings.CROSSHAIR` (défauts = rendu d'origine), validés par `sanitize` (px
+  entiers, couleur hors palette refusée). L'opacité vaut pour le trait et le contour. RÉTABLIR remet le style d'origine
+  sans couper la visée simplifiée. Aperçu sous les catégories : deux cases (sable clair, sombre) où `Crosshair.draw`
+  trace le viseur à sa taille réelle en px (le `UIScale` de l'écran est compensé par un `UIScale` inverse lu dans
+  l'attribut `Scale` de `UIKit.scaledRoot`). En jeu, le crosshair se redessine dès que son style change (clé
+  `Crosshair.styleKey`), sans respawn.
   Taille fixe en pixels, pas de `scaledRoot`. `ScreenGui` en `ScreenInsets.None` pour tomber sur le centre exact de la caméra,
   comme la lunette. Affichage = `HUDRules.crosshairVisible` appliquée à `HUDState` (voir « État du HUD ») : réglage actif, HUD de
   jeu visible (donc ni menu, ni mort, ni résultat), lunette absente et menu en partie fermé.
   Toutes les armes, couteau compris. Piste rejetée : point rouge central (criard, hors de la matière du HUD).
   Branches tracées par `Reticle.drawArms` (#222), comme le réticule de la lunette (`ScopeOverlay`) : quatre branches à
-  `gap` px du centre, longueur en px ou en part du parent, contour dessous plus épais de `outline.width` px par côté,
-  bouts fermés (`caps`, crosshair) ou ouverts (lunette), estompe `fade` en option (lunette). Un nouveau réticule passe par là.
+  `gap` px du centre, longueur en px ou en part du parent, contour de `outline.width` px par côté ; bouts ouverts
+  (lunette) : couche plus large posée dessous, sur laquelle joue l'estompe `fade` ; crosshair (`pixelAligned`) : traits
+  sur des px entiers (épaisseur impaire : un px de plus en bas ou à droite de l'axe, branches droite et basse décalées
+  d'un px pour garder l'écart symétrique ; des demi-px seraient arrondis frame par frame et décolleraient le contour ;
+  le `Root` du crosshair reste centré en part de l'écran : un `ScreenGui` désactivé garde une `AbsoluteSize` périmée,
+  800x600, un centre calculé en px tombait hors du centre ; avec la mise à l'échelle d'affichage de Windows, un px
+  d'interface n'est de toute façon pas un px physique), contour en cadre qui ferme les bouts, rien dessous (#251 : avec un contour dessous,
+  baisser l'opacité assombrissait le trait au lieu de le rendre translucide). Point central `dot` en option. Limite connue : à opacité réduite et écart central
+  inférieur à environ épaisseur / 2 + 2 px, branches, point et contours se superposent au centre et y paraissent plus
+  opaques. Un nouveau réticule passe par là.
 - `src/client/ui/KeyDisplay.luau` (#197) : réglage « Affichage des touches » (Réglages > GRAPHISMES, `PlayerSettings.keyDisplay`,
   trois valeurs `off` (défaut) / `simple` / `full`, validées par `sanitize`). Grille façon clavier en bas au centre (`BOTTOM_MARGIN`
   40 px, `scaledRoot`, entre le compteur de vitesse à gauche et la barre d'armes à droite) : touches de `KEY_SIZE` 40 px, `KEY_GAP` 4.
