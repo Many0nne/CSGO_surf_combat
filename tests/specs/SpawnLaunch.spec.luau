@@ -31,5 +31,15 @@ return function(T, Loader)
 			T.expectNear(v.Magnitude, 120, 1e-4)
 			T.expectNear(v.Z, -120, 1e-4)
 		end)
+
+		T.it("borne un lancement trop rapide à la limite du serveur (#212)", function()
+			local Config = Loader.new():require("src/shared/MovementConfig")
+			local v = SpawnLaunch.velocity(Vector3.new(0, -0.3, -1), 1000)
+			T.expectNear(v.Magnitude, Config.MAX_SPEED_SERVER, 1e-4)
+			T.expectNear(v.Y / v.Z, 0.3, 1e-4)
+			-- Une vitesse négative (erreur de signe dans la map) ne lance pas à l'envers à pleine vitesse
+			T.expectEqual(SpawnLaunch.velocity(Vector3.new(0, 0, -1), -1000).Magnitude, 0)
+			T.expectEqual(SpawnLaunch.velocity(Vector3.new(0, 0, -1), 0 / 0), Vector3.zero)
+		end)
 	end)
 end

@@ -110,6 +110,8 @@ local ok, err = pcall(function()
 				local surfFric = surfNormal and Config.SURF_FRICTION or 1
 				velocity = PhysicsStepAir.step(velocity, wishdir, Config.RUN_SPEED, surfFric, dt)
 			end
+			-- Plafond horizontal avant et après le déplacement, comme CharacterMotor.move (#212)
+			velocity = PhysicsUtils.clampHorizontal(velocity, Config.MAX_HORIZONTAL_SPEED, surfNormal ~= nil)
 			if isG then
 				local snapY = gnd.hitPosition.Y + ci.rootToBottom
 				local moveVec = Vector3.new(velocity.X * dt, 0, velocity.Z * dt)
@@ -172,6 +174,7 @@ local ok, err = pcall(function()
 					and hitNormal.Y < Config.SURF_NORMAL_Y
 				surfNormal = isSurf and hitNormal or nil
 			end
+			velocity = PhysicsUtils.clampHorizontal(velocity, Config.MAX_HORIZONTAL_SPEED, surfNormal ~= nil)
 			wasGrounded = isG
 			local spd = PhysicsUtils.getXZ(velocity).Magnitude
 			if prevSpd - spd > maxDrop then

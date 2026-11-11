@@ -23,8 +23,8 @@ envoyant des données plausibles. Là, on ne peut que détecter statistiquement,
 | Domaine | Validation actuelle | Où |
 |---|---|---|
 | Mêlée | Cible = autre participant vivant, arme de mêlée réellement en main, distance des racines ≤ 10 studs, dégâts et cadence lus dans `WeaponConfig` selon le type d'attaque, backstab recalculé sur les positions serveur (#47) ; pour un joueur, durée d'equip (#175, voir T2), orientation et ligne de vue vers la cible rembobinée (#176, journal seul, voir M1) | `src/server/Validator.luau` (`authorizeMelee`), `src/server/ShotRules.luau` |
-| Tir | Cible valide (vivante), arme à distance en main, partie touchée appartenant à la cible, distance des racines ≤ `Validator.MAX_HITSCAN_RANGE` (~2 196 studs ; bots : 250), cadence `FireDelay` à 0,15 s près, dégâts calculés par le serveur selon la zone ; pour un joueur, forme, origine, visée sur la cible rembobinée, portée et ligne de vue (#174, voir T1), durée d'equip et chargeur (#175, voir T2 ; l'equip vaut aussi pour la mêlée) | `src/server/Validator.luau` (`authorizeHitscan`, `validateShot`), `src/server/ShotRules.luau` |
-| Position | Forme (Vector3 et angle finis, coordonnées ≤ 1e5), personnage vivant, seau de distance (300 studs/s soutenus, silence plafonné), refus journalisé et corrigé (#172) ; noclip et vol journalisés (#177, journal seul), joueur silencieux au-dessus du vide déclaré tombé | `src/server/CharacterSync.luau` (`refuse`, `judgeGuard`, `onClientPosition`), `src/shared/CharacterSyncRules.luau` (`tryMove`), `src/shared/MovementGuardRules.luau` |
+| Tir | Cible valide (vivante), arme à distance en main, partie touchée appartenant à la cible, distance des racines ≤ `Validator.MAX_HITSCAN_RANGE` (~2 256 studs ; bots : 250), cadence `FireDelay` à 0,15 s près, dégâts calculés par le serveur selon la zone ; pour un joueur, forme, origine, visée sur la cible rembobinée, portée et ligne de vue (#174, voir T1), durée d'equip et chargeur (#175, voir T2 ; l'equip vaut aussi pour la mêlée) | `src/server/Validator.luau` (`authorizeHitscan`, `validateShot`), `src/server/ShotRules.luau` |
+| Position | Forme (Vector3 et angle finis, coordonnées ≤ 1e5), personnage vivant, seau de distance (450 studs/s soutenus, client plafonné à 420 horizontaux, silence plafonné), refus journalisé et corrigé (#172) ; noclip et vol journalisés (#177, journal seul), joueur silencieux au-dessus du vide déclaré tombé | `src/server/CharacterSync.luau` (`refuse`, `judgeGuard`, `onClientPosition`), `src/shared/CharacterSyncRules.luau` (`tryMove`), `src/shared/MovementGuardRules.luau` |
 | Réglages | Réglages entièrement assainis par `PlayerSettings.sanitize`, une écriture DataStore au plus toutes les 10 s | `src/server/SettingsStore.luau` (`onSaveSettings`) |
 | Feedback | Type `string`, longueur 10 à 500, délai de 60 s après un envoi réussi, 5 envois par semaine (DataStore) | `src/server/FeedbackService.luau` (`init`, `COOLDOWN`, `consumeWeeklyQuota`) |
 | Debug | Remote `DebugPlaytest` créé seulement dans Studio | `src/server/DebugPlaytest.luau` (`DebugPlaytest.init`) |
@@ -44,7 +44,7 @@ Impact : ce que gagne le tricheur et ce que subissent les autres. Coût : serveu
 | # | Menace | Impact aujourd'hui | Coût de la parade | Priorité |
 |---|---|---|---|---|
 | T1 | Tir sans viser, à travers les murs, hitbox agrandie (« silent aim ») | **Critique** : un tir accepté par cible à 250 studs, 1 par 1,46 s, tête choisie (460 dégâts) | Faible serveur, moyen en complexité | P1 |
-| D1 | Vitesse et téléportation | Fermé (#172) : 300 studs/s soutenus au plus, saut borné à 225 studs après un silence, refus corrigé | Faible | Fait |
+| D1 | Vitesse et téléportation | Fermé (#172, #212) : 450 studs/s soutenus au plus, saut borné à 337,5 studs après un silence, refus corrigé | Faible | Fait |
 | M1 | Coup de couteau dans toutes les directions (« kill aura ») | Détecté (#176, journal seul) : coup hors du cap ou à travers un mur journalisé ; **élevé** tant qu'il n'est pas en `block` | Faible | P2 |
 | R1 | Remotes sans débit ni garde (respawn, feedback) | Fermé (#170, #171) : garde commune, délai de réapparition et feedback limité en mémoire | Faible | Fait |
 | T2 | Munitions et durée d'equip | Fermé (#175) : touche refusée pendant l'equip et au 6e tir sans rechargement | Faible | Fait |
@@ -186,7 +186,7 @@ seul » (`tests/specs/Validator.spec.luau`). Les tests « mode block » couvrent
 
 La portée du serveur est celle du client : `WeaponConfig.HITSCAN_RANGE` = 2 048 studs, tirée par `HitscanSystem` et
 vérifiée par le contrôle `distance` (+ 10 studs). L'ancienne borne de 250 studs entre racines, qui refusait sans retour
-un tir légitime lointain, devient pour les joueurs `Validator.MAX_HITSCAN_RANGE` ≈ 2 196 studs (portée +
+un tir légitime lointain, devient pour les joueurs `Validator.MAX_HITSCAN_RANGE` ≈ 2 256 studs (portée +
 `MAX_SPEED_SERVER` × `MAX_REWIND`, chemin possible de la cible pendant le rembobinage, + hauteur de caméra + 25 de
 marge, calculé depuis ces constantes). Un échec `origin` ou `lineOfSight` au-delà de 250 studs reste refusé pendant la
 mesure (`LOG_ONLY_RANGE`, voir plus haut). Les bots gardent 250 studs (`BOT_HITSCAN_RANGE`, tirs inchangés) : ils
@@ -341,16 +341,18 @@ pose la racine et relaie (commentaire d'en-tête de `src/server/CharacterSync.lu
 juger les positions reçues.
 
 **Contrainte surf et bhop.** Les vitesses légitimes sont grandes : 90 studs/s mesurés en bhop de bots
-(`docs/bots.md:80`), 200 studs/s et plus en surf (`docs/performance.md:98`), d'où `MAX_SPEED_SERVER = 300`
-(`MovementConfig.MAX_SPEED_SERVER`). Le gain de vitesse en l'air vient de l'air strafe, pas d'une limite fixe : une
-borne de vitesse seule ne peut pas être serrée. S'y ajoutent les boosts de la map (`Maps.Map.Boosts`, geysers et
-lanceurs à vitesse imposée, portiques qui ajoutent `Boost` studs/s, `docs/maps.md:251-254`), détectés et appliqués par
-le client seul (commentaire d'en-tête de `src/client/systems/movement/BoostSystem.luau`) : une parade qui juge la vitesse ou la gravité
-doit les connaître (règles pures dans `src/shared/MapRules.luau`, réutilisables par le serveur). Attention : un
-geyser ou un lanceur impose sa vitesse (`Velocity`) sans la borner à `MAX_SPEED_SERVER` (`MapRules.velocityAfter`), et
-le lancement depuis le soleil prend l'attribut `Speed` tel quel : au-delà de 300 studs/s, le seau de D1 refuserait le
-joueur. Dizzy n'a ni boost ni `SunLaunch` aujourd'hui ; une map qui en ajoute doit rester sous 300 studs/s ou relever
-`MAX_SPEED_SERVER`.
+(`docs/bots.md:80`), 200 studs/s et plus en surf (`docs/performance.md:98`). Le gain de vitesse en l'air vient de l'air
+strafe, pas d'une limite fixe : une borne de vitesse seule ne peut pas être serrée. Depuis #212, le client plafonne donc
+sa vitesse comme Source, et le serveur se place juste au-dessus (voir « Plafond du client et limite du serveur » en
+D1). S'y ajoutent les boosts de la map (`Maps.Map.Boosts`, geysers et lanceurs à vitesse imposée, portiques qui
+ajoutent `Boost` studs/s, `docs/maps.md:251-254`), détectés et appliqués par le client seul (commentaire d'en-tête de
+`src/client/systems/movement/BoostSystem.luau`) : une parade qui juge la vitesse ou la gravité doit les connaître
+(règles pures dans `src/shared/MapRules.luau`, réutilisables par le serveur). Un geyser ou un lanceur impose sa vitesse
+(`Velocity`) et le lancement depuis le soleil prend l'attribut `Speed`, mais tous deux sont ramenés à
+`MAX_SPEED_SERVER` (450 studs/s, norme 3D) au plus (`MapRules.imposedVelocity`, `SpawnLaunch.velocity`, #212), sans
+avertissement, puis le client plafonne l'horizontale à 420 : une map ne peut pas, par erreur, faire refuser un joueur
+par le seau de D1. Un lanceur réglé au-delà (ou à plus de 420 horizontaux) n'atteint plus son point de chute calculé.
+Le serveur borne la vitesse verticale d'un geyser de la même façon pour l'enveloppe du vol (D2).
 
 ### D1. Vitesse et téléportation (fait, #172)
 
@@ -376,9 +378,9 @@ cible rend le kill aura (M1) praticable sur toute la map.
    `écoulé` = temps depuis le paquet précédent jugé (accepté **ou refusé**). Un déplacement accepté consomme son budget,
    le reste est gardé dans `stored`, plafonné à `MAX_DELTA_POS`. Un refus ne consomme rien, mais son temps est compté :
    se taire ou se faire refuser n'accumule rien. Constantes (`src/shared/MovementConfig.luau`) :
-   `MAX_SPEED_SERVER` = 300 studs/s, `MAX_DELTA_POS` = 75 studs (0,25 s mises de côté, pour la gigue et les paquets
-   groupés), `MAX_SILENCE` = 0,5 s. Bornes : 300 studs/s soutenus quel que soit le débit d'envoi, saut d'un paquet
-   ≤ 75 + 150 = 225 studs après n'importe quel silence. Le délai minimal de 0,025 s entre deux paquets a été retiré :
+   `MAX_SPEED_SERVER` = 450 studs/s, `MAX_DELTA_POS` = 112,5 studs (0,25 s mises de côté, pour la gigue et les paquets
+   groupés), `MAX_SILENCE` = 0,5 s (valeurs de #212, voir plus bas ; 300 et 75 avant). Bornes : 450 studs/s soutenus
+   quel que soit le débit d'envoi, saut d'un paquet ≤ 112,5 + 225 = 337,5 studs après n'importe quel silence. Le délai minimal de 0,025 s entre deux paquets a été retiré :
    des paquets groupés passent tous, chacun consomme le seau, le débit reste borné par la garde commune (40/s).
 2. **Refus** : journalisé `CheatLog` (`Movement`, gravité moyenne : un vrai lag peut en produire un), puis **correction**
    : le serveur envoie au client, par le remote fiable `MovementCorrection`, `(personnage, dernière position acceptée,
@@ -397,6 +399,32 @@ cible rend le kill aura (M1) praticable sur toute la map.
 4. Option non faite : borne d'accélération plutôt que de vitesse (la vitesse ne peut croître que de `AIR_ACCEL`/gravité
    × dt), plus serrée mais délicate avec les rampes ; à n'envisager qu'après mesure.
 
+**Plafond du client et limite du serveur (#212).** Avant #212, rien ne plafonnait la vitesse horizontale du client,
+et un surfeur honnête au-delà de 300 studs/s (vitesse 3D) aurait été corrigé. Faute de map de surf pour mesurer un bon
+surfeur, la règle de Source a été reprise :
+
+- **Client** : `MAX_HORIZONTAL_SPEED` = 420 studs/s, soit `sv_maxvelocity` (3 500 unités/s) × 0,12 (ratio unités
+  Source → studs déjà pris pour `RUN_SPEED`). Appliqué dans `CharacterMotor.move` (`PhysicsUtils.clampHorizontal`)
+  avant et après le déplacement, au sol, en l'air et en surf, pour le joueur comme pour les bots. Sous 420, rien ne
+  change (vecteur rendu tel quel). En surf, tout le vecteur est réduit (pas seulement l'horizontale) : réduire la
+  seule horizontale sortirait la vitesse du plan de la rampe (vers la rampe en descente, ce qui freine au
+  ClipVelocity suivant ; vers le vide en montée, ce qui peut décrocher). Source plafonne chaque axe ; ici seule la norme horizontale l'est, la verticale
+  reste bornée par `MAX_FALL_SPEED` (130) hors surf.
+- **Serveur** : `MAX_SPEED_SERVER` = ⌈√(420² + 130²)⌉ + 10 = 450 studs/s, calculé dans `MovementConfig` depuis les
+  deux plafonds du client, et `MAX_DELTA_POS` = 0,25 × 450 = 112,5 studs. Saut d'un paquet après un silence ≤ 112,5
+  + 225 = 337,5 studs (au lieu de 225). Un tricheur reste à 450 studs/s au plus.
+- **Reste non couvert** : sur une rampe de surf, la chute n'est pas plafonnée (comme Source). À 420 studs/s
+  horizontaux, une glissade qui descend à plus de ~160 studs/s dépasse 450 en 3D ; le seau (112,5 studs) absorbe
+  l'excédent quelques secondes (à 250 studs/s de descente, ~2,9 s, soit ~700 studs de dénivelé), ce qu'aucune map
+  actuelle ne permet. Un joueur honnête corrigé en surf : repli `CharacterSyncRules.ENFORCE_MOVEMENT = false`
+  (journal seul), puis mesurer avant de relever la marge.
+- **Consommateurs de `MAX_SPEED_SERVER`** élargis volontairement (une cible honnête peut aller à 450 studs/s pendant
+  le rembobinage) : `ShotRelayRules.ORIGIN_MAX` 125 → 185 studs (son du tir seulement), `Validator.MAX_HITSCAN_RANGE`
+  2 196 → 2 256 studs, majoration de la vitesse de décollage de D2 (`takeoffVy`) 338 → 488 studs/s, plafond des
+  vitesses imposées (`MapRules.imposedVelocity`, `SpawnLaunch.velocity`) aucun → 450 (norme 3D ; l'horizontale
+  repasse ensuite à 420 au tick suivant). Les portiques (`MapRules.velocityAfter`) plafonnent à
+  `MAX_HORIZONTAL_SPEED` (420) au lieu de 300.
+
 **Pièges.** Une correction ne doit **jamais** remplir le seau : un tricheur qui enchaîne refus et numéro forgé
 gagnerait un seau plein à chaque cycle (40 cycles/s). Le numéro de correction est croissant sur toute la session du
 joueur (pas remis à zéro à la réapparition) pour qu'un ancien accusé ne valide pas une correction récente.
@@ -407,13 +435,14 @@ fait D2 (#177, `judgeGuard`) ; `refuse` repart aussi l'enveloppe du vol de la po
 
 **Bots.** Non concernés : leurs positions viennent du serveur (`relayBot`), qui ne passe pas par le seau.
 
-**Vérifié.** Tests `tests/specs/CharacterSyncRules.spec.luau` (300 studs/s soutenus, surf à 220 studs/s avec 80 ms de
-gigue, paquets groupés, rafale à 40 Hz, tricheur borné à 20 et 40 Hz, silences, suite de refus, reprise après
+**Vérifié.** Tests `tests/specs/CharacterSyncRules.spec.luau` (limite dérivée des plafonds du client, 420 studs/s
+horizontaux et chute à `MAX_FALL_SPEED` avec 80 ms de gigue acceptés, 520 studs/s corrigés, 300 studs/s soutenus, surf
+à 220 studs/s avec 80 ms de gigue, paquets groupés, rafale à 40 Hz, tricheur borné à 20 et 40 Hz, silences, suite de refus, reprise après
 correction). En jeu (Studio, latence nulle) : bhop sans refus ; un paquet forgé de 400 studs pendant une course est
 refusé une fois, journalisé, corrigé, et la course reprend sans seconde correction. Reste à observer en jeu publié :
 surf rapide avec un vrai ping (journal `Movement` des joueurs honnêtes).
 
-**Impact.** Ramène le tricheur à 300 studs/s au plus et supprime la téléportation, qui est l'aide principale du kill
+**Impact.** Ramène le tricheur à 450 studs/s au plus et supprime la téléportation, qui est l'aide principale du kill
 aura et de l'ESP actif.
 
 ### D2. Vol et noclip (fait en journal seul, #177)
@@ -538,7 +567,7 @@ commune (débit et types, voir R1) ; la colonne « Validation actuelle » décri
 | `CharacterSync` (non fiable) | C→S puis S→C | `pos, yaw, ack` | Forme, débit 40 Hz (garde), seau de distance et silence plafonné, refus corrigé (D1, `CharacterSync.luau`, `onClientPosition`) ; noclip et vol au journal, vide (D2, #177) | Noclip et vol en mode bloquant après mesure (D2) |
 | `MovementCorrection` | S→C | `char, pos, seq` | — | — |
 | `WeaponAction` | C→S | `action` | Valeur `Shoot`/`Reload`, outil en main, 0,05 s mini (`init.server.luau`) ; `Reload` démarre le rechargement suivi par le serveur avant ces filtres (T2, #175) | `Shoot` non lié à la cadence : sans effet hors pose 3P depuis #156 (ouïe des bots et son passés sur `ShotFired`) |
-| `ShotFired` | C→S puis S→C | `origin, direction` ; relais : `char, weaponName, origin, direction` | Garde (5/s), tireur vivant, arme à distance prête (`Validator.isReadyToFire` : equip, chargeur), forme, origine à `ORIGIN_MAX` (125 studs) de la racine, cadence `FireDelay` à 0,15 s près (`ShotRelayRules`, #156) ; refus non journalisé | Rien : sans dégâts, un tir forgé ne fait qu'un son, au plus un par cadence |
+| `ShotFired` | C→S puis S→C | `origin, direction` ; relais : `char, weaponName, origin, direction` | Garde (5/s), tireur vivant, arme à distance prête (`Validator.isReadyToFire` : equip, chargeur), forme, origine à `ORIGIN_MAX` (185 studs) de la racine, cadence `FireDelay` à 0,15 s près (`ShotRelayRules`, #156) ; refus non journalisé | Rien : sans dégâts, un tir forgé ne fait qu'un son, au plus un par cadence |
 | `RequestSpawn` | C→S | aucun | `SpawnRules.request` : spawn en vol, personnage en place, bannière de fin, mort depuis moins de `RESPAWN_DELAY` en round actif (`SpawnManager.init`, handler de `RequestSpawn`) | Rien (R1 fermé, #171) |
 | `LeaveRound` | C→S | aucun | Retour au menu (#157) : `RoundManager.withdraw` (score de la manche effacé, coups en attente du joueur oubliés, disparition du personnage non comptée), puis `SpawnManager.withdraw` (personnage détruit, plus de réapparition, prochain `RequestSpawn` accepté sans `RESPAWN_DELAY`) (handler de `leaveRoundRmt` dans `init.server.luau`, `SpawnManager.withdraw`) | Un client modifié peut s'en servir pour échapper à une mort imminente (l'adversaire ne gagne pas le kill) ou réapparaître plus tôt : il perd à chaque fois tout son score de la manche, comme un joueur qui quitte le jeu |
 | `SendFeedback` | C→S | `text` | Type, longueur, 60 s en mémoire après toute demande valide (posé avant le DataStore, quel que soit le résultat), 5 par semaine (`UpdateAsync`), rien d'écrit si la lecture échoue (`FeedbackService.init`, handler de `SendFeedback`) | Rien (R1 fermé, #171) |
@@ -624,7 +653,7 @@ par `ShotFired(origin, direction)` (`HitscanSystem`, juste avant `HitscanDamage`
 arrivent dans l'ordre) ; les bots par `BotArsenal` (`onFire`, avant leur raycast). `relayShot` (`init.server.luau`)
 vérifie tireur vivant, arme à distance en main prête (`Validator.isReadyToFire` : equip et chargeur de T2, en lecture
 seule, sans journal), puis `ShotRelayRules.admit` : forme (Vector3 bornés, direction unitaire), origine à moins de
-`ORIGIN_MAX` (5 + 300 × 0,4 = 125 studs) de la racine serveur, cadence `FireDelay` à `CADENCE_TOLERANCE` (0,15 s) près,
+`ORIGIN_MAX` (5 + 450 × 0,4 = 185 studs) de la racine serveur, cadence `FireDelay` à `CADENCE_TOLERANCE` (0,15 s) près,
 propre au relais (un tir refusé ne la relance pas, elle ne touche pas celle des touches). Accepté : relayé par
 `FireClient` à tous les joueurs sauf le tireur (`ShotRelayRules.recipients`), et entendu par les bots
 (`BotManager.hearShot`, joueurs seulement : ceux des bots passent par `BotBrain`). Pas de journal sur un refus : un tir
@@ -930,7 +959,7 @@ mode bloquant une fois mesurée.
 
 - **Résumé.** D1 : remplacer le minimum par paquet par un seau qui fuit, plafonner le temps de silence, renvoyer le
   client à sa dernière position acceptée après un refus.
-- **Critères.** Plus de ~300 studs/s soutenus, plus de téléportation après silence ; correction appliquée par
+- **Critères.** Plus de ~300 studs/s soutenus (450 depuis #212, client plafonné à 420 horizontaux), plus de téléportation après silence ; correction appliquée par
   `MovementController` (vitesse nulle) ; surf à 200+ studs/s et bhop sans refus en jeu (test utilisateur) ;
   tests Lune de `CharacterSyncRules` (paquets groupés, silence, rafale légitime) ; bots non concernés.
 - **Dépendances.** 1 pour journaliser. **Priorité.** P1.

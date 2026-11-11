@@ -65,7 +65,7 @@ function BoostSystem.check(pos: Vector3, velocity: Vector3, now: number): (Vecto
 					part:GetAttribute(MapRules.VELOCITY_ATTRIBUTE),
 					part:GetAttribute(MapRules.BOOST_ATTRIBUTE),
 					part.CFrame.LookVector,
-					Config.MAX_SPEED_SERVER
+					Config.MAX_HORIZONTAL_SPEED
 				)
 				if newVelocity then
 					lastUse[part] = now

@@ -1,6 +1,10 @@
 -- Règles pures du lancement depuis le soleil (#69) : le serveur projette le joueur depuis un point
 -- Maps.Map.SunLaunch.* (LookVector = direction, attribut Speed), le client applique la vitesse et oriente la caméra.
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local MovementConfig = require(ReplicatedStorage.Shared.MovementConfig)
+
 local SpawnLaunch = {}
 
 -- Attributs posés par le serveur sur le personnage, lus par MovementController
@@ -12,9 +16,12 @@ local PITCH_MIN = -30
 local PITCH_MAX = 10
 
 -- Cette méthode permet de calculer la vitesse de lancement lorsqu'un point de lancement donne sa direction
--- (LookVector) et sa vitesse en studs/s.
+-- (LookVector) et sa vitesse en studs/s, bornée entre 0 et la limite du serveur MAX_SPEED_SERVER (#212).
 function SpawnLaunch.velocity(direction: Vector3, speed: number): Vector3
-	return direction.Unit * speed
+	if speed ~= speed then
+		return Vector3.zero -- NaN : attribut corrompu
+	end
+	return direction.Unit * math.clamp(speed, 0, MovementConfig.MAX_SPEED_SERVER)
 end
 
 -- Cette méthode permet de convertir une direction en angles de FPSCamera (yaw, pitch en degrés) lorsque le joueur

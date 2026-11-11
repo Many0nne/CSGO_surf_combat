@@ -26,6 +26,18 @@ return function(T, Loader)
 			T.expectEqual(MapRules.velocityAfter("Launcher", Vector3.zero, set, nil, fwd, 300), set)
 		end)
 
+		T.it(
+			"borne un geyser ou un lanceur trop rapide à MAX_SPEED_SERVER, même direction, quel que soit maxSpeed (#212)",
+			function()
+				local set = Vector3.new(0, 600, 800)
+				local limit = Loader.new():require("src/shared/MovementConfig").MAX_SPEED_SERVER
+				local v = MapRules.velocityAfter("Launcher", Vector3.zero, set, nil, fwd, 420)
+				T.expectNear(v.Magnitude, limit, 1e-4)
+				T.expectNear(v.Y / v.Z, 600 / 800, 1e-4)
+				T.expectEqual(MapRules.velocityAfter("Geyser", Vector3.zero, nil, nil, fwd, 450), nil)
+			end
+		)
+
 		T.it("ajoute la vitesse d'un portique dans le sens du mouvement, sans toucher à la verticale", function()
 			local v = MapRules.velocityAfter("Portal", Vector3.new(60, -20, 80), nil, 40, fwd, 300)
 			T.expectNear(Vector3.new(v.X, 0, v.Z).Magnitude, 140, 1e-4)

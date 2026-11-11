@@ -21,7 +21,7 @@ local MAX_BUMPS = 4
 local MAX_CLIP_PLANES = 5
 local SKIN = 0.015
 local PUSH_OUT = 20.0 -- "a surfer cries"
-local MAX_SUBSTEPS = 48 -- couvre ~300 u/s meme a 20 fps
+local MAX_SUBSTEPS = 48 -- couvre ~680 u/s meme a dt = MAX_DT, au-dessus du plafond serveur de 450 (#212)
 local MAX_DT = 1 / 30 -- borne les sauts apres lag spike
 local STEP_FACTOR = 0.5 -- longueur max d'un sweep = STEP_FACTOR * radius
 local SNAP_OUT = 0.6 -- distance (en rayons) au-dessus de la surface d'ou l'on sonde

@@ -19,7 +19,7 @@ local ShotRelayRules = {}
 -- Tolérance (s) sur la cadence de l'arme : la même que celle des touches (Validator), gigue entre deux paquets.
 ShotRelayRules.CADENCE_TOLERANCE = ShotRules.CADENCE_TOLERANCE
 -- Origine relayée : à moins de cette distance (studs) de la racine du tireur vue par le serveur. Le client est en
--- avance de sa latence : base de l'origine des tirs + MAX_SPEED_SERVER × rembobinage maximal (5 + 300 × 0,4 = 125).
+-- avance de sa latence : base de l'origine des tirs + MAX_SPEED_SERVER × rembobinage maximal (5 + 450 × 0,4 = 185).
 -- Large exprès : un tir honnête n'est jamais écarté, une origine forgée à l'autre bout de la map l'est.
 ShotRelayRules.ORIGIN_MAX = ShotRules.ORIGIN_BASE + MovementConfig.MAX_SPEED_SERVER * PositionHistory.MAX_REWIND
 

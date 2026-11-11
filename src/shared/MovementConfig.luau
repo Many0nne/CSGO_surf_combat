@@ -1,3 +1,11 @@
+-- Plafonds de vitesse (studs/s), en locales pour en dériver la limite du serveur plus bas (#212).
+-- Horizontal : sv_maxvelocity Source (3500 unités/s) × 0,12, le ratio unités Source → studs de RUN_SPEED.
+local MAX_HORIZONTAL_SPEED = 420
+local MAX_FALL_SPEED = 130
+-- Serveur : cas honnête le plus rapide en 3D (plafond horizontal et chute plafonnée, √(420² + 130²) ≈ 440), plus 10
+-- de marge, soit 450.
+local MAX_SPEED_SERVER = math.ceil(math.sqrt(MAX_HORIZONTAL_SPEED ^ 2 + MAX_FALL_SPEED ^ 2)) + 10
+
 -- Alignement en colonnes conservé volontairement
 -- stylua: ignore
 return {
@@ -5,6 +13,9 @@ return {
 	RUN_SPEED    = 30,     -- ratio Source: AIR_SPEED_CAP / RUN_SPEED ≈ 30/250 ≈ 0.12
 	WALK_SPEED   = 15,     -- 0.5 × RUN_SPEED
 	CROUCH_SPEED = 8.4,    -- ≈ 0.28 × RUN_SPEED
+
+	-- Plafond de la vitesse horizontale, au sol, en l'air et en surf (CharacterMotor.move) : 420, cf. plus haut
+	MAX_HORIZONTAL_SPEED = MAX_HORIZONTAL_SPEED,
 
 	-- Accélération
 	GROUND_ACCEL           = 12,   -- sv_accelerate Source (× wishspeed) ; doit rester > FRICTION pour atteindre RUN_SPEED
@@ -15,8 +26,8 @@ return {
 
 	-- Saut / Gravité
 	JUMP_VELOCITY    = 38,
-	GRAVITY          = -110,     -- arc ~6.6 studs (38²/220), trajectoire plus nerveuse
-	MAX_FALL_SPEED   = 130,
+	GRAVITY          = -110,            -- arc ~6.6 studs (38²/220), trajectoire plus nerveuse
+	MAX_FALL_SPEED   = MAX_FALL_SPEED,  -- 130 hors surf, cf. plus haut
 
 	-- Pentes
 	SLOPE_ANGLE_MAX = 45,
@@ -44,9 +55,9 @@ return {
 
 	-- Réseau
 	NET_SYNC_RATE    = 20,
-	MAX_SPEED_SERVER = 300,  -- studs/s soutenus au plus (surf 200+), remplit le seau de distance du serveur (#172)
-	MAX_DELTA_POS    = 75,   -- plafond du seau (studs) : 0,25 s à MAX_SPEED_SERVER mises de côté, pour la gigue
-	MAX_SILENCE      = 0.5,  -- s de silence au plus comptées pour un paquet : au-delà, pas plus de budget
+	MAX_SPEED_SERVER = MAX_SPEED_SERVER,         -- 450 studs/s soutenus au plus, remplit le seau de distance du serveur (#172)
+	MAX_DELTA_POS    = MAX_SPEED_SERVER * 0.25,  -- 112,5 : plafond du seau (studs), 0,25 s à MAX_SPEED_SERVER, pour la gigue
+	MAX_SILENCE      = 0.5,                      -- s de silence au plus comptées pour un paquet : au-delà, pas plus de budget
 
 	-- Hitbox
 	HITBOX_USE_RIG_BOUNDS = true,

@@ -17,6 +17,35 @@ return function(T, Loader)
 			T.expectEqual(PhysicsUtils.setXZ(v, Vector3.new(7, 99, 9)), Vector3.new(7, 2, 9))
 		end)
 
+		T.it(
+			"clampHorizontal plafonne la vitesse horizontale sans toucher à la verticale ni à la direction",
+			function()
+				local v = PhysicsUtils.clampHorizontal(Vector3.new(600, -130, 800), 420)
+				T.expectNear(Vector3.new(v.X, 0, v.Z).Magnitude, 420, 1e-4)
+				T.expectNear(v.X / v.Z, 600 / 800, 1e-4)
+				T.expectEqual(v.Y, -130)
+			end
+		)
+
+		T.it("clampHorizontal réduit tout le vecteur en surf : il reste dans le plan de la rampe", function()
+			local normal = Vector3.new(0.8, 0.6, 0)
+			local along = Vector3.new(-0.6, 0.8, 0) * 300 + Vector3.new(0, 0, 500)
+			local v = PhysicsUtils.clampHorizontal(along, 420, true)
+			T.expectNear(Vector3.new(v.X, 0, v.Z).Magnitude, 420, 1e-4)
+			T.expectNear(v:Dot(normal), 0, 1e-4)
+		end)
+
+		T.it(
+			"clampHorizontal rend la vitesse telle quelle sous le plafond (bhop, air strafe, surf inchangés)",
+			function()
+				for _, v in
+					{ Vector3.zero, Vector3.new(90, 38, 0), Vector3.new(-250, -400, 300), Vector3.new(0, 0, 420) }
+				do
+					T.expectEqual(PhysicsUtils.clampHorizontal(v, 420), v)
+				end
+			end
+		)
+
 		T.it("projectOnPlane donne un vecteur orthogonal à la normale", function()
 			local normal = Vector3.new(1, 1, 0).Unit
 			local projected = PhysicsUtils.projectOnPlane(Vector3.new(5, -2, 3), normal)

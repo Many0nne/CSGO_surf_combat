@@ -4,6 +4,8 @@ return function(T, Loader)
 	local WeaponConfig = Loader.new():require("src/shared/WeaponConfig")
 	local RemoteGuard = Loader.new():require("src/server/RemoteGuard")
 	local NetworkProtocol = Loader.new():require("src/shared/NetworkProtocol")
+	local MovementConfig = Loader.new():require("src/shared/MovementConfig")
+	local ShotRules = Loader.new():require("src/server/ShotRules")
 
 	local AWP_DELAY = WeaponConfig.Weapons.AWP.FireDelay
 	local ROOT = Vector3.new(100, 10, -50)
@@ -117,7 +119,10 @@ return function(T, Loader)
 			T.expectEqual((admit(state, "a", 10, { origin = ahead })), true, "juste dans la borne")
 			local far = ROOT + Vector3.new(ShotRelayRules.ORIGIN_MAX + 1, 0, 0)
 			T.expectEqual((admit(state, "b", 10, { origin = far })), false, "juste au-delà")
-			T.expect(ShotRelayRules.ORIGIN_MAX >= 100, "borne large : surf à 300 studs/s et 0,3 s de latence")
+			T.expect(
+				ShotRelayRules.ORIGIN_MAX >= ShotRules.ORIGIN_BASE + MovementConfig.MAX_HORIZONTAL_SPEED * 0.3,
+				"borne large : surf à 420 studs/s et 0,3 s de latence"
+			)
 		end)
 
 		T.it("refuse un tireur sans position (mort, personnage absent)", function()
