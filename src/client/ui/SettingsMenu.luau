@@ -145,7 +145,7 @@ end
 
 -- Cette méthode permet d'ajouter un réglage à curseur (trace, poignée en impact, valeur éditable) à une catégorie lorsque
 -- l'écran est construit : un clic place la valeur, puis la poignée se glisse ; `field` est le champ de
--- PlayerSettings où la valeur est conservée.
+-- PlayerSettings où la valeur est conservée ; `snap` garde la valeur à la précision affichée.
 local function addSlider(
 	category: Category,
 	name: string,
@@ -154,7 +154,8 @@ local function addSlider(
 	maxVal: number,
 	default: number,
 	decimals: number,
-	onChange: (number) -> ()
+	onChange: (number) -> (),
+	snap: boolean?
 )
 	local fmt = "%." .. decimals .. "f"
 	local currentVal = default
@@ -224,8 +225,11 @@ local function addSlider(
 	UIKit.hover(hit, label, { TextColor3 = C.Bone }, { TextColor3 = C.HitRed })
 
 	local function applyValue(v: number)
-		-- Sans décimale (px du viseur), valeur entière ; les autres gardent leur précision (sensibilités sauvegardées)
-		v = math.clamp(if decimals == 0 then math.round(v) else v, minVal, maxVal)
+		-- `snap` (viseur) : valeur gardée à la précision affichée ; les sensibilités gardent la leur (valeurs sauvegardées)
+		if snap then
+			v = math.round(v * 10 ^ decimals) / 10 ^ decimals
+		end
+		v = math.clamp(v, minVal, maxVal)
 		currentVal = v
 		local t = (v - minVal) / (maxVal - minVal)
 		fill.Size = UDim2.fromScale(t, 1)
@@ -673,7 +677,7 @@ local function buildCrosshairCategory(block: Frame)
 		}
 	do
 		local range = size.range
-		addSlider(crosshair, size.name, size.field, range.min, range.max, range.default, 0, function() end)
+		addSlider(crosshair, size.name, size.field, range.min, range.max, range.default, 0, function() end, true)
 	end
 	local showOptions = { { label = "AFFICHÉ", value = true }, { label = "MASQUÉ", value = false } }
 	local dotDefault = if defaults.dot then 1 else 2
@@ -681,7 +685,17 @@ local function buildCrosshairCategory(block: Frame)
 	local outlineDefault = if defaults.outline then 1 else 2
 	addPicker(crosshair, "Contour", "crosshairOutline", showOptions, outlineDefault, outlineDefault, function() end)
 	local opacity = defaults.opacity
-	addSlider(crosshair, "Opacité", "crosshairOpacity", opacity.min, opacity.max, opacity.default, 2, function() end)
+	addSlider(
+		crosshair,
+		"Opacité",
+		"crosshairOpacity",
+		opacity.min,
+		opacity.max,
+		opacity.default,
+		2,
+		function() end,
+		true
+	)
 
 	buildCrosshairPreview(crosshair)
 end

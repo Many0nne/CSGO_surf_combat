@@ -128,9 +128,10 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   Toutes les armes, couteau compris. Piste rejetée : point rouge central (criard, hors de la matière du HUD).
   Branches tracées par `Reticle.drawArms` (#222), comme le réticule de la lunette (`ScopeOverlay`) : quatre branches à
   `gap` px du centre, longueur en px ou en part du parent, contour de `outline.width` px par côté ; bouts ouverts
-  (lunette) : couche plus large posée dessous, sur laquelle joue l'estompe `fade` ; bouts fermés (`caps`, crosshair) :
-  contour en cadre autour du trait, rien dessous (#251 : avec un contour dessous, baisser l'opacité assombrissait le trait
-  au lieu de le rendre translucide). Point central `dot` en option. Limite connue : à opacité réduite et écart central
+  (lunette) : couche plus large posée dessous, sur laquelle joue l'estompe `fade` ; crosshair (`pixelAligned`) : traits
+  sur des px entiers (épaisseur impaire : un px de plus vers le haut ou la gauche, des demi-px seraient arrondis frame par
+  frame et décolleraient le contour), contour en cadre qui ferme les bouts, rien dessous (#251 : avec un contour dessous,
+  baisser l'opacité assombrissait le trait au lieu de le rendre translucide). Point central `dot` en option. Limite connue : à opacité réduite et écart central
   inférieur à environ épaisseur / 2 + 2 px, branches, point et contours se superposent au centre et y paraissent plus
   opaques. Un nouveau réticule passe par là.
 - `src/client/ui/KeyDisplay.luau` (#197) : réglage « Affichage des touches » (Réglages > GRAPHISMES, `PlayerSettings.keyDisplay`,

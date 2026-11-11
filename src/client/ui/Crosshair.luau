@@ -62,12 +62,12 @@ function Crosshair.draw(parent: GuiObject, settings: PlayerSettings.Settings)
 		color = Crosshair.color(settings.crosshairColor),
 		transparency = 1 - opacity,
 		dot = settings.crosshairDot,
+		pixelAligned = true,
 		outline = if settings.crosshairOutline
 			then {
 				color = C.Black,
 				width = OUTLINE,
 				transparency = 1 - (1 - OUTLINE_TRANSPARENCY) * opacity,
-				caps = true,
 			}
 			else nil,
 	})
