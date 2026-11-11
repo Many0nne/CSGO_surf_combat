@@ -17,8 +17,8 @@ local Motion = UITheme.Motion
 
 local RoundHUD = {}
 
--- Fond du timer : deux moitiés de fondu de coin collées au milieu du haut de l'écran
-local TOP_SCRIM_SIZE = Vector2.new(220, 110)
+-- Fond du timer : fondu de bord (une seule image, #247) au milieu du haut de l'écran
+local TOP_SCRIM_SIZE = Vector2.new(440, 110)
 local TOP_SCRIM_TRANSPARENCY = 0.3
 local TIMER_TOP = 10
 local TIMER_HEIGHT = 80
@@ -34,8 +34,8 @@ local LB_VEIL_TRANSPARENCY = 0.3
 local COL_RANK = 36
 local COL_NAME = 56
 local COL_STATS = { 80, 64, 64 } -- K, M, K/M
--- Réapparition : bloc en bas au centre sur deux moitiés de fondu de coin, scène désaturée sans voile plein
-local RESPAWN_SCRIM_SIZE = Vector2.new(260, 230)
+-- Réapparition : bloc en bas au centre sur un fondu de bord (une seule image, #247), scène désaturée sans voile plein
+local RESPAWN_SCRIM_SIZE = Vector2.new(520, 230)
 local RESPAWN_SCRIM_TRANSPARENCY = 0.2
 local RESPAWN_WIDTH = 400
 local RESPAWN_BOTTOM = 40
@@ -58,7 +58,7 @@ local rankShadow: TextLabel
 local leaderboard: Frame
 local leaderboardList: Frame
 local respawnRoot: Frame
-local respawnScrims: { ImageLabel }
+local respawnScrim: ImageLabel
 local respawnPanel: Frame
 local respawnCount: TextLabel
 local respawnCountShadow: TextLabel
@@ -100,9 +100,7 @@ local function buildTimer(root: Frame)
 		Parent = root,
 	})
 	timerLayer = layer
-	local top = UDim2.fromScale(0.5, 0)
-	UIKit.cornerScrim(layer, "TopRight", TOP_SCRIM_SIZE, TOP_SCRIM_TRANSPARENCY, top)
-	UIKit.cornerScrim(layer, "TopLeft", TOP_SCRIM_SIZE, TOP_SCRIM_TRANSPARENCY, top)
+	UIKit.cornerScrim(layer, "Top", TOP_SCRIM_SIZE, TOP_SCRIM_TRANSPARENCY)
 
 	local block = UIKit.frame({
 		Name = "TimerBlock",
@@ -331,11 +329,7 @@ local function buildRespawnOverlay(root: Frame)
 		Visible = false,
 		Parent = root,
 	})
-	local bottom = UDim2.fromScale(0.5, 1)
-	respawnScrims = {
-		UIKit.cornerScrim(respawnRoot, "BottomRight", RESPAWN_SCRIM_SIZE, 1, bottom),
-		UIKit.cornerScrim(respawnRoot, "BottomLeft", RESPAWN_SCRIM_SIZE, 1, bottom),
-	}
+	respawnScrim = UIKit.cornerScrim(respawnRoot, "Bottom", RESPAWN_SCRIM_SIZE, 1)
 	respawnPanel = UIKit.create("Frame", {
 		Name = "Panel",
 		BackgroundTransparency = 1,
@@ -718,10 +712,8 @@ function RoundHUD.showRespawning(delaySeconds: number)
 		return
 	end
 	respawnRoot.Visible = true
-	for _, scrim in respawnScrims do
-		scrim.ImageTransparency = 1
-		UIKit.tween(scrim, Motion.Enter, { ImageTransparency = RESPAWN_SCRIM_TRANSPARENCY })
-	end
+	respawnScrim.ImageTransparency = 1
+	UIKit.tween(respawnScrim, Motion.Enter, { ImageTransparency = RESPAWN_SCRIM_TRANSPARENCY })
 	respawnLabel.Text = "RÉAPPARITION"
 	setRespawnLines("ÉLIMINÉ", "", "")
 	UIKit.reveal(respawnPanel, 0, 16)

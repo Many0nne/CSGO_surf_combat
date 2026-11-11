@@ -118,6 +118,60 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("HUDRules.keyDisplayGridSize", function()
+		T.it("mesure la grille : 3 colonnes en simple, 6 en full, 3 rangées, rien en off", function()
+			local w, h = HUDRules.keyDisplayGridSize("simple")
+			T.expectEqual(w, 3 * 44 - 4)
+			T.expectEqual(h, 3 * 44 - 4)
+			T.expectEqual((HUDRules.keyDisplayGridSize("full")), 6 * 44 - 4)
+			T.expectEqual((HUDRules.keyDisplayGridSize("off")), 0)
+		end)
+	end)
+
+	T.describe("HUDRules.keyDisplayBottom", function()
+		-- Cette méthode permet de lire la largeur de la grille (px) d'un mode lorsqu'un test la place, telle que KeyDisplay la construit.
+		local function gridWidth(mode: string): number
+			return (HUDRules.keyDisplayGridSize(mode))
+		end
+
+		local lifted = HUDRules.AMMO_BOX.bottom + HUDRules.AMMO_BOX.height + HUDRules.KEY_DISPLAY_CLEARANCE
+
+		T.it("garde la grille en bas en 16:9 et plus large, mode full compris", function()
+			for _, width in { 1280, 1531, 1680 } do -- 16:9, fenêtre Studio 1291x607, 21:9
+				T.expectEqual(
+					HUDRules.keyDisplayBottom(width, gridWidth("full")),
+					HUDRules.KEY_DISPLAY_BOTTOM,
+					tostring(width)
+				)
+				T.expectEqual(
+					HUDRules.keyDisplayBottom(width, gridWidth("simple")),
+					HUDRules.KEY_DISPLAY_BOTTOM,
+					tostring(width)
+				)
+			end
+		end)
+
+		T.it("remonte la grille full au-dessus des munitions en 4:3 et 16:10", function()
+			T.expectEqual(HUDRules.keyDisplayBottom(960, gridWidth("full")), lifted, "4:3")
+			T.expectEqual(HUDRules.keyDisplayBottom(1152, gridWidth("full")), lifted, "16:10")
+			T.expectEqual(lifted > HUDRules.AMMO_BOX.bottom + HUDRules.AMMO_BOX.height, true, "au-dessus du compteur")
+		end)
+
+		T.it("ne remonte la grille simple que si elle atteint les munitions (16:10 non, 4:3 oui)", function()
+			T.expectEqual(HUDRules.keyDisplayBottom(1152, gridWidth("simple")), HUDRules.KEY_DISPLAY_BOTTOM, "16:10")
+			T.expectEqual(HUDRules.keyDisplayBottom(960, gridWidth("simple")), lifted, "4:3")
+		end)
+
+		T.it("bascule au seuil exact de l'écart minimal", function()
+			local grid = gridWidth("full")
+			-- gridRight + clearance = ammoLeft  <=>  width = grid + 2 * (right + width + clearance)
+			local box = HUDRules.AMMO_BOX
+			local threshold = grid + 2 * (box.right + box.width + HUDRules.KEY_DISPLAY_CLEARANCE)
+			T.expectEqual(HUDRules.keyDisplayBottom(threshold, grid), HUDRules.KEY_DISPLAY_BOTTOM, "au seuil")
+			T.expectEqual(HUDRules.keyDisplayBottom(threshold - 1, grid), lifted, "sous le seuil")
+		end)
+	end)
+
 	T.describe("HUDRules.roundTimerOverMenu", function()
 		T.it("passe le timer au-dessus du menu en partie ouvert, vivant ou mort, lunette ou non", function()
 			T.expectEqual(HUDRules.roundTimerOverMenu(hud({ menuOpen = true })), true)

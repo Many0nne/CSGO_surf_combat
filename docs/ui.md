@@ -103,7 +103,8 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   réglables dans Réglages > TOUCHES (#100) ; toucher d'un emplacement, L1/R1 à la manette (fixes). La barre ignore
   touches et molette pendant que le menu en partie est ouvert (`InGameMenu.isOpen`, Réglages compris).
 - `src/client/ui/AmmoCounter.luau` (#158) : « chargeur / réserve » en bas à droite, à gauche de la barre d'armes (chiffre du
-  chargeur os à ombre, réserve atténuée, libellé ambré « MUNITIONS », chargeur vide en rouge d'impact). Lit
+  chargeur os à ombre, réserve atténuée, libellé ambré « MUNITIONS » à contour noir (`TextStroke`, transparence 0,35 ; #247 :
+  sans contour, illisible sur rampe claire), chargeur vide en rouge d'impact). Son emprise (`HUDRules.AMMO_BOX`) sert aussi à placer l'affichage des touches. Lit
   `WeaponSystem.getAmmo` à chaque Heartbeat (met à jour les textes seulement si les valeurs changent), masqué sans
   chargeur (couteau) et hors partie (`HUDRules.gameHudVisible`, via `GameStateController.applyGameHud`). Contrairement à
   la barre d'armes, il ne s'estompe pas.
@@ -128,8 +129,12 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   os à libellé sombre (`CAP_KEY`), « modificateurs » Espace, Ctrl, Maj, M1, M2 en ambre (`CAP_MOD`, à la place du rose de la
   référence) ; enfoncée, la touche descend de `CAP_PRESS` 5 px (le haut descend, le bas reste posé, la face avant raccourcit) et
   passe au rouge d'impact à libellé os (`CAP_DOWN`). Placement mesuré en jeu (fenêtre 1291x607) : plus de 100 px d'écart avec le
-  compteur et les munitions ; en 16:9, 12 px de marge côté munitions avec le mode `full` ; en 4:3, le bloc `full` chevauche les
-  munitions (déjà le cas de l'ancienne grille).
+  compteur et les munitions ; en 16:9, 12 px de marge côté munitions avec le mode `full`.
+  **Écran étroit (#247, choix de l'utilisateur) :** la grille garde sa taille et remonte au-dessus du compteur de munitions
+  quand elle l'atteindrait (`HUDRules.keyDisplayBottom` : bord droit de la grille + `KEY_DISPLAY_CLEARANCE` 12 px au-delà du
+  bord gauche de `AMMO_BOX`, en px du repère `scaledRoot`). Seuil en largeur de ce repère : 1 252 px en `full`, 1 120 px en
+  `simple`. Soit, pour une fenêtre de 540 à 1 152 px de haut (échelle de `scaledRoot` non bornée par 0,75 et 1,6), un ratio de 1,74 en `full` (16:9 inchangé,
+  16:10 et 4:3 remontent) et 1,56 en `simple` (16:10 reste, 4:3 remonte) ; hors de ces hauteurs, le seuil suit la largeur. Replacée au redimensionnement (`AbsoluteSize` du `ScreenGui`, lu après la mise à jour de `scaledRoot`).
   Pistes rejetées (#229, captures en jeu) : grille de cases plates (fond `C.Scrim` translucide, case os pleine une fois enfoncée,
   rendu d'origine de #197, « overlay de stream ») ; lettres os à ombre sans cases avec trait rouge sous la touche enfoncée
   (« titrage », comme le timer) ; trait de bande sous chaque touche rempli d'ambre (« jauge », comme le compteur) ; directions en
@@ -153,7 +158,7 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   Vérifié en Studio avec `user_keyboard_input` (`keyDown` W/D/S/Espace/Ctrl/R passent en partie et enfoncent les touches) ; le clic de
   souris M1/M2 n'a pas été simulé. Coordonnées de clic des onglets du menu : y négatif (`AbsolutePosition` du bouton).
 - `src/client/ui/RoundHUD.luau` : timer et rang en haut au centre (chiffres os droits avec ombre, libellés ambrés, fondu
-  sombre en deux moitiés de coin, timer en rouge d'impact sous 30 s) ; classement sous Tab : pas de panneau, voile sombre
+  sombre de bord (`cornerScrim` « Top »), timer en rouge d'impact sous 30 s) ; classement sous Tab : pas de panneau, voile sombre
   central qui s'efface vers les côtés, titre « CLASSEMENT » sur un filet ambre, colonnes K / M / K/M, ligne du joueur
   sur une bande rouge d'impact **droite** (penchée, elle se lisait mal en face des colonnes).
   Menu en partie ouvert (#220, choix de l'utilisateur : la partie continue derrière) : le timer et son fondu (calque
@@ -161,7 +166,7 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   page 3), selon `HUDRules.roundTimerOverMenu` ; le titre « MENU » / « RÉGLAGES » descend dessous. Menu fermé, le calque
   revient dans `RoundHUD` en ZIndex 0, sous les voiles du classement et du résultat comme avant.
   Réapparition : la scène reste visible, désaturée (`ColorCorrectionEffect`), sans voile plein ; en bas au centre, sur
-  deux moitiés de fondu de coin, « ÉLIMINÉ » en rouge d'impact (le joueur a été touché), compte à rebours en gros
+  un fondu de bord (`cornerScrim` « Bottom »), « ÉLIMINÉ » en rouge d'impact (le joueur a été touché), compte à rebours en gros
   chiffres os à ombre, libellé ambré « RÉAPPARITION ». Au-dessus du compte à rebours (#102) : « ÉLIMINÉ PAR », nom du
   tueur en os, arme et « TÊTE » en ambre ; sans tueur, « ÉLIMINÉ » puis « CHUTE ». La caméra reste au lieu de la mort
   et pivote vers le tueur, marqué d'un losange et de « NOM · distance » en rouge d'impact (`DeathCamera`).
@@ -171,7 +176,8 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   menu ni au résultat.
   Fin de round : voile central du classement, « ROUND TERMINÉ » ambré, nom du vainqueur en os géant, filet ambre,
   « REMPORTE LE ROUND » ; le rouge d'impact n'apparaît que si le joueur gagne (bande derrière son nom).
-- `UIKit.cornerScrim` : fond de coin du HUD (`assets/ui/hud/scrim_coin.png`) dans les quatre orientations, par rotation.
+- `UIKit.cornerScrim` : fond de coin du HUD (`assets/ui/hud/scrim_coin.png`) dans les quatre orientations, par rotation ;
+  `Top` / `Bottom` : fond centré sur un bord (`scrim_bord.png`, `make_corner_scrim.py --edge`), `size` = largeur totale.
   Seul le compteur de vitesse est penché (`UITheme.Layout.HudLean`, -6°) : l'utilisateur a préféré le timer, la barre
   d'armes et le classement droits.
 - Titrage en images usées (police Anton, `tools/ui/make_menu_type.py`) : abandonné en #117 au profit du texte Oswald à
@@ -245,6 +251,13 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
 - **Fondu dans deux directions** (fond qui s'efface vers le haut et vers la droite) : impossible avec des `UIGradient`.
   Un `UIGradient` sur un `CanvasGroup` est ignoré ; un seul gradient en biais laisse une arête ; des calques très transparents
   empilés font des bandes visibles. Utiliser une image de dégradé blanche teintée par `ImageColor3` (voir `make_corner_scrim.py`).
+- **Fond centré : une seule image (#247).** Deux `cornerScrim` collés en miroir (bord à bord, ou 1 px de recouvrement)
+  laissent un filet clair à leur jonction : l'arête de chaque image est lissée (sous-pixel, `UIScale` non entier), et deux
+  arêtes à moitié couvertes ne refont pas un fond plein. Un recouvrement plus large assombrit la jonction à la place. Pour un
+  fond au milieu d'un bord, une seule image symétrique (`cornerScrim` « Top » / « Bottom »).
+- **Libellé posé sur la scène :** un texte ambré ou atténué sans fond se perd sur une rampe claire (`AmmoCounter`, #247).
+  Tout texte du HUD hors d'un `cornerScrim` prend l'ombre noire décalée (`UIKit.shadowedText`) ; sous ~16 px, l'ombre
+  double les lettres (essai à 1 et 2 px, captures #247) : contour noir `TextStroke` à la place, comme le crosshair.
 - **Retourner une image :** un `ImageRectSize` négatif ne retourne pas l'image dans une `ImageLabel`. Tourner l'image
   (`UIKit.cornerScrim` : 90°, 180° ou -90° selon le coin, taille permutée pour les quarts de tour).
 - **Tools des armes :** ils sont presque vides (l'arme visible vient du viewmodel). Pour dessiner une arme hors du jeu

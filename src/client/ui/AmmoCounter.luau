@@ -14,9 +14,12 @@ local WeaponSystem = require(script.Parent.Parent.systems.weapon.WeaponSystem)
 local C = UITheme.Colors
 local F = UITheme.Fonts
 
-local MARGIN = Vector2.new(44 + 250, 40) -- à gauche de la barre d'armes (44 px de marge, 250 px de contenu)
-local SIZE = Vector2.new(190, 78)
+-- Emprise partagée avec l'affichage des touches, qui remonte au-dessus sur écran étroit (HUDRules.keyDisplayBottom)
+local BOX = HUDRules.AMMO_BOX
 local SHADOW = 3
+-- Contour noir du libellé (#247) : à 14 px, une ombre décalée double les lettres ; le contour se lit sur rampe claire
+-- comme en zone sombre (même principe que le crosshair)
+local LABEL_STROKE_TRANSPARENCY = 0.35
 
 local AmmoCounter = {}
 
@@ -76,10 +79,11 @@ function AmmoCounter.init()
 		Name = "Box",
 		BackgroundTransparency = 1,
 		AnchorPoint = Vector2.new(1, 1),
-		Position = UDim2.new(1, -MARGIN.X, 1, -MARGIN.Y),
-		Size = UDim2.fromOffset(SIZE.X, SIZE.Y),
+		Position = UDim2.new(1, -BOX.right, 1, -BOX.bottom),
+		Size = UDim2.fromOffset(BOX.width, BOX.height),
 		Parent = root,
 	})
+	-- Libellé ambré posé sur la scène sans fond : contour noir, sinon illisible sur rampe claire (#247)
 	UIKit.text({
 		Name = "Label",
 		Text = "MUNITIONS",
@@ -87,7 +91,9 @@ function AmmoCounter.init()
 		TextSize = 14,
 		TextColor3 = C.Accent,
 		TextXAlignment = Enum.TextXAlignment.Right,
-		Size = UDim2.fromOffset(SIZE.X, 16),
+		TextStrokeColor3 = C.Black,
+		TextStrokeTransparency = LABEL_STROKE_TRANSPARENCY,
+		Size = UDim2.fromOffset(BOX.width, 16),
 		Parent = box,
 	})
 	magazineText, magazineShadow = UIKit.shadowedText(box, {

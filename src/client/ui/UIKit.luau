@@ -194,31 +194,38 @@ end
 -- Fond sombre du HUD (assets/ui/hud/scrim_coin.png, Decal 139288849836344) : blanc, opaque en bas à gauche, effacé vers
 -- le haut et la droite. Les autres coins s'obtiennent par rotation (un ImageRectSize négatif ne retourne pas l'image).
 local SCRIM_IMAGE = "rbxassetid://128710099398466"
-local SCRIM_ROTATION = { BottomLeft = 0, TopLeft = 90, TopRight = 180, BottomRight = -90 }
+-- Variante bord (#247, assets/ui/hud/scrim_bord.png, Decal 76113717632250 ; ci-dessous l'id de l'image du Decal) :
+-- opaque au milieu du bord bas, effacée vers le haut et les côtés. Une seule image : deux coins collés en miroir
+-- laissaient un filet clair à leur jonction.
+local SCRIM_EDGE_IMAGE = "rbxassetid://104671552818880"
+local SCRIM_ROTATION = { BottomLeft = 0, TopLeft = 90, TopRight = 180, BottomRight = -90, Bottom = 0, Top = 180 }
 
--- Cette méthode permet de poser un fond sombre sans bord, opaque dans un coin et effacé vers les côtés opposés, lorsqu'un
--- élément du HUD est posé sur la scène ; `at` place le coin opaque (coin de l'écran par défaut), `size` est la taille vue.
+-- Cette méthode permet de poser un fond sombre sans bord, opaque dans un coin (ou au milieu d'un bord, `Top` / `Bottom`) et
+-- effacé vers les côtés opposés, lorsqu'un élément du HUD est posé sur la scène ; `size` est la taille vue (largeur totale
+-- pour un bord).
 function UIKit.cornerScrim(
 	parent: GuiObject,
-	corner: "BottomLeft" | "TopLeft" | "TopRight" | "BottomRight",
+	corner: "BottomLeft" | "TopLeft" | "TopRight" | "BottomRight" | "Bottom" | "Top",
 	size: Vector2,
-	transparency: number,
-	at: UDim2?
+	transparency: number
 ): ImageLabel
+	local edge = corner == "Top" or corner == "Bottom"
 	local right = corner == "TopRight" or corner == "BottomRight"
-	local top = corner == "TopLeft" or corner == "TopRight"
-	local origin = at or UDim2.fromScale(right and 1 or 0, top and 0 or 1)
+	local top = corner == "TopLeft" or corner == "TopRight" or corner == "Top"
+	local originX = if edge then 0.5 elseif right then 1 else 0
+	local origin = UDim2.fromScale(originX, top and 0 or 1)
+	local offsetX = if edge then 0 elseif right then -size.X / 2 else size.X / 2
 	local rotation = SCRIM_ROTATION[corner]
 	local quarter = rotation % 180 ~= 0
 	return UIKit.create("ImageLabel", {
 		Name = "Scrim" .. corner,
-		Image = SCRIM_IMAGE,
+		Image = if edge then SCRIM_EDGE_IMAGE else SCRIM_IMAGE,
 		ImageColor3 = C.Scrim,
 		ImageTransparency = transparency,
 		BackgroundTransparency = 1,
 		Rotation = rotation,
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = origin + UDim2.fromOffset(right and -size.X / 2 or size.X / 2, top and size.Y / 2 or -size.Y / 2),
+		Position = origin + UDim2.fromOffset(offsetX, top and size.Y / 2 or -size.Y / 2),
 		Size = quarter and UDim2.fromOffset(size.Y, size.X) or UDim2.fromOffset(size.X, size.Y),
 		Parent = parent,
 	})

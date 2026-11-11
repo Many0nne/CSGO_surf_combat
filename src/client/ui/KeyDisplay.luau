@@ -19,9 +19,8 @@ local UIKit = require(script.Parent.UIKit)
 local C = UITheme.Colors
 local F = UITheme.Fonts
 
-local KEY_SIZE = 40 -- px, côté d'une touche (résolution de référence, 720 px de haut)
-local KEY_GAP = 4 -- px entre deux touches
-local BOTTOM_MARGIN = 40 -- px entre la grille et le bas de l'écran
+local KEY_SIZE = HUDRules.KEY_DISPLAY_KEY -- px, côté d'une touche (résolution de référence, 720 px de haut)
+local KEY_GAP = HUDRules.KEY_DISPLAY_GAP -- px entre deux touches
 local TEXT_SIZE = 18
 local TEXT_SIZE_LONG = 13 -- libellés de plus de deux caractères dans une touche simple (CTRL, MAJ)
 local TEXT_SIZE_WIDE = 16 -- libellé de plus de deux caractères dans une touche large (ESPACE)
@@ -65,6 +64,7 @@ type KeyView = {
 
 local gui: ScreenGui?
 local grid: Frame?
+local root: Frame? -- racine mise à l'échelle (UIKit.scaledRoot), repère des marges de la grille
 local views: { KeyView } = {}
 local builtMode: string? -- mode dont la grille est construite
 
@@ -181,6 +181,19 @@ local function buildKey(container: Frame, entry: HUDRules.KeyDisplayEntry): (Tex
 		end
 end
 
+-- Cette méthode permet de poser la grille en bas au centre lorsque la taille de l'écran ou de la grille change : au-dessus
+-- du compteur de munitions si elle l'atteindrait sur un écran étroit (HUDRules.keyDisplayBottom, #247).
+local function place()
+	local container, scaled, screenGui = grid, root, gui
+	if not (container and scaled and screenGui) then
+		return
+	end
+	-- Largeur vue dans le repère de la racine : écran x Size de la racine (1 / échelle, posée par UIKit.scaledRoot)
+	local width = screenGui.AbsoluteSize.X * scaled.Size.X.Scale
+	local bottom = HUDRules.keyDisplayBottom(width, container.Size.X.Offset)
+	container.Position = UDim2.new(0.5, 0, 1, -bottom)
+end
+
 -- Cette méthode permet de reconstruire la grille lorsque le mode d'affichage change : un keycap par entrée du mode,
 -- grille centrée en bas de l'écran.
 local function build(mode: string)
@@ -192,13 +205,9 @@ local function build(mode: string)
 	views = {}
 	builtMode = mode
 	local entries = HUDRules.keyDisplayEntries(mode)
-	local columns, rows = 0, 0
-	for _, entry in entries do
-		columns = math.max(columns, entry.col + entry.width)
-		rows = math.max(rows, entry.row + 1)
-	end
-	container.Size =
-		UDim2.fromOffset(columns * (KEY_SIZE + KEY_GAP) - KEY_GAP, math.max(rows, 1) * (KEY_SIZE + KEY_GAP) - KEY_GAP)
+	local width, height = HUDRules.keyDisplayGridSize(mode)
+	container.Size = UDim2.fromOffset(width, height)
+	place()
 	for _, entry in entries do
 		local label, paintKey = buildKey(container, entry)
 		local codes = {}
@@ -221,6 +230,8 @@ local function update()
 	gui.Enabled = HUDRules.keyDisplayVisible(HUDState.get(), mode)
 	if mode ~= builtMode then
 		build(mode)
+	elseif gui.Enabled then
+		place() -- un ScreenGui masqué a pu manquer un redimensionnement
 	end
 	if not gui.Enabled then
 		for _, view in views do
@@ -282,15 +293,24 @@ function KeyDisplay.init()
 		Parent = Players.LocalPlayer:WaitForChild("PlayerGui"),
 	})
 	gui = screenGui
-	local root = UIKit.scaledRoot(screenGui)
+	local scaled = UIKit.scaledRoot(screenGui)
+	root = scaled
 	grid = UIKit.frame({
 		Name = "Grid",
 		BackgroundTransparency = 1,
 		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -BOTTOM_MARGIN),
+		Position = UDim2.new(0.5, 0, 1, -HUDRules.KEY_DISPLAY_BOTTOM),
 		Size = UDim2.fromOffset(0, 0),
-		Parent = root,
+		Parent = scaled,
 	})
+	-- Fenêtre redimensionnée : largeur seule (AbsoluteSize, échelle inchangée) ou hauteur (attribut Scale, posé par
+	-- UIKit.scaledRoot après la taille de la racine) ; différé pour lire une racine à jour
+	-- Cette méthode permet de replacer la grille à la frame suivante lorsque la taille ou l'échelle de l'écran change.
+	local function replace()
+		task.defer(place)
+	end
+	screenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(replace)
+	scaled:GetAttributeChangedSignal("Scale"):Connect(replace)
 
 	LocalSettings.onChanged(update)
 	HUDState.onChanged(onHudChanged)
