@@ -40,7 +40,7 @@ prêt (ils tombent du soleil pendant ce temps).
 Décision 3 de #133 : une rampe est un raccourci emprunté seulement s'il rapproche le bot de sa destination. Le surf
 n'est **pas simulé par bot** : le trajet est **calculé une fois au démarrage** avec la vraie physique, puis rejoué.
 Règles pures dans `RampRules` (et `NavRules.rampCost`), simulation dans `RampSim`, réglages `RAMP_*` de `BotConfig`.
-- **Rampes** (`NavBuilder.findRamps`) : pièces `Part` des dossiers `RAMPS_FOLDER` (`Ramps`, à toute profondeur) dont
+- **Rampes** (`NavBuilder.findRamps`) : pièces `Part` en bloc (`Shape = Block`, pas de `WedgePart`), `CanCollide`, des dossiers `RAMPS_FOLDER` (`Ramps`, à toute profondeur) dont
   une face est dans la plage du surf (`SURF_NORMAL_MIN` à `SURF_NORMAL_Y`) et fait au moins `RAMP_MIN_AREA` studs² ;
   repère `RampRules.frameOf` (u le long de la rampe, v vers le haut de la pente, n la normale), une seule par rampe
   (`sameRamp`). Map sans rampe : aucune arête, rien d'autre ne change. `RAMP_ENABLED = false` les coupe toutes.
@@ -215,8 +215,9 @@ Règles pures dans `BotPopulationRules`, appliquées par `BotManager` (`adjustPo
 - `workspace:SetAttribute("DebugBotsFreeze", true)` : fige les bots (ni mouvement ni tir), `false` ou `nil` les relâche.
 - `workspace:SetAttribute("DebugBotsGoto", Vector3.new(x, y, z))` : tous les bots vont au point de passage le plus
   proche (corniches de Dizzy : `(1730, 70.5, -350)` côté T, `(2268, 70.5, -170)` côté CT, plateformes
-  `(1895, 70.5, -412)` et `(2110, 70.5, -115)`). Le comportement reprend la main à l'arrivée (ou plus tôt s'il enquête
-  ou se replie) ; remettre `nil` avant de renvoyer au même endroit.
+  `(1895, 70.5, -412)` et `(2110, 70.5, -115)`). Ordre prioritaire (`BotNavigator.pinDestination`) : enquête et repli
+  ne le changent pas ; le comportement reprend la main à l'arrivée, ou si la destination devient injoignable (arête
+  écartée). Remettre `nil` avant de renvoyer au même endroit (même valeur : pas de signal).
 - `workspace:SetAttribute("DebugNav", true)` : points (couleur du rouge au vert et étiquette = numéro, type, note),
   arêtes entre points (gris marche, bleu descente, orange saut, vert échelle ; trait court = sens unique), trajet
   simulé de chaque arête de rampe en violet (boule à l'entrée), chemin

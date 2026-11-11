@@ -13,6 +13,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
 local CharacterMotor = require(ReplicatedStorage.Shared.movement.CharacterMotor)
+local MathRules = require(ReplicatedStorage.Shared.MathRules)
 local MovementConfig = require(ReplicatedStorage.Shared.MovementConfig)
 local RampRules = require(ReplicatedStorage.Shared.RampRules)
 local StepTiming = require(ReplicatedStorage.Shared.StepTiming)
@@ -70,17 +71,12 @@ local function flatDir(from: Vector3, to: Vector3): Vector3
 	return if d.Magnitude > 1e-3 then d.Unit else Vector3.zero
 end
 
--- Cette méthode permet de donner la distance horizontale entre deux points lorsqu'on compare le corps simulé à un but.
-local function flatDist(a: Vector3, b: Vector3): number
-	return Vector3.new(b.X - a.X, 0, b.Z - a.Z).Magnitude
-end
-
 -- Cette méthode permet de trouver la case la plus proche des pieds lorsque le corps simulé atterrit : à moins de
 -- RAMP_LAND_RADIUS à l'horizontale et à hauteur voisine ; nil sinon.
 local function landedCell(params: Params, foot: Vector3): number?
 	local best, bestDist = nil, math.huge
 	for _, c in params.cellsNear(foot, BotConfig.RAMP_LAND_RADIUS + 1) do
-		local d = flatDist(foot, c.position)
+		local d = MathRules.horizontalLength(c.position - foot)
 		if
 			d <= BotConfig.RAMP_LAND_RADIUS
 			and math.abs(c.position.Y - foot.Y) <= BotConfig.NAV_REACH_DY
@@ -127,7 +123,7 @@ function RampSim.simulate(rig: Rig, params: Params): (RampRules.Trajectory?, str
 		local gnd = motor:beginTick(dt)
 		local _, grounded, airborne = motor:updateState(gnd, false)
 		local foot = motor.cframe.Position - lift
-		local speed = Vector3.new(motor.velocity.X, 0, motor.velocity.Z).Magnitude
+		local speed = MathRules.horizontalLength(motor.velocity)
 		if grounded and jumped and not touched then
 			return nil, "saut trop court, retombé avant la rampe"
 		elseif airborne and settled > 0 then
@@ -138,7 +134,7 @@ function RampSim.simulate(rig: Rig, params: Params): (RampRules.Trajectory?, str
 		local beyond = RampRules.beyondStart(frame, direction, foot)
 		local _, _, h = RampRules.toLocal(frame, foot)
 		passed = passed
-			or flatDist(foot, approach) < 3
+			or MathRules.horizontalLength(approach - foot) < 3
 			or (beyond <= BotConfig.RAMP_APPROACH_OUT and h >= BotConfig.RAMP_APPROACH_LIFT * 0.5)
 		local aim = if passed then target else approach
 
@@ -163,7 +159,7 @@ function RampSim.simulate(rig: Rig, params: Params): (RampRules.Trajectory?, str
 				-- Saut près du point de passage, ou au bord du vide (rien sous les pieds un peu plus loin)
 				local ahead = motor.cframe.Position + wish * (ci.radius + 1.5)
 				local floor = workspace:Raycast(ahead, Vector3.new(0, -(ci.rootToBottom + 2), 0), params.castParams)
-				jump = flatDist(foot, approach) <= BotConfig.RAMP_JUMP_DIST or floor == nil
+				jump = MathRules.horizontalLength(approach - foot) <= BotConfig.RAMP_JUMP_DIST or floor == nil
 			end
 			jumped = jumped or jump
 			motor:groundPhysics(gnd, wish, run, dt, jump, false, false)

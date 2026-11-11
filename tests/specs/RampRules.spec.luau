@@ -150,6 +150,14 @@ return function(T, Loader)
 			T.expectNear(reached.X, 30, 1e-6, "atteinte quand l'écart est petit")
 		end)
 
+		T.it("mesure le chemin parcouru le long de la rampe, sans compter la pente ni la normale", function()
+			local f = frame()
+			local a = Rules.surfacePoint(f, -40, 10)
+			local b = Rules.surfacePoint(f, 30, -20) + f.n * 5
+			T.expectNear(Rules.travel(f, a, b), 70, 1e-3)
+			T.expectNear(Rules.travel(f, b, a), 70, 1e-3, "dans les deux sens")
+		end)
+
 		T.it("garde un trajet qui traverse la rampe sous les plafonds de vitesse et de durée", function()
 			T.expect(Rules.accept(5, 60, 120, 130), "trajet normal")
 			T.expectEqual(Rules.accept(5, 60, 20, 130), false, "rampe à peine parcourue")
