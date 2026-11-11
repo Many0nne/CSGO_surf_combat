@@ -233,7 +233,8 @@ local function onSpawnReply(answer: any)
 	local char = localPlayer.Character
 	local humanoid = char and char.Parent and char:FindFirstChildOfClass("Humanoid")
 	local live = humanoid ~= nil and humanoid.Health > 0
-	if SpawnRequestRules.onReply(attempt, answer, os.clock(), live) == "adopt" and char then
+	-- En DEAD, pas de reprise à la main : CharacterAdded de ce personnage peut être encore en attente (double setup)
+	if SpawnRequestRules.onReply(attempt, answer, os.clock(), live) == "adopt" and char and state == "SPAWNING" then
 		onCharacterAdded(char)
 	end
 end
@@ -277,35 +278,52 @@ local function giveUpSpawn(notice: string)
 	MainMenu.showNotice(notice)
 end
 
--- Cette méthode permet de surveiller une demande d'apparition lorsqu'elle part (JOUER) : renvoi sans réponse, après un
--- refus temporaire ou un échec, abandon après un délai borné ; s'arrête dès que l'état quitte SPAWNING.
-local function watchSpawnRequest(attempt: SpawnRequestRules.Attempt)
-	while spawnAttempt == attempt do
-		local action = SpawnRequestRules.onTick(attempt, os.clock())
+-- Cette méthode permet de dérouler une surveillance d'apparition (JOUER #219, ou DEAD #245) tant que isCurrent() :
+-- tick décide à chaque pas d'attendre, (r)envoyer la demande getAttempt() ou abandonner vers le menu avec notice.
+local function runSpawnWatch(
+	isCurrent: () -> boolean,
+	tick: (now: number) -> SpawnRequestRules.TickAction,
+	getAttempt: () -> SpawnRequestRules.Attempt?,
+	notice: string
+)
+	while isCurrent() do
+		local action = tick(os.clock())
 		if action == "giveUp" then
-			giveUpSpawn(SPAWN_FAILED_NOTICE)
+			giveUpSpawn(notice)
 			return
 		elseif action == "send" then
-			sendSpawnRequest(attempt)
+			local attempt = getAttempt()
+			if attempt then
+				sendSpawnRequest(attempt)
+			end
 		end
 		task.wait(SpawnRequestRules.TICK)
 	end
+end
+
+-- Cette méthode permet de surveiller une demande d'apparition lorsqu'elle part (JOUER) : renvoi sans réponse, après un
+-- refus temporaire ou un échec, abandon après un délai borné ; s'arrête dès que l'état quitte SPAWNING.
+local function watchSpawnRequest(attempt: SpawnRequestRules.Attempt)
+	runSpawnWatch(function()
+		return spawnAttempt == attempt
+	end, function(now)
+		return SpawnRequestRules.onTick(attempt, now)
+	end, function()
+		return attempt
+	end, SPAWN_FAILED_NOTICE)
 end
 
 -- Cette méthode permet de borner l'attente en DEAD (#245) lorsque la réapparition programmée par le serveur tarde :
 -- redemande comme JOUER passé RESPAWN_DELAY + RESPAWN_MARGIN, puis retour au menu ; s'arrête dès que l'état quitte DEAD.
 local function watchRespawn(watch: SpawnRequestRules.DeadWatch)
 	local waitFor = GameConfig.RESPAWN_DELAY + GameConfig.RESPAWN_MARGIN
-	while deadWatch == watch do
-		local action = SpawnRequestRules.onDeadTick(watch, os.clock(), waitFor)
-		if action == "giveUp" then
-			giveUpSpawn(RESPAWN_FAILED_NOTICE)
-			return
-		elseif action == "send" and watch.attempt then
-			sendSpawnRequest(watch.attempt)
-		end
-		task.wait(SpawnRequestRules.TICK)
-	end
+	runSpawnWatch(function()
+		return deadWatch == watch
+	end, function(now)
+		return SpawnRequestRules.onDeadTick(watch, now, waitFor)
+	end, function()
+		return watch.attempt
+	end, RESPAWN_FAILED_NOTICE)
 end
 
 -- Cette méthode permet de lancer la surveillance de la réapparition lorsque le joueur local passe en DEAD.

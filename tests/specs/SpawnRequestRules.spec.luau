@@ -237,7 +237,8 @@ return function(T, Loader)
 	end)
 
 	T.describe("SpawnRequestRules : attente en DEAD (#245)", function()
-		local WAIT_FOR = 2.5 + 3
+		local GameConfig = Loader.new():require("src/shared/GameConfig")
+		local WAIT_FOR = GameConfig.RESPAWN_DELAY + GameConfig.RESPAWN_MARGIN
 
 		-- Cette méthode permet de rejouer l'attente en DEAD jusqu'à untilT lorsqu'un test simule le serveur
 		-- (characterAt : instant d'arrivée du personnage ou nil ; serverReply(n, t) comme simulate) ; renvoie la fin,
@@ -316,16 +317,29 @@ return function(T, Loader)
 			T.expectEqual(t <= WAIT_FOR + Rules.DEAD_GIVE_UP_AFTER + Rules.TICK, true)
 		end)
 
-		T.it("redemande acceptée sans personnage : retour au menu après LOAD_TIMEOUT", function()
+		T.it("redemande acceptée sans personnage : borne stricte, pas de LOAD_TIMEOUT en plus", function()
 			local outcome, t = simulateDead(nil, function()
 				return { status = "accepted" }, 0
 			end, 120)
 			T.expectEqual(outcome, "giveUp")
-			T.expectNear(t, WAIT_FOR + Rules.LOAD_TIMEOUT, Rules.TICK)
+			T.expectNear(t, WAIT_FOR + Rules.DEAD_GIVE_UP_AFTER, Rules.TICK)
+		end)
+
+		T.it("redemande acceptée tard (« spawning » après des échecs) : même borne", function()
+			local outcome, t = simulateDead(nil, function(index)
+				return { status = if index < 3 then "failed" else "spawning" }, 0
+			end, 120)
+			T.expectEqual(outcome, "giveUp")
+			T.expectEqual(t <= WAIT_FOR + Rules.DEAD_GIVE_UP_AFTER + Rules.TICK, true)
+		end)
+
+		T.it("la redemande n'arrive jamais pendant RESPAWN_DELAY (pas de refus « early » au journal)", function()
+			T.expectEqual(GameConfig.RESPAWN_MARGIN > 0, true)
 		end)
 
 		T.it("la borne courte ne touche pas une demande lancée par JOUER", function()
 			T.expectEqual(Rules.new(0).giveUpAfter, Rules.GIVE_UP_AFTER)
+			T.expectEqual(Rules.new(0).strict, false)
 			T.expectEqual(Rules.DEAD_GIVE_UP_AFTER < Rules.GIVE_UP_AFTER, true)
 		end)
 
