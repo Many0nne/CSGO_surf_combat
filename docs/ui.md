@@ -142,7 +142,7 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   `src/shared/KeyBindings.luau` (action → noms d'`Enum.KeyCode`, `MOUSE` pour M1/M2 ; M2 lu par `WeaponSystem`, M1 reste
   `Tool.Activated`, fixé par Roblox ; tables gelées), lue par `InputModule` (`KEY_MAP`), par
   `HUDRules.keyDisplayEntries` (la grille `KEY_DISPLAY_LAYOUT` ne garde que la place et le libellé fixe de chaque action) et par
-  les touches réservées de `PlayerSettings`. Une nouvelle action : sa liaison dans `KeyBindings`, sa case dans la grille.
+  les touches réservées de `PlayerSettings`. Une nouvelle action : sa liaison dans `KeyBindings`, sa case dans la grille (et dans `CAP_MODIFIERS` de `KeyDisplay` si sa touche est ambrée).
   Les cases suivent les touches physiques, pas l'action disponible : F et M2 s'enfoncent aussi avec une arme sans inspection
   ni lunette ; clavier ignoré pendant la saisie de texte (`GetFocusedTextBox`), pas de suivi du `gameProcessed` (piste non retenue,
   elle demandait un état par touche au lieu d'un sondage).

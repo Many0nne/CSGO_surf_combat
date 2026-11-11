@@ -277,6 +277,7 @@ function KeyDisplay.init()
 		Enabled = false,
 		ResetOnSpawn = false,
 		IgnoreGuiInset = true,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling, -- ombre sous le rebord, dessus et libellé au-dessus de leur parent
 		DisplayOrder = 0,
 		Parent = Players.LocalPlayer:WaitForChild("PlayerGui"),
 	})
