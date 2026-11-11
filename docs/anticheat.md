@@ -22,9 +22,9 @@ envoyant des données plausibles. Là, on ne peut que détecter statistiquement,
 
 | Domaine | Validation actuelle | Où |
 |---|---|---|
-| Mêlée | Cible = autre participant vivant, arme de mêlée réellement en main, distance des racines ≤ 10 studs, dégâts et cadence lus dans `WeaponConfig` selon le type d'attaque, backstab recalculé sur les positions serveur (#47) ; pour un joueur, durée d'equip (#175, voir T2), orientation et ligne de vue vers la cible rembobinée (#176, journal seul, voir M1) | `src/server/Validator.luau` (`authorizeMelee`), `src/server/ShotRules.luau` |
-| Tir | Cible valide (vivante), arme à distance en main, partie touchée appartenant à la cible, distance des racines ≤ `Validator.MAX_HITSCAN_RANGE` (~2 256 studs ; bots : 250), cadence `FireDelay` à 0,15 s près, dégâts calculés par le serveur selon la zone ; pour un joueur, forme, origine, visée sur la cible rembobinée, portée et ligne de vue (#174, voir T1), durée d'equip et chargeur (#175, voir T2 ; l'equip vaut aussi pour la mêlée), touche rattachée à son `ShotFired` par `shotTime` (#216, journal seul) | `src/server/Validator.luau` (`authorizeHitscan`, `validateShot`), `src/server/ShotRules.luau`, `src/server/ShotLinkRules.luau` |
-| Position | Forme (Vector3 et angle finis, coordonnées ≤ 1e5), personnage vivant, seau de distance (450 studs/s soutenus, client plafonné à 420 horizontaux, silence plafonné), refus journalisé et corrigé (#172) ; noclip et vol journalisés (#177, journal seul), joueur silencieux au-dessus du vide déclaré tombé | `src/server/CharacterSync.luau` (`refuse`, `judgeGuard`, `onClientPosition`), `src/shared/CharacterSyncRules.luau` (`tryMove`), `src/shared/MovementGuardRules.luau` |
+| Mêlée | Cible = autre participant vivant, arme de mêlée réellement en main, distance des racines ≤ 10 studs, dégâts et cadence lus dans `WeaponConfig` selon le type d'attaque, backstab recalculé sur les positions serveur (#47) ; pour un joueur, durée d'equip (#175, voir T2), instant du coup borné par le ping (#214, journal seul), orientation et ligne de vue vers la cible rembobinée à cet instant, pose comprise (#176, #213, journal seul, voir M1) | `src/server/Validator.luau` (`authorizeMelee`), `src/server/ShotRules.luau` |
+| Tir | Cible valide (vivante), arme à distance en main, partie touchée appartenant à la cible, distance des racines ≤ `Validator.MAX_HITSCAN_RANGE` (~2 256 studs ; bots : 250), cadence `FireDelay` à 0,15 s près, dégâts calculés par le serveur selon la zone ; pour un joueur, forme, instant du tir borné par le ping (#214, journal seul), origine, visée sur la cible rembobinée dans sa pose (cap, accroupi, #213), portée et ligne de vue (#174, voir T1), durée d'equip et chargeur (#175, voir T2 ; l'equip vaut aussi pour la mêlée), touche rattachée à son `ShotFired` par `shotTime` (#216, journal seul) | `src/server/Validator.luau` (`authorizeHitscan`, `validateShot`), `src/server/ShotRules.luau`, `src/server/ShotLinkRules.luau` |
+| Position | Forme (Vector3 et angle finis, coordonnées ≤ 1e5, accroupi booléen), personnage vivant, seau de distance (450 studs/s soutenus, client plafonné à 420 horizontaux, silence plafonné), refus journalisé et corrigé (#172) ; noclip et vol journalisés (#177, journal seul), joueur silencieux au-dessus du vide déclaré tombé | `src/server/CharacterSync.luau` (`refuse`, `judgeGuard`, `onClientPosition`), `src/shared/CharacterSyncRules.luau` (`tryMove`), `src/shared/MovementGuardRules.luau` |
 | Réglages | Réglages entièrement assainis par `PlayerSettings.sanitize`, une écriture DataStore au plus toutes les 10 s | `src/server/SettingsStore.luau` (`onSaveSettings`) |
 | Feedback | Type `string`, longueur 10 à 500, délai de 60 s après un envoi réussi, 5 envois par semaine (DataStore) | `src/server/FeedbackService.luau` (`init`, `COOLDOWN`, `consumeWeeklyQuota`) |
 | Debug | Remote `DebugPlaytest` créé seulement dans Studio | `src/server/DebugPlaytest.luau` (`DebugPlaytest.init`) |
@@ -80,8 +80,10 @@ localement les hitbox des autres (« hitbox expander ») marche aussi : le serve
    interpole et borne `t` à `[now - MAX_REWIND, now]`, `MAX_REWIND` = 0,4 s ≤ `DURATION` = 1 s ; entre deux relevés
    distants de plus de `MAX_GAP` = 0,25 s, le plus proche est pris au lieu d'une ligne droite). Un historique par `Model` (joueurs et bots, vide à
    chaque réapparition), supprimé à `Destroying` du personnage (mort, départ, bot retiré). Point d'entrée pour #174 et
-   #176 : `CharacterSync.positionAt(char, t)` (nil sans historique), aucun consommateur branché. Tests :
-   `tests/specs/PositionHistory.spec.luau`.
+   #176 : `CharacterSync.positionAt(char, t)` (nil sans historique). Depuis #213, chaque relevé garde aussi la **pose** :
+   cap (`yaw`, rad, interpolé par le plus court chemin) et accroupi (pris au relevé le plus proche) ; `positionAt` rend
+   `(position, cap, accroupi)`. L'accroupi vient du client (4e argument de `CharacterSync`, `CrouchSystem.isCrouching`),
+   les bots sont toujours debout. Tests : `tests/specs/PositionHistory.spec.luau`.
    Le tireur voyait la cible à `shotTime - INTERP_DELAY` (`CharacterSyncRules.INTERP_DELAY`, 0,1 s) ; ce
    temps est borné à `[now - 0,4 s, now]` pour qu'un client ne puisse pas réclamer une position ancienne.
 3. Origine : à moins de `5 + vitesse du tireur × 0,1` studs de la position du tireur à `shotTime` (il est en avance
@@ -127,8 +129,9 @@ Les accès au monde (horloge serveur, `CharacterSync.positionAt`, raycast, `Chea
 | Contrôle | Règle (constantes de `ShotRules`) | Mode livré | Gravité |
 |---|---|---|---|
 | `shape` | Trois Vector3 finis et ≤ 1e5 (`MAX_COORD`), `|direction|` = 1 à `UNIT_TOLERANCE` (1e-3) près, `shotTime` fini | `block` | forte |
+| `ping` | `now - shotTime` ≤ ping du tireur × `PING_FACTOR` (2) + `PING_MARGIN` (0,1 s), et ≥ `-CLOCK_TOLERANCE` (0,05 s) ; ping = `Player:GetNetworkPing()` (aller-retour). Ping inconnu : pas de borne (#214) | `log` | moyenne |
 | `origin` | À moins de `ORIGIN_BASE` (5) + vitesse du tireur × `ORIGIN_SPEED_FACTOR` (0,1) studs de sa racine actuelle ou de sa position à `shotTime` (borné à `[now - 0,4 s, now]`). La caméra est à 2,5 studs au-dessus de la racine | `log` | moyenne |
-| `direction` | Impact sur le rayon (à `HIT_ON_RAY` = 0,5 stud près, devant l'origine) ; rayon et impact à moins de rayon englobant de la partie (`Size.Magnitude / 2`) + `DIRECTION_BASE` (2) + vitesse de la cible × `DIRECTION_SPEED_FACTOR` (0,05) de la partie rembobinée. Partie rembobinée = racine à `shotTime - INTERP_DELAY` (borné à `[now - 0,4 s, now]`) + décalage de la partie sur le rig serveur | `log` | moyenne |
+| `direction` | Impact sur le rayon (à `HIT_ON_RAY` = 0,5 stud près, devant l'origine) ; rayon et impact à moins de rayon englobant de la partie (`Size.Magnitude / 2`) + `DIRECTION_BASE` (2) + vitesse de la cible × `DIRECTION_SPEED_FACTOR` (0,05) de la partie rembobinée. Partie rembobinée = racine à `shotTime - INTERP_DELAY` (borné à `[now - 0,4 s, now]`) + décalage de la partie pris sur le rig serveur dans le repère de sa racine, tourné au cap rembobiné et corrigé de l'accroupi (`posedPartCenter`, #213) | `log` | moyenne |
 | `distance` | `|hitPos - origin|` ≤ `WeaponConfig.HITSCAN_RANGE` (2 048, la portée du client) + `RANGE_TOLERANCE` (10) | `block` | moyenne |
 | `lineOfSight` | Raycast serveur de `origin` jusqu'à `LINE_OF_SIGHT_END_MARGIN` (0,5 stud) avant `hitPos` (avant la partie rembobinée si l'impact n'est pas sur elle : un impact forgé près de l'origine ne raccourcit pas le segment), limité à `Workspace.Maps` (inclusion) : aucun obstacle | `log` | moyenne |
 
@@ -164,15 +167,12 @@ résistant côté serveur, `DebugDummy` détruit), puis lire les lignes `[CheatL
 est un nouvel userdata : `==` marche, mais elle ne retrouve pas une clé de table posée avec une autre référence au
 même objet (`t[part.Parent]` vaut nil). Passer les personnages tels que le code les a obtenus (`resolveAttack` renvoie
 `aChar`) plutôt que de les relire par `Parent`. Et une `Part` neuve n'a pas de `Position` par défaut sous Lune (erreur
-à la lecture) : la poser dans les tests (`addPart` de `Validator.spec.luau`).
+à la lecture) : la poser dans les tests (`addPart` de `Validator.spec.luau`). Enfin `CFrame.lookAt(p, p + Vector3.new(0,
+0, 1))` rend sous Lune un cap **-Z** (cas dégénéré, vu avec #213) : pour une orientation vers +Z, construire
+`CFrame.new(p) * CFrame.Angles(0, yaw, 0)`.
 
-**Limites connues (à traiter avant `block` si la mesure les montre).** (1) Seule la racine est rembobinée : le
-décalage de la partie touchée est pris sur le rig serveur à l'arrivée du tir, pas dans la pose (accroupi, animation,
-cap) que voyait le tireur ; c'est la cause probable du faux positif mesuré sur une main. Piste : garder aussi le cap
-et l'état accroupi dans l'historique, ou élargir `DIRECTION_BASE` pour les membres. (2) `shotTime` est choisi par le
-client dans `[now - 0,4 s, now]` : un client modifié peut viser une position de la cible jusqu'à 0,4 s en arrière
-(« backtrack »). Piste : borner `now - shotTime` par la latence mesurée du joueur (RTT de `CharacterSync` ou
-`Player:GetNetworkPing()`) plus une marge.
+**Limites connues de #174, traitées depuis** : pose non rembobinée (#213) et instant choisi par le client
+(« backtrack », #214), voir « Instant annoncé et pose rembobinée » ci-dessous.
 
 **Passer un contrôle en `block`.** 1. Laisser tourner en jeu publié en `log` (au moins quelques centaines de tirs, dont
 du surf rapide et des joueurs à fort ping). 2. Lire les résumés `CheatLog` du webhook : compter les violations
@@ -181,6 +181,55 @@ du surf rapide et des joueurs à fort ping). 2. Lire les résumés `CheatLog` du
 un hitbox expander utile (rester sous ~2 fois le rayon d'une tête). 4. Passer le contrôle à `"block"` dans
 `ShotRules.MODES`, mettre à jour le tableau ci-dessus et le test « livre origine, direction et ligne de vue en journal
 seul » (`tests/specs/Validator.spec.luau`). Les tests « mode block » couvrent déjà le refus.
+
+### Instant annoncé et pose rembobinée (#214, #213)
+
+**Backtrack (#214).** Avant, `shotTime` était seulement ramené dans `[now - 0,4 s, now]` : un client modifié choisissait
+librement où rembobiner la cible dans ces 0,4 s (viser là où elle **était**, quel que soit son ping). Désormais le
+contrôle `ping` (`ShotRules.checkShotDelay`) borne `now - shotTime` (et `now - hitTime` pour la mêlée, voir M1) :
+
+- **Source du ping : `Player:GetNetworkPing()`**, l'aller-retour réseau (s) mesuré par le moteur, hors traitement
+  ([doc](https://create.roblox.com/docs/reference/engine/classes/Player#GetNetworkPing)), lu par `pingOf` du monde
+  (`init.server.luau`, `pcall`, nil pour un bot). Écarté : un RTT mesuré par `CharacterSync`, qui n'existe pas (il
+  faudrait un écho horodaté), et que le client pourrait gonfler en retardant sa réponse ; `GetNetworkPing` ne dépend
+  d'aucun script du client.
+- **Borne** : `ping × PING_FACTOR (2) + PING_MARGIN (0,1 s)`. Un tir honnête arrive un aller simple (≈ ping / 2)
+  plus la frame du tir, le tick réseau du client et le Heartbeat du serveur après `shotTime`. Facteur 2 (relevé en
+  revue) : `HitscanDamage` comme `MeleeDamage` sont fiables, un paquet perdu est renvoyé (un aller-retour de plus) ;
+  un aller peut être plus lent que le retour ; et `GetNetworkPing` est une moyenne, dont des retours du DevForum disent
+  qu'elle vaut la moitié de l'aller-retour (la doc dit l'aller-retour). La marge couvre les frames et l'erreur de
+  `GetServerTimeNow`. Avance tolérée (`shotTime` dans le futur) : `CLOCK_TOLERANCE` (0,05 s). Avec 30 ms de ping, un
+  tricheur ne remonte plus qu'à 0,16 s (+ `INTERP_DELAY`) au lieu de 0,4 s.
+- **Journal seul** (`ping` = `"log"`). Faux positifs restants : pic de latence au-dessus de la moyenne, deux pertes de
+  suite. À lire dans les résumés `CheatLog` avant de bloquer, en comparant `GetNetworkPing` au ping affiché (F3) en jeu
+  publié pour trancher le facteur. Le rembobinage lui-même n'est pas raccourci à la borne en mode journal (sinon un faux positif
+  déplacerait la cible, et la ligne de vue au-delà de `LOG_ONLY_RANGE` refuserait le tir) ; en `block`, le tir ou le
+  coup est refusé. Piste au moment de bloquer (relevée en revue) : ramener plutôt le rembobinage à
+  `max(shotTime, now - maxShotDelay(ping))`, ce qui retire le gain du backtrack sans refuser la touche. Détail :
+  écart, borne, ping (« instant 0.40 s avant l'arrivée (max 0.16 s, ping 30 ms) »). Ping inconnu (`pingOf` absent ou en erreur) : pas de borne.
+- **Bots** : pas concernés (tirs et coups serveur, sans `shot` ni `hitTime`).
+
+**Pose (#213).** Avant, seule la racine était rembobinée : le décalage de la partie touchée était pris sur le rig
+serveur à l'arrivée du tir, dans le cap actuel de la cible ; une cible qui tournait entre le tir et sa réception avait
+ses membres déplacés (cause probable du faux positif `direction` mesuré par #174 sur une main, 6,0 studs pour 5,0).
+Désormais l'historique garde le cap et l'accroupi, et `ShotRules.posedPartCenter` replace la partie : décalage dans le
+repère de la racine du rig serveur, tourné au cap rembobiné, posé sur la racine rembobinée.
+
+- **Accroupi : sans effet sur les parties aujourd'hui.** Le rig 3P ne s'accroupit pas (`CharacterConfig.ANIMATIONS` :
+  `CROUCH_IDLE` et `CROUCH_WALK` vides, repli sur `IDLE` et `WALK`, #120) : un tireur voit sa cible debout, accroupie
+  ou non. `ShotRules.CROUCH_DROP` (baisse des parties au-dessus de la racine quand l'accroupi diffère entre le tir et
+  maintenant) vaut donc 0. **Piège** : publier une piste d'accroupi 3P demande de régler `CROUCH_DROP` sur la baisse de
+  la tête qu'elle montre, sinon tous les tirs sur une cible qui vient de s'accroupir ou de se relever sortent en
+  `direction` ; le test « CROUCH_DROP suit la piste 3P » (`tests/specs/ShotRules.spec.luau`) échoue tant que ce n'est
+  pas fait. L'accroupi sert déjà à l'œil du tireur en mêlée (voir M1).
+- **Coût.** Deux tableaux de plus par historique (35 caps, 35 booléens), un octet de plus par paquet `CharacterSync`.
+  Repère `srv historique` de la sonde `PerfServer` (relevé de chaque position acceptée, joueurs et bots), mesuré en
+  Studio (voir « Mesure en Studio (#213, #214) »).
+- **Tolérances `DIRECTION_BASE` (2) et `DIRECTION_SPEED_FACTOR` (0,05) gardées** : voir la mesure ci-dessous ; Studio
+  n'a ni latence ni gigue, et ce sont elles que ces marges couvrent. À resserrer d'après le journal du jeu publié
+  (procédure « Passer un contrôle en `block` »).
+
+**Mesure en Studio (#213, #214).** À compléter.
 
 ### Distance (tranché, #174)
 
@@ -319,9 +368,10 @@ posé sur la parole du client, sans cadence. `AimStats` rattachait une touche au
   relais écarte le tir (`onFire` renvoie false), le rayon partant quand même.
 - **Oubli.** Le registre est vidé par `Validator.forget` (réapparition, départ, retrait d'un bot : règle de #218) et
   compté par `Validator.trackedCount`.
-- **Limite connue.** `shotTime` est choisi par le client : il n'est borné ni par le ping ni par l'horloge serveur
-  (#214). Un tricheur peut annoncer n'importe quel instant, pourvu qu'il envoie le même dans les deux remotes : il ne
-  gagne rien sur le chargeur ni sur le taux de touches.
+- **Limite connue.** `shotTime` est choisi par le client. Celui d'une touche est borné par le ping depuis #214
+  (contrôle `ping` de T1, journal seul) ; celui de `ShotFired` ne l'est pas (le relais ne rembobine rien). Un tricheur
+  qui annonce un autre instant, le même dans les deux remotes, ne gagne rien sur le chargeur ni sur le taux de
+  touches.
 - **Tests.** `tests/specs/ShotLinkRules.spec.luau` (tolérance, tir voisin, une touche par tir, âge, taille, touche
   avant son tir) ; « tirs comptés et touches rattachées » de `tests/specs/Validator.spec.luau` (6e `ShotFired` refusé
   après 4 tirs manqués, rechargement puis tir, bon tir, orpheline en `log` et en `block`, deux touches pour un tir,
@@ -366,31 +416,47 @@ historique `positionAt`, même raycast limité à `Workspace.Maps`, même journa
 
 | Contrôle | Règle (constantes de `ShotRules`) | Mode livré | Gravité |
 |---|---|---|---|
+| `ping` | `now - hitTime` borné par le ping comme `shotTime` (#214, voir T1 « Instant annoncé et pose rembobinée ») | `log` | moyenne |
 | `orientation` | Angle horizontal entre le cap de la racine serveur du tireur (`LookVector`, relayé à 20 Hz, celui de sa caméra : `MovementController`) et la direction de la racine de la cible ≤ `MELEE_MAX_ANGLE` (70°) + `asin(MELEE_BODY_RADIUS / distance)` (2 studs : 15° à 7,5 studs, 90° au contact ; distance 3D, sinon une cible à 2,5 studs à l'horizontale mais 6 studs plus bas ouvrait 124°). Cible à l'aplomb (à moins de `MELEE_BODY_RADIUS` à l'horizontale) et à plus de `MELEE_BODY_RADIUS` au-dessus ou au-dessous : acceptée quel que soit le cap (regard vers le bas, tireur sur sa tête) ; à même hauteur, l'angle permis s'applique, un coup dans le dos reste refusé | `log` | moyenne |
 | `meleeLineOfSight` | Raycast sur la map de la racine du tireur à celle de la cible, ou de son œil (`CAM_HEIGHT_STAND`) à la tête de la cible (décalage de `Head` sur le rig serveur, 1,5 stud à défaut : pas au-dessus de la tête, sinon un mur juste plus haut que la cible laisserait passer), pour un obstacle bas par-dessus lequel la caméra frappe ; jusqu'à `LINE_OF_SIGHT_END_MARGIN` avant : un segment dégagé suffit | `log` | moyenne |
 
-- **Rembobinage sans instant.** Le remote `MeleeDamage` n'envoie pas d'instant (client hors périmètre de #176) : la
-  cible est prise à `now`, `now - 0,05`, … `now - MAX_REWIND` (`MELEE_REWIND_STEP`, 9 positions, `meleeRewindTimes`),
-  ce qui couvre `INTERP_DELAY` + l'aller-retour du tireur jusqu'à 300 ms. Les positions à plus de 10 studs du tireur
-  (`MAX_MELEE_RANGE`) sont écartées (piège relevé en revue : sinon une cible en surf, à découvert à 30 studs il y a
-  0,3 s, se frappe maintenant à 5 studs derrière un mur). Le coup passe l'orientation si **une**
-  position est devant le cap ; la ligne de vue n'est testée que sur ces positions (toutes si aucune, pour la mesure),
-  deux positions à moins de `MELEE_SAMPLE_MERGE` (0,25 stud) testées une fois : un raycast pour un coup honnête,
-  18 au pire (cible derrière un mur), sous la cadence du couteau. Sans historique (`DebugDummy`), position actuelle.
+- **Instant du coup (#214).** Avant #214, `MeleeDamage` n'envoyait pas d'instant : la cible était cherchée à `now`,
+  `now - 0,05`, … `now - MAX_REWIND` (9 positions), et le coup passait si **une** position était devant le cap. Un
+  tricheur qui fixait une direction touchait donc toute cible dont le sillage des 0,4 dernières secondes avait croisé
+  son cône. Désormais le client envoie `hitTime` (`workspace:GetServerTimeNow()` au raycast de `MeleeHitDetection`,
+  comme `shotTime`), la garde l'exige (nombre fini ; sans lui, contrôle `shape`, refusé) et le serveur rembobine la
+  cible à **cet** instant seul (`ShotRules.rewindTime` : `hitTime - INTERP_DELAY`, borné à `[now - 0,4 s, now]`).
+  `hitTime` est borné par le ping comme `shotTime` (contrôle `ping`, catégorie `Melee`, journal seul). Position
+  rembobinée à plus de 10 studs du tireur (`MAX_MELEE_RANGE`) : position actuelle à la place (piège relevé en revue de
+  #176 : une cible en surf, à découvert à 30 studs il y a 0,3 s, ne se frappe pas maintenant à 5 studs derrière un
+  mur). Deux raycasts au plus par coup (racine à racine, œil à tête). Sans historique (`DebugDummy`), position
+  actuelle.
+- **Pose (#213).** La tête de la cible (segment « œil à tête ») est replacée dans sa pose rembobinée
+  (`posedPartCenter`, comme pour le tir) ; l'œil du tireur suit son accroupi : `CAM_HEIGHT_CROUCH` (1,2) au lieu de
+  `CAM_HEIGHT_STAND` (2,5) s'il est accroupi sur tous ses relevés des `CROUCH_EYE_SETTLE` dernières secondes
+  (≈ 0,21 s, temps pour que la caméra, qui descend en approche exponentielle à `CAM_LERP_SPEED`, arrive à 0,1 stud de
+  sa hauteur accroupie ; `eyeSettledCrouched` de `Validator.luau`), debout sinon (piège relevé en revue : juste après
+  l'appui, la caméra est encore haute). Un obstacle bas que la caméra debout survolait bloque désormais un tireur
+  accroupi.
 - **Tolérance d'angle.** La géométrie seule demande `asin(2 / 7,5)` ≈ 15° à portée : les 70° restants couvrent le
   retard du cap relayé (un paquet de position toutes les 50 ms, plus la gigue), soit ~1 000°/s de rotation. Un coup
-  dans le dos (180°) reste refusé même collé (160° permis au plus). Pas d'historique du cap (seule la position est
-  rembobinée, `CharacterSync*` hors périmètre) : si la mesure montre des faux positifs en rotation rapide, élargir
-  `MELEE_MAX_ANGLE` (jusqu'à ~110° garde le dos fermé), ou garder le cap dans l'historique. Le cap serveur n'avance
-  qu'avec les paquets de position acceptés : un joueur dont le mouvement est refusé (D1) ou dont les paquets (non
-  fiables) se perdent garde un cap ancien et peut être journalisé à tort ; le détail du journal permet de les écarter.
-- **Limite connue.** Sans instant annoncé, un tricheur qui fixe une direction touche une cible dont le sillage des
-  0,4 dernières secondes, à moins de 10 studs, a croisé son cône. Piste : envoyer l'instant du coup dans `MeleeDamage`
-  (comme `shotTime` de `HitscanDamage`) et réutiliser `ShotRules.rewindTime`. L'accroupi n'est pas connu du serveur :
-  l'œil du tireur est pris debout (`CAM_HEIGHT_STAND`, pas `CAM_HEIGHT_CROUCH`) et la tête de la cible sur le rig
-  serveur, d'où une marge par-dessus un obstacle de 1,2 à 2,5 studs (même limite que la pose non rembobinée de T1).
+  dans le dos (180°) reste refusé même collé (160° permis au plus). Le cap du **tireur** reste le dernier reçu, pas
+  celui de son historique à `hitTime` : un relevé est horodaté à son arrivée, donc le cap de `hitTime` n'arrive au
+  mieux qu'avec le coup. Le dernier paquet de position (non fiable, 20 Hz) est parti au plus 50 ms avant le coup, ou
+  plus tôt s'il s'est perdu : c'est ce retard que couvre la tolérance. À l'inverse, un paquet parti **après** le coup
+  peut arriver avant lui (non fiable contre fiable, sans ordre garanti) : le cap reçu en dernier est alors déjà tourné.
+  Les caps de l'historique un et deux paquets avant l'arrivée du coup (`MELEE_YAW_PACKETS`, relevé en revue) sont donc
+  testés aussi ; un seul devant la cible suffit, un cap plus ancien ne compte pas. Depuis #214, la cible n'est plus cherchée sur
+  9 instants : une cible en mouvement est prise exactement où le tireur la voyait, mais rien n'absorbe plus un cap
+  très en retard. **Valeur gardée (#213)** : la mesure en Studio n'a pas de latence (voir « Mesure en
+  Studio (#213, #214) »), elle ne dit rien du retard du cap ; à resserrer seulement d'après le journal du jeu publié. Le
+  cap serveur n'avance qu'avec les paquets de position acceptés : un joueur dont le mouvement est refusé (D1) ou dont
+  les paquets (non fiables) se perdent garde un cap ancien et peut être journalisé à tort ; le détail du journal permet
+  de les écarter.
 - **Position du tireur.** Racine serveur actuelle, sans rembobinage : le client est en avance de sa latence, l'écart
   est couvert par la tolérance d'angle et la portée de 10 studs (contre 7,5 côté client).
+- **Backstab.** Toujours jugé sur les positions et le cap **actuels** de la cible (`tRoot.CFrame`), pas sur sa pose
+  rembobinée : la juger à `hitTime` changerait les dégâts vus par les joueurs (décision de gameplay hors #213).
 - **Cible vivante.** Vérifiée avant (`isValidTarget`) : un corps dont l'historique répond encore est refusé.
 - **Bots.** Exclus (`attacker.isBot`) : ils frappent depuis le serveur, tournés vers leur cible (`BotMotion`). Test :
   coup de bot dos à la cible et à travers un mur accepté, rien au journal, contrôles bloquants.
@@ -613,7 +679,7 @@ devrait les chercher par une requête spatiale.
 - Raycasts `Include` sur la map et `RespectCanCollide` : un client honnête collisionne aussi avec les pièces `CanQuery`
   sans collision ; le serveur, plus permissif, ne s'en plaint pas.
 - Vérifier en Studio : un paquet forgé s'envoie en contexte Client avec un numéro de correction élevé
-  (`CharacterSync:FireServer(pos, 0, 1000)`) ; un client figé s'obtient avec
+  (`CharacterSync:FireServer(pos, 0, 1000, false)`, l'accroupi est exigé depuis #213) ; un client figé s'obtient avec
   `RunService:UnbindFromRenderStep("MovementStep")` (plus de mouvement ni d'envoi) ; une apparition à un endroit choisi,
   en déplaçant les points de `Maps.Dizzy.GroundSpawns` pendant le Play.
 
@@ -649,12 +715,12 @@ commune (débit et types, voir R1) ; la colonne « Validation actuelle » décri
 
 | Remote | Sens | Arguments | Validation actuelle | Manque |
 |---|---|---|---|---|
-| `MeleeDamage` | C→S | `targetChar, attackKind` | Cible, arme, portée, type d'attaque, cadence, dégâts serveur, durée d'equip (T2, #175), orientation et ligne de vue (M1, #176, journal seul) (`Validator.authorizeMelee`) | Passage en `block` après mesure (M1), tireur vivant |
-| `HitscanDamage` | C→S | `targetChar, hitPart, origin, direction, hitPos, shotTime` | Cible, arme, partie de la cible, portée des racines, cadence ; forme, origine, visée rembobinée, portée 2 048, ligne de vue (T1, #174 : origine, visée et ligne de vue en journal seul) ; durée d'equip et chargeur (T2, #175) ; rattachée à son `ShotFired` par `shotTime`, sinon orpheline comptée dans le chargeur (#215, #216 : `shotLink` en journal seul) | Passage en `block` après mesure (T1, `shotLink`), tireur vivant |
-| `CharacterSync` (non fiable) | C→S puis S→C | `pos, yaw, ack` | Forme, débit 40 Hz (garde), seau de distance et silence plafonné, refus corrigé (D1, `CharacterSync.luau`, `onClientPosition`) ; noclip et vol au journal, vide (D2, #177) | Noclip et vol en mode bloquant après mesure (D2) |
+| `MeleeDamage` | C→S | `targetChar, attackKind, hitTime` | Cible, arme, portée, type d'attaque, cadence, dégâts serveur, durée d'equip (T2, #175), instant du coup borné par le ping (#214), orientation et ligne de vue vers la cible rembobinée à cet instant (M1, #176, #213 ; journal seul) (`Validator.authorizeMelee`) | Passage en `block` après mesure (M1, `ping`), tireur vivant |
+| `HitscanDamage` | C→S | `targetChar, hitPart, origin, direction, hitPos, shotTime` | Cible, arme, partie de la cible, portée des racines, cadence ; forme, instant borné par le ping (#214, journal seul), origine, visée rembobinée (pose comprise, #213), portée 2 048, ligne de vue (T1, #174 : origine, visée et ligne de vue en journal seul) ; durée d'equip et chargeur (T2, #175) ; rattachée à son `ShotFired` par `shotTime`, sinon orpheline comptée dans le chargeur (#215, #216 : `shotLink` en journal seul) | Passage en `block` après mesure (T1, `shotLink`), tireur vivant |
+| `CharacterSync` (non fiable) | C→S puis S→C | `pos, yaw, ack, crouching` (relais : `char, pos, yaw, stamp`) | Forme, débit 40 Hz (garde), seau de distance et silence plafonné, refus corrigé (D1, `CharacterSync.luau`, `onClientPosition`) ; noclip et vol au journal, vide (D2, #177) | Noclip et vol en mode bloquant après mesure (D2) |
 | `MovementCorrection` | S→C | `char, pos, seq` | — | — |
 | `WeaponAction` | C→S | `action` | Valeur `Shoot`/`Reload`, outil en main, 0,05 s mini (`init.server.luau`) ; `Reload` démarre le rechargement suivi par le serveur avant ces filtres (T2, #175) ; `Shoot` ignoré pour une arme à distance (#215 : recul 3P posé par le relais de `ShotFired`) | `Shoot` du couteau non lié à la cadence : pose 3P seulement (un coup manqué n'a pas d'autre remote) |
-| `ShotFired` | C→S puis S→C | `origin, direction, shotTime` ; relais : `char, weaponName, origin, direction` | Garde (5/s, `shotTime` nombre fini), tireur vivant, arme à distance prête (`Validator.isReadyToFire` : equip, chargeur), forme, origine à `ORIGIN_MAX` (185 studs) de la racine, cadence `FireDelay` à 0,15 s près (`ShotRelayRules`, #156) ; accepté : compté dans le chargeur et inscrit au registre des tirs (`Validator.noteShotFired`, #215, #216), recul 3P posé ; refus non journalisé | `shotTime` non borné par le ping (#214) |
+| `ShotFired` | C→S puis S→C | `origin, direction, shotTime` ; relais : `char, weaponName, origin, direction` | Garde (5/s, `shotTime` nombre fini), tireur vivant, arme à distance prête (`Validator.isReadyToFire` : equip, chargeur), forme, origine à `ORIGIN_MAX` (185 studs) de la racine, cadence `FireDelay` à 0,15 s près (`ShotRelayRules`, #156) ; accepté : compté dans le chargeur et inscrit au registre des tirs (`Validator.noteShotFired`, #215, #216), recul 3P posé ; refus non journalisé | `shotTime` non borné par le ping (celui de la touche l'est, #214) |
 | `RequestSpawn` | C→S | aucun | `SpawnRules.request` : spawn en vol, personnage en place, bannière de fin, mort depuis moins de `RESPAWN_DELAY` en round actif (`SpawnManager.init`, handler de `RequestSpawn`) | Rien (R1 fermé, #171) |
 | `LeaveRound` | C→S | aucun | Retour au menu (#157) : `RoundManager.withdraw` (score de la manche effacé, coups en attente du joueur oubliés, disparition du personnage non comptée), puis `SpawnManager.withdraw` (personnage détruit, plus de réapparition, prochain `RequestSpawn` accepté sans `RESPAWN_DELAY`) (handler de `leaveRoundRmt` dans `init.server.luau`, `SpawnManager.withdraw`). Touché depuis moins de `GameConfig.LEAVE_DEATH_WINDOW` (5 s) : le départ compte comme une mort, kill au dernier attaquant (#217, `LeaveRules.countsAsDeath`) | Fuite d'une mort imminente fermée (#217) tant que le coup date de moins de 5 s ; un joueur au bord du vide sans coup reçu peut toujours éviter sa chute. Réapparaître plus tôt reste possible : il perd à chaque fois tout son score de la manche, comme un joueur qui quitte le jeu |
 | `SendFeedback` | C→S | `text` | Type, longueur, 60 s en mémoire après toute demande valide (posé avant le DataStore, quel que soit le résultat), 5 par semaine (`UpdateAsync`), rien d'écrit si la lecture échoue (`FeedbackService.init`, handler de `SendFeedback`) | Rien (R1 fermé, #171) |
@@ -984,7 +1050,7 @@ Les contrôles livrés et leur mode, pour savoir ce qu'une ligne du journal prou
 |---|---|---|
 | Seau de distance (#172) | `block` (`ENFORCE_MOVEMENT = true`) | Refus corrigé : un téléport franc est déjà arrêté, un gros ping aussi peut en produire |
 | Tir : `shape`, `distance` (#174) | `block` | `shape` : client forgé quasi certain ; `distance` : tir refusé |
-| Tir : `origin`, `direction`, `lineOfSight` (#174) | `log` | Tir accepté (sauf au-delà de 250 studs) : **indice seulement**, jamais une base de ban seule |
+| Tir : `origin`, `direction`, `lineOfSight` (#174), `ping` (#214, tir et mêlée) | `log` | Tir accepté (sauf au-delà de 250 studs) : **indice seulement**, jamais une base de ban seule |
 | Equip et chargeur (#175, #215) | `block` | Touche ou `ShotFired` refusé ; un paquet en retard peut coûter une touche honnête |
 | Touche sans tir rattaché (#216, `shotLink`) | `log` | Touche appliquée : **indice seulement** (un `ShotFired` écarté par le relais en produit) |
 | Mêlée orientation et ligne de vue (#176, M1) | `log` (`ShotRules.MODES` : `orientation`, `meleeLineOfSight`) | Coup appliqué : **indice seulement** |
@@ -1120,7 +1186,7 @@ mode bloquant une fois mesurée.
   (cadence, munitions, equip), jamais de l'action visuelle `WeaponAction` du client ; `hearShot` des bots aussi.
   Fait : remote `ShotFired`, voir « Relais des tirs » dans « Remotes ». Suite (#215, #216, fait) : chaque `ShotFired`
   accepté compté dans le chargeur, recul 3P posé par le relais, touche rattachée à son tir par `shotTime` (voir
-  « Tirs comptés et touches rattachées » en T2). Reste : borner `shotTime` par le ping (#214), rembobiner la pose (#213).
+  « Tirs comptés et touches rattachées » en T2). Puis `shotTime` et `hitTime` bornés par le ping (#214) et pose rembobinée (#213), faits, voir T1 et M1.
 - **Dépendances.** 6 de préférence. **Priorité.** suit #156.
 
 ### 10. Statistiques de visée (aimbot) — P3 (fait, #178 : journal seul, voir A1)
