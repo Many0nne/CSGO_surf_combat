@@ -293,14 +293,15 @@ function KeyDisplay.init()
 		Parent = Players.LocalPlayer:WaitForChild("PlayerGui"),
 	})
 	gui = screenGui
-	root = UIKit.scaledRoot(screenGui)
+	local scaled = UIKit.scaledRoot(screenGui)
+	root = scaled
 	grid = UIKit.frame({
 		Name = "Grid",
 		BackgroundTransparency = 1,
 		AnchorPoint = Vector2.new(0.5, 1),
 		Position = UDim2.new(0.5, 0, 1, -HUDRules.KEY_DISPLAY_BOTTOM),
 		Size = UDim2.fromOffset(0, 0),
-		Parent = root,
+		Parent = scaled,
 	})
 	-- Fenêtre redimensionnée : largeur seule (AbsoluteSize, échelle inchangée) ou hauteur (attribut Scale, posé par
 	-- UIKit.scaledRoot après la taille de la racine) ; différé pour lire une racine à jour
@@ -309,7 +310,7 @@ function KeyDisplay.init()
 		task.defer(place)
 	end
 	screenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(replace)
-	root:GetAttributeChangedSignal("Scale"):Connect(replace)
+	scaled:GetAttributeChangedSignal("Scale"):Connect(replace)
 
 	LocalSettings.onChanged(update)
 	HUDState.onChanged(onHudChanged)
