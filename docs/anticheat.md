@@ -44,7 +44,7 @@ Impact : ce que gagne le tricheur et ce que subissent les autres. Coût : serveu
 | T1 | Tir sans viser, à travers les murs, hitbox agrandie (« silent aim ») | **Critique** : un tir accepté par cible à 250 studs, 1 par 1,46 s, tête choisie (460 dégâts) | Faible serveur, moyen en complexité | P1 |
 | D1 | Vitesse et téléportation | **Critique** : ~400 à 800 studs/s soutenus, téléportation de 300 studs par seconde de silence | Faible | P1 |
 | M1 | Coup de couteau dans toutes les directions (« kill aura ») | **Élevé** : one-shot de dos à 10 studs, cumulable avec D1 | Faible | P2 |
-| R1 | Remotes sans débit ni garde (respawn, feedback) | **Moyen** : respawn en 0,3 s au lieu de 2,5 s, quota DataStore du serveur épuisable | Faible | P1 |
+| R1 | Remotes sans débit ni garde (respawn, feedback) | Fermé (#170, #171) : garde commune, délai de réapparition et feedback limité en mémoire | Faible | Fait |
 | T2 | Munitions et durée d'equip | **Moyen** : tir dès l'equip (#159), pas de rechargement | Faible | P2 |
 | D2 | Vol et noclip | **Moyen** : survivre au vide, passer les murs | Faible serveur, moyen en réglage (surf) | P2 |
 | A1 | Aimbot, triggerbot | **Élevé** mais seulement détectable | Moyen, faux positifs | P3 |
@@ -255,8 +255,8 @@ commune (débit et types, voir R1) ; la colonne « Validation actuelle » décri
 | `HitscanDamage` | C→S | `targetChar, hitPart` | Cible, arme, partie de la cible, portée 250, cadence (`Validator.luau:97-115`) | Origine, direction, ligne de vue, rembobinage (T1), munitions, equip (T2), tireur vivant |
 | `CharacterSync` (non fiable) | C→S puis S→C | `pos, yaw` | Forme, débit 40 Hz, distance (`CharacterSync.luau:69-88`) | Seau et silence (D1), noclip, vol (D2), correction |
 | `WeaponAction` | C→S | `action` | Valeur `Shoot`/`Reload`, outil en main, 0,05 s mini (`init.server.luau:127-139`) | `Shoot` non lié à la cadence de l'arme : 20 faux tirs/s attirent les bots (`hearShot`, `:143`) et, avec #156, déclencheraient 20 sons chez tous |
-| `RequestSpawn` | C→S | aucun | Refusé si personnage en place ou bannière de fin (`init.server.luau:189-206`) | Délai de réapparition non vérifié, appels en vol (voir R1) |
-| `SendFeedback` | C→S | `text` | Type, longueur, 60 s après un succès, 5 par semaine (`FeedbackService.luau:76-104`) | Débit en mémoire indépendant du succès (voir R1) |
+| `RequestSpawn` | C→S | aucun | `SpawnRules.request` : spawn en vol, personnage en place, bannière de fin, mort depuis moins de `RESPAWN_DELAY` en round actif (`SpawnManager.luau:137-169`) | Rien (R1 fermé, #171) |
+| `SendFeedback` | C→S | `text` | Type, longueur, 60 s en mémoire après toute demande valide (posé avant le DataStore, quel que soit le résultat), 5 par semaine (`UpdateAsync`), rien d'écrit si la lecture échoue (`FeedbackService.luau:113-150`) | Rien (R1 fermé, #171) |
 | `SaveSettings` | C→S | table | `PlayerSettings.sanitize`, écriture différée de 10 s (`SettingsStore.luau:113-130`) | Débit (coût CPU seulement, faible) |
 | `GetSettings` (RemoteFunction) | C→S | aucun | Attend le chargement, 20 s au plus (`SettingsStore.luau:101-109`) | Appels simultanés non bornés pendant le chargement (fils qui attendent) |
 | `DebugPlaytest` | C→S | `id, ok, detail, data` | Studio seulement, id attendu et propriétaire (`DebugPlaytest.luau:365-378`) | Rien en jeu publié |
@@ -264,23 +264,48 @@ commune (débit et types, voir R1) ; la colonne « Validation actuelle » décri
 
 ### R1. Garde commune et failles constatées
 
-**Respawn (risque moyen : 2,2 s gagnées par mort).** Le personnage mort est détruit 0,3 s après la mort (`init.server.luau:165-169`) ; `canSpawn` ne teste que
-`player.Character.Parent` (`:191`). Un client modifié qui envoie `RequestSpawn` après 0,3 s réapparaît tout de suite au
-lieu d'attendre `RESPAWN_DELAY` = 2,5 s (`src/shared/GameConfig.luau:5`). Puis la réapparition programmée par le serveur
-(`RoundManager.luau:215-219`) rappelle `SpawnManager.spawnPlayer` (`init.server.luau:175`) sans vérifier qu'il est
-déjà en vie : son personnage est remplacé par un neuf. Le client légitime n'envoie `RequestSpawn` que depuis le menu
-(`src/client/systems/game/GameStateController.luau:242-250`). Parade : `canSpawn` refuse un participant mort depuis moins
-de `RESPAWN_DELAY` dans un round actif, et la réapparition programmée ne fait rien si le joueur a déjà un personnage
-vivant ; un seul `LoadCharacterAsync` en vol par joueur.
+**Respawn (fait, #171).** Avant : le personnage mort est détruit 0,3 s après la mort (`CORPSE_HANDOFF_DELAY`,
+`init.server.luau`) et `canSpawn` ne testait que `player.Character.Parent` ; un client modifié qui envoyait
+`RequestSpawn` après 0,3 s réapparaissait tout de suite au lieu d'attendre `RESPAWN_DELAY` = 2,5 s
+(`src/shared/GameConfig.luau:5`), puis la réapparition programmée (`RoundManager.onCharacterDied`) remplaçait son
+personnage par un neuf. Le client légitime n'envoie `RequestSpawn` que depuis le menu
+(`src/client/systems/game/GameStateController.luau`, `requestPlay`). Parade en place :
 
-**Feedback (risque moyen : déni de service DataStore).** `lastSent` n'est écrit qu'après un envoi réussi au webhook (`FeedbackService.luau:117`), alors que
-chaque demande valide lit (et écrit) le DataStore (`:100`). Sans webhook configuré, ou une fois la limite
-hebdomadaire atteinte, un client qui spamme provoque un `GetAsync` par appel : il épuise le budget DataStore du
-serveur, partagé avec `SettingsStore` et `StatsStore`, dont le chargement échoue alors pour tout le monde
-(`SettingsStore.luau:73-75` coupe la sauvegarde pour la session). De plus, si `GetAsync` échoue, la liste lue est vide
-(`FeedbackService.luau:41-48`) et le `SetAsync` qui suit l'écrase par `{ now }` (`:67-70`) : une panne DataStore remet
-le quota hebdomadaire à zéro. Parade : délai en mémoire posé à chaque demande qui atteint le DataStore, quel que soit le
-résultat, et pas d'écriture du quota quand la lecture a échoué.
+- `SpawnManager.noteDeath` retient l'heure de la mort (Humanoid.Died, joueurs seulement) ;
+- `SpawnRules.request` (pur, `tests/specs/SpawnRules.spec.luau`) refuse, dans l'ordre : un `LoadCharacterAsync` déjà en
+  vol (`spawning`), en round actif une mort de moins de `RESPAWN_DELAY` (`early`, même si le corps est encore en
+  place), un personnage en place (`alive`, corps compris), la bannière de fin (`result`). Une mort hors round actif ne compte pas : la bannière dure plus que le
+  délai, le premier spawn du round suivant n'est pas gêné ;
+- refus au journal, catégorie `Spawn` : `early` moyen (notre client n'est pas au menu pendant un round où il est mort),
+  `spawning` et `alive` faibles (course réseau possible), `result` sans violation (Play cliqué pendant la bannière) ;
+- la réapparition programmée passe par `SpawnManager.respawn` : rien si le joueur a déjà un personnage vivant
+  (`SpawnRules.isAlive` : en place et PV > 0) ou un chargement en vol ; `SpawnManager.spawnPlayer` ne lance qu'un
+  `LoadCharacterAsync` à la fois par joueur (pcall, connexion `CharacterAdded` rendue en cas d'échec) ;
+- les bots ne passent pas par là : `BotManager` gère leur réapparition (`diedAt` + `RESPAWN_DELAY`) et leur passe un
+  rappel vide.
+
+Le futur bouton de retour au menu (#157) devra en tenir compte : un mort qui revient au menu et clique Play avant
+`RESPAWN_DELAY` est refusé (et journalisé `early`) ; la réapparition programmée le fait de toute façon revenir.
+
+**Feedback (fait, #171).** Avant : `lastSent` n'était écrit qu'après un envoi réussi au webhook, alors que chaque
+demande valide lisait (et écrivait) le DataStore : sans webhook, ou la limite hebdomadaire atteinte, un spam provoquait
+un `GetAsync` par appel et épuisait le budget DataStore du serveur, partagé avec `SettingsStore` et `StatsStore`
+(dont le chargement échoue alors pour tout le monde). Et si `GetAsync` échouait, la liste lue était vide et le
+`SetAsync` suivant remettait le quota hebdomadaire à zéro. Parade en place (`FeedbackService.luau`, testée par
+`tests/specs/FeedbackService.spec.luau`) :
+
+- après la garde commune et la longueur, `lastAttempt` (en mémoire, par joueur et par serveur) refuse toute demande à
+  moins de 60 s de la précédente, et est posé **avant** tout accès DataStore, quel que soit le résultat (succès, webhook
+  en échec, quota atteint, DataStore en panne, pas de webhook) : au plus un accès par minute et par joueur. Il survit
+  au départ du joueur tant que le délai court (une reconnexion ne le remet pas à zéro) ;
+- l'URL du webhook est lue avant le DataStore : sans webhook, ni accès ni quota consommé ;
+- quota en un seul `UpdateAsync` (un accès au lieu de `GetAsync` + `SetAsync`, et atomique entre serveurs) : la
+  décision est `FeedbackService.weeklyQuota` (pure, valeurs non numériques ignorées), qui annule l'écriture à la limite.
+  Un `UpdateAsync` en erreur n'écrit rien (lecture échouée ≠ liste vide) et le feedback est refusé ;
+- un envoi au webhook en échec est rendu au quota (au mieux, second `UpdateAsync`) : une panne du webhook ne bloque pas
+  le joueur une semaine.
+
+Pas de catégorie `CheatLog` pour ces refus : un joueur honnête qui réessaie après une erreur tombe dessus.
 
 **Garde commune (fait, #170).** `src/server/RemoteGuard.luau` (pur, testé par `tests/specs/RemoteGuard.spec.luau`) :
 seau à jetons par joueur et par remote (débit et rafale), contrôles de type (`instance`, `vector3` fini, `number` fini,
@@ -373,7 +398,7 @@ CheatLog.summary(participant.id) -- bilan (compteurs, score présent, pire viola
 
 - **Gravités** (`CheatLog.Severity`) : `LOW`, `MEDIUM`, `HIGH`, au sens de « Classer les violations » ci-dessous.
 - **Catégories** (`CheatLog.Category`) : `RemoteRate`, `RemoteArgs` (garde des remotes), et réservées aux parades
-  suivantes : `Spawn` (#171), `Movement` (#172), `Hitscan` (#174, #175), `Melee` (#176). Une nouvelle parade
+  suivantes : `Spawn` (#171, branchée : refus de `RequestSpawn`), `Movement` (#172), `Hitscan` (#174, #175), `Melee` (#176). Une nouvelle parade
   ajoute sa catégorie à `CheatLog.Category` et ici, pour garder des noms stables dans le journal.
 - `warn` `[CheatLog]` limité à un toutes les `WARN_INTERVAL` (2 s) par joueur, le suivant dit combien ont été tus ;
   détail coupé à `MAX_DETAIL` octets sans couper de caractère, octets non UTF-8 remplacés par `?` (il peut contenir une
@@ -450,7 +475,7 @@ mode bloquant une fois mesurée.
   journalisé « fort » ; kick à 3 violations fortes ; bots et Studio sans sanction ; tests Lune du seau et des types.
 - **Dépendances.** Aucune. **Priorité.** P1 (socle des suivantes).
 
-### 2. Corriger le contournement du délai de réapparition et le spam du feedback — P1
+### 2. Corriger le contournement du délai de réapparition et le spam du feedback — P1 (fait, #171)
 
 - **Résumé.** Les deux failles de R1.
 - **Critères.** `RequestSpawn` refusé moins de `RESPAWN_DELAY` après la mort pendant un round actif ; la réapparition

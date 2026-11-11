@@ -157,13 +157,17 @@ local function onParticipantCharacter(participant: Participants.Participant, cha
 	trackWeapon3P(char)
 	local humanoid = char:WaitForChild("Humanoid") :: Humanoid
 	humanoid.Died:Connect(function()
+		local player = participant.player
+		if player then
+			-- En premier : une demande d'apparition est refusée pendant RESPAWN_DELAY (#171), même si la suite échoue
+			SpawnManager.noteDeath(player)
+		end
 		local killer = RoundManager.onCharacterDied(participant, respawn)
 		if killer then
 			-- Un bot qui vient de tuer se replace (#141)
 			BotManager.notifyKill(killer)
 		end
 		-- Une mort infligée par un bot ne compte que dans le round (décision 6 de #133)
-		local player = participant.player
 		if player and ParticipantRules.countsInStats(participant.isBot, killer and killer.isBot) then
 			StatsStore.recordDeath(player)
 		end
@@ -178,7 +182,8 @@ end
 
 local function onCharacterAdded(player: Player, char: Model)
 	onParticipantCharacter(Participants.fromPlayer(player), char, function()
-		SpawnManager.spawnPlayer(player)
+		-- Jamais par-dessus un personnage vivant ni un spawn en vol (#171)
+		SpawnManager.respawn(player)
 	end)
 end
 
@@ -192,24 +197,19 @@ CharacterSync.init(characterSyncRmt, KillZone.check)
 -- Une seule map est jouée (GameConfig.ACTIVE_MAP) : les autres sont retirées avant les premières apparitions
 MapSelection.activate(workspace:FindFirstChild("Maps"), GameConfig.ACTIVE_MAP)
 
-SpawnManager.init(spawnRmt, function(player: Player): boolean
-	-- Refuser si déjà vivant
-	if player.Character and player.Character.Parent then
-		return false
-	end
-	-- Refuser si résultat en cours (bannière de fin)
-	if RoundManager.getState() == "result" then
-		return false
-	end
-	-- Démarrer le round si idle (1er joueur à cliquer Play)
-	if RoundManager.getState() == "idle" then
-		-- attribut Workspace RoundDuration : rounds courts pour suivre la mémoire sur plusieurs rounds (#95)
-		RoundManager.startRound(
-			PerfRules.roundDuration(GameConfig.ROUND_DURATION, workspace:GetAttribute("RoundDuration"))
-		)
-	end
-	return true
-end)
+-- Règles de la demande (déjà vivant, spawn en vol, bannière de fin, délai depuis la mort) : SpawnRules (#171)
+SpawnManager.init(spawnRmt, {
+	roundState = RoundManager.getState,
+	beforeSpawn = function()
+		-- Démarrer le round si idle (1er joueur à cliquer Play)
+		if RoundManager.getState() == "idle" then
+			-- attribut Workspace RoundDuration : rounds courts pour suivre la mémoire sur plusieurs rounds (#95)
+			RoundManager.startRound(
+				PerfRules.roundDuration(GameConfig.ROUND_DURATION, workspace:GetAttribute("RoundDuration"))
+			)
+		end
+	end,
+})
 
 -- ── Combat : validation et attribution des dégâts ─────────────────────────
 
@@ -341,6 +341,7 @@ end)
 Players.PlayerAdded:Connect(setupPlayer)
 Players.PlayerRemoving:Connect(function(player)
 	lastWeaponAction[player] = nil
+	SpawnManager.forget(player)
 	local participant = Participants.fromPlayer(player)
 	Validator.forget(participant)
 	RoundManager.removeParticipant(participant)
