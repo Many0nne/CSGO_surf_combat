@@ -257,8 +257,9 @@ contrôles de plus. Règles pures dans `src/server/ShotRules.luau` (`checkEquip`
   Méthode : `workspace:SetAttribute("DebugBots", 0)` d'abord (sinon les bots tuent le joueur et la réapparition remet
   le chargeur à zéro), un run `DebugPlaytest` AWP pour équiper et viser la cible, puis en contexte `Client` une boucle
   `tool:Activate()` lancée par `task.spawn` (appels MCP courts : un `execute_luau` qui attend longtemps a figé Studio
-  des heures). Espacer les clics de 2 s : `ShootAnimTime` (1,63 s) dépasse `FireDelay`, un clic à 1,6 s est ignoré
-  par le client (état `FIRING`).
+  des heures). À l'époque, espacer les clics de 2 s : `ShootAnimTime` (1,63 s) dépassait `FireDelay`, un clic à 1,6 s
+  était ignoré par le client (état `FIRING`). Depuis #221, `ShootAnimTime` = `FireDelay` (invariant testé par
+  `tests/specs/WeaponConfig.spec.luau`) : cadence client et serveur identiques.
 - **Début du rechargement borné.** Un `Reload` ne compte qu'à partir de la fin de l'equip et de la cadence du dernier
   tir accepté de l'arme (`max(arrivée, equip + EquipTime - 0,2, dernier tir + FireDelay - 0,2)`) : le client ne peut pas
   recharger avant, un client modifié qui recharge dès son tir ne gagne pas `FireDelay` (1,46 s) sur la pause.
@@ -580,7 +581,7 @@ commune (débit et types, voir R1) ; la colonne « Validation actuelle » décri
 | `WeaponAction` | C→S | `action` | Valeur `Shoot`/`Reload`, outil en main, 0,05 s mini (`init.server.luau`) ; `Reload` démarre le rechargement suivi par le serveur avant ces filtres (T2, #175) | `Shoot` non lié à la cadence : sans effet hors pose 3P depuis #156 (ouïe des bots et son passés sur `ShotFired`) |
 | `ShotFired` | C→S puis S→C | `origin, direction` ; relais : `char, weaponName, origin, direction` | Garde (5/s), tireur vivant, arme à distance prête (`Validator.isReadyToFire` : equip, chargeur), forme, origine à `ORIGIN_MAX` (185 studs) de la racine, cadence `FireDelay` à 0,15 s près (`ShotRelayRules`, #156) ; refus non journalisé | Rien : sans dégâts, un tir forgé ne fait qu'un son, au plus un par cadence |
 | `RequestSpawn` | C→S | aucun | `SpawnRules.request` : spawn en vol, personnage en place, bannière de fin, mort depuis moins de `RESPAWN_DELAY` en round actif (`SpawnManager.init`, handler de `RequestSpawn`) | Rien (R1 fermé, #171) |
-| `LeaveRound` | C→S | aucun | Retour au menu (#157) : `RoundManager.withdraw` (score de la manche effacé, coups en attente du joueur oubliés, disparition du personnage non comptée), puis `SpawnManager.withdraw` (personnage détruit, plus de réapparition, prochain `RequestSpawn` accepté sans `RESPAWN_DELAY`) (handler de `leaveRoundRmt` dans `init.server.luau`, `SpawnManager.withdraw`) | Un client modifié peut s'en servir pour échapper à une mort imminente (l'adversaire ne gagne pas le kill) ou réapparaître plus tôt : il perd à chaque fois tout son score de la manche, comme un joueur qui quitte le jeu |
+| `LeaveRound` | C→S | aucun | Retour au menu (#157) : `RoundManager.withdraw` (score de la manche effacé, coups en attente du joueur oubliés, disparition du personnage non comptée), puis `SpawnManager.withdraw` (personnage détruit, plus de réapparition, prochain `RequestSpawn` accepté sans `RESPAWN_DELAY`) (handler de `leaveRoundRmt` dans `init.server.luau`, `SpawnManager.withdraw`). Touché depuis moins de `GameConfig.LEAVE_DEATH_WINDOW` (5 s) : le départ compte comme une mort, kill au dernier attaquant (#217, `LeaveRules.countsAsDeath`) | Fuite d'une mort imminente fermée (#217) tant que le coup date de moins de 5 s ; un joueur au bord du vide sans coup reçu peut toujours éviter sa chute. Réapparaître plus tôt reste possible : il perd à chaque fois tout son score de la manche, comme un joueur qui quitte le jeu |
 | `SendFeedback` | C→S | `text` | Type, longueur, 60 s en mémoire après toute demande valide (posé avant le DataStore, quel que soit le résultat), 5 par semaine (`UpdateAsync`), rien d'écrit si la lecture échoue (`FeedbackService.init`, handler de `SendFeedback`) | Rien (R1 fermé, #171) |
 | `SaveSettings` | C→S | table | `PlayerSettings.sanitize`, écriture différée de 10 s (`SettingsStore.onSaveSettings`) | Débit (coût CPU seulement, faible) |
 | `GetSettings` (RemoteFunction) | C→S | aucun | Attend le chargement, 20 s au plus (`SettingsStore.onGetSettings`) | Appels simultanés non bornés pendant le chargement (fils qui attendent) |
@@ -613,6 +614,17 @@ Retour au menu en partie (#157, remote `LeaveRound`) : `SpawnManager.withdraw` e
 réapparition programmée, donc un mort qui revient au menu puis clique JOUER n'est ni refusé `early` ni journalisé ; il a
 perdu son score de la manche (`RoundManager.withdraw`). Si sa réapparition programmée chargeait encore, sa demande est
 servie à la fin de ce chargement (`SpawnRules.rejoinsInFlight`) au lieu d'être refusée `spawning`.
+
+**Fuite d'une mort par le menu (fait, #217).** Un départ moins de `GameConfig.LEAVE_DEATH_WINDOW` (5 s) après un coup
+reçu compte comme une mort (`LeaveRules.countsAsDeath`, lu par `RoundManager.withdraw`) : kill au dernier attaquant
+(mort entre-temps : crédité ; parti : départ libre), `PlayerDied`, stats comme une mort normale (`onDeathCounted`). Un
+coup absorbé par la protection d'apparition garde le tueur mais pas l'instant (`LastHit.at` nil). Limites assumées :
+quitter le jeu (déconnexion) n'est pas couvert ; un départ compté comme une mort ne retient pas `RESPAWN_DELAY` (un
+refus `early` serait journalisé et laisserait le client en `SPAWNING`).
+Vérification Studio (2026-11-11) : joueur passé à 1000 PV côté serveur (un tir d'AWP de bot ne le tue pas), menu en
+partie ouvert d'avance (`DebugInGameMenu`), attente du coup bornée à 6 s en contexte `Client`, puis clic sur
+MENU PRINCIPAL (`user_mouse_input` aux coordonnées `AbsolutePosition` + taille / 2, `InGameMenu` ignore l'inset). Départ
+1,6 s après le coup : `PlayerDied` reçu (tueur le bot, arme AWP) ; départ sans coup : rien.
 
 **Feedback (fait, #171).** Avant : `lastSent` n'était écrit qu'après un envoi réussi au webhook, alors que chaque
 demande valide lisait (et écrivait) le DataStore : sans webhook, ou la limite hebdomadaire atteinte, un spam provoquait

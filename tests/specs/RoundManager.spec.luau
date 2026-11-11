@@ -22,10 +22,11 @@ return function(T, Loader)
 		return remote
 	end
 
-	-- Cette méthode permet de monter un RoundManager avec services, remotes et `task` simulés lorsqu'un test démarre ;
-	-- les délais (réapparition, fin de résultat) ne partent que quand le test appelle flush, et tick fait avancer le timer.
+	-- Cette méthode permet de monter un RoundManager avec services, remotes, `task` et horloge simulés lorsqu'un test
+	-- démarre ; les délais ne partent qu'à flush, tick fait avancer le timer du round et wait l'horloge (os.clock).
 	local function setup()
 		local players, owners = {}, {}
+		local now = 0
 		local heartbeat = nil
 		local pending = {}
 		local services = {
@@ -59,7 +60,12 @@ return function(T, Loader)
 				table.insert(pending, table.pack(fn, ...))
 			end,
 		}
-		local loader = Loader.new(services, { task = fakeTask })
+		local fakeOs = {
+			clock = function()
+				return now
+			end,
+		}
+		local loader = Loader.new(services, { task = fakeTask, os = fakeOs })
 		local RoundManager = loader:require("src/server/RoundManager")
 		local Participants = loader:require("src/server/Participants")
 		local remotes = {
@@ -91,6 +97,10 @@ return function(T, Loader)
 			for _, call in due do
 				call[1](table.unpack(call, 2, call.n))
 			end
+		end
+		-- Cette méthode permet d'avancer l'horloge simulée (os.clock) lorsqu'un test fait vieillir le dernier coup reçu.
+		function env.wait(seconds: number)
+			now += seconds
 		end
 		function env.tick(dt: number)
 			if heartbeat then
@@ -227,6 +237,8 @@ return function(T, Loader)
 			local bot = env.addBot("Marcel", Vector3.zero)
 			env.RoundManager.startRound(60)
 			env.RoundManager.recordDamage(bot, alice, "AWP", true)
+			-- Coup ancien : départ libre (#217)
+			env.wait(10)
 			local deathsBefore = #env.remotes.playerDied.sent
 
 			env.RoundManager.withdraw(alice)
@@ -276,6 +288,144 @@ return function(T, Loader)
 			env.flush()
 			T.expectEqual(env.remotes.scoreUpdate.last()[alice.id].deaths, 1)
 			T.expectEqual(respawned, true, "réapparition programmée de nouveau")
+		end)
+	end)
+
+	T.describe("RoundManager : départ juste après un coup reçu (#217)", function()
+		T.it("compte un départ 4,9 s après un coup comme une mort, kill au dernier attaquant", function()
+			local env = setup()
+			local alice = env.addPlayer(1, "Alice", Vector3.new(10, 0, 0))
+			local bot = env.addBot("Marcel", Vector3.zero)
+			env.RoundManager.startRound(60)
+			env.RoundManager.recordDamage(bot, alice, "AWP", true)
+			env.wait(4.9)
+
+			local died, killer = env.RoundManager.withdraw(alice)
+
+			T.expectEqual(died, true, "départ compté comme une mort")
+			T.expectEqual(killer, bot, "kill au dernier attaquant")
+			T.expectEqual(env.remotes.scoreUpdate.last()[bot.id].kills, 1, "kill compté au round")
+			T.expectEqual(env.remotes.scoreUpdate.last()[alice.id], nil, "le partant quitte le classement")
+			local death = env.remotes.playerDied.last()
+			T.expectEqual(death.victimId, alice.id, "kill feed : victime")
+			T.expectEqual(death.killerName, "Marcel", "kill feed : tueur")
+			T.expectEqual(death.weapon, "AWP")
+			T.expectEqual(death.headshot, true)
+		end)
+
+		T.it("laisse partir librement 5,1 s après le coup", function()
+			local env = setup()
+			local alice = env.addPlayer(1, "Alice", Vector3.zero)
+			local bot = env.addBot("Marcel", Vector3.zero)
+			env.RoundManager.startRound(60)
+			env.RoundManager.recordDamage(bot, alice, "AWP", false)
+			env.wait(5.1)
+			local deathsBefore = #env.remotes.playerDied.sent
+
+			local died, killer = env.RoundManager.withdraw(alice)
+
+			T.expectEqual(died, false)
+			T.expectEqual(killer, nil)
+			T.expectEqual(#env.remotes.playerDied.sent, deathsBefore, "aucune mort annoncée")
+			T.expectEqual(env.remotes.scoreUpdate.last()[bot.id].kills, 0)
+		end)
+
+		T.it("laisse partir librement sans coup reçu", function()
+			local env = setup()
+			local alice = env.addPlayer(1, "Alice", Vector3.zero)
+			env.addBot("Marcel", Vector3.zero)
+			env.RoundManager.startRound(60)
+
+			T.expectEqual((env.RoundManager.withdraw(alice)), false)
+			T.expectEqual(#env.remotes.playerDied.sent, 0)
+		end)
+
+		T.it("crédite le kill à un attaquant mort entre-temps", function()
+			local env = setup()
+			local alice = env.addPlayer(1, "Alice", Vector3.zero)
+			local bob = env.addPlayer(2, "Bob", Vector3.new(5, 0, 0))
+			env.RoundManager.startRound(60)
+			env.RoundManager.recordDamage(bob, alice, "AWP", false)
+			env.RoundManager.onCharacterDied(bob, function() end) -- Bob meurt d'une chute
+			env.wait(1)
+
+			local died, killer = env.RoundManager.withdraw(alice)
+
+			T.expectEqual(died, true)
+			T.expectEqual(killer, bob, "toujours inscrit : crédité comme pour une mort normale")
+			T.expectEqual(env.remotes.scoreUpdate.last()[bob.id].kills, 1)
+		end)
+
+		T.it("laisse partir librement si l'attaquant a quitté le jeu", function()
+			local env = setup()
+			local alice = env.addPlayer(1, "Alice", Vector3.zero)
+			local bot = env.addBot("Marcel", Vector3.zero)
+			env.RoundManager.startRound(60)
+			env.RoundManager.recordDamage(bot, alice, "AWP", false)
+			env.Participants.remove(bot)
+			env.RoundManager.removeParticipant(bot)
+
+			T.expectEqual((env.RoundManager.withdraw(alice)), false, "personne à créditer")
+		end)
+
+		T.it("laisse partir librement si l'attaquant est lui-même revenu au menu", function()
+			local env = setup()
+			local alice = env.addPlayer(1, "Alice", Vector3.zero)
+			local bob = env.addPlayer(2, "Bob", Vector3.zero)
+			env.RoundManager.startRound(60)
+			env.RoundManager.recordDamage(bob, alice, "AWP", false)
+			env.RoundManager.withdraw(bob)
+
+			T.expectEqual((env.RoundManager.withdraw(alice)), false, "ses coups en attente sont oubliés (#157)")
+		end)
+
+		T.it("ne compte qu'une mort pour un double clic, puis ni mort ni réapparition", function()
+			local env = setup()
+			local alice = env.addPlayer(1, "Alice", Vector3.zero)
+			local bot = env.addBot("Marcel", Vector3.zero)
+			env.RoundManager.startRound(60)
+			env.RoundManager.recordDamage(bot, alice, "AWP", false)
+
+			T.expectEqual((env.RoundManager.withdraw(alice)), true)
+			T.expectEqual((env.RoundManager.withdraw(alice)), false, "second clic")
+			local respawned = false
+			local killer = env.RoundManager.onCharacterDied(alice, function()
+				respawned = true
+			end)
+			env.flush()
+			T.expectEqual(killer, nil, "destruction du personnage non comptée")
+			T.expectEqual(#env.remotes.playerDied.sent, 1, "une seule annonce")
+			T.expectEqual(env.remotes.scoreUpdate.last()[bot.id].kills, 1)
+			T.expectEqual(respawned, false)
+		end)
+
+		T.it("laisse partir librement après un coup absorbé par la protection d'apparition", function()
+			local env = setup()
+			local alice = env.addPlayer(1, "Alice", Vector3.zero)
+			local bot = env.addBot("Marcel", Vector3.zero)
+			env.RoundManager.startRound(60)
+			env.RoundManager.recordDamage(bot, alice, "AWP", false, true)
+
+			T.expectEqual((env.RoundManager.withdraw(alice)), false, "aucun PV perdu")
+		end)
+
+		T.it("garde le tueur d'un coup absorbé par la protection, pour une chute qui suit", function()
+			local env = setup()
+			local alice = env.addPlayer(1, "Alice", Vector3.zero)
+			local bot = env.addBot("Marcel", Vector3.zero)
+			env.RoundManager.startRound(60)
+			env.RoundManager.recordDamage(bot, alice, "AWP", false, true)
+
+			T.expectEqual(env.RoundManager.onCharacterDied(alice, function() end), bot)
+		end)
+
+		T.it("ne compte rien hors d'un round actif", function()
+			local env = setup()
+			local alice = env.addPlayer(1, "Alice", Vector3.zero)
+			local bot = env.addBot("Marcel", Vector3.zero)
+			env.RoundManager.recordDamage(bot, alice, "AWP", false)
+
+			T.expectEqual((env.RoundManager.withdraw(alice)), false)
 		end)
 	end)
 end

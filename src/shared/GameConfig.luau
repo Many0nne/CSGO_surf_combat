@@ -6,5 +6,6 @@ return {
 	RESULT_DURATION    = 6,    -- seconds result banner is shown before returning to menu
 	AUTO_SAVE_INTERVAL = 120,
 	SPAWN_PROTECTION   = 2.5,  -- seconds of invulnerability while launched from the sun (#69)
+	LEAVE_DEATH_WINDOW = 5,    -- seconds after a hit during which MENU PRINCIPAL counts as a death (#217, LeaveRules)
 	ACTIVE_MAP         = "Dizzy", -- map jouée : nom d'un .rbxm de assets/rbx/Maps ("Dizzy")
 }

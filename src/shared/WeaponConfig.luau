@@ -7,6 +7,10 @@ local WeaponConfig = {}
 -- (ShotRules.checkDistance, avec une marge) : un tir légitime n'est jamais refusé pour sa distance (#174).
 WeaponConfig.HITSCAN_RANGE = 2048
 
+-- Cadence de l'AWP (41 coups/min, CS) : écart entre deux tirs, côté client (WeaponSystem) comme côté serveur (Validator,
+-- ShotRules, ShotRelayRules), et verrou d'action du tir (#221).
+local AWP_FIRE_DELAY = 60 / 41
+
 WeaponConfig.Weapons = {
 	AWP = {
 		Name = "AWP",
@@ -16,7 +20,7 @@ WeaponConfig.Weapons = {
 		Accuracy = 0.9,
 		Damage = 115,
 		RPM = 41,
-		FireDelay = 60 / 41, -- seconds between shots
+		FireDelay = AWP_FIRE_DELAY, -- seconds between shots
 		ReloadTime = 3.7,
 		Magazine = 5,
 		Reserve = math.huge, -- réserve illimitée (#165) : le rechargement remplit toujours le chargeur
@@ -25,7 +29,8 @@ WeaponConfig.Weapons = {
 		-- Not a fixed game-units value; movement system multiplies wishspeed by this.
 		RunSpeedMultiplier = 0.75,
 		EquipTime = 1.58,
-		ShootAnimTime = 1.63,
+		-- Verrou d'action (#221) = cadence, comme la M9 : le tir suivant coupe la fin de la piste Shoot (1,63 s)
+		ShootAnimTime = AWP_FIRE_DELAY,
 		HasScope = true,
 		ScopeFov1 = 40,
 		ScopeFov2 = 10,
