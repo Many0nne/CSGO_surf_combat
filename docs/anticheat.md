@@ -653,7 +653,9 @@ les bots (il passait par `WeaponAction`). Tests : `tests/specs/ShotRelayRules.sp
   caméra, 20 Hz) et la direction du tir, si ce cap date d'au plus `FLICK_MAX_AGE` (0,15 s). Flick = au moins
   `FLICK_MIN_ANGLE` (25°). Statistique jugée : part des touches précédées d'un flick. La vitesse maximale (`pic`, °/s,
   durée bornée à `MIN_SPEED_DT` = 1/20 s) est affichée, pas jugée (trop bruitée par la gigue réseau). Le pitch n'est
-  pas mesuré (le serveur ne reçoit que le cap) : un flick vertical passe inaperçu ;
+  pas mesuré (le serveur ne reçoit que le cap) : un flick vertical passe inaperçu. **Indice faible** : le cap vient du
+  client ; un paquet de position parti dans la frame du tir (caméra déjà tournée) donne un écart nul, et un aimbot qui
+  fait tourner la racine sur 2 ou 3 paquets n'en produit aucun. Les flicks sont donc sous-comptés, jamais inventés ;
 - **bots exclus** : ni comptés, ni dans la population. Les touches de mêlée ne comptent pas.
 
 **Seuils.** Un joueur est jugé quand il a `MIN_HITS` (30) touches, et seulement contre les **autres** joueurs jugeables
@@ -670,9 +672,16 @@ départ, à revoir sur le journal de production.
   l'est, et au départ). Un seul signalement suffit au résumé de fin de session (webhook), qui reprend le dernier
   relevé (« Visée (dernier relevé, revue humaine) »). Le relevé final passe par `CheatLog.onClosing`, avant la clôture
   du bilan.
-- Format : `SIGNALÉ tête z+8.1 | tirs 100, touches 40 (40%), tête 36 (90%), flick touché 2 (5%), flicks 3/95, pic
-  1240°/s | z tête +8.1 touches +0.2 flick -0.3`. « non jugé (12/30 touches) » ou « non jugé (population trop
-  petite) » quand il n'y a pas de quoi comparer.
+- Format (compact : le détail de `CheatLog` est coupé à 160 octets) : `SIGNALÉ z tête+8.1 | tirs 100 but 40 (40%)
+  touches 41 tête 36 (88%) flick-touche 2 (5%) flicks 3/95 pic 1240°/s | z touches +0.2 flick -0.3`. « but » = tirs
+  rattachés à une touche (taux de touches), « touches » = toutes les touches acceptées (seuil `MIN_HITS`, base du taux
+  de tête) ; le z d'une statistique signalée est en tête, les autres à la fin. « non jugé (12/30 touches) » ou « non
+  jugé (population trop petite) » quand il n'y a pas de quoi comparer.
+- Un joueur signalé une fois a aussi son relevé **final** au journal, même redevenu normal : le « dernier relevé » du
+  résumé est donc vraiment le dernier. À l'arrêt du serveur, tous les joueurs restants sont jugés ensemble contre la
+  même population (rappels `CheatLog.onClosing` appelés avec la liste). Limite : des départs un par un (fin de partie)
+  font fondre la population, et les derniers partis sont « non jugés » au départ ; leurs résumés périodiques (toutes
+  les 120 s) les ont jugés tant que la population était là.
 
 **Comment le lire.** Un signalement est un indice à regarder, pas une preuve : un très bon joueur à l'AWP vise la tête.
 Plus parlant : plusieurs statistiques signalées ensemble (tête et flick touché), sur plusieurs sessions, avec un taux de

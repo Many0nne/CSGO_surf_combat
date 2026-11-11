@@ -56,6 +56,7 @@ export type Stats = {
 	lastShotFlick: boolean,
 	lastShotHit: boolean,
 	reportedShots: number, -- tirs au dernier résumé périodique
+	everFlagged: boolean, -- signalé au moins une fois dans la session (son relevé final va alors au journal)
 }
 
 export type Metric = "headshotRate" | "hitRate" | "flickRate"
@@ -68,7 +69,9 @@ export type Verdict = {
 	flagged: { Metric }, -- statistiques au-delà du seuil relatif ET du plancher
 }
 
-export type Entry = { id: number, stats: Stats, verdict: Verdict, line: string }
+-- report : le relevé va à CheatLog (signalé ; au départ, aussi s'il l'a été plus tôt, pour que le dernier relevé du
+-- résumé soit vraiment le dernier).
+export type Entry = { id: number, stats: Stats, verdict: Verdict, line: string, report: boolean }
 
 -- Joueurs suivis, par id de participant (UserId).
 export type State = { players: { [number]: Stats } }
@@ -99,6 +102,7 @@ local function statsOf(state: State, participant: any): Stats?
 			lastShotFlick = false,
 			lastShotHit = false,
 			reportedShots = 0,
+			everFlagged = false,
 		}
 		state.players[participant.id] = stats
 	end
@@ -227,8 +231,10 @@ function AimStats.judge(state: State, id: number): Verdict
 end
 
 -- Cette méthode permet de mettre en forme les chiffres bruts d'un joueur lorsqu'ils vont au journal : compact (le
--- détail de CheatLog est coupé à 160 octets), signalement d'abord, puis tirs, touches, tête, flicks, z-scores.
+-- détail de CheatLog est coupé à 160 octets), signalement et son z d'abord, puis les chiffres, puis les autres z.
+-- « but » = tirs rattachés à une touche ; « touches » = toutes les touches acceptées (celles de MIN_HITS).
 function AimStats.describe(stats: Stats, verdict: Verdict): string
+	-- Cette méthode permet d'arrondir une statistique en pourcentage lorsqu'elle est affichée.
 	local function pct(metric: Metric): number
 		return math.floor(AimStats.rate(stats, metric) * 100 + 0.5)
 	end
@@ -236,17 +242,18 @@ function AimStats.describe(stats: Stats, verdict: Verdict): string
 	if #verdict.flagged > 0 then
 		local names = {}
 		for _, metric in verdict.flagged do
-			table.insert(names, string.format("%s z%+.1f", LABELS[metric], verdict.z[metric]))
+			table.insert(names, string.format("%s%+.1f", LABELS[metric], verdict.z[metric]))
 		end
-		table.insert(parts, "SIGNALÉ " .. table.concat(names, ", ") .. " |")
+		table.insert(parts, "SIGNALÉ z " .. table.concat(names, " ") .. " |")
 	end
 	table.insert(
 		parts,
 		string.format(
-			"tirs %d, touches %d (%d%%), tête %d (%d%%), flick touché %d (%d%%), flicks %d/%d, pic %.0f°/s",
+			"tirs %d but %d (%d%%) touches %d tête %d (%d%%) flick-touche %d (%d%%) flicks %d/%d pic %.0f°/s",
 			stats.shots,
 			stats.hitShots,
 			pct("hitRate"),
+			stats.hits,
 			stats.headshots,
 			pct("headshotRate"),
 			stats.flickHits,
@@ -257,15 +264,16 @@ function AimStats.describe(stats: Stats, verdict: Verdict): string
 		)
 	)
 	if verdict.judged then
-		table.insert(
-			parts,
-			string.format(
-				"| z tête %+.1f touches %+.1f flick %+.1f",
-				verdict.z.headshotRate,
-				verdict.z.hitRate,
-				verdict.z.flickRate
-			)
-		)
+		-- z des statistiques non signalées (celles signalées sont déjà en tête)
+		local others = {}
+		for _, metric in METRICS do
+			if not table.find(verdict.flagged, metric) then
+				table.insert(others, string.format("%s %+.1f", LABELS[metric], verdict.z[metric]))
+			end
+		end
+		if #others > 0 then
+			table.insert(parts, "| z " .. table.concat(others, " "))
+		end
 	elseif stats.hits < AimStats.MIN_HITS then
 		table.insert(parts, string.format("| non jugé (%d/%d touches)", stats.hits, AimStats.MIN_HITS))
 	else
@@ -274,10 +282,14 @@ function AimStats.describe(stats: Stats, verdict: Verdict): string
 	return table.concat(parts, " ")
 end
 
--- Cette méthode permet de produire le résumé d'un joueur lorsqu'il est demandé (périodique, fin de session).
-local function entryOf(state: State, id: number, stats: Stats): Entry
+-- Cette méthode permet de produire le résumé d'un joueur lorsqu'il est demandé (périodique, fin de session) ; final :
+-- le relevé va aussi au journal si le joueur a été signalé plus tôt dans la session.
+local function entryOf(state: State, id: number, stats: Stats, final: boolean): Entry
 	local verdict = AimStats.judge(state, id)
-	return { id = id, stats = stats, verdict = verdict, line = AimStats.describe(stats, verdict) }
+	local flagged = #verdict.flagged > 0
+	local report = flagged or (final and stats.everFlagged)
+	stats.everFlagged = stats.everFlagged or flagged
+	return { id = id, stats = stats, verdict = verdict, line = AimStats.describe(stats, verdict), report = report }
 end
 
 -- Cette méthode permet de produire le résumé périodique lorsque son intervalle tombe : un résumé par joueur qui a tiré
@@ -286,7 +298,7 @@ function AimStats.periodic(state: State): { Entry }
 	local entries = {}
 	for id, stats in state.players do
 		if stats.shots > stats.reportedShots then
-			table.insert(entries, entryOf(state, id, stats))
+			table.insert(entries, entryOf(state, id, stats, false))
 		end
 	end
 	-- Après le jugement de tous (un même tour voit la même population)
@@ -299,16 +311,20 @@ function AimStats.periodic(state: State): { Entry }
 	return entries
 end
 
--- Cette méthode permet de clore la session d'un joueur lorsqu'il part : résumé final (jugé contre la population encore
--- là) s'il a tiré, puis oubli de ses statistiques (aucune fuite). nil si rien à résumer.
-function AimStats.close(state: State, id: number): Entry?
-	local stats = state.players[id]
-	if not stats then
-		return nil
+-- Cette méthode permet de clore la session de joueurs qui partent (un seul, ou tous à l'arrêt du serveur) : résumé
+-- final de chacun, tous jugés contre la même population avant d'être oubliés (aucune fuite). Joueurs inconnus ignorés.
+function AimStats.close(state: State, ids: { number }): { Entry }
+	local entries = {}
+	for _, id in ids do
+		local stats = state.players[id]
+		if stats then
+			table.insert(entries, entryOf(state, id, stats, true))
+		end
 	end
-	local entry = if stats.shots > 0 or stats.hits > 0 then entryOf(state, id, stats) else nil
-	state.players[id] = nil
-	return entry
+	for _, entry in entries do
+		state.players[entry.id] = nil
+	end
+	return entries
 end
 
 -- Cette méthode permet de compter les joueurs suivis lorsqu'un test vérifie le nettoyage.

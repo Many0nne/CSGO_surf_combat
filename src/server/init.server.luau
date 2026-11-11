@@ -221,7 +221,7 @@ local aimStats = AimStats.new()
 local AIM_REPORT_INTERVAL = 120
 
 -- Cette méthode permet d'écrire le résumé de visée d'un joueur lorsqu'il est produit (périodique ou fin de session) :
--- console pour tous, CheatLog (catégorie Aim, gravité faible) pour un joueur signalé.
+-- console pour tous, CheatLog (catégorie Aim, gravité faible) pour un joueur signalé (au départ : signalé un jour).
 local function logAim(participant: Participants.Participant, entry: AimStats.Entry, final: boolean)
 	print(
 		string.format(
@@ -232,7 +232,7 @@ local function logAim(participant: Participants.Participant, entry: AimStats.Ent
 			entry.line
 		)
 	)
-	if #entry.verdict.flagged > 0 then
+	if entry.report then
 		CheatLog.report(participant, CheatLog.Category.AIM, CheatLog.Severity.LOW, entry.line, CheatLog.Category.AIM)
 	end
 end
@@ -240,21 +240,34 @@ end
 task.spawn(function()
 	while true do
 		task.wait(AIM_REPORT_INTERVAL)
-		for _, entry in AimStats.periodic(aimStats) do
-			local participant = Participants.get(entry.id)
-			if participant then
-				logAim(participant, entry, false)
+		-- Une erreur ne doit pas arrêter les résumés suivants
+		local ok, err = pcall(function()
+			for _, entry in AimStats.periodic(aimStats) do
+				local participant = Participants.get(entry.id)
+				if participant then
+					logAim(participant, entry, false)
+				end
 			end
+		end)
+		if not ok then
+			warn("[AimStats] résumé périodique en échec :", err)
 		end
 	end
 end)
 
--- Résumé final avant la clôture du bilan CheatLog (le signalement y entre) ; statistiques oubliées au départ.
-CheatLog.onClosing(function(player)
-	local entry = AimStats.close(aimStats, player.UserId)
-	if entry then
+-- Résumé final avant la clôture du bilan CheatLog (le signalement y entre) ; statistiques oubliées au départ. À
+-- l'arrêt du serveur, tous les joueurs restants sont jugés ensemble, contre la même population.
+CheatLog.onClosing(function(players)
+	local byId: { [number]: Player } = {}
+	local ids = {}
+	for _, player in players do
+		byId[player.UserId] = player
+		table.insert(ids, player.UserId)
+	end
+	for _, entry in AimStats.close(aimStats, ids) do
+		local player = byId[entry.id]
 		-- Participant reconstruit : celui du registre peut déjà être retiré (ordre des PlayerRemoving non garanti)
-		logAim({ id = player.UserId, name = player.Name, isBot = false, player = player }, entry, true)
+		logAim({ id = entry.id, name = player.Name, isBot = false, player = player }, entry, true)
 	end
 end)
 

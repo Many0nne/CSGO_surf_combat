@@ -91,8 +91,8 @@ local pendingSummaries = 0
 local warnedNoRule: { [string]: boolean } = {}
 -- Rappels lancés au départ d'un joueur avant la clôture de son bilan (ex. statistiques de visée finales, #178), et
 -- joueur en cours de clôture : ses signalements sont gardés même s'il n'a déjà plus de Parent.
-local closingHooks: { (Player) -> () } = {}
-local closingPlayer: Player? = nil
+local closingHooks: { ({ Player }) -> () } = {}
+local closingPlayers: { [Player]: boolean } = {}
 
 -- Cette méthode permet de lire l'horloge du serveur lorsqu'une violation est datée (os.clock, simulable en test).
 local function now(): number
@@ -166,7 +166,7 @@ function CheatLog.report(
 )
 	-- Bot, ou joueur déjà parti (parade différée) : rien à recréer pour lui, sauf pendant la clôture de son bilan
 	local owner = participant.player
-	if participant.isBot or (owner and not owner.Parent and owner ~= closingPlayer) then
+	if participant.isBot or (owner and not owner.Parent and not closingPlayers[owner]) then
 		return
 	end
 	assert(SEVERITY_RANK[severity], "CheatLog.report : gravité inconnue " .. tostring(severity))
@@ -321,7 +321,8 @@ function CheatLog.buildEmbed(record: Record): { [string]: any }
 			record.maxScore
 		),
 	}
-	if worst then
+	-- Signalements de visée seuls : leur dernier relevé suit (« Visée »), le premier n'est pas une « pire » violation
+	if worst and worst.category ~= CheatLog.Category.AIM then
 		table.insert(
 			lines,
 			string.format("Pire : %s %s — %s", worst.category, SEVERITY_LABEL[worst.severity], worst.detail)
@@ -377,32 +378,34 @@ function CheatLog.worthSummary(record: Record): boolean
 	local worst = record.worst
 	return (worst ~= nil and SEVERITY_RANK[worst.severity] >= SEVERITY_RANK.medium)
 		or record.total >= CheatLog.SUMMARY_MIN_LOW
-		or record.counts[CheatLog.Category.AIM] ~= nil
+		or record.aim ~= nil
 end
 
--- Cette méthode permet d'inscrire un rappel lancé au départ d'un joueur, avant la clôture de son bilan, lorsqu'une
--- parade veut y signaler un dernier relevé (statistiques de visée, #178) ; ses report y sont gardés.
-function CheatLog.onClosing(hook: (Player) -> ())
+-- Cette méthode permet d'inscrire un rappel lancé au départ de joueurs (un seul, ou tous ensemble à l'arrêt du
+-- serveur), avant la clôture de leur bilan, lorsqu'une parade veut y signaler un dernier relevé (visée, #178).
+function CheatLog.onClosing(hook: ({ Player }) -> ())
 	table.insert(closingHooks, hook)
 end
 
--- Cette méthode permet de lancer les rappels de clôture d'un joueur lorsqu'il part (une erreur n'empêche ni les
--- suivants ni le résumé).
-local function runClosingHooks(player: Player)
-	closingPlayer = player
+-- Cette méthode permet de lancer les rappels de clôture de joueurs qui partent : leurs report y sont gardés même sans
+-- Parent (PlayerRemoving différé) ; une erreur n'empêche ni les rappels suivants ni le résumé.
+local function runClosingHooks(players: { Player })
+	for _, player in players do
+		closingPlayers[player] = true
+	end
 	for _, hook in closingHooks do
-		local ok, err = pcall(hook, player)
+		local ok, err = pcall(hook, players)
 		if not ok then
 			warn("[CheatLog] rappel de clôture en échec :", err)
 		end
 	end
-	closingPlayer = nil
+	table.clear(closingPlayers)
 end
 
 -- Cette méthode permet d'oublier un joueur qui part lorsque son bilan est clos : seaux de la garde libérés, résumé
 -- envoyé si le bilan le mérite (worthSummary).
 function CheatLog.onPlayerRemoving(player: Player)
-	runClosingHooks(player)
+	runClosingHooks({ player })
 	guard:forget(player)
 	local record = records[player.UserId]
 	records[player.UserId] = nil
@@ -416,10 +419,9 @@ end
 function CheatLog.init()
 	Players.PlayerRemoving:Connect(CheatLog.onPlayerRemoving)
 	game:BindToClose(function()
-		-- Joueurs encore là à l'arrêt : leur PlayerRemoving peut arriver après ce rappel
-		for _, player in Players:GetPlayers() do
-			runClosingHooks(player)
-		end
+		-- Joueurs encore là à l'arrêt : leur PlayerRemoving peut arriver après ce rappel. Tous ensemble, pour que chaque
+		-- parade les juge contre la même population
+		runClosingHooks(Players:GetPlayers())
 		for id, record in records do
 			records[id] = nil
 			if CheatLog.worthSummary(record) then

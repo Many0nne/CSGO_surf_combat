@@ -252,6 +252,10 @@ return function(T, Loader)
 			T.expectEqual(#env.spawned, 1, "résumé envoyé pour revue humaine")
 			local embed = C.buildEmbed(env.spawned[1][2])
 			T.expect(string.find(embed.description, "Visée", 1, true) ~= nil, "relevé de visée au résumé")
+			T.expect(
+				string.find(embed.description, "Pire", 1, true) == nil,
+				"pas de « pire » pour un relevé de visée"
+			)
 		end)
 
 		T.it("rappel de clôture : son signalement entre au résumé même sans Parent, avant l'oubli", function()
@@ -259,9 +263,11 @@ return function(T, Loader)
 			local C = env.CheatLog
 			local bob = fakePlayer(2, "Bob")
 			local seen = 0
-			C.onClosing(function(player)
-				seen += 1
-				C.report(participantOf(player), C.Category.AIM, C.Severity.LOW, "fin de session")
+			C.onClosing(function(players)
+				for _, player in players do
+					seen += 1
+					C.report(participantOf(player), C.Category.AIM, C.Severity.LOW, "fin de session")
+				end
 			end)
 			C.onClosing(function()
 				error("rappel cassé")

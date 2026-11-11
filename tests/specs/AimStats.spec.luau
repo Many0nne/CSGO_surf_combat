@@ -165,15 +165,61 @@ return function(T, Loader)
 			local state = AimStats.new()
 			population(state, 6)
 			play(state, participant(99), 100, 40, 36)
-			local entry = AimStats.close(state, 99)
-			T.expect(entry ~= nil and #entry.verdict.flagged > 0, "signalé au départ")
+			local entry = AimStats.close(state, { 99 })[1]
+			T.expect(entry ~= nil and #entry.verdict.flagged > 0 and entry.report, "signalé au départ")
 			T.expectEqual(state.players[99], nil)
 			T.expectEqual(AimStats.count(state), 6)
 			for id = 1, 6 do
-				AimStats.close(state, id)
+				AimStats.close(state, { id })
 			end
 			T.expectEqual(AimStats.count(state), 0)
-			T.expectEqual(AimStats.close(state, 42), nil, "inconnu : rien")
+			T.expectEqual(#AimStats.close(state, { 42 }), 0, "inconnu : rien")
+		end)
+
+		T.it("arrêt du serveur : tous les joueurs restants jugés contre la même population", function()
+			local state = AimStats.new()
+			population(state, 6)
+			play(state, participant(99), 100, 40, 36)
+			-- Le tricheur clos en dernier : avec des départs un par un, la population serait déjà sous MIN_POPULATION
+			local entries = AimStats.close(state, { 1, 2, 3, 4, 5, 6, 99 })
+			T.expectEqual(#entries, 7)
+			T.expect(entries[7].verdict.judged and entries[7].report, "tricheur jugé et signalé")
+			T.expectEqual(AimStats.count(state), 0)
+		end)
+
+		T.it("relevé final au journal s'il a été signalé plus tôt, même redevenu normal", function()
+			local state = AimStats.new()
+			population(state, 6)
+			local p = participant(99)
+			play(state, p, 100, 40, 36)
+			T.expect(AimStats.periodic(state)[7].report, "signalé au résumé périodique")
+			-- Il retombe dans la moyenne : plus signalé, mais son relevé final va quand même au journal
+			play(state, p, 400, 200, 40, 1000)
+			local entry = AimStats.close(state, { 99 })[1]
+			T.expectEqual(#entry.verdict.flagged, 0)
+			T.expect(entry.report, "dernier relevé journalisé")
+			-- Un joueur jamais signalé : console seulement
+			T.expectEqual(AimStats.close(state, { 1 })[1].report, false)
+		end)
+
+		T.it("détail compact : tient dans les 160 octets de CheatLog avec trois signalements", function()
+			local stats = {
+				shots = 12500,
+				hits = 9000,
+				headshots = 8500,
+				hitShots = 8000,
+				measured = 11000,
+				flicks = 9000,
+				flickHits = 7000,
+				peakSpeed = 24000,
+			}
+			local verdict = {
+				judged = true,
+				z = { headshotRate = 12.3, hitRate = 10.1, flickRate = 11.7 },
+				flagged = { "headshotRate", "hitRate", "flickRate" },
+			}
+			local line = AimStats.describe(stats :: any, verdict :: any)
+			T.expect(#line <= 160, #line .. " octets : " .. line)
 		end)
 
 		T.it("aucune sanction ni tir refusé : noteShot et noteHit ne renvoient rien", function()
