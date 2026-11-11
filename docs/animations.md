@@ -84,8 +84,8 @@ animation »), puis le couteau suivant. Caméra fixe, ciel dégagé derrière l'
 | 5:10 | couteau 15 (?) | |
 | 5:36 | couteau 16 (?) | |
 | 6:00 | couteau 17 (?) | |
-| 6:20 | **couteau CT par défaut** (référence du Ka-Bar) | repos 6:20-6:24 ; taille 6:23,9 (frappe 0,1 s, main hors cadre 6:24,2-6:24,5, retour jusqu'à 6:25,5) ; deuxième taille 6:25,9 ; estoc 6:27,0 (plongée sous le cadre, poussée 6:27,5-6:28,4) ; Inspect 6:28,5-6:36 (couteau vertical au centre, les deux faces) ; tailles 6:33,7-6:35,7 |
-| 6:44 | **couteau T par défaut** | Equip 6:44 ; Inspect 6:45-6:50 ; tailles 6:50-6:55 ; estoc vers 6:52,5-6:53,5 |
+| 6:27 | **couteau CT par défaut** (référence du Ka-Bar) | l'étiquette « DEFAULT CT KNIFE » apparaît à 6:27,5 et le Butterfly occupe jusqu'à 6:27. Equip 6:27,05-6:27,3 (le couteau arrive à l'envers, lame vers le bas à gauche, et se retourne dans le poing) ; repos jusqu'à 6:28,4 ; Inspect 6:28,4-6:36,6 (couteau vertical devant la main restée en bas, une face tenue 6:29-6:30,2, inclinaison 6:30,4-6:32, autre face 6:32,2-6:33,6, retour jusqu'à 6:36,6) ; taille 1 6:37,3 (arme en haut à gauche, hors cadre 6:37,45-6:37,95, retour par le bas) ; taille 2 6:38,5 (arme en haut au centre, sort en bas à droite 6:38,7) ; estoc 6:39,7 (bras vertical, lame horizontale vers la droite, puis pointée en haut à droite, plonge hors cadre en bas à gauche 6:40,05, retour 6:40,35-6:40,95) ; repos jusqu'à 6:43 |
+| 6:43 | **couteau T par défaut** | Equip 6:44 ; Inspect 6:45-6:50 ; tailles 6:50-6:55 ; estoc vers 6:52,5-6:53,5 |
 | 6:58 | Ghost Knife (Danger Zone) | |
 | 7:14 | hache, 7:26 marteau, 7:32 clé à molette (Danger Zone) | outils de mêlée, hors couteaux |
 
@@ -245,29 +245,28 @@ déplacement R15. Méthode retenue faute de vidéo de référence : une planche 
   tranche) sont réglés sur la vidéo de la M9 et sont à revoir pour une autre vidéo.
 - L'Equip reste sur sa trajectoire relevée à la main (`EQUIP_TRACK`, `sample_track`).
 
-## Ka-Bar : animations faites d'une planche, sans vidéo
+## Ka-Bar : animations tirées du couteau CT par défaut de CS:GO
 
-`assets/kabar_viewmodel/build_viewmodel.py` (copie du script de la M9, `run_build.py` pour le lancer sans toucher au Blender
-ouvert). Les clés viennent d'une planche validée par l'utilisateur, lue par `K(t, x, y, a, flip, e, edge)` : garde (x, y) sur un
-cadre 320x180, angle `a` de la lame (0 = pointe en haut, sens horaire), `flip` = pivot du couteau dans le poing (180 = prise
-inversée). Ce n'est pas une reproduction : le mouvement doit être validé à la vidéo avant toute publication.
+`assets/kabar_viewmodel/build_viewmodel.py` (copie du script de la M9 ; `run_build.py` le lance sans toucher au Blender ouvert,
+`make_rbxm.luau` fabrique les `.rbxm` d'animation). Référence : le couteau CT par défaut de
+`references/anim/csgo-couteaux-toutes-animations.mp4` (repères corrigés dans le tableau ci-dessus).
 
-- **Les angles d'une planche sont absolus, le repos du jeu est fixe** : le repos de l'Idle est à -62° et sa garde à (0,67 ; 0,80).
-  Une clé d'approche dessinée avec un autre repos fait balayer 60° dans les dernières 0,2 s. Lire le tableau de `dump_frames.py`
-  et aligner les clés de retour sur -62°.
-- **Les coups simples : reprendre ceux de la M9, pas les réinventer.** Deux tentatives rejetées (lame perpendiculaire au balayage, puis
-  lame dans l'axe avec un autre tracé) : l'utilisateur voulait « comme la baïonnette ». `spec_shoot` et `spec_shoot2` reprennent ses
-  clés (`S(...)` avec `FACE` et `edge = (-1, 0.2, 0.2)`) : lame presque horizontale, pointe à gauche, dans l'axe du balayage, même
-  roulis du début à la fin. Pour juger un geste, rendre la M9 dans Studio avec le même script et la même planche, et comparer.
-  `K(..., edge=None)` garde le tranchant du repos tourné avec la lame (`rest_edge`) pour un geste nouveau sans roulis.
-- **Inspect : les pauses sur une face de la lame.** Le tranchant dans le plan de l'écran (`edge` en x, y, z ≈ 0,1) montre une face
-  entière ; la tranche ou le dos ne doivent jamais servir de pause. Le demi-tour de poignet entre les deux faces est court (0,5 s),
-  les pauses (≈ 0,9 s) portent un léger tilt pour que le couteau reste vivant.
-- **Un estoc part en ligne droite**, la rotation se fait pendant l'armé : le couteau reste en prise avant, recule en se tournant
-  vers l'avant, puis ne fait plus que se translater (rotation de la main < 7° par image pendant la poussée) jusqu'à l'impact.
-  Incliner la pointe vers le haut de l'écran et descendre la main : une lame qui pointe droit devant disparaît derrière le poing.
-- **Pas de prise inversée à l'écran** (essayée, rejetée) : la lame passe derrière l'avant-bras et le poing R15, et la rotation
-  jusqu'à la pointe vers le bas n'est pas naturelle. Même chose pour l'Inspect : ne jamais pencher la lame vers le bas.
+- **Les coups simples et l'estoc reprennent les clés de la M9** (`spec_shoot`, `spec_shoot2`, `spec_stab`) : la baïonnette et le
+  couteau CT par défaut sont de la même famille de gestes, la M9 l'avait déjà mesurée. Deux tentatives de coups inventés
+  (lame perpendiculaire au balayage, puis lame dans l'axe avec un autre tracé) et une planche avec prise inversée ont été
+  rejetées : l'utilisateur voulait « comme la baïonnette ». Pour juger un geste, rendre la M9 dans Studio avec le même
+  script et la même planche et comparer.
+- **L'Equip** (`spec_equip`) suit le CT : 0,25 s de retournement dans le poing (lame vers le bas à gauche, puis horizontale,
+  puis relevée sur la tenue), le reste de la piste est du repos.
+- **L'Inspect** (`spec_inspect`, 8 s comme la référence) : le couteau se dresse à la verticale devant la main, qui reste en bas ;
+  une face tenue 1,3 s, roulis avec inclinaison, l'autre face tenue 1,7 s, retour. Les pauses tombent sur une face entière
+  (`flat_edge`), jamais sur la tranche ou le dos.
+- **`K(t, x, y, a, flip, e, edge)`** : clé en coordonnées d'une planche 320x180 (garde x, y ; angle `a` de la lame, 0 = pointe en
+  haut, sens horaire). `edge=None` garde le tranchant du repos tourné avec la lame (`rest_edge`), donc aucun roulis.
+- **Lire le tableau de `dump_frames.py`** avant tout rendu : les pics de rotation de Shoot2 et Stab (167° et 179° du poing en
+  une image) sont ceux de la M9, mesurés sur sa référence.
+- **`track_blade.py` ne suit pas cette vidéo** (garde figée, pointe hors de l'écran) : ses seuils sont réglés pour celle de la M9.
+  Mesurer à l'œil sur des planches `grid.py` (`uv run tools/anim/grid.py <video> <sortie.jpg> <debut> <fin> <pas> 7 0.15 1.0`).
 - **Rendu des poses dans Studio** : `tools/anim/studio_render.luau` suppose un seul MeshPart `Handle` ; avec `Blade` et `Fittings`,
   recaler aussi ces pièces sur `Handle` (décalage relatif lu dans le viewmodel). Le lancer dans un `task.spawn` et suivre les
   captures dans le dossier (≈ 2,5 s par image sur ce poste), pas en attendant dans `execute_luau`.

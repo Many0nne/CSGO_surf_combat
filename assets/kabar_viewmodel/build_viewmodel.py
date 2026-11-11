@@ -473,21 +473,22 @@ def spec_idle():
 	return dict(length=length, offset=offset, loop=True, step=6, markers=[])
 
 
-# Cette méthode permet de décrire l'Equip : le couteau monte du bas à droite en prise inversée, fait son demi-tour sur le
-# poignet (la lame tourne à l'écran pendant que le poing pivote de 180°), dépasse un peu sa pose puis s'y pose.
+# Cette méthode permet de décrire l'Equip comme celui du couteau CT par défaut de CS:GO (références/anim, 387,05 à 387,3 s) : le
+# couteau arrive à l'envers, lame vers le bas à gauche, se retourne dans le poing en 0,25 s (la lame passe à l'horizontale
+# puis se relève) et se pose sur la tenue de repos, où il attend la fin de la piste.
 def spec_equip():
 	return dict(
 		length=1.0,
 		keys=[
-			K(0.0, 262, 196, 168, 180.0),  # 1
-			K(0.20, 244, 150, 172, 180.0, "o"),  # 2
-			K(0.30, 226, 122, 120, 120.0, "l"),  # 3 : Equip Sound
-			K(0.55, 196, 104, 30, 0.0, "l"),  # 4
-			K(0.80, 192, 126, -75, 0.0, "o"),  # 5 : dépasse un peu la pose de repos (-62°)
-			P(1.0),  # 6
+			K(0.0, 198, 148, -110, 180.0, "o"),  # 1 : à l'envers, lame vers le bas à gauche
+			K(0.07, 224, 140, -100, 135.0, "l"),  # 2
+			K(0.14, 243, 144, -90, 80.0, "l"),  # 3 : lame horizontale
+			K(0.22, 240, 140, -72, 25.0, "o"),  # 4 : la lame se relève
+			P(0.30, "o"),  # 5 : pose de repos
+			P(1.0),
 		],
 		left=[(0.0, 1.0), (0.70, 1.0), (0.92, 0.0)],
-		markers=[("Equip Sound", 0.3)],
+		markers=[("Equip Sound", 0.05)],
 		step=1,
 	)
 
@@ -538,18 +539,23 @@ def spec_shoot2():
 	)
 
 
-# Cette méthode permet de décrire le coup du clic droit : un estoc droit. Le couteau reste en prise avant, recule un peu en
-# se tournant vers l'avant (armé), part en ligne droite vers le centre de l'écran en accélérant jusqu'à l'impact, tient,
-# puis revient par le même chemin à la pose de repos (jamais hors du cadre, aucun retournement de lame).
+# Cette méthode permet de décrire le coup du clic droit comme celui du couteau CT par défaut et de la M9 (même famille de
+# gestes, tracé repris de assets/m9_viewmodel/build_viewmodel.py) : le bras recule, monte au centre de l'écran, la lame
+# pointe en haut à droite, puis le couteau tombe hors du cadre en bas à gauche et remonte du bas de l'écran.
 def spec_stab():
+	edge = (-0.7, 0.7, 0.2)
 	return dict(
 		length=1.0,
 		keys=[
 			P(0.0),
-			S(0.07, (0.75, 0.87), (0.64, 0.74), 3.0, FACE, e="io"),  # armé : recule, lame tournée vers l'avant
-			S(0.16, (0.64, 0.80), (0.50, 0.50), 2.4, FACE, e="i"),  # impact : en ligne droite, accélère jusqu'ici
-			S(0.40, (0.63, 0.80), (0.50, 0.50), 2.5, FACE, e="l"),  # tenu, recule à peine
-			S(0.66, (0.66, 0.82), (0.54, 0.64), 2.7, FACE, e="io"),  # retour par le même chemin
+			S(0.04, (0.92, 1.05), (1.0, 0.92), 2.6, (0, 1, 0), e="o"),
+			S(0.10, (0.50, 0.62), (0.63, 0.64), 3.0, (0, 1, 0), e="o"),
+			S(0.23, (0.40, 0.60), (0.46, 0.49), 3.2, edge, e="o"),
+			S(0.44, (0.39, 0.62), (0.45, 0.50), 3.2, edge, e="l"),
+			S(0.57, (0.27, 0.85), (0.34, 0.61), 3.0, edge, e="i"),
+			S(0.64, (0.20, 1.25), (0.30, 1.0), 3.0, edge, e="l"),
+			S(0.78, (0.20, 1.25), (0.30, 1.0), 3.0, edge, e="l"),
+			S(0.90, (0.68, 0.93), (0.48, 0.71), 3.0, FACE, e="o"),
 			P(1.0),
 		],
 		left=[(0.0, 0.0), (0.03, 1.0), (0.82, 1.0), (1.0, 0.0)],
@@ -558,24 +564,30 @@ def spec_stab():
 	)
 
 
-# Cette méthode permet de décrire l'inspection comme un joueur qui regarde son couteau : il monte lame dressée avec une face
-# bien visible (pause), tourne le poignet d'un demi-tour (rapide : la tranche ne fait que passer), pause sur l'autre face, puis
-# revient au repos. Les pauses tombent toujours sur une face de la lame, jamais sur le dos ou la tranche.
+# Cette méthode permet de calculer le tranchant qui montre une face entière de la lame lorsqu'elle est à l'angle a : dans le plan de
+# l'écran, perpendiculaire à la lame (side = 1 : une face, -1 : l'autre).
+def flat_edge(a, side):
+	r = math.radians(a)
+	return (-math.cos(r) * side, math.sin(r) * side, 0.1)
+
+
+# Cette méthode permet de décrire l'inspection comme celle du couteau CT par défaut de CS:GO (références/anim, 388,4 à 396,6 s) :
+# le couteau se dresse à la verticale devant la main (la main reste en bas), tient une face, passe à l'autre en s'inclinant,
+# tient celle-là, puis redescend sur la tenue. Les pauses tombent toujours sur une face entière de la lame.
 def spec_inspect():
-	face_a = (-0.9, -0.4, 0.1)  # tranchant dans le plan de l'écran : une face de la lame vers la caméra
-	face_b = (0.9, 0.4, 0.1)  # tranchant opposé : l'autre face
 	return dict(
-		length=4.6,
+		length=8.0,
 		keys=[
 			P(0.0),
-			K(0.7, 175, 102, -28, 0.0, "io", face_a),  # 2 : monte, face A visible
-			K(1.55, 180, 100, -18, 0.0, "l", face_a),  # 3 : pause sur la face A, léger tilt
-			K(2.1, 178, 101, -22, 0.0, "io", face_b),  # 4 : demi-tour du poignet
-			K(3.15, 172, 103, -30, 0.0, "l", face_b),  # 5 : pause sur la face B, léger tilt
-			K(3.9, 200, 114, -50, 0.0, "io", None),  # 6 : redescend vers la tenue
-			P(4.6),
+			K(0.5, 205, 142, -25, 0.0, "io", flat_edge(-25, 1)),  # 2 : se redresse
+			K(0.9, 202, 142, 0, 0.0, "io", flat_edge(0, 1)),  # 3 : vertical, face A
+			K(2.2, 202, 143, 3, 0.0, "l", flat_edge(3, 1)),  # 4 : pause sur la face A
+			K(3.5, 200, 143, -2, 0.0, "io", flat_edge(-2, -1)),  # 5 : roulis et inclinaison, face B
+			K(5.2, 202, 143, 3, 0.0, "l", flat_edge(3, -1)),  # 6 : pause sur la face B
+			K(6.4, 210, 146, -35, 0.0, "io", None),  # 7 : redescend
+			P(8.0),
 		],
-		left=[(0.0, 0.0), (0.3, 1.0), (4.4, 1.0), (4.6, 0.0)],
+		left=[(0.0, 0.0), (0.3, 1.0), (7.7, 1.0), (8.0, 0.0)],
 		markers=[("Equip Sound", 0.5)],
 		step=2,
 	)
