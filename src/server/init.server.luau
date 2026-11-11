@@ -290,11 +290,18 @@ shotFiredRmt.OnServerEvent:Connect(function(player, origin, direction)
 	end
 end)
 
+-- Cette méthode permet d'oublier l'état de combat d'un participant lorsqu'il réapparaît (armes neuves) ou s'en va
+-- (joueur parti, bot retiré, #218) : cadences, equip et chargeurs du Validator, cadence du relais des tirs. AimStats
+-- n'en retient rien pour un bot (exclu), et celles d'un joueur sont closes par CheatLog.onClosing.
+local function forgetCombatState(participant: Participants.Participant)
+	Validator.forget(participant)
+	ShotRelayRules.forget(shotRelay, participant)
+end
+
 -- Cette méthode permet de brancher le personnage d'un participant (joueur ou bot, #139) lorsqu'il apparaît : arme 3P
 -- suivie, mort comptée dans le round (et dans les stats pour un joueur), corps laissé aux clients le temps du ragdoll.
 local function onParticipantCharacter(participant: Participants.Participant, char: Model, respawn: () -> ())
-	Validator.forget(participant)
-	ShotRelayRules.forget(shotRelay, participant)
+	forgetCombatState(participant)
 	trackWeapon3P(participant, char)
 	local humanoid = char:WaitForChild("Humanoid") :: Humanoid
 	humanoid.Died:Connect(function()
@@ -518,6 +525,7 @@ BotManager.init({
 	shotFired = function(bot, origin, direction)
 		relayShot(bot, origin, direction)
 	end,
+	forget = forgetCombatState,
 	roundManager = RoundManager,
 })
 
@@ -551,7 +559,7 @@ MemoryTracker.enable()
 MemoryTracker.snapshot("démarrage")
 -- Sonde de coût du serveur (attribut Workspace PerfServer, #145) : inactive tant que l'attribut n'est pas posé
 ServerPerf.init(function()
-	return BotManager.count(), BotManager.aliveCount()
+	return BotManager.count(), BotManager.aliveCount(), Validator.trackedCount()
 end)
 
 Players.PlayerAdded:Connect(setupPlayer)
@@ -559,8 +567,7 @@ Players.PlayerRemoving:Connect(function(player)
 	lastWeaponAction[player] = nil
 	SpawnManager.forget(player)
 	local participant = Participants.fromPlayer(player)
-	Validator.forget(participant)
-	ShotRelayRules.forget(shotRelay, participant)
+	forgetCombatState(participant)
 	RoundManager.removeParticipant(participant)
 	Participants.remove(participant)
 	-- départ d'un joueur : ses Instances et connexions doivent avoir disparu au relevé (cf. docs/performance.md)

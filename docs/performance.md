@@ -47,9 +47,14 @@ si `PerfMarkers.timing` est vrai ; l'overlay F3 ne le règle que sur le client. 
 relevés mémoire du serveur : la console serveur n'est lisible que par les développeurs. Une ligne toutes les 10 s :
 
 ```
-[Perf] SRV t=60s Heartbeat méd 28.2ms p99 57.9ms max 59.7ms | bots 5 (4 en jeu) | mém … | scripts : srv bots 2.0ms×1.0 (max 7.8),
+[Perf] SRV t=60s Heartbeat méd 28.2ms p99 57.9ms max 59.7ms | bots 5 (4 en jeu) | anti-triche 5 suivi(s) | mém … | scripts : srv bots 2.0ms×1.0 (max 7.8),
 bots mouvement …, bots chemin …, bots cerveau …, srv round …
 ```
+
+- `anti-triche N suivi(s)` : participants dont le `Validator` retient encore cadence, equip ou chargeur
+  (`Validator.trackedCount`). Il doit retomber quand les bots sont retirés (`DebugBots` à 0) : s'il ne redescend pas,
+  une table indexée par participant fuit (#218, `docs/anticheat.md` « Retrait d'un participant »). Un `require` du
+  Validator depuis `execute_luau` ne lit pas ces tables (autre instance des modules) : lire cette ligne.
 
 - `Heartbeat méd/p99/max` : durée des frames serveur. Dans Studio, elle suit le client (même processus) : ne vaut que
   pour comparer deux versions.

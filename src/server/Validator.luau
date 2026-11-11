@@ -596,11 +596,33 @@ function Validator.authorizeMelee(
 end
 
 -- Cette méthode permet d'oublier les cadences, l'equip et les chargeurs d'un participant lorsqu'il réapparaît (armes
--- neuves, comme côté client) ou s'en va.
+-- neuves, comme côté client) ou s'en va (joueur parti, bot retiré : sinon l'entrée reste en mémoire, #218).
 function Validator.forget(participant: Participant)
 	lastAttacks[participant] = nil
 	equips[participant] = nil
 	magazines[participant] = nil
+end
+
+-- Cette méthode permet de savoir si le Validator retient encore quelque chose d'un participant (cadence, equip ou
+-- chargeur) lorsqu'on vérifie qu'un retrait l'a bien oublié (test, sonde de mémoire).
+function Validator.hasEntries(participant: Participant): boolean
+	return lastAttacks[participant] ~= nil or equips[participant] ~= nil or magazines[participant] ~= nil
+end
+
+-- Cette méthode permet de compter les participants dont le Validator retient encore l'état lorsque la sonde serveur
+-- écrit son bilan : ce nombre doit retomber quand les bots sont retirés (fuite, #218).
+function Validator.trackedCount(): number
+	local seen: { [Participant]: boolean } = {}
+	local count = 0
+	for _, byParticipant in { lastAttacks, equips, magazines } :: { { [Participant]: any } } do
+		for participant in byParticipant do
+			if not seen[participant] then
+				seen[participant] = true
+				count += 1
+			end
+		end
+	end
+	return count
 end
 
 -- Cette méthode permet de qualifier le résultat de dégâts appliqués lorsque le tireur doit en être informé :
