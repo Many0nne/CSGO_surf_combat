@@ -12,6 +12,8 @@ local InfosScreen = require(script.Parent.Parent.Parent.ui.InfosScreen)
 local RoundHUD = require(script.Parent.Parent.Parent.ui.RoundHUD)
 local FeedbackScreen = require(script.Parent.Parent.Parent.ui.FeedbackScreen)
 local SettingsMenu = require(script.Parent.Parent.Parent.ui.SettingsMenu)
+local InGameMenu = require(script.Parent.Parent.Parent.ui.InGameMenu)
+local InGameMenuRules = require(script.Parent.Parent.Parent.ui.InGameMenuRules)
 local Transition = require(script.Parent.Parent.Parent.ui.Transition)
 local Speedometer = require(script.Parent.Parent.Parent.ui.Speedometer)
 local WeaponBar = require(script.Parent.Parent.Parent.ui.WeaponBar)
@@ -41,6 +43,7 @@ local lastDeath: { killer: string?, weapon: string?, headshot: boolean, at: numb
 
 -- Remotes (résolus une seule fois)
 local spawnRemote: RemoteEvent?
+local leaveRemote: RemoteEvent?
 
 -- ── Caméra ─────────────────────────────────────────────────────────────────
 
@@ -78,6 +81,8 @@ end
 
 local function setState(newState: State)
 	state = newState
+	-- Avant le reste : le menu en partie rend la souris au jeu avant que le menu principal la reprenne
+	InGameMenu.onGameState(newState)
 	applyGameHud()
 	if newState ~= "DEAD" then
 		-- Réapparition, menu ou fin de round : la caméra revient à FPSCamera ou au menu
@@ -135,6 +140,10 @@ end
 -- ── Liaison personnage ─────────────────────────────────────────────────────
 
 local function onCharacterAdded(char: Model)
+	-- Au menu, un personnage n'est pas attendu (réapparition partie avant un retour au menu, détruite par le serveur, #157)
+	if state == "MENU" or state == "INFOS" then
+		return
+	end
 	-- Connecter la mort
 	local humanoid = char:WaitForChild("Humanoid") :: Humanoid
 	if humDiedConn then
@@ -195,6 +204,7 @@ local function listenToRemotes()
 	local N = NetworkProtocol.Names
 
 	spawnRemote = NetworkProtocol.getRemote(N.REQUEST_SPAWN)
+	leaveRemote = NetworkProtocol.getRemote(N.LEAVE_ROUND)
 
 	-- RoundState : { state, timeLeft }
 	local roundStateRmt = NetworkProtocol.getRemote(N.ROUND_STATE)
@@ -254,25 +264,36 @@ function GameStateController.requestPlay(): boolean
 	return true
 end
 
+-- Cette méthode permet de revenir au menu principal lorsque le joueur choisit MENU PRINCIPAL dans le menu en partie
+-- (#157) : le serveur le retire du round (score, personnage), le client repasse au menu sans attendre sa réponse.
+local function leaveRound()
+	if not InGameMenuRules.available(state) then
+		return
+	end
+	-- Arme rangée tout de suite (viewmodel, lunette, délais d'arme), sans attendre la destruction du personnage
+	local char = localPlayer.Character
+	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		humanoid:UnequipTools()
+	end
+	if leaveRemote then
+		leaveRemote:FireServer()
+	end
+	setState("MENU")
+end
+
 -- Cette méthode permet de lire l'état client courant (MENU, IN_ROUND…) lorsqu'un module doit s'y adapter.
 function GameStateController.getState(): State
 	return state
 end
 
--- Cette méthode permet d'ouvrir Réglages à même la scène lorsque le joueur le demande depuis l'accueil du menu ;
--- renvoie true tant que le menu gère la demande, même s'il l'ignore (autre écran ouvert, volets en cours).
-local function openSettingsPage(): boolean
-	if state == "SPAWNING" then
-		return true
-	end
-	if state ~= "MENU" then
-		return false
-	end
-	if MainMenu.getPage() == "home" then
+-- Cette méthode permet d'ouvrir Réglages à même la scène lorsque le joueur le demande depuis l'accueil du menu (rien
+-- sur un autre écran du menu ni pendant les volets).
+local function openSettingsPage()
+	if state == "MENU" and MainMenu.getPage() == "home" then
 		SettingsMenu.open("page")
 		MainMenu.setPage("settings")
 	end
-	return true
 end
 
 -- ── Init ───────────────────────────────────────────────────────────────────
@@ -305,10 +326,20 @@ function GameStateController.init(player: Player, setupCharacter: (char: Model) 
 		SettingsMenu.close()
 		MainMenu.setPage("home")
 	end)
-	SettingsMenu.setPageRequest(function()
-		-- INFOS est un écran du menu : la touche P y reste sans effet
-		return state == "INFOS" or openSettingsPage()
-	end)
+	-- Menu en partie (#157) ; au menu principal, sa touche ouvre ou ferme les Réglages de l'accueil
+	InGameMenu.init({
+		getState = function()
+			return state
+		end,
+		onLeave = leaveRound,
+		onMainMenuKey = function()
+			if SettingsMenu.isOpen() then
+				SettingsMenu.close()
+			else
+				openSettingsPage()
+			end
+		end,
+	})
 	SettingsMenu.setOnClosed(function()
 		if state == "MENU" then
 			MainMenu.setPage("home")

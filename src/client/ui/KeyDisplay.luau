@@ -40,7 +40,7 @@ local grid: Frame?
 local views: { KeyView } = {}
 local builtMode: string? -- mode dont la grille est construite
 local hudVisible = false -- règle « HUD de jeu visible » (HUDRules), posée par GameStateController
-local menuOpen = false -- écran Réglages ouvert (SettingsMenu)
+local menuOpen = false -- menu en partie ouvert, Réglages compris (InGameMenu)
 
 -- Cette méthode permet de savoir si une touche ou un bouton de souris est enfoncé lorsque la grille est rafraîchie ;
 -- `typing` : un champ de texte (chat) a le focus et capte le clavier, le jeu ne reçoit pas ces touches.
@@ -187,7 +187,7 @@ function KeyDisplay.setHudVisible(show: boolean)
 	end
 end
 
--- Cette méthode permet de masquer les touches lorsque l'écran Réglages s'ouvre ou se ferme (SettingsMenu).
+-- Cette méthode permet de masquer les touches lorsque le menu en partie s'ouvre ou se ferme (InGameMenu).
 function KeyDisplay.setMenuOpen(isOpen: boolean)
 	menuOpen = isOpen
 	update()

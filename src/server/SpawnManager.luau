@@ -17,6 +17,10 @@ local mapModel: Instance?
 -- Joueurs dont un LoadCharacterAsync est en vol, et heure (os.clock) de leur dernière mort (#171)
 local spawning: { [Player]: boolean } = {}
 local diedAt: { [Player]: number } = {}
+-- Joueurs revenus au menu (#157) : aucune réapparition programmée, aucun personnage en vol gardé, jusqu'à leur demande
+local away: { [Player]: boolean } = {}
+-- Joueurs revenus du menu pendant une réapparition encore en vol : leur demande est servie à la fin de ce chargement
+local rejoin: { [Player]: boolean } = {}
 -- Gravité d'un refus de RequestSpawn au journal ; "result" n'y va pas (Play cliqué pendant la bannière de fin).
 -- "early" est moyen : notre client n'envoie RequestSpawn que depuis le menu, où un joueur mort en round ne revient pas.
 local REFUSAL_SEVERITY: { [string]: CheatLog.Severity } = {
@@ -97,6 +101,11 @@ function SpawnManager.spawnPlayer(player: Player)
 	local conn: RBXScriptConnection
 	conn = player.CharacterAdded:Connect(function(char)
 		conn:Disconnect()
+		-- Réapparition partie avant le retour au menu : le joueur n'a plus de personnage dans le round
+		if away[player] then
+			char:Destroy()
+			return
+		end
 		CharacterAppearance.apply(char)
 		SpawnManager.place(char)
 	end)
@@ -107,11 +116,21 @@ function SpawnManager.spawnPlayer(player: Player)
 		conn:Disconnect()
 		warn("[SpawnManager] LoadCharacterAsync a échoué pour " .. player.Name .. " :", err)
 	end
+	-- Demande arrivée pendant ce chargement (#157) : le personnage gardé la sert, sinon un nouveau
+	if rejoin[player] then
+		rejoin[player] = nil
+		if not SpawnRules.isAlive(player.Character) then
+			SpawnManager.spawnPlayer(player)
+		end
+	end
 end
 
 -- Cette méthode permet de faire réapparaître un joueur lorsque sa réapparition programmée échoit (RoundManager) :
 -- rien s'il a déjà un personnage vivant (demande arrivée entre-temps) ou un LoadCharacterAsync en vol.
 function SpawnManager.respawn(player: Player)
+	if away[player] then
+		return
+	end
 	if SpawnRules.scheduled(spawning[player] == true, SpawnRules.isAlive(player.Character)) then
 		SpawnManager.spawnPlayer(player)
 	end
@@ -120,8 +139,8 @@ end
 -- Cette méthode permet de retenir l'heure de la mort d'un joueur lorsque son Humanoid meurt : une demande
 -- d'apparition est refusée pendant RESPAWN_DELAY dans un round actif.
 function SpawnManager.noteDeath(player: Player)
-	-- Joueur déjà parti (forget passé) : rien à retenir
-	if player.Parent then
+	-- Joueur déjà parti (forget passé) ou revenu au menu : rien à retenir
+	if player.Parent and not away[player] then
 		diedAt[player] = os.clock()
 	end
 end
@@ -129,6 +148,21 @@ end
 -- Cette méthode permet d'oublier un joueur lorsqu'il quitte le jeu.
 function SpawnManager.forget(player: Player)
 	spawning[player] = nil
+	diedAt[player] = nil
+	away[player] = nil
+	rejoin[player] = nil
+end
+
+-- Cette méthode permet de sortir du round un joueur revenu au menu (#157, après RoundManager.withdraw) : personnage
+-- détruit, plus de réapparition, prochaine demande acceptée sans RESPAWN_DELAY (son score de la manche est perdu).
+function SpawnManager.withdraw(player: Player)
+	away[player] = true
+	rejoin[player] = nil
+	local char = player.Character
+	if char then
+		char:Destroy()
+	end
+	-- Après la destruction : une mort que Roblox annoncerait en détruisant le personnage n'est pas retenue
 	diedAt[player] = nil
 end
 
@@ -152,6 +186,13 @@ function SpawnManager.init(
 			now = now,
 			respawnDelay = GameConfig.RESPAWN_DELAY,
 		})
+		-- Retour du menu pendant une réapparition partie avant le départ : servie à la fin de son chargement (#157)
+		if SpawnRules.rejoinsInFlight(refusal, away[player] == true, hooks.roundState()) then
+			away[player] = nil
+			rejoin[player] = true
+			hooks.beforeSpawn(player)
+			return
+		end
 		if refusal then
 			local severity = REFUSAL_SEVERITY[refusal]
 			if severity then
@@ -163,6 +204,7 @@ function SpawnManager.init(
 			end
 			return
 		end
+		away[player] = nil
 		hooks.beforeSpawn(player)
 		SpawnManager.spawnPlayer(player)
 	end)

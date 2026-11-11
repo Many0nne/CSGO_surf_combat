@@ -52,8 +52,8 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   actions côte à côte en bas au centre (`MenuPage.ExitY`). Choix de l'utilisateur en #117, après un premier passage en
   colonne sur un dégradé à gauche jugé peu changé. Infos et Réglages partagent la même disposition (catégories à gauche
   avec barre ambrée sur l'active, contenu à droite, bloc de 780 px). Le titre en texte (Oswald à ombre, en
-  haut au centre, à la place des onglets) n'est montré qu'en partie (Réglages par la touche P) : au menu, l'onglet actif
-  sert de titre. `page.choice` : choix en texte, os atténué au repos, os vif une fois choisi (`setSelected`, aussi pour
+  haut au centre, à la place des onglets) n'est montré qu'en partie (menu en partie et ses Réglages) : au menu, l'onglet
+  actif sert de titre. `page.choice` : choix en texte, os atténué au repos, os vif une fois choisi (`setSelected`, aussi pour
   l'action principale comme ENVOYER ou RETOUR), rouge d'impact au survol.
 - Réglages (`SettingsMenu.luau`, disposition C des schémas de #117, préférée aux sous-onglets en haut et à la liste
   unique qui défile) : catégories à gauche (barre ambrée sur l'active), lignes de 54 px à droite (nom, contrôle,
@@ -69,6 +69,20 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   touche du jeu (déplacement, R, F, P, F3/F4…) ou hors liste (Espace, Maj, Tab…) est refusée par un message en rouge
   d'impact sur la ligne. Seules les lettres, les chiffres du haut et les touches F sont proposées : libellés courts dans
   la barre d'armes. RÉTABLIR remet molette et touches ensemble.
+- Menu en partie (`InGameMenu.luau`, #157) : la touche `PlayerSettings.MENU_KEY` (P, seule constante de cette touche :
+  réservée pour la barre d'armes, rappelée dans Infos) ouvre en partie un écran `MenuPage` titré « MENU » : colonne
+  centrée de choix en texte (taille 40) REPRENDRE (os vif), RÉGLAGES, puis MENU PRINCIPAL écarté ; libellé ambré en bas
+  « LA PARTIE CONTINUE · P POUR REPRENDRE ». RÉGLAGES remplace l'accueil par l'écran Réglages (présentation `modal`,
+  même écran que celui du menu principal, sans copie) dont RETOUR revient à l'accueil du menu. P referme tout, Échap
+  aussi (Roblox ouvre son menu par-dessus ; `GuiService.MenuOpened` ferme tout). Le jeu n'est pas en pause (FFA) : le
+  menu est une surcouche, sur un voile noir à part (`InGameMenuBackdrop`, DisplayOrder 2, actif : il retient les clics
+  pour qu'ils ne partent pas en tirs) qui reste posé quand les Réglages remplacent l'accueil. Tant qu'il est ouvert :
+  souris libre (retenue même si `FPSCamera` la verrouille à une réapparition, la valeur voulue par le jeu est rendue à
+  la fermeture), touches de jeu coupées (`InputModule.setSuspended`), barre d'armes inactive, crosshair et affichage
+  des touches masqués. Disponible vivant ou mort (`InGameMenuRules.available` : `IN_ROUND`, `DEAD`), fermé
+  ailleurs ; au menu principal, P ouvre ou ferme ses Réglages. Vues et routage de la touche : `InGameMenuRules`
+  (testées). MENU PRINCIPAL : arme rangée, remote `LeaveRound` (le serveur retire le joueur du round, cf.
+  `docs/architecture.md`), puis état `MENU` sans attendre la réponse.
 - `src/client/ui/MenuShot.luau` : choix en texte à ombre décalée (`textChoice`, l'ombre s'estompe avec le choix
   désactivé) ; un clic déclenche l'action, sans tir (JOUER : explosion de la vitrine, puis action après `PLAY_DELAY`).
 - `src/client/ui/MenuCursor.luau` : souris système, hitmarker au survol de l'arme (`MenuScene.isAimingWeapon`, accueil seulement).
@@ -85,7 +99,7 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   (`HUDRules.WEAPON_BAR_FADE_DELAY`). Emplacements dans l'ordre alphabétique, comme le helper `DebugPlaytest`.
   Équipement : touches des emplacements (1 à 9 par défaut) et molette (vers le haut = arme précédente par défaut),
   réglables dans Réglages > TOUCHES (#100) ; toucher d'un emplacement, L1/R1 à la manette (fixes). La barre ignore
-  touches et molette pendant que l'écran Réglages est ouvert.
+  touches et molette pendant que le menu en partie est ouvert (`InGameMenu.isOpen`, Réglages compris).
 - `src/client/ui/AmmoCounter.luau` (#158) : « chargeur / réserve » en bas à droite, à gauche de la barre d'armes (chiffre du
   chargeur os à ombre, réserve atténuée, libellé ambré « MUNITIONS », chargeur vide en rouge d'impact). Lit
   `WeaponSystem.getAmmo` à chaque Heartbeat (met à jour les textes seulement si les valeurs changent), masqué sans
@@ -96,7 +110,7 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   noir de `OUTLINE` 1 px (`OUTLINE_TRANSPARENCY` 0,1) : sur fond blanc seul le contour se lit, sur sol ou mur sombre le trait os.
   Taille fixe en pixels, pas de `scaledRoot`. `ScreenGui` en `ScreenInsets.None` pour tomber sur le centre exact de la caméra,
   comme la lunette. Affichage = `HUDRules.crosshairVisible` : réglage actif, HUD de jeu visible (`GameStateController.applyGameHud`,
-  donc ni menu, ni mort, ni résultat), lunette absente (`ScopeOverlay.setVisible`) et Réglages fermé (`SettingsMenu.setOpen`).
+  donc ni menu, ni mort, ni résultat), lunette absente (`ScopeOverlay.setVisible`) et menu en partie fermé (`InGameMenu`).
   Toutes les armes, couteau compris. Piste rejetée : point rouge central (criard, hors de la matière du HUD).
 - `src/client/ui/KeyDisplay.luau` (#197) : réglage « Affichage des touches » (Réglages > GRAPHISMES, `PlayerSettings.keyDisplay`,
   trois valeurs `off` (défaut) / `simple` / `full`, validées par `sanitize`). Grille façon clavier en bas au centre (`BOTTOM_MARGIN`
@@ -111,7 +125,7 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   Les cases suivent les touches physiques, pas l'action disponible : F et M2 s'allument aussi avec une arme sans inspection
   ni lunette ; clavier ignoré pendant la saisie de texte (`GetFocusedTextBox`), pas de suivi du `gameProcessed` (piste non retenue,
   elle demandait un état par touche au lieu d'un sondage).
-  Affichage : mode actif, HUD de jeu visible (`GameStateController.applyGameHud`), Réglages fermé (`SettingsMenu.setOpen`) ; la
+  Affichage : mode actif, HUD de jeu visible (`GameStateController.applyGameHud`), menu en partie fermé (`InGameMenu`) ; la
   lunette ne le masque pas (les touches restent utiles).
   Vérifié en Studio avec `user_keyboard_input` (`keyDown` W/D/S/Espace/Ctrl/R passent en partie et allument les cases) ; le clic de
   souris M1/M2 n'a pas été simulé. Coordonnées de clic des onglets du menu : y négatif (`AbsolutePosition` du bouton).
@@ -152,7 +166,7 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
 ## Règles des écrans secondaires
 
 - Rien ne se tire (#130) : souris système, un clic agit tout de suite. Un curseur de réglage se place d'un clic, puis se glisse.
-- Réglages en partie (touche P) : même écran sur un voile sombre.
+- Réglages en partie (menu en partie, touche P) : même écran sur un voile sombre.
 - Piste rejetée (#130) : un impact de balle laissé sur chaque élément cliqué, et le hitmarker comme curseur partout. Peu beau et peu lisible.
 
 ## Pièges connus
@@ -176,6 +190,13 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
   `UserInputService:IsKeyDown` (#197) ; les onglets du menu se cliquent à l'`AbsolutePosition` du bouton, y négatif compris
   (`moveTo`, attendre, puis `mouseButtonClick`) ; équiper côté serveur (`Humanoid:EquipTool`). Les bots tuent le joueur en boucle :
   `workspace:SetAttribute("DebugBots", 0)` avant de tester.
+- **Touche P au MCP (#157) :** `user_keyboard_input` ne fait pas passer P en partie (comme en #195). Pour ouvrir le menu
+  en partie dans un playtest, attribut de debug Studio `DebugInGameMenu` sur le joueur (contexte `Server` ou `Client`) :
+  `true` ouvre (en partie seulement), `false` ferme (`InGameMenu`, inactif hors Studio). Les choix se cliquent ensuite à
+  l'`AbsolutePosition` des boutons.
+- **Choix inertes en partie (#157) :** JOUER pose le verrou `MenuShot` (`locks`) qui bloque tous les choix en texte ;
+  il n'était levé qu'au retour au menu (`MainMenu.show`), si bien que les choix des Réglages en partie ne répondaient
+  pas. `MainMenu.hide` le lève désormais. Tout nouvel écran de partie fait de `MenuShot.textChoice` en dépend.
 - **Écran Réglages piloté au MCP :** `user_mouse_input` prend ici les coordonnées de l'`AbsolutePosition` des boutons
   (`ScreenGui` en `IgnoreGuiInset`), et un refus de touche (affiché 1,5 s) se lit avec un relevé branché avant l'appui :
   deux appels MCP successifs prennent plus de temps que ça.

@@ -158,8 +158,9 @@ RemoteGuard.FEEDBACK_MAX_BYTES = 1000
 -- Débits calibrés pour qu'un client honnête ne les atteigne jamais (rafale réseau comprise), cf. docs/anticheat.md :
 -- - MeleeDamage : couteau 0,4 s mini (2,5/s) ; HitscanDamage : AWP 1,46 s (0,7/s) ; WeaponAction : un Shoot par tir ou
 --   coup, un Reload par chargeur ; CharacterSync : 20 Hz, paquets regroupés après une coupure réseau ;
---   RequestSpawn : clic du menu ; SendFeedback : clic ENVOYER ; SaveSettings : 1 envoi par seconde au plus
---   (LocalSettings) ; GetSettings : une demande au démarrage du client.
+--   RequestSpawn : clic du menu ; LeaveRound : clic MENU PRINCIPAL du menu en partie ;
+--   SendFeedback : clic ENVOYER ; SaveSettings : 1 envoi par seconde au plus (LocalSettings) ; GetSettings : une
+--   demande au démarrage du client.
 -- Une arme plus rapide (automatique) demandera de relever HitscanDamage et WeaponAction.
 local N = NetworkProtocol.Names
 RemoteGuard.RULES = {
@@ -191,6 +192,7 @@ RemoteGuard.RULES = {
 		args = { RemoteGuard.vector3(), RemoteGuard.number(), RemoteGuard.number() },
 	},
 	[N.REQUEST_SPAWN] = { rate = 1, burst = 3, args = {} },
+	[N.LEAVE_ROUND] = { rate = 1, burst = 3, args = {} },
 	[N.SEND_FEEDBACK] = { rate = 0.5, burst = 3, args = { RemoteGuard.string(RemoteGuard.FEEDBACK_MAX_BYTES) } },
 	[N.SAVE_SETTINGS] = { rate = 2, burst = 5, args = { RemoteGuard.table() } },
 	[N.GET_SETTINGS] = { rate = 0.2, burst = 3, args = {} },

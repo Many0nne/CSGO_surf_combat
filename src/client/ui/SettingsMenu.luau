@@ -1,9 +1,9 @@
 -- Réglages (direction « Ligne de mire », disposition C de #117) : bloc centré sur un voile, catégories à gauche,
 -- lignes de réglages à droite (nom, contrôle, valeur), RÉTABLIR et RETOUR en bas au centre. Deux présentations du même
--- écran : « page » à même la scène du menu et « modal » sur un voile sombre (touche P en
--- partie), toutes deux à la souris système (#130). Pour ajouter un réglage : une entrée dans `buildCategories`, et un champ dans
--- PlayerSettings s'il doit être conservé entre les sessions (LocalSettings, #100).
-local GuiService = game:GetService("GuiService")
+-- écran : « page » à même la scène du menu principal et « modal » avec son titre, ouverte depuis le menu en partie
+-- (InGameMenu, #157, qui pose le voile sombre, libère la souris et route les touches), toutes deux à la souris système
+-- (#130). Pour ajouter un réglage : une entrée dans `buildCategories`, et un champ dans PlayerSettings s'il doit être
+-- conservé entre les sessions (LocalSettings, #100).
 local Lighting = game:GetService("Lighting")
 local StarterPack = game:GetService("StarterPack")
 local UserInputService = game:GetService("UserInputService")
@@ -13,8 +13,6 @@ local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
 local PlayerSettings = require(ReplicatedStorage.Shared.PlayerSettings)
 local UITheme = require(ReplicatedStorage.Shared.UITheme)
 local LocalSettings = require(script.Parent.Parent.systems.settings.LocalSettings)
-local Crosshair = require(script.Parent.Crosshair)
-local KeyDisplay = require(script.Parent.KeyDisplay)
 local HUDRules = require(script.Parent.HUDRules)
 local MenuPage = require(script.Parent.MenuPage)
 local MenuShot = require(script.Parent.MenuShot)
@@ -44,7 +42,6 @@ local VALUE_SHADOW = 3
 local PICK_WIDTH = 120
 local ACTION_SIZE = 30
 local ACTION_GAP = 46
-local BACKDROP_TRANSPARENCY = 0.45
 local KEY_HINT_TIME = 1.5 -- s d'affichage du refus d'une touche (« RÉSERVÉE AU JEU »)
 
 -- `sync` reporte sur la ligne les réglages sauvegardés, une fois arrivés du serveur
@@ -54,13 +51,11 @@ type Category = { title: string, rows: Frame, list: { Row }, rowCount: number }
 type Capture = { slot: number, finish: () -> () }
 
 local page: MenuPage.Page?
-local backdrop: Frame
 local open = false
 local mode: Mode = "modal"
-local savedMouseBehavior = Enum.MouseBehavior.LockCenter
-local savedMouseIcon = false
 local onClosedCallback: (() -> ())?
-local pageRequest: (() -> boolean)?
+-- Rappel de fermeture propre à l'ouverture en cours (retour au menu en partie), oublié une fois appelé
+local onceClosed: (() -> ())?
 local fpsCamRef: {
 	setSensitivity: (number) -> (),
 	getSensitivity: () -> number,
@@ -632,32 +627,24 @@ local function resetCategory()
 	end
 end
 
--- Cette méthode permet d'ouvrir ou fermer l'écran en sauvegardant puis restaurant l'état de la souris
--- lorsque le joueur appuie sur P, clique sur RÉGLAGES ou ferme l'écran.
+-- Cette méthode permet d'ouvrir ou fermer l'écran lorsque le joueur clique sur RÉGLAGES, RETOUR, ou que le menu le
+-- ferme ; à la fermeture, le rappel de l'ouverture en cours puis celui du menu principal sont prévenus.
 local function setOpen(state: boolean)
 	if not page or state == open then
 		return
 	end
 	open = state
-	Crosshair.setMenuOpen(state)
-	KeyDisplay.setMenuOpen(state)
 	if state then
-		savedMouseBehavior = UserInputService.MouseBehavior
-		savedMouseIcon = UserInputService.MouseIconEnabled
-		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-		UserInputService.MouseIconEnabled = true
-		backdrop.Visible = mode == "modal"
-		if mode == "modal" then
-			backdrop.BackgroundTransparency = 1
-			UIKit.tween(backdrop, Motion.Enter, { BackgroundTransparency = BACKDROP_TRANSPARENCY })
-		end
 		page.show(mode == "modal")
 		selectCategory(selected)
 	else
 		endCapture()
 		page.hide()
-		UserInputService.MouseBehavior = savedMouseBehavior
-		UserInputService.MouseIconEnabled = savedMouseIcon
+		local once = onceClosed
+		onceClosed = nil
+		if once then
+			once()
+		end
 		if onClosedCallback then
 			onClosedCallback()
 		end
@@ -701,7 +688,7 @@ local function buildActions(built: MenuPage.Page)
 	back.setSelected(true)
 end
 
--- Cette méthode permet de construire l'écran et de brancher la touche P et Échap lorsque le client démarre.
+-- Cette méthode permet de construire l'écran lorsque le client démarre (touches routées par InGameMenu).
 function SettingsMenu.init(fpsCam: typeof(fpsCamRef))
 	if page then
 		return
@@ -710,18 +697,6 @@ function SettingsMenu.init(fpsCam: typeof(fpsCamRef))
 
 	local built = MenuPage.new("SettingsMenu", 3, "RÉGLAGES")
 	page = built
-
-	-- Le voile retient les clics pour qu'ils ne partent pas en tirs dans la partie
-	backdrop = UIKit.frame({
-		Name = "Backdrop",
-		Active = true,
-		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = C.Black,
-		BackgroundTransparency = BACKDROP_TRANSPARENCY,
-		ZIndex = -1,
-		Visible = false,
-		Parent = built.gui,
-	})
 
 	local block = UIKit.frame({
 		Name = "Block",
@@ -746,41 +721,26 @@ function SettingsMenu.init(fpsCam: typeof(fpsCamRef))
 		end
 		syncing = false
 	end)
+end
 
-	UserInputService.InputBegan:Connect(function(inp, gameProcessed)
-		-- Saisie d'une touche : la touche pressée va à l'emplacement (Échap annule sans fermer l'écran), un clic ailleurs
-		-- annule
-		local active = capture
-		if active then
-			if inp.KeyCode == Enum.KeyCode.Escape then
-				endCapture()
-				return
-			elseif inp.UserInputType == Enum.UserInputType.Keyboard then
-				keyHandlers[active.slot](inp.KeyCode)
-				return
-			elseif inp.UserInputType == Enum.UserInputType.MouseButton1 then
-				endCapture()
-			end
-		end
-		-- Échap ferme l'écran, même si Roblox traite aussi la touche (menu système)
-		if inp.KeyCode == Enum.KeyCode.Escape then
-			setOpen(false)
-			return
-		end
-		if gameProcessed or inp.KeyCode ~= Enum.KeyCode.P then
-			return
-		end
-		if open then
-			setOpen(false)
-		elseif not (pageRequest and pageRequest()) then
-			mode = "modal"
-			setOpen(true)
-		end
-	end)
-	-- Échap ouvre le menu Roblox, qui peut capturer la touche avant nous : on ferme aussi à son ouverture
-	GuiService.MenuOpened:Connect(function()
-		setOpen(false)
-	end)
+-- Cette méthode permet de donner à la saisie de touche en cours la priorité sur une entrée (InGameMenu l'appelle
+-- d'abord) : la touche pressée va à l'emplacement, Échap ou un clic ailleurs annule ; renvoie true si l'entrée est prise.
+function SettingsMenu.handleCaptureInput(inp: InputObject): boolean
+	local active = capture
+	if not active then
+		return false
+	end
+	if inp.KeyCode == Enum.KeyCode.Escape then
+		endCapture()
+		return true
+	elseif inp.UserInputType == Enum.UserInputType.Keyboard then
+		keyHandlers[active.slot](inp.KeyCode)
+		return true
+	elseif inp.UserInputType == Enum.UserInputType.MouseButton1 then
+		-- Le clic annule la saisie et garde son effet (autre choix cliqué)
+		endCapture()
+	end
+	return false
 end
 
 -- Cette méthode permet d'enregistrer une action à exécuter à chaque fermeture de l'écran
@@ -789,14 +749,14 @@ function SettingsMenu.setOnClosed(callback: () -> ())
 	onClosedCallback = callback
 end
 
--- Cette méthode permet de laisser le menu traiter la touche P lorsqu'il est affiché ; le rappel renvoie true s'il s'en charge.
-function SettingsMenu.setPageRequest(callback: () -> boolean)
-	pageRequest = callback
-end
-
--- Cette méthode permet d'ouvrir l'écran dans une présentation donnée lorsque le joueur clique sur RÉGLAGES.
-function SettingsMenu.open(newMode: Mode)
+-- Cette méthode permet d'ouvrir l'écran dans une présentation donnée lorsque le joueur clique sur RÉGLAGES ;
+-- `onClosed` est appelé une fois, à la fermeture de cette ouverture (retour au menu en partie).
+function SettingsMenu.open(newMode: Mode, onClosed: (() -> ())?)
+	if open then
+		return
+	end
 	mode = newMode
+	onceClosed = onClosed
 	setOpen(true)
 end
 

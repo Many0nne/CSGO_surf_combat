@@ -32,10 +32,12 @@ local jumpPressTime = -math.huge
 local reloadPressedEdge = false
 local inspectPressedEdge = false
 local lastWishdir = Vector3.zero
+-- Menu en partie ouvert (#157) : touches de jeu ignorées, rien n'est tenu
+local suspended = false
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	local key = KEY_MAP[input.KeyCode]
-	if not key then
+	if not key or suspended then
 		return
 	end
 	-- Bloquer le saut si l'UI a capturé l'input (ex: chat ouvert), mais laisser passer
@@ -80,6 +82,20 @@ UserInputService.InputEnded:Connect(function(input)
 end)
 
 local InputModule = {}
+
+-- Cette méthode permet de couper (plus rien de tenu ni en attente) ou rendre les touches de jeu lorsque le menu en
+-- partie s'ouvre ou se ferme ; une touche restée enfoncée ne compte qu'au prochain appui.
+function InputModule.setSuspended(on: boolean)
+	suspended = on
+	if on then
+		for key in held do
+			held[key] = false
+		end
+		jumpPressedEdge = false
+		reloadPressedEdge = false
+		inspectPressedEdge = false
+	end
+end
 
 -- Direction souhaitée en world-space XZ, normalisée (diagonales incluses).
 -- yaw : angle horizontal de la caméra en degrés (depuis FPSCamera.getCameraYaw()).

@@ -474,6 +474,9 @@ function MainMenu.hide()
 	for _, choice in choices do
 		choice.reset()
 	end
+	-- JOUER garde les clics bloqués (`locks`) jusqu'ici : sans cela, les choix du menu en partie et de ses Réglages
+	-- restaient sans effet (#157)
+	MenuShot.reset()
 	MenuScene.stop()
 end
 

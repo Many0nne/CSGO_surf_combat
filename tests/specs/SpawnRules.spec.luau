@@ -21,12 +21,16 @@ return function(T, Loader)
 
 	-- Cette méthode permet de construire un faux personnage (en place ou non, PV) lorsqu'un test vérifie isAlive.
 	local function fakeCharacter(inGame: boolean, health: number?)
-		return {
+		local character = {
 			Parent = if inGame then {} else nil,
 			FindFirstChildOfClass = function()
 				return if health then { Health = health } else nil
 			end,
 		}
+		function character.Destroy(self)
+			self.Parent = nil
+		end
+		return character
 	end
 
 	T.describe("SpawnRules.request", function()
@@ -60,6 +64,19 @@ return function(T, Loader)
 			T.expectEqual(SpawnRules.request(request({ hasCharacter = true })), "alive")
 			T.expectEqual(SpawnRules.request(request({ spawning = true })), "spawning")
 			T.expectEqual(SpawnRules.request(request({ roundState = "result" })), "result")
+		end)
+	end)
+
+	T.describe("SpawnRules.rejoinsInFlight (#157)", function()
+		local SpawnRules = Loader.new():require("src/server/SpawnRules")
+
+		T.it("sert une demande refusée « spawning » d'un joueur revenu du menu, hors bannière de fin", function()
+			T.expectEqual(SpawnRules.rejoinsInFlight("spawning", true, "active"), true)
+			T.expectEqual(SpawnRules.rejoinsInFlight("spawning", true, "idle"), true)
+			T.expectEqual(SpawnRules.rejoinsInFlight("spawning", true, "result"), false, "bannière de fin")
+			T.expectEqual(SpawnRules.rejoinsInFlight("spawning", false, "active"), false, "joueur resté en partie")
+			T.expectEqual(SpawnRules.rejoinsInFlight("early", true, "active"), false)
+			T.expectEqual(SpawnRules.rejoinsInFlight(nil, true, "active"), false)
 		end)
 	end)
 
@@ -256,6 +273,82 @@ return function(T, Loader)
 			env.clock = 2
 			env.handler(p)
 			T.expectEqual(p.loads, 2)
+		end)
+	end)
+
+	T.describe("SpawnManager : retour au menu en partie (#157)", function()
+		T.it("détruit le personnage et annule la réapparition programmée", function()
+			local env = setup()
+			local p = fakePlayer(1)
+			local char = fakeCharacter(true, 100)
+			p.Character = char
+			env.SpawnManager.withdraw(p :: any)
+			T.expectEqual(char.Parent, nil, "personnage détruit")
+			env.SpawnManager.respawn(p :: any)
+			T.expectEqual(p.loads, 0, "pas de réapparition")
+		end)
+
+		T.it("accepte JOUER juste après une mort suivie d'un retour au menu, sans journal", function()
+			local env = setup()
+			local p = fakePlayer(1)
+			env.SpawnManager.noteDeath(p :: any)
+			env.SpawnManager.withdraw(p :: any)
+			env.SpawnManager.noteDeath(p :: any) -- une mort annoncée après le retrait n'est pas retenue
+			env.clock = 0.3
+			env.handler(p)
+			T.expectEqual(p.loads, 1)
+			T.expectEqual(env.CheatLog.summary(1), nil, "rien au journal")
+		end)
+
+		T.it(
+			"sert JOUER arrivé pendant la réapparition en vol, sans second chargement si le personnage est gardé",
+			function()
+				local env = setup()
+				local p = fakePlayer(1)
+				p.duringLoad = function()
+					env.SpawnManager.withdraw(p :: any)
+					env.handler(p)
+				end
+				env.SpawnManager.respawn(p :: any)
+				T.expectEqual(p.loads, 1)
+				T.expectEqual(env.started, 1, "remis au round (beforeSpawn)")
+				T.expectEqual(env.CheatLog.summary(1), nil, "pas de refus journalisé")
+				env.SpawnManager.respawn(p :: any)
+				T.expectEqual(p.loads, 1, "personnage vivant : rien de plus")
+			end
+		)
+
+		T.it("recharge si le personnage en vol a été détruit, refuse pendant la bannière de fin", function()
+			local env = setup()
+			local p = fakePlayer(1)
+			p.duringLoad = function()
+				env.SpawnManager.withdraw(p :: any)
+				env.handler(p)
+			end
+			-- Le personnage en vol est arrivé pendant le retrait : détruit
+			function p.LoadCharacterAsync(self)
+				self.loads += 1
+				if self.duringLoad then
+					local fn = self.duringLoad
+					self.duringLoad = nil
+					fn()
+					self.Character = fakeCharacter(false, 0)
+				else
+					self.Character = fakeCharacter(true, 100)
+				end
+			end
+			env.SpawnManager.respawn(p :: any)
+			T.expectEqual(p.loads, 2, "nouveau chargement pour la demande")
+
+			local env2 = setup()
+			env2.state = "result"
+			local q = fakePlayer(2)
+			q.duringLoad = function()
+				env2.SpawnManager.withdraw(q :: any)
+				env2.handler(q)
+			end
+			env2.SpawnManager.respawn(q :: any)
+			T.expectEqual(env2.started, 0, "bannière de fin : pas de retour au round")
 		end)
 	end)
 end

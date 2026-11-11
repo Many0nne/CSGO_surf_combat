@@ -21,6 +21,8 @@ local state = "idle" -- "idle" | "active" | "result"
 local timeLeft = 0
 local scores: { [number]: Score } = {} -- par id de participant
 local lastAttacker: { [number]: LastHit } = {} -- id de la victime → dernier coup reçu
+-- Joueurs revenus au menu pendant le round (#157), par id : leur personnage retiré ne compte pas comme une mort
+local withdrawn: { [number]: boolean } = {}
 
 local roundStateRmt: RemoteEvent
 local scoreUpdateRmt: RemoteEvent
@@ -92,6 +94,7 @@ local function endRound()
 		state = "idle"
 		scores = {}
 		lastAttacker = {}
+		withdrawn = {}
 		broadcastState()
 		-- personnages détruits depuis 6 s : ce qui reste d'un round à l'autre est candidat à une fuite
 		MemoryTracker.snapshot("fin de round")
@@ -209,6 +212,10 @@ end
 -- Cette méthode permet de compter la mort d'un participant et de programmer sa réapparition lorsqu'il meurt ; elle
 -- renvoie le tueur crédité, pour décider si la mort compte dans les stats persistantes (ParticipantRules.countsInStats).
 function RoundManager.onCharacterDied(victim: Participant, respawn: () -> ()): Participant?
+	-- Personnage d'un joueur revenu au menu : ni mort, ni score recréé, ni réapparition
+	if withdrawn[victim.id] then
+		return nil
+	end
 	ensureScore(victim)
 	local killer = recordDeath(victim)
 
@@ -222,8 +229,10 @@ end
 
 -- ── participant lifecycle ──────────────────────────────────────────────────
 
--- Cette méthode permet d'inscrire un participant (joueur ou bot) au classement lorsqu'il entre dans le jeu.
+-- Cette méthode permet d'inscrire un participant (joueur ou bot) au classement lorsqu'il entre dans le jeu ou qu'un
+-- joueur relance une partie depuis le menu (ses kills comptent dès son apparition).
 function RoundManager.addParticipant(participant: Participant)
+	withdrawn[participant.id] = nil
 	ensureScore(participant)
 	broadcastScores()
 end
@@ -233,6 +242,7 @@ end
 function RoundManager.removeParticipant(participant: Participant)
 	scores[participant.id] = nil
 	lastAttacker[participant.id] = nil
+	withdrawn[participant.id] = nil
 	broadcastScores()
 	if state == "active" and #Players:GetPlayers() == 0 then
 		if timerConn then
@@ -242,6 +252,21 @@ function RoundManager.removeParticipant(participant: Participant)
 		state = "idle"
 		scores = {}
 	end
+end
+
+-- Cette méthode permet de retirer du round un joueur revenu au menu (#157) comme un départ : score effacé, coups en
+-- attente oubliés, disparition du personnage non comptée ; il revient à sa prochaine apparition (addParticipant).
+function RoundManager.withdraw(participant: Participant)
+	local id = participant.id
+	withdrawn[id] = true
+	scores[id] = nil
+	lastAttacker[id] = nil
+	for victimId, hit in lastAttacker do
+		if hit.attackerId == id then
+			lastAttacker[victimId] = nil
+		end
+	end
+	broadcastScores()
 end
 
 -- ── accessors ──────────────────────────────────────────────────────────────

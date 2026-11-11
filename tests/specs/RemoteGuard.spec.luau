@@ -121,6 +121,7 @@ return function(T, Loader)
 					N.CHARACTER_SYNC,
 					N.WEAPON_ACTION,
 					N.REQUEST_SPAWN,
+					N.LEAVE_ROUND,
 					N.SEND_FEEDBACK,
 					N.SAVE_SETTINGS,
 					N.GET_SETTINGS,
@@ -140,6 +141,7 @@ return function(T, Loader)
 			T.expectEqual(honest(N.WEAPON_ACTION, "Shoot"), "ok")
 			T.expectEqual(honest(N.WEAPON_ACTION, "Reload"), "ok")
 			T.expectEqual(honest(N.REQUEST_SPAWN), "ok")
+			T.expectEqual(honest(N.LEAVE_ROUND), "ok")
 			T.expectEqual(honest(N.SEND_FEEDBACK, string.rep("é", 250)), "ok", "500 octets, la limite du client")
 			T.expectEqual(honest(N.SAVE_SETTINGS, { sensitivity = 0.5 }), "ok")
 			T.expectEqual(honest(N.GET_SETTINGS), "ok")
