@@ -131,7 +131,9 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   (lunette) : couche plus large posée dessous, sur laquelle joue l'estompe `fade` ; crosshair (`pixelAligned`) : traits
   sur des px entiers (épaisseur impaire : un px de plus en bas ou à droite de l'axe, branches droite et basse décalées
   d'un px pour garder l'écart symétrique ; des demi-px seraient arrondis frame par frame et décolleraient le contour ;
-  centre du crosshair posé sur un px entier, même avec une fenêtre de taille impaire), contour en cadre qui ferme les bouts, rien dessous (#251 : avec un contour dessous,
+  le `Root` du crosshair reste centré en part de l'écran : un `ScreenGui` désactivé garde une `AbsoluteSize` périmée,
+  800x600, un centre calculé en px tombait hors du centre ; avec la mise à l'échelle d'affichage de Windows, un px
+  d'interface n'est de toute façon pas un px physique), contour en cadre qui ferme les bouts, rien dessous (#251 : avec un contour dessous,
   baisser l'opacité assombrissait le trait au lieu de le rendre translucide). Point central `dot` en option. Limite connue : à opacité réduite et écart central
   inférieur à environ épaisseur / 2 + 2 px, branches, point et contours se superposent au centre et y paraissent plus
   opaques. Un nouveau réticule passe par là.

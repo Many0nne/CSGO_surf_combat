@@ -286,9 +286,8 @@ local function addSlider(
 end
 
 -- Cette méthode permet d'ajouter un réglage à choix fermé (« ‹ VALEUR › », flèches à cliquer, en boucle) à une catégorie
--- lorsque l'écran est construit ; `options` donne les libellés et valeurs (et la couleur du libellé, en option),
--- `initial` l'indice de départ, `field` le champ de PlayerSettings où la valeur est conservée et `width` la largeur de
--- la valeur (PICK_WIDTH par défaut). `keepOnReset` : RÉTABLIR ne touche pas à cette ligne.
+-- lorsque l'écran est construit ; `options` (libellé, valeur, couleur en option), `field` (champ de PlayerSettings),
+-- `width` (PICK_WIDTH par défaut) ; `keepOnReset` : RÉTABLIR ne touche pas à cette ligne.
 local function addPicker(
 	category: Category,
 	name: string,

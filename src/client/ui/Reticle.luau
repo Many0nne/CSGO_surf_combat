@@ -128,14 +128,15 @@ local function drawRect(
 	})
 end
 
--- Cette méthode permet de tracer un réticule aligné sur les px entiers (crosshair, #251) lorsqu'il est construit, plutôt
--- que sur des demi-px que Roblox arrondirait frame par frame (contour décollé ou mordant le trait) : une épaisseur impaire
--- a un px de plus en bas ou à droite de l'axe, et le centre du réticule est alors le milieu du px [0, 1] ; les branches
--- droite et basse partent d'un px plus loin pour garder le même écart des deux côtés. Le contour est un cadre autour de
--- chaque trait, rien dessous : un trait translucide ne s'assombrit pas sur le contour.
+-- Cette méthode permet de tracer un réticule aligné sur les px entiers, contour en cadre autour de chaque trait, lorsque le
+-- crosshair est construit (#251).
 local function drawAligned(parent: GuiObject, spec: Spec)
 	local t, length = spec.thickness, spec.length
 	assert(length.Scale == 0, "Reticle : un réticule aligné sur les px a une longueur en px")
+	-- Pas de demi-px, que Roblox arrondirait frame par frame (contour décollé ou mordant le trait) : une épaisseur impaire a
+	-- un px de plus en bas ou à droite de l'axe, le centre est le milieu du px [0, 1], et les branches droite et basse
+	-- partent d'un px plus loin pour garder le même écart des deux côtés. Rien sous le trait : un trait translucide ne
+	-- s'assombrit pas sur le contour.
 	local lo = -math.floor(t / 2) -- bord haut ou gauche du trait, en px depuis l'axe
 	local hi = lo + t
 	local color, transparency = spec.color, spec.transparency or 0
@@ -203,10 +204,10 @@ local function drawAligned(parent: GuiObject, spec: Spec)
 	end
 end
 
--- Cette méthode permet de tracer les quatre branches d'un réticule (contour, ZIndex 1, puis trait, ZIndex 2) centrées sur
--- `parent` lorsqu'un réticule est construit : aligné sur les px avec contour en cadre et point central en option
--- (`pixelAligned`, crosshair), ou centré avec contour en couche dessous, sur laquelle joue l'estompe (lunette).
+-- Cette méthode permet de tracer les quatre branches d'un réticule (contour en ZIndex 1, trait en ZIndex 2) centrées sur
+-- `parent` lorsqu'un réticule est construit (crosshair ou lunette).
 function Reticle.drawArms(parent: GuiObject, spec: Spec)
+	-- Crosshair : aligné sur les px, contour en cadre, point en option ; lunette : centré, contour en couche dessous (estompe)
 	if spec.pixelAligned then
 		drawAligned(parent, spec)
 		return
