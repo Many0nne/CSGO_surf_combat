@@ -374,7 +374,7 @@ leaveRoundRmt.OnServerEvent:Connect(function(player)
 	end
 	local participant = Participants.fromPlayer(player)
 	RoundManager.withdraw(participant)
-	Validator.forget(participant)
+	forgetCombatState(participant)
 	SpawnManager.withdraw(player)
 end)
 

@@ -1,6 +1,7 @@
 -- Historique pur des positions acceptées d'un personnage (#173), pour rembobiner une cible au moment d'un tir ou d'un
--- coup (compensation de latence, #174 et #176). Aucune dépendance à Roblox hors Vector3 et MathRules : testable en Lune. Le serveur
--- (CharacterSync) en garde un par personnage et l'alimente avec l'horloge serveur (workspace:GetServerTimeNow()).
+-- coup (compensation de latence, #174 et #176). Aucune dépendance à Roblox hors Vector3 et MathRules (module partagé,
+-- sans service) : testable en Lune. Le serveur (CharacterSync) en garde un par personnage et l'alimente avec l'horloge
+-- serveur (workspace:GetServerTimeNow()).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 

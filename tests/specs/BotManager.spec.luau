@@ -92,10 +92,34 @@ return function(T, Loader)
 		return env
 	end
 
-	-- Cette méthode permet de donner du état de combat à un bot lorsqu'un test simule ses tirs : equip noté au Validator
-	-- et cadence du relais des tirs.
+	-- Cette méthode permet de construire un personnage minimal (racine posée + humanoïde) lorsqu'un test fait frapper un
+	-- bot ; cible : le helper de playtest l'accepte sans participant (DEBUG_TARGET_ATTRIBUTE).
+	local function makeCharacter(position: Vector3)
+		local model = Instance.new("Model")
+		local root = Instance.new("Part")
+		root.Name = "HumanoidRootPart"
+		root.Position = position
+		root.CFrame = CFrame.new(position)
+		root.Parent = model
+		-- Lune n'a pas de Health par défaut : posée, la cible est vivante
+		local humanoid = Instance.new("Humanoid")
+		humanoid.Health = 100
+		humanoid.Parent = model
+		return model
+	end
+
+	-- Cette méthode permet de donner de l'état de combat à un bot lorsqu'un test simule ses attaques, par le chemin de
+	-- production : un coup de couteau accepté par le Validator (cadence, `lastAttacks` : le seul état d'un bot, ses
+	-- equip et chargeur étant exclus), puis un tir relayé (cadence du relais des tirs).
 	local function giveCombatState(env, participant)
-		env.Validator.noteEquip(participant, Instance.new("Tool"), 1)
+		local char = makeCharacter(Vector3.zero)
+		local knife = Instance.new("Tool")
+		knife.Name = "M9Bayonet"
+		knife.Parent = char
+		env.Participants.setCharacter(participant, char)
+		local target = makeCharacter(Vector3.new(3, 0, 0))
+		target:SetAttribute(env.Validator.DEBUG_TARGET_ATTRIBUTE, true)
+		T.expect(env.Validator.authorizeMelee(participant, target, "primary", 10), "le coup du bot doit être accepté")
 		local admitted = env.ShotRelayRules.admit(
 			env.shotRelay,
 			participant,
@@ -167,7 +191,7 @@ return function(T, Loader)
 	end)
 
 	T.describe("Validator.hasEntries et trackedCount", function()
-		T.it("suivent cadence, equip et chargeur, et retombent à zéro au forget", function()
+		T.it("suivent la cadence d'un bot et retombent à zéro au forget", function()
 			local env = setup()
 			local bot = env.BotManager.add() :: any
 			T.expectEqual(env.Validator.hasEntries(bot), false, "rien au départ")
@@ -177,6 +201,17 @@ return function(T, Loader)
 			T.expectEqual(env.Validator.trackedCount(), 1)
 			env.Validator.forget(bot)
 			T.expectEqual(env.Validator.hasEntries(bot), false)
+			T.expectEqual(env.Validator.trackedCount(), 0)
+		end)
+
+		T.it("suivent aussi l'equip d'un joueur, compté une seule fois avec sa cadence", function()
+			local env = setup()
+			local player = { id = 7, name = "Alice", isBot = false } :: any
+			env.Validator.noteEquip(player, Instance.new("Tool"), 1)
+			T.expectEqual(env.Validator.hasEntries(player), true, "equip")
+			T.expectEqual(env.Validator.trackedCount(), 1)
+			env.Validator.forget(player)
+			T.expectEqual(env.Validator.hasEntries(player), false)
 			T.expectEqual(env.Validator.trackedCount(), 0)
 		end)
 	end)

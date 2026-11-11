@@ -1,7 +1,7 @@
 -- DebugPlaytestRules.luau
 -- Règles pures du helper de playtest debug (Studio uniquement, #30) : choix de l'outil, marqueurs attendus,
--- dégâts attendus, visée caméra et rapport PASS/FAIL. Aucune dépendance Roblox au-delà des types de base,
--- pour rester testable sous Lune. Le helper lui-même vit dans `server/DebugPlaytest` et `client/debug/DebugPlaytest`.
+-- dégâts attendus, visée caméra et rapport PASS/FAIL. Aucune dépendance Roblox au-delà des types de base et de
+-- MathRules (module partagé, sans service), pour rester testable sous Lune. Le helper lui-même vit dans `server/DebugPlaytest` et `client/debug/DebugPlaytest`.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
