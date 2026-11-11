@@ -344,8 +344,8 @@ function NavRules.cluster(
 	return waypoints, cellWaypoint
 end
 
--- Cette méthode permet de relier les points de passage lorsque le plan est construit : une arête du point A au point
--- B si une case de A mène à une case de B, avec le type le plus simple trouvé (marche avant descente, saut, échelle).
+-- Cette méthode permet de relier les points de passage voisins lorsque le plan est construit : arête de A à B si une case
+-- de A mène à une case de B (type le plus simple trouvé), sauf par une rampe de surf (#142 : B peut être très loin).
 function NavRules.waypointEdges(graph: Graph, cellWaypoint: { [number]: number }): { { [number]: number } }
 	local edges: { { [number]: number } } = {}
 	for from, targets in graph.out do
@@ -353,7 +353,7 @@ function NavRules.waypointEdges(graph: Graph, cellWaypoint: { [number]: number }
 		if a then
 			for k, to in targets do
 				local b = cellWaypoint[to]
-				if b and b ~= a then
+				if b and b ~= a and graph.outKind[from][k] ~= NavRules.RAMP then
 					local list = edges[a]
 					if not list then
 						list = {}

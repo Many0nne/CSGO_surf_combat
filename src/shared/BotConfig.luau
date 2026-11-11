@@ -104,6 +104,7 @@ return {
 	RAMP_MIN_TRAVEL     = 0.6,    -- part de la longueur de la rampe parcourue au moins
 	RAMP_EXIT_RADIUS    = 40,     -- case d'arrivée cherchée à moins de tant de la sortie de la rampe (studs)
 	RAMP_LAND_RADIUS    = 3,      -- atterrissage à moins de tant d'une case (studs)
+	RAMP_SETTLE_TIME    = 0.5,    -- après l'atterrissage, freinage jusqu'à la vitesse de course en tant au plus (s)
 	RAMP_MAX_SPEED      = 200,    -- vitesse au plus le long du trajet (studs/s, sous MAX_SPEED_SERVER)
 	RAMP_COST_EXTRA     = 20,     -- forfait ajouté au coût d'une arête de rampe (studs : risque, pas de tir sûr)
 	RAMP_START_DIST     = 3,      -- trajet lancé à moins de tant de la case d'entrée (studs, à l'horizontale)

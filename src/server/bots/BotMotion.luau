@@ -128,14 +128,11 @@ function BotMotion._turn(self: BotMotion, pos: Vector3, direction: Vector3, dt: 
 	return BotRules.headingRotation(self.yaw)
 end
 
--- Cette méthode permet de jouer un tick du trajet de rampe en cours lorsque le bot surfe (#142) : position et vitesse
--- lues dans le trajet (figé : le temps ne passe pas), regard vers sa course ou sa cible ; à la fin, il est posé au sol
--- sur la case de sortie avec sa vitesse horizontale et le suivi de chemin reprend.
+-- Cette méthode permet de jouer un tick du trajet de rampe lorsque le bot surfe (#142), même figé (comme la gravité) :
+-- position et vitesse lues dans le trajet ; à la fin, posé sur la case de sortie, le suivi de chemin reprend.
 function BotMotion._rideTick(self: BotMotion, dt: number)
 	local ride = self.ride :: Ride
-	if not self.frozen then
-		ride.t += dt
-	end
+	ride.t += dt
 	local motor = self.motor
 	local ci = motor:standInfo()
 	local foot, velocity, state = RampRules.sample(ride.traj, ride.t)
@@ -158,12 +155,6 @@ function BotMotion._rideTick(self: BotMotion, dt: number)
 		speed = PhysicsUtils.getXZ(velocity).Magnitude,
 		verticalSpeed = velocity.Y,
 	})
-end
-
--- Cette méthode permet de savoir si le bot rejoue le trajet d'une rampe lorsqu'un outil de debug ou le comportement
--- le demande.
-function BotMotion.isRiding(self: BotMotion): boolean
-	return self.ride ~= nil
 end
 
 -- Cette méthode permet d'avancer le bot d'un tick fixe lorsque la boucle serveur en joue un : intention du suivi de

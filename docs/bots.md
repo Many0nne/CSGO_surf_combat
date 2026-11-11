@@ -52,10 +52,14 @@ Règles pures dans `RampRules` (et `NavRules.rampCost`), simulation dans `RampSi
   saut près du point de passage ou au bord du vide ; sur la rampe, **appui vers la rampe** (direction horizontale
   opposée à la normale) : le glissement le garde sur la face et il y **monte doucement** à ~30 studs/s, comme un
   joueur ; au-delà du bout d'arrivée (ou décroché), case où il retomberait (`pickLanding`), rejointe en l'air
-  (`landingVelocity`, `steer` à `RAMP_AIR_STEER`). Réussite : atterri à moins de `RAMP_LAND_RADIUS` d'une case, assez
-  de rampe parcourue (`RAMP_MIN_TRAVEL`), sous `RAMP_MAX_TIME` et `RAMP_MAX_SPEED` (`accept`). Le plus court trajet
-  réussi devient l'arête ; `[Nav] rampe i, sens d : entrée → sortie, durée, vitesse` dans la console, ou la raison de
-  chaque échec.
+  (`landingVelocity`, `steer` à `RAMP_AIR_STEER`). Réussite : atterri à moins de `RAMP_LAND_RADIUS` d'une case, freiné
+  jusqu'à sa vitesse de course sans en sortir (`RAMP_SETTLE_TIME` au plus : le bot rejoue ce freinage et repart à
+  vitesse de course), assez de rampe parcourue (`RAMP_MIN_TRAVEL`), sous `RAMP_MAX_TIME` et `RAMP_MAX_SPEED`
+  (`accept`). Échec immédiat s'il retombe avant la rampe (saut trop court). Le plus court trajet réussi devient
+  l'arête ; `[Nav] rampe i, sens d : entrée → sortie, durée, vitesse` dans la console, ou la raison de chaque échec.
+  La simulation rend la main à chaque tick quand la tranche `NAV_BUILD_BUDGET` est écoulée.
+- **Voisins** : une arête de rampe ne relie pas deux points de passage dans `waypointEdges` (l'enquête fouille les
+  points voisins, pas le bout d'une rampe à 150 studs).
 - **Coût** : `NavRules.rampCost` = durée × `RUN_SPEED` + `RAMP_COST_EXTRA` (risque), lu par l'A* dans
   `graph.rampCost` au lieu de la longueur : une rampe n'est prise que si elle raccourcit le chemin.
 - **Parcours** : arrivé au sol à moins de `RAMP_START_DIST` de la case d'entrée (`canStart`), `BotNavigator` renvoie
@@ -253,3 +257,11 @@ Règles pures dans `BotPopulationRules`, appliquées par `BotManager` (`adjustPo
 - Gain par saut : environ 36 × 44 ticks ≈ 1 600 de |v|² en strafe parfait, donc 6 sauts de 30 à 100, pas 3.
 - **Tests Lune : `Vector3` est en simple précision.** Un angle recalculé par `acos` d'un produit scalaire d'unitaires
   s'écarte de ~1e-5° de la valeur exacte : comparer les angles à 1e-3 près, pas à 1e-6.
+- **Simulation de rampe et personnages présents.** `RampSim` utilise le `CharacterMotor` du joueur, dont les requêtes
+  n'excluent que le corps simulé : un joueur ou un bot debout sur une entrée de rampe pendant la construction du plan
+  (les premières secondes du serveur) peut gêner un essai. Les `RAMP_TRIES` essais par sens limitent le risque ; si une
+  arête manque au démarrage (`[Nav] rampe … : aucun trajet`), relancer le serveur.
+- **Une corniche gardée ouvre aussi ses autres accès.** Rendre une corniche joignable par une rampe (et d'où l'on
+  revient) rend aussi utilisables les descentes qui y mènent (toit → corniche de Dizzy, 35 studs). Sans air control sur
+  les descentes, le bot gardait sa vitesse de course et dépassait la corniche (16 studs de large) : la descente vise
+  désormais sa case en l'air, comme un saut.

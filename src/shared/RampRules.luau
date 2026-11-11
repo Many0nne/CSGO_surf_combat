@@ -33,9 +33,8 @@ RampRules.GROUND = 0
 RampRules.AIR = 1
 RampRules.SURF = 2
 
--- Cette méthode permet de donner le repère d'une pièce de surf lorsque le plan cherche les rampes de la map : la face
--- dont la normale est dans la plage du surf (SURF_NORMAL_MIN à SURF_NORMAL_Y) et d'au moins RAMP_MIN_AREA studs²,
--- longueur = l'axe le plus horizontal de la face ; nil si la pièce n'en a pas.
+-- Cette méthode permet de donner le repère d'une pièce lorsque le plan cherche les rampes : face de normale dans la plage
+-- du surf et d'au moins RAMP_MIN_AREA studs², longueur = son axe le plus horizontal ; nil sans telle face.
 function RampRules.frameOf(cf: CFrame, size: Vector3): Frame?
 	local axes = { { cf.XVector, size.X }, { cf.YVector, size.Y }, { cf.ZVector, size.Z } }
 	local best: Frame? = nil
@@ -71,9 +70,8 @@ function RampRules.frameOf(cf: CFrame, size: Vector3): Frame?
 	return best
 end
 
--- Cette méthode permet de savoir si deux repères décrivent la même rampe lorsque le plan en trouve plusieurs pièces
--- (peau d'acier, mur d'air posé dessus) : faces parallèles, à moins de 2 studs l'une de l'autre, centres qui se
--- recouvrent.
+-- Cette méthode permet de savoir si deux repères sont la même rampe lorsque le plan en trouve plusieurs pièces (peau,
+-- mur d'air posé dessus) : faces parallèles à moins de 2 studs, centre de b dans l'emprise de a.
 function RampRules.sameRamp(a: Frame, b: Frame): boolean
 	if a.n:Dot(b.n) < 0.99 then
 		return false
@@ -101,9 +99,8 @@ function RampRules.beyondStart(frame: Frame, direction: number, p: Vector3): num
 	return -direction * u - frame.halfU
 end
 
--- Cette méthode permet de donner le point visé sur la rampe depuis une case d'entrée au sol floorY lorsque le bot va
--- y sauter : à RAMP_ENTRY_INSET studs du bout de départ, à RAMP_ENTRY_RISE au-dessus du sol (sous le sommet du
--- saut) ; nil si cette hauteur n'est pas sur la face (sol trop bas ou trop haut pour cette rampe).
+-- Cette méthode permet de donner le point visé sur la rampe lorsque le bot y saute d'un sol à floorY : à RAMP_ENTRY_INSET
+-- du bout de départ, RAMP_ENTRY_RISE au-dessus du sol ; nil si cette hauteur n'est pas sur la face.
 function RampRules.entryTarget(frame: Frame, direction: number, floorY: number): Vector3?
 	local u = -direction * (frame.halfU - BotConfig.RAMP_ENTRY_INSET)
 	if frame.v.Y < 1e-3 then
@@ -117,9 +114,8 @@ function RampRules.entryTarget(frame: Frame, direction: number, floorY: number):
 	return RampRules.surfacePoint(frame, u, v)
 end
 
--- Cette méthode permet de donner le point de passage avant la rampe lorsque le bot s'y lance depuis une case d'entrée :
--- au-delà du bout de départ (RAMP_APPROACH_OUT), à la hauteur du point visé, devant la face (RAMP_APPROACH_LIFT le
--- long de la normale). Il y arrive sans passer derrière la face ni toucher la tranche du bout.
+-- Cette méthode permet de donner le point de passage lorsque le bot se lance vers la rampe : au-delà du bout de départ
+-- (RAMP_APPROACH_OUT), devant la face (RAMP_APPROACH_LIFT), pour ne passer ni derrière elle ni dans sa tranche.
 function RampRules.approachPoint(frame: Frame, direction: number, target: Vector3): Vector3
 	local _, v = RampRules.toLocal(frame, target)
 	local u = -direction * (frame.halfU + BotConfig.RAMP_APPROACH_OUT)
@@ -172,9 +168,8 @@ function RampRules.fallTime(y: number, vy: number, floorY: number): number?
 	return (vy + math.sqrt(disc)) / g
 end
 
--- Cette méthode permet de choisir la case où atterrir lorsque le bot quitte la rampe : parmi les cases plus basses
--- que lui (RAMP_EXIT_RADIUS à l'horizontale), celle la plus proche du point où il retomberait sans rien changer.
--- candidates : { { id, position } } ; renvoie l'id, ou nil.
+-- Cette méthode permet de choisir la case où atterrir lorsque le bot quitte la rampe : parmi les cases plus basses à
+-- moins de RAMP_EXIT_RADIUS, la plus proche du point où il retomberait sans rien changer ; nil sans case.
 function RampRules.pickLanding(
 	pos: Vector3,
 	velocity: Vector3,
@@ -199,8 +194,7 @@ function RampRules.pickLanding(
 end
 
 -- Cette méthode permet de rapprocher la vitesse horizontale d'une vitesse voulue lorsque le bot se dirige en l'air
--- (lancement vers la rampe, sortie vers la case d'arrivée) : au plus maxDelta studs/s de changement par appel, la
--- vitesse verticale gardée.
+-- (lancement, sortie de rampe) : au plus maxDelta studs/s par appel, vitesse verticale gardée.
 function RampRules.steer(velocity: Vector3, wanted: Vector3, maxDelta: number): Vector3
 	local flat = Vector3.new(velocity.X, 0, velocity.Z)
 	local goal = Vector3.new(wanted.X, 0, wanted.Z)
@@ -242,9 +236,8 @@ function RampRules.peakSpeed(points: { Vector3 }, dt: number): number
 	return peak
 end
 
--- Cette méthode permet de savoir si un trajet simulé peut devenir une arête lorsque la simulation est finie : durée
--- et vitesse sous les plafonds (RAMP_MAX_TIME, RAMP_MAX_SPEED, lui-même sous le plafond du serveur), assez de
--- rampe parcourue.
+-- Cette méthode permet de savoir si un trajet simulé devient une arête lorsque la simulation finit : sous RAMP_MAX_TIME
+-- et RAMP_MAX_SPEED (et le plafond du serveur), au moins RAMP_MIN_TRAVEL de la rampe parcourue.
 function RampRules.accept(duration: number, peakSpeed: number, travel: number, rampLength: number): boolean
 	return duration <= BotConfig.RAMP_MAX_TIME
 		and peakSpeed <= BotConfig.RAMP_MAX_SPEED

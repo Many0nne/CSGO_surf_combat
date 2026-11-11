@@ -308,23 +308,36 @@ function NavBuilder.build(map: Instance): Plan
 
 	local graph: NavRules.Graph = { positions = positions, out = out, outKind = outKind }
 
-	-- Cette méthode permet de trouver la case la plus proche d'un point lorsqu'on accroche une échelle ou un point
-	-- d'apparition au plan ; accept filtre les cases (nil : toutes).
-	local function nearest(point: Vector3, radius: number, accept: ((number) -> boolean)?): number?
+	-- Cette méthode permet de lister les cases à moins de radius studs (à l'horizontale) d'un point lorsque la
+	-- simulation cherche une case d'entrée, d'arrivée ou d'atterrissage.
+	local function cellsNear(point: Vector3, radius: number): { RampSim.Candidate }
 		local cx, cz = math.floor((point.X - minX) / G), math.floor((point.Z - minZ) / G)
 		local span = math.ceil(radius / G)
-		local best, bestDist = nil, radius
+		local found = {}
 		for dx = -span, span do
 			for dz = -span, span do
 				local list = columns[NavBuilder.columnKey(cx + dx, cz + dz)]
 				if list then
 					for _, id in list do
-						local dist = (positions[id] - point).Magnitude
-						if dist < bestDist and (not accept or accept(id)) then
-							best, bestDist = id, dist
+						local p = positions[id]
+						if Vector3.new(p.X - point.X, 0, p.Z - point.Z).Magnitude <= radius then
+							table.insert(found, { id = id, position = p })
 						end
 					end
 				end
+			end
+		end
+		return found
+	end
+
+	-- Cette méthode permet de trouver la case la plus proche d'un point lorsqu'on accroche une échelle ou un point
+	-- d'apparition au plan ; accept filtre les cases (nil : toutes).
+	local function nearest(point: Vector3, radius: number, accept: ((number) -> boolean)?): number?
+		local best, bestDist = nil, radius
+		for _, c in cellsNear(point, radius) do
+			local dist = (c.position - point).Magnitude
+			if dist < bestDist and (not accept or accept(c.id)) then
+				best, bestDist = c.id, dist
 			end
 		end
 		return best
@@ -377,27 +390,6 @@ function NavBuilder.build(map: Instance): Plan
 	local rampPaths: { [number]: RampRules.Trajectory } = {}
 	local rampCost: { [number]: number } = {}
 	if #ramps > 0 then
-		-- Cette méthode permet de lister les cases à moins de radius studs (à l'horizontale) d'un point lorsque la
-		-- simulation cherche une case d'entrée, d'arrivée ou d'atterrissage.
-		local function cellsNear(point: Vector3, radius: number): { RampSim.Candidate }
-			local cx, cz = math.floor((point.X - minX) / G), math.floor((point.Z - minZ) / G)
-			local span = math.ceil(radius / G)
-			local found = {}
-			for dx = -span, span do
-				for dz = -span, span do
-					local list = columns[NavBuilder.columnKey(cx + dx, cz + dz)]
-					if list then
-						for _, id in list do
-							local p = positions[id]
-							if Vector3.new(p.X - point.X, 0, p.Z - point.Z).Magnitude <= radius then
-								table.insert(found, { id = id, position = p })
-							end
-						end
-					end
-				end
-			end
-			return found
-		end
 		local rig = RampSim.newRig()
 		for index, frame in ramps do
 			for _, direction in { 1, -1 } do
@@ -426,6 +418,7 @@ function NavBuilder.build(map: Instance): Plan
 						killY = if type(killY) == "number" then killY else nil,
 						castParams = castParams,
 						cellsNear = cellsNear,
+						yield = slice,
 					})
 					if traj and (not best or traj.duration < best.duration) then
 						best = traj

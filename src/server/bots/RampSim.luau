@@ -6,7 +6,8 @@
 -- 2. surf : il appuie vers la rampe (direction horizontale opposée à la normale), comme un joueur qui tient sa
 --    hauteur ; l'élan le porte le long de la rampe ;
 -- 3. sortie (au-delà du bout d'arrivée, ou décroché) : il choisit la case où il retomberait (RampRules.pickLanding)
---    et s'y dirige en l'air ; arrivée au sol près d'une case = trajet réussi.
+--    et s'y dirige en l'air ; arrivé au sol près d'une case, il freine jusqu'à sa vitesse de course sans en sortir
+--    (RAMP_SETTLE_TIME au plus) : trajet réussi. Retombé avant la rampe ou glissé hors de la case : échec.
 -- Règles pures : RampRules.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -29,6 +30,7 @@ export type Params = {
 	killY: number?,
 	castParams: RaycastParams, -- requêtes dans la map (sol devant lui)
 	cellsNear: (point: Vector3, radius: number) -> { Candidate },
+	yield: (() -> ())?, -- appelé à chaque tick simulé (NavBuilder : rend la main quand la tranche de la frame est écoulée)
 }
 
 export type Rig = { model: Model, root: BasePart, body: BasePart }
@@ -68,7 +70,7 @@ local function flatDir(from: Vector3, to: Vector3): Vector3
 	return if d.Magnitude > 1e-3 then d.Unit else Vector3.zero
 end
 
--- Cette méthode permet de donner la distance horizontale entre deux points.
+-- Cette méthode permet de donner la distance horizontale entre deux points lorsqu'on compare le corps simulé à un but.
 local function flatDist(a: Vector3, b: Vector3): number
 	return Vector3.new(b.X - a.X, 0, b.Z - a.Z).Magnitude
 end
@@ -115,42 +117,21 @@ function RampSim.simulate(rig: Rig, params: Params): (RampRules.Trajectory?, str
 
 	local points, states = { params.entryPos }, { RampRules.GROUND }
 	local passed, jumped, touched = false, false, false
-	local surfing, lost = false, 0
+	local surfing, lost, settled = false, 0, 0
 	local landing: Candidate? = nil
 	local maxTicks = math.ceil(BotConfig.RAMP_MAX_TIME / dt)
 	for _ = 1, maxTicks do
+		if params.yield then
+			params.yield()
+		end
 		local gnd = motor:beginTick(dt)
 		local _, grounded, airborne = motor:updateState(gnd, false)
 		local foot = motor.cframe.Position - lift
-		if grounded and touched then
-			local exit = landedCell(params, foot)
-			if not exit then
-				return nil, string.format("atterri hors d'une case en %s", tostring(foot))
-			end
-			local duration = (#points - 1) * dt
-			local peak = RampRules.peakSpeed(points, dt)
-			local travel = RampRules.travel(frame, params.entryPos, foot)
-			if not RampRules.accept(duration, peak, travel, frame.halfU * 2) then
-				return nil,
-					string.format(
-						"refusé (%.1f s, %.0f studs/s, %.0f studs le long de la rampe)",
-						duration,
-						peak,
-						travel
-					)
-			end
-			return {
-				dt = dt,
-				points = points,
-				states = states,
-				duration = duration,
-				entry = params.entry,
-				exit = exit,
-				ramp = params.ramp,
-				direction = direction,
-				peakSpeed = peak,
-			},
-				"ok"
+		local speed = Vector3.new(motor.velocity.X, 0, motor.velocity.Z).Magnitude
+		if grounded and jumped and not touched then
+			return nil, "saut trop court, retombé avant la rampe"
+		elseif airborne and settled > 0 then
+			return nil, "glissé hors de la case d'arrivée"
 		end
 
 		-- Point visé : le point de passage tant qu'il n'est pas devant la face, puis le point sur la rampe
@@ -162,7 +143,19 @@ function RampSim.simulate(rig: Rig, params: Params): (RampRules.Trajectory?, str
 		local aim = if passed then target else approach
 
 		local jump = false
-		if grounded then
+		if grounded and touched then
+			-- Atterri : il freine vers la case d'arrivée jusqu'à sa vitesse de course, il doit y rester
+			local exit = landedCell(params, foot)
+			if not exit then
+				return nil, string.format("atterri hors d'une case en %s", tostring(foot))
+			end
+			if settled > 0 and (speed <= run + 1 or settled >= BotConfig.RAMP_SETTLE_TIME) then
+				return RampSim._finish(params, points, states, dt, exit)
+			end
+			settled += dt
+			local goal = if landing then landing.position else foot
+			motor:groundPhysics(gnd, flatDir(foot, goal), run, dt, false, false, false)
+		elseif grounded then
 			local wish = flatDir(foot, aim)
 			if not jumped then
 				-- Saut près du point de passage, ou au bord du vide (rien sous les pieds un peu plus loin)
@@ -182,18 +175,17 @@ function RampSim.simulate(rig: Rig, params: Params): (RampRules.Trajectory?, str
 			if surfing and (direction * u > frame.halfU or lost > 0.2) then
 				-- Sortie : case d'arrivée choisie une fois, là où il retomberait
 				surfing = false
-				local id =
-					RampRules.pickLanding(foot, motor.velocity, params.cellsNear(foot, BotConfig.RAMP_EXIT_RADIUS))
-				if not id then
-					return nil, string.format("aucune case où retomber depuis %s", tostring(foot))
-				end
-				for _, c in params.cellsNear(foot, BotConfig.RAMP_EXIT_RADIUS) do
+				local nearby = params.cellsNear(foot, BotConfig.RAMP_EXIT_RADIUS)
+				local id = RampRules.pickLanding(foot, motor.velocity, nearby)
+				for _, c in nearby do
 					if c.id == id then
 						landing = c
 					end
 				end
+				if not landing then
+					return nil, string.format("aucune case où retomber depuis %s", tostring(foot))
+				end
 			end
-			local speed = Vector3.new(motor.velocity.X, 0, motor.velocity.Z).Magnitude
 			if surfing then
 				-- Appui vers la rampe : le glissement (ClipVelocity) le maintient sur la face
 				motor:airPhysics(inward, run, dt, false)
@@ -224,6 +216,37 @@ function RampSim.simulate(rig: Rig, params: Params): (RampRules.Trajectory?, str
 		end
 	end
 	return nil, "trop long"
+end
+
+-- Cette méthode permet de garder le trajet simulé lorsque le corps s'est arrêté sur la case d'arrivée, s'il passe les
+-- plafonds de durée et de vitesse et parcourt assez de rampe (RampRules.accept) ; sinon nil et la raison.
+function RampSim._finish(
+	params: Params,
+	points: { Vector3 },
+	states: { number },
+	dt: number,
+	exit: number
+): (RampRules.Trajectory?, string)
+	local frame = params.frame
+	local duration = (#points - 1) * dt
+	local peak = RampRules.peakSpeed(points, dt)
+	local travel = RampRules.travel(frame, params.entryPos, points[#points])
+	if not RampRules.accept(duration, peak, travel, frame.halfU * 2) then
+		return nil,
+			string.format("refusé (%.1f s, %.0f studs/s, %.0f studs le long de la rampe)", duration, peak, travel)
+	end
+	return {
+		dt = dt,
+		points = points,
+		states = states,
+		duration = duration,
+		entry = params.entry,
+		exit = exit,
+		ramp = params.ramp,
+		direction = params.direction,
+		peakSpeed = peak,
+	},
+		"ok"
 end
 
 return RampSim

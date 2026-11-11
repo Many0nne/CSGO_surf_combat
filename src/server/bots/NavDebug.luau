@@ -111,7 +111,7 @@ local function drawPlan(plan: NavPlan.Plan, withCells: boolean)
 			local pa, pb = plan.waypoints[a].position + LIFT, plan.waypoints[b].position + LIFT
 			-- Arête dans les deux sens : un seul trait ; à sens unique : trait plus fin, côté départ
 			local back = plan.waypointEdges[b] and plan.waypointEdges[b][a]
-			if kind ~= NavRules.RAMP and (not back or a < b) then
+			if not back or a < b then
 				segment(edges, pa, if back then pb else pa:Lerp(pb, 0.85), KIND_COLORS[kind], if back then 0.3 else 0.2)
 			end
 		end

@@ -241,6 +241,14 @@ return function(T, Loader)
 			T.expectEqual(#path, 60, "à pied")
 		end)
 
+		T.it("ne compte pas les deux bouts d'une rampe comme points voisins", function()
+			-- Cases 1-2 et 59-60 dans deux points ; seule la rampe les relie
+			local graph = corridor(60, 1, 60, 3)
+			local cellWaypoint = { [1] = 1, [2] = 1, [59] = 2, [60] = 2 }
+			local edges = Nav.waypointEdges(graph, cellWaypoint)
+			T.expectEqual(edges[1], nil, "pas de voisin par la rampe (enquête, #141)")
+		end)
+
 		T.it("sans rampe dans la map, le chemin reste celui à pied", function()
 			local path = Nav.findPath(corridor(60, 1, 60, nil), 1, 60)
 			T.expectEqual(#path, 60)

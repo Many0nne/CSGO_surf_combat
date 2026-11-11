@@ -135,19 +135,6 @@ function NavPlan.randomWaypoint(plan: Plan, rng: Random, avoid: number?): number
 	return pick
 end
 
--- Cette méthode permet de trouver le point de passage le plus proche d'une position lorsqu'un outil de debug envoie
--- les bots quelque part (DebugBotsGoto) ; nil sans point.
-function NavPlan.nearestWaypoint(plan: Plan, position: Vector3): number?
-	local best, bestDist = nil, math.huge
-	for i, wp in plan.waypoints do
-		local d = (wp.position - position).Magnitude
-		if d < bestDist then
-			best, bestDist = i, d
-		end
-	end
-	return best
-end
-
 -- Cette méthode permet de trouver l'échelle dont le volume contient une position lorsqu'un bot grimpe : renvoie sa
 -- normale sortante, ou nil.
 function NavPlan.ladderAt(plan: Plan, pos: Vector3): Vector3?
