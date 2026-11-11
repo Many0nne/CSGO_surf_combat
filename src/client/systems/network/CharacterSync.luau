@@ -115,9 +115,9 @@ function CharacterSync.velocityOf(char: Model): Vector3
 	return (last.pos - previous.pos) / dt
 end
 
--- Cette méthode permet d'envoyer la position et le cap du personnage local au serveur lorsque le mouvement vient
--- d'avancer d'une frame (dt), au plus NET_SYNC_RATE fois par seconde.
-function CharacterSync.send(hrp: BasePart, dt: number)
+-- Cette méthode permet d'envoyer la position, le cap et l'accroupi (#213) du personnage local au serveur lorsque le
+-- mouvement vient d'avancer d'une frame (dt), au plus NET_SYNC_RATE fois par seconde.
+function CharacterSync.send(hrp: BasePart, dt: number, crouching: boolean)
 	sendAccumulator += dt
 	if not remote or sendAccumulator < CharacterSyncRules.SEND_INTERVAL then
 		return
@@ -125,7 +125,7 @@ function CharacterSync.send(hrp: BasePart, dt: number)
 	-- Une demi-période reportée au plus : deux envois restent séparés d'au moins SEND_INTERVAL / 2, même après une
 	-- saccade (le serveur s'en sert pour majorer la vitesse verticale, MovementGuardRules.MIN_PACKET_INTERVAL)
 	sendAccumulator = math.min(sendAccumulator - CharacterSyncRules.SEND_INTERVAL, CharacterSyncRules.SEND_INTERVAL / 2)
-	remote:FireServer(hrp.Position, CharacterSyncRules.yawOf(hrp.CFrame.LookVector), correctionAck)
+	remote:FireServer(hrp.Position, CharacterSyncRules.yawOf(hrp.CFrame.LookVector), correctionAck, crouching)
 end
 
 -- Cette méthode permet de désigner le personnage local et la fonction qui le replace lorsque son mouvement démarre

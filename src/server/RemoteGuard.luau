@@ -94,6 +94,16 @@ function RemoteGuard.number(): Check
 	end
 end
 
+-- Cette méthode permet de construire le contrôle « booléen » lorsqu'un remote reçoit un état (accroupi, #213).
+function RemoteGuard.boolean(): Check
+	return function(value)
+		if type(value) ~= "boolean" then
+			return "malformed", "booléen attendu, reçu " .. describe(value)
+		end
+		return "ok"
+	end
+end
+
 -- Cette méthode permet de construire le contrôle « chaîne d'au plus maxLen octets » lorsqu'un remote reçoit du texte.
 function RemoteGuard.string(maxLen: number): Check
 	return function(value)
@@ -160,12 +170,14 @@ RemoteGuard.FEEDBACK_MAX_BYTES = 1000
 -- Une arme plus rapide (automatique) demandera de relever HitscanDamage, ShotFired et WeaponAction.
 local N = NetworkProtocol.Names
 RemoteGuard.RULES = {
+	-- Cible, type d'attaque, instant du coup (#214, horloge serveur comme shotTime, borné ensuite par le ping)
 	[N.MELEE_DAMAGE] = {
 		rate = 5,
 		burst = 5,
 		args = {
 			RemoteGuard.instance(),
 			RemoteGuard.enum({ WeaponConfig.AttackKind.PRIMARY, WeaponConfig.AttackKind.SECONDARY }),
+			RemoteGuard.number(),
 		},
 	},
 	-- Cible, partie touchée, origine, direction, point d'impact, instant du tir (#174, contrôlés ensuite par ShotRules)
@@ -189,10 +201,11 @@ RemoteGuard.RULES = {
 		args = { RemoteGuard.vector3(), RemoteGuard.vector3(), RemoteGuard.number() },
 	},
 	[N.WEAPON_ACTION] = { rate = 8, burst = 8, args = { RemoteGuard.enum({ "Shoot", "Reload" }) } },
+	-- Position, cap, numéro de correction, accroupi (#213)
 	[N.CHARACTER_SYNC] = {
 		rate = 40,
 		burst = 60,
-		args = { RemoteGuard.vector3(), RemoteGuard.number(), RemoteGuard.number() },
+		args = { RemoteGuard.vector3(), RemoteGuard.number(), RemoteGuard.number(), RemoteGuard.boolean() },
 	},
 	[N.REQUEST_SPAWN] = { rate = 1, burst = 3, args = {} },
 	[N.LEAVE_ROUND] = { rate = 1, burst = 3, args = {} },

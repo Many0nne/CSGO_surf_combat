@@ -149,9 +149,11 @@ local function buildGeometry(map: Instance): (MovementGuardRules.Geometry, (CFra
 		hasFloorIn
 end
 
--- Cette méthode permet d'ajouter une position acceptée à l'historique du personnage lorsqu'elle est posée ; l'historique
--- est créé au premier relevé, sauf si le personnage est déjà retiré du monde (Destroying ne se déclencherait plus).
-local function recordPosition(char: Model, pos: Vector3, stamp: number)
+-- Cette méthode permet d'ajouter une position acceptée et sa pose (cap, accroupi, #213) à l'historique du personnage
+-- lorsqu'elle est posée ; l'historique est créé au premier relevé, sauf si le personnage est déjà retiré du monde
+-- (Destroying ne se déclencherait plus). Coût relevé sous le repère « srv historique ».
+local function recordPosition(char: Model, pos: Vector3, yaw: number, crouching: boolean, stamp: number)
+	local startedAt = os.clock()
 	local history = histories[char]
 	if not history and not char:IsDescendantOf(game) then
 		return
@@ -163,7 +165,8 @@ local function recordPosition(char: Model, pos: Vector3, stamp: number)
 			histories[char] = nil
 		end)
 	end
-	PositionHistory.record(history, stamp, pos)
+	PositionHistory.record(history, stamp, pos, yaw, crouching)
+	PerfMarkers.record("srv historique", os.clock() - startedAt)
 end
 
 -- Cette méthode permet de (re)partir de la position serveur de la racine lorsqu'un paquet arrive pour un personnage
@@ -247,16 +250,18 @@ end
 
 -- Cette méthode permet de traiter la position annoncée par un client lorsqu'elle arrive : forme vérifiée, paquet
 -- antérieur à la dernière correction ignoré, seau de distance jugé, puis racine déplacée, hauteur de mort testée et
--- position relayée aux autres joueurs. ack = numéro de la dernière correction appliquée par le client.
+-- position relayée aux autres joueurs. ack = numéro de la dernière correction appliquée par le client ; crouching =
+-- accroupi (#213), gardé dans l'historique (non relayé : le rig 3P ne s'accroupit pas).
 local function onClientPosition(
 	remote: UnreliableRemoteEvent,
 	onAccepted: (Model, Vector3) -> (),
 	player: Player,
 	pos: any,
 	yaw: any,
-	ack: any
+	ack: any,
+	crouching: any
 )
-	if not CharacterSyncRules.isWellFormed(pos, yaw) or type(ack) ~= "number" then
+	if not CharacterSyncRules.isWellFormed(pos, yaw) or type(ack) ~= "number" or type(crouching) ~= "boolean" then
 		return
 	end
 	local char = player.Character
@@ -305,7 +310,7 @@ local function onClientPosition(
 	root.CFrame = CFrame.new(pos) * CFrame.Angles(0, yaw, 0)
 
 	local stamp = workspace:GetServerTimeNow()
-	recordPosition(char, pos, stamp)
+	recordPosition(char, pos, yaw, crouching, stamp)
 	for _, other in Players:GetPlayers() do
 		if other ~= player then
 			remote:FireClient(other, char, pos, yaw, stamp)
@@ -387,12 +392,12 @@ function CharacterSync.init(
 		checkVoid(fall)
 		PerfMarkers.record("srv vide", os.clock() - startedAt)
 	end)
-	remote.OnServerEvent:Connect(function(player, pos, yaw, ack)
-		-- Garde commune (#170) : débit et types (Vector3, angle et numéro de correction finis)
-		if not CheatLog.admit(player, remote.Name, pos, yaw, ack) then
+	remote.OnServerEvent:Connect(function(player, pos, yaw, ack, crouching)
+		-- Garde commune (#170) : débit et types (Vector3, angle et numéro de correction finis, accroupi booléen)
+		if not CheatLog.admit(player, remote.Name, pos, yaw, ack, crouching) then
 			return
 		end
-		onClientPosition(remote, onAccepted, player, pos, yaw, ack)
+		onClientPosition(remote, onAccepted, player, pos, yaw, ack, crouching)
 	end)
 	Players.PlayerRemoving:Connect(function(player)
 		tracks[player] = nil
@@ -409,9 +414,11 @@ function CharacterSync.relayBot(char: Model, root: BasePart, cf: CFrame)
 		return
 	end
 	local pos = cf.Position
+	local yaw = CharacterSyncRules.yawOf(cf.LookVector)
 	local stamp = workspace:GetServerTimeNow()
-	recordPosition(char, pos, stamp)
-	remote:FireAllClients(char, pos, CharacterSyncRules.yawOf(cf.LookVector), stamp)
+	-- Les bots ne s'accroupissent pas (BotMotion)
+	recordPosition(char, pos, yaw, false, stamp)
+	remote:FireAllClients(char, pos, yaw, stamp)
 	if acceptedCallback then
 		acceptedCallback(char, pos)
 	end
@@ -427,13 +434,13 @@ function CharacterSync.lastYaw(player: Player): (number?, number?)
 	return track.yaw, track.yawAt
 end
 
--- Cette méthode permet de connaître la position d'un personnage à l'instant t (horloge serveur, ex. shotTime) lorsque
--- le serveur valide un tir ou un coup (#174, #176) : t est borné à [maintenant - MAX_REWIND, maintenant], interpolé
--- entre deux relevés. nil si le personnage n'a pas encore d'historique.
-function CharacterSync.positionAt(char: Model, t: number): Vector3?
+-- Cette méthode permet de connaître la position et la pose (cap en rad, accroupi, #213) d'un personnage à l'instant t
+-- (horloge serveur, ex. shotTime) lorsque le serveur valide un tir ou un coup (#174, #176) : t est borné à
+-- [maintenant - MAX_REWIND, maintenant], interpolé entre deux relevés. nil si le personnage n'a pas encore d'historique.
+function CharacterSync.positionAt(char: Model, t: number): (Vector3?, number?, boolean?)
 	local history = histories[char]
 	if not history then
-		return nil
+		return nil, nil, nil
 	end
 	return PositionHistory.sampleAt(history, t, workspace:GetServerTimeNow())
 end

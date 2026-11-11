@@ -143,4 +143,63 @@ return function(T, Loader)
 			T.expect(a < b)
 		end)
 	end)
+	T.describe("PositionHistory : pose (#213)", function()
+		T.it(
+			"garde cap et accroupi, interpolés avec la position (cap par le plus court chemin, accroupi au plus proche)",
+			function()
+				local h = PH.new()
+				-- Demi-tour par +pi : de 170° à -170°, le cap passe par 180°, pas par 0°
+				PH.record(h, 10, Vector3.zero, math.rad(170), false)
+				PH.record(h, 10.05, Vector3.new(5, 0, 0), math.rad(-170), true)
+				local pos, yaw, crouching = PH.sampleAt(h, 10.025, 10.05)
+				T.expectNear(pos.X, 2.5, 1e-6)
+				T.expectNear(math.abs(math.deg(yaw :: number)), 180, 1e-3)
+				T.expectEqual(crouching, true, "milieu : le plus récent")
+				local _, yawEarly, crouchEarly = PH.sampleAt(h, 10.01, 10.05)
+				T.expectNear(math.deg(yawEarly :: number), 174, 1e-3)
+				T.expectEqual(crouchEarly, false, "plus proche du relevé debout")
+			end
+		)
+
+		T.it("renvoie la pose de la dernière position acceptée, même hors du tampon", function()
+			local h = PH.new()
+			PH.record(h, 10, Vector3.zero, 1, false)
+			-- Trop proche pour le tampon (MIN_SPACING), mais dernière position acceptée
+			PH.record(h, 10.01, Vector3.new(1, 0, 0), 2, true)
+			local pos, yaw, crouching = PH.sampleAt(h, 10.01, 10.01)
+			T.expectEqual(pos, Vector3.new(1, 0, 0))
+			T.expectEqual(yaw, 2)
+			T.expectEqual(crouching, true)
+		end)
+
+		T.it("prend la pose du relevé le plus proche à travers un trou", function()
+			local h = PH.new()
+			PH.record(h, 10, Vector3.zero, 0, true)
+			PH.record(h, 10.3, Vector3.new(30, 0, 0), 1, false)
+			local _, yaw, crouching = PH.sampleAt(h, 10.05, 10.3)
+			T.expectEqual(yaw, 0)
+			T.expectEqual(crouching, true)
+		end)
+
+		T.it("par défaut cap 0 et debout ; refuse un cap non fini", function()
+			local h = PH.new()
+			PH.record(h, 10, Vector3.zero)
+			local _, yaw, crouching = PH.sampleAt(h, 10, 10)
+			T.expectEqual(yaw, 0)
+			T.expectEqual(crouching, false)
+			T.expectEqual(PH.record(h, 10.1, Vector3.zero, 0 / 0, false), false, "cap NaN")
+			T.expectEqual(PH.record(h, 10.1, Vector3.zero, math.huge, false), false, "cap infini")
+		end)
+
+		T.it("garde la pose de chaque relevé après rotation du tampon", function()
+			local h = PH.new()
+			for i = 0, 59 do
+				PH.record(h, i * 0.05, Vector3.new(i, 0, 0), i * 0.01, i % 2 == 0)
+			end
+			local now = 59 * 0.05
+			local _, yaw, crouching = PH.sampleAt(h, now - 0.1, now)
+			T.expectNear(yaw :: number, 0.57, 1e-6)
+			T.expectEqual(crouching, false, "relevé 57 : impair")
+		end)
+	end)
 end

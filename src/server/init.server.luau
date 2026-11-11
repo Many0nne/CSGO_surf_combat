@@ -478,11 +478,12 @@ local function onHitVerdict(
 	return nil
 end
 
-meleeRmt.OnServerEvent:Connect(function(player, targetCharacter, attackKind)
-	if not CheatLog.admit(player, N.MELEE_DAMAGE, targetCharacter, attackKind) then
+meleeRmt.OnServerEvent:Connect(function(player, targetCharacter, attackKind, hitTime)
+	if not CheatLog.admit(player, N.MELEE_DAMAGE, targetCharacter, attackKind, hitTime) then
 		return
 	end
-	local damage = Validator.authorizeMelee(Participants.fromPlayer(player), targetCharacter, attackKind, os.clock())
+	local damage =
+		Validator.authorizeMelee(Participants.fromPlayer(player), targetCharacter, attackKind, os.clock(), hitTime)
 	onHitVerdict(player, meleeRmt, targetCharacter, damage, false)
 end)
 
@@ -521,6 +522,16 @@ Validator.setShotWorld({
 	end,
 	positionAt = CharacterSync.positionAt,
 	isObstructed = isShotObstructed,
+	-- Cette méthode permet de lire l'aller-retour réseau d'un joueur (s) lorsqu'on borne l'instant annoncé d'un tir ou
+	-- d'un coup (#214) : mesuré par le moteur (Player:GetNetworkPing), nil pour un bot ou en cas d'erreur.
+	pingOf = function(attacker)
+		local player = attacker.player
+		if not player then
+			return nil
+		end
+		local ok, ping = pcall(player.GetNetworkPing, player)
+		return if ok and type(ping) == "number" then ping else nil
+	end,
 	-- Cette méthode permet de journaliser un contrôle de tir en échec lorsqu'il est constaté (catégorie Hitscan, une
 	-- source par contrôle pour le décompte des violations fortes).
 	-- Catégorie Melee pour l'equip d'une arme de mêlée (#175), l'orientation et la ligne de vue d'un coup (#176).

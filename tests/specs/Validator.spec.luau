@@ -72,16 +72,22 @@ return function(T, Loader)
 		local Participants = loader:require("src/server/Participants")
 		local ShotRules = loader:require("src/server/ShotRules")
 		-- Monde simulé de la validation des tirs (#174) : horloge serveur, historiques (fonction t -> position par
-		-- personnage, sinon pas d'historique), obstacle de la map (booléen, ou fonction (from, delta) -> booléen),
-		-- violations reçues.
-		local world = { now = 100, histories = {}, obstructed = false :: any, reports = {} }
+		-- personnage, sinon pas d'historique ; elle peut rendre aussi la pose : cap et accroupi, #213), obstacle de la map
+		-- (booléen, ou fonction (from, delta) -> booléen), violations reçues, ping des joueurs (s, nil : inconnu, #214).
+		local world = { now = 100, histories = {}, obstructed = false :: any, reports = {}, ping = nil :: number? }
 		Real.setShotWorld({
 			serverNow = function()
 				return world.now
 			end,
 			positionAt = function(char, t)
 				local history = world.histories[char]
-				return if history then history(math.clamp(t, world.now - 0.4, world.now)) else nil
+				if not history then
+					return nil
+				end
+				return history(math.clamp(t, world.now - 0.4, world.now))
+			end,
+			pingOf = function(attacker)
+				return if attacker.isBot then nil else world.ping
 			end,
 			isObstructed = function(from, delta)
 				if type(world.obstructed) == "function" then
@@ -161,8 +167,15 @@ return function(T, Loader)
 			hasEntries = function(attacker)
 				return Real.hasEntries(participantOf(attacker))
 			end,
-			authorizeMelee = function(attacker, ...)
-				return Real.authorizeMelee(participantOf(attacker), ...)
+			-- Sans hitTime, un joueur frappe comme notre client : à l'instant présent (#214) ; `false` envoie un coup sans
+			-- instant (client modifié). Un bot n'envoie pas d'instant.
+			authorizeMelee = function(attacker, targetCharacter, attackKind, now, hitTime)
+				if hitTime == nil and not attacker.isBot then
+					hitTime = world.now
+				elseif hitTime == false then
+					hitTime = nil
+				end
+				return Real.authorizeMelee(participantOf(attacker), targetCharacter, attackKind, now, hitTime)
 			end,
 			forget = function(attacker)
 				Real.forget(participantOf(attacker))
@@ -1370,18 +1383,24 @@ return function(T, Loader)
 			T.expectEqual(reportedChecks(world), "")
 		end)
 
-		T.it("accepte une cible qui contourne le tireur : vue devant lui avant le rembobinage", function()
-			local Validator, a, b, world = setupMelee(Vector3.new(1, 0, 0), ALL_BLOCK)
-			-- La cible était devant (+X) jusqu'à now - 0,15 s, elle est maintenant passée dans le dos du tireur
-			world.histories[b.Character] = function(t)
-				return if t < world.now - 0.15 then Vector3.new(5, 0, 0) else Vector3.new(-4, 0, 0)
+		T.it(
+			"accepte une cible qui contourne le tireur : vue devant lui à l'instant du coup (100 ms de ping)",
+			function()
+				local Validator, a, b, world =
+					setupMelee(Vector3.new(1, 0, 0), { ping = "block", orientation = "block" })
+				world.ping = 0.1
+				-- La cible était devant (+X) jusqu'à now - 0,15 s, elle est maintenant passée dans le dos du tireur
+				world.histories[b.Character] = function(t)
+					return if t < world.now - 0.15 then Vector3.new(5, 0, 0) else Vector3.new(-4, 0, 0)
+				end
+				-- Elle fait face au tireur (pas de backstab)
+				rootOf(b.Character).Position = Vector3.new(-4, 0, 0)
+				rootOf(b.Character).CFrame = CFrame.lookAt(Vector3.new(-4, 0, 0), Vector3.zero)
+				-- Coup parti il y a un aller simple (50 ms) plus une frame : le client voyait la cible à hitTime - INTERP_DELAY
+				T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0, world.now - 0.06), 50)
+				T.expectEqual(reportedChecks(world), "")
 			end
-			-- Elle fait face au tireur (pas de backstab)
-			rootOf(b.Character).Position = Vector3.new(-4, 0, 0)
-			rootOf(b.Character).CFrame = CFrame.lookAt(Vector3.new(-4, 0, 0), Vector3.zero)
-			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), 50)
-			T.expectEqual(reportedChecks(world), "")
-		end)
+		)
 
 		T.it("accepte un tireur qui tourne : cible à 80° de son cap relayé, à 7 studs", function()
 			local Validator, a, _, world, _, _, makePlayer = setupMelee(nil, ALL_BLOCK)
@@ -1393,7 +1412,7 @@ return function(T, Loader)
 			T.expectEqual(reportedChecks(world), "")
 		end)
 
-		T.it("ne teste qu'une fois contre la map une cible immobile derrière un mur", function()
+		T.it("ne rembobine qu'à l'instant du coup : deux raycasts pour une cible derrière un mur", function()
 			local Validator, a, b, world = setupMelee(nil, ALL_BLOCK)
 			world.histories[b.Character] = function()
 				return Vector3.new(5, 0, 0)
@@ -1404,7 +1423,7 @@ return function(T, Loader)
 				return true
 			end
 			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), nil)
-			-- 9 positions identiques : une seule testée, racine à racine et œil à tête
+			-- Une position (l'instant annoncé) : racine à racine et œil à tête
 			T.expectEqual(raycasts, 2)
 		end)
 
@@ -1423,21 +1442,127 @@ return function(T, Loader)
 				return if t < world.now - 0.4 then Vector3.new(5, 0, 0) else Vector3.new(-5, 0, 0)
 			end
 			rootOf(b.Character).Position = Vector3.new(-5, 0, 0)
+			-- Instant annoncé 0,5 s en arrière : ramené à now - 0,4 s, où la cible était déjà derrière
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0, world.now - 0.5), nil)
+			T.expectEqual(reportedChecks(world), "orientation")
+		end)
+
+		T.it(
+			"coup à l'ancienne position : instant hors du ping signalé, sinon cible prise derrière le tireur",
+			function()
+				-- La cible était devant (+X) jusqu'à now - 0,25 s, elle est maintenant dans le dos du tireur ; 30 ms de ping
+				local function scene(modes)
+					local Validator, a, b, world = setupMelee(Vector3.new(1, 0, 0), modes)
+					world.ping = 0.03
+					world.histories[b.Character] = function(t)
+						return if t < world.now - 0.25 then Vector3.new(5, 0, 0) else Vector3.new(-5, 0, 0)
+					end
+					-- Elle fait face au tireur (pas de backstab)
+					rootOf(b.Character).Position = Vector3.new(-5, 0, 0)
+					rootOf(b.Character).CFrame = CFrame.lookAt(Vector3.new(-5, 0, 0), Vector3.zero)
+					return Validator, a, b, world
+				end
+				-- Client modifié : annonce l'instant où la cible était devant lui (0,2 s, ping 30 ms)
+				local Validator, a, b, world = scene(ALL_BLOCK)
+				T.expectEqual(
+					Validator.authorizeMelee(a, b.Character, "primary", 0, world.now - 0.2),
+					50,
+					"ping en journal"
+				)
+				T.expectEqual(reportedChecks(world), "ping")
+				T.expectEqual(world.reports[1].category, "Melee")
+				Validator, a, b, world = scene({ ping = "block" })
+				T.expectEqual(
+					Validator.authorizeMelee(a, b.Character, "primary", 0, world.now - 0.2),
+					nil,
+					"ping en block"
+				)
+				-- Instant honnête : la cible était déjà derrière lui
+				Validator, a, b, world = scene(ALL_BLOCK)
+				T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0, world.now - 0.02), nil)
+				T.expectEqual(reportedChecks(world), "orientation")
+			end
+		)
+
+		T.it("accepte un coup honnête sur une cible en mouvement, 50 et 150 ms de ping", function()
+			for _, ping in { 0.05, 0.15 } do
+				local Validator, a, b, world = setupMelee(Vector3.new(1, 0, 0), {
+					ping = "block",
+					orientation = "block",
+					meleeLineOfSight = "block",
+				})
+				world.ping = ping
+				-- Cible qui traverse le cône du tireur à 20 studs/s, de -Z vers +Z, à 5 studs devant lui
+				world.histories[b.Character] = function(t)
+					return Vector3.new(5, 0, (t - world.now) * 20 + 6)
+				end
+				rootOf(b.Character).Position = Vector3.new(5, 0, 6)
+				-- Coup parti un aller simple plus une frame avant son arrivée ; la cible était alors devant le tireur
+				local hitTime = world.now - ping / 2 - 0.016
+				T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0, hitTime), 50, "ping " .. ping)
+				T.expectEqual(reportedChecks(world), "")
+			end
+		end)
+
+		T.it("refuse un coup de joueur sans instant (forme, violation forte)", function()
+			local Validator, a, b, world = setupMelee(nil, ALL_BLOCK)
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0, false), nil)
+			T.expectEqual(reportedChecks(world), "shape")
+			T.expectEqual(world.reports[1].severity, "high")
+			T.expectEqual(world.reports[1].category, "Melee")
+		end)
+
+		T.it("prend l'œil du tireur accroupi : un obstacle bas que l'œil debout survolait bloque le coup", function()
+			local Validator, a, b, world = setupMelee(nil, ALL_BLOCK)
+			-- Caisse de 2 studs : l'œil debout (2,5) passe au-dessus, l'œil accroupi (1,2) non
+			world.obstructed = function(from: Vector3)
+				return from.Y < 2
+			end
+			world.histories[a.Character] = function()
+				return Vector3.zero, 0, true
+			end
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), nil)
+			T.expectEqual(reportedChecks(world), "meleeLineOfSight")
+		end)
+
+		T.it("accepte un coup dont le paquet de position suivant, déjà tourné, est arrivé avant lui", function()
+			local Validator, a, b, world = setupMelee(nil, ALL_BLOCK)
+			-- Cap reçu en dernier : 150° de la cible (le joueur s'est retourné après le coup) ; 50 ms avant : face à elle
+			local away = math.rad(150)
+			rootOf(a.Character).CFrame = CFrame.lookAt(Vector3.zero, Vector3.new(math.cos(away), 0, math.sin(away)))
+			local yawOf = Loader.new():require("src/shared/CharacterSyncRules").yawOf
+			local facingYaw, awayYaw =
+				yawOf(Vector3.new(1, 0, 0)), yawOf(Vector3.new(math.cos(away), 0, math.sin(away)))
+			world.histories[a.Character] = function(t)
+				return Vector3.zero, if t < world.now - 0.03 then facingYaw else awayYaw, false
+			end
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), 50)
+			T.expectEqual(reportedChecks(world), "")
+		end)
+
+		T.it("ne prend pas un cap plus ancien que deux paquets", function()
+			local Validator, a, b, world = setupMelee(Vector3.new(-1, 0, 0), ALL_BLOCK)
+			-- Face à la cible il y a 0,3 s seulement : dos tourné sur les caps récents
+			local yawOf = Loader.new():require("src/shared/CharacterSyncRules").yawOf
+			local facingYaw, awayYaw = yawOf(Vector3.new(1, 0, 0)), yawOf(Vector3.new(-1, 0, 0))
+			world.histories[a.Character] = function(t)
+				return Vector3.zero, if t < world.now - 0.25 then facingYaw else awayYaw, false
+			end
 			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), nil)
 			T.expectEqual(reportedChecks(world), "orientation")
 		end)
 
-		T.it("teste la ligne de vue sur une position devant le tireur, pas derrière lui", function()
-			local Validator, a, b, world = setupMelee(Vector3.new(1, 0, 0), ALL_BLOCK)
-			-- Devant le tireur (+X), la cible n'était vue qu'à travers un mur ; dégagée seulement dans son dos : refusé
-			world.histories[b.Character] = function(t)
-				return if t < world.now - 0.2 then Vector3.new(5, 0, 0) else Vector3.new(-5, 0, 0)
+		T.it("prend l'œil debout tant que la caméra du tireur qui s'accroupit descend encore", function()
+			local Validator, a, b, world = setupMelee(nil, ALL_BLOCK)
+			world.obstructed = function(from: Vector3)
+				return from.Y < 2
 			end
-			world.obstructed = function(_, delta: Vector3)
-				return delta.X > 0
+			-- Accroupi depuis 0,1 s seulement : la caméra est encore au-dessus de la caisse
+			world.histories[a.Character] = function(t)
+				return Vector3.zero, 0, t >= world.now - 0.1
 			end
-			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), nil)
-			T.expectEqual(reportedChecks(world), "meleeLineOfSight")
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), 50)
+			T.expectEqual(reportedChecks(world), "")
 		end)
 
 		T.it(
@@ -1451,7 +1576,8 @@ return function(T, Loader)
 				world.obstructed = function(_, delta: Vector3)
 					return delta.Magnitude < 10
 				end
-				T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), nil)
+				-- Instant annoncé où la cible était à 30 studs : hors de portée, position actuelle derrière le mur
+				T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0, world.now - 0.2), nil)
 				T.expectEqual(reportedChecks(world), "meleeLineOfSight")
 			end
 		)
@@ -1596,6 +1722,129 @@ return function(T, Loader)
 			local Validator, _, makeBot = setup()
 			T.expectEqual(Validator.isReadyToFire(makeBot(Vector3.zero, "AWP"), 0), true)
 			T.expectEqual(Validator.isReadyToFire(makeBot(Vector3.zero, "M9Bayonet"), 0), false, "couteau")
+		end)
+	end)
+	T.describe("Validator : instant du tir borné par le ping (#214) et pose rembobinée (#213)", function()
+		-- Cette méthode permet de préparer un tireur à l'AWP à l'origine et une cible à 100 studs (+X), qui regarde le
+		-- tireur, lorsqu'un test vérifie l'instant ou la pose ; modes : contrôles à forcer.
+		local function setupPose(modes: { [string]: string }?)
+			local Validator, makePlayer, makeBot, world, ShotRules = setup()
+			for check, mode in modes or {} do
+				ShotRules.MODES[check] = mode
+			end
+			local a = makePlayer(Vector3.zero, "AWP")
+			local b = makePlayer(Vector3.new(100, 0, 0), nil, nil, Vector3.new(-1, 0, 0))
+			return Validator, a, b, world, ShotRules, makeBot
+		end
+
+		-- Cette méthode permet de construire le tir de a vers un point, annoncé à shotTime.
+		local function shotAt(a, point: Vector3, shotTime: number)
+			local origin = rootOf(a.Character).Position + EYE
+			return { origin = origin, direction = (point - origin).Unit, hitPos = point, shotTime = shotTime }
+		end
+
+		-- Cette méthode permet de lister les contrôles signalés au journal lorsqu'un test les vérifie.
+		local function reportedChecks(world): string
+			local checks = {}
+			for _, report in world.reports do
+				table.insert(checks, report.check)
+			end
+			return table.concat(checks, ",")
+		end
+
+		-- Cap (rad) d'un personnage tourné vers look, comme CharacterSync le relaie.
+		local yawOf = Loader.new():require("src/shared/CharacterSyncRules").yawOf
+
+		T.it("accepte un tir honnête avec 50 et 150 ms de ping, sans violation", function()
+			for _, ping in { 0.05, 0.15 } do
+				local Validator, a, b, world = setupPose({ ping = "block", direction = "block" })
+				world.ping = ping
+				local head = addPart(b.Character, "Head", Vector3.new(0, 2, 0))
+				-- Tir parti un aller simple plus deux frames avant son arrivée
+				local shot = shotAt(a, head.Position, world.now - ping / 2 - 0.033)
+				T.expectEqual(Validator.authorizeHitscan(a, b.Character, head, 0, shot), 460, "ping " .. ping)
+				T.expectEqual(reportedChecks(world), "")
+			end
+		end)
+
+		T.it(
+			"signale un shotTime 0,4 s en arrière avec 30 ms de ping : journal seul, refusé en mode block",
+			function()
+				local Validator, a, b, world = setupPose()
+				world.ping = 0.03
+				local head = addPart(b.Character, "Head", Vector3.new(0, 2, 0))
+				T.expectEqual(Validator.authorizeHitscan(a, b.Character, head, 0, shotAt(a, head.Position, 99.6)), 460)
+				T.expectEqual(reportedChecks(world), "ping")
+				T.expect(string.find(world.reports[1].detail, "journal seul", 1, true) ~= nil, "mode non indiqué")
+				T.expectEqual(world.reports[1].severity, "medium")
+
+				Validator, a, b, world = setupPose({ ping = "block" })
+				world.ping = 0.03
+				head = addPart(b.Character, "Head", Vector3.new(0, 2, 0))
+				T.expectEqual(Validator.authorizeHitscan(a, b.Character, head, 0, shotAt(a, head.Position, 99.6)), nil)
+				T.expectEqual(reportedChecks(world), "ping")
+			end
+		)
+
+		T.it("ne borne pas l'instant d'un joueur dont le ping est inconnu", function()
+			local Validator, a, b, world = setupPose({ ping = "block" })
+			local head = addPart(b.Character, "Head", Vector3.new(0, 2, 0))
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, head, 0, shotAt(a, head.Position, 99.6)), 460)
+			T.expectEqual(reportedChecks(world), "")
+		end)
+
+		T.it(
+			"cible qui a tourné entre le tir et sa réception : main rembobinée là où le tireur la voyait",
+			function()
+				local Validator, a, b, world = setupPose({ direction = "block" })
+				-- Rig serveur : la cible regarde le tireur (-X), sa main droite est à 2 studs côté -Z
+				local hand = addPart(b.Character, "RightHand", Vector3.new(0, 0, -2))
+				-- Au tir, elle tournait le dos au tireur (+X) : sa main droite était côté +Z
+				local backYaw, faceYaw = yawOf(Vector3.new(1, 0, 0)), yawOf(Vector3.new(-1, 0, 0))
+				world.histories[b.Character] = function(t)
+					return Vector3.new(100, 0, 0), if t < world.now - 0.05 then backYaw else faceYaw, false
+				end
+				local seen = Vector3.new(100, 0, 2)
+				T.expectEqual(Validator.authorizeHitscan(a, b.Character, hand, 0, shotAt(a, seen, world.now)), 115)
+				T.expectEqual(reportedChecks(world), "", "main vue par le tireur")
+				-- La main là où le rig serveur la montre maintenant, que le tireur ne voyait pas : refusé
+				T.expectEqual(
+					Validator.authorizeHitscan(a, b.Character, hand, 10, shotAt(a, hand.Position, world.now)),
+					nil
+				)
+				T.expectEqual(reportedChecks(world), "direction")
+			end
+		)
+
+		T.it(
+			"cible accroupie au tir, debout maintenant : tête rembobinée baissée (si le rig 3P s'accroupit)",
+			function()
+				local Validator, a, b, world, ShotRules = setupPose({ direction = "block" })
+				-- Le rig 3P ne s'accroupit pas aujourd'hui (CROUCH_DROP = 0) : piste simulée qui baisse la tête de 3 studs
+				ShotRules.CROUCH_DROP = 3
+				local head = addPart(b.Character, "Head", Vector3.new(0, 2, 0))
+				local faceYaw = yawOf(Vector3.new(-1, 0, 0))
+				world.histories[b.Character] = function(t)
+					return Vector3.new(100, 0, 0), faceYaw, t < world.now - 0.05
+				end
+				local seen = Vector3.new(100, -1, 0)
+				T.expectEqual(Validator.authorizeHitscan(a, b.Character, head, 0, shotAt(a, seen, world.now)), 460)
+				T.expectEqual(reportedChecks(world), "", "tête vue baissée")
+				-- La tête debout, que le tireur ne voyait pas : refusé
+				T.expectEqual(
+					Validator.authorizeHitscan(a, b.Character, head, 10, shotAt(a, head.Position, world.now)),
+					nil
+				)
+				T.expectEqual(reportedChecks(world), "direction")
+			end
+		)
+
+		T.it("ne borne pas les tirs des bots par le ping", function()
+			local Validator, _, b, world, _, makeBot = setupPose({ ping = "block" })
+			world.ping = 0.03
+			local bot = makeBot(Vector3.new(50, 0, 0), "AWP")
+			T.expectEqual(Validator.authorizeHitscan(bot, b.Character, rootOf(b.Character), 0), 115)
+			T.expectEqual(reportedChecks(world), "")
 		end)
 	end)
 end

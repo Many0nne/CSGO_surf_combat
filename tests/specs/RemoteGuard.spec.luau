@@ -133,12 +133,13 @@ return function(T, Loader)
 
 		T.it("accepte les appels de notre client", function()
 			local char, part = Instance.new("Model"), Instance.new("Part")
-			T.expectEqual(honest(N.MELEE_DAMAGE, char, "primary"), "ok")
-			T.expectEqual(honest(N.MELEE_DAMAGE, char, "secondary"), "ok")
+			T.expectEqual(honest(N.MELEE_DAMAGE, char, "primary", 1234.5), "ok")
+			T.expectEqual(honest(N.MELEE_DAMAGE, char, "secondary", 1234.5), "ok")
 			local shot = { Vector3.new(0, 5, 0), Vector3.new(1, 0, 0), Vector3.new(80, 5, 0), 1234.5 }
 			T.expectEqual(honest(N.HITSCAN_DAMAGE, char, part, table.unpack(shot)), "ok")
 			T.expectEqual(honest(N.SHOT_FIRED, Vector3.new(0, 5, 0), Vector3.new(1, 0, 0), 1234.5), "ok")
-			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.new(10, -500, 3), 3.1, 0), "ok")
+			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.new(10, -500, 3), 3.1, 0, false), "ok")
+			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.new(10, -500, 3), 3.1, 0, true), "ok", "accroupi")
 			T.expectEqual(honest(N.WEAPON_ACTION, "Shoot"), "ok")
 			T.expectEqual(honest(N.WEAPON_ACTION, "Reload"), "ok")
 			T.expectEqual(honest(N.REQUEST_SPAWN), "ok")
@@ -168,9 +169,18 @@ return function(T, Loader)
 				"malformed",
 				"instant infini"
 			)
-			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.new(0 / 0, 0, 0), 0, 0), "malformed")
-			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.zero, nil, 0), "malformed")
-			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.zero, 0, nil), "malformed", "numéro de correction absent")
+			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.new(0 / 0, 0, 0), 0, 0, false), "malformed")
+			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.zero, nil, 0, false), "malformed")
+			T.expectEqual(
+				honest(N.CHARACTER_SYNC, Vector3.zero, 0, nil, false),
+				"malformed",
+				"numéro de correction absent"
+			)
+			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.zero, 0, 0), "malformed", "accroupi absent (ancien client)")
+			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.zero, 0, 0, 1), "malformed", "accroupi non booléen")
+			local target = Instance.new("Model")
+			T.expectEqual(honest(N.MELEE_DAMAGE, target, "primary"), "malformed", "coup sans instant (ancien client)")
+			T.expectEqual(honest(N.MELEE_DAMAGE, target, "primary", 0 / 0), "malformed", "instant NaN")
 			T.expectEqual(honest(N.WEAPON_ACTION, "Equip"), "malformed")
 			T.expectEqual(honest(N.SEND_FEEDBACK, string.rep("a", RemoteGuard.FEEDBACK_MAX_BYTES + 1)), "malformed")
 			T.expectEqual(honest(N.SAVE_SETTINGS, "réglages"), "malformed")
@@ -182,12 +192,12 @@ return function(T, Loader)
 			local guard = RemoteGuard.new()
 			local refused = 0
 			for i = 0, 199 do
-				if guard:check("joueur", N.CHARACTER_SYNC, i / 20, Vector3.zero, 0, 0) ~= "ok" then
+				if guard:check("joueur", N.CHARACTER_SYNC, i / 20, Vector3.zero, 0, 0, false) ~= "ok" then
 					refused += 1
 				end
 			end
 			for _ = 1, 40 do
-				if guard:check("joueur", N.CHARACTER_SYNC, 12, Vector3.zero, 0, 0) ~= "ok" then
+				if guard:check("joueur", N.CHARACTER_SYNC, 12, Vector3.zero, 0, 0, false) ~= "ok" then
 					refused += 1
 				end
 			end
@@ -195,7 +205,7 @@ return function(T, Loader)
 			-- Couteau au clic gauche (0,4 s) avec WeaponAction à chaque coup, deux coups arrivés groupés
 			for i = 0, 49 do
 				local t = i * 0.4 + (if i % 2 == 1 then -0.39 else 0)
-				T.expectEqual(guard:check("joueur", N.MELEE_DAMAGE, t, Instance.new("Model"), "primary"), "ok")
+				T.expectEqual(guard:check("joueur", N.MELEE_DAMAGE, t, Instance.new("Model"), "primary", t), "ok")
 				T.expectEqual(guard:check("joueur", N.WEAPON_ACTION, t, "Shoot"), "ok")
 			end
 		end)

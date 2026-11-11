@@ -48,6 +48,100 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("ShotRules : instant annoncé borné par le ping (#214)", function()
+		T.it("accepte un tir honnête avec 50 et 150 ms de ping", function()
+			-- Arrivée = aller simple (ping / 2) + une frame de tir et un Heartbeat serveur (~33 ms)
+			for _, ping in { 0.05, 0.15 } do
+				local delay = ping / 2 + 0.033
+				local ok, detail = ShotRules.checkShotDelay(100 - delay, 100, ping)
+				T.expect(ok, string.format("ping %.0f ms : %s", ping * 1000, detail or "?"))
+			end
+			-- Aller plus lent que le retour, ou remote fiable renvoyé : un aller-retour de plus passe encore
+			T.expectEqual((ShotRules.checkShotDelay(100 - 0.15 * 1.5 - 0.033, 100, 0.15)), true, "paquet renvoyé")
+		end)
+
+		T.it("signale un instant 0,4 s en arrière avec 30 ms de ping (backtrack)", function()
+			local ok, detail = ShotRules.checkShotDelay(99.6, 100, 0.03)
+			T.expectEqual(ok, false)
+			T.expect(string.find(detail or "", "ping 30 ms", 1, true) ~= nil, "détail : " .. tostring(detail))
+		end)
+
+		T.it("signale un instant dans le futur au-delà de la tolérance d'horloge", function()
+			T.expectEqual((ShotRules.checkShotDelay(100 + ShotRules.CLOCK_TOLERANCE / 2, 100, 0.03)), true)
+			T.expectEqual((ShotRules.checkShotDelay(100.2, 100, 0.03)), false)
+		end)
+
+		T.it("accepte tout instant sans ping connu", function()
+			T.expectEqual((ShotRules.checkShotDelay(99.6, 100, nil)), true)
+			T.expectEqual((ShotRules.checkShotDelay(99.6, 100, 0 / 0)), true)
+		end)
+
+		T.it("borne = ping × PING_FACTOR + PING_MARGIN, journal seul", function()
+			local expected = 0.05 * ShotRules.PING_FACTOR + ShotRules.PING_MARGIN
+			T.expect(math.abs(ShotRules.maxShotDelay(0.05) - expected) < 1e-9, "borne")
+			T.expectEqual(ShotRules.MODES.ping, "log")
+			T.expectEqual(ShotRules.SEVERITY.ping, "medium")
+		end)
+	end)
+
+	T.describe("ShotRules : pose rembobinée (#213)", function()
+		-- Cap (rad) d'un personnage tourné vers look, comme CharacterSyncRules.yawOf
+		local function yawOf(look: Vector3): number
+			return CharacterSyncRules.yawOf(look)
+		end
+
+		T.it("tourne la partie avec le cap rembobiné : cible qui a tourné entre le tir et sa réception", function()
+			-- Rig serveur : racine en (0, 0, 0) tournée vers +X, main droite 1,5 stud à sa droite (-Z)
+			local rootCFrame = CFrame.lookAt(Vector3.zero, Vector3.new(1, 0, 0))
+			local hand = rootCFrame:PointToWorldSpace(Vector3.new(1.5, 0, 0))
+			-- Au tir, la cible était 10 studs plus loin, tournée vers +Z : sa main droite était côté +X
+			local pose = { pos = Vector3.new(0, 0, 10), yaw = yawOf(Vector3.new(0, 0, 1)) }
+			local center = ShotRules.posedPartCenter(rootCFrame, Vector3.zero, hand, false, pose)
+			-- CFrame.Angles, pas CFrame.lookAt : sous Lune, lookAt vers +Z rend un cap -Z (cas dégénéré)
+			local seen = (CFrame.new(pose.pos) * CFrame.Angles(0, pose.yaw, 0)):PointToWorldSpace(
+				Vector3.new(1.5, 0, 0)
+			)
+			T.expect((seen - Vector3.new(-1.5, 0, 10)).Magnitude < 1e-4, "main droite d'une cible tournée vers +Z")
+			T.expect(
+				(center - seen).Magnitude < 1e-4,
+				string.format("main à %s, vue à %s", tostring(center), tostring(seen))
+			)
+			-- Sans cap rembobiné, la main garde l'orientation actuelle (ancien comportement)
+			local unposed = ShotRules.posedPartCenter(rootCFrame, Vector3.zero, hand, false, { pos = pose.pos })
+			T.expect((unposed - (pose.pos + hand)).Magnitude < 1e-4, "cap inconnu")
+		end)
+
+		T.it("baisse les parties hautes d'une cible accroupie au tir, debout maintenant", function()
+			local rootCFrame = CFrame.new(Vector3.zero)
+			local head, foot = Vector3.new(0, 1.5, 0), Vector3.new(0, -2, 0)
+			local crouched = { pos = Vector3.zero, yaw = 0, crouching = true }
+			local standing = { pos = Vector3.zero, yaw = 0, crouching = false }
+			-- Module à part : la baisse simulée ne fuit pas dans les autres specs, même si un appel lève une erreur
+			local Rules = Loader.new():require("src/server/ShotRules")
+			Rules.CROUCH_DROP = 2
+			local headSeen = Rules.posedPartCenter(rootCFrame, Vector3.zero, head, false, crouched)
+			local footSeen = Rules.posedPartCenter(rootCFrame, Vector3.zero, foot, false, crouched)
+			-- Et l'inverse : debout au tir, accroupie maintenant (rig serveur baissé)
+			local headUp = Rules.posedPartCenter(rootCFrame, Vector3.zero, Vector3.new(0, 0.5, 0), true, standing)
+			-- Accroupi inconnu : rien ne bouge
+			local unknown = Rules.posedPartCenter(rootCFrame, Vector3.zero, head, nil, crouched)
+			T.expect((headSeen - Vector3.new(0, -0.5, 0)).Magnitude < 1e-4, "tête baissée : " .. tostring(headSeen))
+			T.expect((footSeen - foot).Magnitude < 1e-4, "pieds immobiles")
+			T.expect((headUp - Vector3.new(0, 2.5, 0)).Magnitude < 1e-4, "tête relevée : " .. tostring(headUp))
+			T.expect((unknown - head).Magnitude < 1e-4, "accroupi inconnu")
+		end)
+
+		T.it("CROUCH_DROP suit la piste 3P : 0 tant que le rig 3P ne s'accroupit pas", function()
+			local CharacterConfig = Loader.new():require("src/shared/CharacterConfig")
+			if CharacterConfig.ANIMATIONS.CROUCH_IDLE == "" then
+				T.expectEqual(ShotRules.CROUCH_DROP, 0)
+			else
+				-- Piste d'accroupi publiée (#120) : régler CROUCH_DROP sur la baisse de la tête qu'elle montre
+				T.expect(ShotRules.CROUCH_DROP > 0, "CROUCH_DROP à régler sur la piste CROUCH_IDLE publiée")
+			end
+		end)
+	end)
+
 	T.describe("ShotRules : origine, visée, portée", function()
 		T.it("tolère 5 studs plus 0,1 s de la vitesse du tireur, depuis la plus proche de ses positions", function()
 			T.expectEqual((ShotRules.checkOrigin(Vector3.new(0, 4.9, 0), { Vector3.zero }, 0)), true)
@@ -273,27 +367,11 @@ return function(T, Loader)
 			T.expectEqual(ok, false)
 		end)
 
-		T.it("teste toujours la borne de rembobinage, même hors multiple du pas", function()
-			local step = ShotRules.MELEE_REWIND_STEP
-			ShotRules.MELEE_REWIND_STEP = 0.15
-			local times = ShotRules.meleeRewindTimes(100)
-			ShotRules.MELEE_REWIND_STEP = step
-			T.expect(math.abs(times[#times] - 99.6) < 1e-6, "dernier instant " .. times[#times])
-			T.expectEqual(#times, 4)
-		end)
-
 		T.it("n'ouvre pas l'angle pour une cible proche à l'horizontale mais loin en hauteur (rampe)", function()
 			-- 2,5 studs à l'horizontale (hors de l'aplomb), 6 studs plus bas, 150° du cap : permis 70° + asin(2 / 6,5) ≈ 88°
 			local yaw = math.rad(150)
 			local target = Vector3.new(math.cos(yaw) * 2.5, -6, math.sin(yaw) * 2.5)
 			T.expectEqual((ShotRules.checkMeleeOrientation(Vector3.new(1, 0, 0), Vector3.zero, target)), false)
-		end)
-
-		T.it("rembobine de now à now - MAX_REWIND, le plus récent d'abord", function()
-			local times = ShotRules.meleeRewindTimes(100)
-			T.expectEqual(times[1], 100)
-			T.expect(math.abs(times[#times] - 99.6) < 1e-6, "dernier instant " .. times[#times])
-			T.expectEqual(#times, 9)
 		end)
 
 		T.it("teste racine à racine et œil à tête, rien pour deux cibles collées", function()
