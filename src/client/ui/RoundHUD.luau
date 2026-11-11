@@ -58,7 +58,7 @@ local rankShadow: TextLabel
 local leaderboard: Frame
 local leaderboardList: Frame
 local respawnRoot: Frame
-local respawnScrims: { ImageLabel }
+local respawnScrim: ImageLabel
 local respawnPanel: Frame
 local respawnCount: TextLabel
 local respawnCountShadow: TextLabel
@@ -329,7 +329,7 @@ local function buildRespawnOverlay(root: Frame)
 		Visible = false,
 		Parent = root,
 	})
-	respawnScrims = { UIKit.cornerScrim(respawnRoot, "Bottom", RESPAWN_SCRIM_SIZE, 1) }
+	respawnScrim = UIKit.cornerScrim(respawnRoot, "Bottom", RESPAWN_SCRIM_SIZE, 1)
 	respawnPanel = UIKit.create("Frame", {
 		Name = "Panel",
 		BackgroundTransparency = 1,
@@ -712,10 +712,8 @@ function RoundHUD.showRespawning(delaySeconds: number)
 		return
 	end
 	respawnRoot.Visible = true
-	for _, scrim in respawnScrims do
-		scrim.ImageTransparency = 1
-		UIKit.tween(scrim, Motion.Enter, { ImageTransparency = RESPAWN_SCRIM_TRANSPARENCY })
-	end
+	respawnScrim.ImageTransparency = 1
+	UIKit.tween(respawnScrim, Motion.Enter, { ImageTransparency = RESPAWN_SCRIM_TRANSPARENCY })
 	respawnLabel.Text = "RÉAPPARITION"
 	setRespawnLines("ÉLIMINÉ", "", "")
 	UIKit.reveal(respawnPanel, 0, 16)

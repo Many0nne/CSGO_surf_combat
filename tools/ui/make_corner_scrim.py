@@ -42,5 +42,8 @@ def main(out: str, edge: bool = False) -> None:
 
 
 if __name__ == "__main__":
-    args = sys.argv[1:]
-    main(args[-1], edge="--edge" in args)
+    edge = "--edge" in sys.argv[1:]
+    paths = [a for a in sys.argv[1:] if a != "--edge"]
+    if len(paths) != 1 or not paths[0].lower().endswith(".png"):
+        sys.exit("usage : uv run tools/ui/make_corner_scrim.py [--edge] <fichier .png de sortie>")
+    main(paths[0], edge=edge)

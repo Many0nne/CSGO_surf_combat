@@ -19,8 +19,8 @@ local UIKit = require(script.Parent.UIKit)
 local C = UITheme.Colors
 local F = UITheme.Fonts
 
-local KEY_SIZE = 40 -- px, côté d'une touche (résolution de référence, 720 px de haut)
-local KEY_GAP = 4 -- px entre deux touches
+local KEY_SIZE = HUDRules.KEY_DISPLAY_KEY -- px, côté d'une touche (résolution de référence, 720 px de haut)
+local KEY_GAP = HUDRules.KEY_DISPLAY_GAP -- px entre deux touches
 local TEXT_SIZE = 18
 local TEXT_SIZE_LONG = 13 -- libellés de plus de deux caractères dans une touche simple (CTRL, MAJ)
 local TEXT_SIZE_WIDE = 16 -- libellé de plus de deux caractères dans une touche large (ESPACE)
@@ -188,8 +188,10 @@ local function place()
 	if not (container and scaled) then
 		return
 	end
-	local scale = scaled:GetAttribute("Scale") or 1
-	local bottom = HUDRules.keyDisplayBottom(scaled.AbsoluteSize.X / scale, container.Size.X.Offset)
+	-- Largeur vue dans le repère de la racine : écran x Size de la racine (1 / échelle, posée par UIKit.scaledRoot)
+	local camera = workspace.CurrentCamera
+	local width = (camera and camera.ViewportSize.X or 1280) * scaled.Size.X.Scale
+	local bottom = HUDRules.keyDisplayBottom(width, container.Size.X.Offset)
 	container.Position = UDim2.new(0.5, 0, 1, -bottom)
 end
 
@@ -204,13 +206,8 @@ local function build(mode: string)
 	views = {}
 	builtMode = mode
 	local entries = HUDRules.keyDisplayEntries(mode)
-	local columns, rows = 0, 0
-	for _, entry in entries do
-		columns = math.max(columns, entry.col + entry.width)
-		rows = math.max(rows, entry.row + 1)
-	end
-	container.Size =
-		UDim2.fromOffset(columns * (KEY_SIZE + KEY_GAP) - KEY_GAP, math.max(rows, 1) * (KEY_SIZE + KEY_GAP) - KEY_GAP)
+	local width, height = HUDRules.keyDisplayGridSize(mode)
+	container.Size = UDim2.fromOffset(width, height)
 	place()
 	for _, entry in entries do
 		local label, paintKey = buildKey(container, entry)
@@ -234,8 +231,6 @@ local function update()
 	gui.Enabled = HUDRules.keyDisplayVisible(HUDState.get(), mode)
 	if mode ~= builtMode then
 		build(mode)
-	elseif gui.Enabled then
-		place() -- taille relue à l'affichage : un ScreenGui masqué peut avoir manqué un redimensionnement
 	end
 	if not gui.Enabled then
 		for _, view in views do
@@ -307,9 +302,13 @@ function KeyDisplay.init()
 		Size = UDim2.fromOffset(0, 0),
 		Parent = scaled,
 	})
-	-- La fenêtre redimensionnée change la largeur vue et l'échelle (UIKit.scaledRoot) : replacer la grille
-	scaled:GetPropertyChangedSignal("AbsoluteSize"):Connect(place)
-	scaled:GetAttributeChangedSignal("Scale"):Connect(place)
+	-- Fenêtre redimensionnée : replacer la grille une fois UIKit.scaledRoot à jour (même signal, ordre non garanti)
+	local camera = workspace.CurrentCamera
+	if camera then
+		camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+			task.defer(place)
+		end)
+	end
 
 	LocalSettings.onChanged(update)
 	HUDState.onChanged(onHudChanged)

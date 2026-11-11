@@ -217,9 +217,23 @@ end
 -- Emprise du compteur de munitions en bas à droite (px à 720 px de haut, repère de UIKit.scaledRoot) : `right` et `bottom`
 -- sont ses marges au bord de l'écran (à gauche de la barre d'armes : 44 px de marge + 250 px de contenu).
 HUDRules.AMMO_BOX = table.freeze({ right = 44 + 250, bottom = 40, width = 190, height = 78 })
--- Affichage des touches : marge au bas de l'écran, et écart minimal avec le compteur de munitions (#247)
+-- Affichage des touches : côté d'une touche et écart entre deux (px), marge au bas de l'écran, écart minimal avec le
+-- compteur de munitions (#247)
+HUDRules.KEY_DISPLAY_KEY = 40
+HUDRules.KEY_DISPLAY_GAP = 4
 HUDRules.KEY_DISPLAY_BOTTOM = 40
 HUDRules.KEY_DISPLAY_CLEARANCE = 12
+
+-- Cette méthode permet de mesurer la grille de l'affichage des touches (largeur, hauteur en px) lorsque le mode change.
+function HUDRules.keyDisplayGridSize(mode: string): (number, number)
+	local columns, rows = 0, 0
+	for _, entry in HUDRules.keyDisplayEntries(mode) do
+		columns = math.max(columns, entry.col + entry.width)
+		rows = math.max(rows, entry.row + 1)
+	end
+	local step = HUDRules.KEY_DISPLAY_KEY + HUDRules.KEY_DISPLAY_GAP
+	return math.max(columns * step - HUDRules.KEY_DISPLAY_GAP, 0), math.max(rows * step - HUDRules.KEY_DISPLAY_GAP, 0)
+end
 
 -- Cette méthode permet de placer l'affichage des touches (grille centrée en bas) lorsque la largeur de l'écran ou celle de
 -- la grille change : marge habituelle, ou au-dessus du compteur de munitions si la grille l'atteindrait (écran étroit, 4:3).
