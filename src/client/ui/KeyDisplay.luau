@@ -304,6 +304,7 @@ function KeyDisplay.init()
 	})
 	-- Fenêtre redimensionnée : largeur seule (AbsoluteSize, échelle inchangée) ou hauteur (attribut Scale, posé par
 	-- UIKit.scaledRoot après la taille de la racine) ; différé pour lire une racine à jour
+	-- Cette méthode permet de replacer la grille à la frame suivante lorsque la taille ou l'échelle de l'écran change.
 	local function replace()
 		task.defer(place)
 	end
