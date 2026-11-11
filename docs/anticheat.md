@@ -242,6 +242,11 @@ contrôles de plus. Règles pures dans `src/server/ShotRules.luau` (`checkEquip`
   `Tool:Activate`) : 5 touches, rechargement, 3 touches, aucune ligne `[CheatLog]`. Tir forgé envoyé 0,25 s après un
   ré-equip : refusé, journalisé `Hitscan … equip : touche 0.25 s après l'equip (min 1.38 s)`. Studio sans latence : à
   surveiller dans les résumés `CheatLog` du jeu publié (catégories `Hitscan`/`Melee`, contrôles `equip` et `magazine`).
+  Méthode : `workspace:SetAttribute("DebugBots", 0)` d'abord (sinon les bots tuent le joueur et la réapparition remet
+  le chargeur à zéro), un run `DebugPlaytest` AWP pour équiper et viser la cible, puis en contexte `Client` une boucle
+  `tool:Activate()` lancée par `task.spawn` (appels MCP courts : un `execute_luau` qui attend longtemps a figé Studio
+  des heures). Espacer les clics de 2 s : `ShootAnimTime` (1,63 s) dépasse `FireDelay`, un clic à 1,6 s est ignoré
+  par le client (état `FIRING`).
 - **Début du rechargement borné.** Un `Reload` ne compte qu'à partir de la fin de l'equip et de la cadence du dernier
   tir accepté de l'arme (`max(arrivée, equip + EquipTime - 0,2, dernier tir + FireDelay - 0,2)`) : le client ne peut pas
   recharger avant, un client modifié qui recharge dès son tir ne gagne pas `FireDelay` (1,46 s) sur la pause.
