@@ -368,10 +368,7 @@ local function speedAround(world: ShotWorld, char: Model, t: number, now: number
 	if not from or not to then
 		return 0
 	end
-	-- Positions seules : positionAt rend aussi la pose, qui ne doit pas glisser dans les arguments suivants
-	local older = world.positionAt(char, from)
-	local newer = world.positionAt(char, to)
-	return ShotRules.speedBetween(older, newer, to - from)
+	return ShotRules.speedBetween(world.positionAt(char, from), world.positionAt(char, to), to - from)
 end
 
 -- Cette méthode permet de vérifier l'instant annoncé par un joueur (shotTime, hitTime) lorsqu'un tir ou un coup arrive
@@ -392,7 +389,8 @@ local function rewoundPose(world: ShotWorld, targetCharacter: Model, tRoot: Base
 end
 
 -- Cette méthode permet de replacer une partie de la cible (position sur le rig serveur) dans sa pose rembobinée
--- lorsqu'un tir ou un coup est vérifié (#213) ; l'accroupi actuel est le dernier relevé de son historique.
+-- lorsqu'un tir ou un coup est vérifié (#213) ; l'accroupi actuel est le dernier relevé de son historique, lu
+-- seulement si l'accroupi déplace les parties (CROUCH_DROP non nul).
 local function posedCenter(
 	world: ShotWorld,
 	targetCharacter: Model,
@@ -401,7 +399,10 @@ local function posedCenter(
 	pose: ShotRules.Pose,
 	now: number
 ): Vector3
-	local _, _, crouchingNow = world.positionAt(targetCharacter, now)
+	local crouchingNow = nil
+	if ShotRules.CROUCH_DROP ~= 0 then
+		crouchingNow = select(3, world.positionAt(targetCharacter, now))
+	end
 	return ShotRules.posedPartCenter(tRoot.CFrame, tRoot.Position, partPos, crouchingNow, pose)
 end
 
@@ -505,6 +506,22 @@ end
 -- d'un coup (#176 ; accroupi du tireur lu dans son historique, #213).
 local EYE_OFFSET = Vector3.new(0, CameraConfig.CAM_HEIGHT_STAND, 0)
 local EYE_OFFSET_CROUCH = Vector3.new(0, CameraConfig.CAM_HEIGHT_CROUCH, 0)
+-- Durée (s) pour que la caméra qui s'accroupit (approche exponentielle à CAM_LERP_SPEED, CrouchSystem) arrive à
+-- 0,1 stud de CAM_HEIGHT_CROUCH : avant, l'œil est encore plus haut, pris debout (plus permissif).
+local CROUCH_EYE_SETTLE = math.log((CameraConfig.CAM_HEIGHT_STAND - CameraConfig.CAM_HEIGHT_CROUCH) / 0.1)
+	/ CameraConfig.CAM_LERP_SPEED
+
+-- Cette méthode permet de savoir si l'œil d'un joueur est à la hauteur accroupie lorsqu'un coup est vérifié (#213) :
+-- accroupi sur ses relevés de now - CROUCH_EYE_SETTLE à now (caméra descendue), sinon pris debout.
+local function eyeSettledCrouched(world: ShotWorld, aChar: Model, now: number): boolean
+	for _, back in { 0, CROUCH_EYE_SETTLE / 2, CROUCH_EYE_SETTLE } do
+		local _, _, crouching = world.positionAt(aChar, now - back)
+		if crouching ~= true then
+			return false
+		end
+	end
+	return true
+end
 -- Centre de la tête au-dessus de la racine, si le rig serveur de la cible n'a pas de Head (R6 : 1,5 stud).
 local DEFAULT_HEAD_OFFSET = Vector3.new(0, 1.5, 0)
 
@@ -560,15 +577,17 @@ local function validateMelee(
 	end
 	local targetPos = pose.pos
 
-	-- Orientation : cap actuel du tireur (son dernier paquet de position est parti au plus tard avec le coup)
+	-- Orientation : dernier cap reçu du tireur. Son paquet de position (non fiable, 20 Hz) part au plus 50 ms avant le
+	-- coup, ou plus tôt s'il s'est perdu ou a été doublé par le coup (fiable, pas d'ordre entre les deux) :
+	-- MELEE_MAX_ANGLE couvre ce retard
 	local facing, _, orientationDetail = ShotRules.checkMeleeOrientation(look, attackerPos, targetPos)
 	if not facing then
 		fail(ShotRules.Check.ORIENTATION, string.format("%s, rembobinée de %.2f s", orientationDetail or "?", rewind))
 	end
 
-	-- Ligne de vue : racine à racine, ou œil du tireur (accroupi ou non) à tête de la cible dans sa pose rembobinée
-	local _, _, attackerCrouching = world.positionAt(aChar, now)
-	local eyeOffset = if attackerCrouching then EYE_OFFSET_CROUCH else EYE_OFFSET
+	-- Ligne de vue : racine à racine, ou œil du tireur (accroupi, caméra descendue, ou debout) à tête de la cible dans
+	-- sa pose rembobinée
+	local eyeOffset = if eyeSettledCrouched(world, aChar, now) then EYE_OFFSET_CROUCH else EYE_OFFSET
 	local head = targetCharacter:FindFirstChild("Head")
 	local headOffset = if head and head:IsA("BasePart")
 		then posedCenter(world, targetCharacter, tRoot, head.Position, pose, now) - targetPos

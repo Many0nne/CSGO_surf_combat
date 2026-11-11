@@ -111,19 +111,19 @@ return function(T, Loader)
 		end)
 
 		T.it("baisse les parties hautes d'une cible accroupie au tir, debout maintenant", function()
-			local drop = ShotRules.CROUCH_DROP
-			ShotRules.CROUCH_DROP = 2
 			local rootCFrame = CFrame.new(Vector3.zero)
 			local head, foot = Vector3.new(0, 1.5, 0), Vector3.new(0, -2, 0)
 			local crouched = { pos = Vector3.zero, yaw = 0, crouching = true }
-			local headSeen = ShotRules.posedPartCenter(rootCFrame, Vector3.zero, head, false, crouched)
-			local footSeen = ShotRules.posedPartCenter(rootCFrame, Vector3.zero, foot, false, crouched)
-			-- Et l'inverse : debout au tir, accroupie maintenant (rig serveur baissé)
 			local standing = { pos = Vector3.zero, yaw = 0, crouching = false }
-			local headUp = ShotRules.posedPartCenter(rootCFrame, Vector3.zero, Vector3.new(0, 0.5, 0), true, standing)
+			-- Module à part : la baisse simulée ne fuit pas dans les autres specs, même si un appel lève une erreur
+			local Rules = Loader.new():require("src/server/ShotRules")
+			Rules.CROUCH_DROP = 2
+			local headSeen = Rules.posedPartCenter(rootCFrame, Vector3.zero, head, false, crouched)
+			local footSeen = Rules.posedPartCenter(rootCFrame, Vector3.zero, foot, false, crouched)
+			-- Et l'inverse : debout au tir, accroupie maintenant (rig serveur baissé)
+			local headUp = Rules.posedPartCenter(rootCFrame, Vector3.zero, Vector3.new(0, 0.5, 0), true, standing)
 			-- Accroupi inconnu : rien ne bouge
-			local unknown = ShotRules.posedPartCenter(rootCFrame, Vector3.zero, head, nil, crouched)
-			ShotRules.CROUCH_DROP = drop
+			local unknown = Rules.posedPartCenter(rootCFrame, Vector3.zero, head, nil, crouched)
 			T.expect((headSeen - Vector3.new(0, -0.5, 0)).Magnitude < 1e-4, "tête baissée : " .. tostring(headSeen))
 			T.expect((footSeen - foot).Magnitude < 1e-4, "pieds immobiles")
 			T.expect((headUp - Vector3.new(0, 2.5, 0)).Magnitude < 1e-4, "tête relevée : " .. tostring(headUp))

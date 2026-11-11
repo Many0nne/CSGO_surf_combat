@@ -1525,6 +1525,19 @@ return function(T, Loader)
 			T.expectEqual(reportedChecks(world), "meleeLineOfSight")
 		end)
 
+		T.it("prend l'œil debout tant que la caméra du tireur qui s'accroupit descend encore", function()
+			local Validator, a, b, world = setupMelee(nil, ALL_BLOCK)
+			world.obstructed = function(from: Vector3)
+				return from.Y < 2
+			end
+			-- Accroupi depuis 0,1 s seulement : la caméra est encore au-dessus de la caisse
+			world.histories[a.Character] = function(t)
+				return Vector3.zero, 0, t >= world.now - 0.1
+			end
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), 50)
+			T.expectEqual(reportedChecks(world), "")
+		end)
+
 		T.it(
 			"ignore les positions rembobinées hors de portée : pas de coup à travers un mur via le sillage",
 			function()
