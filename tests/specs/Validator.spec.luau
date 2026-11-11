@@ -1525,6 +1525,33 @@ return function(T, Loader)
 			T.expectEqual(reportedChecks(world), "meleeLineOfSight")
 		end)
 
+		T.it("accepte un coup dont le paquet de position suivant, déjà tourné, est arrivé avant lui", function()
+			local Validator, a, b, world = setupMelee(nil, ALL_BLOCK)
+			-- Cap reçu en dernier : 150° de la cible (le joueur s'est retourné après le coup) ; 50 ms avant : face à elle
+			local away = math.rad(150)
+			rootOf(a.Character).CFrame = CFrame.lookAt(Vector3.zero, Vector3.new(math.cos(away), 0, math.sin(away)))
+			local yawOf = Loader.new():require("src/shared/CharacterSyncRules").yawOf
+			local facingYaw, awayYaw =
+				yawOf(Vector3.new(1, 0, 0)), yawOf(Vector3.new(math.cos(away), 0, math.sin(away)))
+			world.histories[a.Character] = function(t)
+				return Vector3.zero, if t < world.now - 0.03 then facingYaw else awayYaw, false
+			end
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), 50)
+			T.expectEqual(reportedChecks(world), "")
+		end)
+
+		T.it("ne prend pas un cap plus ancien que deux paquets", function()
+			local Validator, a, b, world = setupMelee(Vector3.new(-1, 0, 0), ALL_BLOCK)
+			-- Face à la cible il y a 0,3 s seulement : dos tourné sur les caps récents
+			local yawOf = Loader.new():require("src/shared/CharacterSyncRules").yawOf
+			local facingYaw, awayYaw = yawOf(Vector3.new(1, 0, 0)), yawOf(Vector3.new(-1, 0, 0))
+			world.histories[a.Character] = function(t)
+				return Vector3.zero, if t < world.now - 0.25 then facingYaw else awayYaw, false
+			end
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), nil)
+			T.expectEqual(reportedChecks(world), "orientation")
+		end)
+
 		T.it("prend l'œil debout tant que la caméra du tireur qui s'accroupit descend encore", function()
 			local Validator, a, b, world = setupMelee(nil, ALL_BLOCK)
 			world.obstructed = function(from: Vector3)

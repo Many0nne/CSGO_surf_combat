@@ -4,6 +4,7 @@ local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 local HitZones = require(ReplicatedStorage.Shared.HitZones)
 local MovementConfig = require(ReplicatedStorage.Shared.MovementConfig)
 local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
+local CharacterSyncRules = require(ReplicatedStorage.Shared.CharacterSyncRules)
 local MathRules = require(ReplicatedStorage.Shared.MathRules)
 local PositionHistory = require(ReplicatedStorage.Shared.PositionHistory)
 local Participants = require(ServerScriptService.Server.Participants)
@@ -580,10 +581,26 @@ local function validateMelee(
 	end
 	local targetPos = pose.pos
 
-	-- Orientation : dernier cap reçu du tireur. Son paquet de position (non fiable, 20 Hz) part au plus 50 ms avant le
-	-- coup, ou plus tôt s'il s'est perdu ou a été doublé par le coup (fiable, pas d'ordre entre les deux) :
-	-- MELEE_MAX_ANGLE couvre ce retard
-	local facing, _, orientationDetail = ShotRules.checkMeleeOrientation(look, attackerPos, targetPos)
+	-- Orientation : dernier cap reçu du tireur, ou l'un de ceux reçus juste avant (MELEE_YAW_PACKETS : un paquet parti
+	-- après le coup a pu arriver avant lui). Son paquet de position (non fiable, 20 Hz) part au plus 50 ms avant le
+	-- coup, ou plus tôt s'il s'est perdu : MELEE_MAX_ANGLE couvre ce retard
+	local looks = { look }
+	for k = 1, ShotRules.MELEE_YAW_PACKETS do
+		local _, yaw = world.positionAt(aChar, now - k * CharacterSyncRules.SEND_INTERVAL)
+		if yaw then
+			table.insert(looks, CFrame.Angles(0, yaw, 0).LookVector)
+		end
+	end
+	local facing, orientationDetail, closestExcess = false, nil, math.huge
+	for _, candidate in looks do
+		local inFront, excess, candidateDetail = ShotRules.checkMeleeOrientation(candidate, attackerPos, targetPos)
+		if inFront then
+			facing = true
+			break
+		elseif excess < closestExcess then
+			orientationDetail, closestExcess = candidateDetail, excess
+		end
+	end
 	if not facing then
 		fail(ShotRules.Check.ORIENTATION, string.format("%s, rembobinée de %.2f s", orientationDetail or "?", rewind))
 	end

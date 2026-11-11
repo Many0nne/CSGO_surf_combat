@@ -131,6 +131,10 @@ ShotRules.RELOAD_CANCEL_TOLERANCE = 1
 -- asin(MELEE_BODY_RADIUS / distance), soit 15° à 7,5 studs : le reste couvre le retard du cap relayé (20 Hz, plus la
 -- gigue), environ 1 000°/s de rotation pendant 50 ms.
 ShotRules.MELEE_MAX_ANGLE = 70
+-- Caps du tireur testés en plus du dernier reçu (#214) : ceux de son historique un et deux paquets avant l'arrivée du
+-- coup. Le paquet de position parti juste avant le coup (non fiable) peut avoir été doublé par un paquet parti après
+-- lui (le coup est fiable, sans ordre garanti entre les deux) : son cap est alors dans l'historique, pas en dernier.
+ShotRules.MELEE_YAW_PACKETS = 2
 -- Demi-largeur (studs) d'un personnage vu de dessus, bras compris : le rayon peut toucher le bord du corps plutôt que
 -- son axe, l'angle permis est élargi de asin(MELEE_BODY_RADIUS / distance horizontale) (90° au contact).
 ShotRules.MELEE_BODY_RADIUS = 2
