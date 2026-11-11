@@ -8,10 +8,22 @@ local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local MapSelection = require(ReplicatedStorage.Shared.MapSelection)
 local SpawnLaunch = require(ReplicatedStorage.Shared.SpawnLaunch)
 local CheatLog = require(ServerScriptService.Server.CheatLog)
+local Participants = require(ServerScriptService.Server.Participants)
+local SpawnRules = require(ServerScriptService.Server.SpawnRules)
 
 local SpawnManager = {}
 
 local mapModel: Instance?
+-- Joueurs dont un LoadCharacterAsync est en vol, et heure (os.clock) de leur dernière mort (#171)
+local spawning: { [Player]: boolean } = {}
+local diedAt: { [Player]: number } = {}
+-- Gravité d'un refus de RequestSpawn au journal ; "result" n'y va pas (Play cliqué pendant la bannière de fin).
+-- "early" est moyen : notre client n'envoie RequestSpawn que depuis le menu, où un joueur mort en round ne revient pas.
+local REFUSAL_SEVERITY: { [string]: CheatLog.Severity } = {
+	spawning = CheatLog.Severity.LOW,
+	alive = CheatLog.Severity.LOW,
+	early = CheatLog.Severity.MEDIUM,
+}
 
 -- Cette méthode permet de trouver la map jouée (GameConfig.ACTIVE_MAP dans Workspace.Maps) lorsqu'un joueur demande à
 -- apparaître.
@@ -74,7 +86,13 @@ function SpawnManager.place(char: Model): Vector3?
 	return nil
 end
 
+-- Cette méthode permet de faire apparaître un joueur lorsqu'une demande ou une réapparition programmée est acceptée ;
+-- un seul LoadCharacterAsync en vol par joueur : rien si un autre est déjà en cours.
 function SpawnManager.spawnPlayer(player: Player)
+	if spawning[player] then
+		return
+	end
+	spawning[player] = true
 	-- Connexion avant LoadCharacter pour ne pas manquer CharacterAdded
 	local conn: RBXScriptConnection
 	conn = player.CharacterAdded:Connect(function(char)
@@ -83,15 +101,70 @@ function SpawnManager.spawnPlayer(player: Player)
 		SpawnManager.place(char)
 	end)
 	-- Rig = StarterCharacter, skin appliqué dans CharacterAdded (#1).
-	player:LoadCharacterAsync()
+	local ok, err = pcall(player.LoadCharacterAsync, player)
+	spawning[player] = nil
+	if not ok then
+		conn:Disconnect()
+		warn("[SpawnManager] LoadCharacterAsync a échoué pour " .. player.Name .. " :", err)
+	end
 end
 
-function SpawnManager.init(requestSpawnRemote: RemoteEvent, canSpawn: (Player) -> boolean)
+-- Cette méthode permet de faire réapparaître un joueur lorsque sa réapparition programmée échoit (RoundManager) :
+-- rien s'il a déjà un personnage vivant (demande arrivée entre-temps) ou un LoadCharacterAsync en vol.
+function SpawnManager.respawn(player: Player)
+	if SpawnRules.scheduled(spawning[player] == true, SpawnRules.isAlive(player.Character)) then
+		SpawnManager.spawnPlayer(player)
+	end
+end
+
+-- Cette méthode permet de retenir l'heure de la mort d'un joueur lorsque son Humanoid meurt : une demande
+-- d'apparition est refusée pendant RESPAWN_DELAY dans un round actif.
+function SpawnManager.noteDeath(player: Player)
+	-- Joueur déjà parti (forget passé) : rien à retenir
+	if player.Parent then
+		diedAt[player] = os.clock()
+	end
+end
+
+-- Cette méthode permet d'oublier un joueur lorsqu'il quitte le jeu.
+function SpawnManager.forget(player: Player)
+	spawning[player] = nil
+	diedAt[player] = nil
+end
+
+-- Cette méthode permet de brancher RequestSpawn lorsque le serveur démarre : garde commune, règles de réapparition
+-- (SpawnRules.request, refus au journal), puis beforeSpawn (démarrage du round) et apparition.
+function SpawnManager.init(
+	requestSpawnRemote: RemoteEvent,
+	hooks: { roundState: () -> string, beforeSpawn: (Player) -> () }
+)
 	requestSpawnRemote.OnServerEvent:Connect(function(player)
 		-- Garde commune (#170) : débit
-		if CheatLog.admit(player, requestSpawnRemote.Name) and canSpawn(player) then
-			SpawnManager.spawnPlayer(player)
+		if not CheatLog.admit(player, requestSpawnRemote.Name) then
+			return
 		end
+		local now = os.clock()
+		local refusal = SpawnRules.request({
+			spawning = spawning[player] == true,
+			hasCharacter = SpawnRules.inPlace(player.Character),
+			roundState = hooks.roundState(),
+			diedAt = diedAt[player],
+			now = now,
+			respawnDelay = GameConfig.RESPAWN_DELAY,
+		})
+		if refusal then
+			local severity = REFUSAL_SEVERITY[refusal]
+			if severity then
+				local detail = refusal
+				if refusal == "early" then
+					detail = string.format("early : %.2f s après la mort", now - (diedAt[player] :: number))
+				end
+				CheatLog.report(Participants.fromPlayer(player), CheatLog.Category.SPAWN, severity, detail)
+			end
+			return
+		end
+		hooks.beforeSpawn(player)
+		SpawnManager.spawnPlayer(player)
 	end)
 end
 

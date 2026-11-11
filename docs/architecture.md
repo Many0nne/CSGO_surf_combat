@@ -103,7 +103,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/client/ui/Transition.luau`: volets de transition entre le menu et le jeu.
 - `src/client/ui/UIKit.luau`: briques communes des écrans (création d'Instances, texte au thème, tweens, icônes, mise à l'échelle).
 - `src/server/DebugPlaytest.luau`: helper de playtest (Studio uniquement) : déclenché par un attribut joueur, enchaîne spawn, équipement, cible immobile et attaque, avec un PASS/FAIL par étape.
-- `src/server/FeedbackService.luau`: réception des feedbacks côté serveur (longueur, délai entre deux envois, limite hebdomadaire), envoyés au webhook par `Webhook`.
+- `src/server/FeedbackService.luau`: réception des feedbacks côté serveur (longueur, délai en mémoire posé avant tout accès DataStore, limite hebdomadaire jamais écrasée après une lecture échouée, #171), envoyés au webhook par `Webhook`.
 - `src/server/Webhook.luau`: envoi d'un embed à un webhook (URL lue dans un StringValue de ServerScriptService, jamais versionnée), partagé par `FeedbackService` et `CheatLog`.
 - `src/server/CheatLog.luau`: journal anti-triche (#170) : violations par joueur (catégorie, gravité), warn limité, score décroissant, kick à 3 violations fortes (hors Studio), résumé au webhook au départ ; `admit` garde chaque remote client → serveur. API et règles : `docs/anticheat.md`.
 - `src/server/RemoteGuard.luau`: règles pures de la garde des remotes (seau à jetons par joueur et par remote, contrôles de type, `RULES` de chaque remote), testées (`tests/specs/RemoteGuard.spec.luau`).
@@ -120,7 +120,8 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/server/RoundManager.luau`: boucle de round FFA (timer, kills/deaths par participant, fin de round, diffusion résultat), testée avec un faux bot (`tests/specs/RoundManager.spec.luau`).
 - `src/server/Participants.luau`: registre des participants au round, joueurs et bots (inscription, personnage, recherche depuis un personnage), cf. « Participants, joueurs et bots ».
 - `src/server/SettingsStore.luau`: DataStore des réglages du joueur (`PlayerSettings_v1`) : chargement à l'arrivée, réponse à `GetSettings`, réception validée de `SaveSettings`, écriture différée et au départ.
-- `src/server/SpawnManager.luau`: gestion du spawn différé (RequestSpawn remote, LoadCharacter, lancement depuis le soleil ou point au sol, ForceField de protection) ; `place(char)` sert aussi aux bots.
+- `src/server/SpawnManager.luau`: gestion du spawn différé (RequestSpawn remote, LoadCharacter, lancement depuis le soleil ou point au sol, ForceField de protection) ; un seul `LoadCharacterAsync` en vol par joueur, `respawn` (réapparition programmée) jamais par-dessus un personnage vivant (#171) ; `place(char)` sert aussi aux bots.
+- `src/server/SpawnRules.luau`: règles pures de réapparition (#171) : refus d'un `RequestSpawn` (spawn en vol, personnage en place, bannière de fin, mort depuis moins de `RESPAWN_DELAY` en round actif), réapparition programmée, personnage vivant ; testées (`tests/specs/SpawnRules.spec.luau`).
 - `src/server/StatsStore.luau`: DataStore stats joueur (kills/deaths/rounds), save périodique + déconnexion, robustesse load.
 - `src/server/Validator.luau`: décision serveur des touches melee et hitscan d'un participant, joueur ou bot (cible, arme en main, partie touchée, portée, cadence), calcul des dégâts depuis `WeaponConfig` (zone du corps pour le hitscan, backstab pour la mêlée) et qualification d'une touche (hit/kill).
 - `src/server/init.server.luau`: point d'entrée serveur — crée tous les RemoteEvents, orchestre SpawnManager, RoundManager, StatsStore.
