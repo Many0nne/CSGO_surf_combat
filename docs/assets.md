@@ -81,8 +81,8 @@ par `ScaleTo` avec le reste de l'arme.
   canon dessiné à l'impact réel, un peu de biais quand le tireur surfe vite. Seul un canon à plus de
   `MUZZLE_MAX_OFFSET` de l'origine (personnage pas à jour) fait partir le rayon de l'origine. La partie d'un rayon à
   moins de `NEAR_CAMERA` de notre caméra est retirée (`clipNearCamera` : tir qui nous touche, nous frôle, ou tireur
-  collé à nous) : sinon le Beam, face à la caméra, couvre l'écran. Au plus `MAX_ACTIVE` rayons en même temps, les
-  siens compris (au-delà, flamme seule).
+  collé à nous) : sinon le Beam, face à la caméra, couvre l'écran. Au plus `MAX_ACTIVE` rayons en même temps (au-delà,
+  un tir relayé n'a que sa flamme) ; le tir local a toujours son rayon et compte parmi eux.
 - **Nouvelle arme à distance :** garder `Barrel.ShootPart.MuzzleEffect` dans son viewmodel (le copier de l'AWP), sinon
   elle tire sans flamme et son rayon part de l'œil.
 - **Vérifier qu'un tir ne laisse rien :** le rayon crée deux `Attachment` dans `Terrain` (et un `Beam`), tous nommés

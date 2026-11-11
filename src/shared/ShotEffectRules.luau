@@ -38,7 +38,8 @@ ShotEffectRules.NEAR_CAMERA = 3
 ShotEffectRules.HIDE_RADIUS = 1
 -- Paliers du fondu : la transparence est arrondie au 1/FADE_STEPS, une séquence précalculée par palier.
 ShotEffectRules.FADE_STEPS = 20
--- Rayons en cours au plus (les siens compris) : au-delà, un tir relayé n'a pas de rayon, seulement sa flamme.
+-- Rayons en cours au plus : au-delà, un tir relayé n'a pas de rayon, seulement sa flamme. Le tir local a toujours le
+-- sien (une AWP ne tire pas pendant la vie d'un rayon) et compte parmi les rayons en cours.
 ShotEffectRules.MAX_ACTIVE = 16
 -- Nom des Instances créées pour un rayon (repérables en Studio, comptées par la vérification « aucune instance »).
 ShotEffectRules.INSTANCE_NAME = "ShotTracer"
