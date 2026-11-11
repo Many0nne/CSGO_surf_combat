@@ -682,6 +682,10 @@ personnage par un neuf. Le client légitime n'envoie `RequestSpawn` que depuis l
 - la réapparition programmée passe par `SpawnManager.respawn` : rien si le joueur a déjà un personnage vivant
   (`SpawnRules.isAlive` : en place et PV > 0) ou un chargement en vol ; `SpawnManager.spawnPlayer` ne lance qu'un
   `LoadCharacterAsync` à la fois par joueur (pcall, connexion `CharacterAdded` rendue en cas d'échec) ;
+- chaque demande admise reçoit une réponse (#219, `SpawnRules.reply`) ; le client légitime renvoie sa demande sans
+  réponse ou après un refus temporaire (`SpawnRequestRules`, au plus un envoi toutes les 1,2 s, sous le débit de
+  `RemoteGuard`). Ces renvois peuvent ajouter au journal des refus `spawning` ou `alive` faibles (réponse en route
+  pendant un gel du serveur) ; les refus `result` répétés pendant la bannière n'y vont pas ;
 - les bots ne passent pas par là : `BotManager` gère leur réapparition (`diedAt` + `RESPAWN_DELAY`) et leur passe un
   rappel vide.
 
@@ -694,8 +698,10 @@ servie à la fin de ce chargement (`SpawnRules.rejoinsInFlight`) au lieu d'être
 reçu compte comme une mort (`LeaveRules.countsAsDeath`, lu par `RoundManager.withdraw`) : kill au dernier attaquant
 (mort entre-temps : crédité ; parti : départ libre), `PlayerDied`, stats comme une mort normale (`onDeathCounted`). Un
 coup absorbé par la protection d'apparition garde le tueur mais pas l'instant (`LastHit.at` nil). Limites assumées :
-quitter le jeu (déconnexion) n'est pas couvert ; un départ compté comme une mort ne retient pas `RESPAWN_DELAY` (un
-refus `early` serait journalisé et laisserait le client en `SPAWNING`).
+quitter le jeu (déconnexion) n'est pas couvert ; un départ compté comme une mort ne retient pas `RESPAWN_DELAY`.
+Vérifié pour #219 : ce départ ne laisse pas de refus `early` à JOUER (`SpawnManager.withdraw` efface l'heure de la
+mort, `RoundManager.withdraw` ne passe pas par `noteDeath` ; test « départ par MENU PRINCIPAL compté comme une mort »).
+Si `RESPAWN_DELAY` y était un jour imposé, le client attendrait le délai annoncé (`retryIn`) au lieu de rester bloqué.
 Vérification Studio (2026-11-11) : joueur passé à 1000 PV côté serveur (un tir d'AWP de bot ne le tue pas), menu en
 partie ouvert d'avance (`DebugInGameMenu`), attente du coup bornée à 6 s en contexte `Client`, puis clic sur
 MENU PRINCIPAL (`user_mouse_input` aux coordonnées `AbsolutePosition` + taille / 2, `InGameMenu` ignore l'inset). Départ
