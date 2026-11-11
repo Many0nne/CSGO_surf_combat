@@ -254,10 +254,8 @@ function RoundManager.removeParticipant(participant: Participant)
 	end
 end
 
--- Cette méthode permet de retirer du round un joueur revenu au menu (#157) avant que son personnage soit détruit : comme
--- pour un départ, son score de la manche disparaît et ses coups en attente ne créditent plus aucun kill ; les morts
--- qu'il a infligées restent au classement des autres, et la disparition de son personnage n'est pas une mort.
--- Il revient au classement à sa prochaine apparition (addParticipant).
+-- Cette méthode permet de retirer du round un joueur revenu au menu (#157) comme un départ : score effacé, coups en
+-- attente oubliés, disparition du personnage non comptée ; il revient à sa prochaine apparition (addParticipant).
 function RoundManager.withdraw(participant: Participant)
 	local id = participant.id
 	withdrawn[id] = true

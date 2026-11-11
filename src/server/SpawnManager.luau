@@ -19,6 +19,8 @@ local spawning: { [Player]: boolean } = {}
 local diedAt: { [Player]: number } = {}
 -- Joueurs revenus au menu (#157) : aucune réapparition programmée, aucun personnage en vol gardé, jusqu'à leur demande
 local away: { [Player]: boolean } = {}
+-- Joueurs revenus du menu pendant une réapparition encore en vol : leur demande est servie à la fin de ce chargement
+local rejoin: { [Player]: boolean } = {}
 -- Gravité d'un refus de RequestSpawn au journal ; "result" n'y va pas (Play cliqué pendant la bannière de fin).
 -- "early" est moyen : notre client n'envoie RequestSpawn que depuis le menu, où un joueur mort en round ne revient pas.
 local REFUSAL_SEVERITY: { [string]: CheatLog.Severity } = {
@@ -114,6 +116,13 @@ function SpawnManager.spawnPlayer(player: Player)
 		conn:Disconnect()
 		warn("[SpawnManager] LoadCharacterAsync a échoué pour " .. player.Name .. " :", err)
 	end
+	-- Demande arrivée pendant ce chargement (#157) : le personnage gardé la sert, sinon un nouveau
+	if rejoin[player] then
+		rejoin[player] = nil
+		if not SpawnRules.isAlive(player.Character) then
+			SpawnManager.spawnPlayer(player)
+		end
+	end
 end
 
 -- Cette méthode permet de faire réapparaître un joueur lorsque sa réapparition programmée échoit (RoundManager) :
@@ -130,8 +139,8 @@ end
 -- Cette méthode permet de retenir l'heure de la mort d'un joueur lorsque son Humanoid meurt : une demande
 -- d'apparition est refusée pendant RESPAWN_DELAY dans un round actif.
 function SpawnManager.noteDeath(player: Player)
-	-- Joueur déjà parti (forget passé) : rien à retenir
-	if player.Parent then
+	-- Joueur déjà parti (forget passé) ou revenu au menu : rien à retenir
+	if player.Parent and not away[player] then
 		diedAt[player] = os.clock()
 	end
 end
@@ -141,13 +150,14 @@ function SpawnManager.forget(player: Player)
 	spawning[player] = nil
 	diedAt[player] = nil
 	away[player] = nil
+	rejoin[player] = nil
 end
 
--- Cette méthode permet de sortir du round un joueur qui revient au menu (#157), après RoundManager.withdraw : son
--- personnage est détruit, aucune réapparition ne part plus, et sa prochaine demande d'apparition est acceptée sans
--- attendre RESPAWN_DELAY (son score de la manche est perdu, revenir plus tôt ne rapporte rien).
+-- Cette méthode permet de sortir du round un joueur revenu au menu (#157, après RoundManager.withdraw) : personnage
+-- détruit, plus de réapparition, prochaine demande acceptée sans RESPAWN_DELAY (son score de la manche est perdu).
 function SpawnManager.withdraw(player: Player)
 	away[player] = true
+	rejoin[player] = nil
 	local char = player.Character
 	if char then
 		char:Destroy()
@@ -176,6 +186,13 @@ function SpawnManager.init(
 			now = now,
 			respawnDelay = GameConfig.RESPAWN_DELAY,
 		})
+		-- Retour du menu pendant une réapparition partie avant le départ : servie à la fin de son chargement (#157)
+		if refusal == "spawning" and away[player] then
+			away[player] = nil
+			rejoin[player] = true
+			hooks.beforeSpawn(player)
+			return
+		end
 		if refusal then
 			local severity = REFUSAL_SEVERITY[refusal]
 			if severity then

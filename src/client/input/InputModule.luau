@@ -83,9 +83,8 @@ end)
 
 local InputModule = {}
 
--- Cette méthode permet de couper ou rendre les touches de jeu (déplacement, saut, recharge, inspection) lorsque le menu
--- en partie s'ouvre ou se ferme : à l'ouverture, plus rien n'est tenu ni en attente ; à la fermeture, une touche
--- restée enfoncée ne compte qu'au prochain appui.
+-- Cette méthode permet de couper (plus rien de tenu ni en attente) ou rendre les touches de jeu lorsque le menu en
+-- partie s'ouvre ou se ferme ; une touche restée enfoncée ne compte qu'au prochain appui.
 function InputModule.setSuspended(on: boolean)
 	suspended = on
 	if on then

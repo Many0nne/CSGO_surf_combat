@@ -140,6 +140,10 @@ end
 -- ── Liaison personnage ─────────────────────────────────────────────────────
 
 local function onCharacterAdded(char: Model)
+	-- Au menu, un personnage n'est pas attendu (réapparition partie avant un retour au menu, détruite par le serveur, #157)
+	if state == "MENU" or state == "INFOS" then
+		return
+	end
 	-- Connecter la mort
 	local humanoid = char:WaitForChild("Humanoid") :: Humanoid
 	if humDiedConn then
@@ -283,20 +287,13 @@ function GameStateController.getState(): State
 	return state
 end
 
--- Cette méthode permet d'ouvrir Réglages à même la scène lorsque le joueur le demande depuis l'accueil du menu ;
--- renvoie true tant que le menu gère la demande, même s'il l'ignore (autre écran ouvert, volets en cours).
-local function openSettingsPage(): boolean
-	if state == "SPAWNING" then
-		return true
-	end
-	if state ~= "MENU" then
-		return false
-	end
-	if MainMenu.getPage() == "home" then
+-- Cette méthode permet d'ouvrir Réglages à même la scène lorsque le joueur le demande depuis l'accueil du menu (rien
+-- sur un autre écran du menu ni pendant les volets).
+local function openSettingsPage()
+	if state == "MENU" and MainMenu.getPage() == "home" then
 		SettingsMenu.open("page")
 		MainMenu.setPage("settings")
 	end
-	return true
 end
 
 -- ── Init ───────────────────────────────────────────────────────────────────

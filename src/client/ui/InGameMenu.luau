@@ -67,6 +67,7 @@ local function holdMouse()
 	wantedIcon = UserInputService.MouseIconEnabled
 	UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 	UserInputService.MouseIconEnabled = true
+	-- Cette méthode permet de retenir puis annuler un changement de souris lorsque le jeu la reprend menu ouvert.
 	local function enforce()
 		if UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default then
 			wantedBehavior = UserInputService.MouseBehavior

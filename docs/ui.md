@@ -99,7 +99,7 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   (`HUDRules.WEAPON_BAR_FADE_DELAY`). Emplacements dans l'ordre alphabétique, comme le helper `DebugPlaytest`.
   Équipement : touches des emplacements (1 à 9 par défaut) et molette (vers le haut = arme précédente par défaut),
   réglables dans Réglages > TOUCHES (#100) ; toucher d'un emplacement, L1/R1 à la manette (fixes). La barre ignore
-  touches et molette pendant que l'écran Réglages est ouvert.
+  touches et molette pendant que le menu en partie est ouvert (`InGameMenu.isOpen`, Réglages compris).
 - `src/client/ui/AmmoCounter.luau` (#158) : « chargeur / réserve » en bas à droite, à gauche de la barre d'armes (chiffre du
   chargeur os à ombre, réserve atténuée, libellé ambré « MUNITIONS », chargeur vide en rouge d'impact). Lit
   `WeaponSystem.getAmmo` à chaque Heartbeat (met à jour les textes seulement si les valeurs changent), masqué sans
@@ -110,7 +110,7 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   noir de `OUTLINE` 1 px (`OUTLINE_TRANSPARENCY` 0,1) : sur fond blanc seul le contour se lit, sur sol ou mur sombre le trait os.
   Taille fixe en pixels, pas de `scaledRoot`. `ScreenGui` en `ScreenInsets.None` pour tomber sur le centre exact de la caméra,
   comme la lunette. Affichage = `HUDRules.crosshairVisible` : réglage actif, HUD de jeu visible (`GameStateController.applyGameHud`,
-  donc ni menu, ni mort, ni résultat), lunette absente (`ScopeOverlay.setVisible`) et Réglages fermé (`SettingsMenu.setOpen`).
+  donc ni menu, ni mort, ni résultat), lunette absente (`ScopeOverlay.setVisible`) et menu en partie fermé (`InGameMenu`).
   Toutes les armes, couteau compris. Piste rejetée : point rouge central (criard, hors de la matière du HUD).
 - `src/client/ui/KeyDisplay.luau` (#197) : réglage « Affichage des touches » (Réglages > GRAPHISMES, `PlayerSettings.keyDisplay`,
   trois valeurs `off` (défaut) / `simple` / `full`, validées par `sanitize`). Grille façon clavier en bas au centre (`BOTTOM_MARGIN`
@@ -125,7 +125,7 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   Les cases suivent les touches physiques, pas l'action disponible : F et M2 s'allument aussi avec une arme sans inspection
   ni lunette ; clavier ignoré pendant la saisie de texte (`GetFocusedTextBox`), pas de suivi du `gameProcessed` (piste non retenue,
   elle demandait un état par touche au lieu d'un sondage).
-  Affichage : mode actif, HUD de jeu visible (`GameStateController.applyGameHud`), Réglages fermé (`SettingsMenu.setOpen`) ; la
+  Affichage : mode actif, HUD de jeu visible (`GameStateController.applyGameHud`), menu en partie fermé (`InGameMenu`) ; la
   lunette ne le masque pas (les touches restent utiles).
   Vérifié en Studio avec `user_keyboard_input` (`keyDown` W/D/S/Espace/Ctrl/R passent en partie et allument les cases) ; le clic de
   souris M1/M2 n'a pas été simulé. Coordonnées de clic des onglets du menu : y négatif (`AbsolutePosition` du bouton).
