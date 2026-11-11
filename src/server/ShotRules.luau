@@ -14,6 +14,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local CheatTypes = require(ServerScriptService.Server.CheatTypes)
 local CharacterSyncRules = require(ReplicatedStorage.Shared.CharacterSyncRules)
+local HitZones = require(ReplicatedStorage.Shared.HitZones)
 local MathRules = require(ReplicatedStorage.Shared.MathRules)
 local PositionHistory = require(ReplicatedStorage.Shared.PositionHistory)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
@@ -156,17 +157,21 @@ ShotRules.CLOCK_TOLERANCE = 0.05
 -- voit la cible debout, accroupie ou non, donc 0. À régler sur la piste publiée le jour où elle existe (le test
 -- « CROUCH_DROP suit la piste 3P » de ShotRules.spec.luau échoue tant que les deux ne concordent pas).
 ShotRules.CROUCH_DROP = 0
--- Membres (#240) : parties des bras R15, rattachées à leur épaule. La tenue de l'arme (#107) n'est posée que par les
--- clients (WeaponThirdPersonView) : sur le rig serveur, une main est à ~4 studs de là où le tireur la voit. Une touche
--- sur ces parties est jugée dans la sphère d'allonge du bras (limbAim), pas sur la position serveur de la partie.
-ShotRules.LIMB_SIDES = {
-	LeftUpperArm = "Left",
-	LeftLowerArm = "Left",
-	LeftHand = "Left",
-	RightUpperArm = "Right",
-	RightLowerArm = "Right",
-	RightHand = "Right",
-} :: { [string]: string }
+-- Membres (#240) : parties des bras R15 (zone ARMS de HitZones), rattachées à l'épaule de leur côté. La tenue de
+-- l'arme (#107) n'est posée que par les clients (WeaponThirdPersonView) : sur le rig serveur, une main est à ~4 studs de
+-- là où le tireur la voit. Une touche sur ces parties est jugée dans la sphère d'allonge du bras (limbRadius), centrée
+-- sur l'épaule, pas sur la position serveur de la partie.
+ShotRules.LIMB_SIDE_PREFIXES = { "Left", "Right" }
+
+-- Rotations de taille (Transform du Motor6D Waist) que les tenues de WeaponThirdPerson.POSES imposent chez les clients.
+local HOLD_WAIST_TRANSFORMS: { CFrame } = {}
+for _, holdPose in WeaponThirdPerson.POSES do
+	for _, joints in { holdPose.Joints, holdPose.AirJoints } do
+		if joints and joints.Waist then
+			table.insert(HOLD_WAIST_TRANSFORMS, joints.Waist)
+		end
+	end
+end
 
 -- Bras d'un rig R15, lu sur le rig serveur (Motor6D Shoulder, Elbow, Wrist d'un côté) : positions des articulations
 -- dans le repère de chaque partie, tailles des parties, et épaule et taille dans le repère de l'UpperTorso.
@@ -181,12 +186,21 @@ export type ArmRig = {
 	handSize: Vector3,
 	shoulderC0: Vector3, -- épaule, repère UpperTorso
 	waistC1: CFrame?, -- taille (articulation Waist, C1), repère UpperTorso ; nil sans Waist
+	waistTransform: CFrame?, -- rotation de taille du rig serveur (animation), identité si nil
 }
 
 -- Cette méthode permet de savoir de quel côté est une partie touchée lorsqu'on vérifie la visée : "Left" ou "Right"
 -- pour une partie de bras R15, nil pour toute autre partie (règle de la partie inchangée).
 function ShotRules.limbSide(partName: string): string?
-	return ShotRules.LIMB_SIDES[partName]
+	if HitZones.zoneOf(partName) ~= HitZones.Zone.ARMS then
+		return nil
+	end
+	for _, side in ShotRules.LIMB_SIDE_PREFIXES do
+		if string.sub(partName, 1, #side) == side then
+			return side
+		end
+	end
+	return nil
 end
 
 -- Cette méthode permet de mesurer le point d'une boîte (centrée sur l'origine de son repère) le plus loin d'un point
@@ -208,24 +222,20 @@ function ShotRules.armReach(arm: ArmRig): number
 	)
 end
 
--- Cette méthode permet de mesurer de combien la tenue de l'arme déplace l'épaule lorsqu'une touche sur un membre est
--- vérifiée : rotation de taille (Waist) des tenues de WeaponThirdPerson.POSES, absente du rig serveur ; 0 sans Waist.
+-- Cette méthode permet de mesurer de combien la tenue de l'arme peut déplacer l'épaule lorsqu'une touche sur un membre
+-- est vérifiée : écart entre la taille du rig serveur (waistTransform) et celle d'une tenue ; 0 sans Waist.
 function ShotRules.holdShoulderShift(arm: ArmRig): number
 	local waist = arm.waistC1
 	if not waist then
 		return 0
 	end
 	-- La taille tourne l'UpperTorso autour de son articulation (Transform, dans le repère du joint) : l'épaule y est à
-	-- fromWaist, déplacée de |Transform × fromWaist - fromWaist|
+	-- fromWaist. Le client remplace la taille animée par celle de la tenue (fondu compris entre les deux)
 	local fromWaist = waist:PointToObjectSpace(arm.shoulderC0)
+	local server = (arm.waistTransform or CFrame.identity):VectorToWorldSpace(fromWaist)
 	local shift = 0
-	for _, pose in WeaponThirdPerson.POSES do
-		for _, joints in { pose.Joints, pose.AirJoints } do
-			local transform = joints and joints.Waist
-			if transform then
-				shift = math.max(shift, (transform:VectorToWorldSpace(fromWaist) - fromWaist).Magnitude)
-			end
-		end
+	for _, transform in HOLD_WAIST_TRANSFORMS do
+		shift = math.max(shift, (transform:VectorToWorldSpace(fromWaist) - server).Magnitude)
 	end
 	return shift
 end

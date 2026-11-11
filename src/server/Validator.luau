@@ -447,6 +447,7 @@ local function limbArm(targetCharacter: Model, hitPart: BasePart): (Vector3?, Sh
 		handSize = hand.Size,
 		shoulderC0 = shoulder.C0.Position,
 		waistC1 = if waist and waist:IsA("Motor6D") then waist.C1 else nil,
+		waistTransform = if waist and waist:IsA("Motor6D") then waist.Transform else nil,
 	}
 	-- Position et rotation lues à part (sous Lune, Position et CFrame sont posées séparément)
 	local shoulderPos = torso.Position + torso.CFrame:VectorToWorldSpace(arm.shoulderC0)

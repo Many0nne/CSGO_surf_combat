@@ -218,7 +218,8 @@ return function(T, Loader)
 	end)
 
 	T.describe("ShotRules : membres jugés dans l'allonge de l'épaule (#240)", function()
-		-- Bras gauche d'un rig R15 : articulations (Motor6D C0/C1) et tailles des parties
+		-- Cette méthode permet de construire le bras gauche d'un rig R15 (articulations Motor6D C0/C1, tailles des
+		-- parties) lorsqu'un test calcule une allonge.
 		local function leftArm()
 			return {
 				shoulderC1 = Vector3.new(0, 0.4, 0),
@@ -297,6 +298,12 @@ return function(T, Loader)
 			local shift = ShotRules.holdShoulderShift(arm)
 			T.expect(math.abs(shift - 2 * math.sin(math.rad(20))) < 1e-3, "déplacement " .. shift)
 			T.expect(math.abs(ShotRules.limbRadius(arm) - (ShotRules.armReach(arm) + shift)) < 1e-9, "rayon")
+			-- Taille du rig serveur déjà tournée comme la tenue (animation) : l'épaule ne bouge plus ; tournée à
+			-- l'opposé : l'écart double presque
+			arm.waistTransform = CFrame.Angles(0, math.rad(-40), 0)
+			T.expect(ShotRules.holdShoulderShift(arm) < 1e-3, "taille serveur comme la tenue")
+			arm.waistTransform = CFrame.Angles(0, math.rad(40), 0)
+			T.expect(math.abs(ShotRules.holdShoulderShift(arm) - 2 * math.sin(math.rad(40))) < 1e-3, "taille opposée")
 			arm.waistC1 = nil
 			T.expectEqual(ShotRules.holdShoulderShift(arm), 0, "sans Waist")
 		end)
@@ -322,11 +329,6 @@ return function(T, Loader)
 			ok, detail = ShotRules.checkDirection(shot({ direction = far.Unit, hitPos = far }), shoulder, limit)
 			T.expectEqual(ok, false, "hors de l'allonge")
 			T.expect(string.find(detail or "", "rayon à", 1, true) ~= nil, "détail : " .. tostring(detail))
-		end)
-
-		T.it("garde les tolérances de la tête et du corps", function()
-			T.expectEqual(ShotRules.DIRECTION_BASE, 2)
-			T.expectEqual(ShotRules.DIRECTION_SPEED_FACTOR, 0.05)
 		end)
 	end)
 

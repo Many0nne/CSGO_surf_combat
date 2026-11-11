@@ -267,7 +267,8 @@ repère de la racine du rig serveur, tourné au cap rembobiné, posé sur la rac
 locaux), jamais sur le rig serveur : une main est à ~4 studs de là où le tireur la voit (mesure #213), d'où des
 violations `direction` sur des tirs honnêtes visant un bras.
 
-**Règle (piste A).** Pour une touche sur une main ou un bras (`ShotRules.LIMB_SIDES`), `Validator.validateShot`
+**Règle (piste A).** Pour une touche sur une main ou un bras (zone `ARMS` de `HitZones`, côté lu dans le nom :
+`ShotRules.limbSide`), `Validator.validateShot`
 remplace la partie par une sphère : centre = articulation de l'épaule du même côté sur le rig serveur
 (`UpperTorso` + `C0` du Motor6D `*Shoulder`, `limbArm`), replacée dans la pose rembobinée comme toute partie
 (`posedPartCenter`) ; rayon = `ShotRules.limbRadius` à la place du rayon englobant de la partie, la tolérance
@@ -278,16 +279,23 @@ remplace la partie par une sphère : centre = articulation de l'épaule du même
   coin de la main le plus loin du poignet (bras tendu), ou coin d'une partie plus haute s'il est plus loin. Borne
   exacte par l'inégalité triangulaire, vérifiée sur 500 poses au hasard (`tests/specs/ShotRules.spec.luau`).
 - `holdShoulderShift` : la tenue tourne aussi la taille (`Waist` de la tenue `Rifle` : 40°), ce qui déplace
-  l'épaule chez le client ; plus grand déplacement sur les tenues de `WeaponThirdPerson.POSES`, d'après la position
-  de l'épaule vue de l'articulation `Waist` (~0,7 stud pour une épaule à 1 stud de l'axe).
+  l'épaule chez le client, alors que le centre de la sphère suit la taille du rig serveur (sa `Transform`, animée
+  pour un bot). Plus grand écart entre l'épaule tournée par une tenue de `WeaponThirdPerson.POSES` et l'épaule du rig
+  serveur, vue de l'articulation `Waist` (~0,7 stud pour une épaule à 1 stud de l'axe et une taille serveur au repos).
+  Les rotations de taille des tenues sont lues une fois au chargement de `ShotRules`.
 
 Rig incomplet (pas de Motor6D, partie hors du personnage) : règle de la partie, plus stricte. Le détail du journal
 indique « <partie> jugé dans l'allonge de l'épaule ». Les autres parties (tête, torse, jambes) gardent la règle de
 la partie.
 
-**Ce qu'un tricheur y gagne.** Une touche annoncée sur un bras passe si le rayon frôle la sphère du bras : à peu
-près le volume du haut du corps vu de face. Les bras valent ×1 comme le torse (`HitZones`) : annoncer un bras au lieu
-du torse ne rapporte rien de plus. Un tir truqué loin de la cible (silent aim) reste signalé.
+**Ce qu'un tricheur y gagne (limite connue).** Une touche annoncée sur un bras passe si le rayon passe à moins de
+l'allonge + tolérance de l'épaule : la cible est en pratique grossie d'environ un bras autour du haut du corps
+(~1,5 stud de plus que la sphère du torse), et les bras valent ×1 comme le torse (`HitZones`). Un tir truqué loin de
+la cible (silent aim) reste signalé, la tête garde sa règle (pas de ×4 gagné). De même, la ligne de vue s'arrête à
+l'impact annoncé s'il est dans la sphère : un impact forgé jusqu'à l'allonge devant l'épaule raccourcit le segment
+d'autant (un mur collé à la cible peut être sauté, `lineOfSight` est en journal seul). Ces deux marges ne se
+referment qu'en reproduisant la tenue côté serveur (piste B, #240 l'a écartée) ; la sphère est la plus petite qui
+contienne le bras dans toute pose.
 
 **Tests.** `tests/specs/ShotRules.spec.luau` (« membres jugés dans l'allonge de l'épaule ») : parties concernées,
 allonge exacte et contenant le bras dans toute pose, déplacement de l'épaule par la taille, membre au bout de

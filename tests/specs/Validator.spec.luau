@@ -1839,29 +1839,46 @@ return function(T, Loader)
 			end
 		)
 
-		-- Cette méthode permet d'ajouter un bras gauche R15 (UpperTorso, Waist, épaule, coude, poignet) à une cible
-		-- lorsqu'un test tire sur un membre (#240) ; bras le long du corps, comme sur le rig serveur. Renvoie la main et
-		-- la position de l'épaule.
+		-- Bras gauche R15 des tests de membres (#240) : articulations (C0/C1) et tailles, au format ShotRules.ArmRig.
+		local LEFT_ARM = {
+			shoulderC1 = Vector3.new(0, 0.4, 0),
+			elbowC0 = Vector3.new(0, -0.4, 0),
+			elbowC1 = Vector3.new(0, 0.2, 0),
+			wristC0 = Vector3.new(0, -0.5, 0),
+			wristC1 = Vector3.new(0, 0.125, 0),
+			upperArmSize = Vector3.new(1, 1.2, 1),
+			lowerArmSize = Vector3.new(1, 1.1, 1),
+			handSize = Vector3.new(1, 0.3, 1),
+			shoulderC0 = Vector3.new(-1, 0.5, 0),
+			waistC1 = CFrame.new(0, -0.8, 0),
+		}
+
+		-- Cette méthode permet d'ajouter un bras gauche R15 (UpperTorso, Waist, épaule, coude, poignet, d'après LEFT_ARM)
+		-- à une cible lorsqu'un test tire sur un membre (#240) ; bras le long du corps, comme sur le rig serveur. Renvoie
+		-- la main et la position de l'épaule.
 		local function addLeftArm(character)
 			local torso = addPart(character, "UpperTorso", Vector3.new(0, 1, 0))
-			local shoulderPos = torso.Position + Vector3.new(-1, 0.5, 0)
-			local function motor(name: string, holder, c0: Vector3, c1: Vector3)
+			local shoulderPos = torso.Position + LEFT_ARM.shoulderC0
+			-- Cette méthode permet de poser un Motor6D (C0, C1) dans sa partie Part1 lorsqu'on construit le bras.
+			local function motor(name: string, holder, c0: CFrame, c1: CFrame)
 				local m = Instance.new("Motor6D")
 				m.Name = name
-				m.C0 = CFrame.new(c0)
-				m.C1 = CFrame.new(c1)
+				m.C0 = c0
+				m.C1 = c1
+				-- Pose de l'Animator serveur (sous Lune, Transform n'a pas de valeur par défaut)
+				m.Transform = CFrame.identity
 				m.Parent = holder
 			end
-			motor("Waist", torso, Vector3.new(0, -0.2, 0), Vector3.new(0, -0.8, 0))
+			motor("Waist", torso, CFrame.new(0, -0.2, 0), LEFT_ARM.waistC1)
 			local upperArm = addPart(character, "LeftUpperArm", Vector3.new(-1, 1.1, 0))
-			upperArm.Size = Vector3.new(1, 1.2, 1)
-			motor("LeftShoulder", upperArm, Vector3.new(-1, 0.5, 0), Vector3.new(0, 0.4, 0))
+			upperArm.Size = LEFT_ARM.upperArmSize
+			motor("LeftShoulder", upperArm, CFrame.new(LEFT_ARM.shoulderC0), CFrame.new(LEFT_ARM.shoulderC1))
 			local lowerArm = addPart(character, "LeftLowerArm", Vector3.new(-1, 0.1, 0))
-			lowerArm.Size = Vector3.new(1, 1.1, 1)
-			motor("LeftElbow", lowerArm, Vector3.new(0, -0.4, 0), Vector3.new(0, 0.2, 0))
+			lowerArm.Size = LEFT_ARM.lowerArmSize
+			motor("LeftElbow", lowerArm, CFrame.new(LEFT_ARM.elbowC0), CFrame.new(LEFT_ARM.elbowC1))
 			local hand = addPart(character, "LeftHand", Vector3.new(-1, -0.6, 0))
-			hand.Size = Vector3.new(1, 0.3, 1)
-			motor("LeftWrist", hand, Vector3.new(0, -0.5, 0), Vector3.new(0, 0.125, 0))
+			hand.Size = LEFT_ARM.handSize
+			motor("LeftWrist", hand, CFrame.new(LEFT_ARM.wristC0), CFrame.new(LEFT_ARM.wristC1))
 			return hand, shoulderPos
 		end
 
@@ -1880,18 +1897,7 @@ return function(T, Loader)
 				T.expectEqual(Validator.authorizeHitscan(a, b.Character, hand, 0, shotAt(a, seen, world.now)), 115)
 				T.expectEqual(reportedChecks(world), "", "main tenue")
 				-- Silent aim : rayon à côté de la cible, au-delà de l'allonge et de la tolérance
-				local radius = ShotRules.limbRadius({
-					shoulderC1 = Vector3.new(0, 0.4, 0),
-					elbowC0 = Vector3.new(0, -0.4, 0),
-					elbowC1 = Vector3.new(0, 0.2, 0),
-					wristC0 = Vector3.new(0, -0.5, 0),
-					wristC1 = Vector3.new(0, 0.125, 0),
-					upperArmSize = Vector3.new(1, 1.2, 1),
-					lowerArmSize = Vector3.new(1, 1.1, 1),
-					handSize = Vector3.new(1, 0.3, 1),
-					shoulderC0 = Vector3.new(-1, 0.5, 0),
-					waistC1 = CFrame.new(0, -0.8, 0),
-				})
+				local radius = ShotRules.limbRadius(LEFT_ARM)
 				local aside = shoulder + Vector3.new(0, 0, -(radius + ShotRules.DIRECTION_BASE + 1))
 				T.expectEqual(Validator.authorizeHitscan(a, b.Character, hand, 10, shotAt(a, aside, world.now)), nil)
 				T.expectEqual(reportedChecks(world), "direction")
