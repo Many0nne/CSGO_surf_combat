@@ -42,6 +42,8 @@ local localPlayer: Player
 local setupCharFn: (char: Model) -> ()
 local stopCharFn: () -> ()
 local humDiedConn: RBXScriptConnection?
+-- Personnage déjà branché (mort, setup) : CharacterAdded et une reprise "alive" ne le branchent pas deux fois (#245)
+local boundChar: Model? = nil
 local resultTimer: thread?
 -- Dernière mort du joueur local annoncée par le serveur (qui, avec quoi), pour l'écran de mort
 local lastDeath: { killer: string?, weapon: string?, headshot: boolean, at: number }? = nil
@@ -111,6 +113,8 @@ local function setState(newState: State)
 	end
 	if newState == "MENU" then
 		DeathRagdoll.clear()
+		-- Mouvement et caméra coupés au menu : un personnage repris ensuite (JOUER, "alive") doit être rebranché
+		boundChar = nil
 	end
 
 	if newState == "MENU" then
@@ -161,13 +165,24 @@ end
 
 -- ── Liaison personnage ─────────────────────────────────────────────────────
 
+-- Cette méthode permet de savoir si le client est au menu (principal ou Infos) lorsqu'un personnage arrive, y compris
+-- après une attente (l'état a pu changer pendant le WaitForChild).
+local function atMenu(): boolean
+	return state == "MENU" or state == "INFOS"
+end
+
 local function onCharacterAdded(char: Model)
 	-- Au menu, un personnage n'est pas attendu (réapparition partie avant un retour au menu, détruite par le serveur, #157)
-	if state == "MENU" or state == "INFOS" then
+	if atMenu() then
 		return
 	end
 	-- Connecter la mort
 	local humanoid = char:WaitForChild("Humanoid") :: Humanoid
+	-- Après l'attente : retour au menu entre-temps (abandon, #245), ou personnage déjà branché par l'autre voie
+	if atMenu() or boundChar == char then
+		return
+	end
+	boundChar = char
 	if humDiedConn then
 		humDiedConn:Disconnect()
 	end
@@ -233,8 +248,8 @@ local function onSpawnReply(answer: any)
 	local char = localPlayer.Character
 	local humanoid = char and char.Parent and char:FindFirstChildOfClass("Humanoid")
 	local live = humanoid ~= nil and humanoid.Health > 0
-	-- En DEAD, pas de reprise à la main : CharacterAdded de ce personnage peut être encore en attente (double setup)
-	if SpawnRequestRules.onReply(attempt, answer, os.clock(), live) == "adopt" and char and state == "SPAWNING" then
+	-- onCharacterAdded ne branche pas deux fois le même personnage (CharacterAdded encore en attente, boundChar)
+	if SpawnRequestRules.onReply(attempt, answer, os.clock(), live) == "adopt" and char then
 		onCharacterAdded(char)
 	end
 end
