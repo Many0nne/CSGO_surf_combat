@@ -159,7 +159,8 @@ RemoteGuard.FEEDBACK_MAX_BYTES = 1000
 -- - MeleeDamage : couteau 0,4 s mini (2,5/s) ; HitscanDamage : AWP 1,46 s (0,7/s) ; WeaponAction : un Shoot par tir ou
 --   coup, un Reload par chargeur ; CharacterSync : 20 Hz, paquets regroupés après une coupure réseau ;
 --   RequestSpawn : clic du menu ; LeaveRound : clic MENU PRINCIPAL du menu en partie ;
---   SendFeedback : clic ENVOYER ; SaveSettings : 1 envoi par seconde au plus (LocalSettings) ; GetSettings : une demande au démarrage du client.
+--   SendFeedback : clic ENVOYER ; SaveSettings : 1 envoi par seconde au plus (LocalSettings) ; GetSettings : une
+--   demande au démarrage du client.
 -- Une arme plus rapide (automatique) demandera de relever HitscanDamage et WeaponAction.
 local N = NetworkProtocol.Names
 RemoteGuard.RULES = {
