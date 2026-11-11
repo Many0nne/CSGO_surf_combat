@@ -325,8 +325,9 @@ meleeRmt.OnServerEvent:Connect(function(player, targetCharacter, attackKind)
 	onHitVerdict(player, meleeRmt, targetCharacter, damage, false)
 end)
 
--- Cette méthode permet de tester la ligne de vue d'un tir lorsque le Validator la vérifie (#174) : raycast limité à la
--- géométrie de la map jouée (Workspace.Maps, en inclusion : personnages et objets mobiles ignorés).
+-- Cette méthode permet de tester la ligne de vue d'un tir ou d'un coup de mêlée (#176) lorsque le Validator la vérifie
+-- (#174) : raycast limité à la géométrie de la map jouée (Workspace.Maps, en inclusion : personnages et objets
+-- mobiles ignorés).
 -- Paramètres réutilisés tant que le dossier des maps est le même (reconstruits s'il est remplacé).
 local shotParams: RaycastParams? = nil
 local shotParamsMaps: Instance? = nil
@@ -361,7 +362,7 @@ Validator.setShotWorld({
 	isObstructed = isShotObstructed,
 	-- Cette méthode permet de journaliser un contrôle de tir en échec lorsqu'il est constaté (catégorie Hitscan, une
 	-- source par contrôle pour le décompte des violations fortes).
-	-- Catégorie Melee pour l'equip d'une arme de mêlée (#175).
+	-- Catégorie Melee pour l'equip d'une arme de mêlée (#175), l'orientation et la ligne de vue d'un coup (#176).
 	report = function(attacker, check, severity, detail, category)
 		local cat = category or CheatLog.Category.HITSCAN
 		CheatLog.report(attacker, cat, severity, detail, cat .. ":" .. check)

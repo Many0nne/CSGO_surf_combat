@@ -72,8 +72,9 @@ return function(T, Loader)
 		local Participants = loader:require("src/server/Participants")
 		local ShotRules = loader:require("src/server/ShotRules")
 		-- Monde simulé de la validation des tirs (#174) : horloge serveur, historiques (fonction t -> position par
-		-- personnage, sinon pas d'historique), obstacle de la map, violations reçues.
-		local world = { now = 100, histories = {}, obstructed = false, reports = {} }
+		-- personnage, sinon pas d'historique), obstacle de la map (booléen, ou fonction (from, delta) -> booléen),
+		-- violations reçues.
+		local world = { now = 100, histories = {}, obstructed = false :: any, reports = {} }
 		Real.setShotWorld({
 			serverNow = function()
 				return world.now
@@ -82,7 +83,10 @@ return function(T, Loader)
 				local history = world.histories[char]
 				return if history then history(math.clamp(t, world.now - 0.4, world.now)) else nil
 			end,
-			isObstructed = function()
+			isObstructed = function(from, delta)
+				if type(world.obstructed) == "function" then
+					return world.obstructed(from, delta)
+				end
 				return world.obstructed
 			end,
 			report = function(attacker, check, severity, detail, category)
@@ -1014,6 +1018,198 @@ return function(T, Loader)
 			T.expectEqual(Validator.authorizeHitscan(bot, b.Character, head, 0), 460, "tir de bot refusé")
 			T.expectEqual(Validator.authorizeHitscan(bot, b.Character, rootOf(b.Character), 2), 115, "second tir")
 			T.expectEqual(reportedChecks(world), "")
+		end)
+	end)
+
+	T.describe("Validator : orientation et ligne de vue de la mêlée (#176)", function()
+		-- Cette méthode permet de préparer un tireur au couteau à l'origine, tourné vers facing, et une cible à 5 studs
+		-- devant lui (vers +X) lorsqu'un test valide un coup ; modes : contrôles à forcer, les autres gardent leur défaut.
+		local function setupMelee(facing: Vector3?, modes: { [string]: string }?)
+			local Validator, makePlayer, makeBot, world, ShotRules = setup()
+			for check, mode in modes or {} do
+				ShotRules.MODES[check] = mode
+			end
+			local a = makePlayer(Vector3.zero, "M9Bayonet", nil, facing or Vector3.new(1, 0, 0))
+			-- La cible regarde le tireur : pas de backstab, 50 dégâts au slash
+			local b = makePlayer(Vector3.new(5, 0, 0), nil, nil, Vector3.new(-1, 0, 0))
+			return Validator, a, b, world, makeBot, ShotRules, makePlayer
+		end
+
+		local ALL_BLOCK = { orientation = "block", meleeLineOfSight = "block" }
+
+		-- Cette méthode permet de lister les contrôles signalés au journal lorsqu'un test les vérifie.
+		local function reportedChecks(world): string
+			local checks = {}
+			for _, report in world.reports do
+				table.insert(checks, report.check)
+			end
+			return table.concat(checks, ",")
+		end
+
+		T.it("accepte un coup honnête face à la cible sans aucune violation, contrôles bloquants", function()
+			local Validator, a, b, world = setupMelee(nil, ALL_BLOCK)
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), 50)
+			T.expectEqual(reportedChecks(world), "")
+		end)
+
+		T.it("livre orientation et ligne de vue de la mêlée en journal seul", function()
+			local _, _, _, _, _, ShotRules = setupMelee()
+			T.expectEqual(ShotRules.MODES.orientation, "log")
+			T.expectEqual(ShotRules.MODES.meleeLineOfSight, "log")
+		end)
+
+		T.it(
+			"coup dans le dos du tireur : journalisé en mode log, refusé en mode block sans relancer la cadence",
+			function()
+				-- Le tireur regarde vers -X, la cible est derrière lui
+				local Validator, a, b, world = setupMelee(Vector3.new(-1, 0, 0))
+				T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), 50, "mode log : coup appliqué")
+				T.expectEqual(reportedChecks(world), "orientation")
+				T.expectEqual(world.reports[1].category, "Melee")
+				T.expectEqual(world.reports[1].severity, "medium")
+				T.expect(string.find(world.reports[1].detail, "journal seul", 1, true) ~= nil, "mode non indiqué")
+
+				Validator, a, b, world = setupMelee(Vector3.new(-1, 0, 0), ALL_BLOCK)
+				T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 10), nil, "mode block : coup refusé")
+				T.expectEqual(reportedChecks(world), "orientation")
+				-- Le tireur se retourne : la cadence n'a pas été relancée par le refus
+				rootOf(a.Character).CFrame = CFrame.lookAt(Vector3.zero, Vector3.new(1, 0, 0))
+				T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 10.1), 50, "cadence relancée")
+			end
+		)
+
+		T.it("coup sur le côté au-delà de l'angle permis : refusé en mode block", function()
+			-- Cible à 90° du cap, à 7 studs : permis 70° + asin(2 / 7) ≈ 86,6°
+			local Validator, a, _, world, _, _, makePlayer = setupMelee(Vector3.new(1, 0, 0), ALL_BLOCK)
+			local side = makePlayer(Vector3.new(0, 0, 7))
+			T.expectEqual(Validator.authorizeMelee(a, side.Character, "primary", 0), nil)
+			T.expectEqual(reportedChecks(world), "orientation")
+		end)
+
+		T.it("coup à travers un mur : journalisé en mode log, refusé en mode block", function()
+			local Validator, a, b, world = setupMelee()
+			world.obstructed = true
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), 50, "mode log : coup appliqué")
+			T.expectEqual(reportedChecks(world), "meleeLineOfSight")
+			T.expectEqual(world.reports[1].category, "Melee")
+
+			Validator, a, b, world = setupMelee(nil, ALL_BLOCK)
+			world.obstructed = true
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), nil, "mode block : coup refusé")
+			T.expectEqual(reportedChecks(world), "meleeLineOfSight")
+		end)
+
+		T.it("accepte un coup par-dessus un obstacle bas : la ligne œil à œil est dégagée", function()
+			local Validator, a, b, world = setupMelee(nil, ALL_BLOCK)
+			-- Caisse basse : seul le segment à hauteur des racines (Y = 0) la traverse
+			world.obstructed = function(from: Vector3)
+				return from.Y < 1
+			end
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), 50)
+			T.expectEqual(reportedChecks(world), "")
+		end)
+
+		T.it("accepte une cible qui contourne le tireur : vue devant lui avant le rembobinage", function()
+			local Validator, a, b, world = setupMelee(Vector3.new(1, 0, 0), ALL_BLOCK)
+			-- La cible était devant (+X) jusqu'à now - 0,15 s, elle est maintenant passée dans le dos du tireur
+			world.histories[b.Character] = function(t)
+				return if t < world.now - 0.15 then Vector3.new(5, 0, 0) else Vector3.new(-4, 0, 0)
+			end
+			-- Elle fait face au tireur (pas de backstab)
+			rootOf(b.Character).Position = Vector3.new(-4, 0, 0)
+			rootOf(b.Character).CFrame = CFrame.lookAt(Vector3.new(-4, 0, 0), Vector3.zero)
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), 50)
+			T.expectEqual(reportedChecks(world), "")
+		end)
+
+		T.it("accepte un tireur qui tourne : cible à 60° de son cap relayé", function()
+			local Validator, a, b, world = setupMelee(nil, ALL_BLOCK)
+			-- Cap relayé en retard : 60° à côté de la cible à 5 studs
+			local yaw = math.rad(60)
+			rootOf(a.Character).CFrame = CFrame.lookAt(Vector3.zero, Vector3.new(math.cos(yaw), 0, math.sin(yaw)))
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), 50)
+			T.expectEqual(reportedChecks(world), "")
+		end)
+
+		T.it("élargit l'angle au contact : cible collée sur le côté acceptée", function()
+			local Validator, a, _, world, _, _, makePlayer = setupMelee(Vector3.new(1, 0, 0), ALL_BLOCK)
+			-- 100° du cap à 2,1 studs : permis 70° + asin(2 / 2,1) ≈ 142°
+			local yaw = math.rad(100)
+			local close = makePlayer(Vector3.new(math.cos(yaw), 0, math.sin(yaw)) * 2.1)
+			T.expectEqual(Validator.authorizeMelee(a, close.Character, "primary", 0), 50)
+			T.expectEqual(reportedChecks(world), "")
+		end)
+
+		T.it("borne le rembobinage : une cible devant le tireur il y a plus de 0,4 s est refusée", function()
+			local Validator, a, b, world = setupMelee(Vector3.new(1, 0, 0), ALL_BLOCK)
+			world.histories[b.Character] = function(t)
+				return if t < world.now - 0.4 then Vector3.new(5, 0, 0) else Vector3.new(-5, 0, 0)
+			end
+			rootOf(b.Character).Position = Vector3.new(-5, 0, 0)
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), nil)
+			T.expectEqual(reportedChecks(world), "orientation")
+		end)
+
+		T.it("teste la ligne de vue sur une position devant le tireur, pas derrière lui", function()
+			local Validator, a, b, world = setupMelee(Vector3.new(1, 0, 0), ALL_BLOCK)
+			-- Devant le tireur (+X), la cible n'était vue qu'à travers un mur ; dégagée seulement dans son dos : refusé
+			world.histories[b.Character] = function(t)
+				return if t < world.now - 0.2 then Vector3.new(5, 0, 0) else Vector3.new(-5, 0, 0)
+			end
+			world.obstructed = function(_, delta: Vector3)
+				return delta.X > 0
+			end
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), nil)
+			T.expectEqual(reportedChecks(world), "meleeLineOfSight")
+		end)
+
+		T.it("refuse une cible morte même si son historique répond encore (corps en place)", function()
+			local Validator, a, b, world = setupMelee(nil, ALL_BLOCK)
+			world.histories[b.Character] = function()
+				return Vector3.new(5, 0, 0)
+			end
+			b.Character:FindFirstChildWhichIsA("Humanoid").Health = 0
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), nil)
+			T.expectEqual(reportedChecks(world), "")
+		end)
+
+		T.it("ne refuse aucun coup de bot, de dos et à travers un mur, et ne journalise rien", function()
+			local Validator, _, b, world, makeBot = setupMelee(nil, ALL_BLOCK)
+			world.obstructed = true
+			-- Bot tourné vers -X, dos à la cible (+X) derrière un mur
+			local bot = makeBot(Vector3.zero, "M9Bayonet")
+			rootOf(bot.character).CFrame = CFrame.lookAt(Vector3.zero, Vector3.new(-1, 0, 0))
+			T.expectEqual(Validator.authorizeMelee(bot, b.Character, "primary", 0), 50, "coup de bot refusé")
+			T.expectEqual(Validator.authorizeMelee(bot, b.Character, "primary", 0.5), 50, "second coup")
+			T.expectEqual(reportedChecks(world), "")
+		end)
+
+		T.it("refuse les coups de joueurs tant que le monde n'est pas branché, pas ceux des bots", function()
+			local owners = {}
+			local loader = Loader.new({
+				Players = {
+					GetPlayerFromCharacter = function(_, character)
+						return owners[character]
+					end,
+				},
+			}, { warn = function() end })
+			local Real = loader:require("src/server/Validator")
+			local Participants = loader:require("src/server/Participants")
+			local player =
+				{ UserId = 1, Name = "Joueur", Character = makeCharacter(Vector3.zero, nil, Vector3.new(1, 0, 0)) }
+			owners[player.Character] = player
+			local knife = Instance.new("Tool")
+			knife.Name = "M9Bayonet"
+			knife.Parent = player.Character
+			Real.noteEquip(Participants.fromPlayer(player :: any), knife, LONG_AGO)
+			local bot = Participants.addBot("Marcel")
+			local target = makeCharacter(Vector3.new(5, 0, 0), nil, Vector3.new(-1, 0, 0))
+			Participants.setCharacter(bot, target)
+			T.expectEqual(Real.authorizeMelee(Participants.fromPlayer(player :: any), target, "primary", 0), nil)
+			local botKnife = Instance.new("Tool")
+			botKnife.Name = "M9Bayonet"
+			botKnife.Parent = target
+			T.expectEqual(Real.authorizeMelee(bot, player.Character, "primary", 0), 50)
 		end)
 	end)
 
