@@ -35,7 +35,7 @@ CheatLog.Category = {
 	SPAWN = "Spawn", -- réapparition (#171)
 	MOVEMENT = "Movement", -- vitesse, téléport, noclip, vol (#172)
 	HITSCAN = "Hitscan", -- tir : origine, direction, ligne de vue, equip, chargeur (#174, #175)
-	MELEE = "Melee", -- mêlée : orientation, ligne de vue (#176)
+	MELEE = "Melee", -- mêlée : equip (#175), orientation, ligne de vue (#176)
 }
 
 -- Poids d'une violation dans le score, et décroissance du score (points par seconde).

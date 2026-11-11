@@ -3,6 +3,7 @@
 -- Aucun service hors les modules partagés (ReplicatedStorage), ni workspace : positions rembobinées, vitesses et
 -- raycast de ligne de vue sont fournis par l'appelant (Validator). Testées sous Lune (tests/specs/ShotRules.spec.luau, tests/specs/Validator.spec.luau).
 -- Chaque contrôle a un mode : "log" (violation journalisée, tir appliqué : phase de mesure) ou "block" (tir refusé).
+-- Durée d'equip et chargeur (#175, « T2 ») : règles pures ici aussi, l'état (instants, compteurs) vit dans Validator.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -26,16 +27,24 @@ ShotRules.Check = {
 	DIRECTION = "direction", -- rayon et point d'impact sur la partie annoncée, rembobinée
 	DISTANCE = "distance", -- |hitPos - origin| dans la portée
 	LINE_OF_SIGHT = "lineOfSight", -- aucun obstacle de la map entre origine et impact
+	EQUIP = "equip", -- arme sortie depuis sa durée d'equip (#175, tir et mêlée)
+	MAGAZINE = "magazine", -- chargeur non vide, ou rechargé (#175, tir)
 }
 
+-- Catégories du journal (mêmes valeurs que CheatLog.Category) : le contrôle d'equip vaut aussi pour la mêlée.
+ShotRules.Category = { HITSCAN = "Hitscan", MELEE = "Melee" }
+
 -- Mode de chaque contrôle. "log" tant que les faux positifs ne sont pas mesurés en jeu (docs/anticheat.md, « T1 » :
--- procédure pour passer en "block") ; forme et distance ne dépendent pas du réseau, donc bloquants d'emblée.
+-- procédure pour passer en "block") ; forme et distance ne dépendent pas du réseau, donc bloquants d'emblée. Equip et
+-- chargeur (#175) : règles déterministes à tolérance de gigue, sans faux positif mesuré, bloquants d'emblée.
 ShotRules.MODES = {
 	shape = "block",
 	origin = "log",
 	direction = "log",
 	distance = "block",
 	lineOfSight = "log",
+	equip = "block",
+	magazine = "block",
 } :: { [string]: Mode }
 
 -- Gravité d'un échec au journal (valeurs de CheatLog.Severity) : une forme impossible ne vient jamais de notre client
@@ -46,6 +55,8 @@ ShotRules.SEVERITY = {
 	direction = "medium",
 	distance = "medium",
 	lineOfSight = "medium",
+	equip = "medium",
+	magazine = "medium",
 } :: { [string]: Severity }
 
 -- Ancienne borne du serveur (studs entre racines), avant #174 : tout tir au-delà était refusé. Pendant la phase de
@@ -76,6 +87,18 @@ ShotRules.RANGE_TOLERANCE = 10
 ShotRules.LINE_OF_SIGHT_END_MARGIN = 0.5
 -- Fenêtre (s) sur laquelle la vitesse d'un personnage est estimée dans son historique.
 ShotRules.SPEED_WINDOW = 0.1
+-- Equip (#175) : une touche est acceptée à partir de equippedAt + EquipTime - EQUIP_TOLERANCE. equippedAt est
+-- l'arrivée de l'outil dans le personnage sur le serveur, la touche arrive au moins EquipTime plus tard (le client
+-- honnête n'est jamais prêt plus tôt, #184) : la tolérance couvre la gigue entre les deux paquets.
+ShotRules.EQUIP_TOLERANCE = 0.2
+-- Chargeur (#175) : un rechargement compte comme fini ReloadTime - RELOAD_TOLERANCE après l'arrivée de l'action
+-- Reload (même gigue entre l'action et la touche suivante).
+ShotRules.RELOAD_TOLERANCE = 0.2
+-- Changement d'arme pendant un rechargement : celui-ci compte comme fini s'il ne lui manquait pas plus de
+-- RELOAD_CANCEL_TOLERANCE (s). Une action Reload arrivée en retard ne doit pas faire refuser tout le chargeur suivant à
+-- un joueur qui a fini de recharger puis changé d'arme aussitôt ; un tricheur n'y gagne rien, ressortir l'arme lui
+-- coûte son equip (AWP : 1,38 s au moins), plus que cette marge.
+ShotRules.RELOAD_CANCEL_TOLERANCE = 1
 
 -- Cette méthode permet de vérifier qu'un nombre est fini et borné lorsqu'un argument de tir arrive.
 local function isBounded(n: any, bound: number): boolean
@@ -215,6 +238,78 @@ function ShotRules.speedBetween(older: Vector3?, newer: Vector3?, dt: number): n
 		return 0
 	end
 	return (newer - older).Magnitude / dt
+end
+
+-- Cette méthode permet de vérifier la durée d'equip lorsqu'une touche arrive : l'outil en main est arrivé dans le
+-- personnage (equippedAt, nil s'il n'a pas été vu par le serveur) depuis au moins equipTime - EQUIP_TOLERANCE.
+function ShotRules.checkEquip(equippedAt: number?, equipTime: number, now: number): (boolean, string?)
+	if equippedAt == nil then
+		return false, "arme en main sans equip vu par le serveur"
+	end
+	local elapsed = now - equippedAt
+	if elapsed >= equipTime - ShotRules.EQUIP_TOLERANCE then
+		return true
+	end
+	return false,
+		string.format("touche %.2f s après l'equip (min %.2f s)", elapsed, equipTime - ShotRules.EQUIP_TOLERANCE)
+end
+
+-- Chargeur d'une arme d'un participant (#175) : touches acceptées depuis le dernier rechargement fini, et rechargement
+-- en cours (instant de l'action Reload, nil sinon).
+export type Magazine = { shots: number, reloadAt: number? }
+
+-- Cette méthode permet de créer le chargeur plein d'une arme lorsqu'elle tire ou recharge pour la première fois.
+function ShotRules.newMagazine(): Magazine
+	return { shots = 0, reloadAt = nil }
+end
+
+-- Cette méthode permet de terminer le rechargement en cours lorsqu'il a duré reloadTime - tolerance (RELOAD_TOLERANCE
+-- par défaut) : le chargeur est rempli (réserve illimitée, #165).
+function ShotRules.settleReload(mag: Magazine, reloadTime: number, now: number, tolerance: number?)
+	local reloadAt = mag.reloadAt
+	if reloadAt and now - reloadAt >= reloadTime - (tolerance or ShotRules.RELOAD_TOLERANCE) then
+		mag.shots = 0
+		mag.reloadAt = nil
+	end
+end
+
+-- Cette méthode permet de démarrer un rechargement lorsque l'action Reload arrive : un rechargement déjà fini est
+-- d'abord compté, un rechargement inachevé repart de zéro.
+function ShotRules.startReload(mag: Magazine, reloadTime: number, now: number)
+	ShotRules.settleReload(mag, reloadTime, now)
+	mag.reloadAt = now
+end
+
+-- Cette méthode permet d'annuler le rechargement en cours lorsque l'arme est rangée ou changée (comme le client) ;
+-- un rechargement fini, à RELOAD_CANCEL_TOLERANCE près (retard de l'action Reload), reste acquis.
+function ShotRules.cancelReload(mag: Magazine, reloadTime: number, now: number)
+	ShotRules.settleReload(mag, reloadTime, now, ShotRules.RELOAD_CANCEL_TOLERANCE)
+	mag.reloadAt = nil
+end
+
+-- Cette méthode permet de vérifier le chargeur lorsqu'une touche arrive : aucun rechargement inachevé (le client ne tire
+-- pas en RELOADING, un Reload en boucle ne remet rien à zéro) et moins de size touches depuis le dernier rechargement.
+function ShotRules.checkMagazine(mag: Magazine, size: number, reloadTime: number, now: number): (boolean, string?)
+	ShotRules.settleReload(mag, reloadTime, now)
+	local reloadAt = mag.reloadAt
+	if reloadAt then
+		return false,
+			string.format(
+				"touche pendant le rechargement (depuis %.2f s, min %.2f s)",
+				-- Un Reload reçu pendant l'equip démarre à la fin de l'equip : pas de durée négative au journal
+				math.max(0, now - reloadAt),
+				reloadTime - ShotRules.RELOAD_TOLERANCE
+			)
+	end
+	if mag.shots < size then
+		return true
+	end
+	return false, string.format("chargeur vide (%d touches) sans rechargement", mag.shots)
+end
+
+-- Cette méthode permet de compter une touche acceptée dans le chargeur lorsqu'elle est appliquée.
+function ShotRules.countShot(mag: Magazine)
+	mag.shots += 1
 end
 
 -- Cette méthode permet de savoir si l'échec d'un contrôle refuse le tir lorsqu'il est constaté (mode "block") ;

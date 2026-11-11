@@ -173,4 +173,64 @@ return function(T, Loader)
 			end
 		end)
 	end)
+
+	T.describe("ShotRules : equip et chargeur (#175)", function()
+		T.it("borne l'equip à EquipTime moins la tolérance, refuse un equip inconnu", function()
+			local min = 1.58 - ShotRules.EQUIP_TOLERANCE
+			T.expectEqual((ShotRules.checkEquip(10, 1.58, 10 + min)), true)
+			T.expectEqual((ShotRules.checkEquip(10, 1.58, 10 + min - 0.01)), false)
+			T.expectEqual((ShotRules.checkEquip(nil, 1.58, 1000)), false)
+		end)
+
+		T.it("livre equip et chargeur bloquants", function()
+			T.expectEqual(ShotRules.blocks("equip"), true)
+			T.expectEqual(ShotRules.blocks("magazine"), true)
+		end)
+
+		T.it("remplit le chargeur à la fin d'un rechargement, pas avant", function()
+			local mag = ShotRules.newMagazine()
+			for _ = 1, 5 do
+				ShotRules.countShot(mag)
+			end
+			T.expectEqual((ShotRules.checkMagazine(mag, 5, 3.7, 20)), false, "vide")
+			ShotRules.startReload(mag, 3.7, 20)
+			T.expectEqual((ShotRules.checkMagazine(mag, 5, 3.7, 23)), false, "rechargement en cours")
+			T.expectEqual((ShotRules.checkMagazine(mag, 5, 3.7, 20 + 3.7 - ShotRules.RELOAD_TOLERANCE)), true, "fini")
+			T.expectEqual(mag.shots, 0)
+		end)
+
+		T.it("annule un rechargement inachevé, garde un rechargement fini", function()
+			local mag = ShotRules.newMagazine()
+			mag.shots = 5
+			ShotRules.startReload(mag, 3.7, 0)
+			ShotRules.cancelReload(mag, 3.7, 1)
+			T.expectEqual(mag.shots, 5, "inachevé")
+			T.expectEqual(mag.reloadAt, nil)
+			ShotRules.startReload(mag, 3.7, 2)
+			ShotRules.cancelReload(mag, 3.7, 10)
+			T.expectEqual(mag.shots, 0, "fini avant le changement d'arme")
+		end)
+
+		T.it("refuse toute touche pendant un rechargement inachevé, même chargeur non vide", function()
+			local mag = ShotRules.newMagazine()
+			mag.shots = 2
+			ShotRules.startReload(mag, 3.7, 0)
+			local ok, detail = ShotRules.checkMagazine(mag, 5, 3.7, 1)
+			T.expectEqual(ok, false)
+			T.expect(string.find(detail or "", "pendant le rechargement", 1, true) ~= nil, detail)
+			T.expectEqual((ShotRules.checkMagazine(mag, 5, 3.7, 3.5)), true, "fini à la tolérance près")
+		end)
+
+		T.it("redémarre un rechargement inachevé quand Reload revient", function()
+			local mag = ShotRules.newMagazine()
+			mag.shots = 3
+			ShotRules.startReload(mag, 3.7, 0)
+			ShotRules.startReload(mag, 3.7, 2) -- inachevé : repart de 2
+			T.expectEqual(mag.reloadAt, 2)
+			T.expectEqual(mag.shots, 3)
+			T.expectEqual((ShotRules.checkMagazine(mag, 5, 3.7, 5)), false, "compté depuis le second Reload")
+			T.expectEqual((ShotRules.checkMagazine(mag, 5, 3.7, 5.5)), true)
+			T.expectEqual(mag.shots, 0)
+		end)
+	end)
 end
