@@ -91,6 +91,13 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   `WeaponSystem.getAmmo` à chaque Heartbeat (met à jour les textes seulement si les valeurs changent), masqué sans
   chargeur (couteau) et hors partie (`HUDRules.gameHudVisible`, via `GameStateController.applyGameHud`). Contrairement à
   la barre d'armes, il ne s'estompe pas.
+- `src/client/ui/Crosshair.luau` (#195) : réglage « Visée simplifiée » (Réglages > GRAPHISMES, `PlayerSettings.simpleAim`, coupé par
+  défaut). Quatre traits fins os (`ARM_LENGTH` 9 px, `ARM_THICKNESS` 2, `CENTER_GAP` 5) sans point central, doublés d'un contour
+  noir de `OUTLINE` 1 px (`OUTLINE_TRANSPARENCY` 0,1) : sur fond blanc seul le contour se lit, sur sol ou mur sombre le trait os.
+  Taille fixe en pixels, pas de `scaledRoot`. `ScreenGui` en `ScreenInsets.None` pour tomber sur le centre exact de la caméra,
+  comme la lunette. Affichage = `HUDRules.crosshairVisible` : réglage actif, HUD de jeu visible (`GameStateController.applyGameHud`,
+  donc ni menu, ni mort, ni résultat), lunette absente (`ScopeOverlay.setVisible`) et Réglages fermé (`SettingsMenu.setOpen`).
+  Toutes les armes, couteau compris. Piste rejetée : point rouge central (criard, hors de la matière du HUD).
 - `src/client/ui/RoundHUD.luau` : timer et rang en haut au centre (chiffres os droits avec ombre, libellés ambrés, fondu
   sombre en deux moitiés de coin, timer en rouge d'impact sous 30 s) ; classement sous Tab : pas de panneau, voile sombre
   central qui s'efface vers les côtés, titre « CLASSEMENT » sur un filet ambre, colonnes K / M / K/M, ligne du joueur
@@ -143,6 +150,13 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
 - **Libellé d'une touche (#100) :** `Enum.KeyCode` désigne la position sur un clavier QWERTY. Sur un clavier AZERTY,
   `KeyCode.Q` est la touche imprimée « A » : afficher `UserInputService:GetStringForKeyCode` (`LocalSettings.keyText`),
   sauf pour les chiffres du haut, qui donneraient « & » ou « é ».
+- **Piloter le vrai jeu au MCP (#195) :** un `require` dans `execute_luau` (Client) charge une copie des modules : `requestPlay`,
+  `LocalSettings.update` ou `getState` n'agissent pas sur le jeu qui tourne. Lire les `ScreenGui` de `PlayerGui` (leur `Enabled`
+  est réel) et passer par l'interface (`user_mouse_input` en coordonnées d'écran, soit 0,8 fois celles de `screen_capture`) ou
+  par `DebugPlaytest` pour lancer la partie. Les chemins `instance_path` avec accents (« RÉGLAGES ») ne se résolvent pas, et un
+  nom en double (onglet et cadre « GRAPHISMES ») est ambigu : cliquer aux coordonnées. En partie, ni les touches (P, 1) ni le
+  clic droit (lunette) ne passent par le MCP ; équiper côté serveur (`Humanoid:EquipTool`). Les bots tuent le joueur en boucle :
+  `workspace:SetAttribute("DebugBots", 0)` avant de tester.
 - **Écran Réglages piloté au MCP :** `user_mouse_input` prend ici les coordonnées de l'`AbsolutePosition` des boutons
   (`ScreenGui` en `IgnoreGuiInset`), et un refus de touche (affiché 1,5 s) se lit avec un relevé branché avant l'appui :
   deux appels MCP successifs prennent plus de temps que ça.

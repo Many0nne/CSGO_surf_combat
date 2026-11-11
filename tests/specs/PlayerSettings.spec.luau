@@ -14,6 +14,7 @@ return function(T, Loader)
 				T.expectEqual(s.scopeMultiplier, CameraConfig.SCOPE_SENS_MULT)
 				T.expectEqual(s.shadows, nil)
 				T.expectEqual(s.wheel, "previous")
+				T.expectEqual(s.simpleAim, false)
 				T.expectEqual(keysOf(s.slotKeys), keysOf(PlayerSettings.DEFAULT_SLOT_KEYS))
 			end
 		end)
@@ -26,8 +27,10 @@ return function(T, Loader)
 				scopeMultiplier = 1.5,
 				shadows = false,
 				wheel = "next",
+				simpleAim = true,
 				slotKeys = keys,
 			})
+			T.expectEqual(s.simpleAim, true)
 			T.expectEqual(s.sensitivity, 0.25)
 			T.expectEqual(s.scopeMultiplier, 1.5)
 			T.expectEqual(s.shadows, false)
@@ -45,6 +48,9 @@ return function(T, Loader)
 			)
 			T.expectEqual(PlayerSettings.sanitize({ shadows = "oui" }).shadows, nil)
 			T.expectEqual(PlayerSettings.sanitize({ wheel = "haut" }).wheel, "previous")
+			for _, bad in { "oui", 1, {} } do
+				T.expectEqual(PlayerSettings.sanitize({ simpleAim = bad }).simpleAim, false)
+			end
 		end)
 
 		T.it("remet toutes les touches par défaut si une touche est en double, réservée ou manquante", function()

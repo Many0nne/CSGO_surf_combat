@@ -13,6 +13,8 @@ export type Settings = {
 	-- nil : ombres de la place (Lighting.GlobalShadows d'origine), le joueur n'a rien choisi
 	shadows: boolean?,
 	wheel: WheelMode,
+	-- Visée simplifiée (#195) : crosshair au centre de l'écran, désactivé par défaut
+	simpleAim: boolean,
 	-- une touche par emplacement de la barre d'armes, dans l'ordre des emplacements
 	slotKeys: { string },
 }
@@ -81,6 +83,7 @@ function PlayerSettings.defaults(): Settings
 		scopeMultiplier = CameraConfig.SCOPE_SENS_MULT,
 		shadows = nil,
 		wheel = PlayerSettings.DEFAULT_WHEEL,
+		simpleAim = false,
 		slotKeys = table.clone(PlayerSettings.DEFAULT_SLOT_KEYS),
 	}
 end
@@ -142,6 +145,9 @@ function PlayerSettings.sanitize(raw: any): Settings
 	end
 	if table.find(PlayerSettings.WHEEL_MODES, raw.wheel) then
 		settings.wheel = raw.wheel
+	end
+	if type(raw.simpleAim) == "boolean" then
+		settings.simpleAim = raw.simpleAim
 	end
 	settings.slotKeys = sanitizeKeys(raw.slotKeys)
 	return settings
