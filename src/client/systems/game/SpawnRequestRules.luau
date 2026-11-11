@@ -9,7 +9,7 @@ SpawnRequestRules.TICK = 0.25 -- cadence de la surveillance d'une demande
 SpawnRequestRules.REPLY_TIMEOUT = 3 -- sans réponse depuis l'envoi : renvoi
 SpawnRequestRules.MAX_UNANSWERED = 3 -- envois sans réponse avant l'abandon
 SpawnRequestRules.LOAD_TIMEOUT = 15 -- demande acceptée, personnage pas arrivé : abandon
-SpawnRequestRules.GIVE_UP_AFTER = 30 -- borne totale d'une demande, quoi qu'il arrive
+SpawnRequestRules.GIVE_UP_AFTER = 30 -- borne des envois (+ LOAD_TIMEOUT si acceptée juste avant)
 -- Écart minimal entre deux envois : la garde du serveur (RemoteGuard.RULES.RequestSpawn) en admet 1 par seconde
 SpawnRequestRules.MIN_RESEND = 1.2
 SpawnRequestRules.RESULT_RETRY = 1.5 -- bannière de fin (6 s) : renvoi à ce rythme jusqu'au round suivant
@@ -24,10 +24,6 @@ export type Attempt = {
 	acceptedAt: number?,
 	retryAt: number?,
 }
-
--- Réponse du serveur (SpawnRules.Reply) : "accepted", "failed" ou un motif de refus ("spawning", "alive", "result",
--- "early" avec retryIn, le délai restant).
-export type Reply = { status: string, retryIn: number? }
 
 export type TickAction = "wait" | "send" | "giveUp"
 export type ReplyAction = "wait" | "adopt"
@@ -45,9 +41,8 @@ function SpawnRequestRules.noteSent(attempt: Attempt, now: number)
 	attempt.retryAt = nil
 end
 
--- Cette méthode permet de décider quoi faire d'une réponse du serveur lorsqu'elle arrive pendant SPAWNING : attendre
--- le personnage (accepté, chargement en vol), reprendre le personnage déjà en jeu ("alive" et personnage local
--- vivant), ou programmer un renvoi (bannière de fin, demande précoce, corps encore en place, échec du chargement).
+-- Cette méthode permet de traiter une réponse du serveur (SpawnRules.Reply) arrivée en SPAWNING : attendre le
+-- personnage, reprendre celui déjà en jeu ("alive" et personnage local vivant), ou programmer un renvoi.
 function SpawnRequestRules.onReply(attempt: Attempt, reply: any, now: number, hasLiveCharacter: boolean): ReplyAction
 	if type(reply) ~= "table" or type(reply.status) ~= "string" then
 		return "wait"
@@ -82,13 +77,14 @@ function SpawnRequestRules.onReply(attempt: Attempt, reply: any, now: number, ha
 end
 
 -- Cette méthode permet de décider, à chaque pas de la surveillance d'une demande en SPAWNING, s'il faut attendre,
--- (r)envoyer la demande ou abandonner (retour au menu) ; jamais plus de GIVE_UP_AFTER au total.
+-- (r)envoyer la demande ou abandonner (retour au menu) ; borné par GIVE_UP_AFTER + LOAD_TIMEOUT.
 function SpawnRequestRules.onTick(attempt: Attempt, now: number): TickAction
-	if now - attempt.startedAt >= SpawnRequestRules.GIVE_UP_AFTER then
-		return "giveUp"
-	end
+	-- Acceptée : le chargement a toujours LOAD_TIMEOUT, même accepté juste avant GIVE_UP_AFTER
 	if attempt.acceptedAt then
 		return if now - attempt.acceptedAt >= SpawnRequestRules.LOAD_TIMEOUT then "giveUp" else "wait"
+	end
+	if now - attempt.startedAt >= SpawnRequestRules.GIVE_UP_AFTER then
+		return "giveUp"
 	end
 	if attempt.retryAt then
 		return if now >= attempt.retryAt then "send" else "wait"

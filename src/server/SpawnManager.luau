@@ -210,7 +210,12 @@ function SpawnManager.init(
 			return
 		end
 		-- Avant le journal et le chargement : le client est fixé tout de suite, même si la suite échoue
-		reply(player, SpawnRules.reply(refusal, request))
+		reply(player, SpawnRules.reply(refusal, request, away[player] == true))
+		-- Personnage vivant que le client reprend (il l'avait ignoré au menu) : remis au round comme une apparition
+		if refusal == "alive" and SpawnRules.isAlive(player.Character) then
+			away[player] = nil
+			hooks.beforeSpawn(player)
+		end
 		if refusal then
 			local severity = REFUSAL_SEVERITY[refusal]
 			if severity then

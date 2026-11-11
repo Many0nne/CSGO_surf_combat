@@ -78,6 +78,14 @@ return function(T, Loader)
 			T.expectEqual(SpawnRules.reply("result", request({})).retryIn, nil)
 		end)
 
+		T.it(
+			"« spawning » d'un joueur revenu du menu non servie (bannière) : « result », pas d'attente",
+			function()
+				T.expectEqual(SpawnRules.reply("spawning", request({}), true).status, "result")
+				T.expectEqual(SpawnRules.reply("spawning", request({}), false).status, "spawning")
+			end
+		)
+
 		T.it("donne le délai restant d'une demande précoce", function()
 			local answer = SpawnRules.reply("early", request({ diedAt = 99 }))
 			T.expectEqual(answer.status, "early")
@@ -393,6 +401,32 @@ return function(T, Loader)
 			env.handler(p)
 			T.expectEqual(p.loads, 2)
 			T.expectEqual(statuses(env, p), "accepted,failed,accepted")
+		end)
+
+		T.it("« alive » sur un personnage vivant : remis au round (beforeSpawn), sans second chargement", function()
+			local env = setup()
+			local p = fakePlayer(1)
+			p.Character = fakeCharacter(true, 100)
+			env.handler(p)
+			T.expectEqual(statuses(env, p), "alive")
+			T.expectEqual(env.started, 1, "beforeSpawn : le client reprend ce personnage")
+			T.expectEqual(p.loads, 0)
+			p.Character = fakeCharacter(true, 0)
+			env.clock = 5
+			env.handler(p)
+			T.expectEqual(env.started, 1, "corps : pas de reprise")
+		end)
+
+		T.it("revenu du menu pendant une réapparition en vol, JOUER pendant la bannière : « result »", function()
+			local env = setup()
+			env.state = "result"
+			local p = fakePlayer(1)
+			p.duringLoad = function()
+				env.SpawnManager.withdraw(p :: any)
+				env.handler(p)
+			end
+			env.SpawnManager.respawn(p :: any)
+			T.expectEqual(statuses(env, p), "result", "le client renvoie au lieu d'attendre un personnage jeté")
 		end)
 
 		T.it("ne répond pas à un joueur déjà parti", function()

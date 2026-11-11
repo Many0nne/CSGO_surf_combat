@@ -104,6 +104,17 @@ return function(T, Loader)
 			T.expectEqual(outcome, "adopt")
 		end)
 
+		T.it("traite chaque statut que le serveur peut envoyer (SpawnRules.REPLY_STATUSES)", function()
+			local SpawnRules = Loader.new():require("src/server/SpawnRules")
+			for _, status in SpawnRules.REPLY_STATUSES do
+				local attempt = Rules.new(0)
+				Rules.noteSent(attempt, 0)
+				local action = Rules.onReply(attempt, { status = status, retryIn = 1 }, 0.1, false)
+				local handled = action == "adopt" or attempt.acceptedAt ~= nil or attempt.retryAt ~= nil
+				T.expectEqual(handled, true, status)
+			end
+		end)
+
 		T.it("ignore une réponse illisible", function()
 			local attempt = Rules.new(0)
 			Rules.noteSent(attempt, 0)
@@ -147,6 +158,15 @@ return function(T, Loader)
 			end
 			T.expectEqual(Rules.onTick(attempt, t), "giveUp")
 			T.expectNear(t, Rules.REPLY_TIMEOUT * Rules.MAX_UNANSWERED, Rules.TICK)
+		end)
+
+		T.it("acceptée juste avant GIVE_UP_AFTER : le chargement garde LOAD_TIMEOUT", function()
+			local outcome, t = simulate(function(_, sendT)
+				return { status = if sendT < Rules.GIVE_UP_AFTER - 1 then "result" else "accepted" }, 0
+			end, 120)
+			T.expectEqual(outcome, "giveUp")
+			T.expectEqual(t > Rules.GIVE_UP_AFTER + Rules.LOAD_TIMEOUT - 2, true, "pas abandonnée à GIVE_UP_AFTER")
+			T.expectEqual(t <= Rules.GIVE_UP_AFTER + Rules.LOAD_TIMEOUT + Rules.TICK, true, "borne totale")
 		end)
 
 		T.it("une réponse remet à zéro les envois sans réponse", function()

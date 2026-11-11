@@ -211,12 +211,12 @@ local function onPlayerDied(data: any)
 	end
 end
 
--- Cette méthode permet de traiter la réponse du serveur à une demande d'apparition lorsqu'elle arrive (#219) : rien
--- hors SPAWNING (réponse d'une ancienne demande), sinon SpawnRequestRules.onReply ; "alive" avec un personnage local
--- vivant (arrivé pendant qu'on était au menu, donc ignoré) : on le reprend comme s'il venait d'apparaître.
+-- Cette méthode permet d'appliquer la réponse du serveur à la demande en cours (#219, rien hors SPAWNING) ; "alive" avec
+-- un personnage local vivant (ignoré pendant le menu) : il est repris comme s'il venait d'apparaître.
 local function onSpawnReply(answer: any)
+	-- setState remet spawnAttempt à nil hors SPAWNING
 	local attempt = spawnAttempt
-	if state ~= "SPAWNING" or not attempt then
+	if not attempt then
 		return
 	end
 	local char = localPlayer.Character
@@ -227,13 +227,13 @@ local function onSpawnReply(answer: any)
 	end
 end
 
--- Cette méthode permet de trouver le remote RequestSpawn et d'écouter ses réponses lorsque le client démarre, ou plus
--- tard si le serveur ne l'avait pas encore créé (#219 : demande envoyée avant, jamais partie) ; une seule écoute.
-local function resolveSpawnRemote(): RemoteEvent?
+-- Cette méthode permet de retenir le remote RequestSpawn (trouvé par getRemote, ou cherché plus tard s'il manquait,
+-- #219) et d'écouter ses réponses, une seule fois.
+local function resolveSpawnRemote(found: Instance?): RemoteEvent?
 	if spawnRemote then
 		return spawnRemote
 	end
-	local remote = ReplicatedStorage:FindFirstChild(NetworkProtocol.Names.REQUEST_SPAWN)
+	local remote = found or ReplicatedStorage:FindFirstChild(NetworkProtocol.Names.REQUEST_SPAWN)
 	if remote and remote:IsA("RemoteEvent") then
 		spawnRemote = remote
 		remote.OnClientEvent:Connect(onSpawnReply)
@@ -251,9 +251,8 @@ local function sendSpawnRequest(attempt: SpawnRequestRules.Attempt)
 	end
 end
 
--- Cette méthode permet d'abandonner une demande d'apparition restée sans suite lorsque ses délais sont dépassés
--- (#219) : retour au menu avec un message, et retrait côté serveur (LeaveRound) pour qu'un personnage arrivé trop
--- tard ne reste pas dans le round.
+-- Cette méthode permet d'abandonner une demande restée sans suite après ses délais (#219) : retour au menu avec un
+-- message, et LeaveRound pour qu'un personnage arrivé trop tard ne reste pas dans le round.
 local function giveUpSpawn()
 	warn("[GameState] demande d'apparition sans suite : retour au menu")
 	if leaveRemote then
@@ -268,7 +267,7 @@ end
 -- Cette méthode permet de surveiller une demande d'apparition lorsqu'elle part (JOUER) : renvoi sans réponse, après un
 -- refus temporaire ou un échec, abandon après un délai borné ; s'arrête dès que l'état quitte SPAWNING.
 local function watchSpawnRequest(attempt: SpawnRequestRules.Attempt)
-	while spawnAttempt == attempt and state == "SPAWNING" do
+	while spawnAttempt == attempt do
 		local action = SpawnRequestRules.onTick(attempt, os.clock())
 		if action == "giveUp" then
 			giveUpSpawn()
@@ -283,8 +282,7 @@ end
 local function listenToRemotes()
 	local N = NetworkProtocol.Names
 
-	NetworkProtocol.getRemote(N.REQUEST_SPAWN)
-	resolveSpawnRemote()
+	resolveSpawnRemote(NetworkProtocol.getRemote(N.REQUEST_SPAWN))
 	leaveRemote = NetworkProtocol.getRemote(N.LEAVE_ROUND)
 
 	-- RoundState : { state, timeLeft }

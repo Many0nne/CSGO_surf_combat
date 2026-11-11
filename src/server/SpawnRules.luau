@@ -42,11 +42,17 @@ end
 -- retryIn = délai restant avant qu'une demande "early" soit acceptée.
 export type Reply = { status: string, retryIn: number? }
 
--- Cette méthode permet de construire la réponse au client lorsqu'une demande d'apparition vient d'être jugée
--- (refusal = résultat de SpawnRules.request, nil si acceptée).
-function SpawnRules.reply(refusal: Refusal?, r: Request): Reply
+-- Tous les statuts de réponse, chacun traité par le client (SpawnRequestRules.onReply, test croisé)
+SpawnRules.REPLY_STATUSES = { "accepted", "failed", "spawning", "alive", "result", "early" }
+
+-- Cette méthode permet de construire la réponse au client lorsqu'une demande vient d'être jugée (refusal nil : acceptée) ;
+-- "spawning" d'un joueur revenu du menu, non servie (bannière de fin) : "result", ce chargement sera jeté.
+function SpawnRules.reply(refusal: Refusal?, r: Request, away: boolean?): Reply
 	if not refusal then
 		return { status = "accepted" }
+	end
+	if refusal == "spawning" and away then
+		return { status = "result" }
 	end
 	if refusal == "early" and r.diedAt then
 		return { status = "early", retryIn = math.clamp(r.respawnDelay - (r.now - r.diedAt), 0, r.respawnDelay) }
