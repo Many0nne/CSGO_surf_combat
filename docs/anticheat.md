@@ -30,7 +30,7 @@ envoyant des données plausibles. Là, on ne peut que détecter statistiquement,
 | Debug | Remote `DebugPlaytest` créé seulement dans Studio | `src/server/DebugPlaytest.luau:365-372` |
 | Tous les remotes C→S | Garde commune (#170) : débit par joueur et par remote, types des arguments, violations journalisées, kick à 3 violations fortes | `src/server/RemoteGuard.luau`, `src/server/CheatLog.luau` |
 
-Les bots (`src/server/bots/`) passent par le même `Validator` (`src/server/init.server.luau:335-349`) : leurs tirs sont
+Les bots (`src/server/bots/`) passent par le même `Validator` (`src/server/init.server.luau:337-351`) : leurs tirs sont
 des raycasts serveur (`src/server/bots/BotArsenal.luau:184`), leurs munitions et leur temps de sortie sont gérés par
 `BotArsenal` (`:110`, `:116-122`, `:142-148`). Toute nouvelle parade doit donc soit valoir aussi pour eux sans les gêner,
 soit être réservée aux joueurs (`participant.isBot`), ce qui est indiqué pour chaque parade.
@@ -194,7 +194,7 @@ et toucherait sinon un joueur lointain derrière une cible manquée.
 ### T2. Cadence, munitions, durée d'equip
 
 **Cadence (fait).** Une seule cadence par arme et par participant, à 0,15 s près (`Validator.luau:25`, `:107-121`),
-remise à zéro à l'apparition (`src/server/init.server.luau:156`). Un tir refusé ne relance pas la cadence : le spam est
+remise à zéro à l'apparition (`src/server/init.server.luau:158`). Un tir refusé ne relance pas la cadence : le spam est
 sans effet.
 
 **Munitions, aujourd'hui.** Suivies seulement par le client (`src/client/systems/weapon/WeaponSystem.luau:52-54`,
@@ -205,7 +205,7 @@ compte : 5 tirs, puis `ReloadTime` = 3,7 s (`WeaponConfig.luau:16-18`).
 
 **Munitions, parade.** Après #165 : le serveur compte les tirs **acceptés** par arme (`magazine`), refuse le 6e tant
 qu'un rechargement n'a pas duré `ReloadTime - tolérance`. Le début du rechargement est l'action `Reload` déjà envoyée
-par le client (`init.server.luau:127-140`) ; un changement d'arme l'annule, comme côté client. Pas de réserve à suivre.
+par le client (`init.server.luau:132-153`) ; un changement d'arme l'annule, comme côté client. Pas de réserve à suivre.
 Bots : exclus (`BotArsenal` fait déjà respecter chargeur et rechargement, `BotArsenal.luau:116-148`), ou bien
 `BotArsenal._startReload` appelle le même point d'entrée serveur. Coût : un compteur par participant et par arme.
 
@@ -221,7 +221,7 @@ réutiliser. Le serveur ne contrôle rien.
 `WeaponConfig.luau:23`), ce qui compte en duel après un changement d'arme.
 
 **Durée d'equip, parade.** Le serveur voit déjà l'arrivée de l'outil dans le personnage (`ChildAdded`,
-`init.server.luau:114-118`) : y noter `equippedAt`, et refuser une touche avant `equippedAt + EquipTime - tolérance`.
+`init.server.luau:119-123`) : y noter `equippedAt`, et refuser une touche avant `equippedAt + EquipTime - tolérance`.
 Valable pour les bots sans effet (ils attendent déjà `EquipTime`, `BotArsenal.luau:110`). Coût : nul. À faire avec #159.
 
 ## Mêlée
@@ -367,7 +367,7 @@ commune (débit et types, voir R1) ; la colonne « Validation actuelle » décri
 | `HitscanDamage` | C→S | `targetChar, hitPart, origin, direction, hitPos, shotTime` | Cible, arme, partie de la cible, portée des racines, cadence ; forme, origine, visée rembobinée, portée 2 048, ligne de vue (T1, #174 : origine, visée et ligne de vue en journal seul) | Passage en `block` après mesure (T1), munitions, equip (T2), tireur vivant |
 | `CharacterSync` (non fiable) | C→S puis S→C | `pos, yaw, ack` | Forme, débit 40 Hz (garde), seau de distance et silence plafonné, refus corrigé (D1, `CharacterSync.luau:113-165`) | Noclip, vol (D2) |
 | `MovementCorrection` | S→C | `char, pos, seq` | — | — |
-| `WeaponAction` | C→S | `action` | Valeur `Shoot`/`Reload`, outil en main, 0,05 s mini (`init.server.luau:127-139`) | `Shoot` non lié à la cadence de l'arme : 20 faux tirs/s attirent les bots (`hearShot`, `:143`) et, avec #156, déclencheraient 20 sons chez tous |
+| `WeaponAction` | C→S | `action` | Valeur `Shoot`/`Reload`, outil en main, 0,05 s mini (`init.server.luau:132-153`) | `Shoot` non lié à la cadence de l'arme : 20 faux tirs/s attirent les bots (`hearShot`, `:143`) et, avec #156, déclencheraient 20 sons chez tous |
 | `RequestSpawn` | C→S | aucun | `SpawnRules.request` : spawn en vol, personnage en place, bannière de fin, mort depuis moins de `RESPAWN_DELAY` en round actif (`SpawnManager.luau:137-169`) | Rien (R1 fermé, #171) |
 | `SendFeedback` | C→S | `text` | Type, longueur, 60 s en mémoire après toute demande valide (posé avant le DataStore, quel que soit le résultat), 5 par semaine (`UpdateAsync`), rien d'écrit si la lecture échoue (`FeedbackService.luau:113-150`) | Rien (R1 fermé, #171) |
 | `SaveSettings` | C→S | table | `PlayerSettings.sanitize`, écriture différée de 10 s (`SettingsStore.luau:113-130`) | Débit (coût CPU seulement, faible) |
