@@ -327,6 +327,16 @@ posé sur la parole du client, sans cadence. `AimStats` rattachait une touche au
   ordre inversé, rechargement borné par un tir manqué, bots) ; `tests/specs/AimStats.spec.luau` (rattachement,
   orphelines hors du taux, flick sur le bon tir). Dans `Validator.spec.luau`, l'enveloppe `authorizeHitscan` envoie
   d'abord le `ShotFired` de notre client (paramètre `noShotFired` pour une touche seule).
+- **Mesure en Studio (2026-11-11).** `DebugPlaytest` AWP et M9Bayonet : PASS 9/9. Client honnête à l'AWP (chemin réel
+  `Tool:Activate`, un clic toutes les 2 s, `DebugDummy` levé de 80 studs un tir sur trois pour des tirs manqués) :
+  12 `ShotFired` reçus et relayés (12 reculs 3P posés), 9 touches, 2 rechargements, aucune ligne `[CheatLog]` ;
+  relevé `[AimStats] … tirs 14 but 10 (71%) touches 10 orph 0` (toutes les touches rattachées). `DebugBots` 3 pendant
+  plus d'une minute (joueur sous `ForceField` invisible) : 18 tirs de bots relayés au client, recul 3P vu sur le modèle
+  3P du bot (C0 du grip décalé 0,05 s après le relais) pour 15 d'entre eux (les autres : tir suivi aussitôt du
+  rechargement, l'attribut est déjà passé à `Reload`), aucune ligne `[CheatLog]`. Méthode : compteurs posés par
+  `execute_luau` (contexte `Server` : `OnServerEvent` de `ShotFired`/`HitscanDamage`, attribut `Weapon3PActionAt` du
+  joueur ; contexte `Client` : `ShotFired.OnClientEvent`), boucles lancées par `task.spawn`. Studio sans latence : à
+  surveiller dans les résumés `CheatLog` du jeu publié (contrôle `shotLink`).
 
 ## Mêlée
 
