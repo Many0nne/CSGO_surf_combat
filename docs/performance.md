@@ -62,8 +62,9 @@ bots mouvement …, bots chemin …, bots cerveau …, srv round …
   cerveau` (perception, état) + apparitions ; `bots chemin` isole la recherche de chemin (appels par frame < 1 :
   une recherche étalée sur plusieurs ticks). `×N` = appels par frame, `(max …)` = pire appel en ms.
 - Piège : le `max` dit ce qui fait la saccade, la moyenne non. Une moyenne de 2 ms cachait des pics de 150 ms.
-- Méthode pour les bots : `workspace:SetAttribute("DebugBots", 5)`, la sonde, puis `RequestSpawn:FireServer()` en
-  contexte Client (le round démarre) ; attendre 2 minutes de jeu.
+- Méthode pour les bots : `workspace:SetAttribute("DebugBots", 5)`, la sonde, puis un run `DebugPlaytest` pour lancer
+  la partie (le round démarre ; les bots, retirés pendant le run, reviennent à la fin), pas `RequestSpawn:FireServer()`
+  (cf. `CLAUDE.md`) ; attendre 2 minutes de jeu après la fin du run.
 
 ## Coût de la population maximale de bots (#145, mesure du 2026-11-10)
 
