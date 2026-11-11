@@ -51,8 +51,8 @@ Règles pures dans `RampRules` (et `NavRules.rampCost`), simulation dans `RampSi
   course vers le **point de passage** (`approachPoint` : au-delà du bout, devant la face) puis vers le point visé,
   saut près du point de passage ou au bord du vide ; sur la rampe, **appui vers la rampe** (direction horizontale
   opposée à la normale) : le glissement le garde sur la face et il y **monte doucement** à ~30 studs/s, comme un
-  joueur ; au-delà du bout d'arrivée (ou décroché), case où il retomberait (`pickLanding`, une case intérieure,
-  entourée de 8 cases rejointes à pied, de préférence), rejointe en l'air
+  joueur ; au-delà du bout d'arrivée (ou décroché), case où il retomberait (`pickLanding` ; une case de bord,
+  sans ses 8 voisines à pied, comptée `RAMP_EDGE_PENALTY` studs plus loin), rejointe en l'air
   (`landingVelocity`, `steer` à `RAMP_AIR_STEER`). Réussite : atterri à moins de `RAMP_LAND_RADIUS` d'une case, freiné
   jusqu'à sa vitesse de course sans en sortir (`RAMP_SETTLE_TIME` au plus : le bot rejoue ce freinage et repart à
   vitesse de course), assez de rampe parcourue (`RAMP_MIN_TRAVEL`), sous `RAMP_MAX_TIME` et `RAMP_MAX_SPEED`
@@ -270,4 +270,5 @@ Règles pures dans `BotPopulationRules`, appliquées par `BotManager` (`adjustPo
 - **Atterrir au milieu, pas sur le rebord.** La première version visait la case la plus proche du point de chute : sur
   Dizzy, le rebord extérieur de la corniche CT (X 2278, 1 stud de large au-dessus du vide). Le bot y arrivait à sa
   vitesse de course vers l'extérieur et, le trajet fini, la friction ne l'arrêtait qu'au-delà : 2 chutes sur 4
-  passages. `pickLanding` préfère désormais une case intérieure.
+  passages. `pickLanding` pénalise désormais les cases de bord (`RAMP_EDGE_PENALTY`) sans les interdire : une
+  corniche étroite sous le point de chute reste préférée à un sol intérieur bien plus bas.

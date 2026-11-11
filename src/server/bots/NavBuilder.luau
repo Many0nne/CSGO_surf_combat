@@ -308,6 +308,18 @@ function NavBuilder.build(map: Instance): Plan
 
 	local graph: NavRules.Graph = { positions = positions, out = out, outKind = outKind }
 
+	-- Case intérieure : ses 8 voisines rejointes à pied (atterrissage au sortir d'une rampe, #142)
+	local interior: { [number]: boolean } = {}
+	for id = 1, #positions do
+		local walks = 0
+		for _, kind in outKind[id] do
+			if kind == NavRules.WALK then
+				walks += 1
+			end
+		end
+		interior[id] = walks >= 8
+	end
+
 	-- Cette méthode permet de lister les cases à moins de radius studs (à l'horizontale) d'un point lorsque la
 	-- simulation cherche une case d'entrée, d'arrivée ou d'atterrissage.
 	local function cellsNear(point: Vector3, radius: number): { RampSim.Candidate }
@@ -321,13 +333,7 @@ function NavBuilder.build(map: Instance): Plan
 					for _, id in list do
 						local p = positions[id]
 						if Vector3.new(p.X - point.X, 0, p.Z - point.Z).Magnitude <= radius then
-							local walks = 0
-							for _, kind in outKind[id] do
-								if kind == NavRules.WALK then
-									walks += 1
-								end
-							end
-							table.insert(found, { id = id, position = p, interior = walks >= 8 })
+							table.insert(found, { id = id, position = p, interior = interior[id] })
 						end
 					end
 				end

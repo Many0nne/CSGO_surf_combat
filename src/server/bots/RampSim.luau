@@ -6,8 +6,9 @@
 -- 2. surf : il appuie vers la rampe (direction horizontale opposée à la normale), comme un joueur qui tient sa
 --    hauteur ; l'élan le porte le long de la rampe ;
 -- 3. sortie (au-delà du bout d'arrivée, ou décroché) : il choisit la case où il retomberait (RampRules.pickLanding)
---    et s'y dirige en l'air ; arrivé au sol près d'une case, il freine jusqu'à sa vitesse de course sans en sortir
---    (RAMP_SETTLE_TIME au plus) : trajet réussi. Retombé avant la rampe ou glissé hors de la case : échec.
+--    et s'y dirige en l'air ; arrivé au sol près d'une case, il doit freiner jusqu'à sa vitesse de course sans en
+--    sortir en RAMP_SETTLE_TIME au plus : trajet réussi. Retombé avant la rampe, glissé hors de la case ou encore trop
+--    rapide après RAMP_SETTLE_TIME : échec (pas d'arête plutôt qu'un trajet qui finit dans le vide).
 -- Règles pures : RampRules.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 

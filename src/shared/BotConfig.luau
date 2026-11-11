@@ -103,6 +103,7 @@ return {
 	RAMP_MAX_TIME       = 9,      -- trajet simulé au plus (s)
 	RAMP_MIN_TRAVEL     = 0.6,    -- part de la longueur de la rampe parcourue au moins
 	RAMP_EXIT_RADIUS    = 40,     -- case d'arrivée cherchée à moins de tant de la sortie de la rampe (studs)
+	RAMP_EDGE_PENALTY   = 8,      -- case d'arrivée au bord d'un vide comptée tant plus loin du point de chute (studs)
 	RAMP_LAND_RADIUS    = 3,      -- atterrissage à moins de tant d'une case (studs)
 	RAMP_SETTLE_TIME    = 0.5,    -- après l'atterrissage, freinage jusqu'à la vitesse de course en tant au plus (s)
 	RAMP_MAX_SPEED      = 200,    -- vitesse au plus le long du trajet (studs/s, sous MAX_SPEED_SERVER)

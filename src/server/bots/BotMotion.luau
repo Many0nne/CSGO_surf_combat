@@ -33,7 +33,7 @@ type Relay = (Model, BasePart, CFrame) -> ()
 export type Gaze = { lookAt: Vector3?, aiming: boolean }
 
 -- Trajet de rampe rejoué : temps écoulé, écart entre le bot et le départ du trajet
-type Ride = { traj: RampRules.Trajectory, t: number, offset: Vector3 }
+type Ride = { traj: RampRules.Trajectory, tick: number, offset: Vector3 } -- tick : pas du trajet rejoués
 
 export type BotMotion = typeof(setmetatable(
 	{} :: {
@@ -132,14 +132,15 @@ end
 -- position et vitesse lues dans le trajet ; à la fin, posé sur la case de sortie, le suivi de chemin reprend.
 function BotMotion._rideTick(self: BotMotion, dt: number)
 	local ride = self.ride :: Ride
-	ride.t += dt
+	ride.tick += 1
+	local t = ride.tick * ride.traj.dt
 	local motor = self.motor
 	local ci = motor:standInfo()
-	local foot, velocity, state = RampRules.sample(ride.traj, ride.t)
-	local pos = foot + RampRules.blend(ride.offset, ride.t) + Vector3.new(0, ci.rootToBottom, 0)
+	local foot, velocity, state = RampRules.sample(ride.traj, t)
+	local pos = foot + RampRules.blend(ride.offset, t) + Vector3.new(0, ci.rootToBottom, 0)
 	local rotation = self:_turn(pos, velocity, dt)
 	local cf = CFrame.new(pos) * rotation
-	if ride.t >= ride.traj.duration - 1e-6 then
+	if ride.tick >= #ride.traj.points - 1 then
 		motor.velocity = Vector3.new(velocity.X, 0, velocity.Z)
 		motor:teleport(cf)
 		self.ride = nil
@@ -177,7 +178,7 @@ function BotMotion._tick(self: BotMotion, dt: number)
 	local frozen = self.frozen
 	if intent.ride and not frozen then
 		-- Rampe (#142) : le trajet commence à la case d'entrée, l'écart avec le bot se résorbe au départ
-		self.ride = { traj = intent.ride, t = 0, offset = foot - intent.ride.points[1] }
+		self.ride = { traj = intent.ride, tick = 0, offset = foot - intent.ride.points[1] }
 		self:_rideTick(dt)
 		return
 	end

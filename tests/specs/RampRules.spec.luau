@@ -133,6 +133,10 @@ return function(T, Loader)
 			local inner = { id = 6, position = Vector3.new(landX + 4, 70, 0), interior = true }
 			T.expectEqual(Rules.pickLanding(pos, velocity, { edge, inner }), 6, "case intérieure")
 			T.expectEqual(Rules.pickLanding(pos, velocity, { edge }), 5, "sans case intérieure : la plus proche")
+			-- Corniche étroite (cases de bord) sous le point de chute, grand sol 40 studs plus bas : il reste sur la corniche
+			local floorT = Rules.fallTime(93, 0, 30)
+			local floor = { id = 7, position = Vector3.new(-30 * floorT + 20, 30, 0), interior = true }
+			T.expectEqual(Rules.pickLanding(pos, velocity, { edge, floor }), 5, "pas de plongeon vers un sol plus bas")
 			T.expectEqual(Rules.pickLanding(pos, velocity, { candidates[3], candidates[4] }), nil, "aucune case")
 			local wanted = Rules.landingVelocity(pos, velocity, candidates[2].position, 30)
 			T.expectNear(wanted.X, -2 / t, 1e-4, "vitesse qui retombe sur la case visée")
