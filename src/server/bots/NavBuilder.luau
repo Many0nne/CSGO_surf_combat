@@ -3,7 +3,8 @@
 -- 1. grille de colonnes tous les NAV_GRID studs : chaque surface marchable rencontrée de haut en bas devient une case
 --    si un corps y tient debout (GetPartsInPart) ;
 -- 2. arêtes vers les 8 colonnes voisines : marche (boîte du corps balayée de case à case), descente d'un rebord et
---    saut sur un rebord (même trajet en L, parcouru dans un sens ou dans l'autre), plus une arête par échelle ;
+--    saut sur un rebord (même trajet en L, parcouru dans un sens ou dans l'autre), plus une arête par échelle et une
+--    par rampe de surf et par sens (#142 : trajet simulé par RampSim, de la case d'entrée à la case de sortie) ;
 -- 3. cases gardées : celles d'où l'on va partout et revient (NavRules.stronglyConnected depuis un point d'apparition) ;
 -- 4. points de passage (NavRules.cluster) et leur note fixe (vue entre points, hauteur, couvert, type).
 -- Le calcul est étalé sur plusieurs frames (NAV_BUILD_BUDGET par frame). Règles pures : NavRules.
@@ -13,6 +14,8 @@ local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
 local LadderRules = require(ReplicatedStorage.Shared.LadderRules)
 local MovementConfig = require(ReplicatedStorage.Shared.MovementConfig)
 local NavRules = require(ReplicatedStorage.Shared.NavRules)
+local RampRules = require(ReplicatedStorage.Shared.RampRules)
+local RampSim = require(script.Parent.RampSim)
 
 local NavBuilder = {}
 
@@ -50,6 +53,8 @@ export type Plan = {
 	cellWaypoint: { [number]: number },
 	waypointEdges: { { [number]: number } },
 	ladders: { Ladder },
+	ramps: { RampRules.Frame }, -- rampes de surf de la map (#142), vide sans rampe
+	rampPaths: { [number]: RampRules.Trajectory }, -- trajet de chaque arête de rampe (clé NavRules.edgeKey)
 	stats: { [string]: number },
 }
 
@@ -67,6 +72,37 @@ local DIRS = {
 -- Cette méthode permet de donner la clé d'une colonne de la grille lorsqu'on range ou cherche ses cases.
 function NavBuilder.columnKey(ix: number, iz: number): number
 	return ix * 100000 + iz
+end
+
+-- Cette méthode permet de trouver les rampes de surf d'une map lorsque le plan est construit (#142) : grandes faces de
+-- surf des dossiers RAMPS_FOLDER (RampRules.frameOf), une seule par rampe (la plus grande des pièces superposées).
+function NavBuilder.findRamps(map: Instance): { RampRules.Frame }
+	local frames: { RampRules.Frame } = {}
+	for _, folder in map:GetDescendants() do
+		if folder.Name == BotConfig.RAMPS_FOLDER and not folder:IsA("BasePart") then
+			for _, part in folder:GetDescendants() do
+				if part:IsA("Part") and part.Shape == Enum.PartType.Block and part.CanCollide then
+					local frame = RampRules.frameOf(part.CFrame, part.Size)
+					if frame then
+						local merged = false
+						for i, other in frames do
+							if RampRules.sameRamp(other, frame) or RampRules.sameRamp(frame, other) then
+								if frame.halfU * frame.halfV > other.halfU * other.halfV then
+									frames[i] = frame
+								end
+								merged = true
+								break
+							end
+						end
+						if not merged then
+							table.insert(frames, frame)
+						end
+					end
+				end
+			end
+		end
+	end
+	return frames
 end
 
 -- Cette méthode permet de construire le plan de navigation de la map lorsque le serveur démarre ; à appeler dans un
@@ -177,7 +213,7 @@ function NavBuilder.build(map: Instance): Plan
 		outKind[id] = {}
 	end
 	local edgeSet: { [number]: boolean } = {}
-	local counts = { 0, 0, 0, 0 }
+	local counts = { 0, 0, 0, 0, 0 }
 	-- Cette méthode permet d'ajouter une arête orientée lorsqu'elle est validée (une seule par paire et par sens).
 	local function addEdge(a: number, b: number, kind: number)
 		local key = NavRules.edgeKey(a, b)
@@ -333,6 +369,109 @@ function NavBuilder.build(map: Instance): Plan
 		end
 	end
 
+	-- Rampes de surf (#142) : par rampe et par sens, trajet simulé depuis quelques cases d'entrée au-delà du bout de
+	-- départ ; le plus court réussi devient une arête (coût d'après sa durée). Avant les cases gardées : une corniche
+	-- qu'on ne rejoint que par une rampe (et d'où l'on revient par l'autre sens) en fait partie.
+	phaseStart = os.clock()
+	local ramps: { RampRules.Frame } = if BotConfig.RAMP_ENABLED then NavBuilder.findRamps(map) else {}
+	local rampPaths: { [number]: RampRules.Trajectory } = {}
+	local rampCost: { [number]: number } = {}
+	if #ramps > 0 then
+		-- Cette méthode permet de lister les cases à moins de radius studs (à l'horizontale) d'un point lorsque la
+		-- simulation cherche une case d'entrée, d'arrivée ou d'atterrissage.
+		local function cellsNear(point: Vector3, radius: number): { RampSim.Candidate }
+			local cx, cz = math.floor((point.X - minX) / G), math.floor((point.Z - minZ) / G)
+			local span = math.ceil(radius / G)
+			local found = {}
+			for dx = -span, span do
+				for dz = -span, span do
+					local list = columns[NavBuilder.columnKey(cx + dx, cz + dz)]
+					if list then
+						for _, id in list do
+							local p = positions[id]
+							if Vector3.new(p.X - point.X, 0, p.Z - point.Z).Magnitude <= radius then
+								table.insert(found, { id = id, position = p })
+							end
+						end
+					end
+				end
+			end
+			return found
+		end
+		local rig = RampSim.newRig()
+		for index, frame in ramps do
+			for _, direction in { 1, -1 } do
+				local endCenter = RampRules.surfacePoint(frame, -direction * frame.halfU, 0)
+				local candidates = {}
+				for _, c in cellsNear(endCenter, frame.halfV + BotConfig.RAMP_ENTRY_DIST) do
+					local beyond = RampRules.beyondStart(frame, direction, c.position)
+					local target = RampRules.entryTarget(frame, direction, c.position.Y)
+					if target and beyond >= 0 and beyond <= BotConfig.RAMP_ENTRY_DIST then
+						local approach = RampRules.approachPoint(frame, direction, target)
+						local flat = Vector3.new(approach.X - c.position.X, 0, approach.Z - c.position.Z)
+						table.insert(candidates, { id = c.id, position = c.position, score = flat.Magnitude })
+					end
+				end
+				local best: RampRules.Trajectory? = nil
+				local failures = {}
+				local tried = 0
+				for _, entry in RampRules.pickEntries(candidates, BotConfig.RAMP_TRIES, BotConfig.RAMP_TRY_SPACING) do
+					tried += 1
+					local traj, why = RampSim.simulate(rig, {
+						frame = frame,
+						direction = direction,
+						ramp = index,
+						entry = entry,
+						entryPos = positions[entry],
+						killY = if type(killY) == "number" then killY else nil,
+						castParams = castParams,
+						cellsNear = cellsNear,
+					})
+					if traj and (not best or traj.duration < best.duration) then
+						best = traj
+					elseif not traj then
+						table.insert(failures, why)
+					end
+					slice()
+				end
+				if not best then
+					print(
+						string.format(
+							"[Nav] rampe %d, sens %d : aucun trajet (%d cases d'entrée : %s)",
+							index,
+							direction,
+							#failures,
+							table.concat(failures, " ; ")
+						)
+					)
+				end
+				if best and best.entry ~= best.exit then
+					local key = NavRules.edgeKey(best.entry, best.exit)
+					if not edgeSet[key] then
+						addEdge(best.entry, best.exit, NavRules.RAMP)
+						rampPaths[key] = best
+						rampCost[key] = NavRules.rampCost(best.duration)
+						print(
+							string.format(
+								"[Nav] rampe %d, sens %d : %s → %s, %.1f s, %.0f studs/s au plus (%d essais)",
+								index,
+								direction,
+								tostring(positions[best.entry]),
+								tostring(positions[best.exit]),
+								best.duration,
+								best.peakSpeed,
+								tried
+							)
+						)
+					end
+				end
+			end
+		end
+		rig.model:Destroy()
+	end
+	graph.rampCost = rampCost
+	phases.ramps = os.clock() - phaseStart
+
 	-- 3. Cases gardées, depuis le point d'apparition au sol le plus central (sinon la case la plus reliée)
 	local seed: number? = nil
 	local spawns = map:FindFirstChild("GroundSpawns")
@@ -417,11 +556,12 @@ function NavBuilder.build(map: Instance): Plan
 			ladderCells[ladder.top] = true
 		end
 	end
-	local ramps = map:FindFirstChild("Ramps")
-	local rampParams = OverlapParams.new()
-	rampParams.FilterType = Enum.RaycastFilterType.Include
-	rampParams.FilterDescendantsInstances = if ramps then { ramps } else {}
-	rampParams.MaxParts = 1
+	-- Entrées et sorties des rampes de surf (#142) : le point qui en a une à moins de NAV_RAMP_DIST est une entrée de rampe
+	local rampEnds: { Vector3 } = {}
+	for _, traj in rampPaths do
+		table.insert(rampEnds, positions[traj.entry])
+		table.insert(rampEnds, positions[traj.exit])
+	end
 	local scanDist = math.max(BotConfig.NAV_COVER_DIST, BotConfig.NAV_NARROW_WIDTH)
 
 	local waypoints: { PlanWaypoint } = {}
@@ -443,8 +583,13 @@ function NavBuilder.build(map: Instance): Plan
 				nearLadder = true
 			end
 		end
-		local nearRamp = ramps ~= nil
-			and #workspace:GetPartBoundsInRadius(wp.position, BotConfig.NAV_RAMP_DIST, rampParams) > 0
+		local nearRamp = false
+		for _, p in rampEnds do
+			if (p - wp.position).Magnitude <= BotConfig.NAV_RAMP_DIST then
+				nearRamp = true
+				break
+			end
+		end
 		local kind = NavRules.classify({
 			slopeShare = slopeCount / #wp.cells,
 			depth = NavRules.depthBelow(wp.position, wpPositions, 40),
@@ -486,6 +631,8 @@ function NavBuilder.build(map: Instance): Plan
 		cellWaypoint = cellWaypoint,
 		waypointEdges = waypointEdges,
 		ladders = ladders,
+		ramps = ramps,
+		rampPaths = rampPaths,
 		stats = {
 			cells = #positions,
 			kept = kept,
@@ -493,12 +640,15 @@ function NavBuilder.build(map: Instance): Plan
 			drop = counts[NavRules.DROP],
 			jump = counts[NavRules.JUMP],
 			ladder = counts[NavRules.LADDER],
+			ramp = counts[NavRules.RAMP],
+			ramps = #ramps,
 			waypoints = #waypoints,
 			seconds = os.clock() - started,
 			secondsCells = phases.cells,
 			secondsWalk = phases.walk,
 			secondsLedges = phases.ledges,
 			secondsView = phases.view,
+			secondsRamps = phases.ramps,
 		},
 	}
 end

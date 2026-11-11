@@ -4,6 +4,8 @@
 -- L'intention (direction, saut, grimpe, bhop) vient du suivi de chemin (BotNavigator, #140, #151), le regard imposé
 -- (cible, angle tenu) du comportement (BotBrain, #141) ; sur une échelle,
 -- la vitesse est celle du joueur (LadderRules), en poussant vers le mur ; en bhop, air strafe (BotRules).
+-- Rampe de surf (#142) : le trajet de l'arête, simulé au démarrage par le plan (RampSim), est rejoué tel quel (le surf
+-- n'est pas simulé par bot), l'écart de départ résorbé en RAMP_BLEND_TIME ; regard et animations continuent.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
@@ -15,6 +17,7 @@ local LadderRules = require(ReplicatedStorage.Shared.LadderRules)
 local MathRules = require(ReplicatedStorage.Shared.MathRules)
 local Config = require(ReplicatedStorage.Shared.MovementConfig)
 local PhysicsUtils = require(ReplicatedStorage.Shared.PhysicsUtils)
+local RampRules = require(ReplicatedStorage.Shared.RampRules)
 local StepTiming = require(ReplicatedStorage.Shared.StepTiming)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 local BotNavigator = require(script.Parent.BotNavigator)
@@ -28,6 +31,9 @@ type Relay = (Model, BasePart, CFrame) -> ()
 -- Regard imposé par le comportement (BotBrain, #141) : point regardé (cible en combat, angle tenu), nil pour regarder
 -- où il va ; aiming : il vise une cible (rotation rapide, et pas de gain d'air strafe pendant la visée)
 export type Gaze = { lookAt: Vector3?, aiming: boolean }
+
+-- Trajet de rampe rejoué : temps écoulé, écart entre le bot et le départ du trajet
+type Ride = { traj: RampRules.Trajectory, t: number, offset: Vector3 }
 
 export type BotMotion = typeof(setmetatable(
 	{} :: {
@@ -44,6 +50,7 @@ export type BotMotion = typeof(setmetatable(
 		frozen: boolean,
 		wishSpeed: number,
 		gaze: Gaze,
+		ride: Ride?, -- trajet de rampe en cours (#142)
 	},
 	BotMotion
 ))
@@ -108,10 +115,65 @@ function BotMotion.setFrozen(self: BotMotion, frozen: boolean)
 	self.frozen = frozen
 end
 
+-- Cette méthode permet de tourner le regard du bot lorsqu'un tick est joué : vers le point imposé par le comportement
+-- (cible, angle tenu), sinon vers la direction donnée ; renvoie l'orientation de la racine.
+function BotMotion._turn(self: BotMotion, pos: Vector3, direction: Vector3, dt: number): CFrame
+	local gaze = self.gaze
+	local lookAt = gaze.lookAt
+	local wantedYaw = if lookAt then BotRules.yawOf(lookAt - pos) else BotRules.yawOf(direction)
+	if wantedYaw then
+		local rate = if gaze.aiming and lookAt then BotConfig.COMBAT_TURN_RATE else BotConfig.NAV_TURN_RATE
+		self.yaw = BotRules.turnToward(self.yaw, wantedYaw, rate, dt)
+	end
+	return BotRules.headingRotation(self.yaw)
+end
+
+-- Cette méthode permet de jouer un tick du trajet de rampe en cours lorsque le bot surfe (#142) : position et vitesse
+-- lues dans le trajet (figé : le temps ne passe pas), regard vers sa course ou sa cible ; à la fin, il est posé au sol
+-- sur la case de sortie avec sa vitesse horizontale et le suivi de chemin reprend.
+function BotMotion._rideTick(self: BotMotion, dt: number)
+	local ride = self.ride :: Ride
+	if not self.frozen then
+		ride.t += dt
+	end
+	local motor = self.motor
+	local ci = motor:standInfo()
+	local foot, velocity, state = RampRules.sample(ride.traj, ride.t)
+	local pos = foot + RampRules.blend(ride.offset, ride.t) + Vector3.new(0, ci.rootToBottom, 0)
+	local rotation = self:_turn(pos, velocity, dt)
+	local cf = CFrame.new(pos) * rotation
+	if ride.t >= ride.traj.duration then
+		motor.velocity = Vector3.new(velocity.X, 0, velocity.Z)
+		motor:teleport(cf)
+		self.ride = nil
+		self.navigator:rideFinished()
+	else
+		motor.velocity = velocity
+		motor:_place(cf)
+	end
+	self.animator:update({
+		onGround = state == RampRules.GROUND,
+		crouching = false,
+		surfing = state == RampRules.SURF,
+		speed = PhysicsUtils.getXZ(velocity).Magnitude,
+		verticalSpeed = velocity.Y,
+	})
+end
+
+-- Cette méthode permet de savoir si le bot rejoue le trajet d'une rampe lorsqu'un outil de debug ou le comportement
+-- le demande.
+function BotMotion.isRiding(self: BotMotion): boolean
+	return self.ride ~= nil
+end
+
 -- Cette méthode permet d'avancer le bot d'un tick fixe lorsque la boucle serveur en joue un : intention du suivi de
 -- chemin, échelle si le bot est dans son volume, puis le même pas que le joueur (sol, transitions, physique,
 -- collisions), puis le regard et l'animation.
 function BotMotion._tick(self: BotMotion, dt: number)
+	if self.ride then
+		self:_rideTick(dt)
+		return
+	end
 	local motor = self.motor
 	local gnd = motor:beginTick(dt)
 	local _, isGroundedState, isAirborneState = motor:updateState(gnd, false)
@@ -122,6 +184,12 @@ function BotMotion._tick(self: BotMotion, dt: number)
 
 	local intent = self.navigator:update(NavPlan.get(), foot, isGroundedState, speedBefore, motor.velocity.Y, dt)
 	local frozen = self.frozen
+	if intent.ride and not frozen then
+		-- Rampe (#142) : le trajet commence à la case d'entrée, l'écart avec le bot se résorbe au départ
+		self.ride = { traj = intent.ride, t = 0, offset = foot - intent.ride.points[1] }
+		self:_rideTick(dt)
+		return
+	end
 	local wishdir = if frozen then Vector3.zero else intent.wishdir
 	local wishspeed = if frozen or wishdir.Magnitude < 1e-3 then 0 else self.wishSpeed
 	local jump = not frozen and intent.jump
@@ -152,7 +220,7 @@ function BotMotion._tick(self: BotMotion, dt: number)
 			wishdir, wishspeed =
 				BotRules.airStrafe(motor.velocity, wishdir, intent.targetSpeed, wishspeed, dt, intent.strafeNoise)
 		elseif bhop or not intent.airControl then
-			-- Hors bhop, pas d'air strafe (seul un saut sur un rebord vise sa cible) ; en bhop pendant une visée (#141),
+			-- Hors bhop, pas d'air strafe (seuls un saut ou une descente visent leur case) ; en bhop pendant une visée (#141),
 			-- comme un joueur qui arrête de strafer pour tirer, il glisse et garde sa vitesse
 			wishdir = Vector3.zero
 		end
@@ -161,15 +229,8 @@ function BotMotion._tick(self: BotMotion, dt: number)
 
 	-- Regard : vers le point imposé par le comportement (cible, angle tenu) ; sinon en bhop il suit la vitesse (comme
 	-- la caméra d'un joueur qui strafe), sinon la direction voulue
-	local lookAt = gaze.lookAt
-	local wantedYaw = if lookAt
-		then BotRules.yawOf(lookAt - pos)
-		else BotRules.yawOf(if bhop then motor.velocity else wishdir)
-	if wantedYaw then
-		local rate = if aiming then BotConfig.COMBAT_TURN_RATE else BotConfig.NAV_TURN_RATE
-		self.yaw = BotRules.turnToward(self.yaw, wantedYaw, rate, dt)
-	end
-	motor:move(gnd, dt, ci, BotRules.headingRotation(self.yaw), isGroundedState, isAirborneState, willJump, onLadder)
+	local rotation = self:_turn(pos, if bhop then motor.velocity else wishdir, dt)
+	motor:move(gnd, dt, ci, rotation, isGroundedState, isAirborneState, willJump, onLadder)
 
 	local speed = PhysicsUtils.getXZ(motor.velocity).Magnitude
 	self.animator:update({

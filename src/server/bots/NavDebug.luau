@@ -1,6 +1,6 @@
 -- Affichage de debug du plan de navigation (#140), Studio uniquement : attribut Workspace DebugNav.
 -- - true : points de passage (couleur et étiquette = note, type), arêtes entre points (gris marche, bleu descente,
---   orange saut, vert échelle), chemin restant de chaque bot (jaune), état et destination au-dessus de chaque bot,
+--   orange saut, vert échelle, violet rampe de surf : trajet simulé, #142), chemin restant de chaque bot (jaune), état et destination au-dessus de chaque bot,
 --   trait rouge vers sa cible en combat (#141) ;
 -- - "cases" : en plus, chaque case du plan (vert : gardée, rouge : écartée, hors de la composante principale).
 -- Tout est posé dans Workspace.NavDebug, créé par le serveur (visible par tous les clients du playtest). Bilan des
@@ -21,6 +21,7 @@ local KIND_COLORS = {
 	[NavRules.DROP] = Color3.fromRGB(70, 140, 255),
 	[NavRules.JUMP] = Color3.fromRGB(255, 150, 40),
 	[NavRules.LADDER] = Color3.fromRGB(60, 220, 90),
+	[NavRules.RAMP] = Color3.fromRGB(190, 80, 255),
 }
 local PATH_COLOR = Color3.fromRGB(255, 230, 40)
 local TARGET_COLOR = Color3.fromRGB(255, 40, 40)
@@ -110,10 +111,18 @@ local function drawPlan(plan: NavPlan.Plan, withCells: boolean)
 			local pa, pb = plan.waypoints[a].position + LIFT, plan.waypoints[b].position + LIFT
 			-- Arête dans les deux sens : un seul trait ; à sens unique : trait plus fin, côté départ
 			local back = plan.waypointEdges[b] and plan.waypointEdges[b][a]
-			if not back or a < b then
+			if kind ~= NavRules.RAMP and (not back or a < b) then
 				segment(edges, pa, if back then pb else pa:Lerp(pb, 0.85), KIND_COLORS[kind], if back then 0.3 else 0.2)
 			end
 		end
+	end
+	-- Rampes (#142) : trajet simulé de chaque arête, un trait tous les 4 ticks, boule à l'entrée
+	for _, traj in plan.rampPaths do
+		local trail = traj.points
+		for i = 5, #trail, 4 do
+			segment(edges, trail[i - 4] + LIFT, trail[i] + LIFT, KIND_COLORS[NavRules.RAMP], 0.35)
+		end
+		debugPart(edges, Vector3.one * 2, CFrame.new(trail[1] + LIFT), KIND_COLORS[NavRules.RAMP], Enum.PartType.Ball)
 	end
 
 	if withCells then
@@ -192,12 +201,13 @@ function NavDebug.init(navigators: () -> { Entry })
 				nextReport = os.clock() + 30
 				print(
 					string.format(
-						"[Nav] bilan : %d destinations atteintes, %d arêtes ratées ; franchies : %d descentes, %d sauts, %d échelles ; bhop : %d séries, %d sauts, %.0f studs/s au plus",
+						"[Nav] bilan : %d destinations atteintes, %d arêtes ratées ; franchies : %d descentes, %d sauts, %d échelles, %d rampes ; bhop : %d séries, %d sauts, %.0f studs/s au plus",
 						BotNavigator.stats.reached,
 						BotNavigator.stats.banned,
 						BotNavigator.stats.passed[NavRules.DROP],
 						BotNavigator.stats.passed[NavRules.JUMP],
 						BotNavigator.stats.passed[NavRules.LADDER],
+						BotNavigator.stats.passed[NavRules.RAMP],
 						BotNavigator.stats.bhopRuns,
 						BotNavigator.stats.bhopJumps,
 						BotNavigator.stats.bhopTopSpeed

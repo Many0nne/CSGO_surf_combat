@@ -8,11 +8,14 @@
 -- friction et, en l'air, vise un point du chemin devant lui (poursuite) à une vitesse réglée par les virages devant
 -- et la marche restante (BotMotion strafe, plane ou freine en l'air pour la tenir). Il atterrit normalement quand le
 -- saut suivant ne tient plus avant un saut, une échelle ou sa destination.
+-- Rampe de surf (#142) : arrivé au sol sur la case d'entrée, il demande à BotMotion de rejouer le trajet de l'arête
+-- (intention ride), puis reprend son chemin à la case de sortie (rideFinished).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
 local BotRules = require(ReplicatedStorage.Shared.BotRules)
 local NavRules = require(ReplicatedStorage.Shared.NavRules)
+local RampRules = require(ReplicatedStorage.Shared.RampRules)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local StepTiming = require(ReplicatedStorage.Shared.StepTiming)
 local NavPlan = require(script.Parent.NavPlan)
@@ -36,10 +39,11 @@ export type Intent = {
 	wishdir: Vector3, -- direction horizontale voulue (zéro : rester sur place) ; en bhop : cap visé
 	jump: boolean,
 	climb: boolean, -- grimper si le bot est dans le volume d'une échelle
-	airControl: boolean, -- en l'air, viser la cible (saut sur un rebord)
+	airControl: boolean, -- en l'air, viser la cible (saut sur un rebord, descente)
 	bhop: boolean, -- série de sauts en cours : air strafe en l'air, pas de friction au saut
 	strafeNoise: number, -- écart de strafe du saut en cours (part de la fenêtre de gain, −1 à 1)
 	targetSpeed: number, -- en bhop : vitesse visée en l'air (studs/s)
+	ride: RampRules.Trajectory?, -- rampe de surf (#142) : trajet à rejouer, depuis la case d'entrée
 }
 
 export type BotNavigator = typeof(setmetatable(
@@ -61,6 +65,7 @@ export type BotNavigator = typeof(setmetatable(
 		chooseDestination: ((foot: Vector3) -> number?)?,
 		onArrive: ((waypoint: number?) -> number?)?,
 		banned: { [number]: number }, -- clé d'arête → fin de la mise à l'écart (os.clock)
+		pinned: boolean, -- destination imposée par le debug (DebugBotsGoto) : le comportement ne la change pas
 		runSpeed: number, -- vitesse de course du bot (arme tenue)
 		bhopAllowed: boolean, -- coupé par les états (#141) : combat, angle tenu
 		bhopping: boolean,
@@ -75,7 +80,8 @@ export type BotNavigator = typeof(setmetatable(
 -- Bilan de tous les bots depuis le démarrage (debug Studio : NavDebug l'affiche dans la console)
 -- passed : arêtes franchies par type ; bhopRuns / bhopJumps : séries de sauts commencées, sauts enchaînés ;
 -- bhopTopSpeed : plus haute vitesse atteinte en bhop
-BotNavigator.stats = { reached = 0, banned = 0, passed = { 0, 0, 0, 0 }, bhopRuns = 0, bhopJumps = 0, bhopTopSpeed = 0 }
+BotNavigator.stats =
+	{ reached = 0, banned = 0, passed = { 0, 0, 0, 0, 0 }, bhopRuns = 0, bhopJumps = 0, bhopTopSpeed = 0 }
 
 local IDLE: Intent = {
 	wishdir = Vector3.zero,
@@ -113,6 +119,7 @@ function BotNavigator.new(rng: Random, runSpeed: number): BotNavigator
 		repaths = 0,
 		hold = 0,
 		banned = {},
+		pinned = false,
 	}, BotNavigator)
 end
 
@@ -169,6 +176,7 @@ function BotNavigator._plan(self: BotNavigator, plan: NavPlan.Plan, foot: Vector
 	local cells = (search :: NavRules.Search).path
 	if not cells then
 		self.destination = nil -- injoignable avec les arêtes écartées : autre tirage au prochain tick
+		self.pinned = false
 		return false
 	end
 	local positions, out, outKind = plan.graph.positions, plan.graph.out, plan.graph.outKind
@@ -201,12 +209,20 @@ end
 -- Cette méthode permet d'imposer une destination lorsque le comportement du bot change de but (enquête, repli) :
 -- chemin recalculé et attente interrompue, sauf si c'est déjà sa destination.
 function BotNavigator.setDestination(self: BotNavigator, waypoint: number)
-	if self.destination == waypoint and self.cells then
+	if self.pinned or (self.destination == waypoint and self.cells) then
 		return
 	end
 	self.destination = waypoint
 	self.hold = 0
 	self:_dropPath()
+end
+
+-- Cette méthode permet d'imposer une destination jusqu'à l'arrivée lorsqu'un outil de debug envoie le bot quelque part
+-- (DebugBotsGoto) : le comportement ne peut plus la changer avant qu'il l'atteigne.
+function BotNavigator.pinDestination(self: BotNavigator, waypoint: number)
+	self.pinned = false
+	self:setDestination(waypoint)
+	self.pinned = true
 end
 
 -- Cette méthode permet de savoir si le bot attend sur un point lorsque le comportement décide où il regarde.
@@ -218,6 +234,17 @@ end
 -- ou quand il tient un angle) ; une série en cours s'arrête au prochain atterrissage.
 function BotNavigator.setBhopAllowed(self: BotNavigator, allowed: boolean)
 	self.bhopAllowed = allowed
+end
+
+-- Cette méthode permet de reprendre le chemin à la case de sortie d'une rampe lorsque BotMotion a fini d'en rejouer le
+-- trajet (#142) ; sans effet si le chemin a changé pendant le trajet (il repartira de là où il atterrit).
+function BotNavigator.rideFinished(self: BotNavigator)
+	if not self.cells or self.kinds[self.index] ~= NavRules.RAMP then
+		return
+	end
+	BotNavigator.stats.passed[NavRules.RAMP] += 1
+	self.index += 1
+	self.best, self.stalled, self.repaths = math.huge, 0, 0
 end
 
 -- Cette méthode permet d'avancer dans le chemin pendant une série de sauts lorsque le bot le survole : les cases sont
@@ -368,6 +395,7 @@ function BotNavigator.update(
 	if self.index > #points then
 		-- Arrivé : pause (choisie par le comportement, sinon courte), puis destination suivante
 		local arrived = self.destination
+		self.pinned = false
 		self.lastWaypoint = arrived
 		self.destination = nil
 		BotNavigator.stats.reached += 1
@@ -379,7 +407,25 @@ function BotNavigator.update(
 	end
 
 	local kind = kinds[self.index]
-	local goal = points[self.index]
+	-- Rampe (#142) : le but est la case d'entrée, d'où il lance le trajet de l'arête
+	local goal = if kind == NavRules.RAMP and self.index > 1 then points[self.index - 1] else points[self.index]
+	if kind == NavRules.RAMP and self.index > 1 then
+		local cells = self.cells :: { number }
+		local traj = plan.rampPaths[NavRules.edgeKey(cells[self.index - 1], cells[self.index])]
+		if traj and RampRules.canStart(foot, goal, grounded) then
+			self.bhopping = false
+			return {
+				wishdir = Vector3.zero,
+				jump = false,
+				climb = false,
+				airControl = false,
+				bhop = false,
+				strafeNoise = 0,
+				targetSpeed = 0,
+				ride = traj,
+			}
+		end
+	end
 	-- Tombé sous le trajet (rebord raté) : chemin recalculé depuis là où il est
 	if grounded and kind ~= NavRules.LADDER and goal.Y - foot.Y > BotConfig.NAV_JUMP_UP_MAX + 1 then
 		self:_dropPath()
@@ -394,7 +440,7 @@ function BotNavigator.update(
 	local targetIndex = if kind == NavRules.WALK
 		then NavRules.lookAhead(foot, points, kinds, self.index)
 		else self.index
-	local target = points[targetIndex]
+	local target = if kind == NavRules.RAMP then goal else points[targetIndex]
 	local flat = Vector3.new(target.X - foot.X, 0, target.Z - foot.Z)
 	local wishdir = if flat.Magnitude > 1e-3 then flat.Unit else Vector3.zero
 
@@ -423,12 +469,13 @@ function BotNavigator.update(
 					"[Nav] arête %s ratée (%s → %s), écartée %d s",
 					NavRules.KIND_NAMES[kind],
 					tostring(points[self.index - 1]),
-					tostring(goal),
+					tostring(points[self.index]),
 					BotConfig.NAV_BAN_TIME
 				)
 			)
 			self.repaths = 0
 			self.destination = nil
+			self.pinned = false
 		end
 		self:_dropPath()
 		return IDLE
@@ -441,7 +488,8 @@ function BotNavigator.update(
 		wishdir = wishdir,
 		jump = jump,
 		climb = kind == NavRules.LADDER,
-		airControl = kind == NavRules.JUMP or kind == NavRules.LADDER,
+		-- Descente comprise (#142) : sans viser la case d'arrivée, il dépasse une corniche étroite (toit → corniche de Dizzy)
+		airControl = kind == NavRules.JUMP or kind == NavRules.LADDER or kind == NavRules.DROP,
 		bhop = false,
 		strafeNoise = 0,
 		targetSpeed = 0,

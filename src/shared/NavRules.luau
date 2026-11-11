@@ -1,6 +1,6 @@
 -- Règles pures du plan de navigation des bots (#140, décision 3 de #133), testées (tests/specs/NavRules.spec.luau).
 -- Le plan est une grille de cases praticables (sondée par NavBuilder dans la vraie collision de la map) reliées par
--- des arêtes orientées (marche, descente, saut, échelle). Les cases sont regroupées en points de passage notés, qui
+-- des arêtes orientées (marche, descente, saut, échelle, rampe de surf #142). Les cases sont regroupées en points de passage notés, qui
 -- servent de destinations ; la recherche de chemin se fait case par case, le suivi saute les cases alignées.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -15,13 +15,15 @@ NavRules.WALK = 1
 NavRules.DROP = 2
 NavRules.JUMP = 3
 NavRules.LADDER = 4
-NavRules.KIND_NAMES = { "marche", "descente", "saut", "echelle" }
+NavRules.RAMP = 5 -- rampe de surf (#142) : trajet simulé de la case d'entrée à la case de sortie (RampRules)
+NavRules.KIND_NAMES = { "marche", "descente", "saut", "echelle", "rampe" }
 
 export type Graph = {
 	positions: { Vector3 }, -- point du sol de chaque case
 	out: { { number } }, -- cases d'arrivée des arêtes sortantes
 	outKind: { { number } }, -- type de chaque arête sortante
 	cellCost: { number }?, -- surcoût d'arrivée sur chaque case (bord d'un passage, #151), en studs
+	rampCost: { [number]: number }?, -- coût de chaque arête de rampe (clé edgeKey, #142), d'après la durée du trajet
 }
 
 -- Cette méthode permet de donner la clé d'une arête orientée lorsqu'on veut la mettre à l'écart (ids < 1e6).
@@ -51,6 +53,12 @@ end
 -- par son type, plus un forfait (un saut ou une échelle coûtent plus qu'un pas).
 function NavRules.edgeCost(a: Vector3, b: Vector3, kind: number): number
 	return (b - a).Magnitude * BotConfig.NAV_COST_FACTOR[kind] + BotConfig.NAV_COST_EXTRA[kind]
+end
+
+-- Cette méthode permet de donner le coût d'une arête de rampe lorsque le plan l'ajoute (#142) : distance que le bot
+-- aurait courue pendant la durée du trajet, plus un forfait (risque) ; une rampe n'est prise que si elle raccourcit.
+function NavRules.rampCost(duration: number): number
+	return duration * MovementConfig.RUN_SPEED + BotConfig.RAMP_COST_EXTRA
 end
 
 -- Cette méthode permet de chercher le plus court chemin entre deux cases lorsqu'un bot choisit où aller (A*, tas
@@ -84,6 +92,7 @@ function NavRules.newSearch(
 	-- weight > 1 : heuristique pondérée, bien moins de cases explorées pour un chemin au plus weight fois plus long
 	local w = weight or 1
 	local positions, out, outKind, cellCost = graph.positions, graph.out, graph.outKind, graph.cellCost
+	local rampCost = graph.rampCost
 	local goalPos = positions[goal]
 	local gScore: { [number]: number } = { [start] = 0 }
 	local cameFrom: { [number]: number } = {}
@@ -157,8 +166,12 @@ function NavRules.newSearch(
 				local targets, kinds = out[node], outKind[node]
 				for k, to in targets do
 					if not closed[to] and not (banned and banned[NavRules.edgeKey(node, to)]) then
+						local kind = kinds[k]
+						local ramp = if kind == NavRules.RAMP and rampCost
+							then rampCost[NavRules.edgeKey(node, to)]
+							else nil
 						local g = base
-							+ NavRules.edgeCost(nodePos, positions[to], kinds[k])
+							+ (ramp or NavRules.edgeCost(nodePos, positions[to], kind))
 							+ (if cellCost then cellCost[to] else 0)
 						local known = gScore[to]
 						if known == nil or g < known then

@@ -33,7 +33,7 @@ function NavPlan.start(map: Instance)
 		local s = plan.stats
 		print(
 			string.format(
-				"[Nav] %s : %d cases (%d gardées), %d points, arêtes marche %d / descente %d / saut %d / échelle %d, %d échelles, %.1f s (cases %.1f, marche %.1f, rebords %.1f, vue %.1f)",
+				"[Nav] %s : %d cases (%d gardées), %d points, arêtes marche %d / descente %d / saut %d / échelle %d / rampe %d, %d échelles, %d rampes, %.1f s (cases %.1f, marche %.1f, rebords %.1f, rampes %.1f, vue %.1f)",
 				plan.mapName,
 				s.cells,
 				s.kept,
@@ -42,11 +42,14 @@ function NavPlan.start(map: Instance)
 				s.drop,
 				s.jump,
 				s.ladder,
+				s.ramp,
 				#plan.ladders,
+				s.ramps,
 				s.seconds,
 				s.secondsCells,
 				s.secondsWalk,
 				s.secondsLedges,
+				s.secondsRamps,
 				s.secondsView
 			)
 		)
@@ -130,6 +133,19 @@ function NavPlan.randomWaypoint(plan: Plan, rng: Random, avoid: number?): number
 		pick = pick % count + 1
 	end
 	return pick
+end
+
+-- Cette méthode permet de trouver le point de passage le plus proche d'une position lorsqu'un outil de debug envoie
+-- les bots quelque part (DebugBotsGoto) ; nil sans point.
+function NavPlan.nearestWaypoint(plan: Plan, position: Vector3): number?
+	local best, bestDist = nil, math.huge
+	for i, wp in plan.waypoints do
+		local d = (wp.position - position).Magnitude
+		if d < bestDist then
+			best, bestDist = i, d
+		end
+	end
+	return best
 end
 
 -- Cette méthode permet de trouver l'échelle dont le volume contient une position lorsqu'un bot grimpe : renvoie sa
