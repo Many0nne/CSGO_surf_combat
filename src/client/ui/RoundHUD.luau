@@ -9,6 +9,7 @@ local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("U
 local ParticipantRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ParticipantRules"))
 local UIKit = require(script.Parent.UIKit)
 local HUDRules = require(script.Parent.HUDRules)
+local HUDState = require(script.Parent.HUDState)
 
 local C = UITheme.Colors
 local F = UITheme.Fonts
@@ -19,6 +20,10 @@ local RoundHUD = {}
 -- Fond du timer : deux moitiés de fondu de coin collées au milieu du haut de l'écran
 local TOP_SCRIM_SIZE = Vector2.new(220, 110)
 local TOP_SCRIM_TRANSPARENCY = 0.3
+local TIMER_TOP = 10
+local TIMER_HEIGHT = 80
+-- Menu en partie ouvert (#220) : le timer passe au-dessus de son voile (2) et de sa page (3), la partie continue
+local TIMER_OVER_MENU_ORDER = 4
 -- Classement : largeur fixe (px), colonnes en px ; JOUEUR prend la place restante
 local LB_WIDTH = 620
 local LB_TOP = 118
@@ -40,6 +45,10 @@ local RESULT_RULE_WIDTH = 420
 local RESULT_VEIL_TRANSPARENCY = 0.2
 
 local gui: ScreenGui
+local hudRoot: Frame
+local timerLayer: Frame
+local timerOverMenuGui: ScreenGui
+local timerOverMenuRoot: Frame
 local timerLabel: TextLabel
 local timerShadow: TextLabel
 local blinkTween: Tween?
@@ -69,6 +78,7 @@ local resultName: TextLabel
 local resultNameShadow: TextLabel
 local resultLabel: TextLabel
 
+local hudStateConn: (() -> ())? -- désabonnement de HUDState
 local tabConn: RBXScriptConnection?
 local tabEndConn: RBXScriptConnection?
 local respawnTask: thread?
@@ -78,19 +88,29 @@ local respawnTask: thread?
 local shadowedText = UIKit.shadowedText
 
 -- Cette méthode permet de construire le timer et le rang en haut au centre (chiffres os droits sur un fondu sombre,
--- sans panneau) lorsque le HUD est initialisé.
+-- sans panneau) lorsque le HUD est initialisé ; le tout dans un calque qui passe au-dessus du menu en partie (#220).
 local function buildTimer(root: Frame)
+	-- ZIndex 0 : sous le classement et le résultat (voiles centraux), quel que soit l'ordre des enfants après un
+	-- passage au-dessus du menu
+	local layer = UIKit.frame({
+		Name = "TimerLayer",
+		BackgroundTransparency = 1,
+		Size = UDim2.fromScale(1, 1),
+		ZIndex = 0,
+		Parent = root,
+	})
+	timerLayer = layer
 	local top = UDim2.fromScale(0.5, 0)
-	UIKit.cornerScrim(root, "TopRight", TOP_SCRIM_SIZE, TOP_SCRIM_TRANSPARENCY, top)
-	UIKit.cornerScrim(root, "TopLeft", TOP_SCRIM_SIZE, TOP_SCRIM_TRANSPARENCY, top)
+	UIKit.cornerScrim(layer, "TopRight", TOP_SCRIM_SIZE, TOP_SCRIM_TRANSPARENCY, top)
+	UIKit.cornerScrim(layer, "TopLeft", TOP_SCRIM_SIZE, TOP_SCRIM_TRANSPARENCY, top)
 
 	local block = UIKit.frame({
 		Name = "TimerBlock",
 		BackgroundTransparency = 1,
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 10),
-		Size = UDim2.fromOffset(240, 80),
-		Parent = root,
+		Position = UDim2.new(0.5, 0, 0, TIMER_TOP),
+		Size = UDim2.fromOffset(240, TIMER_HEIGHT),
+		Parent = layer,
 	})
 	timerLabel, timerShadow = shadowedText(block, {
 		Name = "Timer",
@@ -513,6 +533,20 @@ local function buildResultBanner(root: Frame)
 	})
 end
 
+-- Cette méthode permet de poser le timer au-dessus du menu en partie, ou de le rendre au HUD, lorsque l'état du HUD
+-- (HUDState) change ou que le HUD de round s'affiche ou se masque (HUDRules.roundTimerOverMenu).
+local function applyTimerLayer()
+	if not timerLayer then
+		return
+	end
+	local overMenu = HUDRules.roundTimerOverMenu(HUDState.get())
+	local parent = if overMenu then timerOverMenuRoot else hudRoot
+	if timerLayer.Parent ~= parent then
+		timerLayer.Parent = parent
+	end
+	timerOverMenuGui.Enabled = overMenu and gui.Enabled
+end
+
 -- ── API publique ───────────────────────────────────────────────────────────────
 
 function RoundHUD.init()
@@ -531,11 +565,25 @@ function RoundHUD.init()
 		Parent = Lighting,
 	})
 	local root = UIKit.scaledRoot(gui)
+	hudRoot = root
+	-- Calque du timer quand le menu en partie est ouvert : même mise à l'échelle, au-dessus du voile et de la page
+	timerOverMenuGui = UIKit.create("ScreenGui", {
+		Name = "RoundTimerOverMenu",
+		ResetOnSpawn = false,
+		IgnoreGuiInset = true,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+		DisplayOrder = TIMER_OVER_MENU_ORDER,
+		Enabled = false,
+		Parent = gui.Parent,
+	})
+	timerOverMenuRoot = UIKit.scaledRoot(timerOverMenuGui)
 
 	buildRespawnOverlay(root)
 	buildTimer(root)
 	buildLeaderboard(root)
 	buildResultBanner(root)
+	hudStateConn = HUDState.onChanged(applyTimerLayer)
+	applyTimerLayer()
 
 	tabConn = UserInputService.InputBegan:Connect(function(input, _processed)
 		if input.KeyCode == Enum.KeyCode.Tab then
@@ -552,6 +600,7 @@ end
 function RoundHUD.show()
 	if gui then
 		gui.Enabled = true
+		applyTimerLayer()
 	end
 	if respawnRoot then
 		respawnRoot.Visible = false
@@ -564,6 +613,7 @@ end
 function RoundHUD.hide()
 	if gui then
 		gui.Enabled = false
+		applyTimerLayer()
 	end
 	if deathGrade then
 		deathGrade.Enabled = false
@@ -762,8 +812,16 @@ function RoundHUD.destroy()
 		tabEndConn:Disconnect()
 		tabEndConn = nil
 	end
+	if hudStateConn then
+		hudStateConn()
+		hudStateConn = nil
+	end
 	if deathGrade then
 		deathGrade:Destroy()
+	end
+	timerLayer = nil :: any -- applyTimerLayer n'agit plus sur des Instances détruites
+	if timerOverMenuGui then
+		timerOverMenuGui:Destroy()
 	end
 	if gui then
 		gui:Destroy()

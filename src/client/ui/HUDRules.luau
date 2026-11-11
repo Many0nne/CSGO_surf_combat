@@ -1,5 +1,10 @@
--- Règles pures du HUD (sans Instance ni service) : paliers de vitesse, timer, classement, barre d'armes.
+-- Règles pures du HUD (sans Instance ; seul module requis : KeyBindings) : paliers de vitesse, timer, classement, barre
+-- d'armes, affichage des touches.
 -- Testées sous Lune (tests/specs/HUDRules.spec.luau).
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local KeyBindings = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("KeyBindings"))
+
 local HUDRules = {}
 
 -- Seuils des paliers de vitesse en studs/s horizontaux (course ≈ 30) ; le dernier passe le compteur au rouge
@@ -133,15 +138,23 @@ function HUDRules.gameHudVisible(state: string): boolean
 	return state == "IN_ROUND"
 end
 
--- Cette méthode permet de savoir si le crosshair de la visée simplifiée (#195) est affiché lorsque le réglage, l'état du
--- HUD de jeu, la lunette ou le menu en partie changent : réglage actif, HUD de jeu visible, ni lunette ni menu ouvert.
-function HUDRules.crosshairVisible(enabled: boolean, hudVisible: boolean, scoped: boolean, menuOpen: boolean): boolean
-	return enabled and hudVisible and not scoped and not menuOpen
+-- État du HUD (#223), tenu par HUDState : état client (GameStateController), menu en partie ouvert (InGameMenu, Réglages
+-- compris), lunette affichée (ScopeOverlay). La mort est l'état client DEAD.
+export type HUDSnapshot = {
+	gameState: string,
+	menuOpen: boolean,
+	scoped: boolean,
+}
+
+-- Cette méthode permet de savoir si le crosshair de la visée simplifiée (#195) est affiché lorsque le réglage ou l'état du
+-- HUD changent : réglage actif, HUD de jeu visible (donc ni menu principal, ni mort, ni résultat), ni lunette ni menu ouvert.
+function HUDRules.crosshairVisible(hud: HUDSnapshot, enabled: boolean): boolean
+	return enabled and HUDRules.gameHudVisible(hud.gameState) and not hud.scoped and not hud.menuOpen
 end
 
--- Affichage des touches (#197) : une entrée par touche, placée sur une grille (colonne, rangée, largeur en cases).
--- `keys` : noms d'Enum.KeyCode (une des touches suffit à l'allumer), reflet des liaisons fixes d'InputModule.KEY_MAP ;
--- `mouse` : bouton de souris (« 1 » ou « 2 ») ; `label` : libellé fixe, sinon celui de la disposition du clavier.
+-- Affichage des touches (#197) : une entrée par action, placée sur une grille (colonne, rangée, largeur en cases).
+-- `keys` : noms d'Enum.KeyCode (une des touches suffit à l'allumer) et `mouse` : bouton de souris (1 ou 2), tirés de
+-- KeyBindings (#224, mêmes liaisons qu'InputModule) ; `label` : libellé fixe, sinon celui de la disposition du clavier.
 -- `full` : l'entrée n'apparaît qu'en mode « full » ; le mode « simple » garde les directions et le saut.
 export type KeyDisplayEntry = {
 	id: string,
@@ -154,40 +167,57 @@ export type KeyDisplayEntry = {
 	full: boolean,
 }
 
+-- Disposition de la grille : `id` est une action de KeyBindings.KEYS ou KeyBindings.MOUSE.
 -- stylua: ignore
-local KEY_DISPLAY_ENTRIES: { KeyDisplayEntry } = {
-	{ id = "forward", keys = { "W" },                         col = 1, row = 0, width = 1, full = false },
-	{ id = "left",    keys = { "A" },                         col = 0, row = 1, width = 1, full = false },
-	{ id = "back",    keys = { "S" },                         col = 1, row = 1, width = 1, full = false },
-	{ id = "right",   keys = { "D" },                         col = 2, row = 1, width = 1, full = false },
-	{ id = "jump",    keys = { "Space" }, label = "ESPACE",   col = 0, row = 2, width = 3, full = false },
-	{ id = "fire",    mouse = 1,          label = "M1",       col = 4, row = 0, width = 1, full = true },
-	{ id = "aim",     mouse = 2,          label = "M2",       col = 5, row = 0, width = 1, full = true },
-	{ id = "reload",  keys = { "R" },                         col = 4, row = 1, width = 1, full = true },
-	{ id = "inspect", keys = { "F" },                         col = 5, row = 1, width = 1, full = true },
-	{ id = "crouch",  keys = { "LeftControl", "RightControl" }, label = "CTRL", col = 4, row = 2, width = 1, full = true },
-	{ id = "walk",    keys = { "LeftShift", "RightShift" },   label = "MAJ",    col = 5, row = 2, width = 1, full = true },
-}
+local KEY_DISPLAY_LAYOUT = {
+	{ id = "forward",                     col = 1, row = 0, width = 1, full = false },
+	{ id = "left",                        col = 0, row = 1, width = 1, full = false },
+	{ id = "back",                        col = 1, row = 1, width = 1, full = false },
+	{ id = "right",                       col = 2, row = 1, width = 1, full = false },
+	{ id = "jump",    label = "ESPACE",   col = 0, row = 2, width = 3, full = false },
+	{ id = "fire",    label = "M1",       col = 4, row = 0, width = 1, full = true },
+	{ id = "aim",     label = "M2",       col = 5, row = 0, width = 1, full = true },
+	{ id = "reload",                      col = 4, row = 1, width = 1, full = true },
+	{ id = "inspect",                     col = 5, row = 1, width = 1, full = true },
+	{ id = "crouch",  label = "CTRL",     col = 4, row = 2, width = 1, full = true },
+	{ id = "walk",    label = "MAJ",      col = 5, row = 2, width = 1, full = true },
+} :: { { id: string, label: string?, col: number, row: number, width: number, full: boolean } }
 
 -- Cette méthode permet de lister les touches à afficher lorsque le mode d'affichage des touches est appliqué : aucune en
--- « off », directions et saut en « simple », toutes (accroupi, marche lente, tir, visée, recharge, inspection) en « full ».
+-- « off », directions et saut en « simple », toutes (accroupi, marche lente, tir, visée, recharge, inspection) en « full » ;
+-- les touches et boutons de chaque entrée viennent de KeyBindings.
 function HUDRules.keyDisplayEntries(mode: string): { KeyDisplayEntry }
 	local result = {}
 	if mode ~= "simple" and mode ~= "full" then
 		return result
 	end
-	for _, entry in KEY_DISPLAY_ENTRIES do
-		if mode == "full" or not entry.full then
-			table.insert(result, entry)
+	for _, slot in KEY_DISPLAY_LAYOUT do
+		if mode == "full" or not slot.full then
+			table.insert(result, {
+				id = slot.id,
+				keys = (KeyBindings.KEYS :: any)[slot.id],
+				mouse = (KeyBindings.MOUSE :: any)[slot.id],
+				label = slot.label,
+				col = slot.col,
+				row = slot.row,
+				width = slot.width,
+				full = slot.full,
+			})
 		end
 	end
 	return result
 end
 
--- Cette méthode permet de savoir si l'affichage des touches est montré lorsque le réglage, l'état du HUD de jeu ou le
--- menu en partie changent : mode actif, HUD de jeu visible (donc ni menu, ni mort, ni résultat), menu en partie fermé.
-function HUDRules.keyDisplayVisible(mode: string, hudVisible: boolean, menuOpen: boolean): boolean
-	return (mode == "simple" or mode == "full") and hudVisible and not menuOpen
+-- Cette méthode permet de savoir si l'affichage des touches est montré lorsque le réglage ou l'état du HUD changent : mode
+-- actif, HUD de jeu visible (donc ni menu, ni mort, ni résultat), menu en partie fermé ; la lunette ne le masque pas.
+function HUDRules.keyDisplayVisible(hud: HUDSnapshot, mode: string): boolean
+	return (mode == "simple" or mode == "full") and HUDRules.gameHudVisible(hud.gameState) and not hud.menuOpen
+end
+
+-- Cette méthode permet de savoir si le timer du round passe au-dessus du voile du menu en partie (#220) lorsque l'état du
+-- HUD change : menu ouvert (Réglages compris), vivant ou mort, la partie continuant derrière ; sinon il reste dans le HUD.
+function HUDRules.roundTimerOverMenu(hud: HUDSnapshot): boolean
+	return hud.menuOpen
 end
 
 -- Cette méthode permet de savoir si le kill feed est affiché lorsque l'état client change : en partie, vivant ou mort

@@ -52,8 +52,8 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   actions côte à côte en bas au centre (`MenuPage.ExitY`). Choix de l'utilisateur en #117, après un premier passage en
   colonne sur un dégradé à gauche jugé peu changé. Infos et Réglages partagent la même disposition (catégories à gauche
   avec barre ambrée sur l'active, contenu à droite, bloc de 780 px). Le titre en texte (Oswald à ombre, en
-  haut au centre, à la place des onglets) n'est montré qu'en partie (menu en partie et ses Réglages) : au menu, l'onglet
-  actif sert de titre. `page.choice` : choix en texte, os atténué au repos, os vif une fois choisi (`setSelected`, aussi pour
+  haut au centre) n'est montré qu'en partie (menu en partie et ses Réglages) : au menu, l'onglet actif sert de titre. En
+  partie, il se pose sous le timer du round (`TITLE_Y` 92 px, #220), resté visible au-dessus du voile. `page.choice` : choix en texte, os atténué au repos, os vif une fois choisi (`setSelected`, aussi pour
   l'action principale comme ENVOYER ou RETOUR), rouge d'impact au survol.
 - Réglages (`SettingsMenu.luau`, disposition C des schémas de #117, préférée aux sous-onglets en haut et à la liste
   unique qui défile) : catégories à gauche (barre ambrée sur l'active), lignes de 54 px à droite (nom, contrôle,
@@ -109,9 +109,12 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   défaut). Quatre traits fins os (`ARM_LENGTH` 9 px, `ARM_THICKNESS` 2, `CENTER_GAP` 5) sans point central, doublés d'un contour
   noir de `OUTLINE` 1 px (`OUTLINE_TRANSPARENCY` 0,1) : sur fond blanc seul le contour se lit, sur sol ou mur sombre le trait os.
   Taille fixe en pixels, pas de `scaledRoot`. `ScreenGui` en `ScreenInsets.None` pour tomber sur le centre exact de la caméra,
-  comme la lunette. Affichage = `HUDRules.crosshairVisible` : réglage actif, HUD de jeu visible (`GameStateController.applyGameHud`,
-  donc ni menu, ni mort, ni résultat), lunette absente (`ScopeOverlay.setVisible`) et menu en partie fermé (`InGameMenu`).
+  comme la lunette. Affichage = `HUDRules.crosshairVisible` appliquée à `HUDState` (voir « État du HUD ») : réglage actif, HUD de
+  jeu visible (donc ni menu, ni mort, ni résultat), lunette absente et menu en partie fermé.
   Toutes les armes, couteau compris. Piste rejetée : point rouge central (criard, hors de la matière du HUD).
+  Branches tracées par `Reticle.drawArms` (#222), comme le réticule de la lunette (`ScopeOverlay`) : quatre branches à
+  `gap` px du centre, longueur en px ou en part du parent, contour dessous plus épais de `outline.width` px par côté,
+  bouts fermés (`caps`, crosshair) ou ouverts (lunette), estompe `fade` en option (lunette). Un nouveau réticule passe par là.
 - `src/client/ui/KeyDisplay.luau` (#197) : réglage « Affichage des touches » (Réglages > GRAPHISMES, `PlayerSettings.keyDisplay`,
   trois valeurs `off` (défaut) / `simple` / `full`, validées par `sanitize`). Grille façon clavier en bas au centre (`BOTTOM_MARGIN`
   40 px, `scaledRoot`, entre le compteur de vitesse à gauche et la barre d'armes à droite) : cases de `KEY_SIZE` 40 px, `KEY_GAP` 4.
@@ -120,12 +123,15 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   à droite (M1, M2 / recharge, inspection / CTRL accroupi, MAJ marche lente), pas les armes. La liste, la grille et la visibilité sont
   dans `HUDRules.keyDisplayEntries` / `keyDisplayVisible` (testées). Libellés : `LocalSettings.keyText` (disposition du clavier, AZERTY
   = Z Q S D), libellés fixes pour Espace, Ctrl, Maj et la souris. L'état vient de `UserInputService:IsKeyDown` /
-  `IsMouseButtonPressed` à chaque Heartbeat (repeint seulement au changement). Les liaisons de déplacement sont fixes dans
-  `InputModule.KEY_MAP` : la liste de `HUDRules` les reflète, à garder synchrone si une liaison devient réglable.
+  `IsMouseButtonPressed` à chaque Heartbeat (repeint seulement au changement). Les liaisons sont fixes et n'ont qu'une source (#224) :
+  `src/shared/KeyBindings.luau` (action → noms d'`Enum.KeyCode`, `MOUSE` pour M1/M2 ; M2 lu par `WeaponSystem`, M1 reste
+  `Tool.Activated`, fixé par Roblox ; tables gelées), lue par `InputModule` (`KEY_MAP`), par
+  `HUDRules.keyDisplayEntries` (la grille `KEY_DISPLAY_LAYOUT` ne garde que la place et le libellé fixe de chaque action) et par
+  les touches réservées de `PlayerSettings`. Une nouvelle action : sa liaison dans `KeyBindings`, sa case dans la grille.
   Les cases suivent les touches physiques, pas l'action disponible : F et M2 s'allument aussi avec une arme sans inspection
   ni lunette ; clavier ignoré pendant la saisie de texte (`GetFocusedTextBox`), pas de suivi du `gameProcessed` (piste non retenue,
   elle demandait un état par touche au lieu d'un sondage).
-  Affichage : mode actif, HUD de jeu visible (`GameStateController.applyGameHud`), menu en partie fermé (`InGameMenu`) ; la
+  Affichage (`HUDRules.keyDisplayVisible` appliquée à `HUDState`) : mode actif, HUD de jeu visible, menu en partie fermé ; la
   lunette ne le masque pas (les touches restent utiles).
   Vérifié en Studio avec `user_keyboard_input` (`keyDown` W/D/S/Espace/Ctrl/R passent en partie et allument les cases) ; le clic de
   souris M1/M2 n'a pas été simulé. Coordonnées de clic des onglets du menu : y négatif (`AbsolutePosition` du bouton).
@@ -133,6 +139,10 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   sombre en deux moitiés de coin, timer en rouge d'impact sous 30 s) ; classement sous Tab : pas de panneau, voile sombre
   central qui s'efface vers les côtés, titre « CLASSEMENT » sur un filet ambre, colonnes K / M / K/M, ligne du joueur
   sur une bande rouge d'impact **droite** (penchée, elle se lisait mal en face des colonnes).
+  Menu en partie ouvert (#220, choix de l'utilisateur : la partie continue derrière) : le timer et son fondu (calque
+  `TimerLayer`) passent dans un `ScreenGui` à part (`RoundTimerOverMenu`, DisplayOrder 4, au-dessus du voile 2 et de la
+  page 3), selon `HUDRules.roundTimerOverMenu` ; le titre « MENU » / « RÉGLAGES » descend dessous. Menu fermé, le calque
+  revient dans `RoundHUD` en ZIndex 0, sous les voiles du classement et du résultat comme avant.
   Réapparition : la scène reste visible, désaturée (`ColorCorrectionEffect`), sans voile plein ; en bas au centre, sur
   deux moitiés de fondu de coin, « ÉLIMINÉ » en rouge d'impact (le joueur a été touché), compte à rebours en gros
   chiffres os à ombre, libellé ambré « RÉAPPARITION ». Au-dessus du compte à rebours (#102) : « ÉLIMINÉ PAR », nom du
@@ -177,6 +187,14 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
   Piège : `endRound()` détruit le personnage côté serveur sans que `CharacterRemoving` se déclenche (`Player.Character` reste
   référencé) : un élément qui ne suit que la vie du personnage reste affiché au menu (cas de `WeaponBar`). Tout nouvel élément du HUD de jeu doit brancher sur cette règle, pas sur un état à lui.
   `Speedometer.init()` tourne au premier spawn, après le premier `setVisible` : le module mémorise donc la visibilité.
+
+- **État du HUD (#223) :** `src/client/ui/HUDState.luau` tient l'état client (posé par `applyGameHud`, d'où « HUD de jeu » et
+  « mort »), le menu en partie ouvert (`InGameMenu`, Réglages compris) et la lunette affichée (`ScopeOverlay.setVisible`). Les
+  éléments qui dépendent de plus que l'état client s'y abonnent (`HUDState.onChanged`, nouvel et ancien instantanés) et
+  appliquent leur règle de `HUDRules`, testée avec un instantané (`crosshairVisible`, `keyDisplayVisible`, `roundTimerOverMenu`).
+  Une nouvelle condition de masquage : un champ et son setter dans `HUDState`, puis la règle des éléments concernés ; pas de
+  setter `setMenuOpen` / `setScoped` recopié dans chaque élément (supprimés de `Crosshair` et `KeyDisplay`). Compteur de
+  vitesse, barre d'armes, munitions et kill feed ne dépendent que de l'état client et restent poussés par `applyGameHud`.
 
 - **Libellé d'une touche (#100) :** `Enum.KeyCode` désigne la position sur un clavier QWERTY. Sur un clavier AZERTY,
   `KeyCode.Q` est la touche imprimée « A » : afficher `UserInputService:GetStringForKeyCode` (`LocalSettings.keyText`),

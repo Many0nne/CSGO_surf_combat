@@ -1,5 +1,8 @@
 return function(T, Loader)
-	local HUDRules = Loader.new():require("src/client/ui/HUDRules")
+	-- Même contexte pour les deux : HUDRules et le test lisent la même instance de KeyBindings
+	local loader = Loader.new()
+	local HUDRules = loader:require("src/client/ui/HUDRules")
+	local KeyBindings = loader:require("src/shared/KeyBindings")
 
 	T.describe("HUDRules.speedTier", function()
 		T.it("place chaque vitesse dans le bon palier, seuils inclus", function()
@@ -14,13 +17,28 @@ return function(T, Loader)
 		end)
 	end)
 
+	-- Cette méthode permet de composer un état du HUD (HUDState) lorsqu'un test de visibilité en a besoin : en partie,
+	-- menu fermé, sans lunette, sauf champs donnés.
+	local function hud(fields: { [string]: any }?): HUDRules.HUDSnapshot
+		local result = { gameState = "IN_ROUND", menuOpen = false, scoped = false }
+		for key, value in fields or {} do
+			(result :: any)[key] = value
+		end
+		return result
+	end
+
 	T.describe("HUDRules.crosshairVisible", function()
-		T.it("n'affiche le crosshair que réglage actif, en partie, sans lunette ni Réglages ouverts", function()
-			T.expectEqual(HUDRules.crosshairVisible(true, true, false, false), true)
-			T.expectEqual(HUDRules.crosshairVisible(false, true, false, false), false, "réglage coupé")
-			T.expectEqual(HUDRules.crosshairVisible(true, false, false, false), false, "HUD masqué")
-			T.expectEqual(HUDRules.crosshairVisible(true, true, true, false), false, "lunette")
-			T.expectEqual(HUDRules.crosshairVisible(true, true, false, true), false, "Réglages ouverts")
+		T.it("n'affiche le crosshair que réglage actif, en partie, sans lunette ni menu ouvert", function()
+			T.expectEqual(HUDRules.crosshairVisible(hud(), true), true)
+			T.expectEqual(HUDRules.crosshairVisible(hud(), false), false, "réglage coupé")
+			T.expectEqual(HUDRules.crosshairVisible(hud({ scoped = true }), true), false, "lunette")
+			T.expectEqual(HUDRules.crosshairVisible(hud({ menuOpen = true }), true), false, "menu en partie ouvert")
+		end)
+
+		T.it("masque le crosshair hors partie : mort, menu principal, réapparition, résultat", function()
+			for _, state in { "DEAD", "MENU", "INFOS", "SPAWNING", "RESULT" } do
+				T.expectEqual(HUDRules.crosshairVisible(hud({ gameState = state }), true), false, state)
+			end
 		end)
 	end)
 
@@ -68,15 +86,48 @@ return function(T, Loader)
 				T.expectEqual(entry.keys ~= nil or entry.mouse ~= nil, true, entry.id)
 			end
 		end)
+
+		T.it("tire chaque action affichée des liaisons d'InputModule (KeyBindings, #224)", function()
+			local keyMap = KeyBindings.keyMap()
+			for _, entry in HUDRules.keyDisplayEntries("full") do
+				if entry.mouse then
+					T.expectEqual(entry.mouse, KeyBindings.MOUSE[entry.id], entry.id)
+				else
+					T.expectEqual(entry.keys, KeyBindings.KEYS[entry.id], entry.id)
+					for _, key in entry.keys or {} do
+						T.expectEqual(keyMap[key], entry.id, entry.id .. " " .. key)
+					end
+				end
+			end
+		end)
 	end)
 
 	T.describe("HUDRules.keyDisplayVisible", function()
-		T.it("n'affiche les touches que mode actif, en partie, Réglages fermés", function()
-			T.expectEqual(HUDRules.keyDisplayVisible("simple", true, false), true)
-			T.expectEqual(HUDRules.keyDisplayVisible("full", true, false), true)
-			T.expectEqual(HUDRules.keyDisplayVisible("off", true, false), false, "réglage coupé")
-			T.expectEqual(HUDRules.keyDisplayVisible("simple", false, false), false, "HUD masqué")
-			T.expectEqual(HUDRules.keyDisplayVisible("full", true, true), false, "Réglages ouverts")
+		T.it("n'affiche les touches que mode actif, en partie, menu fermé", function()
+			T.expectEqual(HUDRules.keyDisplayVisible(hud(), "simple"), true)
+			T.expectEqual(HUDRules.keyDisplayVisible(hud(), "full"), true)
+			T.expectEqual(HUDRules.keyDisplayVisible(hud(), "off"), false, "réglage coupé")
+			T.expectEqual(HUDRules.keyDisplayVisible(hud({ menuOpen = true }), "full"), false, "menu en partie ouvert")
+		end)
+
+		T.it("garde les touches en lunette, les masque hors partie (mort comprise)", function()
+			T.expectEqual(HUDRules.keyDisplayVisible(hud({ scoped = true }), "simple"), true, "lunette")
+			for _, state in { "DEAD", "MENU", "INFOS", "SPAWNING", "RESULT" } do
+				T.expectEqual(HUDRules.keyDisplayVisible(hud({ gameState = state }), "simple"), false, state)
+			end
+		end)
+	end)
+
+	T.describe("HUDRules.roundTimerOverMenu", function()
+		T.it("passe le timer au-dessus du menu en partie ouvert, vivant ou mort, lunette ou non", function()
+			T.expectEqual(HUDRules.roundTimerOverMenu(hud({ menuOpen = true })), true)
+			T.expectEqual(HUDRules.roundTimerOverMenu(hud({ menuOpen = true, gameState = "DEAD" })), true, "mort")
+			T.expectEqual(HUDRules.roundTimerOverMenu(hud({ menuOpen = true, scoped = true })), true, "lunette")
+		end)
+
+		T.it("laisse le timer dans le HUD menu fermé", function()
+			T.expectEqual(HUDRules.roundTimerOverMenu(hud()), false)
+			T.expectEqual(HUDRules.roundTimerOverMenu(hud({ gameState = "DEAD" })), false, "mort")
 		end)
 	end)
 

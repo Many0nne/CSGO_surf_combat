@@ -1,8 +1,9 @@
 -- Affichage des touches (#197, direction « Ligne de mire ») : grille façon clavier en bas au centre de l'écran, une case par
 -- touche (directions et Espace en « simple », plus accroupi et actions de jeu en « full »). Case au repos : fond sombre
 -- translucide, trait et texte os atténués ; touche enfoncée : case os pleine, texte noir. Libellés selon la disposition
--- du clavier (LocalSettings.keyText). Affiché selon HUDRules.keyDisplayVisible : mode actif, HUD de jeu visible (donc ni
--- menu ni mort) et écran Réglages fermé. Pas de CanvasGroup (cf. docs/ui.md) : de simples Frame et TextLabel.
+-- du clavier (LocalSettings.keyText). Affiché selon HUDRules.keyDisplayVisible appliquée à HUDState (#223) : mode actif,
+-- HUD de jeu visible (donc ni menu ni mort) et menu en partie fermé. Pas de CanvasGroup (cf. docs/ui.md) : de simples
+-- Frame et TextLabel.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -11,6 +12,7 @@ local UserInputService = game:GetService("UserInputService")
 local UITheme = require(ReplicatedStorage.Shared.UITheme)
 local LocalSettings = require(script.Parent.Parent.systems.settings.LocalSettings)
 local HUDRules = require(script.Parent.HUDRules)
+local HUDState = require(script.Parent.HUDState)
 local UIKit = require(script.Parent.UIKit)
 
 local C = UITheme.Colors
@@ -39,15 +41,13 @@ local gui: ScreenGui?
 local grid: Frame?
 local views: { KeyView } = {}
 local builtMode: string? -- mode dont la grille est construite
-local hudVisible = false -- règle « HUD de jeu visible » (HUDRules), posée par GameStateController
-local menuOpen = false -- menu en partie ouvert, Réglages compris (InGameMenu)
 
 -- Cette méthode permet de savoir si une touche ou un bouton de souris est enfoncé lorsque la grille est rafraîchie ;
 -- `typing` : un champ de texte (chat) a le focus et capte le clavier, le jeu ne reçoit pas ces touches.
 local function isDown(view: KeyView, typing: boolean): boolean
 	local mouse = view.entry.mouse
 	if mouse then
-		local button = if mouse == 1 then Enum.UserInputType.MouseButton1 else Enum.UserInputType.MouseButton2
+		local button = (Enum.UserInputType :: any)["MouseButton" .. mouse]
 		return UserInputService:IsMouseButtonPressed(button)
 	end
 	if typing then
@@ -131,14 +131,14 @@ local function build(mode: string)
 	end
 end
 
--- Cette méthode permet d'afficher ou de masquer la grille, et de la reconstruire si le mode a changé, lorsque le réglage,
--- le HUD ou l'écran Réglages changent ; grille masquée, les cases repartent au repos (pas de case restée allumée).
+-- Cette méthode permet d'afficher ou de masquer la grille, et de la reconstruire si le mode a changé, lorsque le réglage
+-- ou l'état du HUD (HUDState) changent ; grille masquée, les cases repartent au repos (pas de case restée allumée).
 local function update()
 	if not gui then
 		return
 	end
 	local mode = LocalSettings.get().keyDisplay
-	gui.Enabled = HUDRules.keyDisplayVisible(mode, hudVisible, menuOpen)
+	gui.Enabled = HUDRules.keyDisplayVisible(HUDState.get(), mode)
 	if mode ~= builtMode then
 		build(mode)
 	end
@@ -177,20 +177,12 @@ local function poll()
 	end
 end
 
--- Cette méthode permet de savoir si le HUD de jeu est affiché lorsque l'état client change (règle HUDRules.gameHudVisible).
-function KeyDisplay.setHudVisible(show: boolean)
-	local appearing = show and not hudVisible
-	hudVisible = show
+-- Cette méthode permet d'appliquer l'état du HUD lorsqu'il change, et de relire les libellés quand le HUD de jeu apparaît.
+local function onHudChanged(hud: HUDState.Snapshot, previous: HUDState.Snapshot)
 	update()
-	if appearing then
+	if HUDRules.gameHudVisible(hud.gameState) and not HUDRules.gameHudVisible(previous.gameState) then
 		refreshLabels()
 	end
-end
-
--- Cette méthode permet de masquer les touches lorsque le menu en partie s'ouvre ou se ferme (InGameMenu).
-function KeyDisplay.setMenuOpen(isOpen: boolean)
-	menuOpen = isOpen
-	update()
 end
 
 -- Cette méthode permet de construire l'affichage des touches et de suivre le réglage lorsque le client démarre ; le réglage
@@ -219,6 +211,7 @@ function KeyDisplay.init()
 	})
 
 	LocalSettings.onChanged(update)
+	HUDState.onChanged(onHudChanged)
 	RunService.Heartbeat:Connect(poll)
 	update()
 end

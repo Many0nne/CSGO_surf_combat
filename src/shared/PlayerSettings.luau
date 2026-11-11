@@ -4,6 +4,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
+local KeyBindings = require(ReplicatedStorage.Shared.KeyBindings)
 
 export type WheelMode = "previous" | "next" | "off"
 
@@ -51,23 +52,6 @@ local DIGITS = {
 	Nine = "9",
 }
 
--- Touches déjà prises par le jeu (déplacement, saut, accroupi, recharge, inspection, menu, classement, F3/F4 de
--- debug) ou par Roblox (F9 console, F11 plein écran, F12 capture) : refusées pour un emplacement
-local RESERVED = {
-	W = true,
-	A = true,
-	S = true,
-	D = true,
-	R = true,
-	F = true,
-	[PlayerSettings.MENU_KEY] = true,
-	F3 = true,
-	F4 = true,
-	F9 = true,
-	F11 = true,
-	F12 = true,
-}
-
 -- Touches proposées : lettres, chiffres de la rangée du haut et touches F (hors réservées). Une liste fermée garde des
 -- libellés courts dans la barre et écarte les touches système (Échap, Tab, Espace, Maj, Ctrl, Alt, « / » du chat).
 local BINDABLE: { [string]: boolean } = {}
@@ -79,6 +63,25 @@ for name in DIGITS do
 end
 for n = 1, 12 do
 	BINDABLE["F" .. n] = true
+end
+
+-- Touches déjà prises par le jeu (liaisons de KeyBindings parmi les touches proposées : déplacement, recharge,
+-- inspection ; menu, classement, F3/F4 de debug) ou par Roblox (F9 console, F11 plein écran, F12 capture) : refusées
+-- pour un emplacement. Espace, Ctrl et Maj, liés aussi, ne sont pas proposés (refus « invalid »).
+local RESERVED = {
+	[PlayerSettings.MENU_KEY] = true,
+	F3 = true,
+	F4 = true,
+	F9 = true,
+	F11 = true,
+	F12 = true,
+}
+for _, keys in KeyBindings.KEYS do
+	for _, key in keys do
+		if BINDABLE[key] then
+			RESERVED[key] = true
+		end
+	end
 end
 for name in RESERVED do
 	BINDABLE[name] = nil

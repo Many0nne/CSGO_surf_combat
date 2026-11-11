@@ -2,7 +2,8 @@
 -- un cercle transparent dont le contour noir couvre le reste de l'écran, et un réticule en Frames.
 local Players = game:GetService("Players")
 
-local Crosshair = require(script.Parent.Crosshair)
+local HUDState = require(script.Parent.HUDState)
+local Reticle = require(script.Parent.Reticle)
 local UIKit = require(script.Parent.UIKit)
 
 local MASK_COLOR = Color3.new(0, 0, 0)
@@ -23,57 +24,9 @@ local ARM_FADE = NumberSequence.new({
 	NumberSequenceKeypoint.new(1, 0.65),
 })
 
--- `rotation` oriente l'estompe (fin du dégradé) vers le centre de la lunette.
-local ARMS = {
-	{
-		name = "Left",
-		anchor = Vector2.new(1, 0.5),
-		position = UDim2.new(0.5, -CENTER_GAP, 0.5, 0),
-		horizontal = true,
-		rotation = 0,
-	},
-	{
-		name = "Right",
-		anchor = Vector2.new(0, 0.5),
-		position = UDim2.new(0.5, CENTER_GAP, 0.5, 0),
-		horizontal = true,
-		rotation = 180,
-	},
-	{
-		name = "Top",
-		anchor = Vector2.new(0.5, 1),
-		position = UDim2.new(0.5, 0, 0.5, -CENTER_GAP),
-		horizontal = false,
-		rotation = 90,
-	},
-	{
-		name = "Bottom",
-		anchor = Vector2.new(0.5, 0),
-		position = UDim2.new(0.5, 0, 0.5, CENTER_GAP),
-		horizontal = false,
-		rotation = 270,
-	},
-}
-
 local ScopeOverlay = {}
 
 local gui: ScreenGui?
-
--- Cette méthode permet de tracer une couche d'une branche du réticule lorsque la lunette est construite.
-local function armLayer(lens: Frame, arm: { [string]: any }, thickness: number, color: Color3, zIndex: number)
-	local size = arm.horizontal and UDim2.new(0.5, -CENTER_GAP, 0, thickness)
-		or UDim2.new(0, thickness, 0.5, -CENTER_GAP)
-	local layer = UIKit.frame({
-		Name = arm.name,
-		AnchorPoint = arm.anchor,
-		Position = arm.position,
-		Size = size,
-		BackgroundColor3 = color,
-		ZIndex = zIndex,
-		Parent = lens,
-	})
-	UIKit.create("UIGradient", { Rotation = arm.rotation, Transparency = ARM_FADE, Parent = layer })
-end
 
 -- Cette méthode permet de construire la lunette une seule fois lorsqu'elle est affichée pour la première fois.
 local function build(): ScreenGui
@@ -102,10 +55,15 @@ local function build(): ScreenGui
 	UIKit.create("UICorner", { CornerRadius = UDim.new(0.5, 0), Parent = lens })
 	UIKit.stroke(lens, MASK_COLOR, MASK_THICKNESS)
 
-	for _, arm in ARMS do
-		armLayer(lens, arm, OUTLINE_THICKNESS, OUTLINE_COLOR, 1)
-		armLayer(lens, arm, LINE_THICKNESS, LINE_COLOR, 2)
-	end
+	-- Branches jusqu'au bord du cercle, contour sur les côtés seulement (bouts ouverts, estompés vers le centre)
+	Reticle.drawArms(lens, {
+		length = UDim.new(0.5, -CENTER_GAP),
+		thickness = LINE_THICKNESS,
+		gap = CENTER_GAP,
+		color = LINE_COLOR,
+		outline = { color = OUTLINE_COLOR, width = (OUTLINE_THICKNESS - LINE_THICKNESS) / 2 },
+		fade = ARM_FADE,
+	})
 	UIKit.frame({
 		Name = "Dot",
 		AnchorPoint = Vector2.new(0.5, 0.5),
@@ -120,7 +78,7 @@ end
 
 -- Cette méthode permet d'afficher ou de masquer la lunette lorsque le joueur change de niveau de zoom.
 function ScopeOverlay.setVisible(visible: boolean)
-	Crosshair.setScoped(visible) -- la lunette a son propre réticule : le crosshair de la visée simplifiée s'efface
+	HUDState.setScoped(visible) -- la lunette a son propre réticule : le crosshair de la visée simplifiée s'efface
 	if not gui then
 		if not visible then
 			return

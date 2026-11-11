@@ -14,9 +14,8 @@ local PlayerSettings = require(ReplicatedStorage.Shared.PlayerSettings)
 local UITheme = require(ReplicatedStorage.Shared.UITheme)
 local InputModule = require(script.Parent.Parent.input.InputModule)
 local LocalSettings = require(script.Parent.Parent.systems.settings.LocalSettings)
-local Crosshair = require(script.Parent.Crosshair)
+local HUDState = require(script.Parent.HUDState)
 local InGameMenuRules = require(script.Parent.InGameMenuRules)
-local KeyDisplay = require(script.Parent.KeyDisplay)
 local MenuPage = require(script.Parent.MenuPage)
 local SettingsMenu = require(script.Parent.SettingsMenu)
 local UIKit = require(script.Parent.UIKit)
@@ -94,12 +93,11 @@ local function releaseMouse()
 	UserInputService.MouseIconEnabled = wantedIcon
 end
 
--- Cette méthode permet de poser ou retirer tout ce qui couvre la partie (voile, souris, touches de jeu, crosshair,
--- affichage des touches) lorsque le menu s'ouvre ou se ferme.
+-- Cette méthode permet de poser ou retirer tout ce qui couvre la partie (voile, souris, touches de jeu ; via HUDState,
+-- crosshair et affichage des touches masqués) lorsque le menu s'ouvre ou se ferme.
 local function applyOverlay(isOpen: boolean)
 	InputModule.setSuspended(isOpen)
-	Crosshair.setMenuOpen(isOpen)
-	KeyDisplay.setMenuOpen(isOpen)
+	HUDState.setMenuOpen(isOpen)
 	backdropGui.Enabled = isOpen
 	if isOpen then
 		holdMouse()
