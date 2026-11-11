@@ -24,7 +24,7 @@ local ROUNDED_ENDS = UDim.new(0.5, 0) -- rayon égal à la moitié de l'épaisse
 -- Les diagonales ne chevauchent pas le réticule en croix de la lunette.
 local DIAGONALS = { { 1, 1 }, { -1, 1 }, { -1, -1 }, { 1, -1 } }
 
--- Ding aigu d'un tir à la tête (Headshot 2 de SilverIllusionist, freesound.org, crédité dans l'écran Infos) :
+-- Ding aigu d'un tir à la tête (Headshot 2 de SilverIllusionist, CC BY 4.0, freesound.org/s/470586, crédité dans l'écran Infos) :
 -- source versionnée dans assets/sounds/Headshot.mp3, publiée par Open Cloud.
 local HEADSHOT_SOUND_ID = "rbxassetid://132843349237006"
 local HEADSHOT_VOLUME = 0.7
