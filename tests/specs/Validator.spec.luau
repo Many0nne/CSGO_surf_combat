@@ -1315,6 +1315,19 @@ return function(T, Loader)
 			)
 		end)
 
+		T.it("un contrôle d'equip en mode log ne rend pas muet un tir que la touche accepterait", function()
+			local Validator, makePlayer, _, _, ShotRules = setup()
+			local a = makePlayer(Vector3.zero)
+			local awp = Instance.new("Tool")
+			awp.Name = "AWP"
+			awp.Parent = a.Character
+			Validator.noteEquip(a, awp, 10)
+			ShotRules.MODES.equip = "log"
+			T.expectEqual(Validator.isReadyToFire(a, 10.1), true, "equip en journal seul")
+			ShotRules.MODES.equip = "block"
+			T.expectEqual(Validator.isReadyToFire(a, 10.1), false, "equip bloquant")
+		end)
+
 		T.it("toujours prêt pour un bot armé d'un fusil (BotArsenal fait respecter equip et chargeur)", function()
 			local Validator, _, makeBot = setup()
 			T.expectEqual(Validator.isReadyToFire(makeBot(Vector3.zero, "AWP"), 0), true)

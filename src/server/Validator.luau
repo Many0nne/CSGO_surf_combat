@@ -230,7 +230,7 @@ local function isWeaponReady(attacker: Participant, category: string, tool: Inst
 end
 
 -- Cette méthode permet de savoir si l'arme à distance en main peut tirer lorsqu'un tir doit être relayé (#156) : equip
--- et chargeur (#175) en lecture seule, sans journal ; toujours vrai pour un bot armé (BotArsenal les fait respecter).
+-- et chargeur (#175) selon leur mode, sans journal ni compte ; toujours vrai pour un bot armé (BotArsenal).
 function Validator.isReadyToFire(participant: Participant, now: number): boolean
 	local tool, cfg = weaponInHand(participant)
 	if not tool or not cfg or cfg.IsMelee then
@@ -241,11 +241,15 @@ function Validator.isReadyToFire(participant: Participant, now: number): boolean
 	end
 	local record = equips[participant]
 	local equippedAt = if record and record.tool == tool then record.at else nil
-	if not ShotRules.checkEquip(equippedAt, cfg.EquipTime or 0, now) then
+	-- Mêmes refus qu'une touche (isWeaponReady) : un contrôle en mode "log" ne rend pas muet un tir accepté
+	if not ShotRules.checkEquip(equippedAt, cfg.EquipTime or 0, now) and ShotRules.blocks(ShotRules.Check.EQUIP) then
 		return false
 	end
 	if cfg.Magazine then
-		return (ShotRules.checkMagazine(magazineOf(participant, cfg), cfg.Magazine, cfg.ReloadTime or 0, now))
+		local ok = ShotRules.checkMagazine(magazineOf(participant, cfg), cfg.Magazine, cfg.ReloadTime or 0, now)
+		if not ok and ShotRules.blocks(ShotRules.Check.MAGAZINE) then
+			return false
+		end
 	end
 	return true
 end

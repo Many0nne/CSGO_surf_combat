@@ -31,14 +31,22 @@ local getState: () -> string? = function()
 end
 local terrain = workspace:WaitForChild("Terrain")
 
--- Cette méthode permet de faire suivre l'arme du tireur aux sons en cours lorsqu'une frame passe ; un son fini est
--- oublié, un son dont l'arme a disparu reste où elle était, et la boucle s'arrête quand il n'y a plus de son.
-local function follow()
+-- Cette méthode permet d'oublier les sons détruits (fin de lecture, durée de vie) lorsqu'on compte ou déplace les sons.
+local function prune(): number
 	for i = #entries, 1, -1 do
-		local entry = entries[i]
-		if not entry.anchor.Parent then
+		if not entries[i].anchor.Parent then
 			table.remove(entries, i)
-		elseif entry.source:IsDescendantOf(workspace) then
+		end
+	end
+	return #entries
+end
+
+-- Cette méthode permet de faire suivre l'arme du tireur aux sons en cours lorsqu'une frame passe ; un son dont l'arme a
+-- disparu reste où elle était, et la boucle s'arrête quand il n'y a plus de son.
+local function follow()
+	prune()
+	for _, entry in entries do
+		if entry.source:IsDescendantOf(workspace) then
 			entry.anchor.WorldPosition = entry.source.Position
 		end
 	end
@@ -48,16 +56,6 @@ local function follow()
 	end
 end
 local timedFollow = PerfMarkers.wrap("sons de tir", follow)
-
--- Cette méthode permet de compter les sons de tir encore en vie lorsqu'un tir arrive (sons détruits oubliés).
-local function activeCount(): number
-	for i = #entries, 1, -1 do
-		if not entries[i].anchor.Parent then
-			table.remove(entries, i)
-		end
-	end
-	return #entries
-end
 
 -- Cette méthode permet de trouver le son de tir modèle et la pièce à suivre lorsqu'un tir est entendu : poignée 3P du
 -- tireur et son son cloné, sinon racine du personnage et son du viewmodel de l'outil en main.
@@ -90,7 +88,7 @@ local function onShotFired(shooter: any, weaponName: any)
 		return
 	end
 	local localPlayer = Players.LocalPlayer
-	if not ShotSoundRules.shouldPlay(shooter, localPlayer and localPlayer.Character, getState(), activeCount()) then
+	if not ShotSoundRules.shouldPlay(shooter, localPlayer and localPlayer.Character, getState(), prune()) then
 		return
 	end
 	local settings = ShotSoundRules.settingsFor(weaponName)
@@ -132,12 +130,21 @@ function RemoteShotSounds.init(stateOf: () -> string?)
 	if connection then
 		return
 	end
-	local remote = ReplicatedStorage:WaitForChild(NetworkProtocol.Names.SHOT_FIRED, 15)
-	if not (remote and remote:IsA("RemoteEvent")) then
-		warn("[RemoteShotSounds] remote " .. NetworkProtocol.Names.SHOT_FIRED .. " introuvable : tirs des autres muets")
-		return
-	end
-	connection = remote.OnClientEvent:Connect(onShotFired)
+	-- Attente hors du fil de démarrage du client (init.client continue sans elle)
+	task.spawn(function()
+		local remote = ReplicatedStorage:WaitForChild(NetworkProtocol.Names.SHOT_FIRED, 15)
+		if not (remote and remote:IsA("RemoteEvent")) then
+			warn(
+				"[RemoteShotSounds] remote "
+					.. NetworkProtocol.Names.SHOT_FIRED
+					.. " introuvable : tirs des autres muets"
+			)
+			return
+		end
+		if not connection then
+			connection = remote.OnClientEvent:Connect(onShotFired)
+		end
+	end)
 end
 
 return RemoteShotSounds
