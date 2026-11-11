@@ -108,6 +108,9 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   = Z Q S D), libellés fixes pour Espace, Ctrl, Maj et la souris. L'état vient de `UserInputService:IsKeyDown` /
   `IsMouseButtonPressed` à chaque Heartbeat (repeint seulement au changement). Les liaisons de déplacement sont fixes dans
   `InputModule.KEY_MAP` : la liste de `HUDRules` les reflète, à garder synchrone si une liaison devient réglable.
+  Les cases suivent les touches physiques, pas l'action disponible : F et M2 s'allument aussi avec une arme sans inspection
+  ni lunette ; clavier ignoré pendant la saisie de texte (`GetFocusedTextBox`), pas de suivi du `gameProcessed` (piste non retenue,
+  elle demandait un état par touche au lieu d'un sondage).
   Affichage : mode actif, HUD de jeu visible (`GameStateController.applyGameHud`), Réglages fermé (`SettingsMenu.setOpen`) ; la
   lunette ne le masque pas (les touches restent utiles).
   Vérifié en Studio avec `user_keyboard_input` (`keyDown` W/D/S/Espace/Ctrl/R passent en partie et allument les cases) ; le clic de

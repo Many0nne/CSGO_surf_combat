@@ -21,7 +21,8 @@ local KEY_GAP = 4 -- px entre deux cases
 local BOTTOM_MARGIN = 40 -- px entre la grille et le bas de l'écran
 local REST_TRANSPARENCY = 0.35 -- fond d'une case au repos
 local TEXT_SIZE = 18
-local TEXT_SIZE_LONG = 13 -- libellés de plus de deux caractères (ESPACE, CTRL, MAJ)
+local TEXT_SIZE_LONG = 13 -- libellés de plus de deux caractères dans une case simple (CTRL, MAJ)
+local TEXT_SIZE_WIDE = 16 -- libellé de plus de deux caractères dans une case large (ESPACE)
 
 local KeyDisplay = {}
 
@@ -36,13 +37,13 @@ local menuOpen = false -- écran Réglages ouvert (SettingsMenu)
 
 -- Cette méthode permet de savoir si une touche ou un bouton de souris est enfoncé lorsque la grille est rafraîchie.
 local function isDown(entry: HUDRules.KeyDisplayEntry): boolean
-	-- Un champ de texte focalisé (chat) capte le clavier : le jeu ne reçoit pas ces touches, elles ne s'allument pas
-	if UserInputService:GetFocusedTextBox() then
-		return false
-	end
 	if entry.mouse then
 		local button = if entry.mouse == 1 then Enum.UserInputType.MouseButton1 else Enum.UserInputType.MouseButton2
 		return UserInputService:IsMouseButtonPressed(button)
+	end
+	-- Un champ de texte focalisé (chat) capte le clavier : le jeu ne reçoit pas ces touches, elles ne s'allument pas
+	if UserInputService:GetFocusedTextBox() then
+		return false
 	end
 	local names: { string } = entry.keys or {}
 	for _, name in names do
@@ -104,7 +105,10 @@ local function build(mode: string)
 			Name = "Label",
 			Text = text,
 			FontFace = F.Display,
-			TextSize = if (utf8.len(text) or #text) > 2 then TEXT_SIZE_LONG else TEXT_SIZE,
+			TextSize = if (utf8.len(text) or #text) <= 2
+				then TEXT_SIZE
+				elseif entry.width > 1 then TEXT_SIZE_WIDE
+				else TEXT_SIZE_LONG,
 			TextXAlignment = Enum.TextXAlignment.Center,
 			Size = UDim2.fromScale(1, 1),
 			Parent = frame,
