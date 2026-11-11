@@ -29,6 +29,7 @@ envoyant des données plausibles. Là, on ne peut que détecter statistiquement,
 | Feedback | Type `string`, longueur 10 à 500, délai de 60 s après un envoi réussi, 5 envois par semaine (DataStore) | `src/server/FeedbackService.luau:76-104` |
 | Debug | Remote `DebugPlaytest` créé seulement dans Studio | `src/server/DebugPlaytest.luau:365-372` |
 | Relais des tirs (son chez les autres) | Tireur vivant, arme à distance en main prête (equip, chargeur), forme, origine près du tireur, cadence de l'arme (#156) | `src/server/ShotRelayRules.luau`, `Validator.isReadyToFire`, `relayShot` de `src/server/init.server.luau` |
+| Statistiques de visée (#178) | Par joueur : tirs acceptés, touches, têtes, flicks suivis d'une touche ; z-score contre les autres joueurs du serveur, journal seul (A1) | `src/server/AimStats.luau`, branchement dans `src/server/init.server.luau` |
 | Tous les remotes C→S | Garde commune (#170) : débit par joueur et par remote, types des arguments, violations journalisées, kick à 3 violations fortes | `src/server/RemoteGuard.luau`, `src/server/CheatLog.luau` |
 
 Les bots (`src/server/bots/`) passent par le même `Validator` (`BotManager.init` dans `src/server/init.server.luau`) : leurs tirs sont
@@ -48,7 +49,7 @@ Impact : ce que gagne le tricheur et ce que subissent les autres. Coût : serveu
 | R1 | Remotes sans débit ni garde (respawn, feedback) | Fermé (#170, #171) : garde commune, délai de réapparition et feedback limité en mémoire | Faible | Fait |
 | T2 | Munitions et durée d'equip | Fermé (#175) : touche refusée pendant l'equip et au 6e tir sans rechargement | Faible | Fait |
 | D2 | Vol et noclip | Détecté (#177) : noclip et vol au journal (journal seul), vide fermé | Faible serveur, moyen en réglage (surf) | Fait (journal) |
-| A1 | Aimbot, triggerbot | **Élevé** mais seulement détectable | Moyen, faux positifs | P3 |
+| A1 | Aimbot, triggerbot | Détecté statistiquement (#178, journal seul) : tête, touches et flicks comparés aux autres joueurs ; **élevé**, rien n'est bloqué | Moyen, faux positifs | P3 |
 | E1 | Wallhack, ESP | **Élevé** mais non bloquable à coût raisonnable | Très élevé | P4 (accepté) |
 
 Les sections suivantes détaillent chaque menace : ce que fait le code, le risque, la parade, son coût et son impact.
@@ -640,22 +641,78 @@ les bots (il passait par `WeaponAction`). Tests : `tests/specs/ShotRelayRules.sp
 
 ## Aimbot et triggerbot (A1)
 
-**Aujourd'hui.** Rien. Le serveur ne connaît pas l'orientation verticale de la caméra (seul le cap est envoyé,
-`src/client/systems/network/CharacterSync.luau:120-130`).
+**Aujourd'hui (fait, #178, journal seul).** Statistiques par joueur et par session, calculées sur le serveur par
+`src/server/AimStats.luau` (règles pures, `tests/specs/AimStats.spec.luau`), branchées dans `src/server/init.server.luau` :
 
-**Risque.** Élevé : après T1, l'aimbot reste la triche la plus efficace, et elle envoie des données valides.
+- **tirs** : chaque tir à distance accepté par le relais `ShotFired` (#156, touché ou manqué) ;
+- **touches** et **têtes** : chaque touche à distance acceptée par le `Validator` **qui a fait des dégâts** (pas un
+  corps déjà mort pendant le ragdoll, pas un ForceField) ; une touche est rattachée au dernier
+  tir s'il date d'au plus `HIT_LINK_WINDOW` (0,5 s ; le client envoie `ShotFired` juste avant `HitscanDamage`, deux
+  remotes fiables donc dans cet ordre), une seule par tir. Taux de touches = tirs rattachés / tirs ; taux de tête =
+  têtes / touches ;
+- **flick** : rotation horizontale entre le dernier cap accepté par `CharacterSync` (`CharacterSync.lastYaw`, cap de la
+  caméra, 20 Hz) et la direction **de la touche** (`HitscanDamage`, vérifiée par le `Validator`), si ce cap date d'au
+  plus `FLICK_MAX_AGE` (0,1 s). Le cap est **figé à l'arrivée de `ShotFired`** (juste avant la touche) : un paquet de
+  position (non fiable) arrivé entre le tir et sa touche (fiable) ne compte pas, sinon le recul ou le retour de visée
+  après un tir d'AWP ferait des faux flicks. Pas la direction de `ShotFired` : rien ne la compare à la touche, un
+  aimbot y enverrait son cap courant. Flick = au moins `FLICK_MIN_ANGLE` (30°) en 0,1 s au plus, soit 300 °/s
+  minimum : au-dessus d'un air strafe de surf ordinaire (100 à 250 °/s, environ 10° par paquet). Touche sans tir
+  rattaché : pas de mesure. Statistique jugée : part des touches précédées d'un flick. La vitesse maximale (`pic`, °/s,
+  durée bornée à `MIN_SPEED_DT` = 1/20 s) est affichée, pas jugée (trop bruitée par la gigue réseau). Le pitch n'est
+  pas mesuré (le serveur ne reçoit que le cap) : un flick vertical passe inaperçu. **Indice faible** : le cap vient du
+  client ; un paquet de position parti dans la frame du tir (caméra déjà tournée) donne un écart nul, et un aimbot qui
+  fait tourner la racine sur 2 ou 3 paquets n'en produit aucun. Les flicks sont donc sous-comptés, jamais inventés ;
+- **bots exclus** : ni comptés, ni dans la population. Les touches de mêlée ne comptent pas.
 
-**Parade : détection, jamais blocage.** Statistiques par joueur, calculées sur le serveur :
+**Seuils.** Un joueur est jugé quand il a `MIN_HITS` (30) touches, et seulement contre les **autres** joueurs jugeables
+du serveur, s'ils sont au moins `MIN_POPULATION` (5) : en dessous (serveur de 2 joueurs), personne n'est signalé. Une
+statistique est signalée si elle dépasse la moyenne des autres de `Z_THRESHOLD` (3) écarts-types (écart-type
+d'échantillon, divisé par n - 1, plus large et donc plus prudent sur 5 joueurs ; au moins `MIN_SPREAD`, 0,05) **et** son plancher absolu `FLOOR` : tête 60 %, touches 75 %, flick touché 30 %. Valeurs de
+départ, à revoir sur le journal de production.
 
-- taux de tirs à la tête parmi les touches, et taux de touches parmi les tirs (tirs connus grâce à T1/T2) ;
-- vitesse angulaire de la visée juste avant le tir (« flick ») : demande d'envoyer le pitch avec le cap dans
-  `CharacterSync` (9 octets de plus par paquet) ou la direction de visée dans le tir ;
-- temps de réaction entre l'apparition d'une cible et le tir : demande un calcul de visibilité, trop cher (voir E1),
-  écarté.
+**Où le lire.**
 
-Seuils relatifs à la population (ex. > 3 écarts-types sur au moins 30 touches) et uniquement en journal pour revue
-humaine. Sur un FPS à l'AWP, les très bons joueurs ont naturellement beaucoup de tirs à la tête : risque de faux positif
-élevé, pas de sanction automatique. Bots exclus des statistiques. Coût : faible serveur, moyen en analyse.
+- Console serveur, toutes les `AIM_REPORT_INTERVAL` (120 s) : une ligne `[AimStats] <nom> (<UserId>) : …` par joueur
+  qui a tiré depuis la précédente, et `[AimStats] fin de session, …` au départ.
+- `CheatLog`, catégorie `Aim`, gravité faible, **seulement pour un joueur signalé** (à chaque résumé périodique où il
+  l'est, et au départ). Un seul signalement suffit au résumé de fin de session (webhook), qui reprend le dernier
+  relevé (« Visée (dernier relevé, revue humaine) »). Le relevé final passe par `CheatLog.onClosing`, avant la clôture
+  du bilan.
+- Format (compact : le détail de `CheatLog` est coupé à 160 octets) : `SIGNALÉ z tête+8.1 | tirs 100 but 40 (40%)
+  touches 41 tête 36 (88%) flick 2 (5%) mesurés 38 pic 1240°/s | z touches +0.2 flick -0.3` (« mesurés » : touches dont
+  le flick a pu être mesuré). « but » = tirs
+  rattachés à une touche (taux de touches), « touches » = toutes les touches acceptées (seuil `MIN_HITS`, base du taux
+  de tête) ; le z d'une statistique signalée est en tête, les autres à la fin. « non jugé (12/30 touches) » ou « non
+  jugé (population trop petite) » quand il n'y a pas de quoi comparer.
+- Un joueur signalé une fois a aussi son relevé **final** au journal, même redevenu normal : le « dernier relevé » du
+  résumé est donc vraiment le dernier. À l'arrêt du serveur, tous les joueurs restants sont jugés ensemble contre la
+  même population (rappels `CheatLog.onClosing` appelés avec la liste et `shuttingDown`), puis les statistiques sont
+  gelées (`AimStats.freeze`) : un tir pendant l'attente de l'arrêt ne recrée pas de relevé partiel. Limite : des départs un par un (fin de partie)
+  font fondre la population, et les derniers partis sont « non jugés » au départ ; leurs résumés périodiques (toutes
+  les 120 s) les ont jugés tant que la population était là.
+
+**Limites connues** (à garder en tête à la lecture) :
+
+- le nombre de tirs vient de `ShotFired`, que le client choisit d'envoyer : un tricheur peut faire baisser son taux de
+  touches en envoyant des tirs sans touche (cadence respectée), ou le faire monter en taisant ses tirs manqués. Le taux
+  de tête et le flick ne dépendent pas de `ShotFired` ;
+- une touche est rattachée au dernier tir **relayé** : si le tir qui l'a produite a été écarté par le relais (cadence,
+  débit), elle peut se rattacher à un tir manqué juste avant (rare : même cadence que le `Validator`) ;
+- les touches sur les bots comptent : un joueur qui ne joue que contre des bots peut ressortir face à des joueurs qui
+  jouent entre eux. Regarder le contexte de la partie avant de conclure ;
+- le jugement recalcule la population pour chaque joueur (O(n²) toutes les 120 s) : négligeable aux tailles de
+  serveur actuelles.
+
+**Comment le lire.** Un signalement est un indice à regarder, pas une preuve : un très bon joueur à l'AWP vise la tête.
+Plus parlant : plusieurs statistiques signalées ensemble (tête et flick touché), sur plusieurs sessions, avec un taux de
+touches élevé. **Jamais de sanction** sur ces chiffres (voir « Bannissement ») ; aucun tir n'est refusé, rien dans
+`AimStats` ne renvoie de verdict sur un tir.
+
+**Écarté.** Temps de réaction entre l'apparition d'une cible et le tir : demande un calcul de visibilité, trop cher
+(voir E1). Envoyer le pitch dans `CharacterSync` : 9 octets de plus par paquet, gardé pour plus tard si les flicks
+horizontaux ne suffisent pas.
+
+**Coût.** Serveur : négligeable (quelques additions par tir, un jugement en O(n²) toutes les 120 s). Analyse : humaine.
 
 ## Wallhack et ESP (E1)
 
@@ -699,7 +756,9 @@ CheatLog.summary(participant.id) -- bilan (compteurs, score présent, pire viola
 
 - **Gravités** (`CheatLog.Severity`) : `LOW`, `MEDIUM`, `HIGH`, au sens de « Classer les violations » ci-dessous.
 - **Catégories** (`CheatLog.Category`) : `RemoteRate`, `RemoteArgs` (garde des remotes), et réservées aux parades
-  suivantes : `Spawn` (#171, branchée : refus de `RequestSpawn`), `Movement` (#172), `Hitscan` (#174, branchée : contrôles du tir ; #175 : equip et chargeur), `Melee` (#175, branchée : equip du couteau ; #176 : orientation et ligne de vue). Une nouvelle parade
+  suivantes : `Spawn` (#171, branchée : refus de `RequestSpawn`), `Movement` (#172), `Hitscan` (#174, branchée : contrôles du tir ; #175 : equip et chargeur), `Melee` (#175, branchée : equip du couteau ; #176 : orientation et ligne de vue), `Aim` (#178, branchée :
+  statistiques de visée signalées, toujours faible ; un relevé, pas une violation : hors du total, du score, de la
+  « pire » violation et du warn limité, mais compté dans sa catégorie et suffisant pour le résumé). Une nouvelle parade
   ajoute sa catégorie à `CheatLog.Category` et ici, pour garder des noms stables dans le journal.
 - `warn` `[CheatLog]` limité à un toutes les `WARN_INTERVAL` (2 s) par joueur, le suivant dit combien ont été tus ;
   détail coupé à `MAX_DETAIL` octets sans couper de caractère, octets non UTF-8 remplacés par `?` (il peut contenir une
@@ -710,8 +769,8 @@ CheatLog.summary(participant.id) -- bilan (compteurs, score présent, pire viola
   (5e argument `source` de `report`, le remote pour la garde, la catégorie par défaut) ne compte qu'une violation forte
   par `HIGH_SOURCE_INTERVAL` (1 s) : un bug de notre client sur un remote à 20 Hz (position NaN) laisse le temps de
   le voir au journal au lieu d'expulser en 150 ms. Toutes restent comptées au journal et au score.
-- Au départ d'un joueur qui a une violation moyenne ou forte, ou au moins `SUMMARY_MIN_LOW` (10) violations faibles
-  (en dessous, une rafale réseau ne fait pas de bruit au webhook) : résumé (nom, UserId, compteurs par catégorie,
+- Au départ d'un joueur qui a une violation moyenne ou forte, au moins `SUMMARY_MIN_LOW` (10) violations faibles
+  (en dessous, une rafale réseau ne fait pas de bruit au webhook), ou un signalement `Aim` (#178) : résumé (nom, UserId, compteurs par catégorie,
   score max, pire violation, kick) posté au webhook en jeu publié, par `src/server/Webhook.luau` (mécanisme de `FeedbackService`) :
   StringValue `CheatLogWebhookUrl` dans ServerScriptService, sinon `FeedbackWebhookUrl`. Pas de cumul entre sessions
   (DataStore/MemoryStore) : il relève du bannissement (#179). À l'arrêt du serveur, les résumés des joueurs encore là sont envoyés
@@ -751,8 +810,9 @@ comptes secondaires ([annonce de la Ban API](https://devforum.roblox.com/t/intro
 
 Ce que le code envoie vraiment (`src/server/CheatLog.luau`, `src/server/Webhook.luau`) :
 
-- **Résumé au webhook**, posté au départ d'un joueur qui a au moins une violation moyenne ou forte, ou 10 violations
-  faibles ou plus (`SUMMARY_MIN_LOW`), et à l'arrêt du serveur pour les joueurs encore là. Webhook : StringValue
+- **Résumé au webhook**, posté au départ d'un joueur qui a au moins une violation moyenne ou forte, 10 violations
+  faibles ou plus (`SUMMARY_MIN_LOW`), ou un signalement des statistiques de visée (`Aim`, #178), et à l'arrêt du
+  serveur pour les joueurs encore là. Webhook : StringValue
   `CheatLogWebhookUrl` dans ServerScriptService, sinon `FeedbackWebhookUrl`. Contenu : titre « Anti-triche : <nom> »,
   total des violations, nombre de fortes comptées pour le kick, score max, pire violation (catégorie, gravité,
   détail), mention « Expulsé pendant la session » le cas échéant, un champ par catégorie (« forte N · moyenne N ·
@@ -788,7 +848,8 @@ Les contrôles livrés et leur mode, pour savoir ce qu'une ligne du journal prou
 | Tir : `shape`, `distance` (#174) | `block` | `shape` : client forgé quasi certain ; `distance` : tir refusé |
 | Tir : `origin`, `direction`, `lineOfSight` (#174) | `log` | Tir accepté (sauf au-delà de 250 studs) : **indice seulement**, jamais une base de ban seule |
 | Equip et chargeur (#175) | `block` | Touche refusée ; un paquet en retard peut coûter une touche honnête |
-| Mêlée orientation et ligne de vue (#176, M1) | **non livré** (à faire au moment de cette rédaction) | rien à lire |
+| Mêlée orientation et ligne de vue (#176, M1) | `log` (`ShotRules.MODES` : `orientation`, `meleeLineOfSight`) | Coup appliqué : **indice seulement** |
+| Statistiques de visée (#178, A1) | journal seul (aucun mode `block`) | Indice pour revue humaine, **jamais** une base de ban |
 | Noclip et vol (#177) | `log` (`ENFORCE_NOCLIP = ENFORCE_FLIGHT = false`) | Indice seulement |
 | Vide (#177) | actif (`ENFORCE_VOID = true`) | Joueur silencieux au-dessus du vide déclaré tombé |
 
@@ -921,9 +982,10 @@ mode bloquant une fois mesurée.
   Fait : remote `ShotFired`, voir « Relais des tirs » dans « Remotes ».
 - **Dépendances.** 6 de préférence. **Priorité.** suit #156.
 
-### 10. Statistiques de visée (aimbot) — P3
+### 10. Statistiques de visée (aimbot) — P3 (fait, #178 : journal seul, voir A1)
 
-- **Résumé.** A1 : taux de tirs à la tête, taux de touches, vitesse angulaire avant le tir ; pitch ajouté à la synchro.
+- **Résumé.** A1 : taux de tirs à la tête, taux de touches, flicks (cap de `CharacterSync` contre la direction du tir,
+  le pitch n'a pas été ajouté) suivis d'une touche.
 - **Critères.** Statistiques au journal, seuils relatifs à la population, aucune sanction automatique, bots exclus.
 - **Dépendances.** 1, 5. **Priorité.** P3.
 

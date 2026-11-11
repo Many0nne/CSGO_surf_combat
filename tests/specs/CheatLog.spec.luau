@@ -239,6 +239,54 @@ return function(T, Loader)
 			T.expectEqual(#env.spawned, 2, "seuil de faibles atteint")
 		end)
 
+		T.it("statistiques de visée (#178) : un signalement faible suffit au résumé, jamais de kick", function()
+			local env = setup()
+			local C = env.CheatLog
+			local bob = fakePlayer(2, "Bob")
+			for _ = 1, 3 * C.KICK_HIGH_COUNT do
+				C.report(participantOf(bob), C.Category.AIM, C.Severity.LOW, "SIGNALÉ tête z+8.0", C.Category.AIM)
+			end
+			T.expectEqual(bob.kickedWith, nil, "aucune sanction")
+			T.expectEqual(C.summary(2).highCount, 0)
+			T.expectEqual(C.summary(2).total, 0, "un relevé de visée n'est pas une violation")
+			T.expectEqual(C.summary(2).score, 0)
+			T.expectEqual(C.summary(2).counts.Aim.low, 3 * C.KICK_HIGH_COUNT)
+			-- Une vraie violation juste après reste affichée (le relevé ne prend pas le créneau du warn limité)
+			local before = #env.warns
+			C.report(participantOf(bob), C.Category.REMOTE_RATE, C.Severity.LOW, "flood")
+			T.expectEqual(#env.warns, before + 1)
+			C.onPlayerRemoving(bob :: any)
+			T.expectEqual(#env.spawned, 1, "résumé envoyé pour revue humaine")
+			local embed = C.buildEmbed(env.spawned[1][2])
+			T.expect(string.find(embed.description, "Visée", 1, true) ~= nil, "relevé de visée au résumé")
+			T.expect(string.find(embed.description, "RemoteRate", 1, true) ~= nil, "pire violation réelle au résumé")
+		end)
+
+		T.it("rappel de clôture : son signalement entre au résumé même sans Parent, avant l'oubli", function()
+			local env = setup()
+			local C = env.CheatLog
+			local bob = fakePlayer(2, "Bob")
+			local seen = 0
+			C.onClosing(function(players)
+				for _, player in players do
+					seen += 1
+					C.report(participantOf(player), C.Category.AIM, C.Severity.LOW, "fin de session")
+				end
+			end)
+			C.onClosing(function()
+				error("rappel cassé")
+			end)
+			-- PlayerRemoving différé : le joueur n'a déjà plus de Parent
+			bob.Parent = nil
+			C.onPlayerRemoving(bob :: any)
+			T.expectEqual(seen, 1)
+			T.expectEqual(#env.spawned, 1, "résumé envoyé malgré un rappel en erreur")
+			T.expectEqual(C.summary(2), nil, "bilan oublié")
+			-- Hors clôture, un joueur parti reste ignoré
+			C.report(participantOf(bob), C.Category.AIM, C.Severity.LOW, "tardif")
+			T.expectEqual(C.summary(2), nil)
+		end)
+
 		T.it("ignore une violation signalée après le départ", function()
 			local env = setup()
 			local C = env.CheatLog

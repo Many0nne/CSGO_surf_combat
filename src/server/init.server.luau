@@ -25,6 +25,7 @@ local BotManager = require(script.bots.BotManager)
 local ServerPerf = require(script.ServerPerf)
 local CheatLog = require(script.CheatLog)
 local ShotRelayRules = require(script.ShotRelayRules)
+local AimStats = require(script.AimStats)
 
 -- Spawn contrôlé : on gère LoadCharacter nous-mêmes
 Players.CharacterAutoLoads = false
@@ -213,11 +214,80 @@ local function relayShot(participant: Participants.Participant, origin: Vector3,
 	return true
 end
 
+-- ── Statistiques de visée (#178) : journal pour revue humaine, jamais de sanction ni de tir refusé ──────
+
+local aimStats = AimStats.new()
+-- Période (s) du résumé des statistiques de visée (console, et CheatLog pour les joueurs signalés).
+local AIM_REPORT_INTERVAL = 120
+
+-- Cette méthode permet d'écrire le résumé de visée d'un joueur lorsqu'il est produit (périodique ou fin de session) :
+-- console pour tous, CheatLog (catégorie Aim, gravité faible) pour un joueur signalé (au départ : signalé un jour).
+local function logAim(participant: Participants.Participant, entry: AimStats.Entry, final: boolean)
+	print(
+		string.format(
+			"[AimStats] %s%s (%d) : %s",
+			if final then "fin de session, " else "",
+			entry.stats.name,
+			entry.id,
+			entry.line
+		)
+	)
+	if entry.report then
+		CheatLog.report(participant, CheatLog.Category.AIM, CheatLog.Severity.LOW, entry.line, CheatLog.Category.AIM)
+	end
+end
+
+task.spawn(function()
+	while true do
+		task.wait(AIM_REPORT_INTERVAL)
+		-- Une erreur ne doit pas arrêter les résumés suivants
+		local ok, err = pcall(function()
+			for _, entry in AimStats.periodic(aimStats) do
+				-- Joueur retrouvé par Players, pas par le registre (qu'un départ en cours peut déjà avoir vidé) ; parti :
+				-- son relevé final est fait par la clôture
+				local player = Players:GetPlayerByUserId(entry.id)
+				if player then
+					logAim({ id = entry.id, name = player.Name, isBot = false, player = player }, entry, false)
+				end
+			end
+		end)
+		if not ok then
+			warn("[AimStats] résumé périodique en échec :", err)
+		end
+	end
+end)
+
+-- Résumé final avant la clôture du bilan CheatLog (le signalement y entre) ; statistiques oubliées au départ. À
+-- l'arrêt du serveur, tous les joueurs restants sont jugés ensemble, contre la même population, puis plus rien n'est
+-- compté (pas de relevé partiel recréé par un tir pendant l'attente de l'arrêt).
+CheatLog.onClosing(function(players, shuttingDown)
+	local byId: { [number]: Player } = {}
+	local ids = {}
+	for _, player in players do
+		byId[player.UserId] = player
+		table.insert(ids, player.UserId)
+	end
+	for _, entry in AimStats.close(aimStats, ids) do
+		local player = byId[entry.id]
+		-- Participant reconstruit : celui du registre peut déjà être retiré (ordre des PlayerRemoving non garanti)
+		logAim({ id = entry.id, name = player.Name, isBot = false, player = player }, entry, true)
+	end
+	if shuttingDown then
+		AimStats.freeze(aimStats)
+	end
+end)
+
 shotFiredRmt.OnServerEvent:Connect(function(player, origin, direction)
 	if not CheatLog.admit(player, N.SHOT_FIRED, origin, direction) then
 		return
 	end
-	relayShot(Participants.fromPlayer(player), origin, direction)
+	local participant = Participants.fromPlayer(player)
+	-- Compté après la décision du relais, qu'il ne change pas : un tir accepté (forme, cadence) entre aux statistiques
+	if relayShot(participant, origin, direction) then
+		-- Cap figé à l'arrivée du tir, avant sa touche (flick)
+		local yaw, yawAt = CharacterSync.lastYaw(player)
+		AimStats.noteShot(aimStats, participant, os.clock(), yaw, yawAt)
+	end
 end)
 
 -- Cette méthode permet de brancher le personnage d'un participant (joueur ou bot, #139) lorsqu'il apparaît : arme 3P
@@ -347,17 +417,19 @@ local function applyHit(
 end
 
 -- Cette méthode permet de traiter le verdict du Validator lorsqu'une touche arrive : damage vaut nil si elle est refusée.
+-- Renvoie le résultat des dégâts (nil si refusée ou sans effet : cible déjà morte, ForceField).
 local function onHitVerdict(
 	player: Player,
 	remote: RemoteEvent,
 	targetCharacter: Instance,
 	damage: number?,
 	isHeadshot: boolean
-)
+): ("hit" | "kill")?
 	DebugPlaytest.onHitReceived(player, remote.Name, targetCharacter, damage)
 	if damage then
-		applyHit(Participants.fromPlayer(player), targetCharacter, damage, isHeadshot)
+		return applyHit(Participants.fromPlayer(player), targetCharacter, damage, isHeadshot)
 	end
+	return nil
 end
 
 meleeRmt.OnServerEvent:Connect(function(player, targetCharacter, attackKind)
@@ -416,11 +488,15 @@ hitscanRmt.OnServerEvent:Connect(function(player, targetCharacter, hitPart, orig
 	if not CheatLog.admit(player, N.HITSCAN_DAMAGE, targetCharacter, hitPart, origin, direction, hitPos, shotTime) then
 		return
 	end
+	local participant = Participants.fromPlayer(player)
 	local shot = { origin = origin, direction = direction, hitPos = hitPos, shotTime = shotTime }
-	local damage, isHeadshot =
-		Validator.authorizeHitscan(Participants.fromPlayer(player), targetCharacter, hitPart, os.clock(), shot)
+	local damage, isHeadshot = Validator.authorizeHitscan(participant, targetCharacter, hitPart, os.clock(), shot)
 	-- Le son du tir chez les autres (#156) ne part pas d'ici : chaque tir, touché ou manqué, arrive d'abord par ShotFired
-	onHitVerdict(player, hitscanRmt, targetCharacter, damage, isHeadshot)
+	-- Statistiques de visée (#178), après coup et sans effet sur la touche : seulement une touche qui a fait des dégâts
+	-- (pas un corps déjà mort), flick mesuré sur sa direction validée
+	if onHitVerdict(player, hitscanRmt, targetCharacter, damage, isHeadshot) then
+		AimStats.noteHit(aimStats, participant, isHeadshot, os.clock(), direction)
+	end
 end)
 
 -- ── Bots (#133) : personnages serveur, sans client ────────────────────────

@@ -36,6 +36,9 @@ CheatLog.Category = {
 	MOVEMENT = "Movement", -- vitesse, téléport, noclip, vol (#172)
 	HITSCAN = "Hitscan", -- tir : origine, direction, ligne de vue, equip, chargeur (#174, #175)
 	MELEE = "Melee", -- mêlée : equip (#175), orientation, ligne de vue (#176)
+	-- statistiques de visée signalées (#178, AimStats) : toujours faible, chiffres bruts pour revue humaine, jamais de
+	-- sanction ; un seul signalement suffit au résumé de fin de session (worthSummary)
+	AIM = "Aim",
 }
 
 -- Poids d'une violation dans le score, et décroissance du score (points par seconde).
@@ -78,6 +81,7 @@ export type Record = {
 	unwarned: number,
 	highAt: { [string]: number },
 	kicked: boolean,
+	aim: string?, -- dernier relevé des statistiques de visée signalées (#178), affiché au résumé
 }
 
 local records: { [number]: Record } = {}
@@ -85,6 +89,10 @@ local guard = RemoteGuard.new()
 -- Résumés en cours d'envoi (attendus à l'arrêt du serveur), remotes sans règle déjà signalés.
 local pendingSummaries = 0
 local warnedNoRule: { [string]: boolean } = {}
+-- Rappels lancés au départ d'un joueur avant la clôture de son bilan (ex. statistiques de visée finales, #178), et
+-- joueur en cours de clôture : ses signalements sont gardés même s'il n'a déjà plus de Parent.
+local closingHooks: { ({ Player }, boolean) -> () } = {}
+local closingPlayers: { [Player]: boolean } = {}
 
 -- Cette méthode permet de lire l'horloge du serveur lorsqu'une violation est datée (os.clock, simulable en test).
 local function now(): number
@@ -156,8 +164,9 @@ function CheatLog.report(
 	detail: string,
 	source: string?
 )
-	-- Bot, ou joueur déjà parti (parade différée) : rien à recréer pour lui
-	if participant.isBot or (participant.player and not participant.player.Parent) then
+	-- Bot, ou joueur déjà parti (parade différée) : rien à recréer pour lui, sauf pendant la clôture de son bilan
+	local owner = participant.player
+	if participant.isBot or (owner and not owner.Parent and not closingPlayers[owner]) then
 		return
 	end
 	assert(SEVERITY_RANK[severity], "CheatLog.report : gravité inconnue " .. tostring(severity))
@@ -178,6 +187,7 @@ function CheatLog.report(
 			unwarned = 0,
 			highAt = {},
 			kicked = false,
+			aim = nil,
 		}
 		records[participant.id] = record
 	end
@@ -189,6 +199,13 @@ function CheatLog.report(
 		record.counts[category] = perCategory
 	end
 	perCategory[severity] += 1
+	if category == CheatLog.Category.AIM then
+		-- Relevé de visée (#178) : pas une violation. Compté dans sa catégorie et gardé pour le résumé, mais hors du
+		-- total, du score, de la « pire » violation et du warn limité (au plus un relevé par joueur toutes les 120 s)
+		record.aim = violation.detail
+		warn(string.format("[CheatLog] %s (%d) Aim : %s", record.name, record.id, violation.detail))
+		return
+	end
 	record.total += 1
 	record.score = decayedScore(record, t) + CheatLog.SCORE_WEIGHT[severity]
 	record.scoreAt = t
@@ -287,12 +304,15 @@ function CheatLog.buildEmbed(record: Record): { [string]: any }
 	for category, perCategory in record.counts do
 		table.insert(fields, {
 			name = category,
-			value = string.format(
-				"forte %d · moyenne %d · faible %d",
-				perCategory.high,
-				perCategory.medium,
-				perCategory.low
-			),
+			-- Relevés de visée (#178) : pas des violations, ne pas les présenter comme des « faibles »
+			value = if category == CheatLog.Category.AIM
+				then string.format("%d relevé(s) signalé(s), revue humaine", perCategory.low)
+				else string.format(
+					"forte %d · moyenne %d · faible %d",
+					perCategory.high,
+					perCategory.medium,
+					perCategory.low
+				),
 			inline = true,
 		})
 	end
@@ -313,6 +333,9 @@ function CheatLog.buildEmbed(record: Record): { [string]: any }
 			lines,
 			string.format("Pire : %s %s — %s", worst.category, SEVERITY_LABEL[worst.severity], worst.detail)
 		)
+	end
+	if record.aim then
+		table.insert(lines, "Visée (dernier relevé, revue humaine) : " .. record.aim)
 	end
 	if record.kicked then
 		table.insert(lines, "Expulsé pendant la session.")
@@ -356,16 +379,39 @@ local function trackedSummary(record: Record)
 end
 
 -- Cette méthode permet de décider si un bilan mérite un résumé lorsque le joueur part : une violation moyenne ou
--- forte, ou au moins SUMMARY_MIN_LOW violations faibles.
+-- forte, au moins SUMMARY_MIN_LOW violations faibles, ou un signalement des statistiques de visée (#178).
 function CheatLog.worthSummary(record: Record): boolean
 	local worst = record.worst
 	return (worst ~= nil and SEVERITY_RANK[worst.severity] >= SEVERITY_RANK.medium)
 		or record.total >= CheatLog.SUMMARY_MIN_LOW
+		or record.aim ~= nil
+end
+
+-- Cette méthode permet d'inscrire un rappel lancé au départ de joueurs (un seul, ou tous ensemble à l'arrêt du
+-- serveur : shuttingDown), avant la clôture de leur bilan, lorsqu'une parade veut y signaler un dernier relevé (#178).
+function CheatLog.onClosing(hook: ({ Player }, boolean) -> ())
+	table.insert(closingHooks, hook)
+end
+
+-- Cette méthode permet de lancer les rappels de clôture de joueurs qui partent : leurs report y sont gardés même sans
+-- Parent (PlayerRemoving différé) ; une erreur n'empêche ni les rappels suivants ni le résumé.
+local function runClosingHooks(players: { Player }, shuttingDown: boolean)
+	for _, player in players do
+		closingPlayers[player] = true
+	end
+	for _, hook in closingHooks do
+		local ok, err = pcall(hook, players, shuttingDown)
+		if not ok then
+			warn("[CheatLog] rappel de clôture en échec :", err)
+		end
+	end
+	table.clear(closingPlayers)
 end
 
 -- Cette méthode permet d'oublier un joueur qui part lorsque son bilan est clos : seaux de la garde libérés, résumé
 -- envoyé si le bilan le mérite (worthSummary).
 function CheatLog.onPlayerRemoving(player: Player)
+	runClosingHooks({ player }, false)
 	guard:forget(player)
 	local record = records[player.UserId]
 	records[player.UserId] = nil
@@ -379,7 +425,9 @@ end
 function CheatLog.init()
 	Players.PlayerRemoving:Connect(CheatLog.onPlayerRemoving)
 	game:BindToClose(function()
-		-- Joueurs encore là à l'arrêt : leur PlayerRemoving peut arriver après ce rappel
+		-- Joueurs encore là à l'arrêt : leur PlayerRemoving peut arriver après ce rappel. Tous ensemble, pour que chaque
+		-- parade les juge contre la même population
+		runClosingHooks(Players:GetPlayers(), true)
 		for id, record in records do
 			records[id] = nil
 			if CheatLog.worthSummary(record) then
