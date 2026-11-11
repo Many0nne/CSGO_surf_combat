@@ -112,6 +112,9 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   comme la lunette. Affichage = `HUDRules.crosshairVisible` appliquée à `HUDState` (voir « État du HUD ») : réglage actif, HUD de
   jeu visible (donc ni menu, ni mort, ni résultat), lunette absente et menu en partie fermé.
   Toutes les armes, couteau compris. Piste rejetée : point rouge central (criard, hors de la matière du HUD).
+  Branches tracées par `Reticle.drawArms` (#222), comme le réticule de la lunette (`ScopeOverlay`) : quatre branches à
+  `gap` px du centre, longueur en px ou en part du parent, contour dessous plus épais de `outline.width` px par côté,
+  bouts fermés (`caps`, crosshair) ou ouverts (lunette), estompe `fade` en option (lunette). Un nouveau réticule passe par là.
 - `src/client/ui/KeyDisplay.luau` (#197) : réglage « Affichage des touches » (Réglages > GRAPHISMES, `PlayerSettings.keyDisplay`,
   trois valeurs `off` (défaut) / `simple` / `full`, validées par `sanitize`). Grille façon clavier en bas au centre (`BOTTOM_MARGIN`
   40 px, `scaledRoot`, entre le compteur de vitesse à gauche et la barre d'armes à droite) : cases de `KEY_SIZE` 40 px, `KEY_GAP` 4.

@@ -10,6 +10,7 @@ local UITheme = require(ReplicatedStorage.Shared.UITheme)
 local LocalSettings = require(script.Parent.Parent.systems.settings.LocalSettings)
 local HUDRules = require(script.Parent.HUDRules)
 local HUDState = require(script.Parent.HUDState)
+local Reticle = require(script.Parent.Reticle)
 local UIKit = require(script.Parent.UIKit)
 
 local C = UITheme.Colors
@@ -28,36 +29,6 @@ local gui: ScreenGui?
 local function update()
 	if gui then
 		gui.Enabled = HUDRules.crosshairVisible(HUDState.get(), LocalSettings.get().simpleAim)
-	end
-end
-
--- Cette méthode permet de tracer une couche (contour noir ou trait os) des quatre branches lorsque le crosshair est
--- construit ; `grow` élargit chaque branche de part et d'autre (contour).
-local function drawArms(parent: GuiObject, color: Color3, transparency: number, grow: number, zIndex: number)
-	local long = ARM_LENGTH + grow * 2
-	local thick = ARM_THICKNESS + grow * 2
-	local arms = {
-		{ name = "Left", anchor = Vector2.new(1, 0.5), offset = Vector2.new(-CENTER_GAP + grow, 0), horizontal = true },
-		{ name = "Right", anchor = Vector2.new(0, 0.5), offset = Vector2.new(CENTER_GAP - grow, 0), horizontal = true },
-		{ name = "Top", anchor = Vector2.new(0.5, 1), offset = Vector2.new(0, -CENTER_GAP + grow), horizontal = false },
-		{
-			name = "Bottom",
-			anchor = Vector2.new(0.5, 0),
-			offset = Vector2.new(0, CENTER_GAP - grow),
-			horizontal = false,
-		},
-	}
-	for _, arm in arms do
-		UIKit.frame({
-			Name = arm.name .. (if grow > 0 then "Outline" else ""),
-			AnchorPoint = arm.anchor,
-			Position = UDim2.new(0.5, arm.offset.X, 0.5, arm.offset.Y),
-			Size = if arm.horizontal then UDim2.fromOffset(long, thick) else UDim2.fromOffset(thick, long),
-			BackgroundColor3 = color,
-			BackgroundTransparency = transparency,
-			ZIndex = zIndex,
-			Parent = parent,
-		})
 	end
 end
 
@@ -84,8 +55,13 @@ function Crosshair.init()
 		Size = UDim2.fromOffset(0, 0),
 		Parent = screenGui,
 	})
-	drawArms(root, C.Black, OUTLINE_TRANSPARENCY, OUTLINE, 1)
-	drawArms(root, C.Bone, 0, 0, 2)
+	Reticle.drawArms(root, {
+		length = UDim.new(0, ARM_LENGTH),
+		thickness = ARM_THICKNESS,
+		gap = CENTER_GAP,
+		color = C.Bone,
+		outline = { color = C.Black, width = OUTLINE, transparency = OUTLINE_TRANSPARENCY, caps = true },
+	})
 
 	LocalSettings.onChanged(update)
 	HUDState.onChanged(update)

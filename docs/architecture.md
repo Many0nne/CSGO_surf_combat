@@ -98,7 +98,8 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/client/ui/MenuPage.luau`: gabarit des écrans secondaires du menu (bloc centré sur un voile, titre en texte pour Réglages en partie, choix et action de sortie en texte).
 - `src/client/ui/MenuShot.luau`: tir sur un élément du menu (impact, puis action) et choix en texte à ombre décalée.
 - `src/client/ui/RoundHUD.luau`: HUD en jeu (timer et rang, classement Tab, écran de réapparition, écran de fin de round).
-- `src/client/ui/ScopeOverlay.luau`: lunette des armes à scope, dessinée sans image (masque rond et réticule en Frames).
+- `src/client/ui/ScopeOverlay.luau`: lunette des armes à scope, dessinée sans image (masque rond et réticule en Frames, branches tracées par `Reticle`).
+- `src/client/ui/Reticle.luau`: tracé commun des quatre branches d'un réticule (#222 : longueur, épaisseur, écart central, couleur, contour, transparence, estompe), utilisé par `Crosshair` et `ScopeOverlay`.
 - `src/client/ui/Crosshair.luau`: crosshair de la « visée simplifiée » (#195), quatre traits au centre de l'écran, affiché selon `HUDRules.crosshairVisible` appliquée à `HUDState` (réglage, HUD de jeu, lunette, menu en partie ouvert).
 - `src/client/ui/KeyDisplay.luau`: affichage des touches (#197), grille façon clavier en bas au centre (Z Q S D, Espace ; en mode complet accroupi, marche lente, tir, visée, recharge, inspection), affichée selon `HUDRules.keyDisplayVisible` appliquée à `HUDState` (réglage `PlayerSettings.keyDisplay`, HUD de jeu, menu en partie fermé) ; la liste des touches est `HUDRules.keyDisplayEntries`.
 - `src/client/ui/HUDState.luau`: état central du HUD (#223) : état client, menu en partie ouvert, lunette affichée ; poussé par `GameStateController`, `InGameMenu` et `ScopeOverlay`, lu par les éléments abonnés (`onChanged`) qui appliquent leur règle de `HUDRules` ; testé (`tests/specs/HUDState.spec.luau`).
