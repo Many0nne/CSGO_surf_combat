@@ -3,6 +3,10 @@
 -- dégâts attendus, visée caméra et rapport PASS/FAIL. Aucune dépendance Roblox au-delà des types de base,
 -- pour rester testable sous Lune. Le helper lui-même vit dans `server/DebugPlaytest` et `client/debug/DebugPlaytest`.
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local MathRules = require(ReplicatedStorage.Shared.MathRules)
+
 local DebugPlaytestRules = {}
 
 -- Préfixe stable de toutes les lignes de log du helper (filtrable dans la sortie console).
@@ -87,7 +91,7 @@ function DebugPlaytestRules.yawPitchToward(
 		return 0, 0
 	end
 	local u = d.Unit
-	local yaw = math.deg(math.atan2(u.X, -u.Z))
+	local yaw = MathRules.headingDeg(u.X, u.Z)
 	local pitch = math.clamp(math.deg(math.asin(math.clamp(u.Y, -1, 1))), pitchMin, pitchMax)
 	return yaw, pitch
 end

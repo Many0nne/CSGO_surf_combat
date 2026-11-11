@@ -12,6 +12,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CharacterSyncRules = require(ReplicatedStorage.Shared.CharacterSyncRules)
+local MathRules = require(ReplicatedStorage.Shared.MathRules)
 
 local AimStats = {}
 
@@ -120,14 +121,10 @@ end
 -- Cette méthode permet de mesurer la rotation horizontale (degrés, 0 à 180) entre un cap et la direction d'un tir
 -- lorsqu'un tir arrive ; nil si la direction est presque verticale (cap indéfini).
 function AimStats.yawDelta(yaw: number, direction: Vector3): number?
-	if Vector3.new(direction.X, 0, direction.Z).Magnitude < MIN_HORIZONTAL then
+	if MathRules.horizontalLength(direction) < MIN_HORIZONTAL then
 		return nil
 	end
-	local delta = (CharacterSyncRules.yawOf(direction) - yaw) % (2 * math.pi)
-	if delta > math.pi then
-		delta = 2 * math.pi - delta
-	end
-	return math.deg(delta)
+	return math.deg(math.abs(MathRules.angleDelta(yaw, CharacterSyncRules.yawOf(direction))))
 end
 
 -- Cette méthode permet de compter un tir accepté lorsqu'il est relayé (ShotFired) : le dernier cap reçu (lastYaw à

@@ -71,7 +71,7 @@ localement les hitbox des autres (« hitbox expander ») marche aussi : le serve
 
 1. Arguments : `origin: Vector3`, `direction: Vector3` (unitaire), `hitPos: Vector3`, `shotTime: number`
    (`workspace:GetServerTimeNow()` au tir), en plus de `targetChar` et `hitPart`. Types et finitude vérifiés comme
-   `CharacterSyncRules.isWellFormed`.
+   `CharacterSyncRules.isWellFormed`, par les fonctions de `MathRules` (une seule copie de la règle « fini »).
 2. Rembobinage : le serveur garde un historique des positions acceptées de chaque personnage, une seconde à 20 Hz,
    alimenté là où elles sont posées : joueurs dans `onClientPosition` (après acceptation), bots dans `relayBot`.
    **Fait (#173)** : module pur `src/shared/PositionHistory.luau` (tampon circulaire de 35 relevés, un relevé au plus

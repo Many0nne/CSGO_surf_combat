@@ -1,6 +1,10 @@
 -- Historique pur des positions acceptées d'un personnage (#173), pour rembobiner une cible au moment d'un tir ou d'un
--- coup (compensation de latence, #174 et #176). Aucune dépendance à Roblox hors Vector3 : testable en Lune. Le serveur
+-- coup (compensation de latence, #174 et #176). Aucune dépendance à Roblox hors Vector3 et MathRules : testable en Lune. Le serveur
 -- (CharacterSync) en garde un par personnage et l'alimente avec l'horloge serveur (workspace:GetServerTimeNow()).
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local MathRules = require(ReplicatedStorage.Shared.MathRules)
 
 local PositionHistory = {}
 
@@ -55,7 +59,7 @@ end
 -- précédent (le plus ancien est écrasé si plein). Un temps ou une position non finis sont refusés ; un recul d'horloge
 -- d'au moins MAX_CLOCK_STEP repart d'un tampon vide.
 function PositionHistory.record(history: History, t: number, pos: Vector3): boolean
-	if t ~= t or t == math.huge or t == -math.huge or pos ~= pos or pos.Magnitude == math.huge then
+	if not MathRules.isFinite(t) or not MathRules.isFiniteVector3(pos) then
 		return false
 	end
 	if t < history.latestT then

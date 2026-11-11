@@ -9,6 +9,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CharacterSyncRules = require(ReplicatedStorage.Shared.CharacterSyncRules)
+local MathRules = require(ReplicatedStorage.Shared.MathRules)
 local PositionHistory = require(ReplicatedStorage.Shared.PositionHistory)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 
@@ -124,17 +125,9 @@ ShotRules.MELEE_REWIND_STEP = 0.05
 -- Deux positions rembobinées plus proches que cette distance (studs) ne sont testées qu'une fois contre la map.
 ShotRules.MELEE_SAMPLE_MERGE = 0.25
 
--- Cette méthode permet de vérifier qu'un nombre est fini et borné lorsqu'un argument de tir arrive.
-local function isBounded(n: any, bound: number): boolean
-	return type(n) == "number" and n == n and math.abs(n) <= bound
-end
-
--- Cette méthode permet de vérifier qu'un Vector3 est fini et borné lorsqu'un point de tir arrive.
+-- Cette méthode permet de vérifier qu'un Vector3 est fini et borné par MAX_COORD lorsqu'un point de tir arrive.
 local function isBoundedVector(v: any): boolean
-	return typeof(v) == "Vector3"
-		and isBounded(v.X, ShotRules.MAX_COORD)
-		and isBounded(v.Y, ShotRules.MAX_COORD)
-		and isBounded(v.Z, ShotRules.MAX_COORD)
+	return MathRules.isBoundedVector3(v, ShotRules.MAX_COORD)
 end
 
 ShotRules.isBoundedVector = isBoundedVector
@@ -160,7 +153,7 @@ function ShotRules.isWellFormed(shot: any): (boolean, string?)
 	end
 	-- Instant : horloge serveur en secondes ; seul le fini compte, il est borné ensuite au rembobinage
 	local t = shot.shotTime
-	if type(t) ~= "number" or t ~= t or t == math.huge or t == -math.huge then
+	if not MathRules.isFinite(t) then
 		return false, "instant invalide"
 	end
 	return true
@@ -357,15 +350,8 @@ end
 -- Cette méthode permet de mesurer l'angle horizontal (degrés) entre un cap et la direction d'un point à un autre
 -- lorsqu'on vérifie l'orientation d'un coup ; renvoie aussi la distance horizontale (angle nil si elle est nulle).
 function ShotRules.horizontalAngle(look: Vector3, from: Vector3, to: Vector3): (number?, number)
-	local flatLook = Vector3.new(look.X, 0, look.Z)
 	local delta = to - from
-	local flat = Vector3.new(delta.X, 0, delta.Z)
-	local distance = flat.Magnitude
-	if distance < 1e-3 or flatLook.Magnitude < 1e-3 then
-		return nil, distance
-	end
-	local cos = math.clamp(flatLook.Unit:Dot(flat.Unit), -1, 1)
-	return math.deg(math.acos(cos)), distance
+	return MathRules.horizontalAngle(look, delta, 1e-3), MathRules.horizontalLength(delta)
 end
 
 -- Cette méthode permet de calculer l'angle permis (degrés) lorsqu'on vérifie l'orientation d'un coup : MELEE_MAX_ANGLE
