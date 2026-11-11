@@ -56,6 +56,22 @@ return function(T, Loader)
 		return { id = player.UserId, name = player.Name, isBot = false, player = player }
 	end
 
+	T.describe("CheatLog noms partagés", function()
+		T.it("ré-exporte les gravités et catégories de CheatTypes (une seule source, lue par ShotRules)", function()
+			local C = setup().CheatLog
+			local Types = Loader.new():require("src/server/CheatTypes")
+			for name, value in Types.Category do
+				T.expectEqual(C.Category[name], value, "catégorie " .. name)
+			end
+			for name, value in Types.Severity do
+				T.expectEqual(C.Severity[name], value, "gravité " .. name)
+			end
+			local ShotRules = Loader.new():require("src/server/ShotRules")
+			T.expectEqual(ShotRules.SEVERITY.shape, Types.Severity.HIGH)
+			T.expectEqual(ShotRules.SEVERITY.origin, Types.Severity.MEDIUM)
+		end)
+	end)
+
 	T.describe("CheatLog.report", function()
 		T.it("compte par catégorie et gravité et garde la pire violation", function()
 			local env = setup()

@@ -19,7 +19,6 @@ local BotArsenal = {}
 BotArsenal.__index = BotArsenal
 
 local BAG_NAME = "BotBag"
-local MAX_RAY = 2048 -- longueur du rayon d'un tir (comme HitscanSystem côté client)
 
 export type BotArsenal = typeof(setmetatable(
 	{} :: {
@@ -185,7 +184,7 @@ function BotArsenal.fire(self: BotArsenal, now: number, eye: Vector3, direction:
 	if self.onFire then
 		self.onFire(eye, direction)
 	end
-	local result = workspace:Raycast(eye, direction * MAX_RAY, self.params)
+	local result = workspace:Raycast(eye, direction * WeaponConfig.HITSCAN_RANGE, self.params)
 	if result then
 		local victim = characterOf(result.Instance)
 		if victim and result.Instance:IsA("BasePart") then
@@ -197,7 +196,7 @@ function BotArsenal.fire(self: BotArsenal, now: number, eye: Vector3, direction:
 		self.readyAt = math.max(self.readyAt, now)
 		self:_startReload(self.readyAt)
 	end
-	return if result then result.Position else eye + direction * MAX_RAY
+	return if result then result.Position else eye + direction * WeaponConfig.HITSCAN_RANGE
 end
 
 return BotArsenal

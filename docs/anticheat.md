@@ -190,7 +190,7 @@ un tir légitime lointain, devient pour les joueurs `Validator.MAX_HITSCAN_RANGE
 `MAX_SPEED_SERVER` × `MAX_REWIND`, chemin possible de la cible pendant le rembobinage, + hauteur de caméra + 25 de
 marge, calculé depuis ces constantes). Un échec `origin` ou `lineOfSight` au-delà de 250 studs reste refusé pendant la
 mesure (`LOG_ONLY_RANGE`, voir plus haut). Les bots gardent 250 studs (`BOT_HITSCAN_RANGE`, tirs inchangés) : ils
-visent à 240 au plus (`src/shared/BotConfig.luau`), mais leur rayon serveur porte à 2 048 studs (`BotArsenal.MAX_RAY`)
+visent à 240 au plus (`src/shared/BotConfig.luau`), mais leur rayon serveur porte à `WeaponConfig.HITSCAN_RANGE` = 2 048 studs (lu par `BotArsenal`)
 et toucherait sinon un joueur lointain derrière une cible manquée.
 
 ### T2. Cadence, munitions, durée d'equip

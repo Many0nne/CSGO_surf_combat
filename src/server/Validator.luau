@@ -6,6 +6,7 @@ local MovementConfig = require(ReplicatedStorage.Shared.MovementConfig)
 local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
 local PositionHistory = require(ReplicatedStorage.Shared.PositionHistory)
 local Participants = require(ServerScriptService.Server.Participants)
+local CheatTypes = require(ServerScriptService.Server.CheatTypes)
 local ShotRules = require(ServerScriptService.Server.ShotRules)
 
 type Participant = Participants.Participant
@@ -32,7 +33,7 @@ Validator.MAX_HITSCAN_RANGE = MAX_HITSCAN_RANGE
 
 -- Accès au monde dont la validation d'un tir de joueur a besoin (#174), branchés par init.server (simulés en test) :
 -- horloge serveur, position rembobinée d'un personnage, raycast de ligne de vue sur la map, journal des violations
--- (category : ShotRules.Category, Hitscan si absente ; l'equip vaut aussi pour la mêlée, #175 ; orientation et ligne de
+-- (category : CheatTypes.Category, Hitscan si absente ; l'equip vaut aussi pour la mêlée, #175 ; orientation et ligne de
 -- vue de la mêlée, #176).
 export type ShotWorld = {
 	serverNow: () -> number,
@@ -446,7 +447,7 @@ local function validateMelee(attacker: Participant, aRoot: BasePart, tRoot: Base
 	local function fail(check: string, detail: string)
 		local refuses = ShotRules.blocks(check)
 		blocked = blocked or refuses
-		reportCheck(world, attacker, check, detail, refuses, ShotRules.Category.MELEE)
+		reportCheck(world, attacker, check, detail, refuses, CheatTypes.Category.MELEE)
 	end
 
 	-- Orientation : au moins une position devant le cap ; sinon la plus proche de l'angle permis va au journal
@@ -545,7 +546,7 @@ function Validator.authorizeHitscan(
 		-- Géométrie du tir (#174) d'abord, puis equip et chargeur (#175, joueurs seulement : BotArsenal les fait déjà
 		-- respecter à ses bots) : tous sont évalués, pour que la phase de mesure de T1 voie aussi les tirs refusés ici
 		local shotOk = validateShot(attacker, aChar, aRoot, tRoot, targetCharacter :: Model, hitPart :: BasePart, shot)
-		local weaponOk = isWeaponReady(attacker, ShotRules.Category.HITSCAN, tool, cfg, now)
+		local weaponOk = isWeaponReady(attacker, CheatTypes.Category.HITSCAN, tool, cfg, now)
 		if not shotOk or not weaponOk then
 			-- Refusé : la cadence n'est pas relancée, comme pour toute touche refusée
 			return nil, false
@@ -582,7 +583,7 @@ function Validator.authorizeMelee(
 		-- Orientation et ligne de vue (#176), puis equip (#175) : joueurs seulement (les bots frappent depuis le serveur,
 		-- face à leur cible, BotMotion) ; tous sont évalués, comme pour le tir
 		local geometryOk = validateMelee(attacker, aRoot, tRoot, targetCharacter :: Model)
-		local weaponOk = isWeaponReady(attacker, ShotRules.Category.MELEE, tool, cfg, now)
+		local weaponOk = isWeaponReady(attacker, CheatTypes.Category.MELEE, tool, cfg, now)
 		if not geometryOk or not weaponOk then
 			-- Refusé : la cadence n'est pas relancée
 			return nil
