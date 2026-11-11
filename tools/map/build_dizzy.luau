@@ -27,7 +27,7 @@ local OUT = "assets/rbx/Maps/Dizzy.rbxm"
 local OFFSET = Vector3.new(2000, 0, 0)
 
 -- Ombres (cf. docs/performance.md) : direction vers le soleil pour Lighting.ClockTime 17,9 et GeographicLatitude 0
--- (Lighting:GetSunDirection() relevé dans Studio). Changer l'heure ou la latitude (default.project.json, MenuScene)
+-- (Lighting:GetSunDirection() relevé dans Studio). Changer l'heure ou la latitude (default.project.json)
 -- oblige à la relever de nouveau : le générateur refuse de tourner si default.project.json ne correspond plus.
 local SUN_CLOCK, SUN_LATITUDE = 17.9, 0
 local SUN = { -0.9167592525482178, 0.024006040766835213, -0.39871811866760254 }

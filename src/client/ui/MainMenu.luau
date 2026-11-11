@@ -1,8 +1,7 @@
--- Menu principal, salle des miroirs (#112, docs/ui.md) : on choisit à la souris système, seule l'arme de la vitrine se
--- tire (hitmarker à son survol, le tir fait pivoter les éclats touchés, #130). Disposition de la maquette
--- (docs/ui/menu-miroirs/reconstituee.jpg) : titre en haut à gauche, onglets ARMES · INFOS · JOUER · RÉGLAGES · FEEDBACK en haut au centre (au-dessus des écrans secondaires,
--- qui s'ouvrent dessous), fiche de l'arme de la vitrine en bas à gauche, sélecteur d'arme en bas à droite.
-local GuiService = game:GetService("GuiService")
+-- Menu principal (docs/ui.md) : derrière, le personnage du jeu en pose sur une copie de la map (#253, MenuScene) ; on
+-- choisit à la souris système, rien ne se tire. Titre en haut à gauche, onglets ARMES · INFOS · JOUER · RÉGLAGES ·
+-- FEEDBACK en haut au centre (au-dessus des écrans secondaires, qui s'ouvrent dessous), fiche de l'arme tenue en bas à
+-- gauche, sélecteur d'arme en bas à droite.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -25,10 +24,9 @@ local MainMenu = {}
 local EDGE = 28 -- marge de la maquette (px à 720 de haut)
 local TITLE_Y = 46 -- sous les boutons Roblox du coin haut gauche
 local TABS_Y = 18
-local PLAY_DELAY = 1.0 -- l'explosion de la vitrine se voit avant les volets
 local NOTICE_Y = 72 -- message sous les onglets (apparition impossible, #219)
 local NOTICE_TIME = 5 -- s d'affichage de ce message
--- Onglets, de gauche à droite ; ARMES est l'accueil (la vitrine), JOUER l'appel à l'action
+-- Onglets, de gauche à droite ; ARMES est l'accueil (le personnage et son arme), JOUER l'appel à l'action
 local TABS = {
 	{ key = "home", text = "ARMES" },
 	{ key = "infos", text = "INFOS" },
@@ -36,8 +34,7 @@ local TABS = {
 	{ key = "settings", text = "RÉGLAGES" },
 	{ key = "feedback", text = "FEEDBACK" },
 }
--- Fiche : jeu d'éclats de la vitrine -> clé de WeaponConfig, barres de 10 segments
-local CONFIG_KEYS = { AWP = "AWP", M9 = "M9Bayonet" }
+-- Fiche : barres de 10 segments
 local SEGMENTS = 10
 local SEGMENT_SIZE = Vector2.new(17, 3)
 local SEGMENT_GAP = 4
@@ -110,7 +107,7 @@ local function buildTitle(root: Frame)
 end
 
 -- Cette méthode permet de construire la barre d'onglets lorsque le menu est initialisé : JOUER, plus grand et
--- souligné de rouge d'impact, lance la partie après l'explosion de la vitrine.
+-- souligné de rouge d'impact, lance la partie (les volets se ferment aussitôt).
 local function buildTabs(root: Frame)
 	local bar = UIKit.frame({
 		Name = "Tabs",
@@ -156,8 +153,6 @@ local function buildTabs(root: Frame)
 					goTo(tab.key)
 				end
 			end,
-			onFired = if isPlay then MenuScene.burst else nil,
-			delay = if isPlay then PLAY_DELAY else nil,
 			locks = isPlay,
 		})
 		if isPlay then
@@ -296,17 +291,17 @@ local function buildSelector(root: Frame)
 	})
 end
 
--- Cette méthode permet de remplir la fiche avec l'arme montrée (stats rapportées à la meilleure arme de la vitrine,
--- dernier segment en rouge d'impact quand la barre est pleine) lorsque la vitrine change d'arme.
+-- Cette méthode permet de remplir la fiche avec l'arme tenue (stats rapportées à la meilleure arme du menu, dernier
+-- segment en rouge d'impact quand la barre est pleine) lorsque le personnage change d'arme.
 local function showWeapon(name: string)
 	local weapons = MenuScene.getWeapons()
-	local cfg = WeaponConfig.Weapons[CONFIG_KEYS[name] or name]
+	local cfg = WeaponConfig.Weapons[name]
 	if not cfg then
 		return
 	end
 	local maxDamage, maxRate = 0, 0
 	for _, other in weapons do
-		local otherCfg = WeaponConfig.Weapons[CONFIG_KEYS[other] or other]
+		local otherCfg = WeaponConfig.Weapons[other]
 		if otherCfg then
 			maxDamage = math.max(maxDamage, otherCfg.Damage or 0)
 			maxRate = math.max(maxRate, otherCfg.RPM or 0)
@@ -348,27 +343,7 @@ local function buildContent(root: Frame)
 	MenuScene.onWeaponChanged(showWeapon)
 end
 
--- Cette méthode permet de tirer sur l'arme de la vitrine lorsque le joueur clique hors des boutons, sur l'accueil
--- seulement ; un clic à côté de l'arme ne tire pas.
-local function onInputBegan(input: InputObject, processed: boolean)
-	if processed or currentPage ~= "home" or MenuShot.isBusy() then
-		return
-	end
-	local x, y
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
-		local mouse = UserInputService:GetMouseLocation()
-		x, y = mouse.X, mouse.Y
-	elseif input.UserInputType == Enum.UserInputType.Touch then
-		x, y = input.Position.X, input.Position.Y + GuiService:GetGuiInset().Y
-	else
-		return
-	end
-	if MenuScene.shoot(x, y) then
-		MenuCursor.kick()
-	end
-end
-
--- Touches 1 à 9 : rang de l'arme montrée dans la salle des miroirs
+-- Touches 1 à 9 : rang de l'arme tenue par le personnage
 local NUMBER_KEYS = {
 	Enum.KeyCode.One,
 	Enum.KeyCode.Two,
@@ -381,7 +356,7 @@ local NUMBER_KEYS = {
 	Enum.KeyCode.Nine,
 }
 
--- Cette méthode permet de changer l'arme de la vitrine (molette, touches 1-9) lorsque le joueur est sur l'accueil.
+-- Cette méthode permet de changer l'arme du personnage (molette, touches 1-9) lorsque le joueur est sur l'accueil.
 local function onWeaponInput(input: InputObject, processed: boolean)
 	if processed or currentPage ~= "home" then
 		return
@@ -426,12 +401,8 @@ function MainMenu.init(
 	buildContent(UIKit.scaledRoot(gui))
 	buildTabs(UIKit.scaledRoot(tabsGui))
 	MainMenu.setPage("home")
-	MenuCursor.init(function(x: number, y: number): boolean
-		return currentPage == "home" and not MenuShot.isBusy() and MenuScene.isAimingWeapon(x, y)
-	end)
 	UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
 		if gui.Enabled then
-			onInputBegan(input, processed)
 			onWeaponInput(input, processed)
 		end
 	end)
@@ -500,7 +471,7 @@ function MainMenu.show()
 	task.spawn(MenuScene.start)
 end
 
--- Cette méthode permet de masquer le menu, sa scène et le hitmarker lorsque la partie démarre.
+-- Cette méthode permet de masquer le menu et sa scène lorsque la partie démarre.
 function MainMenu.hide()
 	if not gui then
 		return

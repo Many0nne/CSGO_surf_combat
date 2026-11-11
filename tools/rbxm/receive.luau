@@ -1,9 +1,9 @@
 -- receive.luau
 -- Serveur local qui reçoit les .rbxm envoyés par tools/rbxm/studio_export.luau (exécuté dans Studio)
--- et les écrit sous assets/rbx/{ViewModels,Tools,Maps,Materials,Menu}/. Un export complet réussi supprime aussi les .rbxm
+-- et les écrit sous assets/rbx/{ViewModels,Tools,Maps,Materials}/. Un export complet réussi supprime aussi les .rbxm
 -- qui n'existent plus dans la place (arme renommée ou retirée). S'arrête tout seul à la fin de l'export.
 -- Usage (racine du dépôt) : lune run tools/rbxm/receive.luau [Dossier]   (port fixe 34990, cf. studio_export.luau)
--- Avec un dossier (ex. Menu, à passer aussi à studio_export via ONLY), seul ce dossier est reçu et nettoyé.
+-- Avec un dossier (ex. Maps, à passer aussi à studio_export via ONLY), seul ce dossier est reçu et nettoyé.
 
 local fs = require("@lune/fs")
 local net = require("@lune/net")
@@ -11,7 +11,7 @@ local process = require("@lune/process")
 local task = require("@lune/task")
 
 local PORT = 34990
-local FOLDERS = { "ViewModels", "Tools", "Maps", "Materials", "Menu" }
+local FOLDERS = { "ViewModels", "Tools", "Maps", "Materials" }
 local only = process.args[1]
 if only then
 	assert(table.find(FOLDERS, only), "dossier inconnu : " .. only .. " (attendu : " .. table.concat(FOLDERS, ", ") .. ")")

@@ -1,6 +1,0 @@
-{
- "_note": "Assets du menu salle des miroirs (#112), publiés par tools/publish_asset.sh depuis mirrors.py --export. Modèles : FBX de MeshParts (positions absolues conservées). Images : id de l'image contenue dans le Decal (celui du Decal ne s'affiche pas).",
- "AWP": { "model": 115918240545507, "atlas": 106649563293671, "mask": 81515790802412, "shards": 32 },
- "M9": { "model": 71318560570033, "atlas": 106156980390882, "mask": 93578180015143, "shards": 36 },
- "Vides": { "model": 116397854461933, "glass": 135080027899100, "shards": 26 }
-}

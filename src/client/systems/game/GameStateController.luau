@@ -122,7 +122,7 @@ local function setState(newState: State)
 		MainMenu.show()
 		InfosScreen.hide()
 		RoundHUD.hide()
-		-- La caméra et le curseur (hitmarker) sont pilotés par le menu
+		-- La caméra et le curseur (souris système) sont pilotés par le menu
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 	elseif newState == "INFOS" then
 		SettingsMenu.close()

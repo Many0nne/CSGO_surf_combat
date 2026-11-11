@@ -11,7 +11,7 @@ local HttpService = game:GetService("HttpService")
 local SerializationService = game:GetService("SerializationService")
 
 local BASE = "http://localhost:34990" -- port fixe, cf. receive.luau
--- Dossier à exporter seul (ex. "Menu"), à passer aussi à receive.luau ; nil = export complet.
+-- Dossier à exporter seul (ex. "Maps"), à passer aussi à receive.luau ; nil = export complet.
 local ONLY: string? = nil
 
 -- Cette méthode permet d'encoder un buffer en hexadécimal lorsqu'il doit transiter dans un corps HTTP texte.
@@ -60,7 +60,6 @@ local ok, err = pcall(function()
 		{ "Tools", game:GetService("StarterPack"), "Tool" },
 		{ "Maps", workspace:FindFirstChild("Maps"), "Model" },
 		{ "Materials", game:GetService("MaterialService"), "MaterialVariant" },
-		{ "Menu", game:GetService("ReplicatedStorage"):FindFirstChild("MenuMirrors"), "Model" },
 	}
 	for _, source in sources do
 		if not ONLY or ONLY == source[1] then

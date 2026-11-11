@@ -1,5 +1,5 @@
 -- Choix en texte à ombre décalée des écrans du menu (onglets et flèches de l'accueil, choix des écrans secondaires) :
--- un clic à la souris système déclenche l'action, sans tir ni impact (seule l'arme de la vitrine se tire, #130).
+-- un clic à la souris système déclenche l'action, sans tir ni impact (#130 ; rien ne se tire au menu depuis #253).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
@@ -26,15 +26,13 @@ function MenuShot.reset()
 	busy = false
 end
 
--- Cette méthode permet de savoir si une action longue (JOUER) est en cours lorsqu'un nouveau clic arrive.
+-- Cette méthode permet de savoir si une action exclusive (JOUER) est partie lorsqu'un nouveau clic arrive.
 function MenuShot.isBusy(): boolean
 	return busy
 end
 
 type ChoiceProps = {
 	action: () -> (),
-	onFired: (() -> ())?,
-	delay: number?,
 	locks: boolean?,
 }
 
@@ -59,20 +57,11 @@ local function bindChoice(button: GuiButton, props: ChoiceProps, paint: (boolean
 		if not enabled or busy then
 			return
 		end
-		if props.onFired then
-			props.onFired()
+		-- JOUER bloque les autres choix jusqu'à MenuShot.reset (retour au menu ou MainMenu.hide)
+		if props.locks then
+			busy = true
 		end
-		if not props.delay then
-			props.action()
-			return
-		end
-		busy = true
-		task.delay(props.delay, function()
-			if not props.locks then
-				busy = false
-			end
-			props.action()
-		end)
+		props.action()
 	end)
 
 	return {
@@ -94,7 +83,7 @@ end
 
 -- Cette méthode permet de créer un choix en texte à ombre décalée (onglets, flèches, actions des écrans secondaires)
 -- lorsqu'un écran est construit : rouge d'impact au survol, `selectedColor` pour l'élément actif. Le bouton prend la
--- taille de son texte ; `onFired` et `delay` servent aux actions longues (JOUER), `locks` les garde exclusives.
+-- taille de son texte ; `locks` rend l'action exclusive (JOUER : plus aucun choix jusqu'au retour au menu).
 function MenuShot.textChoice(props: {
 	text: string,
 	font: Font,
@@ -106,8 +95,6 @@ function MenuShot.textChoice(props: {
 	anchor: Vector2?,
 	layoutOrder: number?,
 	action: () -> (),
-	onFired: (() -> ())?,
-	delay: number?,
 	locks: boolean?,
 }): Choice
 	local button = UIKit.create("TextButton", {

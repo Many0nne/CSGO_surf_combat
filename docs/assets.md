@@ -31,8 +31,8 @@ Mettre à jour un `.rbxm` (après modification d'une arme dans Studio, ou pour a
    serveur, qui écrit `assets/rbx/ViewModels/<Nom>.rbxm`, `assets/rbx/Tools/<Nom>.rbxm`, `assets/rbx/Maps/<Nom>.rbxm`
    et `assets/rbx/Materials/<Nom>.rbxm`, supprime les `.rbxm` qui n'existent plus dans la place, puis s'arrête. Si l'export
    échoue dans Studio, le serveur s'arrête en erreur sans rien supprimer.
-   Export partiel : `lune run tools/rbxm/receive.luau Menu` et `ONLY = "Menu"` dans le script (seul ce dossier est
-   écrit et nettoyé) ; `assets/rbx/Menu/` reçoit les jeux d'éclats du menu (`ReplicatedStorage.MenuMirrors`, #112).
+   Export partiel : `lune run tools/rbxm/receive.luau Maps` et `ONLY = "Maps"` dans le script (seul ce dossier est
+   écrit et nettoyé).
    Le MCP refuse l'envoi tant que `localhost:34990` n'est pas dans la liste HTTP autorisée de l'Assistant
    (« not in the Assistant HTTP allowlist », Studio > Assistant > Settings > MCP Permissions) : l'y ajouter une fois.
    Sans MCP : clic droit sur l'instance > *Save to File…* > `assets/rbx/<Dossier>/<Nom>.rbxm` (format binaire).
@@ -183,8 +183,8 @@ jamais d'un effet propre à three.js. C'est ce qui permet de publier telle quell
    viewmodel (`ColorMapContent`, `RoughnessMapContent`, `MetalnessMapContent`, `NormalMapContent`, avec
    `Content.fromUri("rbxassetid://…")`), via `execute_luau`.
 3. Réexporter le viewmodel (« Mettre à jour un `.rbxm` » ci-dessus), puis vérifier en jeu (helper de playtest, étape
-   `VIEWMODEL`) et faire juger le rendu par l'utilisateur. Le modèle 3P clone les pièces du viewmodel : il suit. La
-   vitrine du menu, elle, est une image précalculée (`MenuMirrorsData`) : elle garde l'ancien rendu.
+   `VIEWMODEL`) et faire juger le rendu par l'utilisateur. Le modèle 3P clone les pièces du viewmodel : il suit, comme
+   l'arme du personnage de l'accueil du menu (`MenuScene`, même modèle 3P).
 
 ## Ajouter un couteau
 
@@ -204,8 +204,9 @@ la config (`IsMelee`), pas par le nom de l'arme ; seuls quelques endroits nommen
    identique en jeu ; refaire `ThirdPerson.Grip` pour le nouveau mesh, `tools/anim/poses3p/`), et une poussée dans
    `DeathRules.PUSH_BY_WEAPON` (sinon `DEFAULT_PUSH`).
 6. **Endroits qui nomment la M9**, à décider selon que le couteau la remplace ou s'y ajoute : `BotCombatRules.KNIFE`
-   (couteau des bots), `MainMenu.CONFIG_KEYS` et `MenuMirrorsData` (vitrine du menu, qui demande un jeu d'éclats
-   recalculé, `tools/menu/`).
+   (couteau des bots). L'accueil du menu prend tout seul les Tools du `StarterPack` (`MenuScene`, attribut
+   `WeaponName`) et tient un couteau le long du corps (`MenuPoses.Melee`, tenue M2, avec la prise du jeu). Une nouvelle arme à
+   distance demande sa tenue de menu (`MenuPoses`, tenue M1 de `tools/anim/poses3p/poses.js`).
 7. `rojo build` + `tools/rbxm/verify_place.luau` (signale un Tool sans entrée de config), puis le helper de playtest sur
    le nouveau Tool.
 

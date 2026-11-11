@@ -9,9 +9,6 @@
       },
       "ViewModels": {
         "$path": "assets/rbx/ViewModels"
-      },
-      "MenuMirrors": {
-        "$path": "assets/rbx/Menu"
       }
     },
 

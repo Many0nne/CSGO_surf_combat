@@ -390,7 +390,7 @@ Rojo gère `Workspace.Maps` : un objet posé à la main dans une map est supprim
   qui détecte la chute : **le serveur ne voit pas la position des joueurs** (racine ancrée, mouvement fait par le
   client ; côté serveur le personnage reste figé à son point d'apparition). Une première version qui testait la
   position côté serveur ne tuait jamais personne.
-- La lumière est dans `default.project.json` (Lighting + Atmosphere), identique à celle du menu (`MenuScene`) :
+- La lumière est dans `default.project.json` (Lighting + Atmosphere), reprise telle quelle par l'accueil du menu (`MenuScene`, #253) :
   `ClockTime` 17.9 et latitude 0. Des lanceurs `SunLaunch` doivent viser `Lighting:GetSunDirection()` (Y retiré) pour
   qu'on sorte du soleil : changer l'heure oblige à les réorienter. Jugée un peu sombre le 06/11/2026 : éclaircie par
   les ambiances (`OutdoorAmbient` 122,110,130, `Ambient` 74,69,88), `Brightness` 3.6 et `ExposureCompensation` 0.35,
@@ -418,7 +418,7 @@ Rojo gère `Workspace.Maps` : un objet posé à la main dans une map est supprim
     le cas de la plupart des pièces : il reste 1 949 pièces qui projettent une ombre, sur 15 300.
   
   Le calcul suit la direction du soleil `SUN` de `build_dizzy.luau`, relevée dans Studio (`Lighting:GetSunDirection()`)
-  pour `ClockTime` 17,9 et `GeographicLatitude` 0. Si l'heure change (`default.project.json`, `MenuScene`), il faut la
+  pour `ClockTime` 17,9 et `GeographicLatitude` 0. Si l'heure change (`default.project.json`), il faut la
   relever de nouveau : le générateur refuse de tourner tant que `default.project.json` ne correspond plus. Seules les
   boîtes et les coins opaques servent de masque : un cylindre ou une boule, approchés par leur boîte, masqueraient trop.
   Une pièce ajoutée à la main dans Studio ne passe pas par ce calcul.
