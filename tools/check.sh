@@ -27,6 +27,15 @@ fi
 echo "== luau-lsp"
 luau-lsp analyze --sourcemap=sourcemap.json --definitions="$DEFS" --base-luaurc=.luaurc src || status=1
 
+echo "== docs"
+# Un numéro de ligne se périme à chaque PR : les docs citent la fonction ou le bloc, pas fichier.luau:ligne
+if grep -rnE '\.luau:[0-9]' docs CLAUDE.md --include='*.md'; then
+	echo "docs : citer la fonction, pas le numéro de ligne (références ci-dessus)"
+	status=1
+else
+	echo "ok"
+fi
+
 echo "== tests"
 lune run tests/run.luau || status=1
 
