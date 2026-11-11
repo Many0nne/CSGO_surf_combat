@@ -108,21 +108,31 @@ local function onToolEquipped(char: Model, tool: Tool)
 	end
 end
 
--- Cette méthode permet de suivre l'équipement d'armes d'un personnage joueur lorsqu'il spawn :
--- modèle 3P attaché à l'équipement, retiré quand l'outil correspondant quitte le personnage.
-local function trackWeapon3P(char: Model)
+-- Cette méthode permet de suivre l'équipement d'armes d'un personnage (joueur ou bot) lorsqu'il spawn : début de la
+-- durée d'equip vérifiée par le Validator (#175), modèle 3P attaché à l'équipement, retiré quand l'outil correspondant
+-- quitte le personnage (rechargement annulé).
+local function trackWeapon3P(participant: Participants.Participant, char: Model)
 	for _, child in char:GetChildren() do
 		if child:IsA("Tool") then
+			Validator.noteEquip(participant, child, os.clock())
 			onToolEquipped(char, child)
 		end
 	end
 	char.ChildAdded:Connect(function(child)
 		if child:IsA("Tool") then
+			Validator.noteEquip(participant, child, os.clock())
 			onToolEquipped(char, child)
 		end
 	end)
 	char.ChildRemoved:Connect(function(child)
-		if child:IsA("Tool") and equippedTools[char] == child then
+		if not child:IsA("Tool") then
+			return
+		end
+		-- Le personnage d'un participant réapparu n'est plus le sien : son ancien corps ne touche pas aux nouvelles armes
+		if Participants.characterOf(participant) == char then
+			Validator.noteUnequip(participant, child, os.clock())
+		end
+		if equippedTools[char] == child then
 			equippedTools[char] = nil
 			WeaponThirdPerson.detach(char)
 		end
@@ -137,7 +147,14 @@ weaponActionRmt.OnServerEvent:Connect(function(player, action)
 		return
 	end
 	local char = player.Character
-	if not char or not equippedTools[char] then
+	if not char then
+		return
+	end
+	-- Chargeur vérifié par le serveur (#175) : avant les filtres de la pose 3P, qui peuvent écarter une action honnête
+	if action == "Reload" then
+		Validator.noteReload(Participants.fromPlayer(player), os.clock())
+	end
+	if not equippedTools[char] then
 		return
 	end
 	local now = os.clock()
@@ -156,7 +173,7 @@ end)
 -- suivie, mort comptée dans le round (et dans les stats pour un joueur), corps laissé aux clients le temps du ragdoll.
 local function onParticipantCharacter(participant: Participants.Participant, char: Model, respawn: () -> ())
 	Validator.forget(participant)
-	trackWeapon3P(char)
+	trackWeapon3P(participant, char)
 	local humanoid = char:WaitForChild("Humanoid") :: Humanoid
 	humanoid.Died:Connect(function()
 		local player = participant.player
@@ -316,8 +333,10 @@ Validator.setShotWorld({
 	isObstructed = isShotObstructed,
 	-- Cette méthode permet de journaliser un contrôle de tir en échec lorsqu'il est constaté (catégorie Hitscan, une
 	-- source par contrôle pour le décompte des violations fortes).
-	report = function(attacker, check, severity, detail)
-		CheatLog.report(attacker, CheatLog.Category.HITSCAN, severity, detail, "Hitscan:" .. check)
+	-- Catégorie Melee pour l'equip d'une arme de mêlée (#175).
+	report = function(attacker, check, severity, detail, category)
+		local cat = category or CheatLog.Category.HITSCAN
+		CheatLog.report(attacker, cat, severity, detail, cat .. ":" .. check)
 	end,
 })
 

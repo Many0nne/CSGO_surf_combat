@@ -36,14 +36,23 @@ return function(T, Loader)
 	-- Hauteur de la caméra au-dessus de la racine (CameraConfig.CAM_HEIGHT_STAND) : origine d'un tir honnête.
 	local EYE = Vector3.new(0, 2.5, 0)
 
-	-- Cette méthode permet de mettre un outil en main d'un joueur lorsqu'un test attaque avec une arme donnée.
-	local function equip(player, toolName: string, weaponName: string?)
+	-- Arrivée d'un outil vue par le serveur (#175), branchée par setup : comme trackWeapon3P dans init.server.
+	local onEquip: ((any, any, number?) -> ())? = nil
+	-- Instant d'equip par défaut, loin dans le passé : un test qui ne porte pas sur l'equip tire avec une arme sortie.
+	local LONG_AGO = -1000
+
+	-- Cette méthode permet de mettre un outil en main d'un joueur lorsqu'un test attaque avec une arme donnée ; at est
+	-- l'instant où le serveur voit l'outil arriver (LONG_AGO par défaut).
+	local function equip(player, toolName: string, weaponName: string?, at: number?)
 		local tool = Instance.new("Tool")
 		tool.Name = toolName
 		if weaponName then
 			tool:SetAttribute("WeaponName", weaponName)
 		end
 		tool.Parent = player.Character
+		if onEquip then
+			onEquip(player, tool, at)
+		end
 		return tool
 	end
 
@@ -76,16 +85,22 @@ return function(T, Loader)
 			isObstructed = function()
 				return world.obstructed
 			end,
-			report = function(attacker, check, severity, detail)
-				table.insert(
-					world.reports,
-					{ attacker = attacker, check = check, severity = severity, detail = detail }
-				)
+			report = function(attacker, check, severity, detail, category)
+				table.insert(world.reports, {
+					attacker = attacker,
+					check = check,
+					severity = severity,
+					detail = detail,
+					category = category or "Hitscan",
+				})
 			end,
 		})
 		local nextUserId = 0
 		local function participantOf(attacker)
 			return if attacker.isBot then attacker else Participants.fromPlayer(attacker)
+		end
+		onEquip = function(attacker, tool, at)
+			Real.noteEquip(participantOf(attacker), tool, at or LONG_AGO)
 		end
 		-- Cette méthode permet de construire le tir qu'enverrait notre client lorsqu'un test ne porte pas sur sa
 		-- validation : depuis l'œil du tireur, droit sur la partie touchée, à l'instant présent.
@@ -121,6 +136,15 @@ return function(T, Loader)
 			end,
 			forget = function(attacker)
 				Real.forget(participantOf(attacker))
+			end,
+			noteReload = function(attacker, now)
+				Real.noteReload(participantOf(attacker), now)
+			end,
+			noteUnequip = function(attacker, tool, now)
+				Real.noteUnequip(participantOf(attacker), tool, now)
+			end,
+			noteEquip = function(attacker, tool, now)
+				Real.noteEquip(participantOf(attacker), tool, now)
 			end,
 		}
 		local function makePlayer(position: Vector3, weapon: string?, health: number?, facing: Vector3?)
@@ -404,7 +428,229 @@ return function(T, Loader)
 			local a, b = makePlayer(Vector3.zero, "M9Bayonet"), makePlayer(Vector3.new(5, 0, 0))
 			T.expectEqual(Validator.authorizeMelee(a, b.Character, "secondary", 10), 65)
 			Validator.forget(a)
+			-- Comme à la réapparition : l'oubli précède l'arrivée des armes neuves (init.server)
+			a.Character:FindFirstChildOfClass("Tool"):Destroy()
+			equip(a, "M9Bayonet")
 			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 10.1), 50)
+		end)
+	end)
+
+	T.describe("Validator : durée d'equip (#175)", function()
+		T.it("refuse un tir pendant l'equip, l'accepte à EquipTime moins la tolérance", function()
+			local Validator, makePlayer, _, world, ShotRules = setup()
+			local a = makePlayer(Vector3.zero)
+			local b = makePlayer(Vector3.new(50, 0, 0))
+			equip(a, "AWP", nil, 10)
+			local limit = 10 + 1.58 - ShotRules.EQUIP_TOLERANCE
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), 10.5), nil, "tir à 0,5 s")
+			T.expectEqual(#world.reports, 1, "refus journalisé")
+			T.expectEqual(world.reports[1].check, "equip")
+			T.expectEqual(world.reports[1].severity, "medium")
+			T.expectEqual(
+				Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), limit - 0.01),
+				nil,
+				"juste avant la borne"
+			)
+			T.expectEqual(
+				Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), limit),
+				115,
+				"refus a relancé la cadence ou borne trop stricte"
+			)
+		end)
+
+		T.it("accepte le client honnête le plus rapide : touche à EquipTime pile, sans violation", function()
+			local Validator, makePlayer, _, world = setup()
+			local a = makePlayer(Vector3.zero)
+			local b = makePlayer(Vector3.new(5, 0, 0))
+			equip(a, "AWP", nil, 10)
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), 11.58), 115)
+			local knifer = makePlayer(Vector3.zero)
+			equip(knifer, "M9Bayonet", nil, 20)
+			-- Piste Equip du couteau : 1 s à vitesse 1,3, soit 0,769 s, à peine sous EquipTime (0,77)
+			T.expectEqual(Validator.authorizeMelee(knifer, b.Character, "primary", 20 + 1 / 1.3), 50)
+			T.expectEqual(#world.reports, 0)
+		end)
+
+		T.it("refuse un coup de couteau pendant l'equip, catégorie Melee", function()
+			local Validator, makePlayer, _, world = setup()
+			local a = makePlayer(Vector3.zero)
+			local b = makePlayer(Vector3.new(5, 0, 0))
+			equip(a, "M9Bayonet", nil, 10)
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 10.2), nil)
+			T.expectEqual(world.reports[1].check, "equip")
+			T.expectEqual(world.reports[1].category, "Melee")
+			T.expectEqual(
+				Validator.authorizeMelee(a, b.Character, "primary", 10.6),
+				50,
+				"cadence relancée par le refus"
+			)
+		end)
+
+		T.it("repart de zéro à chaque equip, et refuse une arme dont l'arrivée n'a pas été vue", function()
+			local Validator, makePlayer, _, world = setup()
+			local a = makePlayer(Vector3.zero)
+			local b = makePlayer(Vector3.new(5, 0, 0))
+			local awp = equip(a, "AWP", nil, 10)
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), 12), 115)
+			Validator.noteUnequip(a, awp, 13)
+			awp.Parent = nil
+			equip(a, "M9Bayonet", nil, 13)
+			a.Character:FindFirstChildOfClass("Tool"):Destroy()
+			equip(a, "AWP", nil, 14)
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), 14.5), nil, "rééquipée")
+			-- Outil en main sans arrivée notée (aucun chemin du jeu) : refusé, jamais accepté en silence
+			a.Character:FindFirstChildOfClass("Tool"):Destroy()
+			local stray = Instance.new("Tool")
+			stray.Name = "AWP"
+			stray.Parent = a.Character
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), 100), nil, "equip non vu")
+			T.expectEqual(string.find(world.reports[#world.reports].detail, "sans equip vu", 1, true) ~= nil, true)
+		end)
+
+		T.it("ne gêne pas les bots : tir dès la sortie de l'arme accepté", function()
+			local Validator, makePlayer, makeBot, world = setup()
+			local bot = makeBot(Vector3.zero)
+			local b = makePlayer(Vector3.new(50, 0, 0))
+			equip(bot, "AWP", nil, 10)
+			T.expectEqual(Validator.authorizeHitscan(bot, b.Character, rootOf(b.Character), 10), 115)
+			local knifeBot = makeBot(Vector3.zero)
+			equip(knifeBot, "M9Bayonet", nil, 10)
+			T.expectEqual(
+				Validator.authorizeMelee(knifeBot, makePlayer(Vector3.new(5, 0, 0)).Character, "primary", 10),
+				50
+			)
+			T.expectEqual(#world.reports, 0)
+		end)
+	end)
+
+	T.describe("Validator : chargeur (#175)", function()
+		-- Cette méthode permet de tirer n touches honnêtes, une par cadence, lorsqu'un test vide un chargeur ; elle
+		-- renvoie l'instant du dernier tir.
+		local function fire(Validator, a, b, n: number, from: number): number
+			local t = from
+			for i = 1, n do
+				t = from + (i - 1) * 1.5
+				T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), t), 115, "tir " .. i)
+			end
+			return t
+		end
+
+		T.it("refuse le 6e tir sans rechargement, sans relancer la cadence", function()
+			local Validator, makePlayer, _, world = setup()
+			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(50, 0, 0))
+			local last = fire(Validator, a, b, 5, 10)
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), last + 1.5), nil, "6e tir")
+			T.expectEqual(world.reports[1].check, "magazine")
+			T.expectEqual(world.reports[1].category, "Hitscan")
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), last + 100), nil, "plus tard")
+		end)
+
+		T.it("accepte 5 tirs après un rechargement complet, à ReloadTime moins la tolérance", function()
+			local Validator, makePlayer, _, world, ShotRules = setup()
+			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(50, 0, 0))
+			local last = fire(Validator, a, b, 5, 10)
+			local reloadAt = last + 1.5
+			Validator.noteReload(a, reloadAt)
+			local ready = reloadAt + 3.7 - ShotRules.RELOAD_TOLERANCE
+			T.expectEqual(
+				Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), ready - 0.01),
+				nil,
+				"rechargement trop court"
+			)
+			T.expectEqual(#world.reports, 1)
+			last = fire(Validator, a, b, 5, ready)
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), last + 1.5), nil, "11e tir")
+		end)
+
+		T.it("client honnête : rechargement à ReloadTime pile, chargeur partiel compris, sans violation", function()
+			local Validator, makePlayer, _, world = setup()
+			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(50, 0, 0))
+			local last = fire(Validator, a, b, 3, 10)
+			Validator.noteReload(a, last + 1.5)
+			last = fire(Validator, a, b, 5, last + 1.5 + 3.7)
+			Validator.noteReload(a, last + 1.5)
+			fire(Validator, a, b, 5, last + 1.5 + 3.7)
+			T.expectEqual(#world.reports, 0)
+		end)
+
+		T.it("annule le rechargement au changement d'arme, garde un rechargement déjà fini", function()
+			local Validator, makePlayer = setup()
+			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(50, 0, 0))
+			local last = fire(Validator, a, b, 5, 10)
+			local awp = a.Character:FindFirstChildOfClass("Tool")
+			Validator.noteReload(a, last + 1.5)
+			-- Couteau sorti 1 s après le début du rechargement, AWP ressortie : rechargement perdu
+			Validator.noteUnequip(a, awp, last + 2.5)
+			awp.Parent = nil
+			local knife = equip(a, "M9Bayonet", nil, last + 2.5)
+			Validator.noteUnequip(a, knife, last + 3)
+			knife:Destroy()
+			awp.Parent = a.Character
+			Validator.noteEquip(a, awp, last + 3)
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), last + 20), nil, "annulé")
+			-- Rechargement complet puis changement d'arme : acquis
+			Validator.noteReload(a, last + 21)
+			Validator.noteUnequip(a, awp, last + 25)
+			Validator.noteEquip(a, awp, last + 25)
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), last + 30), 115, "acquis")
+		end)
+
+		T.it("garde dues les touches acceptées pendant un rechargement (Reload en boucle sans effet)", function()
+			local Validator, makePlayer = setup()
+			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(50, 0, 0))
+			-- Client modifié : Reload envoyé avant chaque tir, jamais d'attente de 3,7 s
+			local t = 10
+			for i = 1, 5 do
+				Validator.noteReload(a, t - 0.1)
+				T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), t), 115, "tir " .. i)
+				t += 1.5
+			end
+			Validator.noteReload(a, t - 0.1)
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), t), nil, "6e tir")
+		end)
+
+		T.it("compte un rechargement lancé pendant l'equip à partir de la fin de l'equip", function()
+			local Validator, makePlayer, _, _, ShotRules = setup()
+			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(50, 0, 0))
+			local last = fire(Validator, a, b, 5, 10)
+			local awp = a.Character:FindFirstChildOfClass("Tool")
+			Validator.noteUnequip(a, awp, last + 2)
+			Validator.noteEquip(a, awp, last + 2)
+			Validator.noteReload(a, last + 2) -- dès la sortie, pendant l'equip
+			local equipEnd = last + 2 + 1.58 - ShotRules.EQUIP_TOLERANCE
+			local ready = equipEnd + 3.7 - ShotRules.RELOAD_TOLERANCE
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), ready - 0.05), nil)
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), ready), 115)
+		end)
+
+		T.it("suit le chargeur par joueur, et l'oublie à la réapparition", function()
+			local Validator, makePlayer = setup()
+			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(50, 0, 0))
+			local other = makePlayer(Vector3.new(0, 0, 10), "AWP")
+			local last = fire(Validator, a, b, 5, 10)
+			T.expectEqual(
+				Validator.authorizeHitscan(other, b.Character, rootOf(b.Character), last),
+				115,
+				"autre joueur"
+			)
+			Validator.forget(a)
+			a.Character:FindFirstChildOfClass("Tool"):Destroy()
+			equip(a, "AWP")
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), last + 1.5), 115)
+		end)
+
+		T.it("ne compte pas les tirs des bots : aucun tir de bot refusé au-delà de 5", function()
+			local Validator, makePlayer, makeBot, world = setup()
+			local bot = makeBot(Vector3.zero, "AWP")
+			local b = makePlayer(Vector3.new(50, 0, 0))
+			for i = 1, 12 do
+				T.expectEqual(
+					Validator.authorizeHitscan(bot, b.Character, rootOf(b.Character), i * 1.5),
+					115,
+					"tir " .. i
+				)
+			end
+			T.expectEqual(#world.reports, 0)
 		end)
 	end)
 

@@ -31,12 +31,19 @@ local Validator = {}
 Validator.MAX_HITSCAN_RANGE = MAX_HITSCAN_RANGE
 
 -- Accès au monde dont la validation d'un tir de joueur a besoin (#174), branchés par init.server (simulés en test) :
--- horloge serveur, position rembobinée d'un personnage, raycast de ligne de vue sur la map, journal des violations.
+-- horloge serveur, position rembobinée d'un personnage, raycast de ligne de vue sur la map, journal des violations
+-- (category : ShotRules.Category, Hitscan si absente ; l'equip vaut aussi pour la mêlée, #175).
 export type ShotWorld = {
 	serverNow: () -> number,
 	positionAt: (char: Model, t: number) -> Vector3?,
 	isObstructed: (from: Vector3, delta: Vector3) -> boolean,
-	report: (attacker: Participant, check: string, severity: ShotRules.Severity, detail: string) -> (),
+	report: (
+		attacker: Participant,
+		check: string,
+		severity: ShotRules.Severity,
+		detail: string,
+		category: string?
+	) -> (),
 }
 
 -- nil tant que setShotWorld n'a pas été appelé : les tirs de joueurs sont alors refusés (jamais validés en silence).
@@ -48,6 +55,10 @@ Validator.DEBUG_TARGET_ATTRIBUTE = "DebugTarget"
 
 -- Dernière attaque acceptée, par participant et par arme (entrée de WeaponConfig), comme `nextFireTime` côté client.
 local lastAttacks: { [Participant]: { [any]: LastAttack } } = {}
+-- Dernier outil arrivé dans le personnage d'un participant et instant de son arrivée (#175), même horloge que `now`.
+local equips: { [Participant]: { tool: Instance, at: number } } = {}
+-- Chargeur de chaque arme à distance d'un participant (#175), par entrée de WeaponConfig comme les cadences.
+local magazines: { [Participant]: { [any]: ShotRules.Magazine } } = {}
 
 local function getRoot(char: Model): BasePart?
 	return char:FindFirstChild("HumanoidRootPart") :: BasePart?
@@ -74,13 +85,13 @@ local function isValidTarget(attacker: Participant, targetCharacter: Instance): 
 end
 
 -- Cette méthode permet de vérifier ce qui est commun à toutes les attaques (cible, arme réellement en main, portée)
--- lorsqu'une touche arrive ; elle renvoie la config de l'arme, les deux roots et le personnage du tireur, ou nil si la
--- touche est invalide.
+-- lorsqu'une touche arrive ; elle renvoie la config de l'arme, les deux roots, le personnage du tireur et l'outil en
+-- main, ou nil si la touche est invalide.
 local function resolveAttack(
 	attacker: Participant,
 	targetCharacter: Instance,
 	maxRange: number
-): (any, BasePart?, BasePart?, Model?)
+): (any, BasePart?, BasePart?, Model?, Tool?)
 	if not isValidTarget(attacker, targetCharacter) then
 		return nil
 	end
@@ -95,7 +106,7 @@ local function resolveAttack(
 	if not aRoot or not tRoot or (aRoot.Position - tRoot.Position).Magnitude > maxRange then
 		return nil
 	end
-	return cfg, aRoot, tRoot, aChar
+	return cfg, aRoot, tRoot, aChar, tool
 end
 
 -- Cette méthode permet de vérifier que la partie annoncée par le client appartient à la cible lorsqu'un tir arrive.
@@ -118,6 +129,104 @@ local function recordAttack(attacker: Participant, cfg: any, delay: number, now:
 		lastAttacks[attacker] = playerAttacks
 	end
 	playerAttacks[cfg] = { at = now, delay = delay }
+end
+
+-- Cette méthode permet de lire le chargeur d'une arme d'un participant lorsqu'il tire ou recharge ; il est créé plein.
+local function magazineOf(participant: Participant, cfg: any): ShotRules.Magazine
+	local perWeapon = magazines[participant]
+	if not perWeapon then
+		perWeapon = {}
+		magazines[participant] = perWeapon
+	end
+	local mag = perWeapon[cfg]
+	if not mag then
+		mag = ShotRules.newMagazine()
+		perWeapon[cfg] = mag
+	end
+	return mag
+end
+
+-- Cette méthode permet d'annuler les rechargements en cours d'un participant lorsqu'il range ou change d'arme (un
+-- rechargement déjà fini reste acquis).
+local function cancelReloads(participant: Participant, now: number)
+	local perWeapon = magazines[participant]
+	if not perWeapon then
+		return
+	end
+	for cfg, mag in perWeapon do
+		ShotRules.cancelReload(mag, cfg.ReloadTime or 0, now)
+	end
+end
+
+-- Cette méthode permet de journaliser un contrôle d'equip ou de chargeur en échec lorsqu'il est constaté ; elle
+-- renvoie true s'il refuse la touche (mode "block"). Sans monde branché, la décision s'applique sans journal.
+local function failWeaponCheck(attacker: Participant, category: string, check: string, detail: string): boolean
+	local blocks = ShotRules.blocks(check)
+	local world = shotWorld
+	if world then
+		local suffix = if blocks then "" else " (journal seul)"
+		world.report(
+			attacker,
+			check,
+			ShotRules.SEVERITY[check],
+			string.format("%s : %s%s", check, detail, suffix),
+			category
+		)
+	end
+	return blocks
+end
+
+-- Cette méthode permet de vérifier qu'un joueur pouvait utiliser son arme lorsqu'une touche a passé cible, arme et
+-- cadence (#175) : equip fini, et pour une arme à chargeur, chargeur non vide. Renvoie false si la touche est refusée.
+local function isWeaponReady(attacker: Participant, category: string, tool: Instance, cfg: any, now: number): boolean
+	local blocked = false
+	local record = equips[attacker]
+	local equippedAt = if record and record.tool == tool then record.at else nil
+	local ok, detail = ShotRules.checkEquip(equippedAt, cfg.EquipTime or 0, now)
+	if not ok then
+		blocked = failWeaponCheck(attacker, category, ShotRules.Check.EQUIP, detail or "?") or blocked
+	end
+	if not cfg.IsMelee and cfg.Magazine then
+		ok, detail = ShotRules.checkMagazine(magazineOf(attacker, cfg), cfg.Magazine, cfg.ReloadTime or 0, now)
+		if not ok then
+			blocked = failWeaponCheck(attacker, category, ShotRules.Check.MAGAZINE, detail or "?") or blocked
+		end
+	end
+	return not blocked
+end
+
+-- Cette méthode permet de noter l'arrivée d'un outil dans le personnage d'un participant lorsque le serveur la voit
+-- (equip, #175) : début de sa durée d'equip ; un rechargement en cours est annulé, comme côté client.
+function Validator.noteEquip(participant: Participant, tool: Instance, now: number)
+	cancelReloads(participant, now)
+	equips[participant] = { tool = tool, at = now }
+end
+
+-- Cette méthode permet de noter qu'un outil quitte le personnage d'un participant lorsqu'il range son arme :
+-- rechargement annulé ; l'equip suivant repartira de son arrivée.
+function Validator.noteUnequip(participant: Participant, tool: Instance, now: number)
+	cancelReloads(participant, now)
+	local record = equips[participant]
+	if record and record.tool == tool then
+		equips[participant] = nil
+	end
+end
+
+-- Cette méthode permet de démarrer le rechargement de l'arme en main lorsque l'action Reload arrive (#175). Un
+-- rechargement demandé pendant l'equip ne compte qu'à partir de la fin de l'equip (le client ne peut pas recharger avant).
+function Validator.noteReload(participant: Participant, now: number)
+	local char = Participants.characterOf(participant)
+	local tool = char and char:FindFirstChildOfClass("Tool")
+	local cfg = tool and WeaponConfig.Weapons[tool:GetAttribute("WeaponName") or tool.Name]
+	if not cfg or cfg.IsMelee or not cfg.Magazine then
+		return
+	end
+	local record = equips[participant]
+	local start = now
+	if record and record.tool == tool then
+		start = math.max(now, record.at + (cfg.EquipTime or 0) - ShotRules.EQUIP_TOLERANCE)
+	end
+	ShotRules.startReload(magazineOf(participant, cfg), cfg.ReloadTime or 0, start)
 end
 
 -- Cette méthode permet de brancher les accès au monde de la validation des tirs lorsque le serveur démarre (ou qu'un
@@ -240,18 +349,23 @@ function Validator.authorizeHitscan(
 	shot: any?
 ): (number?, boolean)
 	local maxRange = if attacker.isBot then BOT_HITSCAN_RANGE else MAX_HITSCAN_RANGE
-	local cfg, aRoot, tRoot, aChar = resolveAttack(attacker, targetCharacter, maxRange)
+	local cfg, aRoot, tRoot, aChar, tool = resolveAttack(attacker, targetCharacter, maxRange)
 	if
 		not cfg
 		or cfg.IsMelee
 		or not aRoot
 		or not tRoot
 		or not aChar
+		or not tool
 		or not isPartOfTarget(hitPart, targetCharacter)
 	then
 		return nil, false
 	end
 	if not isCadenceReady(attacker, cfg, now) then
+		return nil, false
+	end
+	-- Equip et chargeur (#175) : joueurs seulement, BotArsenal les fait déjà respecter à ses bots
+	if not attacker.isBot and not isWeaponReady(attacker, ShotRules.Category.HITSCAN, tool, cfg, now) then
 		return nil, false
 	end
 	if
@@ -262,6 +376,9 @@ function Validator.authorizeHitscan(
 		return nil, false
 	end
 	recordAttack(attacker, cfg, cfg.FireDelay, now)
+	if not attacker.isBot and cfg.Magazine then
+		ShotRules.countShot(magazineOf(attacker, cfg))
+	end
 
 	-- Seul un enfant direct est une partie du corps : un accessoire ou l'arme 3P peut contenir une pièce nommée "Head".
 	local zone = if hitPart.Parent == targetCharacter then HitZones.zoneOf(hitPart.Name) else nil
@@ -276,12 +393,16 @@ function Validator.authorizeMelee(
 	attackKind: string,
 	now: number
 ): number?
-	local cfg, aRoot, tRoot = resolveAttack(attacker, targetCharacter, MAX_MELEE_RANGE)
-	if not cfg or not aRoot or not tRoot then
+	local cfg, aRoot, tRoot, _, tool = resolveAttack(attacker, targetCharacter, MAX_MELEE_RANGE)
+	if not cfg or not aRoot or not tRoot or not tool then
 		return nil
 	end
 	local damage, fireDelay = WeaponConfig.getMeleeAttack(cfg, attackKind)
 	if not damage or not fireDelay or not isCadenceReady(attacker, cfg, now) then
+		return nil
+	end
+	-- Equip (#175) : joueurs seulement, comme pour le tir
+	if not attacker.isBot and not isWeaponReady(attacker, ShotRules.Category.MELEE, tool, cfg, now) then
 		return nil
 	end
 	recordAttack(attacker, cfg, fireDelay, now)
@@ -290,10 +411,12 @@ function Validator.authorizeMelee(
 	return if isBackstab then damage * cfg.BackstabMultiplier else damage
 end
 
--- Cette méthode permet d'oublier les cadences d'un participant lorsqu'il réapparaît (armes neuves, comme côté client)
--- ou s'en va.
+-- Cette méthode permet d'oublier les cadences, l'equip et les chargeurs d'un participant lorsqu'il réapparaît (armes
+-- neuves, comme côté client) ou s'en va.
 function Validator.forget(participant: Participant)
 	lastAttacks[participant] = nil
+	equips[participant] = nil
+	magazines[participant] = nil
 end
 
 -- Cette méthode permet de qualifier le résultat de dégâts appliqués lorsque le tireur doit en être informé :
