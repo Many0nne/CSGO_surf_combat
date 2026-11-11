@@ -18,8 +18,7 @@ local Transition = require(script.Parent.Parent.Parent.ui.Transition)
 local Speedometer = require(script.Parent.Parent.Parent.ui.Speedometer)
 local WeaponBar = require(script.Parent.Parent.Parent.ui.WeaponBar)
 local AmmoCounter = require(script.Parent.Parent.Parent.ui.AmmoCounter)
-local Crosshair = require(script.Parent.Parent.Parent.ui.Crosshair)
-local KeyDisplay = require(script.Parent.Parent.Parent.ui.KeyDisplay)
+local HUDState = require(script.Parent.Parent.Parent.ui.HUDState)
 local ScopeSystem = require(script.Parent.Parent.weapon.ScopeSystem)
 local HUDRules = require(script.Parent.Parent.Parent.ui.HUDRules)
 local KillFeed = require(script.Parent.Parent.Parent.ui.KillFeed)
@@ -56,15 +55,14 @@ end
 -- ── Transitions d'état ─────────────────────────────────────────────────────
 
 -- Cette méthode permet d'appliquer la règle unique « HUD de jeu visible » (HUDRules.gameHudVisible) au compteur de vitesse
--- à la barre d'armes et à la lunette lorsque l'état client change ; RoundHUD suit déjà l'état. HUD masqué (mort, fin de
--- round, menu) : le zoom est remis à zéro tout de suite (FOV, viewmodel, lunette), sans attendre le prochain personnage.
+-- à la barre d'armes et à la lunette lorsque l'état client change ; RoundHUD suit déjà l'état, crosshair et affichage
+-- des touches suivent HUDState (posé par setState). HUD masqué (mort, fin de round, menu) : le zoom est remis à zéro
+-- tout de suite (FOV, viewmodel, lunette), sans attendre le prochain personnage.
 local function applyGameHud()
 	local show = HUDRules.gameHudVisible(state)
 	Speedometer.setVisible(show)
 	WeaponBar.setVisible(show)
 	AmmoCounter.setVisible(show)
-	Crosshair.setHudVisible(show)
-	KeyDisplay.setHudVisible(show)
 	KillFeed.setVisible(HUDRules.killFeedVisible(state))
 	if not show then
 		ScopeSystem.reset()
@@ -81,6 +79,9 @@ end
 
 local function setState(newState: State)
 	state = newState
+	-- Avant la fermeture du menu en partie : les abonnés de HUDState voient le nouvel état menu encore ouvert (tout masqué),
+	-- jamais l'ancien état de partie menu fermé (crosshair ou touches réaffichés un instant)
+	HUDState.setGameState(newState)
 	-- Avant le reste : le menu en partie rend la souris au jeu avant que le menu principal la reprenne
 	InGameMenu.onGameState(newState)
 	applyGameHud()

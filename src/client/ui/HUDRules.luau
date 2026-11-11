@@ -138,10 +138,18 @@ function HUDRules.gameHudVisible(state: string): boolean
 	return state == "IN_ROUND"
 end
 
--- Cette méthode permet de savoir si le crosshair de la visée simplifiée (#195) est affiché lorsque le réglage, l'état du
--- HUD de jeu, la lunette ou le menu en partie changent : réglage actif, HUD de jeu visible, ni lunette ni menu ouvert.
-function HUDRules.crosshairVisible(enabled: boolean, hudVisible: boolean, scoped: boolean, menuOpen: boolean): boolean
-	return enabled and hudVisible and not scoped and not menuOpen
+-- État du HUD (#223), tenu par HUDState : état client (GameStateController), menu en partie ouvert (InGameMenu, Réglages
+-- compris), lunette affichée (ScopeOverlay). La mort est l'état client DEAD.
+export type HUDSnapshot = {
+	gameState: string,
+	menuOpen: boolean,
+	scoped: boolean,
+}
+
+-- Cette méthode permet de savoir si le crosshair de la visée simplifiée (#195) est affiché lorsque le réglage ou l'état du
+-- HUD changent : réglage actif, HUD de jeu visible (donc ni menu principal, ni mort, ni résultat), ni lunette ni menu ouvert.
+function HUDRules.crosshairVisible(hud: HUDSnapshot, enabled: boolean): boolean
+	return enabled and HUDRules.gameHudVisible(hud.gameState) and not hud.scoped and not hud.menuOpen
 end
 
 -- Affichage des touches (#197) : une entrée par action, placée sur une grille (colonne, rangée, largeur en cases).
@@ -200,10 +208,10 @@ function HUDRules.keyDisplayEntries(mode: string): { KeyDisplayEntry }
 	return result
 end
 
--- Cette méthode permet de savoir si l'affichage des touches est montré lorsque le réglage, l'état du HUD de jeu ou le
--- menu en partie changent : mode actif, HUD de jeu visible (donc ni menu, ni mort, ni résultat), menu en partie fermé.
-function HUDRules.keyDisplayVisible(mode: string, hudVisible: boolean, menuOpen: boolean): boolean
-	return (mode == "simple" or mode == "full") and hudVisible and not menuOpen
+-- Cette méthode permet de savoir si l'affichage des touches est montré lorsque le réglage ou l'état du HUD changent : mode
+-- actif, HUD de jeu visible (donc ni menu, ni mort, ni résultat), menu en partie fermé ; la lunette ne le masque pas.
+function HUDRules.keyDisplayVisible(hud: HUDSnapshot, mode: string): boolean
+	return (mode == "simple" or mode == "full") and HUDRules.gameHudVisible(hud.gameState) and not hud.menuOpen
 end
 
 -- Cette méthode permet de savoir si le kill feed est affiché lorsque l'état client change : en partie, vivant ou mort

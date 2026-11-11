@@ -17,13 +17,28 @@ return function(T, Loader)
 		end)
 	end)
 
+	-- Cette méthode permet de composer un état du HUD (HUDState) lorsqu'un test de visibilité en a besoin : en partie,
+	-- menu fermé, sans lunette, sauf champs donnés.
+	local function hud(fields: { [string]: any }?): HUDRules.HUDSnapshot
+		local result = { gameState = "IN_ROUND", menuOpen = false, scoped = false }
+		for key, value in fields or {} do
+			(result :: any)[key] = value
+		end
+		return result
+	end
+
 	T.describe("HUDRules.crosshairVisible", function()
-		T.it("n'affiche le crosshair que réglage actif, en partie, sans lunette ni Réglages ouverts", function()
-			T.expectEqual(HUDRules.crosshairVisible(true, true, false, false), true)
-			T.expectEqual(HUDRules.crosshairVisible(false, true, false, false), false, "réglage coupé")
-			T.expectEqual(HUDRules.crosshairVisible(true, false, false, false), false, "HUD masqué")
-			T.expectEqual(HUDRules.crosshairVisible(true, true, true, false), false, "lunette")
-			T.expectEqual(HUDRules.crosshairVisible(true, true, false, true), false, "Réglages ouverts")
+		T.it("n'affiche le crosshair que réglage actif, en partie, sans lunette ni menu ouvert", function()
+			T.expectEqual(HUDRules.crosshairVisible(hud(), true), true)
+			T.expectEqual(HUDRules.crosshairVisible(hud(), false), false, "réglage coupé")
+			T.expectEqual(HUDRules.crosshairVisible(hud({ scoped = true }), true), false, "lunette")
+			T.expectEqual(HUDRules.crosshairVisible(hud({ menuOpen = true }), true), false, "menu en partie ouvert")
+		end)
+
+		T.it("masque le crosshair hors partie : mort, menu principal, réapparition, résultat", function()
+			for _, state in { "DEAD", "MENU", "INFOS", "SPAWNING", "RESULT" } do
+				T.expectEqual(HUDRules.crosshairVisible(hud({ gameState = state }), true), false, state)
+			end
 		end)
 	end)
 
@@ -88,12 +103,18 @@ return function(T, Loader)
 	end)
 
 	T.describe("HUDRules.keyDisplayVisible", function()
-		T.it("n'affiche les touches que mode actif, en partie, Réglages fermés", function()
-			T.expectEqual(HUDRules.keyDisplayVisible("simple", true, false), true)
-			T.expectEqual(HUDRules.keyDisplayVisible("full", true, false), true)
-			T.expectEqual(HUDRules.keyDisplayVisible("off", true, false), false, "réglage coupé")
-			T.expectEqual(HUDRules.keyDisplayVisible("simple", false, false), false, "HUD masqué")
-			T.expectEqual(HUDRules.keyDisplayVisible("full", true, true), false, "Réglages ouverts")
+		T.it("n'affiche les touches que mode actif, en partie, menu fermé", function()
+			T.expectEqual(HUDRules.keyDisplayVisible(hud(), "simple"), true)
+			T.expectEqual(HUDRules.keyDisplayVisible(hud(), "full"), true)
+			T.expectEqual(HUDRules.keyDisplayVisible(hud(), "off"), false, "réglage coupé")
+			T.expectEqual(HUDRules.keyDisplayVisible(hud({ menuOpen = true }), "full"), false, "menu en partie ouvert")
+		end)
+
+		T.it("garde les touches en lunette, les masque hors partie (mort comprise)", function()
+			T.expectEqual(HUDRules.keyDisplayVisible(hud({ scoped = true }), "simple"), true, "lunette")
+			for _, state in { "DEAD", "MENU", "INFOS", "SPAWNING", "RESULT" } do
+				T.expectEqual(HUDRules.keyDisplayVisible(hud({ gameState = state }), "simple"), false, state)
+			end
 		end)
 	end)
 

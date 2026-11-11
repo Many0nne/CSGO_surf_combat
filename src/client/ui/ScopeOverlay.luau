@@ -2,7 +2,7 @@
 -- un cercle transparent dont le contour noir couvre le reste de l'écran, et un réticule en Frames.
 local Players = game:GetService("Players")
 
-local Crosshair = require(script.Parent.Crosshair)
+local HUDState = require(script.Parent.HUDState)
 local UIKit = require(script.Parent.UIKit)
 
 local MASK_COLOR = Color3.new(0, 0, 0)
@@ -120,7 +120,7 @@ end
 
 -- Cette méthode permet d'afficher ou de masquer la lunette lorsque le joueur change de niveau de zoom.
 function ScopeOverlay.setVisible(visible: boolean)
-	Crosshair.setScoped(visible) -- la lunette a son propre réticule : le crosshair de la visée simplifiée s'efface
+	HUDState.setScoped(visible) -- la lunette a son propre réticule : le crosshair de la visée simplifiée s'efface
 	if not gui then
 		if not visible then
 			return

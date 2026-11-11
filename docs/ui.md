@@ -109,8 +109,8 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   défaut). Quatre traits fins os (`ARM_LENGTH` 9 px, `ARM_THICKNESS` 2, `CENTER_GAP` 5) sans point central, doublés d'un contour
   noir de `OUTLINE` 1 px (`OUTLINE_TRANSPARENCY` 0,1) : sur fond blanc seul le contour se lit, sur sol ou mur sombre le trait os.
   Taille fixe en pixels, pas de `scaledRoot`. `ScreenGui` en `ScreenInsets.None` pour tomber sur le centre exact de la caméra,
-  comme la lunette. Affichage = `HUDRules.crosshairVisible` : réglage actif, HUD de jeu visible (`GameStateController.applyGameHud`,
-  donc ni menu, ni mort, ni résultat), lunette absente (`ScopeOverlay.setVisible`) et menu en partie fermé (`InGameMenu`).
+  comme la lunette. Affichage = `HUDRules.crosshairVisible` appliquée à `HUDState` (voir « État du HUD ») : réglage actif, HUD de
+  jeu visible (donc ni menu, ni mort, ni résultat), lunette absente et menu en partie fermé.
   Toutes les armes, couteau compris. Piste rejetée : point rouge central (criard, hors de la matière du HUD).
 - `src/client/ui/KeyDisplay.luau` (#197) : réglage « Affichage des touches » (Réglages > GRAPHISMES, `PlayerSettings.keyDisplay`,
   trois valeurs `off` (défaut) / `simple` / `full`, validées par `sanitize`). Grille façon clavier en bas au centre (`BOTTOM_MARGIN`
@@ -128,7 +128,7 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   Les cases suivent les touches physiques, pas l'action disponible : F et M2 s'allument aussi avec une arme sans inspection
   ni lunette ; clavier ignoré pendant la saisie de texte (`GetFocusedTextBox`), pas de suivi du `gameProcessed` (piste non retenue,
   elle demandait un état par touche au lieu d'un sondage).
-  Affichage : mode actif, HUD de jeu visible (`GameStateController.applyGameHud`), menu en partie fermé (`InGameMenu`) ; la
+  Affichage (`HUDRules.keyDisplayVisible` appliquée à `HUDState`) : mode actif, HUD de jeu visible, menu en partie fermé ; la
   lunette ne le masque pas (les touches restent utiles).
   Vérifié en Studio avec `user_keyboard_input` (`keyDown` W/D/S/Espace/Ctrl/R passent en partie et allument les cases) ; le clic de
   souris M1/M2 n'a pas été simulé. Coordonnées de clic des onglets du menu : y négatif (`AbsolutePosition` du bouton).
@@ -180,6 +180,14 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
   Piège : `endRound()` détruit le personnage côté serveur sans que `CharacterRemoving` se déclenche (`Player.Character` reste
   référencé) : un élément qui ne suit que la vie du personnage reste affiché au menu (cas de `WeaponBar`). Tout nouvel élément du HUD de jeu doit brancher sur cette règle, pas sur un état à lui.
   `Speedometer.init()` tourne au premier spawn, après le premier `setVisible` : le module mémorise donc la visibilité.
+
+- **État du HUD (#223) :** `src/client/ui/HUDState.luau` tient l'état client (posé par `applyGameHud`, d'où « HUD de jeu » et
+  « mort »), le menu en partie ouvert (`InGameMenu`, Réglages compris) et la lunette affichée (`ScopeOverlay.setVisible`). Les
+  éléments qui dépendent de plus que l'état client s'y abonnent (`HUDState.onChanged`, nouvel et ancien instantanés) et
+  appliquent leur règle de `HUDRules`, testée avec un instantané (`crosshairVisible`, `keyDisplayVisible`).
+  Une nouvelle condition de masquage : un champ et son setter dans `HUDState`, puis la règle des éléments concernés ; pas de
+  setter `setMenuOpen` / `setScoped` recopié dans chaque élément (supprimés de `Crosshair` et `KeyDisplay`). Compteur de
+  vitesse, barre d'armes, munitions et kill feed ne dépendent que de l'état client et restent poussés par `applyGameHud`.
 
 - **Libellé d'une touche (#100) :** `Enum.KeyCode` désigne la position sur un clavier QWERTY. Sur un clavier AZERTY,
   `KeyCode.Q` est la touche imprimée « A » : afficher `UserInputService:GetStringForKeyCode` (`LocalSettings.keyText`),
