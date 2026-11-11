@@ -312,6 +312,18 @@ historique `positionAt`, même raycast limité à `Workspace.Maps`, même journa
   refusés en `block` ; cible qui contourne, tireur qui tourne, cible collée, obstacle bas acceptés ; rembobinage
   borné ; bots).
 
+**Mesure en Studio (#176, 2026-11-11).** `DebugPlaytest` M9Bayonet : PASS 9/9 (cible `DebugDummy` sans historique).
+Coups honnêtes sur des bots en mouvement (chemin réel `Tool:Activate`, caméra qui suit le bot) : 11 coups reçus,
+angle au cap serveur de 0 à 63°, distance des racines de 4,3 à 10,6 studs, aucune ligne `[CheatLog]` ; 10 appliqués,
+le 11e refusé par la portée de 10 studs **déjà en place** (racines actuelles, bot qui s'éloigne ; piste hors
+périmètre de #176 : mesurer aussi la portée sur les positions rembobinées). Studio sans latence : à surveiller dans les résumés `CheatLog` du jeu publié. Méthode, les bots ne
+venant pas d'eux-mêmes au contact : joueur protégé par un `ForceField` invisible, boucle serveur (`task.spawn` dans
+`execute_luau`, contexte `Server`) qui envoie au client par le remote `DebugPlaytest` la commande `aim` vers la racine
+du bot le plus proche toutes les 0,05 s et `attack` (`{ tool = "M9Bayonet" }`) quand il est à moins de 6,5 studs,
+et `W` maintenu par `user_keyboard_input` (tranches de 10 s) ; compter les coups par une connexion de plus sur
+`MeleeDamage.OnServerEvent`. Un `require` depuis `execute_luau` charge une autre instance des modules du jeu (registre
+`Participants` vide) : passer par les remotes et les attributs, pas par les modules.
+
 **Passer en `block`.** Même procédure que T1 (« Tolérances et modes ») : en jeu publié, lire dans les résumés
 `CheatLog` les violations `Melee` `orientation`/`meleeLineOfSight` de joueurs honnêtes (le détail donne l'angle, le
 maximum permis, la distance et le rembobinage de la position la plus proche), élargir `MELEE_MAX_ANGLE` ou
