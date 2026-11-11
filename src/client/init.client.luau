@@ -66,6 +66,13 @@ local function setupCharacter(char: Model)
 	MovementController.init(char, rootPart, humanoid, Speedometer, FPSCamera)
 end
 
+-- Cette méthode permet de couper tout de suite le pilotage du personnage local (mouvement, caméra FPS) lorsque le
+-- joueur quitte la partie par MENU PRINCIPAL (#217) : le serveur ne le détruit qu'un aller-retour plus tard.
+local function stopCharacter()
+	MovementController.stop()
+	FPSCamera.stop()
+end
+
 -- Liste des joueurs native désactivée : le classement du jeu (Tab) la remplace et elle masquait le bouton PLAY
 StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
 -- Barre d'outils native désactivée : la barre d'armes du jeu (WeaponBar) la remplace, équipement compris
@@ -83,7 +90,7 @@ Hitmarker.init()
 
 -- GameStateController orchestre les transitions d'état, le spawn et tous les UIs.
 -- Il appelle setupCharacter au bon moment (après LoadCharacter côté serveur).
-GameStateController.init(player, setupCharacter)
+GameStateController.init(player, setupCharacter, stopCharacter)
 -- Tirs des autres joueurs et des bots entendus en 3D (#156), hors écrans du menu
 RemoteShotSounds.init(GameStateController.getState)
 

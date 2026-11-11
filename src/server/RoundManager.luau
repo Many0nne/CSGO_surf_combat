@@ -7,13 +7,15 @@ local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local MemoryTracker = require(ReplicatedStorage.Shared.MemoryTracker)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local ParticipantRules = require(ReplicatedStorage.Shared.ParticipantRules)
+local LeaveRules = require(ServerScriptService.Server.LeaveRules)
 local Participants = require(ServerScriptService.Server.Participants)
 
 type Participant = Participants.Participant
 -- Score d'un participant (joueur ou bot), envoyé tel quel aux clients (classement, préfixe BOT)
 type Score = { name: string, isBot: boolean, kills: number, deaths: number, firstKillTick: number }
--- Dernier coup reçu par une victime : tueur crédité, arme et tir à la tête affichés à la mort (#102)
-type LastHit = { attackerId: number, weapon: string?, headshot: boolean }
+-- Dernier coup reçu par une victime : tueur crédité, arme et tir à la tête affichés à la mort (#102), instant du coup
+-- (os.clock) qui fait compter comme une mort un départ par MENU PRINCIPAL juste après (#217)
+type LastHit = { attackerId: number, weapon: string?, headshot: boolean, at: number }
 
 local RoundManager = {}
 
@@ -142,7 +144,8 @@ end
 -- est validée ; c'est lui qui désigne le tueur à la mort.
 function RoundManager.recordDamage(attacker: Participant, victim: Participant, weapon: string?, headshot: boolean?)
 	if victim and attacker ~= victim then
-		lastAttacker[victim.id] = { attackerId = attacker.id, weapon = weapon, headshot = headshot == true }
+		lastAttacker[victim.id] =
+			{ attackerId = attacker.id, weapon = weapon, headshot = headshot == true, at = os.clock() }
 	end
 end
 
@@ -256,8 +259,27 @@ end
 
 -- Cette méthode permet de retirer du round un joueur revenu au menu (#157) comme un départ : score effacé, coups en
 -- attente oubliés, disparition du personnage non comptée ; il revient à sa prochaine apparition (addParticipant).
-function RoundManager.withdraw(participant: Participant)
+-- Touché depuis moins de LEAVE_DEATH_WINDOW (#217, LeaveRules) : le départ compte d'abord comme une mort (kill du
+-- dernier attaquant, kill feed) ; renvoie alors true et le tueur crédité, pour les stats persistantes.
+function RoundManager.withdraw(participant: Participant): (boolean, Participant?)
 	local id = participant.id
+	local died, killer = false, nil
+	local ownHit = lastAttacker[id]
+	if
+		state == "active"
+		and not withdrawn[id]
+		and ownHit
+		and LeaveRules.countsAsDeath(
+			ownHit.at,
+			os.clock(),
+			GameConfig.LEAVE_DEATH_WINDOW,
+			Participants.get(ownHit.attackerId) ~= nil
+		)
+	then
+		ensureScore(participant)
+		killer = recordDeath(participant)
+		died = true
+	end
 	withdrawn[id] = true
 	scores[id] = nil
 	lastAttacker[id] = nil
@@ -267,6 +289,7 @@ function RoundManager.withdraw(participant: Participant)
 		end
 	end
 	broadcastScores()
+	return died, killer
 end
 
 -- ── accessors ──────────────────────────────────────────────────────────────

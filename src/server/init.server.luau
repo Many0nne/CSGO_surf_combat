@@ -297,6 +297,20 @@ local function forgetCombatState(participant: Participants.Participant)
 	ShotRelayRules.forget(shotRelay, participant)
 end
 
+-- Cette méthode permet d'appliquer les suites d'une mort comptée par le round (bot tueur replacé, stats persistantes)
+-- lorsqu'un personnage meurt, ou qu'un joueur part par MENU PRINCIPAL juste après un coup reçu (#217).
+local function onDeathCounted(participant: Participants.Participant, killer: Participants.Participant?)
+	if killer then
+		-- Un bot qui vient de tuer se replace (#141)
+		BotManager.notifyKill(killer)
+	end
+	-- Une mort infligée par un bot ne compte que dans le round (décision 6 de #133)
+	local player = participant.player
+	if player and ParticipantRules.countsInStats(participant.isBot, killer and killer.isBot) then
+		StatsStore.recordDeath(player)
+	end
+end
+
 -- Cette méthode permet de brancher le personnage d'un participant (joueur ou bot, #139) lorsqu'il apparaît : arme 3P
 -- suivie, mort comptée dans le round (et dans les stats pour un joueur), corps laissé aux clients le temps du ragdoll.
 local function onParticipantCharacter(participant: Participants.Participant, char: Model, respawn: () -> ())
@@ -310,14 +324,7 @@ local function onParticipantCharacter(participant: Participants.Participant, cha
 			SpawnManager.noteDeath(player)
 		end
 		local killer = RoundManager.onCharacterDied(participant, respawn)
-		if killer then
-			-- Un bot qui vient de tuer se replace (#141)
-			BotManager.notifyKill(killer)
-		end
-		-- Une mort infligée par un bot ne compte que dans le round (décision 6 de #133)
-		if player and ParticipantRules.countsInStats(participant.isBot, killer and killer.isBot) then
-			StatsStore.recordDeath(player)
-		end
+		onDeathCounted(participant, killer)
 		-- Pas tout de suite : les clients clonent le personnage pour en faire un ragdoll à la réception de PlayerDied (#102)
 		task.delay(CORPSE_HANDOFF_DELAY, function()
 			if Participants.characterOf(participant) == char then
@@ -366,13 +373,18 @@ SpawnManager.init(spawnRmt, {
 })
 
 -- Retour au menu principal depuis le menu en partie (#157) : retiré du round (score, coups en attente) avant la
--- destruction de son personnage, qui ne compte donc pas comme une mort ; plus de réapparition jusqu'à JOUER
+-- destruction de son personnage, qui ne compte donc pas comme une mort ; plus de réapparition jusqu'à JOUER.
+-- Touché depuis moins de GameConfig.LEAVE_DEATH_WINDOW (#217) : le départ compte d'abord comme une mort, avec les
+-- suites d'une mort normale (kill du dernier attaquant, kill feed, stats), sans ragdoll ni caméra de mort pour lui.
 leaveRoundRmt.OnServerEvent:Connect(function(player)
 	if not CheatLog.admit(player, N.LEAVE_ROUND) then
 		return
 	end
 	local participant = Participants.fromPlayer(player)
-	RoundManager.withdraw(participant)
+	local died, killer = RoundManager.withdraw(participant)
+	if died then
+		onDeathCounted(participant, killer)
+	end
 	forgetCombatState(participant)
 	SpawnManager.withdraw(player)
 end)

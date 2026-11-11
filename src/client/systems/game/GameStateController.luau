@@ -35,6 +35,7 @@ type State = "MENU" | "INFOS" | "SPAWNING" | "IN_ROUND" | "DEAD" | "RESULT"
 local state: State = "MENU"
 local localPlayer: Player
 local setupCharFn: (char: Model) -> ()
+local stopCharFn: () -> ()
 local humDiedConn: RBXScriptConnection?
 local resultTimer: thread?
 -- Dernière mort du joueur local annoncée par le serveur (qui, avec quoi), pour l'écran de mort
@@ -271,6 +272,8 @@ local function leaveRound()
 	if not InGameMenuRules.available(state) then
 		return
 	end
+	-- Mouvement et caméra FPS coupés dès le clic (#217) : plus aucune entrée de jeu jusqu'à la destruction du personnage
+	stopCharFn()
 	-- Arme rangée tout de suite (viewmodel, lunette, délais d'arme), sans attendre la destruction du personnage
 	local char = localPlayer.Character
 	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
@@ -299,9 +302,10 @@ end
 
 -- ── Init ───────────────────────────────────────────────────────────────────
 
-function GameStateController.init(player: Player, setupCharacter: (char: Model) -> ())
+function GameStateController.init(player: Player, setupCharacter: (char: Model) -> (), stopCharacter: () -> ())
 	localPlayer = player
 	setupCharFn = setupCharacter
+	stopCharFn = stopCharacter
 
 	-- Connexions RemoteEvent (attend que le serveur les crée)
 	task.spawn(listenToRemotes)

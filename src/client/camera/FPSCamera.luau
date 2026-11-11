@@ -62,6 +62,13 @@ function FPSCamera.init(hrp: BasePart, char: Model)
 	)
 end
 
+-- Cette méthode permet de couper la caméra FPS (plus de rotation à la souris ni de suivi du personnage) lorsque le
+-- joueur quitte la partie par MENU PRINCIPAL, sans attendre la destruction de son personnage (#217).
+function FPSCamera.stop()
+	RunService:UnbindFromRenderStep(boundStepName)
+	hrpRef = nil
+end
+
 function FPSCamera.setCamHeight(h: number)
 	currentCamHeight = h - 0.4
 end

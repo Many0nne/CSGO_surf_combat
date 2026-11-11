@@ -38,6 +38,12 @@ function MovementController.getStepStats(): (number, number)
 	return stepCount, simulatedTime
 end
 
+-- Cette méthode permet de couper la boucle de mouvement (entrées, physique, envoi de position) lorsque le joueur quitte
+-- la partie par MENU PRINCIPAL, sans attendre la destruction de son personnage (#217) ; init la rebranche au spawn.
+function MovementController.stop()
+	RunService:UnbindFromRenderStep(BIND_NAME)
+end
+
 function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, speedometer, camera)
 	-- Physique et collisions communes avec les bots (#139) ; la racine est écrite à chaque tick (échelles, boosts et
 	-- accroupi lisent hrp.Position)
