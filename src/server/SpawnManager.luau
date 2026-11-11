@@ -26,7 +26,8 @@ local away: { [Player]: boolean } = {}
 local rejoin: { [Player]: boolean } = {}
 -- Gravité d'un refus de RequestSpawn au journal ; "result" n'y va pas (Play cliqué pendant la bannière de fin).
 -- "early" est moyen : notre client n'envoie RequestSpawn que depuis le menu, où un joueur mort en round ne revient pas,
--- ou en DEAD passé RESPAWN_DELAY + RESPAWN_MARGIN (#245), jamais pendant RESPAWN_DELAY.
+-- ou en DEAD passé RESPAWN_DELAY + RESPAWN_MARGIN (#245), jamais pendant RESPAWN_DELAY. Cette redemande peut tomber
+-- sur une réapparition programmée encore en vol ("spawning", LOW) si le chargement dépasse RESPAWN_MARGIN.
 local REFUSAL_SEVERITY: { [string]: CheatLog.Severity } = {
 	spawning = CheatLog.Severity.LOW,
 	alive = CheatLog.Severity.LOW,
@@ -113,6 +114,12 @@ function SpawnManager.spawnPlayer(player: Player): boolean
 	-- programmée et demandes), pour vérifier que le client ne reste pas bloqué
 	if RunService:IsStudio() and workspace:GetAttribute("DebugSpawnFail") == true then
 		warn("[SpawnManager] DebugSpawnFail : chargement refusé pour " .. player.Name)
+		-- Comme un vrai échec : une demande en attente de ce chargement est répondue ici
+		if rejoin[player] then
+			rejoin[player] = nil
+			reply(player, { status = "failed" })
+			return true
+		end
 		return false
 	end
 	spawning[player] = true
