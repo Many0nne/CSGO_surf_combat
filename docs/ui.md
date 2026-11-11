@@ -118,9 +118,23 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   bouts fermés (`caps`, crosshair) ou ouverts (lunette), estompe `fade` en option (lunette). Un nouveau réticule passe par là.
 - `src/client/ui/KeyDisplay.luau` (#197) : réglage « Affichage des touches » (Réglages > GRAPHISMES, `PlayerSettings.keyDisplay`,
   trois valeurs `off` (défaut) / `simple` / `full`, validées par `sanitize`). Grille façon clavier en bas au centre (`BOTTOM_MARGIN`
-  40 px, `scaledRoot`, entre le compteur de vitesse à gauche et la barre d'armes à droite) : cases de `KEY_SIZE` 40 px, `KEY_GAP` 4.
-  Au repos : fond `C.Scrim` translucide (`REST_TRANSPARENCY` 0,35), trait et texte `C.BoneMuted` ; touche enfoncée : case `C.Bone`
-  pleine, texte noir. `simple` : Z/Q/S/D et Espace en barre large dessous (pas d'accroupi) ; `full` : en plus, dans un bloc séparé
+  40 px, `scaledRoot`, entre le compteur de vitesse à gauche et la barre d'armes à droite) : touches de `KEY_SIZE` 40 px, `KEY_GAP` 4.
+  **DA (#229, choix de l'utilisateur) : keycaps en relief comme un vrai clavier** (référence : photo d'un clavier blanc à
+  touches roses, vu de face et un peu au-dessus), dans les couleurs du HUD. Chaque touche (`buildKey`) : ombre portée noire
+  décalée de 3 px, rebord plus sombre visible sur les côtés (`CAP_SIDE` 4 px) et sous le dessus (face avant, `CAP_FRONT` 9 px),
+  dessus bombé (dégradé `UIGradient` vertical multiplié à la couleur, pas de `CanvasGroup`), coins arrondis. Couleurs : touches
+  os à libellé sombre (`CAP_KEY`), « modificateurs » Espace, Ctrl, Maj, M1, M2 en ambre (`CAP_MOD`, à la place du rose de la
+  référence) ; enfoncée, la touche descend de `CAP_PRESS` 5 px (le haut descend, le bas reste posé, la face avant raccourcit) et
+  passe au rouge d'impact à libellé os (`CAP_DOWN`). Placement mesuré en jeu (fenêtre 1291x607) : plus de 100 px d'écart avec le
+  compteur et les munitions ; en 16:9, 12 px de marge côté munitions avec le mode `full` ; en 4:3, le bloc `full` chevauche les
+  munitions (déjà le cas de l'ancienne grille).
+  Pistes rejetées (#229, captures en jeu) : grille de cases plates (fond `C.Scrim` translucide, case os pleine une fois enfoncée,
+  rendu d'origine de #197, « overlay de stream ») ; lettres os à ombre sans cases avec trait rouge sous la touche enfoncée
+  (« titrage », comme le timer) ; trait de bande sous chaque touche rempli d'ambre (« jauge », comme le compteur) ; directions en
+  branches de crosshair (« réticule ») ; l'utilisateur voulait garder la grille du clavier, avec de la profondeur. Palettes de
+  keycaps écartées : touches sombres à libellé os (relief invisible sur fond sombre) et deux tons sombre / os (plus proche de la
+  référence, recommandée mais non retenue).
+  `simple` : Z/Q/S/D et Espace en barre large dessous (pas d'accroupi) ; `full` : en plus, dans un bloc séparé
   à droite (M1, M2 / recharge, inspection / CTRL accroupi, MAJ marche lente), pas les armes. La liste, la grille et la visibilité sont
   dans `HUDRules.keyDisplayEntries` / `keyDisplayVisible` (testées). Libellés : `LocalSettings.keyText` (disposition du clavier, AZERTY
   = Z Q S D), libellés fixes pour Espace, Ctrl, Maj et la souris. L'état vient de `UserInputService:IsKeyDown` /
@@ -128,13 +142,13 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   `src/shared/KeyBindings.luau` (action → noms d'`Enum.KeyCode`, `MOUSE` pour M1/M2 ; M2 lu par `WeaponSystem`, M1 reste
   `Tool.Activated`, fixé par Roblox ; tables gelées), lue par `InputModule` (`KEY_MAP`), par
   `HUDRules.keyDisplayEntries` (la grille `KEY_DISPLAY_LAYOUT` ne garde que la place et le libellé fixe de chaque action) et par
-  les touches réservées de `PlayerSettings`. Une nouvelle action : sa liaison dans `KeyBindings`, sa case dans la grille.
-  Les cases suivent les touches physiques, pas l'action disponible : F et M2 s'allument aussi avec une arme sans inspection
+  les touches réservées de `PlayerSettings`. Une nouvelle action : sa liaison dans `KeyBindings`, sa case dans la grille (et dans `CAP_MODIFIERS` de `KeyDisplay` si sa touche est ambrée).
+  Les cases suivent les touches physiques, pas l'action disponible : F et M2 s'enfoncent aussi avec une arme sans inspection
   ni lunette ; clavier ignoré pendant la saisie de texte (`GetFocusedTextBox`), pas de suivi du `gameProcessed` (piste non retenue,
   elle demandait un état par touche au lieu d'un sondage).
   Affichage (`HUDRules.keyDisplayVisible` appliquée à `HUDState`) : mode actif, HUD de jeu visible, menu en partie fermé ; la
   lunette ne le masque pas (les touches restent utiles).
-  Vérifié en Studio avec `user_keyboard_input` (`keyDown` W/D/S/Espace/Ctrl/R passent en partie et allument les cases) ; le clic de
+  Vérifié en Studio avec `user_keyboard_input` (`keyDown` W/D/S/Espace/Ctrl/R passent en partie et enfoncent les touches) ; le clic de
   souris M1/M2 n'a pas été simulé. Coordonnées de clic des onglets du menu : y négatif (`AbsolutePosition` du bouton).
 - `src/client/ui/RoundHUD.luau` : timer et rang en haut au centre (chiffres os droits avec ombre, libellés ambrés, fondu
   sombre en deux moitiés de coin, timer en rouge d'impact sous 30 s) ; classement sous Tab : pas de panneau, voile sombre
@@ -253,6 +267,13 @@ et une UI entières, et `screen_capture` montre le résultat avec l'UI. Tout dis
 lancé ne partage pas ses modules avec le jeu (un `require` donne une autre instance). En mode Edit, `screen_capture` rend
 un viewport tout blanc quand la fenêtre Studio est réduite ou en arrière-plan : la mettre au premier plan. Seul Claude ne peut pas connecter le
 plugin Rojo : l'utilisateur doit le faire pour tester un worktree.
+
+Juger la lisibilité d'un élément du HUD (#229) : en contexte `Client`, poser une `Part` ancrée sans collision à 3 studs devant
+la caméra, recalée à chaque `RenderStepped`, en `Neon` couleur sable (105, 100, 92) pour un fond clair proche des rampes,
+en `SmoothPlastic` presque noir pour un fond sombre ; masquer côté client le mannequin `DebugDummy`. Un mur plus proche que 3
+studs passe devant : s'en éloigner au clavier (`user_keyboard_input`). On ne peut pas téléporter le joueur depuis le MCP :
+le mouvement est simulé côté client (`MovementController`) et réécrit la position de la racine à chaque tick, que le
+changement vienne du serveur ou du client. Pour allumer des touches sans bouger, appuyer sur deux directions opposées.
 
 ## Menu : salle des miroirs (#106, implémentation #112)
 

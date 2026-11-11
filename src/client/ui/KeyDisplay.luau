@@ -1,6 +1,7 @@
--- Affichage des touches (#197, direction « Ligne de mire ») : grille façon clavier en bas au centre de l'écran, une case par
--- touche (directions et Espace en « simple », plus accroupi et actions de jeu en « full »). Case au repos : fond sombre
--- translucide, trait et texte os atténués ; touche enfoncée : case os pleine, texte noir. Libellés selon la disposition
+-- Affichage des touches (#197, direction « Ligne de mire », DA #229) : grille façon clavier en bas au centre de l'écran,
+-- une touche par action (directions et Espace en « simple », plus accroupi et actions de jeu en « full »). Chaque touche
+-- est un keycap en relief : dessus os bombé, rebord plus sombre sur les côtés et dessous, ombre portée ; Espace, Ctrl,
+-- Maj et la souris en ambre ; enfoncée, la touche s'enfonce et passe au rouge d'impact. Libellés selon la disposition
 -- du clavier (LocalSettings.keyText). Affiché selon HUDRules.keyDisplayVisible appliquée à HUDState (#223) : mode actif,
 -- HUD de jeu visible (donc ni menu ni mort) et menu en partie fermé. Pas de CanvasGroup (cf. docs/ui.md) : de simples
 -- Frame et TextLabel.
@@ -18,22 +19,47 @@ local UIKit = require(script.Parent.UIKit)
 local C = UITheme.Colors
 local F = UITheme.Fonts
 
-local KEY_SIZE = 40 -- px, côté d'une case (résolution de référence, 720 px de haut)
-local KEY_GAP = 4 -- px entre deux cases
+local KEY_SIZE = 40 -- px, côté d'une touche (résolution de référence, 720 px de haut)
+local KEY_GAP = 4 -- px entre deux touches
 local BOTTOM_MARGIN = 40 -- px entre la grille et le bas de l'écran
-local REST_TRANSPARENCY = 0.35 -- fond d'une case au repos
 local TEXT_SIZE = 18
-local TEXT_SIZE_LONG = 13 -- libellés de plus de deux caractères dans une case simple (CTRL, MAJ)
-local TEXT_SIZE_WIDE = 16 -- libellé de plus de deux caractères dans une case large (ESPACE)
+local TEXT_SIZE_LONG = 13 -- libellés de plus de deux caractères dans une touche simple (CTRL, MAJ)
+local TEXT_SIZE_WIDE = 16 -- libellé de plus de deux caractères dans une touche large (ESPACE)
+
+-- Relief du keycap, vu de face et d'un peu au-dessus
+local CAP_SIDE = 4 -- px de rebord visibles à gauche et à droite du dessus
+local CAP_TOP = 2 -- px de rebord au-dessus du dessus
+local CAP_FRONT = 9 -- px de rebord visibles sous le dessus (face avant)
+local CAP_PRESS = 5 -- px dont la touche s'enfonce
+local CAP_CORNER = 5
+local CAP_SHADOW_OFFSET = 3
+local CAP_SHADOW_TRANSPARENCY = 0.45
+local CAP_FACE_SHADE = Color3.fromRGB(205, 205, 205) -- bas du dessus (dégradé multiplié à la couleur)
+local CAP_SIDE_SHADE = Color3.fromRGB(165, 165, 165) -- bas du rebord
+
+-- Couleurs d'un keycap : dessus, rebord, libellé
+type CapColors = { face: Color3, side: Color3, legend: Color3 }
+
+local CAP_SIDE_DARKEN = 0.33 -- rebord : couleur du dessus assombrie d'autant vers le noir
+
+-- Cette méthode permet de décrire les couleurs d'un keycap lorsque ses états sont posés : rebord tiré du dessus.
+local function capColors(face: Color3, legend: Color3): CapColors
+	return { face = face, side = face:Lerp(C.Black, CAP_SIDE_DARKEN), legend = legend }
+end
+
+local CAP_KEY = capColors(C.Bone, C.Scrim)
+-- Espace, Ctrl, Maj et la souris : les « modificateurs » du clavier, en ambre
+local CAP_MOD = capColors(C.Accent, C.Scrim)
+local CAP_DOWN = capColors(C.HitRed, C.Bone)
+local CAP_MODIFIERS = { jump = true, crouch = true, walk = true, fire = true, aim = true }
 
 local KeyDisplay = {}
 
 type KeyView = {
 	entry: HUDRules.KeyDisplayEntry,
 	codes: { Enum.KeyCode }, -- touches du clavier de l'entrée, résolues une fois à la construction
-	frame: Frame,
-	stroke: UIStroke,
 	label: TextLabel,
+	paint: (boolean) -> (),
 	down: boolean,
 }
 
@@ -61,17 +87,14 @@ local function isDown(view: KeyView, typing: boolean): boolean
 	return false
 end
 
--- Cette méthode permet de peindre une case au repos ou enfoncée lorsque l'état de sa touche change.
+-- Cette méthode permet de peindre une touche au repos ou enfoncée lorsque l'état de sa touche change.
 local function paint(view: KeyView, down: boolean)
 	view.down = down
-	view.frame.BackgroundColor3 = if down then C.Bone else C.Scrim
-	view.frame.BackgroundTransparency = if down then 0 else REST_TRANSPARENCY
-	view.stroke.Color = if down then C.Bone else C.BoneMuted
-	view.label.TextColor3 = if down then C.Black else C.BoneMuted
+	view.paint(down)
 end
 
--- Cette méthode permet de donner le libellé d'une case lorsque la grille est construite : libellé fixe (ESPACE, CTRL, M1),
--- sinon celui de la touche sur la disposition du clavier du joueur (AZERTY : Z Q S D).
+-- Cette méthode permet de donner le libellé d'une touche lorsque la grille est construite : libellé fixe (ESPACE, CTRL,
+-- M1), sinon celui de la touche sur la disposition du clavier du joueur (AZERTY : Z Q S D).
 local function labelOf(entry: HUDRules.KeyDisplayEntry): string
 	if entry.label then
 		return entry.label
@@ -79,16 +102,93 @@ local function labelOf(entry: HUDRules.KeyDisplayEntry): string
 	return LocalSettings.keyText(entry.keys and entry.keys[1] or "")
 end
 
--- Cette méthode permet de reconstruire la grille lorsque le mode d'affichage change : une case par entrée du mode,
+-- Cette méthode permet de choisir la taille du libellé d'une touche lorsque la grille est construite : lettre, libellé
+-- long dans une touche simple (CTRL, MAJ) ou dans une touche large (ESPACE).
+local function textSizeOf(entry: HUDRules.KeyDisplayEntry, text: string): number
+	if (utf8.len(text) or #text) <= 2 then
+		return TEXT_SIZE
+	end
+	return if entry.width > 1 then TEXT_SIZE_WIDE else TEXT_SIZE_LONG
+end
+
+-- Cette méthode permet d'arrondir les coins d'une pièce de keycap lorsqu'elle est construite.
+local function rounded(frame: Frame, radius: number): Frame
+	UIKit.create("UICorner", { CornerRadius = UDim.new(0, radius), Parent = frame })
+	return frame
+end
+
+-- Cette méthode permet de poser un dégradé vertical multiplié à la couleur d'une pièce lorsqu'un keycap est construit :
+-- haut à la couleur pleine, bas assombri de `shade`.
+local function shaded(frame: Frame, shade: Color3)
+	UIKit.create("UIGradient", {
+		Rotation = 90,
+		Color = ColorSequence.new(Color3.new(1, 1, 1), shade),
+		Parent = frame,
+	})
+end
+
+-- Cette méthode permet de construire un keycap (ombre, rebord, dessus bombé, libellé) lorsque la grille est construite ;
+-- renvoie le libellé et la fonction qui peint la touche au repos ou enfoncée.
+local function buildKey(container: Frame, entry: HUDRules.KeyDisplayEntry): (TextLabel, (boolean) -> ())
+	local holder = UIKit.frame({
+		Name = entry.id,
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(entry.col * (KEY_SIZE + KEY_GAP), entry.row * (KEY_SIZE + KEY_GAP)),
+		Size = UDim2.fromOffset(entry.width * (KEY_SIZE + KEY_GAP) - KEY_GAP, KEY_SIZE),
+		Parent = container,
+	})
+	local shadow = rounded(
+		UIKit.frame({
+			Name = "Shadow",
+			BackgroundColor3 = C.Black,
+			BackgroundTransparency = CAP_SHADOW_TRANSPARENCY,
+			ZIndex = 1,
+			Parent = holder,
+		}),
+		CAP_CORNER
+	)
+	local body = rounded(UIKit.frame({ Name = "Body", ZIndex = 2, Parent = holder }), CAP_CORNER)
+	shaded(body, CAP_SIDE_SHADE)
+	local face = rounded(
+		UIKit.frame({ Name = "Face", Position = UDim2.fromOffset(CAP_SIDE, CAP_TOP), Parent = body }),
+		CAP_CORNER - 1
+	)
+	shaded(face, CAP_FACE_SHADE)
+	local text = labelOf(entry)
+	local label = UIKit.text({
+		Name = "Label",
+		Text = text,
+		FontFace = F.Display,
+		TextSize = textSizeOf(entry, text),
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Size = UDim2.fromScale(1, 1),
+		Parent = face,
+	})
+	local rest = if CAP_MODIFIERS[entry.id] then CAP_MOD else CAP_KEY
+	return label,
+		-- Cette méthode permet de peindre la touche lorsque son état change : enfoncée, le haut descend, le bas reste posé.
+		function(down: boolean)
+			local colors = if down then CAP_DOWN else rest
+			local sink = if down then CAP_PRESS else 0
+			body.Position = UDim2.fromOffset(0, sink)
+			body.Size = UDim2.new(1, 0, 1, -sink)
+			face.Size = UDim2.new(1, -2 * CAP_SIDE, 1, -CAP_TOP - CAP_FRONT + sink)
+			shadow.Position = UDim2.fromOffset(0, CAP_SHADOW_OFFSET + sink)
+			shadow.Size = UDim2.new(1, 0, 1, -sink)
+			body.BackgroundColor3 = colors.side
+			face.BackgroundColor3 = colors.face
+			label.TextColor3 = colors.legend
+		end
+end
+
+-- Cette méthode permet de reconstruire la grille lorsque le mode d'affichage change : un keycap par entrée du mode,
 -- grille centrée en bas de l'écran.
 local function build(mode: string)
 	local container = grid
 	if not container then
 		return
 	end
-	for _, view in views do
-		view.frame:Destroy()
-	end
+	container:ClearAllChildren()
 	views = {}
 	builtMode = mode
 	local entries = HUDRules.keyDisplayEntries(mode)
@@ -100,39 +200,19 @@ local function build(mode: string)
 	container.Size =
 		UDim2.fromOffset(columns * (KEY_SIZE + KEY_GAP) - KEY_GAP, math.max(rows, 1) * (KEY_SIZE + KEY_GAP) - KEY_GAP)
 	for _, entry in entries do
-		local frame = UIKit.frame({
-			Name = entry.id,
-			Position = UDim2.fromOffset(entry.col * (KEY_SIZE + KEY_GAP), entry.row * (KEY_SIZE + KEY_GAP)),
-			Size = UDim2.fromOffset(entry.width * (KEY_SIZE + KEY_GAP) - KEY_GAP, KEY_SIZE),
-			Parent = container,
-		})
-		local stroke = UIKit.stroke(frame, C.BoneMuted, 1)
-		local text = labelOf(entry)
-		local label = UIKit.text({
-			Name = "Label",
-			Text = text,
-			FontFace = F.Display,
-			TextSize = if (utf8.len(text) or #text) <= 2
-				then TEXT_SIZE
-				elseif entry.width > 1 then TEXT_SIZE_WIDE
-				else TEXT_SIZE_LONG,
-			TextXAlignment = Enum.TextXAlignment.Center,
-			Size = UDim2.fromScale(1, 1),
-			Parent = frame,
-		})
+		local label, paintKey = buildKey(container, entry)
 		local codes = {}
 		for _, name in entry.keys or {} :: { string } do
 			table.insert(codes, (Enum.KeyCode :: any)[name])
 		end
-		local view: KeyView =
-			{ entry = entry, codes = codes, frame = frame, stroke = stroke, label = label, down = false }
+		local view: KeyView = { entry = entry, codes = codes, label = label, paint = paintKey, down = false }
 		paint(view, false)
 		table.insert(views, view)
 	end
 end
 
 -- Cette méthode permet d'afficher ou de masquer la grille, et de la reconstruire si le mode a changé, lorsque le réglage
--- ou l'état du HUD (HUDState) changent ; grille masquée, les cases repartent au repos (pas de case restée allumée).
+-- ou l'état du HUD (HUDState) changent ; grille masquée, les touches repartent au repos (pas de touche restée enfoncée).
 local function update()
 	if not gui then
 		return
@@ -151,19 +231,20 @@ local function update()
 	end
 end
 
--- Cette méthode permet de relire les libellés des cases lorsque le HUD de jeu apparaît : la disposition du clavier a pu
+-- Cette méthode permet de relire les libellés des touches lorsque le HUD de jeu apparaît : la disposition du clavier a pu
 -- changer depuis la construction de la grille.
 local function refreshLabels()
 	for _, view in views do
 		local text = labelOf(view.entry)
 		if view.label.Text ~= text then
 			view.label.Text = text
+			view.label.TextSize = textSizeOf(view.entry, text)
 		end
 	end
 end
 
--- Cette méthode permet de mettre les cases à jour lorsque le HUD est affiché : une case ne se repeint que si l'état de sa
--- touche a changé depuis la frame précédente.
+-- Cette méthode permet de mettre les touches à jour lorsque le HUD est affiché : une touche ne se repeint que si son état
+-- a changé depuis la frame précédente.
 local function poll()
 	if not (gui and gui.Enabled) then
 		return
@@ -196,6 +277,7 @@ function KeyDisplay.init()
 		Enabled = false,
 		ResetOnSpawn = false,
 		IgnoreGuiInset = true,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling, -- ombre sous le rebord, dessus et libellé au-dessus de leur parent
 		DisplayOrder = 0,
 		Parent = Players.LocalPlayer:WaitForChild("PlayerGui"),
 	})
