@@ -406,6 +406,54 @@ local function posedCenter(
 	return ShotRules.posedPartCenter(tRoot.CFrame, tRoot.Position, partPos, crouchingNow, pose)
 end
 
+-- Cette méthode permet de lire le bras d'un membre touché sur le rig serveur lorsqu'un tir le vise (#240) : épaule
+-- (position monde) et articulations du côté de la partie ; nil hors des bras R15 ou si le rig est incomplet.
+local function limbArm(targetCharacter: Model, hitPart: BasePart): (Vector3?, ShotRules.ArmRig?)
+	local side = ShotRules.limbSide(hitPart.Name)
+	if not side or hitPart.Parent ~= targetCharacter then
+		return nil, nil
+	end
+	local torso = targetCharacter:FindFirstChild("UpperTorso")
+	local upperArm = targetCharacter:FindFirstChild(side .. "UpperArm")
+	local lowerArm = targetCharacter:FindFirstChild(side .. "LowerArm")
+	local hand = targetCharacter:FindFirstChild(side .. "Hand")
+	if
+		not (torso and torso:IsA("BasePart"))
+		or not (upperArm and upperArm:IsA("BasePart"))
+		or not (lowerArm and lowerArm:IsA("BasePart"))
+		or not (hand and hand:IsA("BasePart"))
+	then
+		return nil, nil
+	end
+	local shoulder = upperArm:FindFirstChild(side .. "Shoulder")
+	local elbow = lowerArm:FindFirstChild(side .. "Elbow")
+	local wrist = hand:FindFirstChild(side .. "Wrist")
+	if
+		not (shoulder and shoulder:IsA("Motor6D"))
+		or not (elbow and elbow:IsA("Motor6D"))
+		or not (wrist and wrist:IsA("Motor6D"))
+	then
+		return nil, nil
+	end
+	local waist = torso:FindFirstChild("Waist")
+	local arm: ShotRules.ArmRig = {
+		shoulderC1 = shoulder.C1.Position,
+		elbowC0 = elbow.C0.Position,
+		elbowC1 = elbow.C1.Position,
+		wristC0 = wrist.C0.Position,
+		wristC1 = wrist.C1.Position,
+		upperArmSize = upperArm.Size,
+		lowerArmSize = lowerArm.Size,
+		handSize = hand.Size,
+		shoulderC0 = shoulder.C0.Position,
+		waistC1 = if waist and waist:IsA("Motor6D") then waist.C1 else nil,
+		waistTransform = if waist and waist:IsA("Motor6D") then waist.Transform else nil,
+	}
+	-- Position et rotation lues à part (sous Lune, Position et CFrame sont posées séparément)
+	local shoulderPos = torso.Position + torso.CFrame:VectorToWorldSpace(arm.shoulderC0)
+	return shoulderPos, arm
+end
+
 -- Cette méthode permet de vérifier un tir de joueur lorsqu'il a passé cible, arme et cadence : forme, origine, visée
 -- sur la partie rembobinée, portée, ligne de vue (#174). Chaque échec est journalisé ; il ne refuse le tir que si son
 -- contrôle est en mode "block" (ShotRules.MODES). Renvoie true si le tir peut être appliqué.
@@ -468,9 +516,18 @@ local function validateShot(
 	local rewindT = ShotRules.rewindTime(shot.shotTime, now)
 	local pose = rewoundPose(world, targetCharacter, tRoot, rewindT)
 	local rewoundRoot = pose.pos
-	local partCenter = posedCenter(world, targetCharacter, tRoot, hitPart.Position, pose, now)
 	local targetSpeed = speedAround(world, targetCharacter, rewindT, now)
-	local partLimit = ShotRules.directionLimit(hitPart.Size.Magnitude / 2, targetSpeed)
+	-- Membre (#240) : la tenue de l'arme n'existe que chez les clients, la partie est jugée dans la sphère d'allonge de
+	-- son épaule rembobinée plutôt qu'à sa position serveur
+	local shoulderPos, arm = limbArm(targetCharacter, hitPart)
+	local partCenter, partLimit
+	if shoulderPos and arm then
+		partCenter = posedCenter(world, targetCharacter, tRoot, shoulderPos, pose, now)
+		partLimit = ShotRules.directionLimit(ShotRules.limbRadius(arm), targetSpeed)
+	else
+		partCenter = posedCenter(world, targetCharacter, tRoot, hitPart.Position, pose, now)
+		partLimit = ShotRules.directionLimit(hitPart.Size.Magnitude / 2, targetSpeed)
+	end
 	ok, detail = ShotRules.checkDirection(shot, partCenter, partLimit)
 	if not ok then
 		-- Contexte pour régler les tolérances pendant la phase de mesure (docs/anticheat.md, « T1 »)
@@ -479,7 +536,7 @@ local function validateShot(
 			string.format(
 				"%s ; %s, cible à %.0f studs/s, rembobinée de %.2f s (%.1f studs)",
 				detail or "?",
-				hitPart.Name,
+				if arm then hitPart.Name .. " jugé dans l'allonge de l'épaule" else hitPart.Name,
 				targetSpeed,
 				now - rewindT,
 				(tRoot.Position - rewoundRoot).Magnitude

@@ -131,7 +131,7 @@ Les accès au monde (horloge serveur, `CharacterSync.positionAt`, raycast, `Chea
 | `shape` | Trois Vector3 finis et ≤ 1e5 (`MAX_COORD`), `|direction|` = 1 à `UNIT_TOLERANCE` (1e-3) près, `shotTime` fini | `block` | forte |
 | `ping` | `now - shotTime` ≤ ping du tireur × `PING_FACTOR` (2) + `PING_MARGIN` (0,1 s), et ≥ `-CLOCK_TOLERANCE` (0,05 s) ; ping = `Player:GetNetworkPing()` (aller-retour). Ping inconnu : pas de borne (#214) | `log` | moyenne |
 | `origin` | À moins de `ORIGIN_BASE` (5) + vitesse du tireur × `ORIGIN_SPEED_FACTOR` (0,1) studs de sa racine actuelle ou de sa position à `shotTime` (borné à `[now - 0,4 s, now]`). La caméra est à 2,5 studs au-dessus de la racine | `log` | moyenne |
-| `direction` | Impact sur le rayon (à `HIT_ON_RAY` = 0,5 stud près, devant l'origine) ; rayon et impact à moins de rayon englobant de la partie (`Size.Magnitude / 2`) + `DIRECTION_BASE` (2) + vitesse de la cible × `DIRECTION_SPEED_FACTOR` (0,05) de la partie rembobinée. Partie rembobinée = racine à `shotTime - INTERP_DELAY` (borné à `[now - 0,4 s, now]`) + décalage de la partie pris sur le rig serveur dans le repère de sa racine, tourné au cap rembobiné et corrigé de l'accroupi (`posedPartCenter`, #213) | `log` | moyenne |
+| `direction` | Impact sur le rayon (à `HIT_ON_RAY` = 0,5 stud près, devant l'origine) ; rayon et impact à moins de rayon englobant de la partie (`Size.Magnitude / 2`) + `DIRECTION_BASE` (2) + vitesse de la cible × `DIRECTION_SPEED_FACTOR` (0,05) de la partie rembobinée. Partie rembobinée = racine à `shotTime - INTERP_DELAY` (borné à `[now - 0,4 s, now]`) + décalage de la partie pris sur le rig serveur dans le repère de sa racine, tourné au cap rembobiné et corrigé de l'accroupi (`posedPartCenter`, #213). Main ou bras (`*Hand`, `*LowerArm`, `*UpperArm`) : la partie est remplacée par la sphère d'allonge de son épaule (centre = articulation de l'épaule rembobinée, rayon = `ShotRules.limbRadius`, voir « Membres (#240) ») | `log` | moyenne |
 | `distance` | `|hitPos - origin|` ≤ `WeaponConfig.HITSCAN_RANGE` (2 048, la portée du client) + `RANGE_TOLERANCE` (10) | `block` | moyenne |
 | `lineOfSight` | Raycast serveur de `origin` jusqu'à `LINE_OF_SIGHT_END_MARGIN` (0,5 stud) avant `hitPos` (avant la partie rembobinée si l'impact n'est pas sur elle : un impact forgé près de l'origine ne raccourcit pas le segment), limité à `Workspace.Maps` (inclusion) : aucun obstacle | `log` | moyenne |
 
@@ -245,10 +245,9 @@ repère de la racine du rig serveur, tourné au cap rembobiné, posé sur la rac
   (-3,0 ; -1,1 ; 0,1) sur le rig serveur (bras le long du corps) et à (0,1 ; 2,2 ; -3,3) chez le client : la tenue de
   l'arme du haut du corps (#107) est posée par chaque client (`WeaponThirdPersonView`, Motor6D locaux), jamais sur le
   rig serveur. Environ 4 studs d'écart sur une main, alors que la tête concorde (≈ 0,2 stud). C'est aussi la cause
-  probable du faux positif de #174 (une main). **À faire avant de passer `direction` en `block`** : pour les membres
-  (mains, bras), juger la partie dans une sphère d'allonge autour de l'épaule (`UpperTorso` + longueur du bras), ou
-  reproduire la tenue de l'arme côté serveur ; les tolérances `DIRECTION_*` ne doivent pas être élargies pour ça
-  (elles valent pour la tête).
+  probable du faux positif de #174 (une main). **Fait (#240)** : les membres sont jugés dans la sphère d'allonge de
+  leur épaule, voir « Membres (#240) » ; les tolérances `DIRECTION_*` n'ont pas été élargies (elles valent pour la
+  tête).
 - **Backtrack forgé** : un tir annoncé 0,35 s en arrière est signalé `ping : instant 0.38 s avant l'arrivée (max
   0.10 s, ping 0 ms) (journal seul)`.
 - **Coups honnêtes** (méthode de #176 : boucle serveur qui envoie au client `aim` vers le bot le plus proche et
@@ -261,6 +260,80 @@ repère de la racine du rig serveur, tourné au cap rembobiné, posé sur la rac
 - **Valeurs gardées** : `DIRECTION_BASE`, `DIRECTION_SPEED_FACTOR`, `MELEE_MAX_ANGLE`, `PING_*`. Studio n'a ni latence ni
   gigue, ce que couvrent ces marges, et les seuls faux positifs mesurés viennent de la tenue des bras, qu'une marge ne
   doit pas absorber. À revoir sur les résumés `CheatLog` du jeu publié.
+
+### Membres (#240)
+
+**Problème.** La tenue de l'arme du haut du corps (#107) est posée par chaque client (`WeaponThirdPersonView`, Motor6D
+locaux), jamais sur le rig serveur : une main est à ~4 studs de là où le tireur la voit (mesure #213), d'où des
+violations `direction` sur des tirs honnêtes visant un bras.
+
+**Règle (piste A).** Pour une touche sur une main ou un bras (zone `ARMS` de `HitZones`, côté lu dans le nom :
+`ShotRules.limbSide`), `Validator.validateShot`
+remplace la partie par une sphère : centre = articulation de l'épaule du même côté sur le rig serveur
+(`UpperTorso` + `C0` du Motor6D `*Shoulder`, `limbArm`), replacée dans la pose rembobinée comme toute partie
+(`posedPartCenter`) ; rayon = `ShotRules.limbRadius` à la place du rayon englobant de la partie, la tolérance
+(`DIRECTION_BASE` + vitesse × `DIRECTION_SPEED_FACTOR`) s'ajoute inchangée. Rayon dérivé du rig, rien en dur :
+
+- `armReach` : plus grande distance entre l'épaule et un point du bras dans n'importe quelle pose, articulations du
+  rig serveur (`C0`/`C1` de `*Shoulder`, `*Elbow`, `*Wrist`) et tailles des parties : épaule-coude + coude-poignet +
+  coin de la main le plus loin du poignet (bras tendu), ou coin d'une partie plus haute s'il est plus loin. Borne
+  exacte par l'inégalité triangulaire, vérifiée sur 500 poses au hasard (`tests/specs/ShotRules.spec.luau`).
+- `holdShoulderShift` : la tenue tourne aussi la taille (`Waist` de la tenue `Rifle` : 40°), ce qui déplace
+  l'épaule chez le client, alors que le centre de la sphère suit la taille du rig serveur (sa `Transform`, animée
+  pour un bot). Plus grand écart entre l'épaule tournée par une tenue de `WeaponThirdPerson.POSES` et l'épaule du rig
+  serveur, vue de l'articulation `Waist` (~0,7 stud pour une épaule à 1 stud de l'axe et une taille serveur au repos).
+  Les rotations de taille des tenues sont lues une fois au chargement de `ShotRules`. Limite : pendant le fondu de la
+  tenue (`HOLD_FADE_TIME`), le client part de **sa** taille animée, qui peut différer de celle du serveur (phase
+  d'animation, joueur dont le serveur ne joue pas les pistes) ; l'écart restant est couvert par `DIRECTION_BASE`
+  (aucun faux positif mesuré, voir la mesure), à surveiller dans les résumés `CheatLog` du jeu publié (détail « jugé
+  dans l'allonge de l'épaule »).
+
+Quand la sphère s'applique, le détail du journal indique « <partie> jugé dans l'allonge de l'épaule ». Rig incomplet
+(Motor6D ou partie du bras absents, partie hors du personnage) : règle de la partie (rayon englobant de la partie
+elle-même, plus petit que l'allonge), détail avec le nom seul. Les autres parties (tête, torse, jambes) gardent la
+règle de la partie.
+
+**Ce qu'un tricheur y gagne (limite connue).** Une touche annoncée sur un bras passe si le rayon passe à moins de
+l'allonge + tolérance de l'épaule : la cible est en pratique grossie d'environ un bras autour du haut du corps
+(~1,5 stud de plus que la sphère du torse), et les bras valent ×1 comme le torse (`HitZones`). Un tir truqué loin de
+la cible (silent aim) reste signalé, la tête garde sa règle (pas de ×4 gagné). De même, la ligne de vue s'arrête à
+l'impact annoncé s'il est dans la sphère : un impact forgé jusqu'à l'allonge devant l'épaule raccourcit le segment
+d'autant (un mur collé à la cible peut être sauté, `lineOfSight` est en journal seul). Ces deux marges ne se
+referment qu'en reproduisant la tenue côté serveur (piste B, #240 l'a écartée) ; la sphère est la plus petite qui
+contienne le bras quels que soient les angles de ses articulations (rotations seules, comme les pistes et les tenues).
+
+**Tests.** `tests/specs/ShotRules.spec.luau` (« membres jugés dans l'allonge de l'épaule ») : parties concernées,
+allonge exacte et contenant le bras dans toute pose, déplacement de l'épaule par la taille, membre au bout de
+l'allonge accepté, hors de l'allonge refusé, tolérances inchangées ; `tests/specs/Validator.spec.luau` (« membre
+(#240) ») : main vue tenue acceptée en mode `block` (refusée avant #240), silent aim refusé, tête et main sans rig
+inchangées.
+
+**Mesure en Studio (#240, 2026-11-11).** Méthode de #174/#213 : en Play, contexte `Client`, raycast de `HitscanSystem`
+depuis la caméra vers une partie de bras d'un bot telle que le client l'affiche (tenue comprise), `ShotFired` puis
+`HitscanDamage` au même `shotTime` ; joueur et bots à 1e6 PV ou plus (sinon chaque touche tue le bot et la boucle attend
+les réapparitions), `DebugDummy` détruit, 3 bots en mouvement (bhop jusqu'à 81 studs/s), 7 à 347 studs. Compteurs posés
+côté `Server` (`OnServerEvent` de `HitscanDamage` : touche appliquée si les PV de la cible baissent, `MessageOut` pour
+les lignes `[CheatLog]`). `DebugPlaytest` AWP : PASS 9/9.
+
+- Rig du `StarterCharacter` (échelle ~1,59) : allonge `armReach` = 3,81 studs ; déplacement de l'épaule
+  `holdShoulderShift` relevé de 0,56 à 1,71 stud selon la taille animée du bot, d'où un rayon de 4,4 à 5,5 studs
+  (+ 2 + vitesse × 0,05 de tolérance).
+- **Tirs honnêtes : 50 touches jugées, dont 42 sur un membre** (mains, avant-bras, bras, deux côtés) et 8 sur la
+  tête ou le torse ; 45 appliquées, 5 refusées par `magazine` (voir plus bas) : **aucune violation `direction`**. À
+  titre indicatif, 26 des 42 impacts sur un membre étaient à plus de l'ancienne limite (rayon de la partie + 2) de la
+  position serveur actuelle de la partie, jusqu'à 4,4 studs au-delà.
+  Autres lignes : 5 `magazine` (script de mesure qui n'attendait que 4,2 s après `Reload`, alors que le rechargement
+  ne compte qu'à partir de la cadence du dernier tir : attendre 5,5 s) et 1 `ping` (`instant 0.11 s avant l'arrivée
+  (max 0.10 s, ping 0 ms)`, frame lente de Studio, hors périmètre).
+- **Tirs truqués** (silent aim sur un membre) : 4 rayons à 9 à 13 studs du torse vu, tous signalés (« rayon à 8.3 à
+  11.5 studs de la partie (max 7.7 à 9.2) ; <membre> jugé dans l'allonge de l'épaule »), et un à 10 studs de la partie
+  vue (10,4 pour 8,6). Trois rayons décalés de 6,5 à 8 studs de la partie **vue** sont passés : la partie tenue étant
+  devant le corps, ce décalage les ramenait à moins de l'allonge + tolérance de l'épaule (bots à 20-36 studs/s, soit
+  1 à 1,8 stud de tolérance de vitesse en plus) ; c'est la marge décrite plus haut.
+- **Piège de la méthode** : `DebugPlaytest` range l'arme en fin de run ; sans arme en main, les touches sont refusées
+  avant la validation, sans journal. Rééquiper (`Humanoid:EquipTool`) avant de tirer et vérifier que les touches sont
+  appliquées. La manche dure 300 s : au-delà, le joueur repasse au menu et les bots disparaissent. Borner les boucles
+  par `workspace:GetServerTimeNow()`, pas par `os.clock()` (temps CPU dans Studio, la boucle ne s'arrête pas).
 
 ### Distance (tranché, #174)
 
