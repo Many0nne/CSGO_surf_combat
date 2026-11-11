@@ -40,10 +40,17 @@ local CAP_SIDE_SHADE = Color3.fromRGB(165, 165, 165) -- bas du rebord
 -- Couleurs d'un keycap : dessus, rebord, libellé
 type CapColors = { face: Color3, side: Color3, legend: Color3 }
 
-local CAP_KEY: CapColors = { face = C.Bone, side = Color3.fromRGB(176, 164, 150), legend = C.Scrim }
+local CAP_SIDE_DARKEN = 0.33 -- rebord : couleur du dessus assombrie d'autant vers le noir
+
+-- Cette méthode permet de décrire les couleurs d'un keycap lorsque les palettes sont posées : rebord tiré du dessus.
+local function capColors(face: Color3, legend: Color3): CapColors
+	return { face = face, side = face:Lerp(C.Black, CAP_SIDE_DARKEN), legend = legend }
+end
+
+local CAP_KEY = capColors(C.Bone, C.Scrim)
 -- Espace, Ctrl, Maj et la souris : les « modificateurs » du clavier, en ambre
-local CAP_MOD: CapColors = { face = C.Accent, side = Color3.fromRGB(160, 104, 0), legend = C.Scrim }
-local CAP_DOWN: CapColors = { face = C.HitRed, side = Color3.fromRGB(130, 30, 22), legend = C.Bone }
+local CAP_MOD = capColors(C.Accent, C.Scrim)
+local CAP_DOWN = capColors(C.HitRed, C.Bone)
 local CAP_MODIFIERS = { jump = true, crouch = true, walk = true, fire = true, aim = true }
 
 local KeyDisplay = {}
@@ -120,9 +127,8 @@ local function shaded(frame: Frame, shade: Color3)
 	})
 end
 
--- Cette méthode permet de construire un keycap lorsque la grille est construite : ombre portée, rebord (côtés et face
--- avant), dessus bombé et libellé ; renvoie le libellé et la fonction qui peint la touche au repos ou enfoncée (le haut
--- descend de CAP_PRESS px, le bas reste posé, et la touche passe au rouge d'impact).
+-- Cette méthode permet de construire un keycap (ombre, rebord, dessus bombé, libellé) lorsque la grille est construite ;
+-- renvoie le libellé et la fonction qui peint la touche au repos ou enfoncée.
 local function buildKey(container: Frame, entry: HUDRules.KeyDisplayEntry): (TextLabel, (boolean) -> ())
 	local holder = UIKit.frame({
 		Name = entry.id,
@@ -144,7 +150,7 @@ local function buildKey(container: Frame, entry: HUDRules.KeyDisplayEntry): (Tex
 	local body = rounded(UIKit.frame({ Name = "Body", ZIndex = 2, Parent = holder }), CAP_CORNER)
 	shaded(body, CAP_SIDE_SHADE)
 	local face = rounded(
-		UIKit.frame({ Name = "Face", Position = UDim2.fromOffset(CAP_SIDE, CAP_TOP), ZIndex = 3, Parent = body }),
+		UIKit.frame({ Name = "Face", Position = UDim2.fromOffset(CAP_SIDE, CAP_TOP), Parent = body }),
 		CAP_CORNER - 1
 	)
 	shaded(face, CAP_FACE_SHADE)
@@ -156,11 +162,11 @@ local function buildKey(container: Frame, entry: HUDRules.KeyDisplayEntry): (Tex
 		TextSize = textSizeOf(entry, text),
 		TextXAlignment = Enum.TextXAlignment.Center,
 		Size = UDim2.fromScale(1, 1),
-		ZIndex = 4,
 		Parent = face,
 	})
 	local rest = if CAP_MODIFIERS[entry.id] then CAP_MOD else CAP_KEY
 	return label,
+		-- Cette méthode permet de peindre la touche lorsque son état change : enfoncée, le haut descend, le bas reste posé.
 		function(down: boolean)
 			local colors = if down then CAP_DOWN else rest
 			local sink = if down then CAP_PRESS else 0
@@ -232,6 +238,7 @@ local function refreshLabels()
 		local text = labelOf(view.entry)
 		if view.label.Text ~= text then
 			view.label.Text = text
+			view.label.TextSize = textSizeOf(view.entry, text)
 		end
 	end
 end

@@ -143,12 +143,12 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   `Tool.Activated`, fixé par Roblox ; tables gelées), lue par `InputModule` (`KEY_MAP`), par
   `HUDRules.keyDisplayEntries` (la grille `KEY_DISPLAY_LAYOUT` ne garde que la place et le libellé fixe de chaque action) et par
   les touches réservées de `PlayerSettings`. Une nouvelle action : sa liaison dans `KeyBindings`, sa case dans la grille.
-  Les cases suivent les touches physiques, pas l'action disponible : F et M2 s'allument aussi avec une arme sans inspection
+  Les cases suivent les touches physiques, pas l'action disponible : F et M2 s'enfoncent aussi avec une arme sans inspection
   ni lunette ; clavier ignoré pendant la saisie de texte (`GetFocusedTextBox`), pas de suivi du `gameProcessed` (piste non retenue,
   elle demandait un état par touche au lieu d'un sondage).
   Affichage (`HUDRules.keyDisplayVisible` appliquée à `HUDState`) : mode actif, HUD de jeu visible, menu en partie fermé ; la
   lunette ne le masque pas (les touches restent utiles).
-  Vérifié en Studio avec `user_keyboard_input` (`keyDown` W/D/S/Espace/Ctrl/R passent en partie et allument les cases) ; le clic de
+  Vérifié en Studio avec `user_keyboard_input` (`keyDown` W/D/S/Espace/Ctrl/R passent en partie et enfoncent les touches) ; le clic de
   souris M1/M2 n'a pas été simulé. Coordonnées de clic des onglets du menu : y négatif (`AbsolutePosition` du bouton).
 - `src/client/ui/RoundHUD.luau` : timer et rang en haut au centre (chiffres os droits avec ombre, libellés ambrés, fondu
   sombre en deux moitiés de coin, timer en rouge d'impact sous 30 s) ; classement sous Tab : pas de panneau, voile sombre
