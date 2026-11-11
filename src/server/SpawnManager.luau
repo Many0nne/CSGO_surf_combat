@@ -187,7 +187,7 @@ function SpawnManager.init(
 			respawnDelay = GameConfig.RESPAWN_DELAY,
 		})
 		-- Retour du menu pendant une réapparition partie avant le départ : servie à la fin de son chargement (#157)
-		if refusal == "spawning" and away[player] and hooks.roundState() ~= "result" then
+		if SpawnRules.rejoinsInFlight(refusal, away[player] == true, hooks.roundState()) then
 			away[player] = nil
 			rejoin[player] = true
 			hooks.beforeSpawn(player)

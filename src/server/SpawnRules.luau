@@ -37,6 +37,12 @@ function SpawnRules.request(r: Request): Refusal?
 	return nil
 end
 
+-- Cette méthode permet de décider si une demande refusée vient d'un joueur revenu du menu pendant que sa réapparition
+-- programmée charge encore (#157) : elle est alors servie à la fin de ce chargement, sauf pendant la bannière de fin.
+function SpawnRules.rejoinsInFlight(refusal: Refusal?, away: boolean, roundState: string): boolean
+	return refusal == "spawning" and away and roundState ~= "result"
+end
+
 -- Cette méthode permet de décider si la réapparition programmée après une mort part lorsqu'elle échoit : jamais
 -- par-dessus un personnage vivant ni un autre LoadCharacterAsync en vol.
 function SpawnRules.scheduled(spawning: boolean, alive: boolean): boolean

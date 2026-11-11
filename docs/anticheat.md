@@ -504,8 +504,10 @@ personnage par un neuf. Le client légitime n'envoie `RequestSpawn` que depuis l
 - les bots ne passent pas par là : `BotManager` gère leur réapparition (`diedAt` + `RESPAWN_DELAY`) et leur passe un
   rappel vide.
 
-Le futur bouton de retour au menu (#157) devra en tenir compte : un mort qui revient au menu et clique Play avant
-`RESPAWN_DELAY` est refusé (et journalisé `early`) ; la réapparition programmée le fait de toute façon revenir.
+Retour au menu en partie (#157, remote `LeaveRound`) : `SpawnManager.withdraw` efface l'heure de la mort et annule la
+réapparition programmée, donc un mort qui revient au menu puis clique JOUER n'est ni refusé `early` ni journalisé ; il a
+perdu son score de la manche (`RoundManager.withdraw`). Si sa réapparition programmée chargeait encore, sa demande est
+servie à la fin de ce chargement (`SpawnRules.rejoinsInFlight`) au lieu d'être refusée `spawning`.
 
 **Feedback (fait, #171).** Avant : `lastSent` n'était écrit qu'après un envoi réussi au webhook, alors que chaque
 demande valide lisait (et écrivait) le DataStore : sans webhook, ou la limite hebdomadaire atteinte, un spam provoquait
