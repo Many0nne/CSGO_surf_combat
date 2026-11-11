@@ -134,6 +134,13 @@ end
 function CharacterSync.setCorrectionHandler(char: Model, apply: (Vector3) -> ())
 	correctionTarget = char
 	correctionApply = apply
+	-- Personnage détruit (mort) : ne pas le garder en mémoire, ni le mouvement qui le pilote, jusqu'au spawn suivant
+	char.Destroying:Once(function()
+		if correctionTarget == char then
+			correctionTarget = nil
+			correctionApply = nil
+		end
+	end)
 end
 
 return CharacterSync

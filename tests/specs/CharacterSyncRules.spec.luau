@@ -158,13 +158,19 @@ return function(T, Loader)
 
 	T.describe("CharacterSyncRules.awaitsAck", function()
 		T.it("n'ignore rien sans correction en attente", function()
-			T.expectEqual(Rules.awaitsAck(nil, 0), false)
+			T.expectEqual(Rules.awaitsAck(0, 0), false)
 		end)
 
 		T.it("ignore les paquets envoyés avant d'avoir appliqué la correction, pas les suivants", function()
 			T.expectEqual(Rules.awaitsAck(3, 2), true)
 			T.expectEqual(Rules.awaitsAck(3, 3), false)
 			T.expectEqual(Rules.awaitsAck(3, 7), false, "un numéro forgé ne fait que reprendre la validation")
+		end)
+
+		T.it("ignore encore un paquet ancien arrivé après l'accusé (paquets non fiables en désordre)", function()
+			-- Le paquet portant l'accusé 3 est arrivé ; un paquet parti avant la correction (accusé 2) arrive ensuite
+			T.expectEqual(Rules.awaitsAck(3, 3), false)
+			T.expectEqual(Rules.awaitsAck(3, 2), true)
 		end)
 	end)
 

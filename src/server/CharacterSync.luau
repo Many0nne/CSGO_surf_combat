@@ -29,7 +29,10 @@ type Track = {
 	char: Model,
 	lastPos: Vector3, -- dernière position acceptée, posée sur la racine
 	budget: CharacterSyncRules.MoveBudget,
-	pendingSeq: number?, -- correction envoyée et pas encore appliquée par le client
+	-- Numéro de la dernière correction pour ce personnage (0 : aucune) : un paquet d'un numéro inférieur est parti
+	-- d'une position déjà refusée. Gardé après l'accusé (paquets non fiables, donc parfois en désordre).
+	requiredAck: number,
+	acked: boolean, -- un paquet portant requiredAck est arrivé
 	correctedAt: number,
 }
 
@@ -68,7 +71,8 @@ local function trackFor(player: Player, char: Model, root: BasePart, now: number
 			char = char,
 			lastPos = root.Position,
 			budget = CharacterSyncRules.newBudget(now),
-			pendingSeq = nil,
+			requiredAck = 0,
+			acked = true,
 			correctedAt = -math.huge,
 		}
 		tracks[player] = track
@@ -80,19 +84,26 @@ end
 -- que la correction reste sans réponse : personnage, dernière position acceptée et numéro de la correction.
 local function fireCorrection(player: Player, track: Track, now: number)
 	track.correctedAt = now
-	if correctionRemote and track.pendingSeq then
-		correctionRemote:FireClient(player, track.char, track.lastPos, track.pendingSeq)
+	if correctionRemote then
+		correctionRemote:FireClient(player, track.char, track.lastPos, track.requiredAck)
 	end
+end
+
+-- Cette méthode permet de journaliser un déplacement impossible lorsqu'une règle le refuse (catégorie Movement,
+-- gravité moyenne : un vrai lag peut en produire un).
+local function reportMove(player: Player, detail: string)
+	CheatLog.report(Participants.fromPlayer(player), CheatLog.Category.MOVEMENT, CheatLog.Severity.MEDIUM, detail)
 end
 
 -- Cette méthode permet de refuser un paquet lorsqu'une règle de déplacement le juge impossible (seau de distance ;
 -- réutilisable par les règles suivantes, noclip et vol #177) : violation journalisée, puis le client est renvoyé à sa
 -- dernière position acceptée et ses paquets sont ignorés jusqu'à ce qu'il l'ait appliquée.
 local function refuse(player: Player, track: Track, detail: string, now: number)
-	CheatLog.report(Participants.fromPlayer(player), CheatLog.Category.MOVEMENT, CheatLog.Severity.MEDIUM, detail)
+	reportMove(player, detail)
 	local seq = (correctionSeqs[player] or 0) + 1
 	correctionSeqs[player] = seq
-	track.pendingSeq = seq
+	track.requiredAck = seq
+	track.acked = false
 	fireCorrection(player, track, now)
 end
 
@@ -119,20 +130,26 @@ local function onClientPosition(
 	local now = os.clock()
 	local track = trackFor(player, char, root, now)
 	-- Envoyé avant d'avoir appliqué la correction : ni jugé ni journalisé (le temps continue de remplir le seau)
-	if CharacterSyncRules.awaitsAck(track.pendingSeq, ack) then
-		if now - track.correctedAt >= CORRECTION_RESEND then
+	if CharacterSyncRules.awaitsAck(track.requiredAck, ack) then
+		if not track.acked and now - track.correctedAt >= CORRECTION_RESEND then
 			fireCorrection(player, track, now)
 		end
 		return
 	end
-	track.pendingSeq = nil
+	track.acked = true
 	-- Pas de délai minimal entre deux paquets : des paquets groupés passent, chacun consomme le seau (débit borné par
 	-- la garde commune, RemoteGuard)
 	local silence = now - track.budget.lastAt
 	if not CharacterSyncRules.tryMove(track.budget, track.lastPos, pos, now) then
 		local distance = (pos - track.lastPos).Magnitude
-		refuse(player, track, string.format("déplacement de %.1f studs en %.2f s refusé", distance, silence), now)
-		return
+		local detail = string.format("déplacement de %.1f studs en %.2f s refusé", distance, silence)
+		if CharacterSyncRules.ENFORCE_MOVEMENT then
+			refuse(player, track, detail, now)
+			return
+		end
+		-- Journal seul : violation comptée, déplacement appliqué quand même, seau vidé
+		reportMove(player, detail)
+		track.budget.stored = 0
 	end
 	track.lastPos = pos
 	root.CFrame = CFrame.new(pos) * CFrame.Angles(0, yaw, 0)

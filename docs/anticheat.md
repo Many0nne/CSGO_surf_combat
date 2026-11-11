@@ -24,7 +24,7 @@ envoyant des données plausibles. Là, on ne peut que détecter statistiquement,
 |---|---|---|
 | Mêlée | Cible = autre participant vivant, arme de mêlée réellement en main, distance des racines ≤ 10 studs, dégâts et cadence lus dans `WeaponConfig` selon le type d'attaque, backstab recalculé sur les positions serveur (#47) | `src/server/Validator.luau:119-137` |
 | Tir | Cible valide, arme à distance en main, partie touchée appartenant à la cible, distance des racines ≤ 250 studs, cadence `FireDelay` à 0,15 s près, dégâts calculés par le serveur selon la zone | `src/server/Validator.luau:97-115` |
-| Position | Forme (Vector3 et angle finis, coordonnées ≤ 1e5), personnage vivant, seau de distance (300 studs/s soutenus, silence plafonné), refus journalisé et corrigé (#172) | `src/server/CharacterSync.luau:102-147`, `src/shared/CharacterSyncRules.luau:46-58` |
+| Position | Forme (Vector3 et angle finis, coordonnées ≤ 1e5), personnage vivant, seau de distance (300 studs/s soutenus, silence plafonné), refus journalisé et corrigé (#172) | `src/server/CharacterSync.luau:113-165`, `src/shared/CharacterSyncRules.luau:49-60` |
 | Réglages | Réglages entièrement assainis par `PlayerSettings.sanitize`, une écriture DataStore au plus toutes les 10 s | `src/server/SettingsStore.luau:113-130` |
 | Feedback | Type `string`, longueur 10 à 500, délai de 60 s après un envoi réussi, 5 envois par semaine (DataStore) | `src/server/FeedbackService.luau:76-104` |
 | Debug | Remote `DebugPlaytest` créé seulement dans Studio | `src/server/DebugPlaytest.luau:365-372` |
@@ -193,11 +193,11 @@ joueur. Dizzy n'a ni boost ni `SunLaunch` aujourd'hui ; une map qui en ajoute do
 **Avant #172, failles de la règle** `|new - last| ≤ 300 × max(écoulé, 0,05) + 5`.
 
 1. Le minimum de 0,05 s et la marge de 5 studs s'appliquent à **chaque** paquet, et le serveur accepte un paquet toutes
-   les 0,025 s (`CharacterSync.luau:81`) : 20 studs par paquet, soit ~400 studs/s à 20 Hz et ~800 studs/s à 40 Hz.
-2. Un paquet refusé ne met à jour ni `lastPos` ni `lastAt` (`CharacterSync.luau:85-90`) : après `T` secondes de silence
+   les 0,025 s : 20 studs par paquet, soit ~400 studs/s à 20 Hz et ~800 studs/s à 40 Hz.
+2. Un paquet refusé ne met à jour ni `lastPos` ni `lastAt` : après `T` secondes de silence
    ou de refus, le serveur accepte un saut de `300 × T + 5` studs. Il suffit de se taire une seconde pour se téléporter
    de 300 studs, dans n'importe quelle direction, y compris dans le dos d'une cible (M1).
-3. Le refus ne corrige pas le client (`CharacterSync.luau:5`) : client et serveur divergent, ce qui ne pénalise que le
+3. Le refus ne corrigeait pas le client : client et serveur divergent, ce qui ne pénalise que le
    joueur honnête qui a laggé.
 
 **Risque.** Critique : vitesse plus que doublée en continu, et téléportation n'importe où en se taisant. La position
@@ -234,7 +234,7 @@ gagnerait un seau plein à chaque cycle (40 cycles/s). Le numéro de correction 
 joueur (pas remis à zéro à la réapparition) pour qu'un ancien accusé ne valide pas une correction récente.
 
 **Réutiliser (D2, #177).** Une nouvelle règle de déplacement (noclip, vol) se branche dans `onClientPosition`, après
-le seau, et appelle `refuse(player, track, détail, now)` (`src/server/CharacterSync.luau:91`) : journal et correction
+le seau, et appelle `refuse(player, track, détail, now)` (`src/server/CharacterSync.luau:101`) : journal et correction
 compris.
 
 **Bots.** Non concernés : leurs positions viennent du serveur (`relayBot`), qui ne passe pas par le seau.
@@ -288,7 +288,7 @@ commune (débit et types, voir R1) ; la colonne « Validation actuelle » décri
 |---|---|---|---|---|
 | `MeleeDamage` | C→S | `targetChar, attackKind` | Cible, arme, portée, type d'attaque, cadence, dégâts serveur (`Validator.luau:119-137`) | Orientation, ligne de vue (M1), equip (T2), tireur vivant |
 | `HitscanDamage` | C→S | `targetChar, hitPart` | Cible, arme, partie de la cible, portée 250, cadence (`Validator.luau:97-115`) | Origine, direction, ligne de vue, rembobinage (T1), munitions, equip (T2), tireur vivant |
-| `CharacterSync` (non fiable) | C→S puis S→C | `pos, yaw, ack` | Forme, débit 40 Hz (garde), seau de distance et silence plafonné, refus corrigé (D1, `CharacterSync.luau:102-147`) | Noclip, vol (D2) |
+| `CharacterSync` (non fiable) | C→S puis S→C | `pos, yaw, ack` | Forme, débit 40 Hz (garde), seau de distance et silence plafonné, refus corrigé (D1, `CharacterSync.luau:113-165`) | Noclip, vol (D2) |
 | `MovementCorrection` | S→C | `char, pos, seq` | — | — |
 | `WeaponAction` | C→S | `action` | Valeur `Shoot`/`Reload`, outil en main, 0,05 s mini (`init.server.luau:127-139`) | `Shoot` non lié à la cadence de l'arme : 20 faux tirs/s attirent les bots (`hearShot`, `:143`) et, avec #156, déclencheraient 20 sons chez tous |
 | `RequestSpawn` | C→S | aucun | `SpawnRules.request` : spawn en vol, personnage en place, bannière de fin, mort depuis moins de `RESPAWN_DELAY` en round actif (`SpawnManager.luau:137-169`) | Rien (R1 fermé, #171) |
@@ -376,7 +376,7 @@ sur l'action visuelle du client.
 ## Aimbot et triggerbot (A1)
 
 **Aujourd'hui.** Rien. Le serveur ne connaît pas l'orientation verticale de la caméra (seul le cap est envoyé,
-`src/client/systems/network/CharacterSync.luau:95-102`).
+`src/client/systems/network/CharacterSync.luau:123-130`).
 
 **Risque.** Élevé : après T1, l'aimbot reste la triche la plus efficace, et elle envoie des données valides.
 
@@ -397,8 +397,8 @@ humaine. Sur un FPS à l'AWP, les très bons joueurs ont naturellement beaucoup 
 **Aujourd'hui.** Toutes les positions sont envoyées à tous :
 
 - le relais `CharacterSync` envoie à chaque autre joueur la position de chacun, sans filtre
-  (`src/server/CharacterSync.luau:94-98`, `:124`) ;
-- le serveur pose la racine de chaque personnage (`:91`), propriété répliquée nativement à tous les clients ;
+  (`src/server/CharacterSync.luau:158-163`, `:197`) ;
+- le serveur pose la racine de chaque personnage (`:155`), propriété répliquée nativement à tous les clients ;
 - les personnages sont dans `Workspace`, sans streaming (`default.project.json:43`) ;
 - `PlayerDied` donne la position de chaque mort (`RoundManager.luau:162-173`), et #156 relaiera les tirs.
 

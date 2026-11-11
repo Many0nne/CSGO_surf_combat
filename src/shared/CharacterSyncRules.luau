@@ -16,6 +16,9 @@ CharacterSyncRules.INTERP_DELAY = 2 * CharacterSyncRules.SEND_INTERVAL
 CharacterSyncRules.BUFFER_SIZE = 10
 -- Au-delà de cette coordonnée (studs), une position est rejetée (valeur absurde ou forgée).
 CharacterSyncRules.MAX_COORD = 1e5
+-- Seau de distance (#172) : true = un déplacement refusé est corrigé (client renvoyé à sa dernière position acceptée) ;
+-- false = journal seul (violation comptée, déplacement appliqué), à remettre si des joueurs honnêtes sont corrigés.
+CharacterSyncRules.ENFORCE_MOVEMENT = true
 
 export type Snapshot = { t: number, pos: Vector3, yaw: number }
 
@@ -59,8 +62,9 @@ end
 -- Cette méthode permet de savoir si un paquet a été envoyé avant que le client n'applique la dernière correction
 -- lorsqu'il arrive (ack = numéro de la dernière correction appliquée, joint à chaque paquet) : un tel paquet part
 -- d'une position que le serveur a déjà refusée, il est ignoré sans être jugé, ce qui évite une boucle de corrections.
-function CharacterSyncRules.awaitsAck(pendingSeq: number?, ack: number): boolean
-	return pendingSeq ~= nil and ack < pendingSeq
+-- requiredAck reste en place après l'accusé : un paquet plus ancien arrivé en retard (non fiable) est aussi ignoré.
+function CharacterSyncRules.awaitsAck(requiredAck: number, ack: number): boolean
+	return ack < requiredAck
 end
 
 -- Cette méthode permet de lire le cap horizontal (rad, autour de Y) d'une orientation lorsque le client l'envoie.
