@@ -22,7 +22,7 @@ envoyant des données plausibles. Là, on ne peut que détecter statistiquement,
 
 | Domaine | Validation actuelle | Où |
 |---|---|---|
-| Mêlée | Cible = autre participant vivant, arme de mêlée réellement en main, distance des racines ≤ 10 studs, dégâts et cadence lus dans `WeaponConfig` selon le type d'attaque, backstab recalculé sur les positions serveur (#47) ; pour un joueur, durée d'equip (#175, voir T2) | `src/server/Validator.luau` (`authorizeMelee`) |
+| Mêlée | Cible = autre participant vivant, arme de mêlée réellement en main, distance des racines ≤ 10 studs, dégâts et cadence lus dans `WeaponConfig` selon le type d'attaque, backstab recalculé sur les positions serveur (#47) ; pour un joueur, durée d'equip (#175, voir T2), orientation et ligne de vue vers la cible rembobinée (#176, journal seul, voir M1) | `src/server/Validator.luau` (`authorizeMelee`), `src/server/ShotRules.luau` |
 | Tir | Cible valide (vivante), arme à distance en main, partie touchée appartenant à la cible, distance des racines ≤ `Validator.MAX_HITSCAN_RANGE` (~2 196 studs ; bots : 250), cadence `FireDelay` à 0,15 s près, dégâts calculés par le serveur selon la zone ; pour un joueur, forme, origine, visée sur la cible rembobinée, portée et ligne de vue (#174, voir T1), durée d'equip et chargeur (#175, voir T2 ; l'equip vaut aussi pour la mêlée) | `src/server/Validator.luau` (`authorizeHitscan`, `validateShot`), `src/server/ShotRules.luau` |
 | Position | Forme (Vector3 et angle finis, coordonnées ≤ 1e5), personnage vivant, seau de distance (300 studs/s soutenus, silence plafonné), refus journalisé et corrigé (#172) ; noclip et vol journalisés (#177, journal seul), joueur silencieux au-dessus du vide déclaré tombé | `src/server/CharacterSync.luau:210-309`, `src/shared/CharacterSyncRules.luau:49-60`, `src/shared/MovementGuardRules.luau` |
 | Réglages | Réglages entièrement assainis par `PlayerSettings.sanitize`, une écriture DataStore au plus toutes les 10 s | `src/server/SettingsStore.luau:113-130` |
@@ -43,7 +43,7 @@ Impact : ce que gagne le tricheur et ce que subissent les autres. Coût : serveu
 |---|---|---|---|---|
 | T1 | Tir sans viser, à travers les murs, hitbox agrandie (« silent aim ») | **Critique** : un tir accepté par cible à 250 studs, 1 par 1,46 s, tête choisie (460 dégâts) | Faible serveur, moyen en complexité | P1 |
 | D1 | Vitesse et téléportation | Fermé (#172) : 300 studs/s soutenus au plus, saut borné à 225 studs après un silence, refus corrigé | Faible | Fait |
-| M1 | Coup de couteau dans toutes les directions (« kill aura ») | **Élevé** : one-shot de dos à 10 studs, cumulable avec D1 | Faible | P2 |
+| M1 | Coup de couteau dans toutes les directions (« kill aura ») | Détecté (#176, journal seul) : coup hors du cap ou à travers un mur journalisé ; **élevé** tant qu'il n'est pas en `block` | Faible | P2 |
 | R1 | Remotes sans débit ni garde (respawn, feedback) | Fermé (#170, #171) : garde commune, délai de réapparition et feedback limité en mémoire | Faible | Fait |
 | T2 | Munitions et durée d'equip | Fermé (#175) : touche refusée pendant l'equip et au 6e tir sans rechargement | Faible | Fait |
 | D2 | Vol et noclip | Détecté (#177) : noclip et vol au journal (journal seul), vide fermé | Faible serveur, moyen en réglage (surf) | Fait (journal) |
@@ -255,7 +255,7 @@ contrôles de plus. Règles pures dans `src/server/ShotRules.luau` (`checkEquip`
 
 ### M1. Orientation et ligne de vue
 
-**Aujourd'hui.** #47 a réglé dégâts, cadence et arme en main (`Validator.authorizeMelee`). Restent : la distance est
+**Avant #176.** #47 a réglé dégâts, cadence et arme en main (`Validator.authorizeMelee`). Restaient : la distance est
 mesurée entre racines (10 studs, `:10`, alors que l'arme porte à 7,5, `WeaponConfig.luau:76`), sans regarder la
 direction du tireur ni les obstacles.
 
@@ -269,6 +269,46 @@ cible ≤ ~70° dans le plan horizontal (le pitch n'est pas connu) ; (2) raycast
 ajouter. Coût : un produit scalaire et un raycast par coup accepté.
 
 **Impact.** Supprime le kill aura ; la portée reste un peu généreuse (tolérance latence), acceptable.
+
+**Fait (#176).** `Validator.authorizeMelee` applique aux joueurs, après cible, arme, portée de 10 studs et cadence (un
+refus ne relance donc pas la cadence), deux contrôles de plus, avant l'equip (#175), tous évalués comme pour le tir.
+Règles pures dans `src/server/ShotRules.luau`, accès au monde par `Validator.setShotWorld` (même horloge, même
+historique `positionAt`, même raycast limité à `Workspace.Maps`, même journal que T1), catégorie `Melee`, source
+`Melee:<contrôle>`.
+
+| Contrôle | Règle (constantes de `ShotRules`) | Mode livré | Gravité |
+|---|---|---|---|
+| `orientation` | Angle horizontal entre le cap de la racine serveur du tireur (`LookVector`, relayé à 20 Hz, celui de sa caméra : `MovementController`) et la direction de la racine de la cible ≤ `MELEE_MAX_ANGLE` (70°) + `asin(MELEE_BODY_RADIUS / distance horizontale)` (2 studs : 15° à 7,5 studs, 90° au contact). Cible à la verticale : acceptée | `log` | moyenne |
+| `meleeLineOfSight` | Raycast sur la map de la racine du tireur à celle de la cible, ou de l'œil à l'œil (`CAM_HEIGHT_STAND`, obstacle bas par-dessus lequel la caméra frappe), jusqu'à `LINE_OF_SIGHT_END_MARGIN` avant : un segment dégagé suffit | `log` | moyenne |
+
+- **Rembobinage sans instant.** Le remote `MeleeDamage` n'envoie pas d'instant (client hors périmètre de #176) : la
+  cible est prise à `now`, `now - 0,05`, … `now - MAX_REWIND` (`MELEE_REWIND_STEP`, 9 positions, `meleeRewindTimes`),
+  ce qui couvre `INTERP_DELAY` + l'aller-retour du tireur jusqu'à 300 ms. Le coup passe l'orientation si **une**
+  position est devant le cap ; la ligne de vue n'est testée que sur ces positions (toutes si aucune, pour la mesure),
+  deux positions à moins de `MELEE_SAMPLE_MERGE` (0,25 stud) testées une fois : un raycast pour un coup honnête,
+  18 au pire (cible derrière un mur), sous la cadence du couteau. Sans historique (`DebugDummy`), position actuelle.
+- **Tolérance d'angle.** La géométrie seule demande `asin(2 / 7,5)` ≈ 15° à portée : les 70° restants couvrent le
+  retard du cap relayé (un paquet de position toutes les 50 ms, plus la gigue), soit ~1 000°/s de rotation. Un coup
+  dans le dos (180°) reste refusé même collé (160° permis au plus). Pas d'historique du cap (seule la position est
+  rembobinée, `CharacterSync*` hors périmètre) : si la mesure montre des faux positifs en rotation rapide, élargir
+  `MELEE_MAX_ANGLE` (jusqu'à ~110° garde le dos fermé), ou garder le cap dans l'historique.
+- **Position du tireur.** Racine serveur actuelle, sans rembobinage : le client est en avance de sa latence, l'écart
+  est couvert par la tolérance d'angle et la portée de 10 studs (contre 7,5 côté client).
+- **Cible vivante.** Vérifiée avant (`isValidTarget`) : un corps dont l'historique répond encore est refusé.
+- **Bots.** Exclus (`attacker.isBot`) : ils frappent depuis le serveur, tournés vers leur cible (`BotMotion`). Test :
+  coup de bot dos à la cible et à travers un mur accepté, rien au journal, contrôles bloquants.
+- **Monde non branché.** Comme pour le tir : coups de mêlée de joueurs refusés, warn unique.
+- **Tests.** `tests/specs/ShotRules.spec.luau` (angle, angle permis, positions, segments, modes) et
+  `tests/specs/Validator.spec.luau` (« orientation et ligne de vue de la mêlée » : dos et mur journalisés en `log`,
+  refusés en `block` ; cible qui contourne, tireur qui tourne, cible collée, obstacle bas acceptés ; rembobinage
+  borné ; bots).
+
+**Passer en `block`.** Même procédure que T1 (« Tolérances et modes ») : en jeu publié, lire dans les résumés
+`CheatLog` les violations `Melee` `orientation`/`meleeLineOfSight` de joueurs honnêtes (le détail donne l'angle, le
+maximum permis, la distance et le rembobinage de la position la plus proche), élargir `MELEE_MAX_ANGLE` ou
+`MELEE_BODY_RADIUS` si besoin, puis passer le contrôle à `"block"` dans `ShotRules.MODES` et mettre à jour ce tableau
+et les tests « livre orientation et ligne de vue de la mêlée en journal seul » (`ShotRules.spec.luau`,
+`Validator.spec.luau`). Les tests en mode `block` couvrent déjà le refus.
 
 ## Déplacement
 
@@ -469,7 +509,7 @@ commune (débit et types, voir R1) ; la colonne « Validation actuelle » décri
 
 | Remote | Sens | Arguments | Validation actuelle | Manque |
 |---|---|---|---|---|
-| `MeleeDamage` | C→S | `targetChar, attackKind` | Cible, arme, portée, type d'attaque, cadence, dégâts serveur, durée d'equip (T2, #175) (`Validator.authorizeMelee`) | Orientation, ligne de vue (M1), tireur vivant |
+| `MeleeDamage` | C→S | `targetChar, attackKind` | Cible, arme, portée, type d'attaque, cadence, dégâts serveur, durée d'equip (T2, #175), orientation et ligne de vue (M1, #176, journal seul) (`Validator.authorizeMelee`) | Passage en `block` après mesure (M1), tireur vivant |
 | `HitscanDamage` | C→S | `targetChar, hitPart, origin, direction, hitPos, shotTime` | Cible, arme, partie de la cible, portée des racines, cadence ; forme, origine, visée rembobinée, portée 2 048, ligne de vue (T1, #174 : origine, visée et ligne de vue en journal seul) ; durée d'equip et chargeur (T2, #175) | Passage en `block` après mesure (T1), tireur vivant |
 | `CharacterSync` (non fiable) | C→S puis S→C | `pos, yaw, ack` | Forme, débit 40 Hz (garde), seau de distance et silence plafonné, refus corrigé (D1, `CharacterSync.luau:247-309`) ; noclip et vol au journal, vide (D2, #177) | Noclip et vol en mode bloquant après mesure (D2) |
 | `MovementCorrection` | S→C | `char, pos, seq` | — | — |
@@ -620,7 +660,7 @@ CheatLog.summary(participant.id) -- bilan (compteurs, score présent, pire viola
 
 - **Gravités** (`CheatLog.Severity`) : `LOW`, `MEDIUM`, `HIGH`, au sens de « Classer les violations » ci-dessous.
 - **Catégories** (`CheatLog.Category`) : `RemoteRate`, `RemoteArgs` (garde des remotes), et réservées aux parades
-  suivantes : `Spawn` (#171, branchée : refus de `RequestSpawn`), `Movement` (#172), `Hitscan` (#174, branchée : contrôles du tir ; #175 : equip et chargeur), `Melee` (#175, branchée : equip du couteau ; #176). Une nouvelle parade
+  suivantes : `Spawn` (#171, branchée : refus de `RequestSpawn`), `Movement` (#172), `Hitscan` (#174, branchée : contrôles du tir ; #175 : equip et chargeur), `Melee` (#175, branchée : equip du couteau ; #176 : orientation et ligne de vue). Une nouvelle parade
   ajoute sa catégorie à `CheatLog.Category` et ici, pour garder des noms stables dans le journal.
 - `warn` `[CheatLog]` limité à un toutes les `WARN_INTERVAL` (2 s) par joueur, le suivant dit combien ont été tus ;
   détail coupé à `MAX_DETAIL` octets sans couper de caractère, octets non UTF-8 remplacés par `?` (il peut contenir une
@@ -819,7 +859,7 @@ mode bloquant une fois mesurée.
   branchés sur le même point d'entrée, sans tir refusé ; tests `Validator.spec.luau`.
 - **Dépendances.** #165 (réserve illimitée : seul le chargeur est suivi), #159 (volet client). **Priorité.** P2.
 
-### 7. Mêlée : orientation et ligne de vue — P2
+### 7. Mêlée : orientation et ligne de vue — P2 (fait, #176 : journal seul, voir M1)
 
 - **Résumé.** M1 : angle horizontal entre le cap du tireur et la cible, raycast racine → racine sur la map, cible
   rembobinée.
