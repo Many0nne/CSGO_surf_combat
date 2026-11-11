@@ -278,7 +278,7 @@ historique `positionAt`, même raycast limité à `Workspace.Maps`, même journa
 
 | Contrôle | Règle (constantes de `ShotRules`) | Mode livré | Gravité |
 |---|---|---|---|
-| `orientation` | Angle horizontal entre le cap de la racine serveur du tireur (`LookVector`, relayé à 20 Hz, celui de sa caméra : `MovementController`) et la direction de la racine de la cible ≤ `MELEE_MAX_ANGLE` (70°) + `asin(MELEE_BODY_RADIUS / distance horizontale)` (2 studs : 15° à 7,5 studs, 90° au contact). Cible à la verticale : acceptée | `log` | moyenne |
+| `orientation` | Angle horizontal entre le cap de la racine serveur du tireur (`LookVector`, relayé à 20 Hz, celui de sa caméra : `MovementController`) et la direction de la racine de la cible ≤ `MELEE_MAX_ANGLE` (70°) + `asin(MELEE_BODY_RADIUS / distance)` (2 studs : 15° à 7,5 studs, 90° au contact ; distance 3D, sinon une cible juste en dessous sur une rampe mais 6 studs plus bas ouvrait 160°). Cible exactement à la verticale : acceptée | `log` | moyenne |
 | `meleeLineOfSight` | Raycast sur la map de la racine du tireur à celle de la cible, ou de son œil (`CAM_HEIGHT_STAND`) à la tête de la cible (décalage de `Head` sur le rig serveur, 1,5 stud à défaut : pas au-dessus de la tête, sinon un mur juste plus haut que la cible laisserait passer), pour un obstacle bas par-dessus lequel la caméra frappe ; jusqu'à `LINE_OF_SIGHT_END_MARGIN` avant : un segment dégagé suffit | `log` | moyenne |
 
 - **Rembobinage sans instant.** Le remote `MeleeDamage` n'envoie pas d'instant (client hors périmètre de #176) : la
@@ -298,7 +298,9 @@ historique `positionAt`, même raycast limité à `Workspace.Maps`, même journa
   fiables) se perdent garde un cap ancien et peut être journalisé à tort ; le détail du journal permet de les écarter.
 - **Limite connue.** Sans instant annoncé, un tricheur qui fixe une direction touche une cible dont le sillage des
   0,4 dernières secondes, à moins de 10 studs, a croisé son cône. Piste : envoyer l'instant du coup dans `MeleeDamage`
-  (comme `shotTime` de `HitscanDamage`) et réutiliser `ShotRules.rewindTime`.
+  (comme `shotTime` de `HitscanDamage`) et réutiliser `ShotRules.rewindTime`. L'accroupi n'est pas connu du serveur :
+  l'œil du tireur est pris debout (`CAM_HEIGHT_STAND`, pas `CAM_HEIGHT_CROUCH`) et la tête de la cible sur le rig
+  serveur, d'où une marge par-dessus un obstacle de 1,2 à 2,5 studs (même limite que la pose non rembobinée de T1).
 - **Position du tireur.** Racine serveur actuelle, sans rembobinage : le client est en avance de sa latence, l'écart
   est couvert par la tolérance d'angle et la portée de 10 studs (contre 7,5 côté client).
 - **Cible vivante.** Vérifiée avant (`isValidTarget`) : un corps dont l'historique répond encore est refusé.
@@ -314,8 +316,8 @@ historique `positionAt`, même raycast limité à `Workspace.Maps`, même journa
 `CheatLog` les violations `Melee` `orientation`/`meleeLineOfSight` de joueurs honnêtes (le détail donne l'angle, le
 maximum permis, la distance et le rembobinage de la position la plus proche), élargir `MELEE_MAX_ANGLE` ou
 `MELEE_BODY_RADIUS` si besoin, puis passer le contrôle à `"block"` dans `ShotRules.MODES` et mettre à jour ce tableau
-et les tests « livre orientation et ligne de vue de la mêlée en journal seul » (`ShotRules.spec.luau`,
-`Validator.spec.luau`). Les tests en mode `block` couvrent déjà le refus.
+et le test « livre orientation et ligne de vue de la mêlée en journal seul » (`ShotRules.spec.luau`). Les tests en
+mode `block` (`Validator.spec.luau`) couvrent déjà le refus.
 
 ## Déplacement
 

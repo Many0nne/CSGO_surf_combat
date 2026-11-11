@@ -264,6 +264,13 @@ return function(T, Loader)
 			T.expectEqual((ShotRules.checkMeleeOrientation(look, Vector3.zero, Vector3.new(0, 4, 0))), true)
 		end)
 
+		T.it("n'ouvre pas l'angle pour une cible proche à l'horizontale mais loin en hauteur (rampe)", function()
+			-- 1,5 stud à l'horizontale, 6 studs plus bas, 150° du cap : permis 70° + asin(2 / 6,2) ≈ 89°
+			local yaw = math.rad(150)
+			local target = Vector3.new(math.cos(yaw) * 1.5, -6, math.sin(yaw) * 1.5)
+			T.expectEqual((ShotRules.checkMeleeOrientation(Vector3.new(1, 0, 0), Vector3.zero, target)), false)
+		end)
+
 		T.it("rembobine de now à now - MAX_REWIND, le plus récent d'abord", function()
 			local times = ShotRules.meleeRewindTimes(100)
 			T.expectEqual(times[1], 100)

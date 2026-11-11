@@ -359,9 +359,10 @@ function ShotRules.horizontalAngle(look: Vector3, from: Vector3, to: Vector3): (
 end
 
 -- Cette méthode permet de calculer l'angle permis (degrés) lorsqu'on vérifie l'orientation d'un coup : MELEE_MAX_ANGLE
--- plus l'angle sous lequel le tireur voit la demi-largeur du corps de la cible (bord du corps touché).
-function ShotRules.meleeAngleLimit(horizontalDistance: number): number
-	local ratio = if horizontalDistance > 0 then math.min(1, ShotRules.MELEE_BODY_RADIUS / horizontalDistance) else 1
+-- plus l'angle sous lequel le tireur voit la demi-largeur du corps de la cible (bord du corps touché), d'après la
+-- distance 3D : une cible juste au-dessous, mais loin en hauteur, n'ouvre pas l'angle (rampe de surf).
+function ShotRules.meleeAngleLimit(distance: number): number
+	local ratio = if distance > 0 then math.min(1, ShotRules.MELEE_BODY_RADIUS / distance) else 1
 	return ShotRules.MELEE_MAX_ANGLE + math.deg(math.asin(ratio))
 end
 
@@ -373,11 +374,12 @@ function ShotRules.checkMeleeOrientation(
 	attackerPos: Vector3,
 	targetPos: Vector3
 ): (boolean, number, string?)
-	local angle, distance = ShotRules.horizontalAngle(look, attackerPos, targetPos)
+	local angle = ShotRules.horizontalAngle(look, attackerPos, targetPos)
 	if angle == nil then
 		-- Cible à la verticale du tireur : toute direction horizontale touche son corps
 		return true, -math.huge, nil
 	end
+	local distance = (targetPos - attackerPos).Magnitude
 	local limit = ShotRules.meleeAngleLimit(distance)
 	local excess = angle - limit
 	if excess <= 0 then

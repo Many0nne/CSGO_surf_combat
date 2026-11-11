@@ -1052,12 +1052,6 @@ return function(T, Loader)
 			T.expectEqual(reportedChecks(world), "")
 		end)
 
-		T.it("livre orientation et ligne de vue de la mêlée en journal seul", function()
-			local _, _, _, _, _, ShotRules = setupMelee()
-			T.expectEqual(ShotRules.MODES.orientation, "log")
-			T.expectEqual(ShotRules.MODES.meleeLineOfSight, "log")
-		end)
-
 		T.it(
 			"coup dans le dos du tireur : journalisé en mode log, refusé en mode block sans relancer la cadence",
 			function()
