@@ -33,8 +33,8 @@ Validator.MAX_HITSCAN_RANGE = MAX_HITSCAN_RANGE
 
 -- Accès au monde dont la validation d'un tir de joueur a besoin (#174), branchés par init.server (simulés en test) :
 -- horloge serveur, position rembobinée d'un personnage, raycast de ligne de vue sur la map, journal des violations
--- (category : CheatTypes.Category, Hitscan si absente ; l'equip vaut aussi pour la mêlée, #175 ; orientation et ligne de
--- vue de la mêlée, #176).
+-- (category : CheatTypes.Category, Hitscan si absente ; l'equip vaut aussi pour la mêlée, #175 ; orientation et
+-- ligne de vue de la mêlée, #176).
 export type ShotWorld = {
 	serverNow: () -> number,
 	positionAt: (char: Model, t: number) -> Vector3?,

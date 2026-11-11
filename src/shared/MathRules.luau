@@ -62,8 +62,8 @@ function MathRules.horizontalLength(v: Vector3): number
 end
 
 -- Cette méthode permet de lire le cap (degrés, de -180 à 180) d'une direction horizontale (dx, dz) lorsqu'on oriente
--- un regard : convention de la caméra FPS, 0 vers -Z, positif vers +X. Indéfini (0) pour une direction nulle : le
--- test de seuil reste à l'appelant.
+-- un regard : convention de la caméra FPS, 0 vers -Z, positif vers +X. Une direction nulle n'a pas de cap (le résultat
+-- vaut alors 180, atan2(0, -0) = π) : le test de seuil reste à l'appelant.
 function MathRules.headingDeg(dx: number, dz: number): number
 	return math.deg(math.atan2(dx, -dz))
 end

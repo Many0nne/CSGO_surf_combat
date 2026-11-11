@@ -60,7 +60,8 @@ end
 -- précédent (le plus ancien est écrasé si plein). Un temps ou une position non finis sont refusés ; un recul d'horloge
 -- d'au moins MAX_CLOCK_STEP repart d'un tampon vide.
 function PositionHistory.record(history: History, t: number, pos: Vector3): boolean
-	if not MathRules.isFinite(t) or not MathRules.isFiniteVector3(pos) then
+	-- Magnitude, pas composantes : une position finie mais de longueur infinie (débordement) est aussi refusée
+	if not MathRules.isFinite(t) or not MathRules.isFinite(pos.Magnitude) then
 		return false
 	end
 	if t < history.latestT then

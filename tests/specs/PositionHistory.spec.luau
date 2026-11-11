@@ -119,6 +119,9 @@ return function(T, Loader)
 			T.expectEqual(PH.record(h, 50, Vector3.new(1, 1, 1)), true) -- grand recul : on repart de zéro
 			T.expectEqual(h.count, 1)
 			T.expectEqual(PH.record(h, 51, Vector3.new(0 / 0, 0, 0)), false)
+			T.expectEqual(PH.record(h, 51, Vector3.new(math.huge, 0, 0)), false, "composante infinie")
+			T.expectEqual(PH.record(h, 51, Vector3.new(3e38, 3e38, 3e38)), false, "longueur infinie par débordement")
+			T.expectEqual(h.count, 1, "aucune position non finie retenue")
 		end)
 
 		T.it("fait tourner le tampon sans dépasser sa capacité et oublie les plus anciens", function()

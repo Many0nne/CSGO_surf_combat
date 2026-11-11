@@ -18,7 +18,8 @@ local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 local ShotRules = {}
 
 export type Mode = "log" | "block"
--- Gravités du journal : CheatTypes, que CheatLog ré-exporte (ShotRules ne dépend pas de CheatLog, qui demande des services).
+-- Gravités du journal : CheatTypes, que CheatLog ré-exporte (ShotRules ne dépend pas de CheatLog, qui demande des
+-- services).
 export type Severity = CheatTypes.Severity
 export type Shot = { origin: Vector3, direction: Vector3, hitPos: Vector3, shotTime: number }
 
