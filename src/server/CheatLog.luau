@@ -91,7 +91,7 @@ local pendingSummaries = 0
 local warnedNoRule: { [string]: boolean } = {}
 -- Rappels lancés au départ d'un joueur avant la clôture de son bilan (ex. statistiques de visée finales, #178), et
 -- joueur en cours de clôture : ses signalements sont gardés même s'il n'a déjà plus de Parent.
-local closingHooks: { ({ Player }) -> () } = {}
+local closingHooks: { ({ Player }, boolean) -> () } = {}
 local closingPlayers: { [Player]: boolean } = {}
 
 -- Cette méthode permet de lire l'horloge du serveur lorsqu'une violation est datée (os.clock, simulable en test).
@@ -304,12 +304,15 @@ function CheatLog.buildEmbed(record: Record): { [string]: any }
 	for category, perCategory in record.counts do
 		table.insert(fields, {
 			name = category,
-			value = string.format(
-				"forte %d · moyenne %d · faible %d",
-				perCategory.high,
-				perCategory.medium,
-				perCategory.low
-			),
+			-- Relevés de visée (#178) : pas des violations, ne pas les présenter comme des « faibles »
+			value = if category == CheatLog.Category.AIM
+				then string.format("%d relevé(s) signalé(s), revue humaine", perCategory.low)
+				else string.format(
+					"forte %d · moyenne %d · faible %d",
+					perCategory.high,
+					perCategory.medium,
+					perCategory.low
+				),
 			inline = true,
 		})
 	end
@@ -385,19 +388,19 @@ function CheatLog.worthSummary(record: Record): boolean
 end
 
 -- Cette méthode permet d'inscrire un rappel lancé au départ de joueurs (un seul, ou tous ensemble à l'arrêt du
--- serveur), avant la clôture de leur bilan, lorsqu'une parade veut y signaler un dernier relevé (visée, #178).
-function CheatLog.onClosing(hook: ({ Player }) -> ())
+-- serveur : shuttingDown), avant la clôture de leur bilan, lorsqu'une parade veut y signaler un dernier relevé (#178).
+function CheatLog.onClosing(hook: ({ Player }, boolean) -> ())
 	table.insert(closingHooks, hook)
 end
 
 -- Cette méthode permet de lancer les rappels de clôture de joueurs qui partent : leurs report y sont gardés même sans
 -- Parent (PlayerRemoving différé) ; une erreur n'empêche ni les rappels suivants ni le résumé.
-local function runClosingHooks(players: { Player })
+local function runClosingHooks(players: { Player }, shuttingDown: boolean)
 	for _, player in players do
 		closingPlayers[player] = true
 	end
 	for _, hook in closingHooks do
-		local ok, err = pcall(hook, players)
+		local ok, err = pcall(hook, players, shuttingDown)
 		if not ok then
 			warn("[CheatLog] rappel de clôture en échec :", err)
 		end
@@ -408,7 +411,7 @@ end
 -- Cette méthode permet d'oublier un joueur qui part lorsque son bilan est clos : seaux de la garde libérés, résumé
 -- envoyé si le bilan le mérite (worthSummary).
 function CheatLog.onPlayerRemoving(player: Player)
-	runClosingHooks({ player })
+	runClosingHooks({ player }, false)
 	guard:forget(player)
 	local record = records[player.UserId]
 	records[player.UserId] = nil
@@ -424,7 +427,7 @@ function CheatLog.init()
 	game:BindToClose(function()
 		-- Joueurs encore là à l'arrêt : leur PlayerRemoving peut arriver après ce rappel. Tous ensemble, pour que chaque
 		-- parade les juge contre la même population
-		runClosingHooks(Players:GetPlayers())
+		runClosingHooks(Players:GetPlayers(), true)
 		for id, record in records do
 			records[id] = nil
 			if CheatLog.worthSummary(record) then

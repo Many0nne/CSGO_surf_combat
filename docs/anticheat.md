@@ -652,9 +652,12 @@ les bots (il passait par `WeaponAction`). Tests : `tests/specs/ShotRelayRules.sp
   têtes / touches ;
 - **flick** : rotation horizontale entre le dernier cap accepté par `CharacterSync` (`CharacterSync.lastYaw`, cap de la
   caméra, 20 Hz) et la direction **de la touche** (`HitscanDamage`, vérifiée par le `Validator`), si ce cap date d'au
-  plus `FLICK_MAX_AGE` (0,15 s). Pas la direction de `ShotFired` : rien ne la compare à la touche, un aimbot y
-  enverrait son cap courant. Flick = au moins `FLICK_MIN_ANGLE` (25°). Statistique jugée : part des touches précédées
-  d'un flick. La vitesse maximale (`pic`, °/s,
+  plus `FLICK_MAX_AGE` (0,1 s). Le cap est **figé à l'arrivée de `ShotFired`** (juste avant la touche) : un paquet de
+  position (non fiable) arrivé entre le tir et sa touche (fiable) ne compte pas, sinon le recul ou le retour de visée
+  après un tir d'AWP ferait des faux flicks. Pas la direction de `ShotFired` : rien ne la compare à la touche, un
+  aimbot y enverrait son cap courant. Flick = au moins `FLICK_MIN_ANGLE` (30°) en 0,1 s au plus, soit 300 °/s
+  minimum : au-dessus d'un air strafe de surf ordinaire (100 à 250 °/s, environ 10° par paquet). Touche sans tir
+  rattaché : pas de mesure. Statistique jugée : part des touches précédées d'un flick. La vitesse maximale (`pic`, °/s,
   durée bornée à `MIN_SPEED_DT` = 1/20 s) est affichée, pas jugée (trop bruitée par la gigue réseau). Le pitch n'est
   pas mesuré (le serveur ne reçoit que le cap) : un flick vertical passe inaperçu. **Indice faible** : le cap vient du
   client ; un paquet de position parti dans la frame du tir (caméra déjà tournée) donne un écart nul, et un aimbot qui
@@ -663,8 +666,8 @@ les bots (il passait par `WeaponAction`). Tests : `tests/specs/ShotRelayRules.sp
 
 **Seuils.** Un joueur est jugé quand il a `MIN_HITS` (30) touches, et seulement contre les **autres** joueurs jugeables
 du serveur, s'ils sont au moins `MIN_POPULATION` (5) : en dessous (serveur de 2 joueurs), personne n'est signalé. Une
-statistique est signalée si elle dépasse la moyenne des autres de `Z_THRESHOLD` (3) écarts-types (écart-type au moins
-`MIN_SPREAD`, 0,05) **et** son plancher absolu `FLOOR` : tête 60 %, touches 75 %, flick touché 30 %. Valeurs de
+statistique est signalée si elle dépasse la moyenne des autres de `Z_THRESHOLD` (3) écarts-types (écart-type
+d'échantillon, divisé par n - 1, plus large et donc plus prudent sur 5 joueurs ; au moins `MIN_SPREAD`, 0,05) **et** son plancher absolu `FLOOR` : tête 60 %, touches 75 %, flick touché 30 %. Valeurs de
 départ, à revoir sur le journal de production.
 
 **Où le lire.**
@@ -683,7 +686,8 @@ départ, à revoir sur le journal de production.
   jugé (population trop petite) » quand il n'y a pas de quoi comparer.
 - Un joueur signalé une fois a aussi son relevé **final** au journal, même redevenu normal : le « dernier relevé » du
   résumé est donc vraiment le dernier. À l'arrêt du serveur, tous les joueurs restants sont jugés ensemble contre la
-  même population (rappels `CheatLog.onClosing` appelés avec la liste). Limite : des départs un par un (fin de partie)
+  même population (rappels `CheatLog.onClosing` appelés avec la liste et `shuttingDown`), puis les statistiques sont
+  gelées (`AimStats.freeze`) : un tir pendant l'attente de l'arrêt ne recrée pas de relevé partiel. Limite : des départs un par un (fin de partie)
   font fondre la population, et les derniers partis sont « non jugés » au départ ; leurs résumés périodiques (toutes
   les 120 s) les ont jugés tant que la population était là.
 

@@ -13,14 +13,14 @@ return function(T, Loader)
 	end
 
 	-- Cette méthode permet de simuler `shots` tirs dont `hits` touchent (`heads` à la tête) lorsqu'un test construit un
-	-- joueur ; cap reçu juste avant chaque touche, déjà aligné (pas de flick).
+	-- joueur ; cap reçu juste avant chaque tir, déjà aligné (pas de flick).
 	local function play(state, p, shots: number, hits: number, heads: number, startAt: number?)
 		local t = startAt or 0
 		for i = 1, shots do
 			t += 2
-			AimStats.noteShot(state, p, t)
+			AimStats.noteShot(state, p, t, FORWARD_YAW, t - 0.05)
 			if i <= hits then
-				AimStats.noteHit(state, p, i <= heads, t + 0.05, FORWARD, FORWARD_YAW, t)
+				AimStats.noteHit(state, p, i <= heads, t + 0.05, FORWARD)
 			end
 		end
 	end
@@ -60,27 +60,49 @@ return function(T, Loader)
 			T.expectEqual(s.headshots, 1)
 		end)
 
-		T.it("flick : rotation rapide entre le dernier cap et la direction validée de la touche", function()
+		T.it("flick : rotation rapide entre le cap figé au tir et la direction validée de la touche", function()
 			local state = AimStats.new()
 			local p = participant(1)
 			local right = Vector3.new(1, 0, 0) -- 90° de cap
-			AimStats.noteShot(state, p, 10)
-			AimStats.noteHit(state, p, true, 10.05, right, FORWARD_YAW, 10)
+			AimStats.noteShot(state, p, 10, FORWARD_YAW, 9.95)
+			AimStats.noteHit(state, p, true, 10.02, right)
 			local s = state.players[1]
 			T.expectEqual(s.measured, 1)
 			T.expectEqual(s.flickHits, 1)
 			T.expectNear(s.peakSpeed, 90 / 0.05, 1)
-			-- Cap trop ancien : pas de mesure
-			AimStats.noteHit(state, p, true, 20, FORWARD, FORWARD_YAW + math.pi / 2, 20 - AimStats.FLICK_MAX_AGE - 0.01)
+			-- Cap trop ancien à l'arrivée du tir : pas de mesure
+			AimStats.noteShot(state, p, 20, FORWARD_YAW + math.pi / 2, 20 - AimStats.FLICK_MAX_AGE - 0.01)
+			AimStats.noteHit(state, p, true, 20.02, FORWARD)
 			T.expectEqual(s.measured, 1)
 			-- Petite correction : mesurée, pas un flick
-			AimStats.noteHit(state, p, true, 30, FORWARD, FORWARD_YAW + math.rad(5), 29.95)
+			AimStats.noteShot(state, p, 30, FORWARD_YAW + math.rad(5), 29.95)
+			AimStats.noteHit(state, p, true, 30.02, FORWARD)
 			T.expectEqual(s.measured, 2)
 			T.expectEqual(s.flickHits, 1)
-			-- Sans direction (touche sans tir mesurable) : comptée, pas mesurée
-			AimStats.noteHit(state, p, false, 40)
+			-- Touche sans tir récent : comptée, ni au but ni mesurée
+			AimStats.noteHit(state, p, false, 40, right)
 			T.expectEqual(s.measured, 2)
 			T.expectEqual(s.hits, 4)
+			T.expectEqual(s.hitShots, 3)
+		end)
+
+		T.it("air strafe (200 °/s) : pas un flick", function()
+			local state = AimStats.new()
+			local p = participant(1)
+			-- Cap reçu 50 ms avant le tir, la caméra a tourné de 10° depuis
+			AimStats.noteShot(state, p, 10, FORWARD_YAW + math.rad(10), 9.95)
+			AimStats.noteHit(state, p, false, 10.02, FORWARD)
+			T.expectEqual(state.players[1].measured, 1)
+			T.expectEqual(state.players[1].flickHits, 0)
+		end)
+
+		T.it("arrêt du serveur : plus rien compté après le gel", function()
+			local state = AimStats.new()
+			play(state, participant(1), 3, 1, 0)
+			AimStats.close(state, { 1 })
+			AimStats.freeze(state)
+			play(state, participant(1), 3, 1, 0)
+			T.expectEqual(AimStats.count(state), 0)
 		end)
 
 		T.it("écart de cap pris par le plus court (passage de -180° à 180°)", function()
@@ -229,8 +251,8 @@ return function(T, Loader)
 			population(state, 6)
 			local cheater = participant(99)
 			play(state, cheater, 100, 40, 36)
-			T.expectEqual(select("#", AimStats.noteShot(state, cheater, 1000)), 0)
-			T.expectEqual(select("#", AimStats.noteHit(state, cheater, true, 1000.05, FORWARD, FORWARD_YAW, 1000)), 0)
+			T.expectEqual(select("#", AimStats.noteShot(state, cheater, 1000, FORWARD_YAW, 999.95)), 0)
+			T.expectEqual(select("#", AimStats.noteHit(state, cheater, true, 1000.05, FORWARD)), 0)
 			T.expectEqual(state.players[99].shots, 101, "le tir du joueur signalé est compté comme les autres")
 		end)
 	end)

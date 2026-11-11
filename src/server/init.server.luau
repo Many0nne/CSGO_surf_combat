@@ -243,9 +243,11 @@ task.spawn(function()
 		-- Une erreur ne doit pas arrêter les résumés suivants
 		local ok, err = pcall(function()
 			for _, entry in AimStats.periodic(aimStats) do
-				local participant = Participants.get(entry.id)
-				if participant then
-					logAim(participant, entry, false)
+				-- Joueur retrouvé par Players, pas par le registre (qu'un départ en cours peut déjà avoir vidé) ; parti :
+				-- son relevé final est fait par la clôture
+				local player = Players:GetPlayerByUserId(entry.id)
+				if player then
+					logAim({ id = entry.id, name = player.Name, isBot = false, player = player }, entry, false)
 				end
 			end
 		end)
@@ -256,8 +258,9 @@ task.spawn(function()
 end)
 
 -- Résumé final avant la clôture du bilan CheatLog (le signalement y entre) ; statistiques oubliées au départ. À
--- l'arrêt du serveur, tous les joueurs restants sont jugés ensemble, contre la même population.
-CheatLog.onClosing(function(players)
+-- l'arrêt du serveur, tous les joueurs restants sont jugés ensemble, contre la même population, puis plus rien n'est
+-- compté (pas de relevé partiel recréé par un tir pendant l'attente de l'arrêt).
+CheatLog.onClosing(function(players, shuttingDown)
 	local byId: { [number]: Player } = {}
 	local ids = {}
 	for _, player in players do
@@ -269,6 +272,9 @@ CheatLog.onClosing(function(players)
 		-- Participant reconstruit : celui du registre peut déjà être retiré (ordre des PlayerRemoving non garanti)
 		logAim({ id = entry.id, name = player.Name, isBot = false, player = player }, entry, true)
 	end
+	if shuttingDown then
+		AimStats.freeze(aimStats)
+	end
 end)
 
 shotFiredRmt.OnServerEvent:Connect(function(player, origin, direction)
@@ -278,7 +284,9 @@ shotFiredRmt.OnServerEvent:Connect(function(player, origin, direction)
 	local participant = Participants.fromPlayer(player)
 	-- Compté après la décision du relais, qu'il ne change pas : un tir accepté (forme, cadence) entre aux statistiques
 	if relayShot(participant, origin, direction) then
-		AimStats.noteShot(aimStats, participant, os.clock())
+		-- Cap figé à l'arrivée du tir, avant sa touche (flick)
+		local yaw, yawAt = CharacterSync.lastYaw(player)
+		AimStats.noteShot(aimStats, participant, os.clock(), yaw, yawAt)
 	end
 end)
 
@@ -480,15 +488,14 @@ hitscanRmt.OnServerEvent:Connect(function(player, targetCharacter, hitPart, orig
 	if not CheatLog.admit(player, N.HITSCAN_DAMAGE, targetCharacter, hitPart, origin, direction, hitPos, shotTime) then
 		return
 	end
+	local participant = Participants.fromPlayer(player)
 	local shot = { origin = origin, direction = direction, hitPos = hitPos, shotTime = shotTime }
-	local damage, isHeadshot =
-		Validator.authorizeHitscan(Participants.fromPlayer(player), targetCharacter, hitPart, os.clock(), shot)
+	local damage, isHeadshot = Validator.authorizeHitscan(participant, targetCharacter, hitPart, os.clock(), shot)
 	-- Le son du tir chez les autres (#156) ne part pas d'ici : chaque tir, touché ou manqué, arrive d'abord par ShotFired
 	-- Statistiques de visée (#178), après coup et sans effet sur la touche : seulement une touche qui a fait des dégâts
 	-- (pas un corps déjà mort), flick mesuré sur sa direction validée
 	if onHitVerdict(player, hitscanRmt, targetCharacter, damage, isHeadshot) then
-		local yaw, yawAt = CharacterSync.lastYaw(player)
-		AimStats.noteHit(aimStats, Participants.fromPlayer(player), isHeadshot, os.clock(), direction, yaw, yawAt)
+		AimStats.noteHit(aimStats, participant, isHeadshot, os.clock(), direction)
 	end
 end)
 

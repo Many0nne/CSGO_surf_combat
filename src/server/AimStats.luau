@@ -31,10 +31,11 @@ AimStats.FLOOR = {
 -- Écart-type minimal de la population par statistique : des autres joueurs presque identiques ne doivent pas rendre
 -- suspect un écart de quelques points.
 AimStats.MIN_SPREAD = 0.05
--- Flick : rotation horizontale d'au moins FLICK_MIN_ANGLE (degrés) entre le dernier cap reçu et la direction du tir,
--- ce cap datant d'au plus FLICK_MAX_AGE (s) (3 paquets CharacterSync à 20 Hz ; plus vieux : pas de mesure).
-AimStats.FLICK_MIN_ANGLE = 25
-AimStats.FLICK_MAX_AGE = 0.15
+-- Flick : rotation horizontale d'au moins FLICK_MIN_ANGLE (degrés) entre le dernier cap reçu avant le tir et la
+-- direction de la touche, ce cap datant d'au plus FLICK_MAX_AGE (s) à l'arrivée du tir (2 paquets CharacterSync à
+-- 20 Hz ; plus vieux : pas de mesure). Soit au moins 300 °/s : au-dessus d'un air strafe de surf ordinaire.
+AimStats.FLICK_MIN_ANGLE = 30
+AimStats.FLICK_MAX_AGE = 0.1
 -- Durée minimale (s) retenue pour la vitesse angulaire affichée (paquets groupés : un écart de 1 ms ferait 25 000 °/s).
 AimStats.MIN_SPEED_DT = 1 / 20
 -- Une touche est rattachée au dernier tir s'il date d'au plus HIT_LINK_WINDOW (s) (le client envoie ShotFired juste
@@ -54,6 +55,10 @@ export type Stats = {
 	peakSpeed: number, -- vitesse angulaire maximale mesurée (°/s)
 	lastShotAt: number?,
 	lastShotHit: boolean,
+	-- Cap reçu avant le dernier tir et son âge à l'arrivée du tir : figé là, un paquet de position arrivé entre le tir
+	-- et sa touche (non fiable contre fiable, ordre non garanti) ne fausse pas le flick
+	shotYaw: number?,
+	shotYawAge: number?,
 	reportedShots: number, -- tirs au dernier résumé périodique
 	everFlagged: boolean, -- signalé au moins une fois dans la session (son relevé final va alors au journal)
 }
@@ -72,17 +77,23 @@ export type Verdict = {
 -- résumé soit vraiment le dernier).
 export type Entry = { id: number, stats: Stats, verdict: Verdict, line: string, report: boolean }
 
--- Joueurs suivis, par id de participant (UserId).
-export type State = { players: { [number]: Stats } }
+-- Joueurs suivis, par id de participant (UserId) ; frozen : arrêt du serveur, relevés finaux faits, plus rien compté.
+export type State = { players: { [number]: Stats }, frozen: boolean }
 
 -- Cette méthode permet de créer l'état des statistiques lorsque le serveur démarre (ou qu'un test commence).
 function AimStats.new(): State
-	return { players = {} }
+	return { players = {}, frozen = false }
+end
+
+-- Cette méthode permet de ne plus rien compter lorsque le serveur s'arrête et que les relevés finaux sont faits (un
+-- tir pendant l'attente de l'arrêt ne recrée pas de statistiques partielles).
+function AimStats.freeze(state: State)
+	state.frozen = true
 end
 
 -- Cette méthode permet de retrouver (ou de créer) les statistiques d'un joueur lorsqu'il tire ; nil pour un bot.
 local function statsOf(state: State, participant: any): Stats?
-	if participant.isBot then
+	if participant.isBot or state.frozen then
 		return nil
 	end
 	local stats = state.players[participant.id]
@@ -119,8 +130,9 @@ function AimStats.yawDelta(yaw: number, direction: Vector3): number?
 	return math.deg(delta)
 end
 
--- Cette méthode permet de compter un tir accepté lorsqu'il est relayé (ShotFired). Ne renvoie rien : aucun veto.
-function AimStats.noteShot(state: State, participant: any, now: number)
+-- Cette méthode permet de compter un tir accepté lorsqu'il est relayé (ShotFired) : le dernier cap reçu (lastYaw à
+-- lastYawAt, même horloge que now) est figé pour le flick de sa touche. Ne renvoie rien : aucun veto.
+function AimStats.noteShot(state: State, participant: any, now: number, lastYaw: number?, lastYawAt: number?)
 	local stats = statsOf(state, participant)
 	if not stats then
 		return
@@ -128,20 +140,14 @@ function AimStats.noteShot(state: State, participant: any, now: number)
 	stats.shots += 1
 	stats.lastShotAt = now
 	stats.lastShotHit = false
+	stats.shotYaw = lastYaw
+	stats.shotYawAge = if lastYaw and lastYawAt then now - lastYawAt else nil
 end
 
 -- Cette méthode permet de compter une touche qui a fait des dégâts lorsqu'elle est appliquée : rattachée au dernier tir
--- s'il est récent et pas encore touché (taux de touches), flick mesuré entre le dernier cap reçu (lastYaw à lastYawAt,
--- même horloge que now) et la direction validée de la touche. Ne renvoie rien : aucun veto.
-function AimStats.noteHit(
-	state: State,
-	participant: any,
-	isHeadshot: boolean,
-	now: number,
-	direction: Vector3?,
-	lastYaw: number?,
-	lastYawAt: number?
-)
+-- s'il est récent et pas encore touché (taux de touches) ; flick mesuré alors entre le cap figé au tir et la direction
+-- validée de la touche. Ne renvoie rien : aucun veto.
+function AimStats.noteHit(state: State, participant: any, isHeadshot: boolean, now: number, direction: Vector3?)
 	local stats = statsOf(state, participant)
 	if not stats then
 		return
@@ -151,18 +157,17 @@ function AimStats.noteHit(
 		stats.headshots += 1
 	end
 	local shotAt = stats.lastShotAt
-	if shotAt and not stats.lastShotHit and now - shotAt >= 0 and now - shotAt <= AimStats.HIT_LINK_WINDOW then
-		stats.lastShotHit = true
-		stats.hitShots += 1
-	end
-	if not direction or not lastYaw or not lastYawAt then
+	if not shotAt or stats.lastShotHit or now - shotAt < 0 or now - shotAt > AimStats.HIT_LINK_WINDOW then
+		-- Touche sans tir récent à qui la rattacher : comptée, ni « au but » ni flick
 		return
 	end
-	local age = now - lastYawAt
-	if age < 0 or age > AimStats.FLICK_MAX_AGE then
+	stats.lastShotHit = true
+	stats.hitShots += 1
+	local yaw, age = stats.shotYaw, stats.shotYawAge
+	if not direction or not yaw or not age or age < 0 or age > AimStats.FLICK_MAX_AGE then
 		return
 	end
-	local delta = AimStats.yawDelta(lastYaw, direction)
+	local delta = AimStats.yawDelta(yaw, direction)
 	if not delta then
 		return
 	end
@@ -212,7 +217,8 @@ function AimStats.judge(state: State, id: number): Verdict
 		for _, other in others do
 			squares += (AimStats.rate(other, metric) - mean) ^ 2
 		end
-		local spread = math.max(math.sqrt(squares / #others), AimStats.MIN_SPREAD)
+		-- Écart-type d'échantillon (n - 1) : plus large sur une petite population, donc plus prudent
+		local spread = math.max(math.sqrt(squares / (#others - 1)), AimStats.MIN_SPREAD)
 		local value = AimStats.rate(stats, metric)
 		local z = (value - mean) / spread
 		verdict.z[metric] = z
