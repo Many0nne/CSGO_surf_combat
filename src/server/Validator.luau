@@ -49,6 +49,7 @@ export type ShotWorld = {
 -- nil tant que setShotWorld n'a pas été appelé : les tirs de joueurs sont alors refusés (jamais validés en silence).
 local shotWorld: ShotWorld? = nil
 local warnedNoWorld = false
+local warnedNoWorldWeapon = false
 
 -- Attribut serveur de la cible immobile du helper de playtest ; les attributs posés par un client ne répliquent pas.
 Validator.DEBUG_TARGET_ATTRIBUTE = "DebugTarget"
@@ -168,9 +169,8 @@ local function cancelReloads(participant: Participant, now: number)
 	end
 end
 
--- Cette méthode permet de journaliser un contrôle en échec lorsqu'il est constaté (tir ou mêlée), au format commun :
--- « contrôle : détail », suffixé « (journal seul) » s'il ne refuse pas la touche, ou de la raison du refus en mode "log"
--- (tir lointain, LOG_ONLY_RANGE).
+-- Cette méthode permet de journaliser un contrôle en échec lorsqu'il est constaté (tir ou mêlée) : « contrôle : détail »,
+-- suffixé « (journal seul) » en mode "log", ou de la raison du refus (LOG_ONLY_RANGE).
 local function reportCheck(
 	world: ShotWorld,
 	attacker: Participant,
@@ -199,9 +199,9 @@ local function failWeaponCheck(attacker: Participant, category: string, check: s
 	local world = shotWorld
 	if world then
 		reportCheck(world, attacker, check, detail, blocks, category)
-	elseif not warnedNoWorld then
-		-- Même avertissement que validateShot : un refus de mêlée sans journal ne doit pas passer inaperçu
-		warnedNoWorld = true
+	elseif not warnedNoWorldWeapon then
+		-- Comme validateShot : un refus de mêlée sans journal ne doit pas passer inaperçu
+		warnedNoWorldWeapon = true
 		warn("[Validator] setShotWorld non appelé : refus d'equip et de chargeur non journalisés")
 	end
 	return blocks
@@ -243,8 +243,8 @@ function Validator.noteUnequip(participant: Participant, tool: Instance, now: nu
 	end
 end
 
--- Cette méthode permet de démarrer le rechargement de l'arme en main lorsque l'action Reload arrive (#175). Un
--- rechargement demandé pendant l'equip ne compte qu'à partir de la fin de l'equip (le client ne peut pas recharger avant).
+-- Cette méthode permet de démarrer le rechargement de l'arme en main lorsque l'action Reload arrive (#175), au plus tôt
+-- à la fin de l'equip et de la cadence du dernier tir (le client ne peut pas recharger avant).
 function Validator.noteReload(participant: Participant, now: number)
 	local tool, cfg = weaponInHand(participant)
 	if not cfg or cfg.IsMelee or not cfg.Magazine then
@@ -253,7 +253,12 @@ function Validator.noteReload(participant: Participant, now: number)
 	local record = equips[participant]
 	local start = now
 	if record and record.tool == tool then
-		start = math.max(now, record.at + (cfg.EquipTime or 0) - ShotRules.EQUIP_TOLERANCE)
+		start = math.max(start, record.at + (cfg.EquipTime or 0) - ShotRules.EQUIP_TOLERANCE)
+	end
+	local playerAttacks = lastAttacks[participant]
+	local last = playerAttacks and playerAttacks[cfg]
+	if last then
+		start = math.max(start, last.at + last.delay - ShotRules.RELOAD_TOLERANCE)
 	end
 	ShotRules.startReload(magazineOf(participant, cfg), cfg.ReloadTime or 0, start)
 end

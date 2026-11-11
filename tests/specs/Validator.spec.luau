@@ -617,6 +617,21 @@ return function(T, Loader)
 			end
 		)
 
+		T.it("compte un Reload envoyé juste après un tir à partir de la fin de la cadence", function()
+			local Validator, makePlayer, _, _, ShotRules = setup()
+			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(50, 0, 0))
+			local last = fire(Validator, a, b, 5, 10)
+			Validator.noteReload(a, last + 0.01) -- client modifié : le client attend FireDelay (1,46 s)
+			local ready = last + 60 / 41 - ShotRules.RELOAD_TOLERANCE + 3.7 - ShotRules.RELOAD_TOLERANCE
+			T.expectEqual(
+				Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), last + 3.6),
+				nil,
+				"sans cadence"
+			)
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), ready - 0.05), nil)
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), ready + 0.01), 115)
+		end)
+
 		T.it("refuse une touche pendant un rechargement inachevé, chargeur non vide compris", function()
 			local Validator, makePlayer, _, world = setup()
 			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(50, 0, 0))

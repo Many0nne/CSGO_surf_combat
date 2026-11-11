@@ -287,9 +287,8 @@ function ShotRules.cancelReload(mag: Magazine, reloadTime: number, now: number)
 	mag.reloadAt = nil
 end
 
--- Cette méthode permet de vérifier le chargeur lorsqu'une touche arrive : aucun rechargement inachevé (le client ne
--- tire pas pendant RELOADING ; sinon un Reload renvoyé en boucle remettrait le compteur à zéro sans pause), et moins
--- de size touches acceptées depuis le dernier rechargement fini.
+-- Cette méthode permet de vérifier le chargeur lorsqu'une touche arrive : aucun rechargement inachevé (le client ne tire
+-- pas en RELOADING, un Reload en boucle ne remet rien à zéro) et moins de size touches depuis le dernier rechargement.
 function ShotRules.checkMagazine(mag: Magazine, size: number, reloadTime: number, now: number): (boolean, string?)
 	ShotRules.settleReload(mag, reloadTime, now)
 	local reloadAt = mag.reloadAt

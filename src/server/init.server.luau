@@ -112,9 +112,8 @@ end
 -- durée d'equip vérifiée par le Validator (#175), modèle 3P attaché à l'équipement, retiré quand l'outil correspondant
 -- quitte le personnage (rechargement annulé).
 local function trackWeapon3P(participant: Participants.Participant, char: Model)
-	-- Cette méthode permet de savoir si l'equip d'un outil de ce personnage compte pour le Validator lorsqu'il change :
-	-- joueur seulement (les bots sont exclus des contrôles, rien à retenir pour eux), et personnage encore le sien (un
-	-- ancien corps, le temps du ragdoll, ne touche pas aux armes du nouveau).
+	-- Cette méthode permet de savoir si un equip de ce personnage compte pour le Validator lorsqu'il change : joueur
+	-- seulement (bots exclus des contrôles), et personnage encore le sien (pas l'ancien corps du ragdoll).
 	local function tracksEquip(): boolean
 		return not participant.isBot and Participants.characterOf(participant) == char
 	end

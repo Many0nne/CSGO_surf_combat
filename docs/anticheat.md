@@ -22,7 +22,7 @@ envoyant des données plausibles. Là, on ne peut que détecter statistiquement,
 
 | Domaine | Validation actuelle | Où |
 |---|---|---|
-| Mêlée | Cible = autre participant vivant, arme de mêlée réellement en main, distance des racines ≤ 10 studs, dégâts et cadence lus dans `WeaponConfig` selon le type d'attaque, backstab recalculé sur les positions serveur (#47) | `src/server/Validator.luau` (`authorizeMelee`) |
+| Mêlée | Cible = autre participant vivant, arme de mêlée réellement en main, distance des racines ≤ 10 studs, dégâts et cadence lus dans `WeaponConfig` selon le type d'attaque, backstab recalculé sur les positions serveur (#47) ; pour un joueur, durée d'equip (#175, voir T2) | `src/server/Validator.luau` (`authorizeMelee`) |
 | Tir | Cible valide (vivante), arme à distance en main, partie touchée appartenant à la cible, distance des racines ≤ `Validator.MAX_HITSCAN_RANGE` (~2 196 studs ; bots : 250), cadence `FireDelay` à 0,15 s près, dégâts calculés par le serveur selon la zone ; pour un joueur, forme, origine, visée sur la cible rembobinée, portée et ligne de vue (#174, voir T1), durée d'equip et chargeur (#175, voir T2 ; l'equip vaut aussi pour la mêlée) | `src/server/Validator.luau` (`authorizeHitscan`, `validateShot`), `src/server/ShotRules.luau` |
 | Position | Forme (Vector3 et angle finis, coordonnées ≤ 1e5), personnage vivant, seau de distance (300 studs/s soutenus, silence plafonné), refus journalisé et corrigé (#172) | `src/server/CharacterSync.luau:113-165`, `src/shared/CharacterSyncRules.luau:49-60` |
 | Réglages | Réglages entièrement assainis par `PlayerSettings.sanitize`, une écriture DataStore au plus toutes les 10 s | `src/server/SettingsStore.luau:113-130` |
@@ -242,8 +242,9 @@ contrôles de plus. Règles pures dans `src/server/ShotRules.luau` (`checkEquip`
   `Tool:Activate`) : 5 touches, rechargement, 3 touches, aucune ligne `[CheatLog]`. Tir forgé envoyé 0,25 s après un
   ré-equip : refusé, journalisé `Hitscan … equip : touche 0.25 s après l'equip (min 1.38 s)`. Studio sans latence : à
   surveiller dans les résumés `CheatLog` du jeu publié (catégories `Hitscan`/`Melee`, contrôles `equip` et `magazine`).
-- **Limite connue.** Le rechargement peut démarrer juste après un tir (le client attend `FireDelay`) : un client modifié
-  gagne au plus `FireDelay` sur la pause. Piste : `start = max(now, dernière attaque + FireDelay - tolérance)`.
+- **Début du rechargement borné.** Un `Reload` ne compte qu'à partir de la fin de l'equip et de la cadence du dernier
+  tir accepté de l'arme (`max(arrivée, equip + EquipTime - 0,2, dernier tir + FireDelay - 0,2)`) : le client ne peut pas
+  recharger avant, un client modifié qui recharge dès son tir ne gagne pas `FireDelay` (1,46 s) sur la pause.
 
 ## Mêlée
 
