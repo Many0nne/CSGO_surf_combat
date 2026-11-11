@@ -297,8 +297,8 @@ local function forgetCombatState(participant: Participants.Participant)
 	ShotRelayRules.forget(shotRelay, participant)
 end
 
--- Cette méthode permet d'appliquer les suites d'une mort comptée par le round (bot tueur replacé, stats persistantes)
--- lorsqu'un personnage meurt, ou qu'un joueur part par MENU PRINCIPAL juste après un coup reçu (#217).
+-- Cette méthode permet d'appliquer les suites d'une mort (bot tueur replacé, stats persistantes) lorsqu'un personnage
+-- meurt, ou qu'un joueur part par MENU PRINCIPAL juste après un coup reçu (#217).
 local function onDeathCounted(participant: Participants.Participant, killer: Participants.Participant?)
 	if killer then
 		-- Un bot qui vient de tuer se replace (#141)

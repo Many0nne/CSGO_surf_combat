@@ -35,6 +35,11 @@ local stateConn: RBXScriptConnection?
 local function setupCharacter(char: Model)
 	local humanoid = char:WaitForChild("Humanoid") :: Humanoid
 	local rootPart = char:WaitForChild("HumanoidRootPart") :: BasePart
+	-- Parti au menu pendant ces attentes (#217) : ne pas rebrancher caméra FPS et mouvement par-dessus le menu
+	local state = GameStateController.getState()
+	if state == "MENU" or state == "INFOS" then
+		return
+	end
 
 	rootPart.Anchored = true
 	humanoid.WalkSpeed = 0
