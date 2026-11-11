@@ -226,7 +226,10 @@ function BotBrain._perceive(self: BotBrain, now: number)
 					speed = speed,
 					isHuman = other.isHuman,
 				}
-				table.insert(candidates, { id = other.id, isHuman = other.isHuman, distance = distance })
+				-- Passif (debug) : les humains ne sont pas des cibles, le bot combat les autres bots
+				if not (other.isHuman and self.env.passive and self.env.passive()) then
+					table.insert(candidates, { id = other.id, isHuman = other.isHuman, distance = distance })
+				end
 				self.lastContact = now
 			end
 		end

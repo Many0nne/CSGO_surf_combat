@@ -215,7 +215,7 @@ Règles pures dans `BotPopulationRules`, appliquées par `BotManager` (`adjustPo
 - `workspace:SetAttribute("DebugBotsFreeze", true)` : fige les bots (ni mouvement ni tir), `false` ou `nil` les relâche. Valable
   aussi pour les bots ajoutés ensuite (`DebugBots`, population automatique) : `BotManager.add` lit l'attribut à la création.
 - `workspace:SetAttribute("DebugBotsPassive", true)` : les bots se déplacent normalement mais ne tirent jamais sur un
-  humain (`holdFire` de `BotCombatRules.canFire`, lu à chaque tir) ; ils ne tirent sur personne s'ils voient un humain (qu'ils préfèrent comme cible), et tirent sur les bots sinon. `false` ou
+  humain (`holdFire` de `BotCombatRules.canFire`, lu à chaque tir) ; les humains ne sont plus des cibles (`BotBrain._perceive`), ils combattent les autres bots ; une cible humaine déjà choisie reste sans tir (`holdFire`) jusqu'à ce qu'elle soit perdue. `false` ou
   `nil` rétablit le tir. S'applique aux bots présents et ajoutés ensuite. Pour observer les déplacements sans être tué.
 - `workspace:SetAttribute("DebugBotsGoto", Vector3.new(x, y, z))` : tous les bots vont au point de passage le plus
   proche (corniches de Dizzy : `(1730, 70.5, -350)` côté T, `(2268, 70.5, -170)` côté CT, plateformes
