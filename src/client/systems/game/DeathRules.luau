@@ -11,6 +11,7 @@ DeathRules.MAX_RAGDOLLS = 6
 DeathRules.PUSH_BY_WEAPON = {
 	AWP = 45,
 	M9Bayonet = 14,
+	KaBar = 14,
 }
 DeathRules.DEFAULT_PUSH = 20
 DeathRules.HEADSHOT_PUSH = 1.4

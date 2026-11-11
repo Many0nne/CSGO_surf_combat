@@ -109,6 +109,43 @@ WeaponConfig.Weapons = {
 			Inspect = {},
 		},
 	},
+	-- Couteau de base Ka-Bar : mêmes dégâts, cadence et portée que la M9, animations propres (assets/kabar_viewmodel).
+	KaBar = {
+		Name = "Ka-Bar",
+		Category = "COUTEAU",
+		Accuracy = 0.7,
+		Damage = 50,
+		RPM = 150,
+		FireDelay = 0.4, -- cadence du clic gauche, comme la M9
+		Penetration = 0,
+		RunSpeedMultiplier = 1.0,
+		EquipTime = 0.77,
+		EquipAnimSpeed = 1.1, -- vitesse de lecture de la piste Equip (0,85 s, durée du couteau CT) : sortie en 0,77 s
+		ShootAnimTime = 0.4, -- verrou d'action : le coup suivant coupe la fin de la piste (1,1 s et 0,87 s)
+		ShootAnimations = { "Shoot", "Shoot2" }, -- coups du clic gauche, joués en alternance
+		AttackFadeTime = 0, -- les coups partent sans fondu : la piste commence sur la pose de repos
+		-- Clic droit : estoc droit, plus lourd et plus lent (mêmes dégâts et cadence que l'estoc de la M9).
+		SecondaryAttack = { Animation = "Stab", Damage = 65, FireDelay = 1, AnimTime = 1 },
+		InspectAnimation = "Inspect", -- touche F : purement visuel, interrompu par une attaque
+		IsMelee = true,
+		MeleeRange = 7.5,
+		BackstabMultiplier = 2,
+		-- Handle = manche en cuir, origine au centre du manche (la prise tient ici) ; +Z = pointe, +X = tranchant dans le
+		-- repère de prise de build_viewmodel.py, la Handle du mesh est tournée de Q = (X local = -Y prise, Y local = -X
+		-- prise, Z local = -Z prise). Grip = grip de la M9 recalé : centre du manche à l'origine, repère tourné par Q.
+		ThirdPerson = {
+			Scale = 1,
+			Grip = CFrame.new(0, 0, 0, 1, 0, 0, 0, 0.25882, 0.96593, 0, -0.96593, 0.25882),
+			Pose = "Melee",
+		},
+		AnimationSounds = {
+			Equip = { "Equip" },
+			Shoot = {},
+			Shoot2 = {},
+			Stab = {},
+			Inspect = {},
+		},
+	},
 }
 
 -- Types d'attaque de mêlée envoyés par le client dans le remote MeleeDamage : le serveur en déduit dégâts et cadence.

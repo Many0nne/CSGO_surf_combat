@@ -208,3 +208,22 @@ la config (`IsMelee`), pas par le nom de l'arme ; seuls quelques endroits nommen
    recalculé, `tools/menu/`).
 7. `rojo build` + `tools/rbxm/verify_place.luau` (signale un Tool sans entrée de config), puis le helper de playtest sur
    le nouveau Tool.
+
+### Retour d'expérience : le Ka-Bar (3 MeshParts)
+
+Mesh et textures déjà publiés (créateur 434916384) : `KaBar_Mesh` (Model) `83975015198873` ; images des `SurfaceAppearance`
+(`ColorMap`, `MetalnessMap`, `NormalMap`, `RoughnessMap`) : lame `124191312180866`, `74907094682910`, `94195951916794`,
+`140077592249861` ; ferrures `118493701544171`, `97521279426765`, `139401042642764`, `117522299042669` ; manche
+`133923595339041`, `97532613922522`, `73079325706533`, `87566334772377`. `assets/kabar_viewmodel/export_mesh.py` refait le FBX.
+
+- **Un couteau en plusieurs matières = plusieurs MeshParts** : `Handle` (le manche, qui porte le Motor6D `Handle`) et des pièces
+  soudées par `WeldConstraint` (`Blade`, `Fittings`). Le 3P clone toutes les pièces du viewmodel et les soude à `Handle`.
+- **Repère après l'import FBX** : la pointe est à -Z local, l'épaisseur de la lame sur X, le dos sur +Y. Le repère de prise du script
+  d'animation (+Z pointe, +X tranchant) se retrouve avec `Q = CFrame.fromMatrix(0, (0,-1,0), (-1,0,0))` : `Handle.CFrame = Hs * Q`
+  et `C1 = Q⁻¹ * C1_script`. Le `Grip` 3P devient celui de la M9 recalé : `Grip_M9 * CFrame.new(0,0,-1.21) * Q`.
+- **Le FBX exporte aussi le cube de la scène par défaut** (`--factory-startup`) : le supprimer avant l'export (fait dans `export_mesh.py`).
+- **`insert_asset` d'un Model publié** rend les MeshParts à leur disposition d'origine (pièces à rotation identique) : on y lit les
+  décalages relatifs avant d'assembler.
+- **Pas d'export complet pendant que Rojo est connecté** : un petit serveur local qui n'écrit que `KaBar.rbxm` évite de réécrire
+  les autres armes. Le MCP Studio n'autorise que `localhost:34990` (liste HTTP de l'Assistant) : y faire tourner aussi le serveur
+  de capture des animations (`CAPTURE_PORT=34990`, voir `docs/animations.md`), pas le 34991 par défaut.

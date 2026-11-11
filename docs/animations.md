@@ -43,29 +43,36 @@ Rien n'est publié avant la validation de l'étape 3.
 ## Grammaire des gestes de couteau (mesurée sur CS:GO)
 
 Relevée image par image (30 i/s) sur le couteau CT par défaut de `references/anim/csgo-couteaux-toutes-animations.mp4`
-(6:20 à 6:44) et l'Equip du couteau T (6:44). Positions en fraction du cadre 16:9 (0,0 = haut gauche), longueurs en
-hauteurs d'écran, temps depuis le début du geste. Ces nombres sont les cibles par défaut d'un geste de couteau, original
-ou non ; `dump_frames.py` les contrôle (voir « Contrôler le résultat »). Une arme d'une autre famille se mesure de la même
-façon avant d'écrire sa première clé.
+(étiquette « DEFAULT CT KNIFE » de 387,0 à 402,9 s ; avant 387,0 s c'est le **Butterfly**, sur lequel une première version de
+ce tableau avait été relevée par erreur). Positions en fraction du cadre 16:9 (0,0 = haut gauche), longueurs en hauteurs
+d'écran, temps depuis le début du geste, profondeur estimée par la largeur du gant (rapport au repos). Ces nombres sont les
+cibles par défaut d'un geste de couteau, original ou non ; `dump_frames.py` les contrôle (voir « Contrôler le résultat »).
+Une arme d'une autre famille se mesure de la même façon avant d'écrire sa première clé. Les trajectoires complètes sont
+dans `assets/kabar_viewmodel/build_viewmodel.py` (`*_ROWS`).
 
 | Geste | Mesures sur la référence |
 |---|---|
-| Repos | Main (centre du gant) à (0,72 ; 0,85), gant ≈ 0,2 de la largeur, manche coupée par le coin bas droit. Lame **de face** (toute sa largeur visible), pointe en haut à gauche à ≈ 45° de la verticale, 0,37 de long à l'écran. Dérive < 0,01 par seconde. |
-| Taille (Shoot), 1,5 s | Anticipation 0,17 s : la lame pivote d'environ 40° vers l'horizontale, la main bouge à peine. Frappe en **une image (33 ms)** : la main passe du coin bas droit à (0,40 ; 0,35), le bras tendu traverse le cadre en diagonale depuis le coin bas gauche. Suivi 0,3 s vers le bas à gauche, sortie du cadre à 0,53 s. **Hors cadre 0,6 s** (0,57 à 1,17). Retour par le **haut à droite**, main petite (loin), redescend au repos en 0,3 s. On ne revient jamais par où on est sorti. |
-| Estoc (Stab), 1,0 s | Anticipation 0,03 à 0,07 s : la main **plonge sous le cadre**. Poussée 0,1 s : la main remonte au centre (0,50 ; 0,75), bras tendu, couteau raccourci par la perspective (pointe vers l'avant et le haut). Retrait 0,3 s : la main revient à droite, le couteau grossit (proche), lame haute, pointe en haut à gauche ; la main gauche entre en bas à gauche. Repos à 1,0 s. |
-| Equip, 0,5 s | Entre par le bas à droite déjà proche du repos, les deux mains visibles 0,1 s. Le couteau **pivote de 180° dans le poing** pendant que la main monte (0,03 à 0,30 s). Couteau vertical au centre droit à 0,33 s, puis repos. |
-| Inspect, 5,4 s | Montée au centre en 0,4 s, couteau vertical, face vers la caméra. Tenue 2,0 s avec dérive lente. Bascule 1,2 s vers la gauche (pointe à ≈ 30°) qui montre l'autre face, retour vertical, tenue 1,4 s. Descente 0,4 s avec un petit mouvement de poignet. **Jamais de pause sur la tranche.** |
+| Repos (395,5 s) | Garde (0,665 ; 0,775), pointe (0,46 ; 0,605) : lame **de face**, 0,40 de long, à ≈ 65° de la verticale (25° au-dessus de l'horizontale). Gant droit centré vers (0,74 ; 0,85), manche coupée par le bord bas. Poing gauche visible vers (0,41 ; 0,83), avant-bras vers le coin bas gauche. |
+| Taille 1 (Shoot, 397,30 s), 1,1 s | **Aucune anticipation** : à la première image la main saute au centre-bas (0,60 ; 0,68), lame dressée vers l'avant (0,15 de long, gant 1,6 fois plus petit qu'au repos : bras tendu, loin). Balayage vers la gauche, (0,34 ; 0,83) puis (0,18 ; 0,94), **sortie en bas à gauche à 0,17 s**. Hors cadre 0,5 s. Retour en bas au centre, lame horizontale vers la gauche, qui se relève jusqu'au repos à 1,1 s. |
+| Taille 2 (Shoot2, 398,50 s), 0,87 s | Revers : la main saute à gauche du centre (0,50 ; 0,68), gant 1,3 fois plus petit, puis balaie vers la droite (0,81 ; 0,78) et **sort en bas à droite à 0,17 s**. Hors cadre 0,4 s, retour par le bas à droite. La lame garde à peu près l'orientation du repos. |
+| Estoc (Stab, 399,63 s), 1,07 s | En une image la main monte au centre (0,50 ; 0,58), loin (gant 1,5 fois plus petit), couteau **retourné** : pommeau à gauche, lame vers la droite, puis pointe en haut à droite. Armé tenu 0,25 s en dérivant vers (0,30 ; 0,64). **Frappe en une image** : la main plonge en (0,25 ; 0,93), plus proche, lame dressée, et sort en bas à gauche. Hors cadre 0,3 s, retour par le bas au centre, repos à 1,07 s. |
+| Equip (387,07 s), ≈ 0,8 s | La vidéo coupe le début. Première image : main près du repos, lame vers le bas à gauche. Elle se relève au poignet (horizontale à 0,07 s, au-dessus de la tenue à 0,1 s), **dépasse la tenue** (lame à 40° au-dessus de l'horizontale) jusqu'à 0,35 s, puis s'y couche vers 0,75 s. La main gauche entre par le bas à 0,07 s. |
+| Inspect (388,40 s), 5,6 s | Montée 0,4 s en passant brièvement par la tranche. Couteau vertical **face à la caméra** (garde (0,70 ; 0,59), pointe (0,70 ; 0,30)), tenu 1,6 s en montant lentement. Roulis de 0,3 s vers l'autre face en basculant à gauche (≈ 23° depuis la verticale), tenu 1,2 s. Retour de face en 0,3 s **par le même chemin** (le poignet revient : le tranchant passe vers le joueur à l'aller comme au retour), tenu 1,4 s. Petit coup de poignet et descente au repos en 0,3 s. **Jamais de pause sur la tranche.** |
 
 Ce que ces mesures ont en commun, et qui vaut pour tout geste d'arme blanche :
 
-- **La frappe tient en 1 à 3 images.** Toute la durée du geste est dans une anticipation courte (≤ 0,2 s) et dans le
-  retour (≥ 60 % du geste). Un armé d'une seconde est une pose, pas un coup.
-- **La main sort du cadre** au moins une fois par coup, et ne revient pas par où elle est sortie.
+- **La frappe tient en 1 à 3 images.** Toute la durée du geste est dans une anticipation courte (aucune pour les tailles
+  du CT, un armé tenu 0,25 s pour l'estoc) et dans le retour (≥ 60 % du geste). Un armé d'une seconde est une pose, pas un coup.
+- **La main sort du cadre** au moins une fois par coup, par un coin bas, et revient par le bas (au centre pour la taille 1
+  et l'estoc, par le même coin pour la taille 2).
 - **La profondeur travaille** : le couteau au bout du bras tendu paraît 1,5 à 2 fois plus petit que proche de la caméra.
   Une rotation sur place, à profondeur fixe, ne ressemble à aucun coup de la référence.
 - **Le bras tendu se voit en entier**, en diagonale à travers le cadre, pendant la frappe et la poussée.
 - **Retour au repos en moins d'une seconde** après le pic de vitesse.
 - **Rien ne s'arrête au milieu d'un geste** (pas de clé `io` entre le départ et le pic : vitesse nulle = geste cassé).
+- **Un roulis va et revient.** Montrer l'autre face puis revenir, c'est tourner le poignet puis le ramener : le tranchant
+  passe deux fois du même côté (vers le joueur sur le CT). Enchaîner 0 → 180 → 360 fait faire un tour complet au couteau
+  dans la main, ce qu'aucun avant-bras ne permet (pronation et supination font ≈ 180° à elles deux).
 - **Au repos et aux pauses, la lame est de face.** La tranche et le dos ne sont jamais des poses tenues.
 
 ## Un geste original
@@ -148,9 +155,9 @@ animation »), puis le couteau suivant. Caméra fixe, ciel dégagé derrière l'
 | 4:46 | couteau 14, lame courbe (?) | |
 | 5:10 | couteau 15 (?) | |
 | 5:36 | couteau 16 (?) | |
-| 6:00 | couteau 17 (?) | |
-| 6:20 | **couteau CT par défaut** (référence du Ka-Bar) | repos 6:20-6:24 ; taille 6:23,9 (frappe 0,1 s, main hors cadre 6:24,2-6:24,5, retour jusqu'à 6:25,5) ; deuxième taille 6:25,9 ; estoc 6:27,0 (plongée sous le cadre, poussée 6:27,5-6:28,4) ; Inspect 6:28,5-6:36 (couteau vertical au centre, les deux faces) ; tailles 6:33,7-6:35,7 |
-| 6:44 | **couteau T par défaut** | Equip 6:44 ; Inspect 6:45-6:50 ; tailles 6:50-6:55 ; estoc vers 6:52,5-6:53,5 |
+| 6:00 | Butterfly (étiquette lue de 6:16 à 6:27) | ses coups (6:23,9 à 6:27) ne sont pas ceux du CT |
+| 6:27 | **couteau CT par défaut** (référence du Ka-Bar) | étiquette « DEFAULT CT KNIFE » de 6:27,0 à 6:42,9 (avant : Butterfly). Equip 6:27,07 (début coupé) ; Inspect 6:28,4-6:34,0 ; repos 6:34-6:37,3 ; taille 1 6:37,30 ; taille 2 6:38,50 ; estoc 6:39,63 ; repos jusqu'à 6:42,9. Mesures détaillées : « Grammaire des gestes de couteau » |
+| 6:43 | **couteau T par défaut** | Equip 6:44 ; Inspect 6:45-6:50 ; tailles 6:50-6:55 ; estoc vers 6:52,5-6:53,5 |
 | 6:58 | Ghost Knife (Danger Zone) | |
 | 7:14 | hache, 7:26 marteau, 7:32 clé à molette (Danger Zone) | outils de mêlée, hors couteaux |
 
@@ -173,11 +180,14 @@ lune run assets/m9_viewmodel/make_rbxm.luau assets/m9_viewmodel/export assets/m9
 # Étape 3 : exporter les frames et lire les vitesses de rotation, AVANT tout rendu
 blender -b --factory-startup --python tools/anim/dump_frames.py -- <dossier_build_viewmodel> <Nom> <frames.json> [taille|estoc|equip|inspect]
 
-# Rendu dans Studio : lancer le serveur, puis coller tools/anim/studio_render.luau dans execute_luau (Edit)
-uv run tools/anim/capture_server.py <dossier_captures> <frames.json>
+# Rendu dans Studio : lancer le serveur, puis coller tools/anim/studio_render.luau dans execute_luau (Edit, VIEWMODEL à
+# régler). Si Studio répond « not in the Assistant HTTP allowlist », prendre le port 34990 (déjà autorisé pour localhost) :
+CAPTURE_PORT=34990 uv run tools/anim/capture_server.py <dossier_captures> <frames.json>   # et BASE = "http://localhost:34990"
 
-# Vidéo à faire valider. Viewport en pixels, à relever sur une capture : il dépend de la disposition de Studio
-uv run tools/anim/side_by_side.py <reference.mp4> <debut_video> <ralenti> <dossier_captures> <Nom> <x0,y0,x1,y1> <sortie.mp4>
+# Vidéo à faire valider. Viewport en pixels, à relever sur une capture : il dépend de la disposition de Studio.
+# i/s = cadence des captures (30 pour une référence à 30 i/s rendue image pour image), titre = piste et variante.
+uv run tools/anim/side_by_side.py <reference.mp4> <debut_video> <ralenti> <dossier_captures> <Nom> <x0,y0,x1,y1> <sortie.mp4> [i/s] [titre]
+# Plusieurs pistes et variantes bout à bout (une seule vidéo à valider) : ffmpeg -f concat -safe 0 -i liste.txt -c copy <sortie.mp4>
 
 # Étape 4 : publier (clé dans la variable d'environnement utilisateur ROBLOX_OPEN_CLOUD_KEY)
 bash tools/anim/publish.sh assets/m9_viewmodel/export M9_ <Nom>
@@ -204,7 +214,8 @@ Si un clone reste dans `Workspace` après une erreur de rendu, supprimer `__Anim
 - **Un objet qui tourne dans la main n'a pas la même trajectoire que la main.** Faire suivre la main au couteau la fait
   basculer (54° en 1/30 s sur la M9). La main garde sa propre trajectoire, et le couteau tourne devant elle.
 - **Exprimer le tranchant par rapport au regard, pas par une direction fixe** : une direction fixe impose une rotation
-  parasite. `knife_from_roll` utilise un roulis : 0 = de plat, 90 = dos vers la caméra.
+  parasite. `knife_from_roll` utilise un roulis : 0 = de plat, 90 = dos vers la caméra. Le sens du roulis se lit dans les
+  lignes mesurées : un retour de face s'écrit en revenant à la valeur de départ (180 → 0), pas en continuant (180 → 360).
 - **Laisser la profondeur suivre la longueur de la lame à l'écran.** Avec une profondeur fixe, la lame peut paraître trop
   courte ou tourner hors de son axe.
 
@@ -215,13 +226,48 @@ Si un clone reste dans `Workspace` après une erreur de rendu, supprimer `__Anim
 - **Lire ensuite son bilan de grammaire.** `dump_frames.py` mesure le profil du geste (départ, pic de vitesse, durée de
   la frappe, temps hors cadre, retour au repos, écart de profondeur) et le compare aux cibles de la grammaire selon
   l'archétype (déduit du nom de l'animation, ou donné en quatrième argument : `taille`, `estoc`, `equip`, `inspect`).
-  Chaque ligne `GRAMMAIRE` est un écart à corriger avant tout rendu, ou à justifier dans la PR.
+  Chaque ligne `GRAMMAIRE` est un écart à corriger avant tout rendu, ou à justifier dans la PR. Pour tous les archétypes,
+  il mesure aussi la **torsion de l'avant-bras** (rotation de la main autour de son axe, cumulée image par image) et
+  signale plus de 200° : c'est le tour du couteau dans la main. Tailles et estoc doivent sortir du cadre **par le bas**
+  (le CT sort toujours par un coin bas ou le centre bas, et revient au centre ou par le même coin). La montée et la
+  descente de l'Inspect s'arrêtent à la première tenue (0,15 s sous 1 stud/s), pas à l'arrêt complet : le CT monte encore
+  lentement pendant qu'il tient le couteau.
 - **Regarder des images consécutives**, jamais des images espacées : 8 images réparties sur 1 s ne révèlent pas un saut.
 - **Vérifier que l'arme reste visible** : les bras R15 sont massifs (1,2 stud) et cachent ce qui passe derrière eux.
 - **En jeu, comparer des nombres** : figer la piste (`AdjustSpeed(0)`, `TimePosition`) et comparer les CFrames au JSON
   (écart attendu : moins de 0,01 stud). Le client ne peut pas envoyer de requêtes HTTP, et une capture minutée se décale.
 - Ces mesures prouvent que le rig joue bien ce qui est prévu, **pas que le mouvement est beau**. Seule la vidéo côte à
   côte répond à cette question.
+
+## Ka-Bar : refait sur le couteau CT
+
+Refonte du 2026-11-11, à partir du couteau CT par défaut (`build_viewmodel.py`, lignes `*_ROWS`).
+
+- **Le bon segment :** « DEFAULT CT KNIFE » de 387,0 à 402,9 s. Avant 387,0 s c'est le Butterfly, sur lequel une première
+  version de la grammaire avait été relevée. Lire l'étiquette du couteau sur la vidéo avant de mesurer.
+- **Sens du tranchant pendant l'Inspect :** le premier rendu continuait le roulis de 180 à 360° au retour de face, ce qui
+  faisait passer le tranchant à l'opposé du joueur et tourner le couteau d'un tour dans la main. Sur le CT, le poignet
+  revient par le même chemin et le tranchant passe vers le joueur aux deux bascules. Contrôle sans rendu : signe de
+  `tranchant · vers la caméra` au milieu de chaque bascule (positif = vers le joueur), et torsion de l'avant-bras dans
+  le bilan `GRAMMAIRE` (226° avant correction, 120° après).
+- **Profondeur de repos 2,6** (`REST_DEPTH`) : à 2,8 la lame de repos atteint sa longueur réelle à l'écran et son
+  inclinaison saute.
+- **Port de capture 34990** : le MCP Studio n'autorise que `localhost:34990` (`CAPTURE_PORT=34990`,
+  `BASE = "http://localhost:34990"`).
+- **Variantes rejetées :** repos décalé en bas à droite (B) et bascule de l'Inspect à 32° (B). L'utilisateur était
+  indifférent : les valeurs mesurées sur le CT (A) sont gardées. `KABAR_REST_SHIFT` et `KABAR_INSPECT_TILT` restent
+  pour rendre des variantes.
+- **Rig de repos changé = `KaBar.rbxm` à mettre à jour**, sinon les pistes (calculées avec les nouveaux C1) jouent faux.
+  Dans Studio, appliquer `export/kabar_rig.json` au viewmodel : C1 des Motor6D (Handle : `Q⁻¹ · C1`, voir
+  `docs/assets.md`), CFrames de repos depuis la `HumanoidRootPart` (Handle : `repos · Q`, `Blade` et `Fittings` gardent
+  leur décalage), ids des animations. Contrôle : `Part1 = Part0 · C0 · C1⁻¹` à 0 près. Puis, sans jamais réécrire le
+  fichier synchronisé pendant la connexion : export vers `assets/rbx/KaBar_pending.rbxm` (racine de `assets/rbx/` non
+  synchronisée par Rojo), `-ReleaseStudio`, renommer en `assets/rbx/ViewModels/KaBar.rbxm`, `-AcquireStudio` (le plugin
+  reconnecte et accepte le patch).
+- **Contrôle numérique en jeu :** `Animator:StepAnimations` en mode Edit laisse les Transform à l'identité (l'asset
+  publié n'est pas encore chargé), et une boucle lancée par `task.spawn` côté client meurt avec le joueur (les bots
+  tuent pendant la mesure : poser un `ForceField`). Ce qui marche : figer la piste dans un appel MCP (`AdjustSpeed(0)`,
+  `TimePosition`), lire la pose dans l'appel suivant. Écart mesuré : 0,001 stud sur la main droite.
 
 ## Rig et code du viewmodel
 
@@ -308,8 +354,10 @@ déplacement R15. Méthode retenue faute de vidéo de référence : une planche 
 ## Limites actuelles
 
 - Le rig n'a pas de doigts : le couteau tourne devant un poing fermé. C'est accepté pour la M9.
-- `Shoot`, `Shoot2` et `Stab` utilisent encore des clés espacées. Elles n'ont pas eu de validation du mouvement et
-  peuvent avoir les mêmes saccades que l'ancien Equip. À reprendre avec `track_blade.py`.
+- M9 : `Shoot`, `Shoot2` et `Stab` utilisent encore des clés espacées. Elles n'ont pas eu de validation du mouvement et
+  peuvent avoir les mêmes saccades que l'ancien Equip. À reprendre avec `track_blade.py`. Le bilan `GRAMMAIRE` y relève
+  une sortie à droite (Shoot), une torsion de 320° (Shoot2) et une profondeur ×1,25 (Stab).
 - `track_blade.py` suppose une caméra fixe et une lame sur fond dégagé. Ses seuils (texte incrusté, ciel, largeur par la
   tranche) sont réglés sur la vidéo de la M9 et sont à revoir pour une autre vidéo.
-- L'Equip reste sur sa trajectoire relevée à la main (`EQUIP_TRACK`, `sample_track`).
+- L'Equip de la M9 reste sur sa trajectoire relevée à la main (`EQUIP_TRACK`, `sample_track`). Le Ka-Bar est entièrement
+  sur des lignes mesurées image par image (`*_ROWS`).
