@@ -194,7 +194,7 @@ end
 -- Fond sombre du HUD (assets/ui/hud/scrim_coin.png, Decal 139288849836344) : blanc, opaque en bas à gauche, effacé vers
 -- le haut et la droite. Les autres coins s'obtiennent par rotation (un ImageRectSize négatif ne retourne pas l'image).
 local SCRIM_IMAGE = "rbxassetid://128710099398466"
--- Variante bord (#247, assets/ui/hud/scrim_bord.png, Decal 76113717632250) : opaque au milieu du bord bas, effacée vers
+-- Variante bord (#247, assets/ui/hud/scrim_bord.png, Decal 76113717632250 ; ci-dessous l'id de l'image du Decal) : opaque au milieu du bord bas, effacée vers
 -- le haut et les côtés. Une seule image : deux coins collés en miroir laissaient un filet clair à leur jonction.
 local SCRIM_EDGE_IMAGE = "rbxassetid://EDGE_ID"
 local SCRIM_ROTATION = { BottomLeft = 0, TopLeft = 90, TopRight = 180, BottomRight = -90, Bottom = 0, Top = 180 }

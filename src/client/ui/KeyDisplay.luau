@@ -184,13 +184,12 @@ end
 -- Cette méthode permet de poser la grille en bas au centre lorsque la taille de l'écran ou de la grille change : au-dessus
 -- du compteur de munitions si elle l'atteindrait sur un écran étroit (HUDRules.keyDisplayBottom, #247).
 local function place()
-	local container, scaled = grid, root
-	if not (container and scaled) then
+	local container, scaled, screenGui = grid, root, gui
+	if not (container and scaled and screenGui) then
 		return
 	end
 	-- Largeur vue dans le repère de la racine : écran x Size de la racine (1 / échelle, posée par UIKit.scaledRoot)
-	local camera = workspace.CurrentCamera
-	local width = (camera and camera.ViewportSize.X or 1280) * scaled.Size.X.Scale
+	local width = screenGui.AbsoluteSize.X * scaled.Size.X.Scale
 	local bottom = HUDRules.keyDisplayBottom(width, container.Size.X.Offset)
 	container.Position = UDim2.new(0.5, 0, 1, -bottom)
 end
@@ -231,6 +230,8 @@ local function update()
 	gui.Enabled = HUDRules.keyDisplayVisible(HUDState.get(), mode)
 	if mode ~= builtMode then
 		build(mode)
+	elseif gui.Enabled then
+		place() -- un ScreenGui masqué a pu manquer un redimensionnement
 	end
 	if not gui.Enabled then
 		for _, view in views do
@@ -292,23 +293,19 @@ function KeyDisplay.init()
 		Parent = Players.LocalPlayer:WaitForChild("PlayerGui"),
 	})
 	gui = screenGui
-	local scaled = UIKit.scaledRoot(screenGui)
-	root = scaled
+	root = UIKit.scaledRoot(screenGui)
 	grid = UIKit.frame({
 		Name = "Grid",
 		BackgroundTransparency = 1,
 		AnchorPoint = Vector2.new(0.5, 1),
 		Position = UDim2.new(0.5, 0, 1, -HUDRules.KEY_DISPLAY_BOTTOM),
 		Size = UDim2.fromOffset(0, 0),
-		Parent = scaled,
+		Parent = root,
 	})
-	-- Fenêtre redimensionnée : replacer la grille une fois UIKit.scaledRoot à jour (même signal, ordre non garanti)
-	local camera = workspace.CurrentCamera
-	if camera then
-		camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
-			task.defer(place)
-		end)
-	end
+	-- Fenêtre redimensionnée : replacer la grille une fois UIKit.scaledRoot à jour (signal de la caméra, ordre non garanti)
+	screenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+		task.defer(place)
+	end)
 
 	LocalSettings.onChanged(update)
 	HUDState.onChanged(onHudChanged)

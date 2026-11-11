@@ -119,7 +119,7 @@ return function(T, Loader)
 	end)
 
 	T.describe("HUDRules.keyDisplayBottom", function()
-		-- Largeur de la grille (px) d'un mode, telle que KeyDisplay la construit
+		-- Cette méthode permet de lire la largeur de la grille (px) d'un mode lorsqu'un test la place, telle que KeyDisplay la construit.
 		local function gridWidth(mode: string): number
 			return (HUDRules.keyDisplayGridSize(mode))
 		end
@@ -135,8 +135,16 @@ return function(T, Loader)
 
 		T.it("garde la grille en bas en 16:9 et plus large, mode full compris", function()
 			for _, width in { 1280, 1531, 1680 } do -- 16:9, fenêtre Studio 1291x607, 21:9
-				T.expectEqual(HUDRules.keyDisplayBottom(width, gridWidth("full")), HUDRules.KEY_DISPLAY_BOTTOM, width)
-				T.expectEqual(HUDRules.keyDisplayBottom(width, gridWidth("simple")), HUDRules.KEY_DISPLAY_BOTTOM, width)
+				T.expectEqual(
+					HUDRules.keyDisplayBottom(width, gridWidth("full")),
+					HUDRules.KEY_DISPLAY_BOTTOM,
+					tostring(width)
+				)
+				T.expectEqual(
+					HUDRules.keyDisplayBottom(width, gridWidth("simple")),
+					HUDRules.KEY_DISPLAY_BOTTOM,
+					tostring(width)
+				)
 			end
 		end)
 
