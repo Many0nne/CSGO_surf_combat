@@ -21,19 +21,17 @@ local DISPLAY_ORDER = { "Admin" }
 
 local assigned: { [Player]: { [string]: boolean } } = {}
 
--- Cette méthode permet de calculer les rôles d'un joueur lorsqu'on ne les a pas encore en mémoire.
+-- Cette méthode permet de calculer les rôles d'un joueur ; le propriétaire n'est reconnu que si le jeu appartient à un
+-- utilisateur (pour un groupe, CreatorId est l'id du groupe et pourrait coïncider avec l'UserId d'un compte).
 local function compute(player: Player): { [string]: boolean }
-	return RoleRules.assign(player.UserId, game.CreatorId, LISTS)
+	local creatorId = if game.CreatorType == Enum.CreatorType.User then game.CreatorId else 0
+	return RoleRules.assign(player.UserId, creatorId, LISTS)
 end
 
--- Cette méthode permet de savoir si un joueur a un rôle lorsqu'un système serveur doit réserver une action.
-function Roles.hasRole(player: Player, role: string): boolean
-	local roles = assigned[player]
-	if not roles then
-		roles = compute(player)
-		assigned[player] = roles
-	end
-	return RoleRules.has(roles, role)
+-- Cette méthode permet de savoir si un joueur a un rôle lorsqu'un système serveur doit réserver une action ; sans
+-- entrée (joueur parti ou pas encore inscrit) le calcul n'est pas mis en cache, pour ne pas retenir un Player détruit.
+function Roles.hasRole(player: Player, role: Role): boolean
+	return RoleRules.has(assigned[player] or compute(player), role)
 end
 
 -- Cette méthode permet de poser l'attribut informatif `Role` lorsqu'un joueur arrive.
