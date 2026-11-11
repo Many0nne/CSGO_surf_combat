@@ -40,7 +40,7 @@ local SECTIONS: { Section } = {
 		title = "COMMANDES",
 		keys = {
 			{ "W A S D", "Se déplacer" },
-			{ "ESPACE", "Sauter / bhop (maintenir : auto-bhop, réglable)" },
+			{ "ESPACE", "Sauter / bhop (auto-bhop réglable dans Réglages)" },
 			{ "CTRL", "S'accroupir" },
 			{ "CLIC GAUCHE", "Tirer" },
 			{ "R", "Recharger" },
