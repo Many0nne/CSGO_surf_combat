@@ -154,6 +154,12 @@ Repris du retour d'expérience de la M9 (`docs/notes/retex-viewmodel-m9.md`).
   pose de repos, donc rien à fondre). Les autres armes n'ont pas le champ et gardent le défaut de 0,1 s : l'AWP (Shoot,
   Reload, Inspect) est inchangée. Si un coup à 0 paraît saccadé, monter `AttackFadeTime` à 0,03-0,05 s plutôt que
   d'avancer le défaut global.
+- **Verrou de tir et cadence (#221) :** `ShootAnimTime` (état `FIRING` de `WeaponSystem`, qui refuse tout clic) ne
+  dépasse jamais `FireDelay`, seule cadence connue du serveur : sinon le client tire moins vite que la cadence de l'arme.
+  Une piste de tir plus longue que la cadence (AWP : Shoot dure 1,63 s, cadence 60/41 = 1,46 s) est coupée par le tir
+  suivant, comme les slashs de la M9 : `playAnimation` arrête la piste en cours et relance Shoot avec le fondu par défaut
+  (0,1 s). La fin de la piste Shoot de l'AWP étant déjà sur la pose de repos, la coupure ne se voit pas. Invariant testé
+  par `tests/specs/WeaponConfig.spec.luau`.
 - **Viewmodel dans Studio :** vérifier `PrimaryPart` avant un playtest. Il a disparu de l'instance Studio de l'AWP pendant la
   refonte, Rojo connecté à un autre worktree, alors que le `.rbxm` exporté l'avait encore (cause non établie). Le viewmodel
   retombe alors sur `HumanoidRootPart` et se décale de (-0,19 ; 0 ; 0,14) par rapport au rendu. Réparation : `CLAUDE.md`.
