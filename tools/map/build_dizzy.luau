@@ -35,7 +35,7 @@ local SMALL_SHADOW = 2 -- studs : une pièce plus petite que ça dans toutes ses
 
 -- Habillage par rôle de face (relevé par extract_dizzy.py) : couleur, matière
 local CONCRETE = Color3.fromRGB(150, 140, 128)
-local PLASTER = Color3.fromRGB(196, 176, 152)
+local PLASTER = Color3.fromRGB(222, 218, 206) -- enduit blanc cassé des murs (#189, beige avant)
 local SHADOW = Color3.fromRGB(112, 100, 92)
 local STEEL = Color3.fromRGB(70, 74, 82)
 local GLOW = Color3.fromRGB(255, 170, 110)

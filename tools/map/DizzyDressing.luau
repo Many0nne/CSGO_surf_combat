@@ -4,7 +4,8 @@
 -- estrades, auvents et câbles des
 -- portes de garage, fenêtres et lampes des murs du milieu ; grue, bardage en tôle ondulée, double porte, groupes du
 -- toit du garage, zone de stockage du lot #166 ; fûts, parpaings, contreplaqué et baladeuses de la fosse centrale,
--- charge de la grue et clôtures grillagées du lot #187). Coordonnées du plan relevé (sans le décalage de la map,
+-- charge de la grue et clôtures grillagées du lot #187 ; bardage percé, bande bleue des façades peintes et porte du
+-- toit haut du lot #189). Coordonnées du plan relevé (sans le décalage de la map,
 -- ajouté par `build`). La map est symétrique par rotation d'un demi-tour autour de (0, -260,1) : chaque objet est
 -- décrit une fois côté T et recopié côté CT par `mirror`. Cf. docs/maps.md, « Habillage détaillé ».
 --
@@ -820,42 +821,125 @@ local function flat(model)
 	return model
 end
 
--- Cette méthode permet d'habiller de tôle ondulée (nervures, bande basse ocre de hauteur `band`, couvertine, cornières)
--- un pan de mur dont `frame` est le milieu du bas, sur le nu du mur, -Z local vers l'extérieur.
-local function cladding(parent, frame, width, height, band)
+-- teinte des façades (#189) : bande bleu clair des murs peints (BANDS) et du bardage blanc ; enduit blanc cassé dans
+-- LOOK.wall de build_dizzy.luau
+DizzyDressing.FACADE_BLUE = C3.fromRGB(150, 190, 204)
+-- bardage : `white` (tôle blanc cassé, bande bleue décollée du sol, comme les murs peints) ou `grey` (tôle grise, bande
+-- basse ocre de la hauteur donnée par le pan, lot #166)
+DizzyDressing.CLAD_STYLE = "white"
+local CLAD_STYLES = {
+	white = { sheet = C3.fromRGB(216, 214, 204), band = DizzyDressing.FACADE_BLUE, from = 3, height = 6 },
+	grey = { sheet = CLAD, band = OCHRE, from = 0 },
+}
+
+-- Cette méthode permet de retirer d'un rectangle {x0, x1, y0, y1} une liste de rectangles (ouvertures) lorsqu'on
+-- habille un pan percé ; renvoie des rectangles disjoints qui couvrent exactement le reste.
+function DizzyDressing.minus(rect, holes)
+	local out = { rect }
+	for _, h in holes do
+		local nextOut = {}
+		for _, a in out do
+			if h.x1 <= a.x0 or h.x0 >= a.x1 or h.y1 <= a.y0 or h.y0 >= a.y1 then
+				table.insert(nextOut, a)
+			else
+				local y0, y1 = math.max(a.y0, h.y0), math.min(a.y1, h.y1)
+				if h.y0 > a.y0 then
+					table.insert(nextOut, { x0 = a.x0, x1 = a.x1, y0 = a.y0, y1 = h.y0 })
+				end
+				if h.y1 < a.y1 then
+					table.insert(nextOut, { x0 = a.x0, x1 = a.x1, y0 = h.y1, y1 = a.y1 })
+				end
+				if h.x0 > a.x0 then
+					table.insert(nextOut, { x0 = a.x0, x1 = h.x0, y0 = y0, y1 = y1 })
+				end
+				if h.x1 < a.x1 then
+					table.insert(nextOut, { x0 = h.x1, x1 = a.x1, y0 = y0, y1 = y1 })
+				end
+			end
+		end
+		out = nextOut
+	end
+	local kept = {}
+	for _, r in out do
+		if r.x1 - r.x0 > 0.01 and r.y1 - r.y0 > 0.01 then
+			table.insert(kept, r)
+		end
+	end
+	return kept
+end
+
+-- Cette méthode permet d'habiller de tôle ondulée (nervures, bande de couleur, couvertine, cornières) un pan de mur dont
+-- `frame` est le milieu du bas, sur le nu du mur, -Z local vers l'extérieur ; `band` > 0 pose la bande (CLAD_STYLE).
+-- `holes` : ouvertures laissées libres ({ x, w, y0, y1 } dans le repère du pan), bordées d'un cadre si `frame` est donné
+-- (montants à partir de `sill` au-dessus du bas de l'ouverture, l'appui de la fenêtre faisant le bas).
+local function cladding(parent, frame, width, height, band, holes)
 	local m = New("Model")
 	m.Name = "Cladding"
 	m.Parent = parent
-	band = math.clamp(band, 0, height)
-	-- tôle : deux plaques (bande et haut) côte à côte, jamais l'une sur l'autre (scintillement)
+	local style = CLAD_STYLES[DizzyDressing.CLAD_STYLE]
+	local b0, b1 = 0, 0
 	if band > 0 then
-		piece(m, frame, V3.new(0, band / 2, -0.06), V3.new(width, band, 0.12), OCHRE, E.Material.Metal)
+		b0 = math.min(style.from, height)
+		b1 = math.min(height, if style.height then b0 + style.height else band)
 	end
-	piece(m, frame, V3.new(0, (band + height) / 2, -0.06), V3.new(width, height - band, 0.12), CLAD, E.Material.Metal)
+	local cut = {}
+	for _, h in holes or {} do
+		table.insert(cut, { x0 = h.x - h.w / 2, x1 = h.x + h.w / 2, y0 = h.y0, y1 = h.y1 })
+	end
+	-- Cette méthode permet de poser un rectangle local du pan à la profondeur `z` (épaisseur `d`), ouvertures retirées.
+	local function slab(x0, x1, y0, y1, z, d, color)
+		for _, r in DizzyDressing.minus({ x0 = x0, x1 = x1, y0 = y0, y1 = y1 }, cut) do
+			local pos = V3.new((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, z)
+			piece(m, frame, pos, V3.new(r.x1 - r.x0, r.y1 - r.y0, d), color, E.Material.Metal)
+		end
+	end
+	-- tôle : plaques (bas, bande, haut) côte à côte, jamais l'une sur l'autre (scintillement)
+	local strips = {}
+	if b0 > 0 then
+		table.insert(strips, { 0, b0, style.sheet })
+	end
+	if b1 > b0 then
+		table.insert(strips, { b0, b1, style.band })
+	end
+	if height > b1 then
+		table.insert(strips, { b1, height, style.sheet })
+	end
+	for _, s in strips do
+		slab(-width / 2, width / 2, s[1], s[2], -0.06, 0.12, s[3])
+	end
 	local n = math.max(1, math.floor(width / 1.6 + 0.5))
 	local step = width / n
 	for i = 0, n - 1 do
 		local x = -width / 2 + (i + 0.5) * step
-		if band > 0 then
-			piece(m, frame, V3.new(x, band / 2, -0.21), V3.new(0.5, band, 0.18), shade(OCHRE, i), E.Material.Metal)
+		for _, s in strips do
+			slab(x - 0.25, x + 0.25, s[1], s[2], -0.21, 0.18, shade(s[3], i))
 		end
-		piece(
-			m,
-			frame,
-			V3.new(x, (band + height) / 2, -0.21),
-			V3.new(0.5, height - band, 0.18),
-			shade(CLAD, i),
-			E.Material.Metal
-		)
 	end
-	if band > 0 then
-		piece(m, frame, V3.new(0, band, -0.3), V3.new(width, 0.3, 0.3), TRIM, E.Material.Metal)
+	-- filets sombres aux bords de la bande (pas au ras du sol)
+	if b1 > b0 then
+		for _, y in { b0, b1 } do
+			if y > 0.15 and y < height - 0.6 then
+				slab(-width / 2, width / 2, y - 0.15, y + 0.15, -0.3, 0.3, TRIM)
+			end
+		end
 	end
-	piece(m, frame, V3.new(0, height - 0.3, -0.32), V3.new(width, 0.6, 0.64), GALVA, E.Material.Metal)
+	slab(-width / 2, width / 2, height - 0.6, height, -0.32, 0.64, GALVA)
 	for _, s in { -1, 1 } do
 		-- cornières arrêtées sous la couvertine (faces confondues sinon)
-		local ch = height - 0.6
-		piece(m, frame, V3.new(s * (width / 2 - 0.3), ch / 2, -0.32), V3.new(0.6, ch, 0.64), GALVA, E.Material.Metal)
+		local x = s * (width / 2 - 0.3)
+		slab(x - 0.3, x + 0.3, 0, height - 0.6, -0.32, 0.64, GALVA)
+	end
+	-- cadres des ouvertures : montants puis linteau, sans recouvrement (faces avant dans le même plan)
+	for _, h in holes or {} do
+		local f = h.frame
+		if f then
+			local x0, x1 = h.x - h.w / 2, h.x + h.w / 2
+			local y0 = h.y0 + (h.sill or 0)
+			for _, x in { x0 + f / 2, x1 - f / 2 } do
+				piece(m, frame, V3.new(x, (y0 + h.y1 - f) / 2, -0.22), V3.new(f, h.y1 - f - y0, 0.44), TRIM, E.Material.Metal)
+			end
+			piece(m, frame, V3.new(h.x, h.y1 - f / 2, -0.22), V3.new(h.w, f, 0.44), TRIM, E.Material.Metal)
+		end
 	end
 	return flat(m)
 end
@@ -1413,11 +1497,12 @@ DizzyDressing.WINDOWS = {
 	{ frame = facing(-65.03, 96.14, -261.11, 1, 0), width = 28.45, height = 5.69, depth = 2.5 },
 	{ frame = facing(-65.03, 96.14, -228.6, 1, 0), width = 28.45, height = 5.69, depth = 2.5 },
 }
--- lampes des murs du milieu : sous les baies, aux extrémités et au trumeau
+-- lampes des murs du milieu : sous les baies, aux extrémités et au trumeau ; platine posée sur les nervures du bardage
+-- (nu du mur à -65,03, nervures jusqu'à 0,3 devant)
 DizzyDressing.LAMPS = {
-	facing(-65.03, 89.5, -277.3, 1, 0),
-	facing(-65.03, 89.5, -244.86, 1, 0),
-	facing(-65.03, 89.5, -212.4, 1, 0),
+	facing(-64.58, 89.5, -277.3, 1, 0),
+	facing(-64.58, 89.5, -244.86, 1, 0),
+	facing(-64.58, 89.5, -212.4, 1, 0),
 }
 
 -- échelles des murs des rampes sur pilotis (relevées en boîtes, retirées par dizzy_patches.luau) : pied sur le nu du
@@ -1448,15 +1533,31 @@ DizzyDressing.CLADDING = {
 	{ frame = facing(-130.05, 42.09, -192.02, -1, 0), width = 6.1, height = 54.1, band = 9 }, -- retour vers l'échelle
 	{ frame = facing(-97.5, 42.09, -188.97, 0, 1), width = 65, height = 63.36, band = 9 }, -- volume de l'échelle
 	{ frame = facing(-81.28, 70.56, -357.63, 0.894, -0.447), width = 72.7, height = 34.1, band = 7 }, -- mur du stockage
+	-- #189 : façade du bâtiment du milieu sur la fosse (baies de WINDOWS laissées libres, appui compris ; en haut à
+	-- gauche, la bande d'acier relevée au-dessus de 102,54) et pan sud derrière le stockage
+	{
+		frame = facing(-65.025, 70.54, -257.045, 1, 0),
+		width = 136.15,
+		height = 34.85,
+		band = 7,
+		holes = {
+			{ x = 28.445, w = 29.65, y0 = 22.36, y1 = 29.05, frame = 0.6, sill = 0.4 },
+			{ x = -4.065, w = 29.65, y0 = 22.36, y1 = 29.05, frame = 0.6, sill = 0.4 },
+			{ x = -37.6, w = 61, y0 = 32, y1 = 35 },
+		},
+	},
+	{ frame = facing(-113.795, 70.54, -390.145, 0, -1), width = 32.51, height = 34.14, band = 7 },
 }
 -- groupes de ventilation du toit du garage : bas du caisson, au centre ; capot vers la façade
 DizzyDressing.ROOF_UNITS = {
 	facing(-247.9, 98.95, -207.4, 0, 1),
 	facing(-231.6, 98.95, -207.4, 0, 1),
 }
--- double porte (aplat relevé) : milieu du bas, sur la face de l'aplat ; largeur et hauteur de l'aplat
+-- double porte (aplat relevé) : milieu du bas, 0,28 devant le nu du mur ; largeur et hauteur de l'aplat ; `unique` :
+-- côté T seulement (la porte du toit haut, #189, n'a pas de symétrique côté CT)
 DizzyDressing.DOORS = {
 	{ frame = facing(-65.3, 42.09, -53.35, -1, 0), width = 20.11, height = 21.25 },
+	{ frame = facing(-113.72, 104.68, -322.58, 1, 0), width = 20.11, height = 21.25, unique = true }, -- toit haut
 }
 -- zone de stockage des chantiers, au pied du mur en tôle : bobines (sur la pile de plaques, à la place de la bobine
 -- relevée), palettes et seaux. Bobines posées de chaque côté : la bobine relevée côté CT n'est pas le symétrique exact
@@ -1491,6 +1592,8 @@ DizzyDressing.REDRESS = {
 		zone = { center = { 2000, 310.2, -81.3 }, size = { 1, 1, 1 } } },
 	{ kind = "hide", group = "metal", why = "aplat de la porte T (DizzyDressing.DOORS)",
 		zone = { center = { 1935.9, 47.4, -53.35 }, size = { 1, 12, 2 } } },
+	{ kind = "hide", why = "aplat, vantail et seuil de la porte du toit haut T (DizzyDressing.DOORS)",
+		zone = { center = { 1885.3, 110, -322.58 }, size = { 1, 12, 1 } } },
 	{ kind = "hide", group = "metal", why = "aplat de la porte CT (DizzyDressing.DOORS)",
 		zone = { center = { 2064.1, 47.4, -466.85 }, size = { 1, 12, 1 } } },
 	{ kind = "hide", group = "metal", why = "groupe du toit du garage T (gauche)",
@@ -1555,6 +1658,99 @@ DizzyDressing.REDRESS = {
 	{ kind = "fencepost", group = "chainlink", why = "poteaux des clôtures grillagées",
 		zone = { center = { 2000, 80, -260 }, size = { 600, 100, 600 } } },
 }
+
+-- Bande bleu clair des bâtiments peints (#189) : les dalles de mur relevées (Walls, blocs verticaux) dont le centre est
+-- dans l'emprise `x`, `z` (coordonnées du monde) sont découpées à la hauteur `y` de la bande, qui prend FACADE_BLUE.
+-- Aucune plaque ajoutée : pas de faces confondues (scintillement), collision identique. Recopié côté CT sauf `unique`.
+-- Bande 3 à 9 studs au-dessus du sol des façades, comme celle du bardage blanc.
+DizzyDressing.BANDS = {
+	{ why = "toit haut", x = { 1802, 1889 }, z = { -344, -241 }, y = { 107.68, 113.68 } },
+	{ why = "cabane du bord sud", x = { 1866, 1916 }, z = { -492, -392 }, y = { 49.36, 55.36 } },
+	{ why = "abri à la porte (unique)", unique = true, x = { 1960, 2040 }, z = { -466, -412 }, y = { 76.2, 82.2 } },
+}
+
+-- Cette méthode permet de découper une dalle de mur verticale aux hauteurs y0 et y1 lorsqu'elle traverse une bande :
+-- le morceau du milieu prend `color`. Renvoie vrai si la dalle a été découpée.
+local function splitWall(p, y0, y1, color, why)
+	local cf, s = p.CFrame, p.Size
+	local axes = { cf.RightVector, cf.UpVector, cf.LookVector }
+	local k
+	for i, a in axes do
+		if math.abs(a.Y) > 0.99 then
+			k = i
+		end
+	end
+	if not k then
+		return false
+	end
+	local sizes = { s.X, s.Y, s.Z }
+	local cy = cf.Position.Y
+	local bottom, top = cy - sizes[k] / 2, cy + sizes[k] / 2
+	if y1 <= bottom + 0.05 or y0 >= top - 0.05 then
+		return false
+	end
+	local a, b = math.max(bottom, y0), math.min(top, y1)
+	for _, seg in { { bottom, a, nil }, { a, b, color }, { b, top, nil } } do
+		local lo, hi = seg[1], seg[2]
+		if hi - lo > 0.01 then
+			local q = p:Clone()
+			local ns = table.clone(sizes)
+			ns[k] = hi - lo
+			q.Size = V3.new(ns[1], ns[2], ns[3])
+			q.CFrame = CF.new(V3.new(0, (lo + hi) / 2 - cy, 0)) * cf
+			if seg[3] then
+				q.Color = seg[3]
+				q:SetAttribute("Band", why)
+			end
+			q.Parent = p.Parent
+		end
+	end
+	p:Destroy()
+	return true
+end
+
+-- Cette méthode permet de poser les bandes de BANDS sur les murs relevés de `map` lorsque la géométrie est posée ;
+-- `offset` est le décalage de la map (centre de la symétrie). Lève une erreur si une emprise ne coupe aucun mur.
+-- Renvoie le nombre de dalles découpées.
+function DizzyDressing.paintBands(map, offset)
+	local geometry = map:FindFirstChild("Geometry")
+	local walls = geometry and geometry:FindFirstChild("Walls")
+	assert(walls, "Geometry.Walls absent")
+	local total = 0
+	for _, b in DizzyDressing.BANDS do
+		local zones = { { b.x[1], b.x[2], b.z[1], b.z[2] } }
+		if not b.unique then
+			local cx, cz = 2 * offset.X, 2 * (offset.Z + DizzyDressing.CENTER_Z)
+			table.insert(zones, { cx - b.x[2], cx - b.x[1], cz - b.z[2], cz - b.z[1] })
+		end
+		for _, zone in zones do
+			local n, wedges = 0, 0
+			for _, p in walls:GetChildren() do
+				local pos = if p:IsA("BasePart") then p.CFrame.Position else nil
+				if
+					pos
+					and p.Transparency < 1
+					and pos.X >= zone[1]
+					and pos.X <= zone[2]
+					and pos.Z >= zone[3]
+					and pos.Z <= zone[4]
+				then
+					if p:IsA("Part") and p.Shape == E.PartType.Block then
+						if splitWall(p, b.y[1], b.y[2], DizzyDressing.FACADE_BLUE, b.why) then
+							n += 1
+						end
+					elseif p.CFrame.Position.Y - p.Size.Y < b.y[2] and p.CFrame.Position.Y + p.Size.Y > b.y[1] then
+						wedges += 1 -- coin de mur dans la bande : laissé uni
+					end
+				end
+			end
+			assert(n > 0, string.format("BANDS %q : aucun mur découpé", b.why))
+			print(string.format("  bande %q : %d dalle(s) découpée(s), %d coin(s) laissé(s) uni(s)", b.why, n, wedges))
+			total += n
+		end
+	end
+	return total
+end
 
 -- Cette méthode permet de rhabiller les boîtes relevées listées dans REDRESS lorsque la géométrie est posée : chaque
 -- boîte devient invisible (collision gardée) et reçoit son habillage dans `parent`. Lève une erreur si une zone ne
@@ -1650,13 +1846,18 @@ function DizzyDressing.build(map, offset)
 	crane(root, shift * c.frame, c.top, c.hook, c.load, c.reach, c.bundle)
 	count += 1
 	for _, w in DizzyDressing.CLADDING do
-		both(cladding, w.frame, w.width, w.height, w.band)
+		both(cladding, w.frame, w.width, w.height, w.band, w.holes)
 	end
 	for _, cf in DizzyDressing.ROOF_UNITS do
 		both(roofUnit, cf)
 	end
 	for _, d in DizzyDressing.DOORS do
-		both(door, d.frame, d.width, d.height)
+		if d.unique then
+			door(root, shift * d.frame, d.width, d.height)
+			count += 1
+		else
+			both(door, d.frame, d.width, d.height)
+		end
 	end
 	for _, cf in DizzyDressing.REELS do
 		cableReels(root, shift * cf)
@@ -1672,6 +1873,8 @@ function DizzyDressing.build(map, offset)
 		count += 1
 	end
 	count += DizzyDressing.redress(map, root)
+	-- #189 : bande bleue des bâtiments peints (découpe des murs relevés, après les rhabillages)
+	DizzyDressing.paintBands(map, offset)
 	return count
 end
 
