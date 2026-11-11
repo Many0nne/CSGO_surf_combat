@@ -52,8 +52,8 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   actions côte à côte en bas au centre (`MenuPage.ExitY`). Choix de l'utilisateur en #117, après un premier passage en
   colonne sur un dégradé à gauche jugé peu changé. Infos et Réglages partagent la même disposition (catégories à gauche
   avec barre ambrée sur l'active, contenu à droite, bloc de 780 px). Le titre en texte (Oswald à ombre, en
-  haut au centre, à la place des onglets) n'est montré qu'en partie (menu en partie et ses Réglages) : au menu, l'onglet
-  actif sert de titre. `page.choice` : choix en texte, os atténué au repos, os vif une fois choisi (`setSelected`, aussi pour
+  haut au centre) n'est montré qu'en partie (menu en partie et ses Réglages) : au menu, l'onglet actif sert de titre. En
+  partie, il se pose sous le timer du round (`TITLE_Y` 92 px, #220), resté visible au-dessus du voile. `page.choice` : choix en texte, os atténué au repos, os vif une fois choisi (`setSelected`, aussi pour
   l'action principale comme ENVOYER ou RETOUR), rouge d'impact au survol.
 - Réglages (`SettingsMenu.luau`, disposition C des schémas de #117, préférée aux sous-onglets en haut et à la liste
   unique qui défile) : catégories à gauche (barre ambrée sur l'active), lignes de 54 px à droite (nom, contrôle,
@@ -139,6 +139,10 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   sombre en deux moitiés de coin, timer en rouge d'impact sous 30 s) ; classement sous Tab : pas de panneau, voile sombre
   central qui s'efface vers les côtés, titre « CLASSEMENT » sur un filet ambre, colonnes K / M / K/M, ligne du joueur
   sur une bande rouge d'impact **droite** (penchée, elle se lisait mal en face des colonnes).
+  Menu en partie ouvert (#220, choix de l'utilisateur : la partie continue derrière) : le timer et son fondu (calque
+  `TimerLayer`) passent dans un `ScreenGui` à part (`RoundTimerOverMenu`, DisplayOrder 4, au-dessus du voile 2 et de la
+  page 3), selon `HUDRules.roundTimerOverMenu` ; le titre « MENU » / « RÉGLAGES » descend dessous. Menu fermé, le calque
+  revient dans `RoundHUD` en ZIndex 0, sous les voiles du classement et du résultat comme avant.
   Réapparition : la scène reste visible, désaturée (`ColorCorrectionEffect`), sans voile plein ; en bas au centre, sur
   deux moitiés de fondu de coin, « ÉLIMINÉ » en rouge d'impact (le joueur a été touché), compte à rebours en gros
   chiffres os à ombre, libellé ambré « RÉAPPARITION ». Au-dessus du compte à rebours (#102) : « ÉLIMINÉ PAR », nom du
@@ -187,7 +191,7 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
 - **État du HUD (#223) :** `src/client/ui/HUDState.luau` tient l'état client (posé par `applyGameHud`, d'où « HUD de jeu » et
   « mort »), le menu en partie ouvert (`InGameMenu`, Réglages compris) et la lunette affichée (`ScopeOverlay.setVisible`). Les
   éléments qui dépendent de plus que l'état client s'y abonnent (`HUDState.onChanged`, nouvel et ancien instantanés) et
-  appliquent leur règle de `HUDRules`, testée avec un instantané (`crosshairVisible`, `keyDisplayVisible`).
+  appliquent leur règle de `HUDRules`, testée avec un instantané (`crosshairVisible`, `keyDisplayVisible`, `roundTimerOverMenu`).
   Une nouvelle condition de masquage : un champ et son setter dans `HUDState`, puis la règle des éléments concernés ; pas de
   setter `setMenuOpen` / `setScoped` recopié dans chaque élément (supprimés de `Crosshair` et `KeyDisplay`). Compteur de
   vitesse, barre d'armes, munitions et kill feed ne dépendent que de l'état client et restent poussés par `applyGameHud`.

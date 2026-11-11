@@ -214,6 +214,12 @@ function HUDRules.keyDisplayVisible(hud: HUDSnapshot, mode: string): boolean
 	return (mode == "simple" or mode == "full") and HUDRules.gameHudVisible(hud.gameState) and not hud.menuOpen
 end
 
+-- Cette méthode permet de savoir si le timer du round passe au-dessus du voile du menu en partie (#220) lorsque l'état du
+-- HUD change : menu ouvert (Réglages compris), vivant ou mort, la partie continuant derrière ; sinon il reste dans le HUD.
+function HUDRules.roundTimerOverMenu(hud: HUDSnapshot): boolean
+	return hud.menuOpen
+end
+
 -- Cette méthode permet de savoir si le kill feed est affiché lorsque l'état client change : en partie, vivant ou mort
 -- (le joueur tué y voit sa propre ligne), pas au menu ni au résultat.
 function HUDRules.killFeedVisible(state: string): boolean

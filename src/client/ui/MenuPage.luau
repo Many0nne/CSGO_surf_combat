@@ -18,7 +18,9 @@ local MenuPage = {}
 MenuPage.ContentTop = 150
 MenuPage.ExitY = 632 -- ligne des actions de sortie (RETOUR, ANNULER…)
 
-local TITLE_Y = 20 -- à la place des onglets de l'accueil, absents en partie
+-- Titre montré en partie seulement (menu en partie et ses Réglages) : sous le timer du round (RoundHUD, bloc de 10 à
+-- 90 px, texte jusqu'à 78), qui reste visible au-dessus du menu (#220), et au-dessus du contenu (ContentTop)
+local TITLE_Y = 92
 local TITLE_SIZE = 34
 local EXIT_Y = MenuPage.ExitY
 local EXIT_SIZE = 30
