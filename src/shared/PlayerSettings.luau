@@ -34,6 +34,9 @@ PlayerSettings.DEFAULT_WHEEL = "previous" :: WheelMode
 PlayerSettings.WHEEL_MODES = { "previous", "next", "off" } :: { WheelMode }
 PlayerSettings.DEFAULT_KEY_DISPLAY = "off" :: KeyDisplayMode
 PlayerSettings.KEY_DISPLAY_MODES = { "off", "simple", "full" } :: { KeyDisplayMode }
+-- Touche du menu en partie (#157 : reprendre, réglages, retour au menu principal), nom d'Enum.KeyCode ; au menu
+-- principal elle ouvre les Réglages. Seule source de cette touche : InGameMenu, l'écran Infos et la liste des réservées.
+PlayerSettings.MENU_KEY = "P"
 
 local DIGITS = {
 	Zero = "0",
@@ -48,7 +51,7 @@ local DIGITS = {
 	Nine = "9",
 }
 
--- Touches déjà prises par le jeu (déplacement, saut, accroupi, recharge, inspection, Réglages, classement, F3/F4 de
+-- Touches déjà prises par le jeu (déplacement, saut, accroupi, recharge, inspection, menu, classement, F3/F4 de
 -- debug) ou par Roblox (F9 console, F11 plein écran, F12 capture) : refusées pour un emplacement
 local RESERVED = {
 	W = true,
@@ -57,7 +60,7 @@ local RESERVED = {
 	D = true,
 	R = true,
 	F = true,
-	P = true,
+	[PlayerSettings.MENU_KEY] = true,
 	F3 = true,
 	F4 = true,
 	F9 = true,

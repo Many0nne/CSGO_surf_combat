@@ -14,6 +14,9 @@ Protocol.Names = {
 	SCORE_UPDATE = "ScoreUpdate",
 	ROUND_RESULT = "RoundResult",
 	PLAYER_DIED = "PlayerDied",
+	-- Retour au menu principal depuis le menu en partie (#157) : client → serveur, sans argument ; le serveur retire le
+	-- joueur du round (score de la manche, personnage, réapparition), cf. server/init.server
+	LEAVE_ROUND = "LeaveRound",
 	-- Position des personnages (#75), UnreliableRemoteEvent : client → serveur (position, cap, numéro de la dernière
 	-- correction appliquée) à NET_SYNC_RATE, puis serveur → autres clients (joueur, position, cap, horodatage
 	-- serveur), cf. server/CharacterSync

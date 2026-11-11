@@ -23,7 +23,7 @@ local Crosshair = {}
 local gui: ScreenGui?
 local hudVisible = false -- règle « HUD de jeu visible » (HUDRules), posée par GameStateController
 local scoped = false -- lunette affichée (ScopeOverlay)
-local menuOpen = false -- écran Réglages ouvert (SettingsMenu)
+local menuOpen = false -- menu en partie ouvert, Réglages compris (InGameMenu)
 
 -- Cette méthode permet d'afficher ou de masquer le crosshair lorsque le réglage, le HUD, la lunette ou Réglages changent.
 local function update()
@@ -74,7 +74,7 @@ function Crosshair.setScoped(isScoped: boolean)
 	update()
 end
 
--- Cette méthode permet de masquer le crosshair lorsque l'écran Réglages s'ouvre ou se ferme (SettingsMenu).
+-- Cette méthode permet de masquer le crosshair lorsque le menu en partie s'ouvre ou se ferme (InGameMenu).
 function Crosshair.setMenuOpen(isOpen: boolean)
 	menuOpen = isOpen
 	update()

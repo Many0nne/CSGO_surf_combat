@@ -46,6 +46,7 @@ local roundStateRmt = makeRemote(N.ROUND_STATE)
 local scoreUpdateRmt = makeRemote(N.SCORE_UPDATE)
 local roundResultRmt = makeRemote(N.ROUND_RESULT)
 local playerDiedRmt = makeRemote(N.PLAYER_DIED)
+local leaveRoundRmt = makeRemote(N.LEAVE_ROUND)
 local sendFeedbackRmt = makeRemote(N.SEND_FEEDBACK)
 local feedbackAckRmt = makeRemote(N.FEEDBACK_ACK)
 local weaponActionRmt = makeRemote(N.WEAPON_ACTION)
@@ -232,7 +233,7 @@ MapSelection.activate(workspace:FindFirstChild("Maps"), GameConfig.ACTIVE_MAP)
 -- Règles de la demande (déjà vivant, spawn en vol, bannière de fin, délai depuis la mort) : SpawnRules (#171)
 SpawnManager.init(spawnRmt, {
 	roundState = RoundManager.getState,
-	beforeSpawn = function()
+	beforeSpawn = function(player)
 		-- Démarrer le round si idle (1er joueur à cliquer Play)
 		if RoundManager.getState() == "idle" then
 			-- attribut Workspace RoundDuration : rounds courts pour suivre la mémoire sur plusieurs rounds (#95)
@@ -240,8 +241,22 @@ SpawnManager.init(spawnRmt, {
 				PerfRules.roundDuration(GameConfig.ROUND_DURATION, workspace:GetAttribute("RoundDuration"))
 			)
 		end
+		-- Au classement dès l'apparition, retour du menu en partie compris (#157)
+		RoundManager.addParticipant(Participants.fromPlayer(player))
 	end,
 })
+
+-- Retour au menu principal depuis le menu en partie (#157) : retiré du round (score, coups en attente) avant la
+-- destruction de son personnage, qui ne compte donc pas comme une mort ; plus de réapparition jusqu'à JOUER
+leaveRoundRmt.OnServerEvent:Connect(function(player)
+	if not CheatLog.admit(player, N.LEAVE_ROUND) then
+		return
+	end
+	local participant = Participants.fromPlayer(player)
+	RoundManager.withdraw(participant)
+	Validator.forget(participant)
+	SpawnManager.withdraw(player)
+end)
 
 -- ── Combat : validation et attribution des dégâts ─────────────────────────
 

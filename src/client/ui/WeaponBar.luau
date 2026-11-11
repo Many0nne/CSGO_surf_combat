@@ -13,7 +13,7 @@ local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("U
 local PlayerSettings = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("PlayerSettings"))
 local UIKit = require(script.Parent.UIKit)
 local HUDRules = require(script.Parent.HUDRules)
-local SettingsMenu = require(script.Parent.SettingsMenu)
+local InGameMenu = require(script.Parent.InGameMenu)
 local LocalSettings = require(script.Parent.Parent.systems.settings.LocalSettings)
 
 local C = UITheme.Colors
@@ -339,9 +339,9 @@ local function watchCharacter(character: Model)
 end
 
 -- Cette méthode permet de savoir si les entrées doivent changer d'arme lorsqu'une touche ou la molette est utilisée :
--- barre affichée et écran Réglages fermé (on peut y réaffecter une touche).
+-- barre affichée et menu en partie fermé (Réglages compris : on peut y réaffecter une touche).
 local function acceptsInput(processed: boolean): boolean
-	return not processed and gui ~= nil and gui.Enabled and not SettingsMenu.isOpen()
+	return not processed and gui ~= nil and gui.Enabled and not InGameMenu.isOpen()
 end
 
 -- Cette méthode permet de remettre à jour les libellés de touche des emplacements lorsque le joueur les réaffecte.

@@ -2,6 +2,7 @@
 -- texte à tirer à gauche (barre ambrée sur l'actif), contenu à droite, RETOUR en bas au centre.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local PlayerSettings = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("PlayerSettings"))
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
 local MenuPage = require(script.Parent.MenuPage)
 local UIKit = require(script.Parent.UIKit)
@@ -45,7 +46,7 @@ local SECTIONS: { Section } = {
 			{ "R", "Recharger" },
 			{ "F", "Inspecter le couteau" },
 			{ "TAB", "Classement" },
-			{ "P", "Réglages" },
+			{ PlayerSettings.MENU_KEY, "Menu en partie (réglages, retour au menu)" },
 		},
 	},
 	{

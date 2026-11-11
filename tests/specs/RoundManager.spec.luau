@@ -204,4 +204,78 @@ return function(T, Loader)
 			T.expectEqual(env.remotes.roundResult.last().winnerName, "BOT Marcel")
 		end)
 	end)
+
+	T.describe("RoundManager : retour au menu en partie (#157)", function()
+		T.it("retire le score de la manche du joueur et garde les morts qu'il a infligées", function()
+			local env = setup()
+			local alice = env.addPlayer(1, "Alice", Vector3.zero)
+			local bot = env.addBot("Marcel", Vector3.new(0, 0, 5))
+			env.RoundManager.startRound(60)
+			env.RoundManager.recordDamage(alice, bot, "AWP", false)
+			env.RoundManager.onCharacterDied(bot, function() end)
+
+			env.RoundManager.withdraw(alice)
+
+			local scores = env.remotes.scoreUpdate.last()
+			T.expectEqual(scores[alice.id], nil, "retiré du classement")
+			T.expectEqual(scores[bot.id].deaths, 1, "la mort du bot reste comptée")
+		end)
+
+		T.it("ne compte pas la disparition de son personnage comme une mort ni ne le fait réapparaître", function()
+			local env = setup()
+			local alice = env.addPlayer(1, "Alice", Vector3.zero)
+			local bot = env.addBot("Marcel", Vector3.zero)
+			env.RoundManager.startRound(60)
+			env.RoundManager.recordDamage(bot, alice, "AWP", true)
+			local deathsBefore = #env.remotes.playerDied.sent
+
+			env.RoundManager.withdraw(alice)
+			local respawned = false
+			local killer = env.RoundManager.onCharacterDied(alice, function()
+				respawned = true
+			end)
+			env.flush()
+
+			T.expectEqual(killer, nil, "aucun kill crédité à l'adversaire")
+			T.expectEqual(#env.remotes.playerDied.sent, deathsBefore, "aucune mort annoncée")
+			T.expectEqual(env.remotes.scoreUpdate.last()[alice.id], nil, "score pas recréé")
+			T.expectEqual(env.remotes.scoreUpdate.last()[bot.id].kills, 0)
+			T.expectEqual(respawned, false)
+		end)
+
+		T.it("n'attribue plus de kill à un joueur revenu au menu", function()
+			local env = setup()
+			local alice = env.addPlayer(1, "Alice", Vector3.zero)
+			local bot = env.addBot("Marcel", Vector3.zero)
+			env.RoundManager.startRound(60)
+			env.RoundManager.recordDamage(alice, bot, "AWP", false)
+			env.RoundManager.withdraw(alice)
+
+			T.expectEqual(env.RoundManager.onCharacterDied(bot, function() end), nil, "chute sans tueur")
+			T.expectEqual(env.remotes.playerDied.last().killerName, nil)
+			T.expectEqual(env.remotes.scoreUpdate.last()[bot.id].deaths, 1, "la mort du bot compte")
+		end)
+
+		T.it("compte de nouveau ses kills et ses morts quand il relance une partie", function()
+			local env = setup()
+			local alice = env.addPlayer(1, "Alice", Vector3.zero)
+			local bot = env.addBot("Marcel", Vector3.zero)
+			env.RoundManager.startRound(60)
+			env.RoundManager.withdraw(alice)
+
+			env.RoundManager.addParticipant(alice)
+			T.expectEqual(env.remotes.scoreUpdate.last()[alice.id].kills, 0, "de retour au classement, à zéro")
+			env.RoundManager.recordDamage(alice, bot, "AWP", false)
+			env.RoundManager.onCharacterDied(bot, function() end)
+			T.expectEqual(env.remotes.scoreUpdate.last()[alice.id].kills, 1, "kill compté avant sa première mort")
+
+			local respawned = false
+			env.RoundManager.onCharacterDied(alice, function()
+				respawned = true
+			end)
+			env.flush()
+			T.expectEqual(env.remotes.scoreUpdate.last()[alice.id].deaths, 1)
+			T.expectEqual(respawned, true, "réapparition programmée de nouveau")
+		end)
+	end)
 end

@@ -17,6 +17,8 @@ local mapModel: Instance?
 -- Joueurs dont un LoadCharacterAsync est en vol, et heure (os.clock) de leur dernière mort (#171)
 local spawning: { [Player]: boolean } = {}
 local diedAt: { [Player]: number } = {}
+-- Joueurs revenus au menu (#157) : aucune réapparition programmée, aucun personnage en vol gardé, jusqu'à leur demande
+local away: { [Player]: boolean } = {}
 -- Gravité d'un refus de RequestSpawn au journal ; "result" n'y va pas (Play cliqué pendant la bannière de fin).
 -- "early" est moyen : notre client n'envoie RequestSpawn que depuis le menu, où un joueur mort en round ne revient pas.
 local REFUSAL_SEVERITY: { [string]: CheatLog.Severity } = {
@@ -97,6 +99,11 @@ function SpawnManager.spawnPlayer(player: Player)
 	local conn: RBXScriptConnection
 	conn = player.CharacterAdded:Connect(function(char)
 		conn:Disconnect()
+		-- Réapparition partie avant le retour au menu : le joueur n'a plus de personnage dans le round
+		if away[player] then
+			char:Destroy()
+			return
+		end
 		CharacterAppearance.apply(char)
 		SpawnManager.place(char)
 	end)
@@ -112,6 +119,9 @@ end
 -- Cette méthode permet de faire réapparaître un joueur lorsque sa réapparition programmée échoit (RoundManager) :
 -- rien s'il a déjà un personnage vivant (demande arrivée entre-temps) ou un LoadCharacterAsync en vol.
 function SpawnManager.respawn(player: Player)
+	if away[player] then
+		return
+	end
 	if SpawnRules.scheduled(spawning[player] == true, SpawnRules.isAlive(player.Character)) then
 		SpawnManager.spawnPlayer(player)
 	end
@@ -129,6 +139,20 @@ end
 -- Cette méthode permet d'oublier un joueur lorsqu'il quitte le jeu.
 function SpawnManager.forget(player: Player)
 	spawning[player] = nil
+	diedAt[player] = nil
+	away[player] = nil
+end
+
+-- Cette méthode permet de sortir du round un joueur qui revient au menu (#157), après RoundManager.withdraw : son
+-- personnage est détruit, aucune réapparition ne part plus, et sa prochaine demande d'apparition est acceptée sans
+-- attendre RESPAWN_DELAY (son score de la manche est perdu, revenir plus tôt ne rapporte rien).
+function SpawnManager.withdraw(player: Player)
+	away[player] = true
+	local char = player.Character
+	if char then
+		char:Destroy()
+	end
+	-- Après la destruction : une mort que Roblox annoncerait en détruisant le personnage n'est pas retenue
 	diedAt[player] = nil
 end
 
@@ -163,6 +187,7 @@ function SpawnManager.init(
 			end
 			return
 		end
+		away[player] = nil
 		hooks.beforeSpawn(player)
 		SpawnManager.spawnPlayer(player)
 	end)

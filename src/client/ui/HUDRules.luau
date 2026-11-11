@@ -134,7 +134,7 @@ function HUDRules.gameHudVisible(state: string): boolean
 end
 
 -- Cette méthode permet de savoir si le crosshair de la visée simplifiée (#195) est affiché lorsque le réglage, l'état du
--- HUD de jeu, la lunette ou l'écran Réglages changent : réglage actif, HUD de jeu visible, ni lunette ni Réglages ouverts.
+-- HUD de jeu, la lunette ou le menu en partie changent : réglage actif, HUD de jeu visible, ni lunette ni menu ouvert.
 function HUDRules.crosshairVisible(enabled: boolean, hudVisible: boolean, scoped: boolean, menuOpen: boolean): boolean
 	return enabled and hudVisible and not scoped and not menuOpen
 end
@@ -184,8 +184,8 @@ function HUDRules.keyDisplayEntries(mode: string): { KeyDisplayEntry }
 	return result
 end
 
--- Cette méthode permet de savoir si l'affichage des touches est montré lorsque le réglage, l'état du HUD de jeu ou l'écran
--- Réglages changent : mode actif, HUD de jeu visible (donc ni menu, ni mort, ni résultat), Réglages fermé.
+-- Cette méthode permet de savoir si l'affichage des touches est montré lorsque le réglage, l'état du HUD de jeu ou le
+-- menu en partie changent : mode actif, HUD de jeu visible (donc ni menu, ni mort, ni résultat), menu en partie fermé.
 function HUDRules.keyDisplayVisible(mode: string, hudVisible: boolean, menuOpen: boolean): boolean
 	return (mode == "simple" or mode == "full") and hudVisible and not menuOpen
 end
