@@ -48,6 +48,41 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("ShotRules : instant annoncé borné par le ping (#214)", function()
+		T.it("accepte un tir honnête avec 50 et 150 ms de ping", function()
+			-- Arrivée = aller simple (ping / 2) + une frame de tir et un Heartbeat serveur (~33 ms)
+			for _, ping in { 0.05, 0.15 } do
+				local delay = ping / 2 + 0.033
+				local ok, detail = ShotRules.checkShotDelay(100 - delay, 100, ping)
+				T.expect(ok, string.format("ping %.0f ms : %s", ping * 1000, detail or "?"))
+			end
+			-- Aller plus lent que le retour : l'aller-retour entier passe encore
+			T.expectEqual((ShotRules.checkShotDelay(100 - 0.15, 100, 0.15)), true, "aller = aller-retour")
+		end)
+
+		T.it("signale un instant 0,4 s en arrière avec 30 ms de ping (backtrack)", function()
+			local ok, detail = ShotRules.checkShotDelay(99.6, 100, 0.03)
+			T.expectEqual(ok, false)
+			T.expect(string.find(detail or "", "ping 30 ms", 1, true) ~= nil, "détail : " .. tostring(detail))
+		end)
+
+		T.it("signale un instant dans le futur au-delà de la tolérance d'horloge", function()
+			T.expectEqual((ShotRules.checkShotDelay(100 + ShotRules.CLOCK_TOLERANCE / 2, 100, 0.03)), true)
+			T.expectEqual((ShotRules.checkShotDelay(100.2, 100, 0.03)), false)
+		end)
+
+		T.it("accepte tout instant sans ping connu", function()
+			T.expectEqual((ShotRules.checkShotDelay(99.6, 100, nil)), true)
+			T.expectEqual((ShotRules.checkShotDelay(99.6, 100, 0 / 0)), true)
+		end)
+
+		T.it("borne = aller-retour + PING_MARGIN, toujours sous le rembobinage maximal à ping courant", function()
+			T.expect(math.abs(ShotRules.maxShotDelay(0.05) - (0.05 + ShotRules.PING_MARGIN)) < 1e-9, "borne")
+			T.expectEqual(ShotRules.MODES.ping, "log")
+			T.expectEqual(ShotRules.SEVERITY.ping, "medium")
+		end)
+	end)
+
 	T.describe("ShotRules : origine, visée, portée", function()
 		T.it("tolère 5 studs plus 0,1 s de la vitesse du tireur, depuis la plus proche de ses positions", function()
 			T.expectEqual((ShotRules.checkOrigin(Vector3.new(0, 4.9, 0), { Vector3.zero }, 0)), true)
@@ -273,27 +308,11 @@ return function(T, Loader)
 			T.expectEqual(ok, false)
 		end)
 
-		T.it("teste toujours la borne de rembobinage, même hors multiple du pas", function()
-			local step = ShotRules.MELEE_REWIND_STEP
-			ShotRules.MELEE_REWIND_STEP = 0.15
-			local times = ShotRules.meleeRewindTimes(100)
-			ShotRules.MELEE_REWIND_STEP = step
-			T.expect(math.abs(times[#times] - 99.6) < 1e-6, "dernier instant " .. times[#times])
-			T.expectEqual(#times, 4)
-		end)
-
 		T.it("n'ouvre pas l'angle pour une cible proche à l'horizontale mais loin en hauteur (rampe)", function()
 			-- 2,5 studs à l'horizontale (hors de l'aplomb), 6 studs plus bas, 150° du cap : permis 70° + asin(2 / 6,5) ≈ 88°
 			local yaw = math.rad(150)
 			local target = Vector3.new(math.cos(yaw) * 2.5, -6, math.sin(yaw) * 2.5)
 			T.expectEqual((ShotRules.checkMeleeOrientation(Vector3.new(1, 0, 0), Vector3.zero, target)), false)
-		end)
-
-		T.it("rembobine de now à now - MAX_REWIND, le plus récent d'abord", function()
-			local times = ShotRules.meleeRewindTimes(100)
-			T.expectEqual(times[1], 100)
-			T.expect(math.abs(times[#times] - 99.6) < 1e-6, "dernier instant " .. times[#times])
-			T.expectEqual(#times, 9)
 		end)
 
 		T.it("teste racine à racine et œil à tête, rien pour deux cibles collées", function()

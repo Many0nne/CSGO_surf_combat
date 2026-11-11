@@ -5,6 +5,7 @@
 -- Chaque contrôle a un mode : "log" (violation journalisée, tir appliqué : phase de mesure) ou "block" (tir refusé).
 -- Durée d'equip et chargeur (#175, « T2 ») : règles pures ici aussi, l'état (instants, compteurs) vit dans Validator.
 -- Mêlée (#176, « M1 ») : orientation du tireur et ligne de vue vers la cible rembobinée, mêmes modes et même journal.
+-- Instant annoncé (#214) : shotTime (tir) et hitTime (mêlée) bornés par le ping du tireur, contrôle « ping ».
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
@@ -37,6 +38,7 @@ ShotRules.Check = {
 	ORIENTATION = "orientation", -- cible devant le cap du tireur (#176, mêlée)
 	MELEE_LINE_OF_SIGHT = "meleeLineOfSight", -- aucun obstacle de la map entre tireur et cible (#176, mêlée)
 	SHOT_LINK = "shotLink", -- touche rattachée à un ShotFired accepté du même instant (#216, tir)
+	PING = "ping", -- instant annoncé (shotTime, hitTime) dans la borne du ping du tireur (#214, tir et mêlée)
 }
 
 -- Mode de chaque contrôle. "log" tant que les faux positifs ne sont pas mesurés en jeu (docs/anticheat.md, « T1 » :
@@ -45,6 +47,8 @@ ShotRules.Check = {
 -- (#176) : cap du tireur relayé à 20 Hz, faux positifs possibles en rotation rapide, journal seul jusqu'à mesure en jeu.
 -- Touche sans tir rattaché (#216) : un ShotFired écarté par le relais (cadence à la gigue près, origine) la rend
 -- orpheline chez un joueur honnête, journal seul jusqu'à mesure en jeu ; le chargeur la compte quand même.
+-- Instant hors du ping (#214) : pic de latence, horloge mal synchronisée, journal seul jusqu'à mesure en jeu publié
+-- (Studio n'a pas de latence).
 ShotRules.MODES = {
 	shape = "block",
 	origin = "log",
@@ -56,6 +60,7 @@ ShotRules.MODES = {
 	orientation = "log",
 	meleeLineOfSight = "log",
 	shotLink = "log",
+	ping = "log",
 } :: { [string]: Mode }
 
 -- Gravité d'un échec au journal (CheatTypes.Severity) : une forme impossible ne vient jamais de notre client
@@ -72,6 +77,7 @@ ShotRules.SEVERITY = {
 	meleeLineOfSight = CheatTypes.Severity.MEDIUM,
 	-- Faible : un tir relayé écarté de peu (gigue) en produit, et le chargeur reste compté (#216)
 	shotLink = CheatTypes.Severity.LOW,
+	ping = CheatTypes.Severity.MEDIUM,
 } :: { [string]: Severity }
 
 -- Ancienne borne du serveur (studs entre racines), avant #174 : tout tir au-delà était refusé. Pendant la phase de
@@ -125,11 +131,15 @@ ShotRules.MELEE_MAX_ANGLE = 70
 -- Demi-largeur (studs) d'un personnage vu de dessus, bras compris : le rayon peut toucher le bord du corps plutôt que
 -- son axe, l'angle permis est élargi de asin(MELEE_BODY_RADIUS / distance horizontale) (90° au contact).
 ShotRules.MELEE_BODY_RADIUS = 2
--- Pas (s) entre deux positions rembobinées de la cible testées : le remote de mêlée n'envoie pas d'instant, la cible
--- est cherchée sur toute la borne de rembobinage [now - MAX_REWIND, now] (INTERP_DELAY + aller-retour du tireur).
-ShotRules.MELEE_REWIND_STEP = 0.05
--- Deux positions rembobinées plus proches que cette distance (studs) ne sont testées qu'une fois contre la map.
-ShotRules.MELEE_SAMPLE_MERGE = 0.25
+-- Instant annoncé (#214) : un tir honnête arrive now - shotTime = aller simple + délais de frame après son départ.
+-- Borne = ping du tireur (Player:GetNetworkPing, aller-retour mesuré par le moteur) × PING_FACTOR + PING_MARGIN :
+-- l'aller-retour entier couvre un aller plus lent que le retour, la marge couvre la frame du tir, le tick réseau du
+-- client, le Heartbeat du serveur et la synchronisation de GetServerTimeNow. Un instant plus ancien vise une position
+-- de la cible que le tireur ne voyait plus (« backtrack »).
+ShotRules.PING_FACTOR = 1
+ShotRules.PING_MARGIN = 0.1
+-- Avance tolérée (s) d'un instant annoncé sur l'horloge serveur (erreur de synchronisation de GetServerTimeNow).
+ShotRules.CLOCK_TOLERANCE = 0.05
 
 -- Cette méthode permet de vérifier qu'un Vector3 est fini et borné par MAX_COORD lorsqu'un point de tir arrive.
 local function isBoundedVector(v: any): boolean
@@ -174,6 +184,31 @@ end
 -- Cette méthode permet de borner l'instant du tir lorsqu'on cherche la position du tireur au moment du tir.
 function ShotRules.shooterTime(shotTime: number, now: number): number
 	return math.clamp(shotTime, now - PositionHistory.MAX_REWIND, now)
+end
+
+-- Cette méthode permet de calculer le plus grand écart permis (s) entre l'instant annoncé et l'arrivée lorsqu'un tir
+-- ou un coup arrive : ping (aller-retour, s) × PING_FACTOR + PING_MARGIN.
+function ShotRules.maxShotDelay(ping: number): number
+	return math.max(ping, 0) * ShotRules.PING_FACTOR + ShotRules.PING_MARGIN
+end
+
+-- Cette méthode permet de vérifier l'instant annoncé (shotTime, hitTime) lorsqu'un tir ou un coup arrive : pas plus
+-- ancien que maxShotDelay(ping) ni en avance de plus de CLOCK_TOLERANCE sur now. Sans ping connu (nil, non fini) :
+-- accepté, rien à comparer.
+function ShotRules.checkShotDelay(shotTime: number, now: number, ping: number?): (boolean, string?)
+	if ping == nil or not MathRules.isFinite(ping) then
+		return true
+	end
+	local delay = now - shotTime
+	local limit = ShotRules.maxShotDelay(ping)
+	if delay < -ShotRules.CLOCK_TOLERANCE then
+		return false, string.format("instant %.2f s dans le futur (max %.2f s)", -delay, ShotRules.CLOCK_TOLERANCE)
+	end
+	if delay > limit then
+		return false,
+			string.format("instant %.2f s avant l'arrivée (max %.2f s, ping %.0f ms)", delay, limit, ping * 1000)
+	end
+	return true
 end
 
 -- Cette méthode permet de vérifier l'origine lorsqu'un tir arrive : à moins de ORIGIN_BASE + vitesse × facteur de
@@ -340,22 +375,6 @@ end
 function ShotRules.countShot(mag: Magazine, now: number)
 	mag.shots += 1
 	mag.lastShotAt = now
-end
-
--- Cette méthode permet de lister les instants où rembobiner la cible lorsqu'un coup de mêlée arrive (sans instant
--- annoncé) : de now à now - MAX_REWIND, tous les MELEE_REWIND_STEP, le plus récent d'abord ; la borne now - MAX_REWIND
--- est toujours testée, même si elle n'est pas un multiple du pas.
-function ShotRules.meleeRewindTimes(now: number): { number }
-	local times = {}
-	local steps = math.floor(PositionHistory.MAX_REWIND / ShotRules.MELEE_REWIND_STEP + 1e-6)
-	for i = 0, steps do
-		table.insert(times, now - i * ShotRules.MELEE_REWIND_STEP)
-	end
-	local oldest = now - PositionHistory.MAX_REWIND
-	if times[#times] - oldest > 1e-6 then
-		table.insert(times, oldest)
-	end
-	return times
 end
 
 -- Cette méthode permet de mesurer l'angle horizontal (degrés) entre un cap et la direction d'un point à un autre

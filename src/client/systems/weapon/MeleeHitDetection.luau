@@ -25,6 +25,8 @@ function MeleeHitDetection.resolveHit(cfg, activeViewmodel: Model?, attackKind: 
 	params.FilterDescendantsInstances = filtered
 	params.FilterType = Enum.RaycastFilterType.Exclude
 
+	-- Instant du coup (#214), horloge serveur comme shotTime : le serveur rembobine la cible là où on la voit
+	local hitTime = workspace:GetServerTimeNow()
 	local result = workspace:Raycast(cam.CFrame.Position, cam.CFrame.LookVector * range, params)
 	if not result then
 		return "Shoot_void"
@@ -42,7 +44,7 @@ function MeleeHitDetection.resolveHit(cfg, activeViewmodel: Model?, attackKind: 
 		targetChar = targetChar.Parent
 	end
 	if meleeEvent and targetChar then
-		meleeEvent:FireServer(targetChar, attackKind)
+		meleeEvent:FireServer(targetChar, attackKind, hitTime)
 	end
 	return "Shoot_human"
 end

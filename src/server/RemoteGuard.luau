@@ -160,12 +160,14 @@ RemoteGuard.FEEDBACK_MAX_BYTES = 1000
 -- Une arme plus rapide (automatique) demandera de relever HitscanDamage, ShotFired et WeaponAction.
 local N = NetworkProtocol.Names
 RemoteGuard.RULES = {
+	-- Cible, type d'attaque, instant du coup (#214, horloge serveur comme shotTime, borné ensuite par le ping)
 	[N.MELEE_DAMAGE] = {
 		rate = 5,
 		burst = 5,
 		args = {
 			RemoteGuard.instance(),
 			RemoteGuard.enum({ WeaponConfig.AttackKind.PRIMARY, WeaponConfig.AttackKind.SECONDARY }),
+			RemoteGuard.number(),
 		},
 	},
 	-- Cible, partie touchée, origine, direction, point d'impact, instant du tir (#174, contrôlés ensuite par ShotRules)
