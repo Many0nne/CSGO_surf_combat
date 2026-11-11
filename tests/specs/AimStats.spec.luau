@@ -1,7 +1,8 @@
--- Statistiques de visée (#178) : accumulation, flick, z-score contre la population, planchers, bots exclus,
--- nettoyage au départ, aucun veto sur un tir.
+-- Statistiques de visée (#178) : accumulation, rattachement des touches par shotTime (#216), flick, z-score contre la
+-- population, planchers, bots exclus, nettoyage au départ, aucun veto sur un tir.
 return function(T, Loader)
 	local AimStats = Loader.new():require("src/server/AimStats")
+	local ShotLinkRules = Loader.new():require("src/server/ShotLinkRules")
 	local CharacterSyncRules = Loader.new():require("src/shared/CharacterSyncRules")
 
 	local FORWARD = Vector3.new(0, 0, -1)
@@ -13,14 +14,14 @@ return function(T, Loader)
 	end
 
 	-- Cette méthode permet de simuler `shots` tirs dont `hits` touchent (`heads` à la tête) lorsqu'un test construit un
-	-- joueur ; cap reçu juste avant chaque tir, déjà aligné (pas de flick).
+	-- joueur ; cap reçu juste avant chaque tir, déjà aligné (pas de flick), touche rattachée à son tir (#216).
 	local function play(state, p, shots: number, hits: number, heads: number, startAt: number?)
 		local t = startAt or 0
 		for i = 1, shots do
 			t += 2
-			AimStats.noteShot(state, p, t, FORWARD_YAW, t - 0.05)
+			AimStats.noteShot(state, p, t, FORWARD_YAW, t - 0.05, 500 + t)
 			if i <= hits then
-				AimStats.noteHit(state, p, i <= heads, t + 0.05, FORWARD)
+				AimStats.noteHit(state, p, i <= heads, t + 0.05, FORWARD, 500 + t)
 			end
 		end
 	end
@@ -46,52 +47,82 @@ return function(T, Loader)
 			T.expectNear(AimStats.rate(s, "headshotRate"), 0.25)
 		end)
 
-		T.it("une seule touche rattachée par tir, et pas après HIT_LINK_WINDOW", function()
+		T.it("touche rattachée à son tir par shotTime (pas au dernier tir), une seule par tir (#216)", function()
 			local state = AimStats.new()
 			local p = participant(1)
-			AimStats.noteShot(state, p, 10)
-			AimStats.noteHit(state, p, false, 10.1)
-			AimStats.noteHit(state, p, false, 10.2)
-			AimStats.noteShot(state, p, 20)
-			AimStats.noteHit(state, p, true, 20 + AimStats.HIT_LINK_WINDOW + 0.1)
+			AimStats.noteShot(state, p, 10, nil, nil, 100)
+			AimStats.noteShot(state, p, 10.2, nil, nil, 100.2)
+			AimStats.noteHit(state, p, false, 10.3, nil, 100)
+			AimStats.noteHit(state, p, false, 10.35, nil, 100)
+			AimStats.noteHit(state, p, true, 10.4, nil, 100.2)
 			local s = state.players[1]
 			T.expectEqual(s.hits, 3, "toutes les touches comptent pour la tête")
-			T.expectEqual(s.hitShots, 1)
+			T.expectEqual(s.hitShots, 2, "chaque tir rattaché une fois")
+			T.expectEqual(s.orphanHits, 1, "seconde touche du premier tir : orpheline")
 			T.expectEqual(s.headshots, 1)
+		end)
+
+		T.it("touche orpheline : comptée à part, hors du taux de touches (#216)", function()
+			local state = AimStats.new()
+			local p = participant(1)
+			-- Tricheur qui tait ses tirs manqués : touches sans ShotFired, le taux de touches ne monte pas
+			for i = 1, 10 do
+				AimStats.noteHit(state, p, true, i * 2, FORWARD)
+			end
+			-- Tir trop ancien (au-delà de ShotLinkRules.MAX_AGE) : la touche n'y est plus rattachée
+			AimStats.noteShot(state, p, 30, nil, nil, 200)
+			AimStats.noteHit(state, p, false, 30 + ShotLinkRules.MAX_AGE + 0.1, FORWARD, 200)
+			local s = state.players[1]
+			T.expectEqual(s.hits, 11)
+			T.expectEqual(s.orphanHits, 11)
+			T.expectEqual(s.hitShots, 0)
+			T.expectEqual(AimStats.rate(s, "hitRate"), 0)
+			T.expect(string.find(AimStats.describe(s, AimStats.judge(state, 1)), "orph 11", 1, true) ~= nil)
+		end)
+
+		T.it("flick mesuré sur le cap figé au tir rattaché, pas au dernier tir (#216)", function()
+			local state = AimStats.new()
+			local p = participant(1)
+			-- Deux tirs en attente : le premier, cap à 90° de la touche (flick) ; le second, cap aligné
+			AimStats.noteShot(state, p, 10, FORWARD_YAW + math.pi / 2, 9.95, 100)
+			AimStats.noteShot(state, p, 10.1, FORWARD_YAW, 10.05, 100.1)
+			AimStats.noteHit(state, p, true, 10.15, FORWARD, 100)
+			T.expectEqual(state.players[1].flickHits, 1)
 		end)
 
 		T.it("flick : rotation rapide entre le cap figé au tir et la direction validée de la touche", function()
 			local state = AimStats.new()
 			local p = participant(1)
 			local right = Vector3.new(1, 0, 0) -- 90° de cap
-			AimStats.noteShot(state, p, 10, FORWARD_YAW, 9.95)
-			AimStats.noteHit(state, p, true, 10.02, right)
+			AimStats.noteShot(state, p, 10, FORWARD_YAW, 9.95, 10)
+			AimStats.noteHit(state, p, true, 10.02, right, 10)
 			local s = state.players[1]
 			T.expectEqual(s.measured, 1)
 			T.expectEqual(s.flickHits, 1)
 			T.expectNear(s.peakSpeed, 90 / 0.05, 1)
 			-- Cap trop ancien à l'arrivée du tir : pas de mesure
-			AimStats.noteShot(state, p, 20, FORWARD_YAW + math.pi / 2, 20 - AimStats.FLICK_MAX_AGE - 0.01)
-			AimStats.noteHit(state, p, true, 20.02, FORWARD)
+			AimStats.noteShot(state, p, 20, FORWARD_YAW + math.pi / 2, 20 - AimStats.FLICK_MAX_AGE - 0.01, 20)
+			AimStats.noteHit(state, p, true, 20.02, FORWARD, 20)
 			T.expectEqual(s.measured, 1)
 			-- Petite correction : mesurée, pas un flick
-			AimStats.noteShot(state, p, 30, FORWARD_YAW + math.rad(5), 29.95)
-			AimStats.noteHit(state, p, true, 30.02, FORWARD)
+			AimStats.noteShot(state, p, 30, FORWARD_YAW + math.rad(5), 29.95, 30)
+			AimStats.noteHit(state, p, true, 30.02, FORWARD, 30)
 			T.expectEqual(s.measured, 2)
 			T.expectEqual(s.flickHits, 1)
-			-- Touche sans tir récent : comptée, ni au but ni mesurée
+			-- Touche sans tir rattaché : comptée, ni au but ni mesurée
 			AimStats.noteHit(state, p, false, 40, right)
 			T.expectEqual(s.measured, 2)
 			T.expectEqual(s.hits, 4)
 			T.expectEqual(s.hitShots, 3)
+			T.expectEqual(s.orphanHits, 1)
 		end)
 
 		T.it("air strafe (200 °/s) : pas un flick", function()
 			local state = AimStats.new()
 			local p = participant(1)
 			-- Cap reçu 50 ms avant le tir, la caméra a tourné de 10° depuis
-			AimStats.noteShot(state, p, 10, FORWARD_YAW + math.rad(10), 9.95)
-			AimStats.noteHit(state, p, false, 10.02, FORWARD)
+			AimStats.noteShot(state, p, 10, FORWARD_YAW + math.rad(10), 9.95, 10)
+			AimStats.noteHit(state, p, false, 10.02, FORWARD, 10)
 			T.expectEqual(state.players[1].measured, 1)
 			T.expectEqual(state.players[1].flickHits, 0)
 		end)
@@ -233,6 +264,7 @@ return function(T, Loader)
 				hits = 9000,
 				headshots = 8500,
 				hitShots = 8000,
+				orphanHits = 9000,
 				measured = 11000,
 				flickHits = 7000,
 				peakSpeed = 24000,

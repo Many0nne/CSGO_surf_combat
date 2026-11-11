@@ -613,6 +613,16 @@ function Validator.authorizeHitscan(
 			-- Refusé : la cadence n'est pas relancée, comme pour toute touche refusée
 			return nil, false
 		end
+		-- Touche orpheline : journalisée seulement si rien d'autre ne la refuse (un chargeur vide explique déjà le
+		-- ShotFired écarté) ; mode "log" de shotLink jusqu'à mesure en jeu
+		if not link then
+			local detail = if type(shotTime) == "number"
+				then string.format("touche sans ShotFired accepté du même instant (%.3f)", shotTime)
+				else "touche sans instant de tir"
+			if failWeaponCheck(attacker, CheatTypes.Category.HITSCAN, ShotRules.Check.SHOT_LINK, detail) then
+				return nil, false
+			end
+		end
 	end
 	recordAttack(attacker, cfg, cfg.FireDelay, now)
 	if link then

@@ -36,12 +36,15 @@ ShotRules.Check = {
 	MAGAZINE = "magazine", -- chargeur non vide, ou rechargé (#175, tir)
 	ORIENTATION = "orientation", -- cible devant le cap du tireur (#176, mêlée)
 	MELEE_LINE_OF_SIGHT = "meleeLineOfSight", -- aucun obstacle de la map entre tireur et cible (#176, mêlée)
+	SHOT_LINK = "shotLink", -- touche rattachée à un ShotFired accepté du même instant (#216, tir)
 }
 
 -- Mode de chaque contrôle. "log" tant que les faux positifs ne sont pas mesurés en jeu (docs/anticheat.md, « T1 » :
 -- procédure pour passer en "block") ; forme et distance ne dépendent pas du réseau, donc bloquants d'emblée. Equip et
 -- chargeur (#175) : règles déterministes à tolérance de gigue, sans faux positif mesuré, bloquants d'emblée. Mêlée
 -- (#176) : cap du tireur relayé à 20 Hz, faux positifs possibles en rotation rapide, journal seul jusqu'à mesure en jeu.
+-- Touche sans tir rattaché (#216) : un ShotFired écarté par le relais (cadence à la gigue près, origine) la rend
+-- orpheline chez un joueur honnête, journal seul jusqu'à mesure en jeu ; le chargeur la compte quand même.
 ShotRules.MODES = {
 	shape = "block",
 	origin = "log",
@@ -52,6 +55,7 @@ ShotRules.MODES = {
 	magazine = "block",
 	orientation = "log",
 	meleeLineOfSight = "log",
+	shotLink = "log",
 } :: { [string]: Mode }
 
 -- Gravité d'un échec au journal (CheatTypes.Severity) : une forme impossible ne vient jamais de notre client
@@ -66,6 +70,8 @@ ShotRules.SEVERITY = {
 	magazine = CheatTypes.Severity.MEDIUM,
 	orientation = CheatTypes.Severity.MEDIUM,
 	meleeLineOfSight = CheatTypes.Severity.MEDIUM,
+	-- Faible : un tir relayé écarté de peu (gigue) en produit, et le chargeur reste compté (#216)
+	shotLink = CheatTypes.Severity.LOW,
 } :: { [string]: Severity }
 
 -- Ancienne borne du serveur (studs entre racines), avant #174 : tout tir au-delà était refusé. Pendant la phase de

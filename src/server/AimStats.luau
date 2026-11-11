@@ -1,7 +1,8 @@
 -- Statistiques de visée par joueur (#178, docs/anticheat.md « Aimbot et triggerbot ») : règles pures, sans service ni
 -- workspace, testées sous Lune (tests/specs/AimStats.spec.luau).
 -- Un aimbot envoie des tirs valides : on ne peut que le repérer statistiquement. Par joueur et par session : tirs
--- acceptés (ShotFired), touches qui ont fait des dégâts, touches à la tête, et touches précédées d'un « flick » (cap qui
+-- acceptés (ShotFired), touches qui ont fait des dégâts, touches rattachées à leur tir par shotTime (#216, taux de
+-- touches) ou orphelines (anomalie), touches à la tête, et touches précédées d'un « flick » (cap qui
 -- tourne d'au moins FLICK_MIN_ANGLE entre le dernier cap reçu par CharacterSync et la direction de la touche, validée
 -- par le Validator, en FLICK_MAX_AGE au plus ; pas la direction de ShotFired, que rien ne vérifie contre la touche).
 -- Un joueur est signalé sur une statistique seulement si elle dépasse de Z_THRESHOLD écarts-types la moyenne des
@@ -11,8 +12,11 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local ServerScriptService = game:GetService("ServerScriptService")
+
 local CharacterSyncRules = require(ReplicatedStorage.Shared.CharacterSyncRules)
 local MathRules = require(ReplicatedStorage.Shared.MathRules)
+local ShotLinkRules = require(ServerScriptService.Server.ShotLinkRules)
 
 local AimStats = {}
 
@@ -39,27 +43,25 @@ AimStats.FLICK_MIN_ANGLE = 30
 AimStats.FLICK_MAX_AGE = 0.1
 -- Durée minimale (s) retenue pour la vitesse angulaire affichée (paquets groupés : un écart de 1 ms ferait 25 000 °/s).
 AimStats.MIN_SPEED_DT = 1 / 20
--- Une touche est rattachée au dernier tir s'il date d'au plus HIT_LINK_WINDOW (s) (le client envoie ShotFired juste
--- avant la touche, sur deux remotes fiables, donc dans cet ordre) ; une seule touche comptée par tir.
-AimStats.HIT_LINK_WINDOW = 0.5
 -- Direction de tir presque verticale : cap indéfini, flick non mesuré (composante horizontale minimale).
 local MIN_HORIZONTAL = 0.1
+
+-- Tir récent (#216) : instant annoncé par ShotFired, arrivée, cap reçu avant le tir et son âge à l'arrivée du tir
+-- (figé là : un paquet de position arrivé entre le tir et sa touche, non fiable contre fiable, ne fausse pas le
+-- flick), touche déjà rattachée. Gardé ShotLinkRules.MAX_AGE, comme le registre du Validator.
+export type ShotRecord = { shotTime: number, at: number, yaw: number?, yawAge: number?, hit: boolean }
 
 export type Stats = {
 	name: string,
 	shots: number, -- tirs acceptés (ShotFired relayé)
 	hits: number, -- touches acceptées par le Validator qui ont fait des dégâts
 	headshots: number,
-	hitShots: number, -- tirs rattachés à au moins une touche
+	hitShots: number, -- tirs rattachés à une touche (#216 : par shotTime, rattachement décidé par le Validator)
+	orphanHits: number, -- touches sans tir rattaché (#216 : anomalie, hors du taux de touches)
 	measured: number, -- touches dont le flick a pu être mesuré
 	flickHits: number, -- touches précédées d'un flick
 	peakSpeed: number, -- vitesse angulaire maximale mesurée (°/s)
-	lastShotAt: number?,
-	lastShotHit: boolean,
-	-- Cap reçu avant le dernier tir et son âge à l'arrivée du tir : figé là, un paquet de position arrivé entre le tir
-	-- et sa touche (non fiable contre fiable, ordre non garanti) ne fausse pas le flick
-	shotYaw: number?,
-	shotYawAge: number?,
+	recent: { ShotRecord }, -- tirs récents, en attente de leur touche
 	reportedShots: number, -- tirs au dernier résumé périodique
 	everFlagged: boolean, -- signalé au moins une fois dans la session (son relevé final va alors au journal)
 }
@@ -105,11 +107,11 @@ local function statsOf(state: State, participant: any): Stats?
 			hits = 0,
 			headshots = 0,
 			hitShots = 0,
+			orphanHits = 0,
 			measured = 0,
 			flickHits = 0,
 			peakSpeed = 0,
-			lastShotAt = nil,
-			lastShotHit = false,
+			recent = {},
 			reportedShots = 0,
 			everFlagged = false,
 		}
@@ -127,24 +129,75 @@ function AimStats.yawDelta(yaw: number, direction: Vector3): number?
 	return math.deg(math.abs(MathRules.angleDelta(yaw, CharacterSyncRules.yawOf(direction))))
 end
 
+-- Cette méthode permet d'oublier les tirs récents trop anciens d'un joueur (ShotLinkRules.MAX_AGE, ou venus du futur)
+-- lorsqu'un tir ou une touche arrive.
+local function pruneRecent(stats: Stats, now: number)
+	local recent = stats.recent
+	for i = #recent, 1, -1 do
+		local age = now - recent[i].at
+		if age > ShotLinkRules.MAX_AGE or age < 0 then
+			table.remove(recent, i)
+		end
+	end
+end
+
 -- Cette méthode permet de compter un tir accepté lorsqu'il est relayé (ShotFired) : le dernier cap reçu (lastYaw à
--- lastYawAt, même horloge que now) est figé pour le flick de sa touche. Ne renvoie rien : aucun veto.
-function AimStats.noteShot(state: State, participant: any, now: number, lastYaw: number?, lastYawAt: number?)
+-- lastYawAt, même horloge que now) est figé pour le flick de sa touche, retrouvée par shotTime. Aucun veto.
+function AimStats.noteShot(
+	state: State,
+	participant: any,
+	now: number,
+	lastYaw: number?,
+	lastYawAt: number?,
+	shotTime: number?
+)
 	local stats = statsOf(state, participant)
 	if not stats then
 		return
 	end
 	stats.shots += 1
-	stats.lastShotAt = now
-	stats.lastShotHit = false
-	stats.shotYaw = lastYaw
-	stats.shotYawAge = if lastYaw and lastYawAt then now - lastYawAt else nil
+	if type(shotTime) ~= "number" then
+		return
+	end
+	pruneRecent(stats, now)
+	table.insert(stats.recent, {
+		shotTime = shotTime,
+		at = now,
+		yaw = lastYaw,
+		yawAge = if lastYaw and lastYawAt then now - lastYawAt else nil,
+		hit = false,
+	})
+	while #stats.recent > ShotLinkRules.MAX_ENTRIES do
+		table.remove(stats.recent, 1)
+	end
 end
 
--- Cette méthode permet de compter une touche qui a fait des dégâts lorsqu'elle est appliquée : rattachée au dernier tir
--- s'il est récent et pas encore touché (taux de touches) ; flick mesuré alors entre le cap figé au tir et la direction
--- validée de la touche. Ne renvoie rien : aucun veto.
-function AimStats.noteHit(state: State, participant: any, isHeadshot: boolean, now: number, direction: Vector3?)
+-- Cette méthode permet de retrouver le tir récent d'instant shotTime (à LINK_TOLERANCE près) pas encore touché
+-- lorsqu'une touche rattachée par le Validator arrive ; le plus proche, nil sinon.
+local function findRecent(stats: Stats, shotTime: number, now: number): ShotRecord?
+	pruneRecent(stats, now)
+	local best: ShotRecord? = nil
+	local bestGap = math.huge
+	for _, record in stats.recent do
+		local gap = math.abs(record.shotTime - shotTime)
+		if not record.hit and gap <= ShotLinkRules.LINK_TOLERANCE and gap < bestGap then
+			best, bestGap = record, gap
+		end
+	end
+	return best
+end
+
+-- Cette méthode permet de compter une touche qui a fait des dégâts lorsqu'elle est appliquée : rattachée au tir
+-- linkedShotTime (décidé par le Validator, #216 ; nil : orpheline, anomalie hors du taux de touches) ; flick mesuré
+-- alors entre le cap figé à ce tir et la direction validée de la touche. Ne renvoie rien : aucun veto.
+function AimStats.noteHit(
+	state: State,
+	participant: any,
+	isHeadshot: boolean,
+	now: number,
+	direction: Vector3?,
+	linkedShotTime: number?
+)
 	local stats = statsOf(state, participant)
 	if not stats then
 		return
@@ -153,14 +206,15 @@ function AimStats.noteHit(state: State, participant: any, isHeadshot: boolean, n
 	if isHeadshot then
 		stats.headshots += 1
 	end
-	local shotAt = stats.lastShotAt
-	if not shotAt or stats.lastShotHit or now - shotAt < 0 or now - shotAt > AimStats.HIT_LINK_WINDOW then
-		-- Touche sans tir récent à qui la rattacher : comptée, ni « au but » ni flick
+	local record = if type(linkedShotTime) == "number" then findRecent(stats, linkedShotTime, now) else nil
+	if not record then
+		-- Touche sans tir rattaché : comptée (tête), ni « au but » ni flick
+		stats.orphanHits += 1
 		return
 	end
-	stats.lastShotHit = true
+	record.hit = true
 	stats.hitShots += 1
-	local yaw, age = stats.shotYaw, stats.shotYawAge
+	local yaw, age = record.yaw, record.yawAge
 	if not direction or not yaw or not age or age < 0 or age > AimStats.FLICK_MAX_AGE then
 		return
 	end
@@ -228,7 +282,8 @@ end
 
 -- Cette méthode permet de mettre en forme les chiffres bruts d'un joueur lorsqu'ils vont au journal : compact (le
 -- détail de CheatLog est coupé à 160 octets), signalement et son z d'abord, puis les chiffres, puis les autres z.
--- « but » = tirs rattachés à une touche ; « touches » = toutes les touches acceptées (celles de MIN_HITS).
+-- « but » = tirs rattachés à une touche ; « touches » = toutes les touches acceptées (celles de MIN_HITS) ; « orph » =
+-- touches sans tir rattaché (#216).
 function AimStats.describe(stats: Stats, verdict: Verdict): string
 	-- Cette méthode permet d'arrondir une statistique en pourcentage lorsqu'elle est affichée.
 	local function pct(metric: Metric): number
@@ -245,11 +300,12 @@ function AimStats.describe(stats: Stats, verdict: Verdict): string
 	table.insert(
 		parts,
 		string.format(
-			"tirs %d but %d (%d%%) touches %d tête %d (%d%%) flick %d (%d%%) mesurés %d pic %.0f°/s",
+			"tirs %d but %d (%d%%) touches %d orph %d tête %d (%d%%) flick %d (%d%%) mesurés %d pic %.0f°/s",
 			stats.shots,
 			stats.hitShots,
 			pct("hitRate"),
 			stats.hits,
+			stats.orphanHits or 0,
 			stats.headshots,
 			pct("headshotRate"),
 			stats.flickHits,

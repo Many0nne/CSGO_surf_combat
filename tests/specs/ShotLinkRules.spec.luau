@@ -1,5 +1,5 @@
 -- Rattachement d'une touche à son tir (#215, #216) : instant à LINK_TOLERANCE près, une touche par tir, âge et taille
--- du registre bornés, touche arrivée avant son ShotFired.
+-- du registre bornés, touche arrivée avant son ShotFired, mode et gravité du contrôle shotLink.
 return function(T, Loader)
 	local ShotLinkRules = Loader.new():require("src/server/ShotLinkRules")
 	local ShotRules = Loader.new():require("src/server/ShotRules")
@@ -80,6 +80,12 @@ return function(T, Loader)
 			T.expectEqual(ShotLinkRules.find(ledger, nil, 10, "hit"), nil)
 			T.expectEqual(ShotLinkRules.find(ledger, 0 / 0, 10, "hit"), nil)
 			T.expectEqual(ShotLinkRules.find(ledger, "100", 10, "hit"), nil)
+		end)
+
+		T.it("contrôle shotLink livré en journal seul, gravité faible", function()
+			T.expectEqual(ShotRules.Check.SHOT_LINK, "shotLink")
+			T.expectEqual(ShotRules.MODES.shotLink, "log")
+			T.expectEqual(ShotRules.SEVERITY.shotLink, "low")
 		end)
 	end)
 end

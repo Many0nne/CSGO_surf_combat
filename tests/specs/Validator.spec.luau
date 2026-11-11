@@ -836,6 +836,66 @@ return function(T, Loader)
 			T.expectEqual(Validator.shotFired(a, 110, 16.5), false, "6e")
 		end)
 
+		T.it(
+			"touche orpheline : journalisée (journal seul), appliquée, comptée dans le chargeur ; refusée en block",
+			function()
+				local Validator, makePlayer, _, world, ShotRules = setup()
+				local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(50, 0, 0))
+				local damage, _, linked = Validator.authorizeHitscan(
+					a,
+					b.Character,
+					rootOf(b.Character),
+					10,
+					shotAt(Validator, a, b, 100),
+					true
+				)
+				T.expectEqual(damage, 115, "mode log : touche appliquée")
+				T.expectEqual(linked, nil, "orpheline")
+				T.expectEqual(#world.reports, 1)
+				T.expectEqual(world.reports[1].check, "shotLink")
+				T.expectEqual(world.reports[1].category, "Hitscan")
+				T.expectEqual(world.reports[1].severity, "low")
+				T.expect(string.find(world.reports[1].detail, "journal seul", 1, true) ~= nil, world.reports[1].detail)
+				-- Le chargeur compte les touches orphelines : 4 de plus, puis la 6e est refusée
+				for i = 1, 4 do
+					T.expectEqual(
+						Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), 10 + i * 1.5, nil, true),
+						115,
+						"orpheline " .. i + 1
+					)
+				end
+				T.expectEqual(
+					Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), 17.5, nil, true),
+					nil,
+					"6e"
+				)
+				T.expectEqual(Validator.shotFired(a, 999, 17.5), false, "ShotFired refusé aussi")
+				-- Mode block : une touche orpheline est refusée
+				local V2, makePlayer2, _, world2, ShotRules2 = setup()
+				local c, d = makePlayer2(Vector3.zero, "AWP"), makePlayer2(Vector3.new(50, 0, 0))
+				ShotRules2.MODES.shotLink = "block"
+				T.expectEqual(V2.authorizeHitscan(c, d.Character, rootOf(d.Character), 10, nil, true), nil, "block")
+				T.expectEqual(world2.reports[1].check, "shotLink")
+				T.expectEqual(
+					V2.authorizeHitscan(c, d.Character, rootOf(d.Character), 10),
+					115,
+					"rattachée : acceptée"
+				)
+				ShotRules2.MODES.shotLink = "log"
+				T.expectEqual(ShotRules.MODES.shotLink, "log")
+			end
+		)
+
+		T.it("touche refusée par ailleurs (chargeur vide) : pas de ligne shotLink en plus", function()
+			local Validator, makePlayer, _, world = setup()
+			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(50, 0, 0))
+			for i = 1, 5 do
+				T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), 10 + (i - 1) * 1.5), 115)
+			end
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), 17.5), nil)
+			T.expectEqual(table.concat(checks(world), ","), "magazine")
+		end)
+
 		T.it("deux touches pour un même tir d'AWP : une seule rattachée (pas de pénétration)", function()
 			local Validator, makePlayer, _, world = setup()
 			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(50, 0, 0))
@@ -856,7 +916,7 @@ return function(T, Loader)
 
 		-- Roblox garantit l'ordre d'envoi entre deux RemoteEvent d'un même client : seul un client modifié (ou une file
 		-- de Roblox saturée) inverse les deux ; aucun délai d'attente n'est donc accordé, mais rien n'est compté deux fois
-		T.it("HitscanDamage avant son ShotFired : tir compté une seule fois", function()
+		T.it("HitscanDamage avant son ShotFired : touche orpheline, tir compté une seule fois", function()
 			local Validator, makePlayer, _, world = setup()
 			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(50, 0, 0))
 			for i = 1, 5 do
@@ -877,7 +937,10 @@ return function(T, Loader)
 				T.expectEqual(Validator.shotFired(a, 100 + i, t + 0.01), true, "ShotFired " .. i)
 			end
 			T.expectEqual(Validator.shotFired(a, 106, 17.5), false, "6e tir : 5 comptés, pas 10")
-			T.expectEqual(#world.reports, 0)
+			T.expectEqual(#world.reports, 5, "chaque touche arrivée avant son tir est journalisée")
+			for _, r in world.reports do
+				T.expectEqual(r.check, "shotLink")
+			end
 		end)
 
 		T.it("rechargement borné par la cadence du dernier tir compté, même manqué", function()

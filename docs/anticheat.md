@@ -23,13 +23,13 @@ envoyant des données plausibles. Là, on ne peut que détecter statistiquement,
 | Domaine | Validation actuelle | Où |
 |---|---|---|
 | Mêlée | Cible = autre participant vivant, arme de mêlée réellement en main, distance des racines ≤ 10 studs, dégâts et cadence lus dans `WeaponConfig` selon le type d'attaque, backstab recalculé sur les positions serveur (#47) ; pour un joueur, durée d'equip (#175, voir T2), orientation et ligne de vue vers la cible rembobinée (#176, journal seul, voir M1) | `src/server/Validator.luau` (`authorizeMelee`), `src/server/ShotRules.luau` |
-| Tir | Cible valide (vivante), arme à distance en main, partie touchée appartenant à la cible, distance des racines ≤ `Validator.MAX_HITSCAN_RANGE` (~2 256 studs ; bots : 250), cadence `FireDelay` à 0,15 s près, dégâts calculés par le serveur selon la zone ; pour un joueur, forme, origine, visée sur la cible rembobinée, portée et ligne de vue (#174, voir T1), durée d'equip et chargeur (#175, voir T2 ; l'equip vaut aussi pour la mêlée) | `src/server/Validator.luau` (`authorizeHitscan`, `validateShot`), `src/server/ShotRules.luau` |
+| Tir | Cible valide (vivante), arme à distance en main, partie touchée appartenant à la cible, distance des racines ≤ `Validator.MAX_HITSCAN_RANGE` (~2 256 studs ; bots : 250), cadence `FireDelay` à 0,15 s près, dégâts calculés par le serveur selon la zone ; pour un joueur, forme, origine, visée sur la cible rembobinée, portée et ligne de vue (#174, voir T1), durée d'equip et chargeur (#175, voir T2 ; l'equip vaut aussi pour la mêlée), touche rattachée à son `ShotFired` par `shotTime` (#216, journal seul) | `src/server/Validator.luau` (`authorizeHitscan`, `validateShot`), `src/server/ShotRules.luau`, `src/server/ShotLinkRules.luau` |
 | Position | Forme (Vector3 et angle finis, coordonnées ≤ 1e5), personnage vivant, seau de distance (450 studs/s soutenus, client plafonné à 420 horizontaux, silence plafonné), refus journalisé et corrigé (#172) ; noclip et vol journalisés (#177, journal seul), joueur silencieux au-dessus du vide déclaré tombé | `src/server/CharacterSync.luau` (`refuse`, `judgeGuard`, `onClientPosition`), `src/shared/CharacterSyncRules.luau` (`tryMove`), `src/shared/MovementGuardRules.luau` |
 | Réglages | Réglages entièrement assainis par `PlayerSettings.sanitize`, une écriture DataStore au plus toutes les 10 s | `src/server/SettingsStore.luau` (`onSaveSettings`) |
 | Feedback | Type `string`, longueur 10 à 500, délai de 60 s après un envoi réussi, 5 envois par semaine (DataStore) | `src/server/FeedbackService.luau` (`init`, `COOLDOWN`, `consumeWeeklyQuota`) |
 | Debug | Remote `DebugPlaytest` créé seulement dans Studio | `src/server/DebugPlaytest.luau` (`DebugPlaytest.init`) |
-| Relais des tirs (son chez les autres) | Tireur vivant, arme à distance en main prête (equip, chargeur), forme, origine près du tireur, cadence de l'arme (#156) | `src/server/ShotRelayRules.luau`, `Validator.isReadyToFire`, `relayShot` de `src/server/init.server.luau` |
-| Statistiques de visée (#178) | Par joueur : tirs acceptés, touches, têtes, flicks suivis d'une touche ; z-score contre les autres joueurs du serveur, journal seul (A1) | `src/server/AimStats.luau`, branchement dans `src/server/init.server.luau` |
+| Relais des tirs (son et recul 3P chez les autres) | Tireur vivant, arme à distance en main prête (equip, chargeur), forme, origine près du tireur, cadence de l'arme (#156) ; tir accepté compté dans le chargeur (#215) | `src/server/ShotRelayRules.luau`, `Validator.isReadyToFire`, `Validator.noteShotFired`, `relayShot` de `src/server/init.server.luau` |
+| Statistiques de visée (#178) | Par joueur : tirs acceptés, touches (rattachées à leur tir par `shotTime` ou orphelines, #216), têtes, flicks suivis d'une touche ; z-score contre les autres joueurs du serveur, journal seul (A1) | `src/server/AimStats.luau`, branchement dans `src/server/init.server.luau` |
 | Tous les remotes C→S | Garde commune (#170) : débit par joueur et par remote, types des arguments, violations journalisées, kick à 3 violations fortes | `src/server/RemoteGuard.luau`, `src/server/CheatLog.luau` |
 
 Les bots (`src/server/bots/`) passent par le même `Validator` (`BotManager.init` dans `src/server/init.server.luau`) : leurs tirs sont
@@ -47,7 +47,7 @@ Impact : ce que gagne le tricheur et ce que subissent les autres. Coût : serveu
 | D1 | Vitesse et téléportation | Fermé (#172, #212) : 450 studs/s soutenus au plus, saut borné à 337,5 studs après un silence, refus corrigé | Faible | Fait |
 | M1 | Coup de couteau dans toutes les directions (« kill aura ») | Détecté (#176, journal seul) : coup hors du cap ou à travers un mur journalisé ; **élevé** tant qu'il n'est pas en `block` | Faible | P2 |
 | R1 | Remotes sans débit ni garde (respawn, feedback) | Fermé (#170, #171) : garde commune, délai de réapparition et feedback limité en mémoire | Faible | Fait |
-| T2 | Munitions et durée d'equip | Fermé (#175) : touche refusée pendant l'equip et au 6e tir sans rechargement | Faible | Fait |
+| T2 | Munitions et durée d'equip | Fermé (#175, #215) : touche refusée pendant l'equip ; chaque tir, touché ou manqué, compté : 6e tir refusé sans rechargement | Faible | Fait |
 | D2 | Vol et noclip | Détecté (#177) : noclip et vol au journal (journal seul), vide fermé | Faible serveur, moyen en réglage (surf) | Fait (journal) |
 | A1 | Aimbot, triggerbot | Détecté statistiquement (#178, journal seul) : tête, touches et flicks comparés aux autres joueurs ; **élevé**, rien n'est bloqué | Moyen, faux positifs | P3 |
 | E1 | Wallhack, ESP | **Élevé** mais non bloquable à coût raisonnable | Très élevé | P4 (accepté) |
@@ -209,7 +209,7 @@ contrôles de plus. Règles pures dans `src/server/ShotRules.luau` (`checkEquip`
 | Contrôle | Règle | Mode livré | Gravité |
 |---|---|---|---|
 | `equip` | Touche acceptée à partir de `equippedAt + EquipTime - EQUIP_TOLERANCE` (0,2 s). `equippedAt` = arrivée de l'outil dans le personnage vue par le serveur (`ChildAdded` de `trackWeapon3P`, `Validator.noteEquip`). Outil en main sans arrivée notée : refusé (« sans equip vu par le serveur »), jamais accepté en silence. Tir et mêlée (catégorie `Melee` pour le couteau) | `block` | moyenne |
-| `magazine` | Arme à `Magazine` : touches **acceptées** comptées par participant et par arme ; la `Magazine`+1e est refusée sans rechargement fini, et toute touche est refusée pendant un rechargement qui n'a pas encore duré `ReloadTime - RELOAD_TOLERANCE` (0,2 s). Début du rechargement : action `Reload` du remote `WeaponAction` (`Validator.noteReload`), lue avant les filtres de la pose 3P (intervalle de 0,05 s, modèle 3P attaché) qui pourraient écarter une action honnête | `block` | moyenne |
+| `magazine` | Arme à `Magazine` : **tirs** comptés par participant et par arme depuis #215 (chaque `ShotFired` accepté, touché ou manqué, et chaque touche orpheline, voir « Tirs comptés et touches rattachées ») ; le `Magazine`+1e tir est refusé sans rechargement fini (`ShotFired` non relayé, touche refusée), et tout tir est refusé pendant un rechargement qui n'a pas encore duré `ReloadTime - RELOAD_TOLERANCE` (0,2 s). Début du rechargement : action `Reload` du remote `WeaponAction` (`Validator.noteReload`), lue avant les filtres de la pose 3P (intervalle de 0,05 s, modèle 3P attaché) qui pourraient écarter une action honnête | `block` | moyenne |
 
 - **Borne d'equip.** Le client honnête n'est jamais prêt avant `EquipTime` (#184 : il attend le chargement de la piste
   puis sa durée), sauf piste plus courte qu'`EquipTime` : couteau 1 s / 1,3 = 0,769 s pour 0,77 (couvert par la
@@ -229,9 +229,9 @@ contrôles de plus. Règles pures dans `src/server/ShotRules.luau` (`checkEquip`
   ne peut pas recharger avant). Changement ou rangement d'arme (`ChildRemoved`, `Validator.noteUnequip`) : rechargement
   inachevé annulé, rechargement fini acquis, à `RELOAD_CANCEL_TOLERANCE` (1 s) près : sinon un `Reload` arrivé en
   retard, suivi d'un changement d'arme juste après la fin du rechargement côté client, ferait refuser tout le chargeur
-  suivant. Un tricheur n'y gagne rien (ressortir l'AWP coûte 1,38 s d'equip au moins). Seules les touches sont comptées
-  (les tirs manqués arrivent par `ShotFired` depuis #156, mais ne sont pas comptés : un `ShotFired` perdu ou refusé
-  ne doit pas faire refuser une touche) : le compteur serveur est toujours ≤ celui du client, jamais plus strict.
+  suivant. Un tricheur n'y gagne rien (ressortir l'AWP coûte 1,38 s d'equip au moins). Depuis #215, chaque tir est
+  compté une fois : à son `ShotFired` accepté, ou à sa touche si elle est orpheline (`ShotFired` écarté par le relais) ;
+  un `ShotFired` refusé n'est pas compté. Le compteur serveur reste ≤ celui du client, jamais plus strict.
 - **Bots.** Exclus des deux contrôles (`attacker.isBot`) : `BotArsenal` fait déjà respecter equip, chargeur et
   rechargement, et ses tirs sont des raycasts serveur. Leur equip n'est pas noté (`trackWeapon3P`) : rien à retenir, et
   `Validator.forget` est appelé à l'apparition d'un bot et à son retrait (#218, voir « Retrait d'un participant »).
@@ -261,8 +261,72 @@ contrôles de plus. Règles pures dans `src/server/ShotRules.luau` (`checkEquip`
   était ignoré par le client (état `FIRING`). Depuis #221, `ShootAnimTime` = `FireDelay` (invariant testé par
   `tests/specs/WeaponConfig.spec.luau`) : cadence client et serveur identiques.
 - **Début du rechargement borné.** Un `Reload` ne compte qu'à partir de la fin de l'equip et de la cadence du dernier
-  tir accepté de l'arme (`max(arrivée, equip + EquipTime - 0,2, dernier tir + FireDelay - 0,2)`) : le client ne peut pas
-  recharger avant, un client modifié qui recharge dès son tir ne gagne pas `FireDelay` (1,46 s) sur la pause.
+  tir accepté de l'arme (`max(arrivée, equip + EquipTime - 0,2, dernier tir + FireDelay - 0,2)`, dernier tir = touche
+  acceptée ou, depuis #215, tir compté même manqué : `Magazine.lastShotAt`) : le client ne peut pas recharger avant, un
+  client modifié qui recharge dès son tir ne gagne pas `FireDelay` (1,46 s) sur la pause.
+
+### Tirs comptés et touches rattachées (#215, #216)
+
+**Avant.** Le chargeur serveur ne comptait que les touches : un client modifié pouvait faire entendre un tir par
+cadence sans jamais recharger, ou rater 4 tirs puis toucher les 5 suivants. Le recul 3P (`WeaponAction` « Shoot ») était
+posé sur la parole du client, sans cadence. `AimStats` rattachait une touche au **dernier** tir relayé de moins de
+0,5 s : un tricheur qui ne déclarait que ses tirs réussis gonflait son taux de touches.
+
+**Fait.** Registre des tirs récents par participant et par arme (`Validator`, règles pures dans
+`src/server/ShotLinkRules.luau`), joueurs seulement :
+
+1. **Annonce du tir.** Le client envoie `ShotFired(origin, direction, shotTime)` (`HitscanSystem.resolveHit`),
+   `shotTime` = `workspace:GetServerTimeNow()` pris une fois par tir, le même que dans `HitscanDamage`.
+2. **Tir compté.** `relayShot` (`init.server.luau`) : `Validator.isReadyToFire` (equip, chargeur), puis
+   `ShotRelayRules.admit` (forme, origine, cadence), puis `Validator.noteShotFired` : le tir est compté dans le chargeur
+   (`ShotRules.countShot`) et inscrit au registre. Un `ShotFired` refusé n'est ni relayé (son, recul 3P) ni compté,
+   ni journalisé (sans dégâts, il ne rapporte rien).
+3. **Touche rattachée.** `Validator.authorizeHitscan` cherche dans le registre le tir d'instant `shot.shotTime`
+   (`ShotLinkRules.find`, à `LINK_TOLERANCE` près, encore libre) : rattachée, la touche ne passe pas le contrôle
+   `magazine` (son tir l'a déjà passé) et n'est pas recomptée ; une seule touche par tir. Elle renvoie l'instant du tir
+   rattaché, que `AimStats.noteHit` utilise (taux de touches, flick sur le cap figé à **ce** tir).
+4. **Touche orpheline** (aucun tir libre de cet instant) : contrôle `shotLink`, puis contrôle `magazine` et comptage
+   comme avant #215 (sinon un client qui tait ses `ShotFired` aurait un chargeur infini). Elle entre au registre : un
+   `ShotFired` du même instant arrivé après elle y est rattaché, relayé même chargeur plein, et pas recompté.
+
+| Contrôle | Règle (constantes de `ShotLinkRules`) | Mode livré | Gravité |
+|---|---|---|---|
+| `shotLink` | Touche rattachée à un `ShotFired` accepté, de même `shotTime` à `LINK_TOLERANCE` (1 ms) près, arrivé depuis moins de `MAX_AGE` (1 s), pas encore touché. Journalisé seulement si la touche passe tous les autres contrôles (un chargeur vide explique déjà le `ShotFired` écarté) ; catégorie `Hitscan`, source `Hitscan:shotLink` | `log` | faible |
+
+- **Tolérance.** Le client envoie la même valeur dans les deux remotes, transmise en double : l'écart honnête est nul.
+  1 ms couvre une conversion de flottant et reste 1 000 fois sous l'écart entre deux tirs acceptés (AWP : `FireDelay`
+  - `CADENCE_TOLERANCE` = 1,31 s) : une touche ne se rattache jamais au tir voisin. `MAX_AGE` (1 s) : la touche part
+  dans la même frame que son tir ; reste sous la cadence de l'AWP, donc un tir n'est pas gardé jusqu'au suivant.
+  `MAX_ENTRIES` (16) borne la mémoire.
+- **Ordre des remotes (vérifié).** La doc Roblox ([Remote events](https://create.roblox.com/docs/scripting/events/remote))
+  garantit que les messages d'une connexion arrivent dans l'ordre d'envoi, y compris entre deux `RemoteEvent`
+  différents, même retardés par la limite de débit ; l'ordre vaut au démarrage des handlers (aucun des deux ne yield
+  avant d'avoir décidé). Une touche avant son `ShotFired` ne vient donc que d'un client modifié : pas de délai
+  d'attente, elle est orpheline (journal), et son `ShotFired` tardif n'est pas recompté (test « HitscanDamage avant son
+  `ShotFired` »). Ne vaut pas pour un `UnreliableRemoteEvent` ni une `RemoteFunction`.
+- **Pourquoi `log`.** Un `ShotFired` honnête peut être écarté par le relais (cadence à 0,15 s près, deux tirs groupés
+  par une coupure réseau ; origine à plus de 185 studs) : sa touche devient orpheline. Elle reste appliquée et comptée
+  dans le chargeur, et `AimStats` l'exclut du taux de touches. Passer en `block` (procédure de T1) après lecture des
+  résumés `CheatLog` : aucune violation `shotLink` chez les joueurs honnêtes.
+- **Recul 3P.** Posé par `relayShot` (`WeaponThirdPerson.setAction(char, "Shoot")`) pour tout tir accepté, joueur ou
+  bot, donc à la cadence de l'arme. Notre client n'envoie plus `WeaponAction` « Shoot » pour une arme à distance
+  (`onToolActivated` de `WeaponSystem`) ; le serveur l'ignore s'il en reçoit un (`isMeleeTool`). Le couteau garde
+  `WeaponAction` « Shoot » : un coup manqué n'a pas de remote de tir, sa pose 3P ne peut venir que de là (sans enjeu :
+  pas de son ni de dégâts). La garde accepte toujours « Shoot » (couteau).
+- **Bots.** Même point d'entrée (`relayShot` depuis `BotArsenal.fire`, `onFire`), jamais refusés : `isReadyToFire` est
+  vrai pour un bot armé, `noteShotFired` ne compte rien (`BotArsenal` tient son chargeur), leurs touches gardent le
+  chemin sans `shot` (pas de rattachement). Le recul 3P d'un tir de bot vient du relais (avant : `BotArsenal`).
+- **Oubli.** Le registre est vidé par `Validator.forget` (réapparition, départ, retrait d'un bot : règle de #218) et
+  compté par `Validator.trackedCount`.
+- **Limite connue.** `shotTime` est choisi par le client : il n'est borné ni par le ping ni par l'horloge serveur
+  (#214). Un tricheur peut annoncer n'importe quel instant, pourvu qu'il envoie le même dans les deux remotes : il ne
+  gagne rien sur le chargeur ni sur le taux de touches.
+- **Tests.** `tests/specs/ShotLinkRules.spec.luau` (tolérance, tir voisin, une touche par tir, âge, taille, touche
+  avant son tir) ; « tirs comptés et touches rattachées » de `tests/specs/Validator.spec.luau` (6e `ShotFired` refusé
+  après 4 tirs manqués, rechargement puis tir, bon tir, orpheline en `log` et en `block`, deux touches pour un tir,
+  ordre inversé, rechargement borné par un tir manqué, bots) ; `tests/specs/AimStats.spec.luau` (rattachement,
+  orphelines hors du taux, flick sur le bon tir). Dans `Validator.spec.luau`, l'enveloppe `authorizeHitscan` envoie
+  d'abord le `ShotFired` de notre client (paramètre `noShotFired` pour une touche seule).
 
 ## Mêlée
 
@@ -575,11 +639,11 @@ commune (débit et types, voir R1) ; la colonne « Validation actuelle » décri
 | Remote | Sens | Arguments | Validation actuelle | Manque |
 |---|---|---|---|---|
 | `MeleeDamage` | C→S | `targetChar, attackKind` | Cible, arme, portée, type d'attaque, cadence, dégâts serveur, durée d'equip (T2, #175), orientation et ligne de vue (M1, #176, journal seul) (`Validator.authorizeMelee`) | Passage en `block` après mesure (M1), tireur vivant |
-| `HitscanDamage` | C→S | `targetChar, hitPart, origin, direction, hitPos, shotTime` | Cible, arme, partie de la cible, portée des racines, cadence ; forme, origine, visée rembobinée, portée 2 048, ligne de vue (T1, #174 : origine, visée et ligne de vue en journal seul) ; durée d'equip et chargeur (T2, #175) | Passage en `block` après mesure (T1), tireur vivant |
+| `HitscanDamage` | C→S | `targetChar, hitPart, origin, direction, hitPos, shotTime` | Cible, arme, partie de la cible, portée des racines, cadence ; forme, origine, visée rembobinée, portée 2 048, ligne de vue (T1, #174 : origine, visée et ligne de vue en journal seul) ; durée d'equip et chargeur (T2, #175) ; rattachée à son `ShotFired` par `shotTime`, sinon orpheline comptée dans le chargeur (#215, #216 : `shotLink` en journal seul) | Passage en `block` après mesure (T1, `shotLink`), tireur vivant |
 | `CharacterSync` (non fiable) | C→S puis S→C | `pos, yaw, ack` | Forme, débit 40 Hz (garde), seau de distance et silence plafonné, refus corrigé (D1, `CharacterSync.luau`, `onClientPosition`) ; noclip et vol au journal, vide (D2, #177) | Noclip et vol en mode bloquant après mesure (D2) |
 | `MovementCorrection` | S→C | `char, pos, seq` | — | — |
-| `WeaponAction` | C→S | `action` | Valeur `Shoot`/`Reload`, outil en main, 0,05 s mini (`init.server.luau`) ; `Reload` démarre le rechargement suivi par le serveur avant ces filtres (T2, #175) | `Shoot` non lié à la cadence : sans effet hors pose 3P depuis #156 (ouïe des bots et son passés sur `ShotFired`) |
-| `ShotFired` | C→S puis S→C | `origin, direction` ; relais : `char, weaponName, origin, direction` | Garde (5/s), tireur vivant, arme à distance prête (`Validator.isReadyToFire` : equip, chargeur), forme, origine à `ORIGIN_MAX` (185 studs) de la racine, cadence `FireDelay` à 0,15 s près (`ShotRelayRules`, #156) ; refus non journalisé | Rien : sans dégâts, un tir forgé ne fait qu'un son, au plus un par cadence |
+| `WeaponAction` | C→S | `action` | Valeur `Shoot`/`Reload`, outil en main, 0,05 s mini (`init.server.luau`) ; `Reload` démarre le rechargement suivi par le serveur avant ces filtres (T2, #175) ; `Shoot` ignoré pour une arme à distance (#215 : recul 3P posé par le relais de `ShotFired`) | `Shoot` du couteau non lié à la cadence : pose 3P seulement (un coup manqué n'a pas d'autre remote) |
+| `ShotFired` | C→S puis S→C | `origin, direction, shotTime` ; relais : `char, weaponName, origin, direction` | Garde (5/s, `shotTime` nombre fini), tireur vivant, arme à distance prête (`Validator.isReadyToFire` : equip, chargeur), forme, origine à `ORIGIN_MAX` (185 studs) de la racine, cadence `FireDelay` à 0,15 s près (`ShotRelayRules`, #156) ; accepté : compté dans le chargeur et inscrit au registre des tirs (`Validator.noteShotFired`, #215, #216), recul 3P posé ; refus non journalisé | `shotTime` non borné par le ping (#214) |
 | `RequestSpawn` | C→S | aucun | `SpawnRules.request` : spawn en vol, personnage en place, bannière de fin, mort depuis moins de `RESPAWN_DELAY` en round actif (`SpawnManager.init`, handler de `RequestSpawn`) | Rien (R1 fermé, #171) |
 | `LeaveRound` | C→S | aucun | Retour au menu (#157) : `RoundManager.withdraw` (score de la manche effacé, coups en attente du joueur oubliés, disparition du personnage non comptée), puis `SpawnManager.withdraw` (personnage détruit, plus de réapparition, prochain `RequestSpawn` accepté sans `RESPAWN_DELAY`) (handler de `leaveRoundRmt` dans `init.server.luau`, `SpawnManager.withdraw`). Touché depuis moins de `GameConfig.LEAVE_DEATH_WINDOW` (5 s) : le départ compte comme une mort, kill au dernier attaquant (#217, `LeaveRules.countsAsDeath`) | Fuite d'une mort imminente fermée (#217) tant que le coup date de moins de 5 s ; un joueur au bord du vide sans coup reçu peut toujours éviter sa chute. Réapparaître plus tôt reste possible : il perd à chaque fois tout son score de la manche, comme un joueur qui quitte le jeu |
 | `SendFeedback` | C→S | `text` | Type, longueur, 60 s en mémoire après toute demande valide (posé avant le DataStore, quel que soit le résultat), 5 par semaine (`UpdateAsync`), rien d'écrit si la lecture échoue (`FeedbackService.init`, handler de `SendFeedback`) | Rien (R1 fermé, #171) |
@@ -659,8 +723,8 @@ seau à jetons par joueur et par remote (débit et rafale), contrôles de type (
   sur un corps local en envoie. Ne jamais traiter un `nil` d'Instance comme une triche.
 
 Débits (`RemoteGuard.RULES`, en appels/s et rafale) calibrés au-dessus du client honnête, rafale réseau comprise :
-`MeleeDamage` 5/5 (couteau : 2,5/s au plus), `HitscanDamage` et `ShotFired` 5/5 (AWP : 0,7/s), `WeaponAction` 8/8 (un `Shoot` par tir
-ou coup, un `Reload`), `CharacterSync` 40/60 (20 Hz, 3 s de paquets groupés après une coupure), `RequestSpawn` 1/3, `LeaveRound` 1/3,
+`MeleeDamage` 5/5 (couteau : 2,5/s au plus), `HitscanDamage` et `ShotFired` 5/5 (AWP : 0,7/s), `WeaponAction` 8/8 (un `Shoot` par coup
+de couteau, plus par tir depuis #215, un `Reload`), `CharacterSync` 40/60 (20 Hz, 3 s de paquets groupés après une coupure), `RequestSpawn` 1/3, `LeaveRound` 1/3,
 `SendFeedback` 0,5/3, `SaveSettings` 2/5 (1 envoi/s au plus), `GetSettings` 0,2/3 (une demande au démarrage ; borne
 aussi les demandes en attente du chargement). **Une nouvelle arme plus rapide (automatique) demande de relever
 `HitscanDamage`, `ShotFired` et `WeaponAction`**, et un nouveau remote C→S doit avoir sa règle (sinon tout appel est refusé, sans
@@ -680,13 +744,12 @@ seule, sans journal), puis `ShotRelayRules.admit` : forme (Vector3 bornés, dire
 propre au relais (un tir refusé ne la relance pas, elle ne touche pas celle des touches). Accepté : relayé par
 `FireClient` à tous les joueurs sauf le tireur (`ShotRelayRules.recipients`), et entendu par les bots
 (`BotManager.hearShot`, joueurs seulement : ceux des bots passent par `BotBrain`). Pas de journal sur un refus : un tir
-sans dégâts ne rapporte rien, et un faux positif (gigue) n'a pas à compter. Limites : le chargeur serveur ne compte que les touches
-acceptées (T2) : un client modifié qui n'envoie que des `ShotFired` fait entendre un tir par `FireDelay` sans jamais
-recharger (sans dégâts ; compter les `ShotFired` dans le chargeur demanderait de revoir T2, une touche sans son
-`ShotFired` ne devant pas passer en douce) ; la cadence est jugée à l'arrivée, comme celle des touches : deux tirs
-groupés par une coupure réseau, le second est muet ; une touche peut être acceptée alors que son `ShotFired` a été écarté
-(son muet, dégâts appliqués) : les deux chemins sont indépendants exprès. Un coup de couteau n'est plus entendu par
-les bots (il passait par `WeaponAction`). Tests : `tests/specs/ShotRelayRules.spec.luau`, « tir relayé » de
+sans dégâts ne rapporte rien, et un faux positif (gigue) n'a pas à compter. Depuis #215, un tir relayé est compté
+dans le chargeur et pose le recul 3P : plus de tir entendu sans rechargement (voir « Tirs comptés et touches
+rattachées » en T2). Limites : la cadence est jugée à l'arrivée, comme celle des touches : deux tirs groupés par une
+coupure réseau, le second est muet ; une touche peut être acceptée alors que son `ShotFired` a été écarté (son muet,
+dégâts appliqués, touche orpheline au journal en `log`, comptée dans le chargeur). Un coup de couteau n'est plus
+entendu par les bots (il passait par `WeaponAction`). Tests : `tests/specs/ShotRelayRules.spec.luau`, « tir relayé » de
 `tests/specs/Validator.spec.luau`.
 
 **Coût.** Négligeable. **Impact.** Ferme deux failles réelles et donne le point d'entrée commun de la journalisation.
@@ -698,18 +761,20 @@ les bots (il passait par `WeaponAction`). Tests : `tests/specs/ShotRelayRules.sp
 
 - **tirs** : chaque tir à distance accepté par le relais `ShotFired` (#156, touché ou manqué) ;
 - **touches** et **têtes** : chaque touche à distance acceptée par le `Validator` **qui a fait des dégâts** (pas un
-  corps déjà mort pendant le ragdoll, pas un ForceField) ; une touche est rattachée au dernier
-  tir s'il date d'au plus `HIT_LINK_WINDOW` (0,5 s ; le client envoie `ShotFired` juste avant `HitscanDamage`, deux
-  remotes fiables donc dans cet ordre), une seule par tir. Taux de touches = tirs rattachés / tirs ; taux de tête =
-  têtes / touches ;
+  corps déjà mort pendant le ragdoll, pas un ForceField) ; depuis #216, une touche est rattachée au tir que le
+  `Validator` lui a trouvé par `shotTime` (registre de « Tirs comptés et touches rattachées », troisième valeur de
+  `authorizeHitscan`), une seule par tir ; sans tir rattaché, elle est **orpheline** (« orph » au résumé, anomalie déjà
+  journalisée `shotLink` par le `Validator`). Taux de touches = tirs rattachés / tirs (orphelines exclues) ; taux de
+  tête = têtes / touches (toutes) ;
 - **flick** : rotation horizontale entre le dernier cap accepté par `CharacterSync` (`CharacterSync.lastYaw`, cap de la
   caméra, 20 Hz) et la direction **de la touche** (`HitscanDamage`, vérifiée par le `Validator`), si ce cap date d'au
   plus `FLICK_MAX_AGE` (0,1 s). Le cap est **figé à l'arrivée de `ShotFired`** (juste avant la touche) : un paquet de
   position (non fiable) arrivé entre le tir et sa touche (fiable) ne compte pas, sinon le recul ou le retour de visée
-  après un tir d'AWP ferait des faux flicks. Pas la direction de `ShotFired` : rien ne la compare à la touche, un
+  après un tir d'AWP ferait des faux flicks. Figé **par tir** (`AimStats.ShotRecord`, #216) : la touche prend le cap
+  de son tir, pas celui du dernier. Pas la direction de `ShotFired` : rien ne la compare à la touche, un
   aimbot y enverrait son cap courant. Flick = au moins `FLICK_MIN_ANGLE` (30°) en 0,1 s au plus, soit 300 °/s
   minimum : au-dessus d'un air strafe de surf ordinaire (100 à 250 °/s, environ 10° par paquet). Touche sans tir
-  rattaché : pas de mesure. Statistique jugée : part des touches précédées d'un flick. La vitesse maximale (`pic`, °/s,
+  rattaché (orpheline) : pas de mesure. Statistique jugée : part des touches précédées d'un flick. La vitesse maximale (`pic`, °/s,
   durée bornée à `MIN_SPEED_DT` = 1/20 s) est affichée, pas jugée (trop bruitée par la gigue réseau). Le pitch n'est
   pas mesuré (le serveur ne reçoit que le cap) : un flick vertical passe inaperçu. **Indice faible** : le cap vient du
   client ; un paquet de position parti dans la frame du tir (caméra déjà tournée) donne un écart nul, et un aimbot qui
@@ -731,10 +796,9 @@ départ, à revoir sur le journal de production.
   relevé (« Visée (dernier relevé, revue humaine) »). Le relevé final passe par `CheatLog.onClosing`, avant la clôture
   du bilan.
 - Format (compact : le détail de `CheatLog` est coupé à 160 octets) : `SIGNALÉ z tête+8.1 | tirs 100 but 40 (40%)
-  touches 41 tête 36 (88%) flick 2 (5%) mesurés 38 pic 1240°/s | z touches +0.2 flick -0.3` (« mesurés » : touches dont
-  le flick a pu être mesuré). « but » = tirs
-  rattachés à une touche (taux de touches), « touches » = toutes les touches acceptées (seuil `MIN_HITS`, base du taux
-  de tête) ; le z d'une statistique signalée est en tête, les autres à la fin. « non jugé (12/30 touches) » ou « non
+  touches 41 orph 1 tête 36 (88%) flick 2 (5%) mesurés 38 pic 1240°/s | z touches +0.2 flick -0.3` (« mesurés » :
+  touches dont le flick a pu être mesuré). « but » = tirs rattachés à une touche (taux de touches), « touches » =
+  toutes les touches acceptées (seuil `MIN_HITS`, base du taux de tête), « orph » = touches sans tir rattaché (#216) ; le z d'une statistique signalée est en tête, les autres à la fin. « non jugé (12/30 touches) » ou « non
   jugé (population trop petite) » quand il n'y a pas de quoi comparer.
 - Un joueur signalé une fois a aussi son relevé **final** au journal, même redevenu normal : le « dernier relevé » du
   résumé est donc vraiment le dernier. À l'arrêt du serveur, tous les joueurs restants sont jugés ensemble contre la
@@ -746,10 +810,9 @@ départ, à revoir sur le journal de production.
 **Limites connues** (à garder en tête à la lecture) :
 
 - le nombre de tirs vient de `ShotFired`, que le client choisit d'envoyer : un tricheur peut faire baisser son taux de
-  touches en envoyant des tirs sans touche (cadence respectée), ou le faire monter en taisant ses tirs manqués. Le taux
-  de tête et le flick ne dépendent pas de `ShotFired` ;
-- une touche est rattachée au dernier tir **relayé** : si le tir qui l'a produite a été écarté par le relais (cadence,
-  débit), elle peut se rattacher à un tir manqué juste avant (rare : même cadence que le `Validator`) ;
+  touches en envoyant des tirs sans touche (cadence et chargeur respectés depuis #215). Taire ses tirs manqués ne le
+  fait plus monter (#216) : ses touches deviennent orphelines, hors du taux, et journalisées. Un « orph » élevé est donc
+  à regarder ; quelques-uns s'expliquent par un `ShotFired` écarté par le relais (gigue) ;
 - les touches sur les bots comptent : un joueur qui ne joue que contre des bots peut ressortir face à des joueurs qui
   jouent entre eux. Regarder le contexte de la partie avant de conclure ;
 - le jugement recalcule la population pour chaque joueur (O(n²) toutes les 120 s) : négligeable aux tailles de
@@ -808,7 +871,7 @@ CheatLog.summary(participant.id) -- bilan (compteurs, score présent, pire viola
 
 - **Gravités** (`CheatLog.Severity`) : `LOW`, `MEDIUM`, `HIGH`, au sens de « Classer les violations » ci-dessous.
 - **Catégories** (`CheatLog.Category`) : `RemoteRate`, `RemoteArgs` (garde des remotes), et réservées aux parades
-  suivantes : `Spawn` (#171, branchée : refus de `RequestSpawn`), `Movement` (#172), `Hitscan` (#174, branchée : contrôles du tir ; #175 : equip et chargeur), `Melee` (#175, branchée : equip du couteau ; #176 : orientation et ligne de vue), `Aim` (#178, branchée :
+  suivantes : `Spawn` (#171, branchée : refus de `RequestSpawn`), `Movement` (#172), `Hitscan` (#174, branchée : contrôles du tir ; #175 : equip et chargeur ; #216 : touche orpheline `shotLink`), `Melee` (#175, branchée : equip du couteau ; #176 : orientation et ligne de vue), `Aim` (#178, branchée :
   statistiques de visée signalées, toujours faible ; un relevé, pas une violation : hors du total, du score, de la
   « pire » violation et du warn limité, mais compté dans sa catégorie et suffisant pour le résumé). Une nouvelle parade
   ajoute sa catégorie à `CheatLog.Category` et ici, pour garder des noms stables dans le journal.
@@ -899,7 +962,8 @@ Les contrôles livrés et leur mode, pour savoir ce qu'une ligne du journal prou
 | Seau de distance (#172) | `block` (`ENFORCE_MOVEMENT = true`) | Refus corrigé : un téléport franc est déjà arrêté, un gros ping aussi peut en produire |
 | Tir : `shape`, `distance` (#174) | `block` | `shape` : client forgé quasi certain ; `distance` : tir refusé |
 | Tir : `origin`, `direction`, `lineOfSight` (#174) | `log` | Tir accepté (sauf au-delà de 250 studs) : **indice seulement**, jamais une base de ban seule |
-| Equip et chargeur (#175) | `block` | Touche refusée ; un paquet en retard peut coûter une touche honnête |
+| Equip et chargeur (#175, #215) | `block` | Touche ou `ShotFired` refusé ; un paquet en retard peut coûter une touche honnête |
+| Touche sans tir rattaché (#216, `shotLink`) | `log` | Touche appliquée : **indice seulement** (un `ShotFired` écarté par le relais en produit) |
 | Mêlée orientation et ligne de vue (#176, M1) | `log` (`ShotRules.MODES` : `orientation`, `meleeLineOfSight`) | Coup appliqué : **indice seulement** |
 | Statistiques de visée (#178, A1) | journal seul (aucun mode `block`) | Indice pour revue humaine, **jamais** une base de ban |
 | Noclip et vol (#177) | `log` (`ENFORCE_NOCLIP = ENFORCE_FLIGHT = false`) | Indice seulement |
@@ -1031,7 +1095,9 @@ mode bloquant une fois mesurée.
 
 - **Résumé.** Pas d'issue séparée : contrainte ajoutée à #156. Le relais part d'un tir accepté par le serveur
   (cadence, munitions, equip), jamais de l'action visuelle `WeaponAction` du client ; `hearShot` des bots aussi.
-  Fait : remote `ShotFired`, voir « Relais des tirs » dans « Remotes ».
+  Fait : remote `ShotFired`, voir « Relais des tirs » dans « Remotes ». Suite (#215, #216, fait) : chaque `ShotFired`
+  accepté compté dans le chargeur, recul 3P posé par le relais, touche rattachée à son tir par `shotTime` (voir
+  « Tirs comptés et touches rattachées » en T2). Reste : borner `shotTime` par le ping (#214), rembobiner la pose (#213).
 - **Dépendances.** 6 de préférence. **Priorité.** suit #156.
 
 ### 10. Statistiques de visée (aimbot) — P3 (fait, #178 : journal seul, voir A1)

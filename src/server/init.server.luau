@@ -310,9 +310,9 @@ shotFiredRmt.OnServerEvent:Connect(function(player, origin, direction, shotTime)
 	-- Compté après la décision du relais, qu'il ne change pas : un tir accepté (forme, cadence, chargeur) entre aux
 	-- statistiques
 	if relayShot(participant, origin, direction, shotTime) then
-		-- Cap figé à l'arrivée du tir, avant sa touche (flick)
+		-- Cap figé à l'arrivée du tir, avant sa touche (flick), retrouvée par shotTime (#216)
 		local yaw, yawAt = CharacterSync.lastYaw(player)
-		AimStats.noteShot(aimStats, participant, os.clock(), yaw, yawAt)
+		AimStats.noteShot(aimStats, participant, os.clock(), yaw, yawAt, shotTime)
 	end
 end)
 
@@ -536,12 +536,13 @@ hitscanRmt.OnServerEvent:Connect(function(player, targetCharacter, hitPart, orig
 	end
 	local participant = Participants.fromPlayer(player)
 	local shot = { origin = origin, direction = direction, hitPos = hitPos, shotTime = shotTime }
-	local damage, isHeadshot = Validator.authorizeHitscan(participant, targetCharacter, hitPart, os.clock(), shot)
+	local damage, isHeadshot, linkedShotTime =
+		Validator.authorizeHitscan(participant, targetCharacter, hitPart, os.clock(), shot)
 	-- Le son du tir chez les autres (#156) ne part pas d'ici : chaque tir, touché ou manqué, arrive d'abord par ShotFired
 	-- Statistiques de visée (#178), après coup et sans effet sur la touche : seulement une touche qui a fait des dégâts
-	-- (pas un corps déjà mort), flick mesuré sur sa direction validée
+	-- (pas un corps déjà mort), rattachée à son tir par le Validator (#216), flick mesuré sur sa direction validée
 	if onHitVerdict(player, hitscanRmt, targetCharacter, damage, isHeadshot) then
-		AimStats.noteHit(aimStats, participant, isHeadshot, os.clock(), direction)
+		AimStats.noteHit(aimStats, participant, isHeadshot, os.clock(), direction, linkedShotTime)
 	end
 end)
 
