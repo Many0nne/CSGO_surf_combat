@@ -247,7 +247,7 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 			prevCFrame = prevCFrame or ownCFrame
 			hrp.CFrame = (prevCFrame :: CFrame):Lerp(ownCFrame :: CFrame, alpha)
 			-- Position envoyée au serveur, qui la valide et la relaie aux autres joueurs (#75)
-			CharacterSync.send(hrp, rawDt)
+			CharacterSync.send(hrp, rawDt, CrouchSystem.isCrouching())
 		end)
 	)
 end

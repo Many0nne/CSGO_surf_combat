@@ -72,8 +72,8 @@ return function(T, Loader)
 		local Participants = loader:require("src/server/Participants")
 		local ShotRules = loader:require("src/server/ShotRules")
 		-- Monde simulé de la validation des tirs (#174) : horloge serveur, historiques (fonction t -> position par
-		-- personnage, sinon pas d'historique), obstacle de la map (booléen, ou fonction (from, delta) -> booléen),
-		-- violations reçues, ping des joueurs (s, nil : inconnu, #214).
+		-- personnage, sinon pas d'historique ; elle peut rendre aussi la pose : cap et accroupi, #213), obstacle de la map
+		-- (booléen, ou fonction (from, delta) -> booléen), violations reçues, ping des joueurs (s, nil : inconnu, #214).
 		local world = { now = 100, histories = {}, obstructed = false :: any, reports = {}, ping = nil :: number? }
 		Real.setShotWorld({
 			serverNow = function()
@@ -1512,6 +1512,19 @@ return function(T, Loader)
 			T.expectEqual(world.reports[1].category, "Melee")
 		end)
 
+		T.it("prend l'œil du tireur accroupi : un obstacle bas que l'œil debout survolait bloque le coup", function()
+			local Validator, a, b, world = setupMelee(nil, ALL_BLOCK)
+			-- Caisse de 2 studs : l'œil debout (2,5) passe au-dessus, l'œil accroupi (1,2) non
+			world.obstructed = function(from: Vector3)
+				return from.Y < 2
+			end
+			world.histories[a.Character] = function()
+				return Vector3.zero, 0, true
+			end
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), nil)
+			T.expectEqual(reportedChecks(world), "meleeLineOfSight")
+		end)
+
 		T.it(
 			"ignore les positions rembobinées hors de portée : pas de coup à travers un mur via le sillage",
 			function()
@@ -1671,7 +1684,7 @@ return function(T, Loader)
 			T.expectEqual(Validator.isReadyToFire(makeBot(Vector3.zero, "M9Bayonet"), 0), false, "couteau")
 		end)
 	end)
-	T.describe("Validator : instant du tir borné par le ping (#214)", function()
+	T.describe("Validator : instant du tir borné par le ping (#214) et pose rembobinée (#213)", function()
 		-- Cette méthode permet de préparer un tireur à l'AWP à l'origine et une cible à 100 studs (+X), qui regarde le
 		-- tireur, lorsqu'un test vérifie l'instant ou la pose ; modes : contrôles à forcer.
 		local function setupPose(modes: { [string]: string }?)
@@ -1698,6 +1711,9 @@ return function(T, Loader)
 			end
 			return table.concat(checks, ",")
 		end
+
+		-- Cap (rad) d'un personnage tourné vers look, comme CharacterSync le relaie.
+		local yawOf = Loader.new():require("src/shared/CharacterSyncRules").yawOf
 
 		T.it("accepte un tir honnête avec 50 et 150 ms de ping, sans violation", function()
 			for _, ping in { 0.05, 0.15 } do
@@ -1736,6 +1752,52 @@ return function(T, Loader)
 			T.expectEqual(Validator.authorizeHitscan(a, b.Character, head, 0, shotAt(a, head.Position, 99.6)), 460)
 			T.expectEqual(reportedChecks(world), "")
 		end)
+
+		T.it(
+			"cible qui a tourné entre le tir et sa réception : main rembobinée là où le tireur la voyait",
+			function()
+				local Validator, a, b, world = setupPose({ direction = "block" })
+				-- Rig serveur : la cible regarde le tireur (-X), sa main droite est à 2 studs côté -Z
+				local hand = addPart(b.Character, "RightHand", Vector3.new(0, 0, -2))
+				-- Au tir, elle tournait le dos au tireur (+X) : sa main droite était côté +Z
+				local backYaw, faceYaw = yawOf(Vector3.new(1, 0, 0)), yawOf(Vector3.new(-1, 0, 0))
+				world.histories[b.Character] = function(t)
+					return Vector3.new(100, 0, 0), if t < world.now - 0.05 then backYaw else faceYaw, false
+				end
+				local seen = Vector3.new(100, 0, 2)
+				T.expectEqual(Validator.authorizeHitscan(a, b.Character, hand, 0, shotAt(a, seen, world.now)), 115)
+				T.expectEqual(reportedChecks(world), "", "main vue par le tireur")
+				-- La main là où le rig serveur la montre maintenant, que le tireur ne voyait pas : refusé
+				T.expectEqual(
+					Validator.authorizeHitscan(a, b.Character, hand, 10, shotAt(a, hand.Position, world.now)),
+					nil
+				)
+				T.expectEqual(reportedChecks(world), "direction")
+			end
+		)
+
+		T.it(
+			"cible accroupie au tir, debout maintenant : tête rembobinée baissée (si le rig 3P s'accroupit)",
+			function()
+				local Validator, a, b, world, ShotRules = setupPose({ direction = "block" })
+				-- Le rig 3P ne s'accroupit pas aujourd'hui (CROUCH_DROP = 0) : piste simulée qui baisse la tête de 3 studs
+				ShotRules.CROUCH_DROP = 3
+				local head = addPart(b.Character, "Head", Vector3.new(0, 2, 0))
+				local faceYaw = yawOf(Vector3.new(-1, 0, 0))
+				world.histories[b.Character] = function(t)
+					return Vector3.new(100, 0, 0), faceYaw, t < world.now - 0.05
+				end
+				local seen = Vector3.new(100, -1, 0)
+				T.expectEqual(Validator.authorizeHitscan(a, b.Character, head, 0, shotAt(a, seen, world.now)), 460)
+				T.expectEqual(reportedChecks(world), "", "tête vue baissée")
+				-- La tête debout, que le tireur ne voyait pas : refusé
+				T.expectEqual(
+					Validator.authorizeHitscan(a, b.Character, head, 10, shotAt(a, head.Position, world.now)),
+					nil
+				)
+				T.expectEqual(reportedChecks(world), "direction")
+			end
+		)
 
 		T.it("ne borne pas les tirs des bots par le ping", function()
 			local Validator, _, b, world, _, makeBot = setupPose({ ping = "block" })

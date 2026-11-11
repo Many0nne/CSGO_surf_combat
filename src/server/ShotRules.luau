@@ -6,6 +6,7 @@
 -- Durée d'equip et chargeur (#175, « T2 ») : règles pures ici aussi, l'état (instants, compteurs) vit dans Validator.
 -- Mêlée (#176, « M1 ») : orientation du tireur et ligne de vue vers la cible rembobinée, mêmes modes et même journal.
 -- Instant annoncé (#214) : shotTime (tir) et hitTime (mêlée) bornés par le ping du tireur, contrôle « ping ».
+-- Pose rembobinée (#213) : la partie visée est replacée selon le cap et l'accroupi de la cible à l'instant rembobiné.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
@@ -23,6 +24,8 @@ export type Mode = "log" | "block"
 -- services).
 export type Severity = CheatTypes.Severity
 export type Shot = { origin: Vector3, direction: Vector3, hitPos: Vector3, shotTime: number }
+-- Pose rembobinée d'un personnage (#213) : racine, cap (rad, nil si inconnu) et accroupi (nil si inconnu).
+export type Pose = { pos: Vector3, yaw: number?, crouching: boolean? }
 
 ShotRules.Mode = { LOG = "log" :: Mode, BLOCK = "block" :: Mode }
 
@@ -140,6 +143,11 @@ ShotRules.PING_FACTOR = 1
 ShotRules.PING_MARGIN = 0.1
 -- Avance tolérée (s) d'un instant annoncé sur l'horloge serveur (erreur de synchronisation de GetServerTimeNow).
 ShotRules.CLOCK_TOLERANCE = 0.05
+-- Accroupi (#213) : baisse (studs) des parties au-dessus de la racine telle que la voit le tireur. Le rig 3P ne
+-- s'accroupit pas (CharacterConfig.ANIMATIONS : CROUCH_IDLE et CROUCH_WALK vides, repli sur IDLE et WALK) : un tireur
+-- voit la cible debout, accroupie ou non, donc 0. À régler sur la piste publiée le jour où elle existe (le test
+-- « CROUCH_DROP suit la piste 3P » de ShotRules.spec.luau échoue tant que les deux ne concordent pas).
+ShotRules.CROUCH_DROP = 0
 
 -- Cette méthode permet de vérifier qu'un Vector3 est fini et borné par MAX_COORD lorsqu'un point de tir arrive.
 local function isBoundedVector(v: any): boolean
@@ -209,6 +217,30 @@ function ShotRules.checkShotDelay(shotTime: number, now: number, ping: number?):
 			string.format("instant %.2f s avant l'arrivée (max %.2f s, ping %.0f ms)", delay, limit, ping * 1000)
 	end
 	return true
+end
+
+-- Cette méthode permet de replacer une partie de la cible dans sa pose rembobinée lorsqu'on vérifie un tir ou un coup
+-- (#213) : décalage de la partie pris sur le rig serveur dans le repère de sa racine (rootCFrame, rootPos), corrigé de
+-- CROUCH_DROP si l'accroupi diffère (parties au-dessus de la racine), tourné au cap rembobiné (cap actuel s'il est
+-- inconnu) et posé sur la racine rembobinée.
+function ShotRules.posedPartCenter(
+	rootCFrame: CFrame,
+	rootPos: Vector3,
+	partPos: Vector3,
+	crouchingNow: boolean?,
+	pose: Pose
+): Vector3
+	-- Rotation seule : la position de la racine est lue à part (sous Lune, Position et CFrame sont posées séparément)
+	local offset = rootCFrame:VectorToObjectSpace(partPos - rootPos)
+	local drop = ShotRules.CROUCH_DROP
+	if offset.Y > 0 and crouchingNow ~= nil and pose.crouching ~= nil and crouchingNow ~= pose.crouching then
+		offset += Vector3.new(0, if pose.crouching then -drop else drop, 0)
+	end
+	local yaw = pose.yaw
+	local world = if yaw
+		then CFrame.Angles(0, yaw, 0):VectorToWorldSpace(offset)
+		else rootCFrame:VectorToWorldSpace(offset)
+	return pose.pos + world
 end
 
 -- Cette méthode permet de vérifier l'origine lorsqu'un tir arrive : à moins de ORIGIN_BASE + vitesse × facteur de

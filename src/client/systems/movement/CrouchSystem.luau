@@ -93,6 +93,11 @@ function CrouchSystem.update(dt: number): {
 	}
 end
 
+-- Cette méthode permet de savoir si le personnage local est accroupi lorsque sa position part au serveur (#213).
+function CrouchSystem.isCrouching(): boolean
+	return crouching
+end
+
 function CrouchSystem.getCamHeight(): number
 	return camHeight
 end

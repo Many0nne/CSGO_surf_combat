@@ -83,6 +83,64 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("ShotRules : pose rembobinée (#213)", function()
+		-- Cap (rad) d'un personnage tourné vers look, comme CharacterSyncRules.yawOf
+		local function yawOf(look: Vector3): number
+			return CharacterSyncRules.yawOf(look)
+		end
+
+		T.it("tourne la partie avec le cap rembobiné : cible qui a tourné entre le tir et sa réception", function()
+			-- Rig serveur : racine en (0, 0, 0) tournée vers +X, main droite 1,5 stud à sa droite (-Z)
+			local rootCFrame = CFrame.lookAt(Vector3.zero, Vector3.new(1, 0, 0))
+			local hand = rootCFrame:PointToWorldSpace(Vector3.new(1.5, 0, 0))
+			-- Au tir, la cible était 10 studs plus loin, tournée vers +Z : sa main droite était côté +X
+			local pose = { pos = Vector3.new(0, 0, 10), yaw = yawOf(Vector3.new(0, 0, 1)) }
+			local center = ShotRules.posedPartCenter(rootCFrame, Vector3.zero, hand, false, pose)
+			-- CFrame.Angles, pas CFrame.lookAt : sous Lune, lookAt vers +Z rend un cap -Z (cas dégénéré)
+			local seen = (CFrame.new(pose.pos) * CFrame.Angles(0, pose.yaw, 0)):PointToWorldSpace(
+				Vector3.new(1.5, 0, 0)
+			)
+			T.expect((seen - Vector3.new(-1.5, 0, 10)).Magnitude < 1e-4, "main droite d'une cible tournée vers +Z")
+			T.expect(
+				(center - seen).Magnitude < 1e-4,
+				string.format("main à %s, vue à %s", tostring(center), tostring(seen))
+			)
+			-- Sans cap rembobiné, la main garde l'orientation actuelle (ancien comportement)
+			local unposed = ShotRules.posedPartCenter(rootCFrame, Vector3.zero, hand, false, { pos = pose.pos })
+			T.expect((unposed - (pose.pos + hand)).Magnitude < 1e-4, "cap inconnu")
+		end)
+
+		T.it("baisse les parties hautes d'une cible accroupie au tir, debout maintenant", function()
+			local drop = ShotRules.CROUCH_DROP
+			ShotRules.CROUCH_DROP = 2
+			local rootCFrame = CFrame.new(Vector3.zero)
+			local head, foot = Vector3.new(0, 1.5, 0), Vector3.new(0, -2, 0)
+			local crouched = { pos = Vector3.zero, yaw = 0, crouching = true }
+			local headSeen = ShotRules.posedPartCenter(rootCFrame, Vector3.zero, head, false, crouched)
+			local footSeen = ShotRules.posedPartCenter(rootCFrame, Vector3.zero, foot, false, crouched)
+			-- Et l'inverse : debout au tir, accroupie maintenant (rig serveur baissé)
+			local standing = { pos = Vector3.zero, yaw = 0, crouching = false }
+			local headUp = ShotRules.posedPartCenter(rootCFrame, Vector3.zero, Vector3.new(0, 0.5, 0), true, standing)
+			-- Accroupi inconnu : rien ne bouge
+			local unknown = ShotRules.posedPartCenter(rootCFrame, Vector3.zero, head, nil, crouched)
+			ShotRules.CROUCH_DROP = drop
+			T.expect((headSeen - Vector3.new(0, -0.5, 0)).Magnitude < 1e-4, "tête baissée : " .. tostring(headSeen))
+			T.expect((footSeen - foot).Magnitude < 1e-4, "pieds immobiles")
+			T.expect((headUp - Vector3.new(0, 2.5, 0)).Magnitude < 1e-4, "tête relevée : " .. tostring(headUp))
+			T.expect((unknown - head).Magnitude < 1e-4, "accroupi inconnu")
+		end)
+
+		T.it("CROUCH_DROP suit la piste 3P : 0 tant que le rig 3P ne s'accroupit pas", function()
+			local CharacterConfig = Loader.new():require("src/shared/CharacterConfig")
+			if CharacterConfig.ANIMATIONS.CROUCH_IDLE == "" then
+				T.expectEqual(ShotRules.CROUCH_DROP, 0)
+			else
+				-- Piste d'accroupi publiée (#120) : régler CROUCH_DROP sur la baisse de la tête qu'elle montre
+				T.expect(ShotRules.CROUCH_DROP > 0, "CROUCH_DROP à régler sur la piste CROUCH_IDLE publiée")
+			end
+		end)
+	end)
+
 	T.describe("ShotRules : origine, visée, portée", function()
 		T.it("tolère 5 studs plus 0,1 s de la vitesse du tireur, depuis la plus proche de ses positions", function()
 			T.expectEqual((ShotRules.checkOrigin(Vector3.new(0, 4.9, 0), { Vector3.zero }, 0)), true)

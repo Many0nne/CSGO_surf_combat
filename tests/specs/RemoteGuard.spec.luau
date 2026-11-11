@@ -138,7 +138,8 @@ return function(T, Loader)
 			local shot = { Vector3.new(0, 5, 0), Vector3.new(1, 0, 0), Vector3.new(80, 5, 0), 1234.5 }
 			T.expectEqual(honest(N.HITSCAN_DAMAGE, char, part, table.unpack(shot)), "ok")
 			T.expectEqual(honest(N.SHOT_FIRED, Vector3.new(0, 5, 0), Vector3.new(1, 0, 0), 1234.5), "ok")
-			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.new(10, -500, 3), 3.1, 0), "ok")
+			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.new(10, -500, 3), 3.1, 0, false), "ok")
+			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.new(10, -500, 3), 3.1, 0, true), "ok", "accroupi")
 			T.expectEqual(honest(N.WEAPON_ACTION, "Shoot"), "ok")
 			T.expectEqual(honest(N.WEAPON_ACTION, "Reload"), "ok")
 			T.expectEqual(honest(N.REQUEST_SPAWN), "ok")
@@ -168,9 +169,15 @@ return function(T, Loader)
 				"malformed",
 				"instant infini"
 			)
-			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.new(0 / 0, 0, 0), 0, 0), "malformed")
-			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.zero, nil, 0), "malformed")
-			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.zero, 0, nil), "malformed", "numéro de correction absent")
+			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.new(0 / 0, 0, 0), 0, 0, false), "malformed")
+			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.zero, nil, 0, false), "malformed")
+			T.expectEqual(
+				honest(N.CHARACTER_SYNC, Vector3.zero, 0, nil, false),
+				"malformed",
+				"numéro de correction absent"
+			)
+			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.zero, 0, 0), "malformed", "accroupi absent (ancien client)")
+			T.expectEqual(honest(N.CHARACTER_SYNC, Vector3.zero, 0, 0, 1), "malformed", "accroupi non booléen")
 			local target = Instance.new("Model")
 			T.expectEqual(honest(N.MELEE_DAMAGE, target, "primary"), "malformed", "coup sans instant (ancien client)")
 			T.expectEqual(honest(N.MELEE_DAMAGE, target, "primary", 0 / 0), "malformed", "instant NaN")
@@ -185,12 +192,12 @@ return function(T, Loader)
 			local guard = RemoteGuard.new()
 			local refused = 0
 			for i = 0, 199 do
-				if guard:check("joueur", N.CHARACTER_SYNC, i / 20, Vector3.zero, 0, 0) ~= "ok" then
+				if guard:check("joueur", N.CHARACTER_SYNC, i / 20, Vector3.zero, 0, 0, false) ~= "ok" then
 					refused += 1
 				end
 			end
 			for _ = 1, 40 do
-				if guard:check("joueur", N.CHARACTER_SYNC, 12, Vector3.zero, 0, 0) ~= "ok" then
+				if guard:check("joueur", N.CHARACTER_SYNC, 12, Vector3.zero, 0, 0, false) ~= "ok" then
 					refused += 1
 				end
 			end

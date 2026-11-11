@@ -36,11 +36,11 @@ Validator.MAX_HITSCAN_RANGE = MAX_HITSCAN_RANGE
 -- Accès au monde dont la validation d'un tir de joueur a besoin (#174), branchés par init.server (simulés en test) :
 -- horloge serveur, position rembobinée d'un personnage, raycast de ligne de vue sur la map, journal des violations
 -- (category : CheatTypes.Category, Hitscan si absente ; l'equip vaut aussi pour la mêlée, #175 ; orientation et
--- ligne de vue de la mêlée, #176).
+-- ligne de vue de la mêlée, #176). positionAt rend aussi la pose (#213) : cap (rad) et accroupi, nil si inconnus.
 -- pingOf (#214) : aller-retour réseau du tireur (s), nil si inconnu ou absent (instant annoncé alors non borné).
 export type ShotWorld = {
 	serverNow: () -> number,
-	positionAt: (char: Model, t: number) -> Vector3?,
+	positionAt: (char: Model, t: number) -> (Vector3?, number?, boolean?),
 	isObstructed: (from: Vector3, delta: Vector3) -> boolean,
 	pingOf: ((attacker: Participant) -> number?)?,
 	report: (
@@ -368,7 +368,10 @@ local function speedAround(world: ShotWorld, char: Model, t: number, now: number
 	if not from or not to then
 		return 0
 	end
-	return ShotRules.speedBetween(world.positionAt(char, from), world.positionAt(char, to), to - from)
+	-- Positions seules : positionAt rend aussi la pose, qui ne doit pas glisser dans les arguments suivants
+	local older = world.positionAt(char, from)
+	local newer = world.positionAt(char, to)
+	return ShotRules.speedBetween(older, newer, to - from)
 end
 
 -- Cette méthode permet de vérifier l'instant annoncé par un joueur (shotTime, hitTime) lorsqu'un tir ou un coup arrive
@@ -376,6 +379,30 @@ end
 local function checkAnnouncedTime(world: ShotWorld, attacker: Participant, t: number, now: number): (boolean, string?)
 	local pingOf = world.pingOf
 	return ShotRules.checkShotDelay(t, now, if pingOf then pingOf(attacker) else nil)
+end
+
+-- Cette méthode permet de lire la pose rembobinée d'une cible à l'instant t lorsqu'un tir ou un coup est vérifié
+-- (#213) : racine, cap et accroupi de son historique ; position actuelle de la racine (pose inconnue) sans historique.
+local function rewoundPose(world: ShotWorld, targetCharacter: Model, tRoot: BasePart, t: number): ShotRules.Pose
+	local pos, yaw, crouching = world.positionAt(targetCharacter, t)
+	if not pos then
+		return { pos = tRoot.Position }
+	end
+	return { pos = pos, yaw = yaw, crouching = crouching }
+end
+
+-- Cette méthode permet de replacer une partie de la cible (position sur le rig serveur) dans sa pose rembobinée
+-- lorsqu'un tir ou un coup est vérifié (#213) ; l'accroupi actuel est le dernier relevé de son historique.
+local function posedCenter(
+	world: ShotWorld,
+	targetCharacter: Model,
+	tRoot: BasePart,
+	partPos: Vector3,
+	pose: ShotRules.Pose,
+	now: number
+): Vector3
+	local _, _, crouchingNow = world.positionAt(targetCharacter, now)
+	return ShotRules.posedPartCenter(tRoot.CFrame, tRoot.Position, partPos, crouchingNow, pose)
 end
 
 -- Cette méthode permet de vérifier un tir de joueur lorsqu'il a passé cible, arme et cadence : forme, origine, visée
@@ -435,10 +462,12 @@ local function validateShot(
 		fail(ShotRules.Check.ORIGIN, detail or "?")
 	end
 
-	-- Visée : partie annoncée replacée là où le tireur voyait la cible (décalage pris sur le rig serveur)
+	-- Visée : partie annoncée replacée là où le tireur voyait la cible, dans sa pose rembobinée (#213 : cap et accroupi ;
+	-- décalage pris sur le rig serveur)
 	local rewindT = ShotRules.rewindTime(shot.shotTime, now)
-	local rewoundRoot = world.positionAt(targetCharacter, rewindT) or tRoot.Position
-	local partCenter = rewoundRoot + (hitPart.Position - tRoot.Position)
+	local pose = rewoundPose(world, targetCharacter, tRoot, rewindT)
+	local rewoundRoot = pose.pos
+	local partCenter = posedCenter(world, targetCharacter, tRoot, hitPart.Position, pose, now)
 	local targetSpeed = speedAround(world, targetCharacter, rewindT, now)
 	local partLimit = ShotRules.directionLimit(hitPart.Size.Magnitude / 2, targetSpeed)
 	ok, detail = ShotRules.checkDirection(shot, partCenter, partLimit)
@@ -472,16 +501,19 @@ local function validateShot(
 	return not blocked
 end
 
--- Hauteur de la caméra au-dessus de la racine : départ du segment « œil à tête » de la ligne de vue d'un coup (#176).
+-- Hauteur de la caméra au-dessus de la racine, debout et accroupi : départ du segment « œil à tête » de la ligne de vue
+-- d'un coup (#176 ; accroupi du tireur lu dans son historique, #213).
 local EYE_OFFSET = Vector3.new(0, CameraConfig.CAM_HEIGHT_STAND, 0)
+local EYE_OFFSET_CROUCH = Vector3.new(0, CameraConfig.CAM_HEIGHT_CROUCH, 0)
 -- Centre de la tête au-dessus de la racine, si le rig serveur de la cible n'a pas de Head (R6 : 1,5 stud).
 local DEFAULT_HEAD_OFFSET = Vector3.new(0, 1.5, 0)
 
 -- Cette méthode permet de vérifier un coup de mêlée de joueur lorsqu'il a passé cible, arme et cadence : instant du coup
--- dans la borne du ping (#214), cible rembobinée à cet instant devant le cap du tireur et sans obstacle de la map
--- (#176). Renvoie true s'il peut s'appliquer.
+-- dans la borne du ping (#214), cible rembobinée à cet instant (pose comprise, #213) devant le cap du tireur et sans
+-- obstacle de la map (#176). Renvoie true s'il peut s'appliquer.
 local function validateMelee(
 	attacker: Participant,
+	aChar: Model,
 	aRoot: BasePart,
 	tRoot: BasePart,
 	targetCharacter: Model,
@@ -520,12 +552,13 @@ local function validateMelee(
 	local look = aRoot.CFrame.LookVector
 	local attackerPos = aRoot.Position
 	local rewindT = ShotRules.rewindTime(hitTime, now)
-	local targetPos = world.positionAt(targetCharacter, rewindT) or tRoot.Position
+	local pose = rewoundPose(world, targetCharacter, tRoot, rewindT)
 	local rewind = now - rewindT
-	if (targetPos - attackerPos).Magnitude > MAX_MELEE_RANGE then
-		targetPos = tRoot.Position
+	if (pose.pos - attackerPos).Magnitude > MAX_MELEE_RANGE then
+		pose = { pos = tRoot.Position }
 		rewind = 0
 	end
+	local targetPos = pose.pos
 
 	-- Orientation : cap actuel du tireur (son dernier paquet de position est parti au plus tard avec le coup)
 	local facing, _, orientationDetail = ShotRules.checkMeleeOrientation(look, attackerPos, targetPos)
@@ -533,10 +566,14 @@ local function validateMelee(
 		fail(ShotRules.Check.ORIENTATION, string.format("%s, rembobinée de %.2f s", orientationDetail or "?", rewind))
 	end
 
-	-- Ligne de vue : racine à racine, ou œil du tireur à tête de la cible (décalage pris sur le rig serveur)
+	-- Ligne de vue : racine à racine, ou œil du tireur (accroupi ou non) à tête de la cible dans sa pose rembobinée
+	local _, _, attackerCrouching = world.positionAt(aChar, now)
+	local eyeOffset = if attackerCrouching then EYE_OFFSET_CROUCH else EYE_OFFSET
 	local head = targetCharacter:FindFirstChild("Head")
-	local headOffset = if head and head:IsA("BasePart") then head.Position - tRoot.Position else DEFAULT_HEAD_OFFSET
-	local segments = ShotRules.meleeSightSegments(attackerPos, targetPos, EYE_OFFSET, headOffset)
+	local headOffset = if head and head:IsA("BasePart")
+		then posedCenter(world, targetCharacter, tRoot, head.Position, pose, now) - targetPos
+		else DEFAULT_HEAD_OFFSET
+	local segments = ShotRules.meleeSightSegments(attackerPos, targetPos, eyeOffset, headOffset)
 	local clear = #segments == 0
 	for _, segment in segments do
 		if not world.isObstructed(segment.from, segment.delta) then
@@ -630,7 +667,7 @@ end
 -- Cette méthode permet de décider un coup de mêlée lorsque le remote arrive : elle renvoie les dégâts calculés depuis
 -- WeaponConfig (backstab recalculé d'après les positions serveur) et démarre la cadence, ou nil si le coup est refusé.
 -- Pour un joueur : instant du coup hitTime (horloge serveur, comme shotTime) borné par le ping (#214), orientation et
--- ligne de vue vers la cible rembobinée à cet instant (#176), durée d'equip (#175). Un bot n'envoie pas d'instant.
+-- ligne de vue vers la cible rembobinée à cet instant (#176, #213), durée d'equip (#175). Un bot n'envoie pas d'instant.
 function Validator.authorizeMelee(
 	attacker: Participant,
 	targetCharacter: Instance,
@@ -638,8 +675,8 @@ function Validator.authorizeMelee(
 	now: number,
 	hitTime: number?
 ): number?
-	local cfg, aRoot, tRoot, _, tool = resolveAttack(attacker, targetCharacter, MAX_MELEE_RANGE)
-	if not cfg or not aRoot or not tRoot or not tool then
+	local cfg, aRoot, tRoot, aChar, tool = resolveAttack(attacker, targetCharacter, MAX_MELEE_RANGE)
+	if not cfg or not aRoot or not tRoot or not aChar or not tool then
 		return nil
 	end
 	local damage, fireDelay = WeaponConfig.getMeleeAttack(cfg, attackKind)
@@ -649,7 +686,7 @@ function Validator.authorizeMelee(
 	if not attacker.isBot then
 		-- Orientation et ligne de vue (#176), puis equip (#175) : joueurs seulement (les bots frappent depuis le serveur,
 		-- face à leur cible, BotMotion) ; tous sont évalués, comme pour le tir
-		local geometryOk = validateMelee(attacker, aRoot, tRoot, targetCharacter :: Model, hitTime)
+		local geometryOk = validateMelee(attacker, aChar, aRoot, tRoot, targetCharacter :: Model, hitTime)
 		local weaponOk = isWeaponReady(attacker, CheatTypes.Category.MELEE, tool, cfg, now)
 		if not geometryOk or not weaponOk then
 			-- Refusé : la cadence n'est pas relancée
