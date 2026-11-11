@@ -25,9 +25,11 @@ ShotEffectRules.TRACER_LIFETIME = 0.2
 ShotEffectRules.TRACER_RGB = { 255, 240, 180 }
 -- Un rayon plus court que ça (studs) n'est pas tracé : canon collé à un mur, ou bouche du canon au-delà de l'impact.
 ShotEffectRules.TRACER_MIN_LENGTH = 1
--- Bouche du canon à plus de cette distance (studs) de l'origine du tir : le rayon part de l'origine. Cas d'un tireur
--- distant rapide, dessiné en retard de son interpolation (CharacterSync) alors que l'origine relayée est à jour.
-ShotEffectRules.MUZZLE_MAX_OFFSET = 8
+-- Bouche du canon à plus de cette distance (studs) de l'origine du tir : le rayon part de l'origine. Un tireur distant
+-- est dessiné en retard (interpolation, CharacterSync) alors que l'origine relayée est à jour : comme dans CS, le
+-- rayon va du canon dessiné à l'impact réel, un peu de biais quand le tireur va vite. Ce seuil n'écarte qu'un canon
+-- sans rapport avec le tir (personnage pas encore à jour, réapparition), pas le retard d'un surfeur rapide.
+ShotEffectRules.MUZZLE_MAX_OFFSET = 25
 -- Distance (studs) sous laquelle un rayon venu d'un autre ne s'approche pas de notre caméra : il s'arrête avant, au
 -- lieu de finir dans l'œil quand le tir nous touche (un Beam face à la caméra y couvrirait l'écran).
 ShotEffectRules.NEAR_CAMERA = 3
@@ -45,12 +47,8 @@ ShotEffectRules.LIFETIME_MARGIN = 0.5
 
 -- Cette méthode permet de calculer la transparence d'un rayon lorsqu'il vieillit : opaque au tir, il s'efface de
 -- plus en plus vite (courbe quadratique) jusqu'à disparaître à TRACER_LIFETIME.
-function ShotEffectRules.tracerTransparency(elapsed: number, lifetime: number?): number
-	local life = lifetime or ShotEffectRules.TRACER_LIFETIME
-	if not (life > 0) then
-		return 1
-	end
-	local t = math.clamp(elapsed / life, 0, 1)
+function ShotEffectRules.tracerTransparency(elapsed: number): number
+	local t = math.clamp(elapsed / ShotEffectRules.TRACER_LIFETIME, 0, 1)
 	return t * t
 end
 
@@ -100,22 +98,36 @@ function ShotEffectRules.closestApproach(start: Vector3, endpoint: Vector3, poin
 	return along, (point - (start + unit * along)).Magnitude, length
 end
 
--- Cette méthode permet d'arrêter un rayon venu d'un autre avant notre caméra lorsqu'il passe à moins de NEAR_CAMERA
--- d'elle (tir qui nous touche ou nous frôle) : fin à l'entrée de cette sphère ; nil s'il n'en reste presque rien.
-function ShotEffectRules.clipNearCamera(start: Vector3, endpoint: Vector3, camera: Vector3): Vector3?
-	local along, miss, length = ShotEffectRules.closestApproach(start, endpoint, camera)
+-- Cette méthode permet de retirer d'un rayon venu d'un autre sa partie à moins de NEAR_CAMERA de notre caméra
+-- lorsqu'il nous touche, nous frôle ou part d'à côté de nous : la partie avant cette sphère si elle est assez longue,
+-- sinon celle d'après ; nil s'il n'en reste presque rien. Renvoie le début et la fin du rayon gardé.
+function ShotEffectRules.clipNearCamera(start: Vector3, endpoint: Vector3, camera: Vector3): (Vector3?, Vector3?)
+	local path = endpoint - start
+	local length = path.Magnitude
 	if length <= 0 then
-		return nil
+		return nil, nil
 	end
+	local unit = path / length
+	-- point de la droite du rayon le plus proche de la caméra (non borné au segment), et sa distance à elle
+	local along = (camera - start):Dot(unit)
+	local miss = (camera - (start + unit * along)).Magnitude
 	local radius = ShotEffectRules.NEAR_CAMERA
 	if miss >= radius then
-		return endpoint
+		return start, endpoint
 	end
-	local cut = along - math.sqrt(radius * radius - miss * miss)
-	if cut < ShotEffectRules.TRACER_MIN_LENGTH then
-		return nil
+	local half = math.sqrt(radius * radius - miss * miss)
+	local enter, exit = along - half, along + half
+	if enter >= length or exit <= 0 then
+		return start, endpoint -- la sphère est avant le début ou après la fin du rayon
 	end
-	return start + (endpoint - start).Unit * cut
+	local minLength = ShotEffectRules.TRACER_MIN_LENGTH
+	if enter >= minLength then
+		return start, start + unit * enter
+	end
+	if length - exit >= minLength then
+		return start + unit * exit, endpoint
+	end
+	return nil, nil
 end
 
 -- Cette méthode permet de savoir si un rayon déjà tracé doit être masqué lorsqu'une frame passe : la caméra, qui a

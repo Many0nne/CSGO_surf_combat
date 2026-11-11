@@ -150,7 +150,7 @@ local function show(muzzle: Attachment?, origin: Vector3, endpoint: Vector3, cam
 	local start = ShotEffectRules.tracerStart(origin, muzzle and muzzle.WorldPosition, endpoint)
 	local finish: Vector3? = endpoint
 	if start and camera then
-		finish = ShotEffectRules.clipNearCamera(start, endpoint, camera)
+		start, finish = ShotEffectRules.clipNearCamera(start, endpoint, camera)
 	end
 	if start and finish then
 		spawnTracer(start, finish)

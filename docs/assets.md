@@ -77,10 +77,12 @@ par `ScaleTo` avec le reste de l'arme.
   frame. Le fondu passe par `FADE_STEPS` séquences précalculées (pas de `NumberSequence` créée par frame).
 - **Chez les autres :** chaque `ShotFired` relayé par le serveur (joueurs et bots) allume la flamme du canon 3P du tireur
   et trace un rayon de ce canon au point que touche, chez le client, le rayon origine + direction relayées. Le tireur
-  distant est dessiné en retard (interpolation) alors que l'origine relayée est à jour : un canon à plus de
-  `MUZZLE_MAX_OFFSET` de l'origine (tireur rapide) fait partir le rayon de l'origine. Un rayon qui nous touche ou nous
-  frôle s'arrête à `NEAR_CAMERA` de la caméra (`clipNearCamera`) : sinon le Beam, face à la caméra, couvre l'écran. Au
-  plus `MAX_ACTIVE` rayons en même temps, les siens compris (au-delà, flamme seule).
+  distant est dessiné en retard (interpolation) alors que l'origine relayée est à jour : comme dans CS, le rayon va du
+  canon dessiné à l'impact réel, un peu de biais quand le tireur surfe vite. Seul un canon à plus de
+  `MUZZLE_MAX_OFFSET` de l'origine (personnage pas à jour) fait partir le rayon de l'origine. La partie d'un rayon à
+  moins de `NEAR_CAMERA` de notre caméra est retirée (`clipNearCamera` : tir qui nous touche, nous frôle, ou tireur
+  collé à nous) : sinon le Beam, face à la caméra, couvre l'écran. Au plus `MAX_ACTIVE` rayons en même temps, les
+  siens compris (au-delà, flamme seule).
 - **Nouvelle arme à distance :** garder `Barrel.ShootPart.MuzzleEffect` dans son viewmodel (le copier de l'AWP), sinon
   elle tire sans flamme et son rayon part de l'œil.
 - **Vérifier qu'un tir ne laisse rien :** le rayon crée deux `Attachment` dans `Terrain` (et un `Beam`), tous nommés
