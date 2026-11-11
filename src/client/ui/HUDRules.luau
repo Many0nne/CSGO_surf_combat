@@ -214,6 +214,25 @@ function HUDRules.keyDisplayVisible(hud: HUDSnapshot, mode: string): boolean
 	return (mode == "simple" or mode == "full") and HUDRules.gameHudVisible(hud.gameState) and not hud.menuOpen
 end
 
+-- Emprise du compteur de munitions en bas à droite (px à 720 px de haut, repère de UIKit.scaledRoot) : `right` et `bottom`
+-- sont ses marges au bord de l'écran (à gauche de la barre d'armes : 44 px de marge + 250 px de contenu).
+HUDRules.AMMO_BOX = table.freeze({ right = 44 + 250, bottom = 40, width = 190, height = 78 })
+-- Affichage des touches : marge au bas de l'écran, et écart minimal avec le compteur de munitions (#247)
+HUDRules.KEY_DISPLAY_BOTTOM = 40
+HUDRules.KEY_DISPLAY_CLEARANCE = 12
+
+-- Cette méthode permet de placer l'affichage des touches (grille centrée en bas) lorsque la largeur de l'écran ou celle de
+-- la grille change : marge habituelle, ou au-dessus du compteur de munitions si la grille l'atteindrait (écran étroit, 4:3).
+function HUDRules.keyDisplayBottom(screenWidth: number, gridWidth: number): number
+	local ammo = HUDRules.AMMO_BOX
+	local gridRight = (screenWidth + gridWidth) / 2
+	local ammoLeft = screenWidth - ammo.right - ammo.width
+	if gridRight + HUDRules.KEY_DISPLAY_CLEARANCE <= ammoLeft then
+		return HUDRules.KEY_DISPLAY_BOTTOM
+	end
+	return ammo.bottom + ammo.height + HUDRules.KEY_DISPLAY_CLEARANCE
+end
+
 -- Cette méthode permet de savoir si le timer du round passe au-dessus du voile du menu en partie (#220) lorsque l'état du
 -- HUD change : menu ouvert (Réglages compris), vivant ou mort, la partie continuant derrière ; sinon il reste dans le HUD.
 function HUDRules.roundTimerOverMenu(hud: HUDSnapshot): boolean

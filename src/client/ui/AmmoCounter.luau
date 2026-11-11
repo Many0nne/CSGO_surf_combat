@@ -14,9 +14,10 @@ local WeaponSystem = require(script.Parent.Parent.systems.weapon.WeaponSystem)
 local C = UITheme.Colors
 local F = UITheme.Fonts
 
-local MARGIN = Vector2.new(44 + 250, 40) -- à gauche de la barre d'armes (44 px de marge, 250 px de contenu)
-local SIZE = Vector2.new(190, 78)
+-- Emprise partagée avec l'affichage des touches, qui remonte au-dessus sur écran étroit (HUDRules.keyDisplayBottom)
+local BOX = HUDRules.AMMO_BOX
 local SHADOW = 3
+local LABEL_SHADOW = 2 -- ombre du libellé, plus serrée à sa petite taille
 
 local AmmoCounter = {}
 
@@ -76,20 +77,20 @@ function AmmoCounter.init()
 		Name = "Box",
 		BackgroundTransparency = 1,
 		AnchorPoint = Vector2.new(1, 1),
-		Position = UDim2.new(1, -MARGIN.X, 1, -MARGIN.Y),
-		Size = UDim2.fromOffset(SIZE.X, SIZE.Y),
+		Position = UDim2.new(1, -BOX.right, 1, -BOX.bottom),
+		Size = UDim2.fromOffset(BOX.width, BOX.height),
 		Parent = root,
 	})
-	UIKit.text({
+	-- Libellé ambré posé sur la scène sans fond (#247) : ombre noire décalée comme les chiffres, sinon illisible sur rampe claire
+	UIKit.shadowedText(box, {
 		Name = "Label",
 		Text = "MUNITIONS",
 		FontFace = F.DisplayMedium,
 		TextSize = 14,
 		TextColor3 = C.Accent,
 		TextXAlignment = Enum.TextXAlignment.Right,
-		Size = UDim2.fromOffset(SIZE.X, 16),
-		Parent = box,
-	})
+		Size = UDim2.fromOffset(BOX.width, 16),
+	}, LABEL_SHADOW)
 	magazineText, magazineShadow = UIKit.shadowedText(box, {
 		Name = "Magazine",
 		FontFace = F.Display,
