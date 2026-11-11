@@ -16,6 +16,7 @@ local SpawnManager = require(script.SpawnManager)
 local RoundManager = require(script.RoundManager)
 local StatsStore = require(script.StatsStore)
 local SettingsStore = require(script.SettingsStore)
+local Roles = require(script.Roles)
 local Validator = require(script.Validator)
 local Participants = require(script.Participants)
 local FeedbackService = require(script.FeedbackService)
@@ -598,6 +599,7 @@ end
 -- ── Lifecycle joueurs ─────────────────────────────────────────────────────
 
 local function setupPlayer(player: Player)
+	Roles.setup(player)
 	task.spawn(StatsStore.load, player)
 	task.spawn(SettingsStore.load, player)
 	RoundManager.addParticipant(Participants.fromPlayer(player))
