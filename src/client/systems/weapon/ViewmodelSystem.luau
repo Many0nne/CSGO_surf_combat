@@ -3,6 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local AnimationSoundSystem = require(script.Parent.AnimationSoundSystem)
+local EquipRules = require(script.Parent.EquipRules)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 
@@ -265,7 +266,7 @@ local function equipTool(tool: Tool)
 	setModelVisibility(viewmodelName, true)
 
 	playIdleAnimation()
-	playEquipAnimation(activeViewmodel, cfg and cfg.EquipAnimSpeed or 1)
+	playEquipAnimation(activeViewmodel, EquipRules.animSpeed(cfg and cfg.EquipAnimSpeed))
 end
 
 local function hookTool(tool: Instance)
@@ -388,18 +389,19 @@ function ViewmodelSystem.getActiveViewmodel()
 end
 
 -- Cette méthode permet de lire la longueur d'une piste du viewmodel d'un outil donné lorsque l'outil vient d'être
--- équipé, sans dépendre de l'arme active (ordre des connexions Equipped non garanti) ; 0 si inconnue.
-function ViewmodelSystem.getToolTrackLength(tool: Tool, name: string): number
+-- équipé, sans dépendre de l'arme active (ordre des connexions Equipped non garanti) ; nil si la piste n'existe pas
+-- (pas de viewmodel ni d'animation de ce nom, rien à attendre), 0 si elle existe mais n'est pas encore chargée (#184).
+function ViewmodelSystem.getToolTrackLength(tool: Tool, name: string): number?
 	local viewmodelName = tool:GetAttribute("ViewmodelName")
 	if type(viewmodelName) ~= "string" or viewmodelName == "" then
-		return 0
+		return nil
 	end
 	if not tracksCache[viewmodelName] then
 		prewarmViewmodel(tool)
 	end
 	local tracks = tracksCache[viewmodelName]
 	local t = tracks and tracks[name]
-	return t and t.Length or 0
+	return t and t.Length or nil
 end
 
 -- Cette méthode permet de savoir si une animation préchargée de l'arme active est en cours, pour ne pas la relancer.

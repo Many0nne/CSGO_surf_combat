@@ -137,9 +137,12 @@ Bots : exclus (`BotArsenal` fait déjà respecter chargeur et rechargement, `Bot
 `BotArsenal._startReload` appelle le même point d'entrée serveur. Coût : un compteur par participant et par arme.
 
 **Durée d'equip, aujourd'hui.** Le client bloque tir et lunette pendant `EQUIPPING` (`canAct`, `WeaponSystem`), avec
-une durée tirée de la longueur de la piste `Equip` du viewmodel de l'outil (`EquipRules.duration`) et non de
+une durée tirée de la longueur de la piste `Equip` du viewmodel de l'outil (`EquipRules.settleTime`) et non de
 `EquipTime`. Un jeton d'equip (`EquipRules.newGate`) empêche le délai d'un equip antérieur de terminer le nouveau
-(#159, volet client corrigé). Le serveur ne contrôle rien.
+(#159, volet client corrigé). Tant que la piste n'est pas chargée (`Length` 0), l'equip attend son chargement au lieu de
+retomber sur `EquipTime` (#184) : sans piste `Equip`, `EquipTime` s'applique tout de suite ; piste présente mais jamais
+chargée, l'arme est libérée après `EquipRules.LOAD_TIMEOUT` (2 s). `EquipRules.settleTime` est le point de calcul à
+réutiliser. Le serveur ne contrôle rien.
 
 **Durée d'equip, risque.** Moyen : un client modifié tire dès la sortie de l'arme (AWP : 1,58 s de gagnées,
 `WeaponConfig.luau:23`), ce qui compte en duel après un changement d'arme.
