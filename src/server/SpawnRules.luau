@@ -37,6 +37,23 @@ function SpawnRules.request(r: Request): Refusal?
 	return nil
 end
 
+-- Réponse du serveur à chaque RequestSpawn (#219), renvoyée au client par le même remote : "accepted" (chargement
+-- lancé ou servi à la fin d'un chargement en vol), "failed" (LoadCharacterAsync en échec), ou le motif du refus ;
+-- retryIn = délai restant avant qu'une demande "early" soit acceptée.
+export type Reply = { status: string, retryIn: number? }
+
+-- Cette méthode permet de construire la réponse au client lorsqu'une demande d'apparition vient d'être jugée
+-- (refusal = résultat de SpawnRules.request, nil si acceptée).
+function SpawnRules.reply(refusal: Refusal?, r: Request): Reply
+	if not refusal then
+		return { status = "accepted" }
+	end
+	if refusal == "early" and r.diedAt then
+		return { status = "early", retryIn = math.clamp(r.respawnDelay - (r.now - r.diedAt), 0, r.respawnDelay) }
+	end
+	return { status = refusal }
+end
+
 -- Cette méthode permet de décider si une demande refusée vient d'un joueur revenu du menu pendant que sa réapparition
 -- programmée charge encore (#157) : elle est alors servie à la fin de ce chargement, sauf pendant la bannière de fin.
 function SpawnRules.rejoinsInFlight(refusal: Refusal?, away: boolean, roundState: string): boolean

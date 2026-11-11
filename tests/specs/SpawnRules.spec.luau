@@ -67,6 +67,25 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("SpawnRules.reply (#219)", function()
+		local SpawnRules = Loader.new():require("src/server/SpawnRules")
+
+		T.it("accepte, ou renvoie le motif du refus", function()
+			T.expectEqual(SpawnRules.reply(nil, request({})).status, "accepted")
+			T.expectEqual(SpawnRules.reply("result", request({})).status, "result")
+			T.expectEqual(SpawnRules.reply("alive", request({})).status, "alive")
+			T.expectEqual(SpawnRules.reply("spawning", request({})).status, "spawning")
+			T.expectEqual(SpawnRules.reply("result", request({})).retryIn, nil)
+		end)
+
+		T.it("donne le délai restant d'une demande précoce", function()
+			local answer = SpawnRules.reply("early", request({ diedAt = 99 }))
+			T.expectEqual(answer.status, "early")
+			T.expectNear(answer.retryIn, DELAY - 1, 1e-9)
+			T.expectEqual(SpawnRules.reply("early", request({ diedAt = 200 })).retryIn, DELAY, "horloge incohérente")
+		end)
+	end)
+
 	T.describe("SpawnRules.rejoinsInFlight (#157)", function()
 		local SpawnRules = Loader.new():require("src/server/SpawnRules")
 
@@ -132,7 +151,12 @@ return function(T, Loader)
 		})
 		env.SpawnManager = loader:require("src/server/SpawnManager")
 		env.CheatLog = loader:require("src/server/CheatLog")
+		-- Réponses envoyées au client (#219), dans l'ordre : { player, answer }
+		env.replies = {}
 		local remote = { Name = "RequestSpawn" }
+		function remote.FireClient(_, player, answer)
+			table.insert(env.replies, { player = player, answer = answer })
+		end
 		remote.OnServerEvent = {
 			Connect = function(_, fn)
 				env.handler = fn
@@ -276,6 +300,123 @@ return function(T, Loader)
 		end)
 	end)
 
+	-- Cette méthode permet de lire les statuts des réponses envoyées à un joueur lorsqu'un test vérifie que le serveur
+	-- répond à chaque demande (#219).
+	local function statuses(env, player)
+		local list = {}
+		for _, entry in env.replies do
+			if entry.player == player then
+				table.insert(list, entry.answer.status)
+			end
+		end
+		return table.concat(list, ",")
+	end
+
+	T.describe("SpawnManager : réponse à chaque demande et renvoi (#219)", function()
+		T.it("répond « accepted » à une demande acceptée", function()
+			local env = setup()
+			env.state = "idle"
+			local p = fakePlayer(1)
+			env.handler(p)
+			T.expectEqual(statuses(env, p), "accepted")
+		end)
+
+		T.it(
+			"répond à chaque refus avec son motif (bannière, déjà en jeu, précoce avec le délai restant)",
+			function()
+				local env = setup()
+				env.state = "result"
+				local p = fakePlayer(1)
+				env.handler(p)
+				T.expectEqual(statuses(env, p), "result")
+
+				local env2 = setup()
+				local q = fakePlayer(2)
+				q.Character = fakeCharacter(true, 100)
+				env2.handler(q)
+				T.expectEqual(statuses(env2, q), "alive")
+
+				local env3 = setup()
+				local r = fakePlayer(3)
+				env3.SpawnManager.noteDeath(r :: any)
+				env3.clock = 1
+				env3.handler(r)
+				T.expectEqual(statuses(env3, r), "early")
+				T.expectNear(env3.replies[1].answer.retryIn, 1.5, 1e-9)
+			end
+		)
+
+		T.it("JOUER pendant la bannière de fin, renvoyé jusqu'au round suivant : un seul personnage", function()
+			local env = setup()
+			env.state = "result"
+			local p = fakePlayer(1)
+			env.handler(p)
+			env.clock = 1.5
+			env.handler(p)
+			T.expectEqual(p.loads, 0)
+			env.state = "idle"
+			env.clock = 6.5
+			env.handler(p)
+			T.expectEqual(p.loads, 1)
+			T.expectEqual(statuses(env, p), "result,result,accepted")
+			T.expectEqual(env.CheatLog.summary(1), nil, "aucune violation")
+		end)
+
+		T.it("jamais deux personnages : renvoi pendant le chargement puis après l'apparition", function()
+			local env = setup()
+			env.state = "idle"
+			local p = fakePlayer(1)
+			p.duringLoad = function()
+				env.clock = 3
+				env.handler(p) -- renvoi sans réponse reçue (serveur figé)
+			end
+			env.handler(p)
+			env.clock = 6
+			env.handler(p) -- réponse « accepted » encore en route : nouveau renvoi
+			T.expectEqual(p.loads, 1, "un seul LoadCharacterAsync")
+			T.expectEqual(statuses(env, p), "accepted,spawning,alive")
+		end)
+
+		T.it("répond « failed » quand le chargement échoue, puis accepte le renvoi", function()
+			local env = setup()
+			local p = fakePlayer(1)
+			function p.LoadCharacterAsync(self)
+				self.loads += 1
+				if self.loads == 1 then
+					error("échec simulé")
+				end
+				self.Character = fakeCharacter(true, 100)
+			end
+			env.handler(p)
+			T.expectEqual(statuses(env, p), "accepted,failed")
+			env.clock = 1.5
+			env.handler(p)
+			T.expectEqual(p.loads, 2)
+			T.expectEqual(statuses(env, p), "accepted,failed,accepted")
+		end)
+
+		T.it("ne répond pas à un joueur déjà parti", function()
+			local env = setup()
+			local p = fakePlayer(1)
+			p.Parent = nil
+			env.handler(p)
+			T.expectEqual(#env.replies, 0)
+		end)
+
+		T.it("départ par MENU PRINCIPAL compté comme une mort (#217) puis JOUER : accepté, sans journal", function()
+			-- RoundManager.withdraw compte la mort sans passer par SpawnManager.noteDeath ; withdraw efface l'heure
+			local env = setup()
+			local p = fakePlayer(1)
+			p.Character = fakeCharacter(true, 100)
+			env.SpawnManager.withdraw(p :: any)
+			env.clock = 0.2
+			env.handler(p)
+			T.expectEqual(p.loads, 1)
+			T.expectEqual(statuses(env, p), "accepted")
+			T.expectEqual(env.CheatLog.summary(1), nil)
+		end)
+	end)
+
 	T.describe("SpawnManager : retour au menu en partie (#157)", function()
 		T.it("détruit le personnage et annule la réapparition programmée", function()
 			local env = setup()
@@ -313,6 +454,7 @@ return function(T, Loader)
 				T.expectEqual(p.loads, 1)
 				T.expectEqual(env.started, 1, "remis au round (beforeSpawn)")
 				T.expectEqual(env.CheatLog.summary(1), nil, "pas de refus journalisé")
+				T.expectEqual(statuses(env, p), "accepted", "demande servie : le client attend le personnage")
 				env.SpawnManager.respawn(p :: any)
 				T.expectEqual(p.loads, 1, "personnage vivant : rien de plus")
 			end

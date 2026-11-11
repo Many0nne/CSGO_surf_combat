@@ -14,6 +14,8 @@ local SpawnRules = require(ServerScriptService.Server.SpawnRules)
 local SpawnManager = {}
 
 local mapModel: Instance?
+-- Remote RequestSpawn, aussi la voie de la réponse au client (#219, SpawnRules.reply)
+local replyRemote: RemoteEvent?
 -- Joueurs dont un LoadCharacterAsync est en vol, et heure (os.clock) de leur dernière mort (#171)
 local spawning: { [Player]: boolean } = {}
 local diedAt: { [Player]: number } = {}
@@ -90,11 +92,20 @@ function SpawnManager.place(char: Model): Vector3?
 	return nil
 end
 
+-- Cette méthode permet de répondre au client lorsque sa demande d'apparition est jugée ou que son chargement échoue
+-- (#219) : le client ne reste jamais sans nouvelles en SPAWNING.
+local function reply(player: Player, answer: SpawnRules.Reply)
+	if replyRemote and player.Parent then
+		replyRemote:FireClient(player, answer)
+	end
+end
+
 -- Cette méthode permet de faire apparaître un joueur lorsqu'une demande ou une réapparition programmée est acceptée ;
--- un seul LoadCharacterAsync en vol par joueur : rien si un autre est déjà en cours.
-function SpawnManager.spawnPlayer(player: Player)
+-- un seul LoadCharacterAsync en vol par joueur : rien si un autre est déjà en cours. Renvoie false si ce chargement
+-- a échoué ou n'a pas été lancé.
+function SpawnManager.spawnPlayer(player: Player): boolean
 	if spawning[player] then
-		return
+		return false
 	end
 	spawning[player] = true
 	-- Connexion avant LoadCharacter pour ne pas manquer CharacterAdded
@@ -119,10 +130,11 @@ function SpawnManager.spawnPlayer(player: Player)
 	-- Demande arrivée pendant ce chargement (#157) : le personnage gardé la sert, sinon un nouveau
 	if rejoin[player] then
 		rejoin[player] = nil
-		if not SpawnRules.isAlive(player.Character) then
-			SpawnManager.spawnPlayer(player)
+		if not SpawnRules.isAlive(player.Character) and not SpawnManager.spawnPlayer(player) then
+			reply(player, { status = "failed" })
 		end
 	end
+	return ok
 end
 
 -- Cette méthode permet de faire réapparaître un joueur lorsque sa réapparition programmée échoit (RoundManager) :
@@ -167,32 +179,38 @@ function SpawnManager.withdraw(player: Player)
 end
 
 -- Cette méthode permet de brancher RequestSpawn lorsque le serveur démarre : garde commune, règles de réapparition
--- (SpawnRules.request, refus au journal), puis beforeSpawn (démarrage du round) et apparition.
+-- (SpawnRules.request, refus au journal), réponse au client (#219), puis beforeSpawn (démarrage du round) et apparition.
+-- Une demande écartée par la garde commune (débit) reste sans réponse : le client la renvoie après un délai.
 function SpawnManager.init(
 	requestSpawnRemote: RemoteEvent,
 	hooks: { roundState: () -> string, beforeSpawn: (Player) -> () }
 )
+	replyRemote = requestSpawnRemote
 	requestSpawnRemote.OnServerEvent:Connect(function(player)
 		-- Garde commune (#170) : débit
 		if not CheatLog.admit(player, requestSpawnRemote.Name) then
 			return
 		end
 		local now = os.clock()
-		local refusal = SpawnRules.request({
+		local request: SpawnRules.Request = {
 			spawning = spawning[player] == true,
 			hasCharacter = SpawnRules.inPlace(player.Character),
 			roundState = hooks.roundState(),
 			diedAt = diedAt[player],
 			now = now,
 			respawnDelay = GameConfig.RESPAWN_DELAY,
-		})
+		}
+		local refusal = SpawnRules.request(request)
 		-- Retour du menu pendant une réapparition partie avant le départ : servie à la fin de son chargement (#157)
 		if SpawnRules.rejoinsInFlight(refusal, away[player] == true, hooks.roundState()) then
 			away[player] = nil
 			rejoin[player] = true
+			reply(player, SpawnRules.reply(nil, request))
 			hooks.beforeSpawn(player)
 			return
 		end
+		-- Avant le journal et le chargement : le client est fixé tout de suite, même si la suite échoue
+		reply(player, SpawnRules.reply(refusal, request))
 		if refusal then
 			local severity = REFUSAL_SEVERITY[refusal]
 			if severity then
@@ -206,7 +224,9 @@ function SpawnManager.init(
 		end
 		away[player] = nil
 		hooks.beforeSpawn(player)
-		SpawnManager.spawnPlayer(player)
+		if not SpawnManager.spawnPlayer(player) then
+			reply(player, { status = "failed" })
+		end
 	end)
 end
 
