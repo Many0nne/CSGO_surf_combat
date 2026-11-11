@@ -284,9 +284,10 @@ remplace la partie par une sphère : centre = articulation de l'épaule du même
   serveur, vue de l'articulation `Waist` (~0,7 stud pour une épaule à 1 stud de l'axe et une taille serveur au repos).
   Les rotations de taille des tenues sont lues une fois au chargement de `ShotRules`.
 
-Rig incomplet (pas de Motor6D, partie hors du personnage) : règle de la partie, plus stricte. Le détail du journal
-indique « <partie> jugé dans l'allonge de l'épaule ». Les autres parties (tête, torse, jambes) gardent la règle de
-la partie.
+Quand la sphère s'applique, le détail du journal indique « <partie> jugé dans l'allonge de l'épaule ». Rig incomplet
+(Motor6D ou partie du bras absents, partie hors du personnage) : règle de la partie (rayon englobant de la partie
+elle-même, plus petit que l'allonge), détail avec le nom seul. Les autres parties (tête, torse, jambes) gardent la
+règle de la partie.
 
 **Ce qu'un tricheur y gagne (limite connue).** Une touche annoncée sur un bras passe si le rayon passe à moins de
 l'allonge + tolérance de l'épaule : la cible est en pratique grossie d'environ un bras autour du haut du corps
