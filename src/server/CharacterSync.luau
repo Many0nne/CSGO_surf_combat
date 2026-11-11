@@ -34,9 +34,8 @@ local acceptedCallback: ((Model, Vector3) -> ())? = nil
 
 -- Une correction restée sans réponse (s) est renvoyée : filet si le client ne l'a pas appliquée (personnage pas prêt).
 local CORRECTION_RESEND = 1
--- Période (s) de la boucle du vide, et rayon (studs) de la sphère lancée sous un joueur silencieux pour chercher un sol.
+-- Période (s) de la boucle du vide (joueurs silencieux tombés dans le vide).
 local VOID_PERIOD = 0.25
-local VOID_PROBE_RADIUS = 4
 
 -- Mort par chute fournie par KillZone : hauteur de mort de la map jouée, et mise à mort.
 export type FallHooks = { height: () -> number?, kill: (Model) -> () }
@@ -51,6 +50,7 @@ type Track = {
 	acked: boolean, -- un paquet portant requiredAck est arrivé
 	correctedAt: number,
 	guard: MovementGuardRules.Guard, -- noclip, vol et vide (#177)
+	voidReportedAt: number, -- dernier signalement du vide (journal seul : un par VOID_SILENCE)
 }
 
 local tracks: { [Player]: Track } = {}
@@ -64,7 +64,7 @@ local histories: { [Model]: PositionHistory.History } = setmetatable({}, { __mod
 
 -- Géométrie de la map vue par les règles D2 (#177) : nil tant que la map jouée n'est pas trouvée (règles suspendues).
 local geometry: MovementGuardRules.Geometry? = nil
-local mapParams: RaycastParams? = nil
+local mapOverlap: OverlapParams? = nil
 
 -- Cette méthode permet de préparer la géométrie des règles D2 lorsque la map jouée est trouvée : rayons et requêtes
 -- limités à la map et à ses pièces qui collisionnent (parois sans collision, volumes d'échelle et de boost exclus),
@@ -74,11 +74,11 @@ local function buildGeometry(map: Instance): MovementGuardRules.Geometry
 	params.FilterType = Enum.RaycastFilterType.Include
 	params.FilterDescendantsInstances = { map }
 	params.RespectCanCollide = true
-	mapParams = params
 	local overlap = OverlapParams.new()
 	overlap.FilterType = Enum.RaycastFilterType.Include
 	overlap.FilterDescendantsInstances = { map }
 	overlap.RespectCanCollide = true
+	mapOverlap = overlap
 
 	local ladders: { BasePart } = {}
 	local ladderFolder = map:FindFirstChild(LadderRules.LADDERS_FOLDER)
@@ -98,9 +98,13 @@ local function buildGeometry(map: Instance): MovementGuardRules.Geometry
 	end
 
 	return {
+		-- Cette méthode permet de savoir si un rayon de a vers b touche une paroi de la map lorsque le noclip juge un
+		-- segment ou un détour.
 		isBlocked = function(a: Vector3, b: Vector3): boolean
 			return workspace:Raycast(a, b - a, params) ~= nil
 		end,
+		-- Cette méthode permet de savoir si un segment est porté lorsque le vol le juge : vitesse imposée par un boost
+		-- touché, échelle traversée, ou pièce proche d'un de ses points (pièces candidates : sphère qui couvre le segment).
 		support = function(from: Vector3, to: Vector3): (boolean, number)
 			local launchVy = 0
 			for _, boost in boosts do
@@ -113,12 +117,9 @@ local function buildGeometry(map: Instance): MovementGuardRules.Geometry
 					return true, launchVy
 				end
 			end
-			for _, part in workspace:GetPartBoundsInRadius(to, MovementGuardRules.SUPPORT_REACH, overlap) do
-				if MovementGuardRules.supports(part, to) then
-					return true, launchVy
-				end
-			end
-			return false, launchVy
+			local radius = MovementGuardRules.SUPPORT_REACH + (to - from).Magnitude / 2
+			local parts = workspace:GetPartBoundsInRadius((from + to) / 2, radius, overlap)
+			return MovementGuardRules.supportedAlong(parts, from, to), launchVy
 		end,
 	}
 end
@@ -154,6 +155,7 @@ local function trackFor(player: Player, char: Model, root: BasePart, now: number
 			requiredAck = 0,
 			acked = true,
 			correctedAt = -math.huge,
+			voidReportedAt = -math.huge,
 			guard = MovementGuardRules.newGuard(
 				now,
 				root.Position,
@@ -238,6 +240,8 @@ local function onClientPosition(
 	end
 	local now = os.clock()
 	local track = trackFor(player, char, root, now)
+	-- Le client vit, même si ce paquet est ignoré ci-dessous (règle du vide)
+	track.guard.heardAt = now
 	-- Envoyé avant d'avoir appliqué la correction : ni jugé ni journalisé (le temps continue de remplir le seau)
 	if CharacterSyncRules.awaitsAck(track.requiredAck, ack) then
 		if not track.acked and now - track.correctedAt >= CORRECTION_RESEND then
@@ -279,36 +283,37 @@ end
 
 -- Cette méthode permet de déclarer tombé un joueur silencieux lorsque la boucle du vide le trouve en l'air au-dessus
 -- du vide depuis trop longtemps (MovementGuardRules.fellIntoVoid) : journal (gravité faible, une coupure réseau en
--- produit aussi), puis mort, ou en journal seul une nouvelle attente de VOID_SILENCE avant le signalement suivant.
+-- produit aussi), puis mort, ou en journal seul un signalement au plus par VOID_SILENCE.
 local function checkVoid(fall: FallHooks)
-	local params = mapParams
+	local overlap = mapOverlap
 	local killHeight = fall.height()
-	if not params or not killHeight then
+	if not overlap or not killHeight then
 		return
 	end
 	local now = os.clock()
 	for player, track in tracks do
 		local hum = track.char:FindFirstChildOfClass("Humanoid")
-		if not hum or hum.Health <= 0 then
+		if not hum or hum.Health <= 0 or now - track.voidReportedAt < MovementGuardRules.VOID_SILENCE then
 			continue
 		end
-		local from = track.lastPos
 		local fell = MovementGuardRules.fellIntoVoid(track.guard, now, killHeight, function()
-			local depth = from.Y - killHeight
-			return depth > 0 and workspace:Spherecast(from, VOID_PROBE_RADIUS, Vector3.new(0, -depth, 0), params) ~= nil
+			-- Un sol (boîte d'une pièce de la map) dans la zone où il a pu atterrir
+			local cf, size = MovementGuardRules.voidProbe(track.guard, track.lastPos, now, killHeight)
+			return #workspace:GetPartBoundsInBox(cf, size, overlap) > 0
 		end)
 		if fell then
-			local silence = now - track.guard.flight.lastAt
+			track.voidReportedAt = now
 			CheatLog.report(
 				Participants.fromPlayer(player),
 				CheatLog.Category.MOVEMENT,
 				CheatLog.Severity.LOW,
-				string.format("vide : en l'air sans position depuis %.1f s, déclaré tombé", silence)
+				string.format(
+					"vide : en l'air sans position depuis %.1f s, déclaré tombé",
+					now - track.guard.heardAt
+				)
 			)
 			if MovementGuardRules.ENFORCE_VOID then
 				fall.kill(track.char)
-			else
-				track.guard.flight.lastAt = now
 			end
 		end
 	end
@@ -335,6 +340,8 @@ function CharacterSync.init(
 		end
 	end)
 	local sinceVoidCheck = 0
+	-- Cette méthode permet de passer en revue les joueurs silencieux toutes les VOID_PERIOD secondes lorsque le serveur
+	-- avance d'une frame (coût relevé sous le repère « srv vide »).
 	RunService.Heartbeat:Connect(function(dt: number)
 		sinceVoidCheck += dt
 		if sinceVoidCheck < VOID_PERIOD then

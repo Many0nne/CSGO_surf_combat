@@ -387,11 +387,13 @@ par le seau (D1) passe par `MovementGuardRules.judge` (`judgeGuard`, `src/server
    l'enveloppe repart du point atteint, vitesse nulle : un joueur qui plane encore est signalé environ deux fois par
    seconde, pas à chaque paquet. Lancement depuis le soleil : la vitesse `LaunchVelocity` du personnage ouvre
    l'enveloppe. Correction (D1 ou D2) : enveloppe repartie de la position de correction avec la vitesse d'un saut.
-3. **Vide** (`fellIntoVoid`, boucle `checkVoid` toutes les 0,25 s) : joueur en l'air (dernier paquet non porté), sans
-   paquet depuis `VOID_SILENCE` (2 s), dont même la plus haute position de l'enveloppe est passée sous `KillHeight`, et
-   sans rien sous sa dernière position (sphère de 4 studs lancée jusqu'à `KillHeight`) : journalisé (`Movement`,
-   gravité faible, une coupure réseau en produit aussi) et tué (`KillZone.kill`). Un client corrigé au-dessus du vide
-   qui n'accuse jamais réception y passe aussi.
+3. **Vide** (`fellIntoVoid`, boucle `checkVoid` toutes les 0,25 s) : joueur en l'air (dernier paquet jugé non porté),
+   sans paquet reçu depuis `VOID_SILENCE` (2 s ; un paquet ignoré en attente d'accusé compte comme signe de vie), dont
+   même la plus haute position de l'enveloppe est passée sous `KillHeight`, et sans aucune pièce de la map dans la zone
+   où il a pu atterrir (`voidProbe` : boîte de la hauteur de mort au sommet de l'enveloppe, large de sa vitesse
+   horizontale majorée plus `RUN_SPEED` fois le temps écoulé, `GetPartBoundsInBox`) : journalisé (`Movement`, gravité
+   faible, une coupure réseau en produit aussi) et tué (`KillZone.kill`). Un client corrigé au-dessus du vide qui
+   n'accuse jamais réception y passe aussi.
 
 **Modes** (`src/shared/MovementGuardRules.luau:23-27`) : `ENFORCE_NOCLIP = false` et `ENFORCE_FLIGHT = false` : journal
 seul (violation `Movement` moyenne comptée, position appliquée). `ENFORCE_VOID = true` : un joueur dans ce cas tombait
@@ -406,8 +408,11 @@ noclip → relever `NOCLIP_DETOUR_BASE` ou `NOCLIP_DETOUR_RATIO`.
 
 **Limites connues.** Un joueur qui plane à moins de `SUPPORT_REACH` d'une surface (ou le long d'une rampe, d'un bord de
 mur) n'est pas signalé ; au décollage, l'enveloppe accorde une marge (vitesse estimée doublée, plus un saut) épuisée en
-quelques dixièmes de seconde de vol libre ; un `WedgePart`, un cylindre ou une `MeshPart` portent sur toute leur boîte.
-Ces écarts vont dans le sens du joueur honnête.
+quelques dixièmes de seconde de vol libre ; un `WedgePart`, un cylindre ou une `MeshPart` portent sur toute leur boîte ;
+un volume de geyser ou de lanceur touché compte comme support et donne sa vitesse au décollage suivant même en
+recharge (oubliée au premier paquet porté hors du volume). Ces écarts vont dans le sens du joueur honnête. Coût : les
+volumes d'échelle et de boost sont parcourus à chaque paquet (2 échelles sur Dizzy) ; une map qui en a des dizaines
+devrait les chercher par une requête spatiale.
 
 **Pièges.**
 

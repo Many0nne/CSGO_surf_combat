@@ -123,7 +123,9 @@ return function(T, Loader)
 				verdict.t = packet.t
 				table.insert(verdicts, verdict)
 			end
-			if not (verdict and verdict.enforce) then
+			if verdict and verdict.enforce then
+				Rules.restart(guard.flight, packet.t, lastPos.Y) -- comme CharacterSync.refuse
+			else
 				lastPos = packet.pos
 			end
 		end
@@ -388,6 +390,21 @@ return function(T, Loader)
 			T.expectEqual(#verdicts, 0, describe(verdicts))
 		end)
 
+		T.it("un geyser dépassé à pied ne donne plus d'élan au saut suivant", function()
+			geyser.vy = GEYSER_VY
+			local geometry = geometryOf({ FLOOR }, {}, { geyser })
+			-- Traverse le geyser en marchant (sans être projeté, recharge), s'éloigne, puis « saute » à 60 studs et plane
+			local function path(t: number): Vector3
+				local x = -10 + 20 * t
+				if t < 2 then
+					return V(x, STAND, 0)
+				end
+				return V(x, STAND + math.min(60, 120 * (t - 2)), 0)
+			end
+			local verdicts = replay(packets(path, 5), geometry, path(0))
+			T.expect(#verdicts > 0, "le vol après le geyser doit être signalé")
+		end)
+
 		T.it("un lancement depuis le soleil n'est pas signalé, même au premier paquet tardif", function()
 			local launch = V(100, 80, 0)
 			local origin = V(0, 500, 0)
@@ -489,6 +506,7 @@ return function(T, Loader)
 							verdict.t = arrival
 							table.insert(verdicts, verdict)
 							T.expectEqual(verdict.enforce, true)
+							Rules.restart(guard.flight, arrival, lastPos.Y) -- comme CharacterSync.refuse
 							correctedAt, correctedFrom = arrival, lastPos
 						else
 							lastPos = pos
@@ -511,6 +529,7 @@ return function(T, Loader)
 				local t = i * INTERVAL
 				Rules.observe(guard.flight, t, freeFall(50, 0, t - 0.05), false)
 			end
+			guard.heardAt = 0.5
 			return guard
 		end
 		local noFloor = function(): boolean
@@ -548,8 +567,41 @@ return function(T, Loader)
 		T.it("déclare tombé un client corrigé au-dessus du vide qui n'accuse jamais réception", function()
 			local guard = Rules.newGuard(0, V(0, 50, 0))
 			Rules.restart(guard.flight, 1, 50)
+			guard.heardAt = 1
 			T.expect(not Rules.fellIntoVoid(guard, 2, 0, noFloor))
 			T.expect(Rules.fellIntoVoid(guard, 1 + Rules.VOID_SILENCE + 1, 0, noFloor))
+		end)
+
+		T.it("ne déclare rien tant que le client envoie, même des paquets ignorés (attente d'accusé)", function()
+			local guard = silentFaller()
+			guard.heardAt = 3
+			T.expect(not Rules.fellIntoVoid(guard, 4, 0, noFloor))
+		end)
+
+		T.it("cherche le sol aussi là où le joueur a pu atterrir en avançant (saut par-dessus un trou)", function()
+			-- Saut vers une plateforme 30 studs devant, à 30 studs/s, puis coupure réseau
+			local guard = Rules.newGuard(0, V(0, 50, 0))
+			local lastPos = V(0, 50, 0)
+			for i = 1, 10 do
+				local t = i * INTERVAL
+				local pos = V(30 * t, if i == 1 then 50 else freeFall(50, Config.JUMP_VELOCITY, t - INTERVAL), 0)
+				Rules.judge(guard, lastPos, pos, t, geometryOf({}))
+				lastPos = pos
+			end
+			local platform = box(V(25, 0, -5), V(60, 48, 5))
+			local now = 0.5 + Rules.VOID_SILENCE + 0.5
+			local cf, size = Rules.voidProbe(guard, lastPos, now, 0)
+			local lo, hi = cf.Position - size / 2, cf.Position + size / 2
+			local pLo, pHi = platform.CFrame.Position - platform.Size / 2, platform.CFrame.Position + platform.Size / 2
+			local overlaps = lo.X <= pHi.X
+				and hi.X >= pLo.X
+				and lo.Y <= pHi.Y
+				and hi.Y >= pLo.Y
+				and lo.Z <= pHi.Z
+				and hi.Z >= pLo.Z
+			T.expect(overlaps, "la plateforme d'en face doit être dans la zone")
+			T.expect(cf.Position.Y - size.Y / 2 <= 0, "la zone descend jusqu'à la hauteur de mort")
+			T.expect(cf.Position.Y + size.Y / 2 >= lastPos.Y, "la zone couvre la dernière position")
 		end)
 	end)
 end

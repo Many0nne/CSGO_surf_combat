@@ -57,6 +57,8 @@ MovementGuardRules.SUPPORT_STEP = 3
 
 -- Vide : silence (s) au-delà duquel un joueur en l'air peut être déclaré tombé.
 MovementGuardRules.VOID_SILENCE = 2
+-- Marge horizontale (studs) de la zone où chercher un sol sous un joueur silencieux.
+MovementGuardRules.VOID_PROBE_MARGIN = 6
 
 local GRAVITY = -MovementConfig.GRAVITY -- intensité (positive)
 local SEND_INTERVAL = 1 / MovementConfig.NET_SYNC_RATE
@@ -83,13 +85,14 @@ export type Flight = {
 	suspect: boolean,
 }
 
--- Suivi D2 d'un personnage : vol, et `fresh` tant que le premier paquet (dont le point de départ est la racine posée
--- par le serveur, pas une position du client) n'est pas passé.
-export type Guard = { flight: Flight, fresh: boolean }
+-- Suivi D2 d'un personnage : vol, `fresh` tant que le premier paquet (dont le point de départ est la racine posée par
+-- le serveur, pas une position du client) n'est pas passé, heardAt = heure du dernier paquet reçu (jugé ou ignoré en
+-- attente d'accusé : le client vit), speedXZ = vitesse horizontale majorée du dernier paquet jugé (vide).
+export type Guard = { flight: Flight, fresh: boolean, heardAt: number, speedXZ: number }
 
 -- Géométrie fournie par le serveur : `isBlocked(a, b)` = un rayon de a vers b touche une paroi de la map ;
--- `support(from, to)` = (porté à l'arrivée ou sur une échelle le long du segment, vitesse verticale imposée par un
--- boost touché le long du segment ou 0).
+-- `support(from, to)` = (porté le long du segment ou sur une échelle, vitesse verticale imposée par un boost touché le
+-- long du segment ou 0).
 export type Geometry = {
 	isBlocked: (Vector3, Vector3) -> boolean,
 	support: (Vector3, Vector3) -> (boolean, number),
@@ -190,7 +193,7 @@ end
 
 -- Cette méthode permet de créer le suivi D2 d'un personnage lorsque le serveur reçoit son premier paquet.
 function MovementGuardRules.newGuard(now: number, pos: Vector3, launchVy: number?): Guard
-	return { flight = MovementGuardRules.newFlight(now, pos.Y, launchVy), fresh = true }
+	return { flight = MovementGuardRules.newFlight(now, pos.Y, launchVy), fresh = true, heardAt = now, speedXZ = 0 }
 end
 
 -- Cette méthode permet de repartir d'une correction lorsque le serveur renvoie le client à sa dernière position
@@ -303,8 +306,9 @@ function MovementGuardRules.observe(flight: Flight, now: number, y: number, supp
 end
 
 -- Cette méthode permet de juger un paquet déjà accepté par le seau de distance lorsqu'il arrive : noclip (sauf premier
--- paquet), puis vol. Renvoie nil, ou la violation avec son mode. En mode bloquant, la position sera refusée : le vol
--- repart de lastPos (correction) ; en journal seul, le suivi continue depuis la position appliquée.
+-- paquet), puis vol. Renvoie nil, ou la violation avec son mode. En mode bloquant, la position sera refusée : c'est à
+-- l'appelant de repartir de lastPos (CharacterSync.refuse appelle restart) ; en journal seul, le suivi continue depuis
+-- la position appliquée.
 function MovementGuardRules.judge(
 	guard: Guard,
 	lastPos: Vector3,
@@ -314,56 +318,78 @@ function MovementGuardRules.judge(
 ): Verdict?
 	local fresh = guard.fresh
 	guard.fresh = false
+	local flight = guard.flight
+	local step = pos - lastPos
+	guard.speedXZ = Vector3.new(step.X, 0, step.Z).Magnitude
+		/ math.max(now - flight.lastAt, MovementGuardRules.MIN_PACKET_INTERVAL)
 	local noclip: Verdict? = nil
 	if not fresh and MovementGuardRules.crossesWall(lastPos, pos, geometry.isBlocked) then
 		noclip = {
 			rule = "noclip",
 			enforce = MovementGuardRules.ENFORCE_NOCLIP,
-			detail = string.format("noclip : traversée d'une paroi sur %.1f studs", (pos - lastPos).Magnitude),
+			detail = string.format("noclip : traversée d'une paroi sur %.1f studs", step.Magnitude),
 		}
 		if MovementGuardRules.ENFORCE_NOCLIP then
-			MovementGuardRules.restart(guard.flight, now, lastPos.Y)
 			return noclip
 		end
 	end
 	local supported, launchVy = geometry.support(lastPos, pos)
-	local flight = guard.flight
+	-- Vitesse imposée retenue jusqu'au décollage suivant, oubliée dès un paquet porté sans boost (boost déjà dépassé)
 	if launchVy > 0 then
 		flight.launchVy = math.max(flight.launchVy, launchVy)
+	elseif supported then
+		flight.launchVy = 0
 	end
 	local honest, excess = MovementGuardRules.observe(flight, now, pos.Y, supported or launchVy > 0)
 	-- Journal seul : un paquet n'est signalé qu'une fois, le noclip d'abord ; le vol a quand même suivi la position
 	if noclip or honest then
 		return noclip
 	end
-	local enforce = MovementGuardRules.ENFORCE_FLIGHT
-	if enforce then
-		MovementGuardRules.restart(flight, now, lastPos.Y)
-	end
 	return {
 		rule = "flight",
-		enforce = enforce,
+		enforce = MovementGuardRules.ENFORCE_FLIGHT,
 		detail = string.format("vol : %.1f studs au-dessus de la trajectoire balistique", excess),
 	}
 end
 
+-- Cette méthode permet de délimiter la zone où un joueur silencieux a pu atterrir lorsque le serveur cherche un sol
+-- avant de le déclarer tombé : boîte centrée sur sa dernière position, de la hauteur de mort au sommet de l'enveloppe,
+-- large de ce qu'il a pu parcourir (vitesse horizontale majorée plus une course, gagnée en air strafe) depuis.
+function MovementGuardRules.voidProbe(
+	guard: Guard,
+	lastPos: Vector3,
+	now: number,
+	killHeight: number
+): (CFrame, Vector3)
+	local flight = guard.flight
+	local elapsed = math.max(0, now - flight.lastAt) + MovementGuardRules.FLIGHT_TIME_SLACK
+	local reach = MovementGuardRules.VOID_PROBE_MARGIN + (guard.speedXZ + MovementConfig.RUN_SPEED) * elapsed
+	local apex = flight.anchorY
+		+ MovementGuardRules.ballistic(flight.anchorVy, math.max(flight.anchorVy / GRAVITY, 0))
+		+ MovementGuardRules.FLIGHT_HEIGHT_TOLERANCE
+	local top = math.max(apex, lastPos.Y + MovementGuardRules.FLIGHT_HEIGHT_TOLERANCE)
+	local bottom = math.min(killHeight, top)
+	local center = Vector3.new(lastPos.X, (top + bottom) / 2, lastPos.Z)
+	return CFrame.new(center), Vector3.new(2 * reach, top - bottom, 2 * reach)
+end
+
 -- Cette méthode permet de savoir si un joueur silencieux est tombé dans le vide lorsque le serveur passe en revue les
--- personnages suivis : en l'air, sans paquet depuis VOID_SILENCE, même sa plus haute position possible est sous la
--- hauteur de mort, et rien sous sa dernière position (hasFloorBelow, appelé en dernier : rayon serveur).
+-- personnages suivis : en l'air, sans paquet reçu depuis VOID_SILENCE, même sa plus haute position possible est sous
+-- la hauteur de mort, et aucun sol dans la zone où il a pu atterrir (hasFloor, appelé en dernier : requête serveur
+-- sur voidProbe).
 function MovementGuardRules.fellIntoVoid(
 	guard: Guard,
 	now: number,
 	killHeight: number?,
-	hasFloorBelow: () -> boolean
+	hasFloor: () -> boolean
 ): boolean
-	local flight = guard.flight
-	if type(killHeight) ~= "number" or not flight.anchored then
+	if type(killHeight) ~= "number" or not guard.flight.anchored then
 		return false
 	end
-	if now - flight.lastAt < MovementGuardRules.VOID_SILENCE then
+	if now - guard.heardAt < MovementGuardRules.VOID_SILENCE then
 		return false
 	end
-	return MovementGuardRules.ceiling(flight, now) < killHeight and not hasFloorBelow()
+	return MovementGuardRules.ceiling(guard.flight, now) < killHeight and not hasFloor()
 end
 
 return MovementGuardRules
