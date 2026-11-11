@@ -20,6 +20,17 @@ Lire le document du domaine avant de travailler dessus, et seulement celui-là.
 | Anti-triche : menaces, validations serveur des remotes, plan | `docs/anticheat.md` |
 | Retours d'expérience datés (historique, le document du domaine prime) | `docs/notes/` |
 
+## Labels des issues
+
+Toute issue créée (y compris un problème noté hors périmètre) porte **1 type, 1 ou 2 scopes et 1 priorité** :
+
+- `type:` `bug`, `feature`, `refactor`, `docs`, `question` (analyse sans changement prévu, pas de scope ni de priorité obligatoires).
+- `scope:` `movement`, `weapons`, `animation`, `map`, `ui`, `gameplay` (rounds, spawn, mort, score), `bots`, `anticheat`, `perf`, `audio`, `player-data` (stats, inventaire, rôles), `tooling` (worktrees, CI, outils).
+- `priority:` `high` (cassé ou bloquant pour jouer), `medium` (prochaines tâches), `low` (finition, confort).
+- `status:` optionnel : `blocked` (attend une autre issue ou PR), `needs-ref` (vidéo ou son de référence à obtenir d'abord).
+
+Pas de labels sur les PR : elles renvoient à leur issue par `Closes #<n>`.
+
 ## Capitaliser
 
 Quand une tâche révèle un piège, une règle ou une piste rejetée qui resservira, l'ajouter dans la même PR au document du domaine (créer `docs/<domaine>.md` si le sujet revient et n'a pas de document). N'ajouter à ce fichier qu'une règle utile à presque toutes les tâches. Si le code contredit une doc, corriger la doc.
