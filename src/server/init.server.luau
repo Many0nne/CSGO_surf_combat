@@ -290,9 +290,8 @@ shotFiredRmt.OnServerEvent:Connect(function(player, origin, direction)
 	end
 end)
 
--- Cette méthode permet d'oublier l'état de combat d'un participant lorsqu'il réapparaît (armes neuves) ou s'en va
--- (joueur parti, bot retiré, #218) : cadences, equip et chargeurs du Validator, cadence du relais des tirs. AimStats
--- n'en retient rien pour un bot (exclu), et celles d'un joueur sont closes par CheatLog.onClosing.
+-- Cette méthode permet d'oublier l'état de combat d'un participant (Validator, relais des tirs) lorsqu'il réapparaît
+-- ou s'en va (joueur parti, bot retiré, #218) ; AimStats ignore les bots, CheatLog.onClosing clôt les joueurs.
 local function forgetCombatState(participant: Participants.Participant)
 	Validator.forget(participant)
 	ShotRelayRules.forget(shotRelay, participant)
