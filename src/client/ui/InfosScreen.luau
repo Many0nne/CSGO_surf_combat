@@ -53,6 +53,7 @@ local SECTIONS: { Section } = {
 		title = "CRÉDITS",
 		lines = {
 			"Physique inspirée du Source SDK (surf de CS:GO).",
+			"Headshot 2 by SilverIllusionist -- https://freesound.org/s/470586/ -- License: Attribution 4.0",
 		},
 	},
 	{
