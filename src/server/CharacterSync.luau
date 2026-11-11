@@ -12,6 +12,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local CharacterSyncRules = require(ReplicatedStorage.Shared.CharacterSyncRules)
 local CheatLog = require(ServerScriptService.Server.CheatLog)
+local PositionHistory = require(ReplicatedStorage.Shared.PositionHistory)
 
 local CharacterSync = {}
 
@@ -30,6 +31,27 @@ type Track = {
 }
 
 local tracks: { [Player]: Track } = {}
+
+-- Historique des positions acceptées par personnage (Model : joueurs et bots, vide à chaque réapparition), pour le
+-- rembobinage (#173). Supprimé à la destruction du personnage (mort, départ, bot retiré), clés faibles en filet.
+local histories: { [Model]: PositionHistory.History } = setmetatable({}, { __mode = "k" }) :: any
+
+-- Cette méthode permet d'ajouter une position acceptée à l'historique du personnage lorsqu'elle est posée ; l'historique
+-- est créé au premier relevé, sauf si le personnage est déjà retiré du monde (Destroying ne se déclencherait plus).
+local function recordPosition(char: Model, pos: Vector3, stamp: number)
+	local history = histories[char]
+	if not history and not char:IsDescendantOf(game) then
+		return
+	end
+	if not history then
+		history = PositionHistory.new()
+		histories[char] = history
+		char.Destroying:Once(function()
+			histories[char] = nil
+		end)
+	end
+	PositionHistory.record(history, stamp, pos)
+end
 
 -- Cette méthode permet de (re)partir de la position serveur de la racine lorsqu'un paquet arrive pour un personnage
 -- neuf (spawn, réapparition) : c'est le point posé par SpawnManager, seule référence sûre.
@@ -93,6 +115,7 @@ local function onClientPosition(
 	root.CFrame = CFrame.new(pos) * CFrame.Angles(0, yaw, 0)
 
 	local stamp = workspace:GetServerTimeNow()
+	recordPosition(char, pos, stamp)
 	for _, other in Players:GetPlayers() do
 		if other ~= player then
 			remote:FireClient(other, char, pos, yaw, stamp)
@@ -127,10 +150,23 @@ function CharacterSync.relayBot(char: Model, root: BasePart, cf: CFrame)
 		return
 	end
 	local pos = cf.Position
-	remote:FireAllClients(char, pos, CharacterSyncRules.yawOf(cf.LookVector), workspace:GetServerTimeNow())
+	local stamp = workspace:GetServerTimeNow()
+	recordPosition(char, pos, stamp)
+	remote:FireAllClients(char, pos, CharacterSyncRules.yawOf(cf.LookVector), stamp)
 	if acceptedCallback then
 		acceptedCallback(char, pos)
 	end
+end
+
+-- Cette méthode permet de connaître la position d'un personnage à l'instant t (horloge serveur, ex. shotTime) lorsque
+-- le serveur valide un tir ou un coup (#174, #176) : t est borné à [maintenant - MAX_REWIND, maintenant], interpolé
+-- entre deux relevés. nil si le personnage n'a pas encore d'historique.
+function CharacterSync.positionAt(char: Model, t: number): Vector3?
+	local history = histories[char]
+	if not history then
+		return nil
+	end
+	return PositionHistory.sampleAt(history, t, workspace:GetServerTimeNow())
 end
 
 return CharacterSync
