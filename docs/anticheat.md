@@ -662,11 +662,92 @@ CheatLog.summary(participant.id) -- bilan (compteurs, score présent, pire viola
 [`Players:BanAsync`](https://create.roblox.com/docs/reference/engine/classes/Players#BanAsync), avec détection des
 comptes secondaires ([annonce de la Ban API](https://devforum.roblox.com/t/introducing-the-ban-api-and-alt-account-detection/3039740)) :
 
-- d'abord **manuel**, depuis le Creator Hub, à la lecture du journal (le DevForum rapporte une détection des comptes
-  secondaires imparfaite, et elle ne marche pas dans Studio) ;
+- d'abord **manuel** (#179, procédure ci-dessous), depuis le Creator Hub, à la lecture du journal (le DevForum rapporte
+  une détection des comptes secondaires imparfaite, et elle ne marche pas dans Studio) ;
 - automatique plus tard, seulement pour des violations fortes répétées sur plusieurs sessions, avec des durées
-  croissantes (1 jour, 7 jours, puis définitif) ;
+  croissantes (1 jour, 7 jours, puis définitif) : voir « À faire plus tard » ci-dessous ;
 - aucune sanction automatique sur les statistiques d'aimbot (A1).
+
+#### Où lire le journal
+
+Ce que le code envoie vraiment (`src/server/CheatLog.luau`, `src/server/Webhook.luau`) :
+
+- **Résumé au webhook**, posté au départ d'un joueur qui a au moins une violation moyenne ou forte, ou 10 violations
+  faibles ou plus (`SUMMARY_MIN_LOW`), et à l'arrêt du serveur pour les joueurs encore là. Webhook : StringValue
+  `CheatLogWebhookUrl` dans ServerScriptService, sinon `FeedbackWebhookUrl`. Contenu : titre « Anti-triche : <nom> »,
+  total des violations, nombre de fortes comptées pour le kick, score max, pire violation (catégorie, gravité,
+  détail), mention « Expulsé pendant la session » le cas échéant, un champ par catégorie (« forte N · moyenne N ·
+  faible N »), et en pied de page le nom et le **UserId**. C'est la source de référence : un résumé = une session.
+- **Console serveur** : lignes `[CheatLog]` au fil de l'eau (une par 2 s au plus et par joueur, avec le nombre de
+  lignes tues), et `[CheatLog] <nom> (<UserId>) expulsé : N violations fortes` au kick. Utile pendant une session
+  suivie en direct, sinon voir les journaux du serveur dans le Creator Hub (libellé à vérifier).
+- **Pas de cumul entre sessions** : rien ne l'additionne (ni DataStore ni MemoryStore). Le décompte multi-sessions se
+  fait à la main, en relisant les résumés du salon du webhook et en filtrant sur le UserId du pied de page.
+- En Studio, le résumé va dans la console (`[CheatLog] résumé de …`) et rien n'est posté : **jamais de bannissement
+  sur une trace de Studio**.
+
+#### Décider
+
+Identifier le joueur par son **UserId** (le pied de page du résumé), jamais par le nom affiché, qui change. Seuils
+indicatifs, à ajuster avec l'expérience du journal :
+
+| Situation | Décision |
+|---|---|
+| Violations fortes (`RemoteArgs`, tir sans arme en main…) sur **au moins 2 sessions** différentes, ou kick (3 fortes) sur au moins 2 sessions | Candidat au bannissement : lire les détails avant |
+| Une seule session avec kick | Rien tant qu'une 2e session ne le confirme ; relire le détail (un bug de notre client peut sortir comme forte, voir « Classer les violations ») |
+| Violations moyennes seules (ligne de vue, origine, noclip, vol, téléport refusé) | Pas de ban : faux positifs au ping, au surf, sur une arête. Seulement avec des fortes en plus |
+| Un contrôle en mode `log` isolé (tableau ci-dessous) | **Jamais** : c'est en mesure, le tir ou le déplacement est passé |
+| Violations faibles, débit, « flick suspect », statistiques d'aimbot (A1) | **Jamais** : fréquent chez les joueurs honnêtes, aucune preuve |
+| Même détail forgé répété d'une session à l'autre (même remote, même argument impossible) | Preuve forte d'un exécuteur : ban justifié |
+
+Les contrôles livrés et leur mode, pour savoir ce qu'une ligne du journal prouve (état du code, constantes
+`ShotRules.MODES`, `CharacterSyncRules.ENFORCE_MOVEMENT`, `MovementGuardRules.ENFORCE_*`) :
+
+| Parade | Mode | Lecture au journal |
+|---|---|---|
+| Seau de distance (#172) | `block` (`ENFORCE_MOVEMENT = true`) | Refus corrigé : un téléport franc est déjà arrêté, un gros ping aussi peut en produire |
+| Tir : `shape`, `distance` (#174) | `block` | `shape` : client forgé quasi certain ; `distance` : tir refusé |
+| Tir : `origin`, `direction`, `lineOfSight` (#174) | `log` | Tir accepté (sauf au-delà de 250 studs) : **indice seulement**, jamais une base de ban seule |
+| Equip et chargeur (#175) | `block` | Touche refusée ; un paquet en retard peut coûter une touche honnête |
+| Mêlée orientation et ligne de vue (#176, M1) | **non livré** (à faire au moment de cette rédaction) | rien à lire |
+| Noclip et vol (#177) | `log` (`ENFORCE_NOCLIP = ENFORCE_FLIGHT = false`) | Indice seulement |
+| Vide (#177) | actif (`ENFORCE_VOID = true`) | Joueur silencieux au-dessus du vide déclaré tombé |
+
+#### Bannir dans le Creator Hub
+
+Le libellé exact des menus n'est pas vérifié ici : il change, à confirmer à l'écran.
+
+1. Ouvrir le Creator Hub (create.roblox.com), l'expérience concernée, puis son espace de **modération des
+   utilisateurs / bannissements** (menu de modération de l'expérience, libellé à vérifier).
+2. Ajouter un bannissement par **UserId** (pas par nom d'utilisateur).
+3. Choisir la durée, renseigner la **raison privée** (visible des seuls modérateurs, pas du joueur), éventuellement
+   une raison affichée au joueur ; vérifier dans la doc officielle de `Players:BanAsync` ce que gèrent les deux champs
+   (`DisplayReason`, `PrivateReason`) et l'option des comptes secondaires (`ExcludeAltAccounts`), dont l'équivalent
+   dans l'interface est à confirmer.
+4. Durées recommandées : **1 jour** à la première sanction, **7 jours** à la récidive, **définitif** à la troisième
+   ou d'emblée pour une preuve nette d'exécuteur (même détail forgé sur plusieurs sessions).
+5. Raison privée explicite, format : `anticheat #179 | UserId | dates des sessions | catégorie et contrôle | détail
+   copié du résumé | lien du message du webhook`. Elle doit permettre à quelqu'un d'autre de rejuger sans nous.
+6. Un bannissement ne se fait jamais depuis Studio ni sur une trace de Studio.
+
+**Lever un bannissement** : même espace du Creator Hub, retrouver le joueur par UserId, révoquer le bannissement
+(libellé à vérifier). Lever sans attendre si le joueur conteste et que le détail du journal ne prouve rien (cas
+moyen ou `log` seul, bug de notre client). Noter la levée à la suite de la raison privée ou dans le salon du webhook.
+Après une levée due à un faux positif, relever la tolérance en cause (voir « Passer un contrôle en `block` »).
+
+#### À faire plus tard
+
+Rien de ci-dessous n'est codé ; l'issue #179 reste ouverte pour cela.
+
+- **`Players:BanAsync` automatique**, avec `ApplyToUniverse` et la détection des comptes secondaires
+  (`ExcludeAltAccounts = false`), durées croissantes 1 jour, 7 jours, définitif.
+- **Cumul entre sessions** (DataStore ou MemoryStore) du nombre de violations fortes par UserId : prérequis, car
+  aujourd'hui le journal est par session.
+- **Conditions de déclenchement** : (1) plusieurs semaines de journal en production, pour connaître le taux de fortes
+  chez les joueurs honnêtes (il doit être nul ou expliqué) ; (2) seulement des violations fortes, sur au moins 2
+  sessions ; (3) jamais en Studio ni sur les statistiques d'aimbot ; (4) raison privée écrite automatiquement avec
+  le détail ; (5) procédure de levée testée ; (6) le premier mois, bannissement proposé au webhook et validé à la
+  main plutôt qu'appliqué.
 
 Pour mémoire, Roblox propose aussi une [API de confiance de l'appareil](https://create.roblox.com/docs/scripting/security/device-trust)
 (niveau de confiance au join, sans action de Roblox) : à considérer plus tard pour isoler les appareils douteux, elle
