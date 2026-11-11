@@ -44,7 +44,7 @@ return {
 
 	-- Bunny hop
 	BHOP_LAND_WINDOW = 0.1,
-	AUTO_BHOP        = true,
+	AUTO_BHOP        = true, -- valeur par défaut du réglage joueur PlayerSettings.autoBhop (#255)
 
 	-- Coyote time & jump buffer
 	COYOTE_TIME      = 0.09,
