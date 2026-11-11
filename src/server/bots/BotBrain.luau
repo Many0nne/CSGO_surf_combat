@@ -29,6 +29,8 @@ export type Env = {
 	clips: Instance?,
 	-- Tir de ce bot (position du tireur) : entendu par les autres bots
 	onShot: ((Vector3) -> ())?,
+	-- Vrai : le bot ne tire pas sur les humains (debug DebugBotsPassive), lu à chaque tir
+	passive: (() -> boolean)?,
 }
 
 local BotBrain = {}
@@ -59,6 +61,7 @@ export type BotBrain = typeof(setmetatable(
 		targetPos: Vector3?,
 		targetChar: Model?,
 		targetSpawnedAt: number?,
+		targetIsHuman: boolean, -- la cible courante est un humain (sinon un bot)
 		targetSpeed: number, -- vitesse estimée de la cible entre deux regards (studs/s)
 		lastSeen: { [number]: { position: Vector3, at: number } }, -- par participant vu, pour estimer sa vitesse
 		targetVisible: boolean, -- vue à ce regard (sinon gardée en tête un instant, sans tir)
@@ -126,6 +129,7 @@ function BotBrain.new(env: Env, char: Model, motion: BotMotion.BotMotion, arsena
 		targetPos = nil,
 		targetChar = nil,
 		targetSpawnedAt = nil,
+		targetIsHuman = false,
 		targetSpeed = 0,
 		lastSeen = {},
 		targetVisible = false,
@@ -192,7 +196,7 @@ function BotBrain._perceive(self: BotBrain, now: number)
 	local yaw = self.motion.yaw
 	local candidates: { BotBehaviorRules.Candidate } = {}
 	local positions: { [number]: Vector3 } = {}
-	local seenOthers: { [number]: { character: Model, spawnedAt: number?, speed: number } } = {}
+	local seenOthers: { [number]: { character: Model, spawnedAt: number?, speed: number, isHuman: boolean } } = {}
 	for _, other in self.env.others() do
 		local root = other.character:FindFirstChild("HumanoidRootPart") :: BasePart?
 		local head = other.character:FindFirstChild("Head") :: BasePart?
@@ -216,8 +220,16 @@ function BotBrain._perceive(self: BotBrain, now: number)
 					speed = (torso - previous.position).Magnitude / (now - previous.at)
 				end
 				self.lastSeen[other.id] = { position = torso, at = now }
-				seenOthers[other.id] = { character = other.character, spawnedAt = other.spawnedAt, speed = speed }
-				table.insert(candidates, { id = other.id, isHuman = other.isHuman, distance = distance })
+				seenOthers[other.id] = {
+					character = other.character,
+					spawnedAt = other.spawnedAt,
+					speed = speed,
+					isHuman = other.isHuman,
+				}
+				-- Passif (debug) : les humains ne sont pas des cibles, le bot combat les autres bots
+				if not (other.isHuman and self.env.passive and self.env.passive()) then
+					table.insert(candidates, { id = other.id, isHuman = other.isHuman, distance = distance })
+				end
 				self.lastContact = now
 			end
 		end
@@ -236,6 +248,7 @@ function BotBrain._perceive(self: BotBrain, now: number)
 		self.targetVisible = true
 		local seen = seenOthers[target.id]
 		self.targetChar, self.targetSpawnedAt, self.targetSpeed = seen.character, seen.spawnedAt, seen.speed
+		self.targetIsHuman = seen.isHuman
 	elseif self.targetId then
 		local last = self.memory[self.targetId]
 		if last and last.seen and BotBehaviorRules.keepTarget(last.at, now) then
@@ -246,7 +259,7 @@ function BotBrain._perceive(self: BotBrain, now: number)
 		else
 			-- Perdue de vue : il reprend sa course, et n'enquête que parfois (pas de poursuite systématique)
 			self.targetId, self.targetPos, self.lastShot, self.targetVisible = nil, nil, nil, false
-			self.targetChar, self.targetSpawnedAt, self.targetSpeed = nil, nil, 0
+			self.targetChar, self.targetSpawnedAt, self.targetSpeed, self.targetIsHuman = nil, nil, 0, false
 			if not BotBehaviorRules.investigateLost(self.rng:NextNumber()) then
 				-- Contacts jusqu'ici tenus pour fouillés ; un tir entendu à ce même regard reste à enquêter
 				self.investigated = now - 1e-3
@@ -470,6 +483,7 @@ function BotBrain._tryFire(self: BotBrain, now: number)
 		yawError = BotCombatRules.yawError(eye, self.motion.yaw, point),
 		distance = (point - eye).Magnitude,
 		range = arsenal:range(),
+		holdFire = self.targetIsHuman and self.env.passive ~= nil and self.env.passive(),
 	})
 	if not ok then
 		if inGrace then

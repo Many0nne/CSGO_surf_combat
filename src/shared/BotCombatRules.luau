@@ -87,12 +87,14 @@ export type FireInput = {
 	yawError: number, -- écart entre son cap et la cible (°)
 	distance: number, -- distance à la cible (studs)
 	range: number, -- portée de l'arme tenue (studs)
+	holdFire: boolean?, -- tir interdit (debug DebugBotsPassive : cible humaine alors que les bots sont passifs)
 }
 
--- Cette méthode permet de décider si un bot peut tirer lorsque son temps de réaction et de visée est passé : cible
--- vue, hors délai de grâce, arme prête, à portée et regard tourné vers elle (FIRE_YAW_TOLERANCE).
+-- Cette méthode permet de décider si un bot peut tirer lorsque son temps de réaction et de visée est passé : tir non
+-- interdit, cible vue, hors délai de grâce, arme prête, à portée et regard tourné vers elle (FIRE_YAW_TOLERANCE).
 function BotCombatRules.canFire(input: FireInput): boolean
-	return input.visible
+	return not input.holdFire
+		and input.visible
 		and not input.inGrace
 		and input.ready
 		and input.distance <= input.range

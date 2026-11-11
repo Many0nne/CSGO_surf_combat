@@ -212,7 +212,11 @@ Règles pures dans `BotPopulationRules`, appliquées par `BotManager` (`adjustPo
 - `workspace:SetAttribute("DebugBots", 5)` : fixe le nombre de bots (un round doit être actif : un joueur a demandé à
   apparaître). `"+"` / `"-"` : un de plus / de moins (l'attribut est remplacé par le nombre obtenu), `0` : aucun,
   `nil` ou `"auto"` : retour à la population automatique. Un nombre fixé retire sans attendre la fin des duels.
-- `workspace:SetAttribute("DebugBotsFreeze", true)` : fige les bots (ni mouvement ni tir), `false` ou `nil` les relâche.
+- `workspace:SetAttribute("DebugBotsFreeze", true)` : fige les bots (ni mouvement ni tir), `false` ou `nil` les relâche. Valable
+  aussi pour les bots ajoutés ensuite (`DebugBots`, population automatique) : `BotManager.add` lit l'attribut à la création.
+- `workspace:SetAttribute("DebugBotsPassive", true)` : les bots se déplacent normalement mais ne tirent jamais sur un
+  humain (`holdFire` de `BotCombatRules.canFire`, lu à chaque tir) ; les humains ne sont plus des cibles (`BotBrain._perceive`), ils combattent les autres bots ; une cible humaine déjà choisie reste sans tir (`holdFire`) jusqu'à ce qu'elle soit perdue. `false` ou
+  `nil` rétablit le tir. S'applique aux bots présents et ajoutés ensuite. Pour observer les déplacements sans être tué.
 - `workspace:SetAttribute("DebugBotsGoto", Vector3.new(x, y, z))` : tous les bots vont au point de passage le plus
   proche (corniches de Dizzy : `(1730, 70.5, -350)` côté T, `(2268, 70.5, -170)` côté CT, plateformes
   `(1895, 70.5, -412)` et `(2110, 70.5, -115)`). Ordre prioritaire (`BotNavigator.pinDestination`) : enquête et repli
@@ -235,6 +239,10 @@ Règles pures dans `BotPopulationRules`, appliquées par `BotManager` (`adjustPo
 
 ## Pièges
 
+- **Un état de debug doit aussi s'appliquer à la création.** Un attribut Studio qui ne touche que les bots présents au
+  changement (`applyDebugFreeze`) laisse les bots ajoutés ensuite (population automatique, `DebugBots`) agir
+  normalement : un bot « figé » a ainsi tué le joueur (#244). `BotManager.add` initialise `frozen` depuis l'attribut,
+  et le mode passif est une valeur lue à chaque tir, donc sans état par bot.
 - **Un rebord bas n'est pas une marche.** `NavRules.stepKind` classe en « marche » toute différence de hauteur
   inférieure à `walkRise` (marche + pente de 46° sur la distance : 5,3 studs sur 4), donc aussi un rebord vertical de
   4 studs, que le balayage refuse ensuite. Les rebords sont donc cherchés dans une passe à part, sur toute colonne non
