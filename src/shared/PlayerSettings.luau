@@ -22,6 +22,15 @@ export type Settings = {
 	keyDisplay: KeyDisplayMode,
 	-- Auto-bhop (#255) : saut automatique tant qu'Espace est maintenu ; activé par défaut (DEFAULT_AUTO_BHOP)
 	autoBhop: boolean,
+	-- Viseur (#251) : style du crosshair de la visée simplifiée (couleur : id de CROSSHAIR_COLORS, tailles en px,
+	-- opacité de 0 à 1) ; affiché seulement si simpleAim. Défauts = rendu d'origine (#195)
+	crosshairColor: string,
+	crosshairLength: number,
+	crosshairThickness: number,
+	crosshairGap: number,
+	crosshairDot: boolean,
+	crosshairOutline: boolean,
+	crosshairOpacity: number,
 	-- une touche par emplacement de la barre d'armes, dans l'ordre des emplacements
 	slotKeys: { string },
 }
@@ -39,6 +48,18 @@ PlayerSettings.DEFAULT_KEY_DISPLAY = "off" :: KeyDisplayMode
 PlayerSettings.KEY_DISPLAY_MODES = { "off", "simple", "full" } :: { KeyDisplayMode }
 -- Auto-bhop activé par défaut (#255) ; remplace l'ancienne constante MovementConfig.AUTO_BHOP
 PlayerSettings.DEFAULT_AUTO_BHOP = true
+-- Viseur (#251) : palette fermée (ids ; les couleurs sont dans UITheme.CrosshairPalette, même ordre), bornes et
+-- défauts. Les défauts redonnent le crosshair d'origine (#195) : os, traits de 9 px, épaisseur 2, écart 5, contour.
+PlayerSettings.CROSSHAIR_COLORS = { "bone", "white", "amber", "red", "green", "cyan" }
+PlayerSettings.CROSSHAIR = {
+	color = "bone",
+	length = { min = 2, max = 20, default = 9 },
+	thickness = { min = 1, max = 6, default = 2 },
+	gap = { min = 0, max = 15, default = 5 },
+	dot = false,
+	outline = true,
+	opacity = { min = 0.2, max = 1, default = 1 },
+}
 -- Touche du menu en partie (#157 : reprendre, réglages, retour au menu principal), nom d'Enum.KeyCode ; au menu
 -- principal elle ouvre les Réglages. Seule source de cette touche : InGameMenu, l'écran Infos et la liste des réservées.
 PlayerSettings.MENU_KEY = "P"
@@ -102,6 +123,13 @@ function PlayerSettings.defaults(): Settings
 		simpleAim = false,
 		keyDisplay = PlayerSettings.DEFAULT_KEY_DISPLAY,
 		autoBhop = PlayerSettings.DEFAULT_AUTO_BHOP,
+		crosshairColor = PlayerSettings.CROSSHAIR.color,
+		crosshairLength = PlayerSettings.CROSSHAIR.length.default,
+		crosshairThickness = PlayerSettings.CROSSHAIR.thickness.default,
+		crosshairGap = PlayerSettings.CROSSHAIR.gap.default,
+		crosshairDot = PlayerSettings.CROSSHAIR.dot,
+		crosshairOutline = PlayerSettings.CROSSHAIR.outline,
+		crosshairOpacity = PlayerSettings.CROSSHAIR.opacity.default,
 		slotKeys = table.clone(PlayerSettings.DEFAULT_SLOT_KEYS),
 	}
 end
@@ -123,6 +151,13 @@ local function clampNumber(value: any, minVal: number, maxVal: number, default: 
 		return default
 	end
 	return math.clamp(value, minVal, maxVal)
+end
+
+type Range = { min: number, max: number, default: number }
+
+-- Cette méthode permet de borner une taille du viseur en px entiers lorsque des réglages sont validés.
+local function clampPixels(value: any, range: Range): number
+	return math.round(clampNumber(value, range.min, range.max, range.default))
 end
 
 -- Cette méthode permet de valider les touches reçues lorsque des réglages sont chargés ou envoyés : une touche absente,
@@ -173,6 +208,21 @@ function PlayerSettings.sanitize(raw: any): Settings
 	if type(raw.autoBhop) == "boolean" then
 		settings.autoBhop = raw.autoBhop
 	end
+	if table.find(PlayerSettings.CROSSHAIR_COLORS, raw.crosshairColor) then
+		settings.crosshairColor = raw.crosshairColor
+	end
+	local crosshair = PlayerSettings.CROSSHAIR
+	settings.crosshairLength = clampPixels(raw.crosshairLength, crosshair.length)
+	settings.crosshairThickness = clampPixels(raw.crosshairThickness, crosshair.thickness)
+	settings.crosshairGap = clampPixels(raw.crosshairGap, crosshair.gap)
+	if type(raw.crosshairDot) == "boolean" then
+		settings.crosshairDot = raw.crosshairDot
+	end
+	if type(raw.crosshairOutline) == "boolean" then
+		settings.crosshairOutline = raw.crosshairOutline
+	end
+	local opacity = crosshair.opacity
+	settings.crosshairOpacity = clampNumber(raw.crosshairOpacity, opacity.min, opacity.max, opacity.default)
 	settings.slotKeys = sanitizeKeys(raw.slotKeys)
 	return settings
 end

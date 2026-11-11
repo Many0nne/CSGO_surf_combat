@@ -58,7 +58,9 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   l'action principale comme ENVOYER ou RETOUR), rouge d'impact au survol.
 - Réglages (`SettingsMenu.luau`, disposition C des schémas de #117, préférée aux sous-onglets en haut et à la liste
   unique qui défile) : catégories à gauche (barre ambrée sur l'active), lignes de 54 px à droite (nom, contrôle,
-  valeur os à ombre, filet). Contrôles : curseur (trace continue, poignée en pastille os, rouge au survol ; une barre segmentée ferait perdre
+  valeur os à ombre, filet). Place : 9 lignes au plus par catégorie avant les actions (`MenuPage.ExitY`), pas de
+  défilement ; une section qui ne tient pas devient une catégorie (VISEUR, #251). Un curseur garde la valeur à la
+  précision affichée (0 décimale : entiers). Contrôles : curseur (trace continue, poignée en pastille os, rouge au survol ; une barre segmentée ferait perdre
   la précision de la sensibilité) et choix fermé « ‹ VALEUR › ». RÉTABLIR remet la catégorie affichée à ses valeurs par
   défaut. Ajouter un réglage : une ligne dans `buildCategories` (avec son champ dans `PlayerSettings` pour qu'il soit
   conservé) ; une catégorie sans réglage n'est pas créée.
@@ -107,9 +109,18 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   chargeur (couteau) et hors partie (`HUDRules.gameHudVisible`, via `GameStateController.applyGameHud`). Contrairement à
   la barre d'armes, il ne s'estompe pas.
 - Réglage « Auto-bhop » (#255) : catégorie MOUVEMENT de `SettingsMenu` (une seule ligne, ACTIVÉ par défaut), `PlayerSettings.autoBhop`, lu à chaque tick par `MovementController` et passé à `BhopSystem` : sans respawn.
-- `src/client/ui/Crosshair.luau` (#195) : réglage « Visée simplifiée » (Réglages > GRAPHISMES, `PlayerSettings.simpleAim`, coupé par
-  défaut). Quatre traits fins os (`ARM_LENGTH` 9 px, `ARM_THICKNESS` 2, `CENTER_GAP` 5) sans point central, doublés d'un contour
+- `src/client/ui/Crosshair.luau` (#195) : réglage « Visée simplifiée » (Réglages > VISEUR depuis #251, `PlayerSettings.simpleAim`, coupé par
+  défaut). Par défaut, quatre traits fins os (longueur 9 px, épaisseur 2, écart 5) sans point central, doublés d'un contour
   noir de `OUTLINE` 1 px (`OUTLINE_TRANSPARENCY` 0,1) : sur fond blanc seul le contour se lit, sur sol ou mur sombre le trait os.
+  **Viseur personnalisé (#251)** : catégorie VISEUR des Réglages, « Visée simplifiée » en tête (l'interrupteur), puis couleur
+  (palette fermée `UITheme.CrosshairPalette` : os, blanc, ambre, rouge d'impact, vert, cyan ; libellé du choix dans sa
+  couleur), longueur 2 à 20 px, épaisseur 1 à 6, écart central 0 à 15, point central, contour, opacité 0,20 à 1 (pas
+  d'invisible). Bornes et défauts : `PlayerSettings.CROSSHAIR` (défauts = rendu d'origine), validés par `sanitize` (px
+  entiers, couleur hors palette refusée). L'opacité vaut pour le trait et le contour. RÉTABLIR remet le style d'origine
+  sans couper la visée simplifiée. Aperçu sous les catégories : deux cases (sable clair, sombre) où `Crosshair.draw`
+  trace le viseur à sa taille réelle en px (le `UIScale` de l'écran est compensé par un `UIScale` inverse lu dans
+  l'attribut `Scale` de `UIKit.scaledRoot`). En jeu, le crosshair se redessine dès que son style change (clé
+  `Crosshair.styleKey`), sans respawn.
   Taille fixe en pixels, pas de `scaledRoot`. `ScreenGui` en `ScreenInsets.None` pour tomber sur le centre exact de la caméra,
   comme la lunette. Affichage = `HUDRules.crosshairVisible` appliquée à `HUDState` (voir « État du HUD ») : réglage actif, HUD de
   jeu visible (donc ni menu, ni mort, ni résultat), lunette absente et menu en partie fermé.

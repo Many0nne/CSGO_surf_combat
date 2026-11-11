@@ -81,6 +81,108 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("PlayerSettings.sanitize : viseur (#251)", function()
+		local C = PlayerSettings.CROSSHAIR
+
+		T.it("donne le crosshair d'origine par défaut, y compris pour une sauvegarde d'avant le viseur", function()
+			for _, raw in { {}, { sensitivity = 0.3, simpleAim = true } } do
+				local s = PlayerSettings.sanitize(raw)
+				T.expectEqual(s.crosshairColor, "bone")
+				T.expectEqual(s.crosshairLength, 9)
+				T.expectEqual(s.crosshairThickness, 2)
+				T.expectEqual(s.crosshairGap, 5)
+				T.expectEqual(s.crosshairDot, false)
+				T.expectEqual(s.crosshairOutline, true)
+				T.expectEqual(s.crosshairOpacity, 1)
+			end
+			T.expectEqual(PlayerSettings.sanitize({ simpleAim = true }).simpleAim, true)
+		end)
+
+		T.it("garde un style valide", function()
+			local s = PlayerSettings.sanitize({
+				crosshairColor = "cyan",
+				crosshairLength = 14,
+				crosshairThickness = 1,
+				crosshairGap = 0,
+				crosshairDot = true,
+				crosshairOutline = false,
+				crosshairOpacity = 0.6,
+			})
+			T.expectEqual(s.crosshairColor, "cyan")
+			T.expectEqual(s.crosshairLength, 14)
+			T.expectEqual(s.crosshairThickness, 1)
+			T.expectEqual(s.crosshairGap, 0)
+			T.expectEqual(s.crosshairDot, true)
+			T.expectEqual(s.crosshairOutline, false)
+			T.expectEqual(s.crosshairOpacity, 0.6)
+		end)
+
+		T.it("borne les tailles en px entiers et l'opacité, écarte NaN et les mauvais types", function()
+			local high = PlayerSettings.sanitize({
+				crosshairLength = 500,
+				crosshairThickness = 99,
+				crosshairGap = 1e9,
+				crosshairOpacity = 3,
+			})
+			T.expectEqual(high.crosshairLength, C.length.max)
+			T.expectEqual(high.crosshairThickness, C.thickness.max)
+			T.expectEqual(high.crosshairGap, C.gap.max)
+			T.expectEqual(high.crosshairOpacity, C.opacity.max)
+			local low = PlayerSettings.sanitize({
+				crosshairLength = -4,
+				crosshairThickness = 0,
+				crosshairGap = -1,
+				crosshairOpacity = 0,
+			})
+			T.expectEqual(low.crosshairLength, C.length.min)
+			T.expectEqual(low.crosshairThickness, C.thickness.min)
+			T.expectEqual(low.crosshairGap, C.gap.min)
+			T.expectEqual(low.crosshairOpacity, C.opacity.min, "un viseur invisible n'est pas permis")
+			T.expectEqual(PlayerSettings.sanitize({ crosshairLength = 7.6 }).crosshairLength, 8, "px entiers")
+			local bad = PlayerSettings.sanitize({
+				crosshairLength = 0 / 0,
+				crosshairThickness = "3",
+				crosshairOpacity = {},
+				crosshairDot = "oui",
+				crosshairOutline = 0,
+			})
+			T.expectEqual(bad.crosshairLength, C.length.default)
+			T.expectEqual(bad.crosshairThickness, C.thickness.default)
+			T.expectEqual(bad.crosshairOpacity, C.opacity.default)
+			T.expectEqual(bad.crosshairDot, false)
+			T.expectEqual(bad.crosshairOutline, true)
+		end)
+
+		T.it("refuse une couleur hors de la palette", function()
+			for _, bad in { "pink", "BONE", "#ff00ff", 1, true, {} } do
+				T.expectEqual(PlayerSettings.sanitize({ crosshairColor = bad }).crosshairColor, "bone")
+			end
+			for _, id in PlayerSettings.CROSSHAIR_COLORS do
+				T.expectEqual(PlayerSettings.sanitize({ crosshairColor = id }).crosshairColor, id)
+			end
+		end)
+
+		T.it("palette de 6 à 8 teintes dont la couleur par défaut, alignée sur UITheme.CrosshairPalette", function()
+			local ids = PlayerSettings.CROSSHAIR_COLORS
+			T.expectEqual(#ids >= 6 and #ids <= 8, true)
+			T.expectEqual(table.find(ids, C.color) ~= nil, true)
+			local roblox = require("@lune/roblox")
+			-- TweenInfo absent de Lune : UITheme n'en fait que des constantes
+			local fakeTweenInfo = {
+				new = function()
+					return {}
+				end,
+			}
+			local globals =
+				{ Color3 = roblox.Color3, Font = roblox.Font, Enum = roblox.Enum, TweenInfo = fakeTweenInfo }
+			local UITheme = Loader.new({}, globals):require("src/shared/UITheme")
+			T.expectEqual(#UITheme.CrosshairPalette, #ids)
+			for i, entry in UITheme.CrosshairPalette do
+				T.expectEqual(entry.id, ids[i], "même ordre")
+			end
+		end)
+	end)
+
 	T.describe("PlayerSettings.assignKey", function()
 		local defaults = PlayerSettings.DEFAULT_SLOT_KEYS
 

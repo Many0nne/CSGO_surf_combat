@@ -33,6 +33,18 @@ local Colors = {
 	Scrim         = rgb(10, 12, 22),    -- menu : dégradé sombre sous le texte posé sur la scène
 }
 
+-- Couleurs du viseur (#251), dans l'ordre de PlayerSettings.CROSSHAIR_COLORS (ids validés par le serveur) : celles du HUD
+-- (os par défaut, ambre, rouge d'impact), plus blanc, vert et cyan, classiques d'un viseur et lisibles sur les rampes.
+-- stylua: ignore
+local CrosshairPalette = {
+	{ id = "bone",  label = "OS",    color = Colors.Bone },
+	{ id = "white", label = "BLANC", color = Colors.White },
+	{ id = "amber", label = "AMBRE", color = Colors.Accent },
+	{ id = "red",   label = "ROUGE", color = Colors.HitRed },
+	{ id = "green", label = "VERT",  color = rgb(96, 222, 112) },
+	{ id = "cyan",  label = "CYAN",  color = rgb(74, 214, 240) },
+}
+
 local OSWALD = "rbxasset://fonts/families/Oswald.json"
 local TITILLIUM = "rbxasset://fonts/families/TitilliumWeb.json"
 local ROBOTO_MONO = "rbxasset://fonts/families/RobotoMono.json"
@@ -100,4 +112,5 @@ return {
 	TextSize = TextSize,
 	Motion = Motion,
 	Layout = Layout,
+	CrosshairPalette = CrosshairPalette,
 }
