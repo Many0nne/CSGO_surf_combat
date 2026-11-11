@@ -5,9 +5,8 @@ return function(T, Loader)
 	local RemoteGuard = Loader.new():require("src/server/RemoteGuard")
 	local N = Loader.new():require("src/shared/NetworkProtocol").Names
 
-	-- Cette méthode permet de simuler la surveillance d'une demande de 0 à untilT lorsqu'un test rejoue un échange ;
-	-- serverReply(sendIndex, t) renvoie la réponse à un envoi (nil : perdue) et son délai d'arrivée. Renvoie la fin
-	-- ("giveUp", "adopt" ou "running"), l'instant de la fin et les instants des envois.
+	-- Cette méthode permet de rejouer la surveillance d'une demande jusqu'à untilT lorsqu'un test simule le serveur
+	-- (serverReply(n, t) : réponse ou nil, délai) ; renvoie la fin, son instant et les instants des envois.
 	local function simulate(serverReply, untilT: number, hasLiveCharacter: boolean?)
 		local attempt = Rules.new(0)
 		local sends = {}
@@ -102,6 +101,14 @@ return function(T, Loader)
 				return { status = "alive", live = true }, 0
 			end, 10, true)
 			T.expectEqual(outcome, "adopt")
+		end)
+
+		T.it("« alive » vivant pour le serveur, mort pour le client : renvoi, pas de reprise", function()
+			local outcome, _, sends = simulate(function(index)
+				return { status = if index == 1 then "alive" else "accepted", live = true }, 0
+			end, 10, false)
+			T.expectEqual(outcome, "running")
+			T.expectEqual(#sends, 2)
 		end)
 
 		T.it("« alive » sur un corps (mort pas encore répliquée au client) : renvoi, pas de reprise", function()
