@@ -72,7 +72,9 @@ par `ScaleTo` avec le reste de l'arme.
   (`MUZZLE_EMIT_COUNT`) : elles naissent au même point, en ajouter rend la flamme plus opaque, pas plus grande.
 - **Rayon :** `TRACER_WIDTH`, `TRACER_LIFETIME` (durée du fondu, courbe `tracerTransparency`), `TRACER_RGB`. Il part de la
   bouche du canon et finit au point d'impact du raycast de visée (le vide : portée `HITSCAN_RANGE`). Canon dans un mur
-  (bouche au-delà de l'impact) ou rayon plus court que `TRACER_MIN_LENGTH` : pas de rayon.
+  (bouche au-delà de l'impact) ou rayon plus court que `TRACER_MIN_LENGTH` : pas de rayon. Le rayon reste fixe dans le
+  monde : une caméra qui passe à moins de `HIDE_RADIUS` de lui (surf vers l'avant juste après le tir) le masque pour la
+  frame. Le fondu passe par `FADE_STEPS` séquences précalculées (pas de `NumberSequence` créée par frame).
 - **Chez les autres :** chaque `ShotFired` relayé par le serveur (joueurs et bots) allume la flamme du canon 3P du tireur
   et trace un rayon de ce canon au point que touche, chez le client, le rayon origine + direction relayées. Le tireur
   distant est dessiné en retard (interpolation) alors que l'origine relayée est à jour : un canon à plus de

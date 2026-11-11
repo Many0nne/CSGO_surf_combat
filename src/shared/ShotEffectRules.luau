@@ -31,6 +31,11 @@ ShotEffectRules.MUZZLE_MAX_OFFSET = 8
 -- Distance (studs) sous laquelle un rayon venu d'un autre ne s'approche pas de notre caméra : il s'arrête avant, au
 -- lieu de finir dans l'œil quand le tir nous touche (un Beam face à la caméra y couvrirait l'écran).
 ShotEffectRules.NEAR_CAMERA = 3
+-- Un rayon déjà tracé que la caméra approche à moins de cette distance (studs) est masqué pour la frame : le rayon
+-- reste dans le monde, la caméra peut le traverser (surf). Inférieur à la distance œil-bouche du canon du viewmodel.
+ShotEffectRules.HIDE_RADIUS = 1
+-- Paliers du fondu : la transparence est arrondie au 1/FADE_STEPS, une séquence précalculée par palier.
+ShotEffectRules.FADE_STEPS = 20
 -- Rayons en cours au plus (les siens compris) : au-delà, un tir relayé n'a pas de rayon, seulement sa flamme.
 ShotEffectRules.MAX_ACTIVE = 16
 -- Nom des Instances créées pour un rayon (repérables en Studio, comptées par la vérification « aucune instance »).
@@ -82,17 +87,26 @@ function ShotEffectRules.tracerStart(origin: Vector3, muzzle: Vector3?, endpoint
 	return start
 end
 
--- Cette méthode permet d'arrêter un rayon venu d'un autre avant notre caméra lorsqu'il passe à moins de NEAR_CAMERA
--- d'elle (tir qui nous touche ou nous frôle) : fin à l'entrée de cette sphère ; nil s'il n'en reste presque rien.
-function ShotEffectRules.clipNearCamera(start: Vector3, endpoint: Vector3, camera: Vector3): Vector3?
+-- Cette méthode permet de mesurer où un segment passe au plus près d'un point lorsqu'on teste un rayon contre la
+-- caméra : distance le long du segment depuis start (bornée), distance au point, longueur du segment.
+function ShotEffectRules.closestApproach(start: Vector3, endpoint: Vector3, point: Vector3): (number, number, number)
 	local path = endpoint - start
 	local length = path.Magnitude
 	if length <= 0 then
-		return nil
+		return 0, (point - start).Magnitude, 0
 	end
 	local unit = path / length
-	local along = math.clamp((camera - start):Dot(unit), 0, length)
-	local miss = (camera - (start + unit * along)).Magnitude
+	local along = math.clamp((point - start):Dot(unit), 0, length)
+	return along, (point - (start + unit * along)).Magnitude, length
+end
+
+-- Cette méthode permet d'arrêter un rayon venu d'un autre avant notre caméra lorsqu'il passe à moins de NEAR_CAMERA
+-- d'elle (tir qui nous touche ou nous frôle) : fin à l'entrée de cette sphère ; nil s'il n'en reste presque rien.
+function ShotEffectRules.clipNearCamera(start: Vector3, endpoint: Vector3, camera: Vector3): Vector3?
+	local along, miss, length = ShotEffectRules.closestApproach(start, endpoint, camera)
+	if length <= 0 then
+		return nil
+	end
 	local radius = ShotEffectRules.NEAR_CAMERA
 	if miss >= radius then
 		return endpoint
@@ -101,15 +115,30 @@ function ShotEffectRules.clipNearCamera(start: Vector3, endpoint: Vector3, camer
 	if cut < ShotEffectRules.TRACER_MIN_LENGTH then
 		return nil
 	end
-	return start + unit * cut
+	return start + (endpoint - start).Unit * cut
+end
+
+-- Cette méthode permet de savoir si un rayon déjà tracé doit être masqué lorsqu'une frame passe : la caméra, qui a
+-- bougé depuis le tir, en est à moins de HIDE_RADIUS (un Beam face à la caméra couvrirait l'écran).
+function ShotEffectRules.isTooClose(start: Vector3, endpoint: Vector3, camera: Vector3): boolean
+	local _, miss = ShotEffectRules.closestApproach(start, endpoint, camera)
+	return miss < ShotEffectRules.HIDE_RADIUS
+end
+
+-- Cette méthode permet de choisir le palier de transparence d'un rayon lorsqu'il vieillit (0 : opaque, FADE_STEPS :
+-- invisible) : un rayon caché par la caméra prend le dernier palier.
+function ShotEffectRules.fadeStep(elapsed: number, hidden: boolean): number
+	if hidden then
+		return ShotEffectRules.FADE_STEPS
+	end
+	return math.round(ShotEffectRules.tracerTransparency(elapsed) * ShotEffectRules.FADE_STEPS)
 end
 
 -- Cette méthode permet de décider si les effets d'un tir relayé sont montrés lorsqu'il arrive : le tir d'un autre
 -- (le tireur voit déjà les siens), hors écrans du menu (mêmes états que le son, la salle du menu flotte au-dessus de
 -- la map).
 function ShotEffectRules.shouldShow(shooter: any, localCharacter: any, state: string?): boolean
-	-- même règle que le son de ces tirs, hors limite des sons en cours
-	return ShotSoundRules.shouldPlay(shooter, localCharacter, state, 0)
+	return ShotSoundRules.isOthersShot(shooter, localCharacter, state)
 end
 
 -- Cette méthode permet de savoir si un tir relayé a droit à son rayon lorsqu'il arrive (la flamme, elle, part

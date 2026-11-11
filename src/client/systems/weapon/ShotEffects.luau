@@ -23,8 +23,17 @@ local WeaponThirdPerson = require(ReplicatedStorage.Shared.WeaponThirdPerson)
 
 local ShotEffects = {}
 
--- Rayon en cours : ses deux extrémités (le Beam est enfant de la première) et son instant de création (os.clock).
-type Tracer = { a0: Attachment, a1: Attachment, beam: Beam, born: number }
+-- Rayon en cours : ses deux extrémités (le Beam est enfant de la première) et leurs positions, son instant de
+-- création (os.clock) et son palier de fondu courant.
+type Tracer = {
+	a0: Attachment,
+	a1: Attachment,
+	beam: Beam,
+	start: Vector3,
+	finish: Vector3,
+	born: number,
+	fade: number,
+}
 
 local tracers: { Tracer } = {}
 local stepConn: RBXScriptConnection? = nil
@@ -34,6 +43,11 @@ local getState: () -> string? = function()
 end
 local terrain = workspace:WaitForChild("Terrain")
 local TRACER_COLOR = ColorSequence.new(Color3.fromRGB(table.unpack(ShotEffectRules.TRACER_RGB)))
+-- Transparence de chaque palier du fondu, précalculée : pas de NumberSequence créée à chaque frame.
+local FADE: { NumberSequence } = {}
+for i = 0, ShotEffectRules.FADE_STEPS do
+	FADE[i + 1] = NumberSequence.new(i / ShotEffectRules.FADE_STEPS)
+end
 local remoteRayParams = RaycastParams.new()
 remoteRayParams.FilterType = Enum.RaycastFilterType.Exclude
 
@@ -59,10 +73,12 @@ local function flash(muzzle: Attachment)
 	end
 end
 
--- Cette méthode permet d'effacer les rayons en cours lorsqu'une frame passe, et de détruire ceux dont la vie est
--- finie (ou déjà détruits par le filet Debris) ; la boucle s'arrête quand il n'en reste plus.
+-- Cette méthode permet d'effacer les rayons en cours lorsqu'une frame passe (masqués si la caméra les traverse), et
+-- de détruire ceux dont la vie est finie (ou déjà détruits par Debris) ; la boucle s'arrête quand il n'en reste plus.
 local function step()
 	local now = os.clock()
+	local camera = workspace.CurrentCamera
+	local eye = camera and camera.CFrame.Position
 	for i = #tracers, 1, -1 do
 		local tracer = tracers[i]
 		local elapsed = now - tracer.born
@@ -71,7 +87,12 @@ local function step()
 			tracer.a1:Destroy()
 			table.remove(tracers, i)
 		else
-			tracer.beam.Transparency = NumberSequence.new(ShotEffectRules.tracerTransparency(elapsed))
+			local hidden = eye ~= nil and ShotEffectRules.isTooClose(tracer.start, tracer.finish, eye)
+			local fade = ShotEffectRules.fadeStep(elapsed, hidden)
+			if fade ~= tracer.fade then
+				tracer.fade = fade
+				tracer.beam.Transparency = FADE[fade + 1]
+			end
 		end
 	end
 	if #tracers == 0 and stepConn then
@@ -79,6 +100,7 @@ local function step()
 		stepConn = nil
 	end
 end
+
 local timedStep = PerfMarkers.wrap("effets de tir", step)
 
 -- Cette méthode permet de créer un rayon entre deux points du monde lorsqu'un tir est montré ; il s'efface ensuite
@@ -98,7 +120,7 @@ local function spawnTracer(start: Vector3, finish: Vector3)
 	beam.Width0 = ShotEffectRules.TRACER_WIDTH
 	beam.Width1 = ShotEffectRules.TRACER_WIDTH
 	beam.Color = TRACER_COLOR
-	beam.Transparency = NumberSequence.new(0)
+	beam.Transparency = FADE[1]
 	beam.LightEmission = 1
 	beam.LightInfluence = 0
 	beam.FaceCamera = true
@@ -107,7 +129,10 @@ local function spawnTracer(start: Vector3, finish: Vector3)
 
 	a0.Parent = terrain
 	a1.Parent = terrain
-	table.insert(tracers, { a0 = a0, a1 = a1, beam = beam, born = os.clock() })
+	table.insert(
+		tracers,
+		{ a0 = a0, a1 = a1, beam = beam, start = start, finish = finish, born = os.clock(), fade = 0 }
+	)
 	local maxLife = ShotEffectRules.TRACER_LIFETIME + ShotEffectRules.LIFETIME_MARGIN
 	Debris:AddItem(a0, maxLife)
 	Debris:AddItem(a1, maxLife)

@@ -19,6 +19,28 @@ return function(T, Loader)
 			T.expectEqual(ShotEffectRules.tracerTransparency(-1), 0)
 			T.expectEqual(ShotEffectRules.tracerTransparency(0.05, 0), 1)
 		end)
+
+		T.it("paliers du fondu : opaque au tir, dernier palier à la fin ou rayon masqué", function()
+			local steps = ShotEffectRules.FADE_STEPS
+			T.expectEqual(ShotEffectRules.fadeStep(0, false), 0)
+			T.expectEqual(ShotEffectRules.fadeStep(ShotEffectRules.TRACER_LIFETIME, false), steps)
+			T.expectEqual(ShotEffectRules.fadeStep(0, true), steps)
+			local mid = ShotEffectRules.fadeStep(ShotEffectRules.TRACER_LIFETIME / 2, false)
+			T.expect(mid > 0 and mid < steps and mid == math.floor(mid), tostring(mid))
+		end)
+	end)
+
+	T.describe("ShotEffectRules.isTooClose (#54)", function()
+		local start, finish = Vector3.new(0, 10, -3), Vector3.new(0, 10, -200)
+
+		T.it("masque un rayon que la caméra traverse (surf vers l'avant après le tir)", function()
+			T.expectEqual(ShotEffectRules.isTooClose(start, finish, Vector3.new(0, 10.2, -40)), true)
+		end)
+
+		T.it("garde un rayon qui part devant la caméra ou passe à côté", function()
+			T.expectEqual(ShotEffectRules.isTooClose(start, finish, Vector3.new(0.6, 10.5, 0)), false)
+			T.expectEqual(ShotEffectRules.isTooClose(start, finish, Vector3.new(5, 10, -40)), false)
+		end)
 	end)
 
 	T.describe("ShotEffectRules.endpoint (#54)", function()
