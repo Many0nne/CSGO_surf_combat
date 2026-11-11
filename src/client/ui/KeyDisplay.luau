@@ -47,7 +47,7 @@ local menuOpen = false -- menu en partie ouvert, Réglages compris (InGameMenu)
 local function isDown(view: KeyView, typing: boolean): boolean
 	local mouse = view.entry.mouse
 	if mouse then
-		local button = if mouse == 1 then Enum.UserInputType.MouseButton1 else Enum.UserInputType.MouseButton2
+		local button = (Enum.UserInputType :: any)["MouseButton" .. mouse]
 		return UserInputService:IsMouseButtonPressed(button)
 	end
 	if typing then

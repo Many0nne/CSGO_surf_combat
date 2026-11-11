@@ -1,5 +1,8 @@
 return function(T, Loader)
-	local HUDRules = Loader.new():require("src/client/ui/HUDRules")
+	-- Même contexte pour les deux : HUDRules et le test lisent la même instance de KeyBindings
+	local loader = Loader.new()
+	local HUDRules = loader:require("src/client/ui/HUDRules")
+	local KeyBindings = loader:require("src/shared/KeyBindings")
 
 	T.describe("HUDRules.speedTier", function()
 		T.it("place chaque vitesse dans le bon palier, seuils inclus", function()
@@ -66,6 +69,20 @@ return function(T, Loader)
 		T.it("lie chaque touche à un clavier ou à un bouton de souris", function()
 			for _, entry in HUDRules.keyDisplayEntries("full") do
 				T.expectEqual(entry.keys ~= nil or entry.mouse ~= nil, true, entry.id)
+			end
+		end)
+
+		T.it("tire chaque action affichée des liaisons d'InputModule (KeyBindings, #224)", function()
+			local keyMap = KeyBindings.keyMap()
+			for _, entry in HUDRules.keyDisplayEntries("full") do
+				if entry.mouse then
+					T.expectEqual(entry.mouse, KeyBindings.MOUSE[entry.id], entry.id)
+				else
+					T.expectEqual(entry.keys, KeyBindings.KEYS[entry.id], entry.id)
+					for _, key in entry.keys or {} do
+						T.expectEqual(keyMap[key], entry.id, entry.id .. " " .. key)
+					end
+				end
 			end
 		end)
 	end)

@@ -1,31 +1,39 @@
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
--- Map KeyCode → nom de touche interne (liaisons fixes : l'affichage des touches, HUDRules.keyDisplayEntries, les reflète)
-local KEY_MAP = {
-	[Enum.KeyCode.W] = "W",
-	[Enum.KeyCode.A] = "A",
-	[Enum.KeyCode.S] = "S",
-	[Enum.KeyCode.D] = "D",
-	[Enum.KeyCode.LeftShift] = "Shift",
-	[Enum.KeyCode.RightShift] = "Shift",
-	[Enum.KeyCode.LeftControl] = "Ctrl",
-	[Enum.KeyCode.RightControl] = "Ctrl",
-	[Enum.KeyCode.Space] = "Space",
-	[Enum.KeyCode.R] = "R",
-	[Enum.KeyCode.F] = "F",
-}
+local KeyBindings = require(ReplicatedStorage.Shared.KeyBindings)
 
+type Action = KeyBindings.Action
+
+-- Liaisons tirées de KeyBindings (#224), source aussi de l'affichage des touches (HUDRules) : Enum.KeyCode → action et
+-- touches de chaque action
+local KEY_MAP: { [Enum.KeyCode]: Action } = {}
+local ACTION_CODES: { [Action]: { Enum.KeyCode } } = {}
+-- Actions tenues, une par action de KeyBindings.KEYS (champs nommés : une faute de frappe est relevée par luau-lsp)
 local held = {
-	W = false,
-	A = false,
-	S = false,
-	D = false,
-	Shift = false,
-	Ctrl = false,
-	Space = false,
-	R = false,
-	F = false,
+	forward = false,
+	left = false,
+	back = false,
+	right = false,
+	jump = false,
+	crouch = false,
+	walk = false,
+	reload = false,
+	inspect = false,
 }
+for action, keys in KeyBindings.KEYS do
+	assert((held :: any)[action] == false, "action de KeyBindings absente de held : " .. action)
+	ACTION_CODES[action] = {}
+	for _, name in keys do
+		table.insert(ACTION_CODES[action], (Enum.KeyCode :: any)[name])
+	end
+end
+for action in held do
+	assert(KeyBindings.KEYS[action :: any], "action de held absente de KeyBindings : " .. action)
+end
+for name, action in KeyBindings.keyMap() do
+	KEY_MAP[(Enum.KeyCode :: any)[name]] = action
+end
 
 local jumpPressedEdge = false
 local jumpPressTime = -math.huge
@@ -36,48 +44,45 @@ local lastWishdir = Vector3.zero
 local suspended = false
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	local key = KEY_MAP[input.KeyCode]
-	if not key or suspended then
+	local action = KEY_MAP[input.KeyCode]
+	if not action or suspended then
 		return
 	end
 	-- Bloquer le saut si l'UI a capturé l'input (ex: chat ouvert), mais laisser passer
 	-- les touches de mouvement même si gameProcessed (ex: Ctrl+Z intercepté comme Undo).
-	if gameProcessed and key == "Space" then
+	if gameProcessed and action == "jump" then
 		return
 	end
-	held[key] = true
-	if key == "Space" then
+	(held :: any)[action] = true
+	if action == "jump" then
 		jumpPressedEdge = true
 		jumpPressTime = tick()
-	elseif key == "R" then
+	elseif action == "reload" then
 		reloadPressedEdge = true
-	elseif key == "F" and not gameProcessed then
+	elseif action == "inspect" and not gameProcessed then
 		inspectPressedEdge = true
 	end
 end)
 
+-- Cette méthode permet de savoir si une autre touche de la même action reste enfoncée lorsqu'une touche est relâchée
+-- (Ctrl, Maj gauche et droite).
+local function otherKeyDown(action: Action, released: Enum.KeyCode): boolean
+	for _, code in ACTION_CODES[action] do
+		if code ~= released and UserInputService:IsKeyDown(code) then
+			return true
+		end
+	end
+	return false
+end
+
 UserInputService.InputEnded:Connect(function(input)
-	local key = KEY_MAP[input.KeyCode]
-	if not key then
+	local action = KEY_MAP[input.KeyCode]
+	if not action then
 		return
 	end
-	-- Pour les touches doublées (L/R Shift, L/R Ctrl), ne relâcher que si aucune des deux n'est tenue
-	if key == "Shift" then
-		if
-			not UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
-			and not UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
-		then
-			held.Shift = false
-		end
-	elseif key == "Ctrl" then
-		if
-			not UserInputService:IsKeyDown(Enum.KeyCode.LeftControl)
-			and not UserInputService:IsKeyDown(Enum.KeyCode.RightControl)
-		then
-			held.Ctrl = false
-		end
-	else
-		held[key] = false
+	-- Pour les actions à deux touches (L/R Shift, L/R Ctrl), ne relâcher que si aucune des deux n'est tenue
+	if not otherKeyDown(action, input.KeyCode) then
+		(held :: any)[action] = false
 	end
 end)
 
@@ -101,8 +106,8 @@ end
 -- yaw : angle horizontal de la caméra en degrés (depuis FPSCamera.getCameraYaw()).
 -- Retourne Vector3.zero si aucune touche directionnelle n'est pressée.
 function InputModule.getWishDir(yaw: number): Vector3
-	local fwd = (held.W and 1 or 0) - (held.S and 1 or 0)
-	local rgt = (held.D and 1 or 0) - (held.A and 1 or 0)
+	local fwd = (held.forward and 1 or 0) - (held.back and 1 or 0)
+	local rgt = (held.right and 1 or 0) - (held.left and 1 or 0)
 	if fwd == 0 and rgt == 0 then
 		lastWishdir = Vector3.zero
 		return Vector3.zero
@@ -119,8 +124,8 @@ end
 
 -- Variante 3D : inclut le pitch pour que viser en bas influence la wishdir (surf/air).
 function InputModule.getWishDir3D(yaw: number, pitch: number): Vector3
-	local fwd = (held.W and 1 or 0) - (held.S and 1 or 0)
-	local rgt = (held.D and 1 or 0) - (held.A and 1 or 0)
+	local fwd = (held.forward and 1 or 0) - (held.back and 1 or 0)
+	local rgt = (held.right and 1 or 0) - (held.left and 1 or 0)
 	if fwd == 0 and rgt == 0 then
 		return Vector3.zero
 	end
@@ -137,12 +142,12 @@ end
 
 -- Shift tenu
 function InputModule.isWalking(): boolean
-	return held.Shift
+	return held.walk
 end
 
 -- Ctrl tenu
 function InputModule.isCrouching(): boolean
-	return held.Ctrl
+	return held.crouch
 end
 
 -- Edge trigger : retourne true une seule fois par appui de Space (consommé à la lecture).
@@ -156,7 +161,7 @@ end
 
 -- Level trigger : true tant que Space est tenu (pour auto-bhop).
 function InputModule.isJumpHeld(): boolean
-	return held.Space
+	return held.jump
 end
 
 -- Horodatage (tick()) du dernier appui Space — utilisé par le jump buffer.
@@ -166,7 +171,7 @@ end
 
 -- True si S est le seul axe directionnel pressé (pas W/A/D) → vitesse limitée en recul.
 function InputModule.isBackwardOnly(): boolean
-	return held.S and not held.W and not held.A and not held.D
+	return held.back and not held.forward and not held.left and not held.right
 end
 
 -- Edge trigger : retourne true une seule fois par appui de R (consommé à la lecture).

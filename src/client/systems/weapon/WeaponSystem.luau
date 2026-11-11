@@ -14,6 +14,10 @@ local FPSCamera = require(script.Parent.Parent.Parent.camera.FPSCamera)
 local InputModule = require(script.Parent.Parent.Parent.input.InputModule)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
+local KeyBindings = require(ReplicatedStorage.Shared.KeyBindings)
+
+-- Bouton de la lunette et de l'attaque secondaire (KeyBindings.MOUSE.aim, #224 : même liaison que l'affichage des touches)
+local AIM_INPUT = (Enum.UserInputType :: any)["MouseButton" .. KeyBindings.MOUSE.aim]
 
 -- Per-tool runtime state (stored on the client)
 local toolState = {} -- [tool] = { ammo, reserve, magazine, lastFire }
@@ -321,7 +325,7 @@ local function onToolEquipped(tool, char)
 			if gp then
 				return
 			end
-			if input.UserInputType == Enum.UserInputType.MouseButton2 then
+			if input.UserInputType == AIM_INPUT then
 				if not canAct() then
 					return
 				end
@@ -332,7 +336,7 @@ local function onToolEquipped(tool, char)
 
 	if cfg and cfg.SecondaryAttack then
 		secondaryConn = UserInputService.InputBegan:Connect(function(input, gp)
-			if not gp and input.UserInputType == Enum.UserInputType.MouseButton2 then
+			if not gp and input.UserInputType == AIM_INPUT then
 				onSecondaryAttack(tool, cfg)
 			end
 		end)
