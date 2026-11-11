@@ -246,6 +246,49 @@ local function onToolActivated(tool)
 	end)
 end
 
+-- Cette méthode permet de couper les connexions de saisie de l'arme (lunette, attaque secondaire) lorsqu'elle est
+-- rangée ou rééquipée, pour ne pas les empiler.
+local function disconnectInputs()
+	if scopeConn then
+		scopeConn:Disconnect()
+		scopeConn = nil
+	end
+	if secondaryConn then
+		secondaryConn:Disconnect()
+		secondaryConn = nil
+	end
+end
+
+-- Cette méthode permet de terminer l'equip d'un outil lorsque son animation Equip est finie : elle attend d'abord le
+-- chargement de la piste du viewmodel de CET outil (Length > 0, pas de l'arme précédemment active : l'ordre des connexions
+-- Equipped entre systèmes n'est pas garanti), puis la durée réelle ; sans piste Equip, EquipTime tout de suite ; piste jamais
+-- chargée après EquipRules.LOAD_TIMEOUT, l'arme est libérée à ce moment (EquipTime déjà dépassé, #184).
+local function finishEquip(tool, cfg, token: number)
+	local fallback = cfg and cfg.EquipTime or 0.8
+	local waited = 0
+	local duration
+	while true do
+		if not actionGate.isCurrent(token) or currentTool ~= tool then
+			return
+		end
+		duration = EquipRules.settleTime(
+			ViewmodelSystem.getToolTrackLength(tool, "Equip"),
+			cfg and cfg.EquipAnimSpeed,
+			fallback,
+			waited,
+			EquipRules.LOAD_TIMEOUT
+		)
+		if duration then
+			break
+		end
+		waited += task.wait()
+	end
+	task.wait(duration)
+	if actionGate.isCurrent(token) and currentTool == tool and weaponState == "EQUIPPING" then
+		weaponState = "IDLE"
+	end
+end
+
 local function onToolEquipped(tool, char)
 	if not tool or not char then
 		return
@@ -264,28 +307,12 @@ local function onToolEquipped(tool, char)
 		createSpeedValueForChar(char, cfg.RunSpeedMultiplier)
 	end
 
-	-- Durée lue sur la piste Equip du viewmodel de CET outil (pas de l'arme précédemment active, l'ordre des
-	-- connexions Equipped entre systèmes n'étant pas garanti) ; le jeton périme le délai d'un equip antérieur.
-	local equipTime = cfg and cfg.EquipTime or 0.8
-	local animLength = ViewmodelSystem.getToolTrackLength(tool, "Equip")
-	local equipAnimSpeed = cfg and cfg.EquipAnimSpeed or 1
-	local actualEquipTime = EquipRules.duration(animLength, equipAnimSpeed, equipTime)
+	-- Le jeton périme le délai d'un equip antérieur ; la fin de l'equip suit la vraie piste (#184).
 	local token = actionGate.begin()
-	task.delay(actualEquipTime, function()
-		if actionGate.isCurrent(token) and currentTool == tool and weaponState == "EQUIPPING" then
-			weaponState = "IDLE"
-		end
-	end)
+	task.spawn(finishEquip, tool, cfg, token)
 
 	-- Un Equipped sans Unequipped préalable ne doit pas empiler les connexions (double bascule de la lunette).
-	if scopeConn then
-		scopeConn:Disconnect()
-		scopeConn = nil
-	end
-	if secondaryConn then
-		secondaryConn:Disconnect()
-		secondaryConn = nil
-	end
+	disconnectInputs()
 
 	if cfg and cfg.HasScope then
 		scopeConn = UserInputService.InputBegan:Connect(function(input, gp)
@@ -326,14 +353,7 @@ local function onToolUnequipped(tool, char)
 	if cancelReload then
 		cancelReload()
 	end
-	if scopeConn then
-		scopeConn:Disconnect()
-		scopeConn = nil
-	end
-	if secondaryConn then
-		secondaryConn:Disconnect()
-		secondaryConn = nil
-	end
+	disconnectInputs()
 	actionGate.invalidate()
 	ScopeSystem.reset()
 	weaponState = "IDLE"
