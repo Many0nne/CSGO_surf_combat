@@ -133,6 +133,12 @@ function HUDRules.gameHudVisible(state: string): boolean
 	return state == "IN_ROUND"
 end
 
+-- Cette méthode permet de savoir si le crosshair de la visée simplifiée (#195) est affiché lorsque le réglage, l'état du
+-- HUD de jeu, la lunette ou l'écran Réglages changent : réglage actif, HUD de jeu visible, ni lunette ni Réglages ouverts.
+function HUDRules.crosshairVisible(enabled: boolean, hudVisible: boolean, scoped: boolean, menuOpen: boolean): boolean
+	return enabled and hudVisible and not scoped and not menuOpen
+end
+
 -- Cette méthode permet de savoir si le kill feed est affiché lorsque l'état client change : en partie, vivant ou mort
 -- (le joueur tué y voit sa propre ligne), pas au menu ni au résultat.
 function HUDRules.killFeedVisible(state: string): boolean

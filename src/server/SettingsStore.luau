@@ -1,6 +1,6 @@
--- Réglages du joueur (#100) conservés entre les sessions : sensibilités, ombres, molette et touches de la barre d'armes.
--- Roblox n'a pas de stockage côté client : le client demande ses réglages (RemoteFunction GetSettings) et envoie chaque
--- changement (SaveSettings) ; le serveur les valide (PlayerSettings.sanitize) et les écrit dans un DataStore, au plus une
+-- Réglages du joueur (#100) conservés entre les sessions : sensibilités, ombres, molette, visée simplifiée (#195) et
+-- touches de la barre d'armes. Roblox n'a pas de stockage côté client : le client demande ses réglages (RemoteFunction
+-- GetSettings) et envoie chaque changement (SaveSettings) ; le serveur les valide (PlayerSettings.sanitize) et les écrit dans un DataStore, au plus une
 -- fois par SAVE_DELAY, puis au départ du joueur et à l'arrêt du serveur.
 local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
