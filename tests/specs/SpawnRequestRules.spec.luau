@@ -333,6 +333,13 @@ return function(T, Loader)
 			T.expectEqual(t <= WAIT_FOR + Rules.DEAD_GIVE_UP_AFTER + Rules.TICK, true)
 		end)
 
+		T.it("annulation : seul DEAD garde l'attente (personnage revenu, idle, fin de round, menu)", function()
+			T.expectEqual(Rules.keepsDeadWatch("DEAD"), true)
+			for _, state in { "IN_ROUND", "MENU", "INFOS", "RESULT", "SPAWNING" } do
+				T.expectEqual(Rules.keepsDeadWatch(state), false, state)
+			end
+		end)
+
 		T.it("la redemande n'arrive jamais pendant RESPAWN_DELAY (pas de refus « early » au journal)", function()
 			T.expectEqual(GameConfig.RESPAWN_MARGIN > 0, true)
 		end)

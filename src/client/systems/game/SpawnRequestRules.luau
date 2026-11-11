@@ -126,6 +126,12 @@ function SpawnRequestRules.onTick(attempt: Attempt, now: number): TickAction
 	return "wait"
 end
 
+-- Cette méthode permet de savoir si l'attente de la réapparition continue lorsque l'état client change : seulement en
+-- DEAD (personnage revenu → IN_ROUND, round idle ou départ → MENU, fin de round → RESULT l'annulent).
+function SpawnRequestRules.keepsDeadWatch(state: string): boolean
+	return state == "DEAD"
+end
+
 -- Cette méthode permet de commencer l'attente de la réapparition programmée lorsque le joueur local passe en DEAD.
 function SpawnRequestRules.newDeadWatch(now: number): DeadWatch
 	return { diedAt = now, attempt = nil }

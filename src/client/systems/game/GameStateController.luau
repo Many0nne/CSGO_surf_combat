@@ -97,7 +97,7 @@ local function setState(newState: State)
 		-- La surveillance de la demande s'arrête d'elle-même (GameStateController.requestPlay)
 		spawnAttempt = nil
 	end
-	if newState ~= "DEAD" then
+	if not SpawnRequestRules.keepsDeadWatch(newState) then
 		-- Personnage revenu, round idle, fin de round ou retour au menu : la surveillance s'arrête (watchRespawn)
 		deadWatch = nil
 	end
