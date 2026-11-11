@@ -131,8 +131,9 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   compteur et les munitions ; en 16:9, 12 px de marge côté munitions avec le mode `full`.
   **Écran étroit (#247, choix de l'utilisateur) :** la grille garde sa taille et remonte au-dessus du compteur de munitions
   quand elle l'atteindrait (`HUDRules.keyDisplayBottom` : bord droit de la grille + `KEY_DISPLAY_CLEARANCE` 12 px au-delà du
-  bord gauche de `AMMO_BOX`, en px du repère `scaledRoot`). Seuil : environ 1,74 de ratio en `full` (16:9 inchangé, 16:10 et
-  4:3 remontent), 1,56 en `simple` (16:10 reste, 4:3 remonte). Replacée au redimensionnement (`AbsoluteSize` du `ScreenGui`, lu après la mise à jour de `scaledRoot`).
+  bord gauche de `AMMO_BOX`, en px du repère `scaledRoot`). Seuil en largeur de ce repère : 1 252 px en `full`, 1 120 px en
+  `simple`. Soit, pour une fenêtre de 540 à 1 152 px de haut (échelle non bornée), un ratio de 1,74 en `full` (16:9 inchangé,
+  16:10 et 4:3 remontent) et 1,56 en `simple` (16:10 reste, 4:3 remonte) ; hors de ces hauteurs, le seuil suit la largeur. Replacée au redimensionnement (`AbsoluteSize` du `ScreenGui`, lu après la mise à jour de `scaledRoot`).
   Pistes rejetées (#229, captures en jeu) : grille de cases plates (fond `C.Scrim` translucide, case os pleine une fois enfoncée,
   rendu d'origine de #197, « overlay de stream ») ; lettres os à ombre sans cases avec trait rouge sous la touche enfoncée
   (« titrage », comme le timer) ; trait de bande sous chaque touche rempli d'ambre (« jauge », comme le compteur) ; directions en

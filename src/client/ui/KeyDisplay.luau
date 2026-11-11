@@ -302,10 +302,13 @@ function KeyDisplay.init()
 		Size = UDim2.fromOffset(0, 0),
 		Parent = root,
 	})
-	-- Fenêtre redimensionnée : replacer la grille une fois UIKit.scaledRoot à jour (signal de la caméra, ordre non garanti)
-	screenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+	-- Fenêtre redimensionnée : largeur seule (AbsoluteSize, échelle inchangée) ou hauteur (attribut Scale, posé par
+	-- UIKit.scaledRoot après la taille de la racine) ; différé pour lire une racine à jour
+	local function replace()
 		task.defer(place)
-	end)
+	end
+	screenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(replace)
+	root:GetAttributeChangedSignal("Scale"):Connect(replace)
 
 	LocalSettings.onChanged(update)
 	HUDState.onChanged(onHudChanged)

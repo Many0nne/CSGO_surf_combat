@@ -118,12 +118,7 @@ return function(T, Loader)
 		end)
 	end)
 
-	T.describe("HUDRules.keyDisplayBottom", function()
-		-- Cette méthode permet de lire la largeur de la grille (px) d'un mode lorsqu'un test la place, telle que KeyDisplay la construit.
-		local function gridWidth(mode: string): number
-			return (HUDRules.keyDisplayGridSize(mode))
-		end
-
+	T.describe("HUDRules.keyDisplayGridSize", function()
 		T.it("mesure la grille : 3 colonnes en simple, 6 en full, 3 rangées, rien en off", function()
 			local w, h = HUDRules.keyDisplayGridSize("simple")
 			T.expectEqual(w, 3 * 44 - 4)
@@ -131,6 +126,14 @@ return function(T, Loader)
 			T.expectEqual((HUDRules.keyDisplayGridSize("full")), 6 * 44 - 4)
 			T.expectEqual((HUDRules.keyDisplayGridSize("off")), 0)
 		end)
+	end)
+
+	T.describe("HUDRules.keyDisplayBottom", function()
+		-- Cette méthode permet de lire la largeur de la grille (px) d'un mode lorsqu'un test la place, telle que KeyDisplay la construit.
+		local function gridWidth(mode: string): number
+			return (HUDRules.keyDisplayGridSize(mode))
+		end
+
 		local lifted = HUDRules.AMMO_BOX.bottom + HUDRules.AMMO_BOX.height + HUDRules.KEY_DISPLAY_CLEARANCE
 
 		T.it("garde la grille en bas en 16:9 et plus large, mode full compris", function()
