@@ -685,7 +685,10 @@ personnage par un neuf. Le client légitime n'envoie `RequestSpawn` que depuis l
 - chaque demande admise reçoit une réponse (#219, `SpawnRules.reply`) ; le client légitime renvoie sa demande sans
   réponse ou après un refus temporaire (`SpawnRequestRules`, au plus un envoi toutes les 1,2 s, sous le débit de
   `RemoteGuard`). Ces renvois peuvent ajouter au journal des refus `spawning` ou `alive` faibles (réponse en route
-  pendant un gel du serveur) ; les refus `result` répétés pendant la bannière n'y vont pas ;
+  pendant un gel du serveur) ; les refus `result` répétés pendant la bannière n'y vont pas. Un `alive` sur un
+  personnage vivant n'est plus journalisé : le client le reprend et le serveur le remet au round (`beforeSpawn`, sans
+  effet sur un joueur déjà inscrit) ; seul un `alive` sur un corps l'est encore. Une demande `spawning` est servie à la
+  fin du chargement en vol (nouveau chargement s'il a échoué), comme le retour du menu de #157 ;
 - les bots ne passent pas par là : `BotManager` gère leur réapparition (`diedAt` + `RESPAWN_DELAY`) et leur passe un
   rappel vide.
 

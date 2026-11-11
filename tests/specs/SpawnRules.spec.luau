@@ -238,13 +238,22 @@ return function(T, Loader)
 			T.expectEqual(env.CheatLog.summary(1), nil, "aucune violation")
 		end)
 
-		T.it("demande d'un joueur déjà en jeu : refusée et journalisée faible (alive)", function()
+		T.it("demande avec un corps encore en place : refusée et journalisée faible (alive)", function()
+			local env = setup()
+			env.state = "idle"
+			local p = fakePlayer(1)
+			p.Character = fakeCharacter(true, 0)
+			env.handler(p)
+			T.expectEqual(p.loads, 0)
+			T.expectEqual(env.CheatLog.summary(1).counts.Spawn.low, 1)
+		end)
+
+		T.it("demande d'un joueur déjà en jeu, vivant : aucun chargement (reprise, #219)", function()
 			local env = setup()
 			local p = fakePlayer(1)
 			p.Character = fakeCharacter(true, 100)
 			env.handler(p)
 			T.expectEqual(p.loads, 0)
-			T.expectEqual(env.CheatLog.summary(1).counts.Spawn.low, 1)
 		end)
 
 		T.it("mort en fin de round, bannière, puis Play au round suivant : accepté", function()
@@ -421,6 +430,7 @@ return function(T, Loader)
 			env.handler(p)
 			T.expectEqual(statuses(env, p), "alive")
 			T.expectEqual(env.replies[1].answer.live, true)
+			T.expectEqual(env.CheatLog.summary(1), nil, "reprise : pas un refus au journal")
 			T.expectEqual(env.started, 1, "beforeSpawn : le client reprend ce personnage")
 			T.expectEqual(p.loads, 0)
 			p.Character = fakeCharacter(true, 0)
@@ -440,6 +450,39 @@ return function(T, Loader)
 			end
 			env.SpawnManager.respawn(p :: any)
 			T.expectEqual(statuses(env, p), "result", "le client renvoie au lieu d'attendre un personnage jeté")
+		end)
+
+		T.it("JOUER pendant une réapparition en vol qui échoue : servi par un nouveau chargement", function()
+			local env = setup()
+			local p = fakePlayer(1)
+			function p.LoadCharacterAsync(self)
+				self.loads += 1
+				if self.loads == 1 then
+					env.handler(self) -- demande arrivée pendant le chargement : « spawning »
+					error("échec simulé")
+				end
+				self.Character = fakeCharacter(true, 100)
+			end
+			env.SpawnManager.respawn(p :: any)
+			T.expectEqual(p.loads, 2, "la demande en attente est servie")
+			T.expectEqual(statuses(env, p), "spawning", "pas de « failed » : le personnage arrive")
+		end)
+
+		T.it("demande servie par un second chargement qui échoue aussi : un seul « failed »", function()
+			local env = setup()
+			env.state = "idle"
+			local p = fakePlayer(1)
+			function p.LoadCharacterAsync(self)
+				self.loads += 1
+				if self.loads == 1 then
+					env.clock = 3
+					env.handler(self) -- renvoi pendant le chargement
+				end
+				error("échec simulé")
+			end
+			env.handler(p)
+			T.expectEqual(p.loads, 2)
+			T.expectEqual(statuses(env, p), "accepted,spawning,failed")
 		end)
 
 		T.it("ne répond pas à un joueur déjà parti", function()

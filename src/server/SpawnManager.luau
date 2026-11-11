@@ -127,12 +127,14 @@ function SpawnManager.spawnPlayer(player: Player): boolean
 		conn:Disconnect()
 		warn("[SpawnManager] LoadCharacterAsync a échoué pour " .. player.Name .. " :", err)
 	end
-	-- Demande arrivée pendant ce chargement (#157) : le personnage gardé la sert, sinon un nouveau
+	-- Demande arrivée pendant ce chargement (#157, #219) : le personnage gardé la sert, sinon un nouveau ; un échec est
+	-- répondu ici, la demande compte alors comme traitée (true : pas de seconde réponse « failed »)
 	if rejoin[player] then
 		rejoin[player] = nil
 		if not SpawnRules.isAlive(player.Character) and not SpawnManager.spawnPlayer(player) then
 			reply(player, { status = "failed" })
 		end
+		return true
 	end
 	return ok
 end
@@ -211,11 +213,18 @@ function SpawnManager.init(
 		end
 		-- Avant le journal et le chargement : le client est fixé tout de suite, même si la suite échoue
 		local live = refusal == "alive" and SpawnRules.isAlive(player.Character)
-		reply(player, SpawnRules.reply(refusal, request, { away = away[player] == true, live = live }))
-		-- Personnage vivant que le client reprend (il l'avait ignoré au menu) : remis au round comme une apparition
+		local answer = SpawnRules.reply(refusal, request, { away = away[player] == true, live = live })
+		reply(player, answer)
+		-- Personnage vivant que le client reprend (il l'avait ignoré au menu) : remis au round comme une apparition,
+		-- sans refus au journal
 		if live then
 			away[player] = nil
 			hooks.beforeSpawn(player)
+			return
+		end
+		-- Le client attend le chargement en vol : s'il échoue, la demande est servie à sa fin (nouveau chargement)
+		if answer.status == "spawning" then
+			rejoin[player] = true
 		end
 		if refusal then
 			local severity = REFUSAL_SEVERITY[refusal]

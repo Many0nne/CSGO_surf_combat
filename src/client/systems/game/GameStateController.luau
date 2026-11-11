@@ -255,8 +255,10 @@ end
 -- message, et LeaveRound pour qu'un personnage arrivé trop tard ne reste pas dans le round.
 local function giveUpSpawn()
 	warn("[GameState] demande d'apparition sans suite : retour au menu")
-	if leaveRemote then
-		leaveRemote:FireServer()
+	-- Cherché ici aussi : listenToRemotes peut encore l'attendre
+	local leave = leaveRemote or ReplicatedStorage:FindFirstChild(NetworkProtocol.Names.LEAVE_ROUND)
+	if leave and leave:IsA("RemoteEvent") then
+		leave:FireServer()
 	end
 	setState("MENU")
 	-- Les volets fermés par SPAWNING couvrent encore l'écran
