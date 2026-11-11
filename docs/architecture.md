@@ -66,7 +66,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/client/systems/game/MenuSceneRules.luau`: règles pures de cette scène (amortis, angles de visée, trajectoire, touche).
 - `src/client/systems/network/CharacterSync.luau`: envoi de la position, du cap et de l'accroupi du personnage local (appelé par `MovementController`, accroupi lu par `CrouchSystem.isCrouching`) et affichage des autres personnages (joueurs et bots, rangés par `Model`) à leur position relayée, interpolée (rendu, priorité `Camera - 2`).
 - `src/client/systems/movement/BoostSystem.luau`: boosts de la map (geysers, lanceurs, portiques de `Maps.Map.Boosts`) détectés à chaque frame, avec recharge par boost.
-- `src/client/systems/movement/BhopSystem.luau`: implémentation du bunnyhop (saut en chaîne).
+- `src/client/systems/movement/BhopSystem.luau`: implémentation du bunnyhop (saut en chaîne) ; reçoit Espace maintenu et le réglage `PlayerSettings.autoBhop` en paramètres (#255, Réglages > MOUVEMENT, activé par défaut = `MovementConfig.AUTO_BHOP`), donc testable sans client.
 - `src/shared/movement/CharacterDimensions.luau`: calcule les dimensions du personnage et les hitboxes debout/accroupi.
 - `src/shared/movement/CharacterMotor.luau`: cœur du mouvement commun au joueur (`MovementController`) et aux bots (`BotMotion`) : détection du sol, transitions sol/air, physique sol et air, déplacement avec collisions. L'appelant fournit l'intention (direction, vitesse, saut, accroupi) et garde entrées, échelles, boosts, caméra et animation. Toute correction de la physique d'un tick se fait ici, pour les deux.
 - `src/client/systems/movement/CoyoteJump.luau`: gestion du "coyote time" pour les sauts.

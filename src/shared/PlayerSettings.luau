@@ -5,6 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
 local KeyBindings = require(ReplicatedStorage.Shared.KeyBindings)
+local MovementConfig = require(ReplicatedStorage.Shared.MovementConfig)
 
 export type WheelMode = "previous" | "next" | "off"
 
@@ -20,6 +21,8 @@ export type Settings = {
 	-- Visée simplifiée (#195) : crosshair au centre de l'écran, désactivé par défaut
 	simpleAim: boolean,
 	keyDisplay: KeyDisplayMode,
+	-- Auto-bhop (#255) : saut automatique tant qu'Espace est maintenu ; activé par défaut (MovementConfig.AUTO_BHOP)
+	autoBhop: boolean,
 	-- une touche par emplacement de la barre d'armes, dans l'ordre des emplacements
 	slotKeys: { string },
 }
@@ -97,6 +100,7 @@ function PlayerSettings.defaults(): Settings
 		wheel = PlayerSettings.DEFAULT_WHEEL,
 		simpleAim = false,
 		keyDisplay = PlayerSettings.DEFAULT_KEY_DISPLAY,
+		autoBhop = MovementConfig.AUTO_BHOP,
 		slotKeys = table.clone(PlayerSettings.DEFAULT_SLOT_KEYS),
 	}
 end
@@ -164,6 +168,9 @@ function PlayerSettings.sanitize(raw: any): Settings
 	end
 	if table.find(PlayerSettings.KEY_DISPLAY_MODES, raw.keyDisplay) then
 		settings.keyDisplay = raw.keyDisplay
+	end
+	if type(raw.autoBhop) == "boolean" then
+		settings.autoBhop = raw.autoBhop
 	end
 	settings.slotKeys = sanitizeKeys(raw.slotKeys)
 	return settings
