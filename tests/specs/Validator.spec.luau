@@ -1849,8 +1849,8 @@ return function(T, Loader)
 			upperArmSize = Vector3.new(1, 1.2, 1),
 			lowerArmSize = Vector3.new(1, 1.1, 1),
 			handSize = Vector3.new(1, 0.3, 1),
-			shoulderC0 = Vector3.new(-1, 0.5, 0),
-			waistC1 = CFrame.new(0, -0.8, 0),
+			shoulderC0 = Vector3.new(-1, 0.56, 0),
+			waistC1 = CFrame.new(0, -0.78, 0),
 		}
 
 		-- Cette méthode permet d'ajouter un bras gauche R15 (UpperTorso, Waist, épaule, coude, poignet, d'après LEFT_ARM)
@@ -1923,6 +1923,11 @@ return function(T, Loader)
 			local off = rightHand.Position + Vector3.new(0, 0, -3.5)
 			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rightHand, 0, shotAt(a, off, world.now)), nil)
 			T.expectEqual(reportedChecks(world), "direction")
+			-- Repli : la main droite est bien jugée sur sa propre position, pas dans l'allonge
+			T.expect(
+				string.find(world.reports[1].detail, "allonge", 1, true) == nil,
+				"détail : " .. world.reports[1].detail
+			)
 			T.expect(ShotRules.limbSide("RightHand") == "Right", "côté")
 		end)
 

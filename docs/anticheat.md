@@ -282,7 +282,11 @@ remplace la partie par une sphère : centre = articulation de l'épaule du même
   l'épaule chez le client, alors que le centre de la sphère suit la taille du rig serveur (sa `Transform`, animée
   pour un bot). Plus grand écart entre l'épaule tournée par une tenue de `WeaponThirdPerson.POSES` et l'épaule du rig
   serveur, vue de l'articulation `Waist` (~0,7 stud pour une épaule à 1 stud de l'axe et une taille serveur au repos).
-  Les rotations de taille des tenues sont lues une fois au chargement de `ShotRules`.
+  Les rotations de taille des tenues sont lues une fois au chargement de `ShotRules`. Limite : pendant le fondu de la
+  tenue (`HOLD_FADE_TIME`), le client part de **sa** taille animée, qui peut différer de celle du serveur (phase
+  d'animation, joueur dont le serveur ne joue pas les pistes) ; l'écart restant est couvert par `DIRECTION_BASE`
+  (aucun faux positif mesuré, voir la mesure), à surveiller dans les résumés `CheatLog` du jeu publié (détail « jugé
+  dans l'allonge de l'épaule »).
 
 Quand la sphère s'applique, le détail du journal indique « <partie> jugé dans l'allonge de l'épaule ». Rig incomplet
 (Motor6D ou partie du bras absents, partie hors du personnage) : règle de la partie (rayon englobant de la partie
