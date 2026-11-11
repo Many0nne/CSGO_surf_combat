@@ -406,7 +406,9 @@ end
 local function recordHit(attacker: Participants.Participant, targetCharacter: Instance, isHeadshot: boolean)
 	local target = Participants.fromCharacter(targetCharacter)
 	if target then
-		RoundManager.recordDamage(attacker, target, weaponOf(attacker), isHeadshot)
+		-- Protection d'apparition (TakeDamage l'ignore) : pas un coup reçu pour un départ par MENU PRINCIPAL (#217)
+		local shielded = targetCharacter:FindFirstChildWhichIsA("ForceField") ~= nil
+		RoundManager.recordDamage(attacker, target, weaponOf(attacker), isHeadshot, shielded)
 	end
 end
 
@@ -421,11 +423,6 @@ local function applyHit(
 	local humanoid = targetCharacter:FindFirstChildWhichIsA("Humanoid") :: Humanoid?
 	-- Corps encore en place (CORPSE_HANDOFF_DELAY) : une touche ne doit pas créditer la prochaine mort de la victime
 	if not humanoid or humanoid.Health <= 0 then
-		return nil
-	end
-	-- Protection d'apparition : TakeDamage l'ignore, la touche n'est pas un coup reçu (ni tueur désigné, ni départ par
-	-- MENU PRINCIPAL compté comme une mort, #217)
-	if targetCharacter:FindFirstChildWhichIsA("ForceField") then
 		return nil
 	end
 	recordHit(attacker, targetCharacter, isHeadshot)

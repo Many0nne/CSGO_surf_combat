@@ -399,6 +399,26 @@ return function(T, Loader)
 			T.expectEqual(respawned, false)
 		end)
 
+		T.it("laisse partir librement après un coup absorbé par la protection d'apparition", function()
+			local env = setup()
+			local alice = env.addPlayer(1, "Alice", Vector3.zero)
+			local bot = env.addBot("Marcel", Vector3.zero)
+			env.RoundManager.startRound(60)
+			env.RoundManager.recordDamage(bot, alice, "AWP", false, true)
+
+			T.expectEqual((env.RoundManager.withdraw(alice)), false, "aucun PV perdu")
+		end)
+
+		T.it("garde le tueur d'un coup absorbé par la protection, pour une chute qui suit", function()
+			local env = setup()
+			local alice = env.addPlayer(1, "Alice", Vector3.zero)
+			local bot = env.addBot("Marcel", Vector3.zero)
+			env.RoundManager.startRound(60)
+			env.RoundManager.recordDamage(bot, alice, "AWP", false, true)
+
+			T.expectEqual(env.RoundManager.onCharacterDied(alice, function() end), bot)
+		end)
+
 		T.it("ne compte rien hors d'un round actif", function()
 			local env = setup()
 			local alice = env.addPlayer(1, "Alice", Vector3.zero)

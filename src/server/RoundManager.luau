@@ -14,8 +14,9 @@ type Participant = Participants.Participant
 -- Score d'un participant (joueur ou bot), envoyé tel quel aux clients (classement, préfixe BOT)
 type Score = { name: string, isBot: boolean, kills: number, deaths: number, firstKillTick: number }
 -- Dernier coup reçu par une victime : tueur crédité, arme et tir à la tête affichés à la mort (#102), instant du coup
--- (os.clock) qui fait compter comme une mort un départ par MENU PRINCIPAL juste après (#217)
-type LastHit = { attackerId: number, weapon: string?, headshot: boolean, at: number }
+-- (os.clock) qui fait compter comme une mort un départ par MENU PRINCIPAL juste après (#217), nil si le coup n'a retiré
+-- aucun PV (protection d'apparition)
+type LastHit = { attackerId: number, weapon: string?, headshot: boolean, at: number? }
 
 local RoundManager = {}
 
@@ -142,10 +143,17 @@ end
 
 -- Cette méthode permet de retenir le dernier coup porté à une victime (tireur, arme, tir à la tête) lorsqu'une touche
 -- est validée ; c'est lui qui désigne le tueur à la mort.
-function RoundManager.recordDamage(attacker: Participant, victim: Participant, weapon: string?, headshot: boolean?)
+function RoundManager.recordDamage(
+	attacker: Participant,
+	victim: Participant,
+	weapon: string?,
+	headshot: boolean?,
+	shielded: boolean?
+)
 	if victim and attacker ~= victim then
-		lastAttacker[victim.id] =
-			{ attackerId = attacker.id, weapon = weapon, headshot = headshot == true, at = os.clock() }
+		-- Coup absorbé par la protection d'apparition : tueur désigné quand même, mais pas un coup reçu (#217)
+		local at = if shielded then nil else os.clock()
+		lastAttacker[victim.id] = { attackerId = attacker.id, weapon = weapon, headshot = headshot == true, at = at }
 	end
 end
 
