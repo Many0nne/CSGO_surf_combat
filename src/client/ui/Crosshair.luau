@@ -24,8 +24,7 @@ local OUTLINE_TRANSPARENCY = 0.1 -- presque opaque : sur fond blanc, seul le con
 local Crosshair = {}
 
 local gui: ScreenGui?
-local root: Frame?
-local drawnKey: string? -- réglages du dernier tracé : on ne redessine qu'au changement du style
+local redraw: ((PlayerSettings.Settings) -> ())?
 
 -- Cette méthode permet de retrouver la couleur d'un id de la palette du viseur lorsque le crosshair est tracé (os si
 -- l'id est inconnu).
@@ -74,16 +73,26 @@ function Crosshair.draw(parent: GuiObject, settings: PlayerSettings.Settings)
 	})
 end
 
--- Cette méthode permet de redessiner le crosshair en jeu lorsque le joueur change son style (aperçu en direct, sans
--- respawn) ou que ses réglages sauvegardés arrivent.
-local function redraw(settings: PlayerSettings.Settings)
-	local key = Crosshair.styleKey(settings)
-	if not root or key == drawnKey then
-		return
+-- Cette méthode permet de préparer un emplacement de viseur centré sur `parent` lorsqu'il est construit (en jeu, aperçu
+-- des Réglages) ; la fonction renvoyée le redessine si le style a changé depuis le dernier tracé (clé `styleKey`).
+function Crosshair.mount(parent: GuiObject): (PlayerSettings.Settings) -> ()
+	local holder = UIKit.frame({
+		Name = "Crosshair",
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(0, 0),
+		Parent = parent,
+	})
+	local drawnKey: string?
+	return function(settings: PlayerSettings.Settings)
+		local key = Crosshair.styleKey(settings)
+		if key ~= drawnKey then
+			drawnKey = key
+			holder:ClearAllChildren()
+			Crosshair.draw(holder, settings)
+		end
 	end
-	drawnKey = key
-	root:ClearAllChildren()
-	Crosshair.draw(root, settings)
 end
 
 -- Cette méthode permet d'afficher ou de masquer le crosshair, et de suivre son style, lorsque les réglages ou l'état du
@@ -91,7 +100,9 @@ end
 local function update()
 	if gui then
 		local settings = LocalSettings.get()
-		redraw(settings)
+		if redraw then
+			redraw(settings) -- style suivi en direct, sans respawn
+		end
 		gui.Enabled = HUDRules.crosshairVisible(HUDState.get(), settings.simpleAim)
 	end
 end
@@ -111,14 +122,13 @@ function Crosshair.init()
 		Parent = Players.LocalPlayer:WaitForChild("PlayerGui"),
 	})
 	gui = screenGui
-	root = UIKit.frame({
+	local root = UIKit.frame({
 		Name = "Root",
 		BackgroundTransparency = 1,
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.fromOffset(0, 0),
+		Size = UDim2.fromScale(1, 1),
 		Parent = screenGui,
 	})
+	redraw = Crosshair.mount(root)
 
 	LocalSettings.onChanged(update)
 	HUDState.onChanged(update)

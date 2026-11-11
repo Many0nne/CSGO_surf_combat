@@ -59,8 +59,9 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
 - Réglages (`SettingsMenu.luau`, disposition C des schémas de #117, préférée aux sous-onglets en haut et à la liste
   unique qui défile) : catégories à gauche (barre ambrée sur l'active), lignes de 54 px à droite (nom, contrôle,
   valeur os à ombre, filet). Place : 9 lignes au plus par catégorie avant les actions (`MenuPage.ExitY`), pas de
-  défilement ; une section qui ne tient pas devient une catégorie (VISEUR, #251). Un curseur garde la valeur à la
-  précision affichée (0 décimale : entiers). Contrôles : curseur (trace continue, poignée en pastille os, rouge au survol ; une barre segmentée ferait perdre
+  défilement ; une section qui ne tient pas devient une catégorie (VISEUR, #251). Un curseur sans décimale donne des
+  entiers (px du viseur) ; les autres gardent leur précision (ne pas arrondir : les sensibilités déjà sauvegardées
+  changeraient au chargement). Contrôles : curseur (trace continue, poignée en pastille os, rouge au survol ; une barre segmentée ferait perdre
   la précision de la sensibilité) et choix fermé « ‹ VALEUR › ». RÉTABLIR remet la catégorie affichée à ses valeurs par
   défaut. Ajouter un réglage : une ligne dans `buildCategories` (avec son champ dans `PlayerSettings` pour qu'il soit
   conservé) ; une catégorie sans réglage n'est pas créée.
@@ -126,8 +127,12 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   jeu visible (donc ni menu, ni mort, ni résultat), lunette absente et menu en partie fermé.
   Toutes les armes, couteau compris. Piste rejetée : point rouge central (criard, hors de la matière du HUD).
   Branches tracées par `Reticle.drawArms` (#222), comme le réticule de la lunette (`ScopeOverlay`) : quatre branches à
-  `gap` px du centre, longueur en px ou en part du parent, contour dessous plus épais de `outline.width` px par côté,
-  bouts fermés (`caps`, crosshair) ou ouverts (lunette), estompe `fade` en option (lunette). Un nouveau réticule passe par là.
+  `gap` px du centre, longueur en px ou en part du parent, contour de `outline.width` px par côté ; bouts ouverts
+  (lunette) : couche plus large posée dessous, sur laquelle joue l'estompe `fade` ; bouts fermés (`caps`, crosshair) :
+  contour en cadre autour du trait, rien dessous (#251 : avec un contour dessous, baisser l'opacité assombrissait le trait
+  au lieu de le rendre translucide). Point central `dot` en option. Limite connue : à opacité réduite et écart central
+  inférieur à environ épaisseur / 2 + 2 px, branches, point et contours se superposent au centre et y paraissent plus
+  opaques. Un nouveau réticule passe par là.
 - `src/client/ui/KeyDisplay.luau` (#197) : réglage « Affichage des touches » (Réglages > GRAPHISMES, `PlayerSettings.keyDisplay`,
   trois valeurs `off` (défaut) / `simple` / `full`, validées par `sanitize`). Grille façon clavier en bas au centre (`BOTTOM_MARGIN`
   40 px, `scaledRoot`, entre le compteur de vitesse à gauche et la barre d'armes à droite) : touches de `KEY_SIZE` 40 px, `KEY_GAP` 4.

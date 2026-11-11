@@ -46,7 +46,7 @@ local ACTION_GAP = 46
 local KEY_HINT_TIME = 1.5 -- s d'affichage du refus d'une touche (« RÉSERVÉE AU JEU »)
 -- Aperçu du viseur (#251), sous les catégories : deux cases, fond clair et fond sombre, viseur à sa vraie taille en px
 local PREVIEW_TOP = 230 -- px sous le haut des lignes
-local PREVIEW_SIZE = 92
+local PREVIEW_SIZE = 100 -- 75 px à l'échelle minimale (0,75) : le plus grand viseur (36 px du centre) y tient
 local PREVIEW_GAP = 6
 local PREVIEW_LIGHT = Color3.fromRGB(222, 214, 200) -- sable clair, comme un ciel ou une rampe éclairée
 local PREVIEW_DARK = Color3.fromRGB(28, 30, 34) -- mur ou sol dans l'ombre
@@ -77,6 +77,8 @@ local selected = 1
 -- comme un choix du joueur (LocalSettings garderait sinon les valeurs par défaut à la place des réglages sauvegardés)
 local syncing = false
 local capture: Capture?
+-- Cadre mis à l'échelle de l'écran (UIKit.scaledRoot) : l'aperçu du viseur annule son échelle
+local scaledRoot: Frame?
 local keyHandlers: { [number]: (Enum.KeyCode) -> () } = {}
 
 -- Cette méthode permet d'enregistrer un réglage choisi par le joueur lorsqu'une ligne change de valeur, sauf pendant
@@ -221,10 +223,9 @@ local function addSlider(
 	UIKit.hover(hit, handle, { BackgroundColor3 = C.Bone }, { BackgroundColor3 = C.HitRed })
 	UIKit.hover(hit, label, { TextColor3 = C.Bone }, { TextColor3 = C.HitRed })
 
-	local precision = 10 ^ decimals
 	local function applyValue(v: number)
-		-- Valeur gardée à la précision affichée (px entiers du viseur), puis bornée
-		v = math.clamp(math.round(v * precision) / precision, minVal, maxVal)
+		-- Sans décimale (px du viseur), valeur entière ; les autres gardent leur précision (sensibilités sauvegardées)
+		v = math.clamp(if decimals == 0 then math.round(v) else v, minVal, maxVal)
 		currentVal = v
 		local t = (v - minVal) / (maxVal - minVal)
 		fill.Size = UDim2.fromScale(t, 1)
@@ -283,7 +284,7 @@ end
 -- Cette méthode permet d'ajouter un réglage à choix fermé (« ‹ VALEUR › », flèches à cliquer, en boucle) à une catégorie
 -- lorsque l'écran est construit ; `options` donne les libellés et valeurs (et la couleur du libellé, en option),
 -- `initial` l'indice de départ, `field` le champ de PlayerSettings où la valeur est conservée et `width` la largeur de
--- la valeur (PICK_WIDTH par défaut).
+-- la valeur (PICK_WIDTH par défaut). `keepOnReset` : RÉTABLIR ne touche pas à cette ligne.
 local function addPicker(
 	category: Category,
 	name: string,
@@ -292,7 +293,8 @@ local function addPicker(
 	initial: number,
 	default: number,
 	onChange: (any) -> (),
-	width: number?
+	width: number?,
+	keepOnReset: boolean?
 )
 	local current = initial
 	local row = makeRow(category, name)
@@ -356,7 +358,9 @@ local function addPicker(
 	apply(initial)
 	table.insert(category.list, {
 		reset = function()
-			apply(default)
+			if not keepOnReset then
+				apply(default)
+			end
 		end,
 		-- Un champ resté à nil (ombres jamais choisies) garde la valeur affichée
 		sync = function(settings)
@@ -583,7 +587,7 @@ end
 
 -- Cette méthode permet de construire l'aperçu du viseur (une case claire, une case sombre) sous les catégories lorsque la
 -- catégorie VISEUR est construite ; le viseur y est à sa taille réelle en px malgré la mise à l'échelle de l'écran.
-local function buildCrosshairPreview(category: Category, block: Frame)
+local function buildCrosshairPreview(category: Category)
 	local preview = UIKit.frame({
 		Name = "Preview",
 		BackgroundTransparency = 1,
@@ -600,9 +604,9 @@ local function buildCrosshairPreview(category: Category, block: Frame)
 		Size = UDim2.new(1, 0, 0, 20),
 		Parent = preview,
 	})
-	-- Mise à l'échelle de l'écran (UIKit.scaledRoot) compensée : le viseur garde ses px comme en jeu
-	local root = block:FindFirstAncestor("Root") :: Frame?
-	local holders: { Frame } = {}
+	-- Mise à l'échelle de l'écran (UIKit.scaledRoot, attribut Scale) compensée : le viseur garde ses px comme en jeu
+	local root = scaledRoot
+	local redraws: { (PlayerSettings.Settings) -> () } = {}
 	for i, background in { PREVIEW_LIGHT, PREVIEW_DARK } do
 		local pane = UIKit.frame({
 			Name = if i == 1 then "Light" else "Dark",
@@ -612,15 +616,16 @@ local function buildCrosshairPreview(category: Category, block: Frame)
 			ClipsDescendants = true,
 			Parent = preview,
 		})
-		local holder = UIKit.frame({
-			Name = "Crosshair",
+		local unscaled = UIKit.frame({
+			Name = "Unscaled",
 			BackgroundTransparency = 1,
 			AnchorPoint = Vector2.new(0.5, 0.5),
 			Position = UDim2.fromScale(0.5, 0.5),
 			Size = UDim2.fromOffset(0, 0),
 			Parent = pane,
 		})
-		local scale = UIKit.create("UIScale", { Parent = holder })
+		local scale = UIKit.create("UIScale", { Parent = unscaled })
+		-- Cette méthode permet d'annuler l'échelle de l'écran sur le viseur de l'aperçu lorsque la résolution change.
 		local function unscale()
 			local s = root and root:GetAttribute("Scale")
 			scale.Scale = if type(s) == "number" and s > 0 then 1 / s else 1
@@ -629,24 +634,13 @@ local function buildCrosshairPreview(category: Category, block: Frame)
 		if root then
 			root:GetAttributeChangedSignal("Scale"):Connect(unscale)
 		end
-		holders[i] = holder
+		redraws[i] = Crosshair.mount(unscaled)
 	end
 
-	local drawnKey: string?
 	-- Cette méthode permet de redessiner l'aperçu lorsque le style du viseur change (curseur glissé, choix, chargement).
 	local function redraw(settings: PlayerSettings.Settings)
-		local key = Crosshair.styleKey(settings)
-		if key == drawnKey then
-			return
-		end
-		drawnKey = key
-		for _, holder in holders do
-			for _, child in holder:GetChildren() do
-				if not child:IsA("UIScale") then
-					child:Destroy()
-				end
-			end
-			Crosshair.draw(holder, settings)
+		for _, redrawPane in redraws do
+			redrawPane(settings)
 		end
 	end
 	redraw(LocalSettings.get())
@@ -660,8 +654,7 @@ local function buildCrosshairCategory(block: Frame)
 	local defaults = PlayerSettings.CROSSHAIR
 	-- Visée simplifiée (#195) : affiche le crosshair, coupée par défaut ; Crosshair suit LocalSettings
 	local aimOptions = { { label = "ACTIVÉE", value = true }, { label = "COUPÉE", value = false } }
-	addPicker(crosshair, "Visée simplifiée", "simpleAim", aimOptions, 2, 2, function() end)
-	crosshair.list[#crosshair.list].reset = function() end
+	addPicker(crosshair, "Visée simplifiée", "simpleAim", aimOptions, 2, 2, function() end, nil, true)
 
 	local colorOptions = {}
 	local colorDefault = 1
@@ -690,7 +683,7 @@ local function buildCrosshairCategory(block: Frame)
 	local opacity = defaults.opacity
 	addSlider(crosshair, "Opacité", "crosshairOpacity", opacity.min, opacity.max, opacity.default, 2, function() end)
 
-	buildCrosshairPreview(crosshair, block)
+	buildCrosshairPreview(crosshair)
 end
 
 -- Cette méthode permet de construire les catégories et leurs réglages lorsque l'écran est initialisé ; une catégorie
@@ -825,6 +818,7 @@ function SettingsMenu.init(fpsCam: typeof(fpsCamRef))
 
 	local built = MenuPage.new("SettingsMenu", 3, "RÉGLAGES")
 	page = built
+	scaledRoot = built.group.Parent :: Frame
 
 	local block = UIKit.frame({
 		Name = "Block",
