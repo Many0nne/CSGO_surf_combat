@@ -44,9 +44,14 @@ MovementGuardRules.SUPPORT_MIN_NORMAL_Y = 0.05
 MovementGuardRules.FLIGHT_TIME_SLACK = 0.25
 -- Marge de hauteur (studs) au-dessus de l'enveloppe.
 MovementGuardRules.FLIGHT_HEIGHT_TOLERANCE = 3
--- Intervalle minimal (s) entre deux paquets d'un client honnête : le client envoie à SEND_INTERVAL en reportant le
--- reste, deux envois sont donc séparés d'au moins une frame et d'au moins SEND_INTERVAL moins une frame, soit au moins
--- la moitié de SEND_INTERVAL. Sert à majorer la vitesse verticale au décollage.
+-- Un paquet au-dessus de l'enveloppe isolé est pris pour un paquet arrivé en désordre ; un second dans cette fenêtre
+-- (paquets en l'air), même en alternance avec des paquets bas, est un vol.
+MovementGuardRules.SUSPECT_WINDOW = 2
+-- Retard (s) au plus d'un paquet ancien arrivé après un plus récent (gigue des paquets non fiables).
+MovementGuardRules.REORDER_TIME = 0.1
+-- Intervalle minimal (s) entre deux paquets d'un client honnête : le client envoie à SEND_INTERVAL en ne reportant
+-- qu'une demi-période au plus (CharacterSync.send), deux envois sont donc séparés d'au moins la moitié de
+-- SEND_INTERVAL, même après une saccade. Sert à majorer la vitesse verticale au décollage.
 MovementGuardRules.MIN_PACKET_INTERVAL = 0.5 / MovementConfig.NET_SYNC_RATE
 -- Marge (studs/s) ajoutée à la vitesse verticale déduite des paquets en l'air (positions affichées interpolées entre
 -- deux pas, glissement sur un mur presque vertical).
@@ -71,8 +76,8 @@ export type Box = { CFrame: CFrame, Size: Vector3 }
 -- l'enveloppe part de (anchorAt, anchorY) avec la vitesse verticale anchorVy au plus. lastAt/lastY : dernier paquet
 -- jugé. launchVy : vitesse verticale du lancement depuis le soleil, et boostVy : celle d'un geyser ou d'un lanceur
 -- touché (oubliée dès un paquet porté hors du volume), à prendre au prochain décollage. baseY : hauteur
--- du premier paquet en l'air, et count : paquets en l'air reçus depuis, pour resserrer l'enveloppe. suspect : le
--- paquet précédent dépassait l'enveloppe (un vol n'est signalé qu'au second de suite).
+-- du premier paquet en l'air, et count : paquets en l'air reçus depuis, pour resserrer l'enveloppe. seen : paquets en l'air
+-- jugés depuis l'apparition, lastHigh : numéro (seen) du dernier paquet au-dessus de l'enveloppe resté isolé.
 export type Flight = {
 	anchored: boolean,
 	anchorAt: number,
@@ -84,7 +89,8 @@ export type Flight = {
 	boostVy: number,
 	baseY: number,
 	count: number,
-	suspect: boolean,
+	seen: number,
+	lastHigh: number,
 }
 
 -- Suivi D2 d'un personnage : vol, `fresh` tant que le premier paquet (dont le point de départ est la racine posée par
@@ -190,7 +196,8 @@ function MovementGuardRules.newFlight(now: number, y: number, launchVy: number?)
 		boostVy = 0,
 		baseY = y,
 		count = 0,
-		suspect = false,
+		seen = 0,
+		lastHigh = -math.huge,
 	}
 end
 
@@ -213,7 +220,7 @@ function MovementGuardRules.restart(flight: Flight, now: number, y: number)
 	flight.boostVy = 0
 	flight.baseY = y
 	flight.count = 0
-	flight.suspect = false
+	flight.lastHigh = -math.huge
 end
 
 -- Cette méthode permet de majorer la vitesse verticale au décollage lorsqu'un premier paquet en l'air arrive : montée
@@ -257,21 +264,28 @@ function MovementGuardRules.ceiling(flight: Flight, now: number): number
 	local tau = now - flight.anchorAt
 	local slack = MovementGuardRules.FLIGHT_TIME_SLACK
 	local s = math.clamp(flight.anchorVy / GRAVITY, math.max(0, tau - slack), tau + slack)
+	-- Ancre resserrée en descente : un paquet parti avant elle peut encore arriver, plus haut d'au plus une chute
+	-- plafonnée pendant REORDER_TIME
+	local reorder = if flight.anchorVy < 0 and tau < MovementGuardRules.REORDER_TIME
+		then MAX_FALL * MovementGuardRules.REORDER_TIME
+		else 0
 	return flight.anchorY
 		+ MovementGuardRules.ballistic(flight.anchorVy, s)
 		+ MovementGuardRules.FLIGHT_HEIGHT_TOLERANCE
+		+ reorder
 end
 
 -- Cette méthode permet de juger la hauteur d'un paquet lorsqu'il arrive : porté, l'enveloppe attend le décollage ;
--- premier paquet en l'air, l'enveloppe part de lui ; ensuite, deux paquets de suite au-dessus de l'enveloppe = vol
--- (un seul : paquet arrivé en désordre). Sous l'enveloppe, elle est resserrée : la hauteur gagnée depuis le premier
--- paquet en l'air, en un temps au moins égal à celui de ses paquets (deux de marge pour le désordre), majore la vitesse
--- actuelle. Renvoie (honnête, dépassement en studs). Après un vol, l'enveloppe repart de ce point à l'arrêt : un joueur
--- qui plane encore n'est signalé qu'une fois cette nouvelle marge épuisée, pas à chaque paquet.
+-- premier paquet en l'air, l'enveloppe part de lui ; ensuite, deux paquets au-dessus de l'enveloppe à moins de
+-- SUSPECT_WINDOW paquets = vol (un seul : paquet arrivé en désordre). Sous l'enveloppe, elle est resserrée : la hauteur
+-- gagnée depuis le premier paquet en l'air, en un temps au moins égal à celui de ses paquets (deux de marge pour le
+-- désordre), majore la vitesse actuelle. Renvoie (honnête, dépassement en studs). Après un vol, l'enveloppe
+-- repart de ce point à l'arrêt : un joueur qui plane encore n'est signalé qu'une fois cette nouvelle marge épuisée,
+-- pas à chaque paquet.
 function MovementGuardRules.observe(flight: Flight, now: number, y: number, supported: boolean): (boolean, number)
 	if supported then
 		flight.anchored = false
-		flight.suspect = false
+		flight.lastHigh = -math.huge
 		flight.lastAt, flight.lastY = now, y
 		return true, 0
 	end
@@ -286,24 +300,27 @@ function MovementGuardRules.observe(flight: Flight, now: number, y: number, supp
 	local limit = MovementGuardRules.ceiling(flight, now)
 	flight.lastAt, flight.lastY = now, y
 	flight.count += 1
+	flight.seen += 1
 	if y > limit then
-		-- Un seul paquet au-dessus : peut-être un paquet ancien arrivé après un plus récent (non fiable), ignoré
-		if not flight.suspect then
-			flight.suspect = true
+		-- Un paquet au-dessus isolé : peut-être un paquet ancien arrivé après un plus récent (non fiable), ignoré ; un
+		-- second dans les SUSPECT_WINDOW paquets suivants (même en alternance avec des paquets bas) : vol
+		if flight.seen - flight.lastHigh > MovementGuardRules.SUSPECT_WINDOW then
+			flight.lastHigh = flight.seen
 			return true, 0
 		end
-		flight.suspect = false
+		flight.lastHigh = -math.huge
 		flight.anchorAt, flight.anchorY, flight.anchorVy = now, y, 0
 		flight.baseY, flight.count = y, 0
 		return false, y - limit
 	end
-	flight.suspect = false
 	-- Deux paquets de marge : le premier paquet en l'air ou celui-ci peuvent être arrivés en désordre
 	local packets = flight.count - 2
 	if packets >= 2 then
 		local elapsed = math.max(packets * MovementGuardRules.MIN_PACKET_INTERVAL, (packets - 1) * SEND_INTERVAL)
 		local vy = maxVyAfter(y - flight.baseY, elapsed) + MovementGuardRules.REFINE_MARGIN
-		if vy < flight.anchorVy - GRAVITY * (now - flight.anchorAt) then
+		-- Vitesse de l'enveloppe actuelle, plafonnée en chute comme celle du joueur
+		local current = math.max(flight.anchorVy - GRAVITY * (now - flight.anchorAt), -MAX_FALL)
+		if vy < current then
 			flight.anchorAt, flight.anchorY, flight.anchorVy = now, y, vy
 		end
 	end
@@ -347,15 +364,16 @@ function MovementGuardRules.judge(
 		flight.boostVy = 0
 	end
 	local honest, excess = MovementGuardRules.observe(flight, now, pos.Y, supported or boostVy > 0)
-	-- Journal seul : un paquet n'est signalé qu'une fois, le noclip d'abord ; le vol a quand même suivi la position
-	if noclip or honest then
-		return noclip
+	-- Un paquet n'est signalé qu'une fois : le vol s'il est bloquant (sinon le paquet serait appliqué), puis le noclip
+	-- (journal seul), puis le vol en journal seul
+	if not honest and (MovementGuardRules.ENFORCE_FLIGHT or not noclip) then
+		return {
+			rule = "flight",
+			enforce = MovementGuardRules.ENFORCE_FLIGHT,
+			detail = string.format("vol : %.1f studs au-dessus de la trajectoire balistique", excess),
+		}
 	end
-	return {
-		rule = "flight",
-		enforce = MovementGuardRules.ENFORCE_FLIGHT,
-		detail = string.format("vol : %.1f studs au-dessus de la trajectoire balistique", excess),
-	}
+	return noclip
 end
 
 -- Cette méthode permet de délimiter la zone où un joueur silencieux a pu atterrir lorsque le serveur cherche un sol

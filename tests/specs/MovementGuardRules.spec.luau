@@ -93,7 +93,7 @@ return function(T, Loader)
 				clock += 1 / fps
 				accumulator += 1 / fps
 				if accumulator >= INTERVAL then
-					accumulator = math.min(accumulator - INTERVAL, INTERVAL)
+					accumulator = math.min(accumulator - INTERVAL, INTERVAL / 2)
 					table.insert(sendTimes, clock)
 				end
 			end
@@ -405,6 +405,17 @@ return function(T, Loader)
 			T.expect(#verdicts > 0, "le vol après le geyser doit être signalé")
 		end)
 
+		T.it("un tricheur qui plane en alternant un paquet haut et un paquet bas est signalé", function()
+			local i = 0
+			local function path(t: number): Vector3
+				i += 1
+				local high = if t < 1 then STAND + 40 * t else STAND + 40
+				return V(10 * t, if i % 2 == 0 then high else high - 25, 0)
+			end
+			local verdicts = replay(packets(path, 5), geometryOf({ FLOOR }), V(0, STAND, 0))
+			T.expect(#verdicts > 0, "l'alternance ne doit pas masquer le vol")
+		end)
+
 		T.it("un lancement depuis le soleil n'est pas signalé, même au premier paquet tardif", function()
 			local launch = V(100, 80, 0)
 			local origin = V(0, 500, 0)
@@ -443,6 +454,28 @@ return function(T, Loader)
 	end)
 
 	T.describe("MovementGuardRules.judge (modes bloquants)", function()
+		T.it(
+			"un paquet qui traverse un mur en volant est refusé si le vol est bloquant et le noclip en journal seul",
+			function()
+				Rules.ENFORCE_FLIGHT = true
+				local ok, err = pcall(function()
+					local wall = box(V(19.5, 0, -10), V(20.5, 100, 10))
+					local geometry = geometryOf({ FLOOR, wall })
+					-- Plane à 40 studs depuis 1,5 s (enveloppe partie de là à l'arrêt), puis un paquet de plus et la traversée
+					local guard = Rules.newGuard(0, V(18, 42.5, 0))
+					guard.fresh = false
+					Rules.restart(guard.flight, 0, 42.5)
+					Rules.judge(guard, V(18, 42.5, 0), V(19, 42.5, 0), 1.45, geometry)
+					local last = Rules.judge(guard, V(19, 42.5, 0), V(21, 42.5, 0), 1.5, geometry)
+					T.expect(last ~= nil, "le paquet qui traverse doit être signalé")
+					T.expectEqual(last.rule, "flight")
+					T.expectEqual(last.enforce, true)
+				end)
+				Rules.ENFORCE_FLIGHT = false
+				assert(ok, err)
+			end
+		)
+
 		T.it(
 			"noclip : journal seul signale une fois et applique ; bloquant refuse chaque paquet de l'autre côté",
 			function()

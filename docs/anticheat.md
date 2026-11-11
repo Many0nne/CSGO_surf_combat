@@ -24,7 +24,7 @@ envoyant des données plausibles. Là, on ne peut que détecter statistiquement,
 |---|---|---|
 | Mêlée | Cible = autre participant vivant, arme de mêlée réellement en main, distance des racines ≤ 10 studs, dégâts et cadence lus dans `WeaponConfig` selon le type d'attaque, backstab recalculé sur les positions serveur (#47) ; pour un joueur, durée d'equip (#175, voir T2) | `src/server/Validator.luau` (`authorizeMelee`) |
 | Tir | Cible valide (vivante), arme à distance en main, partie touchée appartenant à la cible, distance des racines ≤ `Validator.MAX_HITSCAN_RANGE` (~2 196 studs ; bots : 250), cadence `FireDelay` à 0,15 s près, dégâts calculés par le serveur selon la zone ; pour un joueur, forme, origine, visée sur la cible rembobinée, portée et ligne de vue (#174, voir T1), durée d'equip et chargeur (#175, voir T2 ; l'equip vaut aussi pour la mêlée) | `src/server/Validator.luau` (`authorizeHitscan`, `validateShot`), `src/server/ShotRules.luau` |
-| Position | Forme (Vector3 et angle finis, coordonnées ≤ 1e5), personnage vivant, seau de distance (300 studs/s soutenus, silence plafonné), refus journalisé et corrigé (#172) ; noclip et vol journalisés (#177, journal seul), joueur silencieux au-dessus du vide déclaré tombé | `src/server/CharacterSync.luau:186-275`, `src/shared/CharacterSyncRules.luau:49-60`, `src/shared/MovementGuardRules.luau` |
+| Position | Forme (Vector3 et angle finis, coordonnées ≤ 1e5), personnage vivant, seau de distance (300 studs/s soutenus, silence plafonné), refus journalisé et corrigé (#172) ; noclip et vol journalisés (#177, journal seul), joueur silencieux au-dessus du vide déclaré tombé | `src/server/CharacterSync.luau:210-309`, `src/shared/CharacterSyncRules.luau:49-60`, `src/shared/MovementGuardRules.luau` |
 | Réglages | Réglages entièrement assainis par `PlayerSettings.sanitize`, une écriture DataStore au plus toutes les 10 s | `src/server/SettingsStore.luau:113-130` |
 | Feedback | Type `string`, longueur 10 à 500, délai de 60 s après un envoi réussi, 5 envois par semaine (DataStore) | `src/server/FeedbackService.luau:76-104` |
 | Debug | Remote `DebugPlaytest` créé seulement dans Studio | `src/server/DebugPlaytest.luau:365-372` |
@@ -338,7 +338,7 @@ gagnerait un seau plein à chaque cycle (40 cycles/s). Le numéro de correction 
 joueur (pas remis à zéro à la réapparition) pour qu'un ancien accusé ne valide pas une correction récente.
 
 **Réutiliser.** Une nouvelle règle de déplacement se branche dans `onClientPosition`, après le seau, et appelle
-`refuse(player, track, détail, now)` (`src/server/CharacterSync.luau:186`) : journal et correction compris. C'est ce que
+`refuse(player, track, détail, now)` (`src/server/CharacterSync.luau:210`) : journal et correction compris. C'est ce que
 fait D2 (#177, `judgeGuard`) ; `refuse` repart aussi l'enveloppe du vol de la position de correction.
 
 **Bots.** Non concernés : leurs positions viennent du serveur (`relayBot`), qui ne passe pas par le seau.
@@ -363,7 +363,7 @@ au-dessus du vide, ou qui n'envoie jamais de position sous `KillHeight`, ne mour
 **Parade en place.** Règles pures dans `src/shared/MovementGuardRules.luau` (testées sous Lune) ; la géométrie est
 fournie par `CharacterSync` (`buildGeometry`) : rayons et requêtes limités à la map jouée (`Include`) et à ses pièces
 qui collisionnent (`RespectCanCollide` : décor fantôme, volumes d'échelle et de boost exclus). Une position acceptée
-par le seau (D1) passe par `MovementGuardRules.judge` (`judgeGuard`, `src/server/CharacterSync.luau:200`).
+par le seau (D1) passe par `MovementGuardRules.judge` (`judgeGuard`, `src/server/CharacterSync.luau:225`).
 
 1. **Noclip** (`crossesWall`) : raycast `lastPos → newPos` (centre du personnage, qui chez un client honnête reste à
    `CHAR_RADIUS` des parois). Touché : quatre détours sont essayés (milieu du segment décalé vers le haut, le bas et les
@@ -382,8 +382,11 @@ par le seau (D1) passe par `MovementGuardRules.judge` (`judgeGuard`, `src/server
    de l'enveloppe sur `[τ - FLIGHT_TIME_SLACK, τ + FLIGHT_TIME_SLACK]` (gigue, paquets groupés) +
    `FLIGHT_HEIGHT_TOLERANCE`. Sous l'enveloppe, elle est **resserrée** à chaque paquet : la hauteur gagnée depuis le
    premier paquet en l'air, en au moins `max(n × MIN_PACKET_INTERVAL, (n - 1) × SEND_INTERVAL)` secondes (n = paquets
-   reçus moins deux, marge pour le désordre), majore la vitesse actuelle (`maxVyAfter` + `REFINE_MARGIN`). **Deux
-   paquets de suite** au-dessus = vol (un seul : paquet ancien arrivé après un plus récent). Après un vol signalé,
+   reçus moins deux, marge pour le désordre), majore la vitesse actuelle (`maxVyAfter` + `REFINE_MARGIN`, jamais sous
+   `-MAX_FALL_SPEED`) ; juste après un resserrement en descente, un paquet plus ancien arrivé en retard peut être plus
+   haut d'une chute plafonnée pendant `REORDER_TIME` (0,1 s), toléré. **Deux paquets au-dessus à moins de
+   `SUSPECT_WINDOW` (2) paquets d'écart** = vol (un seul : paquet ancien arrivé après un plus récent ; l'alternance
+   haut/bas d'un tricheur est prise). Un vol bloquant passe avant un noclip en journal seul. Après un vol signalé,
    l'enveloppe repart du point atteint, vitesse nulle : un joueur qui plane encore est signalé environ deux fois par
    seconde, pas à chaque paquet. Lancement depuis le soleil : la vitesse `LaunchVelocity` du personnage ouvre
    l'enveloppe. Correction (D1 ou D2) : enveloppe repartie de la position de correction avec la vitesse d'un saut.
@@ -420,8 +423,10 @@ devrait les chercher par une requête spatiale.
 **Pièges.**
 
 - Les paquets non fiables peuvent arriver dans le désordre et groupés : jamais d'estimation de vitesse sur l'heure
-  d'arrivée de deux paquets successifs. Le seul temps sûr côté client est l'intervalle minimal entre deux envois
-  (`CharacterSync.send` reporte le reste : au moins une demi-période, quelle que soit la cadence d'images).
+  d'arrivée de deux paquets successifs. Le seul temps sûr côté client est l'intervalle minimal entre deux envois :
+  `CharacterSync.send` (client) ne reporte qu'une demi-période au plus, donc deux envois sont séparés d'au moins
+  `SEND_INTERVAL / 2`, même après une saccade (avant #177, le report d'une période entière permettait deux envois à
+  une frame d'écart). Ne pas relever ce plafond sans revoir `MIN_PACKET_INTERVAL`.
 - En chute plafonnée (`MAX_FALL_SPEED`), une parabole ne vaut plus : une borne de vitesse déduite d'une parabole doit
   être ramenée à `-MAX_FALL_SPEED` au plus bas.
 - Raycasts `Include` sur la map et `RespectCanCollide` : un client honnête collisionne aussi avec les pièces `CanQuery`
@@ -461,7 +466,7 @@ commune (débit et types, voir R1) ; la colonne « Validation actuelle » décri
 |---|---|---|---|---|
 | `MeleeDamage` | C→S | `targetChar, attackKind` | Cible, arme, portée, type d'attaque, cadence, dégâts serveur, durée d'equip (T2, #175) (`Validator.authorizeMelee`) | Orientation, ligne de vue (M1), tireur vivant |
 | `HitscanDamage` | C→S | `targetChar, hitPart, origin, direction, hitPos, shotTime` | Cible, arme, partie de la cible, portée des racines, cadence ; forme, origine, visée rembobinée, portée 2 048, ligne de vue (T1, #174 : origine, visée et ligne de vue en journal seul) ; durée d'equip et chargeur (T2, #175) | Passage en `block` après mesure (T1), tireur vivant |
-| `CharacterSync` (non fiable) | C→S puis S→C | `pos, yaw, ack` | Forme, débit 40 Hz (garde), seau de distance et silence plafonné, refus corrigé (D1, `CharacterSync.luau:113-165`) | Noclip, vol (D2) |
+| `CharacterSync` (non fiable) | C→S puis S→C | `pos, yaw, ack` | Forme, débit 40 Hz (garde), seau de distance et silence plafonné, refus corrigé (D1, `CharacterSync.luau:247-309`) ; noclip et vol au journal, vide (D2, #177) | Noclip et vol en mode bloquant après mesure (D2) |
 | `MovementCorrection` | S→C | `char, pos, seq` | — | — |
 | `WeaponAction` | C→S | `action` | Valeur `Shoot`/`Reload`, outil en main, 0,05 s mini (`init.server.luau`) ; `Reload` démarre le rechargement suivi par le serveur avant ces filtres (T2, #175) | `Shoot` non lié à la cadence de l'arme : 20 faux tirs/s attirent les bots (`BotManager.hearShot` dans le handler `WeaponAction`) et, avec #156, déclencheraient 20 sons chez tous |
 | `RequestSpawn` | C→S | aucun | `SpawnRules.request` : spawn en vol, personnage en place, bannière de fin, mort depuis moins de `RESPAWN_DELAY` en round actif (`SpawnManager.luau:137-169`) | Rien (R1 fermé, #171) |
@@ -549,7 +554,7 @@ sur l'action visuelle du client.
 ## Aimbot et triggerbot (A1)
 
 **Aujourd'hui.** Rien. Le serveur ne connaît pas l'orientation verticale de la caméra (seul le cap est envoyé,
-`src/client/systems/network/CharacterSync.luau:120-127`).
+`src/client/systems/network/CharacterSync.luau:120-130`).
 
 **Risque.** Élevé : après T1, l'aimbot reste la triche la plus efficace, et elle envoie des données valides.
 
@@ -570,8 +575,8 @@ humaine. Sur un FPS à l'AWP, les très bons joueurs ont naturellement beaucoup 
 **Aujourd'hui.** Toutes les positions sont envoyées à tous :
 
 - le relais `CharacterSync` envoie à chaque autre joueur la position de chacun, sans filtre
-  (`src/server/CharacterSync.luau:158-163`, `:197`) ;
-- le serveur pose la racine de chaque personnage (`:155`), propriété répliquée nativement à tous les clients ;
+  (`src/server/CharacterSync.luau:303-307`, `:408`) ;
+- le serveur pose la racine de chaque personnage (`:299`), propriété répliquée nativement à tous les clients ;
 - les personnages sont dans `Workspace`, sans streaming (`default.project.json:43`) ;
 - `PlayerDied` donne la position de chaque mort (`RoundManager.luau:162-173`), et #156 relaiera les tirs.
 

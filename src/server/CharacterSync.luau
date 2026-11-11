@@ -265,11 +265,12 @@ local function onClientPosition(
 	local track = trackFor(player, char, root, now)
 	-- Le client vit, même si ce paquet est ignoré ci-dessous (règle du vide) ; sauf s'il ignore sa correction depuis
 	-- VOID_SILENCE : au-dessus du vide, il finit déclaré tombé
-	if track.acked or now - track.refusedAt < MovementGuardRules.VOID_SILENCE then
+	local stale = CharacterSyncRules.awaitsAck(track.requiredAck, ack)
+	if not stale or track.acked or now - track.refusedAt < MovementGuardRules.VOID_SILENCE then
 		track.guard.heardAt = now
 	end
 	-- Envoyé avant d'avoir appliqué la correction : ni jugé ni journalisé (le temps continue de remplir le seau)
-	if CharacterSyncRules.awaitsAck(track.requiredAck, ack) then
+	if stale then
 		if not track.acked and now - track.correctedAt >= CORRECTION_RESEND then
 			fireCorrection(player, track, now)
 		end
