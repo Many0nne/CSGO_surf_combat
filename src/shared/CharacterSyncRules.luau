@@ -67,6 +67,12 @@ function CharacterSyncRules.awaitsAck(requiredAck: number, ack: number): boolean
 	return ack < requiredAck
 end
 
+-- Cette méthode permet au client de décider s'il applique une correction du serveur lorsqu'elle arrive : position
+-- valide, numéro plus récent que la dernière correction appliquée (ack), et pour le personnage local actuel (target).
+function CharacterSyncRules.acceptsCorrection(char: any, pos: any, seq: any, target: Model?, ack: number): boolean
+	return typeof(pos) == "Vector3" and type(seq) == "number" and seq > ack and target ~= nil and char == target
+end
+
 -- Cette méthode permet de lire le cap horizontal (rad, autour de Y) d'une orientation lorsque le client l'envoie.
 function CharacterSyncRules.yawOf(look: Vector3): number
 	return math.atan2(-look.X, -look.Z)

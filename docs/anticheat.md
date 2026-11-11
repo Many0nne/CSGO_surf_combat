@@ -222,8 +222,8 @@ cible rend le kill aura (M1) praticable sur toute la map.
    client joint à chaque paquet `CharacterSync` le numéro de la dernière correction appliquée ; tant qu'il est
    inférieur à la correction en attente, ses paquets (partis d'une position déjà refusée) sont ignorés sans être jugés
    ni journalisés : **pas de boucle de corrections**. Le numéro exigé reste en place après l'accusé : un paquet plus
-   ancien arrivé en retard (non fiable, donc parfois en désordre) est aussi ignoré. Correction renvoyée si elle reste
-   sans réponse 1 s (filet). Un numéro forgé ne fait que reprendre la validation : il ne donne aucun budget ; un client
+   ancien arrivé en retard (non fiable, donc parfois en désordre) est aussi ignoré. Correction renvoyée au premier
+   paquet périmé reçu plus d'1 s après le dernier envoi (filet). Un numéro forgé ne fait que reprendre la validation : il ne donne aucun budget ; un client
    qui n'accuse jamais réception reste figé côté serveur à sa dernière position acceptée.
    **Mode journal seul** : `CharacterSyncRules.ENFORCE_MOVEMENT = false` garde le journal mais applique le
    déplacement refusé (seau vidé), sans correction. À utiliser si des joueurs honnêtes sont corrigés en surf.
@@ -380,7 +380,7 @@ sur l'action visuelle du client.
 ## Aimbot et triggerbot (A1)
 
 **Aujourd'hui.** Rien. Le serveur ne connaît pas l'orientation verticale de la caméra (seul le cap est envoyé,
-`src/client/systems/network/CharacterSync.luau:123-130`).
+`src/client/systems/network/CharacterSync.luau:120-127`).
 
 **Risque.** Élevé : après T1, l'aimbot reste la triche la plus efficace, et elle envoie des données valides.
 

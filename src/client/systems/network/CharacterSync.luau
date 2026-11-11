@@ -30,11 +30,8 @@ local correctionApply: ((Vector3) -> ())? = nil
 -- Cette méthode permet d'appliquer une correction du serveur lorsqu'elle arrive : seulement pour le personnage local
 -- actuel (pas celui d'avant une réapparition), une seule fois par numéro, et le numéro n'est retenu qu'une fois appliqué.
 local function onCorrection(char: any, pos: any, seq: any)
-	if typeof(pos) ~= "Vector3" or type(seq) ~= "number" or seq <= correctionAck then
-		return
-	end
 	local apply = correctionApply
-	if not apply or char ~= correctionTarget then
+	if not apply or not CharacterSyncRules.acceptsCorrection(char, pos, seq, correctionTarget, correctionAck) then
 		return
 	end
 	apply(pos)

@@ -156,6 +156,22 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("CharacterSyncRules.acceptsCorrection", function()
+		local char = Instance.new("Model")
+
+		T.it("applique une correction plus récente pour le personnage local", function()
+			T.expectEqual(Rules.acceptsCorrection(char, Vector3.zero, 2, char, 1), true)
+		end)
+
+		T.it("ignore un numéro déjà appliqué, un ancien personnage ou une valeur invalide", function()
+			T.expectEqual(Rules.acceptsCorrection(char, Vector3.zero, 1, char, 1), false, "renvoi déjà appliqué")
+			T.expectEqual(Rules.acceptsCorrection(Instance.new("Model"), Vector3.zero, 2, char, 1), false, "mort")
+			T.expectEqual(Rules.acceptsCorrection(char, Vector3.zero, 2, nil, 1), false, "pas de mouvement local")
+			T.expectEqual(Rules.acceptsCorrection(char, "pos", 2, char, 1), false)
+			T.expectEqual(Rules.acceptsCorrection(char, Vector3.zero, nil, char, 1), false)
+		end)
+	end)
+
 	T.describe("CharacterSyncRules.awaitsAck", function()
 		T.it("n'ignore rien sans correction en attente", function()
 			T.expectEqual(Rules.awaitsAck(0, 0), false)
