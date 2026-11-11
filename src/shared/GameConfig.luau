@@ -3,6 +3,7 @@
 return {
 	ROUND_DURATION     = 300,  -- 5 minutes
 	RESPAWN_DELAY      = 2.5,
+	RESPAWN_MARGIN     = 3,    -- seconds past RESPAWN_DELAY before a DEAD client asks to spawn again (#245)
 	RESULT_DURATION    = 6,    -- seconds result banner is shown before returning to menu
 	AUTO_SAVE_INTERVAL = 120,
 	SPAWN_PROTECTION   = 2.5,  -- seconds of invulnerability while launched from the sun (#69)
