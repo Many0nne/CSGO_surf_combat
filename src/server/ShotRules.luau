@@ -135,11 +135,13 @@ ShotRules.MELEE_MAX_ANGLE = 70
 -- son axe, l'angle permis est élargi de asin(MELEE_BODY_RADIUS / distance horizontale) (90° au contact).
 ShotRules.MELEE_BODY_RADIUS = 2
 -- Instant annoncé (#214) : un tir honnête arrive now - shotTime = aller simple + délais de frame après son départ.
--- Borne = ping du tireur (Player:GetNetworkPing, aller-retour mesuré par le moteur) × PING_FACTOR + PING_MARGIN :
--- l'aller-retour entier couvre un aller plus lent que le retour, la marge couvre la frame du tir, le tick réseau du
+-- Borne = ping du tireur (Player:GetNetworkPing, aller-retour moyen mesuré par le moteur) × PING_FACTOR + PING_MARGIN.
+-- Facteur 2 : un remote fiable perdu est renvoyé (un aller-retour de plus), un aller peut être plus lent que le
+-- retour, et des retours du DevForum disent que GetNetworkPing rend la moitié de l'aller-retour (la doc dit
+-- l'aller-retour) : à vérifier en jeu publié avant de serrer. La marge couvre la frame du tir, le tick réseau du
 -- client, le Heartbeat du serveur et la synchronisation de GetServerTimeNow. Un instant plus ancien vise une position
 -- de la cible que le tireur ne voyait plus (« backtrack »).
-ShotRules.PING_FACTOR = 1
+ShotRules.PING_FACTOR = 2
 ShotRules.PING_MARGIN = 0.1
 -- Avance tolérée (s) d'un instant annoncé sur l'horloge serveur (erreur de synchronisation de GetServerTimeNow).
 ShotRules.CLOCK_TOLERANCE = 0.05

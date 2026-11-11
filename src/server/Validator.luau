@@ -507,7 +507,9 @@ end
 local EYE_OFFSET = Vector3.new(0, CameraConfig.CAM_HEIGHT_STAND, 0)
 local EYE_OFFSET_CROUCH = Vector3.new(0, CameraConfig.CAM_HEIGHT_CROUCH, 0)
 -- Durée (s) pour que la caméra qui s'accroupit (approche exponentielle à CAM_LERP_SPEED, CrouchSystem) arrive à
--- 0,1 stud de CAM_HEIGHT_CROUCH : avant, l'œil est encore plus haut, pris debout (plus permissif).
+-- 0,1 stud de CAM_HEIGHT_CROUCH : avant, l'œil est encore plus haut, pris debout (comme avant #213 ; en se relevant,
+-- l'œil debout est pris tout de suite, plus haut que la caméra qui remonte : un obstacle en surplomb peut alors
+-- couper le segment œil à tête, il reste celui des racines).
 local CROUCH_EYE_SETTLE = math.log((CameraConfig.CAM_HEIGHT_STAND - CameraConfig.CAM_HEIGHT_CROUCH) / 0.1)
 	/ CameraConfig.CAM_LERP_SPEED
 
@@ -553,7 +555,8 @@ local function validateMelee(
 		reportCheck(world, attacker, check, detail, refuses, CheatTypes.Category.MELEE)
 	end
 
-	-- Instant du coup (#214) : notre client l'envoie toujours ; sans lui, rien ne dit où le tireur voyait la cible
+	-- Instant du coup (#214) : notre client l'envoie toujours, et la garde (RemoteGuard) l'exige ; filet si un appel
+	-- passe sans elle : rien ne dirait où le tireur voyait la cible
 	if hitTime == nil or not MathRules.isFinite(hitTime) then
 		fail(ShotRules.Check.SHAPE, "coup sans instant")
 		return not blocked

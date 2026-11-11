@@ -56,8 +56,8 @@ return function(T, Loader)
 				local ok, detail = ShotRules.checkShotDelay(100 - delay, 100, ping)
 				T.expect(ok, string.format("ping %.0f ms : %s", ping * 1000, detail or "?"))
 			end
-			-- Aller plus lent que le retour : l'aller-retour entier passe encore
-			T.expectEqual((ShotRules.checkShotDelay(100 - 0.15, 100, 0.15)), true, "aller = aller-retour")
+			-- Aller plus lent que le retour, ou remote fiable renvoyé : un aller-retour de plus passe encore
+			T.expectEqual((ShotRules.checkShotDelay(100 - 0.15 * 1.5 - 0.033, 100, 0.15)), true, "paquet renvoyé")
 		end)
 
 		T.it("signale un instant 0,4 s en arrière avec 30 ms de ping (backtrack)", function()
@@ -76,8 +76,9 @@ return function(T, Loader)
 			T.expectEqual((ShotRules.checkShotDelay(99.6, 100, 0 / 0)), true)
 		end)
 
-		T.it("borne = aller-retour + PING_MARGIN, toujours sous le rembobinage maximal à ping courant", function()
-			T.expect(math.abs(ShotRules.maxShotDelay(0.05) - (0.05 + ShotRules.PING_MARGIN)) < 1e-9, "borne")
+		T.it("borne = ping × PING_FACTOR + PING_MARGIN, journal seul", function()
+			local expected = 0.05 * ShotRules.PING_FACTOR + ShotRules.PING_MARGIN
+			T.expect(math.abs(ShotRules.maxShotDelay(0.05) - expected) < 1e-9, "borne")
 			T.expectEqual(ShotRules.MODES.ping, "log")
 			T.expectEqual(ShotRules.SEVERITY.ping, "medium")
 		end)
