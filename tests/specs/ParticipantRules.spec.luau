@@ -32,6 +32,7 @@ return function(T, Loader)
 			T.expectEqual(Rules.killCountsInStats(true, false), false, "bot tué")
 			T.expectEqual(Rules.killCountsInStats(false, true), false, "tueur bot")
 			T.expectEqual(Rules.killCountsInStats(false, nil), false, "sans tueur")
+			T.expectEqual(Rules.killCountsInStats(true, true), false, "bot tue bot")
 		end)
 	end)
 
