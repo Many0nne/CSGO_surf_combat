@@ -295,7 +295,7 @@ la cible (silent aim) reste signalé, la tête garde sa règle (pas de ×4 gagn�
 l'impact annoncé s'il est dans la sphère : un impact forgé jusqu'à l'allonge devant l'épaule raccourcit le segment
 d'autant (un mur collé à la cible peut être sauté, `lineOfSight` est en journal seul). Ces deux marges ne se
 referment qu'en reproduisant la tenue côté serveur (piste B, #240 l'a écartée) ; la sphère est la plus petite qui
-contienne le bras dans toute pose.
+contienne le bras quels que soient les angles de ses articulations (rotations seules, comme les pistes et les tenues).
 
 **Tests.** `tests/specs/ShotRules.spec.luau` (« membres jugés dans l'allonge de l'épaule ») : parties concernées,
 allonge exacte et contenant le bras dans toute pose, déplacement de l'épaule par la taille, membre au bout de
