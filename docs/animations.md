@@ -14,6 +14,21 @@ seconde :
 Sur la M9, toutes les poses avaient été validées, mais la rotation de l'Equip était cassée en jeu parce que l'étape 2
 avait été sautée.
 
+**Aucune clé n'est posée sans vidéo de référence.** « Pas de vidéo de cette arme » n'est pas une exception : on prend
+l'arme de la même famille dans `references/` (index plus bas), une vidéo d'un autre jeu ou d'un film pour le geste, ou
+dix secondes filmées au téléphone par l'utilisateur (caméra fixe, un stylo ou l'objet réel à la main). Une planche
+dessinée par Claude est une supposition, pas une référence : le Ka-Bar v3 (2026-11-11) a été fait « d'une planche
+validée, sans vidéo », avec le couteau CT de CS:GO disponible dans la même famille : balayage qui reste dans la moitié
+droite de l'écran au lieu de traverser le cadre bras tendu, lame vue par la tranche, estoc latéral. Sans référence,
+Claude interpole des poses : il n'a aucun modèle de l'anticipation, du profil de vitesse, de la profondeur ni des
+sorties de cadre. Et une vidéo à juger se présente toujours avec sa vitesse (×1 puis ×0,25, comme `side_by_side.py`) :
+un ralenti seul fait prendre un armé de 0,25 s pour un armé d'une seconde.
+
+**Le seul livrable à valider est une vidéo côte à côte** référence / rendu aux mêmes instants (`side_by_side.py`). Un
+rendu seul n'est jamais présenté. Quand un choix reste subjectif (vitesse, amplitude, hauteur), Claude produit deux ou
+trois variantes qui ne diffèrent que sur ce paramètre, dans la même vidéo, et l'utilisateur choisit par lettre : il n'a
+pas à décrire ce qu'il veut, seulement à reconnaître ce qui est juste.
+
 ## Le processus
 
 | Étape | Ce que fait l'utilisateur | Ce que fait Claude | Ce qui est validé |
@@ -24,6 +39,56 @@ avait été sautée.
 | 4. En jeu | Valide le résultat final | Publie, met à jour le viewmodel, vérifie | Ressenti, son |
 
 Rien n'est publié avant la validation de l'étape 3.
+
+## Grammaire des gestes de couteau (mesurée sur CS:GO)
+
+Relevée image par image (30 i/s) sur le couteau CT par défaut de `references/anim/csgo-couteaux-toutes-animations.mp4`
+(6:20 à 6:44) et l'Equip du couteau T (6:44). Positions en fraction du cadre 16:9 (0,0 = haut gauche), longueurs en
+hauteurs d'écran, temps depuis le début du geste. Ces nombres sont les cibles par défaut d'un geste de couteau, original
+ou non ; `dump_frames.py` les contrôle (voir « Contrôler le résultat »). Une arme d'une autre famille se mesure de la même
+façon avant d'écrire sa première clé.
+
+| Geste | Mesures sur la référence |
+|---|---|
+| Repos | Main (centre du gant) à (0,72 ; 0,85), gant ≈ 0,2 de la largeur, manche coupée par le coin bas droit. Lame **de face** (toute sa largeur visible), pointe en haut à gauche à ≈ 45° de la verticale, 0,37 de long à l'écran. Dérive < 0,01 par seconde. |
+| Taille (Shoot), 1,5 s | Anticipation 0,17 s : la lame pivote d'environ 40° vers l'horizontale, la main bouge à peine. Frappe en **une image (33 ms)** : la main passe du coin bas droit à (0,40 ; 0,35), le bras tendu traverse le cadre en diagonale depuis le coin bas gauche. Suivi 0,3 s vers le bas à gauche, sortie du cadre à 0,53 s. **Hors cadre 0,6 s** (0,57 à 1,17). Retour par le **haut à droite**, main petite (loin), redescend au repos en 0,3 s. On ne revient jamais par où on est sorti. |
+| Estoc (Stab), 1,0 s | Anticipation 0,03 à 0,07 s : la main **plonge sous le cadre**. Poussée 0,1 s : la main remonte au centre (0,50 ; 0,75), bras tendu, couteau raccourci par la perspective (pointe vers l'avant et le haut). Retrait 0,3 s : la main revient à droite, le couteau grossit (proche), lame haute, pointe en haut à gauche ; la main gauche entre en bas à gauche. Repos à 1,0 s. |
+| Equip, 0,5 s | Entre par le bas à droite déjà proche du repos, les deux mains visibles 0,1 s. Le couteau **pivote de 180° dans le poing** pendant que la main monte (0,03 à 0,30 s). Couteau vertical au centre droit à 0,33 s, puis repos. |
+| Inspect, 5,4 s | Montée au centre en 0,4 s, couteau vertical, face vers la caméra. Tenue 2,0 s avec dérive lente. Bascule 1,2 s vers la gauche (pointe à ≈ 30°) qui montre l'autre face, retour vertical, tenue 1,4 s. Descente 0,4 s avec un petit mouvement de poignet. **Jamais de pause sur la tranche.** |
+
+Ce que ces mesures ont en commun, et qui vaut pour tout geste d'arme blanche :
+
+- **La frappe tient en 1 à 3 images.** Toute la durée du geste est dans une anticipation courte (≤ 0,2 s) et dans le
+  retour (≥ 60 % du geste). Un armé d'une seconde est une pose, pas un coup.
+- **La main sort du cadre** au moins une fois par coup, et ne revient pas par où elle est sortie.
+- **La profondeur travaille** : le couteau au bout du bras tendu paraît 1,5 à 2 fois plus petit que proche de la caméra.
+  Une rotation sur place, à profondeur fixe, ne ressemble à aucun coup de la référence.
+- **Le bras tendu se voit en entier**, en diagonale à travers le cadre, pendant la frappe et la poussée.
+- **Retour au repos en moins d'une seconde** après le pic de vitesse.
+- **Rien ne s'arrête au milieu d'un geste** (pas de clé `io` entre le départ et le pic : vitesse nulle = geste cassé).
+- **Au repos et aux pauses, la lame est de face.** La tranche et le dos ne sont jamais des poses tenues.
+
+## Un geste original
+
+L'originalité porte sur l'arme, la trajectoire et le rythme, pas sur la méthode : un geste inédit se décompose en
+archétypes qui, eux, ont tous une référence ou une physique.
+
+1. **Décomposer.** Une faux qui arrive de loin en tournant sur elle-même et se plante dans la main, c'est : une approche
+   (objet lancé qui revient), une réception (un Equip : impact, recul, tassement) et un repos. Chaque morceau se traite
+   séparément et se raccorde par `settle`.
+2. **La physique d'abord.** Un objet en vol suit un arc balistique, tourne à vitesse constante et ne ralentit que dans la
+   main. Vitesse angulaire, hauteur de l'arc, durée d'approche sont des nombres qu'on calcule ou qu'on simule dans
+   Blender, pas qu'on devine image par image.
+3. **La référence est celle du geste, pas de l'arme.** Le rappel de la hache dans God of War (2018), le marteau qui
+   revient dans les films Thor, sont des références recevables pour « un objet qui revient en tournant ». Les ranger
+   dans `references/` sous le nom du geste, pas de l'arme. L'utilisateur fournit un lien ou un extrait ; Claude peut en
+   proposer un à confirmer.
+4. **Ce qui reste subjectif se tranche par variantes**, un paramètre à la fois (vitesse de rotation, hauteur de l'arc,
+   durée du tassement), dans une seule vidéo côte à côte. L'utilisateur choisit par lettre.
+5. **Le fragment reproductible se filme.** La réception, le geste du poignet, un moulinet : dix secondes au téléphone
+   valent mieux que dix allers-retours.
+6. **La grammaire s'applique quand même** : frappe courte, sortie de cadre, profondeur, retour rapide, lame de face aux
+   pauses. `dump_frames.py` le vérifie sur n'importe quel geste.
 
 ## L'AWP : mesurer deux points et reconstruire la pose
 
@@ -49,7 +114,7 @@ lune run assets/awp_viewmodel/make_rbxm.luau <sortie> <sortie> Equip Shoot Reloa
 bash tools/anim/publish.sh <sortie> AWP_ Equip Shoot Reload
 ```
 
-Pour le rendu : `VIEWMODEL = "AWP"` et `RECENTER_HANDLE = false` dans `studio_render.luau`. `dump_frames.py` ne sert qu'à la M9.
+Pour le rendu : `VIEWMODEL = "AWP"` et `RECENTER_HANDLE = false` dans `studio_render.luau`. `dump_frames.py` sert aux couteaux (scripts `build_viewmodel.py`), pas à l'AWP.
 
 Le `.blend` garde les anciennes actions : `run_build.py` les régénère à chaque lancement et ne sauvegarde pas le fichier.
 
@@ -106,7 +171,7 @@ blender -b --factory-startup --python <script qui exécute build_viewmodel.py av
 lune run assets/m9_viewmodel/make_rbxm.luau assets/m9_viewmodel/export assets/m9_viewmodel/export <Nom>
 
 # Étape 3 : exporter les frames et lire les vitesses de rotation, AVANT tout rendu
-blender -b --factory-startup --python tools/anim/dump_frames.py -- <dossier_build_viewmodel> <Nom> <frames.json>
+blender -b --factory-startup --python tools/anim/dump_frames.py -- <dossier_build_viewmodel> <Nom> <frames.json> [taille|estoc|equip|inspect]
 
 # Rendu dans Studio : lancer le serveur, puis coller tools/anim/studio_render.luau dans execute_luau (Edit)
 uv run tools/anim/capture_server.py <dossier_captures> <frames.json>
@@ -147,6 +212,10 @@ Si un clone reste dans `Workspace` après une erreur de rendu, supprimer `__Anim
 
 - **Lire d'abord le tableau de `dump_frames.py`.** Une rotation propre monte puis redescend, sans creux ni pic isolé, et
   la main reste à 0 tant que le couteau tourne dedans. C'est le contrôle le moins cher : il ne coûte aucun rendu.
+- **Lire ensuite son bilan de grammaire.** `dump_frames.py` mesure le profil du geste (départ, pic de vitesse, durée de
+  la frappe, temps hors cadre, retour au repos, écart de profondeur) et le compare aux cibles de la grammaire selon
+  l'archétype (déduit du nom de l'animation, ou donné en quatrième argument : `taille`, `estoc`, `equip`, `inspect`).
+  Chaque ligne `GRAMMAIRE` est un écart à corriger avant tout rendu, ou à justifier dans la PR.
 - **Regarder des images consécutives**, jamais des images espacées : 8 images réparties sur 1 s ne révèlent pas un saut.
 - **Vérifier que l'arme reste visible** : les bras R15 sont massifs (1,2 stud) et cachent ce qui passe derrière eux.
 - **En jeu, comparer des nombres** : figer la piste (`AdjustSpeed(0)`, `TimePosition`) et comparer les CFrames au JSON
