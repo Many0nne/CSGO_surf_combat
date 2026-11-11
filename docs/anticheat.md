@@ -439,7 +439,9 @@ fait D2 (#177, `judgeGuard`) ; `refuse` repart aussi l'enveloppe du vol de la po
 horizontaux et chute à `MAX_FALL_SPEED` avec 80 ms de gigue acceptés, 520 studs/s corrigés, 300 studs/s soutenus, surf
 à 220 studs/s avec 80 ms de gigue, paquets groupés, rafale à 40 Hz, tricheur borné à 20 et 40 Hz, silences, suite de refus, reprise après
 correction). En jeu (Studio, latence nulle) : bhop sans refus ; un paquet forgé de 400 studs pendant une course est
-refusé une fois, journalisé, corrigé, et la course reprend sans seconde correction. Reste à observer en jeu publié :
+refusé une fois, journalisé, corrigé, et la course reprend sans seconde correction. #212 (Studio) : un lanceur
+temporaire imposant 600 studs/s donne au plus 420 horizontaux et 426 en 3D vus par le serveur, sans refus ni
+correction ; bhop sans refus. Reste à observer en jeu publié :
 surf rapide avec un vrai ping (journal `Movement` des joueurs honnêtes).
 
 **Impact.** Ramène le tricheur à 450 studs/s au plus et supprime la téléportation, qui est l'aide principale du kill
