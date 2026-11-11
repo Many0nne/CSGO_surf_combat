@@ -78,10 +78,13 @@ return function(T, Loader)
 	end)
 
 	T.describe("ShotEffectRules.tracerStart : canon dessiné loin du tir (#54)", function()
-		T.it("part de l'origine quand le canon dessiné est sans rapport avec le tir (personnage pas à jour)", function()
-			local lagging = ORIGIN + Vector3.new(ShotEffectRules.MUZZLE_MAX_OFFSET + 5, 0, 0)
-			T.expectEqual(ShotEffectRules.tracerStart(ORIGIN, lagging, ORIGIN + FORWARD * 200), ORIGIN)
-		end)
+		T.it(
+			"part de l'origine quand le canon dessiné est sans rapport avec le tir (personnage pas à jour)",
+			function()
+				local lagging = ORIGIN + Vector3.new(ShotEffectRules.MUZZLE_MAX_OFFSET + 5, 0, 0)
+				T.expectEqual(ShotEffectRules.tracerStart(ORIGIN, lagging, ORIGIN + FORWARD * 200), ORIGIN)
+			end
+		)
 
 		T.it("garde le canon en retard d'un surfeur rapide (moins de MUZZLE_MAX_OFFSET)", function()
 			local near = ORIGIN + Vector3.new(ShotEffectRules.MUZZLE_MAX_OFFSET - 1, 0, 0)
