@@ -15,9 +15,10 @@ code qui lit la map doit passer par là, jamais par un nom de map en dur. Rotati
 ## Dizzy (map par défaut)
 
 Toit d'un gratte-ciel au-dessus des nuages, reproduit d'après `ar_dizzy` (CS:GO, port CS2 `ar_dizzy.vpk` de ModDB) :
-pièces, escaliers, mât central, deux grandes rampes de surf dans les fosses d'angle. Habillage à nous (béton, enduit,
-acier, fût de tour aux fenêtres allumées, mer de nuages au crépuscule). Jouable à pied, apparition au sol (24 points,
-`info_player_*` de l'original, attribut `Team`), pas de boosts, mouvement et gravité du jeu inchangés.
+pièces, escaliers, mât central, deux grandes rampes de surf dans les fosses d'angle. Habillage à nous (béton, enduit
+blanc cassé à bande bleu clair, tôle ondulée, acier, fût de tour aux fenêtres allumées, mer de nuages au
+crépuscule). Jouable à pied, apparition au sol (24 points, `info_player_*` de l'original, attribut `Team`), pas de
+boosts, mouvement et gravité du jeu inchangés.
 
 - **Échelle** : 10 studs par mètre en plan, 7 en hauteur (`H_SCALE`, `V_SCALE` de `extract_dizzy.py`), environ
   560 × 600 studs, toit à Y = 0. Rampes de surf à ~62° (69° dans l'original). Une v1 à 5 et 3,5 studs par mètre
@@ -232,12 +233,27 @@ par `mirror` : la map est symétrique par un demi-tour autour de (0, -260,1).
   joints sombres, vis le long des chants, cornières et lisses en bois) ; mât en treillis jaune (membrures, entretoises,
   diagonales en zigzag), plateforme, flèche jusqu'au chariot relevé, contre-flèche lestée, cabine, pylône et tirants,
   câbles de levage jusqu'à la charge relevée. Le bloc du mât reste (invisible) pour la collision.
-- **Bardage** (`CLADDING`) : pans de tôle ondulée (nervures tous les ~1,6 stud, bande basse ocre, couvertine,
-  cornières) sur la façade du garage éclairé, le volume de l'échelle et le mur de la zone de stockage. Un pan est un
-  rectangle sur le nu du mur : laisser les ouvertures hors des rectangles.
+- **Bardage** (`CLADDING`) : pans de tôle ondulée (nervures tous les ~1,6 stud, bande de couleur, couvertine,
+  cornières) sur tout le bloc garage + bâtiment du milieu : façade du garage éclairé, volume de l'échelle, mur de la
+  zone de stockage, et depuis #189 la façade du milieu sur la fosse et le pan sud derrière le stockage. Un pan est un
+  rectangle sur le nu du mur ; `holes` y laisse des ouvertures (baies de `WINDOWS` avec leur appui, bordées d'un cadre ;
+  encoche sous la bande d'acier relevée en haut de la façade du milieu), découpées par `DizzyDressing.minus` en
+  rectangles disjoints (jamais deux plaques l'une sur l'autre). Teinte (`CLAD_STYLE`, #189) : `white`, tôle blanc cassé
+  à bande bleu clair de 3 à 9 studs au-dessus du bas du pan, comme les murs peints (retenu sur planche) ; `grey`, tôle
+  grise à bande basse ocre de la hauteur `band` du pan (lot #166). Les lampes de la façade du milieu sont avancées sur
+  les nervures.
+- **Façades peintes** (#189) : tout l'enduit des murs relevés est blanc cassé (`PLASTER` de `build_dizzy.luau`,
+  murets, acrotères et fût de la tour compris). Bande bleu clair (`BANDS`, `FACADE_BLUE`) sur les bâtiments non bardés
+  (toit haut, cabane du bord sud, abri à porte unique), 3 à 9 studs au-dessus de leur sol : les dalles de mur relevées
+  dont le centre est dans l'emprise sont **découpées** à la hauteur de la bande (`paintBands`), aucune plaque posée
+  devant (pas de faces confondues, collision identique). Les coins (`WedgePart`) ne sont pas découpés : petites
+  coupures possibles dans la bande là où le mur est fait de triangles (abri à porte surtout). Une emprise qui ne coupe
+  aucun mur arrête la génération.
 - **Porte** (`DOORS`) : double porte (bâti, vantaux à oculus, poignées, plaques de propreté, seuil, plaque jaune,
   lampe) sur l'aplat sombre relevé près de la rampe sur pilotis. Côté T, le relevé n'a que le vantail (pas d'aplat) :
-  zone élargie en conséquence.
+  zone élargie en conséquence. Depuis #189, même porte sur l'aplat de la façade est du toit haut (1885, 115, -323),
+  côté T seulement (`unique`) : aplat, vantail et seuil relevés cachés par `REDRESS`. Repère 0,28 devant le nu du mur
+  (et non sur la face de l'aplat, 0,49 devant ici), pour que la plaque et la lampe touchent le mur.
 - **Groupes du toit du garage** (`ROOF_UNITS`) : caisson blanc, ventilateur sur le dessus, capot à lames qui dépasse
   au-dessus de la façade, sur le socle relevé (gardé).
 - **Zone de stockage** (chantiers des étages, contre le mur en tôle) : deux bobines de câble empilées à la place de la
@@ -265,11 +281,18 @@ Rhabillages sans habillage (`kind = "hide"` de `REDRESS`) : la boîte devient in
 est construit à part (grue, porte, groupes du toit, bobines). `folders` vise d'autres dossiers que `Decor` (la bobine
 relevée est faite de murs, sols et plafonds) ; sans `group`, toutes les pièces visibles dont le centre est dans la zone
 sont prises : garder la zone serrée (le mur voisin y entrerait). Contrôle : la colonne `collide` de `audit_map` ne doit
-pas bouger.
+pas bouger, sauf dans `Geometry/Walls` du fait des bandes (chaque dalle découpée compte trois pièces, même union).
 
 Ombres : un objet plaqué contre un mur (bardage, barricade, porte) a l'ombre coupée (`flat`), elle se confond avec
 celle du mur ; idem pour les barres fines du treillis. Sans ça, le lot #166 ajoutait 17 % de pièces qui projettent une
-ombre (+3 % avec).
+ombre (+3 % avec). Lot #189 (`audit_map`, avant/après) : 18 614 → 19 927 pièces (+7 %, surtout les nervures du bardage
+blanc, coupées en trois par la bande), 2 074 → 2 135 pièces qui projettent une ombre (+3 %, murs découpés), une
+lumière de plus (porte du toit haut).
+
+Repérer les façades à habiller : les vues à hauteur d'œil de la planche (spawn, fosse, toits) disent mieux quels murs
+se voient en jeu qu'un relevé des dalles par le calcul (murs fins en double face, flancs de la tour qui descendent
+jusqu'au pied du toit) ; puis lire les cotes exactes des dalles de `Walls` (nu = centre ± demi-épaisseur) dans le
+`dump_parts`.
 
 #### Planche Blender d'un habillage
 
@@ -295,7 +318,7 @@ un repère invalide pour un tube vertical (pièce rejetée à y = -1 000 000). C
 de la map, aucune derrière le nu du mur qu'elle habille.
 
 Collision : seuls les volumes porteurs (caisson, châssis et viroles des groupes, fût et chapeau des extracteurs) la gardent ; tout le reste est sans
-collision ni requête. Lumières : `SpotLight` sans ombre (18 au total).
+collision ni requête. Lumières : `SpotLight` sans ombre (19 au total).
 
 Aperçu dans Studio sans reconnecter Rojo : le MCP refuse `HttpService` vers `localhost` (liste blanche de l'assistant),
 donc pas de `loadstring` d'un fichier servi en local depuis `execute_luau` ; il faut envoyer le code lui-même. Les
@@ -432,10 +455,6 @@ Rojo gère `Workspace.Maps` : un objet posé à la main dans une map est supprim
   faux, sinon les raycasts du mouvement la prennent pour un mur ou une rampe.
 
 ## Reste à faire
-
-- Habillage de Dizzy (#166, lots suivants) : bardage en tôle ondulée sur les autres murs (le premier lot n'a traité que
-  les murs des captures : façade du garage, volume de l'échelle, mur du stockage) ; aplat de porte en
-  (1885, 115, -323), côté T seulement ; façades blanc cassé à bande bleu clair de la référence (teinte des murs).
 
 - Plus tard : supprimer la perte de vitesse restante dans les virages (correction du mouvement, voir les pièges).
 - Son et effet au déclenchement d'un boost.
