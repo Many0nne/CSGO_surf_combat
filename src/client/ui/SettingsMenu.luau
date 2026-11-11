@@ -597,6 +597,12 @@ local function buildCategories(block: Frame)
 		end
 	end)
 
+	-- Auto-bhop (#255) : saut automatique tant qu'Espace est maintenu, activé par défaut ; BhopSystem suit LocalSettings
+	local bhopOptions = { { label = "ACTIVÉ", value = true }, { label = "COUPÉ", value = false } }
+	local movement = addCategory(block, "MOUVEMENT")
+	local bhopDefault = if PlayerSettings.DEFAULT_AUTO_BHOP then 1 else 2
+	addPicker(movement, "Auto-bhop", "autoBhop", bhopOptions, bhopDefault, bhopDefault, function() end, 150)
+
 	buildKeysCategory(block)
 
 	local graphics = addCategory(block, "GRAPHISMES")

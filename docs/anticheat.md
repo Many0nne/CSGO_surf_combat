@@ -1250,3 +1250,5 @@ Non proposé : filtrage ESP par visibilité (E1), modèle d'autorité serveur (v
   [Shooting backend validation](https://devforum.roblox.com/t/shooting-backend-validation-inaccuracies/4633077),
   [Making exploiter-proof guns](https://devforum.roblox.com/t/making-exploiter-proof-guns/235423),
   [Rate limiter module for remotes](https://devforum.roblox.com/t/rate-limiter-module-for-remotes/616268).
+
+**Auto-bhop désactivable (#255).** Le réglage `autoBhop` est purement client : il ne retire que des sauts forcés. Les validations serveur (vitesse, saut borné, enveloppe) portent sur la position et la vitesse déclarées, jamais sur le déclenchement du saut : désactiver l'auto-bhop ne lève aucune violation et aucune règle n'en dépend.

@@ -16,6 +16,7 @@ return function(T, Loader)
 				T.expectEqual(s.wheel, "previous")
 				T.expectEqual(s.simpleAim, false)
 				T.expectEqual(s.keyDisplay, "off")
+				T.expectEqual(s.autoBhop, PlayerSettings.DEFAULT_AUTO_BHOP)
 				T.expectEqual(keysOf(s.slotKeys), keysOf(PlayerSettings.DEFAULT_SLOT_KEYS))
 			end
 		end)
@@ -54,6 +55,11 @@ return function(T, Loader)
 			for _, bad in { "oui", 1, {} } do
 				T.expectEqual(PlayerSettings.sanitize({ simpleAim = bad }).simpleAim, false)
 			end
+			for _, bad in { "non", 0, {} } do
+				T.expectEqual(PlayerSettings.sanitize({ autoBhop = bad }).autoBhop, true)
+			end
+			T.expectEqual(PlayerSettings.sanitize({ autoBhop = false }).autoBhop, false)
+			T.expectEqual(PlayerSettings.sanitize({ sensitivity = 0.3 }).autoBhop, true) -- ancienne sauvegarde
 			for _, bad in { true, 1, "complet", "FULL", {} } do
 				T.expectEqual(PlayerSettings.sanitize({ keyDisplay = bad }).keyDisplay, "off")
 			end

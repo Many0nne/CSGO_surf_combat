@@ -44,7 +44,6 @@ return {
 
 	-- Bunny hop
 	BHOP_LAND_WINDOW = 0.1,
-	AUTO_BHOP        = true,
 
 	-- Coyote time & jump buffer
 	COYOTE_TIME      = 0.09,

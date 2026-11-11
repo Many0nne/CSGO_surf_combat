@@ -106,6 +106,7 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   `WeaponSystem.getAmmo` à chaque Heartbeat (met à jour les textes seulement si les valeurs changent), masqué sans
   chargeur (couteau) et hors partie (`HUDRules.gameHudVisible`, via `GameStateController.applyGameHud`). Contrairement à
   la barre d'armes, il ne s'estompe pas.
+- Réglage « Auto-bhop » (#255) : catégorie MOUVEMENT de `SettingsMenu` (une seule ligne, ACTIVÉ par défaut), `PlayerSettings.autoBhop`, lu à chaque tick par `MovementController` et passé à `BhopSystem` : sans respawn.
 - `src/client/ui/Crosshair.luau` (#195) : réglage « Visée simplifiée » (Réglages > GRAPHISMES, `PlayerSettings.simpleAim`, coupé par
   défaut). Quatre traits fins os (`ARM_LENGTH` 9 px, `ARM_THICKNESS` 2, `CENTER_GAP` 5) sans point central, doublés d'un contour
   noir de `OUTLINE` 1 px (`OUTLINE_TRANSPARENCY` 0,1) : sur fond blanc seul le contour se lit, sur sol ou mur sombre le trait os.
