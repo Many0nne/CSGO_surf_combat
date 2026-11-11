@@ -53,6 +53,42 @@ Pour le rendu : `VIEWMODEL = "AWP"` et `RECENTER_HANDLE = false` dans `studio_re
 
 Le `.blend` garde les anciennes actions : `run_build.py` les régénère à chaque lancement et ne sauvegarde pas le fichier.
 
+## Vidéos de référence
+
+Les vidéos sont rangées dans `references/` à la racine du checkout principal (dossier ignoré par git, à recopier sur un
+nouveau poste : ce ne sont pas des fichiers du projet). Avant toute animation, prendre ici la vidéo de l'arme, ou à défaut
+de l'arme de la même famille, et relever ses repères temporels avec `tools/anim/grid.py`. Les repères ci-dessous ont été
+lus à 2 images par seconde : les affiner avant de mesurer. Les noms de couteaux marqués « ? » restent à confirmer.
+
+### `references/anim/csgo-couteaux-toutes-animations.mp4` (CS:GO, 8 min 12 s, 640x360 à 30 i/s, sha256 `345133499115d2e1…`)
+
+Un couteau par segment, toujours dans le même ordre : Equip, coups de taille, estoc, Inspect (parfois une variante « rare
+animation »), puis le couteau suivant. Caméra fixe, ciel dégagé derrière l'arme : `track_blade.py` s'y prête.
+
+| Début | Couteau | Repères utiles |
+|---|---|---|
+| 0:00 | couteau 1 (?) | |
+| 0:16 | couteau 2, manche rouge (?) | |
+| 0:32 | couteau 3 (?) | |
+| 0:50 | couteau 4 (?) | |
+| 1:12 | Karambit | prise inversée, rotation autour du doigt 1:16-1:20 |
+| 1:38 | couteau 6 (?) | |
+| 1:56 | couteau 7 (?) | |
+| 2:24 | couteau 8 (?) | |
+| 2:48 | couteau 9 (?) | |
+| 3:10 | couteau 10 (?) | |
+| 3:36 | couteau 11 (?) | |
+| 3:58 | couteau 12 (?) | |
+| 4:20 | couteau 13 (?) | |
+| 4:46 | couteau 14, lame courbe (?) | |
+| 5:10 | couteau 15 (?) | |
+| 5:36 | couteau 16 (?) | |
+| 6:00 | couteau 17 (?) | |
+| 6:20 | **couteau CT par défaut** (référence du Ka-Bar) | repos 6:20-6:24 ; taille 6:23,9 (frappe 0,1 s, main hors cadre 6:24,2-6:24,5, retour jusqu'à 6:25,5) ; deuxième taille 6:25,9 ; estoc 6:27,0 (plongée sous le cadre, poussée 6:27,5-6:28,4) ; Inspect 6:28,5-6:36 (couteau vertical au centre, les deux faces) ; tailles 6:33,7-6:35,7 |
+| 6:44 | **couteau T par défaut** | Equip 6:44 ; Inspect 6:45-6:50 ; tailles 6:50-6:55 ; estoc vers 6:52,5-6:53,5 |
+| 6:58 | Ghost Knife (Danger Zone) | |
+| 7:14 | hache, 7:26 marteau, 7:32 clé à molette (Danger Zone) | outils de mêlée, hors couteaux |
+
 ## Les outils
 
 Depuis la racine du worktree. `uv` installe tout seul les dépendances des scripts Python (Pillow, ffmpeg), rien à
