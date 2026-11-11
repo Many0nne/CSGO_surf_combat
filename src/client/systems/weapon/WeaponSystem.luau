@@ -40,7 +40,8 @@ local secondaryConn = nil :: RBXScriptConnection?
 --               IDLE → RELOADING → IDLE, IDLE/SCOPED → FIRING → IDLE/SCOPED
 local weaponState: string = "IDLE"
 local cancelReload: (() -> ())? = nil
-local equipGate = EquipRules.newGate()
+-- Jeton d'action : tout equip, rangement ou nouvelle action périme les délais de fin en vol (#159, #183).
+local actionGate = EquipRules.newGate()
 
 local function canAct(): boolean
 	return weaponState == "IDLE" or weaponState == "SCOPED"
@@ -117,11 +118,12 @@ local function reloadTool(tool, cfg)
 	replicateAction("Reload")
 
 	local reloadTime = cfg and cfg.ReloadTime or 2
+	local token = actionGate.begin()
 	local thread = task.delay(reloadTime, function()
-		cancelReload = nil
-		if currentTool ~= tool then
+		if not actionGate.isCurrent(token) or currentTool ~= tool then
 			return
 		end
+		cancelReload = nil
 		s.ammo = cfg and cfg.Magazine or 0 -- réserve illimitée : le chargeur est toujours rempli
 		weaponState = "IDLE"
 	end)
@@ -166,8 +168,9 @@ local function startMeleeAttack(tool, cfg, s, animation: string, attackKind: str
 	}
 	ViewmodelSystem.playAnimation(animation, markerOverrides, cfg.AttackFadeTime)
 	ScopeSystem.resetVisuals()
+	local token = actionGate.begin()
 	task.delay(lockTime, function()
-		if currentTool == tool and weaponState == "FIRING" then
+		if actionGate.isCurrent(token) and currentTool == tool and weaponState == "FIRING" then
 			weaponState = "IDLE"
 		end
 	end)
@@ -235,8 +238,9 @@ local function onToolActivated(tool)
 	ScopeSystem.resetVisuals()
 	HitscanSystem.resolveHit(ViewmodelSystem.getActiveViewmodel())
 	local shootAnimTime = cfg and cfg.ShootAnimTime or 0.4
+	local token = actionGate.begin()
 	task.delay(shootAnimTime, function()
-		if currentTool == tool and weaponState == "FIRING" then
+		if actionGate.isCurrent(token) and currentTool == tool and weaponState == "FIRING" then
 			weaponState = "IDLE"
 		end
 	end)
@@ -248,6 +252,10 @@ local function onToolEquipped(tool, char)
 	end
 	local cfg = getWeaponConfig(tool:GetAttribute("WeaponName") or tool.Name)
 	ensureAmmoState(tool, cfg).slashIndex = 0
+	-- Un Equipped sans Unequipped préalable périme le délai du rechargement en cours : on l'annule proprement.
+	if cancelReload then
+		cancelReload()
+	end
 	currentTool = tool
 	currentCfg = cfg
 	weaponState = "EQUIPPING"
@@ -262,9 +270,9 @@ local function onToolEquipped(tool, char)
 	local animLength = ViewmodelSystem.getToolTrackLength(tool, "Equip")
 	local equipAnimSpeed = cfg and cfg.EquipAnimSpeed or 1
 	local actualEquipTime = EquipRules.duration(animLength, equipAnimSpeed, equipTime)
-	local token = equipGate.begin()
+	local token = actionGate.begin()
 	task.delay(actualEquipTime, function()
-		if equipGate.isCurrent(token) and currentTool == tool and weaponState == "EQUIPPING" then
+		if actionGate.isCurrent(token) and currentTool == tool and weaponState == "EQUIPPING" then
 			weaponState = "IDLE"
 		end
 	end)
@@ -326,7 +334,7 @@ local function onToolUnequipped(tool, char)
 		secondaryConn:Disconnect()
 		secondaryConn = nil
 	end
-	equipGate.invalidate()
+	actionGate.invalidate()
 	ScopeSystem.reset()
 	weaponState = "IDLE"
 	currentTool = nil
@@ -427,7 +435,7 @@ function WeaponSystem.init(player)
 		if cancelReload then
 			cancelReload()
 		end
-		equipGate.invalidate()
+		actionGate.invalidate()
 		ScopeSystem.reset()
 		weaponState = "IDLE"
 		currentTool = nil

@@ -1,6 +1,6 @@
 --!strict
--- Règles pures de la sélection d'une arme (#159) : durée de l'equip et identité d'un equip en cours,
--- pour qu'un délai resté d'un equip précédent ne termine jamais le nouveau.
+-- Règles pures de la sélection d'une arme (#159, #183) : durée de l'equip et identité de l'action en cours (equip, tir,
+-- coup, rechargement), pour qu'un délai resté d'une action précédente ne termine jamais la nouvelle.
 
 local EquipRules = {}
 
@@ -13,23 +13,23 @@ function EquipRules.duration(animLength: number, animSpeed: number, fallback: nu
 	return fallback
 end
 
--- Cette méthode permet de créer le compteur d'equips : chaque equip reçoit un jeton, et seul le dernier jeton émis
+-- Cette méthode permet de créer le compteur d'actions : chaque action reçoit un jeton, et seul le dernier jeton émis
 -- (tant qu'il n'est pas invalidé) reste courant.
 function EquipRules.newGate()
 	local gate = { current = 0 }
 
-	-- Cette méthode permet de démarrer un equip lorsqu'une arme est sélectionnée ; elle périme tous les jetons précédents.
+	-- Cette méthode permet de démarrer une action (equip, tir, coup, rechargement) ; elle périme tous les jetons précédents.
 	function gate.begin(): number
 		gate.current += 1
 		return gate.current
 	end
 
-	-- Cette méthode permet d'annuler l'equip en cours lorsque l'arme est rangée ou le personnage réapparaît.
+	-- Cette méthode permet d'annuler l'action en cours lorsque l'arme est rangée ou le personnage réapparaît.
 	function gate.invalidate()
 		gate.current += 1
 	end
 
-	-- Cette méthode permet de savoir si un délai appartient encore à l'equip en cours avant de le terminer.
+	-- Cette méthode permet de savoir si un délai appartient encore à l'action en cours avant de la terminer.
 	function gate.isCurrent(token: number): boolean
 		return token == gate.current
 	end

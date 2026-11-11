@@ -42,5 +42,23 @@ return function(T, Loader)
 			gate.invalidate()
 			T.expect(not gate.isCurrent(token))
 		end)
+
+		T.it(
+			"périme le délai de tir, de coup ou de rechargement lancé avant un changement d'arme rapide (#183)",
+			function()
+				local gate = EquipRules.newGate()
+				local fire = gate.begin() -- tir
+				gate.invalidate() -- arme rangée
+				local equip = gate.begin() -- arme reprise aussitôt
+				T.expect(not gate.isCurrent(fire), "l'ancien délai ne doit pas remettre IDLE pendant l'equip")
+				T.expect(gate.isCurrent(equip))
+			end
+		)
+
+		T.it("laisse le délai d'une action non interrompue s'appliquer", function()
+			local gate = EquipRules.newGate()
+			local reload = gate.begin()
+			T.expect(gate.isCurrent(reload))
+		end)
 	end)
 end
