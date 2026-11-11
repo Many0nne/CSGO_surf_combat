@@ -226,4 +226,4 @@ Mesh et textures déjà publiés (créateur 434916384) : `KaBar_Mesh` (Model) `8
   décalages relatifs avant d'assembler.
 - **Pas d'export complet pendant que Rojo est connecté** : un petit serveur local qui n'écrit que `KaBar.rbxm` évite de réécrire
   les autres armes. Le MCP Studio n'autorise que `localhost:34990` (liste HTTP de l'Assistant) : y faire tourner aussi le serveur
-  de capture des animations (copie de `capture_server.py` avec ce port), pas le 34991 prévu.
+  de capture des animations (`CAPTURE_PORT=34990`, voir `docs/animations.md`), pas le 34991 par défaut.

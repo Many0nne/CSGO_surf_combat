@@ -2,7 +2,7 @@
 # requires-python = ">=3.10"
 # dependencies = ["pillow"]
 # ///
-"""Serveur local entre Studio et le disque (Windows, 127.0.0.1:34991).
+"""Serveur local entre Studio et le disque (Windows, 127.0.0.1:34991, ou CAPTURE_PORT).
 
 GET  /frames        sert le fichier JSON de poses donné en argument
 GET  /shot?name=X   capture la fenêtre Studio dans <dossier>/X.png, sans jeton ni clic (fenêtre non réduite)
@@ -10,6 +10,9 @@ POST /save?path=P   écrit un .rbxm reçu en hexadécimal sous assets/rbx/ (P re
 GET  /quit          arrête le serveur
 
 Usage, depuis la racine du worktree : uv run tools/anim/capture_server.py <dossier_captures> <frames.json>
+
+Si Studio refuse la requête (« not in the Assistant HTTP allowlist »), lancer avec CAPTURE_PORT=34990 (port du serveur
+d'export tools/rbxm, déjà autorisé pour localhost) et mettre BASE = "http://localhost:34990" dans studio_render.luau.
 """
 
 import ctypes
@@ -122,4 +125,4 @@ class Handler(BaseHTTPRequestHandler):
 		self.reply(normal.encode())
 
 
-HTTPServer(("127.0.0.1", 34991), Handler).serve_forever()
+HTTPServer(("127.0.0.1", int(os.environ.get("CAPTURE_PORT", "34991"))), Handler).serve_forever()

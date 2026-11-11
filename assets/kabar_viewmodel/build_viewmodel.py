@@ -1,7 +1,8 @@
 # build_viewmodel.py
-# Construit le rig du viewmodel Ka-Bar dans Blender (bras droit + volume du couteau), génère ses animations (Idle, Equip,
-# Shoot, Shoot2, Stab, Inspect) et les exporte pour Roblox. Repris de assets/m9_viewmodel/build_viewmodel.py. Le modèle du couteau vit dans
-# assets/rbx/ViewModels/KaBar.rbxm (à créer) : ce script ne le construit pas.
+# Construit le rig du viewmodel Ka-Bar dans Blender (bras + volume du couteau), génère ses animations (Idle, Equip, Shoot,
+# Shoot2, Stab, Inspect) et les exporte pour Roblox. Rig repris de assets/m9_viewmodel/build_viewmodel.py ; les gestes sont
+# mesurés image par image sur le couteau CT par défaut de CS:GO (voir « Gestes mesurés »). Le modèle du couteau vit dans
+# assets/rbx/ViewModels/KaBar.rbxm : ce script ne le construit pas.
 # À lancer dans Blender :
 #   exec(open(f"{D}/build_viewmodel.py").read(), {"__name__": "__main__", "ASSET_DIR": D})
 #
@@ -18,7 +19,7 @@ import os
 
 import bmesh
 import bpy
-from mathutils import Euler, Matrix, Quaternion, Vector
+from mathutils import Euler, Matrix, Vector
 
 ASSET_DIR = globals().get("ASSET_DIR") or os.path.dirname(os.path.abspath(__file__))
 
@@ -63,12 +64,6 @@ def frame(pos, rot3):
 	m = rot3.to_4x4()
 	m.translation = pos
 	return m
-
-
-# Cette méthode permet de construire une rotation (degrés) appliquée dans l'ordre roulis Z, lacet Y,
-# tangage X, autour des axes du repère caméra Roblox.
-def rot_deg(rx, ry, rz):
-	return Euler((math.radians(rx), math.radians(ry), math.radians(rz)), "ZYX").to_matrix()
 
 
 # Cette méthode permet de calculer la plus petite rotation qui amène le vecteur a sur le vecteur b.
@@ -133,17 +128,42 @@ def knife_from_screen(guard, tip, depth, edge, far=True):
 	return frame(g - axis * GUARD_Z, basis_zx(axis, hint))
 
 
-# Pose idle mesurée sur la référence : lame vers le haut-gauche de l'écran, vue de plat, main en bas à droite.
-IDLE_KNIFE = knife_from_screen((0.67, 0.80), (0.445, 0.59), 2.8, FACE)
+# Cette méthode permet de construire le repère du couteau depuis la garde et la pointe à l'écran et son roulis,
+# lorsque le tranchant se décrit par rapport au regard plutôt que par une direction fixe (qui tournerait avec la lame).
+def knife_from_roll(guard, tip, depth, roll):
+	k = knife_from_screen(guard, tip, depth, (0, 0, 1))
+	axis = k.to_3x3().col[2]
+	to_cam = -screen_ray(tip).normalized()
+	left = to_cam.cross(axis).normalized()
+	a = math.radians(roll)
+	return frame(k.translation, basis_zx(axis, left * math.cos(a) - to_cam * math.sin(a)))
+
+
+# Cette méthode permet de trouver le roulis (repère de knife_from_roll) qui redonne la tenue de repos vue de plat, pour
+# que les gestes mesurés partent de la pose de l'Idle et y reviennent sans rotation parasite.
+def rest_roll(face_knife):
+	g, t = REST_SCREEN
+	target = face_knife.to_3x3().to_quaternion()
+	angle = lambda r: knife_from_roll(g, t, REST_DEPTH, r / 10).to_3x3().to_quaternion().rotation_difference(target).angle
+	return min(range(0, 3600, 5), key=angle) / 10
+
+
+# Tenue de repos mesurée sur le couteau CT (395,5 s) : garde et pointe à l'écran, lame de face. KABAR_REST_SHIFT="du,dv"
+# la décale pour rendre des variantes de placement (le rig exporté suit la tenue du build).
+REST_DEPTH = 2.6  # profondeur de la garde au repos (studs) : à 2,8 la lame de repos est à la limite de sa longueur réelle et son inclinaison saute
+_shift = [float(v) for v in os.environ.get("KABAR_REST_SHIFT", "0,0").split(",")]
+REST_SCREEN = ((0.665 + _shift[0], 0.775 + _shift[1]), (0.46 + _shift[0], 0.605 + _shift[1]))
+REST_ROLL = rest_roll(knife_from_screen(*REST_SCREEN, REST_DEPTH, FACE))
+IDLE_KNIFE = knife_from_roll(*REST_SCREEN, REST_DEPTH, REST_ROLL)
 IDLE_POS = IDLE_KNIFE.translation.copy()
 SHOULDER = Vector((2.2, -2.68, -1.3)) + (IDLE_POS - Vector((1.6, -0.98, -2.7))) * 0.35
 POLE = Vector((2.5, -3.53, -1.55)) + (IDLE_POS - Vector((1.6, -0.98, -2.7))) * 0.35
 
 # Main gauche au repos : en bas à gauche de l'écran, l'avant-bras remonte vers le centre.
-LEFT_HAND_POS = Vector((-2.0, -1.35, -3.0))
+LEFT_HAND_POS = Vector((-1.1, -2.45, -3.4))  # poing gauche au repos vers (0,45 ; 0,80) de l'écran, comme le CT
 LEFT_FOREARM = Vector((0.42, 0.62, -0.66))  # direction coude → main
-LEFT_SHOULDER = Vector((-2.75, -2.55, -1.75))
-LEFT_POLE = Vector((-3.8, -3.4, -1.8))
+LEFT_SHOULDER = Vector((-2.9, -3.6, -2.0))
+LEFT_POLE = Vector((-3.8, -4.2, -2.0))
 
 
 # Cette méthode permet de résoudre un bras (épaule, coude, poignet) pour un repère de main donné et de renvoyer
@@ -359,108 +379,8 @@ def ease(kind, s):
 	raise ValueError(kind)
 
 
-# Cette méthode permet de construire la clé de repos à l'instant t (fin ou début d'une animation).
-def P(t, e="io"):
-	return (t, IDLE_POS.copy(), IDLE_KNIFE.to_3x3().to_quaternion(), e, 0.0)
-
-
-# Cette méthode permet de construire une clé depuis les positions à l'écran de la garde et de la pointe (voir
-# knife_from_screen), avec la courbe d'arrivée et le pivot éventuel du couteau dans le poing.
-def S(t, guard, tip, depth, edge, flip=0.0, e="io", far=True):
-	k = knife_from_screen(guard, tip, depth, edge, far)
-	return (t, k.translation.copy(), k.to_3x3().to_quaternion(), e, flip)
-
-
-# Cette méthode permet d'évaluer une liste de clés à l'instant t (position, rotation slerp et pivot interpolés).
-def eval_keys(keys, t):
-	if t <= keys[0][0]:
-		return keys[0][1].copy(), keys[0][2].copy(), keys[0][4]
-	for (t0, p0, q0, _, f0), (t1, p1, q1, e1, f1) in zip(keys, keys[1:], strict=False):
-		if t <= t1:
-			s = ease(e1, (t - t0) / (t1 - t0)) if t1 > t0 else 1.0
-			return p0.lerp(p1, s), q0.slerp(q1, s), f0 + (f1 - f0) * s
-	return keys[-1][1].copy(), keys[-1][2].copy(), keys[-1][4]
-
-
-# Cette méthode permet de faire suivre les cibles (position et rotation) par un ressort amorti, pour donner de
-# l'inertie à la main sans clés supplémentaires ; l'erreur de rotation passe par le chemin le plus court.
-def spring_pose(targets, freq, zeta, substeps=8):
-	w = 2 * math.pi * freq
-	dt = 1.0 / FPS / substeps
-	pos, q = targets[0][0].copy(), targets[0][1].copy()
-	vel, ang = Vector((0, 0, 0)), Vector((0, 0, 0))
-	out = []
-	for tp, tq in targets:
-		for _ in range(substeps):
-			vel += ((tp - pos) * (w * w) - vel * (2 * zeta * w)) * dt
-			pos += vel * dt
-			d = q.inverted() @ tq
-			if d.w < 0:
-				d = Quaternion((-d.w, -d.x, -d.y, -d.z))
-			axis, angle = d.to_axis_angle()
-			ang += (axis * angle * (w * w) - ang * (2 * zeta * w)) * dt
-			step = ang * dt
-			if step.length > 1e-9:
-				q = q @ Quaternion(step.normalized(), step.length)
-		out.append((pos.copy(), q.copy()))
-	return out
-
-
-# Cette méthode permet de ramener une série de poses exactement sur sa dernière pose cible, pour que
-# l'animation finisse pile sur la pose de repos (pas de saut quand la piste s'arrête).
-def settle_tail(series, seconds, end):
-	n = len(series)
-	k = max(2, int(seconds * FPS))
-	for i in range(max(0, n - k), n):
-		s = ease("io", (i - (n - k)) / (k - 1))
-		series[i] = (series[i][0].lerp(end[0], s), series[i][1].slerp(end[1], s))
-	return series
-
-
-# Cette méthode permet de décrire l'Idle : respiration lente et petite dérive du poignet, en boucle parfaite
-# (période entière sur toute la piste) autour de la pose de repos.
-def spec_idle():
-	length = 4.0
-
-	def offset(t):
-		a = 2 * math.pi * t / length
-		pos = Vector((0.012 * math.sin(a * 2), 0.03 * (1 - math.cos(a)) / 2 + 0.006 * math.sin(a * 3), 0.014 * math.sin(a)))
-		rot = Euler((math.radians(0.9 * math.sin(a)), math.radians(0.6 * math.sin(a * 2)), math.radians(0.8 * math.sin(a))), "XYZ")
-		return pos, rot.to_quaternion()
-
-	return dict(length=length, offset=offset, loop=True, step=6, markers=[])
-
-
-# Les clés ci-dessous suivent la planche d'animations du Ka-Bar validée par l'utilisateur (pas de vidéo de référence) : chaque
-# clé est lue dans le cadre 320x180 de la planche (x, y de la garde, a = angle de la lame, 0 = pointe en haut, sens horaire),
-# les numéros en commentaire renvoient aux clés de la planche. Poses et mouvement restent à valider avant toute publication.
-KABAR_BLADE = 0.45  # longueur de la lame à l'écran, en hauteurs d'écran (la lame de repos de la M9 en fait 0,45)
-
-
-REST_ANGLE = -62.0  # angle de la lame à la tenue de repos (Idle), même repère que K
-
-
-# Cette méthode permet de calculer le tranchant de la tenue de repos tourné avec la lame lorsqu'elle pivote dans le plan
-# de l'écran à l'angle a : la lame garde le même roulis qu'au repos (aucune rotation sur le côté pendant un coup).
-def rest_edge(a):
-	d = math.radians(a - REST_ANGLE)
-	c, s = math.cos(d), math.sin(d)
-	x, y, z = FACE
-	return (x * c + y * s, -x * s + y * c, z)
-
-
-# Cette méthode permet de construire une clé depuis une position de la planche (garde x, y sur 320x180 et angle de la lame),
-# avec le pivot du couteau dans le poing (flip 180 = prise inversée) et le tranchant : None = celui de la tenue de repos
-# tourné avec la lame (pas de roulis), sinon un vecteur du repère caméra.
-def K(t, x, y, a, flip=0.0, e="io", edge=None, depth=3.0):
-	guard = (x / 320, y / 180)
-	r = math.radians(a)
-	tip = (guard[0] + math.sin(r) * KABAR_BLADE / SCREEN_ASPECT, guard[1] - math.cos(r) * KABAR_BLADE)
-	return S(t, guard, tip, depth, rest_edge(a) if edge is None else edge, flip, e)
-
-
-# Cette méthode permet de décrire l'Idle : même respiration que la M9 avec une amplitude réduite de 20 %, en boucle parfaite
-# (période entière sur toute la piste) autour de la pose de repos.
+# Cette méthode permet de décrire l'Idle : respiration lente et petite dérive du poignet (amplitude de la M9 réduite de 20 %),
+# en boucle parfaite (période entière sur toute la piste) autour de la pose de repos.
 def spec_idle():
 	length = 4.0
 
@@ -473,124 +393,200 @@ def spec_idle():
 	return dict(length=length, offset=offset, loop=True, step=6, markers=[])
 
 
-# Cette méthode permet de décrire l'Equip comme celui du couteau CT par défaut de CS:GO (références/anim, 387,05 à 387,3 s) : le
-# couteau arrive à l'envers, lame vers le bas à gauche, se retourne dans le poing en 0,25 s (la lame passe à l'horizontale
-# puis se relève) et se pose sur la tenue de repos, où il attend la fin de la piste.
+# ------------------------------------------------------------------------------------------------
+# Gestes mesurés sur le couteau CT par défaut de CS:GO
+# ------------------------------------------------------------------------------------------------
+# Relevés image par image (1/30 s) sur references/anim/csgo-couteaux-toutes-animations.mp4, segment « DEFAULT CT KNIFE »
+# (387,0 à 402,9 s ; avant 387,0 c'est le Butterfly). Une ligne par image utile : temps depuis le début du geste, garde et
+# pointe à l'écran (0,0 = haut gauche, 1,1 = bas droite), roulis par rapport au repos (0 = même face qu'au repos, 180 =
+# l'autre face, 90 = tranche vers la caméra), échelle de profondeur (largeur du gant au repos / largeur mesurée : 1,5 = la
+# main paraît 1,5 fois plus petite, donc 1,5 fois plus loin). Les images en double de la vidéo (même pose deux fois) sont
+# omises. Les lignes marquées « hors cadre » ne sont pas mesurables : elles prolongent la sortie et préparent la rentrée.
+SHOOT_ROWS = (  # 397,30 s : la main saute au centre-bas, balaie vers la gauche bras tendu, sort en bas à gauche
+	(0.000, None),
+	(0.033, (0.615, 0.60), (0.665, 0.475), 0, 1.6),
+	(0.067, (0.375, 0.72), (0.40, 0.585), 0, 1.45),
+	(0.133, (0.225, 0.82), (0.275, 0.665), 0, 1.2),
+	(0.200, (0.08, 1.10), (0.13, 0.92), 0, 1.15),  # hors cadre
+	(0.350, (0.25, 1.45), (0.15, 1.35), 0, 1.15),  # hors cadre
+	(0.550, (0.50, 1.25), (0.35, 1.22), 0, 1.25),  # hors cadre
+	(0.667, (0.535, 0.92), (0.385, 0.91), 0, 1.25),
+	(0.733, (0.545, 0.855), (0.41, 0.84), 0, 1.2),
+	(0.767, (0.58, 0.81), (0.43, 0.755), 0, 1.2),
+	(0.833, (0.60, 0.77), (0.44, 0.70), 0, 1.1),
+	(0.933, (0.635, 0.75), (0.455, 0.615), 0, 1.0),
+	(1.100, None),
+)
+
+SHOOT2_ROWS = (  # 398,50 s : revers, la main saute à gauche du centre puis balaie vers la droite et sort en bas à droite
+	(0.000, None),
+	(0.033, (0.45, 0.665), (0.29, 0.53), 0, 1.3),
+	(0.067, (0.74, 0.73), (0.615, 0.555), 0, 0.95),
+	(0.133, (0.86, 0.82), (0.73, 0.635), 0, 0.95),
+	(0.200, (0.98, 1.05), (0.86, 0.85), 0, 1.0),  # hors cadre
+	(0.350, (1.05, 1.35), (0.95, 1.20), 0, 1.0),  # hors cadre
+	(0.500, (0.80, 1.25), (0.62, 1.20), 0, 0.9),  # hors cadre
+	(0.567, (0.74, 0.96), (0.57, 0.885), 0, 0.88),
+	(0.633, (0.72, 0.88), (0.55, 0.847), 0, 0.88),
+	(0.700, (0.70, 0.85), (0.51, 0.755), 0, 0.9),
+	(0.767, (0.665, 0.79), (0.47, 0.635), 0, 0.95),
+	(0.867, None),
+)
+
+STAB_ROWS = (  # 399,63 s : la main monte au centre, couteau retourné, pointe en haut à droite, puis plonge en bas à gauche
+	(0.000, None),
+	(0.033, (0.545, 0.645), (0.685, 0.715), 0, 1.5),
+	(0.100, (0.41, 0.58), (0.52, 0.505), 0, 1.45),
+	(0.167, (0.39, 0.58), (0.465, 0.465), 0, 1.35),
+	(0.233, (0.37, 0.58), (0.445, 0.45), 0, 1.3),
+	(0.300, (0.36, 0.60), (0.435, 0.45), 0, 1.3),
+	(0.333, (0.29, 0.80), (0.345, 0.61), 0, 1.1),
+	(0.400, (0.24, 1.05), (0.27, 0.80), 0, 1.1),
+	(0.500, (0.25, 1.45), (0.30, 1.30), 0, 1.1),  # hors cadre
+	(0.650, (0.55, 1.30), (0.40, 1.25), 0, 1.1),  # hors cadre
+	(0.733, (0.60, 0.91), (0.46, 0.865), 0, 1.1),
+	(0.800, (0.62, 0.85), (0.465, 0.765), 0, 1.05),
+	(0.900, (0.65, 0.81), (0.495, 0.68), 0, 1.0),
+	(1.067, None),
+)
+
+EQUIP_ROWS = (  # 387,07 s (la vidéo coupe avant) : lame vers le bas à gauche, se relève, dépasse la tenue puis s'y couche
+	(0.000, (0.62, 1.25), (0.45, 1.40), 0, 1.0),  # hors cadre : la vidéo commence à 387,07, l'arme monte du bas
+	(0.100, (0.61, 0.85), (0.433, 0.974), 0, 1.0),
+	(0.167, (0.63, 0.78), (0.45, 0.786), 0, 1.0),
+	(0.200, (0.67, 0.72), (0.495, 0.59), 0, 1.0),
+	(0.267, (0.69, 0.73), (0.507, 0.544), 0, 1.0),
+	(0.300, (0.72, 0.70), (0.54, 0.45), 0, 1.0),
+	(0.433, (0.735, 0.70), (0.56, 0.43), 0, 1.0),
+	(0.633, (0.70, 0.73), (0.53, 0.49), 0, 1.0),
+	(0.767, (0.67, 0.765), (0.475, 0.58), 0, 1.0),
+	(0.850, None),
+)
+
+INSPECT_ROWS = (  # 388,40 s : se dresse face à la caméra, tient, bascule à gauche sur l'autre face, revient, redescend
+	(0.000, None),
+	(0.100, (0.654, 0.736), (0.52, 0.45), 30, 1.0),
+	(0.200, (0.68, 0.66), (0.60, 0.36), 60, 1.0),
+	(0.300, (0.704, 0.664), (0.67, 0.30), 50, 1.0),
+	(0.400, (0.715, 0.67), (0.715, 0.29), 0, 1.0),
+	(0.600, (0.715, 0.63), (0.715, 0.34), 0, 1.0),
+	(1.100, (0.70, 0.58), (0.69, 0.30), 0, 1.0),
+	(1.600, (0.70, 0.59), (0.694, 0.31), 0, 1.0),
+	(1.900, (0.70, 0.58), (0.704, 0.27), 0, 1.0),
+	(2.000, (0.69, 0.56), (0.67, 0.24), 0, 1.0),
+	(2.100, (0.69, 0.56), (0.645, 0.20), 70, 1.0),
+	(2.200, (0.676, 0.56), (0.61, 0.18), 120, 1.0),
+	(2.300, (0.69, 0.58), (0.59, 0.19), 180, 1.0, "bascule"),
+	(2.900, (0.67, 0.58), (0.58, 0.21), 180, 1.0, "bascule"),
+	(3.500, (0.704, 0.585), (0.614, 0.19), 180, 1.0, "bascule"),
+	(3.600, (0.705, 0.59), (0.655, 0.18), 240, 1.0),
+	(3.700, (0.70, 0.60), (0.696, 0.18), 300, 1.0),
+	(3.800, (0.70, 0.60), (0.71, 0.20), 360, 1.0),
+	(3.900, (0.70, 0.60), (0.715, 0.21), 360, 1.0),
+	(4.500, (0.70, 0.59), (0.70, 0.28), 360, 1.0),
+	(5.100, (0.705, 0.645), (0.707, 0.35), 360, 1.0),
+	(5.300, (0.715, 0.65), (0.67, 0.27), 400, 1.0),
+	(5.400, (0.66, 0.74), (0.48, 0.45), 380, 1.0),
+	(5.500, (0.64, 0.735), (0.415, 0.62), 360, 1.0),
+	(5.600, (0.66, 0.77), (0.46, 0.62), 360, 1.0),
+	(5.750, None),
+)
+
+# Bascule de l'Inspect (degrés depuis la verticale) : None garde la mesure (≈ 23°), sinon la pointe tourne autour de la
+# garde jusqu'à cet angle sur les lignes « bascule ». Réglable par KABAR_INSPECT_TILT pour rendre des variantes.
+INSPECT_TILT = float(os.environ["KABAR_INSPECT_TILT"]) if os.environ.get("KABAR_INSPECT_TILT") else None
+
+
+# Cette méthode permet de faire tourner la pointe autour de la garde, à l'écran, jusqu'à un angle donné depuis la verticale
+# (vers la gauche) en gardant la longueur apparente de la lame, lorsqu'une variante de bascule est demandée.
+def tilt_tip(guard, tip, degrees):
+	dx, dy = (tip[0] - guard[0]) * SCREEN_ASPECT, tip[1] - guard[1]
+	length = math.hypot(dx, dy)
+	r = math.radians(degrees)
+	return (guard[0] - math.sin(r) * length / SCREEN_ASPECT, guard[1] - math.cos(r) * length)
+
+
+# Cette méthode permet d'interpoler une colonne de mesures à l'indice flottant u (spline de Catmull-Rom), pour que
+# la vitesse reste continue d'une mesure à l'autre, sans ralentir sur chaque point comme une clé avec courbe.
+def spline(values, u):
+	i = min(max(int(u), 0), len(values) - 2)
+	s = u - i
+	a, b, c, d = values[max(i - 1, 0)], values[i], values[i + 1], values[min(i + 2, len(values) - 1)]
+	return 0.5 * (2 * b + (c - a) * s + (2 * a - 5 * b + 4 * c - d) * s * s + (3 * b - a - 3 * c + d) * s * s * s)
+
+
+# Cette méthode permet de déplier les lignes mesurées d'un geste en colonnes (None = pose de repos), en appliquant la
+# variante de bascule de l'Inspect sur les lignes marquées.
+def track_columns(rows):
+	cols = {k: [] for k in ("t", "gu", "gv", "tu", "tv", "roll", "depth")}
+	for row in rows:
+		if row[1] is None:
+			# repos : même face, au tour près de la ligne précédente (sinon le couteau ferait un tour complet)
+			roll = round(cols["roll"][-1] / 360) * 360 if cols["roll"] else 0.0
+			(g, tip), scale = REST_SCREEN, 1.0
+		else:
+			g, tip, roll, scale = row[1:5]
+			if len(row) > 5 and row[5] == "bascule" and INSPECT_TILT is not None:
+				tip = tilt_tip(g, tip, INSPECT_TILT)
+		cols["t"].append(row[0])
+		cols["gu"].append(g[0])
+		cols["gv"].append(g[1])
+		cols["tu"].append(tip[0])
+		cols["tv"].append(tip[1])
+		cols["roll"].append(roll)
+		cols["depth"].append(REST_DEPTH * scale)
+	return cols
+
+
+# Cette méthode permet d'évaluer un geste mesuré à l'instant t (spline sur les lignes, temps non uniformes) et de renvoyer
+# le repère du couteau ; le premier et le dernier instant tombent exactement sur la tenue de repos.
+def track_knife(cols, t):
+	times = cols["t"]
+	if t >= times[-1]:
+		u = len(times) - 1.0
+	else:
+		j = max(i for i in range(len(times) - 1) if times[i] <= t)
+		u = j + (t - times[j]) / (times[j + 1] - times[j])
+	v = {k: spline(c, u) for k, c in cols.items() if k != "t"}
+	return knife_from_roll((v["gu"], v["gv"]), (v["tu"], v["tv"]), v["depth"], REST_ROLL + v["roll"])
+
+
+# Cette méthode permet de construire la spec d'un geste mesuré (lignes, longueur = dernière ligne, planning de la main
+# gauche, marqueurs) pour sample().
+def measured_spec(rows, left, markers):
+	return dict(length=rows[-1][0], rows=rows, left=left, markers=markers, step=1)
+
+
+# Cette méthode permet de décrire l'Equip du couteau CT : l'arme monte du bas, lame vers le bas à gauche, se relève en
+# pivotant au poignet, dépasse la tenue (lame plus dressée) puis s'y couche. La main gauche entre à 0,15 s.
 def spec_equip():
-	return dict(
-		length=1.0,
-		keys=[
-			K(0.0, 198, 148, -110, 180.0, "o"),  # 1 : à l'envers, lame vers le bas à gauche
-			K(0.07, 224, 140, -100, 135.0, "l"),  # 2
-			K(0.14, 243, 144, -90, 80.0, "l"),  # 3 : lame horizontale
-			K(0.22, 240, 140, -72, 25.0, "o"),  # 4 : la lame se relève
-			P(0.30, "o"),  # 5 : pose de repos
-			P(1.0),
-		],
-		left=[(0.0, 1.0), (0.70, 1.0), (0.92, 0.0)],
-		markers=[("Equip Sound", 0.05)],
-		step=1,
-	)
+	return measured_spec(EQUIP_ROWS, [(0.0, 1.0), (0.12, 1.0), (0.22, 0.0)], [("Equip Sound", 0.05)])
 
 
-# Cette méthode permet de décrire le premier coup du clic gauche : même geste que la M9 (validé par l'utilisateur, tracé repris de
-# assets/m9_viewmodel/build_viewmodel.py) : le bras jaillit en haut à gauche, la lame reste dans l'axe du balayage vers la
-# droite, sort en bas à droite, puis remonte du bas de l'écran. Le coup suivant coupe ce retour.
+# Cette méthode permet de décrire le premier coup du clic gauche (taille du couteau CT, 397,30 s) : coup de droite à
+# gauche bras tendu loin devant, sortie en bas à gauche, retour par le bas au centre. Le coup suivant coupe à 0,4 s.
 def spec_shoot():
-	return dict(
-		length=0.7,
-		keys=[
-			P(0.0),
-			S(0.03, (0.37, 0.71), (0.18, 0.55), 3.2, FACE, e="o"),
-			S(0.10, (0.57, 0.63), (0.40, 0.52), 3.2, FACE, e="l"),
-			S(0.18, (0.79, 0.77), (0.65, 0.61), 3.2, FACE, e="l"),
-			S(0.27, (1.0, 0.95), (0.84, 0.75), 3.2, FACE, e="l"),
-			S(0.33, (1.08, 1.12), (0.95, 0.92), 3.2, FACE, e="l"),
-			S(0.42, (1.08, 1.12), (0.95, 0.92), 3.2, FACE, e="l"),
-			S(0.56, (0.72, 0.93), (0.52, 0.72), 3.0, FACE, e="o"),
-			P(0.7),
-		],
-		left=[(0.0, 0.0), (0.05, 1.0), (0.55, 1.0), (0.7, 0.0)],
-		markers=[("Stab Sound", 0.14)],
-		step=1,
-	)
+	return measured_spec(SHOOT_ROWS, [(0.0, 0.0), (0.03, 1.0), (0.68, 1.0), (0.95, 0.0)], [("Stab Sound", 0.067)])
 
 
-# Cette méthode permet de décrire le second coup du clic gauche : même geste que la M9 (tracé repris de son Shoot2) :
-# diagonale descendante de droite à gauche, sortie en bas à gauche, puis remontée du bas de l'écran.
+# Cette méthode permet de décrire le second coup du clic gauche (revers du couteau CT, 398,50 s) : coup de gauche à
+# droite, sortie en bas à droite, retour par le bas à droite.
 def spec_shoot2():
-	edge = (-1, 0.2, 0.2)
-	return dict(
-		length=0.7,
-		keys=[
-			P(0.0),
-			S(0.04, (0.645, 0.63), (0.70, 0.47), 3.0, edge, e="o"),
-			S(0.12, (0.435, 0.72), (0.48, 0.56), 3.0, edge, e="l"),
-			S(0.20, (0.25, 0.85), (0.31, 0.66), 3.0, edge, e="l"),
-			S(0.24, (0.08, 0.95), (0.16, 0.75), 3.0, edge, e="l"),
-			S(0.31, (-0.12, 1.15), (-0.02, 0.92), 3.0, edge, e="l"),
-			S(0.42, (-0.12, 1.15), (-0.02, 0.92), 3.0, edge, e="l"),
-			S(0.56, (0.66, 0.96), (0.46, 0.74), 3.0, FACE, e="o"),
-			P(0.7),
-		],
-		left=[(0.0, 0.0), (0.05, 1.0), (0.55, 1.0), (0.7, 0.0)],
-		markers=[("Stab Sound", 0.12)],
-		step=1,
-	)
+	return measured_spec(SHOOT2_ROWS, [(0.0, 0.0), (0.03, 1.0), (0.70, 1.0), (0.87, 0.0)], [("Stab Sound", 0.067)])
 
 
-# Cette méthode permet de décrire le coup du clic droit comme celui du couteau CT par défaut et de la M9 (même famille de
-# gestes, tracé repris de assets/m9_viewmodel/build_viewmodel.py) : le bras recule, monte au centre de l'écran, la lame
-# pointe en haut à droite, puis le couteau tombe hors du cadre en bas à gauche et remonte du bas de l'écran.
+# Cette méthode permet de décrire le coup du clic droit (couteau CT, 399,63 s) : la main monte loin au centre, couteau
+# retourné pointe en haut à droite, tient 0,2 s, plonge en bas à gauche en une image et ressort du cadre.
 def spec_stab():
-	edge = (-0.7, 0.7, 0.2)
-	return dict(
-		length=1.0,
-		keys=[
-			P(0.0),
-			S(0.04, (0.92, 1.05), (1.0, 0.92), 2.6, (0, 1, 0), e="o"),
-			S(0.10, (0.50, 0.62), (0.63, 0.64), 3.0, (0, 1, 0), e="o"),
-			S(0.23, (0.40, 0.60), (0.46, 0.49), 3.2, edge, e="o"),
-			S(0.44, (0.39, 0.62), (0.45, 0.50), 3.2, edge, e="l"),
-			S(0.57, (0.27, 0.85), (0.34, 0.61), 3.0, edge, e="i"),
-			S(0.64, (0.20, 1.25), (0.30, 1.0), 3.0, edge, e="l"),
-			S(0.78, (0.20, 1.25), (0.30, 1.0), 3.0, edge, e="l"),
-			S(0.90, (0.68, 0.93), (0.48, 0.71), 3.0, FACE, e="o"),
-			P(1.0),
-		],
-		left=[(0.0, 0.0), (0.03, 1.0), (0.82, 1.0), (1.0, 0.0)],
-		markers=[("Stab Sound", 0.16)],
-		step=1,
-	)
+	return measured_spec(STAB_ROWS, [(0.0, 0.0), (0.03, 1.0), (0.73, 1.0), (0.95, 0.0)], [("Stab Sound", 0.333)])
 
 
-# Cette méthode permet de calculer le tranchant qui montre une face entière de la lame lorsqu'elle est à l'angle a : dans le plan de
-# l'écran, perpendiculaire à la lame (side = 1 : une face, -1 : l'autre).
-def flat_edge(a, side):
-	r = math.radians(a)
-	return (-math.cos(r) * side, math.sin(r) * side, 0.1)
-
-
-# Cette méthode permet de décrire l'inspection comme celle du couteau CT par défaut de CS:GO (références/anim, 388,4 à 396,6 s) :
-# le couteau se dresse à la verticale devant la main (la main reste en bas), tient une face, passe à l'autre en s'inclinant,
-# tient celle-là, puis redescend sur la tenue. Les pauses tombent toujours sur une face entière de la lame.
+# Cette méthode permet de décrire l'inspection du couteau CT (388,40 s) : le couteau se dresse face à la caméra, tient,
+# bascule vers la gauche sur l'autre face, revient de face, puis redescend avec un petit coup de poignet.
 def spec_inspect():
-	return dict(
-		length=8.0,
-		keys=[
-			P(0.0),
-			K(0.5, 205, 142, -25, 0.0, "io", flat_edge(-25, 1)),  # 2 : se redresse
-			K(0.9, 202, 142, 0, 0.0, "io", flat_edge(0, 1)),  # 3 : vertical, face A
-			K(2.2, 202, 143, 3, 0.0, "l", flat_edge(3, 1)),  # 4 : pause sur la face A
-			K(3.5, 200, 143, -2, 0.0, "io", flat_edge(-2, -1)),  # 5 : roulis et inclinaison, face B
-			K(5.2, 202, 143, 3, 0.0, "l", flat_edge(3, -1)),  # 6 : pause sur la face B
-			K(6.4, 210, 146, -35, 0.0, "io", None),  # 7 : redescend
-			P(8.0),
-		],
-		left=[(0.0, 0.0), (0.3, 1.0), (7.7, 1.0), (8.0, 0.0)],
-		markers=[("Equip Sound", 0.5)],
-		step=2,
-	)
+	spec = measured_spec(INSPECT_ROWS, [(0.0, 0.0), (0.08, 1.0), (5.35, 1.0), (5.55, 0.0)], [("Equip Sound", 0.1)])
+	spec["step"] = 2
+	return spec
 
 
 SPECS = {
@@ -601,8 +597,6 @@ SPECS = {
 	"Stab": spec_stab,
 	"Inspect": spec_inspect,
 }
-
-
 
 
 # Cette méthode permet de calculer le décalage de la main gauche à l'instant t : elle respire avec la droite pendant
@@ -619,206 +613,24 @@ def left_offset(spec, t, right_delta):
 	return HIDDEN_LEFT * schedule[-1][1]
 
 
-# Trajectoire de l'Equip mesurée sur la vidéo de référence, toutes les 0,05 s de vidéo (ralentie 1,25 fois) :
-# temps vidéo, garde et pointe à l'écran, roulis de la lame (0 = de plat, tranchant à gauche d'une lame dressée ;
-# 90 = dos vers la caméra), profondeur de la garde (None = déduite de la longueur à l'écran, lame vue de plat),
-# centre de la main à l'écran tant que le couteau tourne dans le poing (None = la main tient le couteau).
-EQUIP_VIDEO_START = 0.42
-EQUIP_VIDEO_SCALE = 1.25
-EQUIP_TRACK = (
-	(0.40, (0.646, 1.20), (0.63, 1.55), 0, 2.5, (0.62, 1.15)),
-	(0.45, (0.643, 1.08), (0.625, 1.46), 0, 2.5, (0.62, 1.08)),
-	(0.50, (0.639, 1.02), (0.62, 1.40), 0, 2.5, (0.62, 0.98)),
-	(0.55, (0.633, 0.95), (0.61, 1.32), 0, 2.5, (0.63, 0.90)),
-	(0.60, (0.630, 0.89), (0.60, 1.25), 0, 2.5, (0.63, 0.84)),
-	(0.65, (0.620, 0.81), (0.58, 1.12), 0, 2.5, (0.62, 0.76)),
-	(0.70, (0.625, 0.76), (0.575, 1.10), 0, 2.5, (0.63, 0.72)),
-	(0.75, (0.623, 0.71), (0.54, 1.05), 0, 2.5, (0.66, 0.72)),
-	(0.80, (0.647, 0.68), (0.529, 0.899), 0, 2.5, (0.66, 0.70)),
-	(0.85, (0.672, 0.652), (0.529, 0.701), 0, 2.5, (0.665, 0.69)),
-	(0.90, (0.677, 0.684), (0.569, 0.464), 0, 2.5, (0.67, 0.70)),
-	(0.95, (0.659, 0.674), (0.618, 0.313), 0, 2.5, (0.665, 0.71)),
-	(1.00, (0.654, 0.645), (0.659, 0.209), 0, None, None),
-	(1.05, (0.656, 0.623), (0.694, 0.145), 0, None, None),
-	(1.10, (0.670, 0.598), (0.76, 0.107), 0, None, None),
-	(1.15, (0.696, 0.580), (0.829, 0.107), 0, None, None),
-	(1.20, (0.721, 0.558), (0.87, 0.122), 5, None, None),
-	(1.25, (0.727, 0.590), (0.854, 0.136), 15, None, None),
-	(1.30, (0.703, 0.603), (0.764, 0.145), 40, None, None),
-	(1.35, (0.691, 0.640), (0.656, 0.203), 80, None, None),
-	(1.40, (0.691, 0.754), (0.556, 0.296), 100, None, None),
-	(1.45, (0.659, 0.759), (0.485, 0.412), 115, None, None),
-	(1.50, (0.659, 0.710), (0.456, 0.516), 125, None, None),
-	(1.55, (0.667, 0.754), (0.439, 0.58), 130, None, None),
-	(1.60, (0.667, 0.806), (0.439, 0.632), 130, None, None),
-	(1.67, (0.67, 0.80), (0.445, 0.59), 130, 2.8, None),
-)
-
-
-# Cette méthode permet de lisser une colonne de mesures (filtre 1-2-1, extrémités fixes) lorsque le relevé à l'œil
-# contient un léger bruit qui ferait trembler la lame ; passes règle la force du lissage.
-def smooth_column(values, passes=2):
-	out = list(values)
-	for _ in range(passes):
-		out = [out[0]] + [(out[i - 1] + 2 * out[i] + out[i + 1]) / 4 for i in range(1, len(out) - 1)] + [out[-1]]
-	return out
-
-
-# Cette méthode permet d'interpoler une colonne de mesures à l'indice flottant u (spline de Catmull-Rom), pour que
-# la vitesse reste continue d'une mesure à l'autre, sans ralentir sur chaque point comme une clé avec courbe.
-def spline(values, u):
-	i = min(max(int(u), 0), len(values) - 2)
-	s = u - i
-	a, b, c, d = values[max(i - 1, 0)], values[i], values[i + 1], values[min(i + 2, len(values) - 1)]
-	return 0.5 * (2 * b + (c - a) * s + (2 * a - 5 * b + 4 * c - d) * s * s + (3 * b - a - 3 * c + d) * s * s * s)
-
-
-# Cette méthode permet de construire le repère du couteau depuis la garde et la pointe à l'écran et son roulis,
-# lorsque le tranchant se décrit par rapport au regard plutôt que par une direction fixe (qui tournerait avec la lame).
-def knife_from_roll(guard, tip, depth, roll):
-	k = knife_from_screen(guard, tip, depth, (0, 0, 1))
-	axis = k.to_3x3().col[2]
-	to_cam = -screen_ray(tip).normalized()
-	left = to_cam.cross(axis).normalized()
-	a = math.radians(roll)
-	return frame(k.translation, basis_zx(axis, left * math.cos(a) - to_cam * math.sin(a)))
-
-
-# Cette méthode permet de résoudre le bras gauche et le bras droit pour une frame de la trajectoire de l'Equip :
-# tant que le couteau tourne, la main reste orientée comme à la fin du demi-tour et le couteau passe devant elle.
-def equip_track_frame(track, t, hand_rot):
-	vt = EQUIP_VIDEO_START + t * EQUIP_VIDEO_SCALE
-	times = track["times"]
-	if vt >= times[-1]:
-		u = len(times) - 1.0
-	else:
-		j = next(i for i in range(len(times) - 1) if vt < times[i + 1])
-		u = j + (vt - times[j]) / (times[j + 1] - times[j])
-	guard = (spline(track["gu"], u), spline(track["gv"], u))
-	tip = (spline(track["tu"], u), spline(track["tv"], u))
-	depth = spline(track["depth"], u)
-	knife = knife_from_roll(guard, tip, depth, spline(track["roll"], u))
-	grip_hand = knife @ GRIP.inverted()
-	weight = min(max((vt - 0.95) / 0.05, 0.0), 1.0)  # la main reprend le couteau à la fin du demi-tour
-	free = frame(screen_ray((spline(track["hu"], u), spline(track["hv"], u))) * (depth + 0.55), hand_rot)
-	hand = free.lerp(grip_hand, ease("io", weight))
-	return knife, hand
-
-
-# Cette méthode permet d'échantillonner l'Equip depuis sa trajectoire mesurée et de renvoyer les CFrames de chaque frame.
-def sample_track(spec):
-	rows = EQUIP_TRACK
-	depths = []
-	for _, g, tp, _, d, _ in rows:
-		if d is not None:
-			depths.append(d)
-			continue
-		length = math.hypot((tp[0] - g[0]) * SCREEN_ASPECT, tp[1] - g[1])
-		depths.append(min(max((TIP_Z - GUARD_Z) / (2 * length), 2.1), 3.0))
-	end = len(rows) - 1
-	hands = [r[5] or rows[11][5] for r in rows]
-	track = {
-		"times": [r[0] for r in rows],
-		"gu": smooth_column([r[1][0] for r in rows]),
-		"gv": smooth_column([r[1][1] for r in rows]),
-		"tu": smooth_column([r[2][0] for r in rows]),
-		"tv": smooth_column([r[2][1] for r in rows]),
-		"roll": smooth_column([r[3] for r in rows]),
-		"depth": smooth_column(depths),
-		"hu": smooth_column([h[0] for h in hands]),
-		"hv": smooth_column([h[1] for h in hands]),
-	}
-	u_end = 12  # fin du demi-tour : ligne 1,00 s de la trajectoire
-	end_knife = knife_from_roll(
-		(track["gu"][u_end], track["gv"][u_end]),
-		(track["tu"][u_end], track["tv"][u_end]),
-		track["depth"][u_end],
-		track["roll"][u_end],
-	)
-	hand_rot = (end_knife @ GRIP.inverted()).to_3x3()
-	n = int(round(spec["length"] * FPS)) + 1
-	ts = [i / FPS for i in range(n)]
-	idle_hand = IDLE_KNIFE @ GRIP.inverted()
-	frames = []
-	for t in ts:
-		knife, hand = equip_track_frame(track, t, hand_rot)
-		blend = ease("io", (t - spec["length"] + spec["settle"]) / spec["settle"])  # finit pile sur la tenue
-		if blend > 0:
-			knife = knife.lerp(IDLE_KNIFE, blend)
-			hand = hand.lerp(idle_hand, blend)
-		pos = knife.translation
-		delta = (pos - IDLE_POS) * 0.35
-		upper, lower, solved = solve_limb(hand, SHOULDER + delta, POLE + delta)
-		arm = {"RightUpperArm": upper, "RightLowerArm": lower, "RightHand": solved, "Handle": knife}
-		arm.update(solve_left(left_offset(spec, t, pos - IDLE_POS)))
-		frames.append(arm)
-	return ts, frames
-
-
-# Cette méthode permet d'échantillonner une animation depuis une trajectoire produite par tools/anim/track_blade.py :
-# une pose par image mesurée, ramenée sur la tenue au début (enter) et à la fin (settle) pour raccorder avec l'Idle.
-def sample_measured(spec):
-	with open(os.path.join(ASSET_DIR, spec["measured"]), encoding="utf-8") as fh:
-		rows = json.load(fh)["rows"]
-	period = rows[1]["t"] - rows[0]["t"]
-	columns = {
-		"gu": [r["guard"][0] for r in rows],
-		"gv": [r["guard"][1] for r in rows],
-		"tu": [r["tip"][0] for r in rows],
-		"tv": [r["tip"][1] for r in rows],
-		"roll": [r["roll"] for r in rows],
-		"depth": [r["depth"] for r in rows],
-	}
-	n = int(round(spec["length"] * FPS)) + 1
-	ts = [i / FPS for i in range(n)]
-	idle_hand = IDLE_KNIFE @ GRIP.inverted()
-	frames = []
-	for t in ts:
-		u = min(t * spec["video_scale"] / period, len(rows) - 1.0)
-		value = {name: spline(column, u) for name, column in columns.items()}
-		knife = knife_from_roll((value["gu"], value["gv"]), (value["tu"], value["tv"]), value["depth"], value["roll"])
-		hand = knife @ GRIP.inverted()
-		blend = max(1 - t / spec["enter"], (t - spec["length"] + spec["settle"]) / spec["settle"], 0.0)
-		if blend > 0:
-			knife = knife.lerp(IDLE_KNIFE, ease("io", blend))
-			hand = hand.lerp(idle_hand, ease("io", blend))
-		pos = knife.translation
-		delta = (pos - IDLE_POS) * 0.35
-		upper, lower, solved = solve_limb(hand, SHOULDER + delta, POLE + delta)
-		arm = {"RightUpperArm": upper, "RightLowerArm": lower, "RightHand": solved, "Handle": knife}
-		arm.update(solve_left(left_offset(spec, t, pos - IDLE_POS)))
-		frames.append(arm)
-	return ts, frames
-
-
-# Cette méthode permet d'échantillonner une animation (clés, ressort optionnel, pivot dans le poing) et de renvoyer,
-# pour chaque frame, les CFrames (repère caméra) des pièces du bras et de la Handle.
+# Cette méthode permet d'échantillonner une animation (respiration de l'Idle ou geste mesuré) et de renvoyer, pour chaque
+# frame, les CFrames (repère caméra) des pièces des deux bras et de la Handle.
 def sample(spec):
-	if spec.get("track"):
-		return sample_track(spec)
-	if spec.get("measured"):
-		return sample_measured(spec)
 	n = int(round(spec["length"] * FPS)) + 1
 	ts = [i / FPS for i in range(n)]
 	idle_q = IDLE_KNIFE.to_3x3().to_quaternion()
-	flips = [0.0] * n
-	if "offset" in spec:
-		poses = []
-		for t in ts:
-			dp, dq = spec["offset"](t)
-			poses.append((IDLE_POS + dp, idle_q @ dq))
-	else:
-		evaluated = [eval_keys(spec["keys"], t) for t in ts]
-		flips = [e[2] for e in evaluated]
-		poses = [(e[0], e[1]) for e in evaluated]
-		if spec.get("freq"):
-			poses = settle_tail(spring_pose(poses, spec["freq"], spec["zeta"]), spec["settle"], (IDLE_POS, idle_q))
+	cols = track_columns(spec["rows"]) if "rows" in spec else None
 	frames = []
-	for i, t in enumerate(ts):
-		pos, q = poses[i]
+	for t in ts:
+		if cols is None:
+			dp, dq = spec["offset"](t)
+			knife = frame(IDLE_POS + dp, (idle_q @ dq).to_matrix())
+		else:
+			knife = track_knife(cols, t)
+		pos = knife.translation
 		# l'épaule (hors champ) accompagne la main, moins vite qu'elle
 		delta = (pos - IDLE_POS) * 0.35
-		arm = solve_arm(frame(pos, q.to_matrix()), SHOULDER + delta, POLE + delta, flips[i])
+		arm = solve_arm(knife, SHOULDER + delta, POLE + delta)
 		arm.update(solve_left(left_offset(spec, t, pos - IDLE_POS)))
 		frames.append(arm)
 	return ts, frames

@@ -6,10 +6,14 @@
 
 C'est ce fichier qu'on fait valider AVANT de publier : des images fixes justes ne garantissent pas un mouvement juste.
 
-Usage : uv run tools/anim/side_by_side.py <reference.mp4> <debut_video> <ralenti> <captures> <Animation> <x0,y0,x1,y1> <sortie.mp4>
+Usage : uv run tools/anim/side_by_side.py <reference.mp4> <debut_video> <ralenti> <captures> <Animation> <x0,y0,x1,y1> <sortie.mp4> [i/s] [titre]
   debut_video  instant de la référence qui correspond à la frame 0
   ralenti      durée vidéo / durée réelle (1 si la référence n'est pas ralentie)
   x0,y0,x1,y1  viewport Studio en pixels dans les captures (à relever sur une capture, il dépend de la disposition)
+  i/s          cadence des captures (défaut 60 ; 30 pour une référence à 30 i/s rendue image pour image)
+  titre        étiquette affichée en bas (piste, variante A/B/C…)
+
+Plusieurs pistes se mettent bout à bout avec le concat de ffmpeg (même codec, même taille) : une seule vidéo à valider.
 """
 
 import glob
@@ -22,13 +26,14 @@ import imageio_ffmpeg
 from PIL import Image, ImageDraw, ImageFont
 
 video, start, slow, cap_dir, anim, viewport, out = sys.argv[1:8]
+FPS = int(sys.argv[8]) if len(sys.argv) > 8 else 60
+title = sys.argv[9] if len(sys.argv) > 9 else ""
 start, slow = float(start), float(slow)
 x0, y0, x1, y1 = (int(v) for v in viewport.split(","))
 
 FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
 FONT = ImageFont.truetype("C:/Windows/Fonts/arialbd.ttf", 24)
 W, H = 640, 360
-FPS = 60
 crop_w = (y1 - y0) * 16 / 9  # le joueur est en 16:9 : on juge le même cadre que le jeu, pas le viewport de Studio
 center = (x0 + x1) / 2
 files = sorted(glob.glob(os.path.join(cap_dir, anim + "_*.png")))
@@ -43,7 +48,7 @@ def reference(i):
 	return Image.open(io.BytesIO(subprocess.run(cmd, capture_output=True, check=True).stdout)).convert("RGB")
 
 
-# Cette méthode permet de composer une image côte à côte avec le numéro de frame et la vitesse de lecture.
+# Cette méthode permet de composer une image côte à côte avec le numéro de frame, la vitesse de lecture et le titre.
 def compose(ref, rendered, i, label):
 	im = Image.new("RGB", (W * 2, H))
 	im.paste(ref, (0, 0))
@@ -53,6 +58,10 @@ def compose(ref, rendered, i, label):
 	draw.text((6, 3), f"Reference {i:02d} {label}", fill="white", font=FONT)
 	draw.rectangle((W, 0, W + 330, 34), fill=(20, 90, 180))
 	draw.text((W + 6, 3), f"Roblox {i:02d} {label}", fill="white", font=FONT)
+	if title:
+		width = draw.textlength(title, font=FONT)
+		draw.rectangle((W - width / 2 - 10, H - 38, W + width / 2 + 10, H), fill=(0, 0, 0))
+		draw.text((W - width / 2, H - 34), title, fill="white", font=FONT)
 	return im.tobytes()
 
 
@@ -62,13 +71,13 @@ for i, path in enumerate(files):
 	rows.append((reference(i), rendered.resize((W, H))))
 
 cmd = [FFMPEG, "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W * 2}x{H}", "-r", str(FPS), "-i", "-"]
-cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", "-movflags", "+faststart", out]
+cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", "-r", "60", "-movflags", "+faststart", out]
 encoder = subprocess.Popen(cmd, stdin=subprocess.PIPE)
 last = len(rows) - 1
 for _ in range(3):
 	for i, (ref, rendered) in enumerate(rows):
 		encoder.stdin.write(compose(ref, rendered, i, "x1"))
-	encoder.stdin.write(compose(*rows[last], last, "x1") * 30)
+	encoder.stdin.write(compose(*rows[last], last, "x1") * (FPS // 2))
 for i, (ref, rendered) in enumerate(rows):
 	encoder.stdin.write(compose(ref, rendered, i, "x0.25") * 4)
 encoder.stdin.close()

@@ -120,8 +120,8 @@ WeaponConfig.Weapons = {
 		Penetration = 0,
 		RunSpeedMultiplier = 1.0,
 		EquipTime = 0.77,
-		EquipAnimSpeed = 1.3, -- vitesse de lecture de la piste Equip (1 s) : sortie en 0,77 s
-		ShootAnimTime = 0.4, -- verrou d'action : le coup suivant coupe la fin de la piste (0,7 s)
+		EquipAnimSpeed = 1.1, -- vitesse de lecture de la piste Equip (0,85 s, durée du couteau CT) : sortie en 0,77 s
+		ShootAnimTime = 0.4, -- verrou d'action : le coup suivant coupe la fin de la piste (1,1 s et 0,87 s)
 		ShootAnimations = { "Shoot", "Shoot2" }, -- coups du clic gauche, joués en alternance
 		AttackFadeTime = 0, -- les coups partent sans fondu : la piste commence sur la pose de repos
 		-- Clic droit : estoc droit, plus lourd et plus lent (mêmes dégâts et cadence que l'estoc de la M9).
