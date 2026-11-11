@@ -52,16 +52,19 @@ function ShotSoundRules.settingsFor(weaponName: any): Settings?
 	}
 end
 
--- Cette méthode permet de décider si un tir relayé est joué lorsqu'il arrive : un personnage connu qui n'est pas le
--- nôtre (le tireur joue déjà son propre son), un état où l'on entend, et de la place parmi les sons en cours.
-function ShotSoundRules.shouldPlay(shooter: any, localCharacter: any, state: string?, activeCount: number): boolean
+-- Cette méthode permet de savoir si un tir relayé concerne ce client lorsqu'il arrive (son et effets, #54) : un
+-- personnage connu qui n'est pas le nôtre (le tireur a déjà son son et ses effets), dans un état où l'on entend.
+function ShotSoundRules.isOthersShot(shooter: any, localCharacter: any, state: string?): boolean
 	if shooter == nil or shooter == localCharacter then
 		return false
 	end
-	if not (state and ShotSoundRules.AUDIBLE_STATES[state]) then
-		return false
-	end
-	return activeCount < ShotSoundRules.MAX_ACTIVE
+	return state ~= nil and ShotSoundRules.AUDIBLE_STATES[state] == true
+end
+
+-- Cette méthode permet de décider si un tir relayé est joué lorsqu'il arrive : le tir d'un autre dans un état où
+-- l'on entend (isOthersShot), et de la place parmi les sons en cours.
+function ShotSoundRules.shouldPlay(shooter: any, localCharacter: any, state: string?, activeCount: number): boolean
+	return ShotSoundRules.isOthersShot(shooter, localCharacter, state) and activeCount < ShotSoundRules.MAX_ACTIVE
 end
 
 -- Cette méthode permet de fixer la durée de vie d'un son de tir lorsqu'il est lancé (longueur lue à la vitesse de

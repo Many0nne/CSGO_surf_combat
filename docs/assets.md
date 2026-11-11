@@ -59,6 +59,45 @@ Transition d'une place qui contient déjà ces instances (une fois, pour éviter
    s'équipe en playtest, puis sauvegarder la place (File > Save to Roblox).
    Si un MeshPart est vide : clic droit sur `ReplicatedStorage` > *Insert from File…* > le `.rbxm`, et le signaler.
 
+## Effets du tir (flamme, rayon)
+
+Code : `ShotEffects` (client), réglages et règles pures dans `ShotEffectRules` (testées). Une arme à distance porte sa
+bouche de canon dans son viewmodel : l'Attachment `Barrel.ShootPart` (chemin `ShotEffectRules.MUZZLE_PATH`, à la sortie
+du canon) et son `ParticleEmitter` `MuzzleEffect`, **désactivé** (`Enabled = false`) : le code l'allume par `Emit` à
+chaque tir. Le modèle 3P clone les pièces du viewmodel (`WeaponThirdPerson`), il a donc la même bouche de canon, réduite
+par `ScaleTo` avec le reste de l'arme.
+
+- **Flamme :** forme, taille, couleur et durée sont celles du `MuzzleEffect` du `.rbxm` (texture 421803006, vie 0,1 s,
+  `LockedToPart` pour suivre le recul). Seul le nombre de particules par tir est dans le code
+  (`MUZZLE_EMIT_COUNT`) : elles naissent au même point, en ajouter rend la flamme plus opaque, pas plus grande.
+- **Rayon :** `TRACER_WIDTH`, `TRACER_LIFETIME` (durée du fondu, courbe `tracerTransparency`), `TRACER_RGB`. Il part de la
+  bouche du canon et finit au point d'impact du raycast de visée (le vide : portée `HITSCAN_RANGE`). Canon dans un mur
+  (bouche au-delà de l'impact) ou rayon plus court que `TRACER_MIN_LENGTH` : pas de rayon. Le rayon reste fixe dans le
+  monde : une caméra qui passe à moins de `HIDE_RADIUS` de lui (surf vers l'avant juste après le tir) le masque pour la
+  frame. Le fondu passe par `FADE_STEPS` séquences précalculées (pas de `NumberSequence` créée par frame).
+- **Chez les autres :** chaque `ShotFired` relayé par le serveur (joueurs et bots) allume la flamme du canon 3P du tireur
+  et trace un rayon de ce canon au point que touche, chez le client, le rayon origine + direction relayées. Le tireur
+  distant est dessiné en retard (interpolation) alors que l'origine relayée est à jour : comme dans CS, le rayon va du
+  canon dessiné à l'impact réel, un peu de biais quand le tireur surfe vite. Seul un canon à plus de
+  `MUZZLE_MAX_OFFSET` de l'origine (personnage pas à jour) fait partir le rayon de l'origine. La partie d'un rayon à
+  moins de `NEAR_CAMERA` de notre caméra est retirée (`clipNearCamera` : tir qui nous touche, nous frôle, ou tireur
+  collé à nous) : sinon le Beam, face à la caméra, couvre l'écran. Au plus `MAX_ACTIVE` rayons en même temps (au-delà,
+  un tir relayé n'a que sa flamme) ; le tir local a toujours son rayon et compte parmi eux.
+- **Nouvelle arme à distance :** garder `Barrel.ShootPart.MuzzleEffect` dans son viewmodel (le copier de l'AWP), sinon
+  elle tire sans flamme et son rayon part de l'œil.
+- **Vérifier qu'un tir ne laisse rien :** le rayon crée deux `Attachment` dans `Terrain` (et un `Beam`), tous nommés
+  `ShotTracer` : leur nombre revient à 0 après `TRACER_LIFETIME`.
+- **Mesures (#54, Studio) :** bouche du canon du viewmodel AWP à 8,5 studs de la caméra (un mur plus proche que ça :
+  pas de rayon local) ; flamme 3P à 0,7 × la taille du viewmodel (`ScaleTo` réduit aussi les particules) ; créer un
+  rayon coûte ~0,1 ms ; un tir relayé de bot donne un rayon qui part exactement du canon 3P.
+- **Juger la flamme en capture :** elle vit 0,1 s et commence invisible (taille 0, transparence 1), donc la figer
+  (`TimeScale = 0`) juste après l'`Emit` ne montre rien. Allonger plutôt `Lifetime` (par ex. 3 s, les courbes suivent),
+  `Emit`, puis capturer avec `screen_capture` du MCP. La capture de fenêtre par `PrintWindow` (`capture_server.py`)
+  montre bien le rayon, mais **pas les particules** : une flamme absente de ces images n'est pas une flamme absente.
+- **Piloter un tir de test (MCP, contexte Server) :** le remote `DebugPlaytest` accepte les commandes du helper,
+  `FireClient(player, id, "aim", { target = Vector3 })` puis `"attack", { tool = "AWP" }`. Un tir relayé de bot se
+  simule par `ShotFired:FireClient(player, botCharacter, "AWP", origine, direction)` (vrai chemin de `ShotEffects`).
+
 ## Publier un asset (Open Cloud)
 
 Clé dans la variable d'environnement utilisateur `ROBLOX_OPEN_CLOUD_KEY` (scopes `asset:read` et `asset:write`). Créateur :
