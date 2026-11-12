@@ -11,6 +11,9 @@
   reutilise (modifications et slot conserves). Par defaut le script demarre `rojo serve` en arriere-plan et attend que
   http://localhost:<port>/api/rojo reponde. -NoUp : sans demarrer.
 
+  Le worktree recoit un .claude\settings.local.json (exclu de git) qui autorise sa session Claude a ecrire dans
+  worktrees\.briefs (compte rendu du brief /delegate) et dans %TEMP%, malgre blockWritesOutsideWorkingDirectories.
+
   Studio ne suit qu'un serveur Rojo par fenetre. Avec le plugin Rojo modifie (tools\rojo-plugin), -AcquireStudio l'y
   connecte seul et la liberation le renvoie sur 34872 ; sinon connexion a la main (mode Edit, plugin Rojo, port, Connect).
 
@@ -65,6 +68,32 @@ $pidFile = Join-Path $runDir "$slug.pid"
 $logFile = Join-Path $runDir "$slug.log"
 $ownersFile = Join-Path $worktrees '.owners.json'
 $basePort = 34872
+
+# Cette methode permet d'autoriser la session Claude du worktree a ecrire son compte rendu (worktrees\.briefs) et ses
+# fichiers temporaires (%TEMP%) : ajoute ces dossiers a .claude\settings.local.json (ignore par git), sans toucher au reste.
+function Set-AgentSettings {
+  $exclude = Join-Path $commonDir 'info\exclude'
+  $pattern = '.claude/settings.local.json'
+  if (-not ((Test-Path $exclude) -and ((Get-Content $exclude) -contains $pattern))) {
+    New-Item -ItemType Directory -Force (Split-Path -Parent $exclude) | Out-Null
+    Add-Content -Path $exclude -Value $pattern
+  }
+  $dirs = @((Join-Path $worktrees '.briefs'), [IO.Path]::GetTempPath().TrimEnd('\', '/'))
+  $file = Join-Path $dir '.claude\settings.local.json'
+  $settings = [pscustomobject]@{}
+  if (Test-Path $file) {
+    try { $settings = Get-Content -Raw $file | ConvertFrom-Json } catch { Write-Warning "$file illisible : non modifie."; return }
+    if ($null -eq $settings) { $settings = [pscustomobject]@{} }
+  }
+  if (-not $settings.PSObject.Properties['permissions']) { $settings | Add-Member permissions ([pscustomobject]@{}) }
+  $current = @($settings.permissions.additionalDirectories | Where-Object { $_ })
+  $missing = @($dirs | Where-Object { $current -notcontains $_ })
+  if (-not $missing) { return }
+  $settings.permissions | Add-Member -Force additionalDirectories @($current + $missing)
+  New-Item -ItemType Directory -Force (Split-Path -Parent $file) | Out-Null
+  # UTF-8 sans BOM (le Set-Content -Encoding UTF8 de PowerShell 5.1 en ajoute un).
+  [IO.File]::WriteAllText($file, ($settings | ConvertTo-Json -Depth 10), [Text.UTF8Encoding]::new($false))
+}
 
 # Cette methode permet de lire le registre des worktrees lorsqu'on doit l'enrichir ou le nettoyer, en ramenant chaque
 # entree a la forme { branch, sessions[], threads[] } quel que soit l'etat du fichier (vide, ancien format, PS 5.1).
@@ -409,6 +438,7 @@ if (-not $exists) {
   }
   if ($LASTEXITCODE -ne 0) { throw "git worktree add a echoue" }
 }
+Set-AgentSettings
 
 $rojoCode = $null
 if (-not $NoUp) {
