@@ -17,6 +17,7 @@ local NetworkProtocol = require(ReplicatedStorage.Shared.NetworkProtocol)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local ShotSoundRules = require(ReplicatedStorage.Shared.ShotSoundRules)
 local WeaponThirdPerson = require(ReplicatedStorage.Shared.WeaponThirdPerson)
+local SoundChannels = require(script.Parent.Parent.settings.SoundChannels)
 
 local RemoteShotSounds = {}
 
@@ -104,6 +105,7 @@ local function onShotFired(shooter: any, weaponName: any)
 	anchor.WorldPosition = source.Position
 	local sound = template:Clone()
 	sound.Name = ShotSoundRules.INSTANCE_NAME
+	SoundChannels.weapon(sound)
 	sound.Looped = false
 	sound.PlayOnRemove = false
 	sound.TimePosition = 0
