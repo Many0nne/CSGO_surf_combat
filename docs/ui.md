@@ -119,6 +119,9 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
 - `src/client/ui/Transition.luau` : volets blancs ; JOUER les ferme aussitôt (#253 : plus d'explosion avant).
 - `UIKit.shadowedText` : texte os doublé d'une ombre noire décalée, commun au HUD et au menu. `UIKit.accentLabel` : libellé
   ambré du menu (16 px gras, même ombre, sans contour, #280).
+- CoreGui Roblox désactivés dans `init.client.luau` : `PlayerList`, `Backpack`, `Health` (#307 : la barre de vie native
+  apparaissait au premier dégât, au-dessus du kill feed, et restait jusqu'au menu). Pas d'affichage de la vie dans le HUD
+  pour l'instant (choix de l'utilisateur) ; s'il en faut un, le brancher sur `HUDRules.gameHudVisible`.
 - `src/client/ui/Speedometer.luau` : compteur de vitesse, piste « Titrage » : gros chiffres os penchés (-6°) avec ombre noire décalée, nom du palier, bande ambrée en biais crantée aux seuils, tout passe au rouge d'impact au dernier palier (`HUDRules.speedTier`, `speedFill`). En bas à gauche, sur un fond sombre sans bord : image de dégradé de coin (`tools/ui/make_corner_scrim.py`, `assets/ui/hud/`) teintée par `ImageColor3`.
 - `src/client/ui/WeaponBar.luau` : barre d'armes en bas à droite, en miroir du compteur ; remplace le Backpack Roblox
   (`CoreGuiType.Backpack` désactivé dans `init.client.luau`). Par arme : silhouette plate tirée des MeshParts de son viewmodel
