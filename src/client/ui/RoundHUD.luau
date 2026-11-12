@@ -110,7 +110,7 @@ local function buildTimer(root: Frame)
 		Parent = layer,
 	})
 	local anchorScale = UIKit.create("UIScale", { Parent = anchor })
-	UIKit.onHudScale(function(factor)
+	UIKit.onHudScale(anchor, function(factor)
 		anchorScale.Scale = factor
 	end)
 	UIKit.cornerScrim(anchor, "Top", TOP_SCRIM_SIZE, TOP_SCRIM_TRANSPARENCY)

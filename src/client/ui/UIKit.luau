@@ -187,9 +187,15 @@ function UIKit.setHudScale(factor: number)
 end
 
 -- Cette méthode permet de suivre l'échelle du HUD lorsqu'un élément s'y adapte : le rappel est appelé tout de suite
--- avec le facteur courant, puis à chaque changement.
-function UIKit.onHudScale(listener: (number) -> ())
+-- avec le facteur courant, puis à chaque changement, jusqu'à la destruction de `owner` (pas de rappel orphelin).
+function UIKit.onHudScale(owner: Instance, listener: (number) -> ())
 	table.insert(hudScaleListeners, listener)
+	owner.Destroying:Once(function()
+		local index = table.find(hudScaleListeners, listener)
+		if index then
+			table.remove(hudScaleListeners, index)
+		end
+	end)
 	listener(hudFactor)
 end
 
@@ -216,7 +222,7 @@ function UIKit.scaledRoot(gui: ScreenGui, edge: boolean?): Frame
 		camera:GetPropertyChangedSignal("ViewportSize"):Connect(update)
 	end
 	if edge then
-		table.insert(hudScaleListeners, update)
+		UIKit.onHudScale(root, update)
 	end
 	return root
 end
