@@ -89,6 +89,8 @@ end
 StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
 -- Barre d'outils native désactivée : la barre d'armes du jeu (WeaponBar) la remplace, équipement compris
 StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
+-- Barre de vie native désactivée (#307) : hors DA, elle restait affichée jusqu'au menu ; pas de vie au HUD pour l'instant
+StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Health, false)
 -- Réglages sauvegardés (#100) : demandés au serveur dès le démarrage, appliqués à leur arrivée
 LocalSettings.init()
 -- Échelle du HUD (#250) : suit le réglage en direct (changement du joueur, puis réglages sauvegardés à leur arrivée)
