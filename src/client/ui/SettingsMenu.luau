@@ -582,18 +582,21 @@ local function buildKeysCategory(block: Frame)
 	-- ce rang et masquée au-delà : l'inventaire peut arriver ou changer après la construction (#267)
 	local refreshers = {}
 	local slotRows: { { row: Frame, label: TextLabel } } = {}
-	local catalogWeapons = #InventoryRules.ownedTools(InventoryRules.resolve(nil, true))
-	for slot = 1, math.min(catalogWeapons, PlayerSettings.MAX_ROWS) do
+	for slot = 1, math.min(#InventoryRules.catalogTools(), PlayerSettings.MAX_ROWS) do
 		local refresh, row, label = addKeyBinding(keys, slot, "")
 		table.insert(refreshers, refresh)
 		table.insert(slotRows, { row = row, label = label })
 	end
-	-- Cette méthode permet de nommer chaque ligne d'après l'arme possédée à son rang lorsque l'inventaire change.
+	-- Cette méthode permet de nommer chaque ligne d'après l'arme possédée à son rang lorsque l'inventaire change ; une
+	-- saisie de touche ouverte sur une ligne masquée est annulée.
 	local function relabel()
 		local names = weaponNames()
 		for slot, entry in slotRows do
 			local name = names[slot]
 			entry.row.Visible = name ~= nil
+			if not name and capture and capture.slot == slot then
+				endCapture()
+			end
 			entry.label.Text = keyRowName(slot, if name then HUDRules.weaponLabel(name) else "")
 		end
 	end

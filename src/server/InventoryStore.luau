@@ -3,7 +3,9 @@
 -- `InventoryRules`. Le serveur ne place dans le sac que les Tools possédés, copiés de `ReplicatedStorage.Tools` (le
 -- StarterPack est vide : rien n'est donné d'office), à chaque apparition et à chaque changement d'inventaire ; un Tool
 -- non possédé qui arrive en main est retiré (`init.server`, `trackWeapon3P`) et le Validator refuse ses tirs et coups.
--- Lecture DataStore en échec : inventaire par défaut (et admin), sauvegarde coupée pour la session.
+-- Lecture DataStore en échec (ou données d'une version plus récente) : inventaire par défaut (et admin), sauvegarde
+-- coupée pour la session. Écriture par UpdateAsync qui réunit les ids déjà enregistrés et ceux de la session (un
+-- inventaire ne fait que grandir) : une sauvegarde en retard ou d'un autre serveur n'efface rien.
 -- Studio seulement : attribut Player `DebugInventory` = "default" (posé en contexte serveur), le joueur est traité
 -- comme un non-admin, pour vérifier l'inventaire par défaut avec le compte propriétaire.
 local DataStoreService = game:GetService("DataStoreService")
@@ -19,12 +21,22 @@ local Roles = require(ServerScriptService.Server.Roles)
 
 local DEBUG_ATTRIBUTE = "DebugInventory"
 local BACKPACK_WAIT = 5 -- s d'attente maximale du sac d'un personnage qui vient d'apparaître
+local CLOSE_WAIT = 25 -- s d'attente maximale des sauvegardes en vol à l'arrêt du serveur (budget Roblox : 30 s)
 
-type Profile = { stored: { string }, loaded: boolean, dirty: boolean }
+-- owned : items possédés, recalculés à chaque changement (setup, chargement, déblocage, debug) et lus à chaque tir
+type Profile = {
+	stored: { string },
+	owned: InventoryRules.Owned,
+	loaded: boolean,
+	dirty: boolean,
+	saving: boolean,
+	canSave: boolean,
+}
 
 local store: DataStore? = nil
 local profiles: { [Player]: Profile } = {}
-local saveDisabled: { [Player]: boolean } = {}
+-- Sauvegardes en cours, attendues par BindToClose (celles lancées au départ d'un joueur comprises)
+local savesInFlight = 0
 -- Inventaire des bots (#267) : celui par défaut, jamais sauvegardé
 local BOT_OWNED = InventoryRules.resolve(nil, false)
 
@@ -67,11 +79,11 @@ local function isAdmin(player: Player): boolean
 	return Roles.hasRole(player, Roles.ADMIN)
 end
 
--- Cette méthode permet de calculer les items possédés d'un joueur lorsqu'un système serveur en a besoin ; avant ou
--- sans chargement réussi, l'inventaire par défaut (et tout pour un admin).
+-- Cette méthode permet de lire les items possédés d'un joueur lorsqu'un système serveur en a besoin ; joueur inconnu
+-- (parti, pas encore inscrit) : l'inventaire par défaut (et tout pour un admin).
 function InventoryStore.owned(player: Player): InventoryRules.Owned
 	local profile = profiles[player]
-	return InventoryRules.resolve(if profile then profile.stored else nil, isAdmin(player))
+	return if profile then profile.owned else InventoryRules.resolve(nil, isAdmin(player))
 end
 
 -- Cette méthode permet de savoir si un participant possède un Tool lorsque le serveur valide un equip, un tir ou un
@@ -97,8 +109,9 @@ local function presentTools(player: Player): { Tool }
 	return tools
 end
 
--- Cette méthode permet de mettre le sac d'un joueur en accord avec son inventaire lorsqu'il apparaît ou que son
--- inventaire change : Tools possédés copiés de ReplicatedStorage.Tools, Tools non possédés retirés (main comprise).
+-- Cette méthode permet de mettre le sac d'un joueur en accord avec son inventaire lorsqu'il apparaît, qu'un nouveau sac
+-- lui est donné ou que son inventaire change : Tools possédés copiés de ReplicatedStorage.Tools, Tools non possédés
+-- retirés (main comprise). Idempotente : sans effet si le sac est déjà juste.
 function InventoryStore.syncTools(player: Player)
 	local character = player.Character
 	if not character then
@@ -130,30 +143,83 @@ function InventoryStore.syncTools(player: Player)
 	end
 end
 
--- Cette méthode permet de publier l'inventaire d'un joueur (attribut informatif `OwnedItems`, lu par les listes d'armes
--- du client) et de remettre son sac en accord lorsqu'il change (chargement, déblocage, debug Studio).
-local function refresh(player: Player)
+-- Cette méthode permet de recalculer et publier l'inventaire d'un joueur (attribut informatif `OwnedItems`, lu par les
+-- listes d'armes du client) et de remettre son sac en accord lorsqu'il change (chargement, déblocage, debug Studio).
+local function refresh(player: Player, profile: Profile)
+	profile.owned = InventoryRules.resolve(profile.stored, isAdmin(player))
 	if not player.Parent then
 		return
 	end
-	player:SetAttribute(InventoryRules.ATTRIBUTE, InventoryRules.encode(InventoryStore.owned(player)))
+	player:SetAttribute(InventoryRules.ATTRIBUTE, InventoryRules.encode(profile.owned))
 	task.spawn(InventoryStore.syncTools, player)
 end
 
+-- Cette méthode permet d'écrire l'inventaire d'un profil s'il a changé lorsqu'un item est obtenu, que le joueur part ou
+-- que le serveur s'arrête : une seule écriture à la fois par profil, ids réunis avec ceux déjà enregistrés
+-- (InventoryRules.mergeForSave) ; un changement arrivé pendant l'écriture en relance une.
+local function saveProfile(player: Player, profile: Profile)
+	local ds = getStore()
+	if not (ds and profile.loaded and profile.canSave and profile.dirty) or profile.saving then
+		return
+	end
+	profile.saving = true
+	profile.dirty = false
+	savesInFlight += 1
+	local stored = profile.stored
+	local ok = withRetry(function()
+		return ds:UpdateAsync(tostring(player.UserId), function(old)
+			return InventoryRules.mergeForSave(old, stored)
+		end)
+	end)
+	savesInFlight -= 1
+	profile.saving = false
+	if not ok then
+		profile.dirty = true
+		warn("[InventoryStore] sauvegarde impossible pour", player.Name)
+	elseif profile.dirty then
+		saveProfile(player, profile)
+	end
+end
+
+-- Cette méthode permet d'écrire l'inventaire d'un joueur inscrit s'il a changé (cf. saveProfile).
+function InventoryStore.save(player: Player)
+	local profile = profiles[player]
+	if profile then
+		saveProfile(player, profile)
+	end
+end
+
 -- Cette méthode permet d'inscrire un joueur lorsqu'il arrive, avant le chargement DataStore : inventaire par défaut (et
--- admin) publié tout de suite, pour que le client n'attende pas le DataStore.
+-- admin) publié tout de suite, pour que le client n'attende pas le DataStore ; un nouveau sac (réapparition) est
+-- resynchronisé.
 function InventoryStore.setup(player: Player)
-	profiles[player] = { stored = {}, loaded = false, dirty = false }
-	player:SetAttribute(InventoryRules.ATTRIBUTE, InventoryRules.encode(InventoryStore.owned(player)))
+	local profile: Profile = {
+		stored = {},
+		owned = {},
+		loaded = false,
+		dirty = false,
+		saving = false,
+		canSave = false,
+	}
+	profiles[player] = profile
+	refresh(player, profile)
+	player.ChildAdded:Connect(function(child)
+		if child:IsA("Backpack") then
+			task.spawn(InventoryStore.syncTools, player)
+		end
+	end)
 	if RunService:IsStudio() then
 		player:GetAttributeChangedSignal(DEBUG_ATTRIBUTE):Connect(function()
-			refresh(player)
+			if profiles[player] == profile then
+				refresh(player, profile)
+			end
 		end)
 	end
 end
 
--- Cette méthode permet de charger l'inventaire sauvegardé d'un joueur lorsqu'il arrive ; un échec de lecture garde
--- l'inventaire par défaut et coupe la sauvegarde pour la session, pour ne pas écraser ses vraies données.
+-- Cette méthode permet de charger l'inventaire sauvegardé d'un joueur lorsqu'il arrive ; un échec de lecture (ou des
+-- données d'une version plus récente) garde l'inventaire par défaut et coupe la sauvegarde pour la session, pour ne pas
+-- écraser ses vraies données.
 function InventoryStore.load(player: Player)
 	local profile = profiles[player]
 	if not profile then
@@ -170,43 +236,21 @@ function InventoryStore.load(player: Player)
 		return -- parti pendant le chargement
 	end
 	local stored, canSave = InventoryRules.loadOutcome(ok, data)
-	-- Un item obtenu pendant le chargement (stored déjà modifié) n'est pas perdu
-	for _, id in profile.stored do
-		stored = InventoryRules.grant(stored, id)
-	end
 	profile.stored = stored
+	profile.canSave = canSave
 	profile.loaded = true
 	if not canSave then
-		saveDisabled[player] = true
 		warn("[InventoryStore] chargement impossible pour", player.Name, "— inventaire par défaut, non sauvegardé")
 	end
-	refresh(player)
-end
-
--- Cette méthode permet d'écrire l'inventaire d'un joueur s'il a changé lorsqu'un item est obtenu, que le joueur part ou
--- que le serveur s'arrête ; rien avant la fin du chargement ni après une lecture en échec.
-function InventoryStore.save(player: Player)
-	local profile = profiles[player]
-	local ds = getStore()
-	if not (profile and profile.loaded and profile.dirty and ds) or saveDisabled[player] then
-		return
-	end
-	profile.dirty = false
-	local payload = InventoryRules.payload(profile.stored)
-	local ok = withRetry(function()
-		return ds:SetAsync(tostring(player.UserId), payload, { player.UserId })
-	end)
-	if not ok then
-		profile.dirty = true
-		warn("[InventoryStore] sauvegarde impossible pour", player.Name)
-	end
+	refresh(player, profile)
 end
 
 -- Cette méthode permet de donner un item à un joueur lorsqu'il l'obtient (boutique, déblocage : à venir, hors #267) :
--- ajouté, publié, sac mis à jour, écrit tout de suite ; renvoie false si l'id est inconnu ou déjà sauvegardé.
+-- ajouté, publié, sac mis à jour, écrit tout de suite. Refusé (false) tant que l'inventaire n'est pas chargé ou s'il ne
+-- peut pas être sauvegardé (l'item serait perdu au départ), ou si l'id est inconnu ou déjà possédé.
 function InventoryStore.grant(player: Player, id: string): boolean
 	local profile = profiles[player]
-	if not profile then
+	if not (profile and profile.loaded and profile.canSave) then
 		return false
 	end
 	local stored, changed = InventoryRules.grant(profile.stored, id)
@@ -215,8 +259,8 @@ function InventoryStore.grant(player: Player, id: string): boolean
 	end
 	profile.stored = stored
 	profile.dirty = true
-	refresh(player)
-	task.spawn(InventoryStore.save, player)
+	refresh(player, profile)
+	task.spawn(saveProfile, player, profile)
 	return true
 end
 
@@ -231,17 +275,24 @@ local function clearStarterPack()
 	end
 end
 
--- Cette méthode permet de brancher le départ des joueurs et l'arrêt du serveur lorsque le serveur démarre.
+-- Cette méthode permet de brancher le départ des joueurs et l'arrêt du serveur lorsque le serveur démarre ; à l'arrêt,
+-- les sauvegardes partent ensemble et le serveur attend aussi celles déjà en vol (CLOSE_WAIT au plus).
 function InventoryStore.init()
 	clearStarterPack()
 	Players.PlayerRemoving:Connect(function(player)
-		InventoryStore.save(player)
+		local profile = profiles[player]
 		profiles[player] = nil
-		saveDisabled[player] = nil
+		if profile then
+			saveProfile(player, profile)
+		end
 	end)
 	game:BindToClose(function()
-		for player in profiles do
-			InventoryStore.save(player)
+		for player, profile in profiles do
+			task.spawn(saveProfile, player, profile)
+		end
+		local deadline = os.clock() + CLOSE_WAIT
+		while savesInFlight > 0 and os.clock() < deadline do
+			task.wait(0.1)
 		end
 	end)
 end

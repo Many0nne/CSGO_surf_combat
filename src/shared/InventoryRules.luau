@@ -75,19 +75,52 @@ function InventoryRules.sanitizeStored(raw: any): { string }
 	return ids
 end
 
+-- Cette méthode permet de savoir si une valeur relue du DataStore est d'un format que cette version sait réécrire :
+-- absente (nouveau joueur), ou table de schéma connu (pas plus récent) dont `items` est une liste ou absent.
+local function isWritable(data: any): boolean
+	if data == nil then
+		return true
+	end
+	if type(data) ~= "table" then
+		return false
+	end
+	local version = data.schemaVersion
+	if version ~= nil and (type(version) ~= "number" or version > InventoryRules.SCHEMA_VERSION) then
+		return false
+	end
+	return data.items == nil or type(data.items) == "table"
+end
+
 -- Cette méthode permet de décider de l'issue du chargement DataStore d'un inventaire lorsqu'il se termine : ids
 -- sauvegardés et droit d'écrire. Lecture en échec : inventaire par défaut et sauvegarde coupée, pour ne pas écraser les
--- vraies données ; aucune donnée (nouveau joueur) : rien de sauvegardé, écriture permise.
+-- vraies données ; aucune donnée (nouveau joueur) : rien de sauvegardé, écriture permise ; données d'un format inconnu
+-- ou d'une version plus récente du jeu : ids lisibles gardés, sauvegarde coupée.
 function InventoryRules.loadOutcome(ok: boolean, data: any): ({ string }, boolean)
 	if not ok then
 		return {}, false
 	end
-	return InventoryRules.sanitizeStored(if type(data) == "table" then data.items else nil), true
+	return InventoryRules.sanitizeStored(if type(data) == "table" then data.items else nil), isWritable(data)
 end
 
 -- Cette méthode permet de construire la valeur écrite dans le DataStore lorsqu'un inventaire est sauvegardé.
 function InventoryRules.payload(stored: { string }): { schemaVersion: number, items: { string } }
 	return { schemaVersion = InventoryRules.SCHEMA_VERSION, items = table.clone(stored) }
+end
+
+-- Cette méthode permet de calculer la valeur écrite par UpdateAsync lorsqu'un inventaire est sauvegardé : ids déjà
+-- enregistrés (autre serveur, sauvegarde en retard) réunis avec ceux de la session, un inventaire ne faisant que
+-- grandir. nil (écriture annulée) si l'enregistrement est d'un format que cette version ne sait pas réécrire.
+function InventoryRules.mergeForSave(old: any, stored: { string }): { schemaVersion: number, items: { string } }?
+	if not isWritable(old) then
+		return nil
+	end
+	local merged = InventoryRules.sanitizeStored(if type(old) == "table" then old.items else nil)
+	for _, id in stored do
+		if InventoryRules.isValidId(id) and not table.find(merged, id) then
+			table.insert(merged, id)
+		end
+	end
+	return InventoryRules.payload(InventoryRules.sanitizeStored(merged))
 end
 
 -- Cette méthode permet de calculer les items possédés lorsqu'un système serveur en a besoin : inventaire par défaut,
@@ -134,6 +167,12 @@ function InventoryRules.ownedTools(owned: Owned): { string }
 	end
 	table.sort(names)
 	return names
+end
+
+-- Cette méthode permet de lister tous les Tools d'armes du catalogue, triés, lorsque l'interface prévoit une ligne par
+-- arme possible (Réglages).
+function InventoryRules.catalogTools(): { string }
+	return InventoryRules.ownedTools(InventoryRules.resolve(nil, true))
 end
 
 -- Cette méthode permet de comparer les Tools présents chez un joueur (sac et main) à son inventaire lorsque le serveur

@@ -102,10 +102,21 @@ return function(T, Loader)
 			T.expectEqual(table.concat(stored, ","), "skin.awp.futur,weapon.m9bayonet")
 		end)
 
-		T.it("données d'une forme inattendue : liste vide", function()
+		T.it("données d'une forme inattendue : liste vide, sauvegarde coupée pour ne pas les écraser", function()
 			T.expectEqual(#Rules.sanitizeStored("weapon.awp"), 0)
-			T.expectEqual(#(Rules.loadOutcome(true, { items = "weapon.awp" })), 0)
-			T.expectEqual(#(Rules.loadOutcome(true, "texte")), 0)
+			local stored, canSave = Rules.loadOutcome(true, { items = "weapon.awp" })
+			T.expectEqual(#stored, 0)
+			T.expectEqual(canSave, false)
+			stored, canSave = Rules.loadOutcome(true, "texte")
+			T.expectEqual(#stored, 0)
+			T.expectEqual(canSave, false)
+		end)
+
+		T.it("données d'une version plus récente : ids lisibles gardés, sauvegarde coupée", function()
+			local stored, canSave =
+				Rules.loadOutcome(true, { schemaVersion = Rules.SCHEMA_VERSION + 1, items = { "weapon.m9bayonet" } })
+			T.expectEqual(table.concat(stored, ","), "weapon.m9bayonet")
+			T.expectEqual(canSave, false)
 		end)
 
 		T.it("borne le nombre d'ids relus", function()
@@ -122,6 +133,28 @@ return function(T, Loader)
 			T.expectEqual(payload.schemaVersion, Rules.SCHEMA_VERSION)
 			T.expectEqual(payload.items[1], "weapon.m9bayonet")
 			T.expect(payload.items ~= stored, "copie")
+		end)
+
+		T.it("sauvegarde : réunit les ids déjà enregistrés et ceux de la session", function()
+			local written = Rules.mergeForSave(
+				{ schemaVersion = 1, items = { "weapon.m9bayonet", "skin.awp.futur" } },
+				{ "weapon.kabar" }
+			)
+			T.expect(written ~= nil, "écriture")
+			T.expectEqual(written.schemaVersion, Rules.SCHEMA_VERSION)
+			T.expectEqual(table.concat(written.items, ","), "skin.awp.futur,weapon.kabar,weapon.m9bayonet")
+		end)
+
+		T.it("sauvegarde : une session en retard n'efface pas un item enregistré entre-temps", function()
+			-- Sauvegarde de la session A ({}) arrivée après celle de B qui a écrit la M9
+			local written = Rules.mergeForSave({ schemaVersion = 1, items = { "weapon.m9bayonet" } }, {})
+			T.expectEqual(table.concat(written.items, ","), "weapon.m9bayonet")
+		end)
+
+		T.it("sauvegarde : premier enregistrement, et annulée sur un format inconnu ou plus récent", function()
+			T.expectEqual(table.concat(Rules.mergeForSave(nil, { "weapon.kabar" }).items, ","), "weapon.kabar")
+			T.expectEqual(Rules.mergeForSave({ schemaVersion = Rules.SCHEMA_VERSION + 1, items = {} }, {}), nil)
+			T.expectEqual(Rules.mergeForSave("texte", { "weapon.kabar" }), nil)
 		end)
 
 		T.it("grant : ajoute un item connu une seule fois", function()
@@ -146,6 +179,10 @@ return function(T, Loader)
 			local give, remove = Rules.toolChanges(Rules.resolve(nil, true), {})
 			T.expectEqual(table.concat(give, ","), "AWP,KaBar,M9Bayonet")
 			T.expectEqual(#remove, 0)
+		end)
+
+		T.it("catalogue des Tools : toutes les armes, triées", function()
+			T.expectEqual(table.concat(Rules.catalogTools(), ","), "AWP,KaBar,M9Bayonet")
 		end)
 
 		T.it("attribut : aller-retour, ids inconnus ignorés, défaut sans attribut", function()
