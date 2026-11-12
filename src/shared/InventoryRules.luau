@@ -58,10 +58,8 @@ function InventoryRules.isValidId(id: any): boolean
 	return type(id) == "string" and #id <= InventoryRules.MAX_ID_LENGTH and string.match(id, ID_PATTERN) ~= nil
 end
 
--- Cette méthode permet d'assainir les ids sauvegardés lorsqu'ils sont relus du DataStore : chaînes valides seulement,
--- sans doublon, triées, `limit` au plus (MAX_STORED par défaut : borne de la session, jamais appliquée à l'écriture).
--- Un id absent du catalogue est gardé (item retiré, ou ajouté par une version plus récente du jeu) pour ne jamais le
--- perdre à la sauvegarde suivante ; il n'ouvre rien tant qu'il est inconnu.
+-- Cette méthode permet d'assainir les ids relus du DataStore lorsqu'ils sont chargés ou réécrits : valides, uniques, triés,
+-- `limit` au plus (MAX_STORED par défaut) ; un id hors catalogue est gardé pour ne jamais le perdre, sans rien ouvrir.
 function InventoryRules.sanitizeStored(raw: any, limit: number?): { string }
 	local ids: { string } = {}
 	if type(raw) ~= "table" then
@@ -98,10 +96,8 @@ local function isWritable(data: any): boolean
 	return data.items == nil or type(data.items) == "table"
 end
 
--- Cette méthode permet de décider de l'issue du chargement DataStore d'un inventaire lorsqu'il se termine : ids
--- sauvegardés et droit d'écrire. Lecture en échec : inventaire par défaut et sauvegarde coupée, pour ne pas écraser les
--- vraies données ; aucune donnée (nouveau joueur) : rien de sauvegardé, écriture permise ; données d'un format inconnu
--- ou d'une version plus récente du jeu : ids lisibles gardés, sauvegarde coupée.
+-- Cette méthode permet de décider des ids et du droit d'écrire lorsque le chargement DataStore se termine : lecture en
+-- échec ou format inconnu/plus récent → sauvegarde coupée (rien d'écrasé) ; aucune donnée → nouveau joueur, écriture permise.
 function InventoryRules.loadOutcome(ok: boolean, data: any): ({ string }, boolean)
 	if not ok then
 		return {}, false
@@ -114,10 +110,8 @@ function InventoryRules.payload(stored: { string }): { schemaVersion: number, it
 	return { schemaVersion = InventoryRules.SCHEMA_VERSION, items = table.clone(stored) }
 end
 
--- Cette méthode permet de calculer la valeur écrite par UpdateAsync lorsqu'un inventaire est sauvegardé : ids déjà
--- enregistrés (autre serveur, sauvegarde en retard) réunis avec ceux de la session, un inventaire ne faisant que
--- grandir. nil (écriture annulée) si l'enregistrement est d'un format que cette version ne sait pas réécrire. Sans
--- plafond : la borne MAX_STORED de la session ne doit pas effacer les ids enregistrés au-delà.
+-- Cette méthode permet de calculer la valeur écrite par UpdateAsync lorsqu'un inventaire est sauvegardé : ids enregistrés
+-- réunis à ceux de la session, sans plafond (un inventaire ne fait que grandir) ; nil (annulée) sur un format inconnu.
 function InventoryRules.mergeForSave(old: any, stored: { string }): { schemaVersion: number, items: { string } }?
 	if not isWritable(old) then
 		return nil
@@ -127,9 +121,8 @@ function InventoryRules.mergeForSave(old: any, stored: { string }): { schemaVers
 	return InventoryRules.payload(InventoryRules.sanitizeStored(merged, math.huge))
 end
 
--- Cette méthode permet de calculer les items possédés lorsqu'un système serveur en a besoin : inventaire par défaut,
--- plus les items sauvegardés connus du catalogue, plus tout le catalogue pour un admin (jamais sauvegardé : retirer le
--- rôle retire les items). stored nil : rien de sauvegardé (bot, chargement en cours ou en échec).
+-- Cette méthode permet de calculer les items possédés lorsqu'un système en a besoin : défaut + ids sauvegardés connus +
+-- tout le catalogue pour un admin (jamais sauvegardé) ; stored nil : rien de sauvegardé (bot, chargement pas abouti).
 function InventoryRules.resolve(stored: { string }?, isAdmin: boolean): Owned
 	local owned: Owned = {}
 	for _, id in InventoryRules.DEFAULT_ITEMS do

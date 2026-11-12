@@ -38,7 +38,6 @@ return function(T, Loader)
 		loader = Loader.new({
 			Players = Players,
 			RunService = RunService,
-			StarterPack = {},
 			StarterPlayer = {},
 			CollectionService = {},
 		}, {
