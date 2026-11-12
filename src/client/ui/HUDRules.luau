@@ -1,8 +1,9 @@
--- Règles pures du HUD (sans Instance ; seul module requis : KeyBindings) : paliers de vitesse, timer, classement, barre
--- d'armes, affichage des touches.
+-- Règles pures du HUD (sans Instance ; modules requis : KeyBindings, InventoryRules) : paliers de vitesse, timer,
+-- classement, barre d'armes, affichage des touches.
 -- Testées sous Lune (tests/specs/HUDRules.spec.luau).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local InventoryRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("InventoryRules"))
 local KeyBindings = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("KeyBindings"))
 
 local HUDRules = {}
@@ -124,11 +125,21 @@ function HUDRules.formatReserve(reserve: number): string
 	return "/ " .. tostring(reserve)
 end
 
--- Cette méthode permet de trier les noms d'outils dans l'ordre des emplacements (alphabétique, comme le helper
--- DebugPlaytest) lorsque la barre d'armes est reconstruite.
+-- Cette méthode permet de trier les noms d'outils dans l'ordre des emplacements (#280 : SNIPER puis COUTEAU, outils
+-- hors catalogue à la fin ; à emplacement égal, ordre alphabétique) lorsque la barre d'armes est reconstruite.
 function HUDRules.slotOrder(names: { string }): { string }
 	local sorted = table.clone(names)
-	table.sort(sorted)
+	local function rank(name: string): number
+		local slot = InventoryRules.slotOfTool(name)
+		return slot and InventoryRules.slotIndex(slot) or math.huge
+	end
+	table.sort(sorted, function(a, b)
+		local ra, rb = rank(a), rank(b)
+		if ra ~= rb then
+			return ra < rb
+		end
+		return a < b
+	end)
 	return sorted
 end
 

@@ -179,20 +179,24 @@ return function(T, Loader)
 	end)
 
 	T.describe("InventoryRules : sac et attribut", function()
-		T.it("donne les Tools possédés absents et retire ceux non possédés", function()
-			local give, remove = Rules.toolChanges(Rules.resolve(nil, false), { "AWP", "M9Bayonet", "Inconnu" })
+		T.it("donne les Tools équipés absents et retire tous les autres", function()
+			local wanted = Rules.equippedTools(Rules.resolveEquipped(nil, Rules.resolve(nil, false)))
+			local give, remove = Rules.toolChanges(wanted, { "AWP", "M9Bayonet", "Inconnu" })
 			T.expectEqual(table.concat(give, ","), "KaBar")
 			T.expectEqual(table.concat(remove, ","), "M9Bayonet,Inconnu")
 		end)
 
-		T.it("sac vide d'un admin : toutes les armes", function()
-			local give, remove = Rules.toolChanges(Rules.resolve(nil, true), {})
-			T.expectEqual(table.concat(give, ","), "AWP,KaBar,M9Bayonet")
-			T.expectEqual(#remove, 0)
-		end)
-
-		T.it("catalogue des Tools : toutes les armes, triées", function()
-			T.expectEqual(table.concat(Rules.catalogTools(), ","), "AWP,KaBar,M9Bayonet")
+		T.it("sac d'un admin : un sniper et un seul couteau (#280), pas tout le catalogue", function()
+			local owned = Rules.resolve(nil, true)
+			local wanted = Rules.equippedTools(Rules.resolveEquipped(nil, owned))
+			local give, remove = Rules.toolChanges(wanted, { "AWP", "KaBar", "M9Bayonet" })
+			T.expectEqual(#give, 0)
+			T.expectEqual(table.concat(remove, ","), "M9Bayonet")
+			local equipped = Rules.equip({}, owned, "knife", "weapon.m9bayonet", nil)
+			T.expectEqual(
+				table.concat(Rules.equippedTools(Rules.resolveEquipped(equipped, owned)), ","),
+				"AWP,M9Bayonet"
+			)
 		end)
 
 		T.it("attribut : aller-retour, ids inconnus ignorés, défaut sans attribut", function()
@@ -206,6 +210,202 @@ return function(T, Loader)
 				table.concat(ids(Rules.decode("")), ","),
 				"weapon.awp,weapon.kabar",
 				"défaut toujours possédé"
+			)
+		end)
+	end)
+
+	T.describe("InventoryRules : équipement (#280)", function()
+		-- Cette méthode permet de charger un exemplaire à part du module dont le catalogue compte deux skins de test
+		-- lorsque l'étape skin doit être éprouvée (aucun skin n'existe avant #268) ; `Rules` reste intact.
+		local function withSkins()
+			local skinned = Loader.new({}):require("src/shared/InventoryRules")
+			table.insert(skinned.ITEMS, { id = "skin.awp.test", type = "skin", weapon = "weapon.awp" })
+			table.insert(skinned.ITEMS, { id = "skin.kabar.test", type = "skin", weapon = "weapon.kabar" })
+			skinned.reindex()
+			return skinned
+		end
+
+		T.it(
+			"chaque arme a un emplacement connu, chaque emplacement une arme par défaut possédée de cet emplacement",
+			function()
+				for _, entry in Rules.ITEMS do
+					if entry.type == Rules.Type.WEAPON then
+						T.expect(Rules.slotIndex(entry.slot) ~= nil, "emplacement de " .. entry.id)
+					end
+				end
+				local owned = Rules.resolve(nil, false)
+				for _, slot in Rules.SLOTS do
+					local id = Rules.DEFAULT_EQUIPPED[slot]
+					local item = id and Rules.item(id)
+					T.expect(item ~= nil and item.slot == slot, "défaut de " .. slot)
+					T.expect(owned[id] == true, "défaut possédé : " .. slot)
+				end
+			end
+		)
+
+		T.it("ordre des emplacements : 1 · SNIPER, 2 · COUTEAU", function()
+			T.expectEqual(Rules.slotIndex("sniper"), 1)
+			T.expectEqual(Rules.slotIndex("knife"), 2)
+			T.expectEqual(Rules.slotIndex("pistol"), nil)
+			T.expectEqual(Rules.slotOfTool("M9Bayonet"), "knife")
+			T.expectEqual(Rules.slotOfTool("Inconnu"), nil)
+		end)
+
+		T.it("rien de choisi : équipement par défaut (AWP, Ka-Bar, d'origine)", function()
+			local resolved = Rules.resolveEquipped(nil, Rules.resolve(nil, true))
+			T.expectEqual(resolved.sniper.weapon, "weapon.awp")
+			T.expectEqual(resolved.knife.weapon, "weapon.kabar")
+			T.expectEqual(resolved.knife.skin, nil)
+		end)
+
+		T.it("liste d'un emplacement : seules les armes possédées de cet emplacement", function()
+			local function tools(list)
+				local names = {}
+				for _, item in list do
+					table.insert(names, item.tool)
+				end
+				return table.concat(names, ",")
+			end
+			T.expectEqual(tools(Rules.weaponsForSlot(Rules.resolve(nil, false), "knife")), "KaBar")
+			T.expectEqual(tools(Rules.weaponsForSlot(Rules.resolve(nil, true), "knife")), "KaBar,M9Bayonet")
+			T.expectEqual(tools(Rules.weaponsForSlot(Rules.resolve(nil, true), "sniper")), "AWP")
+			T.expectEqual(#Rules.skinsFor(Rules.resolve(nil, true), "weapon.awp"), 0)
+		end)
+
+		T.it("équipe une arme possédée de l'emplacement, sans toucher à l'autre emplacement", function()
+			local owned = Rules.resolve({ "weapon.m9bayonet" }, false)
+			local before = { sniper = { weapon = "weapon.awp" } }
+			local equipped, reason = Rules.equip(before, owned, "knife", "weapon.m9bayonet", nil)
+			T.expectEqual(reason, nil)
+			assert(equipped)
+			T.expectEqual(equipped.knife.weapon, "weapon.m9bayonet")
+			T.expectEqual(equipped.sniper.weapon, "weapon.awp")
+			T.expect(before.knife == nil, "copie : l'équipement reçu n'est pas modifié")
+		end)
+
+		T.it(
+			"refuse un item non possédé, une arme d'un autre emplacement, un id inconnu ou un emplacement inconnu",
+			function()
+				local owned = Rules.resolve(nil, false)
+				local _, notOwned = Rules.equip({}, owned, "knife", "weapon.m9bayonet", nil)
+				T.expectEqual(notOwned, "not_owned")
+				local _, wrongSlot = Rules.equip({}, owned, "sniper", "weapon.kabar", nil)
+				T.expectEqual(wrongSlot, "wrong_slot")
+				local _, unknown = Rules.equip({}, owned, "knife", "weapon.inconnue", nil)
+				T.expectEqual(unknown, "unknown")
+				local _, badSlot = Rules.equip({}, owned, "pistol", "weapon.awp", nil)
+				T.expectEqual(badSlot, "slot")
+				local _, notString = Rules.equip({}, owned, "sniper", 42, nil)
+				T.expectEqual(notString, "unknown")
+			end
+		)
+
+		T.it(
+			"refuse le skin d'une autre arme, un skin non possédé, et accepte un skin possédé de l'arme",
+			function()
+				local R = withSkins()
+				T.expect(Rules.item("skin.awp.test") == nil, "catalogue du module partagé intact")
+				local owned = R.resolve({ "skin.awp.test", "skin.kabar.test" }, false)
+				local _, wrongSkin = R.equip({}, owned, "sniper", "weapon.awp", "skin.kabar.test")
+				T.expectEqual(wrongSkin, "wrong_skin")
+				local _, notOwned = R.equip({}, R.resolve(nil, false), "sniper", "weapon.awp", "skin.awp.test")
+				T.expectEqual(notOwned, "not_owned")
+				local _, unknownSkin = R.equip({}, owned, "sniper", "weapon.awp", "skin.awp.inconnu")
+				T.expectEqual(unknownSkin, "wrong_skin")
+				local equipped = assert(R.equip({}, owned, "sniper", "weapon.awp", "skin.awp.test"))
+				T.expectEqual(equipped.sniper.skin, "skin.awp.test")
+				T.expectEqual(#R.skinsFor(owned, "weapon.awp"), 1)
+				-- Skin perdu : l'arme reste, le skin revient d'origine
+				local resolved = R.resolveEquipped(equipped, R.resolve(nil, false))
+				T.expectEqual(resolved.sniper.weapon, "weapon.awp")
+				T.expectEqual(resolved.sniper.skin, nil)
+				T.expectEqual(R.resolveEquipped(equipped, owned).sniper.skin, "skin.awp.test")
+			end
+		)
+
+		T.it("un choix qui n'est plus possédé laisse la place au défaut, sans être effacé", function()
+			local admin = Rules.resolve(nil, true)
+			local equipped = assert(Rules.equip({}, admin, "knife", "weapon.m9bayonet", nil))
+			-- Rôle admin retiré : la M9 n'est plus possédée
+			local resolved = Rules.resolveEquipped(equipped, Rules.resolve(nil, false))
+			T.expectEqual(resolved.knife.weapon, "weapon.kabar")
+			T.expectEqual(equipped.knife.weapon, "weapon.m9bayonet", "choix enregistré gardé")
+			-- Rôle rendu : le choix revient
+			T.expectEqual(Rules.resolveEquipped(equipped, admin).knife.weapon, "weapon.m9bayonet")
+		end)
+
+		T.it(
+			"un choix enregistré incohérent (arme dans le mauvais emplacement, skin étranger) est ramené au défaut",
+			function()
+				local owned = Rules.resolve(nil, true)
+				local resolved = Rules.resolveEquipped({
+					sniper = { weapon = "weapon.kabar" },
+					knife = { weapon = "weapon.m9bayonet", skin = "skin.awp.inconnu" },
+				}, owned)
+				T.expectEqual(resolved.sniper.weapon, "weapon.awp")
+				T.expectEqual(resolved.knife.weapon, "weapon.m9bayonet")
+				T.expectEqual(resolved.knife.skin, nil, "skin inconnu : d'origine")
+			end
+		)
+
+		T.it("assainit l'équipement relu : formes inattendues ignorées", function()
+			local equipped = Rules.sanitizeEquipped({
+				sniper = { weapon = "weapon.awp", skin = 12 },
+				knife = "weapon.kabar",
+				pistol = { weapon = "weapon.awp" },
+			})
+			T.expectEqual(equipped.sniper.weapon, "weapon.awp")
+			T.expectEqual(equipped.sniper.skin, nil)
+			T.expectEqual(equipped.knife, nil)
+			T.expectEqual(equipped.pistol, nil)
+			T.expectEqual(next(Rules.sanitizeEquipped("texte")), nil)
+		end)
+
+		T.it("chargement : l'équipement enregistré est relu, absent pour un nouveau joueur", function()
+			local _, canSave, equipped = Rules.loadOutcome(true, {
+				schemaVersion = 1,
+				items = { "weapon.m9bayonet" },
+				equipped = { knife = { weapon = "weapon.m9bayonet" } },
+			})
+			T.expectEqual(canSave, true)
+			T.expectEqual(equipped.knife.weapon, "weapon.m9bayonet")
+			local _, _, fresh = Rules.loadOutcome(true, nil)
+			T.expectEqual(next(fresh), nil)
+			local _, failedSave, failed = Rules.loadOutcome(false, nil)
+			T.expectEqual(failedSave, false)
+			T.expectEqual(next(failed), nil)
+		end)
+
+		T.it("chargement : un `equipped` d'une forme inconnue coupe la sauvegarde", function()
+			local _, canSave = Rules.loadOutcome(true, { schemaVersion = 1, items = {}, equipped = "knife" })
+			T.expectEqual(canSave, false)
+			T.expectEqual(Rules.mergeForSave({ schemaVersion = 1, equipped = "knife" }, {}, nil), nil)
+		end)
+
+		T.it("sauvegarde : écrit l'équipement de la session, sinon garde celui déjà enregistré", function()
+			local old = { schemaVersion = 1, items = {}, equipped = { knife = { weapon = "weapon.m9bayonet" } } }
+			local kept = Rules.mergeForSave(old, {}, nil)
+			assert(kept and kept.equipped)
+			T.expectEqual(kept.equipped.knife.weapon, "weapon.m9bayonet")
+			local replaced = Rules.mergeForSave(old, {}, { knife = { weapon = "weapon.kabar" } })
+			assert(replaced and replaced.equipped)
+			T.expectEqual(replaced.equipped.knife.weapon, "weapon.kabar")
+			local none = Rules.mergeForSave(nil, { "weapon.kabar" }, nil)
+			assert(none)
+			T.expectEqual(none.equipped, nil, "rien de choisi : pas de clé `equipped`")
+		end)
+
+		T.it("attribut : aller-retour, repli sur le défaut pour un item non possédé ou un texte absent", function()
+			local admin = Rules.resolve(nil, true)
+			local resolved = Rules.resolveEquipped({ knife = { weapon = "weapon.m9bayonet" } }, admin)
+			local text = Rules.encodeEquipped(resolved)
+			T.expectEqual(text, "weapon.awp,weapon.m9bayonet")
+			T.expectEqual(Rules.decodeEquipped(text, admin).knife.weapon, "weapon.m9bayonet")
+			T.expectEqual(Rules.decodeEquipped(text, Rules.resolve(nil, false)).knife.weapon, "weapon.kabar")
+			T.expectEqual(Rules.decodeEquipped(nil, admin).sniper.weapon, "weapon.awp")
+			T.expectEqual(
+				Rules.encodeEquipped({ sniper = { weapon = "weapon.awp", skin = "skin.awp.x" } }),
+				"weapon.awp:skin.awp.x,"
 			)
 		end)
 	end)

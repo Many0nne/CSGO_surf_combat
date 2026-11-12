@@ -61,8 +61,8 @@ function MenuSceneRules.inView(
 	return lateral <= math.max(along, 0) * tanHalf + radius
 end
 
--- Cette méthode permet de donner le rang (1 à count) de l'arme suivante ou précédente lorsque le joueur fait défiler
--- les armes : on revient au début après la dernière.
+-- Cette méthode permet de donner le rang (1 à count) de l'élément suivant ou précédent lorsque le joueur fait défiler
+-- (emplacements de l'accueil à la molette, #280) : on revient au début après le dernier.
 function MenuSceneRules.cycleIndex(index: number, step: number, count: number): number
 	if count <= 0 then
 		return 1
@@ -83,6 +83,17 @@ function MenuSceneRules.statSegments(value: number, max: number, count: number):
 		return 0
 	end
 	return math.clamp(math.round(value / max * count), 1, count)
+end
+
+-- Cette méthode permet de nommer un skin dans l'écran d'équipement (#280) lorsqu'il est affiché : « D'ORIGINE » sans
+-- skin, sinon le dernier segment de son id en majuscules, `_` changés en espaces (« skin.awp.dragon_lore » →
+-- « DRAGON LORE ») tant que le catalogue n'a pas de nom affiché (#268).
+function MenuSceneRules.skinLabel(skinId: string?): string
+	if not skinId then
+		return "D'ORIGINE"
+	end
+	local last = string.match(skinId, "([^%.]+)$") or skinId
+	return string.upper((string.gsub(last, "_", " ")))
 end
 
 return MenuSceneRules

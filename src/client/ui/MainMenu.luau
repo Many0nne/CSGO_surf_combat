@@ -1,15 +1,20 @@
 -- Menu principal (docs/ui.md) : derrière, le personnage du jeu en pose sur une copie de la map (#253, MenuScene) ; on
 -- choisit à la souris système, rien ne se tire. Titre en haut à gauche, onglets ARMES · INFOS · JOUER · RÉGLAGES ·
 -- FEEDBACK en haut au centre (au-dessus des écrans secondaires, qui s'ouvrent dessous), fiche de l'arme tenue en bas à
--- gauche, sélecteur d'arme en bas à droite.
+-- gauche. L'onglet ARMES est l'écran d'équipement (#280, disposition A) : les deux emplacements à gauche (arme et skin
+-- équipés) ; un clic sur l'un ouvre à droite ses armes possédées, puis les skins de l'arme équipée. Le personnage tient
+-- l'arme survolée, sinon celle de l'emplacement choisi (touches 1 et 2, molette) ; un clic équipe (serveur, sauvegardé).
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
+local InventoryRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("InventoryRules"))
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
 local WeaponConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WeaponConfig"))
+local LocalInventory = require(script.Parent.Parent.systems.inventory.LocalInventory)
 local MenuScene = require(script.Parent.Parent.systems.game.MenuScene)
 local Rules = require(script.Parent.Parent.systems.game.MenuSceneRules)
+local HUDRules = require(script.Parent.HUDRules)
 local MenuCursor = require(script.Parent.MenuCursor)
 local MenuShot = require(script.Parent.MenuShot)
 local UIKit = require(script.Parent.UIKit)
@@ -43,6 +48,29 @@ local STATS = {
 	{ key = "rate", label = "CADENCE" },
 	{ key = "accuracy", label = "PRÉCISION" },
 }
+-- Écran d'équipement (#280, prototype validé en Studio) : emplacements à gauche, liste à droite (px à 720 de haut)
+local SLOTS_Y = 150
+local SLOT_STEP = 90
+local SLOT_SIZE = Vector2.new(300, 80)
+local SLOT_LABELS = { sniper = "SNIPER", knife = "COUTEAU" }
+local LIST_Y = 150
+local LIST_WIDTH = 260
+local LIST_HEADER = 28 -- titre de section et son filet, avant la première ligne
+local LIST_STEP = 34
+local LIST_GAP = 24 -- entre la section ARME et la section SKIN
+local LIST_SCRIM = Vector2.new(520, 560) -- fond de coin sous la liste (le mur clair du décor rendait le texte illisible)
+local LIST_SCRIM_SHOWN = 0.35
+-- Touches de l'accueil : un emplacement par touche (1 · SNIPER, 2 · COUTEAU)
+local SLOT_KEYS = { Enum.KeyCode.One, Enum.KeyCode.Two }
+
+type SlotView = {
+	name: TextLabel,
+	nameShadow: TextLabel,
+	skin: TextLabel,
+	skinShadow: TextLabel,
+	bar: Frame,
+	hovering: boolean,
+}
 
 local gui: ScreenGui
 local tabsGui: ScreenGui
@@ -54,8 +82,13 @@ local cardCategory: TextLabel
 local bars: { [string]: { Frame } } = {}
 local tabs: { [string]: MenuShot.Choice } = {}
 local choices: { MenuShot.Choice } = {}
-local homeChoices: { MenuShot.Choice } = {} -- masqués hors de l'accueil
 local callbacks: { [string]: (() -> ())? } = {}
+local slotViews: { SlotView } = {}
+local list: Frame
+local listScrim: ImageLabel
+local focusedSlot = 1 -- emplacement dont le personnage tient l'arme équipée (hors survol)
+local openSlot: number? = nil -- emplacement dont la liste est ouverte à droite
+local hoverTool: string? = nil -- arme survolée, tenue par le personnage tant que la souris reste dessus
 local currentPage: Page = "home"
 local notice: TextLabel
 local noticeShadow: TextLabel
@@ -243,52 +276,297 @@ local function buildCard(root: Frame)
 	end
 end
 
--- Cette méthode permet de construire le sélecteur d'arme en bas à droite (flèches, rappel molette et touches)
--- lorsque le menu est initialisé ; les flèches remplacent la molette au tactile et à la manette.
-local function buildSelector(root: Frame)
-	local row = UIKit.frame({
-		Name = "Selector",
-		BackgroundTransparency = 1,
-		AnchorPoint = Vector2.new(1, 1),
-		Position = UDim2.new(1, -EDGE + 8, 1, -18),
-		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 30),
-		Parent = root,
-	})
-	UIKit.create("UIListLayout", {
-		FillDirection = Enum.FillDirection.Horizontal,
-		HorizontalAlignment = Enum.HorizontalAlignment.Right,
-		VerticalAlignment = Enum.VerticalAlignment.Center,
-		SortOrder = Enum.SortOrder.LayoutOrder,
-		Parent = row,
-	})
-	for _, arrow in { { text = "‹", step = -1, order = 1 }, { text = "›", step = 1, order = 3 } } do
-		local choice = MenuShot.textChoice({
-			text = arrow.text,
-			font = F.Display,
-			size = 20,
-			color = C.Bone,
-			layoutOrder = arrow.order,
-			parent = row,
-			action = function()
-				MenuScene.cycleWeapon(arrow.step)
-			end,
-		})
-		UIKit.padding(choice.button :: any, 2, 8, 4, 8)
-		table.insert(choices, choice)
-		table.insert(homeChoices, choice)
+-- Cette méthode permet de donner le nom affiché d'une arme (nom de WeaponConfig en majuscules, sinon nom du Tool
+-- espacé) lorsqu'un emplacement ou la liste la nomme.
+local function weaponTitle(toolName: string): string
+	local cfg = WeaponConfig.Weapons[toolName]
+	return if cfg and cfg.Name then string.upper(cfg.Name) else HUDRules.weaponLabel(toolName)
+end
+
+-- Cette méthode permet de lire l'arme (fiche du catalogue) et le skin équipés d'un emplacement par son rang lorsque
+-- l'écran d'équipement les affiche.
+local function equippedAt(index: number): (InventoryRules.Item?, string?)
+	local loadout = LocalInventory.equipped()[InventoryRules.SLOTS[index]]
+	if not loadout then
+		return nil, nil
 	end
+	return InventoryRules.item(loadout.weapon), loadout.skin
+end
+
+-- Cette méthode permet de mettre dans les mains du personnage l'arme survolée, sinon celle équipée de l'emplacement
+-- choisi, lorsque le survol, l'emplacement choisi ou l'équipement change.
+local function updateHeld()
+	local weapon = equippedAt(focusedSlot)
+	local tool = hoverTool or (weapon and weapon.tool)
+	if tool then
+		MenuScene.holdTool(tool)
+	end
+end
+
+-- Cette méthode permet de redessiner les emplacements (arme et skin équipés, survol en rouge d'impact, barre ambrée sur
+-- l'emplacement ouvert) lorsque l'équipement, le survol ou la liste ouverte change.
+local function paintSlots()
+	for index, view in slotViews do
+		local weapon, skin = equippedAt(index)
+		local title = if weapon and weapon.tool then weaponTitle(weapon.tool) else ""
+		local skinText = "SKIN · " .. Rules.skinLabel(skin)
+		view.name.Text = title
+		view.nameShadow.Text = title
+		view.skin.Text = skinText
+		view.skinShadow.Text = skinText
+		local open = openSlot == index
+		local color = if view.hovering then C.HitRed elseif open then C.Bone else C.TextSoft
+		UIKit.tween(view.name, UITheme.Motion.Hover, { TextColor3 = color })
+		view.bar.Visible = open
+	end
+end
+
+-- Cette méthode permet de poser un titre de section ambré à droite, souligné d'un filet, lorsque la liste se construit.
+local function listHeader(text: string, y: number)
 	UIKit.text({
-		Name = "Hint",
-		Text = "MOLETTE  ·  1-9",
+		Name = "Header",
+		Text = text,
 		FontFace = F.DisplayMedium,
 		TextSize = 13,
-		TextColor3 = C.Bone,
-		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 16),
-		LayoutOrder = 2,
-		Parent = row,
+		TextColor3 = C.Accent,
+		TextStrokeTransparency = 0.35,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		Position = UDim2.fromOffset(0, y),
+		Size = UDim2.fromOffset(LIST_WIDTH, 16),
+		Parent = list,
 	})
+	UIKit.frame({
+		Name = "Rule",
+		BackgroundColor3 = C.Accent,
+		BackgroundTransparency = 0.4,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, 0, 0, y + 20),
+		Size = UDim2.fromOffset(200, 1),
+		Parent = list,
+	})
+end
+
+-- Cette méthode permet de poser une ligne de la liste (choix en texte à droite, « ÉQUIPÉ » ambré devant celui équipé)
+-- lorsque la liste se construit ; survoler montre `tool` dans les mains du personnage, cliquer appelle `action`.
+local function listEntry(text: string, y: number, equipped: boolean, tool: string, action: () -> ())
+	local choice = MenuShot.textChoice({
+		text = text,
+		font = if equipped then F.Display else F.DisplayMedium,
+		size = 24,
+		color = if equipped then C.Bone else C.TextSoft,
+		anchor = Vector2.new(1, 0),
+		position = UDim2.new(1, 0, 0, y),
+		parent = list,
+		action = action,
+	})
+	if equipped then
+		UIKit.text({
+			Name = "Equipped",
+			Text = "ÉQUIPÉ",
+			FontFace = F.DisplayMedium,
+			TextSize = 12,
+			TextColor3 = C.Accent,
+			TextStrokeTransparency = 0.35,
+			TextXAlignment = Enum.TextXAlignment.Right,
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(0, -14, 0.5, 0),
+			Size = UDim2.fromOffset(60, 14),
+			Parent = choice.button,
+		})
+	end
+	choice.button.MouseEnter:Connect(function()
+		hoverTool = tool
+		updateHeld()
+	end)
+	choice.button.MouseLeave:Connect(function()
+		if hoverTool == tool then
+			hoverTool = nil
+			updateHeld()
+		end
+	end)
+end
+
+-- Cette méthode permet de reconstruire la liste de droite lorsqu'un emplacement s'ouvre ou que l'équipement change :
+-- armes possédées de l'emplacement ouvert, puis skins de son arme équipée (d'origine, puis skins possédés, #268). Seuls
+-- les items possédés apparaissent ; rien quand aucun emplacement n'est ouvert.
+local function rebuildList()
+	for _, child in list:GetChildren() do
+		child:Destroy()
+	end
+	hoverTool = nil
+	local slotName = openSlot and InventoryRules.SLOTS[openSlot]
+	list.Visible = slotName ~= nil
+	listScrim.Visible = slotName ~= nil
+	if not (openSlot and slotName) then
+		return
+	end
+	local slotIndex: number = openSlot
+	local owned = LocalInventory.owned()
+	local current, currentSkin = equippedAt(slotIndex)
+	listHeader(SLOT_LABELS[slotName] .. " · ARME", 0)
+	local y = LIST_HEADER
+	for _, weapon in InventoryRules.weaponsForSlot(owned, slotName) do
+		local tool = weapon.tool or ""
+		local isEquipped = current ~= nil and current.id == weapon.id
+		listEntry(weaponTitle(tool), y, isEquipped, tool, function()
+			-- Recliquer l'arme équipée garde son skin ; une autre arme part avec son skin d'origine
+			LocalInventory.equip(slotName, weapon.id, if isEquipped then currentSkin else nil)
+		end)
+		y += LIST_STEP
+	end
+	if not (current and current.tool) then
+		return
+	end
+	local currentTool: string = current.tool
+	local weaponId = current.id
+	y += LIST_GAP
+	listHeader(weaponTitle(currentTool) .. " · SKIN", y)
+	y += LIST_HEADER
+	-- D'origine d'abord (id nil), puis les skins possédés de l'arme
+	local skins: { { id: string? } } = { { id = nil } }
+	for _, skin in InventoryRules.skinsFor(owned, weaponId) do
+		table.insert(skins, { id = skin.id })
+	end
+	for _, skin in skins do
+		local skinId = skin.id
+		listEntry(Rules.skinLabel(skinId), y, skinId == currentSkin, currentTool, function()
+			LocalInventory.equip(slotName, weaponId, skinId)
+		end)
+		y += LIST_STEP
+	end
+end
+
+-- Cette méthode permet de choisir l'emplacement montré (personnage) et, si une liste est ouverte, d'y basculer
+-- lorsque le joueur tape 1 ou 2 ou tourne la molette.
+local function focusSlot(index: number)
+	focusedSlot = index
+	if openSlot and openSlot ~= index then
+		openSlot = index
+		rebuildList()
+	end
+	paintSlots()
+	updateHeld()
+end
+
+-- Cette méthode permet d'ouvrir la liste d'un emplacement, ou de la fermer s'il était déjà ouvert, lorsque le joueur
+-- clique dessus.
+local function toggleSlot(index: number)
+	focusedSlot = index
+	openSlot = if openSlot == index then nil else index
+	rebuildList()
+	paintSlots()
+	updateHeld()
+end
+
+-- Cette méthode permet de fermer la liste lorsque le joueur quitte l'accueil ou le menu.
+local function closeList()
+	openSlot = nil
+	rebuildList()
+	paintSlots()
+	updateHeld()
+end
+
+-- Cette méthode permet de construire un emplacement à gauche (« 1 · SNIPER », arme et skin équipés, barre ambrée quand
+-- sa liste est ouverte) lorsque le menu est initialisé ; tout le bloc se clique, son survol montre l'arme équipée.
+local function buildSlot(root: Frame, index: number, slotName: string): SlotView
+	local button = UIKit.create("TextButton", {
+		Name = "Slot" .. index,
+		Text = "",
+		AutoButtonColor = false,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Position = UDim2.fromOffset(EDGE, SLOTS_Y + (index - 1) * SLOT_STEP),
+		Size = UDim2.fromOffset(SLOT_SIZE.X, SLOT_SIZE.Y),
+		Parent = root,
+	})
+	UIKit.text({
+		Name = "Label",
+		Text = string.format("%d · %s", index, SLOT_LABELS[slotName] or string.upper(slotName)),
+		FontFace = F.DisplayMedium,
+		TextSize = 13,
+		TextColor3 = C.Accent,
+		TextStrokeTransparency = 0.35,
+		Size = UDim2.fromOffset(SLOT_SIZE.X, 16),
+		Parent = button,
+	})
+	local name, nameShadow = UIKit.shadowedText(button, {
+		Name = "Weapon",
+		FontFace = F.Display,
+		TextSize = 30,
+		TextColor3 = C.TextSoft,
+		Position = UDim2.fromOffset(0, 16),
+		Size = UDim2.fromOffset(SLOT_SIZE.X, 36),
+		ZIndex = 2,
+	}, 2)
+	local skin, skinShadow = UIKit.shadowedText(button, {
+		Name = "Skin",
+		FontFace = F.DisplayMedium,
+		TextSize = 14,
+		TextColor3 = C.Bone,
+		TextTransparency = 0.25,
+		Position = UDim2.fromOffset(1, 52),
+		Size = UDim2.fromOffset(SLOT_SIZE.X, 18),
+		ZIndex = 2,
+	}, 2)
+	local view: SlotView = {
+		name = name,
+		nameShadow = nameShadow,
+		skin = skin,
+		skinShadow = skinShadow,
+		bar = UIKit.frame({
+			Name = "Bar",
+			BackgroundColor3 = C.Accent,
+			Position = UDim2.fromOffset(-14, 18),
+			Size = UDim2.fromOffset(3, 52),
+			Visible = false,
+			Parent = button,
+		}),
+		hovering = false,
+	}
+	button.MouseEnter:Connect(function()
+		view.hovering = true
+		local weapon = equippedAt(index)
+		hoverTool = weapon and weapon.tool
+		paintSlots()
+		updateHeld()
+	end)
+	button.MouseLeave:Connect(function()
+		view.hovering = false
+		hoverTool = nil
+		paintSlots()
+		updateHeld()
+	end)
+	button.Activated:Connect(function()
+		if not MenuShot.isBusy() then -- JOUER bloque les choix jusqu'au retour au menu
+			toggleSlot(index)
+		end
+	end)
+	return view
+end
+
+-- Cette méthode permet de construire l'écran d'équipement (emplacements à gauche, liste vide à droite sur son fond de
+-- coin) lorsque le menu est initialisé ; il suit ensuite chaque changement d'inventaire ou d'équipement.
+local function buildEquipment(root: Frame)
+	listScrim = UIKit.cornerScrim(root, "TopRight", LIST_SCRIM, LIST_SCRIM_SHOWN)
+	listScrim.Visible = false
+	list = UIKit.frame({
+		Name = "EquipList",
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -EDGE, 0, LIST_Y),
+		Size = UDim2.fromOffset(LIST_WIDTH, 400),
+		Visible = false,
+		Parent = root,
+	})
+	for index, slotName in InventoryRules.SLOTS do
+		slotViews[index] = buildSlot(root, index, slotName)
+	end
+	paintSlots()
+	LocalInventory.onChanged(function()
+		rebuildList()
+		paintSlots()
+		updateHeld()
+	end)
 end
 
 -- Cette méthode permet de remplir la fiche avec l'arme tenue (stats rapportées à la meilleure arme du menu, dernier
@@ -315,13 +593,8 @@ local function showWeapon(name: string)
 	local title = string.upper(cfg.Name)
 	cardName.Text = title
 	cardNameShadow.Text = title
-	cardCategory.Text = string.format(
-		'%s  <font color="#%s">·  %d / %d</font>',
-		cfg.Category or "",
-		C.Bone:ToHex(),
-		table.find(weapons, name) or 1,
-		#weapons
-	)
+	-- Plus de rang « n / m » : on ne fait plus défiler les armes possédées (#280)
+	cardCategory.Text = cfg.Category or ""
 	for key, segments in bars do
 		local count = filled[key]
 		for i, segment in segments do
@@ -333,40 +606,29 @@ local function showWeapon(name: string)
 	UIKit.reveal(card, 0, 6)
 end
 
--- Cette méthode permet de construire l'accueil (titre, fiche, sélecteur) lorsque le menu est initialisé.
+-- Cette méthode permet de construire l'accueil (titre, fiche, écran d'équipement) lorsque le menu est initialisé.
 local function buildContent(root: Frame)
 	content = UIKit.frame({ Name = "Content", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = root })
 	buildTitle(content)
 	buildCard(content)
-	buildSelector(content)
+	buildEquipment(content)
+	updateHeld()
 	showWeapon(MenuScene.getWeapon())
 	MenuScene.onWeaponChanged(showWeapon)
 end
 
--- Touches 1 à 9 : rang de l'arme tenue par le personnage
-local NUMBER_KEYS = {
-	Enum.KeyCode.One,
-	Enum.KeyCode.Two,
-	Enum.KeyCode.Three,
-	Enum.KeyCode.Four,
-	Enum.KeyCode.Five,
-	Enum.KeyCode.Six,
-	Enum.KeyCode.Seven,
-	Enum.KeyCode.Eight,
-	Enum.KeyCode.Nine,
-}
-
--- Cette méthode permet de changer l'arme du personnage (molette, touches 1-9) lorsque le joueur est sur l'accueil.
+-- Cette méthode permet de choisir l'emplacement montré par le personnage (touches 1 et 2, molette qui alterne) lorsque
+-- le joueur est sur l'accueil.
 local function onWeaponInput(input: InputObject, processed: boolean)
 	if processed or currentPage ~= "home" then
 		return
 	end
 	if input.UserInputType == Enum.UserInputType.MouseWheel then
-		MenuScene.cycleWeapon(if input.Position.Z > 0 then -1 else 1)
+		focusSlot(Rules.cycleIndex(focusedSlot, if input.Position.Z > 0 then -1 else 1, #InventoryRules.SLOTS))
 	elseif input.UserInputType == Enum.UserInputType.Keyboard then
-		local index = table.find(NUMBER_KEYS, input.KeyCode)
-		if index then
-			MenuScene.selectWeapon(index)
+		local index = table.find(SLOT_KEYS, input.KeyCode)
+		if index and InventoryRules.SLOTS[index] then
+			focusSlot(index)
 		end
 	end
 end
@@ -413,8 +675,8 @@ function MainMenu.init(
 	end)
 end
 
--- Cette méthode permet de changer la page active (onglet en os, fiche et sélecteur sur l'accueil seulement) lorsque
--- l'orchestrateur ouvre un écran secondaire ou revient à l'accueil.
+-- Cette méthode permet de changer la page active (onglet en os, fiche et équipement sur l'accueil seulement) lorsque
+-- l'orchestrateur ouvre un écran secondaire ou revient à l'accueil ; la liste d'équipement se referme en partant.
 function MainMenu.setPage(page: Page)
 	if not gui then
 		return
@@ -425,9 +687,10 @@ function MainMenu.setPage(page: Page)
 		tab.setSelected(key == page)
 	end
 	if page ~= "home" then
-		for _, choice in homeChoices do
-			choice.reset()
+		for _, view in slotViews do
+			view.hovering = false
 		end
+		closeList()
 	end
 end
 
@@ -482,6 +745,10 @@ function MainMenu.hide()
 	for _, choice in choices do
 		choice.reset()
 	end
+	for _, view in slotViews do
+		view.hovering = false
+	end
+	closeList()
 	-- JOUER garde les clics bloqués (`locks`) jusqu'ici : sans cela, les choix du menu en partie et de ses Réglages
 	-- restaient sans effet (#157)
 	MenuShot.reset()

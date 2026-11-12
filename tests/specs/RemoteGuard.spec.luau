@@ -125,6 +125,7 @@ return function(T, Loader)
 					N.SEND_FEEDBACK,
 					N.SAVE_SETTINGS,
 					N.GET_SETTINGS,
+					N.EQUIP_ITEM,
 				}
 			do
 				T.expect(RemoteGuard.RULES[name] ~= nil, "règle manquante : " .. name)
@@ -147,6 +148,15 @@ return function(T, Loader)
 			T.expectEqual(honest(N.SEND_FEEDBACK, string.rep("é", 250)), "ok", "500 octets, la limite du client")
 			T.expectEqual(honest(N.SAVE_SETTINGS, { sensitivity = 0.5 }), "ok")
 			T.expectEqual(honest(N.GET_SETTINGS), "ok")
+			T.expectEqual(honest(N.EQUIP_ITEM, "knife", "weapon.m9bayonet", ""), "ok", "skin d'origine")
+			T.expectEqual(honest(N.EQUIP_ITEM, "sniper", "weapon.awp", "skin.awp.dragon_lore"), "ok")
+		end)
+
+		T.it("refuse un équipement d'une forme impossible (#280)", function()
+			T.expectEqual(honest(N.EQUIP_ITEM, "pistol", "weapon.awp", ""), "malformed", "emplacement inconnu")
+			T.expectEqual(honest(N.EQUIP_ITEM, "knife", 42, ""), "malformed", "id non textuel")
+			T.expectEqual(honest(N.EQUIP_ITEM, "knife", "weapon.kabar"), "malformed", 'skin absent ("" attendu)')
+			T.expectEqual(honest(N.EQUIP_ITEM, "knife", string.rep("a", 200), ""), "malformed", "id trop long")
 		end)
 
 		T.it("ignore sans violation un personnage propre au client (ragdoll local)", function()

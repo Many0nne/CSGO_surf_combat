@@ -2,7 +2,8 @@
 -- Remplace le Backpack Roblox (désactivé dans init.client) : par arme, silhouette tirée de son viewmodel, nom et touche.
 -- Texte droit (seul le compteur de vitesse est penché). L'arme en main est en os avec son numéro et un trait rouge
 -- d'impact. Toute la barre s'estompe peu après un changement d'arme et revient au suivant.
--- Équipement : touches des emplacements et molette réglables (#100, LocalSettings, 1 à 9 par défaut), toucher d'un
+-- Deux emplacements (#280) : le sac ne contient que l'arme équipée du SNIPER et du COUTEAU, rangées dans cet ordre
+-- (HUDRules.slotOrder). Équipement : touches des emplacements et molette réglables (#100, LocalSettings), toucher d'un
 -- emplacement (tactile), L1/R1 (manette). Rien ne change d'arme pendant que l'écran Réglages est ouvert.
 -- Règles pures dans HUDRules et PlayerSettings.
 local Players = game:GetService("Players")

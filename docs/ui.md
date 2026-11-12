@@ -47,8 +47,20 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
 
 ## Comment c'est construit
 
-- `src/client/ui/MainMenu.luau` : accueil (titre, onglets, fiche de l'arme tenue par le personnage, sélecteur ; rien ne se
-  tire). Les onglets sont dans leur propre `ScreenGui` (`MenuTabs`, DisplayOrder 4), au-dessus des écrans
+- `src/client/ui/MainMenu.luau` : accueil (titre, onglets, fiche de l'arme tenue par le personnage, écran d'équipement ;
+  rien ne se tire). **Écran d'équipement (#280, disposition A, prototype validé en Studio avec la vraie scène)** : l'onglet
+  ARMES le porte. À gauche, sous le titre, les deux emplacements (libellé ambré « 1 · SNIPER », arme équipée en os 30 px à
+  ombre, « SKIN · D'ORIGINE » dessous) remplacent l'ancien sélecteur ‹ › ; tout le bloc se clique, survol en rouge
+  d'impact, barre ambrée à gauche de l'emplacement ouvert (comme les catégories des Réglages). Un clic ouvre à droite,
+  sur un fond de coin sombre (`cornerScrim` « TopRight », sans lui le mur clair du décor rendait le texte illisible), la
+  liste empilée : section « COUTEAU · ARME » (armes possédées de l'emplacement), puis « KA-BAR · SKIN » (d'origine, puis
+  skins possédés de l'arme équipée) ; titres ambrés soulignés d'un filet, choix en texte alignés à droite, l'équipé en
+  os gras précédé de « ÉQUIPÉ » ambré. Recliquer l'emplacement ou changer d'onglet ferme la liste. Le personnage tient
+  l'arme survolée (emplacement, arme ou skin), sinon l'arme équipée de l'emplacement choisi (touches 1 et 2, la molette
+  alterne) ; la fiche suit. Un clic équipe : remote `EquipItem`, l'écran ne change qu'à la réponse du serveur
+  (attribut `EquippedItems`), pas d'affichage optimiste. **Seuls les items possédés apparaissent**, jamais grisés.
+  Choix de l'utilisateur : liste empilée plutôt qu'en deux temps (armes puis skins avec retour « ‹ ARMES »), 1/2 et
+  molette gardés pour alterner. Pas de rang « n / m » sur la fiche depuis que les armes ne défilent plus. Les onglets sont dans leur propre `ScreenGui` (`MenuTabs`, DisplayOrder 4), au-dessus des écrans
   secondaires. Sous les onglets, un message ponctuel (`MainMenu.showNotice`, 5 s, rouge d'impact à ombre) explique un
   retour au menu imprévu, par exemple une apparition impossible (#219) ; rendu provisoire, pas encore validé.
 - `src/client/ui/MenuPage.luau` : gabarit des écrans secondaires, sans panneau : bloc centré sur le voile du classement,
@@ -69,9 +81,9 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   conservé) ; une catégorie sans réglage n'est pas créée.
   TOUCHES (#100) : chaque ligne nomme l'action et la valeur donne le geste (choix de l'utilisateur : « Arme suivante :
   MOLETTE BAS », pas « Molette vers le haut : PRÉCÉDENTE »). « Arme suivante » (MOLETTE BAS par défaut) et « Arme
-  précédente » (MOLETTE HAUT) portent le même réglage et se suivent ; AUCUNE coupe la molette. Puis une ligne par arme de
-  l'inventaire du joueur (#267, « Arme 1 · AWP », 7 au plus, pas de défilement ; lignes renommées ou masquées quand
-  l'inventaire arrive ou change). On clique sur la touche, elle affiche « APPUIE… », la
+  précédente » (MOLETTE HAUT) portent le même réglage et se suivent ; AUCUNE coupe la molette. Puis une ligne par emplacement
+  (#280 : « Arme 1 · AWP », « Arme 2 · KA BAR », nommées d'après l'arme équipée, renommées quand l'équipement arrive ou
+  change). On clique sur la touche, elle affiche « APPUIE… », la
   touche suivante est prise ; Échap ou un clic ailleurs annule. Une touche d'un autre emplacement est échangée ; une
   touche du jeu (déplacement, R, F, P, F3/F4…) ou hors liste (Espace, Maj, Tab…) est refusée par un message en rouge
   d'impact sur la ligne. Seules les lettres, les chiffres du haut et les touches F sont proposées : libellés courts dans
@@ -102,8 +114,9 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   (`CoreGuiType.Backpack` désactivé dans `init.client.luau`). Par arme : silhouette plate tirée des MeshParts de son viewmodel
   (bras exclus) dans un `ViewportFrame` blanc teinté par `ImageColor3`, nom et touche. L'arme en main est en os, avec son
   numéro et un trait en rouge d'impact, les autres sont grisées ; toute la barre (fond compris) disparaît 2,5 s après le dernier changement d'arme
-  (`HUDRules.WEAPON_BAR_FADE_DELAY`). Emplacements dans l'ordre alphabétique, comme le helper `DebugPlaytest`.
-  Équipement : touches des emplacements (1 à 9 par défaut) et molette (vers le haut = arme précédente par défaut),
+  (`HUDRules.WEAPON_BAR_FADE_DELAY`). Deux emplacements depuis #280 (le sac ne contient que l'arme équipée de chacun),
+  dans l'ordre `InventoryRules.SLOTS` : 1 · SNIPER, 2 · COUTEAU (`HUDRules.slotOrder`).
+  Équipement : touches des emplacements (1 et 2 par défaut) et molette (vers le haut = arme précédente par défaut),
   réglables dans Réglages > TOUCHES (#100) ; toucher d'un emplacement, L1/R1 à la manette (fixes). La barre ignore
   touches et molette pendant que le menu en partie est ouvert (`InGameMenu.isOpen`, Réglages compris).
 - `src/client/ui/AmmoCounter.luau` (#158) : « chargeur / réserve » en bas à droite, à gauche de la barre d'armes (chiffre du
@@ -340,9 +353,9 @@ workspace pendant la partie) :
   travers du torse, canon vers le haut à gauche du personnage, avec sa propre prise ; couteau le long du corps, lame
   vers le bas, avec la prise du jeu (même inclinaison que la garde C1). Articulations posées par `C0` (aucune piste ne
   tourne sur ce personnage), respiration de la taille (`breathAngle`).
-- Armes : Tools possédés (#267, `LocalInventory`) de `ReplicatedStorage.Tools` (attribut `WeaponName`), dans l'ordre
-  alphabétique de la barre d'armes. Molette,
-  touches 1-9 et flèches ‹ › changent l'arme tenue ; la fiche suit.
+- Armes : Tools possédés (#267, `LocalInventory`) de `ReplicatedStorage.Tools` (attribut `WeaponName`). L'écran
+  d'équipement (#280, `MainMenu`) choisit l'arme tenue (`MenuScene.holdTool`) : survolée, sinon équipée de l'emplacement
+  choisi ; la fiche suit. Les skins ne sont pas encore rendus sur le modèle (#268).
 - Caméra : fixe, FOV vertical 40° en 16:9 (ouvert sur un écran plus étroit, `fitFov`), léger suivi du curseur
   (`aimAngles`). Flou du fond : `DepthOfFieldEffect` posé sous la caméra le temps du menu.
 - Éclairage : celui du jeu, plus une **lumière de portrait** (SpotLight chaud devant le personnage, du côté du soleil).
@@ -365,4 +378,5 @@ workspace pendant la partie) :
 ## Reste à faire
 
 - Piste écartée pour l'instant sur le compteur : chiffres en images usées comme le titrage, et inclinaison qui augmente avec la vitesse.
-- Tester le menu au tactile et à la manette : c'est prévu dans le code (flèches ‹ ›), jamais essayé.
+- Tester le menu au tactile et à la manette : jamais essayé. Depuis #280, plus de flèches ‹ › : l'écran d'équipement se
+  pilote au clic (le toucher devrait suivre `Activated`) ; rien à la manette (#276).

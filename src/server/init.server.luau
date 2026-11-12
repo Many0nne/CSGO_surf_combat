@@ -58,6 +58,8 @@ local sendFeedbackRmt = makeRemote(N.SEND_FEEDBACK)
 local feedbackAckRmt = makeRemote(N.FEEDBACK_ACK)
 local weaponActionRmt = makeRemote(N.WEAPON_ACTION)
 local saveSettingsRmt = makeRemote(N.SAVE_SETTINGS)
+-- Équipement choisi à l'accueil (#280) : client → serveur, validé par InventoryStore
+local equipItemRmt = makeRemote(N.EQUIP_ITEM)
 local getSettingsRmt = Instance.new("RemoteFunction")
 getSettingsRmt.Name = N.GET_SETTINGS
 getSettingsRmt.Parent = ReplicatedStorage
@@ -74,8 +76,9 @@ local movementCorrectionRmt = makeRemote(N.MOVEMENT_CORRECTION)
 CheatLog.init()
 StatsStore.init()
 SettingsStore.init(getSettingsRmt, saveSettingsRmt)
--- Inventaire (#267) : StarterPack vidé, Tools donnés selon l'inventaire, armes non possédées refusées par le Validator
-InventoryStore.init()
+-- Inventaire (#267) : StarterPack vidé, Tools donnés selon l'équipement (#280), armes non possédées refusées par le
+-- Validator
+InventoryStore.init(equipItemRmt)
 Validator.setOwnership(InventoryStore.ownsTool)
 FeedbackService.init(sendFeedbackRmt, feedbackAckRmt)
 

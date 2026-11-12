@@ -342,12 +342,16 @@ return function(T, Loader)
 	end)
 
 	T.describe("HUDRules.slotOrder", function()
-		T.it("trie par ordre alphabétique sans modifier la liste reçue", function()
+		T.it("range SNIPER puis COUTEAU (#280) sans modifier la liste reçue", function()
 			local names = { "M9Bayonet", "AWP" }
 			local sorted = HUDRules.slotOrder(names)
 			T.expectEqual(sorted[1], "AWP")
 			T.expectEqual(sorted[2], "M9Bayonet")
 			T.expectEqual(names[1], "M9Bayonet")
+		end)
+
+		T.it("un outil hors catalogue passe après les emplacements, même s'il précède dans l'alphabet", function()
+			T.expectEqual(table.concat(HUDRules.slotOrder({ "Inconnu", "KaBar", "AWP" }), ","), "AWP,KaBar,Inconnu")
 		end)
 	end)
 
