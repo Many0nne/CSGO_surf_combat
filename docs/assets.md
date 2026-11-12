@@ -100,6 +100,28 @@ par `ScaleTo` avec le reste de l'arme.
   `FireClient(player, id, "aim", { target = Vector3 })` puis `"attack", { tool = "AWP" }`. Un tir relayé de bot se
   simule par `ShotFired:FireClient(player, botCharacter, "AWP", origine, direction)` (vrai chemin de `ShotEffects`).
 
+## Douille éjectée (#237)
+
+Code : `CasingEjection` (client), réglages et règles pures dans `CasingRules` (testées). Une arme qui éjecte porte sa
+fenêtre d'éjection dans son viewmodel : l'Attachment `Handle.EjectPort` (chemin `CasingRules.PORT_PATH`), orientée
++X vers l'extérieur (côté droit de l'arme), +Y vers le haut, +Z vers l'arrière. Le modèle 3P clone les pièces du
+viewmodel avec leurs enfants (`WeaponThirdPerson`) : il a la même fenêtre, réduite par `ScaleTo`.
+
+- **Déclenchement 1P :** marqueur `Eject` de la piste `Shoot` (culasse en arrière, `docs/animations.md`), branché par
+  `ViewmodelSystem.playAnimation`. Pas de douille si le viewmodel est masqué (lunette) à cet instant.
+- **Chez les autres :** chaque `ShotFired` relayé (joueurs et bots, armes à distance) éjecte de l'arme 3P du tireur
+  `CasingRules.REMOTE_DELAY` plus tard (instant du marqueur : l'arme 3P ne joue pas la piste). La douille hérite du
+  déplacement de l'arme pendant ce délai (un saut au-delà de `MAX_INHERITED_SPEED` est ignoré).
+- **Vol calculé :** arc balistique et rotation constante (`CasingRules.cframeAt`), dans le monde : la douille hérite de
+  la vitesse du joueur (`MovementController.getVelocity`), comme dans CS. Forme : cylindre de laiton (`LENGTH`,
+  `DIAMETER`, `COLOR_RGB`), à l'échelle de l'arme. Vitesse, dispersion, rotation, gravité et durée de vie dans
+  `CasingRules`.
+- **Pool :** au plus `POOL_SIZE` Parts ancrées, sans collision ni requête ni ombre, créées au premier besoin et
+  réutilisées (la plus ancienne si toutes volent). Sous la caméra pendant le vol, `Parent = nil` ensuite. Boucle
+  `RenderStepped` (repère `douilles`) branchée seulement tant qu'une douille vole.
+- **Vérifier qu'un tir ne laisse rien :** aucune pièce `ShotCasing` dans le `DataModel` après `LIFETIME`.
+- **Nouvelle arme qui éjecte :** ajouter `Handle.EjectPort` à son viewmodel et le marqueur `Eject` à sa piste de tir.
+
 ## Publier un asset (Open Cloud)
 
 Clé dans la variable d'environnement utilisateur `ROBLOX_OPEN_CLOUD_KEY` (scopes `asset:read` et `asset:write`). Créateur :
