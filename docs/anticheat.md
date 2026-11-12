@@ -955,7 +955,7 @@ entendu par les bots (il passait par `WeaponAction`). Tests : `tests/specs/ShotR
   corps déjà mort pendant le ragdoll, pas un ForceField) ; depuis #216, une touche est rattachée au tir que le
   `Validator` lui a trouvé par `shotTime` (registre de « Tirs comptés et touches rattachées », troisième valeur de
   `authorizeHitscan`), une seule par tir ; sans tir rattaché, elle est **orpheline** (« orph » au résumé, anomalie déjà
-  journalisée `shotLink` par le `Validator`). Taux de touches = tirs rattachés / tirs (orphelines exclues) ; taux de
+  journalisée `shotLink` par le `Validator`). Taux de touches = tirs rattachés / tirs, l'orpheline comptant comme un tir qui touche (#246) ; taux de
   tête = têtes / touches (toutes) ;
 - **flick** : rotation horizontale entre le dernier cap accepté par `CharacterSync` (`CharacterSync.lastYaw`, cap de la
   caméra, 20 Hz) et la direction **de la touche** (`HitscanDamage`, vérifiée par le `Validator`), si ce cap date d'au
@@ -1002,11 +1002,16 @@ départ, à revoir sur le journal de production.
 
 - le nombre de tirs vient de `ShotFired`, que le client choisit d'envoyer : un tricheur peut faire baisser son taux de
   touches en envoyant des tirs sans touche (cadence et chargeur respectés depuis #215). Taire ses tirs manqués ne le
-  fait plus monter (#216) : ses touches deviennent orphelines, hors du taux, et journalisées. Un « orph » élevé est donc
-  à regarder ; quelques-uns s'expliquent par un `ShotFired` écarté par le relais (gigue) ;
-- un client qui n'envoie **jamais** `ShotFired` sort du taux de touches et du flick (aucune touche rattachée, rien de
-  mesuré) : seul le taux de tête le juge encore. Il ne passe pas inaperçu pour autant : chaque touche est une violation
-  `shotLink` faible (10 suffisent pour le résumé du webhook, `SUMMARY_MIN_LOW`) et « orph » égale « touches » au relevé ;
+  fait plus monter (#216) : ses touches deviennent orphelines et journalisées ; depuis #246, une orpheline compte comme
+  un tir qui touche et lève une violation au-delà du seuil (voir ci-dessous). Un « orph » élevé est à regarder ; quelques-uns s'expliquent par un `ShotFired` écarté par le relais (gigue) ;
+- un client qui n'envoie **jamais** `ShotFired` n'a aucun flick mesuré (aucun cap figé) ; depuis #246 il ne sort plus
+  du taux de touches ni de la violation : chaque touche orpheline compte comme un tir qui touche (`shots` et `hitShots`
+  +1), et `AimStats.orphanAlert` lève une violation `Hitscan:orphanRate` (gravité moyenne, journal seul) dès
+  `ORPHAN_MIN_HITS` (5) orphelines **et** plus de `ORPHAN_MAX_RATE` (25 %) des touches, puis à chaque nouveau palier de 5
+  (journal borné). Justification : Roblox garantit l'ordre des remotes d'une connexion, un client honnête n'a d'orphelines
+  que par un `ShotFired` écarté par le relais (rare). Chaque touche reste aussi une violation `shotLink` faible
+  (`SUMMARY_MIN_LOW`) et « orph » égale « touches » au relevé. Contrepartie : un tricheur qui tait ses tirs manqués
+  gonfle son taux de touches, mais il franchit le seuil d'orphelines ;
 - les touches sur les bots comptent : un joueur qui ne joue que contre des bots peut ressortir face à des joueurs qui
   jouent entre eux. Regarder le contexte de la partie avant de conclure ;
 - le jugement recalcule la population pour chaque joueur (O(n²) toutes les 120 s) : négligeable aux tailles de

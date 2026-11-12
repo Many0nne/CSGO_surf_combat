@@ -57,12 +57,12 @@ return function(T, Loader)
 			AimStats.noteHit(state, p, true, 10.4, nil, 100.2)
 			local s = state.players[1]
 			T.expectEqual(s.hits, 3, "toutes les touches comptent pour la tête")
-			T.expectEqual(s.hitShots, 2, "chaque tir rattaché une fois")
+			T.expectEqual(s.hitShots, 3, "2 tirs rattachés une fois + l'orpheline comptée comme un tir (#246)")
 			T.expectEqual(s.orphanHits, 1, "seconde touche du premier tir : orpheline")
 			T.expectEqual(s.headshots, 1)
 		end)
 
-		T.it("touche orpheline : comptée à part, hors du taux de touches (#216)", function()
+		T.it("touche orpheline : comptée à part et comme un tir qui touche (#216, #246)", function()
 			local state = AimStats.new()
 			local p = participant(1)
 			-- Tricheur qui tait ses tirs manqués : touches sans ShotFired, le taux de touches ne monte pas
@@ -75,9 +75,49 @@ return function(T, Loader)
 			local s = state.players[1]
 			T.expectEqual(s.hits, 11)
 			T.expectEqual(s.orphanHits, 11)
-			T.expectEqual(s.hitShots, 0)
-			T.expectEqual(AimStats.rate(s, "hitRate"), 0)
+			T.expectEqual(s.shots, 12, "11 orphelines + le tir annoncé")
+			T.expectEqual(s.hitShots, 11, "chaque orpheline compte comme un tir qui touche")
 			T.expect(string.find(AimStats.describe(s, AimStats.judge(state, 1)), "orph 11", 1, true) ~= nil)
+		end)
+
+		T.it("client sans ShotFired : reste dans le taux de touches et lève une violation (#246)", function()
+			local state = AimStats.new()
+			local p = participant(1)
+			local alerts = 0
+			for i = 1, 40 do
+				AimStats.noteHit(state, p, false, i, FORWARD)
+				if AimStats.orphanAlert(state, p) then
+					alerts += 1
+				end
+			end
+			local s = state.players[1]
+			T.expectEqual(s.shots, 40)
+			T.expectNear(AimStats.rate(s, "hitRate"), 1)
+			T.expectEqual(alerts, 40 // AimStats.ORPHAN_MIN_HITS, "une violation par palier, pas une par touche")
+			T.expectEqual(AimStats.orphanAlert(state, participant(2)), nil, "joueur inconnu : rien")
+		end)
+
+		T.it("client honnête (tirs et touches) ou quelques orphelines : aucune violation (#246)", function()
+			local state = AimStats.new()
+			local p = participant(1)
+			local alerts = 0
+			for i = 1, 100 do
+				local t = i * 2
+				AimStats.noteShot(state, p, t, FORWARD_YAW, t - 0.05, 500 + t)
+				AimStats.noteHit(state, p, false, t + 0.05, FORWARD, 500 + t)
+				-- 3 touches dont le ShotFired a été écarté par le relais : sous le seuil
+				if i % 33 == 0 then
+					AimStats.noteHit(state, p, false, t + 0.1, FORWARD)
+				end
+				if AimStats.orphanAlert(state, p) then
+					alerts += 1
+				end
+			end
+			T.expectEqual(state.players[1].orphanHits, 3)
+			T.expectEqual(alerts, 0)
+			-- Un bot n'est jamais jugé
+			AimStats.noteHit(state, participant(-1, true), false, 1, FORWARD)
+			T.expectEqual(AimStats.orphanAlert(state, participant(-1, true)), nil)
 		end)
 
 		T.it("flick mesuré sur le cap figé au tir rattaché, pas au dernier tir (#216)", function()
@@ -113,7 +153,7 @@ return function(T, Loader)
 			AimStats.noteHit(state, p, false, 40, right)
 			T.expectEqual(s.measured, 2)
 			T.expectEqual(s.hits, 4)
-			T.expectEqual(s.hitShots, 3)
+			T.expectEqual(s.hitShots, 4, "3 rattachés + l'orpheline (#246)")
 			T.expectEqual(s.orphanHits, 1)
 		end)
 
@@ -285,7 +325,8 @@ return function(T, Loader)
 			play(state, cheater, 100, 40, 36)
 			T.expectEqual(select("#", AimStats.noteShot(state, cheater, 1000, FORWARD_YAW, 999.95)), 0)
 			T.expectEqual(select("#", AimStats.noteHit(state, cheater, true, 1000.05, FORWARD)), 0)
-			T.expectEqual(state.players[99].shots, 101, "le tir du joueur signalé est compté comme les autres")
+			-- Le noteHit sans tir rattaché est une orpheline, comptée comme un tir (#246)
+			T.expectEqual(state.players[99].shots, 102, "le tir du joueur signalé est compté comme les autres")
 		end)
 	end)
 end

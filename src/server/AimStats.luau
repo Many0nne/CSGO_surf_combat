@@ -43,6 +43,13 @@ AimStats.FLICK_MIN_ANGLE = 30
 AimStats.FLICK_MAX_AGE = 0.1
 -- Durée minimale (s) retenue pour la vitesse angulaire affichée (paquets groupés : un écart de 1 ms ferait 25 000 °/s).
 AimStats.MIN_SPEED_DT = 1 / 20
+-- Touches orphelines (#246) : Roblox garantit l'ordre des remotes d'une connexion, donc un client honnête envoie
+-- ShotFired avant sa touche ; seul un ShotFired écarté par le relais (cadence à 0,15 s près, origine lointaine) en
+-- fait une orpheline, ce qui reste rare. Un client qui ne l'envoie jamais n'en produit que des orphelines. Violation
+-- à ORPHAN_MIN_HITS orphelines au moins ET plus de ORPHAN_MAX_RATE des touches (0,25 : un honnête en a au plus
+-- quelques-unes sur des centaines), puis à chaque nouveau palier de ORPHAN_MIN_HITS (journal borné).
+AimStats.ORPHAN_MIN_HITS = 5
+AimStats.ORPHAN_MAX_RATE = 0.25
 -- Direction de tir presque verticale : cap indéfini, flick non mesuré (composante horizontale minimale).
 local MIN_HORIZONTAL = 0.1
 
@@ -56,7 +63,8 @@ export type Stats = {
 	hits: number, -- touches acceptées par le Validator qui ont fait des dégâts
 	headshots: number,
 	hitShots: number, -- tirs rattachés à une touche (#216 : par shotTime, rattachement décidé par le Validator)
-	orphanHits: number, -- touches sans tir rattaché (#216 : anomalie, hors du taux de touches)
+	orphanHits: number, -- touches sans tir rattaché (#216 : anomalie ; #246 : comptée comme un tir qui touche)
+	orphanAlerts: number, -- violations « touches orphelines » déjà levées (#246)
 	measured: number, -- touches dont le flick a pu être mesuré
 	flickHits: number, -- touches précédées d'un flick
 	peakSpeed: number, -- vitesse angulaire maximale mesurée (°/s)
@@ -107,6 +115,7 @@ local function statsOf(state: State, participant: any): Stats?
 			headshots = 0,
 			hitShots = 0,
 			orphanHits = 0,
+			orphanAlerts = 0,
 			measured = 0,
 			flickHits = 0,
 			peakSpeed = 0,
@@ -171,8 +180,11 @@ function AimStats.noteHit(
 	end
 	local record = ShotLinkRules.find(stats.recent, linkedShotTime, now, "hit")
 	if not record then
-		-- Touche sans tir rattaché : comptée (tête), ni « au but » ni flick
+		-- Touche sans tir rattaché (#246) : comptée comme un tir qui touche (le client n'a pas annoncé le tir), pour que
+		-- le joueur qui ne l'envoie jamais ne sorte pas du taux de touches ; pas de flick (aucun cap figé)
 		stats.orphanHits += 1
+		stats.shots += 1
+		stats.hitShots += 1
 		return
 	end
 	record.hit = true
@@ -191,6 +203,28 @@ function AimStats.noteHit(
 	if delta >= AimStats.FLICK_MIN_ANGLE then
 		stats.flickHits += 1
 	end
+end
+
+-- Cette méthode permet de lever la violation « touches orphelines » (#246) lorsqu'une touche vient d'être comptée :
+-- renvoie le détail à journaliser si le joueur franchit un nouveau palier d'orphelines au-delà du taux toléré, sinon nil.
+-- Journal seul : aucun tir n'est refusé ici.
+function AimStats.orphanAlert(state: State, participant: any): string?
+	local stats = if participant.isBot then nil else state.players[participant.id]
+	if not stats or stats.hits == 0 then
+		return nil
+	end
+	local rate = stats.orphanHits / stats.hits
+	if stats.orphanHits < (stats.orphanAlerts + 1) * AimStats.ORPHAN_MIN_HITS or rate <= AimStats.ORPHAN_MAX_RATE then
+		return nil
+	end
+	stats.orphanAlerts += 1
+	return string.format(
+		"touches sans ShotFired : %d sur %d (%d%%, max %d%%)",
+		stats.orphanHits,
+		stats.hits,
+		math.floor(rate * 100 + 0.5),
+		math.floor(AimStats.ORPHAN_MAX_RATE * 100 + 0.5)
+	)
 end
 
 -- Cette méthode permet de lire une statistique d'un joueur (fraction) lorsqu'on le juge ou l'affiche ; 0 sans dénominateur.
