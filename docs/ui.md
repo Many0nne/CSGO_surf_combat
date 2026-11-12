@@ -49,7 +49,8 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
 
 - `src/client/ui/MainMenu.luau` : accueil (titre, onglets, fiche de l'arme tenue par le personnage, écran d'équipement ;
   rien ne se tire). **Écran d'équipement (#280, `src/client/ui/EquipmentScreen.luau`)** : l'onglet ARMES le porte,
-  d'après la propale visuelle du 2026-11-12. À gauche, sous « ÉQUIPEMENT », les deux emplacements (« 1 · SNIPER »,
+  d'après la propale visuelle du 2026-11-12. À gauche, sous le titre de page « ÉQUIPEMENT » (ambre 30 px à ombre : en
+  libellé de 16 px, il ne disait pas assez qu'on est sur la page d'équipement), les deux emplacements (« 1 · SNIPER »,
   arme équipée en Oswald gras 32 px à ombre, « SKIN · D'ORIGINE » dessous) remplacent l'ancien sélecteur ‹ › :
   l'actif en os avec libellé ambré et barre ambrée à gauche, l'autre grisé (`BoneMuted`), survol en rouge d'impact.
   À droite, **toujours ouverte** sur l'emplacement actif (SNIPER à l'arrivée et au retour sur l'accueil), sur un fond de

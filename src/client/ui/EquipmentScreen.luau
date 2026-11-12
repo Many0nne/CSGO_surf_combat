@@ -26,8 +26,10 @@ local EquipmentScreen = {}
 
 -- Mise en page (px à 720 de haut), d'après la propale
 local EDGE = 28
-local HEADER_Y = 140 -- « ÉQUIPEMENT » à gauche, titre de la liste à droite
-local SLOTS_Y = 168
+local HEADER_Y = 140 -- titre de la liste à droite
+local PAGE_TITLE_Y = 118 -- « ÉQUIPEMENT » à gauche, titre de la page
+local PAGE_TITLE_SIZE = 30
+local SLOTS_Y = 176
 local SLOT_STEP = 100
 local SLOT_SIZE = Vector2.new(300, 84)
 local SLOT_LABELS = { sniper = "SNIPER", knife = "COUTEAU" }
@@ -413,12 +415,17 @@ end
 -- en bas à droite) lorsque l'accueil est construit ; il suit ensuite chaque changement d'inventaire ou d'équipement.
 function EquipmentScreen.build(root: Frame)
 	UIKit.cornerScrim(root, "TopRight", SCRIM_SIZE, SCRIM_SHOWN)
-	UIKit.accentLabel(root, {
+	-- Titre de la page, en grand : il dit qu'on est sur l'écran d'équipement (retour de l'utilisateur)
+	UIKit.shadowedText(root, {
 		Name = "EquipmentTitle",
 		Text = "ÉQUIPEMENT",
-		Position = UDim2.fromOffset(EDGE, HEADER_Y),
-		Size = UDim2.fromOffset(SLOT_SIZE.X, 18),
-	})
+		FontFace = F.Display,
+		TextSize = PAGE_TITLE_SIZE,
+		TextColor3 = C.Accent,
+		Position = UDim2.fromOffset(EDGE, PAGE_TITLE_Y),
+		Size = UDim2.fromOffset(SLOT_SIZE.X, PAGE_TITLE_SIZE + 4),
+		ZIndex = 2,
+	}, 2)
 	panel = UIKit.frame({
 		Name = "EquipList",
 		BackgroundTransparency = 1,

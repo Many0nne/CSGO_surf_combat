@@ -88,7 +88,8 @@ function UIKit.accentLabel(parent: GuiObject, props: { [string]: any }): (TextLa
 	for key, value in props do
 		merged[key] = value
 	end
-	return UIKit.shadowedText(parent, merged, 2)
+	-- Ombre de 1 px : à 2 px, les lettres paraissaient doublées une fois l'écran réduit (fenêtre de 607 px de haut)
+	return UIKit.shadowedText(parent, merged, 1)
 end
 
 -- Cette méthode permet de dessiner la silhouette plate d'une arme, de profil, à partir des MeshParts de son viewmodel
