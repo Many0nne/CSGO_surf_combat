@@ -33,17 +33,17 @@ local MAX_SAVE_FAILURES = 5 -- échecs d'affilée (de 3 essais chacun) avant d'a
 local EQUIP_SAVE_SPACING = 6
 
 -- owned : items possédés, recalculés à chaque changement (setup, chargement, déblocage, debug) et lus à chaque tir.
--- equipped : choix enregistré (#280, nil tant que rien n'est choisi ni relu) ; resolved : équipement appliqué, recalculé
--- avec owned.
+-- equipped : choix relu puis modifié (#280, nil tant que rien n'est choisi ni relu) ; chosen : emplacements choisis dans
+-- cette session, seuls écrits (un autre serveur garde les siens) ; resolved : équipement appliqué, recalculé avec owned.
 type Profile = {
 	stored: { string },
 	owned: InventoryRules.Owned,
 	equipped: InventoryRules.Equipped?,
+	chosen: InventoryRules.Equipped,
 	resolved: InventoryRules.Equipped,
 	loaded: boolean,
 	dirty: boolean,
 	saving: boolean,
-	saveScheduled: boolean,
 	lastSaveAt: number,
 	canSave: boolean,
 	failures: number,
@@ -53,6 +53,9 @@ local store: DataStore? = nil
 local profiles: { [Player]: Profile } = {}
 -- Sauvegardes en cours, attendues par BindToClose (celles lancées au départ d'un joueur comprises)
 local savesInFlight = 0
+-- Sauvegardes programmées plus tard (espacement, nouvel essai), lancées tout de suite par BindToClose : le joueur peut
+-- être déjà parti (plus dans `profiles`)
+local pendingSaves: { [Profile]: Player } = {}
 -- Arrêt du serveur en cours (BindToClose) : une sauvegarde en échec est retentée tout de suite, pas après un délai
 local closing = false
 -- Inventaire des bots (#267) : celui par défaut, jamais sauvegardé
@@ -184,10 +187,27 @@ local function refresh(player: Player, profile: Profile)
 	task.spawn(InventoryStore.syncTools, player)
 end
 
--- Cette méthode permet d'écrire l'inventaire d'un profil s'il a changé lorsqu'un item est obtenu, que le joueur part ou
--- que le serveur s'arrête : une seule écriture à la fois par profil, ids réunis avec ceux déjà enregistrés
--- (InventoryRules.mergeForSave) ; un changement arrivé pendant l'écriture en relance une.
-local function saveProfile(player: Player, profile: Profile)
+local saveProfile: (Player, Profile) -> ()
+
+-- Cette méthode permet de programmer une seule écriture d'un profil plus tard (espacée d'EQUIP_SAVE_SPACING depuis la
+-- précédente, ou après `delay`) lorsqu'un changement ne peut pas partir tout de suite ; BindToClose la lance d'avance.
+local function queueSave(player: Player, profile: Profile, delay: number?)
+	if pendingSaves[profile] then
+		return
+	end
+	pendingSaves[profile] = player
+	local wait = delay or math.max(0, profile.lastSaveAt + EQUIP_SAVE_SPACING - os.clock())
+	task.delay(wait, function()
+		if pendingSaves[profile] then
+			pendingSaves[profile] = nil
+			saveProfile(player, profile)
+		end
+	end)
+end
+
+-- Cette méthode permet d'écrire l'inventaire d'un profil s'il a changé (item obtenu, équipement, départ, arrêt), une
+-- écriture à la fois (InventoryRules.mergeForSave) ; un changement arrivé pendant l'écriture en relance une.
+function saveProfile(player: Player, profile: Profile)
 	local ds = getStore()
 	if not (ds and profile.loaded and profile.canSave and profile.dirty) or profile.saving then
 		return
@@ -198,10 +218,11 @@ local function saveProfile(player: Player, profile: Profile)
 	profile.lastSaveAt = os.clock()
 	savesInFlight += 1
 	local stored = profile.stored
-	local equipped = profile.equipped
+	-- Seuls les emplacements choisis dans cette session : ceux relus au chargement ne réécrasent pas un autre serveur
+	local chosen = table.clone(profile.chosen)
 	local ok = withRetry(function()
 		return ds:UpdateAsync(tostring(player.UserId), function(old)
-			return InventoryRules.mergeForSave(old, stored, equipped)
+			return InventoryRules.mergeForSave(old, stored, chosen)
 		end)
 	end)
 	savesInFlight -= 1
@@ -223,7 +244,7 @@ local function saveProfile(player: Player, profile: Profile)
 				SAVE_RETRY_DELAY,
 				"s"
 			)
-			task.delay(SAVE_RETRY_DELAY, saveProfile, player, profile)
+			queueSave(player, profile, SAVE_RETRY_DELAY)
 		end
 		return
 	end
@@ -234,8 +255,7 @@ local function saveProfile(player: Player, profile: Profile)
 		if closing then
 			saveProfile(player, profile)
 		else
-			local wait = math.max(0, profile.lastSaveAt + EQUIP_SAVE_SPACING - os.clock())
-			task.delay(wait, saveProfile, player, profile)
+			queueSave(player, profile)
 		end
 	end
 end
@@ -256,11 +276,11 @@ function InventoryStore.setup(player: Player)
 		stored = {},
 		owned = {},
 		equipped = nil,
+		chosen = {},
 		resolved = {},
 		loaded = false,
 		dirty = false,
 		saving = false,
-		saveScheduled = false,
 		lastSaveAt = -math.huge,
 		canSave = false,
 		failures = 0,
@@ -330,20 +350,6 @@ function InventoryStore.grant(player: Player, id: string): boolean
 	return true
 end
 
--- Cette méthode permet d'écrire le profil après un changement d'équipement lorsque le joueur clique : tout de suite si
--- la dernière écriture date d'au moins EQUIP_SAVE_SPACING, sinon une seule écriture à cette échéance pour tous les clics.
-local function scheduleSave(player: Player, profile: Profile)
-	if profile.saveScheduled then
-		return
-	end
-	profile.saveScheduled = true
-	local wait = math.max(0, profile.lastSaveAt + EQUIP_SAVE_SPACING - os.clock())
-	task.delay(wait, function()
-		profile.saveScheduled = false
-		saveProfile(player, profile)
-	end)
-end
-
 -- Cette méthode permet d'équiper une arme et son skin (nil : d'origine) lorsque le joueur clique à l'accueil (#280),
 -- refusé avant le chargement, personnage en jeu ou item invalide (InventoryRules.equip) ; renvoie l'acceptation, le motif.
 function InventoryStore.equip(player: Player, slot: any, weaponId: any, skinId: any): (boolean, string?)
@@ -362,10 +368,12 @@ function InventoryStore.equip(player: Player, slot: any, weaponId: any, skinId: 
 		return false, reason
 	end
 	profile.equipped = equipped
+	profile.chosen[slot] = equipped[slot]
 	refresh(player, profile)
 	if profile.canSave then
 		profile.dirty = true
-		scheduleSave(player, profile)
+		-- Tout de suite si la dernière écriture date d'EQUIP_SAVE_SPACING, sinon une seule pour les clics rapprochés
+		queueSave(player, profile)
 	end
 	return true
 end
@@ -413,6 +421,11 @@ function InventoryStore.init(equipRemote: RemoteEvent)
 	end)
 	game:BindToClose(function()
 		closing = true
+		-- Écritures programmées plus tard (joueurs partis compris) : lancées maintenant
+		for profile, player in pendingSaves do
+			pendingSaves[profile] = nil
+			task.spawn(saveProfile, player, profile)
+		end
 		for player, profile in profiles do
 			task.spawn(saveProfile, player, profile)
 		end

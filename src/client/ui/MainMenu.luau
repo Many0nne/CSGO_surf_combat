@@ -93,6 +93,7 @@ local currentPage: Page = "home"
 local notice: TextLabel
 local noticeShadow: TextLabel
 local noticeGeneration = 0
+local shownWeapon: string? = nil -- arme de la fiche, pour ne rejouer son apparition qu'au changement
 
 -- Cette méthode permet d'appeler un rappel enregistré lorsqu'un choix du menu est confirmé.
 local function fire(name: string)
@@ -444,6 +445,8 @@ end
 -- lorsque le joueur tape 1 ou 2 ou tourne la molette.
 local function focusSlot(index: number)
 	focusedSlot = index
+	-- La touche l'emporte sur le survol en cours, sinon elle semblerait sans effet
+	hoverTool = nil
 	if openSlot and openSlot ~= index then
 		openSlot = index
 		rebuildList()
@@ -607,7 +610,11 @@ local function showWeapon(name: string)
 			segment.BackgroundTransparency = if lit then 0 else 0.78
 		end
 	end
-	UIKit.reveal(card, 0, 6)
+	-- Apparition rejouée seulement pour une autre arme : un clic d'équipement ne doit pas faire clignoter la fiche
+	if name ~= shownWeapon then
+		shownWeapon = name
+		UIKit.reveal(card, 0, 6)
+	end
 end
 
 -- Cette méthode permet de construire l'accueil (titre, fiche, écran d'équipement) lorsque le menu est initialisé.

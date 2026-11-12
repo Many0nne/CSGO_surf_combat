@@ -11,11 +11,27 @@ local NetworkProtocol = require(Shared:WaitForChild("NetworkProtocol"))
 
 local LocalInventory = {}
 
+local REMOTE_WAIT = 10 -- s d'attente maximale du remote EquipItem (pas encore répliqué juste après l'arrivée)
+
 local player = Players.LocalPlayer
+-- Attributs décodés, gardés jusqu'à leur prochain changement : l'accueil les relit à chaque survol
+local ownedCache: InventoryRules.Owned? = nil
+local equippedCache: InventoryRules.Equipped? = nil
+
+-- Cette méthode permet d'oublier les attributs décodés lorsque l'un d'eux change (connexion posée au chargement, avant
+-- celles des abonnés).
+local function invalidate()
+	ownedCache = nil
+	equippedCache = nil
+end
+player:GetAttributeChangedSignal(InventoryRules.ATTRIBUTE):Connect(invalidate)
+player:GetAttributeChangedSignal(InventoryRules.EQUIPPED_ATTRIBUTE):Connect(invalidate)
 
 -- Cette méthode permet de lire les items possédés lorsqu'une liste du menu se construit.
 function LocalInventory.owned(): InventoryRules.Owned
-	return InventoryRules.decode(player:GetAttribute(InventoryRules.ATTRIBUTE))
+	local owned = ownedCache or InventoryRules.decode(player:GetAttribute(InventoryRules.ATTRIBUTE))
+	ownedCache = owned
+	return owned
 end
 
 -- Cette méthode permet de lire les noms des Tools possédés, triés, lorsqu'une liste d'armes se construit.
@@ -31,7 +47,10 @@ end
 -- Cette méthode permet de lire l'équipement appliqué (arme et skin par emplacement) lorsque l'accueil ou les Réglages
 -- l'affichent.
 function LocalInventory.equipped(): InventoryRules.Equipped
-	return InventoryRules.decodeEquipped(player:GetAttribute(InventoryRules.EQUIPPED_ATTRIBUTE), LocalInventory.owned())
+	local equipped = equippedCache
+		or InventoryRules.decodeEquipped(player:GetAttribute(InventoryRules.EQUIPPED_ATTRIBUTE), LocalInventory.owned())
+	equippedCache = equipped
+	return equipped
 end
 
 -- Cette méthode permet de lister les Tools équipés, dans l'ordre des emplacements, lorsque les lignes de touches des
@@ -40,19 +59,22 @@ function LocalInventory.equippedTools(): { string }
 	return InventoryRules.equippedTools(LocalInventory.equipped())
 end
 
--- Cette méthode permet de demander au serveur d'équiper une arme et son skin (nil : d'origine) dans un emplacement
--- lorsque le joueur clique à l'accueil ; l'attribut `EquippedItems` change si le serveur accepte.
+-- Cette méthode permet de demander au serveur d'équiper une arme et son skin (nil : d'origine) lorsque le joueur clique
+-- à l'accueil ; le remote est attendu s'il n'est pas encore répliqué. `EquippedItems` change si le serveur accepte.
 function LocalInventory.equip(slot: InventoryRules.Slot, weaponId: string, skinId: string?)
-	local remote = ReplicatedStorage:FindFirstChild(NetworkProtocol.Names.EQUIP_ITEM)
-	if remote and remote:IsA("RemoteEvent") then
-		remote:FireServer(slot, weaponId, skinId or "")
-	end
+	task.spawn(function()
+		local remote = ReplicatedStorage:WaitForChild(NetworkProtocol.Names.EQUIP_ITEM, REMOTE_WAIT)
+		if remote and remote:IsA("RemoteEvent") then
+			remote:FireServer(slot, weaponId, skinId or "")
+		end
+	end)
 end
 
 -- Cette méthode permet d'être prévenu une fois lorsque l'inventaire ou l'équipement change, les deux attributs posés
 -- ensemble par le serveur ne donnant qu'un appel (différé) ; renvoie les deux connexions.
 function LocalInventory.onChanged(callback: () -> ()): { RBXScriptConnection }
 	local pending = false
+	-- Cette méthode permet de programmer un seul appel du rappel lorsque l'un des deux attributs change.
 	local function schedule()
 		if pending then
 			return
