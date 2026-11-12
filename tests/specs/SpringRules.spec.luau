@@ -47,6 +47,10 @@ return function(T, Loader)
 			end)
 		end
 
+		T.it("marge de stabilité : SPEED * MAX_STEP reste sous 2√2 − 2 (amortissement critique)", function()
+			T.expect(SPEED * SpringRules.MAX_STEP < 2 * math.sqrt(2) - 2, tostring(SPEED * SpringRules.MAX_STEP))
+		end)
+
 		T.it("à 60 i/s, même réponse que l'ancien schéma, pas pour pas", function()
 			local dt = 1 / 60
 			local pa, va = Vector3.zero, Vector3.zero
