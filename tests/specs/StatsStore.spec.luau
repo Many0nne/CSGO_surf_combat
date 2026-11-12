@@ -197,7 +197,7 @@ return function(T, Loader)
 		return record and record.stats
 	end
 
-	local INTERVAL = 120 -- GameConfig.AUTO_SAVE_INTERVAL
+	local INTERVAL = Loader.new({}):require("src/shared/GameConfig").AUTO_SAVE_INTERVAL
 
 	T.describe("StatsStore : écritures", function()
 		T.it("aucune écriture en 10 minutes pour des joueurs restés au menu", function()
@@ -309,6 +309,25 @@ return function(T, Loader)
 			T.expectEqual(ds.writes, 0)
 			T.expect(string.find(server.warnings[1], "chargement impossible", 1, true) ~= nil)
 		end)
+
+		T.it(
+			"format plus récent écrit entre-temps par un autre serveur : écriture annulée, sauvegarde coupée",
+			function()
+				local sched = makeScheduler()
+				local ds = makeDataStore(sched)
+				local server = makeServer(sched, ds)
+				local alice = server.join(1)
+				server.StatsStore.recordKill(alice)
+				ds.data["1"] = { schemaVersion = 99, stats = { kills = 40 } }
+				sched.advance(INTERVAL)
+				T.expectEqual(ds.writes, 0)
+				T.expectEqual(ds.data["1"].stats.kills, 40)
+				T.expect(string.find(server.warnings[1], "format enregistré inconnu", 1, true) ~= nil, "signalé")
+				server.StatsStore.recordKill(alice)
+				sched.advance(INTERVAL)
+				T.expectEqual(ds.writes, 0, "plus aucune tentative")
+			end
+		)
 
 		T.it("ne touche pas un enregistrement d'un format plus récent", function()
 			local sched = makeScheduler()
