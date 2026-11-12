@@ -65,7 +65,7 @@ return function(T, Loader)
 		T.it("touche orpheline : comptée à part et comme un tir qui touche (#216, #246)", function()
 			local state = AimStats.new()
 			local p = participant(1)
-			-- Tricheur qui tait ses tirs manqués : touches sans ShotFired, le taux de touches ne monte pas
+			-- Tricheur qui tait ses tirs : touches sans ShotFired, orphelines
 			for i = 1, 10 do
 				AimStats.noteHit(state, p, true, i * 2, FORWARD)
 			end
@@ -93,8 +93,24 @@ return function(T, Loader)
 			local s = state.players[1]
 			T.expectEqual(s.shots, 40)
 			T.expectNear(AimStats.rate(s, "hitRate"), 1)
-			T.expectEqual(alerts, 40 // AimStats.ORPHAN_MIN_HITS, "une violation par palier, pas une par touche")
+			-- Jugé dès ORPHAN_MIN_TOUCHES touches, puis une violation par palier de 5 (20, 25, 30, 35, 40)
+			T.expectEqual(alerts, 5, "une violation par palier, pas une par touche")
 			T.expectEqual(AimStats.orphanAlert(state, participant(2)), nil, "joueur inconnu : rien")
+		end)
+
+		T.it("taux franchi tard : une seule violation, pas de rattrapage touche par touche (#246)", function()
+			local state = AimStats.new()
+			local p = participant(1)
+			play(state, p, 300, 300, 0)
+			local alerts = 0
+			for i = 1, 200 do
+				AimStats.noteHit(state, p, false, 5000 + i, FORWARD)
+				if AimStats.orphanAlert(state, p) then
+					alerts += 1
+				end
+			end
+			-- 25 % de 500 touches = 125 orphelines : alerte à 130, puis tous les 5 (130 à 200 : 15 alertes au plus)
+			T.expect(alerts <= 15 and alerts >= 1, "alertes : " .. alerts)
 		end)
 
 		T.it("client honnête (tirs et touches) ou quelques orphelines : aucune violation (#246)", function()

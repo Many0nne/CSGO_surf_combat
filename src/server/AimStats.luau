@@ -50,6 +50,8 @@ AimStats.MIN_SPEED_DT = 1 / 20
 -- quelques-unes sur des centaines), puis à chaque nouveau palier de ORPHAN_MIN_HITS (journal borné).
 AimStats.ORPHAN_MIN_HITS = 5
 AimStats.ORPHAN_MAX_RATE = 0.25
+-- Touches minimales avant de juger le taux (sur trop peu de touches, 5 orphelines suffiraient à dépasser 25 %).
+AimStats.ORPHAN_MIN_TOUCHES = 20
 -- Direction de tir presque verticale : cap indéfini, flick non mesuré (composante horizontale minimale).
 local MIN_HORIZONTAL = 0.1
 
@@ -62,7 +64,7 @@ export type Stats = {
 	shots: number, -- tirs acceptés (ShotFired relayé)
 	hits: number, -- touches acceptées par le Validator qui ont fait des dégâts
 	headshots: number,
-	hitShots: number, -- tirs rattachés à une touche (#216 : par shotTime, rattachement décidé par le Validator)
+	hitShots: number, -- tirs qui ont touché : rattachés par shotTime (#216) + orphelines comptées comme un tir (#246)
 	orphanHits: number, -- touches sans tir rattaché (#216 : anomalie ; #246 : comptée comme un tir qui touche)
 	orphanAlerts: number, -- violations « touches orphelines » déjà levées (#246)
 	measured: number, -- touches dont le flick a pu être mesuré
@@ -160,7 +162,7 @@ function AimStats.noteShot(
 end
 
 -- Cette méthode permet de compter une touche qui a fait des dégâts lorsqu'elle est appliquée : rattachée au tir
--- linkedShotTime (décidé par le Validator, #216 ; nil : orpheline, anomalie hors du taux de touches) ; flick mesuré
+-- linkedShotTime (décidé par le Validator, #216 ; nil : orpheline, anomalie comptée comme un tir qui touche, #246) ; flick mesuré
 -- alors entre le cap figé à ce tir et la direction validée de la touche. Ne renvoie rien : aucun veto.
 function AimStats.noteHit(
 	state: State,
@@ -210,14 +212,15 @@ end
 -- Journal seul : aucun tir n'est refusé ici.
 function AimStats.orphanAlert(state: State, participant: any): string?
 	local stats = if participant.isBot then nil else state.players[participant.id]
-	if not stats or stats.hits == 0 then
+	if not stats or stats.hits < AimStats.ORPHAN_MIN_TOUCHES then
 		return nil
 	end
 	local rate = stats.orphanHits / stats.hits
 	if stats.orphanHits < (stats.orphanAlerts + 1) * AimStats.ORPHAN_MIN_HITS or rate <= AimStats.ORPHAN_MAX_RATE then
 		return nil
 	end
-	stats.orphanAlerts += 1
+	-- Palier courant atteint : pas de rattrapage une violation par touche si le taux franchit le seuil tard
+	stats.orphanAlerts = stats.orphanHits // AimStats.ORPHAN_MIN_HITS
 	return string.format(
 		"touches sans ShotFired : %d sur %d (%d%%, max %d%%)",
 		stats.orphanHits,
@@ -280,7 +283,7 @@ end
 
 -- Cette méthode permet de mettre en forme les chiffres bruts d'un joueur lorsqu'ils vont au journal : compact (le
 -- détail de CheatLog est coupé à 160 octets), signalement et son z d'abord, puis les chiffres, puis les autres z.
--- « but » = tirs rattachés à une touche ; « touches » = toutes les touches acceptées (celles de MIN_HITS) ; « orph » =
+-- « but » = tirs qui ont touché (rattachés, plus les orphelines, #246) ; « touches » = toutes les touches acceptées (celles de MIN_HITS) ; « orph » =
 -- touches sans tir rattaché (#216).
 function AimStats.describe(stats: Stats, verdict: Verdict): string
 	-- Cette méthode permet d'arrondir une statistique en pourcentage lorsqu'elle est affichée.
