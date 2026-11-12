@@ -98,7 +98,8 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/client/ui/KillFeed.luau`: kill feed en haut à droite (4 lignes, 5 s), affiché en partie vivant ou mort (`HUDRules.killFeedVisible`).
 - `src/client/ui/Hitmarker.luau`: marqueur de touche confirmée par le serveur (X blanc à contour noir, rouge sur un tir à la tête, plus grand sur un kill). Un tir à la tête joue aussi un ding (`assets/sounds/Headshot.mp3`, publié ; crédité dans Infos).
 - `src/client/ui/InfosScreen.luau`: écran Infos (surfer, commandes, crédits, à propos), même disposition que les Réglages, onglets à tirer.
-- `src/client/ui/MainMenu.luau`: menu d'accueil sur la map (#253, souris système, rien ne se tire) : titre, onglets, fiche de l'arme tenue et écran d'équipement de l'onglet ARMES (#280 : emplacements SNIPER et COUTEAU à gauche, liste des armes puis des skins possédés à droite, arme survolée tenue par le personnage, clic = `EquipItem`).
+- `src/client/ui/MainMenu.luau`: menu d'accueil sur la map (#253, souris système, rien ne se tire) : titre, onglets, fiche de l'arme tenue, et l'écran d'équipement de l'onglet ARMES (`EquipmentScreen`).
+- `src/client/ui/EquipmentScreen.luau`: écran d'équipement (#280) : emplacements SNIPER et COUTEAU à gauche, liste toujours ouverte de l'emplacement actif à droite (armes possédées avec silhouette, puis skins en vignettes), arme survolée tenue par le personnage (`MenuScene.holdTool`), clic = `EquipItem` (cf. `docs/ui.md`).
 - `src/client/ui/MenuCursor.luau`: hitmarker qui remplace le curseur sur tous les écrans du menu.
 - `src/client/ui/MenuPage.luau`: gabarit des écrans secondaires du menu (bloc centré sur un voile, titre en texte pour Réglages en partie, choix et action de sortie en texte).
 - `src/client/ui/MenuShot.luau`: tir sur un élément du menu (impact, puis action) et choix en texte à ombre décalée.
@@ -116,7 +117,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/client/ui/Speedometer.luau`: affichage de la vitesse du joueur.
 - `src/client/ui/WeaponBar.luau`: barre d'armes (remplace le Backpack Roblox) : silhouettes des armes, équipement par les touches et la molette réglées par le joueur, au toucher et à la manette ; inactive pendant que le menu en partie (`InGameMenu`, Réglages compris) est ouvert.
 - `src/client/ui/Transition.luau`: volets de transition entre le menu et le jeu.
-- `src/client/ui/UIKit.luau`: briques communes des écrans (création d'Instances, texte au thème, tweens, icônes, mise à l'échelle).
+- `src/client/ui/UIKit.luau`: briques communes des écrans (création d'Instances, texte au thème, libellé ambré du menu `accentLabel`, silhouette d'arme `weaponSilhouette` partagée par la barre d'armes et l'équipement, tweens, icônes, mise à l'échelle).
 - `src/server/DebugPlaytest.luau`: helper de playtest (Studio uniquement) : déclenché par un attribut joueur, enchaîne spawn, équipement, cible immobile et attaque, avec un PASS/FAIL par étape.
 - `src/server/FeedbackService.luau`: réception des feedbacks côté serveur (longueur, délai en mémoire posé avant tout accès DataStore, limite hebdomadaire jamais écrasée après une lecture échouée, #171), envoyés au webhook par `Webhook`.
 - `src/server/InventoryStore.luau`: inventaire des joueurs (#267) : DataStore `PlayerInventory_v1` (chargement, repli, sauvegarde), items possédés et possession d'un Tool par un participant (`ownsTool`, branché dans le `Validator`), équipement (#280, `equip`, remote `EquipItem`), sac rempli des seuls Tools équipés (`syncTools`), attributs informatifs `OwnedItems` et `EquippedItems`, `grant` pour la future boutique, debug Studio `DebugInventory` ; cf. « Inventaire ».
