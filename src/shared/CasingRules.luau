@@ -6,7 +6,11 @@
 -- La douille part de ce point avec une vitesse et une rotation tirées dans des fourchettes, suit un arc balistique dans
 -- le monde (elle hérite de la vitesse du tireur, comme dans CS) puis disparaît au bout de LIFETIME.
 -- En 1re personne, elle part au marqueur MARKER de l'animation Shoot ; chez les autres (arme 3P, joueurs et bots), au
--- tir relayé (ShotFired) plus REMOTE_DELAY, l'instant de ce marqueur dans la piste.
+-- tir relayé (ShotFired) plus le CasingEjectDelay de l'arme (WeaponConfig), l'instant de ce marqueur dans la piste.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local MovementConfig = require(ReplicatedStorage.Shared.MovementConfig)
 
 local CasingRules = {}
 
@@ -15,10 +19,6 @@ local CasingRules = {}
 CasingRules.PORT_PATH = { "Handle", "EjectPort" }
 -- Marqueur de l'animation Shoot posé au recul de la culasse (assets/awp_viewmodel/build_anims.py, spec_shoot).
 CasingRules.MARKER = "Eject"
--- Instant (s) de ce marqueur dans la piste Shoot de l'AWP : culasse en arrière, 20,47 s de la vidéo de référence
--- (20,47 - 19,65 ; rattaché à la keyframe de 0,817 s). Sert de délai aux tirs relayés, dont l'arme 3P ne joue pas la
--- piste.
-CasingRules.REMOTE_DELAY = 0.82
 
 -- Douille à l'échelle du viewmodel (studs ; l'arme 3P la réduit avec son échelle) : cylindre couché le long de
 -- l'arme, laiton.
@@ -42,13 +42,17 @@ CasingRules.SPIN_ROLL = 6
 CasingRules.GRAVITY = 120
 -- Durée de vie (s) : la douille disparaît ensuite (retour au pool).
 CasingRules.LIFETIME = 0.8
--- Douilles en vol au plus : au-delà, la plus ancienne est réutilisée.
+-- Douilles en vol au plus. Une douille du joueur local prend la plus ancienne si tout est pris ; une douille d'un
+-- autre n'en prend qu'une libre (elle ne chasse jamais celle qu'on voit devant soi).
 CasingRules.POOL_SIZE = 8
 -- Nom des pièces de douille (repérables en Studio, comptées par la vérification « aucune instance restante »).
 CasingRules.INSTANCE_NAME = "ShotCasing"
--- Tir relayé : la vitesse du tireur se déduit du déplacement de son arme 3P entre le tir et l'éjection. Au-delà de
--- cette vitesse (studs/s), c'est un saut (réapparition, téléportation) : la douille n'hérite de rien.
-CasingRules.MAX_INHERITED_SPEED = 400
+-- Tir relayé : la vitesse du tireur se déduit du déplacement moyen de son arme 3P entre le tir et l'éjection
+-- (approximation : un tireur qui freine pendant ce délai donne une vitesse moyenne). Au-delà de la vitesse maximale
+-- d'un joueur (plus une marge, studs/s), c'est un saut (réapparition, téléportation) : la douille n'hérite de rien.
+CasingRules.MAX_INHERITED_SPEED = MovementConfig.MAX_SPEED_SERVER + 50
+-- Tir relayé à plus de cette distance (studs) de notre caméra : pas de douille (quelques pixels, invisible).
+CasingRules.MAX_REMOTE_DISTANCE = 150
 
 -- Cette méthode permet de tirer une valeur autour de base lorsqu'une douille part : u ∈ [0, 1] donne base ± SPREAD.
 local function jitter(base: number, u: number): number
@@ -64,9 +68,8 @@ export type Flight = {
 	gravity: number,
 }
 
--- Cette méthode permet de préparer le vol d'une douille lorsqu'elle sort de la fenêtre d'éjection : port est la
--- CFrame monde de l'EjectPort, scale l'échelle de l'arme (1 en 1re personne), inherited la vitesse du tireur, rolls
--- quatre tirages dans [0, 1] (vitesse droite, haut, arrière, rotation).
+-- Cette méthode permet de préparer le vol d'une douille lorsqu'elle sort de l'EjectPort (CFrame monde port, échelle
+-- de l'arme, vitesse du tireur), rolls étant quatre tirages dans [0, 1] (vitesse droite, haut, arrière, rotation).
 function CasingRules.launch(port: CFrame, scale: number, inherited: Vector3, rolls: { number }): Flight
 	local v = CasingRules.EJECT_VELOCITY
 	local localVelocity = Vector3.new(jitter(v[1], rolls[1]), jitter(v[2], rolls[2]), jitter(v[3], rolls[3]))
@@ -113,9 +116,15 @@ function CasingRules.inheritedVelocity(from: Vector3, to: Vector3, elapsed: numb
 	return velocity
 end
 
--- Cette méthode permet de choisir l'emplacement du pool d'une nouvelle douille lorsqu'elle part : born[i] est
--- l'instant d'éjection de l'emplacement i (nil s'il est libre) ; un libre d'abord, sinon le plus ancien.
-function CasingRules.pickSlot(born: { [number]: number? }, size: number): number
+-- Cette méthode permet de savoir si la douille d'un tir relayé vaut d'être montrée lorsqu'elle part : son arme est
+-- assez près de notre caméra pour qu'on la voie.
+function CasingRules.isNearCamera(port: Vector3, camera: Vector3): boolean
+	return (port - camera).Magnitude <= CasingRules.MAX_REMOTE_DISTANCE
+end
+
+-- Cette méthode permet de choisir l'emplacement du pool d'une douille lorsqu'elle part (born[i] : instant d'éjection,
+-- nil si libre) : un libre d'abord, sinon le plus ancien si evict est vrai, sinon nil (pas de douille).
+function CasingRules.pickSlot(born: { [number]: number? }, size: number, evict: boolean): number?
 	local oldest, oldestTime = 1, math.huge
 	for i = 1, size do
 		local b = born[i]
@@ -126,7 +135,7 @@ function CasingRules.pickSlot(born: { [number]: number? }, size: number): number
 			oldest, oldestTime = i, b
 		end
 	end
-	return oldest
+	return if evict then oldest else nil
 end
 
 return CasingRules

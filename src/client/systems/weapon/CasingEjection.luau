@@ -3,8 +3,8 @@
 --   • Tir du joueur local : le marqueur CasingRules.MARKER de la piste Shoot du viewmodel (ViewmodelSystem.playAnimation
 --     → connectMarker) éjecte une douille de l'EjectPort du viewmodel ; elle hérite de la vitesse du joueur.
 --   • Tirs des autres joueurs et des bots : chaque ShotFired relayé par le serveur (comme la flamme, ShotEffects)
---     éjecte une douille de l'EjectPort de l'arme 3P du tireur, CasingRules.REMOTE_DELAY plus tard (l'arme 3P ne joue
---     pas la piste Shoot) ; elle hérite du déplacement de l'arme pendant ce délai.
+--     éjecte une douille de l'EjectPort de l'arme 3P du tireur, CasingEjectDelay (WeaponConfig) plus tard (l'arme 3P ne
+--     joue pas la piste Shoot) ; elle hérite du déplacement de l'arme pendant ce délai.
 -- Les douilles sont des Parts d'un pool (au plus CasingRules.POOL_SIZE, créées au premier besoin, jamais détruites) :
 -- sous la caméra pendant leur vol, hors du DataModel (Parent = nil) le reste du temps. Leur vol est calculé, pas
 -- simulé par le moteur (pièces ancrées, sans collision ni requête).
@@ -22,8 +22,8 @@ local WeaponThirdPerson = require(ReplicatedStorage.Shared.WeaponThirdPerson)
 
 local CasingEjection = {}
 
--- Emplacement du pool : sa pièce, son vol en cours et son instant d'éjection (os.clock ; nil : libre).
-type Slot = { part: BasePart, flight: CasingRules.Flight?, born: number? }
+-- Emplacement du pool : sa pièce et son vol en cours (son instant d'éjection est dans born, nil s'il est libre).
+type Slot = { part: BasePart, flight: CasingRules.Flight? }
 
 local slots: { Slot } = {}
 local born: { [number]: number? } = {}
@@ -72,7 +72,6 @@ local function release(index: number)
 	local slot = slots[index]
 	slot.part.Parent = nil
 	slot.flight = nil
-	slot.born = nil
 	born[index] = nil
 end
 
@@ -82,7 +81,7 @@ local function step()
 	local now = os.clock()
 	local active = 0
 	for index, slot in slots do
-		local flight, t0 = slot.flight, slot.born
+		local flight, t0 = slot.flight, born[index]
 		if flight and t0 then
 			local t = now - t0
 			if CasingRules.isExpired(t) then
@@ -101,14 +100,14 @@ end
 
 local timedStep = PerfMarkers.wrap("douilles", step)
 
--- Cette méthode permet d'éjecter une douille de la fenêtre d'éjection d'une arme lorsque sa culasse s'ouvre : scale
--- est l'échelle du modèle (1 pour le viewmodel), inherited la vitesse du tireur.
-local function eject(port: Attachment, scale: number, inherited: Vector3)
+-- Cette méthode permet d'éjecter une douille d'une fenêtre d'éjection lorsque la culasse s'ouvre (scale : échelle de
+-- l'arme, inherited : vitesse du tireur) ; evict faux : rien si le pool est plein (tirs des autres).
+local function eject(port: Attachment, scale: number, inherited: Vector3, evict: boolean)
 	local camera = workspace.CurrentCamera
-	if not camera then
+	local index = camera and CasingRules.pickSlot(born, CasingRules.POOL_SIZE, evict)
+	if not (camera and index) then
 		return
 	end
-	local index = CasingRules.pickSlot(born, CasingRules.POOL_SIZE)
 	local slot = slots[index]
 	if not slot then
 		slot = { part = newCasing() }
@@ -116,10 +115,8 @@ local function eject(port: Attachment, scale: number, inherited: Vector3)
 	end
 	local rolls = { random:NextNumber(), random:NextNumber(), random:NextNumber(), random:NextNumber() }
 	local flight = CasingRules.launch(port.WorldCFrame, scale, inherited, rolls)
-	local now = os.clock()
 	slot.flight = flight
-	slot.born = now
-	born[index] = now
+	born[index] = os.clock()
 	slot.part.Size = Vector3.new(CasingRules.LENGTH, CasingRules.DIAMETER, CasingRules.DIAMETER) * scale
 	slot.part.CFrame = flight.start
 	slot.part.Parent = camera
@@ -128,9 +125,8 @@ local function eject(port: Attachment, scale: number, inherited: Vector3)
 	end
 end
 
--- Cette méthode permet de brancher l'éjection sur le marqueur de la piste d'une arme du joueur local lorsque la piste
--- démarre (ViewmodelSystem.playAnimation) ; nil si le viewmodel n'a pas de fenêtre d'éjection. Rien ne part si le
--- viewmodel est masqué (lunette) au moment du marqueur.
+-- Cette méthode permet de brancher l'éjection sur le marqueur de la piste lorsqu'elle démarre (ViewmodelSystem) ; nil
+-- sans fenêtre d'éjection, et rien ne part si le viewmodel est masqué (lunette) au moment du marqueur.
 function CasingEjection.connectMarker(track: AnimationTrack, viewmodel: Model): RBXScriptConnection?
 	if not portOf(viewmodel) then
 		return nil
@@ -143,39 +139,41 @@ function CasingEjection.connectMarker(track: AnimationTrack, viewmodel: Model): 
 		end
 		-- Échelle 1 : le viewmodel est un clone tel quel du modèle source, dont GetScale() vaut 0,517 (mis à l'échelle à
 		-- sa création) alors que les réglages de CasingRules sont pris dans ce repère.
-		eject(port, 1, getVelocity())
+		eject(port, 1, getVelocity(), true)
 	end)
 end
 
--- Cette méthode permet d'éjecter la douille d'un tir relayé lorsque sa culasse s'ouvre (REMOTE_DELAY après le tir) :
--- depuis l'arme 3P du tireur si c'est toujours la même arme, avec la vitesse de l'arme pendant le délai.
-local function ejectRemote(shooter: Model, weaponName: string, gun: Model, from: Vector3)
-	if gun.Parent ~= shooter or not shooter:IsDescendantOf(workspace) then
-		return
-	end
-	if gun:GetAttribute("WeaponName") ~= weaponName then
-		return
-	end
-	local port = portOf(gun)
-	if not port then
-		return
-	end
-	local inherited = CasingRules.inheritedVelocity(from, port.WorldPosition, CasingRules.REMOTE_DELAY)
-	eject(port, gun:GetScale(), inherited)
+-- Cette méthode permet de savoir si un tir relayé a droit à ses effets lorsqu'il arrive puis quand sa douille part :
+-- tir d'un autre, hors écrans du menu (mêmes conditions que la flamme).
+local function shouldShow(shooter: Model): boolean
+	local localPlayer = Players.LocalPlayer
+	return ShotEffectRules.shouldShow(shooter, localPlayer and localPlayer.Character, getState())
 end
 
--- Cette méthode permet de programmer la douille d'un tir relayé par le serveur lorsqu'il arrive (armes à distance
--- seulement, mêmes conditions que la flamme : tir d'un autre, hors écrans du menu).
+-- Cette méthode permet d'éjecter la douille d'un tir relayé lorsque sa culasse s'ouvre : depuis l'arme 3P du tireur si
+-- c'est toujours la même arme et qu'elle est près de notre caméra, avec la vitesse de l'arme pendant le délai.
+local function ejectRemote(shooter: Model, weaponName: string, gun: Model, from: Vector3, delay: number)
+	if gun.Parent ~= shooter or not shooter:IsDescendantOf(workspace) or not shouldShow(shooter) then
+		return
+	end
+	local port = gun:GetAttribute("WeaponName") == weaponName and portOf(gun)
+	local camera = workspace.CurrentCamera
+	if not (port and camera and CasingRules.isNearCamera(port.WorldPosition, camera.CFrame.Position)) then
+		return
+	end
+	local inherited = CasingRules.inheritedVelocity(from, port.WorldPosition, delay)
+	eject(port, gun:GetScale(), inherited, false)
+end
+
+-- Cette méthode permet de programmer la douille d'un tir relayé par le serveur lorsqu'il arrive (armes à distance qui
+-- ont un CasingEjectDelay et une fenêtre d'éjection sur leur arme 3P).
 local function onShotFired(shooter: any, weaponName: any)
 	if typeof(shooter) ~= "Instance" or not shooter:IsA("Model") or type(weaponName) ~= "string" then
 		return
 	end
 	local cfg = WeaponConfig.Weapons[weaponName]
-	if not cfg or cfg.IsMelee then
-		return
-	end
-	local localPlayer = Players.LocalPlayer
-	if not ShotEffectRules.shouldShow(shooter, localPlayer and localPlayer.Character, getState()) then
+	local delay = cfg and not cfg.IsMelee and cfg.CasingEjectDelay
+	if type(delay) ~= "number" or not shouldShow(shooter) then
 		return
 	end
 	local gun = shooter:FindFirstChild(WeaponThirdPerson.MODEL_NAME)
@@ -183,12 +181,11 @@ local function onShotFired(shooter: any, weaponName: any)
 	if not (gun and gun:IsA("Model") and port) then
 		return
 	end
-	task.delay(CasingRules.REMOTE_DELAY, ejectRemote, shooter, weaponName, gun, port.WorldPosition)
+	task.delay(delay, ejectRemote, shooter, weaponName, gun, port.WorldPosition, delay)
 end
 
--- Cette méthode permet d'écouter les tirs relayés par le serveur lorsque le client démarre ; stateOf lit l'état du
--- client (pas de douilles des autres dans les écrans du menu), velocityOf la vitesse du joueur local
--- (MovementController.getVelocity), dont héritent ses douilles.
+-- Cette méthode permet d'écouter les tirs relayés lorsque le client démarre : stateOf lit l'état du client (pas de
+-- douilles des autres au menu), velocityOf la vitesse du joueur local, dont héritent ses douilles.
 function CasingEjection.init(stateOf: () -> string?, velocityOf: () -> Vector3)
 	getState = stateOf
 	getVelocity = velocityOf

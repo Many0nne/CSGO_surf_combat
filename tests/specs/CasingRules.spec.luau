@@ -6,6 +6,7 @@ return function(T, Loader)
 	-- EjectPort d'un viewmodel qui regarde vers -Z du monde : +X droite, +Y haut, +Z arrière (repère identité)
 	local PORT = CFrame.new(10, 20, 30)
 
+	-- Cette méthode permet de comparer deux vecteurs lorsqu'un test vérifie une position ou une vitesse calculée.
 	local function near(a: Vector3, b: Vector3, eps: number?): boolean
 		return (a - b).Magnitude < (eps or 1e-4)
 	end
@@ -88,7 +89,7 @@ return function(T, Loader)
 		end)
 	end)
 
-	T.describe("CasingRules.isExpired et REMOTE_DELAY (#237)", function()
+	T.describe("CasingRules.isExpired et délai 3P (#237)", function()
 		T.it("vit LIFETIME secondes", function()
 			T.expectEqual(CasingRules.isExpired(0), false)
 			T.expectEqual(CasingRules.isExpired(CasingRules.LIFETIME - 0.01), false)
@@ -99,34 +100,49 @@ return function(T, Loader)
 			"la douille d'un tir relayé part pendant le cycle de tir, et sa vie finit avant le tir suivant",
 			function()
 				local WeaponConfig = Loader.new():require("src/shared/WeaponConfig")
-				local delay = CasingRules.REMOTE_DELAY
-				T.expect(delay > 0 and delay < WeaponConfig.Weapons.AWP.FireDelay, tostring(delay))
-				T.expect(CasingRules.LIFETIME < WeaponConfig.Weapons.AWP.FireDelay, "une douille en vol par tireur")
+				local awp = WeaponConfig.Weapons.AWP
+				local delay = awp.CasingEjectDelay
+				T.expect(type(delay) == "number" and delay > 0 and delay < awp.FireDelay, tostring(delay))
+				T.expect(CasingRules.LIFETIME < awp.FireDelay, "une douille en vol par tireur")
 			end
 		)
 	end)
 
 	T.describe("CasingRules.pickSlot (#237)", function()
 		T.it("prend un emplacement libre d'abord", function()
-			T.expectEqual(CasingRules.pickSlot({}, 4), 1)
-			T.expectEqual(CasingRules.pickSlot({ [1] = 5, [2] = 6 }, 4), 3)
-			T.expectEqual(CasingRules.pickSlot({ [1] = 5, [3] = 6 }, 4), 2)
+			T.expectEqual(CasingRules.pickSlot({}, 4, false), 1)
+			T.expectEqual(CasingRules.pickSlot({ [1] = 5, [2] = 6 }, 4, false), 3)
+			T.expectEqual(CasingRules.pickSlot({ [1] = 5, [3] = 6 }, 4, true), 2)
 		end)
 
-		T.it("pool plein : réutilise la douille la plus ancienne", function()
-			T.expectEqual(CasingRules.pickSlot({ 9, 4, 7 }, 3), 2)
+		T.it("pool plein : la douille locale réutilise la plus ancienne, celle d'un autre n'a rien", function()
+			T.expectEqual(CasingRules.pickSlot({ 9, 4, 7 }, 3, true), 2)
+			T.expectEqual(CasingRules.pickSlot({ 9, 4, 7 }, 3, false), nil)
 		end)
 	end)
 
-	T.describe("CasingRules.inheritedVelocity (#237)", function()
+	T.describe("CasingRules.inheritedVelocity et isNearCamera (#237)", function()
 		T.it("vitesse moyenne de l'arme pendant le délai", function()
 			local v = CasingRules.inheritedVelocity(Vector3.zero, Vector3.new(0, 0, -82), 0.82)
 			T.expect(near(v, Vector3.new(0, 0, -100)), tostring(v))
 		end)
 
+		T.it("un surfeur à la vitesse maximale garde sa vitesse (pas pris pour un saut)", function()
+			local MovementConfig = Loader.new():require("src/shared/MovementConfig")
+			local speed = MovementConfig.MAX_SPEED_SERVER
+			local v = CasingRules.inheritedVelocity(Vector3.zero, Vector3.new(speed * 0.82, 0, 0), 0.82)
+			T.expect(near(v, Vector3.new(speed, 0, 0), 1e-3), tostring(v))
+		end)
+
 		T.it("un saut (réapparition) ou une durée nulle ne donne aucune vitesse", function()
 			T.expectEqual(CasingRules.inheritedVelocity(Vector3.zero, Vector3.new(1000, 0, 0), 0.82), Vector3.zero)
 			T.expectEqual(CasingRules.inheritedVelocity(Vector3.zero, Vector3.new(1, 0, 0), 0), Vector3.zero)
+		end)
+
+		T.it("pas de douille pour un tireur loin de notre caméra", function()
+			local far = CasingRules.MAX_REMOTE_DISTANCE
+			T.expectEqual(CasingRules.isNearCamera(Vector3.new(far - 1, 0, 0), Vector3.zero), true)
+			T.expectEqual(CasingRules.isNearCamera(Vector3.new(far + 1, 0, 0), Vector3.zero), false)
 		end)
 	end)
 end

@@ -109,22 +109,26 @@ viewmodel avec leurs enfants (`WeaponThirdPerson`) : il a la même fenêtre, ré
 
 - **Déclenchement 1P :** marqueur `Eject` de la piste `Shoot` (culasse en arrière, `docs/animations.md`), branché par
   `ViewmodelSystem.playAnimation`. Pas de douille si le viewmodel est masqué (lunette) à cet instant.
-- **Chez les autres :** chaque `ShotFired` relayé (joueurs et bots, armes à distance) éjecte de l'arme 3P du tireur
-  `CasingRules.REMOTE_DELAY` plus tard (instant du marqueur : l'arme 3P ne joue pas la piste). La douille hérite du
-  déplacement de l'arme pendant ce délai (un saut au-delà de `MAX_INHERITED_SPEED` est ignoré).
+- **Chez les autres :** chaque `ShotFired` relayé (joueurs et bots) éjecte de l'arme 3P du tireur `CasingEjectDelay`
+  plus tard (champ de l'arme dans `WeaponConfig`, instant du marqueur : l'arme 3P ne joue pas la piste ; sans ce champ,
+  pas de douille 3P). L'état du client est revérifié à l'éjection (menu ouvert entre-temps : rien). La douille hérite
+  du déplacement moyen de l'arme pendant ce délai (approximation ; un saut au-delà de `MAX_INHERITED_SPEED`, vitesse
+  maximale d'un joueur plus une marge, est ignoré). Pas de douille pour un tireur à plus de `MAX_REMOTE_DISTANCE`.
 - **Vol calculé :** arc balistique et rotation constante (`CasingRules.cframeAt`), dans le monde : la douille hérite de
   la vitesse du joueur (`MovementController.getVelocity`), comme dans CS. Forme : cylindre de laiton (`LENGTH`,
   `DIAMETER`, `COLOR_RGB`), à l'échelle de l'arme. Vitesse, dispersion, rotation, gravité et durée de vie dans
   `CasingRules`.
 - **Pool :** au plus `POOL_SIZE` Parts ancrées, sans collision ni requête ni ombre, créées au premier besoin et
-  réutilisées (la plus ancienne si toutes volent). Sous la caméra pendant le vol, `Parent = nil` ensuite. Boucle
+  réutilisées. Pool plein : une douille du joueur local prend la plus ancienne, celle d'un autre est abandonnée (elle
+  ne chasse jamais celle qu'on voit devant soi). Sous la caméra pendant le vol, `Parent = nil` ensuite. Boucle
   `RenderStepped` (repère `douilles`) branchée seulement tant qu'une douille vole.
 - **Échelle :** `CasingRules` est réglé dans le repère du viewmodel tel qu'il est stocké (échelle 1 en 1P). Ne pas
   lire `GetScale()` sur le viewmodel : il vaut 0,517 pour l'AWP (modèle mis à l'échelle à sa création), ce qui rendait
   la douille 1P deux fois trop petite et lente. Sur l'arme 3P (`Model` neuf passé par `ScaleTo`), `GetScale()` est
   bien l'échelle relative au viewmodel (0,7).
 - **Vérifier qu'un tir ne laisse rien :** aucune pièce `ShotCasing` dans le `DataModel` après `LIFETIME`.
-- **Nouvelle arme qui éjecte :** ajouter `Handle.EjectPort` à son viewmodel et le marqueur `Eject` à sa piste de tir.
+- **Nouvelle arme qui éjecte :** ajouter `Handle.EjectPort` à son viewmodel, le marqueur `Eject` à sa piste de tir et
+  `CasingEjectDelay` (instant de ce marqueur) à son entrée de `WeaponConfig`.
 
 ## Publier un asset (Open Cloud)
 

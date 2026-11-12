@@ -558,7 +558,7 @@ def spec_shoot():
 		hand_R=[(A(20.17), A(20.33), GRIP_R, KNOB_R, (0.15, 0, 0.2), "io"), (A(20.68), t_home, KNOB_R, GRIP_R, (0.2, 0, 0.1), "io")],
 		shoulder_R=shoulder_reach(A(20.17), t_home),
 		hand_L=[(0, 0, FOREND_L, FOREND_L, Z, "l")],
-		# Eject : douille éjectée quand la culasse arrive en arrière (20,47 s de la référence, CasingRules.REMOTE_DELAY)
+		# Eject : douille éjectée quand la culasse arrive en arrière (20,47 s de la référence ; WeaponConfig.AWP.CasingEjectDelay)
 		markers=[("Shoot Sound", 0.0), ("Bolt Sound", bt["up"] - 0.07), ("Eject", bt["back"])],
 	)
 
