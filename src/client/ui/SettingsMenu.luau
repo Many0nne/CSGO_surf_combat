@@ -754,6 +754,32 @@ local function buildCategories(block: Frame)
 	local bhopDefault = if PlayerSettings.DEFAULT_AUTO_BHOP then 1 else 2
 	addPicker(movement, "Auto-bhop", "autoBhop", bhopOptions, bhopDefault, bhopDefault, function() end, 150)
 
+	-- Volume (#249) en pourcents entiers : général (tous les sons) et armes (en plus du général) ; SoundChannels suit LocalSettings
+	local audio = addCategory(block, "SON")
+	local volume = PlayerSettings.VOLUME
+	addSlider(
+		audio,
+		"Volume général",
+		"volumeMaster",
+		volume.min,
+		volume.max,
+		volume.default,
+		0,
+		function() end,
+		true
+	)
+	addSlider(
+		audio,
+		"Volume des armes",
+		"volumeWeapons",
+		volume.min,
+		volume.max,
+		volume.default,
+		0,
+		function() end,
+		true
+	)
+
 	buildKeysCategory(block)
 
 	local graphics = addCategory(block, "GRAPHISMES")

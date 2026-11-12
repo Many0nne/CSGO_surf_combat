@@ -48,6 +48,22 @@ Quand une tâche révèle un piège, une règle ou une piste rejetée qui resser
 5. Pas de merge sans ordre explicite. Le nettoyage automatique arrête Rojo une fois le thread fermé, et supprime le worktree
    et la branche locale une fois la PR mergée (à la main : `.\scripts\csgo-worktree.ps1 <branche> -Remove`).
 
+## Périmètre et vérification
+
+- **Mouvement :** ne pas modifier le système de mouvement (`MovementConfig`, physique du surf, bhop, air strafe) hors
+  d'une issue qui le demande. Un effet de bord constaté se signale, il ne se corrige pas en passant.
+- **Mesurer avant de promettre :** tout effet de gameplay annoncé (vitesse, dégâts, cadence, hauteur, temps) se mesure
+  avant et après le changement (test Lune, `DebugPlaytest`, sortie console), et les deux valeurs figurent dans le compte
+  rendu ou la PR. Sans mesure, écrire « non mesuré », jamais « corrigé ».
+- **Comparer avant de montrer :** un rendu (modèle, skin, animation, écran) se compare soi-même à la référence, au même
+  cadrage et au même FOV, avant d'être montré à l'utilisateur. Lister les écarts constatés ; ne pas lui déléguer cette
+  première comparaison.
+
+## Délégation
+
+Pour déléguer des tâches de ce dépôt (`/delegate`, `/triage`), suivre aussi le skill de projet `delegation-csgo`
+(`.claude/skills/delegation-csgo/SKILL.md`) : tâches classées selon leur besoin de Studio, au plus 2 en parallèle.
+
 ## Worktrees (travail en parallèle)
 
 Une branche = un worktree `worktrees/csgo-<slug>/` (slug = branche avec `/` → `-`) = un `rojo serve` sur son propre port.
@@ -63,6 +79,9 @@ Script idempotent, à relancer au début de chaque tâche (PowerShell, depuis la
 
 - Ports par slot N : checkout principal = slot 0 = `34872` (`rojo serve` lancé à la main), worktrees `34872+N` (34873, 34874…).
 - Port, pid et journal du serveur d'un worktree : `worktrees/.run/<slug>.port|.pid|.log` (hors du worktree, rien de versionné).
+- Le script écrit `.claude/settings.local.json` dans le worktree (exclu de git) : la session peut écrire dans
+  `worktrees/.briefs` (compte rendu du brief) et `%TEMP%` malgré `blockWritesOutsideWorkingDirectories`. Les réglages
+  déjà présents dans ce fichier sont conservés.
 - Connecter Studio à un worktree (le plugin Rojo ne se connecte qu'en mode **Edit** ; en Play il renvoie
   `Http requests can only be executed by game server`) :
   1. Studio en mode Edit (arrêter le playtest s'il tourne), Disconnect dans le plugin Rojo s'il est connecté ailleurs.
@@ -160,6 +179,8 @@ bash tools/check.sh --fix   # idem, en appliquant le formatage StyLua
 - Configs : `stylua.toml` (tabs, guillemets doubles, 120 colonnes), `selene.toml` (std roblox, règles par défaut), `.luaurc` (mode `nonstrict`).
 - Les fichiers de constantes (`CameraConfig`, `GameConfig`, `MovementConfig`) sont exclus de StyLua via `-- stylua: ignore` pour garder l'alignement en colonnes : respecter cet alignement à la main quand on les modifie.
 - Après toute modification de code `.luau`, lancer `bash tools/check.sh` et ne pas introduire de nouvel avertissement.
+  Lire sa sortie complète : jamais de `grep`, `tail`, `head` ni filtre par mot-clé (une erreur luau-lsp ou StyLua masquée
+  ainsi n'est vue qu'en CI). Seul le code de sortie et la sortie entière font foi.
 - Tests unitaires (Lune, hors Roblox) dans `tests/specs/*.spec.luau` : chaque spec retourne `function(T, Loader)`. `Loader.new({ Players = mock }, { task = fake }?):require("src/...")` charge un module de `src/` en simulant `game:GetService`, `WaitForChild` et le `require` d'Instances Rojo (pas `script`), avec des globales simulées en option ; les services non simulés lèvent une erreur. Seuls les modules sans raycast/`workspace` sont testables (physique pure, `Validator`, `RoundManager`). Ajouter un test pour toute correction de bug physique.
 - Git LFS : les binaires d'assets (`*.blend`, `*.fbx`, `*.obj`, images, sons) sont suivis par LFS via `.gitattributes`. Installer `git lfs` puis `git lfs install` avant de cloner. Un nouveau format binaire doit être ajouté à `.gitattributes` avant son premier commit. Les `.rbxm` de `assets/rbx/` sont aussi en LFS (le checkout de la CI utilise `lfs: true`).
 - CI GitHub Actions (`.github/workflows/ci.yml`) : sur chaque PR et push sur `main`, lance `tools/check.sh`, `rojo build`, puis `tools/rbxm/verify_place.luau`. Les définitions de types luau-lsp sont téléchargées pour la version déclarée dans `rokit.toml`.

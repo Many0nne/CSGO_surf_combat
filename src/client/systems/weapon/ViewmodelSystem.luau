@@ -4,6 +4,7 @@ local RunService = game:GetService("RunService")
 
 local AnimationSoundSystem = require(script.Parent.AnimationSoundSystem)
 local EquipRules = require(script.Parent.EquipRules)
+local SoundChannels = require(script.Parent.Parent.settings.SoundChannels)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 
@@ -374,7 +375,7 @@ function ViewmodelSystem.playSound(name: string)
 	end
 	local s = sounds:FindFirstChild(name)
 	if s and s:IsA("Sound") then
-		s:Play()
+		SoundChannels.weapon(s):Play()
 	end
 end
 

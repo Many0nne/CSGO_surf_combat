@@ -1,3 +1,5 @@
+local SoundChannels = require(script.Parent.Parent.settings.SoundChannels)
+
 local AnimationSoundSystem = {}
 
 function AnimationSoundSystem.getAnimator(model: Model): Animator?
@@ -40,7 +42,7 @@ function AnimationSoundSystem.connectSoundMarkers(
 		local s = sounds:FindFirstChild(name)
 		if s and s:IsA("Sound") then
 			local c = track:GetMarkerReachedSignal(name .. " Sound"):Connect(function()
-				s:Play()
+				SoundChannels.weapon(s):Play()
 			end)
 			table.insert(conns, c)
 		end
@@ -61,7 +63,7 @@ function AnimationSoundSystem.connectSoundMarker(
 	local s = sounds:FindFirstChild(soundName)
 	if s and s:IsA("Sound") then
 		return track:GetMarkerReachedSignal(markerName):Connect(function()
-			s:Play()
+			SoundChannels.weapon(s):Play()
 		end)
 	end
 	return nil
@@ -82,7 +84,7 @@ function AnimationSoundSystem.connectDynamicMarker(
 		local soundName = getSound()
 		local s = sounds:FindFirstChild(soundName)
 		if s and s:IsA("Sound") then
-			s:Play()
+			SoundChannels.weapon(s):Play()
 		end
 	end)
 end
