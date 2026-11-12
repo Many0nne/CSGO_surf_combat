@@ -50,6 +50,28 @@ Describe 'csgo-worktree.ps1 : cycle nominal' {
     @(Get-SbOwners $sb | Where-Object { $_.branch -eq 'feature/1-nominal' }).Count | Should Be 0
   }
 
+  It 'autorise la session du worktree a ecrire dans .briefs et %TEMP%, sans salir git status' {
+    $r = Invoke-Wt $sb @('feature/3-reglages', '-NoUp', '-Slot', '602')
+    $r.Code | Should Be 0
+    $d = (Get-SbPaths $sb 'feature/3-reglages').Dir
+    $dirs = @((Get-Content -Raw (Join-Path $d '.claude\settings.local.json') | ConvertFrom-Json).permissions.additionalDirectories)
+    $dirs -contains (Join-Path $sb.Repo 'worktrees\.briefs') | Should Be $true
+    $dirs -contains [IO.Path]::GetTempPath().TrimEnd('\', '/') | Should Be $true
+    Invoke-Git $d status --porcelain | Should BeNullOrEmpty
+  }
+
+  It 'garde les reglages deja presents dans settings.local.json et ne duplique rien a la relance' {
+    $d = (Get-SbPaths $sb 'feature/3-reglages').Dir
+    $f = Join-Path $d '.claude\settings.local.json'
+    Set-Content $f '{ "env": { "X": "1" }, "permissions": { "additionalDirectories": ["C:\\autre"] } }'
+    (Invoke-Wt $sb @('feature/3-reglages', '-NoUp')).Code | Should Be 0
+    (Invoke-Wt $sb @('feature/3-reglages', '-NoUp')).Code | Should Be 0
+    $s = Get-Content -Raw $f | ConvertFrom-Json
+    $s.env.X | Should Be '1'
+    @($s.permissions.additionalDirectories).Count | Should Be 3
+    @($s.permissions.additionalDirectories)[0] | Should Be 'C:\autre'
+  }
+
   It 'accepte une branche avec des accents' {
     $r = Invoke-Wt $sb @('feature/2-réglages', '-NoUp', '-Slot', '601')
     $r.Code | Should Be 0
