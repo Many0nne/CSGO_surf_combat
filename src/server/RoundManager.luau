@@ -112,7 +112,8 @@ local function endRound()
 		for _, id in inPlay do
 			table.insert(participants, Participants.get(id) :: Participant)
 		end
-		roundEndHandler(participants, if winnerId then Participants.get(winnerId) else nil)
+		-- À part : une erreur du handler ne bloque pas la fin de manche (personnages détruits, retour à idle)
+		task.spawn(roundEndHandler, participants, if winnerId then Participants.get(winnerId) else nil)
 	end
 
 	-- Personnages détruits (joueurs et bots) : les clients repassent par le menu

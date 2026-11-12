@@ -1,13 +1,14 @@
 -- Statistiques persistantes des joueurs (kills, morts, manches jouées et gagnées), DataStore `PlayerStats_v1` (#296).
 -- Règles pures dans `StatsRules`. La session ne réécrit pas le profil : elle tient ses écarts depuis la dernière écriture
--- et UpdateAsync les ajoute à ce qui est stocké (StatsRules.mergeForSave), si bien qu'une écriture en retard ou d'un
--- autre serveur n'efface rien. Un kill ou une mort enregistré avant la fin du chargement va dans les écarts, il n'est
--- pas perdu.
+-- et UpdateAsync les ajoute à ce qui est stocké, par lots numérotés (StatsRules.mergeForSave) : une écriture en retard ou
+-- d'un autre serveur n'efface rien, un lot renvoyé après un échec douteux n'est pas compté deux fois. Un kill ou une mort
+-- enregistré avant la fin du chargement va dans les écarts, il n'est pas perdu.
 -- Écritures : seulement s'il y a des écarts (aucune pour un joueur resté au menu), toutes les
 -- `GameConfig.AUTO_SAVE_INTERVAL` s, au départ du joueur et à l'arrêt du serveur (en parallèle). Une écriture en échec
--- est signalée (warn) et ses écarts gardés pour la suivante. Format stocké inconnu ou plus récent : sauvegarde coupée
--- pour la session, l'enregistrement n'est pas touché.
+-- est signalée (warn) et son lot gardé pour la suivante. Lecture en échec, format stocké inconnu ou plus récent :
+-- sauvegarde coupée pour la session, l'enregistrement n'est pas touché.
 local DataStoreService = game:GetService("DataStoreService")
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -16,16 +17,19 @@ local StatsRules = require(ReplicatedStorage.Shared.StatsRules)
 
 local STORE_NAME = "PlayerStats_v1"
 local CLOSE_WAIT = 25 -- s d'attente maximale des sauvegardes en vol à l'arrêt du serveur (budget Roblox : 30 s)
--- Échecs d'affilée (de 3 essais chacun) avant d'abandonner les écarts d'un joueur parti
+-- Échecs d'affilée (de 3 essais chacun) avant d'abandonner les écarts d'un joueur parti, ou les essais à l'arrêt
 local MAX_SAVE_FAILURES = 5
 
 type Stats = StatsRules.Stats
--- stored : statistiques stockées connues (au chargement, puis après chaque écriture) ; delta : écarts pas encore écrits ;
--- known : stored a été lu (chargement réussi ou écriture faite) ; canSave : faux si le format stocké n'est pas
--- réécrivable ; saving : une écriture part, les écarts arrivés depuis attendent la suivante.
+-- session/seq : id de cette session du joueur et numéro du dernier lot ; stored : stocké connu (chargement, puis chaque
+-- écriture) ; pending : lot en cours d'écriture ou en échec, renvoyé tel quel ; delta : écarts arrivés depuis ;
+-- known : stored a été lu ; canSave : faux si la lecture a échoué ou si le format stocké n'est pas réécrivable.
 type Profile = {
 	player: Player,
+	session: string,
+	seq: number,
 	stored: Stats,
+	pending: StatsRules.Batch?,
 	delta: Stats,
 	known: boolean,
 	canSave: boolean,
@@ -35,8 +39,7 @@ type Profile = {
 
 local store: DataStore? = nil
 local profiles: { [Player]: Profile } = {}
--- Profils des joueurs partis dont les écarts ne sont pas encore écrits (écriture en vol ou en échec) : retentés par
--- l'auto-sauvegarde et l'arrêt du serveur
+-- Profils des joueurs partis qui ont encore des écarts à écrire : retentés par l'auto-sauvegarde et l'arrêt du serveur
 local departed: { [Profile]: boolean } = {}
 -- Écritures en cours, attendues par BindToClose
 local savesInFlight = 0
@@ -46,7 +49,7 @@ local closing = false
 local StatsStore = {}
 
 -- Cette méthode permet d'ouvrir le DataStore une seule fois lorsqu'il sert pour la première fois ; nil si les services
--- d'API sont coupés (Studio sans « Enable Studio Access to API Services »).
+-- d'API sont coupés.
 local function getStore(): DataStore?
 	if store then
 		return store
@@ -73,66 +76,76 @@ local function withRetry(fn: () -> any): (boolean, any)
 	return false, nil
 end
 
--- Cette méthode permet d'oublier le profil d'un joueur parti lorsqu'il n'a plus rien à écrire (écarts écrits, ou
--- sauvegarde coupée).
-local function settle(profile: Profile)
-	if profiles[profile.player] ~= profile and (StatsRules.isEmpty(profile.delta) or not profile.canSave) then
+-- Cette méthode permet de savoir si un profil a encore quelque chose à écrire (lot en échec ou écarts nouveaux).
+local function hasWork(profile: Profile): boolean
+	return profile.pending ~= nil or not StatsRules.isEmpty(profile.delta)
+end
+
+-- Cette méthode permet de tenir à jour la liste des joueurs partis à écrire lorsqu'un profil part ou finit une écriture.
+local function track(profile: Profile)
+	if profiles[profile.player] == profile then
+		return
+	end
+	if profile.canSave and hasWork(profile) then
+		departed[profile] = true
+	else
 		departed[profile] = nil
 	end
 end
 
--- Cette méthode permet d'écrire les écarts d'un profil lorsqu'il en a (auto-sauvegarde, départ, arrêt), une écriture à
--- la fois : les écarts partent, ceux qui arrivent pendant l'écriture attendent la suivante ; un échec les remet.
+-- Cette méthode permet d'écrire un lot d'écarts d'un profil lorsqu'il en a (auto-sauvegarde, départ, arrêt), une écriture
+-- à la fois : le lot en échec repart tel quel, les écarts arrivés pendant l'écriture forment le lot suivant.
 local function saveProfile(profile: Profile)
 	local ds = getStore()
-	if not (ds and profile.canSave) or profile.saving or StatsRules.isEmpty(profile.delta) then
+	if not (ds and profile.canSave) or profile.saving or not hasWork(profile) then
 		return
 	end
 	local player = profile.player
-	local sent = profile.delta
-	profile.delta = StatsRules.zero()
+	if not profile.pending then
+		profile.seq += 1
+		profile.pending = { session = profile.session, seq = profile.seq, delta = profile.delta }
+		profile.delta = StatsRules.zero()
+	end
+	local batch = profile.pending :: StatsRules.Batch
 	profile.saving = true
 	savesInFlight += 1
-	local refused = false
+	local status: StatsRules.MergeStatus = "refused"
+	local seen: any = nil
 	local ok, written = withRetry(function()
 		return ds:UpdateAsync(tostring(player.UserId), function(old)
-			local merged = StatsRules.mergeForSave(old, sent)
-			refused = merged == nil
+			local merged
+			merged, status = StatsRules.mergeForSave(old, batch)
+			seen = old
 			return merged
 		end)
 	end)
 	savesInFlight -= 1
 	profile.saving = false
-	if ok and not refused then
-		profile.stored = StatsRules.storedStats(written)
+	local gone = profiles[player] ~= profile
+	if ok and status ~= "refused" then
+		-- "applied" : lot déjà écrit par un essai signalé en échec, l'enregistrement relu le contient
+		profile.pending = nil
+		profile.stored = StatsRules.read(if status == "merged" then written else seen)
 		profile.known = true
 		profile.failures = 0
+	elseif ok then
+		-- Un autre serveur (version plus récente) a écrit un format que celle-ci ne sait pas réécrire
+		profile.canSave = false
+		warn("[StatsStore] format enregistré inconnu pour", player.Name, "— statistiques non sauvegardées")
 	else
-		profile.delta = StatsRules.sum(profile.delta, sent)
-		if ok then
-			-- Un autre serveur (version plus récente) a écrit un format que celle-ci ne sait pas réécrire
+		profile.failures += 1
+		if (gone or closing) and profile.failures >= MAX_SAVE_FAILURES then
 			profile.canSave = false
-			warn("[StatsStore] format enregistré inconnu pour", player.Name, "— statistiques non sauvegardées")
+			warn("[StatsStore] sauvegarde abandonnée pour", player.Name, "après", profile.failures, "échecs")
 		else
-			profile.failures += 1
-			if profiles[player] ~= profile and profile.failures >= MAX_SAVE_FAILURES then
-				profile.canSave = false
-				warn("[StatsStore] sauvegarde abandonnée pour", player.Name, "après", profile.failures, "échecs")
-			else
-				warn("[StatsStore] sauvegarde impossible pour", player.Name, "— écarts gardés pour la suivante")
-			end
+			warn("[StatsStore] sauvegarde impossible pour", player.Name, "— écarts gardés pour la suivante")
 		end
 	end
-	-- Arrêt du serveur : les écarts arrivés pendant l'écriture, ou d'une écriture en échec, repartent tout de suite
-	if
-		closing
-		and profile.canSave
-		and not StatsRules.isEmpty(profile.delta)
-		and profile.failures < MAX_SAVE_FAILURES
-	then
+	track(profile)
+	-- Écarts arrivés pendant l'écriture d'un joueur parti : écrits tout de suite ; à l'arrêt, un échec est aussi retenté
+	if (closing or (ok and gone)) and profile.canSave and hasWork(profile) then
 		saveProfile(profile)
 	end
-	settle(profile)
 end
 
 -- Cette méthode permet de lancer en parallèle l'écriture de tous les profils qui ont des écarts (joueurs connectés et
@@ -146,12 +159,15 @@ local function saveAll()
 	end
 end
 
--- Cette méthode permet d'inscrire un joueur et de charger ses statistiques stockées lorsqu'il arrive ; le profil existe
--- dès l'appel, avant la lecture DataStore, pour que les kills et morts qui précèdent sa fin soient gardés en écarts.
+-- Cette méthode permet d'inscrire un joueur puis de charger ses statistiques lorsqu'il arrive ; le profil existe avant la
+-- lecture DataStore, pour que les kills et morts qui précèdent sa fin soient gardés en écarts.
 function StatsStore.load(player: Player)
 	local profile: Profile = {
 		player = player,
+		session = HttpService:GenerateGUID(false),
+		seq = 0,
 		stored = StatsRules.zero(),
+		pending = nil,
 		delta = StatsRules.zero(),
 		known = false,
 		canSave = true,
@@ -160,27 +176,22 @@ function StatsStore.load(player: Player)
 	}
 	profiles[player] = profile
 	local ds = getStore()
-	if not ds then
-		-- Rien ne pourra être écrit : sans quoi les écarts d'un joueur parti resteraient en attente
-		profile.canSave = false
-		warn("[StatsStore] DataStore indisponible pour", player.Name, "— statistiques non sauvegardées")
-		return
+	local ok, data = false, nil
+	if ds then
+		ok, data = withRetry(function()
+			return ds:GetAsync(tostring(player.UserId))
+		end)
 	end
-	local ok, data = withRetry(function()
-		return ds:GetAsync(tostring(player.UserId))
-	end)
 	if profiles[player] ~= profile then
 		return -- parti pendant le chargement : ses écarts sont partis avec PlayerRemoving
 	end
-	local stored, canSave, known = StatsRules.loadOutcome(ok, data)
+	local stored, canSave = StatsRules.loadOutcome(ok, data)
 	if not canSave then
+		-- Lecture en échec (services d'API coupés en Studio compris) ou format inconnu : rien n'est écrit
 		profile.canSave = false
-		warn("[StatsStore] format enregistré inconnu pour", player.Name, "— statistiques non sauvegardées")
-	elseif not known then
-		warn("[StatsStore] chargement impossible pour", player.Name, "— écarts ajoutés à la prochaine écriture")
-	end
-	-- Une écriture déjà faite pendant le chargement a relu des statistiques plus récentes que cette lecture
-	if known and not profile.known then
+		warn("[StatsStore] chargement impossible pour", player.Name, "— statistiques non sauvegardées")
+	elseif not profile.known then
+		-- Pas si une écriture faite pendant le chargement a déjà relu un stocké plus récent
 		profile.stored = stored
 		profile.known = true
 	end
@@ -190,7 +201,11 @@ end
 -- serveur les affiche ; joueur inconnu : zéros.
 function StatsStore.getStats(player: Player): Stats
 	local profile = profiles[player]
-	return if profile then StatsRules.sum(profile.stored, profile.delta) else StatsRules.zero()
+	if not profile then
+		return StatsRules.zero()
+	end
+	local total = StatsRules.sum(profile.stored, profile.delta)
+	return if profile.pending then StatsRules.sum(total, profile.pending.delta) else total
 end
 
 -- Cette méthode permet d'ajouter un écart au profil d'un joueur inscrit lorsqu'un événement compté arrive.
@@ -234,15 +249,22 @@ function StatsStore.init()
 		local profile = profiles[player]
 		profiles[player] = nil
 		if profile then
-			departed[profile] = true
+			-- Les échecs d'un joueur connecté ne comptent pas dans l'abandon de ses écarts une fois parti
+			profile.failures = 0
+			track(profile)
 			saveProfile(profile)
-			settle(profile)
 		end
 	end)
 
 	game:BindToClose(function()
 		closing = true
-		-- Les départs (PlayerRemoving) ont souvent déjà vidé les écarts : rien n'est écrit deux fois
+		for _, profile in profiles do
+			profile.failures = 0
+		end
+		for profile in departed do
+			profile.failures = 0
+		end
+		-- Les départs (PlayerRemoving) ont souvent déjà écrit leurs écarts : rien n'est écrit deux fois
 		saveAll()
 		local deadline = os.clock() + CLOSE_WAIT
 		while savesInFlight > 0 and os.clock() < deadline do

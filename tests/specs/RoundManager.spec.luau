@@ -59,6 +59,9 @@ return function(T, Loader)
 			delay = function(_seconds, fn, ...)
 				table.insert(pending, table.pack(fn, ...))
 			end,
+			spawn = function(fn, ...)
+				fn(...)
+			end,
 		}
 		local fakeOs = {
 			clock = function()

@@ -62,9 +62,10 @@ return function(T, Loader)
 	end
 
 	-- Cette méthode permet de simuler un DataStore partagé par plusieurs serveurs lorsqu'un test compte les écritures ;
-	-- `latency` endort chaque requête, `failures` fait échouer les N prochaines.
+	-- `latency` endort chaque requête, `failures` fait échouer les N prochaines, `commitThenFail` fait échouer les N
+	-- prochaines écritures après les avoir faites (réponse perdue).
 	local function makeDataStore(sched)
-		local ds = { data = {}, writes = 0, reads = 0, latency = 0, failures = 0 }
+		local ds = { data = {}, writes = 0, reads = 0, latency = 0, failures = 0, commitThenFail = 0 }
 		-- Cette méthode permet d'attendre la latence simulée et d'échouer si une panne est programmée.
 		local function request()
 			if ds.latency > 0 then
@@ -88,10 +89,17 @@ return function(T, Loader)
 			end
 			ds.writes += 1
 			ds.data[key] = deepCopy(nextValue)
+			if ds.commitThenFail > 0 then
+				ds.commitThenFail -= 1
+				error("réponse perdue (simulé)")
+			end
 			return deepCopy(nextValue)
 		end
 		return ds
 	end
+
+	-- Ids de session uniques sur tous les serveurs simulés, comme HttpService:GenerateGUID
+	local guids = 0
 
 	-- Cette méthode permet de monter un serveur (un StatsStore isolé) sur un DataStore et une horloge partagés lorsqu'un
 	-- test démarre ; renvoie le module, les avertissements émis et de quoi faire partir un joueur ou arrêter le serveur.
@@ -100,6 +108,12 @@ return function(T, Loader)
 		local removing, closing = nil, nil
 		local warnings = {}
 		local services = {
+			HttpService = {
+				GenerateGUID = function()
+					guids += 1
+					return "session-" .. guids
+				end,
+			},
 			DataStoreService = {
 				GetDataStore = function()
 					return ds
@@ -237,8 +251,43 @@ return function(T, Loader)
 			T.expect(#server.warnings == 1 and string.find(server.warnings[1], "sauvegarde impossible", 1, true) ~= nil)
 			server.StatsStore.recordDeath(alice)
 			sched.advance(INTERVAL)
-			T.expectEqual(ds.writes, 1)
+			T.expectEqual(ds.writes, 1, "le lot en échec repart tel quel")
+			T.expectEqual(storedStats(ds, 1).deaths, 1)
+			T.expectEqual(server.StatsStore.getStats(alice).deaths, 2, "écart suivant visible, pas encore écrit")
+			sched.advance(INTERVAL)
+			T.expectEqual(ds.writes, 2, "puis l'écart arrivé depuis")
 			T.expectEqual(storedStats(ds, 1).deaths, 2)
+		end)
+
+		T.it("une écriture passée mais signalée en échec n'est pas comptée deux fois", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			server.StatsStore.recordKill(alice)
+			ds.commitThenFail = 1
+			sched.advance(INTERVAL + 10)
+			T.expectEqual(storedStats(ds, 1).kills, 1)
+			server.StatsStore.recordKill(alice)
+			sched.advance(INTERVAL)
+			T.expectEqual(storedStats(ds, 1).kills, 2)
+			T.expectEqual(server.StatsStore.getStats(alice).kills, 2)
+		end)
+
+		T.it("lecture en échec (services d'API coupés) : aucune écriture, arrêt sans attente", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			ds.failures = 3
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			sched.advance(10)
+			server.StatsStore.recordKill(alice)
+			sched.advance(INTERVAL)
+			local state = server.close()
+			sched.advance(0.5)
+			T.expect(state.done, "arrêt terminé tout de suite")
+			T.expectEqual(ds.writes, 0)
+			T.expect(string.find(server.warnings[1], "chargement impossible", 1, true) ~= nil)
 		end)
 
 		T.it("ne touche pas un enregistrement d'un format plus récent", function()
@@ -257,6 +306,39 @@ return function(T, Loader)
 	end)
 
 	T.describe("StatsStore : départ et arrêt du serveur", function()
+		T.it("départ pendant une écriture qui échoue : les écarts repartent plus tard", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			server.StatsStore.recordKill(alice)
+			ds.latency = 1
+			ds.failures = 3
+			sched.advance(INTERVAL) -- écriture lancée, en vol
+			server.StatsStore.recordDeath(alice)
+			server.leave(alice)
+			sched.advance(10) -- les trois essais échouent
+			T.expectEqual(ds.writes, 0)
+			sched.advance(INTERVAL)
+			T.expectEqual(ds.writes, 2, "lot en échec puis écarts arrivés pendant l'écriture")
+			T.expectEqual(storedStats(ds, 1).kills, 1)
+			T.expectEqual(storedStats(ds, 1).deaths, 1)
+		end)
+
+		T.it("départ pendant une écriture réussie : les écarts arrivés entre-temps partent aussitôt", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			server.StatsStore.recordKill(alice)
+			ds.latency = 1
+			sched.advance(INTERVAL)
+			server.StatsStore.recordDeath(alice)
+			server.leave(alice)
+			sched.advance(3)
+			T.expectEqual(storedStats(ds, 1).deaths, 1)
+		end)
+
 		T.it("départ puis arrêt : une seule écriture", function()
 			local sched = makeScheduler()
 			local ds = makeDataStore(sched)
