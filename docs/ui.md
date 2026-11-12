@@ -281,9 +281,11 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
   `LocalSettings.update` ou `getState` n'agissent pas sur le jeu qui tourne. Lire les `ScreenGui` de `PlayerGui` (leur `Enabled`
   est réel) et passer par l'interface (`user_mouse_input` en coordonnées d'écran, soit 0,8 fois celles de `screen_capture`) ou
   par `DebugPlaytest` pour lancer la partie. Les chemins `instance_path` avec accents (« RÉGLAGES ») ne se résolvent pas, et un
-  nom en double (onglet et cadre « GRAPHISMES ») est ambigu : cliquer aux coordonnées. En partie, ni les touches P et 1 ni le
-  clic droit (lunette) ne passent par le MCP, mais `keyDown` / `keyUp` de W, A, S, D, Espace, Ctrl, R sont lus par
-  `UserInputService:IsKeyDown` (#197) ; les onglets du menu se cliquent à l'`AbsolutePosition` du bouton, y négatif compris
+  nom en double (onglet et cadre « GRAPHISMES ») est ambigu : cliquer aux coordonnées. En partie, les touches P et 1 ne
+  passent pas par le MCP, mais `keyDown` / `keyUp` de W, A, S, D, Espace, Ctrl, R sont lus par
+  `UserInputService:IsKeyDown` (#197) ; passent aussi (constaté le 2026-11-12) : Tab maintenu (`keyDown`, classement),
+  F3 (`keyPress`, overlay de performance) et le clic droit de la lunette (`mouseButtonDown` puis `mouseButtonUp` à
+  150 ms, un clic par niveau de zoom) ; les onglets du menu se cliquent à l'`AbsolutePosition` du bouton, y négatif compris
   (`moveTo`, attendre, puis `mouseButtonClick`) ; équiper côté serveur (`Humanoid:EquipTool`). Les bots tuent le joueur en boucle :
   `workspace:SetAttribute("DebugBots", 0)` avant de tester.
 - **Touche P au MCP (#157) :** `user_keyboard_input` ne fait pas passer P en partie (comme en #195). Pour ouvrir le menu
@@ -341,6 +343,48 @@ en `SmoothPlastic` presque noir pour un fond sombre ; masquer côté client le m
 studs passe devant : s'en éloigner au clavier (`user_keyboard_input`). On ne peut pas téléporter le joueur depuis le MCP :
 le mouvement est simulé côté client (`MovementController`) et réécrit la position de la racine à chaque tick, que le
 changement vienne du serveur ou du client. Pour allumer des touches sans bouger, appuyer sur deux directions opposées.
+
+## Captures de référence
+
+`docs/ui/captures/` : une image par écran (menu, HUD, lunette, classement, réapparition, fin de round, menu en partie),
+avec un index (`README.md` : écran, code, comment y arriver, ce qui manque). À citer dans une demande de modification,
+et à refaire quand un écran change.
+
+`screen_capture` du MCP ne rend l'image que dans la conversation (un JPG dans le dossier de résultats de l'outil, pas
+dans le dépôt) : les PNG viennent de la capture de fenêtre de `tools/anim/capture_server.py`, recadrée par
+`tools/ui/capture.py`. Studio réservé, playtest lancé, depuis le worktree (PowerShell) :
+
+```powershell
+$env:CAP_DIR = "$env:TEMP\csgo-ui-captures"; New-Item -ItemType Directory -Force "$env:CAP_DIR\raw"; Set-Content "$env:CAP_DIR\frames.json" '{}'
+uv run tools/anim/capture_server.py "$env:CAP_DIR\raw" "$env:CAP_DIR\frames.json"   # en arrière-plan, port 34991
+uv run tools/ui/capture.py place save; uv run tools/ui/capture.py place set 0 0 1655 1080   # viewport 16:9
+curl.exe -s "http://127.0.0.1:34991/shot?name=_voile"; uv run tools/ui/capture.py rect _voile   # voile magenta posé, voir ci-dessous
+curl.exe -s "http://127.0.0.1:34991/shot?name=menu-accueil"                           # une capture brute par écran
+uv run tools/ui/capture.py crop docs/ui/captures menu-accueil                         # recadrage sur le viewport
+uv run tools/ui/capture.py place restore; curl.exe -s "http://127.0.0.1:34991/quit"   # à la fin
+```
+
+- **Viewport en 16:9 :** il dépend de la disposition de Studio. Sur ce poste (1920x1080, échelle 125 %), une fenêtre
+  de 1655x1080 donne 1349x759 px ; ailleurs, ajuster la largeur jusqu'à un ratio de 1,778 (affiché par `rect`).
+- **Repérer le viewport :** en contexte `Client`, poser un `ScreenGui` plein écran (`IgnoreGuiInset`, `ScreenInsets.None`,
+  `DisplayOrder` 10000) avec un `Frame` magenta (255, 0, 255), capturer, lancer `rect`, puis le détruire.
+- **Curseur :** le curseur simulé par `user_mouse_input` (une main jaune) apparaît dans l'image. Au menu, le garer en
+  bas de l'écran (`moveTo` 540, 547) avant de capturer ; en partie, écarter les images où il traîne.
+- **Éléments brefs** (barre d'armes 2,5 s, réapparition 2,5 s, fin de round 6 s, volets) : un appel MCP prend 5 à 10 s,
+  trop pour viser une image. Lancer d'abord une rafale en arrière-plan (boucle de `/shot` toutes les 0,3 à 1 s), puis
+  déclencher l'action, et choisir sur une planche (`capture.py sheet`). Une manche dure 5 min : le timer court pendant
+  qu'on réfléchit.
+- **Studio en arrière-plan tourne à ~15 i/s** (mesuré : 15,5 i/s, bots figés ou non ; `capture.py focus` dit qui a le
+  focus). À cette cadence le viewmodel quitte l'écran dès que la caméra tourne, et n'y revient qu'au rééquipement
+  (modèle retrouvé à un million de studs ; cause probable : le ressort du balancement de `ViewmodelSystem`, instable
+  sous ~22 i/s, non vérifié par un test dédié). Pour un HUD avec l'arme : lancer la partie par le bouton JOUER et
+  équiper côté serveur (`Humanoid:EquipTool`), caméra immobile. `DebugPlaytest` tourne la caméra (étape AIM) : l'arme
+  disparaît juste après son run.
+- **Écrans à déclencheur :** classement = `keyDown` Tab, capturer, `keyUp` ; lunette = clic droit ; menu en partie =
+  attribut `DebugInGameMenu` (le remettre à `false` avant de le reposer à `true`) ; message d'apparition impossible =
+  `workspace:SetAttribute("DebugSpawnFail", true)` (contexte `Server`) puis JOUER, il n'arrive qu'après 30 s
+  (`SpawnRequestRules.GIVE_UP_AFTER`) ; réapparition = retirer `DebugBotsPassive` et attendre un bot.
+- Les captures montrent les réglages enregistrés du compte qui joue : le préciser dans l'index.
 
 ## Menu : accueil sur la map (#253)
 
