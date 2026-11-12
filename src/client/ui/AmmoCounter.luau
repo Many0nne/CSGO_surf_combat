@@ -74,7 +74,7 @@ function AmmoCounter.init()
 		Parent = player:WaitForChild("PlayerGui"),
 	})
 	gui = screenGui
-	local root = UIKit.scaledRoot(screenGui)
+	local root = UIKit.scaledRoot(screenGui, true)
 	local box = UIKit.frame({
 		Name = "Box",
 		BackgroundTransparency = 1,

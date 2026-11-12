@@ -797,6 +797,19 @@ local function buildCategories(block: Frame)
 		{ label = "COMPLET", value = "full" },
 	}
 	addPicker(graphics, "Affichage des touches", "keyDisplay", keyDisplayOptions, 1, 1, function() end, 150)
+	-- Échelle du HUD (#250) en pourcents entiers : éléments de bord du HUD ; init.client la relaie à UIKit.setHudScale
+	local hudScale = PlayerSettings.HUD_SCALE
+	addSlider(
+		graphics,
+		"Échelle du HUD",
+		"hudScale",
+		hudScale.min,
+		hudScale.max,
+		hudScale.default,
+		0,
+		function() end,
+		true
+	)
 
 	buildCrosshairCategory(block)
 end

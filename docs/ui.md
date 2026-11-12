@@ -240,6 +240,17 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
   setter `setMenuOpen` / `setScoped` recopié dans chaque élément (supprimés de `Crosshair` et `KeyDisplay`). Compteur de
   vitesse, barre d'armes, munitions et kill feed ne dépendent que de l'état client et restent poussés par `applyGameHud`.
 
+- **Échelle du HUD (#250) :** réglage « Échelle du HUD » (Réglages > GRAPHISMES, `PlayerSettings.hudScale`, 50 à 100 %, défaut 100 %,
+  pas d'agrandissement, validé par `sanitize`, facteur par `PlayerSettings.hudScaleFactor`). Une seule échelle pour les éléments de
+  bord : compteur de vitesse, barre d'armes, munitions, affichage des touches, kill feed, timer et rang. Réticule, hitmarker,
+  classement, réapparition et menus restent inchangés. Point d'application commun : `UIKit.scaledRoot(gui, true)` (racine « de bord » :
+  `UIScale` = échelle de l'écran x échelle du HUD, `Size` = 1 / total, donc cadre toujours plein écran et éléments ancrés à leur
+  bord ; l'attribut `Scale` vaut l'échelle totale, `KeyDisplay` replace sa grille dessus) et `UIKit.setHudScale` / `onHudScale`,
+  alimentés par `init.client`. Un nouvel élément de bord du HUD passe par `scaledRoot(gui, true)`. Piège : le timer vit dans un
+  calque plein écran partagé avec le classement et qui change de `ScreenGui` (menu en partie) ; il porte donc son propre `UIScale`
+  sur une ancre sans taille au milieu du bord haut (`TimerAnchor`), un `UIScale` sur le calque ferait dériver le timer.
+  `KeyDisplay` et `AmmoCounter` s'échelonnent ensemble : le calcul d'#247 (`keyDisplayBottom`) reste en px du repère commun.
+
 - **Libellé d'une touche (#100) :** `Enum.KeyCode` désigne la position sur un clavier QWERTY. Sur un clavier AZERTY,
   `KeyCode.Q` est la touche imprimée « A » : afficher `UserInputService:GetStringForKeyCode` (`LocalSettings.keyText`),
   sauf pour les chiffres du haut, qui donneraient « & » ou « é ».

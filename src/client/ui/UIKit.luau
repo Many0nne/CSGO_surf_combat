@@ -170,15 +170,48 @@ function UIKit.emblem(parent: GuiObject): Frame
 	return box
 end
 
+-- Échelle du HUD (#250, facteur 0,5 à 1) et rappels des éléments qui la suivent
+local hudFactor = 1
+local hudScaleListeners: { (number) -> () } = {}
+
+-- Cette méthode permet de changer l'échelle des éléments de bord du HUD lorsque le réglage change : chaque racine
+-- `edge` et chaque UIScale branché par onHudScale se met à jour en direct.
+function UIKit.setHudScale(factor: number)
+	if factor == hudFactor then
+		return
+	end
+	hudFactor = factor
+	for _, listener in hudScaleListeners do
+		listener(factor)
+	end
+end
+
+-- Cette méthode permet de suivre l'échelle du HUD lorsqu'un élément s'y adapte : le rappel est appelé tout de suite
+-- avec le facteur courant, puis à chaque changement, jusqu'à la destruction de `owner` (pas de rappel orphelin).
+function UIKit.onHudScale(owner: Instance, listener: (number) -> ())
+	table.insert(hudScaleListeners, listener)
+	owner.Destroying:Once(function()
+		local index = table.find(hudScaleListeners, listener)
+		if index then
+			table.remove(hudScaleListeners, index)
+		end
+	end)
+	listener(hudFactor)
+end
+
 -- Cette méthode permet de créer le cadre racine d'un ScreenGui mis à l'échelle de la résolution lorsque l'écran est construit :
--- les maquettes sont en 720 px de haut, le contenu est agrandi ou réduit en gardant le cadre plein écran.
-function UIKit.scaledRoot(gui: ScreenGui): Frame
+-- les maquettes sont en 720 px de haut, le contenu est agrandi ou réduit en gardant le cadre plein écran. `edge` : racine
+-- d'éléments de bord du HUD, qui suit en plus l'échelle du HUD (#250) ; l'attribut Scale vaut alors l'échelle totale.
+function UIKit.scaledRoot(gui: ScreenGui, edge: boolean?): Frame
 	local root = UIKit.frame({ Name = "Root", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Parent = gui })
 	local scale = UIKit.create("UIScale", { Parent = root })
 	local function update()
 		local camera = workspace.CurrentCamera
 		local height = camera and camera.ViewportSize.Y or UITheme.Layout.ReferenceHeight
 		local s = math.clamp(height / UITheme.Layout.ReferenceHeight, 0.75, 1.6)
+		if edge then
+			s *= hudFactor
+		end
 		scale.Scale = s
 		root.Size = UDim2.fromScale(1 / s, 1 / s)
 		root:SetAttribute("Scale", s)
@@ -187,6 +220,9 @@ function UIKit.scaledRoot(gui: ScreenGui): Frame
 	local camera = workspace.CurrentCamera
 	if camera then
 		camera:GetPropertyChangedSignal("ViewportSize"):Connect(update)
+	end
+	if edge then
+		UIKit.onHudScale(root, update)
 	end
 	return root
 end

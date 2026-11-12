@@ -212,6 +212,39 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("PlayerSettings : échelle du HUD (#250)", function()
+		local H = PlayerSettings.HUD_SCALE
+
+		T.it("donne 100 % par défaut, y compris pour une sauvegarde d'avant le réglage", function()
+			T.expectEqual(PlayerSettings.defaults().hudScale, 100)
+			for _, raw in { nil, 42, {}, { sensitivity = 0.3 } } do
+				T.expectEqual(PlayerSettings.sanitize(raw).hudScale, 100)
+			end
+		end)
+
+		T.it("garde une valeur valide et l'arrondit au pourcent", function()
+			T.expectEqual(PlayerSettings.sanitize({ hudScale = 50 }).hudScale, 50)
+			T.expectEqual(PlayerSettings.sanitize({ hudScale = 72.4 }).hudScale, 72)
+		end)
+
+		T.it("borne à 50-100 % et retombe sur 100 % pour NaN et les mauvais types", function()
+			T.expectEqual(PlayerSettings.sanitize({ hudScale = 10 }).hudScale, H.min)
+			T.expectEqual(PlayerSettings.sanitize({ hudScale = 250 }).hudScale, H.max)
+			for _, bad in { 0 / 0, "70", true, {} } do
+				T.expectEqual(PlayerSettings.sanitize({ hudScale = bad }).hudScale, H.default)
+			end
+		end)
+
+		T.it("convertit en facteur borné entre 0,5 et 1", function()
+			T.expectEqual(PlayerSettings.hudScaleFactor(100), 1)
+			T.expectEqual(PlayerSettings.hudScaleFactor(50), 0.5)
+			T.expectEqual(PlayerSettings.hudScaleFactor(0), 0.5)
+			T.expectEqual(PlayerSettings.hudScaleFactor(300), 1)
+			T.expectEqual(PlayerSettings.hudScaleFactor(nil), 1)
+			T.expectEqual(PlayerSettings.hudScaleFactor("x"), 1)
+		end)
+	end)
+
 	T.describe("PlayerSettings.assignKey", function()
 		local defaults = PlayerSettings.DEFAULT_SLOT_KEYS
 

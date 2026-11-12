@@ -402,7 +402,7 @@ function WeaponBar.init()
 		Parent = player:WaitForChild("PlayerGui"),
 	})
 	gui = screenGui
-	root = UIKit.scaledRoot(screenGui)
+	root = UIKit.scaledRoot(screenGui, true)
 	scrim = UIKit.cornerScrim(root, "BottomRight", SCRIM_SIZE, SCRIM_SHOWN)
 	bar = UIKit.frame({
 		Name = "Bar",

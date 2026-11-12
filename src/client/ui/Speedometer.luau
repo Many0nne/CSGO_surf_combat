@@ -66,7 +66,7 @@ function Speedometer.init()
 		Parent = Players.LocalPlayer:WaitForChild("PlayerGui"),
 	})
 	gui = screenGui
-	local root = UIKit.scaledRoot(screenGui)
+	local root = UIKit.scaledRoot(screenGui, true)
 	UIKit.cornerScrim(root, "BottomLeft", SCRIM_SIZE, SCRIM_TRANSPARENCY)
 
 	local holder = UIKit.frame({
