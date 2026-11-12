@@ -410,3 +410,7 @@ le jeu : surf et combat restent à mesurer à la main, dans le client publié.
   frame à l'autre. Le mouvement tourne maintenant sur le rendu, l'interpolation n'a plus lieu d'être.
 - Tronquer `dt` (ancien `math.min(dt, 1/30)`) fait voir un `HITCH` deux fois : l'image fige, puis le déplacement est
   trop court. Découper en pas (`StepTiming`).
+- Un ressort ou un amortisseur intégré par frame (Euler semi-implicite avec `dt` brut) diverge quand `ω·dt` dépasse
+  environ 0,83 : le balancement du viewmodel (`SWAY_SPEED` 18) est parti à 1 000 000 studs sous ~22 i/s, par exemple
+  fenêtre Studio sans le focus (#304). Toute intégration par frame se découpe en pas de ≤ 1/60 s (`SpringRules.step`,
+  un seul pas à 60 i/s et plus, donc rendu inchangé) et se teste à 10 i/s. Tronquer `dt` ne suffit pas (cf. ci-dessus).

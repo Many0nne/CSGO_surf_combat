@@ -8,6 +8,7 @@ local EquipRules = require(script.Parent.EquipRules)
 local SoundChannels = require(script.Parent.Parent.settings.SoundChannels)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
+local SpringRules = require(ReplicatedStorage.Shared.SpringRules)
 
 local ViewmodelSystem = {}
 
@@ -81,21 +82,6 @@ local function clearViewmodel()
 		c:Disconnect()
 	end
 	markerConns = {}
-end
-
-local function springUpdate(
-	pos: Vector3,
-	vel: Vector3,
-	target: Vector3,
-	speed: number,
-	damping: number,
-	dt: number
-): (Vector3, Vector3)
-	local displacement = target - pos
-	local accel = displacement * (speed * speed) - vel * (2 * damping * speed)
-	vel = vel + accel * dt
-	pos = pos + vel * dt
-	return pos, vel
 end
 
 local function getViewmodelTemplate(name: string): Model?
@@ -484,7 +470,7 @@ function ViewmodelSystem.init(player: Player?)
 				math.clamp(targetVec.Y, -SWAY_MAX, SWAY_MAX),
 				math.clamp(targetVec.Z, -SWAY_MAX, SWAY_MAX)
 			)
-			swayPos, swayVel = springUpdate(swayPos, swayVel, clamped, SWAY_SPEED, SWAY_DAMPING, dt)
+			swayPos, swayVel = SpringRules.step(swayPos, swayVel, clamped, SWAY_SPEED, SWAY_DAMPING, dt)
 			local sway = CFrame.Angles(swayPos.X, swayPos.Y, swayPos.Z)
 			activeViewmodel:PivotTo(cam.CFrame * currentOffset * sway)
 		end)
