@@ -13,13 +13,13 @@ return function(T, Loader)
 		return pos, vel
 	end
 
-	-- Cette méthode permet de simuler une rotation continue lorsqu'on veut le pic de |pos| à une cadence donnée.
+	-- Cette méthode permet de mesurer le pic de |pos| lorsque la cible alterne entre les deux bornes toutes les
+	-- 0,5 s (caméra qui tourne sans arrêt) à une cadence donnée, avec le schéma `stepFn`.
 	local function peakAt(fps: number, stepFn): number
 		local dt = 1 / fps
 		local pos, vel = Vector3.zero, Vector3.zero
 		local peak = 0
 		for i = 1, math.floor(fps * 4) do
-			-- la cible alterne entre les deux bornes toutes les 0,5 s : pire cas d'une caméra qui tourne sans arrêt
 			local sign = (math.floor(i * dt / 0.5) % 2 == 0) and 1 or -1
 			local target = Vector3.new(sign * SWAY_MAX, -sign * SWAY_MAX, 0)
 			pos, vel = stepFn(pos, vel, target, dt)
@@ -28,15 +28,14 @@ return function(T, Loader)
 		return peak
 	end
 
+	-- Cette méthode permet d'appeler SpringRules.step avec les réglages du balancement lorsqu'un test passe un `stepFn`.
 	local function newStep(pos, vel, target, dt)
 		return SpringRules.step(pos, vel, target, SPEED, DAMPING, dt)
 	end
 
 	T.describe("SpringRules.step (#304)", function()
 		T.it("l'ancien schéma diverge à 10 i/s (le bug)", function()
-			local peak = peakAt(10, function(pos, vel, target, dt)
-				return oldStep(pos, vel, target, dt)
-			end)
+			local peak = peakAt(10, oldStep)
 			T.expect(peak > 100 * SWAY_MAX, tostring(peak))
 		end)
 
@@ -54,6 +53,18 @@ return function(T, Loader)
 			local pb, vb = Vector3.zero, Vector3.zero
 			local target = Vector3.new(SWAY_MAX, -SWAY_MAX / 2, 0)
 			for _ = 1, 120 do
+				pa, va = oldStep(pa, va, target, dt)
+				pb, vb = SpringRules.step(pb, vb, target, SPEED, DAMPING, dt)
+				T.expect((pa - pb).Magnitude < 1e-9 and (va - vb).Magnitude < 1e-9, `{pa} vs {pb}`)
+			end
+		end)
+
+		T.it("gigue de dt autour de 1/60 : un seul pas par frame, identique à l'ancien schéma", function()
+			local pa, va = Vector3.zero, Vector3.zero
+			local pb, vb = Vector3.zero, Vector3.zero
+			local target = Vector3.new(SWAY_MAX, SWAY_MAX / 2, 0)
+			for i = 1, 120 do
+				local dt = (i % 2 == 0) and 0.0165 or 0.0169
 				pa, va = oldStep(pa, va, target, dt)
 				pb, vb = SpringRules.step(pb, vb, target, SPEED, DAMPING, dt)
 				T.expect((pa - pb).Magnitude < 1e-9 and (va - vb).Magnitude < 1e-9, `{pa} vs {pb}`)

@@ -186,7 +186,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/shared/MovementState.luau`: structure d'état partagée pour le mouvement du joueur.
 - `src/shared/NetworkProtocol.luau`: noms des RemoteEvents et helper getRemote(name). Remotes : MeleeDamage, HitscanDamage, ShotFired (#156, C→S puis S→C), HitConfirm, RequestSpawn (C→S, puis réponse S→C, #219), LeaveRound, RoundState, ScoreUpdate, RoundResult, PlayerDied, CharacterSync (non fiable), MovementCorrection, WeaponAction, SendFeedback, FeedbackAck, GetSettings (RemoteFunction), SaveSettings, EquipItem (#280), DebugPlaytest (créé uniquement dans Studio).
 - `src/shared/PhysicsUtils.luau`: fonctions utilitaires pour la physique.
-- `src/shared/SpringRules.luau`: ressort amorti du balancement du viewmodel (#304) : Euler semi-implicite découpé en pas de ≤ 1/60 s, stable à toute cadence.
+- `src/shared/SpringRules.luau`: ressort amorti du balancement du viewmodel (#304) : Euler semi-implicite découpé en pas de ≤ 1/40 s, stable à toute cadence.
 - `src/shared/StepTiming.luau`: tick fixe du mouvement (64 Hz, #96) : ticks à jouer dans une frame rendue et fraction d'interpolation de l'affichage, testé (`tests/specs/StepTiming.spec.luau`).
 - `src/shared/UITheme.luau`: tokens de style de l'interface (couleurs, polices, tailles, durées, courbes) et palette du viseur (`CrosshairPalette`, #251, même ordre que `PlayerSettings.CROSSHAIR_COLORS`, vérifié par un test).
 - `src/shared/WeaponConfig.luau`: définitions partagées des armes et de leurs paramètres par défaut (dont `ThirdPerson` : échelle, grip, pose 3P).
