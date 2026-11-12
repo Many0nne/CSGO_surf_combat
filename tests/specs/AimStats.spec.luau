@@ -109,8 +109,9 @@ return function(T, Loader)
 					alerts += 1
 				end
 			end
-			-- 25 % de 500 touches = 125 orphelines : alerte à 130, puis tous les 5 (130 à 200 : 15 alertes au plus)
-			T.expect(alerts <= 15 and alerts >= 1, "alertes : " .. alerts)
+			-- Taux > 25 % dès la 101e orpheline (101/401), puis un palier de 5 : 101, 105, 110 … 200 = 21 alertes ; sans
+			-- le saut de palier, une alerte par touche au-delà de 101 (100 alertes)
+			T.expectEqual(alerts, 21)
 		end)
 
 		T.it("client honnête (tirs et touches) ou quelques orphelines : aucune violation (#246)", function()
