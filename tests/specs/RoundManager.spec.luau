@@ -59,6 +59,9 @@ return function(T, Loader)
 			delay = function(_seconds, fn, ...)
 				table.insert(pending, table.pack(fn, ...))
 			end,
+			spawn = function(fn, ...)
+				fn(...)
+			end,
 		}
 		local fakeOs = {
 			clock = function()
@@ -74,12 +77,27 @@ return function(T, Loader)
 			roundResult = fakeRemote(),
 			playerDied = fakeRemote(),
 		}
-		RoundManager.init(remotes)
+		-- Fins de manche signalées aux stats persistantes (#296) : participants en jeu et vainqueur
+		local roundEnds = {}
+		RoundManager.init({
+			roundState = remotes.roundState,
+			scoreUpdate = remotes.scoreUpdate,
+			roundResult = remotes.roundResult,
+			playerDied = remotes.playerDied,
+			onRoundEnd = function(participants, winner)
+				table.insert(roundEnds, { participants = participants, winner = winner })
+			end,
+		} :: any)
 
-		local env = { RoundManager = RoundManager, Participants = Participants, remotes = remotes }
-		function env.addPlayer(userId: number, name: string, position: Vector3)
-			local player = { UserId = userId, Name = name, Character = makeCharacter(position) }
-			owners[player.Character] = player
+		local env =
+			{ RoundManager = RoundManager, Participants = Participants, remotes = remotes, roundEnds = roundEnds }
+		-- Cette méthode permet d'inscrire un joueur au classement lorsqu'un test en a besoin ; sans position, il est resté
+		-- au menu (pas de personnage).
+		function env.addPlayer(userId: number, name: string, position: Vector3?)
+			local player = { UserId = userId, Name = name, Character = position and makeCharacter(position) }
+			if player.Character then
+				owners[player.Character] = player
+			end
 			table.insert(players, player)
 			local participant = Participants.fromPlayer(player :: any)
 			RoundManager.addParticipant(participant)
@@ -426,6 +444,91 @@ return function(T, Loader)
 			env.RoundManager.recordDamage(bot, alice, "AWP", false)
 
 			T.expectEqual((env.RoundManager.withdraw(alice)), false)
+		end)
+	end)
+	T.describe("RoundManager : fin de manche et stats persistantes (#296)", function()
+		-- Cette méthode permet de lister les ids des participants signalés à une fin de manche lorsqu'un test les compare.
+		local function endedIds(roundEnd): string
+			local ids = {}
+			for _, participant in roundEnd.participants do
+				table.insert(ids, participant.id)
+			end
+			table.sort(ids)
+			return table.concat(ids, ",")
+		end
+
+		T.it("signale les participants en jeu et le vainqueur désigné par id", function()
+			local env = setup()
+			local alice = env.addPlayer(1, "Alice", Vector3.zero)
+			local bob = env.addPlayer(2, "Bob", Vector3.new(0, 0, 5))
+			local bot = env.addBot("Marcel", Vector3.new(0, 0, 10))
+			env.RoundManager.startRound(60)
+			env.RoundManager.recordDamage(bob, bot, "AWP", false)
+			env.RoundManager.onCharacterDied(bot, function() end)
+			env.tick(61)
+			T.expectEqual(#env.roundEnds, 1, "une fin de manche")
+			local roundEnd = env.roundEnds[1]
+			T.expectEqual(endedIds(roundEnd), string.format("%d,%d,%d", bot.id, alice.id, bob.id))
+			T.expectEqual(roundEnd.winner, bob)
+			T.expectEqual(env.remotes.roundResult.last().winnerId, bob.id)
+			T.expectEqual(env.remotes.roundResult.last().winnerName, "Bob")
+		end)
+
+		T.it("départage deux homonymes par leur id", function()
+			local env = setup()
+			local first = env.addPlayer(1, "Alice", Vector3.zero)
+			local second = env.addPlayer(2, "Alice", Vector3.new(0, 0, 5))
+			env.RoundManager.startRound(60)
+			env.RoundManager.recordDamage(second, first, "AWP", false)
+			env.RoundManager.onCharacterDied(first, function() end)
+			env.tick(61)
+			T.expectEqual(env.roundEnds[1].winner, second)
+		end)
+
+		T.it("ne compte pas un joueur resté au menu, ni ne le désigne vainqueur", function()
+			local env = setup()
+			local alice = env.addPlayer(1, "Alice", Vector3.zero)
+			local idle = env.addPlayer(2, "Paul") -- au classement depuis son arrivée, jamais apparu
+			local bot = env.addBot("Marcel", Vector3.new(0, 0, 5))
+			env.RoundManager.startRound(60)
+			-- Alice meurt d'une chute : Paul (0 kill, 0 mort) l'aurait emporté sur elle avant #296
+			env.RoundManager.onCharacterDied(alice, function() end)
+			env.tick(61)
+			local roundEnd = env.roundEnds[1]
+			T.expectEqual(endedIds(roundEnd), string.format("%d,%d", bot.id, alice.id))
+			T.expect(roundEnd.winner ~= idle, "Paul n'a pas joué")
+			T.expectEqual(roundEnd.winner, bot)
+		end)
+
+		T.it("compte un joueur mort en attente de réapparition à la fin", function()
+			local env = setup()
+			local alice = env.addPlayer(1, "Alice", Vector3.zero)
+			env.RoundManager.startRound(60)
+			env.RoundManager.onCharacterDied(alice, function() end)
+			alice.player.Character = nil -- corps détruit, pas encore réapparu
+			env.tick(61)
+			T.expectEqual(endedIds(env.roundEnds[1]), tostring(alice.id))
+			T.expectEqual(env.roundEnds[1].winner, alice)
+		end)
+
+		T.it("ne compte pas un joueur revenu au menu pendant la manche", function()
+			local env = setup()
+			local alice = env.addPlayer(1, "Alice", Vector3.zero)
+			local bob = env.addPlayer(2, "Bob", Vector3.new(0, 0, 5))
+			env.RoundManager.startRound(60)
+			env.RoundManager.withdraw(bob)
+			env.tick(61)
+			T.expectEqual(endedIds(env.roundEnds[1]), tostring(alice.id))
+		end)
+
+		T.it("sans participant en jeu : pas de vainqueur", function()
+			local env = setup()
+			env.addPlayer(1, "Paul")
+			env.RoundManager.startRound(60)
+			env.tick(61)
+			T.expectEqual(#env.roundEnds[1].participants, 0)
+			T.expectEqual(env.roundEnds[1].winner, nil)
+			T.expectEqual(env.remotes.roundResult.last().winnerName, "Personne")
 		end)
 	end)
 end

@@ -33,6 +33,8 @@ local roundResultRmt: RemoteEvent
 local playerDiedRmt: RemoteEvent
 
 local timerConn: RBXScriptConnection?
+-- Appelé à chaque fin de manche avec les participants en jeu et le vainqueur (nil sans participant), branché par init
+local roundEndHandler: ((participants: { Participant }, winner: Participant?) -> ())? = nil
 
 -- ── helpers ────────────────────────────────────────────────────────────────
 
@@ -53,12 +55,30 @@ local function ensureScore(participant: Participant): Score
 	return scores[id]
 end
 
-local function computeWinner(): string
+-- Cette méthode permet de lister les ids des participants en jeu à la fin d'une manche lorsqu'elle se termine : inscrits
+-- au classement et présents sur la map (personnage) ou déjà morts dans la manche ; un joueur resté au menu n'en est pas.
+-- Pas triés : trier par id ferait gagner les égalités aux bots (ids négatifs), l'ordre reste celui d'avant #296.
+local function idsInPlay(): { number }
+	local ids: { number } = {}
+	for id, score in scores do
+		local participant = Participants.get(id)
+		if participant and (score.deaths > 0 or Participants.characterOf(participant) ~= nil) then
+			table.insert(ids, id)
+		end
+	end
+	return ids
+end
+
+-- Cette méthode permet de désigner le vainqueur d'une manche parmi les participants en jeu lorsqu'elle se termine :
+-- plus de kills, puis moins de morts, puis premier kill le plus tôt ; renvoie son id (nil sans participant) et son nom.
+local function computeWinner(inPlay: { number }): (number?, string)
+	local bestId: number? = nil
 	local bestName = "Personne"
 	local bestKills = -1
 	local bestDeaths = math.huge
 	local bestTick = math.huge
-	for _, score in pairs(scores) do
+	for _, id in inPlay do
+		local score = scores[id]
 		if
 			score.kills > bestKills
 			or (score.kills == bestKills and score.deaths < bestDeaths)
@@ -67,10 +87,11 @@ local function computeWinner(): string
 			bestKills = score.kills
 			bestDeaths = score.deaths
 			bestTick = score.firstKillTick
+			bestId = id
 			bestName = ParticipantRules.displayName(score.name, score.isBot)
 		end
 	end
-	return bestName
+	return bestId, bestName
 end
 
 -- ── round lifecycle ────────────────────────────────────────────────────────
@@ -82,8 +103,18 @@ local function endRound()
 	end
 	state = "result"
 
-	local winnerName = computeWinner()
-	roundResultRmt:FireAllClients({ winnerName = winnerName, scores = scores })
+	local inPlay = idsInPlay()
+	local winnerId, winnerName = computeWinner(inPlay)
+	roundResultRmt:FireAllClients({ winnerId = winnerId, winnerName = winnerName, scores = scores })
+	-- Stats persistantes (#296) : avant la destruction des personnages, qui sortirait les vivants de `inPlay`
+	if roundEndHandler then
+		local participants: { Participant } = {}
+		for _, id in inPlay do
+			table.insert(participants, Participants.get(id) :: Participant)
+		end
+		-- À part : une erreur du handler ne bloque pas la fin de manche (personnages détruits, retour à idle)
+		task.spawn(roundEndHandler, participants, if winnerId then Participants.get(winnerId) else nil)
+	end
 
 	-- Personnages détruits (joueurs et bots) : les clients repassent par le menu
 	for _, participant in Participants.all() do
@@ -315,11 +346,13 @@ function RoundManager.init(remotes: {
 	scoreUpdate: RemoteEvent,
 	roundResult: RemoteEvent,
 	playerDied: RemoteEvent,
+	onRoundEnd: ((participants: { Participant }, winner: Participant?) -> ())?,
 })
 	roundStateRmt = remotes.roundState
 	scoreUpdateRmt = remotes.scoreUpdate
 	roundResultRmt = remotes.roundResult
 	playerDiedRmt = remotes.playerDied
+	roundEndHandler = remotes.onRoundEnd
 end
 
 return RoundManager
