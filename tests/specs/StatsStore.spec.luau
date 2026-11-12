@@ -85,6 +85,8 @@ return function(T, Loader)
 				error("DataStore indisponible (simulé)")
 			end
 		end
+		-- Cette méthode permet de lire un enregistrement (copie) lorsque StatsStore charge un joueur, latence et pannes
+		-- simulées comprises.
 		function ds.GetAsync(_, key: string)
 			if ds.readLatency > 0 then
 				sched.task.wait(ds.readLatency)
@@ -97,6 +99,8 @@ return function(T, Loader)
 			ds.reads += 1
 			return deepCopy(ds.data[key])
 		end
+		-- Cette méthode permet d'appliquer une fusion à un enregistrement lorsque StatsStore écrit ; nil annule l'écriture
+		-- (non comptée), comme Roblox.
 		function ds.UpdateAsync(_, key: string, transform)
 			request()
 			local nextValue = transform(deepCopy(ds.data[key]))

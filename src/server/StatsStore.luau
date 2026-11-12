@@ -19,8 +19,6 @@ local STORE_NAME = "PlayerStats_v1"
 local CLOSE_WAIT = 25 -- s d'attente maximale des sauvegardes en vol à l'arrêt du serveur (budget Roblox : 30 s)
 -- Échecs d'affilée (de 3 essais chacun) avant d'abandonner les écarts d'un joueur parti
 local MAX_SAVE_FAILURES = 5
--- s qu'il faut laisser avant la fin de CLOSE_WAIT pour retenter une écriture à l'arrêt (essais espacés de 2 puis 4 s)
-local CLOSE_RETRY_COST = 6
 
 type Stats = StatsRules.Stats
 -- session/seq : id de cette session du joueur et numéro du dernier lot ; stored : stocké connu (chargement, puis chaque
@@ -114,6 +112,7 @@ local function saveProfile(profile: Profile)
 	savesInFlight += 1
 	local status: StatsRules.MergeStatus = "refused"
 	local seen: any = nil
+	local startedAt = os.clock()
 	local ok, written = withRetry(function()
 		return ds:UpdateAsync(tostring(player.UserId), function(old)
 			local merged
@@ -137,7 +136,8 @@ local function saveProfile(profile: Profile)
 		warn("[StatsStore] format enregistré inconnu pour", player.Name, "— statistiques non sauvegardées")
 	else
 		profile.failures += 1
-		local outOfTime = closing and os.clock() + CLOSE_RETRY_COST >= closeDeadline
+		-- À l'arrêt, un nouvel essai n'est lancé que s'il peut durer autant que celui-ci avant la fin de CLOSE_WAIT
+		local outOfTime = closing and 2 * os.clock() - startedAt >= closeDeadline
 		if outOfTime or (gone and profile.failures >= MAX_SAVE_FAILURES) then
 			profile.canSave = false
 			warn("[StatsStore] sauvegarde abandonnée pour", player.Name, "après", profile.failures, "échecs")

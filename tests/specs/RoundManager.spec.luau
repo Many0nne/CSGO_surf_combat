@@ -91,7 +91,8 @@ return function(T, Loader)
 
 		local env =
 			{ RoundManager = RoundManager, Participants = Participants, remotes = remotes, roundEnds = roundEnds }
-		-- Sans position : joueur resté au menu (pas de personnage)
+		-- Cette méthode permet d'inscrire un joueur au classement lorsqu'un test en a besoin ; sans position, il est resté
+		-- au menu (pas de personnage).
 		function env.addPlayer(userId: number, name: string, position: Vector3?)
 			local player = { UserId = userId, Name = name, Character = position and makeCharacter(position) }
 			if player.Character then
