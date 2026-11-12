@@ -95,4 +95,14 @@ function MenuSceneRules.skinLabel(skinId: string?): string
 	return string.upper((string.gsub(last, "_", " ")))
 end
 
+-- Cette méthode permet de calculer de combien descendre la colonne de gauche de l'accueil (px de maquette) lorsque la
+-- barre de Roblox, de hauteur fixe en px réels (`insetPx`), recouvrirait le titre posé à `titleY` dans un écran réduit
+-- par `scale` (#306) ; 0 quand le titre est déjà dessous (grands écrans, barre masquée).
+function MenuSceneRules.topbarShift(insetPx: number, scale: number, titleY: number, gap: number): number
+	if insetPx <= 0 or scale <= 0 then
+		return 0
+	end
+	return math.max(0, math.ceil(insetPx / scale + gap - titleY))
+end
+
 return MenuSceneRules

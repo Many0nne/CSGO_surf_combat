@@ -411,12 +411,13 @@ local function buildSlot(root: Frame, index: number, slotName: string): SlotView
 	return view
 end
 
--- Cette méthode permet de construire l'écran (titre et emplacements à gauche, liste à droite sur son fond de coin, aide
--- en bas à droite) lorsque l'accueil est construit ; il suit ensuite chaque changement d'inventaire ou d'équipement.
-function EquipmentScreen.build(root: Frame)
+-- Cette méthode permet de construire l'écran (titre et emplacements dans `column` à gauche, liste à droite sur son fond
+-- de coin, aide en bas à droite) lorsque l'accueil est construit ; il suit ensuite chaque changement d'inventaire.
+function EquipmentScreen.build(root: Frame, column: Frame)
 	UIKit.cornerScrim(root, "TopRight", SCRIM_SIZE, SCRIM_SHOWN)
-	-- Titre de la page, en grand : il dit qu'on est sur l'écran d'équipement (retour de l'utilisateur)
-	UIKit.shadowedText(root, {
+	-- Titre de la page, en grand : il dit qu'on est sur l'écran d'équipement (retour de l'utilisateur) ; la colonne de
+	-- gauche descend avec le titre du jeu sous la barre de Roblox (#306)
+	UIKit.shadowedText(column, {
 		Name = "EquipmentTitle",
 		Text = "ÉQUIPEMENT",
 		FontFace = F.Display,
@@ -447,7 +448,7 @@ function EquipmentScreen.build(root: Frame)
 		ZIndex = 2,
 	}, 2)
 	for index, slotName in InventoryRules.SLOTS do
-		slotViews[index] = buildSlot(root, index, slotName)
+		slotViews[index] = buildSlot(column, index, slotName)
 	end
 	rebuildList()
 	paintSlots()

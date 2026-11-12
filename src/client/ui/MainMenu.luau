@@ -3,6 +3,7 @@
 -- FEEDBACK en haut au centre (au-dessus des écrans secondaires, qui s'ouvrent dessous), fiche de l'arme tenue en bas à
 -- gauche. L'onglet ARMES est l'écran d'équipement (#280, EquipmentScreen) : emplacements à gauche, armes et skins
 -- possédés de l'emplacement actif à droite, le personnage tient l'arme survolée ou celle de l'emplacement actif.
+local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -24,7 +25,8 @@ export type Page = "home" | "infos" | "settings" | "feedback"
 local MainMenu = {}
 
 local EDGE = 28 -- marge de la maquette (px à 720 de haut)
-local TITLE_Y = 46 -- sous les boutons Roblox du coin haut gauche
+local TITLE_Y = 46 -- sous les boutons Roblox du coin haut gauche (plus bas si la fenêtre est petite, followTopbar)
+local TOPBAR_GAP = 8 -- marge entre la barre de Roblox et le titre quand la colonne doit descendre (#306)
 local TABS_Y = 18
 local NOTICE_Y = 72 -- message sous les onglets (apparition impossible, #219)
 local NOTICE_TIME = 5 -- s d'affichage de ce message
@@ -280,12 +282,29 @@ local function showWeapon(name: string)
 	end
 end
 
+-- Cette méthode permet de descendre la colonne de gauche (titre, « ÉQUIPEMENT », emplacements) sous la barre de Roblox
+-- lorsque l'échelle de l'écran ou la hauteur de cette barre change (#306) : elle reste en px réels, l'interface non.
+local function followTopbar(root: Frame, column: Frame)
+	local function update()
+		local scale = root:GetAttribute("Scale") or 1
+		local shift = Rules.topbarShift(GuiService.TopbarInset.Max.Y, scale, TITLE_Y, TOPBAR_GAP)
+		column.Position = UDim2.fromOffset(0, shift)
+	end
+	update()
+	root:GetAttributeChangedSignal("Scale"):Connect(update)
+	GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(update)
+end
+
 -- Cette méthode permet de construire l'accueil (titre, fiche, écran d'équipement) lorsque le menu est initialisé.
 local function buildContent(root: Frame)
 	content = UIKit.frame({ Name = "Content", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = root })
-	buildTitle(content)
+	-- Colonne de gauche, décalée d'un bloc sous la barre de Roblox dans les petites fenêtres
+	local column =
+		UIKit.frame({ Name = "LeftColumn", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = content })
+	buildTitle(column)
 	buildCard(content)
-	EquipmentScreen.build(content)
+	EquipmentScreen.build(content, column)
+	followTopbar(root, column)
 	showWeapon(MenuScene.getWeapon())
 	MenuScene.onWeaponChanged(showWeapon)
 end

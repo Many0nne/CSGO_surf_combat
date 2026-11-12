@@ -91,6 +91,23 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("MenuSceneRules.topbarShift (#306)", function()
+		T.it("descend le titre sous la barre de Roblox dans une petite fenêtre", function()
+			-- fenêtre de 607 px : échelle 0,843, barre de 58 px réels = 68,8 px de maquette
+			local shift = Rules.topbarShift(58, 607 / 720, 46, 8)
+			T.expectEqual(shift, 31)
+			T.expectEqual(46 + shift >= 58 / (607 / 720) + 8, true)
+		end)
+
+		T.it("ne bouge rien quand le titre est déjà sous la barre", function()
+			T.expectEqual(Rules.topbarShift(58, 1.6, 46, 8), 0)
+		end)
+
+		T.it("ne bouge rien quand la barre est masquée", function()
+			T.expectEqual(Rules.topbarShift(0, 0.75, 46, 8), 0)
+		end)
+	end)
+
 	T.describe("MenuSceneRules.breathAngle", function()
 		T.it("part du repos et reste faible", function()
 			T.expectEqual(Rules.breathAngle(0), 0)
