@@ -1,5 +1,8 @@
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
+
+local PlayerSettings = require(ReplicatedStorage.Shared.PlayerSettings)
 
 local MovementController = require(script.systems.movement.MovementController)
 local CharacterSync = require(script.systems.network.CharacterSync)
@@ -12,6 +15,7 @@ local FPSCamera = require(script.camera.FPSCamera)
 local SettingsMenu = require(script.ui.SettingsMenu)
 local LocalSettings = require(script.systems.settings.LocalSettings)
 local SoundChannels = require(script.systems.settings.SoundChannels)
+local UIKit = require(script.ui.UIKit)
 local Speedometer = require(script.ui.Speedometer)
 local WeaponBar = require(script.ui.WeaponBar)
 local AmmoCounter = require(script.ui.AmmoCounter)
@@ -86,6 +90,10 @@ StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
 StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
 -- Réglages sauvegardés (#100) : demandés au serveur dès le démarrage, appliqués à leur arrivée
 LocalSettings.init()
+-- Échelle du HUD (#250) : suit le réglage en direct (changement du joueur, puis réglages sauvegardés à leur arrivée)
+LocalSettings.onChanged(function(settings)
+	UIKit.setHudScale(PlayerSettings.hudScaleFactor(settings.hudScale))
+end)
 -- Canaux de volume (#249) : groupes général et armes, créés avant le premier son
 SoundChannels.init()
 WeaponBar.init()

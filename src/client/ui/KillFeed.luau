@@ -128,7 +128,7 @@ function KillFeed.init()
 		Enabled = false,
 		Parent = Players.LocalPlayer:WaitForChild("PlayerGui"),
 	})
-	local root = UIKit.scaledRoot(screen)
+	local root = UIKit.scaledRoot(screen, true)
 	list = UIKit.frame({
 		Name = "List",
 		BackgroundTransparency = 1,

@@ -293,7 +293,7 @@ function KeyDisplay.init()
 		Parent = Players.LocalPlayer:WaitForChild("PlayerGui"),
 	})
 	gui = screenGui
-	local scaled = UIKit.scaledRoot(screenGui)
+	local scaled = UIKit.scaledRoot(screenGui, true)
 	root = scaled
 	grid = UIKit.frame({
 		Name = "Grid",

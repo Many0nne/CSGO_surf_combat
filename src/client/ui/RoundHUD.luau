@@ -100,15 +100,28 @@ local function buildTimer(root: Frame)
 		Parent = root,
 	})
 	timerLayer = layer
-	UIKit.cornerScrim(layer, "Top", TOP_SCRIM_SIZE, TOP_SCRIM_TRANSPARENCY)
+	-- Échelle du HUD (#250) : ancre sans taille au milieu du bord haut, dont l'UIScale réduit le fondu et le bloc vers ce
+	-- point (le calque plein écran, lui, ne change pas : il porte aussi le passage au-dessus du menu)
+	local anchor = UIKit.frame({
+		Name = "TimerAnchor",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromScale(0.5, 0),
+		Size = UDim2.fromOffset(0, 0),
+		Parent = layer,
+	})
+	local anchorScale = UIKit.create("UIScale", { Parent = anchor })
+	UIKit.onHudScale(function(factor)
+		anchorScale.Scale = factor
+	end)
+	UIKit.cornerScrim(anchor, "Top", TOP_SCRIM_SIZE, TOP_SCRIM_TRANSPARENCY)
 
 	local block = UIKit.frame({
 		Name = "TimerBlock",
 		BackgroundTransparency = 1,
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, TIMER_TOP),
+		Position = UDim2.fromOffset(0, TIMER_TOP),
 		Size = UDim2.fromOffset(240, TIMER_HEIGHT),
-		Parent = layer,
+		Parent = anchor,
 	})
 	timerLabel, timerShadow = shadowedText(block, {
 		Name = "Timer",

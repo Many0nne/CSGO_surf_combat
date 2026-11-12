@@ -34,6 +34,8 @@ export type Settings = {
 	-- Volume (#249) en pourcents entiers : général (tous les sons) et canal armes (en plus du général)
 	volumeMaster: number,
 	volumeWeapons: number,
+	-- Échelle du HUD (#250) en pourcents entiers (50 à 100) : éléments de bord du HUD de partie, hors réticule et hitmarker
+	hudScale: number,
 	-- une touche par emplacement de la barre d'armes, dans l'ordre des emplacements
 	slotKeys: { string },
 }
@@ -66,6 +68,8 @@ PlayerSettings.CROSSHAIR = {
 -- Volume (#249) : pourcents entiers, 100 par défaut (volume d'origine des sons). Volume effectif d'une arme =
 -- général × armes (SoundChannels).
 PlayerSettings.VOLUME = { min = 0, max = 100, default = 100 }
+-- Échelle du HUD (#250) : pourcents entiers, 100 par défaut = HUD d'origine (pas d'agrandissement)
+PlayerSettings.HUD_SCALE = { min = 50, max = 100, default = 100 }
 -- Touche du menu en partie (#157 : reprendre, réglages, retour au menu principal), nom d'Enum.KeyCode ; au menu
 -- principal elle ouvre les Réglages. Seule source de cette touche : InGameMenu, l'écran Infos et la liste des réservées.
 PlayerSettings.MENU_KEY = "P"
@@ -138,6 +142,7 @@ function PlayerSettings.defaults(): Settings
 		crosshairOpacity = PlayerSettings.CROSSHAIR.opacity.default,
 		volumeMaster = PlayerSettings.VOLUME.default,
 		volumeWeapons = PlayerSettings.VOLUME.default,
+		hudScale = PlayerSettings.HUD_SCALE.default,
 		slotKeys = table.clone(PlayerSettings.DEFAULT_SLOT_KEYS),
 	}
 end
@@ -235,8 +240,15 @@ function PlayerSettings.sanitize(raw: any): Settings
 	settings.crosshairOpacity = math.round(rawOpacity * 100) / 100
 	settings.volumeMaster = clampPixels(raw.volumeMaster, PlayerSettings.VOLUME)
 	settings.volumeWeapons = clampPixels(raw.volumeWeapons, PlayerSettings.VOLUME)
+	settings.hudScale = clampPixels(raw.hudScale, PlayerSettings.HUD_SCALE)
 	settings.slotKeys = sanitizeKeys(raw.slotKeys)
 	return settings
+end
+
+-- Cette méthode permet de convertir l'échelle du HUD (pourcents) en facteur multiplicatif lorsque le HUD l'applique ;
+-- une valeur absente ou hors plage retombe sur une valeur valide (bornée, ou 1 si ce n'est pas un nombre).
+function PlayerSettings.hudScaleFactor(percent: any): number
+	return clampPixels(percent, PlayerSettings.HUD_SCALE) / 100
 end
 
 -- Cette méthode permet de donner une touche à un emplacement lorsque le joueur la choisit dans l'écran Réglages :
