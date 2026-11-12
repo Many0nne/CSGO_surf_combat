@@ -559,6 +559,17 @@ hitscanRmt.OnServerEvent:Connect(function(player, targetCharacter, hitPart, orig
 	-- (pas un corps déjà mort), rattachée à son tir par le Validator (#216), flick mesuré sur sa direction validée
 	if onHitVerdict(player, hitscanRmt, targetCharacter, damage, isHeadshot) then
 		AimStats.noteHit(aimStats, participant, isHeadshot, os.clock(), direction, linkedShotTime)
+		-- Taux de touches orphelines (#246) : un client qui n'envoie jamais ShotFired, violation moyenne (journal seul)
+		local orphanDetail = AimStats.orphanAlert(aimStats, participant)
+		if orphanDetail then
+			CheatLog.report(
+				participant,
+				CheatLog.Category.HITSCAN,
+				CheatLog.Severity.MEDIUM,
+				orphanDetail,
+				CheatLog.Category.HITSCAN .. ":orphanRate"
+			)
+		end
 	end
 end)
 
