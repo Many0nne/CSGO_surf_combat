@@ -31,6 +31,9 @@ export type Settings = {
 	crosshairDot: boolean,
 	crosshairOutline: boolean,
 	crosshairOpacity: number,
+	-- Volume (#249) en pourcents entiers : général (tous les sons) et canal armes (en plus du général)
+	volumeMaster: number,
+	volumeWeapons: number,
 	-- une touche par emplacement de la barre d'armes, dans l'ordre des emplacements
 	slotKeys: { string },
 }
@@ -60,6 +63,9 @@ PlayerSettings.CROSSHAIR = {
 	outline = true,
 	opacity = { min = 0.2, max = 1, default = 1 },
 }
+-- Volume (#249) : pourcents entiers, 100 par défaut (volume d'origine des sons). Volume effectif d'une arme =
+-- général × armes (SoundChannels).
+PlayerSettings.VOLUME = { min = 0, max = 100, default = 100 }
 -- Touche du menu en partie (#157 : reprendre, réglages, retour au menu principal), nom d'Enum.KeyCode ; au menu
 -- principal elle ouvre les Réglages. Seule source de cette touche : InGameMenu, l'écran Infos et la liste des réservées.
 PlayerSettings.MENU_KEY = "P"
@@ -130,6 +136,8 @@ function PlayerSettings.defaults(): Settings
 		crosshairDot = PlayerSettings.CROSSHAIR.dot,
 		crosshairOutline = PlayerSettings.CROSSHAIR.outline,
 		crosshairOpacity = PlayerSettings.CROSSHAIR.opacity.default,
+		volumeMaster = PlayerSettings.VOLUME.default,
+		volumeWeapons = PlayerSettings.VOLUME.default,
 		slotKeys = table.clone(PlayerSettings.DEFAULT_SLOT_KEYS),
 	}
 end
@@ -225,6 +233,8 @@ function PlayerSettings.sanitize(raw: any): Settings
 	-- Au centième, comme le curseur : la valeur dessinée est celle affichée
 	local rawOpacity = clampNumber(raw.crosshairOpacity, opacity.min, opacity.max, opacity.default)
 	settings.crosshairOpacity = math.round(rawOpacity * 100) / 100
+	settings.volumeMaster = clampPixels(raw.volumeMaster, PlayerSettings.VOLUME)
+	settings.volumeWeapons = clampPixels(raw.volumeWeapons, PlayerSettings.VOLUME)
 	settings.slotKeys = sanitizeKeys(raw.slotKeys)
 	return settings
 end

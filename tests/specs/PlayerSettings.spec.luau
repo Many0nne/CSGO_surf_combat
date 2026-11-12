@@ -184,6 +184,34 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("PlayerSettings.sanitize : volume (#249)", function()
+		local V = PlayerSettings.VOLUME
+
+		T.it("donne 100 % par défaut, y compris pour une sauvegarde d'avant le volume", function()
+			for _, raw in { nil, 42, {}, { sensitivity = 0.3 } } do
+				local s = PlayerSettings.sanitize(raw)
+				T.expectEqual(s.volumeMaster, 100)
+				T.expectEqual(s.volumeWeapons, 100)
+			end
+		end)
+
+		T.it("garde un volume valide et arrondit au pourcent", function()
+			local s = PlayerSettings.sanitize({ volumeMaster = 35, volumeWeapons = 0 })
+			T.expectEqual(s.volumeMaster, 35)
+			T.expectEqual(s.volumeWeapons, 0, "0 % (muet) est permis")
+			T.expectEqual(PlayerSettings.sanitize({ volumeMaster = 42.6 }).volumeMaster, 43)
+		end)
+
+		T.it("borne les volumes et écarte NaN et les mauvais types", function()
+			T.expectEqual(PlayerSettings.sanitize({ volumeMaster = 500 }).volumeMaster, V.max)
+			T.expectEqual(PlayerSettings.sanitize({ volumeWeapons = -20 }).volumeWeapons, V.min)
+			for _, bad in { 0 / 0, "50", true, {} } do
+				T.expectEqual(PlayerSettings.sanitize({ volumeMaster = bad }).volumeMaster, V.default)
+				T.expectEqual(PlayerSettings.sanitize({ volumeWeapons = bad }).volumeWeapons, V.default)
+			end
+		end)
+	end)
+
 	T.describe("PlayerSettings.assignKey", function()
 		local defaults = PlayerSettings.DEFAULT_SLOT_KEYS
 
