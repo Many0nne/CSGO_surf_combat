@@ -129,6 +129,7 @@ end
 -- hors catalogue à la fin ; à emplacement égal, ordre alphabétique) lorsque la barre d'armes est reconstruite.
 function HUDRules.slotOrder(names: { string }): { string }
 	local sorted = table.clone(names)
+	-- Cette méthode permet de donner le rang d'emplacement d'un outil lorsqu'il est trié (hors catalogue : en dernier).
 	local function rank(name: string): number
 		local slot = InventoryRules.slotOfTool(name)
 		return slot and InventoryRules.slotIndex(slot) or math.huge

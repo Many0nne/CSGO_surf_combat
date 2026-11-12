@@ -194,6 +194,8 @@ local function saveProfile(player: Player, profile: Profile)
 	end
 	profile.saving = true
 	profile.dirty = false
+	-- Au départ de l'écriture : les clics qui arrivent pendant qu'elle part se calent sur EQUIP_SAVE_SPACING
+	profile.lastSaveAt = os.clock()
 	savesInFlight += 1
 	local stored = profile.stored
 	local equipped = profile.equipped
@@ -204,7 +206,6 @@ local function saveProfile(player: Player, profile: Profile)
 	end)
 	savesInFlight -= 1
 	profile.saving = false
-	profile.lastSaveAt = os.clock()
 	if not ok then
 		-- Retentée même si le joueur est parti (le profil reste tenu ici), MAX_SAVE_FAILURES fois au plus
 		profile.dirty = true
@@ -228,7 +229,14 @@ local function saveProfile(player: Player, profile: Profile)
 	end
 	profile.failures = 0
 	if profile.dirty then
-		saveProfile(player, profile)
+		-- Changement arrivé pendant l'écriture : une autre, tout de suite à l'arrêt du serveur (attendue par BindToClose),
+		-- sinon espacée d'EQUIP_SAVE_SPACING
+		if closing then
+			saveProfile(player, profile)
+		else
+			local wait = math.max(0, profile.lastSaveAt + EQUIP_SAVE_SPACING - os.clock())
+			task.delay(wait, saveProfile, player, profile)
+		end
 	end
 end
 
@@ -336,18 +344,17 @@ local function scheduleSave(player: Player, profile: Profile)
 	end)
 end
 
--- Cette méthode permet d'équiper une arme et son skin (nil : d'origine) dans un emplacement lorsque le joueur le demande
--- à l'accueil (remote `EquipItem`, #280) : refusé tant que l'inventaire n'est pas chargé, en partie (personnage vivant :
--- on ne change d'équipement qu'au menu) ou si l'item n'est pas possédé, pas de cet emplacement, ou le skin d'une autre
--- arme. Accepté : appliqué, publié, enregistré. Renvoie l'acceptation et le motif d'un refus.
+-- Cette méthode permet d'équiper une arme et son skin (nil : d'origine) lorsque le joueur clique à l'accueil (#280),
+-- refusé avant le chargement, personnage en jeu ou item invalide (InventoryRules.equip) ; renvoie l'acceptation, le motif.
 function InventoryStore.equip(player: Player, slot: any, weaponId: any, skinId: any): (boolean, string?)
 	local profile = profiles[player]
 	if not (profile and profile.loaded) then
 		return false, "loading"
 	end
+	-- Personnage en jeu, vivant ou corps pas encore détruit : on ne change d'équipement qu'au menu (le personnage y est
+	-- détruit, `LeaveRound`). Limite : pendant la réapparition, corps détruit, un client modifié passe (docs/anticheat.md)
 	local character = player.Character
-	local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
-	if humanoid and humanoid.Health > 0 then
+	if character and character.Parent then
 		return false, "in_round"
 	end
 	local equipped, reason = InventoryRules.equip(profile.equipped or {}, profile.owned, slot, weaponId, skinId)
@@ -379,8 +386,7 @@ end
 local SUSPECT_REFUSALS = { unknown = true, wrong_slot = true, not_owned = true, wrong_skin = true }
 
 -- Cette méthode permet de brancher le remote d'équipement (#280), le départ des joueurs et l'arrêt du serveur lorsque le
--- serveur démarre ; à l'arrêt, les sauvegardes partent ensemble et le serveur attend aussi celles déjà en vol
--- (CLOSE_WAIT au plus).
+-- serveur démarre ; à l'arrêt, il attend les sauvegardes en vol (CLOSE_WAIT au plus).
 function InventoryStore.init(equipRemote: RemoteEvent)
 	clearStarterPack()
 	equipRemote.OnServerEvent:Connect(function(player: Player, slot: any, weaponId: any, skinId: any)

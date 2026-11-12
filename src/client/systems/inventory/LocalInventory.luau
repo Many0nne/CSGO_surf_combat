@@ -49,12 +49,23 @@ function LocalInventory.equip(slot: InventoryRules.Slot, weaponId: string, skinI
 	end
 end
 
--- Cette méthode permet d'être prévenu lorsque l'inventaire ou l'équipement change (arrivée des attributs, chargement
--- DataStore, choix du joueur) ; renvoie les deux connexions.
+-- Cette méthode permet d'être prévenu une fois lorsque l'inventaire ou l'équipement change, les deux attributs posés
+-- ensemble par le serveur ne donnant qu'un appel (différé) ; renvoie les deux connexions.
 function LocalInventory.onChanged(callback: () -> ()): { RBXScriptConnection }
+	local pending = false
+	local function schedule()
+		if pending then
+			return
+		end
+		pending = true
+		task.defer(function()
+			pending = false
+			callback()
+		end)
+	end
 	return {
-		player:GetAttributeChangedSignal(InventoryRules.ATTRIBUTE):Connect(callback),
-		player:GetAttributeChangedSignal(InventoryRules.EQUIPPED_ATTRIBUTE):Connect(callback),
+		player:GetAttributeChangedSignal(InventoryRules.ATTRIBUTE):Connect(schedule),
+		player:GetAttributeChangedSignal(InventoryRules.EQUIPPED_ATTRIBUTE):Connect(schedule),
 	}
 end
 

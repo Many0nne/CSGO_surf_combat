@@ -109,9 +109,8 @@ function InventoryRules.sanitizeStored(raw: any, limit: number?): { string }
 	return ids
 end
 
--- Cette méthode permet d'assainir l'équipement relu du DataStore ou reçu lorsqu'il est chargé ou réécrit : par
--- emplacement connu, un id d'arme valide et un id de skin valide ou absent ; le reste est ignoré (repli sur le défaut à
--- la résolution). Les ids ne sont pas confrontés au catalogue : un choix qui n'est plus possédé reste enregistré.
+-- Cette méthode permet d'assainir l'équipement relu ou réécrit lorsqu'il est chargé ou sauvegardé : par emplacement connu,
+-- un id d'arme valide et un skin valide ou absent, sans confronter au catalogue (un choix plus possédé reste enregistré).
 function InventoryRules.sanitizeEquipped(raw: any): Equipped
 	local equipped: Equipped = {}
 	if type(raw) ~= "table" then
@@ -145,9 +144,8 @@ local function isWritable(data: any): boolean
 		and (data.equipped == nil or type(data.equipped) == "table")
 end
 
--- Cette méthode permet de décider des ids, du droit d'écrire et de l'équipement enregistré lorsque le chargement
--- DataStore se termine : lecture en échec ou format inconnu/plus récent → sauvegarde coupée (rien d'écrasé) ; aucune
--- donnée → nouveau joueur, écriture permise, équipement par défaut (table vide).
+-- Cette méthode permet de décider des ids, du droit d'écrire et de l'équipement relu lorsque le chargement DataStore se
+-- termine : échec ou format inconnu/plus récent → sauvegarde coupée ; aucune donnée → écriture permise, équipement vide.
 function InventoryRules.loadOutcome(ok: boolean, data: any): ({ string }, boolean, Equipped)
 	if not ok then
 		return {}, false, {}
@@ -172,9 +170,8 @@ function InventoryRules.payload(
 	}
 end
 
--- Cette méthode permet de calculer la valeur écrite par UpdateAsync lorsqu'un inventaire est sauvegardé : ids enregistrés
--- réunis à ceux de la session, sans plafond (un inventaire ne fait que grandir) ; équipement de la session s'il a été
--- choisi (nil : celui déjà enregistré est gardé) ; nil (annulée) sur un format inconnu.
+-- Cette méthode permet de calculer la valeur écrite par UpdateAsync lorsqu'un inventaire est sauvegardé : ids réunis sans
+-- plafond (un inventaire ne fait que grandir), équipement enregistré remplacé emplacement par emplacement par la session.
 function InventoryRules.mergeForSave(
 	old: any,
 	stored: { string },
@@ -185,9 +182,11 @@ function InventoryRules.mergeForSave(
 	end
 	local merged = table.clone(if type(old) == "table" and type(old.items) == "table" then old.items else {})
 	table.move(stored, 1, #stored, #merged + 1, merged)
-	local keptEquipped = if equipped ~= nil
-		then equipped
-		else InventoryRules.sanitizeEquipped(if type(old) == "table" then old.equipped else nil)
+	-- Un emplacement que la session n'a pas choisi garde ce qu'un autre serveur a pu écrire entre-temps
+	local keptEquipped = InventoryRules.sanitizeEquipped(if type(old) == "table" then old.equipped else nil)
+	for slot, loadout in InventoryRules.sanitizeEquipped(equipped) do
+		keptEquipped[slot] = loadout
+	end
 	return InventoryRules.payload(InventoryRules.sanitizeStored(merged, math.huge), keptEquipped)
 end
 
@@ -303,8 +302,7 @@ local function checkLoadout(owned: Owned, slot: string, weaponId: any, skinId: a
 end
 
 -- Cette méthode permet de calculer l'équipement appliqué lorsque le serveur remplit le sac ou que le client l'affiche :
--- par emplacement, le choix enregistré s'il est encore valide (arme possédée de cet emplacement ; skin gardé s'il est
--- possédé et de cette arme, sinon d'origine), sinon l'arme par défaut d'origine.
+-- par emplacement, le choix enregistré s'il reste valide (skin invalide → d'origine), sinon l'arme par défaut.
 function InventoryRules.resolveEquipped(equipped: Equipped?, owned: Owned): Equipped
 	local resolved: Equipped = {}
 	for _, slot in InventoryRules.SLOTS do
@@ -319,10 +317,8 @@ function InventoryRules.resolveEquipped(equipped: Equipped?, owned: Owned): Equi
 	return resolved
 end
 
--- Cette méthode permet de valider une demande d'équipement lorsque le joueur choisit une arme ou un skin à l'accueil :
--- emplacement connu, arme possédée de cet emplacement, skin nil (d'origine) ou possédé et de cette arme. Renvoie le
--- nouvel équipement enregistré (copie), ou nil et le motif du refus (`slot`, `unknown`, `wrong_slot`, `not_owned`,
--- `wrong_skin`).
+-- Cette méthode permet de valider un choix d'arme ou de skin lorsque le joueur clique à l'accueil : nouvel équipement
+-- (copie), ou nil et le motif (`slot`, `unknown`, `wrong_slot`, `not_owned`, `wrong_skin`).
 function InventoryRules.equip(
 	equipped: Equipped,
 	owned: Owned,
@@ -356,9 +352,8 @@ function InventoryRules.equippedTools(resolved: Equipped): { string }
 	return names
 end
 
--- Cette méthode permet de comparer les Tools présents chez un joueur (sac et main) à ceux qu'il doit avoir (#280 : les
--- armes équipées) lorsque le serveur les synchronise : noms à donner (voulus, absents) et noms à retirer (présents, non
--- voulus ; un doublon d'un Tool voulu n'est pas retiré ici).
+-- Cette méthode permet de comparer les Tools d'un joueur (sac et main) à ceux voulus (#280 : armes équipées) lorsque le
+-- serveur les synchronise : noms à donner (voulus, absents) et noms à retirer (présents, non voulus).
 function InventoryRules.toolChanges(wanted: { string }, present: { string }): ({ string }, { string })
 	local has: { [string]: boolean } = {}
 	local remove: { string } = {}

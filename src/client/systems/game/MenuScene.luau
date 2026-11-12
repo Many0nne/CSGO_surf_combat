@@ -405,10 +405,16 @@ end
 -- Cette méthode permet de mettre dans les mains du personnage l'arme dont le Tool porte ce nom lorsque l'écran
 -- d'équipement (#280) montre une arme équipée ou survolée ; sans effet si elle n'est pas possédée.
 function MenuScene.holdTool(toolName: string)
-	for _, weapon in listWeapons() do
-		if weapon.tool == toolName then
-			MenuScene.setWeapon(weapon.key)
-			return
+	-- Deux passes : la liste retenue peut dater d'avant un changement d'inventaire pas encore vu ici
+	for pass = 1, 2 do
+		for _, weapon in listWeapons() do
+			if weapon.tool == toolName then
+				MenuScene.setWeapon(weapon.key)
+				return
+			end
+		end
+		if pass == 1 then
+			weapons = nil
 		end
 	end
 end

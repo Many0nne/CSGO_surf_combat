@@ -86,8 +86,7 @@ function MenuSceneRules.statSegments(value: number, max: number, count: number):
 end
 
 -- Cette méthode permet de nommer un skin dans l'écran d'équipement (#280) lorsqu'il est affiché : « D'ORIGINE » sans
--- skin, sinon le dernier segment de son id en majuscules, `_` changés en espaces (« skin.awp.dragon_lore » →
--- « DRAGON LORE ») tant que le catalogue n'a pas de nom affiché (#268).
+-- skin, sinon la fin de son id en majuscules (« skin.awp.dragon_lore » → « DRAGON LORE », en attendant #268).
 function MenuSceneRules.skinLabel(skinId: string?): string
 	if not skinId then
 		return "D'ORIGINE"

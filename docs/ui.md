@@ -56,8 +56,9 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   liste empilée : section « COUTEAU · ARME » (armes possédées de l'emplacement), puis « KA-BAR · SKIN » (d'origine, puis
   skins possédés de l'arme équipée) ; titres ambrés soulignés d'un filet, choix en texte alignés à droite, l'équipé en
   os gras précédé de « ÉQUIPÉ » ambré. Recliquer l'emplacement ou changer d'onglet ferme la liste. Le personnage tient
-  l'arme survolée (emplacement, arme ou skin), sinon l'arme équipée de l'emplacement choisi (touches 1 et 2, la molette
-  alterne) ; la fiche suit. Un clic équipe : remote `EquipItem`, l'écran ne change qu'à la réponse du serveur
+  l'arme survolée (emplacement, arme ou skin), sinon l'arme équipée de l'emplacement choisi (touches des emplacements
+  réglées dans TOUCHES, 1 et 2 par défaut ; la molette alterne) ; la fiche suit. Les deux attributs posés ensemble par
+  le serveur ne déclenchent qu'une mise à jour (`LocalInventory.onChanged`, différé). Un clic équipe : remote `EquipItem`, l'écran ne change qu'à la réponse du serveur
   (attribut `EquippedItems`), pas d'affichage optimiste. **Seuls les items possédés apparaissent**, jamais grisés.
   Choix de l'utilisateur : liste empilée plutôt qu'en deux temps (armes puis skins avec retour « ‹ ARMES »), 1/2 et
   molette gardés pour alterner. Pas de rang « n / m » sur la fiche depuis que les armes ne défilent plus. Les onglets sont dans leur propre `ScreenGui` (`MenuTabs`, DisplayOrder 4), au-dessus des écrans

@@ -14,6 +14,8 @@ local WeaponConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChi
 local LocalInventory = require(script.Parent.Parent.systems.inventory.LocalInventory)
 local MenuScene = require(script.Parent.Parent.systems.game.MenuScene)
 local Rules = require(script.Parent.Parent.systems.game.MenuSceneRules)
+local PlayerSettings = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("PlayerSettings"))
+local LocalSettings = require(script.Parent.Parent.systems.settings.LocalSettings)
 local HUDRules = require(script.Parent.HUDRules)
 local MenuCursor = require(script.Parent.MenuCursor)
 local MenuShot = require(script.Parent.MenuShot)
@@ -60,8 +62,6 @@ local LIST_STEP = 34
 local LIST_GAP = 24 -- entre la section ARME et la section SKIN
 local LIST_SCRIM = Vector2.new(520, 560) -- fond de coin sous la liste (le mur clair du décor rendait le texte illisible)
 local LIST_SCRIM_SHOWN = 0.35
--- Touches de l'accueil : un emplacement par touche (1 · SNIPER, 2 · COUTEAU)
-local SLOT_KEYS = { Enum.KeyCode.One, Enum.KeyCode.Two }
 
 type SlotView = {
 	name: TextLabel,
@@ -276,6 +276,11 @@ local function buildCard(root: Frame)
 	end
 end
 
+-- Cette méthode permet de nommer un emplacement (« SNIPER », sinon son id en majuscules) lorsqu'il est affiché.
+local function slotLabel(slotName: string): string
+	return SLOT_LABELS[slotName] or string.upper(slotName)
+end
+
 -- Cette méthode permet de donner le nom affiché d'une arme (nom de WeaponConfig en majuscules, sinon nom du Tool
 -- espacé) lorsqu'un emplacement ou la liste la nomme.
 local function weaponTitle(toolName: string): string
@@ -386,9 +391,8 @@ local function listEntry(text: string, y: number, equipped: boolean, tool: strin
 	end)
 end
 
--- Cette méthode permet de reconstruire la liste de droite lorsqu'un emplacement s'ouvre ou que l'équipement change :
--- armes possédées de l'emplacement ouvert, puis skins de son arme équipée (d'origine, puis skins possédés, #268). Seuls
--- les items possédés apparaissent ; rien quand aucun emplacement n'est ouvert.
+-- Cette méthode permet de reconstruire la liste de droite (armes possédées de l'emplacement ouvert, puis skins possédés
+-- de son arme équipée) lorsqu'un emplacement s'ouvre ou que l'équipement change ; vide si rien n'est ouvert.
 local function rebuildList()
 	for _, child in list:GetChildren() do
 		child:Destroy()
@@ -403,7 +407,7 @@ local function rebuildList()
 	local slotIndex: number = openSlot
 	local owned = LocalInventory.owned()
 	local current, currentSkin = equippedAt(slotIndex)
-	listHeader(SLOT_LABELS[slotName] .. " · ARME", 0)
+	listHeader(slotLabel(slotName) .. " · ARME", 0)
 	local y = LIST_HEADER
 	for _, weapon in InventoryRules.weaponsForSlot(owned, slotName) do
 		local tool = weapon.tool or ""
@@ -481,7 +485,7 @@ local function buildSlot(root: Frame, index: number, slotName: string): SlotView
 	})
 	UIKit.text({
 		Name = "Label",
-		Text = string.format("%d · %s", index, SLOT_LABELS[slotName] or string.upper(slotName)),
+		Text = string.format("%d · %s", index, slotLabel(slotName)),
 		FontFace = F.DisplayMedium,
 		TextSize = 13,
 		TextColor3 = C.Accent,
@@ -617,8 +621,8 @@ local function buildContent(root: Frame)
 	MenuScene.onWeaponChanged(showWeapon)
 end
 
--- Cette méthode permet de choisir l'emplacement montré par le personnage (touches 1 et 2, molette qui alterne) lorsque
--- le joueur est sur l'accueil.
+-- Cette méthode permet de choisir l'emplacement montré par le personnage (touches des emplacements réglées par le
+-- joueur, 1 et 2 par défaut comme en partie ; la molette alterne) lorsque le joueur est sur l'accueil.
 local function onWeaponInput(input: InputObject, processed: boolean)
 	if processed or currentPage ~= "home" then
 		return
@@ -626,7 +630,7 @@ local function onWeaponInput(input: InputObject, processed: boolean)
 	if input.UserInputType == Enum.UserInputType.MouseWheel then
 		focusSlot(Rules.cycleIndex(focusedSlot, if input.Position.Z > 0 then -1 else 1, #InventoryRules.SLOTS))
 	elseif input.UserInputType == Enum.UserInputType.Keyboard then
-		local index = table.find(SLOT_KEYS, input.KeyCode)
+		local index = PlayerSettings.slotForKey(LocalSettings.get().slotKeys, input.KeyCode.Name)
 		if index and InventoryRules.SLOTS[index] then
 			focusSlot(index)
 		end
