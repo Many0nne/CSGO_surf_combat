@@ -11,12 +11,12 @@ return function(T, Loader)
 	end
 
 	T.describe("CasingRules.launch (#237)", function()
-		T.it("part de la fenêtre d'éjection, vers la droite, le haut et l'arrière", function()
+		T.it("part de la fenêtre d'éjection, vers la droite et le haut, sans partir vers l'avant", function()
 			local flight = CasingRules.launch(PORT, 1, Vector3.zero, MID)
 			T.expect(near(flight.start.Position, PORT.Position), tostring(flight.start.Position))
 			local v = CasingRules.EJECT_VELOCITY
 			T.expect(near(flight.velocity, Vector3.new(v[1], v[2], v[3])), tostring(flight.velocity))
-			T.expect(flight.velocity.X > 0 and flight.velocity.Y > 0 and flight.velocity.Z > 0)
+			T.expect(flight.velocity.X > 0 and flight.velocity.Y > 0 and flight.velocity.Z >= 0)
 		end)
 
 		T.it("couche la douille le long de l'arme : l'axe du cylindre (X) suit l'axe Z de l'EjectPort", function()

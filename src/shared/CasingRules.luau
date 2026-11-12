@@ -29,8 +29,9 @@ CasingRules.COLOR_RGB = { 214, 170, 84 }
 -- Vitesse de départ (studs/s, échelle du viewmodel) dans le repère de l'EjectPort : vers la droite, vers le haut,
 -- vers l'arrière. Chaque composante varie de ± SPREAD (fraction) d'un tir à l'autre. Référence CS2 (awp showcase.mp4,
 -- 20,233 à 20,367 s) : la douille monte vers la droite et sort par le bord droit vers 30 % de la hauteur en 0,15 s,
--- sa montée freinant déjà ; ≈ 24 studs/s vers la droite et 15 vers le haut à la profondeur de la culasse.
-CasingRules.EJECT_VELOCITY = { 24, 15, 2 }
+-- sa montée freinant déjà. Valeurs ajustées sur ces déplacements à l'écran (rendu de Shoot au FOV 90, 16:9) : l'arme
+-- est penchée pendant le cycle de culasse, le haut de l'EjectPort pointe vers le haut et la droite de l'écran.
+CasingRules.EJECT_VELOCITY = { 12, 24, 0 }
 CasingRules.SPREAD = 0.15
 -- Rotation (rad/s) : surtout bout sur bout autour de l'axe vertical de l'EjectPort, un peu de roulis sur l'axe de la
 -- douille. ± SPREAD aussi.

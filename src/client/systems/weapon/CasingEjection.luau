@@ -141,7 +141,9 @@ function CasingEjection.connectMarker(track: AnimationTrack, viewmodel: Model): 
 		if not port or not (body and body:IsA("BasePart")) or body.LocalTransparencyModifier >= 1 then
 			return
 		end
-		eject(port, viewmodel:GetScale(), getVelocity())
+		-- Échelle 1 : le viewmodel est un clone tel quel du modèle source, dont GetScale() vaut 0,517 (mis à l'échelle à
+		-- sa création) alors que les réglages de CasingRules sont pris dans ce repère.
+		eject(port, 1, getVelocity())
 	end)
 end
 

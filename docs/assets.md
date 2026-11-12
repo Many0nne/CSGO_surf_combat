@@ -119,6 +119,10 @@ viewmodel avec leurs enfants (`WeaponThirdPerson`) : il a la même fenêtre, ré
 - **Pool :** au plus `POOL_SIZE` Parts ancrées, sans collision ni requête ni ombre, créées au premier besoin et
   réutilisées (la plus ancienne si toutes volent). Sous la caméra pendant le vol, `Parent = nil` ensuite. Boucle
   `RenderStepped` (repère `douilles`) branchée seulement tant qu'une douille vole.
+- **Échelle :** `CasingRules` est réglé dans le repère du viewmodel tel qu'il est stocké (échelle 1 en 1P). Ne pas
+  lire `GetScale()` sur le viewmodel : il vaut 0,517 pour l'AWP (modèle mis à l'échelle à sa création), ce qui rendait
+  la douille 1P deux fois trop petite et lente. Sur l'arme 3P (`Model` neuf passé par `ScaleTo`), `GetScale()` est
+  bien l'échelle relative au viewmodel (0,7).
 - **Vérifier qu'un tir ne laisse rien :** aucune pièce `ShotCasing` dans le `DataModel` après `LIFETIME`.
 - **Nouvelle arme qui éjecte :** ajouter `Handle.EjectPort` à son viewmodel et le marqueur `Eject` à sa piste de tir.
 
