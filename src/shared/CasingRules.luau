@@ -33,8 +33,8 @@ CasingRules.COLOR_RGB = { 214, 170, 84 }
 -- est penchée pendant le cycle de culasse, le haut de l'EjectPort pointe vers le haut et la droite de l'écran.
 CasingRules.EJECT_VELOCITY = { 12, 24, 0 }
 CasingRules.SPREAD = 0.15
--- Rotation (rad/s) : surtout bout sur bout autour de l'axe vertical de l'EjectPort, un peu de roulis sur l'axe de la
--- douille. ± SPREAD aussi.
+-- Rotation (rad/s) : surtout bout sur bout autour de l'axe vertical de l'EjectPort (± SPREAD), un peu de roulis fixe
+-- sur l'axe de la douille.
 CasingRules.SPIN_YAW = 22
 CasingRules.SPIN_ROLL = 6
 -- Gravité (studs/s², échelle du viewmodel), plus forte que celle du monde réel à cette échelle pour que la douille

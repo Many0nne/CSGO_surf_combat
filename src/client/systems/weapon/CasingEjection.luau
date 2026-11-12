@@ -151,8 +151,8 @@ local function shouldShow(shooter: Model): boolean
 end
 
 -- Cette méthode permet d'éjecter la douille d'un tir relayé lorsque sa culasse s'ouvre : depuis l'arme 3P du tireur si
--- le tireur vit encore, a toujours la même arme près de notre caméra ; vitesse : celle de l'arme pendant le délai.
-local function ejectRemote(shooter: Model, weaponName: string, gun: Model, from: Vector3, delay: number)
+-- le tireur vit encore, a toujours la même arme près de notre caméra ; vitesse : celle de l'arme depuis le tir (shotAt).
+local function ejectRemote(shooter: Model, weaponName: string, gun: Model, from: Vector3, shotAt: number)
 	if gun.Parent ~= shooter or not shooter:IsDescendantOf(workspace) or not shouldShow(shooter) then
 		return
 	end
@@ -165,7 +165,8 @@ local function ejectRemote(shooter: Model, weaponName: string, gun: Model, from:
 	if not (port and camera and CasingRules.isNearCamera(port.WorldPosition, camera.CFrame.Position)) then
 		return
 	end
-	local inherited = CasingRules.inheritedVelocity(from, port.WorldPosition, delay)
+	-- temps réellement écoulé : task.delay peut partir en retard (saccade), la vitesse serait alors surestimée
+	local inherited = CasingRules.inheritedVelocity(from, port.WorldPosition, os.clock() - shotAt)
 	eject(port, gun:GetScale(), inherited, false)
 end
 
@@ -182,10 +183,15 @@ local function onShotFired(shooter: any, weaponName: any)
 	end
 	local gun = shooter:FindFirstChild(WeaponThirdPerson.MODEL_NAME)
 	local port = gun and gun:IsA("Model") and portOf(gun)
-	if not (gun and gun:IsA("Model") and port) then
+	local camera = workspace.CurrentCamera
+	if not (gun and gun:IsA("Model") and port and camera) then
 		return
 	end
-	task.delay(delay, ejectRemote, shooter, weaponName, gun, port.WorldPosition, delay)
+	-- tireur loin de nous : rien à programmer (la distance est revérifiée à l'éjection)
+	if not CasingRules.isNearCamera(port.WorldPosition, camera.CFrame.Position) then
+		return
+	end
+	task.delay(delay, ejectRemote, shooter, weaponName, gun, port.WorldPosition, os.clock())
 end
 
 -- Cette méthode permet d'écouter les tirs relayés lorsque le client démarre : stateOf lit l'état du client (pas de
