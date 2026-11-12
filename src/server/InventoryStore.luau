@@ -23,6 +23,7 @@ local DEBUG_ATTRIBUTE = "DebugInventory"
 local BACKPACK_WAIT = 5 -- s d'attente maximale du sac d'un personnage qui vient d'apparaître
 local CLOSE_WAIT = 25 -- s d'attente maximale des sauvegardes en vol à l'arrêt du serveur (budget Roblox : 30 s)
 local SAVE_RETRY_DELAY = 60 -- s avant un nouvel essai d'une sauvegarde en échec (panne passagère du DataStore)
+local MAX_SAVE_FAILURES = 5 -- échecs d'affilée (de 3 essais chacun) avant d'abandonner l'écriture d'un profil
 
 -- owned : items possédés, recalculés à chaque changement (setup, chargement, déblocage, debug) et lus à chaque tir
 type Profile = {
@@ -32,12 +33,15 @@ type Profile = {
 	dirty: boolean,
 	saving: boolean,
 	canSave: boolean,
+	failures: number,
 }
 
 local store: DataStore? = nil
 local profiles: { [Player]: Profile } = {}
 -- Sauvegardes en cours, attendues par BindToClose (celles lancées au départ d'un joueur comprises)
 local savesInFlight = 0
+-- Arrêt du serveur en cours (BindToClose) : une sauvegarde en échec est retentée tout de suite, pas après un délai
+local closing = false
 -- Inventaire des bots (#267) : celui par défaut, jamais sauvegardé
 local BOT_OWNED = InventoryRules.resolve(nil, false)
 
@@ -115,8 +119,9 @@ end
 -- retirés (main comprise). Idempotente : sans effet si le sac est déjà juste.
 function InventoryStore.syncTools(player: Player)
 	local character = player.Character
-	if not character then
-		return -- au menu : le sac sera rempli à l'apparition
+	local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
+	if not (character and humanoid and humanoid.Health > 0) then
+		return -- au menu ou mort (corps encore en place) : le sac sera rempli à l'apparition
 	end
 	local backpack = player:FindFirstChildOfClass("Backpack") or player:WaitForChild("Backpack", BACKPACK_WAIT)
 	if not (backpack and backpack:IsA("Backpack")) or player.Character ~= character then
@@ -175,15 +180,28 @@ local function saveProfile(player: Player, profile: Profile)
 	savesInFlight -= 1
 	profile.saving = false
 	if not ok then
+		-- Retentée même si le joueur est parti (le profil reste tenu ici), MAX_SAVE_FAILURES fois au plus
 		profile.dirty = true
-		warn("[InventoryStore] sauvegarde impossible pour", player.Name, "— nouvel essai dans", SAVE_RETRY_DELAY, "s")
-		task.delay(SAVE_RETRY_DELAY, function()
-			-- Joueur parti entre-temps : son départ a déjà retenté l'écriture
-			if profiles[player] == profile then
-				saveProfile(player, profile)
-			end
-		end)
-	elseif profile.dirty then
+		profile.failures += 1
+		if profile.failures >= MAX_SAVE_FAILURES then
+			warn("[InventoryStore] sauvegarde abandonnée pour", player.Name, "après", profile.failures, "échecs")
+		elseif closing then
+			warn("[InventoryStore] sauvegarde impossible pour", player.Name, "— nouvel essai avant l'arrêt")
+			saveProfile(player, profile)
+		else
+			warn(
+				"[InventoryStore] sauvegarde impossible pour",
+				player.Name,
+				"— nouvel essai dans",
+				SAVE_RETRY_DELAY,
+				"s"
+			)
+			task.delay(SAVE_RETRY_DELAY, saveProfile, player, profile)
+		end
+		return
+	end
+	profile.failures = 0
+	if profile.dirty then
 		saveProfile(player, profile)
 	end
 end
@@ -207,6 +225,7 @@ function InventoryStore.setup(player: Player)
 		dirty = false,
 		saving = false,
 		canSave = false,
+		failures = 0,
 	}
 	profiles[player] = profile
 	refresh(player, profile)
@@ -294,6 +313,7 @@ function InventoryStore.init()
 		end
 	end)
 	game:BindToClose(function()
+		closing = true
 		for player, profile in profiles do
 			task.spawn(saveProfile, player, profile)
 		end

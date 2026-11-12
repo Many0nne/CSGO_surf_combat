@@ -598,6 +598,7 @@ local function buildKeysCategory(block: Frame)
 				endCapture()
 			end
 			entry.label.Text = keyRowName(slot, if name then HUDRules.weaponLabel(name) else "")
+			entry.row.Name = entry.label.Text
 		end
 	end
 	relabel()
