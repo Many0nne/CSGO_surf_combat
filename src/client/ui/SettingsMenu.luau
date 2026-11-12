@@ -5,13 +5,14 @@
 -- (#130). Pour ajouter un réglage : une entrée dans `buildCategories`, et un champ dans PlayerSettings s'il doit être
 -- conservé entre les sessions (LocalSettings, #100).
 local Lighting = game:GetService("Lighting")
-local StarterPack = game:GetService("StarterPack")
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
+local InventoryRules = require(ReplicatedStorage.Shared.InventoryRules)
 local PlayerSettings = require(ReplicatedStorage.Shared.PlayerSettings)
 local UITheme = require(ReplicatedStorage.Shared.UITheme)
+local LocalInventory = require(script.Parent.Parent.systems.inventory.LocalInventory)
 local LocalSettings = require(script.Parent.Parent.systems.settings.LocalSettings)
 local Crosshair = require(script.Parent.Crosshair)
 local HUDRules = require(script.Parent.HUDRules)
@@ -395,11 +396,17 @@ local function endCapture()
 	end
 end
 
+-- Cette méthode permet de nommer la ligne d'un emplacement de la barre (« Arme 1 · AWP ») lorsqu'elle est créée ou que
+-- l'inventaire change.
+local function keyRowName(slot: number, weaponLabel: string): string
+	return string.format("Arme %d · %s", slot, weaponLabel)
+end
+
 -- Cette méthode permet d'ajouter la ligne d'un emplacement de la barre d'armes (nom de l'arme, touche à cliquer) lorsque
 -- l'écran est construit : un clic sur la touche attend la suivante, Échap annule, une touche du jeu est refusée.
-local function addKeyBinding(category: Category, slot: number, weaponLabel: string): () -> ()
+local function addKeyBinding(category: Category, slot: number, weaponLabel: string): (() -> (), Frame, TextLabel)
 	assert(page, "SettingsMenu : la page doit exister avant ses lignes")
-	local row = makeRow(category, string.format("Arme %d · %s", slot, weaponLabel))
+	local row, label = makeRow(category, keyRowName(slot, weaponLabel))
 	local choice: MenuShot.Choice
 	local hint = UIKit.text({
 		Name = "Hint",
@@ -470,7 +477,7 @@ local function addKeyBinding(category: Category, slot: number, weaponLabel: stri
 		sync = function() end, -- suivi par LocalSettings.onChanged (refresh)
 	})
 	keyHandlers[slot] = onKey
-	return refresh
+	return refresh, row, label
 end
 
 -- Cette méthode permet d'afficher les lignes de la catégorie choisie et de marquer son onglet (os vif, barre ambrée)
@@ -521,16 +528,10 @@ local function addCategory(block: Frame, title: string): Category
 	return category
 end
 
--- Cette méthode permet de lister les noms d'armes dans l'ordre des emplacements de la barre lorsque la catégorie TOUCHES
--- est construite (une ligne par arme du StarterPack, MAX_ROWS au plus).
+-- Cette méthode permet de lister les noms des armes possédées (#267) dans l'ordre des emplacements de la barre lorsque
+-- la catégorie TOUCHES est construite ou que l'inventaire change (MAX_ROWS au plus).
 local function weaponNames(): { string }
-	local names = {}
-	for _, child in StarterPack:GetChildren() do
-		if child:IsA("Tool") and not table.find(names, child.Name) then
-			table.insert(names, child.Name)
-		end
-	end
-	local ordered = HUDRules.slotOrder(names)
+	local ordered = HUDRules.slotOrder(LocalInventory.ownedTools())
 	return table.move(ordered, 1, math.min(#ordered, PlayerSettings.MAX_ROWS), 1, {})
 end
 
@@ -577,10 +578,31 @@ local function buildKeysCategory(block: Frame)
 		end
 		syncing = wasSyncing
 	end)
+	-- Une ligne par emplacement possible (une par arme du catalogue, MAX_ROWS au plus), nommée d'après l'arme possédée à
+	-- ce rang et masquée au-delà : l'inventaire peut arriver ou changer après la construction (#267)
 	local refreshers = {}
-	for slot, name in weaponNames() do
-		table.insert(refreshers, addKeyBinding(keys, slot, HUDRules.weaponLabel(name)))
+	local slotRows: { { row: Frame, label: TextLabel } } = {}
+	for slot = 1, math.min(#InventoryRules.catalogTools(), PlayerSettings.MAX_ROWS) do
+		local refresh, row, label = addKeyBinding(keys, slot, "")
+		table.insert(refreshers, refresh)
+		table.insert(slotRows, { row = row, label = label })
 	end
+	-- Cette méthode permet de nommer chaque ligne d'après l'arme possédée à son rang lorsque l'inventaire change ; une
+	-- saisie de touche ouverte sur une ligne masquée est annulée.
+	local function relabel()
+		local names = weaponNames()
+		for slot, entry in slotRows do
+			local name = names[slot]
+			entry.row.Visible = name ~= nil
+			if not name and capture and capture.slot == slot then
+				endCapture()
+			end
+			entry.label.Text = keyRowName(slot, if name then HUDRules.weaponLabel(name) else "")
+			entry.row.Name = entry.label.Text
+		end
+	end
+	relabel()
+	LocalInventory.onChanged(relabel)
 	LocalSettings.onChanged(function()
 		for _, refresh in refreshers do
 			refresh()

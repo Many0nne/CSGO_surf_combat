@@ -4,7 +4,6 @@
 -- respiration du personnage. Tout est local au client ; l'éclairage reste celui du jeu.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local StarterPack = game:GetService("StarterPack")
 local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -13,6 +12,7 @@ local MapSelection = require(Shared:WaitForChild("MapSelection"))
 local PerfMarkers = require(Shared:WaitForChild("PerfMarkers"))
 local WeaponConfig = require(Shared:WaitForChild("WeaponConfig"))
 local WeaponThirdPerson = require(Shared:WaitForChild("WeaponThirdPerson"))
+local LocalInventory = require(script.Parent.Parent.inventory.LocalInventory)
 local MenuPoses = require(script.Parent.MenuPoses)
 local Rules = require(script.Parent.MenuSceneRules)
 
@@ -85,17 +85,19 @@ local aimX, aimY = 0, 0
 local clock = 0
 local weaponChanged: ((string) -> ())?
 
--- Cette méthode permet de lister les armes du menu (Tools du StarterPack connus de WeaponConfig, par attribut
--- WeaponName ou à défaut par nom, dans l'ordre alphabétique de la barre d'armes) lorsque la scène ou la fiche en a
--- besoin ; repli sur WeaponConfig si le StarterPack est vide.
+-- Cette méthode permet de lister les armes du menu (Tools possédés de ReplicatedStorage.Tools connus de WeaponConfig,
+-- par attribut WeaponName ou à défaut par nom, dans l'ordre alphabétique de la barre d'armes, #267) lorsque la scène ou
+-- la fiche en a besoin ; repli sur les armes possédées de WeaponConfig, sans la retenir, si le dossier des Tools n'est pas
+-- encore répliqué.
 local function listWeapons(): { Weapon }
 	if weapons then
 		return weapons
 	end
 	local list: { Weapon } = {}
 	local tools = {}
-	for _, tool in StarterPack:GetChildren() do
-		if tool:IsA("Tool") then
+	local folder = ReplicatedStorage:FindFirstChild("Tools")
+	for _, tool in if folder then folder:GetChildren() else {} do
+		if tool:IsA("Tool") and LocalInventory.ownsTool(tool.Name) then
 			table.insert(tools, tool)
 		end
 	end
@@ -112,13 +114,18 @@ local function listWeapons(): { Weapon }
 	end
 	if #list == 0 then
 		for key in WeaponConfig.Weapons do
-			table.insert(list, { key = key, viewmodel = key })
+			if LocalInventory.ownsTool(key) then
+				table.insert(list, { key = key, viewmodel = key })
+			end
 		end
 		table.sort(list, function(a, b)
 			return a.key < b.key
 		end)
 	end
-	weapons = list
+	-- Liste de repli (Tools pas encore répliqués) non retenue : la suivante relira le dossier
+	if folder then
+		weapons = list
+	end
 	return list
 end
 
@@ -437,6 +444,31 @@ end
 function MenuScene.onWeaponChanged(callback: (string) -> ())
 	weaponChanged = callback
 end
+
+-- Cette méthode permet de suivre l'inventaire lorsqu'il change (#267, chargement ou debug Studio) : liste refaite, arme
+-- tenue remplacée par la première possédée si elle ne l'est plus, fiche remise à jour (rang et nombre d'armes).
+local function onInventoryChanged()
+	weapons = nil
+	if current == nil then
+		return -- rien d'affiché encore : la liste sera lue à la première demande
+	end
+	local list = listWeapons()
+	local kept = false
+	for _, weapon in list do
+		kept = kept or weapon.key == current
+	end
+	if not kept then
+		local first = list[1]
+		current = if first then first.key else ""
+		if first then
+			holdWeapon(first.key)
+		end
+	end
+	if weaponChanged then
+		weaponChanged(current :: string)
+	end
+end
+LocalInventory.onChanged(onInventoryChanged)
 
 -- Cette méthode permet de lancer la scène (construction au premier appel, flou du fond, caméra, boucle) lorsque le
 -- menu s'affiche.

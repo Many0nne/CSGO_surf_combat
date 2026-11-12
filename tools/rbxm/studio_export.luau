@@ -2,8 +2,8 @@
 -- À exécuter DANS Roblox Studio (mode Edit), pendant que `lune run tools/rbxm/receive.luau` tourne :
 -- via le MCP Studio (`execute_luau`, contexte plugin) ou la barre de commande (celle-ci exige
 -- Game Settings > Security > Allow HTTP Requests). Sérialise chaque viewmodel (ReplicatedStorage.ViewModels.*),
--- chaque Tool (StarterPack.*), chaque map (Workspace.Maps.*) et chaque matière (MaterialService.*, MaterialVariant
--- des maps) en .rbxm et les envoie au serveur local, qui les écrit dans assets/rbx/ViewModels/<Nom>.rbxm,
+-- chaque Tool (ReplicatedStorage.Tools.*), chaque map (Workspace.Maps.*) et chaque matière (MaterialService.*,
+-- MaterialVariant des maps) en .rbxm et les envoie au serveur local, qui les écrit dans assets/rbx/ViewModels/<Nom>.rbxm,
 -- assets/rbx/Tools/<Nom>.rbxm, assets/rbx/Maps/<Nom>.rbxm et assets/rbx/Materials/<Nom>.rbxm.
 -- Ne modifie rien dans la place.
 
@@ -57,7 +57,7 @@ local ok, err = pcall(function()
 	-- Conteneurs exportés : dossier cible, conteneur dans la place, classe attendue des enfants
 	local sources = {
 		{ "ViewModels", game:GetService("ReplicatedStorage"):FindFirstChild("ViewModels"), "Model" },
-		{ "Tools", game:GetService("StarterPack"), "Tool" },
+		{ "Tools", game:GetService("ReplicatedStorage"):FindFirstChild("Tools"), "Tool" },
 		{ "Maps", workspace:FindFirstChild("Maps"), "Model" },
 		{ "Materials", game:GetService("MaterialService"), "MaterialVariant" },
 	}

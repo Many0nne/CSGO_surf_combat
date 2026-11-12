@@ -1,6 +1,6 @@
 -- verify_place.luau
 -- Relit la place produite par `rojo build` et vérifie que les viewmodels (assets/rbx/ViewModels), les Tools
--- (assets/rbx/Tools), la map (assets/rbx/Maps) et ses matières (assets/rbx/Materials) y sont, avec leurs animations,
+-- (assets/rbx/Tools, dans ReplicatedStorage.Tools, StarterPack vide), la map (assets/rbx/Maps) et ses matières (assets/rbx/Materials) y sont, avec leurs animations,
 -- sons, textures, attributs et scripts.
 -- Signale aussi les Tools dont le nom d'arme n'a pas d'entrée dans src/shared/WeaponConfig.luau (avertissement,
 -- sans échec).
@@ -116,13 +116,22 @@ else
 	end
 end
 
+-- Tools des armes (#267) : dans ReplicatedStorage.Tools, donnés par le serveur selon l'inventaire ; le StarterPack reste
+-- vide, sinon Roblox donnerait chaque arme à tout joueur
+for _, child in game.StarterPack:GetChildren() do
+	fail("StarterPack." .. child.Name .. " : le StarterPack doit rester vide (Tools dans ReplicatedStorage.Tools)")
+end
+local toolsFolder = game.ReplicatedStorage:FindFirstChild("Tools")
+if not toolsFolder then
+	fail("ReplicatedStorage.Tools absent")
+end
 for _, name in rbxmNames("assets/rbx/Tools") do
-	local tool = game.StarterPack:FindFirstChild(name)
+	local tool = toolsFolder and toolsFolder:FindFirstChild(name)
 	if not tool or not tool:IsA("Tool") then
-		fail("Tool " .. name .. " absent de StarterPack")
+		fail("Tool " .. name .. " absent de ReplicatedStorage.Tools")
 		continue
 	end
-	print("StarterPack." .. name .. " " .. summarize(tool))
+	print("Tools." .. name .. " " .. summarize(tool))
 	local vmName = tool:GetAttribute("ViewmodelName")
 	if type(vmName) ~= "string" or not (viewModels and viewModels:FindFirstChild(vmName)) then
 		fail(string.format("Tool %s : ViewmodelName=%s sans viewmodel correspondant", name, tostring(vmName)))

@@ -6,7 +6,8 @@ Procédures détaillées pour modifier une arme et publier un asset. Les règles
 
 Les viewmodels et les Tools sont versionnés en `.rbxm` binaires (Git LFS, `assets/rbx/**`) et synchronisés par Rojo :
 une branche peut modifier une arme sans manipulation dans la place. Un fichier = une instance racine, nommée d'après le
-fichier. Rojo gère `ReplicatedStorage.ViewModels` et `StarterPack` : une instance ajoutée à la main dans Studio y est supprimée à la
+fichier. Rojo gère `ReplicatedStorage.ViewModels`, `ReplicatedStorage.Tools` et `StarterPack` (vide depuis #267 : les
+Tools sont donnés par le serveur selon l'inventaire, `InventoryStore`) : une instance ajoutée à la main dans Studio y est supprimée à la
 connexion (patch de rattrapage du plugin, testé), et toute modification faite dans Studio est perdue si elle n'est pas
 réexportée.
 
@@ -20,13 +21,13 @@ sauvegarder la place avant.
 Mettre à jour un `.rbxm` (après modification d'une arme dans Studio, ou pour ajouter une arme) :
 
 0. Plugin Rojo : **Disconnect**, et rester déconnecté jusqu'à la fin de l'export.
-1. Dans Studio (mode Edit), modifier ou ajouter l'instance sous `ReplicatedStorage.ViewModels` ou dans `StarterPack`
+1. Dans Studio (mode Edit), modifier ou ajouter l'instance sous `ReplicatedStorage.ViewModels` ou `ReplicatedStorage.Tools`
    (noms en `[A-Za-z0-9_-]`). Rojo n'écrit jamais vers les fichiers : la modification n'existe que dans Studio.
 2. Depuis la racine du worktree : `lune run tools/rbxm/receive.luau` (serveur local, port fixe 34990, attend Studio ;
    un seul export à la fois, tous worktrees confondus).
 3. Exécuter `tools/rbxm/studio_export.luau` dans Studio : via le MCP (`execute_luau`, contexte Edit, coller le contenu du
    fichier) ou la barre de commande (exige Game Settings > Security > *Allow HTTP Requests*). Il vérifie les noms (un
-   fichier par instance, sans doublon) et que `StarterPack` ne contient que des Tools, sérialise (`SerializationService`)
+   fichier par instance, sans doublon) et que `ReplicatedStorage.Tools` ne contient que des Tools, sérialise (`SerializationService`)
    chaque viewmodel, chaque Tool, la map et ses matières (`MaterialService`, cf. `docs/maps.md`) et les envoie au
    serveur, qui écrit `assets/rbx/ViewModels/<Nom>.rbxm`, `assets/rbx/Tools/<Nom>.rbxm`, `assets/rbx/Maps/<Nom>.rbxm`
    et `assets/rbx/Materials/<Nom>.rbxm`, supprime les `.rbxm` qui n'existent plus dans la place, puis s'arrête. Si l'export
@@ -53,7 +54,8 @@ Notes :
 
 Transition d'une place qui contient déjà ces instances (une fois, pour éviter les doublons et l'ancienne version) :
 1. Studio en mode Edit, plugin Rojo déconnecté. Supprimer `ReplicatedStorage.ViewModels` (le dossier entier) et les Tools
-   de `StarterPack` (`AWP`, `M9Bayonet`).
+   de `StarterPack` (`AWP`, `M9Bayonet` : une place d'avant #267 les y garde encore, le serveur les retire au démarrage
+   avec un warn `[InventoryStore]`).
 2. Connecter le plugin Rojo (port du checkout ou du worktree) : Rojo recrée le dossier et les Tools depuis `assets/rbx/`.
 3. Vérifier qu'il y a un seul exemplaire de chaque, que les MeshParts sont visibles (pas de bloc gris) et qu'une arme
    s'équipe en playtest, puis sauvegarder la place (File > Save to Roblox).
@@ -198,14 +200,16 @@ la config (`IsMelee`), pas par le nom de l'arme ; seuls quelques endroits nommen
 3. **Animations** : `Equip`, `Shoot`, `Shoot2`, `Stab`, `Inspect` (noms lus par `WeaponConfig`), méthode de
    `docs/animations.md` à partir d'une vidéo de référence ; le rig de `assets/m9_viewmodel/` (`rig.json`,
    `build_viewmodel.py`) sert de base. Le coup part au marqueur `Stab Sound`.
-4. **Tool** : copier `StarterPack.M9Bayonet`, attributs `ViewmodelName` (le nouveau viewmodel) et `WeaponName` (la
-   nouvelle entrée de config).
+4. **Tool** : copier `ReplicatedStorage.Tools.M9Bayonet`, attributs `ViewmodelName` (le nouveau viewmodel) et
+   `WeaponName` (la nouvelle entrée de config). Puis l'item dans le catalogue de l'inventaire (`InventoryRules.ITEMS`,
+   id stable `weapon.<nom>`, `tool` = nom du Tool) : sans lui, aucun joueur ne reçoit l'arme (admin compris), et dans
+   `InventoryRules.DEFAULT_ITEMS` si tout joueur doit l'avoir (#267).
 5. **Config** : une entrée dans `WeaponConfig.Weapons` (copier `M9Bayonet` : mêmes dégâts et cadences pour un couteau
    identique en jeu ; refaire `ThirdPerson.Grip` pour le nouveau mesh, `tools/anim/poses3p/`), et une poussée dans
    `DeathRules.PUSH_BY_WEAPON` (sinon `DEFAULT_PUSH`).
 6. **Endroits qui nomment la M9**, à décider selon que le couteau la remplace ou s'y ajoute : `BotCombatRules.KNIFE`
-   (couteau des bots). L'accueil du menu prend tout seul les Tools du `StarterPack` (`MenuScene`, attribut
-   `WeaponName`) et tient un couteau le long du corps (`MenuPoses.Melee`, tenue M2, avec la prise du jeu). Une nouvelle arme à
+   (couteau des bots, pris dans l'inventaire par défaut : Ka-Bar depuis #267). L'accueil du menu prend tout seul les
+   Tools possédés de `ReplicatedStorage.Tools` (`MenuScene`, attribut `WeaponName`) et tient un couteau le long du corps (`MenuPoses.Melee`, tenue M2, avec la prise du jeu). Une nouvelle arme à
    distance demande sa tenue de menu (`MenuPoses`, tenue M1 de `tools/anim/poses3p/poses.js`).
 7. `rojo build` + `tools/rbxm/verify_place.luau` (signale un Tool sans entrée de config), puis le helper de playtest sur
    le nouveau Tool.

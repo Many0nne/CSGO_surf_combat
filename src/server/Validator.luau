@@ -97,12 +97,25 @@ local function isValidTarget(attacker: Participant, targetCharacter: Instance): 
 	return humanoid ~= nil and humanoid.Health > 0
 end
 
+-- Possession d'un Tool par un participant (#267), branchée par init.server (InventoryStore.ownsTool) ; nil : pas de
+-- contrôle (tests qui ne portent pas sur l'inventaire).
+local ownsTool: ((participant: Participant, toolName: string) -> boolean)? = nil
+
+-- Cette méthode permet de brancher le contrôle de possession des armes lorsque le serveur démarre (ou qu'un test le
+-- simule) : une arme en main non possédée ne tire, ne frappe ni ne recharge.
+function Validator.setOwnership(check: ((participant: Participant, toolName: string) -> boolean)?)
+	ownsTool = check
+end
+
 -- Cette méthode permet de lire l'outil en main d'un participant et sa fiche WeaponConfig (attribut WeaponName, sinon
--- nom de l'outil) lorsqu'il attaque ou recharge ; nil sans outil ou sans fiche.
+-- nom de l'outil) lorsqu'il attaque ou recharge ; nil sans outil, sans fiche ou pour un outil non possédé (#267).
 local function weaponInHand(participant: Participant): (Tool?, any)
 	local char = Participants.characterOf(participant)
 	local tool = char and char:FindFirstChildOfClass("Tool")
 	if not tool then
+		return nil, nil
+	end
+	if ownsTool and not ownsTool(participant, tool.Name) then
 		return nil, nil
 	end
 	return tool, WeaponConfig.Weapons[tool:GetAttribute("WeaponName") or tool.Name]

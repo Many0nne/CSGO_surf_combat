@@ -38,7 +38,6 @@ return function(T, Loader)
 		loader = Loader.new({
 			Players = Players,
 			RunService = RunService,
-			StarterPack = {},
 			StarterPlayer = {},
 			CollectionService = {},
 		}, {
@@ -116,7 +115,7 @@ return function(T, Loader)
 	local function giveCombatState(env, participant)
 		local char = makeCharacter(Vector3.zero)
 		local knife = Instance.new("Tool")
-		knife.Name = "M9Bayonet"
+		knife.Name = "KaBar" -- couteau des bots : inventaire par défaut (#267)
 		knife.Parent = char
 		env.Participants.setCharacter(participant, char)
 		local target = makeCharacter(Vector3.new(3, 0, 0))

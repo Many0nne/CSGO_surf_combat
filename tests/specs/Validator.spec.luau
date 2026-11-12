@@ -192,6 +192,9 @@ return function(T, Loader)
 			isReadyToFire = function(attacker, now)
 				return Real.isReadyToFire(participantOf(attacker), now)
 			end,
+			-- Possession des armes (#267) branchée comme dans init.server (InventoryStore.ownsTool) : check reçoit le
+			-- participant et le nom du Tool
+			setOwnership = Real.setOwnership,
 		}
 		local function makePlayer(position: Vector3, weapon: string?, health: number?, facing: Vector3?)
 			nextUserId += 1
@@ -349,6 +352,55 @@ return function(T, Loader)
 			local a, b = makePlayer(Vector3.zero), makePlayer(Vector3.new(5, 0, 0))
 			equip(a, "Couteau", "M9Bayonet")
 			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), 50)
+		end)
+	end)
+
+	T.describe("Validator : armes possédées (#267)", function()
+		-- Cette méthode permet de brancher l'inventaire par défaut (AWP et Ka-Bar) pour tous, comme InventoryStore pour
+		-- un joueur non admin et pour un bot, lorsqu'un test porte sur la possession.
+		local function defaultInventory(Validator)
+			local InventoryRules = Loader.new({}):require("src/shared/InventoryRules")
+			local owned = InventoryRules.resolve(nil, false)
+			Validator.setOwnership(function(_, toolName)
+				return InventoryRules.ownsTool(owned, toolName)
+			end)
+		end
+
+		T.it("refuse le coup d'un couteau non possédé, accepte celui d'un couteau possédé", function()
+			local Validator, makePlayer = setup()
+			defaultInventory(Validator)
+			local b = makePlayer(Vector3.new(5, 0, 0))
+			T.expectEqual(
+				Validator.authorizeMelee(makePlayer(Vector3.zero, "M9Bayonet"), b.Character, "primary", 0),
+				nil
+			)
+			T.expectEqual(Validator.authorizeMelee(makePlayer(Vector3.zero, "KaBar"), b.Character, "primary", 0), 50)
+		end)
+
+		T.it("refuse tir et relais d'une arme à distance non possédée", function()
+			local Validator, makePlayer = setup()
+			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(100, 0, 0))
+			Validator.setOwnership(function()
+				return false
+			end)
+			T.expectEqual(Validator.isReadyToFire(a, 0), false)
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), 0), nil)
+		end)
+
+		T.it("lit la possession sur le nom du Tool, pas sur l'attribut WeaponName", function()
+			local Validator, makePlayer = setup()
+			defaultInventory(Validator)
+			local a, b = makePlayer(Vector3.zero), makePlayer(Vector3.new(5, 0, 0))
+			-- Tool hors catalogue qui se dirait Ka-Bar : non possédé
+			equip(a, "Couteau", "KaBar")
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), nil)
+		end)
+
+		T.it("un bot armé de l'inventaire par défaut tire toujours", function()
+			local Validator, makePlayer, makeBot = setup()
+			defaultInventory(Validator)
+			local a, bot = makePlayer(Vector3.new(100, 0, 0)), makeBot(Vector3.zero, "AWP")
+			T.expectEqual(Validator.authorizeHitscan(bot, a.Character, rootOf(a.Character), 0), 115)
 		end)
 	end)
 

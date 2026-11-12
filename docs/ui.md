@@ -69,8 +69,9 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   conservé) ; une catégorie sans réglage n'est pas créée.
   TOUCHES (#100) : chaque ligne nomme l'action et la valeur donne le geste (choix de l'utilisateur : « Arme suivante :
   MOLETTE BAS », pas « Molette vers le haut : PRÉCÉDENTE »). « Arme suivante » (MOLETTE BAS par défaut) et « Arme
-  précédente » (MOLETTE HAUT) portent le même réglage et se suivent ; AUCUNE coupe la molette. Puis une ligne par arme du
-  StarterPack (« Arme 1 · AWP », 7 au plus, pas de défilement). On clique sur la touche, elle affiche « APPUIE… », la
+  précédente » (MOLETTE HAUT) portent le même réglage et se suivent ; AUCUNE coupe la molette. Puis une ligne par arme de
+  l'inventaire du joueur (#267, « Arme 1 · AWP », 7 au plus, pas de défilement ; lignes renommées ou masquées quand
+  l'inventaire arrive ou change). On clique sur la touche, elle affiche « APPUIE… », la
   touche suivante est prise ; Échap ou un clic ailleurs annule. Une touche d'un autre emplacement est échangée ; une
   touche du jeu (déplacement, R, F, P, F3/F4…) ou hors liste (Espace, Maj, Tab…) est refusée par un message en rouge
   d'impact sur la ligne. Seules les lettres, les chiffres du haut et les touches F sont proposées : libellés courts dans
@@ -328,7 +329,8 @@ workspace pendant la partie) :
   travers du torse, canon vers le haut à gauche du personnage, avec sa propre prise ; couteau le long du corps, lame
   vers le bas, avec la prise du jeu (même inclinaison que la garde C1). Articulations posées par `C0` (aucune piste ne
   tourne sur ce personnage), respiration de la taille (`breathAngle`).
-- Armes : Tools du `StarterPack` (attribut `WeaponName`), dans l'ordre alphabétique de la barre d'armes. Molette,
+- Armes : Tools possédés (#267, `LocalInventory`) de `ReplicatedStorage.Tools` (attribut `WeaponName`), dans l'ordre
+  alphabétique de la barre d'armes. Molette,
   touches 1-9 et flèches ‹ › changent l'arme tenue ; la fiche suit.
 - Caméra : fixe, FOV vertical 40° en 16:9 (ouvert sur un écran plus étroit, `fitFov`), léger suivi du curseur
   (`aimAngles`). Flou du fond : `DepthOfFieldEffect` posé sous la caméra le temps du menu.

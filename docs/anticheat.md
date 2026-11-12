@@ -27,6 +27,7 @@ envoyant des données plausibles. Là, on ne peut que détecter statistiquement,
 | Position | Forme (Vector3 et angle finis, coordonnées ≤ 1e5, accroupi booléen), personnage vivant, seau de distance (450 studs/s soutenus, client plafonné à 420 horizontaux, silence plafonné), refus journalisé et corrigé (#172) ; noclip et vol journalisés (#177, journal seul), joueur silencieux au-dessus du vide déclaré tombé | `src/server/CharacterSync.luau` (`refuse`, `judgeGuard`, `onClientPosition`), `src/shared/CharacterSyncRules.luau` (`tryMove`), `src/shared/MovementGuardRules.luau` |
 | Réglages | Réglages entièrement assainis par `PlayerSettings.sanitize`, une écriture DataStore au plus toutes les 10 s | `src/server/SettingsStore.luau` (`onSaveSettings`) |
 | Feedback | Type `string`, longueur 10 à 500, délai de 60 s après un envoi réussi, 5 envois par semaine (DataStore) | `src/server/FeedbackService.luau` (`init`, `COOLDOWN`, `consumeWeeklyQuota`) |
+| Inventaire (#267) | Le serveur seul donne les Tools : `StarterPack` vide, sac rempli des seuls Tools possédés (inventaire par défaut, sauvegardé, admin) à chaque apparition ; un Tool non possédé arrivé en main est journalisé (`Inventory`, faible) et retiré, sans equip ni modèle 3P ; une arme en main non possédée ne tire (touche, relais `ShotFired`), ne frappe ni ne recharge (`weaponInHand`, joueurs et bots). L'attribut `OwnedItems` du Player est informatif, jamais relu | `src/server/InventoryStore.luau` (`ownsTool`, `syncTools`), `trackWeapon3P` de `src/server/init.server.luau`, `Validator.setOwnership` |
 | Rôles (#266) | Rôle décidé par le serveur (listes d'UserId + `game.CreatorId`), jamais lu du client ; l'attribut `Role` du Player est informatif, les contrôles passent par `Roles.hasRole` | `src/server/Roles.luau` (`hasRole`) |
 | Debug | Remote `DebugPlaytest` créé seulement dans Studio | `src/server/DebugPlaytest.luau` (`DebugPlaytest.init`) |
 | Relais des tirs (son et recul 3P chez les autres) | Tireur vivant, arme à distance en main prête (equip, chargeur), forme, origine près du tireur, cadence de l'arme (#156) ; tir accepté compté dans le chargeur (#215) | `src/server/ShotRelayRules.luau`, `Validator.isReadyToFire`, `Validator.noteShotFired`, `relayShot` de `src/server/init.server.luau` |
@@ -1075,7 +1076,9 @@ CheatLog.summary(participant.id) -- bilan (compteurs, score présent, pire viola
 - **Catégories** (`CheatLog.Category`) : `RemoteRate`, `RemoteArgs` (garde des remotes), et réservées aux parades
   suivantes : `Spawn` (#171, branchée : refus de `RequestSpawn`), `Movement` (#172), `Hitscan` (#174, branchée : contrôles du tir ; #175 : equip et chargeur ; #216 : touche orpheline `shotLink`), `Melee` (#175, branchée : equip du couteau ; #176 : orientation et ligne de vue), `Aim` (#178, branchée :
   statistiques de visée signalées, toujours faible ; un relevé, pas une violation : hors du total, du score, de la
-  « pire » violation et du warn limité, mais compté dans sa catégorie et suffisant pour le résumé). Une nouvelle parade
+  « pire » violation et du warn limité, mais compté dans sa catégorie et suffisant pour le résumé), `Inventory` (#267,
+  branchée : Tool non possédé arrivé en main, faible : notre client ne peut pas en obtenir, c'est un écart serveur à
+  lire plutôt qu'une triche). Une nouvelle parade
   ajoute sa catégorie à `CheatLog.Category` et ici, pour garder des noms stables dans le journal.
 - `warn` `[CheatLog]` limité à un toutes les `WARN_INTERVAL` (2 s) par joueur, le suivant dit combien ont été tus ;
   détail coupé à `MAX_DETAIL` octets sans couper de caractère, octets non UTF-8 remplacés par `?` (il peut contenir une

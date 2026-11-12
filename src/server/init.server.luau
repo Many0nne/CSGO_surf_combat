@@ -16,6 +16,7 @@ local SpawnManager = require(script.SpawnManager)
 local RoundManager = require(script.RoundManager)
 local StatsStore = require(script.StatsStore)
 local SettingsStore = require(script.SettingsStore)
+local InventoryStore = require(script.InventoryStore)
 local Roles = require(script.Roles)
 local Validator = require(script.Validator)
 local Participants = require(script.Participants)
@@ -73,6 +74,9 @@ local movementCorrectionRmt = makeRemote(N.MOVEMENT_CORRECTION)
 CheatLog.init()
 StatsStore.init()
 SettingsStore.init(getSettingsRmt, saveSettingsRmt)
+-- Inventaire (#267) : StarterPack vidé, Tools donnés selon l'inventaire, armes non possédées refusées par le Validator
+InventoryStore.init()
+Validator.setOwnership(InventoryStore.ownsTool)
 FeedbackService.init(sendFeedbackRmt, feedbackAckRmt)
 
 RoundManager.init({
@@ -124,20 +128,33 @@ local function trackWeapon3P(participant: Participants.Participant, char: Model)
 	local function tracksEquip(): boolean
 		return not participant.isBot and Participants.characterOf(participant) == char
 	end
+	-- Cette méthode permet de suivre un outil arrivé en main (equip) lorsqu'il est vu par le serveur ; un outil non
+	-- possédé par un joueur (#267) est journalisé et retiré, sans equip ni modèle 3P.
+	local function onToolAdded(tool: Tool)
+		if not participant.isBot and not InventoryStore.ownsTool(participant, tool.Name) then
+			CheatLog.report(
+				participant,
+				CheatLog.Category.INVENTORY,
+				CheatLog.Severity.LOW,
+				"outil non possédé en main : " .. tool.Name
+			)
+			-- Différé : détruire un enfant pendant son ChildAdded échoue (parent en cours de changement)
+			task.defer(tool.Destroy, tool)
+			return
+		end
+		if tracksEquip() then
+			Validator.noteEquip(participant, tool, os.clock())
+		end
+		onToolEquipped(char, tool)
+	end
 	for _, child in char:GetChildren() do
 		if child:IsA("Tool") then
-			if tracksEquip() then
-				Validator.noteEquip(participant, child, os.clock())
-			end
-			onToolEquipped(char, child)
+			onToolAdded(child)
 		end
 	end
 	char.ChildAdded:Connect(function(child)
 		if child:IsA("Tool") then
-			if tracksEquip() then
-				Validator.noteEquip(participant, child, os.clock())
-			end
-			onToolEquipped(char, child)
+			onToolAdded(child)
 		end
 	end)
 	char.ChildRemoved:Connect(function(child)
@@ -366,6 +383,8 @@ local function onParticipantCharacter(participant: Participants.Participant, cha
 end
 
 local function onCharacterAdded(player: Player, char: Model)
+	-- Sac rempli des seuls Tools possédés (#267), à chaque apparition : le StarterPack est vide
+	task.spawn(InventoryStore.syncTools, player)
 	onParticipantCharacter(Participants.fromPlayer(player), char, function()
 		-- Jamais par-dessus un personnage vivant ni un spawn en vol (#171)
 		SpawnManager.respawn(player)
@@ -611,6 +630,9 @@ end
 
 local function setupPlayer(player: Player)
 	Roles.setup(player)
+	-- Après les rôles : l'inventaire d'un admin en dépend (#267)
+	InventoryStore.setup(player)
+	task.spawn(InventoryStore.load, player)
 	task.spawn(StatsStore.load, player)
 	task.spawn(SettingsStore.load, player)
 	RoundManager.addParticipant(Participants.fromPlayer(player))
