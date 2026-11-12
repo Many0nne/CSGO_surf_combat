@@ -57,7 +57,7 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   skins possédés de l'arme équipée) ; titres ambrés soulignés d'un filet, choix en texte alignés à droite, l'équipé en
   os gras précédé de « ÉQUIPÉ » ambré. Recliquer l'emplacement ou changer d'onglet ferme la liste. Le personnage tient
   l'arme survolée (emplacement, arme ou skin), sinon l'arme équipée de l'emplacement choisi (touches des emplacements
-  réglées dans TOUCHES, 1 et 2 par défaut ; la molette alterne) ; la fiche suit. Les deux attributs posés ensemble par
+  réglées dans TOUCHES, 1 et 2 par défaut ; la molette alterne, dans le sens réglé, coupée sur AUCUNE) ; la fiche suit. Les deux attributs posés ensemble par
   le serveur ne déclenchent qu'une mise à jour (`LocalInventory.onChanged`, différé). Un clic équipe : remote `EquipItem`, l'écran ne change qu'à la réponse du serveur
   (attribut `EquippedItems`), pas d'affichage optimiste. **Seuls les items possédés apparaissent**, jamais grisés.
   Choix de l'utilisateur : liste empilée plutôt qu'en deux temps (armes puis skins avec retour « ‹ ARMES »), 1/2 et

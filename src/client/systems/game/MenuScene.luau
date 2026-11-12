@@ -73,6 +73,7 @@ local motors: { [string]: Motor6D } = {}
 local baseC0: { [string]: CFrame } = {}
 local pose: { [string]: CFrame } = {}
 local weapons: { Weapon }? = nil
+local weaponsVersion = -1 -- LocalInventory.version() de la liste retenue
 local current: string? = nil
 local running = false
 local building = false
@@ -90,9 +91,11 @@ local weaponChanged: ((string) -> ())?
 -- la fiche en a besoin ; repli sur les armes possédées de WeaponConfig, sans la retenir, si le dossier des Tools n'est pas
 -- encore répliqué.
 local function listWeapons(): { Weapon }
-	if weapons then
+	-- Liste retenue périmée dès que l'inventaire change, même si onInventoryChanged (différé) n'est pas encore passé
+	if weapons and weaponsVersion == LocalInventory.version() then
 		return weapons
 	end
+	weaponsVersion = LocalInventory.version()
 	local list: { Weapon } = {}
 	local tools = {}
 	local folder = ReplicatedStorage:FindFirstChild("Tools")
@@ -405,16 +408,10 @@ end
 -- Cette méthode permet de mettre dans les mains du personnage l'arme dont le Tool porte ce nom lorsque l'écran
 -- d'équipement (#280) montre une arme équipée ou survolée ; sans effet si elle n'est pas possédée.
 function MenuScene.holdTool(toolName: string)
-	-- Deux passes : la liste retenue peut dater d'avant un changement d'inventaire pas encore vu ici
-	for pass = 1, 2 do
-		for _, weapon in listWeapons() do
-			if weapon.tool == toolName then
-				MenuScene.setWeapon(weapon.key)
-				return
-			end
-		end
-		if pass == 1 then
-			weapons = nil
+	for _, weapon in listWeapons() do
+		if weapon.tool == toolName then
+			MenuScene.setWeapon(weapon.key)
+			return
 		end
 	end
 end

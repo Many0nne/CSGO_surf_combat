@@ -78,7 +78,7 @@ StatsStore.init()
 SettingsStore.init(getSettingsRmt, saveSettingsRmt)
 -- Inventaire (#267) : StarterPack vidé, Tools donnés selon l'équipement (#280), armes non possédées refusées par le
 -- Validator
-InventoryStore.init(equipItemRmt)
+InventoryStore.init(equipItemRmt, SpawnManager.isSpawning)
 Validator.setOwnership(InventoryStore.ownsTool)
 FeedbackService.init(sendFeedbackRmt, feedbackAckRmt)
 

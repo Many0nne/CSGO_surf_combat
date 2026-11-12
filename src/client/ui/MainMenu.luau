@@ -398,7 +398,14 @@ local function rebuildList()
 	for _, child in list:GetChildren() do
 		child:Destroy()
 	end
+	-- Les lignes survolées disparaissent ; un emplacement survolé à gauche garde son arme en main
 	hoverTool = nil
+	for index, view in slotViews do
+		if view.hovering then
+			local weapon = equippedAt(index)
+			hoverTool = weapon and weapon.tool
+		end
+	end
 	local slotName = openSlot and InventoryRules.SLOTS[openSlot]
 	list.Visible = slotName ~= nil
 	listScrim.Visible = slotName ~= nil
@@ -635,7 +642,11 @@ local function onWeaponInput(input: InputObject, processed: boolean)
 		return
 	end
 	if input.UserInputType == Enum.UserInputType.MouseWheel then
-		focusSlot(Rules.cycleIndex(focusedSlot, if input.Position.Z > 0 then -1 else 1, #InventoryRules.SLOTS))
+		-- Sens réglé par le joueur (Réglages > TOUCHES), comme en partie ; AUCUNE coupe la molette ici aussi
+		local step = PlayerSettings.wheelStep(LocalSettings.get().wheel, input.Position.Z)
+		if step then
+			focusSlot(Rules.cycleIndex(focusedSlot, step, #InventoryRules.SLOTS))
+		end
 	elseif input.UserInputType == Enum.UserInputType.Keyboard then
 		local index = PlayerSettings.slotForKey(LocalSettings.get().slotKeys, input.KeyCode.Name)
 		if index and InventoryRules.SLOTS[index] then

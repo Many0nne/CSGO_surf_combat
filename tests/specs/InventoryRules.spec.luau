@@ -390,6 +390,15 @@ return function(T, Loader)
 			local replaced = Rules.mergeForSave(old, {}, { knife = { weapon = "weapon.kabar" } })
 			assert(replaced and replaced.equipped)
 			T.expectEqual(replaced.equipped.knife.weapon, "weapon.kabar")
+			-- Emplacement d'une version plus récente (même schéma) : recopié, pas effacé
+			local future = Rules.mergeForSave(
+				{ schemaVersion = 1, equipped = { pistol = { weapon = "weapon.deagle" } } },
+				{},
+				{ knife = { weapon = "weapon.kabar" } }
+			)
+			assert(future and future.equipped)
+			T.expectEqual(future.equipped.pistol.weapon, "weapon.deagle")
+			T.expectEqual(future.equipped.knife.weapon, "weapon.kabar")
 			-- Session qui n'a choisi que le sniper : le couteau écrit par un autre serveur reste
 			local partial = Rules.mergeForSave(old, {}, { sniper = { weapon = "weapon.awp" } })
 			assert(partial and partial.equipped)

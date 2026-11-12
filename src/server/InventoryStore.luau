@@ -55,7 +55,11 @@ local profiles: { [Player]: Profile } = {}
 local savesInFlight = 0
 -- Sauvegardes programmées plus tard (espacement, nouvel essai), lancées tout de suite par BindToClose : le joueur peut
 -- être déjà parti (plus dans `profiles`)
-local pendingSaves: { [Profile]: Player } = {}
+local pendingSaves: { [Profile]: { player: Player, due: number } } = {}
+-- Chargement d'un personnage en vol (SpawnManager.isSpawning), branché par init
+local spawningCheck: (Player) -> boolean = function(_player: Player)
+	return false
+end
 -- Arrêt du serveur en cours (BindToClose) : une sauvegarde en échec est retentée tout de suite, pas après un délai
 local closing = false
 -- Inventaire des bots (#267) : celui par défaut, jamais sauvegardé
@@ -189,16 +193,19 @@ end
 
 local saveProfile: (Player, Profile) -> ()
 
--- Cette méthode permet de programmer une seule écriture d'un profil plus tard (espacée d'EQUIP_SAVE_SPACING depuis la
--- précédente, ou après `delay`) lorsqu'un changement ne peut pas partir tout de suite ; BindToClose la lance d'avance.
+-- Cette méthode permet de programmer une seule écriture d'un profil (espacée d'EQUIP_SAVE_SPACING, ou après `delay`),
+-- l'échéance la plus proche l'emportant, lorsqu'un changement ne peut pas partir tout de suite ; BindToClose l'avance.
 local function queueSave(player: Player, profile: Profile, delay: number?)
-	if pendingSaves[profile] then
+	local wait = delay or math.max(0, profile.lastSaveAt + EQUIP_SAVE_SPACING - os.clock())
+	local due = os.clock() + wait
+	local current = pendingSaves[profile]
+	if current and current.due <= due then
 		return
 	end
-	pendingSaves[profile] = player
-	local wait = delay or math.max(0, profile.lastSaveAt + EQUIP_SAVE_SPACING - os.clock())
+	local entry = { player = player, due = due }
+	pendingSaves[profile] = entry
 	task.delay(wait, function()
-		if pendingSaves[profile] then
+		if pendingSaves[profile] == entry then
 			pendingSaves[profile] = nil
 			saveProfile(player, profile)
 		end
@@ -357,10 +364,10 @@ function InventoryStore.equip(player: Player, slot: any, weaponId: any, skinId: 
 	if not (profile and profile.loaded) then
 		return false, "loading"
 	end
-	-- Personnage en jeu, vivant ou corps pas encore détruit : on ne change d'équipement qu'au menu (le personnage y est
-	-- détruit, `LeaveRound`). Limite : pendant la réapparition, corps détruit, un client modifié passe (docs/anticheat.md)
+	-- Personnage en jeu (vivant ou corps pas encore détruit) ou en chargement : on ne change d'équipement qu'au menu.
+	-- Limite : mort en partie, corps détruit, avant la réapparition, un client modifié passe (docs/anticheat.md)
 	local character = player.Character
-	if character and character.Parent then
+	if (character and character.Parent) or spawningCheck(player) then
 		return false, "in_round"
 	end
 	local equipped, reason = InventoryRules.equip(profile.equipped or {}, profile.owned, slot, weaponId, skinId)
@@ -395,8 +402,9 @@ local SUSPECT_REFUSALS = { unknown = true, wrong_slot = true, not_owned = true, 
 
 -- Cette méthode permet de brancher le remote d'équipement (#280), le départ des joueurs et l'arrêt du serveur lorsque le
 -- serveur démarre ; à l'arrêt, il attend les sauvegardes en vol (CLOSE_WAIT au plus).
-function InventoryStore.init(equipRemote: RemoteEvent)
+function InventoryStore.init(equipRemote: RemoteEvent, isSpawning: (Player) -> boolean)
 	clearStarterPack()
+	spawningCheck = isSpawning
 	equipRemote.OnServerEvent:Connect(function(player: Player, slot: any, weaponId: any, skinId: any)
 		-- Garde commune (#170) : débit, emplacement connu, ids bornés
 		if not CheatLog.admit(player, equipRemote.Name, slot, weaponId, skinId) then
@@ -422,9 +430,9 @@ function InventoryStore.init(equipRemote: RemoteEvent)
 	game:BindToClose(function()
 		closing = true
 		-- Écritures programmées plus tard (joueurs partis compris) : lancées maintenant
-		for profile, player in pendingSaves do
+		for profile, entry in pendingSaves do
 			pendingSaves[profile] = nil
-			task.spawn(saveProfile, player, profile)
+			task.spawn(saveProfile, entry.player, profile)
 		end
 		for player, profile in profiles do
 			task.spawn(saveProfile, player, profile)

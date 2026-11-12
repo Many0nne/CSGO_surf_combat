@@ -166,7 +166,7 @@ function InventoryRules.payload(
 	return {
 		schemaVersion = InventoryRules.SCHEMA_VERSION,
 		items = table.clone(stored),
-		equipped = if hasEquipped then InventoryRules.sanitizeEquipped(equipped) else nil,
+		equipped = if hasEquipped then table.clone(equipped :: Equipped) else nil,
 	}
 end
 
@@ -182,8 +182,18 @@ function InventoryRules.mergeForSave(
 	end
 	local merged = table.clone(if type(old) == "table" and type(old.items) == "table" then old.items else {})
 	table.move(stored, 1, #stored, #merged + 1, merged)
-	-- Un emplacement que la session n'a pas choisi garde ce qu'un autre serveur a pu écrire entre-temps
-	local keptEquipped = InventoryRules.sanitizeEquipped(if type(old) == "table" then old.equipped else nil)
+	-- Un emplacement que la session n'a pas choisi garde ce qu'un autre serveur a pu écrire entre-temps ; un emplacement
+	-- inconnu de cette version (ajouté plus tard) est recopié tel quel, pas effacé
+	local oldEquipped = if type(old) == "table" and type(old.equipped) == "table" then old.equipped else {}
+	local keptEquipped: Equipped = {}
+	for key, value in oldEquipped do
+		if type(key) == "string" and not slotIndex[key] then
+			keptEquipped[key] = value
+		end
+	end
+	for slot, loadout in InventoryRules.sanitizeEquipped(oldEquipped) do
+		keptEquipped[slot] = loadout
+	end
 	for slot, loadout in InventoryRules.sanitizeEquipped(equipped) do
 		keptEquipped[slot] = loadout
 	end

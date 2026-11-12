@@ -17,15 +17,26 @@ local player = Players.LocalPlayer
 -- Attributs décodés, gardés jusqu'à leur prochain changement : l'accueil les relit à chaque survol
 local ownedCache: InventoryRules.Owned? = nil
 local equippedCache: InventoryRules.Equipped? = nil
+-- Numéro de l'inventaire possédé, augmenté à chaque changement : les listes gardées ailleurs (MenuScene) s'y comparent
+local ownedVersion = 0
 
--- Cette méthode permet d'oublier les attributs décodés lorsque l'un d'eux change (connexion posée au chargement, avant
--- celles des abonnés).
-local function invalidate()
+-- Cette méthode permet d'oublier l'inventaire décodé (et l'équipement, qui en dépend) lorsque `OwnedItems` change.
+local function invalidateOwned()
 	ownedCache = nil
 	equippedCache = nil
+	ownedVersion += 1
 end
-player:GetAttributeChangedSignal(InventoryRules.ATTRIBUTE):Connect(invalidate)
-player:GetAttributeChangedSignal(InventoryRules.EQUIPPED_ATTRIBUTE):Connect(invalidate)
+-- Cette méthode permet d'oublier l'équipement décodé lorsque `EquippedItems` change.
+local function invalidateEquipped()
+	equippedCache = nil
+end
+player:GetAttributeChangedSignal(InventoryRules.ATTRIBUTE):Connect(invalidateOwned)
+player:GetAttributeChangedSignal(InventoryRules.EQUIPPED_ATTRIBUTE):Connect(invalidateEquipped)
+
+-- Cette méthode permet de lire le numéro de l'inventaire possédé lorsqu'une liste gardée doit savoir si elle est périmée.
+function LocalInventory.version(): number
+	return ownedVersion
+end
 
 -- Cette méthode permet de lire les items possédés lorsqu'une liste du menu se construit.
 function LocalInventory.owned(): InventoryRules.Owned
