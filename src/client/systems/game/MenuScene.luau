@@ -87,7 +87,8 @@ local weaponChanged: ((string) -> ())?
 
 -- Cette méthode permet de lister les armes du menu (Tools possédés de ReplicatedStorage.Tools connus de WeaponConfig,
 -- par attribut WeaponName ou à défaut par nom, dans l'ordre alphabétique de la barre d'armes, #267) lorsque la scène ou
--- la fiche en a besoin ; repli sur les armes possédées de WeaponConfig si le dossier des Tools est absent.
+-- la fiche en a besoin ; repli sur les armes possédées de WeaponConfig, sans la retenir, si le dossier des Tools n'est pas
+-- encore répliqué.
 local function listWeapons(): { Weapon }
 	if weapons then
 		return weapons
@@ -121,7 +122,10 @@ local function listWeapons(): { Weapon }
 			return a.key < b.key
 		end)
 	end
-	weapons = list
+	-- Liste de repli (Tools pas encore répliqués) non retenue : la suivante relira le dossier
+	if folder then
+		weapons = list
+	end
 	return list
 end
 

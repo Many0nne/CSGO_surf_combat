@@ -151,6 +151,16 @@ return function(T, Loader)
 			T.expectEqual(table.concat(written.items, ","), "weapon.m9bayonet")
 		end)
 
+		T.it("sauvegarde : aucun plafond, les ids enregistrés au-delà de MAX_STORED sont gardés", function()
+			local old = {}
+			for i = 1, Rules.MAX_STORED + 20 do
+				table.insert(old, string.format("skin.x%04d", i))
+			end
+			local written = Rules.mergeForSave({ schemaVersion = 1, items = old }, { "weapon.m9bayonet" })
+			T.expectEqual(#written.items, Rules.MAX_STORED + 21)
+			T.expect(table.find(written.items, "weapon.m9bayonet") ~= nil, "nouvel id écrit")
+		end)
+
 		T.it("sauvegarde : premier enregistrement, et annulée sur un format inconnu ou plus récent", function()
 			T.expectEqual(table.concat(Rules.mergeForSave(nil, { "weapon.kabar" }).items, ","), "weapon.kabar")
 			T.expectEqual(Rules.mergeForSave({ schemaVersion = Rules.SCHEMA_VERSION + 1, items = {} }, {}), nil)
@@ -190,9 +200,13 @@ return function(T, Loader)
 			local text = Rules.encode(owned)
 			T.expectEqual(text, "weapon.awp,weapon.kabar,weapon.m9bayonet")
 			T.expectEqual(table.concat(ids(Rules.decode(text)), ","), text)
-			T.expectEqual(table.concat(ids(Rules.decode("weapon.awp,inconnu")), ","), "weapon.awp")
+			T.expectEqual(table.concat(ids(Rules.decode("weapon.m9bayonet,inconnu")), ","), text)
 			T.expectEqual(table.concat(ids(Rules.decode(nil)), ","), "weapon.awp,weapon.kabar")
-			T.expectEqual(#ids(Rules.decode("")), 0)
+			T.expectEqual(
+				table.concat(ids(Rules.decode("")), ","),
+				"weapon.awp,weapon.kabar",
+				"défaut toujours possédé"
+			)
 		end)
 	end)
 end

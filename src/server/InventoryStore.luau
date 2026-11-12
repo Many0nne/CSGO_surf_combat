@@ -22,6 +22,7 @@ local Roles = require(ServerScriptService.Server.Roles)
 local DEBUG_ATTRIBUTE = "DebugInventory"
 local BACKPACK_WAIT = 5 -- s d'attente maximale du sac d'un personnage qui vient d'apparaître
 local CLOSE_WAIT = 25 -- s d'attente maximale des sauvegardes en vol à l'arrêt du serveur (budget Roblox : 30 s)
+local SAVE_RETRY_DELAY = 60 -- s avant un nouvel essai d'une sauvegarde en échec (panne passagère du DataStore)
 
 -- owned : items possédés, recalculés à chaque changement (setup, chargement, déblocage, debug) et lus à chaque tir
 type Profile = {
@@ -175,7 +176,13 @@ local function saveProfile(player: Player, profile: Profile)
 	profile.saving = false
 	if not ok then
 		profile.dirty = true
-		warn("[InventoryStore] sauvegarde impossible pour", player.Name)
+		warn("[InventoryStore] sauvegarde impossible pour", player.Name, "— nouvel essai dans", SAVE_RETRY_DELAY, "s")
+		task.delay(SAVE_RETRY_DELAY, function()
+			-- Joueur parti entre-temps : son départ a déjà retenté l'écriture
+			if profiles[player] == profile then
+				saveProfile(player, profile)
+			end
+		end)
 	elseif profile.dirty then
 		saveProfile(player, profile)
 	end

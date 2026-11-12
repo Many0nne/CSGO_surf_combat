@@ -38,8 +38,13 @@ InventoryRules.ITEMS = {
 InventoryRules.DEFAULT_ITEMS = { "weapon.awp", "weapon.kabar" }
 
 local byId: { [string]: Item } = {}
+-- Id de l'arme dont le Tool porte ce nom : la possession d'un Tool se lit sans parcourir le catalogue (tir, equip)
+local weaponIdByTool: { [string]: string } = {}
 for _, entry in InventoryRules.ITEMS do
 	byId[entry.id] = entry
+	if entry.type == "weapon" and entry.tool then
+		weaponIdByTool[entry.tool] = entry.id
+	end
 end
 
 -- Cette méthode permet de lire la fiche d'un item du catalogue par son id lorsqu'un système en a besoin ; nil si inconnu.
@@ -54,16 +59,18 @@ function InventoryRules.isValidId(id: any): boolean
 end
 
 -- Cette méthode permet d'assainir les ids sauvegardés lorsqu'ils sont relus du DataStore : chaînes valides seulement,
--- sans doublon, triées, MAX_STORED au plus. Un id absent du catalogue est gardé (item retiré, ou ajouté par une version
--- plus récente du jeu) pour ne jamais le perdre à la sauvegarde suivante ; il n'ouvre rien tant qu'il est inconnu.
-function InventoryRules.sanitizeStored(raw: any): { string }
+-- sans doublon, triées, `limit` au plus (MAX_STORED par défaut : borne de la session, jamais appliquée à l'écriture).
+-- Un id absent du catalogue est gardé (item retiré, ou ajouté par une version plus récente du jeu) pour ne jamais le
+-- perdre à la sauvegarde suivante ; il n'ouvre rien tant qu'il est inconnu.
+function InventoryRules.sanitizeStored(raw: any, limit: number?): { string }
 	local ids: { string } = {}
 	if type(raw) ~= "table" then
 		return ids
 	end
+	local max = limit or InventoryRules.MAX_STORED
 	local seen: { [string]: boolean } = {}
 	for _, id in ipairs(raw) do
-		if #ids >= InventoryRules.MAX_STORED then
+		if #ids >= max then
 			break
 		end
 		if InventoryRules.isValidId(id) and not seen[id] then
@@ -109,18 +116,15 @@ end
 
 -- Cette méthode permet de calculer la valeur écrite par UpdateAsync lorsqu'un inventaire est sauvegardé : ids déjà
 -- enregistrés (autre serveur, sauvegarde en retard) réunis avec ceux de la session, un inventaire ne faisant que
--- grandir. nil (écriture annulée) si l'enregistrement est d'un format que cette version ne sait pas réécrire.
+-- grandir. nil (écriture annulée) si l'enregistrement est d'un format que cette version ne sait pas réécrire. Sans
+-- plafond : la borne MAX_STORED de la session ne doit pas effacer les ids enregistrés au-delà.
 function InventoryRules.mergeForSave(old: any, stored: { string }): { schemaVersion: number, items: { string } }?
 	if not isWritable(old) then
 		return nil
 	end
-	local merged = InventoryRules.sanitizeStored(if type(old) == "table" then old.items else nil)
-	for _, id in stored do
-		if InventoryRules.isValidId(id) and not table.find(merged, id) then
-			table.insert(merged, id)
-		end
-	end
-	return InventoryRules.payload(InventoryRules.sanitizeStored(merged))
+	local merged = table.clone(if type(old) == "table" and type(old.items) == "table" then old.items else {})
+	table.move(stored, 1, #stored, #merged + 1, merged)
+	return InventoryRules.payload(InventoryRules.sanitizeStored(merged, math.huge))
 end
 
 -- Cette méthode permet de calculer les items possédés lorsqu'un système serveur en a besoin : inventaire par défaut,
@@ -148,12 +152,8 @@ end
 -- Cette méthode permet de savoir si un Tool est possédé (arme du catalogue dont le Tool porte ce nom) lorsque le serveur
 -- distribue les outils ou valide un equip, un tir ou un coup ; un Tool hors catalogue n'est jamais possédé.
 function InventoryRules.ownsTool(owned: Owned, toolName: string): boolean
-	for _, entry in InventoryRules.ITEMS do
-		if entry.type == "weapon" and entry.tool == toolName and owned[entry.id] then
-			return true
-		end
-	end
-	return false
+	local id = weaponIdByTool[toolName]
+	return id ~= nil and owned[id] == true
 end
 
 -- Cette méthode permet de lister les noms des Tools possédés, triés comme la barre d'armes, lorsque le serveur remplit
@@ -220,13 +220,13 @@ function InventoryRules.encode(owned: Owned): string
 	return table.concat(ids, ",")
 end
 
--- Cette méthode permet de relire l'attribut informatif côté client lorsqu'il change ; sans attribut (pas encore
--- répliqué), l'inventaire par défaut.
+-- Cette méthode permet de relire l'attribut informatif côté client lorsqu'il change : inventaire par défaut (toujours
+-- possédé, et seul connu tant que l'attribut n'est pas répliqué) plus les ids connus de l'attribut.
 function InventoryRules.decode(text: any): Owned
+	local owned = InventoryRules.resolve(nil, false)
 	if type(text) ~= "string" then
-		return InventoryRules.resolve(nil, false)
+		return owned
 	end
-	local owned: Owned = {}
 	for id in string.gmatch(text, "[^,]+") do
 		if byId[id] then
 			owned[id] = true
