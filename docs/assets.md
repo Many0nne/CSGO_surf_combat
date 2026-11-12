@@ -120,7 +120,8 @@ viewmodel avec leurs enfants (`WeaponThirdPerson`) : il a la même fenêtre, ré
   `CasingRules`.
 - **Pool :** au plus `POOL_SIZE` Parts ancrées, sans collision ni requête ni ombre, créées au premier besoin et
   réutilisées. Pool plein : une douille du joueur local prend la plus ancienne, celle d'un autre est abandonnée (elle
-  ne chasse jamais celle qu'on voit devant soi). Sous la caméra pendant le vol, `Parent = nil` ensuite. Boucle
+  ne chasse jamais celle qu'on voit devant soi). Dans `workspace` pendant le vol (pas sous la caméra : une caméra
+  remplacée détruirait la pièce), `Parent = nil` ensuite. Pas de douille d'un tireur mort pendant le délai. Boucle
   `RenderStepped` (repère `douilles`) branchée seulement tant qu'une douille vole.
 - **Échelle :** `CasingRules` est réglé dans le repère du viewmodel tel qu'il est stocké (échelle 1 en 1P). Ne pas
   lire `GetScale()` sur le viewmodel : il vaut 0,517 pour l'AWP (modèle mis à l'échelle à sa création), ce qui rendait

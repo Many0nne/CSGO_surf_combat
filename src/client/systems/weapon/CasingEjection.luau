@@ -6,7 +6,7 @@
 --     éjecte une douille de l'EjectPort de l'arme 3P du tireur, CasingEjectDelay (WeaponConfig) plus tard (l'arme 3P ne
 --     joue pas la piste Shoot) ; elle hérite du déplacement de l'arme pendant ce délai.
 -- Les douilles sont des Parts d'un pool (au plus CasingRules.POOL_SIZE, créées au premier besoin, jamais détruites) :
--- sous la caméra pendant leur vol, hors du DataModel (Parent = nil) le reste du temps. Leur vol est calculé, pas
+-- dans workspace pendant leur vol, hors du DataModel (Parent = nil) le reste du temps. Leur vol est calculé, pas
 -- simulé par le moteur (pièces ancrées, sans collision ni requête).
 
 local Players = game:GetService("Players")
@@ -103,9 +103,8 @@ local timedStep = PerfMarkers.wrap("douilles", step)
 -- Cette méthode permet d'éjecter une douille d'une fenêtre d'éjection lorsque la culasse s'ouvre (scale : échelle de
 -- l'arme, inherited : vitesse du tireur) ; evict faux : rien si le pool est plein (tirs des autres).
 local function eject(port: Attachment, scale: number, inherited: Vector3, evict: boolean)
-	local camera = workspace.CurrentCamera
-	local index = camera and CasingRules.pickSlot(born, CasingRules.POOL_SIZE, evict)
-	if not (camera and index) then
+	local index = CasingRules.pickSlot(born, CasingRules.POOL_SIZE, evict)
+	if not index then
 		return
 	end
 	local slot = slots[index]
@@ -119,7 +118,8 @@ local function eject(port: Attachment, scale: number, inherited: Vector3, evict:
 	born[index] = os.clock()
 	slot.part.Size = Vector3.new(CasingRules.LENGTH, CasingRules.DIAMETER, CasingRules.DIAMETER) * scale
 	slot.part.CFrame = flight.start
-	slot.part.Parent = camera
+	-- dans workspace, pas sous la caméra : une caméra remplacée détruirait la pièce et bloquerait son emplacement
+	slot.part.Parent = workspace
 	if not stepConn then
 		stepConn = RunService.RenderStepped:Connect(timedStep)
 	end
@@ -151,9 +151,13 @@ local function shouldShow(shooter: Model): boolean
 end
 
 -- Cette méthode permet d'éjecter la douille d'un tir relayé lorsque sa culasse s'ouvre : depuis l'arme 3P du tireur si
--- c'est toujours la même arme et qu'elle est près de notre caméra, avec la vitesse de l'arme pendant le délai.
+-- le tireur vit encore, a toujours la même arme près de notre caméra ; vitesse : celle de l'arme pendant le délai.
 local function ejectRemote(shooter: Model, weaponName: string, gun: Model, from: Vector3, delay: number)
 	if gun.Parent ~= shooter or not shooter:IsDescendantOf(workspace) or not shouldShow(shooter) then
+		return
+	end
+	local humanoid = shooter:FindFirstChildOfClass("Humanoid")
+	if humanoid and humanoid.Health <= 0 then
 		return
 	end
 	local port = gun:GetAttribute("WeaponName") == weaponName and portOf(gun)
@@ -172,7 +176,7 @@ local function onShotFired(shooter: any, weaponName: any)
 		return
 	end
 	local cfg = WeaponConfig.Weapons[weaponName]
-	local delay = cfg and not cfg.IsMelee and cfg.CasingEjectDelay
+	local delay = cfg and cfg.CasingEjectDelay
 	if type(delay) ~= "number" or not shouldShow(shooter) then
 		return
 	end
