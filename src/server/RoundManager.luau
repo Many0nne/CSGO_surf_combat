@@ -57,6 +57,7 @@ end
 
 -- Cette méthode permet de lister les ids des participants en jeu à la fin d'une manche lorsqu'elle se termine : inscrits
 -- au classement et présents sur la map (personnage) ou déjà morts dans la manche ; un joueur resté au menu n'en est pas.
+-- Pas triés : trier par id ferait gagner les égalités aux bots (ids négatifs), l'ordre reste celui d'avant #296.
 local function idsInPlay(): { number }
 	local ids: { number } = {}
 	for id, score in scores do
@@ -65,7 +66,6 @@ local function idsInPlay(): { number }
 			table.insert(ids, id)
 		end
 	end
-	table.sort(ids)
 	return ids
 end
 

@@ -17,8 +17,10 @@ local StatsRules = require(ReplicatedStorage.Shared.StatsRules)
 
 local STORE_NAME = "PlayerStats_v1"
 local CLOSE_WAIT = 25 -- s d'attente maximale des sauvegardes en vol à l'arrêt du serveur (budget Roblox : 30 s)
--- Échecs d'affilée (de 3 essais chacun) avant d'abandonner les écarts d'un joueur parti, ou les essais à l'arrêt
+-- Échecs d'affilée (de 3 essais chacun) avant d'abandonner les écarts d'un joueur parti
 local MAX_SAVE_FAILURES = 5
+-- s qu'il faut laisser avant la fin de CLOSE_WAIT pour retenter une écriture à l'arrêt (essais espacés de 2 puis 4 s)
+local CLOSE_RETRY_COST = 6
 
 type Stats = StatsRules.Stats
 -- session/seq : id de cette session du joueur et numéro du dernier lot ; stored : stocké connu (chargement, puis chaque
@@ -43,8 +45,9 @@ local profiles: { [Player]: Profile } = {}
 local departed: { [Profile]: boolean } = {}
 -- Écritures en cours, attendues par BindToClose
 local savesInFlight = 0
--- Arrêt du serveur en cours : une écriture en échec est retentée tout de suite
+-- Arrêt du serveur en cours : une écriture en échec est retentée tout de suite, tant que closeDeadline le permet
 local closing = false
+local closeDeadline = math.huge
 
 local StatsStore = {}
 
@@ -134,7 +137,8 @@ local function saveProfile(profile: Profile)
 		warn("[StatsStore] format enregistré inconnu pour", player.Name, "— statistiques non sauvegardées")
 	else
 		profile.failures += 1
-		if (gone or closing) and profile.failures >= MAX_SAVE_FAILURES then
+		local outOfTime = closing and os.clock() + CLOSE_RETRY_COST >= closeDeadline
+		if outOfTime or (gone and profile.failures >= MAX_SAVE_FAILURES) then
 			profile.canSave = false
 			warn("[StatsStore] sauvegarde abandonnée pour", player.Name, "après", profile.failures, "échecs")
 		else
@@ -186,12 +190,13 @@ function StatsStore.load(player: Player)
 		return -- parti pendant le chargement : ses écarts sont partis avec PlayerRemoving
 	end
 	local stored, canSave = StatsRules.loadOutcome(ok, data)
-	if not canSave then
+	if profile.known then
+		return -- une écriture faite pendant le chargement a déjà relu le stocké (plus récent) et prouvé son format
+	elseif not canSave then
 		-- Lecture en échec (services d'API coupés en Studio compris) ou format inconnu : rien n'est écrit
 		profile.canSave = false
 		warn("[StatsStore] chargement impossible pour", player.Name, "— statistiques non sauvegardées")
-	elseif not profile.known then
-		-- Pas si une écriture faite pendant le chargement a déjà relu un stocké plus récent
+	else
 		profile.stored = stored
 		profile.known = true
 	end
@@ -258,6 +263,7 @@ function StatsStore.init()
 
 	game:BindToClose(function()
 		closing = true
+		closeDeadline = os.clock() + CLOSE_WAIT
 		for _, profile in profiles do
 			profile.failures = 0
 		end
@@ -266,8 +272,7 @@ function StatsStore.init()
 		end
 		-- Les départs (PlayerRemoving) ont souvent déjà écrit leurs écarts : rien n'est écrit deux fois
 		saveAll()
-		local deadline = os.clock() + CLOSE_WAIT
-		while savesInFlight > 0 and os.clock() < deadline do
+		while savesInFlight > 0 and os.clock() < closeDeadline do
 			task.wait(0.1)
 		end
 	end)

@@ -153,6 +153,11 @@ return function(T, Loader)
 			T.expectEqual(written.stats.headshots, 9)
 		end)
 
+		T.it("recopie un champ inconnu de l'enregistrement (même schéma)", function()
+			local written = Rules.mergeForSave({ schemaVersion = 1, stats = {}, lastSeen = 42 }, batch("a", 1, {}))
+			T.expectEqual(written.lastSeen, 42)
+		end)
+
 		T.it("annule l'écriture (nil) sur un format inconnu ou plus récent", function()
 			local b = batch("a", 1, { kills = 1 })
 			local written, status = Rules.mergeForSave({ schemaVersion = Rules.SCHEMA_VERSION + 1, stats = {} }, b)

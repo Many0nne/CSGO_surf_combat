@@ -63,9 +63,18 @@ return function(T, Loader)
 
 	-- Cette méthode permet de simuler un DataStore partagé par plusieurs serveurs lorsqu'un test compte les écritures ;
 	-- `latency` endort chaque requête, `failures` fait échouer les N prochaines, `commitThenFail` fait échouer les N
-	-- prochaines écritures après les avoir faites (réponse perdue).
+	-- prochaines écritures après les avoir faites (réponse perdue) ; `readLatency` et `readFailures` ne visent que les lectures.
 	local function makeDataStore(sched)
-		local ds = { data = {}, writes = 0, reads = 0, latency = 0, failures = 0, commitThenFail = 0 }
+		local ds = {
+			data = {},
+			writes = 0,
+			reads = 0,
+			latency = 0,
+			failures = 0,
+			commitThenFail = 0,
+			readLatency = 0,
+			readFailures = 0,
+		}
 		-- Cette méthode permet d'attendre la latence simulée et d'échouer si une panne est programmée.
 		local function request()
 			if ds.latency > 0 then
@@ -77,6 +86,13 @@ return function(T, Loader)
 			end
 		end
 		function ds.GetAsync(_, key: string)
+			if ds.readLatency > 0 then
+				sched.task.wait(ds.readLatency)
+			end
+			if ds.readFailures > 0 then
+				ds.readFailures -= 1
+				error("lecture impossible (simulé)")
+			end
 			request()
 			ds.reads += 1
 			return deepCopy(ds.data[key])
@@ -350,6 +366,36 @@ return function(T, Loader)
 			sched.advance(1)
 			T.expect(state.done, "arrêt terminé")
 			T.expectEqual(ds.writes, 1)
+		end)
+
+		T.it("arrêt avec le DataStore en panne : abandon avant la fin du budget de BindToClose", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			server.StatsStore.recordKill(alice)
+			ds.failures = math.huge
+			local state = server.close()
+			sched.advance(25)
+			T.expect(state.done, "arrêt terminé dans les 25 s")
+			T.expect(string.find(server.warnings[#server.warnings], "abandonnée", 1, true) ~= nil, "abandon signalé")
+		end)
+
+		T.it("chargement en échec après une écriture réussie : la sauvegarde reste permise", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			ds.readLatency = INTERVAL + 10 -- l'auto-sauvegarde écrit avant la fin de la lecture
+			ds.readFailures = 3
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			server.StatsStore.recordKill(alice)
+			sched.advance(INTERVAL)
+			T.expectEqual(storedStats(ds, 1).kills, 1, "écrit pendant la lecture")
+			sched.advance(3 * (INTERVAL + 10) + 6) -- les trois lectures échouent
+			server.StatsStore.recordKill(alice)
+			sched.advance(INTERVAL)
+			T.expectEqual(storedStats(ds, 1).kills, 2, "toujours sauvegardé")
+			T.expectEqual(#server.warnings, 0)
 		end)
 
 		T.it("arrêt : écrit les joueurs en parallèle", function()

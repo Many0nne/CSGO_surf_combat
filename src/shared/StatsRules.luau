@@ -144,8 +144,13 @@ function StatsRules.mergeForSave(old: any, batch: Batch): (Payload?, MergeStatus
 	while #marks > StatsRules.MAX_WRITE_MARKS do
 		table.remove(marks, 1)
 	end
+	-- Champs inconnus de cette version (enregistrement ou stats) recopiés tels quels
+	local payload: { [string]: any } = {}
 	local stats: { [string]: any } = {}
 	if type(old) == "table" then
+		for key, value in old do
+			payload[key] = value
+		end
 		for key, value in old.stats do
 			stats[key] = value
 		end
@@ -154,7 +159,10 @@ function StatsRules.mergeForSave(old: any, batch: Batch): (Payload?, MergeStatus
 	for _, field in StatsRules.FIELDS do
 		stats[field] = stored[field] + batch.delta[field]
 	end
-	return { schemaVersion = StatsRules.SCHEMA_VERSION, stats = stats, writes = marks }, "merged"
+	payload.schemaVersion = StatsRules.SCHEMA_VERSION
+	payload.stats = stats
+	payload.writes = marks
+	return payload :: Payload, "merged"
 end
 
 return StatsRules
