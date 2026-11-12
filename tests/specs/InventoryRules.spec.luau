@@ -247,6 +247,8 @@ return function(T, Loader)
 			T.expectEqual(Rules.slotIndex("sniper"), 1)
 			T.expectEqual(Rules.slotIndex("knife"), 2)
 			T.expectEqual(Rules.slotIndex("pistol"), nil)
+			T.expectEqual(Rules.slotIndex(1), nil, "valeur non textuelle")
+			T.expectEqual(Rules.slotIndex(nil), nil)
 			T.expectEqual(Rules.slotOfTool("M9Bayonet"), "knife")
 			T.expectEqual(Rules.slotOfTool("Inconnu"), nil)
 		end)
@@ -417,6 +419,12 @@ return function(T, Loader)
 			T.expectEqual(Rules.decodeEquipped(text, admin).knife.weapon, "weapon.m9bayonet")
 			T.expectEqual(Rules.decodeEquipped(text, Rules.resolve(nil, false)).knife.weapon, "weapon.kabar")
 			T.expectEqual(Rules.decodeEquipped(nil, admin).sniper.weapon, "weapon.awp")
+			-- Attribut malformé (vide, séparateurs seuls, emplacements en trop, nombre) : défaut, sans erreur
+			for _, bad in { "", ",", ":", ",weapon.m9bayonet,weapon.awp,x", "weapon.kabar,weapon.awp", 42 } do
+				local decoded = Rules.decodeEquipped(bad, admin)
+				T.expectEqual(decoded.sniper.weapon, "weapon.awp", "sniper : " .. tostring(bad))
+			end
+			T.expectEqual(Rules.decodeEquipped(",weapon.m9bayonet", admin).knife.weapon, "weapon.m9bayonet")
 			T.expectEqual(
 				Rules.encodeEquipped({ sniper = { weapon = "weapon.awp", skin = "skin.awp.x" } }),
 				"weapon.awp:skin.awp.x,"
