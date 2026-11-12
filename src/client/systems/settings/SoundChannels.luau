@@ -16,7 +16,9 @@ local started = false
 -- sécurité : un son oublié suit au moins le volume général).
 local function adopt(instance: Instance)
 	if instance:IsA("Sound") and instance.SoundGroup == nil then
-		instance.SoundGroup = master
+		-- Dossier « Sounds » d'un viewmodel : sons d'arme (cf. docs/assets.md), les copies jouées en héritent
+		local parent = instance.Parent
+		instance.SoundGroup = if parent and parent.Name == "Sounds" then weapons else master
 	end
 end
 
