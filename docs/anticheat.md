@@ -481,7 +481,8 @@ posé sur la parole du client, sans cadence. `AimStats` rattachait une touche au
   avant son tir) ; « tirs comptés et touches rattachées » de `tests/specs/Validator.spec.luau` (6e `ShotFired` refusé
   après 4 tirs manqués, rechargement puis tir, bon tir, orpheline en `log` et en `block`, deux touches pour un tir,
   ordre inversé, rechargement borné par un tir manqué, bots) ; `tests/specs/AimStats.spec.luau` (rattachement,
-  orphelines comptées comme un tir qui touche et violation au-delà du seuil (#246), flick sur le bon tir). Dans `Validator.spec.luau`, l'enveloppe `authorizeHitscan` envoie
+  orphelines comptées comme un tir qui touche, violation au-delà du seuil #246, flick sur le bon tir). Dans
+  `Validator.spec.luau`, l'enveloppe `authorizeHitscan` envoie
   d'abord le `ShotFired` de notre client (paramètre `noShotFired` pour une touche seule).
 - **Mesure en Studio (2026-11-11).** `DebugPlaytest` AWP et M9Bayonet : PASS 9/9. Client honnête à l'AWP (chemin réel
   `Tool:Activate`, un clic toutes les 2 s, `DebugDummy` levé de 80 studs un tir sur trois pour des tirs manqués) :

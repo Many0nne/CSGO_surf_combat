@@ -98,6 +98,17 @@ return function(T, Loader)
 			T.expectEqual(AimStats.orphanAlert(state, participant(2)), nil, "joueur inconnu : rien")
 		end)
 
+		T.it("taux d'orphelines jugé seulement à partir de ORPHAN_MIN_TOUCHES touches (#246)", function()
+			local state = AimStats.new()
+			local p = participant(1)
+			for i = 1, AimStats.ORPHAN_MIN_TOUCHES - 1 do
+				AimStats.noteHit(state, p, false, i, FORWARD)
+				T.expectEqual(AimStats.orphanAlert(state, p), nil, "touche " .. i)
+			end
+			AimStats.noteHit(state, p, false, 100, FORWARD)
+			T.expect(AimStats.orphanAlert(state, p) ~= nil, "alerte à la touche " .. AimStats.ORPHAN_MIN_TOUCHES)
+		end)
+
 		T.it("taux franchi tard : une seule violation, pas de rattrapage touche par touche (#246)", function()
 			local state = AimStats.new()
 			local p = participant(1)
