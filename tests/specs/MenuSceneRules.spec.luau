@@ -84,6 +84,13 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("MenuSceneRules.skinLabel (#280)", function()
+		T.it("nomme le skin d'origine et un skin du catalogue", function()
+			T.expectEqual(Rules.skinLabel(nil), "D'ORIGINE")
+			T.expectEqual(Rules.skinLabel("skin.awp.dragon_lore"), "DRAGON LORE")
+		end)
+	end)
+
 	T.describe("MenuSceneRules.breathAngle", function()
 		T.it("part du repos et reste faible", function()
 			T.expectEqual(Rules.breathAngle(0), 0)

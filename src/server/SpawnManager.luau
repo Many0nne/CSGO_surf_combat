@@ -174,6 +174,12 @@ function SpawnManager.noteDeath(player: Player)
 	end
 end
 
+-- Cette méthode permet de savoir si le chargement d'un personnage est en vol lorsque l'équipement (#280) refuse un
+-- changement pendant une apparition.
+function SpawnManager.isSpawning(player: Player): boolean
+	return spawning[player] == true
+end
+
 -- Cette méthode permet d'oublier un joueur lorsqu'il quitte le jeu.
 function SpawnManager.forget(player: Player)
 	spawning[player] = nil

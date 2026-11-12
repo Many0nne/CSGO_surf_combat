@@ -2,7 +2,8 @@
 -- Remplace le Backpack Roblox (désactivé dans init.client) : par arme, silhouette tirée de son viewmodel, nom et touche.
 -- Texte droit (seul le compteur de vitesse est penché). L'arme en main est en os avec son numéro et un trait rouge
 -- d'impact. Toute la barre s'estompe peu après un changement d'arme et revient au suivant.
--- Équipement : touches des emplacements et molette réglables (#100, LocalSettings, 1 à 9 par défaut), toucher d'un
+-- Deux emplacements (#280) : le sac ne contient que l'arme équipée du SNIPER et du COUTEAU, rangées dans cet ordre
+-- (HUDRules.slotOrder). Équipement : touches des emplacements et molette réglables (#100, LocalSettings), toucher d'un
 -- emplacement (tactile), L1/R1 (manette). Rien ne change d'arme pendant que l'écran Réglages est ouvert.
 -- Règles pures dans HUDRules et PlayerSettings.
 local Players = game:GetService("Players")
@@ -26,7 +27,6 @@ local KEY_WIDTH = 34 -- colonne du numéro, à droite de la silhouette et du nom
 local ICON_ACTIVE = Vector2.new(170, 50)
 local ICON_IDLE = Vector2.new(130, 40)
 local ICON_ASPECT = ICON_ACTIVE.X / ICON_ACTIVE.Y
-local ICON_FOV = 15
 local IDLE_TRANSPARENCY = 0.3 -- silhouette, nom et numéro d'une arme pas en main
 local SCRIM_SIZE = Vector2.new(460, 250)
 local SCRIM_SHOWN = 0.15
@@ -86,55 +86,10 @@ local function equippedTool(): Tool?
 	return character and character:FindFirstChildOfClass("Tool")
 end
 
--- Cette méthode permet de dessiner la silhouette plate d'une arme, de profil, à partir des pièces de son viewmodel
--- (bras exclus) lorsqu'un emplacement est créé ; la teinte vient ensuite de ImageColor3.
+-- Cette méthode permet de dessiner la silhouette d'une arme (UIKit.weaponSilhouette) lorsqu'un emplacement est créé.
 local function buildSilhouette(tool: Tool, parent: Frame): ViewportFrame
-	local viewport = UIKit.create("ViewportFrame", {
-		Name = "Silhouette",
-		BackgroundTransparency = 1,
-		Ambient = C.White,
-		LightColor = C.Black,
-		Size = UDim2.fromScale(1, 1),
-		Parent = parent,
-	})
-	local viewModels = ReplicatedStorage:FindFirstChild("ViewModels")
-	local source = viewModels and viewModels:FindFirstChild(tool:GetAttribute("ViewmodelName") or tool.Name)
-	if not source then
-		return viewport
-	end
-	local model = Instance.new("Model")
-	for _, part in source:GetChildren() do
-		if part:IsA("MeshPart") and part.Transparency < 1 then
-			local copy = part:Clone()
-			copy:ClearAllChildren()
-			copy.TextureID = ""
-			copy.Color = C.White
-			copy.Material = Enum.Material.SmoothPlastic
-			copy.Anchored = true
-			copy.Parent = model
-		end
-	end
-	model.Parent = viewport
-	if #model:GetChildren() == 0 then
-		return viewport
-	end
-
-	-- Vue de profil : axe le plus long à l'horizontale, regard le long de l'axe le plus mince
-	local frame, size = model:GetBoundingBox()
-	local axes = {
-		{ length = size.X, dir = frame.RightVector },
-		{ length = size.Y, dir = frame.UpVector },
-		{ length = size.Z, dir = frame.LookVector },
-	}
-	table.sort(axes, function(a, b)
-		return a.length > b.length
-	end)
-	local halfHeight = math.max(axes[1].length / 2 / ICON_ASPECT, axes[2].length / 2) * 1.08
-	local distance = halfHeight / math.tan(math.rad(ICON_FOV / 2)) + axes[3].length
-	local camera = UIKit.create("Camera", { FieldOfView = ICON_FOV, Parent = viewport })
-	camera.CFrame = CFrame.lookAt(frame.Position + axes[3].dir * distance, frame.Position, axes[2].dir)
-	viewport.CurrentCamera = camera
-	return viewport
+	local viewmodel = tool:GetAttribute("ViewmodelName")
+	return UIKit.weaponSilhouette(parent, if type(viewmodel) == "string" then viewmodel else tool.Name, ICON_ASPECT)
 end
 
 -- Cette méthode permet d'équiper l'arme d'un emplacement lorsque le joueur la choisit (touche, molette, toucher, manette).

@@ -6,6 +6,9 @@
 -- Lecture DataStore en échec (ou données d'une version plus récente) : inventaire par défaut (et admin), sauvegarde
 -- coupée pour la session. Écriture par UpdateAsync qui réunit les ids déjà enregistrés et ceux de la session (un
 -- inventaire ne fait que grandir) : une sauvegarde en retard ou d'un autre serveur n'efface rien.
+-- Équipement (#280) : une arme par emplacement (SNIPER, COUTEAU) et son skin, choisis à l'accueil (remote `EquipItem`,
+-- refusé en partie) et enregistrés dans le même DataStore (`equipped`) ; seules les armes équipées vont dans le sac.
+-- Le choix est résolu contre les items possédés : un item qui ne l'est plus laisse la place à l'équipement par défaut.
 -- Studio seulement : attribut Player `DebugInventory` = "default" (posé en contexte serveur), le joueur est traité
 -- comme un non-admin, pour vérifier l'inventaire par défaut avec le compte propriétaire.
 local DataStoreService = game:GetService("DataStoreService")
@@ -16,6 +19,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local StarterPack = game:GetService("StarterPack")
 
 local InventoryRules = require(ReplicatedStorage.Shared.InventoryRules)
+local CheatLog = require(ServerScriptService.Server.CheatLog)
 local Participants = require(ServerScriptService.Server.Participants)
 local Roles = require(ServerScriptService.Server.Roles)
 
@@ -24,14 +28,23 @@ local BACKPACK_WAIT = 5 -- s d'attente maximale du sac d'un personnage qui vient
 local CLOSE_WAIT = 25 -- s d'attente maximale des sauvegardes en vol à l'arrêt du serveur (budget Roblox : 30 s)
 local SAVE_RETRY_DELAY = 60 -- s avant un nouvel essai d'une sauvegarde en échec (panne passagère du DataStore)
 local MAX_SAVE_FAILURES = 5 -- échecs d'affilée (de 3 essais chacun) avant d'abandonner l'écriture d'un profil
+-- s minimum entre deux écritures d'un même profil après un changement d'équipement : Roblox limite les écritures d'une
+-- clé (une toutes les 6 s), des clics rapprochés sont réunis en une seule écriture
+local EQUIP_SAVE_SPACING = 6
 
--- owned : items possédés, recalculés à chaque changement (setup, chargement, déblocage, debug) et lus à chaque tir
+-- owned : items possédés, recalculés à chaque changement (setup, chargement, déblocage, debug) et lus à chaque tir.
+-- equipped : choix relu puis modifié (#280, nil tant que rien n'est choisi ni relu) ; chosen : emplacements choisis dans
+-- cette session, seuls écrits (un autre serveur garde les siens) ; resolved : équipement appliqué, recalculé avec owned.
 type Profile = {
 	stored: { string },
 	owned: InventoryRules.Owned,
+	equipped: InventoryRules.Equipped?,
+	chosen: InventoryRules.Equipped,
+	resolved: InventoryRules.Equipped,
 	loaded: boolean,
 	dirty: boolean,
 	saving: boolean,
+	lastSaveAt: number,
 	canSave: boolean,
 	failures: number,
 }
@@ -40,6 +53,13 @@ local store: DataStore? = nil
 local profiles: { [Player]: Profile } = {}
 -- Sauvegardes en cours, attendues par BindToClose (celles lancées au départ d'un joueur comprises)
 local savesInFlight = 0
+-- Sauvegardes programmées plus tard (espacement, nouvel essai), lancées tout de suite par BindToClose : le joueur peut
+-- être déjà parti (plus dans `profiles`)
+local pendingSaves: { [Profile]: { player: Player, due: number } } = {}
+-- Chargement d'un personnage en vol (SpawnManager.isSpawning), branché par init
+local spawningCheck: (Player) -> boolean = function(_player: Player)
+	return false
+end
 -- Arrêt du serveur en cours (BindToClose) : une sauvegarde en échec est retentée tout de suite, pas après un délai
 local closing = false
 -- Inventaire des bots (#267) : celui par défaut, jamais sauvegardé
@@ -99,6 +119,13 @@ function InventoryStore.ownsTool(participant: Participants.Participant, toolName
 	return InventoryRules.ownsTool(owned, toolName)
 end
 
+-- Cette méthode permet de lire l'équipement appliqué d'un joueur (#280) lorsqu'un système serveur en a besoin ; joueur
+-- inconnu : l'équipement par défaut.
+function InventoryStore.equipped(player: Player): InventoryRules.Equipped
+	local profile = profiles[player]
+	return if profile then profile.resolved else InventoryRules.resolveEquipped(nil, InventoryStore.owned(player))
+end
+
 -- Cette méthode permet de lister les Tools du joueur (sac et main) lorsqu'ils sont comparés à son inventaire.
 local function presentTools(player: Player): { Tool }
 	local tools: { Tool } = {}
@@ -114,9 +141,9 @@ local function presentTools(player: Player): { Tool }
 	return tools
 end
 
--- Cette méthode permet de mettre le sac d'un joueur en accord avec son inventaire lorsqu'il apparaît, qu'un nouveau sac
--- lui est donné ou que son inventaire change : Tools possédés copiés de ReplicatedStorage.Tools, Tools non possédés
--- retirés (main comprise). Idempotente : sans effet si le sac est déjà juste.
+-- Cette méthode permet de mettre le sac d'un joueur en accord avec son équipement lorsqu'il apparaît, qu'un nouveau sac
+-- lui est donné ou que son inventaire change : Tools des armes équipées (#280) copiés de ReplicatedStorage.Tools, les
+-- autres retirés (main comprise). Idempotente : sans effet si le sac est déjà juste.
 function InventoryStore.syncTools(player: Player)
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
@@ -132,7 +159,8 @@ function InventoryStore.syncTools(player: Player)
 	for _, tool in tools do
 		table.insert(names, tool.Name)
 	end
-	local give, remove = InventoryRules.toolChanges(InventoryStore.owned(player), names)
+	local wanted = InventoryRules.equippedTools(InventoryStore.equipped(player))
+	local give, remove = InventoryRules.toolChanges(wanted, names)
 	for _, tool in tools do
 		if table.find(remove, tool.Name) then
 			tool:Destroy()
@@ -149,32 +177,59 @@ function InventoryStore.syncTools(player: Player)
 	end
 end
 
--- Cette méthode permet de recalculer et publier l'inventaire d'un joueur (attribut informatif `OwnedItems`, lu par les
--- listes d'armes du client) et de remettre son sac en accord lorsqu'il change (chargement, déblocage, debug Studio).
+-- Cette méthode permet de recalculer et publier l'inventaire et l'équipement d'un joueur (attributs informatifs
+-- `OwnedItems` et `EquippedItems`, lus par l'accueil et les Réglages du client) et de remettre son sac en accord
+-- lorsqu'ils changent (chargement, déblocage, équipement, debug Studio).
 local function refresh(player: Player, profile: Profile)
 	profile.owned = InventoryRules.resolve(profile.stored, isAdmin(player))
+	profile.resolved = InventoryRules.resolveEquipped(profile.equipped, profile.owned)
 	if not player.Parent then
 		return
 	end
 	player:SetAttribute(InventoryRules.ATTRIBUTE, InventoryRules.encode(profile.owned))
+	player:SetAttribute(InventoryRules.EQUIPPED_ATTRIBUTE, InventoryRules.encodeEquipped(profile.resolved))
 	task.spawn(InventoryStore.syncTools, player)
 end
 
--- Cette méthode permet d'écrire l'inventaire d'un profil s'il a changé lorsqu'un item est obtenu, que le joueur part ou
--- que le serveur s'arrête : une seule écriture à la fois par profil, ids réunis avec ceux déjà enregistrés
--- (InventoryRules.mergeForSave) ; un changement arrivé pendant l'écriture en relance une.
-local function saveProfile(player: Player, profile: Profile)
+local saveProfile: (Player, Profile) -> ()
+
+-- Cette méthode permet de programmer une seule écriture d'un profil (espacée d'EQUIP_SAVE_SPACING, ou après `delay`),
+-- l'échéance la plus proche l'emportant, lorsqu'un changement ne peut pas partir tout de suite ; BindToClose l'avance.
+local function queueSave(player: Player, profile: Profile, delay: number?)
+	local wait = delay or math.max(0, profile.lastSaveAt + EQUIP_SAVE_SPACING - os.clock())
+	local due = os.clock() + wait
+	local current = pendingSaves[profile]
+	if current and current.due <= due then
+		return
+	end
+	local entry = { player = player, due = due }
+	pendingSaves[profile] = entry
+	task.delay(wait, function()
+		if pendingSaves[profile] == entry then
+			pendingSaves[profile] = nil
+			saveProfile(player, profile)
+		end
+	end)
+end
+
+-- Cette méthode permet d'écrire l'inventaire d'un profil s'il a changé (item obtenu, équipement, départ, arrêt), une
+-- écriture à la fois (InventoryRules.mergeForSave) ; un changement arrivé pendant l'écriture en relance une.
+function saveProfile(player: Player, profile: Profile)
 	local ds = getStore()
 	if not (ds and profile.loaded and profile.canSave and profile.dirty) or profile.saving then
 		return
 	end
 	profile.saving = true
 	profile.dirty = false
+	-- Au départ de l'écriture : les clics qui arrivent pendant qu'elle part se calent sur EQUIP_SAVE_SPACING
+	profile.lastSaveAt = os.clock()
 	savesInFlight += 1
 	local stored = profile.stored
+	-- Seuls les emplacements choisis dans cette session : ceux relus au chargement ne réécrasent pas un autre serveur
+	local chosen = table.clone(profile.chosen)
 	local ok = withRetry(function()
 		return ds:UpdateAsync(tostring(player.UserId), function(old)
-			return InventoryRules.mergeForSave(old, stored)
+			return InventoryRules.mergeForSave(old, stored, chosen)
 		end)
 	end)
 	savesInFlight -= 1
@@ -196,13 +251,19 @@ local function saveProfile(player: Player, profile: Profile)
 				SAVE_RETRY_DELAY,
 				"s"
 			)
-			task.delay(SAVE_RETRY_DELAY, saveProfile, player, profile)
+			queueSave(player, profile, SAVE_RETRY_DELAY)
 		end
 		return
 	end
 	profile.failures = 0
 	if profile.dirty then
-		saveProfile(player, profile)
+		-- Changement arrivé pendant l'écriture : une autre, tout de suite à l'arrêt du serveur (attendue par BindToClose),
+		-- sinon espacée d'EQUIP_SAVE_SPACING
+		if closing then
+			saveProfile(player, profile)
+		else
+			queueSave(player, profile)
+		end
 	end
 end
 
@@ -221,9 +282,13 @@ function InventoryStore.setup(player: Player)
 	local profile: Profile = {
 		stored = {},
 		owned = {},
+		equipped = nil,
+		chosen = {},
+		resolved = {},
 		loaded = false,
 		dirty = false,
 		saving = false,
+		lastSaveAt = -math.huge,
 		canSave = false,
 		failures = 0,
 	}
@@ -261,9 +326,11 @@ function InventoryStore.load(player: Player)
 	if profiles[player] ~= profile then
 		return -- parti pendant le chargement
 	end
-	local stored, canSave = InventoryRules.loadOutcome(ok, data)
+	local stored, canSave, equipped = InventoryRules.loadOutcome(ok, data)
 	profile.stored = stored
 	profile.canSave = canSave
+	-- Rien d'enregistré : nil, pour qu'une sauvegarde garde l'équipement qu'un autre serveur aurait écrit entre-temps
+	profile.equipped = if next(equipped) ~= nil then equipped else nil
 	profile.loaded = true
 	if not canSave then
 		warn("[InventoryStore] chargement impossible pour", player.Name, "— inventaire par défaut, non sauvegardé")
@@ -290,6 +357,34 @@ function InventoryStore.grant(player: Player, id: string): boolean
 	return true
 end
 
+-- Cette méthode permet d'équiper une arme et son skin (nil : d'origine) lorsque le joueur clique à l'accueil (#280),
+-- refusé avant le chargement, personnage en jeu ou item invalide (InventoryRules.equip) ; renvoie l'acceptation, le motif.
+function InventoryStore.equip(player: Player, slot: any, weaponId: any, skinId: any): (boolean, string?)
+	local profile = profiles[player]
+	if not (profile and profile.loaded) then
+		return false, "loading"
+	end
+	-- Personnage en jeu (vivant ou corps pas encore détruit) ou en chargement : on ne change d'équipement qu'au menu.
+	-- Limite : mort en partie, corps détruit, avant la réapparition, un client modifié passe (docs/anticheat.md)
+	local character = player.Character
+	if (character and character.Parent) or spawningCheck(player) then
+		return false, "in_round"
+	end
+	local equipped, reason = InventoryRules.equip(profile.equipped or {}, profile.owned, slot, weaponId, skinId)
+	if not equipped then
+		return false, reason
+	end
+	profile.equipped = equipped
+	profile.chosen[slot] = equipped[slot]
+	refresh(player, profile)
+	if profile.canSave then
+		profile.dirty = true
+		-- Tout de suite si la dernière écriture date d'EQUIP_SAVE_SPACING, sinon une seule pour les clics rapprochés
+		queueSave(player, profile)
+	end
+	return true
+end
+
 -- Cette méthode permet de vider le StarterPack lorsque le serveur démarre : une place Studio enregistrée avant #267 peut
 -- encore y garder les Tools, que Roblox donnerait à tout joueur à chaque apparition.
 local function clearStarterPack()
@@ -301,10 +396,30 @@ local function clearStarterPack()
 	end
 end
 
--- Cette méthode permet de brancher le départ des joueurs et l'arrêt du serveur lorsque le serveur démarre ; à l'arrêt,
--- les sauvegardes partent ensemble et le serveur attend aussi celles déjà en vol (CLOSE_WAIT au plus).
-function InventoryStore.init()
+-- Motifs de refus d'un `EquipItem` qu'un client honnête n'envoie pas (il ne montre que les items possédés de chaque
+-- emplacement) : journalisés. Les autres (chargement en cours, personnage en partie) tiennent au moment du clic.
+local SUSPECT_REFUSALS = { unknown = true, wrong_slot = true, not_owned = true, wrong_skin = true }
+
+-- Cette méthode permet de brancher le remote d'équipement (#280), le départ des joueurs et l'arrêt du serveur lorsque le
+-- serveur démarre ; à l'arrêt, il attend les sauvegardes en vol (CLOSE_WAIT au plus).
+function InventoryStore.init(equipRemote: RemoteEvent, isSpawning: (Player) -> boolean)
 	clearStarterPack()
+	spawningCheck = isSpawning
+	equipRemote.OnServerEvent:Connect(function(player: Player, slot: any, weaponId: any, skinId: any)
+		-- Garde commune (#170) : débit, emplacement connu, ids bornés
+		if not CheatLog.admit(player, equipRemote.Name, slot, weaponId, skinId) then
+			return
+		end
+		local ok, reason = InventoryStore.equip(player, slot, weaponId, if skinId == "" then nil else skinId)
+		if not ok and reason and SUSPECT_REFUSALS[reason] then
+			CheatLog.report(
+				Participants.fromPlayer(player),
+				CheatLog.Category.INVENTORY,
+				CheatLog.Severity.LOW,
+				string.format("équipement refusé (%s) : %s %s %s", reason, slot, weaponId, skinId)
+			)
+		end
+	end)
 	Players.PlayerRemoving:Connect(function(player)
 		local profile = profiles[player]
 		profiles[player] = nil
@@ -314,6 +429,11 @@ function InventoryStore.init()
 	end)
 	game:BindToClose(function()
 		closing = true
+		-- Écritures programmées plus tard (joueurs partis compris) : lancées maintenant
+		for profile, entry in pendingSaves do
+			pendingSaves[profile] = nil
+			task.spawn(saveProfile, entry.player, profile)
+		end
 		for player, profile in profiles do
 			task.spawn(saveProfile, player, profile)
 		end

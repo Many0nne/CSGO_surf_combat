@@ -1,7 +1,8 @@
 -- Menu principal (docs/ui.md) : derrière, le personnage du jeu en pose sur une copie de la map (#253, MenuScene) ; on
 -- choisit à la souris système, rien ne se tire. Titre en haut à gauche, onglets ARMES · INFOS · JOUER · RÉGLAGES ·
 -- FEEDBACK en haut au centre (au-dessus des écrans secondaires, qui s'ouvrent dessous), fiche de l'arme tenue en bas à
--- gauche, sélecteur d'arme en bas à droite.
+-- gauche. L'onglet ARMES est l'écran d'équipement (#280, EquipmentScreen) : emplacements à gauche, armes et skins
+-- possédés de l'emplacement actif à droite, le personnage tient l'arme survolée ou celle de l'emplacement actif.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -10,6 +11,7 @@ local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("U
 local WeaponConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WeaponConfig"))
 local MenuScene = require(script.Parent.Parent.systems.game.MenuScene)
 local Rules = require(script.Parent.Parent.systems.game.MenuSceneRules)
+local EquipmentScreen = require(script.Parent.EquipmentScreen)
 local MenuCursor = require(script.Parent.MenuCursor)
 local MenuShot = require(script.Parent.MenuShot)
 local UIKit = require(script.Parent.UIKit)
@@ -38,12 +40,12 @@ local TABS = {
 local SEGMENTS = 10
 local SEGMENT_SIZE = Vector2.new(17, 3)
 local SEGMENT_GAP = 4
+local BAR_LABEL_WIDTH = 96 -- colonne des libellés ambrés (16 px) avant les segments
 local STATS = {
 	{ key = "damage", label = "DÉGÂTS" },
 	{ key = "rate", label = "CADENCE" },
 	{ key = "accuracy", label = "PRÉCISION" },
 }
-
 local gui: ScreenGui
 local tabsGui: ScreenGui
 local content: Frame
@@ -51,15 +53,16 @@ local card: Frame
 local cardName: TextLabel
 local cardNameShadow: TextLabel
 local cardCategory: TextLabel
+local cardCategoryShadow: TextLabel
 local bars: { [string]: { Frame } } = {}
 local tabs: { [string]: MenuShot.Choice } = {}
 local choices: { MenuShot.Choice } = {}
-local homeChoices: { MenuShot.Choice } = {} -- masqués hors de l'accueil
 local callbacks: { [string]: (() -> ())? } = {}
 local currentPage: Page = "home"
 local notice: TextLabel
 local noticeShadow: TextLabel
 local noticeGeneration = 0
+local shownWeapon: string? = nil -- arme de la fiche, pour ne rejouer son apparition qu'au changement
 
 -- Cette méthode permet d'appeler un rappel enregistré lorsqu'un choix du menu est confirmé.
 local function fire(name: string)
@@ -184,22 +187,18 @@ local function buildTabs(root: Frame)
 end
 
 -- Cette méthode permet de construire une barre de stat (libellé ambré, segments) de la fiche lorsque le menu est initialisé.
-local function buildBar(parent: Instance, key: string, label: string, y: number)
-	UIKit.text({
+local function buildBar(parent: GuiObject, key: string, label: string, y: number)
+	UIKit.accentLabel(parent, {
 		Name = key .. "Label",
 		Text = label,
-		FontFace = F.DisplayMedium,
-		TextSize = 13,
-		TextColor3 = C.Accent,
 		Position = UDim2.fromOffset(1, y),
-		Size = UDim2.fromOffset(80, 14),
-		Parent = parent,
+		Size = UDim2.fromOffset(BAR_LABEL_WIDTH, 18),
 	})
 	local segments = {}
 	for i = 1, SEGMENTS do
 		segments[i] = UIKit.frame({
 			Name = key .. i,
-			Position = UDim2.fromOffset(80 + (i - 1) * (SEGMENT_SIZE.X + SEGMENT_GAP), y + 6),
+			Position = UDim2.fromOffset(BAR_LABEL_WIDTH + (i - 1) * (SEGMENT_SIZE.X + SEGMENT_GAP), y + 8),
 			Size = UDim2.fromOffset(SEGMENT_SIZE.X, SEGMENT_SIZE.Y),
 			BackgroundColor3 = C.Bone,
 			Parent = parent,
@@ -216,8 +215,8 @@ local function buildCard(root: Frame)
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.new(0, EDGE, 1, -112),
-		Size = UDim2.fromOffset(360, 152),
+		Position = UDim2.new(0, EDGE, 1, -100),
+		Size = UDim2.fromOffset(380, 168),
 		Parent = root,
 	})
 	cardName, cardNameShadow = UIKit.shadowedText(card, {
@@ -225,70 +224,18 @@ local function buildCard(root: Frame)
 		FontFace = F.Display,
 		TextSize = 64,
 		TextColor3 = C.Bone,
-		Size = UDim2.fromOffset(350, 70),
+		Size = UDim2.fromOffset(370, 70),
 		ZIndex = 2,
 	}, 4)
-	cardCategory = UIKit.text({
+	-- Libellés ambrés à 16 px avec ombre (#280 : à 13 px, l'utilisateur les trouvait illisibles)
+	cardCategory, cardCategoryShadow = UIKit.accentLabel(card, {
 		Name = "Category",
-		RichText = true,
-		FontFace = F.DisplayMedium,
-		TextSize = 14,
-		TextColor3 = C.Accent,
-		Position = UDim2.fromOffset(1, 78),
-		Size = UDim2.fromOffset(350, 16),
-		Parent = card,
+		Position = UDim2.fromOffset(1, 76),
+		Size = UDim2.fromOffset(370, 18),
 	})
 	for i, stat in STATS do
-		buildBar(card, stat.key, stat.label, 98 + (i - 1) * 18)
+		buildBar(card, stat.key, stat.label, 102 + (i - 1) * 22)
 	end
-end
-
--- Cette méthode permet de construire le sélecteur d'arme en bas à droite (flèches, rappel molette et touches)
--- lorsque le menu est initialisé ; les flèches remplacent la molette au tactile et à la manette.
-local function buildSelector(root: Frame)
-	local row = UIKit.frame({
-		Name = "Selector",
-		BackgroundTransparency = 1,
-		AnchorPoint = Vector2.new(1, 1),
-		Position = UDim2.new(1, -EDGE + 8, 1, -18),
-		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 30),
-		Parent = root,
-	})
-	UIKit.create("UIListLayout", {
-		FillDirection = Enum.FillDirection.Horizontal,
-		HorizontalAlignment = Enum.HorizontalAlignment.Right,
-		VerticalAlignment = Enum.VerticalAlignment.Center,
-		SortOrder = Enum.SortOrder.LayoutOrder,
-		Parent = row,
-	})
-	for _, arrow in { { text = "‹", step = -1, order = 1 }, { text = "›", step = 1, order = 3 } } do
-		local choice = MenuShot.textChoice({
-			text = arrow.text,
-			font = F.Display,
-			size = 20,
-			color = C.Bone,
-			layoutOrder = arrow.order,
-			parent = row,
-			action = function()
-				MenuScene.cycleWeapon(arrow.step)
-			end,
-		})
-		UIKit.padding(choice.button :: any, 2, 8, 4, 8)
-		table.insert(choices, choice)
-		table.insert(homeChoices, choice)
-	end
-	UIKit.text({
-		Name = "Hint",
-		Text = "MOLETTE  ·  1-9",
-		FontFace = F.DisplayMedium,
-		TextSize = 13,
-		TextColor3 = C.Bone,
-		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 16),
-		LayoutOrder = 2,
-		Parent = row,
-	})
 end
 
 -- Cette méthode permet de remplir la fiche avec l'arme tenue (stats rapportées à la meilleure arme du menu, dernier
@@ -315,13 +262,9 @@ local function showWeapon(name: string)
 	local title = string.upper(cfg.Name)
 	cardName.Text = title
 	cardNameShadow.Text = title
-	cardCategory.Text = string.format(
-		'%s  <font color="#%s">·  %d / %d</font>',
-		cfg.Category or "",
-		C.Bone:ToHex(),
-		table.find(weapons, name) or 1,
-		#weapons
-	)
+	-- Plus de rang « n / m » : on ne fait plus défiler les armes possédées (#280)
+	cardCategory.Text = cfg.Category or ""
+	cardCategoryShadow.Text = cardCategory.Text
 	for key, segments in bars do
 		local count = filled[key]
 		for i, segment in segments do
@@ -330,45 +273,29 @@ local function showWeapon(name: string)
 			segment.BackgroundTransparency = if lit then 0 else 0.78
 		end
 	end
-	UIKit.reveal(card, 0, 6)
+	-- Apparition rejouée seulement pour une autre arme : un clic d'équipement ne doit pas faire clignoter la fiche
+	if name ~= shownWeapon then
+		shownWeapon = name
+		UIKit.reveal(card, 0, 6)
+	end
 end
 
--- Cette méthode permet de construire l'accueil (titre, fiche, sélecteur) lorsque le menu est initialisé.
+-- Cette méthode permet de construire l'accueil (titre, fiche, écran d'équipement) lorsque le menu est initialisé.
 local function buildContent(root: Frame)
 	content = UIKit.frame({ Name = "Content", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = root })
 	buildTitle(content)
 	buildCard(content)
-	buildSelector(content)
+	EquipmentScreen.build(content)
 	showWeapon(MenuScene.getWeapon())
 	MenuScene.onWeaponChanged(showWeapon)
 end
 
--- Touches 1 à 9 : rang de l'arme tenue par le personnage
-local NUMBER_KEYS = {
-	Enum.KeyCode.One,
-	Enum.KeyCode.Two,
-	Enum.KeyCode.Three,
-	Enum.KeyCode.Four,
-	Enum.KeyCode.Five,
-	Enum.KeyCode.Six,
-	Enum.KeyCode.Seven,
-	Enum.KeyCode.Eight,
-	Enum.KeyCode.Nine,
-}
-
--- Cette méthode permet de changer l'arme du personnage (molette, touches 1-9) lorsque le joueur est sur l'accueil.
+-- Cette méthode permet de passer les touches et la molette à l'écran d'équipement lorsque le joueur est sur l'accueil.
 local function onWeaponInput(input: InputObject, processed: boolean)
 	if processed or currentPage ~= "home" then
 		return
 	end
-	if input.UserInputType == Enum.UserInputType.MouseWheel then
-		MenuScene.cycleWeapon(if input.Position.Z > 0 then -1 else 1)
-	elseif input.UserInputType == Enum.UserInputType.Keyboard then
-		local index = table.find(NUMBER_KEYS, input.KeyCode)
-		if index then
-			MenuScene.selectWeapon(index)
-		end
-	end
+	EquipmentScreen.onInput(input)
 end
 
 -- Cette méthode permet de créer un ScreenGui du menu lorsque celui-ci est initialisé.
@@ -413,8 +340,8 @@ function MainMenu.init(
 	end)
 end
 
--- Cette méthode permet de changer la page active (onglet en os, fiche et sélecteur sur l'accueil seulement) lorsque
--- l'orchestrateur ouvre un écran secondaire ou revient à l'accueil.
+-- Cette méthode permet de changer la page active (onglet en os, fiche et équipement sur l'accueil seulement) lorsque
+-- l'orchestrateur ouvre un écran secondaire ou revient à l'accueil ; l'équipement repart sur SNIPER en partant.
 function MainMenu.setPage(page: Page)
 	if not gui then
 		return
@@ -425,9 +352,7 @@ function MainMenu.setPage(page: Page)
 		tab.setSelected(key == page)
 	end
 	if page ~= "home" then
-		for _, choice in homeChoices do
-			choice.reset()
-		end
+		EquipmentScreen.reset()
 	end
 end
 
@@ -482,6 +407,7 @@ function MainMenu.hide()
 	for _, choice in choices do
 		choice.reset()
 	end
+	EquipmentScreen.reset()
 	-- JOUER garde les clics bloqués (`locks`) jusqu'ici : sans cela, les choix du menu en partie et de ses Réglages
 	-- restaient sans effet (#157)
 	MenuShot.reset()

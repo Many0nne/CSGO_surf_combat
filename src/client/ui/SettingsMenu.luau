@@ -528,10 +528,10 @@ local function addCategory(block: Frame, title: string): Category
 	return category
 end
 
--- Cette méthode permet de lister les noms des armes possédées (#267) dans l'ordre des emplacements de la barre lorsque
--- la catégorie TOUCHES est construite ou que l'inventaire change (MAX_ROWS au plus).
+-- Cette méthode permet de lister les noms des armes équipées (#280 : une par emplacement) dans l'ordre de la barre
+-- lorsque la catégorie TOUCHES est construite ou que l'équipement change (MAX_ROWS au plus).
 local function weaponNames(): { string }
-	local ordered = HUDRules.slotOrder(LocalInventory.ownedTools())
+	local ordered = LocalInventory.equippedTools()
 	return table.move(ordered, 1, math.min(#ordered, PlayerSettings.MAX_ROWS), 1, {})
 end
 
@@ -578,17 +578,17 @@ local function buildKeysCategory(block: Frame)
 		end
 		syncing = wasSyncing
 	end)
-	-- Une ligne par emplacement possible (une par arme du catalogue, MAX_ROWS au plus), nommée d'après l'arme possédée à
-	-- ce rang et masquée au-delà : l'inventaire peut arriver ou changer après la construction (#267)
+	-- Une ligne par emplacement (#280 : SNIPER, COUTEAU), nommée d'après l'arme équipée et masquée sans arme : l'équipement
+	-- peut arriver ou changer après la construction
 	local refreshers = {}
 	local slotRows: { { row: Frame, label: TextLabel } } = {}
-	for slot = 1, math.min(#InventoryRules.catalogTools(), PlayerSettings.MAX_ROWS) do
+	for slot = 1, math.min(#InventoryRules.SLOTS, PlayerSettings.MAX_ROWS) do
 		local refresh, row, label = addKeyBinding(keys, slot, "")
 		table.insert(refreshers, refresh)
 		table.insert(slotRows, { row = row, label = label })
 	end
-	-- Cette méthode permet de nommer chaque ligne d'après l'arme possédée à son rang lorsque l'inventaire change ; une
-	-- saisie de touche ouverte sur une ligne masquée est annulée.
+	-- Cette méthode permet de nommer chaque ligne d'après l'arme équipée de son emplacement lorsque l'équipement change ;
+	-- une saisie de touche ouverte sur une ligne masquée est annulée.
 	local function relabel()
 		local names = weaponNames()
 		for slot, entry in slotRows do

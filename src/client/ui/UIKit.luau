@@ -73,6 +73,76 @@ function UIKit.shadowedText(parent: GuiObject, props: { [string]: any }, offset:
 	return UIKit.text(props), shadow
 end
 
+-- Taille des libellés ambrés du menu (#280) : à 13 px avec contour noir, l'utilisateur les trouvait illisibles
+local ACCENT_LABEL_SIZE = 16
+
+-- Cette méthode permet de poser un libellé ambré du menu (Oswald gras 16 px, ombre noire décalée, sans contour) lorsque
+-- un titre de section ou un nom de stat est construit ; renvoie le texte puis son ombre.
+function UIKit.accentLabel(parent: GuiObject, props: { [string]: any }): (TextLabel, TextLabel)
+	local merged: { [string]: any } = {
+		FontFace = UITheme.Fonts.Display,
+		TextSize = ACCENT_LABEL_SIZE,
+		TextColor3 = C.Accent,
+		ZIndex = 2,
+	}
+	for key, value in props do
+		merged[key] = value
+	end
+	-- Ombre de 1 px : à 2 px, les lettres paraissaient doublées une fois l'écran réduit (fenêtre de 607 px de haut)
+	return UIKit.shadowedText(parent, merged, 1)
+end
+
+-- Cette méthode permet de dessiner la silhouette plate d'une arme, de profil, à partir des MeshParts de son viewmodel
+-- (bras exclus) lorsqu'une icône d'arme est créée (barre d'armes, équipement) ; la teinte vient de ImageColor3.
+function UIKit.weaponSilhouette(parent: GuiObject, viewmodelName: string, aspect: number): ViewportFrame
+	local fov = 15
+	local viewport = UIKit.create("ViewportFrame", {
+		Name = "Silhouette",
+		BackgroundTransparency = 1,
+		Ambient = C.White,
+		LightColor = C.Black,
+		Size = UDim2.fromScale(1, 1),
+		Parent = parent,
+	})
+	local viewModels = ReplicatedStorage:FindFirstChild("ViewModels")
+	local source = viewModels and viewModels:FindFirstChild(viewmodelName)
+	if not source then
+		return viewport
+	end
+	local model = Instance.new("Model")
+	for _, part in source:GetChildren() do
+		if part:IsA("MeshPart") and part.Transparency < 1 then
+			local copy = part:Clone()
+			copy:ClearAllChildren()
+			copy.TextureID = ""
+			copy.Color = C.White
+			copy.Material = Enum.Material.SmoothPlastic
+			copy.Anchored = true
+			copy.Parent = model
+		end
+	end
+	model.Parent = viewport
+	if #model:GetChildren() == 0 then
+		return viewport
+	end
+	-- Vue de profil : axe le plus long à l'horizontale, regard le long de l'axe le plus mince
+	local frame, size = model:GetBoundingBox()
+	local axes = {
+		{ length = size.X, dir = frame.RightVector },
+		{ length = size.Y, dir = frame.UpVector },
+		{ length = size.Z, dir = frame.LookVector },
+	}
+	table.sort(axes, function(a, b)
+		return a.length > b.length
+	end)
+	local halfHeight = math.max(axes[1].length / 2 / aspect, axes[2].length / 2) * 1.08
+	local distance = halfHeight / math.tan(math.rad(fov / 2)) + axes[3].length
+	local camera = UIKit.create("Camera", { FieldOfView = fov, Parent = viewport })
+	camera.CFrame = CFrame.lookAt(frame.Position + axes[3].dir * distance, frame.Position, axes[2].dir)
+	viewport.CurrentCamera = camera
+	return viewport
+end
+
 -- Cette méthode permet de créer un bouton texte sans effet natif lorsqu'un écran gère lui-même survol et clic.
 function UIKit.button(props: { [string]: any }): TextButton
 	local defaults = {

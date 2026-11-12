@@ -39,6 +39,9 @@ Protocol.Names = {
 	-- puis RemoteEvent client → serveur à chaque changement (réglages complets, validés par le serveur)
 	GET_SETTINGS = "GetSettings",
 	SAVE_SETTINGS = "SaveSettings",
+	-- Équipement (#280), cf. server/InventoryStore : client → serveur depuis l'accueil (emplacement, id de l'arme, id du
+	-- skin ou "" pour d'origine) ; le serveur valide, applique et publie l'attribut `EquippedItems` du Player
+	EQUIP_ITEM = "EquipItem",
 	-- Helper de playtest debug (#30) : créé uniquement dans Studio (RunService:IsStudio()), jamais en jeu publié
 	DEBUG_PLAYTEST = "DebugPlaytest",
 }

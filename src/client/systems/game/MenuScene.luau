@@ -65,7 +65,7 @@ local SHOTS: { [string]: Shot } = {
 	},
 }
 
-type Weapon = { key: string, viewmodel: string }
+type Weapon = { key: string, viewmodel: string, tool: string }
 
 local stage: Folder?
 local character: Model?
@@ -73,6 +73,7 @@ local motors: { [string]: Motor6D } = {}
 local baseC0: { [string]: CFrame } = {}
 local pose: { [string]: CFrame } = {}
 local weapons: { Weapon }? = nil
+local weaponsVersion = -1 -- LocalInventory.version() de la liste retenue
 local current: string? = nil
 local running = false
 local building = false
@@ -86,13 +87,15 @@ local clock = 0
 local weaponChanged: ((string) -> ())?
 
 -- Cette méthode permet de lister les armes du menu (Tools possédés de ReplicatedStorage.Tools connus de WeaponConfig,
--- par attribut WeaponName ou à défaut par nom, dans l'ordre alphabétique de la barre d'armes, #267) lorsque la scène ou
+-- par attribut WeaponName ou à défaut par nom, triés par nom de Tool, #267) lorsque la scène ou
 -- la fiche en a besoin ; repli sur les armes possédées de WeaponConfig, sans la retenir, si le dossier des Tools n'est pas
 -- encore répliqué.
 local function listWeapons(): { Weapon }
-	if weapons then
+	-- Liste retenue périmée dès que l'inventaire change, même si onInventoryChanged (différé) n'est pas encore passé
+	if weapons and weaponsVersion == LocalInventory.version() then
 		return weapons
 	end
+	weaponsVersion = LocalInventory.version()
 	local list: { Weapon } = {}
 	local tools = {}
 	local folder = ReplicatedStorage:FindFirstChild("Tools")
@@ -109,13 +112,17 @@ local function listWeapons(): { Weapon }
 		key = if type(key) == "string" then key else tool.Name
 		local viewmodel = tool:GetAttribute("ViewmodelName")
 		if WeaponConfig.Weapons[key] then
-			table.insert(list, { key = key, viewmodel = if type(viewmodel) == "string" then viewmodel else tool.Name })
+			table.insert(list, {
+				key = key,
+				viewmodel = if type(viewmodel) == "string" then viewmodel else tool.Name,
+				tool = tool.Name,
+			})
 		end
 	end
 	if #list == 0 then
 		for key in WeaponConfig.Weapons do
 			if LocalInventory.ownsTool(key) then
-				table.insert(list, { key = key, viewmodel = key })
+				table.insert(list, { key = key, viewmodel = key, tool = key })
 			end
 		end
 		table.sort(list, function(a, b)
@@ -379,7 +386,7 @@ local function update(dt: number)
 	applyPose()
 end
 
--- Cette méthode permet de changer l'arme tenue lorsque le joueur la choisit dans le menu (flèches, molette, touches).
+-- Cette méthode permet de changer l'arme tenue (clé de WeaponConfig) lorsque l'accueil montre une autre arme.
 function MenuScene.setWeapon(key: string)
 	if key == current then
 		return
@@ -398,26 +405,14 @@ function MenuScene.setWeapon(key: string)
 	end
 end
 
--- Cette méthode permet de passer à l'arme suivante ou précédente (molette, flèches) lorsque le joueur la fait défiler.
-function MenuScene.cycleWeapon(step: number)
-	local list = listWeapons()
-	local index = 1
-	for i, weapon in list do
-		if weapon.key == MenuScene.getWeapon() then
-			index = i
+-- Cette méthode permet de mettre dans les mains du personnage l'arme dont le Tool porte ce nom lorsque l'écran
+-- d'équipement (#280) montre une arme équipée ou survolée ; sans effet si elle n'est pas possédée.
+function MenuScene.holdTool(toolName: string)
+	for _, weapon in listWeapons() do
+		if weapon.tool == toolName then
+			MenuScene.setWeapon(weapon.key)
+			return
 		end
-	end
-	local nextWeapon = list[Rules.cycleIndex(index, step, #list)]
-	if nextWeapon then
-		MenuScene.setWeapon(nextWeapon.key)
-	end
-end
-
--- Cette méthode permet de choisir une arme par son rang (touches 1-9) lorsque le joueur la tape.
-function MenuScene.selectWeapon(index: number)
-	local weapon = listWeapons()[index]
-	if weapon then
-		MenuScene.setWeapon(weapon.key)
 	end
 end
 
@@ -430,8 +425,8 @@ function MenuScene.getWeapon(): string
 	return current :: string
 end
 
--- Cette méthode permet de lire les armes du menu (clés de WeaponConfig, dans l'ordre des touches 1-9) lorsque
--- l'interface les compte.
+-- Cette méthode permet de lire les armes possédées du menu (clés de WeaponConfig) lorsque la fiche rapporte ses stats
+-- à la meilleure d'entre elles.
 function MenuScene.getWeapons(): { string }
 	local keys = {}
 	for _, weapon in listWeapons() do
