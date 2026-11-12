@@ -87,6 +87,14 @@ RoundManager.init({
 	scoreUpdate = scoreUpdateRmt,
 	roundResult = roundResultRmt,
 	playerDied = playerDiedRmt,
+	-- Stats persistantes (#296) : une manche jouée pour chaque joueur en jeu à la fin, gagnée pour le vainqueur (par id)
+	onRoundEnd = function(participants, winner)
+		for _, participant in participants do
+			if participant.player then
+				StatsStore.recordRoundEnd(participant.player, winner ~= nil and winner.id == participant.id)
+			end
+		end
+	end,
 })
 
 -- ── Gestion du cycle de vie des personnages ────────────────────────────────
