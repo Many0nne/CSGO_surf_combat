@@ -242,6 +242,30 @@ Impact : fort (ce qu'un joueur subit ou ce qui le fait rester), moyen, faible. E
 trois jours), L (plus). Les numéros entre parenthèses renvoient aux constats. Aucune de ces propositions ne double une
 issue ouverte ; les recoupements sont indiqués.
 
+### Issues créées le 2026-11-12
+
+Les propositions 1 à 13 et 19 sont devenues des issues. La proposition 1 est scindée en deux (apparition, bots). Les
+priorités suivent la définition des labels (`high` = cassé ou bloquant pour jouer) : toutes sont en `medium`.
+
+| Proposition | Issue |
+|---|---|
+| 1 | #288 Apparition : protection au sol et point choisi loin des ennemis ; #298 Bots : tir dès la fin du délai de grâce |
+| 2 | #299 HUD : vie affichée et direction des dégâts reçus |
+| 3 | #289 PV : régénération par défaut de Roblox, à garder ou à retirer |
+| 4 | #290 Infos : touches écrites en QWERTY et actions manquantes |
+| 5 | #291 Aide de première partie |
+| 6 | #292 Murs d'air : dossier `Clips` introuvable pour les bots, et règle des balles (reprend le contrôle de `verify_place` de la proposition 24) |
+| 7 | #293 Échelle : Espace ne décroche qu'au pied |
+| 8 | #294 Saut : second saut possible par coyote après un saut d'auto-bhop |
+| 9 et 14 (vainqueur) | #295 Fin de manche : podium, bilan du joueur et vainqueur aux cas limites |
+| 10 | #300 Manches enchaînées sans repasser par le menu |
+| 11 | #296 Stats persistantes : rounds jamais comptés, kills sur bots ignorés, écriture fragile |
+| 12 | #301 Menu : fiche de statistiques du joueur (bloquée par #296) |
+| 13 | #302 Premier déblocage : M9 Bayonet obtenue à N kills (bloquée par #296) |
+| 19 | #297 Anti-triche : journal mesurable |
+
+Les autres propositions (15 à 18, 20 à 30, et le dernier attaquant périmé de la 14) restent sans issue.
+
 ### 1. D'abord : ce qu'un nouveau joueur subit
 
 | # | Proposition | Impact | Effort | Labels |
