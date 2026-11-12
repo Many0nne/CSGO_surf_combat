@@ -1,12 +1,13 @@
--- Armes d'un bot (#143), une par bot vivant : AWP et couteau copiés du StarterPack (sans scripts), un seul en main
+-- Armes d'un bot (#143), une par bot vivant : AWP et couteau (Ka-Bar) copiés de ReplicatedStorage.Tools (sans scripts)
+-- parmi ceux de l'inventaire par défaut (#267, InventoryRules), un seul en main
 -- (l'autre rangé dans un dossier du personnage, comme un sac), avec les mêmes contraintes qu'un joueur : temps de
 -- sortie, cadence, chargeur, réserve et rechargement de WeaponConfig. Le tir part du regard réel du bot
 -- (BotCombatRules) en vrai raycast ; la touche est ensuite validée par le serveur comme celle d'un joueur (onHit).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local StarterPack = game:GetService("StarterPack")
 
 local BotCombatRules = require(ReplicatedStorage.Shared.BotCombatRules)
 local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
+local InventoryRules = require(ReplicatedStorage.Shared.InventoryRules)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 local WeaponThirdPerson = require(ReplicatedStorage.Shared.WeaponThirdPerson)
 
@@ -38,12 +39,20 @@ export type BotArsenal = typeof(setmetatable(
 	BotArsenal
 ))
 
--- Cette méthode permet de copier un outil du StarterPack sans ses scripts lorsqu'un bot apparaît (logique d'arme
--- côté client, inutile au bot) ; nil s'il est introuvable.
+-- Inventaire d'un bot (#267) : celui par défaut
+local BOT_OWNED = InventoryRules.resolve(nil, false)
+
+-- Cette méthode permet de copier un outil de ReplicatedStorage.Tools sans ses scripts lorsqu'un bot apparaît (logique
+-- d'arme côté client, inutile au bot) ; nil s'il est introuvable ou hors de l'inventaire par défaut.
 local function copyTool(name: string): Tool?
-	local source = StarterPack:FindFirstChild(name)
+	if not InventoryRules.ownsTool(BOT_OWNED, name) then
+		warn("[BotArsenal] outil " .. name .. " hors de l'inventaire par défaut des bots")
+		return nil
+	end
+	local folder = ReplicatedStorage:FindFirstChild("Tools")
+	local source = folder and folder:FindFirstChild(name)
 	if not source or not source:IsA("Tool") then
-		warn("[BotArsenal] outil " .. name .. " introuvable dans StarterPack")
+		warn("[BotArsenal] outil " .. name .. " introuvable dans ReplicatedStorage.Tools")
 		return nil
 	end
 	local tool = source:Clone()

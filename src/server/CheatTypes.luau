@@ -29,6 +29,9 @@ CheatTypes.Category = {
 	-- statistiques de visée signalées (#178, AimStats) : toujours faible, chiffres bruts pour revue humaine, jamais de
 	-- sanction ; un seul signalement suffit au résumé de fin de session (worthSummary)
 	AIM = "Aim",
+	-- outil non possédé arrivé en main d'un joueur (#267) : retiré ; impossible pour notre client (le serveur seul
+	-- distribue les Tools), signe d'un écart côté serveur plus que d'une triche, d'où une gravité faible
+	INVENTORY = "Inventory",
 }
 
 return CheatTypes

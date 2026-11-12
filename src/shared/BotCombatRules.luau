@@ -9,9 +9,9 @@ local MathRules = require(ReplicatedStorage.Shared.MathRules)
 
 local BotCombatRules = {}
 
--- Arme d'un bot : fusil à distance, couteau au contact
+-- Arme d'un bot : fusil à distance, couteau au contact, pris dans l'inventaire par défaut (#267 : Ka-Bar et AWP)
 BotCombatRules.RIFLE = "AWP"
-BotCombatRules.KNIFE = "M9Bayonet"
+BotCombatRules.KNIFE = "KaBar"
 -- Attribut serveur d'un personnage (joueur ou bot) : os.clock() de son apparition (SpawnManager.place)
 BotCombatRules.SPAWNED_AT_ATTRIBUTE = "SpawnedAt"
 

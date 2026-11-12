@@ -9,6 +9,9 @@
       },
       "ViewModels": {
         "$path": "assets/rbx/ViewModels"
+      },
+      "Tools": {
+        "$path": "assets/rbx/Tools"
       }
     },
 
@@ -19,7 +22,8 @@
     },
 
     "StarterPack": {
-      "$path": "assets/rbx/Tools"
+      "$className": "StarterPack",
+      "$ignoreUnknownInstances": false
     },
 
     "MaterialService": {
