@@ -3,6 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local AnimationSoundSystem = require(script.Parent.AnimationSoundSystem)
+local CasingEjection = require(script.Parent.CasingEjection)
 local EquipRules = require(script.Parent.EquipRules)
 local SoundChannels = require(script.Parent.Parent.settings.SoundChannels)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
@@ -355,6 +356,11 @@ function ViewmodelSystem.playAnimation(
 		for _, c in newConns do
 			table.insert(markerConns, c)
 		end
+	end
+	-- Douille éjectée au marqueur d'ouverture de culasse, si la piste en a un (#237)
+	local ejectConn = CasingEjection.connectMarker(track, activeViewmodel)
+	if ejectConn then
+		table.insert(markerConns, ejectConn)
 	end
 end
 

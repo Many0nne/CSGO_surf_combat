@@ -11,6 +11,7 @@ local WeaponSystem = require(script.systems.weapon.WeaponSystem)
 local WeaponThirdPersonView = require(script.systems.weapon.WeaponThirdPersonView)
 local RemoteShotSounds = require(script.systems.weapon.RemoteShotSounds)
 local ShotEffects = require(script.systems.weapon.ShotEffects)
+local CasingEjection = require(script.systems.weapon.CasingEjection)
 local FPSCamera = require(script.camera.FPSCamera)
 local SettingsMenu = require(script.ui.SettingsMenu)
 local LocalSettings = require(script.systems.settings.LocalSettings)
@@ -112,6 +113,9 @@ GameStateController.init(player, setupCharacter, stopCharacter)
 RemoteShotSounds.init(GameStateController.getState)
 -- Flamme de bouche et rayon de leurs tirs, sur leur arme 3P (#54), hors écrans du menu
 ShotEffects.init(GameStateController.getState)
+-- Douilles éjectées à l'ouverture de culasse (#237) : les nôtres héritent de notre vitesse, celles des autres partent
+-- de leur arme 3P après le délai d'ouverture
+CasingEjection.init(GameStateController.getState, MovementController.getVelocity)
 
 -- Helper de playtest debug (#30) : ne fait rien hors Studio (garde RunService:IsStudio() dans init).
 DebugPlaytest.init({

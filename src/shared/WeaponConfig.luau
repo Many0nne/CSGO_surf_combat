@@ -57,6 +57,9 @@ WeaponConfig.Weapons = {
 			),
 			Pose = "Rifle",
 		},
+		-- Douille chez les autres (#237, CasingEjection) : délai (s) entre le tir relayé et l'éjection, instant du
+		-- marqueur Eject de la piste Shoot (culasse en arrière, keyframe de 0,817 s). Sans ce champ : pas de douille 3P.
+		CasingEjectDelay = 0.82,
 		AnimationSounds = {
 			Equip = { "Bolt", "Draw" },
 			Shoot = { "Shoot", "Bolt" },

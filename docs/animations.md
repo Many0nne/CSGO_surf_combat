@@ -125,6 +125,12 @@ Pour le rendu : `VIEWMODEL = "AWP"` et `RECENTER_HANDLE = false` dans `studio_re
 
 Le `.blend` garde les anciennes actions : `run_build.py` les régénère à chaque lancement et ne sauvegarde pas le fichier.
 
+**Marqueurs de `Shoot` :** `Shoot Sound` (0 s), `Bolt Sound` (culasse levée moins 0,07 s) et `Eject` (culasse en
+arrière, `bt["back"]`, 0,817 s : la douille sort, #237, `docs/assets.md`). Un marqueur se rattache à la keyframe la plus
+proche (`make_rbxm.luau`). **Ajouter un marqueur sans toucher au mouvement :** reconstruire la piste, puis comparer ses
+poses à celles de la piste publiée (téléchargée par `asset-delivery-api`) avant de publier : pour #237, 1 144 poses
+identiques, seul `Eject` en plus.
+
 ## Vidéos de référence
 
 Les vidéos sont rangées dans `references/` à la racine du checkout principal (dossier ignoré par git, à recopier sur un
