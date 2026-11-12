@@ -306,6 +306,12 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
 - **Distance d'affichage :** Roblox la réduit selon la charge, et le décor lointain disparaît d'un coup avec la map chargée.
   Un décor de menu construit loin de la map se juge donc map chargée.
 - **Curseur :** `MenuCursor` réimpose `MouseIconEnabled` à chaque image, car les autres écrans le changent en s'ouvrant ou se fermant.
+- **Barre de Roblox et `scaledRoot` (#306) :** la barre du haut (logo, menu, chat, micro, `GuiService.TopbarInset`,
+  environ 58 px) garde sa taille en px réels, alors que `scaledRoot` réduit l'interface jusqu'à 0,75. Un élément posé
+  « juste sous la barre » en px de maquette passe donc dessous dans une petite fenêtre. Dans les coins du haut, calculer
+  la position avec `TopbarInset` et l'attribut `Scale` de la racine (`MenuSceneRules.topbarShift`, colonne de gauche de
+  l'accueil). Ne pas mettre `ScreenInsets.TopbarSafeInsets` sur tout le `ScreenGui` : les onglets centrés et la scène
+  descendraient aussi.
 - **`AbsolutePosition` avec `IgnoreGuiInset` :** elle exclut la barre du haut, contrairement à `GetMouseLocation`. Préférer
   `MouseEnter`, `MouseLeave` et `Activated` à un test de zone maison.
 - **Fondu dans deux directions** (fond qui s'efface vers le haut et vers la droite) : impossible avec des `UIGradient`.
