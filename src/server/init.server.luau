@@ -531,56 +531,54 @@ end)
 
 -- Lignes de vue des tirs et des coups de mêlée (#174, #176) : raycast limité à la géométrie de la map jouée
 -- (Workspace.Maps, en inclusion : personnages et objets mobiles ignorés). Le tir traverse les murs d'air et les grillages
--- (#292, même règle que le tir du client et des bots : MapGeometry.bulletTransparent) ; la mêlée garde toute la map,
--- comme le coup du client (MeleeHitDetection).
--- Paramètres réutilisés tant que le dossier des maps et la map jouée sont les mêmes (reconstruits sinon).
-local shotParams: RaycastParams? = nil
-local meleeParams: RaycastParams? = nil
+-- (#292, même règle que le tir du client et des bots : rayon relancé derrière eux, MapGeometry.castThrough) ; la mêlée
+-- garde toute la map, comme le coup du client (MeleeHitDetection).
+-- Paramètres réutilisés tant que le dossier des maps est le même (reconstruits s'il est remplacé).
+local sightParams: RaycastParams? = nil
 local sightParamsMaps: Instance? = nil
-local sightParamsMap: Instance? = nil
+local seeThroughMap: Instance? = nil
+local seeThrough: ((Instance) -> boolean)? = nil
 local warnedNoMaps = false
 
--- Cette méthode permet de préparer les rayons de ligne de vue lorsqu'un tir ou un coup est vérifié : paramètres du tir
--- et de la mêlée, nil sans Workspace.Maps (signalé une fois).
-local function sightParams(): (RaycastParams?, RaycastParams?)
+-- Cette méthode permet de lancer un rayon de ligne de vue sur la map lorsqu'un tir ou un coup est vérifié ; nil sans
+-- Workspace.Maps (signalé une fois, la ligne de vue ne disparaît pas en silence).
+local function sightCast(from: Vector3, delta: Vector3): RaycastResult?
 	local maps = workspace:FindFirstChild("Maps")
 	if not maps then
-		-- Sans map, rien à tester : signalé une fois, la ligne de vue ne disparaît pas en silence
 		if not warnedNoMaps then
 			warnedNoMaps = true
 			warn("[Validator] Workspace.Maps introuvable : ligne de vue des tirs non vérifiée")
 		end
-		return nil, nil
+		return nil
 	end
-	local active = maps:GetAttribute(MapSelection.ACTIVE_ATTRIBUTE)
-	local map = if type(active) == "string" then maps:FindFirstChild(active) else nil
-	if not shotParams or not meleeParams or sightParamsMaps ~= maps or sightParamsMap ~= map then
-		local shot = RaycastParams.new()
-		shot.FilterType = Enum.RaycastFilterType.Include
-		shot.FilterDescendantsInstances = if map
-			then MapGeometry.includeAllBut(maps, MapGeometry.bulletTransparent(map))
-			else { maps }
-		local melee = RaycastParams.new()
-		melee.FilterType = Enum.RaycastFilterType.Include
-		melee.FilterDescendantsInstances = { maps }
-		shotParams, meleeParams = shot, melee
-		sightParamsMaps, sightParamsMap = maps, map
+	if not sightParams or sightParamsMaps ~= maps then
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Include
+		params.FilterDescendantsInstances = { maps }
+		sightParams, sightParamsMaps = params, maps
 	end
-	return shotParams, meleeParams
+	return workspace:Raycast(from, delta, sightParams)
 end
 
 -- Cette méthode permet de tester la ligne de vue d'un tir lorsque le Validator la vérifie (#174) : murs d'air et
--- grillages traversés (#292).
+-- grillages de la map jouée traversés (#292).
 local function isShotObstructed(from: Vector3, delta: Vector3): boolean
-	local params = sightParams()
-	return params ~= nil and workspace:Raycast(from, delta, params) ~= nil
+	local maps = workspace:FindFirstChild("Maps")
+	local active = maps and maps:GetAttribute(MapSelection.ACTIVE_ATTRIBUTE)
+	local map = if maps and type(active) == "string" then maps:FindFirstChild(active) else nil
+	if not map then
+		return sightCast(from, delta) ~= nil
+	end
+	if not seeThrough or seeThroughMap ~= map then
+		seeThrough, seeThroughMap = MapGeometry.seeThrough(map), map
+	end
+	return MapGeometry.castThrough(sightCast, from, delta, seeThrough :: (Instance) -> boolean) ~= nil
 end
 
 -- Cette méthode permet de tester la ligne de vue d'un coup de mêlée lorsque le Validator la vérifie (#176) : toute la
 -- map, murs d'air compris.
 local function isMeleeObstructed(from: Vector3, delta: Vector3): boolean
-	local _, params = sightParams()
-	return params ~= nil and workspace:Raycast(from, delta, params) ~= nil
+	return sightCast(from, delta) ~= nil
 end
 
 -- Validation des tirs de joueurs (#174) : cible rembobinée sur l'historique de CharacterSync, échecs au journal

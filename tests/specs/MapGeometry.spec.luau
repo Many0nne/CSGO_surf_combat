@@ -81,35 +81,72 @@ return function(T, Loader)
 		end)
 	end)
 
-	T.describe("MapGeometry.includeAllBut", function()
-		T.it("garde tout sauf les murs d'air et les grillages, en détaillant seulement leurs ancêtres", function()
+	T.describe("MapGeometry.seeThrough", function()
+		T.it("traverse les murs d'air (à toute profondeur) et les grillages passbullets, pas le reste", function()
 			local map, parts = fakeMap()
-			local include = MapGeometry.includeAllBut(map, MapGeometry.bulletTransparent(map))
-			local geometry = map:FindFirstChild("Geometry")
-			T.expect(has(include, parts.floors), "sols gardés entiers")
-			T.expect(has(include, geometry:FindFirstChild("Ramps")), "rampes gardées")
-			T.expect(has(include, parts.post) and has(include, parts.crate), "décor solide gardé pièce par pièce")
-			T.expect(has(include, map:FindFirstChild("GroundSpawns")), "autres dossiers de la map gardés")
-			T.expect(not has(include, parts.clips), "murs d'air écartés")
-			T.expect(not has(include, parts.fence), "grillage écarté")
-			T.expect(not has(include, geometry) and not has(include, parts.decor), "ancêtres détaillés, pas inclus")
-			T.expectEqual(#include, 6)
+			local skip = MapGeometry.seeThrough(map)
+			T.expect(skip(parts.clips:FindFirstChild("Clip")), "mur d'air")
+			T.expect(skip(parts.fence), "grillage passbullets")
+			T.expect(not skip(parts.post), "poteau chainlink")
+			T.expect(not skip(parts.crate), "caisse")
+			T.expect(not skip(parts.floors:FindFirstChild("floor")), "sol")
+		end)
+	end)
+
+	T.describe("MapGeometry.castThrough", function()
+		-- Cette méthode permet de simuler un raycast sur l'axe X lorsqu'un test place des obstacles : chaque obstacle
+		-- { x, inst } est touché si le rayon (origine, longueur) le rencontre en avançant ; appels notés dans `calls`.
+		local function fakeCast(obstacles, calls)
+			return function(from: Vector3, delta: Vector3)
+				table.insert(calls, from.X)
+				local best
+				for _, o in obstacles do
+					if o.x >= from.X and o.x <= from.X + delta.X and (not best or o.x < best.x) then
+						best = o
+					end
+				end
+				return best and { Instance = best.inst, Position = Vector3.new(best.x, 0, 0) }
+			end
+		end
+		local CLIP, WALL = { name = "clip" }, { name = "wall" }
+		-- Cette méthode permet de reconnaître les pièces traversées lorsqu'un test lance un rayon.
+		local function skip(inst)
+			return inst == CLIP
+		end
+
+		T.it("passe derrière un mur d'air et s'arrête sur le mur suivant", function()
+			local calls = {}
+			local hit = MapGeometry.castThrough(
+				fakeCast({ { x = 3, inst = CLIP }, { x = 7, inst = WALL } }, calls),
+				Vector3.zero,
+				Vector3.new(10, 0, 0),
+				skip
+			)
+			T.expectEqual(hit and hit.Instance, WALL)
+			T.expectEqual(#calls, 2)
+			T.expectNear(calls[2], 3 + MapGeometry.PASS_STEP, 1e-4)
 		end)
 
-		T.it("garde entière une pièce solide qui contient un élément écarté", function()
-			local map, parts = fakeMap()
-			local fenceInPost = make("Part", "block", parts.post)
-			local include = MapGeometry.includeAllBut(map, { fenceInPost })
-			T.expect(has(include, parts.decor) == false, "décor détaillé")
-			T.expect(has(include, parts.post), "poteau gardé")
+		T.it("rend nil quand seuls des murs d'air sont sur le chemin", function()
+			local calls = {}
+			local cast = fakeCast({ { x = 2, inst = CLIP }, { x = 5, inst = CLIP } }, calls)
+			T.expectEqual(MapGeometry.castThrough(cast, Vector3.zero, Vector3.new(10, 0, 0), skip), nil)
+			T.expectEqual(#calls, 3)
 		end)
 
-		T.it("garde la map entière depuis Workspace.Maps quand rien n'est écarté", function()
-			local maps = make("Folder", "Maps", nil)
-			local map = make("Model", "Dizzy", maps)
-			local include = MapGeometry.includeAllBut(maps, {})
-			T.expectEqual(#include, 1)
-			T.expectEqual(include[1], map)
+		T.it("rend le premier obstacle solide sans relancer", function()
+			local calls = {}
+			local cast = fakeCast({ { x = 4, inst = WALL }, { x = 6, inst = CLIP } }, calls)
+			local hit = MapGeometry.castThrough(cast, Vector3.zero, Vector3.new(10, 0, 0), skip)
+			T.expectEqual(hit and hit.Instance, WALL)
+			T.expectEqual(#calls, 1)
+		end)
+
+		T.it("ne dépasse pas la longueur du rayon après un mur d'air au bout", function()
+			local calls = {}
+			local cast = fakeCast({ { x = 10, inst = CLIP } }, calls)
+			T.expectEqual(MapGeometry.castThrough(cast, Vector3.zero, Vector3.new(10, 0, 0), skip), nil)
+			T.expectEqual(#calls, 1)
 		end)
 	end)
 

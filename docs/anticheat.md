@@ -96,7 +96,7 @@ localement les hitbox des autres (« hitbox expander ») marche aussi : le serve
 5. Ligne de vue : raycast serveur de `origin` à `hitPos` limité à la géométrie de la map (`Workspace.Maps`, en
    inclusion), qui ignore donc les personnages et les objets mobiles, comme conseillé sur le DevForum
    ([Shooting backend validation](https://devforum.roblox.com/t/shooting-backend-validation-inaccuracies/4633077)).
-   Les murs d'air et les grillages `passbullets` en sont écartés (`MapGeometry.includeAllBut`, #292), comme dans le
+   Les murs d'air et les grillages `passbullets` en sont écartés (rayon relancé derrière eux, `MapGeometry.castThrough`, #292), comme dans le
    rayon du client : un tir que le client voit passer n'est pas refusé (cf. `docs/maps.md` « Murs d'air et balles »).
    La ligne de vue de la mêlée (`isMeleeObstructed`) les garde, comme le coup du client.
    Un obstacle = tir refusé. Si la pénétration est implémentée un jour (`Penetration` de l'AWP dans `WeaponConfig.luau`, TODO), ce test

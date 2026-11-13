@@ -1,7 +1,7 @@
 -- Dossiers d'une map lus par le code (#292) et règle des balles : les murs d'air (Geometry.Clips, invisibles) et les
 -- boîtes des grillages `passbullets` arrêtent le mouvement (CanCollide inchangé) mais pas les balles ni le regard des
 -- bots. Les rayons de tir (client, ligne de vue serveur, bots) et de vue des bots les écartent tous par ce module :
--- bulletTransparent pour une liste d'exclusion, includeAllBut pour une liste d'inclusion.
+-- bulletTransparent pour une liste d'exclusion, castThrough (rayon relancé derrière) pour un rayon en inclusion.
 -- Sans dépendance : relu aussi par tools/rbxm/verify_place.luau (dossiers attendus dans chaque map).
 
 local MapGeometry = {}
@@ -23,6 +23,10 @@ MapGeometry.REQUIRED_FOLDERS = {
 	{ MapGeometry.GROUND_SPAWNS },
 	{ MapGeometry.LADDERS },
 } :: { { string } }
+
+-- Rayon en inclusion relancé à cette distance (studs) derrière une pièce traversée, au plus MAX_PASSES fois
+MapGeometry.PASS_STEP = 0.01
+MapGeometry.MAX_PASSES = 16
 
 -- Dernière liste calculée et sa map (une seule map jouée par serveur ; référence forte : une clé faible pourrait être
 -- recalculée à chaque tir)
@@ -65,31 +69,40 @@ function MapGeometry.bulletTransparent(map: Instance): { Instance }
 	return list
 end
 
--- Cette méthode permet de lister ce qu'un rayon en inclusion garde lorsqu'il vise tout `root` sauf `ignored` : seuls les
--- dossiers ancêtres d'un élément écarté sont détaillés (une pièce qui en contient un reste entière : la pièce prime).
-function MapGeometry.includeAllBut(root: Instance, ignored: { Instance }): { Instance }
-	-- Comparaisons par == et IsDescendantOf, pas de table indexée par instance (identité non garantie hors Roblox, Lune)
-	local include: { Instance } = {}
-	-- Cette méthode permet de trier les enfants d'un nœud lorsqu'il contient un élément écarté : écarté, détaillé, gardé.
-	local function visit(node: Instance)
-		for _, child in node:GetChildren() do
-			local skipped, holds = false, false
-			for _, inst in ignored do
-				if inst == child then
-					skipped = true
-					break
-				end
-				holds = holds or inst:IsDescendantOf(child)
-			end
-			if holds and not skipped and not child:IsA("BasePart") then
-				visit(child)
-			elseif not skipped then
-				table.insert(include, child)
-			end
+-- Cette méthode permet de savoir si une pièce touchée est traversée par les balles et le regard lorsqu'un rayon en
+-- inclusion la rencontre : mur d'air de la map ou grillage `passbullets` (même règle que bulletTransparent).
+function MapGeometry.seeThrough(map: Instance): (Instance) -> boolean
+	local clips = MapGeometry.clips(map)
+	return function(inst: Instance): boolean
+		return MapGeometry.passesBullets(inst) or (clips ~= nil and inst:IsDescendantOf(clips))
+	end
+end
+
+-- Cette méthode permet de lancer un rayon qui traverse murs d'air et grillages lorsque ses paramètres sont en inclusion
+-- (une longue liste d'inclusion rend chaque rayon ~9x plus cher, #292) : relancé derrière chaque pièce traversée.
+function MapGeometry.castThrough(
+	cast: (Vector3, Vector3) -> RaycastResult?,
+	from: Vector3,
+	delta: Vector3,
+	skip: (Instance) -> boolean
+): RaycastResult?
+	local length = delta.Magnitude
+	if length < 1e-6 then
+		return cast(from, delta)
+	end
+	local dir = delta / length
+	local travelled = 0
+	for _ = 1, MapGeometry.MAX_PASSES do
+		local hit = cast(from + dir * travelled, dir * (length - travelled))
+		if not hit or not skip(hit.Instance) then
+			return hit
+		end
+		travelled = (hit.Position - from):Dot(dir) + MapGeometry.PASS_STEP
+		if travelled >= length then
+			return nil
 		end
 	end
-	visit(root)
-	return include
+	return nil
 end
 
 -- Cette méthode permet de lister les dossiers attendus absents d'une map lorsque verify_place contrôle la place

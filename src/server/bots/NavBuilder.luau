@@ -135,11 +135,17 @@ function NavBuilder.build(map: Instance): Plan
 	overlap.FilterDescendantsInstances = { map }
 	overlap.RespectCanCollide = true
 	overlap.MaxParts = 1
-	-- Vue et couvert : les murs d'air et les grillages n'arrêtent ni le regard ni les balles (#292)
+	-- Vue et couvert : les murs d'air et les grillages n'arrêtent ni le regard ni les balles (#292), rayon relancé
+	-- derrière eux (MapGeometry.castThrough : une liste d'inclusion sans eux rendait la phase vue ~15x plus lente)
 	local viewParams = RaycastParams.new()
 	viewParams.FilterType = Enum.RaycastFilterType.Include
-	viewParams.FilterDescendantsInstances = MapGeometry.includeAllBut(map, MapGeometry.bulletTransparent(map))
+	viewParams.FilterDescendantsInstances = { map }
 	viewParams.RespectCanCollide = true
+	local seeThrough = MapGeometry.seeThrough(map)
+	-- Cette méthode permet de lancer un rayon de vue ou de couvert lorsque les notes des points sont calculées.
+	local function viewCast(from: Vector3, delta: Vector3): RaycastResult?
+		return workspace:Raycast(from, delta, viewParams)
+	end
 
 	local probe = Instance.new("Part")
 	probe.Name = "NavProbe"
@@ -528,7 +534,7 @@ function NavBuilder.build(map: Instance): Plan
 		local from = wpPositions[i] + eye
 		for j = i + 1, #clusters do
 			local delta = wpPositions[j] + eye - from
-			if delta:Dot(delta) <= range2 and not workspace:Raycast(from, delta, viewParams) then
+			if delta:Dot(delta) <= range2 and not MapGeometry.castThrough(viewCast, from, delta, seeThrough) then
 				views[i] += 1
 				views[j] += 1
 				table.insert(visible[i], j)
@@ -567,8 +573,8 @@ function NavBuilder.build(map: Instance): Plan
 		for k = 0, 7 do
 			local angle = k * math.pi / 4
 			local dir = Vector3.new(math.cos(angle), 0, math.sin(angle)) * scanDist
-			local hit = workspace:Raycast(waist, dir, viewParams)
-			dists[k + 1] = if hit then hit.Distance else math.huge
+			local hit = MapGeometry.castThrough(viewCast, waist, dir, seeThrough)
+			dists[k + 1] = if hit then (hit.Position - waist).Magnitude else math.huge
 		end
 		local slopeCount, nearLadder = 0, false
 		for _, cell in wp.cells do

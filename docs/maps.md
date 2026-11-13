@@ -31,7 +31,7 @@ boosts, mouvement et gravité du jeu inchangés.
 - **Murs d'air et balles** (#292, décision de l'utilisateur) : les murs d'air (`Geometry.Clips`) et les boîtes des
   grillages `passbullets_chainlink` arrêtent le mouvement (`CanCollide` et `CanQuery` inchangés) mais **pas les
   balles** : un mur invisible qui arrête une balle est incompréhensible. Les rayons de tir et de vue les écartent
-  par `src/shared/MapGeometry.luau` (`bulletTransparent` en exclusion, `includeAllBut` en inclusion) : tir du joueur
+  par `src/shared/MapGeometry.luau` (`bulletTransparent` en exclusion, `castThrough` en inclusion) : tir du joueur
   (`HitscanSystem`), ligne de vue du serveur (`isShotObstructed` d'`init.server`), tir et vue des bots, notes du plan.
   Un nouveau rayon de tir passe par ce module. Reste à aligner : le tracé des tirs des autres (`ShotEffects`,
   cosmétique). La mêlée n'est pas un tir : le couteau du client (`MeleeHitDetection`) et sa ligne de vue serveur
@@ -39,6 +39,10 @@ boosts, mouvement et gravité du jeu inchangés.
   22,8, rhabillées en tube visible) arrêtent toujours les balles. Dossiers lus par le code
   (`MapGeometry.REQUIRED_FOLDERS` : `Geometry.Clips`, `Geometry.Ramps`, `GroundSpawns`, `Ladders`) : leur absence fait
   échouer `verify_place` (CI).
+  **Piste rejetée : une liste d'inclusion « toute la map sauf eux ».** Les grillages sont dans `Geometry.Decor` avec
+  tout le décor : la liste compte 1 416 entrées sur Dizzy et chaque raycast passe de 5 à 43 µs (mesuré en Studio le
+  2026-11-13, 2 000 segments) ; la phase vue du plan des bots est montée à 34,7 s. Garder `Include { map }` et relancer
+  le rayon juste derrière une pièce traversée (`castThrough`).
 
 ### Relevé du plan (sans trou)
 

@@ -28,7 +28,7 @@ Construit **automatiquement au démarrage du serveur** dans la vraie collision d
    dans le carré), petites zones fondues dans leur voisine. Note fixe : vue (nombre de points visibles à hauteur des
    yeux, critère principal), hauteur, couvert (8 rayons), bonus de type (`rampe` : entrée ou sortie d'une arête de
    rampe à moins de `NAV_RAMP_DIST`, `echelle`, `escalier`, `fosse`, `couloir`, `piece`). Les murs d'air et les
-   grillages `passbullets` ne bloquent ni la vue ni le couvert (`MapGeometry.includeAllBut`, cf. `docs/maps.md`
+   grillages `passbullets` ne bloquent ni la vue ni le couvert (`MapGeometry.castThrough`, cf. `docs/maps.md`
    « Murs d'air et balles », #292).
 
 Mesure sur Dizzy (09/11/2026) : 40 841 cases (29 319 gardées), 1 056 points, 294 000 arêtes de marche, 9 250
