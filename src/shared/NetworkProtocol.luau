@@ -17,6 +17,8 @@ Protocol.Names = {
 	REQUEST_SPAWN = "RequestSpawn",
 	ROUND_STATE = "RoundState",
 	SCORE_UPDATE = "ScoreUpdate",
+	-- Fin de manche (#295) : serveur → tous, { outcome = "winner" | "tie" | "none", winnerId, scores } ; `scores` liste les
+	-- participants en jeu (pas ceux restés au menu), chacun avec son id ; le client y résout le nom du vainqueur
 	ROUND_RESULT = "RoundResult",
 	PLAYER_DIED = "PlayerDied",
 	-- Retour au menu principal depuis le menu en partie (#157) : client → serveur, sans argument ; le serveur retire le

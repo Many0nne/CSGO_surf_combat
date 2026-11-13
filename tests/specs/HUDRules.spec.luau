@@ -409,4 +409,92 @@ return function(T, Loader)
 			T.expectEqual(HUDRules.escapeRichText("<a&b>"), "&lt;a&amp;b&gt;")
 		end)
 	end)
+
+	T.describe("HUDRules.readRoundResult (#295)", function()
+		local ME = 42
+		-- Cette méthode permet de composer un score envoyé par RoundResult lorsqu'un test décrit une fin de manche.
+		local function entry(id: number, name: string, kills: number, deaths: number, isBot: boolean?)
+			return { id = id, name = name, isBot = isBot == true, kills = kills, deaths = deaths }
+		end
+		local scores = {
+			entry(1, "Ramsey", 3, 1),
+			entry(-1, "Marcel", 5, 2, true),
+			entry(ME, "manyonne", 0, 3),
+			entry(2, "Specter", 3, 2),
+			entry(3, "Volkov", 1, 0),
+		}
+
+		-- Cette méthode permet de lister les noms des lignes du podium lorsqu'un test vérifie leur ordre.
+		local function podiumNames(view): string
+			local names = {}
+			for _, row in view.podium do
+				table.insert(names, row.rank .. ":" .. row.score.name)
+			end
+			return table.concat(names, ",")
+		end
+
+		T.it("montre les trois premiers dans l'ordre du classement et la ligne du joueur hors podium", function()
+			local view = HUDRules.readRoundResult({ outcome = "winner", winnerId = -1, scores = scores }, ME)
+			T.expectEqual(podiumNames(view), "1:Marcel,2:Ramsey,3:Specter")
+			T.expect(view.me ~= nil, "joueur hors podium")
+			T.expectEqual(view.me and view.me.rank, 5)
+			T.expectEqual(view.me and view.me.score.kills, 0)
+			T.expectEqual(view.me and view.me.score.deaths, 3)
+		end)
+
+		T.it("même ordre que le classement de Tab", function()
+			local sorted = HUDRules.sortScores(scores)
+			local view = HUDRules.readRoundResult({ outcome = "none", scores = scores }, ME)
+			for i, row in view.podium do
+				T.expectEqual(row.score.id, sorted[i].id)
+			end
+		end)
+
+		T.it("résout le nom d'un bot vainqueur par son id, avec le préfixe", function()
+			local view = HUDRules.readRoundResult({ outcome = "winner", winnerId = -1, scores = scores }, ME)
+			T.expectEqual(view.title, "BOT MARCEL")
+			T.expectEqual(view.subtitle, "REMPORTE LE ROUND")
+			T.expectEqual(view.meWins, false)
+		end)
+
+		T.it("signale la victoire du joueur local, sans ligne en double", function()
+			local mine = { entry(ME, "manyonne", 4, 0), entry(-1, "manyonne", 1, 1, true) }
+			local view = HUDRules.readRoundResult({ outcome = "winner", winnerId = ME, scores = mine }, ME)
+			T.expectEqual(view.title, "MANYONNE")
+			T.expectEqual(view.subtitle, "TU REMPORTES LE ROUND")
+			T.expectEqual(view.meWins, true)
+			T.expectEqual(view.podium[1].isMe, true)
+			T.expectEqual(view.podium[2].isMe, false, "bot homonyme")
+			T.expectEqual(view.me, nil, "déjà sur le podium")
+		end)
+
+		T.it("affiche ÉGALITÉ ou AUCUN VAINQUEUR sans sous-titre", function()
+			local tie = HUDRules.readRoundResult({ outcome = "tie", scores = scores }, ME)
+			T.expectEqual(tie.title, "ÉGALITÉ")
+			T.expectEqual(tie.subtitle, "")
+			T.expectEqual(tie.meWins, false)
+			local none = HUDRules.readRoundResult({ outcome = "none", scores = scores }, ME)
+			T.expectEqual(none.title, "AUCUN VAINQUEUR")
+			T.expectEqual(none.subtitle, "")
+		end)
+
+		T.it("ne montre pas de ligne pour un joueur absent de la manche", function()
+			local view = HUDRules.readRoundResult({ outcome = "winner", winnerId = 1, scores = scores }, 999)
+			T.expectEqual(view.me, nil)
+			T.expectEqual(#view.podium, 3)
+		end)
+
+		T.it("ignore un vainqueur absent des scores et les entrées mal formées", function()
+			local view = HUDRules.readRoundResult({
+				outcome = "winner",
+				winnerId = 7,
+				scores = { entry(1, "Ramsey", 1, 0), { name = "sans id", kills = 1, deaths = 0 }, "x" },
+			}, ME)
+			T.expectEqual(view.title, "AUCUN VAINQUEUR")
+			T.expectEqual(#view.podium, 1)
+			local empty = HUDRules.readRoundResult(nil, ME)
+			T.expectEqual(empty.title, "AUCUN VAINQUEUR")
+			T.expectEqual(#empty.podium, 0)
+		end)
+	end)
 end

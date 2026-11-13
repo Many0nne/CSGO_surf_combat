@@ -6,13 +6,13 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local MemoryTracker = require(ReplicatedStorage.Shared.MemoryTracker)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
-local ParticipantRules = require(ReplicatedStorage.Shared.ParticipantRules)
+local ScoreRules = require(ReplicatedStorage.Shared.ScoreRules)
 local LeaveRules = require(ServerScriptService.Server.LeaveRules)
 local Participants = require(ServerScriptService.Server.Participants)
 
 type Participant = Participants.Participant
--- Score d'un participant (joueur ou bot), envoyé tel quel aux clients (classement, préfixe BOT)
-type Score = { name: string, isBot: boolean, kills: number, deaths: number, firstKillTick: number }
+-- Score d'un participant (joueur ou bot), envoyé tel quel aux clients (classement, préfixe BOT, écran de fin par id)
+type Score = { id: number, name: string, isBot: boolean, kills: number, deaths: number }
 -- Dernier coup reçu par une victime : tueur crédité, arme et tir à la tête affichés à la mort (#102), instant du coup
 -- (os.clock) qui fait compter comme une mort un départ par MENU PRINCIPAL juste après (#217), nil si le coup n'a retiré
 -- aucun PV (protection d'apparition)
@@ -33,7 +33,8 @@ local roundResultRmt: RemoteEvent
 local playerDiedRmt: RemoteEvent
 
 local timerConn: RBXScriptConnection?
--- Appelé à chaque fin de manche avec les participants en jeu et le vainqueur (nil sans participant), branché par init
+-- Appelé à chaque fin de manche avec les participants en jeu et le vainqueur (nil sans vainqueur : aucun kill, égalité
+-- parfaite en tête ou aucun participant), branché par init
 local roundEndHandler: ((participants: { Participant }, winner: Participant?) -> ())? = nil
 
 -- ── helpers ────────────────────────────────────────────────────────────────
@@ -49,7 +50,7 @@ end
 local function ensureScore(participant: Participant): Score
 	local id = participant.id
 	if not scores[id] then
-		scores[id] = { name = participant.name, isBot = participant.isBot, kills = 0, deaths = 0, firstKillTick = 0 }
+		scores[id] = { id = id, name = participant.name, isBot = participant.isBot, kills = 0, deaths = 0 }
 		broadcastScores()
 	end
 	return scores[id]
@@ -57,7 +58,7 @@ end
 
 -- Cette méthode permet de lister les ids des participants en jeu à la fin d'une manche lorsqu'elle se termine : inscrits
 -- au classement et présents sur la map (personnage) ou déjà morts dans la manche ; un joueur resté au menu n'en est pas.
--- Pas triés : trier par id ferait gagner les égalités aux bots (ids négatifs), l'ordre reste celui d'avant #296.
+-- Pas triés : l'issue de la manche (ScoreRules.outcome) ne dépend pas de leur ordre.
 local function idsInPlay(): { number }
 	local ids: { number } = {}
 	for id, score in scores do
@@ -69,29 +70,15 @@ local function idsInPlay(): { number }
 	return ids
 end
 
--- Cette méthode permet de désigner le vainqueur d'une manche parmi les participants en jeu lorsqu'elle se termine :
--- plus de kills, puis moins de morts, puis premier kill le plus tôt ; renvoie son id (nil sans participant) et son nom.
-local function computeWinner(inPlay: { number }): (number?, string)
-	local bestId: number? = nil
-	local bestName = "Personne"
-	local bestKills = -1
-	local bestDeaths = math.huge
-	local bestTick = math.huge
+-- Cette méthode permet de désigner l'issue d'une manche parmi les participants en jeu lorsqu'elle se termine (#295) :
+-- renvoie l'issue (vainqueur, égalité, aucun vainqueur), l'id du vainqueur et les scores en jeu envoyés aux clients.
+local function computeOutcome(inPlay: { number }): (ScoreRules.Outcome, number?, { Score })
+	local inPlayScores: { Score } = {}
 	for _, id in inPlay do
-		local score = scores[id]
-		if
-			score.kills > bestKills
-			or (score.kills == bestKills and score.deaths < bestDeaths)
-			or (score.kills == bestKills and score.deaths == bestDeaths and score.firstKillTick < bestTick)
-		then
-			bestKills = score.kills
-			bestDeaths = score.deaths
-			bestTick = score.firstKillTick
-			bestId = id
-			bestName = ParticipantRules.displayName(score.name, score.isBot)
-		end
+		table.insert(inPlayScores, scores[id])
 	end
-	return bestId, bestName
+	local outcome, winnerId = ScoreRules.outcome(inPlayScores)
+	return outcome, winnerId, inPlayScores
 end
 
 -- ── round lifecycle ────────────────────────────────────────────────────────
@@ -104,8 +91,9 @@ local function endRound()
 	state = "result"
 
 	local inPlay = idsInPlay()
-	local winnerId, winnerName = computeWinner(inPlay)
-	roundResultRmt:FireAllClients({ winnerId = winnerId, winnerName = winnerName, scores = scores })
+	-- Joueurs restés au menu exclus du podium comme du vainqueur ; le client résout le nom du vainqueur dans `scores`
+	local outcome, winnerId, inPlayScores = computeOutcome(inPlay)
+	roundResultRmt:FireAllClients({ outcome = outcome, winnerId = winnerId, scores = inPlayScores })
 	-- Stats persistantes (#296) : avant la destruction des personnages, qui sortirait les vivants de `inPlay`
 	if roundEndHandler then
 		local participants: { Participant } = {}
@@ -242,9 +230,6 @@ local function recordDeath(victim: Participant): Participant?
 		local as = scores[killer.id]
 		if as then
 			as.kills += 1
-			if as.firstKillTick == 0 then
-				as.firstKillTick = os.clock()
-			end
 		end
 	end
 

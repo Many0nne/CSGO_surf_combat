@@ -1,5 +1,6 @@
 -- HUD de round, direction « Ligne de mire » : timer et rang en haut, classement (Tab maintenu), écran de réapparition
--- (scène désaturée, compte à rebours en bas au centre) et écran de fin de round (voile central, nom du vainqueur).
+-- (scène désaturée, compte à rebours en bas au centre) et écran de fin de round (voile central, nom du vainqueur,
+-- podium et ligne du joueur).
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -39,10 +40,14 @@ local RESPAWN_SCRIM_SIZE = Vector2.new(520, 230)
 local RESPAWN_SCRIM_TRANSPARENCY = 0.2
 local RESPAWN_WIDTH = 400
 local RESPAWN_BOTTOM = 40
--- Fin de round : même voile central que le classement, un peu plus dense
+-- Fin de round : même voile central que le classement, un peu plus dense ; sous le vainqueur, podium et ligne du joueur
+-- hors podium (#295) en lignes du classement, à `RESULT_BOARD_TOP` px du haut, ligne du joueur après un écart
 local RESULT_WIDTH = 720
 local RESULT_RULE_WIDTH = 420
 local RESULT_VEIL_TRANSPARENCY = 0.2
+local RESULT_BOARD_TOP = 184
+local RESULT_ME_GAP = 14
+local RESULT_HEIGHT = RESULT_BOARD_TOP + LB_ROW * (HUDRules.PODIUM_SIZE + 2) + RESULT_ME_GAP
 
 local gui: ScreenGui
 local hudRoot: Frame
@@ -77,6 +82,8 @@ local resultMeBand: Frame
 local resultName: TextLabel
 local resultNameShadow: TextLabel
 local resultLabel: TextLabel
+local resultRows: Frame
+local resultShown = false -- écran de fin en cours : Tab maintenu le remplace par le classement, sans superposition
 
 local hudStateConn: (() -> ())? -- désabonnement de HUDState
 local tabConn: RBXScriptConnection?
@@ -232,6 +239,21 @@ local function fillColumns(row: GuiObject, values: { string }, fonts: { Font }, 
 	end
 end
 
+-- Cette méthode permet de poser les en-têtes de colonnes (# JOUEUR K M K/M, atténués) lorsque le classement ou l'écran
+-- de fin est construit.
+local function columnHeaders(parent: GuiObject, y: number)
+	local columns = UIKit.frame({
+		Name = "Columns",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(0, y),
+		Size = UDim2.new(1, 0, 0, LB_ROW - 2),
+		Parent = parent,
+	})
+	local m = C.Muted
+	local h = F.DisplayMedium
+	fillColumns(columns, { "#", "JOUEUR", "K", "M", "K/M" }, { h, h, h, h, h }, { m, m, m, m, m }, 15)
+end
+
 -- Cette méthode permet de construire le classement (voile sombre central sans panneau, titre sur un filet ambre,
 -- en-têtes, liste) lorsque le HUD est initialisé.
 local function buildLeaderboard(root: Frame)
@@ -291,16 +313,7 @@ local function buildLeaderboard(root: Frame)
 		Parent = holder,
 	})
 
-	local columns = UIKit.frame({
-		Name = "Columns",
-		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(0, LB_RULE_Y + 4),
-		Size = UDim2.fromOffset(LB_WIDTH, LB_ROW - 2),
-		Parent = holder,
-	})
-	local m = C.Muted
-	local h = F.DisplayMedium
-	fillColumns(columns, { "#", "JOUEUR", "K", "M", "K/M" }, { h, h, h, h, h }, { m, m, m, m, m }, 15)
+	columnHeaders(holder, LB_RULE_Y + 4)
 
 	leaderboardList = UIKit.frame({
 		Name = "Rows",
@@ -441,7 +454,8 @@ end
 -- ── Fin de round ───────────────────────────────────────────────────────────────
 
 -- Cette méthode permet de construire l'écran de fin de round (voile central qui s'efface vers les côtés, libellé ambré,
--- nom du vainqueur en os géant sur un filet ambre, bande rouge d'impact si c'est le joueur) lorsque le HUD est initialisé.
+-- nom du vainqueur en os géant sur un filet ambre, bande rouge d'impact si c'est le joueur, puis podium en lignes du
+-- classement) lorsque le HUD est initialisé.
 local function buildResultBanner(root: Frame)
 	resultRoot = UIKit.frame({
 		Name = "Result",
@@ -472,8 +486,8 @@ local function buildResultBanner(root: Frame)
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.45),
-		Size = UDim2.fromOffset(RESULT_WIDTH, 200),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(RESULT_WIDTH, RESULT_HEIGHT),
 		Parent = resultRoot,
 	})
 	local centered = Enum.TextXAlignment.Center
@@ -538,6 +552,23 @@ local function buildResultBanner(root: Frame)
 		Size = UDim2.new(1, 0, 0, 28),
 		Parent = resultContent,
 	})
+	-- Podium et ligne du joueur (#295) : colonnes et lignes du classement de Tab, à sa largeur
+	local board = UIKit.frame({
+		Name = "Board",
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, RESULT_BOARD_TOP),
+		Size = UDim2.new(0, LB_WIDTH, 1, -RESULT_BOARD_TOP),
+		Parent = resultContent,
+	})
+	columnHeaders(board, 0)
+	resultRows = UIKit.frame({
+		Name = "Rows",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(0, LB_ROW),
+		Size = UDim2.new(1, 0, 1, -LB_ROW),
+		Parent = board,
+	})
 end
 
 -- Cette méthode permet de poser le timer au-dessus du menu en partie, ou de le rendre au HUD, lorsque l'état du HUD
@@ -592,14 +623,21 @@ function RoundHUD.init()
 	hudStateConn = HUDState.onChanged(applyTimerLayer)
 	applyTimerLayer()
 
+	-- Pendant l'écran de fin, Tab maintenu le remplace par le classement complet, rendu au relâchement (#295)
 	tabConn = UserInputService.InputBegan:Connect(function(input, _processed)
 		if input.KeyCode == Enum.KeyCode.Tab then
+			if resultShown then
+				resultRoot.Visible = false
+			end
 			openLeaderboard()
 		end
 	end)
 	tabEndConn = UserInputService.InputEnded:Connect(function(input)
 		if input.KeyCode == Enum.KeyCode.Tab then
 			leaderboard.Visible = false
+			if resultShown then
+				resultRoot.Visible = true
+			end
 		end
 	end)
 end
@@ -612,12 +650,11 @@ function RoundHUD.show()
 	if respawnRoot then
 		respawnRoot.Visible = false
 	end
-	if resultRoot then
-		resultRoot.Visible = false
-	end
+	RoundHUD.hideResult()
 end
 
 function RoundHUD.hide()
+	resultShown = false
 	if gui then
 		gui.Enabled = false
 		applyTimerLayer()
@@ -652,6 +689,59 @@ local function scoreName(score: Score, isMe: boolean): string
 	return name
 end
 
+-- Cette méthode permet de poser une ligne du classement (rang, nom, K, M, K/M ; bande rouge d'impact pour le joueur local,
+-- rang ambré pour le premier) lorsque le classement de Tab ou l'écran de fin est reconstruit ; `y` en px dans `parent`.
+local function scoreRow(parent: GuiObject, rank: number, score: Score, isMe: boolean, y: number): Frame
+	local row = UIKit.frame({
+		Name = "Row" .. rank,
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(0, y),
+		Size = UDim2.new(1, 0, 0, LB_ROW),
+		Parent = parent,
+	})
+	if isMe then
+		-- Bande droite, pas penchée : une ligne en biais se lit mal en face des colonnes
+		local band = UIKit.frame({
+			Name = "MeBand",
+			BackgroundColor3 = C.HitRed,
+			BackgroundTransparency = 0.2,
+			AnchorPoint = Vector2.new(0, 0.5),
+			Position = UDim2.new(0, -16, 0.5, 0),
+			Size = UDim2.new(1, 32, 0, LB_ROW - 6),
+			Parent = row,
+		})
+		UIKit.create("UIGradient", {
+			Transparency = NumberSequence.new({
+				NumberSequenceKeypoint.new(0, 0),
+				NumberSequenceKeypoint.new(0.75, 0.35),
+				NumberSequenceKeypoint.new(1, 1),
+			}),
+			Parent = band,
+		})
+	end
+	local content = UIKit.frame({
+		Name = "Content",
+		BackgroundTransparency = 1,
+		Size = UDim2.fromScale(1, 1),
+		Parent = row,
+	})
+	local statColor = isMe and C.Bone or C.Muted
+	fillColumns(content, {
+		tostring(rank),
+		scoreName(score, isMe),
+		tostring(score.kills),
+		tostring(score.deaths),
+		HUDRules.formatKD(score.kills, score.deaths),
+	}, { F.Display, isMe and F.BodyBold or F.BodySemi, F.Display, F.DisplayMedium, F.DisplayMedium }, {
+		rank == 1 and C.Accent or statColor,
+		isMe and C.Bone or C.Text,
+		C.Bone,
+		statColor,
+		statColor,
+	}, 20)
+	return row
+end
+
 function RoundHUD.updateScores(scores: { [number]: Score })
 	if not leaderboardList then
 		return
@@ -669,54 +759,8 @@ function RoundHUD.updateScores(scores: { [number]: Score })
 
 	for i, score in sorted do
 		local isMe = not score.isBot and score.name == localName
-		local row = UIKit.frame({
-			Name = "Row" .. i,
-			BackgroundTransparency = 1,
-			Position = UDim2.fromOffset(0, (i - 1) * LB_ROW),
-			Size = UDim2.new(1, 0, 0, LB_ROW),
-			Parent = leaderboardList,
-		})
+		local row = scoreRow(leaderboardList, i, score, isMe, (i - 1) * LB_ROW)
 		row:SetAttribute("Order", i)
-		if isMe then
-			-- Bande droite, pas penchée : une ligne en biais se lit mal en face des colonnes
-			local band = UIKit.frame({
-				Name = "MeBand",
-				BackgroundColor3 = C.HitRed,
-				BackgroundTransparency = 0.2,
-				AnchorPoint = Vector2.new(0, 0.5),
-				Position = UDim2.new(0, -16, 0.5, 0),
-				Size = UDim2.new(1, 32, 0, LB_ROW - 6),
-				Parent = row,
-			})
-			UIKit.create("UIGradient", {
-				Transparency = NumberSequence.new({
-					NumberSequenceKeypoint.new(0, 0),
-					NumberSequenceKeypoint.new(0.75, 0.35),
-					NumberSequenceKeypoint.new(1, 1),
-				}),
-				Parent = band,
-			})
-		end
-		local content = UIKit.frame({
-			Name = "Content",
-			BackgroundTransparency = 1,
-			Size = UDim2.fromScale(1, 1),
-			Parent = row,
-		})
-		local statColor = isMe and C.Bone or C.Muted
-		fillColumns(content, {
-			tostring(i),
-			scoreName(score, isMe),
-			tostring(score.kills),
-			tostring(score.deaths),
-			HUDRules.formatKD(score.kills, score.deaths),
-		}, { F.Display, isMe and F.BodyBold or F.BodySemi, F.Display, F.DisplayMedium, F.DisplayMedium }, {
-			i == 1 and C.Accent or statColor,
-			isMe and C.Bone or C.Text,
-			C.Bone,
-			statColor,
-			statColor,
-		}, 20)
 	end
 end
 
@@ -785,17 +829,30 @@ function RoundHUD.hideRespawning()
 	end
 end
 
-function RoundHUD.showResult(winnerName: string)
+-- Cette méthode permet d'afficher l'écran de fin de manche lorsque RoundResult arrive (#295) : vainqueur (ou « ÉGALITÉ »,
+-- « AUCUN VAINQUEUR »), podium et ligne du joueur hors podium ; il passe devant le classement de Tab s'il était ouvert.
+function RoundHUD.showResult(data: any)
 	if not resultRoot then
 		return
 	end
+	local view = HUDRules.readRoundResult(data, Players.LocalPlayer.UserId)
 	leaderboard.Visible = false
-	local isMe = winnerName == Players.LocalPlayer.Name
-	local name = string.upper(winnerName)
-	resultName.Text = name
-	resultNameShadow.Text = name
-	resultMeBand.Visible = isMe
-	resultLabel.Text = if isMe then "TU REMPORTES LE ROUND" else "REMPORTE LE ROUND"
+	resultName.Text = view.title
+	resultNameShadow.Text = view.title
+	resultMeBand.Visible = view.meWins
+	resultLabel.Text = view.subtitle
+
+	for _, child in resultRows:GetChildren() do
+		child:Destroy()
+	end
+	for i, row in view.podium do
+		scoreRow(resultRows, row.rank, row.score, row.isMe, (i - 1) * LB_ROW)
+	end
+	if view.me then
+		scoreRow(resultRows, view.me.rank, view.me.score, true, #view.podium * LB_ROW + RESULT_ME_GAP)
+	end
+
+	resultShown = true
 	resultRoot.Visible = true
 	resultVeil.BackgroundTransparency = 1
 	UIKit.tween(resultVeil, Motion.Enter, { BackgroundTransparency = 0 })
@@ -803,6 +860,7 @@ function RoundHUD.showResult(winnerName: string)
 end
 
 function RoundHUD.hideResult()
+	resultShown = false
 	if resultRoot then
 		resultRoot.Visible = false
 	end

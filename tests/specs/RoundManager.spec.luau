@@ -229,7 +229,7 @@ return function(T, Loader)
 			T.expectEqual(env.remotes.playerDied.last().killerName, nil)
 		end)
 
-		T.it("désigne un bot gagnant avec le préfixe BOT", function()
+		T.it("désigne un bot gagnant par son id, aucun joueur vainqueur dans les stats", function()
 			local env = setup()
 			local alice = env.addPlayer(1, "Alice", Vector3.zero)
 			local bot = env.addBot("Marcel", Vector3.zero)
@@ -238,7 +238,11 @@ return function(T, Loader)
 			env.RoundManager.onCharacterDied(alice, function() end)
 			env.tick(61)
 			T.expectEqual(env.RoundManager.getState(), "result")
-			T.expectEqual(env.remotes.roundResult.last().winnerName, "BOT Marcel")
+			local result = env.remotes.roundResult.last()
+			T.expectEqual(result.outcome, "winner")
+			T.expectEqual(result.winnerId, bot.id)
+			T.expectEqual(result.winnerName, nil, "plus de nom affiché : le client le résout (#295)")
+			T.expectEqual(env.roundEnds[1].winner, bot, "aucun joueur compté vainqueur")
 		end)
 	end)
 
@@ -479,8 +483,8 @@ return function(T, Loader)
 			local roundEnd = env.roundEnds[1]
 			T.expectEqual(endedIds(roundEnd), string.format("%d,%d,%d", bot.id, alice.id, bob.id))
 			T.expectEqual(roundEnd.winner, bob)
+			T.expectEqual(env.remotes.roundResult.last().outcome, "winner")
 			T.expectEqual(env.remotes.roundResult.last().winnerId, bob.id)
-			T.expectEqual(env.remotes.roundResult.last().winnerName, "Bob")
 		end)
 
 		T.it("départage deux homonymes par leur id", function()
@@ -494,19 +498,24 @@ return function(T, Loader)
 			T.expectEqual(env.roundEnds[1].winner, second)
 		end)
 
-		T.it("ne compte pas un joueur resté au menu, ni ne le désigne vainqueur", function()
+		T.it("ne compte pas un joueur resté au menu, ni dans les stats, ni sur le podium", function()
 			local env = setup()
 			local alice = env.addPlayer(1, "Alice", Vector3.zero)
 			local idle = env.addPlayer(2, "Paul") -- au classement depuis son arrivée, jamais apparu
 			local bot = env.addBot("Marcel", Vector3.new(0, 0, 5))
 			env.RoundManager.startRound(60)
-			-- Alice meurt d'une chute : Paul (0 kill, 0 mort) l'aurait emporté sur elle avant #296
+			-- Alice tue le bot puis meurt d'une chute (1 kill, 1 mort) ; Paul reste à 0 kill, 0 mort
+			env.RoundManager.recordDamage(alice, bot, "AWP", false)
+			env.RoundManager.onCharacterDied(bot, function() end)
 			env.RoundManager.onCharacterDied(alice, function() end)
 			env.tick(61)
 			local roundEnd = env.roundEnds[1]
 			T.expectEqual(endedIds(roundEnd), string.format("%d,%d", bot.id, alice.id))
-			T.expect(roundEnd.winner ~= idle, "Paul n'a pas joué")
-			T.expectEqual(roundEnd.winner, bot)
+			T.expectEqual(roundEnd.winner, alice)
+			for _, score in env.remotes.roundResult.last().scores do
+				T.expect(score.id ~= idle.id, "Paul n'a pas joué : absent du podium")
+			end
+			T.expectEqual(#env.remotes.roundResult.last().scores, 2)
 		end)
 
 		T.it("compte un joueur mort en attente de réapparition à la fin", function()
@@ -517,7 +526,7 @@ return function(T, Loader)
 			alice.player.Character = nil -- corps détruit, pas encore réapparu
 			env.tick(61)
 			T.expectEqual(endedIds(env.roundEnds[1]), tostring(alice.id))
-			T.expectEqual(env.roundEnds[1].winner, alice)
+			T.expectEqual(env.roundEnds[1].winner, nil, "aucun kill : pas de vainqueur (#295)")
 		end)
 
 		T.it("ne compte pas un joueur revenu au menu pendant la manche", function()
@@ -537,7 +546,68 @@ return function(T, Loader)
 			env.tick(61)
 			T.expectEqual(#env.roundEnds[1].participants, 0)
 			T.expectEqual(env.roundEnds[1].winner, nil)
-			T.expectEqual(env.remotes.roundResult.last().winnerName, "Personne")
+			T.expectEqual(env.remotes.roundResult.last().outcome, "none")
+			T.expectEqual(env.remotes.roundResult.last().winnerId, nil)
+		end)
+	end)
+
+	T.describe("RoundManager : vainqueur aux cas limites (#295)", function()
+		-- Cette méthode permet de faire tuer `victim` par `killer` lorsqu'un test compose les scores d'une manche.
+		local function kill(env, killer, victim)
+			env.RoundManager.recordDamage(killer, victim, "AWP", false)
+			env.RoundManager.onCharacterDied(victim, function() end)
+		end
+
+		T.it("départage une égalité de kills aux morts", function()
+			local env = setup()
+			local alice = env.addPlayer(1, "Alice", Vector3.zero)
+			local bob = env.addPlayer(2, "Bob", Vector3.new(0, 0, 5))
+			local bot = env.addBot("Marcel", Vector3.new(0, 0, 10))
+			env.RoundManager.startRound(60)
+			kill(env, alice, bot)
+			kill(env, bob, bot)
+			kill(env, bot, alice) -- 1 kill chacun, Alice 1 mort, Bob 0
+			env.tick(61)
+			T.expectEqual(env.remotes.roundResult.last().outcome, "winner")
+			T.expectEqual(env.remotes.roundResult.last().winnerId, bob.id)
+			T.expectEqual(env.roundEnds[1].winner, bob)
+		end)
+
+		T.it("ne désigne personne à égalité parfaite en tête, quel que soit l'ordre d'inscription", function()
+			for _, order in { { 1, 2 }, { 2, 1 } } do
+				local env = setup()
+				local players = {}
+				for _, userId in order do
+					players[userId] = env.addPlayer(userId, "J" .. userId, Vector3.new(0, 0, userId * 5))
+				end
+				local bot = env.addBot("Marcel", Vector3.zero)
+				env.RoundManager.startRound(60)
+				kill(env, players[1], bot)
+				kill(env, players[2], bot)
+				env.tick(61)
+				local result = env.remotes.roundResult.last()
+				T.expectEqual(result.outcome, "tie", "ordre " .. table.concat(order, ","))
+				T.expectEqual(result.winnerId, nil)
+				T.expectEqual(env.roundEnds[1].winner, nil, "aucun vainqueur dans les stats")
+				T.expectEqual(#env.roundEnds[1].participants, 3, "manche jouée comptée pour chacun")
+			end
+		end)
+
+		T.it("ne désigne personne quand aucun kill n'a été fait", function()
+			local env = setup()
+			local alice = env.addPlayer(1, "Alice", Vector3.zero)
+			local bot = env.addBot("Marcel", Vector3.new(0, 0, 5))
+			env.RoundManager.startRound(60)
+			env.RoundManager.onCharacterDied(alice, function() end) -- chute : 0 kill, 1 mort ; le bot 0 kill, 0 mort
+			env.tick(61)
+			local result = env.remotes.roundResult.last()
+			T.expectEqual(result.outcome, "none")
+			T.expectEqual(result.winnerId, nil)
+			T.expectEqual(env.roundEnds[1].winner, nil)
+			T.expectEqual(#result.scores, 2, "le podium montre quand même les participants")
+			for _, score in result.scores do
+				T.expect(score.id == alice.id or score.id == bot.id, "score envoyé avec son id")
+			end
 		end)
 	end)
 
