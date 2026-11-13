@@ -564,22 +564,20 @@ Validator.setShotWorld({
 	positionAt = CharacterSync.positionAt,
 	isObstructed = isShotObstructed,
 	-- Cette méthode permet de lire l'aller-retour réseau d'un joueur (s) lorsqu'on borne l'instant annoncé d'un tir ou
-	-- d'un coup (#214) : mesuré par le moteur (Player:GetNetworkPing), nil pour un bot ou en cas d'erreur.
+	-- d'un coup (#214) : mesuré par le moteur (Player:GetNetworkPing, même lecture que le ping du journal, #297), nil
+	-- pour un bot ou en cas d'erreur.
 	pingOf = function(attacker)
 		local player = attacker.player
-		if not player then
-			return nil
-		end
-		local ok, ping = pcall(player.GetNetworkPing, player)
-		return if ok and type(ping) == "number" then ping else nil
+		return if player then CheatLog.pingOf(player) else nil
 	end,
-	-- Cette méthode permet de journaliser un contrôle de tir en échec lorsqu'il est constaté (catégorie Hitscan, une
-	-- source par contrôle pour le décompte des violations fortes).
+	-- Cette méthode permet de journaliser un contrôle de tir en échec lorsqu'il est constaté (catégorie Hitscan, compté
+	-- par contrôle au journal et pour le décompte des violations fortes, #297).
 	-- Catégorie Melee pour l'equip d'une arme de mêlée (#175), l'orientation et la ligne de vue d'un coup (#176).
 	report = function(attacker, check, severity, detail, category)
-		local cat = category or CheatLog.Category.HITSCAN
-		CheatLog.report(attacker, cat, severity, detail, cat .. ":" .. check)
+		CheatLog.report(attacker, category or CheatLog.Category.HITSCAN, severity, detail, check)
 	end,
+	-- Touches et coups soumis aux contrôles : dénominateurs des taux du journal (#297)
+	judged = CheatLog.judged,
 })
 
 hitscanRmt.OnServerEvent:Connect(function(player, targetCharacter, hitPart, origin, direction, hitPos, shotTime)
@@ -603,7 +601,7 @@ hitscanRmt.OnServerEvent:Connect(function(player, targetCharacter, hitPart, orig
 				CheatLog.Category.HITSCAN,
 				CheatLog.Severity.MEDIUM,
 				orphanDetail,
-				CheatLog.Category.HITSCAN .. ":orphanRate"
+				"orphanRate"
 			)
 		end
 	end

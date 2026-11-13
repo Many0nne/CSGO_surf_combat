@@ -177,8 +177,9 @@ même objet (`t[part.Parent]` vaut nil). Passer les personnages tels que le code
 (« backtrack », #214), voir « Instant annoncé et pose rembobinée » ci-dessous.
 
 **Passer un contrôle en `block`.** 1. Laisser tourner en jeu publié en `log` (au moins quelques centaines de tirs, dont
-du surf rapide et des joueurs à fort ping). 2. Lire les résumés `CheatLog` du webhook : compter les violations
-`Hitscan` de joueurs honnêtes par contrôle, et relever dans les détails l'écart au maximum permis. 3. Si besoin,
+du surf rapide et des joueurs à fort ping). 2. Lire les relevés agrégés `CheatLog` du webhook (#297, voir « Lire un
+taux » dans « Journaliser ») : taux du contrôle (`Hitscan:direction : N / D touches`), additionné sur les relevés, et
+dans les résumés des joueurs en cause le ping et l'écart au maximum permis donné par les détails. 3. Si besoin,
 élargir la tolérance en cause (`ORIGIN_*`, `DIRECTION_*`) jusqu'à ne plus en avoir, sans dépasser ce qui laisse passer
 un hitbox expander utile (rester sous ~2 fois le rayon d'une tête). 4. Passer le contrôle à `"block"` dans
 `ShotRules.MODES`, mettre à jour le tableau ci-dessus et le test « livre origine, direction et ligne de vue en journal
@@ -1068,9 +1069,11 @@ de positions envoyées. Complexité : très élevée (refonte de `CharacterSync`
 Module serveur `src/server/CheatLog.luau` (testé par `tests/specs/CheatLog.spec.luau`). API pour les parades :
 
 ```lua
-CheatLog.report(participant, CheatLog.Category.MOVEMENT, CheatLog.Severity.MEDIUM, "téléport de 300 studs", source?)
+CheatLog.report(participant, CheatLog.Category.MOVEMENT, CheatLog.Severity.MEDIUM, "téléport de 300 studs", check?)
 CheatLog.admit(player, NetworkProtocol.Names.X, ...) -- garde des remotes : true si le handler peut continuer
-CheatLog.summary(participant.id) -- bilan (compteurs, score présent, pire violation), nil sans violation
+CheatLog.judged(participant, CheatLog.Judged.SHOT) -- un élément jugé par une parade (dénominateur, #297)
+CheatLog.summary(participant.id) -- bilan (compteurs, score présent, pire violation, jugés, ping), nil sans violation
+CheatLog.session(participant.id) -- jugés et ping d'un joueur, avec ou sans violation
 ```
 
 - **Gravités** (`CheatLog.Severity`) : `LOW`, `MEDIUM`, `HIGH`, au sens de « Classer les violations » ci-dessous.
@@ -1085,20 +1088,73 @@ CheatLog.summary(participant.id) -- bilan (compteurs, score présent, pire viola
 - `warn` `[CheatLog]` limité à un toutes les `WARN_INTERVAL` (2 s) par joueur, le suivant dit combien ont été tus ;
   détail coupé à `MAX_DETAIL` octets sans couper de caractère, octets non UTF-8 remplacés par `?` (il peut contenir une
   valeur forgée par le client, et `HttpService:JSONEncode` du webhook échoue sur du texte non UTF-8).
-- Compteurs par joueur, catégorie et gravité ; score en seau qui fuit (poids `SCORE_WEIGHT` : 1, 5, 20 ; décroissance
-  `SCORE_DECAY` = 1 point/s), score maximal gardé au bilan. Le kick sur score moyen n'est pas branché (voir « Kick »).
-- Kick (`player:Kick`) à `KICK_HIGH_COUNT` = 3 violations fortes dans la session, une seule fois. Une même source
-  (5e argument `source` de `report`, le remote pour la garde, la catégorie par défaut) ne compte qu'une violation forte
-  par `HIGH_SOURCE_INTERVAL` (1 s) : un bug de notre client sur un remote à 20 Hz (position NaN) laisse le temps de
-  le voir au journal au lieu d'expulser en 150 ms. Toutes restent comptées au journal et au score.
+- Compteurs par joueur, catégorie et gravité, et **par contrôle** (#297) : le 5e argument `check` de `report` nomme le
+  contrôle, compté sous `Catégorie:check` (la catégorie seule sans `check`, ou si `check` vaut la catégorie). Noms
+  livrés : `Hitscan:`/`Melee:` + contrôle de `ShotRules.Check` (`direction`, `origin`, `equip`…) et `Hitscan:orphanRate`
+  (taux de touches orphelines, #246) ; `Movement:speed` (seau de distance), `Movement:noclip`, `Movement:flight`,
+  `Movement:void` ; `RemoteRate:<remote>` et `RemoteArgs:<remote>` (garde) ; `Spawn`, `Inventory` et `Aim` sans
+  contrôle nommé. Score en seau qui fuit (poids `SCORE_WEIGHT` : 1, 5, 20 ; décroissance `SCORE_DECAY` = 1 point/s),
+  score maximal gardé au bilan. Le kick sur score moyen n'est pas branché (voir « Kick »).
+- **Pire violation** (#297) : la plus grave ; à gravité égale, celle du contrôle qui en compte le plus à cette gravité
+  (une répétition dit plus qu'un incident isolé), avec le dernier détail de ce contrôle (le plus récent en cas
+  d'égalité). Avant #297 : la première de la gravité la plus haute, souvent un incident réseau isolé.
+- Kick (`player:Kick`) à `KICK_HIGH_COUNT` = 3 violations fortes dans la session, une seule fois. Un même contrôle
+  (`Catégorie:check`, le remote pour la garde) ne compte qu'une violation forte par `HIGH_SOURCE_INTERVAL` (1 s) : un
+  bug de notre client sur un remote à 20 Hz (position NaN) laisse le temps de le voir au journal au lieu d'expulser en
+  150 ms. Toutes restent comptées au journal et au score.
+- **Dénominateurs** (#297) : chaque parade compte ce qu'elle juge, par joueur, avec ou sans violation
+  (`CheatLog.judged`) : `shot` = touche de joueur soumise aux contrôles du tir (`Validator.authorizeHitscan`, après
+  cible, portée et cadence ; touches refusées comprises), `melee` = coup de mêlée soumis aux contrôles
+  (`authorizeMelee`), `position` = paquet `CharacterSync` jugé par le seau, le noclip et le vol (pas les paquets
+  antérieurs à une correction). Dénominateur d'une catégorie (`CheatLog.DENOMINATOR`) : `Hitscan` → touches, `Melee` →
+  coups, `Movement` → positions, sauf `Movement:void` (jugé par passage de boucle) et `Hitscan:orphanRate` (signalé
+  une fois par palier d'orphelines ; le taux par touche est celui de `Hitscan:shotLink`), listés dans
+  `NO_DENOMINATOR`. Les autres catégories n'en ont pas : nombres bruts. Deux approximations, majorant le dénominateur
+  de quelques éléments seulement : `Movement:noclip` et `Movement:flight` ne jugent pas un paquet déjà refusé par le
+  seau (mode `block`) ni ceux d'avant le chargement de la géométrie de la map ; `Hitscan:shotLink` ne juge pas une
+  touche déjà refusée par un autre contrôle en `block` (forme, distance, equip, chargeur).
+- **Ping** (#297) : `Player:GetNetworkPing` de chaque joueur toutes les `PING_SAMPLE_INTERVAL` (5 s), en histogramme
+  (classes de `PING_BUCKET_MS` = 10 ms : médiane à 5 ms près, maximum exact, mémoire fixe quelle que soit la durée de
+  la session). Médiane et maximum de la session au résumé du joueur, de la période au relevé.
 - Au départ d'un joueur qui a une violation moyenne ou forte, au moins `SUMMARY_MIN_LOW` (10) violations faibles
-  (en dessous, une rafale réseau ne fait pas de bruit au webhook), ou un signalement `Aim` (#178) : résumé (nom, UserId, compteurs par catégorie,
-  score max, pire violation, kick) posté au webhook en jeu publié, par `src/server/Webhook.luau` (mécanisme de `FeedbackService`) :
+  (en dessous, une rafale réseau ne fait pas de bruit au webhook), ou un signalement `Aim` (#178) : résumé (nom,
+  UserId, compteurs par catégorie et par contrôle avec leur taux sur ses jugés, jugés, ping, score max, pire violation,
+  kick) posté au webhook en jeu publié, par `src/server/Webhook.luau` (mécanisme de `FeedbackService`) :
   StringValue `CheatLogWebhookUrl` dans ServerScriptService, sinon `FeedbackWebhookUrl`. Pas de cumul entre sessions
   (DataStore/MemoryStore) : il relève du bannissement (#179). À l'arrêt du serveur, les résumés des joueurs encore là sont envoyés
   et attendus (`CLOSE_TIMEOUT`, 20 s). Une violation signalée pour un joueur déjà parti est ignorée.
-- Bots ignorés (`participant.isBot`) ; Studio : journal seulement (aucun kick, résumé affiché en console au lieu du
-  webhook).
+- **Envoi au webhook** (#297) : jusqu'à `WEBHOOK_ATTEMPTS` (3) essais, attente `WEBHOOK_RETRY_DELAY` × n° d'essai
+  (2 s, puis 4 s) entre deux (`Webhook.postWithRetry`), sauf refus définitif (HTTP 4xx autre que 429,
+  `Webhook.isRetryable`) ; après le dernier échec, ou sans webhook configuré, le message entier part en console serveur
+  (`[CheatLog] résumé de <nom> (repli console)`). Avant #297, un échec ne laissait qu'un `warn` avec l'erreur : le
+  résumé était perdu. À l'arrêt, les essais tiennent dans `CLOSE_TIMEOUT` sauf si chaque requête met longtemps à
+  échouer. Champs et description bornés sous les limites de Discord (`MAX_FIELD_VALUE`, `MAX_DESCRIPTION`) : les
+  lignes en trop deviennent `… (+N)` au lieu d'un refus 400.
+- **Relevé agrégé du serveur** (#297) : toutes les `REPORT_INTERVAL` (600 s), à l'arrêt du serveur, et à la demande
+  (attribut Workspace `CheatLogReport` = true, en contexte Server, remis à nil après), un message « Anti-triche : relevé
+  du serveur » au webhook **dédié** `CheatLogWebhookUrl` seulement (`REPORT_WEBHOOK_NAMES` : sans lui, console
+  serveur, jamais le salon du feedback ; console dans Studio) : durée de la période et raison, joueurs vus (dont ceux
+  avec violation), jugés de tous les joueurs, ping de la période, relevés de visée signalés (à part : pas des
+  violations), puis une ligne par contrôle en violation, `Hitscan:direction : 2 / 10 touches (20.00 %)`, ou le nombre
+  seul sans dénominateur. Les compteurs repartent de zéro à chaque relevé (périodes additionnables entre serveurs, sans
+  double compte) ; un joueur parti en cours de période y reste. Pied : `JobId` du serveur. Rien n'est émis pour une
+  période sans joueur. Après le dernier relevé de l'arrêt (`CheatLog.close`), plus rien n'est compté : un
+  `PlayerRemoving` traité ensuite ne recrée ni bilan ni second résumé.
+- **Lire un taux.** Taux = violations du contrôle ÷ éléments jugés de sa catégorie, tous joueurs confondus : un
+  contrôle absent du relevé a 0 violation sur ces jugés. Additionner numérateurs et dénominateurs sur plusieurs relevés
+  avant de diviser (pas de moyenne de pourcentages). Un taux sur moins de quelques centaines de jugés ne dit rien. Un
+  taux non nul chez des joueurs honnêtes est un faux positif à expliquer (ping du relevé et du résumé du joueur, détails)
+  avant tout passage en `block` ; un taux porté par un seul joueur se lit dans son résumé (même contrôle, son taux).
+  Un `RemoteArgs:` non nul n'a pas de dénominateur mais doit être nul chez nos clients.
+- Bots ignorés (`participant.isBot`, ni violations ni jugés ni ping) ; Studio : journal seulement (aucun kick, résumé
+  et relevé affichés en console au lieu du webhook).
+- **Coût** (#297) : un compteur par paquet de position, touche ou coup jugé, une lecture du ping par joueur toutes les
+  5 s. Mesuré avec `PerfServer` (Studio, Dizzy, 1 joueur immobile après un run `DebugPlaytest` AWP, 5 bots, 16 relevés
+  de 10 s par version, 13/11/2026) : `srv anti-vol` 0,011 à 0,028 ms/frame avant, 0,012 à 0,025 après ; Heartbeat
+  médian 16,9 ms sur 8 relevés sur 16 avant (jusqu'à 25,1 ms), 15 sur 16 après (jusqu'à 18,2 ms). Écart dans le bruit
+  de Studio : coût non distinguable. `srv anti-vol` ne chronomètre que `MovementGuardRules.judge`, pas les compteurs
+  du journal (sans repère : quelques accès de table par paquet). Vérifié en même temps : le relevé à la demande donne
+  `Movement:flight : 2 / 2717 positions (0.07 %)` (vol signalé à l'apparition, journal seul).
 
 ### Classer les violations
 
@@ -1136,9 +1192,15 @@ Ce que le code envoie vraiment (`src/server/CheatLog.luau`, `src/server/Webhook.
   faibles ou plus (`SUMMARY_MIN_LOW`), ou un signalement des statistiques de visée (`Aim`, #178), et à l'arrêt du
   serveur pour les joueurs encore là. Webhook : StringValue
   `CheatLogWebhookUrl` dans ServerScriptService, sinon `FeedbackWebhookUrl`. Contenu : titre « Anti-triche : <nom> »,
-  total des violations, nombre de fortes comptées pour le kick, score max, pire violation (catégorie, gravité,
-  détail), mention « Expulsé pendant la session » le cas échéant, un champ par catégorie (« forte N · moyenne N ·
-  faible N »), et en pied de page le nom et le **UserId**. C'est la source de référence : un résumé = une session.
+  total des violations, nombre de fortes comptées pour le kick, jugés (touches, coups, positions), ping médian et
+  maximal, pire violation (contrôle, gravité, détail), mention « Expulsé pendant la session » le cas échéant, un champ
+  par catégorie (« forte N · moyenne N · faible N », puis une ligne par contrôle avec son taux sur les jugés du
+  joueur), et en pied de page le nom et le **UserId**. C'est la source de référence : un résumé = une session.
+  Un envoi en échec est réessayé, puis écrit en entier dans la console serveur (repli).
+- **Relevé agrégé du serveur** au webhook dédié `CheatLogWebhookUrl` (console sans lui), toutes les 10 min et à
+  l'arrêt (#297) : taux de violations par contrôle,
+  tous joueurs confondus, joueurs sans violation compris. C'est la source pour mesurer les faux positifs avant un
+  passage en `block` (voir « Lire un taux » ci-dessus), jamais une base de ban : il est anonyme.
 - **Console serveur** : lignes `[CheatLog]` au fil de l'eau (une par 2 s au plus et par joueur, avec le nombre de
   lignes tues), et `[CheatLog] <nom> (<UserId>) expulsé : N violations fortes` au kick. Utile pendant une session
   suivie en direct, sinon voir les journaux du serveur dans le Creator Hub (libellé à vérifier).

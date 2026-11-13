@@ -39,11 +39,14 @@ Validator.MAX_HITSCAN_RANGE = MAX_HITSCAN_RANGE
 -- (category : CheatTypes.Category, Hitscan si absente ; l'equip vaut aussi pour la mêlée, #175 ; orientation et
 -- ligne de vue de la mêlée, #176). positionAt rend aussi la pose (#213) : cap (rad) et accroupi, nil si inconnus.
 -- pingOf (#214) : aller-retour réseau du tireur (s), nil si inconnu ou absent (instant annoncé alors non borné).
+-- judged (#297) : appelé une fois par touche ("shot") ou coup ("melee") de joueur soumis aux contrôles, dénominateur
+-- des taux de violations du journal ; absent : rien n'est compté.
 export type ShotWorld = {
 	serverNow: () -> number,
 	positionAt: (char: Model, t: number) -> (Vector3?, number?, boolean?),
 	isObstructed: (from: Vector3, delta: Vector3) -> boolean,
 	pingOf: ((attacker: Participant) -> number?)?,
+	judged: ((attacker: Participant, kind: "shot" | "melee") -> ())?,
 	report: (
 		attacker: Participant,
 		check: string,
@@ -207,6 +210,16 @@ local function cancelReloads(participant: Participant, now: number)
 	end
 	for cfg, mag in perWeapon do
 		ShotRules.cancelReload(mag, cfg.ReloadTime or 0, now)
+	end
+end
+
+-- Cette méthode permet de compter une touche ou un coup de joueur soumis aux contrôles lorsqu'il les aborde (#297) :
+-- dénominateur des taux du journal, une fois par remote jugé ; rien sans monde branché ou sans judged.
+local function noteJudged(attacker: Participant, kind: "shot" | "melee")
+	local world = shotWorld
+	local judged = world and world.judged
+	if judged then
+		judged(attacker, kind)
 	end
 end
 
@@ -735,6 +748,7 @@ function Validator.authorizeHitscan(
 	if not attacker.isBot then
 		-- Tir de cette touche (#216) : un ShotFired accepté du même instant, déjà compté dans le chargeur (#215)
 		link = ShotLinkRules.find(ledgerOf(attacker, cfg), shotTime, now, "hit")
+		noteJudged(attacker, "shot")
 		-- Géométrie du tir (#174) d'abord, puis equip et chargeur (#175, joueurs seulement : BotArsenal les fait déjà
 		-- respecter à ses bots) : tous sont évalués, pour que la phase de mesure de T1 voie aussi les tirs refusés ici
 		local shotOk = validateShot(attacker, aChar, aRoot, tRoot, targetCharacter :: Model, hitPart :: BasePart, shot)
@@ -794,6 +808,7 @@ function Validator.authorizeMelee(
 	if not attacker.isBot then
 		-- Orientation et ligne de vue (#176), puis equip (#175) : joueurs seulement (les bots frappent depuis le serveur,
 		-- face à leur cible, BotMotion) ; tous sont évalués, comme pour le tir
+		noteJudged(attacker, "melee")
 		local geometryOk = validateMelee(attacker, aChar, aRoot, tRoot, targetCharacter :: Model, hitTime)
 		local weaponOk = isWeaponReady(attacker, CheatTypes.Category.MELEE, tool, cfg, now)
 		if not geometryOk or not weaponOk then
