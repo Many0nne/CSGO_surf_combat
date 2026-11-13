@@ -23,6 +23,7 @@ export type Candidate = {
 	id: number,
 	isHuman: boolean,
 	distance: number,
+	inGrace: boolean?, -- encore dans son délai de grâce d'apparition (pas de tir possible)
 }
 
 export type StateInput = {
@@ -114,23 +115,26 @@ function BotBehaviorRules.forget(memory: { [number]: Memory }, now: number, ttl:
 	return freshest
 end
 
--- Cette méthode permet de savoir si un candidat passe avant les autres lorsqu'un bot choisit sa cible : un humain à
--- moins de HUMAN_PREFERENCE_RANGE (au-delà, il n'est qu'une cible parmi d'autres, #298).
-local function preferred(c: Candidate): boolean
-	return c.isHuman and c.distance <= BotConfig.HUMAN_PREFERENCE_RANGE
+-- Cette méthode permet de savoir si un candidat passe avant les autres lorsqu'un bot choisit sa cible (#298) : un
+-- humain hors délai de grâce à moins de HUMAN_PREFERENCE_RANGE, marge HUMAN_PREFERENCE_MARGIN en plus s'il est déjà
+-- la cible (pas de va-et-vient au seuil, qui relancerait le temps de réaction à chaque regard).
+local function preferred(c: Candidate, currentId: number?): boolean
+	local range = BotConfig.HUMAN_PREFERENCE_RANGE
+	if c.id == currentId then
+		range += BotConfig.HUMAN_PREFERENCE_MARGIN
+	end
+	return c.isHuman and not c.inGrace and c.distance <= range
 end
 
 -- Cette méthode permet de choisir la cible d'un bot parmi celles qu'il voit lorsqu'il en voit plusieurs : un humain
--- proche (HUMAN_PREFERENCE_RANGE) plutôt qu'un bot, puis la plus proche ; nil sans candidat.
-function BotBehaviorRules.pickTarget(candidates: { Candidate }): Candidate?
+-- proche et hors grâce plutôt qu'un bot, puis la plus proche (currentId : cible actuelle) ; nil sans candidat.
+function BotBehaviorRules.pickTarget(candidates: { Candidate }, currentId: number?): Candidate?
 	local best: Candidate? = nil
+	local bestPreferred = false
 	for _, c in candidates do
-		if
-			not best
-			or (preferred(c) and not preferred(best))
-			or (preferred(c) == preferred(best) and c.distance < best.distance)
-		then
-			best = c
+		local p = preferred(c, currentId)
+		if not best or (p and not bestPreferred) or (p == bestPreferred and c.distance < best.distance) then
+			best, bestPreferred = c, p
 		end
 	end
 	return best

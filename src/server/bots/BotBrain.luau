@@ -228,14 +228,19 @@ function BotBrain._perceive(self: BotBrain, now: number)
 				}
 				-- Passif (debug) : les humains ne sont pas des cibles, le bot combat les autres bots
 				if not (other.isHuman and self.env.passive and self.env.passive()) then
-					table.insert(candidates, { id = other.id, isHuman = other.isHuman, distance = distance })
+					table.insert(candidates, {
+						id = other.id,
+						isHuman = other.isHuman,
+						distance = distance,
+						inGrace = BotCombatRules.inSpawnGrace(other.spawnedAt, now),
+					})
 				end
 				self.lastContact = now
 			end
 		end
 	end
 
-	local target = BotBehaviorRules.pickTarget(candidates)
+	local target = BotBehaviorRules.pickTarget(candidates, self.targetId)
 	if target then
 		local seen = seenOthers[target.id]
 		if target.id ~= self.targetId or seen.spawnedAt ~= self.targetSpawnedAt then
@@ -455,6 +460,10 @@ function BotBrain.update(self: BotBrain, dt: number)
 			BotBehaviorRules.combatGaze(now - reactFrom, if self.lastShot then now - self.lastShot else nil)
 		if looking then
 			gaze.lookAt, gaze.aiming = self.targetPos, true
+			if self.targetVisible and BotCombatRules.inSpawnGrace(self.targetSpawnedAt, now) then
+				-- Visée sur une cible encore protégée : ni réaction ni tir avant la fin de sa grâce
+				BotBrain.stats.graceHolds += 1
+			end
 		end
 		if fire and self.targetVisible then
 			self:_tryFire(now)
@@ -488,9 +497,6 @@ function BotBrain._tryFire(self: BotBrain, now: number)
 		holdFire = self.targetIsHuman and self.env.passive ~= nil and self.env.passive(),
 	})
 	if not ok then
-		if inGrace then
-			BotBrain.stats.graceHolds += 1
-		end
 		return
 	end
 	local cfg = arsenal:config()

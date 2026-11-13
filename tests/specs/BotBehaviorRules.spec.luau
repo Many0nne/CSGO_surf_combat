@@ -89,6 +89,33 @@ return function(T, Loader)
 			T.expectEqual(twoHumans and twoHumans.id, 7, "humain proche avant bot et humain lointain")
 		end)
 
+		T.it("garde l'humain visé un peu au-delà du seuil, pas de va-et-vient (#298)", function()
+			local range, margin = Config.HUMAN_PREFERENCE_RANGE, Config.HUMAN_PREFERENCE_MARGIN
+			local candidates = {
+				{ id = -1, isHuman = false, distance = 10 },
+				{ id = 7, isHuman = true, distance = range + margin / 2 },
+			}
+			T.expectEqual((Rules.pickTarget(candidates) :: any).id, -1, "pas encore visé : le bot proche")
+			T.expectEqual((Rules.pickTarget(candidates, 7) :: any).id, 7, "déjà visé : gardé dans la marge")
+			candidates[2].distance = range + margin + 1
+			T.expectEqual((Rules.pickTarget(candidates, 7) :: any).id, -1, "au-delà de la marge : lâché")
+		end)
+
+		T.it("ne préfère pas un humain encore dans son délai de grâce (#298)", function()
+			local target = Rules.pickTarget({
+				{ id = 7, isHuman = true, distance = 50, inGrace = true },
+				{ id = -1, isHuman = false, distance = 20 },
+			})
+			T.expectEqual(target and target.id, -1, "en grâce : plus de préférence, le bot plus proche l'emporte")
+			local graceOver = Rules.pickTarget({
+				{ id = 7, isHuman = true, distance = 50, inGrace = false },
+				{ id = -1, isHuman = false, distance = 20 },
+			})
+			T.expectEqual(graceOver and graceOver.id, 7, "grâce finie : l'humain proche repasse avant")
+			local alone = Rules.pickTarget({ { id = 7, isHuman = true, distance = 20, inGrace = true } })
+			T.expectEqual(alone and alone.id, 7, "seul candidat : reste la cible")
+		end)
+
 		T.it("garde un instant une cible sortie du champ, puis ne la poursuit que parfois", function()
 			T.expectEqual(Rules.keepTarget(10, 10 + Config.TARGET_KEEP_TIME), true)
 			T.expectEqual(Rules.keepTarget(10, 10 + Config.TARGET_KEEP_TIME + 0.1), false)

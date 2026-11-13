@@ -86,13 +86,11 @@ return function(T, Loader)
 				"vue après la grâce : dès qu'il la voit"
 			)
 			T.expectEqual(Rules.reactionStart(101, nil), 101, "apparition inconnue : dès qu'il la voit")
-			-- Vue dès l'apparition : le tir ne part qu'après REACTION_TIME + COMBAT_AIM_TIME, une fois la grâce finie
-			local BehaviorRules = Loader.new():require("src/shared/BotBehaviorRules")
-			local ready = Config.REACTION_TIME + Config.COMBAT_AIM_TIME
-			local _, fire = BehaviorRules.combatGaze(graceEnd + 0.01 - Rules.reactionStart(100, 100), nil)
-			T.expectEqual(fire, false, "pas de tir juste à la fin de la grâce")
-			_, fire = BehaviorRules.combatGaze(graceEnd + ready + 1e-6 - Rules.reactionStart(100, 100), nil)
-			T.expectEqual(fire, true, "tir après réaction et visée comptées depuis la fin de la grâce")
+			T.expectEqual(
+				Rules.reactionStart(100, 100),
+				graceEnd,
+				"vue dès l'apparition : réaction à la fin de la grâce"
+			)
 		end)
 
 		T.it("sort le couteau au contact, reprend le fusil à distance", function()
