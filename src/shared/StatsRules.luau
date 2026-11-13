@@ -1,6 +1,6 @@
 -- Règles pures des statistiques persistantes (#296) : champs comptés, format sauvegardé (DataStore `PlayerStats_v1`),
 -- chargement tolérant et fusion des écarts d'une session dans le profil stocké. Utilisées par le serveur (StatsStore),
--- testées (tests/specs/StatsRules.spec.luau).
+-- testées (tests/specs/StatsRules.spec.luau). En fin de fichier : l'attribut lu par la fiche de l'accueil (#301).
 --
 -- Une session ne réécrit pas le profil entier : elle envoie ses écarts (kills, morts, manches jouées et gagnées depuis
 -- la dernière écriture) par lots, et `mergeForSave`, appelée par UpdateAsync, les ajoute à ce qui est stocké. Deux
@@ -163,6 +163,43 @@ function StatsRules.mergeForSave(old: any, batch: Batch): (Payload?, MergeStatus
 	payload.stats = stats
 	payload.writes = marks
 	return payload :: Payload, "merged"
+end
+
+-- Lecture côté client (#301) : attribut informatif du Player, posé par le serveur (StatsStore) une fois le profil stocké
+-- lu, puis à chaque kill, mort ou fin de manche ; jamais relu par le serveur. Absent : pas (encore) chargé. Mise en
+-- forme de la fiche : HUDRules.statsView (client).
+StatsRules.ATTRIBUTE = "PlayerStats"
+
+-- Cette méthode permet d'écrire les compteurs dans l'attribut du Player lorsque le serveur les publie : entiers séparés
+-- par des virgules, dans l'ordre de FIELDS (« 12,3,5,1 »).
+function StatsRules.encode(stats: Stats): string
+	local parts = table.create(#StatsRules.FIELDS)
+	for i, field in StatsRules.FIELDS do
+		-- « %.0f » et non « %d », qui rendrait négatif un compteur de 2^63 ou plus (relu alors comme non chargé)
+		parts[i] = string.format("%.0f", stats[field])
+	end
+	return table.concat(parts, ",")
+end
+
+-- Cette méthode permet de relire l'attribut du Player lorsque la fiche se remplit ; nil (non chargé) si l'attribut est
+-- absent ou mal formé, jamais des zéros par défaut.
+function StatsRules.decode(value: any): Stats?
+	if type(value) ~= "string" then
+		return nil
+	end
+	local parts = string.split(value, ",")
+	if #parts ~= #StatsRules.FIELDS then
+		return nil
+	end
+	local stats = StatsRules.zero()
+	for i, field in StatsRules.FIELDS do
+		local count = if string.match(parts[i], "^%d+$") then tonumber(parts[i]) else nil
+		if not (count and isCount(count)) then
+			return nil
+		end
+		stats[field] = count
+	end
+	return stats
 end
 
 return StatsRules

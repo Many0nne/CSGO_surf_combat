@@ -1,8 +1,9 @@
 -- Menu principal (docs/ui.md) : derrière, le personnage du jeu en pose sur une copie de la map (#253, MenuScene) ; on
 -- choisit à la souris système, rien ne se tire. Titre en haut à gauche, onglets ARMES · INFOS · JOUER · RÉGLAGES ·
 -- FEEDBACK en haut au centre (au-dessus des écrans secondaires, qui s'ouvrent dessous), fiche de l'arme tenue en bas à
--- gauche. L'onglet ARMES est l'écran d'équipement (#280, EquipmentScreen) : emplacements à gauche, armes et skins
--- possédés de l'emplacement actif à droite, le personnage tient l'arme survolée ou celle de l'emplacement actif.
+-- gauche, statistiques du joueur en bas au centre (#301, StatsCard). L'onglet ARMES est l'écran d'équipement (#280,
+-- EquipmentScreen) : emplacements à gauche, armes et skins possédés de l'emplacement actif à droite, le personnage tient
+-- l'arme survolée ou celle de l'emplacement actif.
 local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -15,6 +16,7 @@ local Rules = require(script.Parent.Parent.systems.game.MenuSceneRules)
 local EquipmentScreen = require(script.Parent.EquipmentScreen)
 local MenuCursor = require(script.Parent.MenuCursor)
 local MenuShot = require(script.Parent.MenuShot)
+local StatsCard = require(script.Parent.StatsCard)
 local UIKit = require(script.Parent.UIKit)
 
 local C = UITheme.Colors
@@ -303,6 +305,7 @@ local function buildContent(root: Frame)
 		UIKit.frame({ Name = "LeftColumn", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = content })
 	buildTitle(column)
 	buildCard(content)
+	StatsCard.build(content)
 	EquipmentScreen.build(content, column)
 	followTopbar(root, column)
 	showWeapon(MenuScene.getWeapon())

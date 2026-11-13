@@ -1,5 +1,6 @@
 -- Règles pures du HUD (sans Instance ; modules requis : KeyBindings, InventoryRules, ParticipantRules, ScoreRules) :
--- paliers de vitesse, timer, classement, écran de fin de manche, barre d'armes, affichage des touches.
+-- paliers de vitesse, timer, classement, écran de fin de manche, barre d'armes, affichage des touches, fiche de
+-- statistiques de l'accueil.
 -- Testées sous Lune (tests/specs/HUDRules.spec.luau).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -90,6 +91,60 @@ function HUDRules.formatKD(kills: number, deaths: number): string
 		return string.format("%.2f", kills)
 	end
 	return string.format("%.2f", kills / deaths)
+end
+
+-- Valeur affichée sur la fiche de l'accueil (#301) tant que les statistiques ne sont pas connues (chargement en cours ou
+-- en échec) : pas de faux zéros
+HUDRules.STATS_UNKNOWN = "—"
+
+-- Compteurs relus de l'attribut `PlayerStats` (même forme que StatsRules.Stats), et textes de la fiche prêts à afficher
+export type PlayerStats = { kills: number, deaths: number, roundsPlayed: number, roundsWon: number }
+export type StatsView = { kills: string, deaths: string, ratio: string, roundsPlayed: string, roundsWon: string }
+
+-- Cette méthode permet d'écrire un compteur lisible lorsque la fiche de l'accueil l'affiche : chiffres complets sous
+-- 10 000 (espace des milliers), puis abrégé en k et M, tronqué pour ne jamais grossir le chiffre.
+function HUDRules.formatCount(n: number): string
+	n = math.max(0, math.floor(n))
+	if n < 1000 then
+		return tostring(n)
+	elseif n < 10000 then
+		return string.format("%d %03d", n // 1000, n % 1000)
+	end
+	local value, suffix = n / 1000, "k"
+	if n >= 1000000 then
+		value, suffix = n / 1000000, "M"
+	end
+	if value < 100 then
+		return string.format("%.1f%s", math.floor(value * 10) / 10, suffix)
+	end
+	return string.format("%d%s", math.floor(value), suffix)
+end
+
+-- Cette méthode permet de donner le ratio kills/morts de la fiche de l'accueil lorsqu'elle se remplit : celui du
+-- classement (formatKD) tant qu'il s'écrit sous 100, au-delà un compteur arrondi comme lui, sans décimale (formatCount).
+function HUDRules.statsRatio(kills: number, deaths: number): string
+	local ratio = if deaths == 0 then kills else kills / deaths
+	-- 99.995 s'écrirait « 100.00 » à deux décimales : il passe déjà sans décimale
+	if ratio >= 99.995 then
+		return HUDRules.formatCount(math.floor(ratio + 0.5))
+	end
+	return HUDRules.formatKD(kills, deaths)
+end
+
+-- Cette méthode permet de préparer les textes de la fiche de l'accueil lorsque l'attribut `PlayerStats` change
+-- (StatsRules.decode) : statistiques non chargées (nil) → STATS_UNKNOWN partout, ratio compris.
+function HUDRules.statsView(stats: PlayerStats?): StatsView
+	if not stats then
+		local u = HUDRules.STATS_UNKNOWN
+		return { kills = u, deaths = u, ratio = u, roundsPlayed = u, roundsWon = u }
+	end
+	return {
+		kills = HUDRules.formatCount(stats.kills),
+		deaths = HUDRules.formatCount(stats.deaths),
+		ratio = HUDRules.statsRatio(stats.kills, stats.deaths),
+		roundsPlayed = HUDRules.formatCount(stats.roundsPlayed),
+		roundsWon = HUDRules.formatCount(stats.roundsWon),
+	}
 end
 
 -- Cette méthode permet de calculer les secondes entières restantes avant réapparition lorsque l'overlay de mort tourne.

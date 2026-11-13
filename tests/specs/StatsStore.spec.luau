@@ -169,7 +169,12 @@ return function(T, Loader)
 		server.StatsStore.init()
 		-- Cette méthode permet de faire arriver un joueur lorsqu'un test en a besoin (chargement lancé comme init.server).
 		function server.join(userId: number)
-			local player = { UserId = userId, Name = "Joueur" .. userId }
+			local player = { UserId = userId, Name = "Joueur" .. userId, attributes = {}, attributeSets = 0 }
+			-- Cette méthode permet de simuler Player:SetAttribute lorsque StatsStore publie les statistiques (#301).
+			function player.SetAttribute(self, name: string, value: any)
+				self.attributes[name] = value
+				self.attributeSets += 1
+			end
 			table.insert(players, player)
 			sched.task.spawn(server.StatsStore.load, player)
 			return player
@@ -450,6 +455,93 @@ return function(T, Loader)
 			sched.advance(10)
 			T.expect(state.done, "arrêt terminé")
 			T.expectEqual(storedStats(ds, 1).kills, 2)
+		end)
+	end)
+
+	T.describe("StatsStore : attribut PlayerStats (#301)", function()
+		local Rules = Loader.new({}):require("src/shared/StatsRules")
+
+		-- Cette méthode permet de relire l'attribut publié d'un joueur simulé lorsqu'un test le vérifie (nil : absent).
+		local function published(player)
+			return Rules.decode(player.attributes[Rules.ATTRIBUTE])
+		end
+
+		T.it("absent pendant le chargement, posé avec le stocké plus les écarts une fois chargé", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			ds.data["1"] = { schemaVersion = 1, stats = { kills = 10, deaths = 2, roundsPlayed = 3, roundsWon = 1 } }
+			ds.latency = 5
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			server.StatsStore.recordKill(alice)
+			T.expectEqual(published(alice), nil, "pas de faux zéros avant la fin du chargement")
+			sched.advance(5)
+			local stats = published(alice)
+			T.expect(stats ~= nil, "attribut posé au chargement")
+			T.expectEqual(stats and stats.kills, 11)
+			T.expectEqual(stats and stats.deaths, 2)
+			T.expectEqual(stats and stats.roundsPlayed, 3)
+		end)
+
+		T.it("mis à jour à chaque kill, mort et fin de manche, sans attendre l'écriture DataStore", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			T.expectEqual(alice.attributes[Rules.ATTRIBUTE], "0,0,0,0", "nouveau joueur : attribut posé, vrais zéros")
+			server.StatsStore.recordKill(alice)
+			server.StatsStore.recordKill(alice)
+			server.StatsStore.recordDeath(alice)
+			server.StatsStore.recordRoundEnd(alice, true)
+			T.expectEqual(ds.writes, 0, "rien d'écrit encore")
+			T.expectEqual(alice.attributes[Rules.ATTRIBUTE], "2,1,1,1")
+			local sets = alice.attributeSets
+			server.StatsStore.recordRoundEnd(alice, true)
+			T.expectEqual(alice.attributeSets, sets + 1, "manche gagnée : une seule publication")
+			T.expectEqual(alice.attributes[Rules.ATTRIBUTE], "2,1,2,2")
+			sched.advance(INTERVAL)
+			T.expectEqual(alice.attributes[Rules.ATTRIBUTE], "2,1,2,2", "inchangé après l'écriture")
+		end)
+
+		T.it("chargement en échec : jamais posé, même après des kills (la fiche reste sur « — »)", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			ds.readFailures = 3
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			sched.advance(10)
+			server.StatsStore.recordKill(alice)
+			server.StatsStore.recordRoundEnd(alice, false)
+			sched.advance(INTERVAL)
+			T.expectEqual(alice.attributes[Rules.ATTRIBUTE], nil)
+			T.expectEqual(alice.attributeSets, 0)
+		end)
+
+		T.it(
+			"écriture réussie pendant le chargement : l'attribut est posé dès qu'elle rend le stocké connu",
+			function()
+				local sched = makeScheduler()
+				local ds = makeDataStore(sched)
+				ds.data["1"] = { schemaVersion = 1, stats = { kills = 4, deaths = 0, roundsPlayed = 0, roundsWon = 0 } }
+				ds.readLatency = INTERVAL + 30
+				local server = makeServer(sched, ds)
+				local alice = server.join(1)
+				server.StatsStore.recordKill(alice)
+				sched.advance(INTERVAL + 1)
+				T.expectEqual(alice.attributes[Rules.ATTRIBUTE], "5,0,0,0")
+			end
+		)
+
+		T.it("joueur parti : plus rien n'est posé sur lui", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			server.leave(alice)
+			local sets = alice.attributeSets
+			server.StatsStore.recordKill(alice)
+			sched.advance(INTERVAL)
+			T.expectEqual(alice.attributeSets, sets)
 		end)
 	end)
 end
