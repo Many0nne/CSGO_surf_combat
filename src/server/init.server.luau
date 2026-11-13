@@ -499,8 +499,6 @@ local function applyHit(
 	if not humanoid or humanoid.Health <= 0 then
 		return nil
 	end
-	-- Touche validée (couteau compris) : la protection d'apparition du tireur tombe (#288)
-	SpawnProtection.drop(Participants.characterOf(attacker))
 	recordHit(attacker, targetCharacter, isHeadshot)
 	local healthBefore = humanoid.Health
 	humanoid:TakeDamage(damage)
@@ -534,6 +532,10 @@ meleeRmt.OnServerEvent:Connect(function(player, targetCharacter, attackKind, hit
 	end
 	local damage =
 		Validator.authorizeMelee(Participants.fromPlayer(player), targetCharacter, attackKind, os.clock(), hitTime)
+	-- Coup accepté, même sans WeaponAction « Shoot » avant lui : la protection d'apparition du tireur tombe (#288)
+	if damage then
+		SpawnProtection.drop(player.Character)
+	end
 	onHitVerdict(player, meleeRmt, targetCharacter, damage, false)
 end)
 

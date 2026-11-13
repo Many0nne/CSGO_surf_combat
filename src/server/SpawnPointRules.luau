@@ -2,24 +2,24 @@
 -- l'applique avec les points GroundSpawns de la map, les ennemis vivants et un vrai raycast de vue.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 
 local SpawnPointRules = {}
 
--- Hauteur des yeux au-dessus d'un point d'apparition ou d'une racine de personnage (studs) : la vue se teste d'yeux à
--- yeux (racine posée 5 studs au-dessus du point, yeux 1,5 stud au-dessus de la racine)
-SpawnPointRules.POINT_EYE_OFFSET = 6.5
-SpawnPointRules.ROOT_EYE_OFFSET = 1.5
+-- Hauteur des yeux au-dessus d'une racine de personnage (celle des bots, BotConfig.EYE_HEIGHT) et d'un point
+-- d'apparition (racine posée ROOT_ABOVE_POINT studs au-dessus du point, SpawnManager.place) : la vue se teste d'yeux à yeux
+SpawnPointRules.ROOT_ABOVE_POINT = 5
+SpawnPointRules.ROOT_EYE_OFFSET = BotConfig.EYE_HEIGHT
+SpawnPointRules.POINT_EYE_OFFSET = SpawnPointRules.ROOT_ABOVE_POINT + BotConfig.EYE_HEIGHT
 
--- Pièces traversées au plus par un test de vue (murs d'air, grillages) avant de conclure qu'il est bloqué
-SpawnPointRules.SIGHT_MAX_HITS = 8
 -- Une pièce au moins aussi transparente se voit au travers (grillages de Dizzy : 0,55 ; murs d'air : 1)
 SpawnPointRules.SEE_THROUGH_TRANSPARENCY = 0.5
 
--- Cette méthode permet de savoir si le regard traverse une pièce touchée lorsqu'on teste la vue d'un ennemi sur un
--- point : mur d'air (dossier Clips, il n'arrête ni le regard ni les balles) ou pièce transparente.
-function SpawnPointRules.seesThrough(inClips: boolean, transparency: number): boolean
-	return inClips or transparency >= SpawnPointRules.SEE_THROUGH_TRANSPARENCY
+-- Cette méthode permet de savoir si une pièce de la map arrête le regard lorsque SpawnManager prépare son test de vue :
+-- ni mur d'air (dossier Clips, il n'arrête ni le regard ni les balles), ni pièce transparente (grillage).
+function SpawnPointRules.blocksSight(inClips: boolean, transparency: number): boolean
+	return not inClips and transparency < SpawnPointRules.SEE_THROUGH_TRANSPARENCY
 end
 
 -- Test de vue injecté : true si un ennemi aux yeux en `from` voit des yeux en `to`
@@ -28,10 +28,16 @@ export type IsVisible = (from: Vector3, to: Vector3) -> boolean
 export type Pick = (n: number) -> number
 
 -- Cette méthode permet de savoir si un point convient lorsqu'on choisit où faire apparaître un personnage : aucun
--- ennemi à moins de SPAWN_SAFE_RADIUS, aucun ennemi qui le voit (yeux à yeux, à toute distance).
+-- ennemi à moins de SPAWN_SAFE_RADIUS, aucun ennemi qui le voit (yeux à yeux, à toute distance). Les distances sont
+-- testées d'abord : un point trop proche ne coûte aucun raycast.
 function SpawnPointRules.isSafe(point: Vector3, enemies: { Vector3 }, isVisible: IsVisible): boolean
 	for _, enemy in enemies do
-		if (enemy - point).Magnitude < GameConfig.SPAWN_SAFE_RADIUS or isVisible(enemy, point) then
+		if (enemy - point).Magnitude < GameConfig.SPAWN_SAFE_RADIUS then
+			return false
+		end
+	end
+	for _, enemy in enemies do
+		if isVisible(enemy, point) then
 			return false
 		end
 	end

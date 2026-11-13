@@ -53,36 +53,28 @@ local sightParams: RaycastParams? = nil
 local sightMap: Instance? = nil
 
 -- Cette méthode permet de tester si un ennemi voit un point d'apparition lorsqu'on choisit où faire apparaître un
--- personnage (#288) : raycast d'yeux à yeux sur la géométrie de la map jouée (personnages ignorés), qui traverse les
--- murs d'air (Clips) et les pièces transparentes (grillages, SpawnPointRules.seesThrough).
+-- personnage (#288) : raycast d'yeux à yeux limité aux pièces de la map jouée qui arrêtent le regard (ni murs d'air
+-- Clips, ni grillages, SpawnPointRules.blocksSight), listées une fois par map (géométrie fixe pendant la partie).
 local function isVisible(map: Instance, from: Vector3, to: Vector3): boolean
 	if not sightParams or sightMap ~= map then
+		local clips = map:FindFirstChild("Clips")
+		local blockers = {}
+		for _, d in map:GetDescendants() do
+			if
+				d:IsA("BasePart")
+				and d.CanQuery
+				and SpawnPointRules.blocksSight(clips ~= nil and d:IsDescendantOf(clips), d.Transparency)
+			then
+				table.insert(blockers, d)
+			end
+		end
 		local params = RaycastParams.new()
 		params.FilterType = Enum.RaycastFilterType.Include
-		params.FilterDescendantsInstances = { map }
+		params.FilterDescendantsInstances = blockers
 		sightParams = params
 		sightMap = map
 	end
-	local clips = map:FindFirstChild("Clips")
-	local origin = from
-	for _ = 1, SpawnPointRules.SIGHT_MAX_HITS do
-		local delta = to - origin
-		if delta.Magnitude < 1e-3 then
-			return true
-		end
-		local hit = workspace:Raycast(origin, delta, sightParams)
-		if not hit then
-			return true
-		end
-		local part = hit.Instance
-		local inClips = clips ~= nil and part:IsDescendantOf(clips)
-		if not SpawnPointRules.seesThrough(inClips, if part:IsA("BasePart") then part.Transparency else 0) then
-			return false
-		end
-		-- Au-delà de la pièce traversée : le rayon repart juste derrière le point touché
-		origin = hit.Position + delta.Unit * 0.05
-	end
-	return false
+	return workspace:Raycast(from, to - from, sightParams) == nil
 end
 
 -- Cette méthode permet de lister les yeux des ennemis vivants (tous les autres participants) lorsqu'un personnage
@@ -141,7 +133,8 @@ function SpawnManager.place(char: Model)
 	char:SetAttribute(BotCombatRules.SPAWNED_AT_ATTRIBUTE, os.clock())
 	SpawnProtection.protect(char)
 	if root then
-		root.CFrame = CFrame.new((if ground then ground.Position else Vector3.new(0, 5, 0)) + Vector3.new(0, 5, 0))
+		local above = Vector3.new(0, SpawnPointRules.ROOT_ABOVE_POINT, 0)
+		root.CFrame = CFrame.new((if ground then ground.Position else Vector3.new(0, 5, 0)) + above)
 	end
 end
 
