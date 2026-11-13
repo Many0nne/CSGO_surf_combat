@@ -91,20 +91,16 @@ return function(T, Loader)
 			T.expectEqual(rowFor(rows, "Menu en partie").key, "P")
 		end)
 
-		T.it("prend les touches d'actions dans HUDRules.keyDisplayEntries, sans liste parallèle", function()
-			local keyMap = KeyBindings.keyMap()
-			for _, entry in HUDRules.keyDisplayEntries("full") do
-				if entry.keys and not entry.label then
-					-- la touche d'une action lettre (R, F) doit apparaître dans une ligne sous son libellé
-					local label = string.upper(entry.keys[1])
-					local found = false
-					for _, row in InfosRules.commandRows(context({})) do
-						found = found or string.find(row.key, label, 1, true) ~= nil
-					end
-					T.expectEqual(found, true, entry.id .. " " .. label)
-					T.expectEqual(keyMap[entry.keys[1]], entry.id)
-				end
-			end
+		T.it("prend la touche de chaque action lettre dans KeyBindings : la ligne porte l'action attendue", function()
+			local rows = InfosRules.commandRows(context({}))
+			T.expectEqual(rowFor(rows, "Recharger").key, string.upper(KeyBindings.KEYS.reload[1]))
+			T.expectEqual(rowFor(rows, "Inspecter").key, string.upper(KeyBindings.KEYS.inspect[1]))
+			T.expectEqual(KeyBindings.keyMap()[KeyBindings.KEYS.reload[1]], "reload")
+			T.expectEqual(KeyBindings.keyMap()[KeyBindings.KEYS.inspect[1]], "inspect")
+		end)
+
+		T.it("garde « ? » plutôt qu'une case vide sans touche d'arme", function()
+			T.expectEqual(rowFor(InfosRules.commandRows(context({}, { slotKeys = {} })), "Changer d'arme").key, "?")
 		end)
 
 		T.it("suit les touches d'armes réglées par le joueur", function()

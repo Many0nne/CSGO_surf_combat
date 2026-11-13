@@ -227,8 +227,15 @@ function InfosScreen.init(onClose: () -> ())
 	end
 	page.exit("RETOUR", onClose)
 
-	-- Touches d'armes changées dans Réglages pendant que Infos est ouvert : l'onglet se recompose
-	LocalSettings.onChanged(function()
+	-- Touches d'armes ou molette changées dans Réglages pendant que Infos est ouvert : l'onglet se recompose ; les autres
+	-- réglages ne touchent pas l'écran (sinon le défilement reviendrait en haut).
+	local shownSlotKeys, shownWheel = table.concat(LocalSettings.get().slotKeys, ","), LocalSettings.get().wheel
+	LocalSettings.onChanged(function(settings)
+		local slotKeys = table.concat(settings.slotKeys, ",")
+		if slotKeys == shownSlotKeys and settings.wheel == shownWheel then
+			return
+		end
+		shownSlotKeys, shownWheel = slotKeys, settings.wheel
 		if page.gui.Enabled then
 			renderSection(selected)
 		end

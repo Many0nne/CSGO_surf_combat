@@ -93,7 +93,7 @@ local function slotKeysLabel(ctx: Context): string
 	if isDefault and #texts > 1 then
 		return texts[1] .. " – " .. texts[#texts]
 	end
-	return table.concat(texts, " ")
+	return #texts > 0 and table.concat(texts, " ") or "?"
 end
 
 -- Cette méthode permet de composer les lignes « touche → action » de la section COMMANDES lorsque l'écran Infos s'ouvre
