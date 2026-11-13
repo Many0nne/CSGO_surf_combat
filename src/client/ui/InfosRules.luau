@@ -28,7 +28,7 @@ export type Context = {
 
 export type KeyRow = { key: string, action: string }
 
--- Description de chaque action affichée ; `move` regroupe les quatre directions sur une ligne
+-- Description de chaque action affichée (les quatre directions tiennent sur une ligne « Se déplacer »)
 local ACTION_TEXT = {
 	jump = "Sauter / bhop (auto-bhop réglable dans Réglages)",
 	crouch = "S'accroupir",

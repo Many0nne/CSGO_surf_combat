@@ -99,6 +99,23 @@ return function(T, Loader)
 			T.expectEqual(KeyBindings.keyMap()[KeyBindings.KEYS.inspect[1]], "inspect")
 		end)
 
+		T.it("donne une ligne à chaque action de l'affichage des touches (pas d'action oubliée)", function()
+			local rows = InfosRules.commandRows(context({}))
+			T.expectEqual(#rows >= #HUDRules.keyDisplayEntries("full") - 3, true, "directions regroupées en une ligne")
+			for _, entry in HUDRules.keyDisplayEntries("full") do
+				if not table.find({ "forward", "left", "back", "right" }, entry.id) then
+					local wanted = entry.mouse and (entry.mouse == 1 and "CLIC GAUCHE" or "CLIC DROIT")
+						or entry.label
+						or string.upper(entry.keys[1])
+					local found = false
+					for _, row in rows do
+						found = found or row.key == wanted
+					end
+					T.expectEqual(found, true, entry.id)
+				end
+			end
+		end)
+
 		T.it("garde « ? » plutôt qu'une case vide sans touche d'arme", function()
 			T.expectEqual(rowFor(InfosRules.commandRows(context({}, { slotKeys = {} })), "Changer d'arme").key, "?")
 		end)
