@@ -341,6 +341,16 @@ local function watchRespawn(watch: SpawnRequestRules.DeadWatch)
 	end, RESPAWN_FAILED_NOTICE)
 end
 
+-- Cette méthode permet de passer en SPAWNING et d'envoyer une demande d'apparition suivie (#219) lorsque le joueur
+-- clique JOUER ou enchaîne la manche suivante après la bannière de fin (#300).
+local function startSpawnRequest()
+	setState("SPAWNING")
+	-- Le serveur répond à chaque demande ; sans réponse ou après un refus temporaire, elle est renvoyée (#219)
+	local attempt = SpawnRequestRules.new(os.clock())
+	spawnAttempt = attempt
+	task.spawn(watchSpawnRequest, attempt)
+end
+
 -- Cette méthode permet de lancer la surveillance de la réapparition lorsque le joueur local passe en DEAD.
 function startRespawnWatch()
 	local watch = SpawnRequestRules.newDeadWatch(os.clock())
@@ -384,10 +394,16 @@ local function listenToRemotes()
 		setState("RESULT")
 		RoundHUD.show()
 		RoundHUD.showResult(data.winnerName)
+		-- Fin de la bannière : enchaînement sur la manche suivante sans repasser par le menu (#300). Le serveur repasse
+		-- idle après le même RESULT_DURATION, compté avant la réception : une demande un peu en avance reçoit "result" et
+		-- est renvoyée (SpawnRequestRules.RESULT_RETRY) ; la première acceptée démarre la manche (beforeSpawn).
 		resultTimer = task.delay(GameConfig.RESULT_DURATION, function()
+			resultTimer = nil
 			RoundHUD.hideResult()
 			RoundHUD.hide()
-			setState("MENU")
+			if SpawnRequestRules.afterResult(state) == "SPAWNING" then
+				startSpawnRequest()
+			end
 		end)
 	end)
 
@@ -405,11 +421,7 @@ function GameStateController.requestPlay(): boolean
 	if state ~= "MENU" and state ~= "INFOS" then
 		return false
 	end
-	setState("SPAWNING")
-	-- Le serveur répond à chaque demande ; sans réponse ou après un refus temporaire, elle est renvoyée (#219)
-	local attempt = SpawnRequestRules.new(os.clock())
-	spawnAttempt = attempt
-	task.spawn(watchSpawnRequest, attempt)
+	startSpawnRequest()
 	return true
 end
 

@@ -12,7 +12,9 @@ SpawnRequestRules.LOAD_TIMEOUT = 15 -- demande acceptée, personnage pas arrivé
 SpawnRequestRules.GIVE_UP_AFTER = 30 -- borne des envois (+ LOAD_TIMEOUT si acceptée juste avant)
 -- Écart minimal entre deux envois : la garde du serveur (RemoteGuard.RULES.RequestSpawn) en admet 1 par seconde
 SpawnRequestRules.MIN_RESEND = 1.2
-SpawnRequestRules.RESULT_RETRY = 1.5 -- bannière de fin (6 s) : renvoi à ce rythme jusqu'au round suivant
+-- Bannière de fin (GameConfig.RESULT_DURATION) : renvoi à ce rythme jusqu'au round suivant (JOUER pendant la bannière,
+-- ou enchaînement d'une manche à l'autre, #300)
+SpawnRequestRules.RESULT_RETRY = 1.5
 SpawnRequestRules.ALIVE_RETRY = 1.2 -- personnage encore en place côté serveur (corps) : renvoi
 SpawnRequestRules.FAILED_RETRY = 1.5 -- LoadCharacterAsync échoué côté serveur : renvoi
 SpawnRequestRules.EARLY_MARGIN = 0.1 -- marge ajoutée au délai restant annoncé par le serveur
@@ -124,6 +126,12 @@ function SpawnRequestRules.onTick(attempt: Attempt, now: number): TickAction
 		return if attempt.unanswered >= SpawnRequestRules.MAX_UNANSWERED then "giveUp" else "send"
 	end
 	return "wait"
+end
+
+-- Cette méthode permet de choisir l'état client à la fin de la bannière de fin de manche (#300) : un joueur encore
+-- en RESULT enchaîne (SPAWNING, sa demande reçoit "result" jusqu'au round suivant), sinon rien ne change (nil).
+function SpawnRequestRules.afterResult(state: string): "SPAWNING"?
+	return if state == "RESULT" then "SPAWNING" else nil
 end
 
 -- Cette méthode permet de savoir si l'attente de la réapparition continue lorsque l'état client change : seulement en
