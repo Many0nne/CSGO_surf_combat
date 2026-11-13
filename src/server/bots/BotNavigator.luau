@@ -3,7 +3,7 @@
 -- BotMotion : direction (raccourcie en ligne droite quand les cases sont alignées), saut devant un rebord à monter,
 -- grimpe d'une échelle. Un bot qui ne se rapproche plus de sa cible recalcule son chemin ; après NAV_MAX_REPATH
 -- essais, l'arête ratée est écartée NAV_BAN_TIME secondes et il change de destination.
--- Après une apparition (lancé depuis le soleil), il attend d'être au sol puis repart de la case la plus proche.
+-- Après une apparition, il attend d'être au sol puis repart de la case la plus proche.
 -- Bunny hop (#151) : sur une portion de marche du chemin (tirage BHOP_CHANCE), il ressaute à chaque atterrissage sans
 -- friction et, en l'air, vise un point du chemin devant lui (poursuite) à une vitesse réglée par les virages devant
 -- et la marche restante (BotMotion strafe, plane ou freine en l'air pour la tenir). Il atterrit normalement quand le

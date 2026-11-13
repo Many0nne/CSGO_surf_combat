@@ -33,7 +33,7 @@ Construit **automatiquement au démarrage du serveur** dans la vraie collision d
 Mesure sur Dizzy (09/11/2026) : 40 841 cases (29 319 gardées), 1 056 points, 294 000 arêtes de marche, 9 250
 descentes, 4 500 sauts, 2 échelles ; **7,8 s** au démarrage (cases 4,0, marche 1,1, rebords 0,3, vue 2,1) avec
 `NAV_BUILD_BUDGET` = 8 ms par frame ; **~45 Mo** de mémoire Lua serveur. Les bots attendent sur place que le plan soit
-prêt (ils tombent du soleil pendant ce temps).
+prêt.
 
 ## Rampes de surf (#142)
 
@@ -188,7 +188,9 @@ Règles pures dans `BotCombatRules`, armes dans `BotArsenal` (une par bot vivant
   repris au-delà de `KNIFE_DROP_RANGE`. Temps de sortie, cadence, chargeur, réserve et rechargement de `WeaponConfig`
   (rechargement aussi quand il n'a rien à viser) ; vitesse de course selon l'arme (`BotMotion:setWeapon`).
 - **Délai de grâce** : `SpawnManager.place` pose l'attribut serveur `SpawnedAt` (os.clock) sur tout personnage ; un
-  bot ne tire pas sur un participant apparu depuis moins de `SPAWN_GRACE` (4 s, lancement depuis le soleil compris).
+  bot ne tire pas sur un participant apparu depuis moins de `SPAWN_GRACE` (4 s). Depuis #288, tout
+  personnage est aussi protégé `GameConfig.SPAWN_PROTECTION` (2 s, `ForceField`) jusqu'à son premier tir : la grâce
+  des bots reste plus longue et couvre aussi un joueur qui tire tôt.
   Son temps de réaction et de visée ne court qu'à partir de la fin de ce délai (`BotCombatRules.reactionStart`,
   #298) : il peut se tourner vers la cible pendant la grâce, mais le tir part au plus tôt `REACTION_TIME` +
   `COMBAT_AIM_TIME` après sa fin. Une cible qui réapparaît (nouveau `SpawnedAt`) est traitée comme une nouvelle cible.

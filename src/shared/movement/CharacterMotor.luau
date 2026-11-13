@@ -112,7 +112,7 @@ function CharacterMotor.syncFromRoot(self: CharacterMotor)
 	self.cframe = self.hrp.CFrame
 end
 
--- Cette méthode permet de téléporter le personnage lorsqu'il est lancé depuis le soleil ou replacé : la position
+-- Cette méthode permet de téléporter le personnage lorsqu'il est replacé (correction du serveur) : la position
 -- devient aussi le dernier point sûr.
 function CharacterMotor.teleport(self: CharacterMotor, cf: CFrame)
 	self:_place(cf)

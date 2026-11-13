@@ -329,8 +329,8 @@ captures (`screen_capture`) sont blanches tant que la fenêtre Studio n'est pas 
 L'Arène (#71, anneau de dunes surfables face à face façon surf_japan, au-dessus du vide) et, avant elle, la ville
 ensablée (#69, ville moderne à moitié engloutie par le sable) ont été retirées avec leurs générateurs, leurs matières
 (`ArenaFacade`, `ArenaCliff`), le mesh des virages et le sable en Terrain (`DuneField`, `MapTerrain`). Récupérables dans
-l'historique git (PR de retrait de l'Arène). Les mécaniques génériques restent : boosts, mort par chute, lancement
-depuis le soleil (voir « Ce que le code attend de la map »).
+l'historique git (PR de retrait de l'Arène). Les mécaniques génériques restent : boosts, mort par chute (voir « Ce que
+le code attend de la map ») ; le lancement depuis le soleil a été retiré par #288.
 
 - **Échelle** : la ville à ~1 000 × 1 100 studs était trop grande (à 8 on ne se croise pas) ; ~450 × 450 studs pour
   6 à 10 joueurs.
@@ -368,22 +368,21 @@ Rojo gère `Workspace.Maps` : un objet posé à la main dans une map est supprim
 
 ## Ce que le code attend de la map
 
-- `Maps.Map.SunLaunch` : parties invisibles ; position = point d'apparition, `LookVector` = direction du lancement,
-  attribut `Speed` (studs/s). `SpawnManager` en tire une au hasard, pose `LaunchOrigin` et `LaunchVelocity` sur le
-  personnage ; `MovementController` les applique une fois (position, vitesse en l'air, caméra tournée vers la map,
-  `SpawnLaunch.cameraAngles`).
 - `Maps.Map.Ladders` : volumes invisibles (aucune collision ni requête), `LookVector` = normale sortante du mur. Dans
   le volume (marge `CHAR_RADIUS`), `MovementController` remplace la physique par `LadderRules.climbVelocity` : avancer
   monte (regard baissé : descend), reculer descend, de côté on glisse le long, saut = poussée hors du mur
   (`LADDER_*` de `MovementConfig`). Le volume doit dépasser le haut du mur d'environ une hauteur de corps, sinon on
   reste coincé sous l'acrotère ; aucun mur d'air ne doit avancer devant le mur à la hauteur de la grimpe.
-- `Maps.Map.GroundSpawns` : repli quand la map n'a pas de lanceur.
+- `Maps.Map.GroundSpawns` : points d'apparition (parties, le personnage est posé 5 studs au-dessus), seuls utilisés
+  depuis #288 (lancement depuis le soleil retiré). `SpawnManager` choisit un point à plus de `SPAWN_SAFE_RADIUS` et hors
+  de vue des ennemis vivants (`SpawnPointRules`) : prévoir des points dans plusieurs zones éloignées et sans vue entre
+  elles, sinon le choix retombe au hasard.
 - `Maps.Map.Boosts` : volumes invisibles (`CanCollide`, `CanQuery`, `CanTouch` faux), attribut `Kind` :
   `Geyser` / `Launcher` avec `Velocity` (Vector3 imposé), `Portal` avec `Boost` (studs/s ajoutés), `Cooldown`
   optionnel. Le client teste sa position dans la boîte (marge `CHAR_RADIUS`) à chaque frame : un portique doit être
   assez épais (14 studs) pour ne pas être traversé entre deux ticks (64 Hz) au plafond horizontal de 420 studs/s.
-  Les vitesses imposées (geyser, lanceur, `SunLaunch`) sont ramenées sans avertissement à `MAX_SPEED_SERVER` (450
-  studs/s, norme 3D) au plus (`MapRules.imposedVelocity`, `SpawnLaunch.velocity`), puis l'horizontale à 420 par le
+  Les vitesses imposées (geyser, lanceur) sont ramenées sans avertissement à `MAX_SPEED_SERVER` (450
+  studs/s, norme 3D) au plus (`MapRules.imposedVelocity`), puis l'horizontale à 420 par le
   client : un lanceur réglé au-delà rate son point de chute (`docs/anticheat.md` « D1 »). Le visuel est à part
   (`BoostFx`).
 - Attribut `KillHeight` sur `Maps.Map` : mort sous cette hauteur (absent : pas de mort par chute). C'est le client
@@ -391,8 +390,7 @@ Rojo gère `Workspace.Maps` : un objet posé à la main dans une map est supprim
   client ; côté serveur le personnage reste figé à son point d'apparition). Une première version qui testait la
   position côté serveur ne tuait jamais personne.
 - La lumière est dans `default.project.json` (Lighting + Atmosphere), reprise telle quelle par l'accueil du menu (`MenuScene`, #253) :
-  `ClockTime` 17.9 et latitude 0. Des lanceurs `SunLaunch` doivent viser `Lighting:GetSunDirection()` (Y retiré) pour
-  qu'on sorte du soleil : changer l'heure oblige à les réorienter. Jugée un peu sombre le 06/11/2026 : éclaircie par
+  `ClockTime` 17.9 et latitude 0. Jugée un peu sombre le 06/11/2026 : éclaircie par
   les ambiances (`OutdoorAmbient` 122,110,130, `Ambient` 74,69,88), `Brightness` 3.6 et `ExposureCompensation` 0.35,
   sans toucher à l'heure ni à l'Atmosphere.
 
