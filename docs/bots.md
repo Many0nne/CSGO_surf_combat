@@ -193,10 +193,11 @@ Règles pures dans `BotCombatRules`, armes dans `BotArsenal` (une par bot vivant
   #298) : il peut se tourner vers la cible pendant la grâce, mais le tir part au plus tôt `REACTION_TIME` +
   `COMBAT_AIM_TIME` après sa fin. Une cible qui réapparaît (nouveau `SpawnedAt`) est traitée comme une nouvelle cible.
 - **Cible** : un humain hors délai de grâce à moins de `HUMAN_PREF_RANGE` passe avant un bot ; au-delà, ou
-  pendant sa grâce, la cible la plus proche l'emporte (`pickTarget` de #141, borné par #298). L'humain déjà visé garde
-  sa préférence jusqu'à `HUMAN_PREF_MARGIN` studs de plus : sans cette marge, un humain au seuil faisait changer
-  de cible à chaque regard, et chaque changement relance le temps de réaction (le bot ne tirait plus). Les bots se
-  tirent dessus. `graceHolds` du bilan compte les regards de visée sur une cible encore dans sa grâce.
+  pendant sa grâce, la cible la plus proche l'emporte (`pickTarget` de #141, borné par #298). La cible déjà visée
+  est comptée `HUMAN_PREF_MARGIN` studs plus proche (seuil et distances) : sans cette marge, un humain au seuil, ou
+  deux cibles à distances presque égales, faisaient changer de cible à chaque regard, et chaque changement relance le
+  temps de réaction (le bot ne tirait plus). Les bots se tirent dessus. `graceHolds` du bilan compte les frames
+  (Heartbeat) où un bot vise une cible encore dans sa grâce.
 
 Mesure #298 (13/11/2026, Studio, 5 bots, un round de 300 s par cas, joueur seul humain) :
 
@@ -212,7 +213,7 @@ toujours, `REACTION_TIME` + `COMBAT_AIM_TIME` plus tard (13 vies sur 28 à 4,88 
 bot qui regarde déjà le point d'apparition, c'est le rôle de la protection côté joueur (#288). La part des kills
 sur le joueur reste proche de 1 sur 5 (une cible parmi cinq) avant comme après : la convergence des 5 bots sur
 le joueur n'apparaît pas dans ce chiffre. Dans la colonne « après », `graceHolds` tombe à 0 car le tir n'est plus
-tenté pendant la grâce (il compte depuis les regards de visée, valeur non mesurée). Le seuil de 100 studs : avant, 7
+tenté pendant la grâce (ancien compteur : tirs retenus ; il compte depuis les frames de visée, valeur non mesurée). Le seuil de 100 studs : avant, 7
 des 24 kills sur le joueur mobile venaient de plus de 100 studs, après 2 sur 21 (distance médiane du tueur ~55
 studs). La marge et la perte de préférence pendant la grâce, ajoutées après ces mesures, ne sont pas mesurées.
 

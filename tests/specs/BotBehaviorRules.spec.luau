@@ -99,6 +99,20 @@ return function(T, Loader)
 			T.expectEqual((Rules.pickTarget(candidates, 7) :: any).id, 7, "déjà visé : gardé dans la marge")
 			candidates[2].distance = range + margin + 1
 			T.expectEqual((Rules.pickTarget(candidates, 7) :: any).id, -1, "au-delà de la marge : lâché")
+			-- Au-delà du seuil, à distances presque égales : la cible actuelle reste choisie
+			local far = range + 30
+			local even = {
+				{ id = 7, isHuman = true, distance = far + 2 },
+				{ id = -1, isHuman = false, distance = far },
+			}
+			T.expectEqual(
+				(Rules.pickTarget(even, 7) :: any).id,
+				7,
+				"humain visé gardé face à un bot à peine plus proche"
+			)
+			T.expectEqual((Rules.pickTarget(even, -1) :: any).id, -1, "bot visé gardé de même")
+			even[1].distance = far - margin - 1
+			T.expectEqual((Rules.pickTarget(even, -1) :: any).id, 7, "nettement plus proche : il change de cible")
 		end)
 
 		T.it("ne préfère pas un humain encore dans son délai de grâce (#298)", function()
