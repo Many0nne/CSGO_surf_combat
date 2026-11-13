@@ -690,8 +690,8 @@ local function scoreName(score: Score, isMe: boolean): string
 end
 
 -- Cette méthode permet de poser une ligne du classement (rang, nom, K, M, K/M ; bande rouge d'impact pour le joueur local,
--- rang ambré pour le premier) lorsque le classement de Tab ou l'écran de fin est reconstruit ; `y` en px dans `parent`.
-local function scoreRow(parent: GuiObject, rank: number, score: Score, isMe: boolean, y: number): Frame
+-- rang ambré pour le premier si `leader`) lorsque le classement de Tab ou l'écran de fin est reconstruit ; `y` en px.
+local function scoreRow(parent: GuiObject, rank: number, score: Score, isMe: boolean, y: number, leader: boolean): Frame
 	local row = UIKit.frame({
 		Name = "Row" .. rank,
 		BackgroundTransparency = 1,
@@ -733,7 +733,7 @@ local function scoreRow(parent: GuiObject, rank: number, score: Score, isMe: boo
 		tostring(score.deaths),
 		HUDRules.formatKD(score.kills, score.deaths),
 	}, { F.Display, isMe and F.BodyBold or F.BodySemi, F.Display, F.DisplayMedium, F.DisplayMedium }, {
-		rank == 1 and C.Accent or statColor,
+		(leader and rank == 1) and C.Accent or statColor,
 		isMe and C.Bone or C.Text,
 		C.Bone,
 		statColor,
@@ -759,7 +759,7 @@ function RoundHUD.updateScores(scores: { [number]: Score })
 
 	for i, score in sorted do
 		local isMe = not score.isBot and score.name == localName
-		local row = scoreRow(leaderboardList, i, score, isMe, (i - 1) * LB_ROW)
+		local row = scoreRow(leaderboardList, i, score, isMe, (i - 1) * LB_ROW, true)
 		row:SetAttribute("Order", i)
 	end
 end
@@ -846,10 +846,10 @@ function RoundHUD.showResult(data: any)
 		child:Destroy()
 	end
 	for i, row in view.podium do
-		scoreRow(resultRows, row.rank, row.score, row.isMe, (i - 1) * LB_ROW)
+		scoreRow(resultRows, row.rank, row.score, row.isMe, (i - 1) * LB_ROW, view.hasWinner)
 	end
 	if view.me then
-		scoreRow(resultRows, view.me.rank, view.me.score, true, #view.podium * LB_ROW + RESULT_ME_GAP)
+		scoreRow(resultRows, view.me.rank, view.me.score, true, #view.podium * LB_ROW + RESULT_ME_GAP, false)
 	end
 
 	resultShown = true

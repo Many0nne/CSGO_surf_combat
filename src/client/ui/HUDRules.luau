@@ -379,18 +379,20 @@ HUDRules.RESULT_NONE = "AUCUN VAINQUEUR"
 -- Ligne de l'écran de fin : rang dans le classement (tri de sortScores), score, joueur local ou non
 export type ResultRow = { rank: number, score: Score, isMe: boolean }
 
--- Contenu de l'écran de fin : titre (vainqueur en majuscules, égalité ou aucun vainqueur), sous-titre, victoire du
--- joueur local, podium, et ligne du joueur local quand il n'est pas sur le podium (nil sinon, ou s'il n'a pas joué)
+-- Contenu de l'écran de fin : titre (vainqueur en majuscules, égalité ou aucun vainqueur), sous-titre, vainqueur désigné
+-- (sinon le premier du podium n'est pas mis en avant), victoire du joueur local, podium, et ligne du joueur local quand
+-- il n'est pas sur le podium (nil sinon, ou s'il n'a pas joué)
 export type RoundResultView = {
 	title: string,
 	subtitle: string,
+	hasWinner: boolean,
 	meWins: boolean,
 	podium: { ResultRow },
 	me: ResultRow?,
 }
 
 -- Cette méthode permet de lire les scores d'un résultat de manche lorsqu'il arrive du serveur : entrées mal formées
--- écartées, le nom d'un bot reconnu à son drapeau.
+-- écartées, drapeau bot ramené à un booléen (le préfixe BOT est posé à l'affichage).
 local function readResultScores(data: any): { Score }
 	local scores: { Score } = {}
 	if type(data) ~= "table" or type(data.scores) ~= "table" then
@@ -436,9 +438,11 @@ function HUDRules.readRoundResult(data: any, localUserId: number): RoundResultVi
 		end
 	end
 
-	local view = { title = HUDRules.RESULT_NONE, subtitle = "", meWins = false, podium = podium, me = me }
+	local view =
+		{ title = HUDRules.RESULT_NONE, subtitle = "", hasWinner = false, meWins = false, podium = podium, me = me }
 	if winner then
 		view.title = string.upper(ParticipantRules.displayName(winner.score.name, winner.score.isBot))
+		view.hasWinner = true
 		view.meWins = winner.isMe
 		view.subtitle = if winner.isMe then "TU REMPORTES LE ROUND" else "REMPORTE LE ROUND"
 	elseif type(data) == "table" and data.outcome == "tie" then

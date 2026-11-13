@@ -56,29 +56,20 @@ local function ensureScore(participant: Participant): Score
 	return scores[id]
 end
 
--- Cette méthode permet de lister les ids des participants en jeu à la fin d'une manche lorsqu'elle se termine : inscrits
--- au classement et présents sur la map (personnage) ou déjà morts dans la manche ; un joueur resté au menu n'en est pas.
--- Pas triés : l'issue de la manche (ScoreRules.outcome) ne dépend pas de leur ordre.
-local function idsInPlay(): { number }
-	local ids: { number } = {}
+-- Cette méthode permet de lister les participants en jeu à la fin d'une manche et leurs scores lorsqu'elle se termine :
+-- inscrits au classement et présents sur la map (personnage) ou déjà morts dans la manche ; un joueur resté au menu
+-- n'en est pas. Pas triés : l'issue de la manche (ScoreRules.outcome) ne dépend pas de leur ordre.
+local function inPlay(): ({ Participant }, { Score })
+	local participants: { Participant } = {}
+	local inPlayScores: { Score } = {}
 	for id, score in scores do
 		local participant = Participants.get(id)
 		if participant and (score.deaths > 0 or Participants.characterOf(participant) ~= nil) then
-			table.insert(ids, id)
+			table.insert(participants, participant)
+			table.insert(inPlayScores, score)
 		end
 	end
-	return ids
-end
-
--- Cette méthode permet de désigner l'issue d'une manche parmi les participants en jeu lorsqu'elle se termine (#295) :
--- renvoie l'issue (vainqueur, égalité, aucun vainqueur), l'id du vainqueur et les scores en jeu envoyés aux clients.
-local function computeOutcome(inPlay: { number }): (ScoreRules.Outcome, number?, { Score })
-	local inPlayScores: { Score } = {}
-	for _, id in inPlay do
-		table.insert(inPlayScores, scores[id])
-	end
-	local outcome, winnerId = ScoreRules.outcome(inPlayScores)
-	return outcome, winnerId, inPlayScores
+	return participants, inPlayScores
 end
 
 -- ── round lifecycle ────────────────────────────────────────────────────────
@@ -90,16 +81,13 @@ local function endRound()
 	end
 	state = "result"
 
-	local inPlay = idsInPlay()
-	-- Joueurs restés au menu exclus du podium comme du vainqueur ; le client résout le nom du vainqueur dans `scores`
-	local outcome, winnerId, inPlayScores = computeOutcome(inPlay)
+	-- Joueurs restés au menu exclus du podium comme du vainqueur (#295) ; le client résout le nom du vainqueur dans
+	-- `scores`. Avant la destruction des personnages, qui sortirait les vivants de `inPlay`.
+	local participants, inPlayScores = inPlay()
+	local outcome, winnerId = ScoreRules.outcome(inPlayScores)
 	roundResultRmt:FireAllClients({ outcome = outcome, winnerId = winnerId, scores = inPlayScores })
-	-- Stats persistantes (#296) : avant la destruction des personnages, qui sortirait les vivants de `inPlay`
+	-- Stats persistantes (#296)
 	if roundEndHandler then
-		local participants: { Participant } = {}
-		for _, id in inPlay do
-			table.insert(participants, Participants.get(id) :: Participant)
-		end
 		-- À part : une erreur du handler ne bloque pas la fin de manche (personnages détruits, retour à idle)
 		task.spawn(roundEndHandler, participants, if winnerId then Participants.get(winnerId) else nil)
 	end

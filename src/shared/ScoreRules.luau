@@ -2,8 +2,8 @@
 -- de fin) et issue de la manche (vainqueur, égalité, aucun vainqueur). Testées (tests/specs/ScoreRules.spec.luau).
 local ScoreRules = {}
 
--- Score d'un participant : `id` de participant (UserId, ou id négatif d'un bot), absent des anciens envois
-export type Score = { id: number?, name: string, isBot: boolean?, kills: number, deaths: number }
+-- Score d'un participant : `id` de participant (UserId, ou id négatif d'un bot)
+export type Score = { id: number, name: string, isBot: boolean?, kills: number, deaths: number }
 
 -- Issue d'une manche : un vainqueur (son id), une égalité parfaite en tête, ou aucun vainqueur (aucun kill)
 export type Outcome = "winner" | "tie" | "none"
