@@ -1,8 +1,9 @@
 -- Menu principal (docs/ui.md) : derrière, le personnage du jeu en pose sur une copie de la map (#253, MenuScene) ; on
 -- choisit à la souris système, rien ne se tire. Titre en haut à gauche, onglets ARMES · INFOS · JOUER · RÉGLAGES ·
 -- FEEDBACK en haut au centre (au-dessus des écrans secondaires, qui s'ouvrent dessous), fiche de l'arme tenue en bas à
--- gauche, statistiques du joueur en bas au centre (#301, StatsCard). L'onglet ARMES est l'écran d'équipement (#280, EquipmentScreen) : emplacements à gauche, armes et skins
--- possédés de l'emplacement actif à droite, le personnage tient l'arme survolée ou celle de l'emplacement actif.
+-- gauche, statistiques du joueur en bas au centre (#301, StatsCard). L'onglet ARMES est l'écran d'équipement (#280,
+-- EquipmentScreen) : emplacements à gauche, armes et skins possédés de l'emplacement actif à droite, le personnage tient
+-- l'arme survolée ou celle de l'emplacement actif.
 local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")

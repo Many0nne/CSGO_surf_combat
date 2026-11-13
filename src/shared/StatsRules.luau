@@ -170,11 +170,12 @@ end
 -- forme de la fiche : HUDRules.statsView (client).
 StatsRules.ATTRIBUTE = "PlayerStats"
 -- Cette méthode permet d'écrire les compteurs dans l'attribut du Player lorsque le serveur les publie : entiers séparés
--- par des virgules, dans l'ordre de FIELDS (« 12,3,5,1 »).
+-- par des virgules, dans l'ordre de FIELDS (« 12,3,5,1 ») ; « %.0f » et non « %d », qui rendrait négatif un compteur
+-- de 2^63 ou plus (relu alors comme non chargé).
 function StatsRules.encode(stats: Stats): string
 	local parts = table.create(#StatsRules.FIELDS)
 	for i, field in StatsRules.FIELDS do
-		parts[i] = string.format("%d", stats[field])
+		parts[i] = string.format("%.0f", stats[field])
 	end
 	return table.concat(parts, ",")
 end

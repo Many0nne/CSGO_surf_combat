@@ -123,11 +123,12 @@ end
 -- Cette méthode permet de donner le ratio kills/morts de la fiche de l'accueil lorsqu'elle se remplit : celui du
 -- classement (formatKD) tant qu'il s'écrit sous 100, au-delà un compteur arrondi comme lui, sans décimale (formatCount).
 function HUDRules.statsRatio(kills: number, deaths: number): string
-	local text = HUDRules.formatKD(kills, deaths)
-	if (tonumber(text) or 0) >= 100 then
-		return HUDRules.formatCount(math.floor((if deaths == 0 then kills else kills / deaths) + 0.5))
+	local ratio = if deaths == 0 then kills else kills / deaths
+	-- 99.995 s'écrirait « 100.00 » à deux décimales : il passe déjà sans décimale
+	if ratio >= 99.995 then
+		return HUDRules.formatCount(math.floor(ratio + 0.5))
 	end
-	return text
+	return HUDRules.formatKD(kills, deaths)
 end
 
 -- Cette méthode permet de préparer les textes de la fiche de l'accueil lorsque l'attribut `PlayerStats` change

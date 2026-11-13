@@ -25,28 +25,60 @@ local COLUMN_GAP = 18
 local VALUE_SIZE = 28
 local LABEL_Y = 32
 local HEIGHT = 52
--- Fondu de bord sous la fiche (sol clair possible selon la map) ; il s'arrête sous les barres de la fiche d'arme
-local SCRIM_SIZE = Vector2.new(620, 110)
+-- Fondu de bord sous la fiche (sol clair possible selon la map) ; son haut (y 624) reste sous la dernière barre de la
+-- fiche d'arme (y 616 au plus)
+local SCRIM_SIZE = Vector2.new(620, 96)
 local SCRIM_TRANSPARENCY = 0.45
--- Colonnes, de gauche à droite : champ de HUDRules.StatsView et libellé
-local COLUMNS = {
-	{ key = "kills", label = "KILLS" },
-	{ key = "deaths", label = "MORTS" },
-	{ key = "ratio", label = "K/M" },
-	{ key = "roundsPlayed", label = "ROUNDS" },
-	{ key = "roundsWon", label = "VICTOIRES" },
+-- Colonnes, de gauche à droite : nom de l'instance, libellé, et texte lu dans la vue (HUDRules.StatsView)
+type Column = { name: string, label: string, text: (HUDRules.StatsView) -> string }
+local COLUMNS: { Column } = {
+	{
+		name = "Kills",
+		label = "KILLS",
+		text = function(v)
+			return v.kills
+		end,
+	},
+	{
+		name = "Deaths",
+		label = "MORTS",
+		text = function(v)
+			return v.deaths
+		end,
+	},
+	{
+		name = "Ratio",
+		label = "K/M",
+		text = function(v)
+			return v.ratio
+		end,
+	},
+	{
+		name = "RoundsPlayed",
+		label = "ROUNDS",
+		text = function(v)
+			return v.roundsPlayed
+		end,
+	},
+	{
+		name = "RoundsWon",
+		label = "VICTOIRES",
+		text = function(v)
+			return v.roundsWon
+		end,
+	},
 }
 
--- Chiffre et ombre de chaque colonne, par champ de la vue
-local values: { [string]: { TextLabel } } = {}
+-- Chiffre et ombre de chaque colonne, dans l'ordre de COLUMNS
+local values: { { TextLabel } } = {}
 
 -- Cette méthode permet de remplir les colonnes avec l'attribut du joueur lorsque la fiche est construite ou que le
 -- serveur republie ses statistiques.
 local function refresh()
 	local view = HUDRules.statsView(StatsRules.decode(Players.LocalPlayer:GetAttribute(StatsRules.ATTRIBUTE)))
-	for key, labels in values do
-		local text = (view :: any)[key]
-		for _, label in labels do
+	for i, column in COLUMNS do
+		local text = column.text(view)
+		for _, label in values[i] do
 			label.Text = text
 		end
 	end
@@ -54,10 +86,10 @@ end
 
 -- Cette méthode permet de construire une colonne (chiffre os à ombre, libellé ambré dessous) lorsque la fiche est
 -- construite.
-local function buildColumn(parent: GuiObject, key: string, label: string, order: number)
+local function buildColumn(parent: GuiObject, index: number, spec: Column)
 	local column = UIKit.frame({
-		Name = key,
-		LayoutOrder = order,
+		Name = spec.name,
+		LayoutOrder = 2 * index,
 		BackgroundTransparency = 1,
 		Size = UDim2.fromOffset(COLUMN_WIDTH, HEIGHT),
 		Parent = parent,
@@ -73,10 +105,10 @@ local function buildColumn(parent: GuiObject, key: string, label: string, order:
 		Size = UDim2.fromOffset(COLUMN_WIDTH, VALUE_SIZE + 2),
 		ZIndex = 2,
 	}, 2)
-	values[key] = { value, shadow }
+	values[index] = { value, shadow }
 	UIKit.accentLabel(column, {
 		Name = "Label",
-		Text = label,
+		Text = spec.label,
 		TextXAlignment = centered,
 		Position = UDim2.fromOffset(0, LABEL_Y),
 		Size = UDim2.fromOffset(COLUMN_WIDTH, 18),
@@ -116,7 +148,7 @@ function StatsCard.build(parent: GuiObject)
 				Parent = card,
 			})
 		end
-		buildColumn(card, column.key, column.label, 2 * i)
+		buildColumn(card, i, column)
 	end
 	refresh()
 	Players.LocalPlayer:GetAttributeChangedSignal(StatsRules.ATTRIBUTE):Connect(refresh)
