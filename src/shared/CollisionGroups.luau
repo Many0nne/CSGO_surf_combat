@@ -1,7 +1,7 @@
 -- Groupes de collision (#312) : les personnages (joueurs et bots) se traversent, comme `mp_solid_teammates 0` étendu à
 -- tous. Le groupe `Characters` ne collisionne pas avec lui-même (PhysicsService) ; le serveur y range chaque pièce d'un
 -- personnage à l'apparition, et celles ajoutées ensuite (arme 3P, outils, accessoires), sinon elles resteraient dans
--- `Default`. Les requêtes du mouvement (sol, murs, marches, tête, accroupi, vue des bots) prennent ce groupe
+-- `Default`. Les requêtes du mouvement (sol, murs, marches, tête, accroupi) prennent ce groupe
 -- (`RaycastParams.CollisionGroup`) et ignorent donc tous les personnages ; les tirs et le couteau gardent `Default` et
 -- les touchent toujours.
 
@@ -28,12 +28,12 @@ local function assign(inst: Instance)
 end
 
 -- Cette méthode permet de ranger toutes les pièces d'un personnage dans le groupe des personnages lorsqu'il apparaît,
--- puis chaque pièce ajoutée ensuite ; la connexion renvoyée meurt avec le personnage.
-function CollisionGroups.assignCharacter(char: Model): RBXScriptConnection
+-- puis chaque pièce ajoutée ensuite (l'écoute meurt avec le personnage détruit).
+function CollisionGroups.assignCharacter(char: Model)
 	for _, inst in char:GetDescendants() do
 		assign(inst)
 	end
-	return char.DescendantAdded:Connect(assign)
+	char.DescendantAdded:Connect(assign)
 end
 
 -- Cette méthode permet de faire ignorer tous les personnages à un rayon ou un balayage de mouvement lorsqu'on le prépare.

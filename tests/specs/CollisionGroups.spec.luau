@@ -5,13 +5,16 @@ return function(T, Loader)
 	-- non collidables notés pour les assertions.
 	local function fakePhysics()
 		local physics = { groups = {}, registerCalls = 0, collidable = {} }
+		-- Cette méthode permet de dire si un groupe existe lorsque le module vérifie avant d'enregistrer.
 		function physics.IsCollisionGroupRegistered(self, name)
 			return self.groups[name] == true
 		end
+		-- Cette méthode permet de noter un enregistrement lorsque le module crée le groupe.
 		function physics.RegisterCollisionGroup(self, name)
 			self.registerCalls += 1
 			self.groups[name] = true
 		end
+		-- Cette méthode permet de noter une paire collidable ou non lorsque le module la règle.
 		function physics.CollisionGroupSetCollidable(self, a, b, value)
 			assert(self.groups[a] and self.groups[b], "groupe non enregistré")
 			self.collidable[a .. "|" .. b] = value
@@ -22,6 +25,7 @@ return function(T, Loader)
 	-- Cette méthode permet de simuler une instance lorsqu'un test construit un personnage : classe testée par IsA.
 	local function fakeInstance(className: string)
 		local inst = { ClassName = className, CollisionGroup = "Default" }
+		-- Cette méthode permet de répondre au test de classe lorsque le module cherche les pièces (Part, MeshPart).
 		function inst.IsA(self, name)
 			local isPart = self.ClassName == "Part" or self.ClassName == "MeshPart"
 			return name == "Instance" or name == self.ClassName or (name == "BasePart" and isPart)
@@ -34,15 +38,18 @@ return function(T, Loader)
 	local function fakeCharacter(descendants)
 		local listeners = {}
 		local char = {}
+		-- Cette méthode permet de renvoyer les descendants fixés lorsque le module range le personnage.
 		function char.GetDescendants()
 			return descendants
 		end
 		char.DescendantAdded = {
+			-- Cette méthode permet de retenir l'écoute lorsque le module se branche sur les ajouts.
 			Connect = function(_, fn)
 				table.insert(listeners, fn)
 				return { Disconnect = function() end }
 			end,
 		}
+		-- Cette méthode permet de simuler l'arrivée d'une instance lorsque le test ajoute une pièce après l'apparition.
 		function char.add(inst)
 			for _, fn in listeners do
 				fn(inst)

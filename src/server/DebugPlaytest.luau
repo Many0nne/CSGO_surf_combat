@@ -18,6 +18,7 @@ local WeaponConfig = require(Shared:WaitForChild("WeaponConfig"))
 local Rules = require(Shared:WaitForChild("DebugPlaytestRules"))
 local CharacterAppearance = require(Shared:WaitForChild("CharacterAppearance"))
 local CharacterConfig = require(Shared:WaitForChild("CharacterConfig"))
+local CollisionGroups = require(Shared:WaitForChild("CollisionGroups"))
 
 local CLIENT_TIMEOUT = 12 -- secondes d'attente max d'une réponse client
 local DAMAGE_TIMEOUT = 3 -- secondes d'attente des dégâts sur la cible après l'attaque
@@ -127,6 +128,8 @@ local function spawnDummy(cf: CFrame, health: number): Model?
 	humanoid.JumpPower = 0
 	model:SetAttribute(deps.validator.DEBUG_TARGET_ATTRIBUTE, true)
 	root.Anchored = true
+	-- Traversable comme tout personnage (#312) : un run reproduit les conditions de jeu
+	CollisionGroups.assignCharacter(model)
 	model:PivotTo(cf)
 	model.Parent = workspace
 	return model
