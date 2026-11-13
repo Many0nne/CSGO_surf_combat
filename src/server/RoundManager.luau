@@ -132,7 +132,7 @@ local function endRound()
 		lastAttacker = {}
 		withdrawn = {}
 		broadcastState()
-		-- personnages détruits depuis 6 s : ce qui reste d'un round à l'autre est candidat à une fuite
+		-- personnages détruits depuis RESULT_DURATION : ce qui reste d'un round à l'autre est candidat à une fuite
 		MemoryTracker.snapshot("fin de round")
 	end)
 end

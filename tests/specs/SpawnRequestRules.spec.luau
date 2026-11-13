@@ -391,7 +391,9 @@ return function(T, Loader)
 			end
 		)
 
-		T.it("serveur en result pendant toute une bannière : renvois sans abandon, puis acceptée", function()
+		-- Cas limite (serveur figé ou bannière client raccourcie) : le client enchaîne alors que le serveur est encore en
+		-- result pour toute une durée de bannière
+		T.it("serveur en retard d'une bannière entière : renvois sans abandon, puis acceptée", function()
 			local accepted = nil
 			local result = simulate(function(_, now)
 				if now < GameConfig.RESULT_DURATION then

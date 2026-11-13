@@ -113,7 +113,10 @@ local function setState(newState: State)
 	end
 	if newState == "MENU" then
 		DeathRagdoll.clear()
-		-- Mouvement et caméra coupés au menu : un personnage repris ensuite (JOUER, "alive") doit être rebranché
+	end
+	if newState == "MENU" or newState == "RESULT" then
+		-- Mouvement et caméra coupés au menu et à la fin de manche : un personnage repris ensuite (JOUER, enchaînement
+		-- #300, "alive") doit être rebranché
 		boundChar = nil
 	end
 
@@ -171,15 +174,23 @@ local function atMenu(): boolean
 	return state == "MENU" or state == "INFOS"
 end
 
+-- Cette méthode permet de savoir si un personnage qui arrive est ignoré lorsqu'il apparaît : au menu, ou pendant la
+-- bannière de fin de manche (#300), y compris après une attente.
+local function ignoresCharacter(): boolean
+	return atMenu() or state == "RESULT"
+end
+
 local function onCharacterAdded(char: Model)
-	-- Au menu, un personnage n'est pas attendu (réapparition partie avant un retour au menu, détruite par le serveur, #157)
-	if atMenu() then
+	-- Au menu, un personnage n'est pas attendu (réapparition partie avant un retour au menu, détruite par le serveur, #157).
+	-- Pendant la bannière non plus (réapparition en vol à la fin de manche) : la demande qui enchaîne le reprend ("alive",
+	-- #300), d'où boundChar remis à nil en RESULT
+	if ignoresCharacter() then
 		return
 	end
 	-- Connecter la mort
 	local humanoid = char:WaitForChild("Humanoid") :: Humanoid
 	-- Après l'attente : retour au menu entre-temps (abandon, #245), ou personnage déjà branché par l'autre voie
-	if atMenu() or boundChar == char then
+	if ignoresCharacter() or boundChar == char then
 		return
 	end
 	boundChar = char
