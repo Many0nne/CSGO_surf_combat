@@ -521,6 +521,9 @@ local function onHitVerdict(
 ): ("hit" | "kill")?
 	DebugPlaytest.onHitReceived(player, remote.Name, targetCharacter, damage)
 	if damage then
+		-- Touche acceptée, même sans ShotFired ni WeaponAction avant elle : la protection d'apparition tombe (#288).
+		-- Personnage actuel : le rembobinage (PositionHistory.MAX_REWIND, 0,4 s) est bien plus court que RESPAWN_DELAY
+		SpawnProtection.drop(player.Character)
 		return applyHit(Participants.fromPlayer(player), targetCharacter, damage, isHeadshot)
 	end
 	return nil
@@ -532,10 +535,6 @@ meleeRmt.OnServerEvent:Connect(function(player, targetCharacter, attackKind, hit
 	end
 	local damage =
 		Validator.authorizeMelee(Participants.fromPlayer(player), targetCharacter, attackKind, os.clock(), hitTime)
-	-- Coup accepté, même sans WeaponAction « Shoot » avant lui : la protection d'apparition du tireur tombe (#288)
-	if damage then
-		SpawnProtection.drop(player.Character)
-	end
 	onHitVerdict(player, meleeRmt, targetCharacter, damage, false)
 end)
 
