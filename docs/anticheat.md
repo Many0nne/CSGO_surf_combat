@@ -1149,7 +1149,12 @@ CheatLog.session(participant.id) -- jugés et ping d'un joueur, avec ou sans vio
 - Bots ignorés (`participant.isBot`, ni violations ni jugés ni ping) ; Studio : journal seulement (aucun kick, résumé
   et relevé affichés en console au lieu du webhook).
 - **Coût** (#297) : un compteur par paquet de position, touche ou coup jugé, une lecture du ping par joueur toutes les
-  5 s. Mesure `PerfServer` avant et après : voir le compte rendu de la PR de #297.
+  5 s. Mesuré avec `PerfServer` (Studio, Dizzy, 1 joueur immobile après un run `DebugPlaytest` AWP, 5 bots, 16 relevés
+  de 10 s par version, 13/11/2026) : `srv anti-vol` 0,011 à 0,028 ms/frame avant, 0,012 à 0,025 après ; Heartbeat
+  médian 16,9 ms sur 8 relevés sur 16 avant (jusqu'à 25,1 ms), 15 sur 16 après (jusqu'à 18,2 ms). Écart dans le bruit
+  de Studio : coût non distinguable. `srv anti-vol` ne chronomètre que `MovementGuardRules.judge`, pas les compteurs
+  du journal (sans repère : quelques accès de table par paquet). Vérifié en même temps : le relevé à la demande donne
+  `Movement:flight : 2 / 2717 positions (0.07 %)` (vol signalé à l'apparition, journal seul).
 
 ### Classer les violations
 
