@@ -17,9 +17,8 @@ function ScoreRules.compare(a: Score, b: Score): number
 	return a.deaths - b.deaths
 end
 
--- Cette méthode permet de désigner l'issue d'une manche parmi les scores des participants en jeu lorsqu'elle se termine :
--- aucun vainqueur sans kill, égalité si deux scores en tête sont identiques, sinon l'id du premier ; l'ordre de la liste
--- ne change rien au résultat.
+-- Cette méthode permet de désigner l'issue d'une manche lorsqu'elle se termine : aucun vainqueur sans kill, égalité si
+-- deux scores en tête sont identiques, sinon l'id du premier ; l'ordre de la liste ne change rien.
 function ScoreRules.outcome(scores: { Score }): (Outcome, number?)
 	local best: Score? = nil
 	local tied = false

@@ -56,9 +56,8 @@ local function ensureScore(participant: Participant): Score
 	return scores[id]
 end
 
--- Cette méthode permet de lister les participants en jeu à la fin d'une manche et leurs scores lorsqu'elle se termine :
--- inscrits au classement et présents sur la map (personnage) ou déjà morts dans la manche ; un joueur resté au menu
--- n'en est pas. Pas triés : l'issue de la manche (ScoreRules.outcome) ne dépend pas de leur ordre.
+-- Cette méthode permet de lister les participants en jeu et leurs scores lorsqu'une manche se termine : personnage sur la
+-- map ou déjà mort dans la manche (pas un joueur resté au menu) ; non triés, l'issue ne dépend pas de leur ordre.
 local function inPlay(): ({ Participant }, { Score })
 	local participants: { Participant } = {}
 	local inPlayScores: { Score } = {}
