@@ -1,8 +1,8 @@
--- Écran d'équipement de l'onglet ARMES (#280, propale visuelle du 2026-11-12, docs/ui.md) : à gauche, sous
--- « ÉQUIPEMENT », les deux emplacements (arme et skin équipés, l'actif en os avec la barre ambrée) ; à droite, toujours
--- ouverte sur l'emplacement actif, la liste de ses armes possédées (silhouette, nom, « ÉQUIPÉ ») puis les skins de
--- l'arme équipée en vignettes. Le personnage de l'accueil tient l'arme survolée, sinon celle de l'emplacement actif ; un
--- clic équipe (remote EquipItem, l'écran suit la réponse du serveur). Seuls les items possédés apparaissent.
+-- Écran d'équipement de l'onglet ARMES (#280, disposition revue en #308 d'après une capture de référence, docs/ui.md) :
+-- tout tient à gauche, le personnage de l'accueil est à droite et tient l'arme montrée. De haut en bas : grand titre
+-- « ÉQUIPEMENT » puis l'emplacement actif et son étiquette, rendu de l'arme montrée, son nom avec « ÉQUIPÉ », onglets
+-- des emplacements, grille de cartes (armes possédées, puis skins de l'arme équipée). Survoler une carte la montre,
+-- cliquer l'équipe (remote EquipItem, l'écran suit la réponse du serveur). Seuls les items possédés apparaissent.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -24,40 +24,50 @@ local Motion = UITheme.Motion
 
 local EquipmentScreen = {}
 
--- Mise en page (px à 720 de haut), d'après la propale
+-- Mise en page (px à 720 de haut)
 local EDGE = 28
-local HEADER_Y = 140 -- titre de la liste à droite
-local PAGE_TITLE_Y = 118 -- « ÉQUIPEMENT » à gauche, titre de la page
-local PAGE_TITLE_SIZE = 30
-local SLOTS_Y = 176
-local SLOT_STEP = 100
-local SLOT_SIZE = Vector2.new(300, 84)
+local TITLE_Y = 108 -- « ÉQUIPEMENT », sous le titre du jeu
+local TITLE_SIZE = 52
+local TITLE_STEP = 54 -- écart entre les deux lignes du titre
+local NAME_Y = 236 -- nom de l'arme montrée et son étiquette
+local NAME_SIZE = 26
+local CATEGORY_Y = 272
+local TABS_Y = 318
+local TAB_SIZE = Vector2.new(118, 30)
+local TAB_GAP = 6
+local GRID_Y = 362
+local COLUMNS = 4
+local CARD_SIZE = Vector2.new(172, 92)
+local CARD_GAP = 12
+local CARD_ICON = Vector2.new(136, 40)
+local SECTION_HEIGHT = 28 -- libellé « SKINS · ARME » entre les deux rangées
+local SECTION_GAP = 20 -- écart entre la rangée des armes et ce libellé
+local GRID_WIDTH = COLUMNS * CARD_SIZE.X + (COLUMNS - 1) * CARD_GAP
+local PREVIEW_POSITION = Vector2.new(330, 76) -- rendu de l'arme montrée, à droite du titre
+local PREVIEW_SIZE = Vector2.new(470, 210)
+local SHOW_PREVIEW = true
 local SLOT_LABELS = { sniper = "SNIPER", knife = "COUTEAU" }
-local PANEL_WIDTH = 380
-local ROW_HEIGHT = 46
-local ROW_ICON = Vector2.new(110, 28)
-local SECTION_GAP = 22
-local TILE_SIZE = Vector2.new(120, 88)
-local TILE_GAP = 10
-local TILE_ICON = Vector2.new(104, 36)
-local TITLE_HEIGHT = 28 -- titre de section, avant sa première ligne
-local SCRIM_SIZE = Vector2.new(640, 620) -- fond de coin sous la liste (le mur clair du décor rendait le texte illisible)
-local SCRIM_SHOWN = 0.3
+local SCRIM_SIZE = Vector2.new(1100, 760) -- fond de coin sous la grille et le titre (décor clair possible)
+local SCRIM_SHOWN = 0.2
 
-type SlotView = {
-	label: TextLabel,
-	name: TextLabel,
-	nameShadow: TextLabel,
-	skin: TextLabel,
-	skinShadow: TextLabel,
-	bar: Frame,
-	hovering: boolean,
-}
+type Hover = { tool: string, skin: string? }
+-- Texte à largeur automatique doublé de son ombre, pour une ligne qui enchaîne texte et étiquette
+type Flow = { set: (string) -> (), label: TextLabel }
+type TabView = { button: TextButton, hovering: boolean }
 
-local slotViews: { SlotView } = {}
-local panel: Frame
-local selectedSlot = 1 -- emplacement actif : sa liste est ouverte à droite, le personnage tient son arme
-local hoverTool: string? = nil -- arme survolée, tenue par le personnage tant que la souris reste dessus
+local tabViews: { TabView } = {}
+local grid: Frame
+local previewHolder: Frame
+local previews: { [string]: ViewportFrame } = {}
+local slotTitle: Flow
+local slotTag: TextLabel
+local weaponName: Flow
+local statusTag: TextLabel
+local statusStroke: UIStroke
+local category: TextLabel
+local categoryShadow: TextLabel
+local selectedSlot = 1 -- emplacement actif : sa grille est affichée, le personnage tient son arme
+local hover: Hover? = nil -- carte survolée : arme (et skin) montrés tant que la souris reste dessus
 
 -- Cette méthode permet de nommer un emplacement (« SNIPER », sinon son id en majuscules) lorsqu'il est affiché.
 local function slotLabel(slotName: string): string
@@ -65,14 +75,13 @@ local function slotLabel(slotName: string): string
 end
 
 -- Cette méthode permet de donner le nom affiché d'une arme (nom de WeaponConfig en majuscules, sinon nom du Tool
--- espacé) lorsqu'un emplacement ou la liste la nomme.
+-- espacé) lorsqu'une carte ou la ligne de nom la nomme.
 local function weaponTitle(toolName: string): string
 	local cfg = WeaponConfig.Weapons[toolName]
 	return if cfg and cfg.Name then string.upper(cfg.Name) else HUDRules.weaponLabel(toolName)
 end
 
--- Cette méthode permet de donner le viewmodel d'une arme (attribut du Tool, sinon son nom) lorsque sa silhouette est
--- dessinée.
+-- Cette méthode permet de donner le viewmodel d'une arme (attribut du Tool, sinon son nom) lorsqu'elle est dessinée.
 local function viewmodelOf(toolName: string): string
 	local folder = ReplicatedStorage:FindFirstChild("Tools")
 	local tool = folder and folder:FindFirstChild(toolName)
@@ -90,48 +99,233 @@ local function equippedAt(index: number): (InventoryRules.Item?, string?)
 	return InventoryRules.item(loadout.weapon), loadout.skin
 end
 
--- Cette méthode permet de mettre dans les mains du personnage l'arme survolée, sinon celle de l'emplacement actif,
--- lorsque le survol, l'emplacement actif ou l'équipement change.
-local function updateHeld()
-	local weapon = equippedAt(selectedSlot)
-	local tool = hoverTool or (weapon and weapon.tool)
+-- Cette méthode permet de poser une ligne horizontale (texte puis étiquettes, alignés en bas) lorsque le titre ou le nom
+-- de l'arme est construit.
+local function flowRow(parent: GuiObject, name: string, y: number, height: number): Frame
+	local row = UIKit.frame({
+		Name = name,
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(EDGE, y),
+		Size = UDim2.fromOffset(GRID_WIDTH, height),
+		Parent = parent,
+	})
+	UIKit.create("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, 12),
+		Parent = row,
+	})
+	return row
+end
+
+-- Cette méthode permet de poser dans une ligne un texte à ombre dont la largeur suit le contenu lorsqu'une étiquette
+-- doit le suivre de près ; renvoie de quoi changer le texte (ombre comprise).
+local function flowText(row: GuiObject, name: string, size: number, shadowOffset: number): Flow
+	local box = UIKit.frame({
+		Name = name,
+		BackgroundTransparency = 1,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromScale(0, 1),
+		LayoutOrder = 1,
+		Parent = row,
+	})
+	local props = {
+		FontFace = F.Display,
+		TextSize = size,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromScale(0, 1),
+	}
+	local shadowProps = table.clone(props)
+	shadowProps.Name = "Shadow"
+	shadowProps.TextColor3 = C.Black
+	shadowProps.TextTransparency = 0.35
+	shadowProps.Position = UDim2.fromOffset(shadowOffset, shadowOffset)
+	shadowProps.Parent = box
+	local shadow = UIKit.text(shadowProps)
+	props.Name = "Text"
+	props.TextColor3 = C.Bone
+	props.ZIndex = 2
+	props.Parent = box
+	local label = UIKit.text(props)
+	return {
+		label = label,
+		set = function(text: string)
+			label.Text = text
+			shadow.Text = text
+		end,
+	}
+end
+
+-- Cette méthode permet de poser une étiquette en boîte (texte court sur fond plein, largeur selon le texte) lorsqu'une
+-- ligne précise un état ou une touche.
+local function tag(row: GuiObject, name: string, order: number, background: Color3, color: Color3): TextLabel
+	local label = UIKit.text({
+		Name = name,
+		FontFace = F.Display,
+		TextSize = 14,
+		TextColor3 = color,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		BackgroundColor3 = background,
+		BackgroundTransparency = 0,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 22),
+		LayoutOrder = order,
+		Parent = row,
+	})
+	UIKit.padding(label, 0, 8, 0, 8)
+	return label
+end
+
+-- Cette méthode permet de donner l'arme et le skin montrés (carte survolée, sinon équipement de l'emplacement actif) et
+-- de dire s'ils sont équipés, lorsque la ligne de nom, le rendu ou le personnage se mettent à jour.
+local function shown(): (string?, string?, boolean)
+	local weapon, skin = equippedAt(selectedSlot)
+	local equippedTool = weapon and weapon.tool
+	if hover then
+		return hover.tool, hover.skin, hover.tool == equippedTool and hover.skin == skin
+	end
+	return equippedTool, skin, equippedTool ~= nil
+end
+
+-- Cette méthode permet d'afficher le rendu texturé de l'arme montrée (un par viewmodel, gardé une fois construit)
+-- lorsque l'arme montrée change.
+local function showPreview(toolName: string?)
+	if not SHOW_PREVIEW then
+		return
+	end
+	local viewmodel = toolName and viewmodelOf(toolName)
+	if viewmodel and not previews[viewmodel] then
+		local viewport = UIKit.weaponSilhouette(previewHolder, viewmodel, PREVIEW_SIZE.X / PREVIEW_SIZE.Y, true)
+		viewport.Name = "Preview" .. viewmodel
+		previews[viewmodel] = viewport
+	end
+	for name, viewport in previews do
+		viewport.Visible = name == viewmodel
+	end
+end
+
+-- Cette méthode permet de mettre à jour le titre, la ligne de nom (« ÉQUIPÉ » plein en rouge d'impact, sinon « CLIC POUR
+-- ÉQUIPER » en contour), le rendu et l'arme du personnage lorsque le survol, l'emplacement ou l'équipement change.
+local function paintHeader()
+	local slotName = InventoryRules.SLOTS[selectedSlot]
+	slotTitle.set(if slotName then slotLabel(slotName) else "")
+	slotTag.Text = string.format("EMPLACEMENT %d", selectedSlot)
+	local tool, skin, isEquipped = shown()
+	weaponName.set(if tool then string.format("%s  /  %s", weaponTitle(tool), Rules.skinLabel(skin)) else "")
+	statusTag.Visible = tool ~= nil
+	statusTag.Text = if isEquipped then "ÉQUIPÉ" else "CLIC POUR ÉQUIPER"
+	statusTag.BackgroundTransparency = if isEquipped then 0 else 1
+	statusStroke.Enabled = not isEquipped
+	local cfg = tool and WeaponConfig.Weapons[tool]
+	local text = if cfg and cfg.Category then string.upper(cfg.Category) else ""
+	category.Text = text
+	categoryShadow.Text = text
+	showPreview(tool)
 	if tool then
 		MenuScene.holdTool(tool)
 	end
 end
 
--- Cette méthode permet de redessiner les emplacements (arme et skin équipés ; actif en os avec la barre ambrée, l'autre
--- grisé ; survol en rouge d'impact) lorsque l'équipement, le survol ou l'emplacement actif change.
-local function paintSlots()
-	for index, view in slotViews do
-		local weapon, skin = equippedAt(index)
-		local title = if weapon and weapon.tool then weaponTitle(weapon.tool) else ""
-		local skinText = "SKIN · " .. Rules.skinLabel(skin)
-		view.name.Text = title
-		view.nameShadow.Text = title
-		view.skin.Text = skinText
-		view.skinShadow.Text = skinText
+-- Cette méthode permet de redessiner les onglets des emplacements (actif en boîte ambrée à texte sombre, autres en os,
+-- survol en rouge d'impact) lorsque l'emplacement actif ou le survol change.
+local function paintTabs()
+	for index, view in tabViews do
 		local active = selectedSlot == index
-		local color = if view.hovering then C.HitRed elseif active then C.Bone else C.BoneMuted
-		UIKit.tween(view.name, Motion.Hover, { TextColor3 = color })
-		view.label.TextColor3 = if active then C.Accent else C.BoneMuted
-		view.bar.Visible = active
+		view.button.BackgroundTransparency = if active then 0 else 1
+		view.button.TextColor3 = if active then C.Ground elseif view.hovering then C.HitRed else C.Bone
 	end
 end
 
--- Cette méthode permet de brancher le survol (arme tenue par le personnage) et le clic d'un élément de la liste
--- lorsqu'il est créé ; `paint(hovering)` redessine l'élément.
-local function bindItem(button: GuiButton, tool: string, paint: (boolean) -> (), action: () -> ())
+-- Cette méthode permet de poser une case vide barrée d'une croix lorsqu'une rangée de la grille compte moins de cartes
+-- que de colonnes : elle garde la grille lisible sans montrer d'item non possédé.
+local function emptyCard(x: number, y: number)
+	local frame = UIKit.frame({
+		Name = "Empty",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(x, y),
+		Size = UDim2.fromOffset(CARD_SIZE.X, CARD_SIZE.Y),
+		Parent = grid,
+	})
+	UIKit.stroke(frame, C.Bone, 1).Transparency = 0.82
+	UIKit.line(frame, 0, 0, CARD_SIZE.X, CARD_SIZE.Y, 1, C.Bone).BackgroundTransparency = 0.88
+	UIKit.line(frame, 0, CARD_SIZE.Y, CARD_SIZE.X, 0, 1, C.Bone).BackgroundTransparency = 0.88
+end
+
+-- Cette méthode permet de poser une carte de la grille (silhouette, nom, coche et trait rouge d'impact sur l'équipée)
+-- lorsque la grille se construit ; survoler la carte montre l'arme (titre, rendu, personnage), cliquer l'équipe.
+local function card(x: number, y: number, text: string, item: Hover, equipped: boolean, action: () -> ())
+	local button = UIKit.create("TextButton", {
+		Name = "Card" .. text,
+		Text = "",
+		AutoButtonColor = false,
+		BackgroundColor3 = C.Scrim,
+		BackgroundTransparency = if equipped then 0.12 else 0.3,
+		BorderSizePixel = 0,
+		Position = UDim2.fromOffset(x, y),
+		Size = UDim2.fromOffset(CARD_SIZE.X, CARD_SIZE.Y),
+		Parent = grid,
+	})
+	local stroke = UIKit.stroke(button, C.Bone, 1)
+	local restStroke = if equipped then 0.1 else 0.7
+	stroke.Transparency = restStroke
+	local icon = UIKit.frame({
+		Name = "Icon",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset((CARD_SIZE.X - CARD_ICON.X) / 2, 12),
+		Size = UDim2.fromOffset(CARD_ICON.X, CARD_ICON.Y),
+		Parent = button,
+	})
+	-- Skin pas encore rendu (#268) : la silhouette de l'arme, la même pour tous ses skins
+	local silhouette = UIKit.weaponSilhouette(icon, viewmodelOf(item.tool), CARD_ICON.X / CARD_ICON.Y)
+	local restColor = if equipped then C.Bone else C.TextSoft
+	silhouette.ImageColor3 = restColor
+	local label = UIKit.shadowedText(button, {
+		Name = "Name",
+		Text = text,
+		FontFace = F.Display,
+		TextSize = 16,
+		TextColor3 = restColor,
+		Position = UDim2.fromOffset(10, CARD_SIZE.Y - 28),
+		Size = UDim2.fromOffset(CARD_SIZE.X - 20, 20),
+		ZIndex = 2,
+	}, 1)
+	if equipped then
+		UIKit.frame({
+			Name = "Equipped",
+			BackgroundColor3 = C.HitRed,
+			AnchorPoint = Vector2.new(0, 1),
+			Position = UDim2.fromScale(0, 1),
+			Size = UDim2.new(1, 0, 0, 3),
+			Parent = button,
+		})
+		local check = UIKit.frame({
+			Name = "Check",
+			BackgroundColor3 = C.HitRed,
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.fromScale(1, 0),
+			Size = UDim2.fromOffset(20, 20),
+			Parent = button,
+		})
+		UIKit.line(check, 5, 10, 9, 14, 2, C.Bone)
+		UIKit.line(check, 9, 14, 15, 6, 2, C.Bone)
+	end
 	button.MouseEnter:Connect(function()
-		hoverTool = tool
-		paint(true)
-		updateHeld()
+		hover = item
+		stroke.Color = C.HitRed
+		stroke.Transparency = 0
+		UIKit.tween(label, Motion.Hover, { TextColor3 = C.HitRed })
+		silhouette.ImageColor3 = C.Bone
+		paintHeader()
 	end)
 	button.MouseLeave:Connect(function()
-		paint(false)
-		if hoverTool == tool then
-			hoverTool = nil
-			updateHeld()
+		stroke.Color = C.Bone
+		stroke.Transparency = restStroke
+		UIKit.tween(label, Motion.Hover, { TextColor3 = restColor })
+		silhouette.ImageColor3 = restColor
+		if hover == item then
+			hover = nil
+			paintHeader()
 		end
 	end)
 	button.Activated:Connect(function()
@@ -141,139 +335,24 @@ local function bindItem(button: GuiButton, tool: string, paint: (boolean) -> (),
 	end)
 end
 
--- Cette méthode permet de poser la ligne d'une arme (silhouette, nom, « ÉQUIPÉ » en rouge d'impact, filet dessous)
--- lorsque la liste se construit ; survoler la montre dans les mains du personnage, cliquer l'équipe.
-local function weaponRow(y: number, toolName: string, equipped: boolean, action: () -> ())
-	local row = UIKit.create("TextButton", {
-		Name = "Row" .. toolName,
-		Text = "",
-		AutoButtonColor = false,
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		Position = UDim2.fromOffset(0, y),
-		Size = UDim2.fromOffset(PANEL_WIDTH, ROW_HEIGHT),
-		Parent = panel,
-	})
-	local icon = UIKit.frame({
-		Name = "Icon",
-		BackgroundTransparency = 1,
-		AnchorPoint = Vector2.new(0, 0.5),
-		Position = UDim2.fromScale(0, 0.5),
-		Size = UDim2.fromOffset(ROW_ICON.X, ROW_ICON.Y),
-		Parent = row,
-	})
-	local silhouette = UIKit.weaponSilhouette(icon, viewmodelOf(toolName), ROW_ICON.X / ROW_ICON.Y)
-	local restColor = if equipped then C.Bone else C.BoneMuted
-	silhouette.ImageColor3 = restColor
-	local name = UIKit.shadowedText(row, {
-		Name = "Name",
-		Text = weaponTitle(toolName),
-		FontFace = F.Display,
-		TextSize = 22,
-		TextColor3 = restColor,
-		AnchorPoint = Vector2.new(0, 0.5),
-		Position = UDim2.new(0, ROW_ICON.X + 14, 0.5, 0),
-		Size = UDim2.fromOffset(170, 26),
-		ZIndex = 2,
-	}, 2)
-	if equipped then
-		UIKit.shadowedText(row, {
-			Name = "Status",
-			Text = "ÉQUIPÉ",
-			FontFace = F.Display,
-			TextSize = 16,
-			TextColor3 = C.HitRed,
-			TextXAlignment = Enum.TextXAlignment.Right,
-			AnchorPoint = Vector2.new(1, 0.5),
-			Position = UDim2.fromScale(1, 0.5),
-			Size = UDim2.fromOffset(80, 20),
-			ZIndex = 2,
-		}, 2)
+-- Cette méthode permet de compléter une rangée par des cases vides jusqu'au nombre de colonnes lorsque la grille se
+-- construit.
+local function fillRow(count: number, y: number)
+	for column = count % COLUMNS, COLUMNS - 1 do
+		if count > 0 and column == 0 then
+			break -- rangée déjà pleine
+		end
+		emptyCard(column * (CARD_SIZE.X + CARD_GAP), y)
 	end
-	UIKit.frame({
-		Name = "Rule",
-		BackgroundColor3 = C.Bone,
-		BackgroundTransparency = 0.85,
-		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.fromScale(0, 1),
-		Size = UDim2.new(1, 0, 0, 1),
-		Parent = row,
-	})
-	bindItem(row, toolName, function(hovering)
-		local color = if hovering then C.HitRed else restColor
-		UIKit.tween(name, Motion.Hover, { TextColor3 = color })
-		silhouette.ImageColor3 = color
-	end, action)
 end
 
--- Cette méthode permet de poser la vignette d'un skin (silhouette, nom, trait rouge d'impact sous l'équipé) lorsque la
--- liste se construit ; `action` nil : case vide « AUCUN AUTRE SKIN », ni survol ni clic.
-local function skinTile(x: number, y: number, text: string, toolName: string, equipped: boolean, action: (() -> ())?)
-	local tile = UIKit.create("TextButton", {
-		Name = "Tile" .. text,
-		Text = "",
-		AutoButtonColor = false,
-		BackgroundColor3 = C.Scrim,
-		BackgroundTransparency = if action then 0.45 else 1,
-		BorderSizePixel = 0,
-		Position = UDim2.fromOffset(x, y),
-		Size = UDim2.fromOffset(TILE_SIZE.X, TILE_SIZE.Y),
-		Parent = panel,
-	})
-	local stroke = UIKit.stroke(tile, C.Bone, 1)
-	stroke.Transparency = if equipped then 0.2 elseif action then 0.7 else 0.8
-	local label = UIKit.shadowedText(tile, {
-		Name = "Name",
-		Text = text,
-		FontFace = F.Display,
-		TextSize = if action then 15 else 13,
-		TextColor3 = if action then C.Bone else C.BoneMuted,
-		TextXAlignment = if action then Enum.TextXAlignment.Left else Enum.TextXAlignment.Center,
-		Position = UDim2.fromOffset(8, TILE_SIZE.Y - 26),
-		Size = UDim2.fromOffset(TILE_SIZE.X - 16, 18),
-		ZIndex = 2,
-	}, 2)
-	if not action then
-		return
-	end
-	local icon = UIKit.frame({
-		Name = "Icon",
-		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset((TILE_SIZE.X - TILE_ICON.X) / 2, 12),
-		Size = UDim2.fromOffset(TILE_ICON.X, TILE_ICON.Y),
-		Parent = tile,
-	})
-	-- Skin pas encore rendu (#268) : la silhouette de l'arme, la même pour tous ses skins
-	UIKit.weaponSilhouette(icon, viewmodelOf(toolName), TILE_ICON.X / TILE_ICON.Y).ImageColor3 = C.Bone
-	if equipped then
-		UIKit.frame({
-			Name = "Equipped",
-			BackgroundColor3 = C.HitRed,
-			AnchorPoint = Vector2.new(0, 1),
-			Position = UDim2.fromScale(0, 1),
-			Size = UDim2.new(1, 0, 0, 3),
-			Parent = tile,
-		})
-	end
-	bindItem(tile, toolName, function(hovering)
-		UIKit.tween(label, Motion.Hover, { TextColor3 = if hovering then C.HitRed else C.Bone })
-	end, action)
-end
-
--- Cette méthode permet de reconstruire la liste de droite (armes possédées de l'emplacement actif, puis skins possédés
--- de son arme équipée) lorsque l'emplacement actif ou l'équipement change.
-local function rebuildList()
-	for _, child in panel:GetChildren() do
+-- Cette méthode permet de reconstruire la grille (armes possédées de l'emplacement actif, puis skins possédés de son
+-- arme équipée) lorsque l'emplacement actif ou l'équipement change.
+local function rebuildGrid()
+	for _, child in grid:GetChildren() do
 		child:Destroy()
 	end
-	-- Les éléments survolés disparaissent ; un emplacement survolé à gauche garde son arme en main
-	hoverTool = nil
-	for index, view in slotViews do
-		if view.hovering then
-			local weapon = equippedAt(index)
-			hoverTool = weapon and weapon.tool
-		end
-	end
+	hover = nil -- les cartes survolées disparaissent
 	local slotName = InventoryRules.SLOTS[selectedSlot]
 	if not slotName then
 		return
@@ -281,127 +360,83 @@ local function rebuildList()
 	local owned = LocalInventory.owned()
 	local current, currentSkin = equippedAt(selectedSlot)
 	local weapons = InventoryRules.weaponsForSlot(owned, slotName)
-	UIKit.accentLabel(panel, {
-		Name = "Title",
-		Text = string.format("%s · %d POSSÉDÉ%s", slotLabel(slotName), #weapons, if #weapons > 1 then "S" else ""),
-		Size = UDim2.fromOffset(PANEL_WIDTH, 18),
-	})
-	local y = TITLE_HEIGHT
-	for _, weapon in weapons do
+	local step = CARD_SIZE.X + CARD_GAP
+	local y = 0
+	for i, weapon in weapons do
+		local tool = weapon.tool or ""
 		local isEquipped = current ~= nil and current.id == weapon.id
-		weaponRow(y, weapon.tool or "", isEquipped, function()
-			-- Recliquer l'arme équipée garde son skin ; une autre arme part avec son skin d'origine
-			LocalInventory.equip(slotName, weapon.id, if isEquipped then currentSkin else nil)
+		local line = (i - 1) // COLUMNS
+		y = line * (CARD_SIZE.Y + CARD_GAP)
+		-- Recliquer l'arme équipée garde son skin ; une autre arme part avec son skin d'origine
+		local skin = if isEquipped then currentSkin else nil
+		card(((i - 1) % COLUMNS) * step, y, weaponTitle(tool), { tool = tool, skin = skin }, isEquipped, function()
+			LocalInventory.equip(slotName, weapon.id, skin)
 		end)
-		y += ROW_HEIGHT
 	end
+	fillRow(#weapons, y)
 	if not (current and current.tool) then
 		return
 	end
 	local currentTool: string = current.tool
 	local weaponId = current.id
-	y += SECTION_GAP
-	UIKit.accentLabel(panel, {
+	y += CARD_SIZE.Y + SECTION_GAP
+	UIKit.accentLabel(grid, {
 		Name = "SkinsTitle",
-		Text = "SKINS · " .. weaponTitle(currentTool),
+		Text = "SKINS  ·  " .. weaponTitle(currentTool),
 		Position = UDim2.fromOffset(0, y),
-		Size = UDim2.fromOffset(PANEL_WIDTH, 18),
+		Size = UDim2.fromOffset(GRID_WIDTH, 18),
 	})
-	y += TITLE_HEIGHT
-	-- D'origine d'abord (id nil), puis les skins possédés de l'arme ; seul, il est suivi d'une case vide
+	y += SECTION_HEIGHT
+	-- D'origine d'abord (id nil), puis les skins possédés de l'arme
 	local skins: { { id: string? } } = { { id = nil } }
 	for _, skin in InventoryRules.skinsFor(owned, weaponId) do
 		table.insert(skins, { id = skin.id })
 	end
-	local perRow = math.max(1, math.floor((PANEL_WIDTH + TILE_GAP) / (TILE_SIZE.X + TILE_GAP)))
+	local rowY = y
 	for i, skin in skins do
 		local skinId = skin.id
-		local column, line = (i - 1) % perRow, (i - 1) // perRow
-		local x, tileY = column * (TILE_SIZE.X + TILE_GAP), y + line * (TILE_SIZE.Y + TILE_GAP)
-		skinTile(x, tileY, Rules.skinLabel(skinId), currentTool, skinId == currentSkin, function()
+		rowY = y + ((i - 1) // COLUMNS) * (CARD_SIZE.Y + CARD_GAP)
+		local item = { tool = currentTool, skin = skinId }
+		card(((i - 1) % COLUMNS) * step, rowY, Rules.skinLabel(skinId), item, skinId == currentSkin, function()
 			LocalInventory.equip(slotName, weaponId, skinId)
 		end)
 	end
-	if #skins == 1 then
-		skinTile(TILE_SIZE.X + TILE_GAP, y, "AUCUN AUTRE SKIN", currentTool, false, nil)
-	end
+	fillRow(#skins, rowY)
 end
 
--- Cette méthode permet de rendre un emplacement actif (sa liste à droite, son arme dans les mains du personnage)
--- lorsque le joueur le clique, tape sa touche ou tourne la molette.
+-- Cette méthode permet de rendre un emplacement actif (sa grille, son arme dans les mains du personnage) lorsque le
+-- joueur clique son onglet, tape sa touche ou tourne la molette.
 local function selectSlot(index: number)
 	selectedSlot = index
-	-- Le choix l'emporte sur le survol en cours, sinon il semblerait sans effet
-	hoverTool = nil
-	rebuildList()
-	paintSlots()
-	updateHeld()
+	rebuildGrid()
+	paintTabs()
+	paintHeader()
 end
 
--- Cette méthode permet de construire un emplacement à gauche (« 1 · SNIPER », arme et skin équipés, barre ambrée quand
--- il est actif) lorsque l'écran est construit ; tout le bloc se clique, son survol montre l'arme équipée.
-local function buildSlot(root: Frame, index: number, slotName: string): SlotView
+-- Cette méthode permet de construire l'onglet d'un emplacement (« 1 · SNIPER ») lorsque l'écran est construit.
+local function buildTab(parent: GuiObject, index: number, slotName: string): TabView
 	local button = UIKit.create("TextButton", {
-		Name = "Slot" .. index,
-		Text = "",
+		Name = "Tab" .. index,
+		Text = string.format("%d  ·  %s", index, slotLabel(slotName)),
+		FontFace = F.Display,
+		TextSize = 18,
+		TextColor3 = C.Bone,
 		AutoButtonColor = false,
+		BackgroundColor3 = C.Accent,
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		Position = UDim2.fromOffset(EDGE, SLOTS_Y + (index - 1) * SLOT_STEP),
-		Size = UDim2.fromOffset(SLOT_SIZE.X, SLOT_SIZE.Y),
-		Parent = root,
+		Position = UDim2.fromOffset(EDGE + (index - 1) * (TAB_SIZE.X + TAB_GAP), TABS_Y),
+		Size = UDim2.fromOffset(TAB_SIZE.X, TAB_SIZE.Y),
+		Parent = parent,
 	})
-	local label = UIKit.accentLabel(button, {
-		Name = "Label",
-		Text = string.format("%d · %s", index, slotLabel(slotName)),
-		Size = UDim2.fromOffset(SLOT_SIZE.X, 18),
-	})
-	local name, nameShadow = UIKit.shadowedText(button, {
-		Name = "Weapon",
-		FontFace = F.Display,
-		TextSize = 32,
-		TextColor3 = C.BoneMuted,
-		Position = UDim2.fromOffset(0, 20),
-		Size = UDim2.fromOffset(SLOT_SIZE.X, 38),
-		ZIndex = 2,
-	}, 2)
-	local skin, skinShadow = UIKit.shadowedText(button, {
-		Name = "Skin",
-		FontFace = F.DisplayMedium,
-		TextSize = 15,
-		TextColor3 = C.BoneMuted,
-		Position = UDim2.fromOffset(1, 60),
-		Size = UDim2.fromOffset(SLOT_SIZE.X, 18),
-		ZIndex = 2,
-	}, 2)
-	local view: SlotView = {
-		label = label,
-		name = name,
-		nameShadow = nameShadow,
-		skin = skin,
-		skinShadow = skinShadow,
-		bar = UIKit.frame({
-			Name = "Bar",
-			BackgroundColor3 = C.Accent,
-			Position = UDim2.fromOffset(-14, 0),
-			Size = UDim2.fromOffset(3, 78),
-			Visible = false,
-			Parent = button,
-		}),
-		hovering = false,
-	}
+	local view: TabView = { button = button, hovering = false }
 	button.MouseEnter:Connect(function()
 		view.hovering = true
-		local weapon = equippedAt(index)
-		hoverTool = weapon and weapon.tool
-		paintSlots()
-		updateHeld()
+		paintTabs()
 	end)
 	button.MouseLeave:Connect(function()
 		view.hovering = false
-		hoverTool = nil
-		paintSlots()
-		updateHeld()
+		paintTabs()
 	end)
 	button.Activated:Connect(function()
 		if not MenuShot.isBusy() then
@@ -411,52 +446,106 @@ local function buildSlot(root: Frame, index: number, slotName: string): SlotView
 	return view
 end
 
--- Cette méthode permet de construire l'écran (titre et emplacements dans `column` à gauche, liste à droite sur son fond
--- de coin, aide en bas à droite) lorsque l'accueil est construit ; il suit ensuite chaque changement d'inventaire.
+-- Cette méthode permet de construire l'aide en bas à gauche (touche en boîte, action en texte) lorsque l'écran est
+-- construit.
+local function buildHints(root: Frame)
+	local row = UIKit.frame({
+		Name = "Hints",
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, EDGE, 1, -18),
+		Size = UDim2.fromOffset(GRID_WIDTH, 22),
+		Parent = root,
+	})
+	UIKit.create("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, 8),
+		Parent = row,
+	})
+	local hints = { { "MOLETTE", "EMPLACEMENT" }, { "CLIC", "ÉQUIPER" } }
+	for i, hint in hints do
+		tag(row, "Key" .. i, 2 * i - 1, C.Bone, C.Ground).Text = hint[1]
+		UIKit.text({
+			Name = "Action" .. i,
+			Text = hint[2] .. "      ",
+			FontFace = F.DisplayMedium,
+			TextSize = 14,
+			TextColor3 = C.TextSoft,
+			AutomaticSize = Enum.AutomaticSize.X,
+			Size = UDim2.fromOffset(0, 22),
+			LayoutOrder = 2 * i,
+			Parent = row,
+		})
+	end
+	UIKit.text({
+		Name = "Saved",
+		Text = "ENREGISTRÉ AUSSITÔT",
+		FontFace = F.DisplayMedium,
+		TextSize = 14,
+		TextColor3 = C.Muted,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 22),
+		LayoutOrder = 9,
+		Parent = row,
+	})
+end
+
+-- Cette méthode permet de construire l'écran (titre, rendu, nom, onglets et grille dans `column` à gauche, aide en bas
+-- à gauche) lorsque l'accueil est construit ; il suit ensuite chaque changement d'inventaire.
 function EquipmentScreen.build(root: Frame, column: Frame)
-	UIKit.cornerScrim(root, "TopRight", SCRIM_SIZE, SCRIM_SHOWN)
-	-- Titre de la page, en grand : il dit qu'on est sur l'écran d'équipement (retour de l'utilisateur) ; la colonne de
-	-- gauche descend avec le titre du jeu sous la barre de Roblox (#306)
+	-- Sous la colonne, créée avant lui : à ZIndex égal il passerait devant et voilerait la grille
+	UIKit.cornerScrim(root, "BottomLeft", SCRIM_SIZE, SCRIM_SHOWN).ZIndex = 0
+	-- La colonne de gauche descend avec le titre du jeu sous la barre de Roblox (#306)
 	UIKit.shadowedText(column, {
 		Name = "EquipmentTitle",
 		Text = "ÉQUIPEMENT",
 		FontFace = F.Display,
-		TextSize = PAGE_TITLE_SIZE,
-		TextColor3 = C.Accent,
-		Position = UDim2.fromOffset(EDGE, PAGE_TITLE_Y),
-		Size = UDim2.fromOffset(SLOT_SIZE.X, PAGE_TITLE_SIZE + 4),
+		TextSize = TITLE_SIZE,
+		TextColor3 = C.Bone,
+		Position = UDim2.fromOffset(EDGE, TITLE_Y),
+		Size = UDim2.fromOffset(400, TITLE_SIZE + 6),
 		ZIndex = 2,
-	}, 2)
-	panel = UIKit.frame({
-		Name = "EquipList",
+	}, 3)
+	local slotRow = flowRow(column, "SlotTitle", TITLE_Y + TITLE_STEP, TITLE_SIZE + 6)
+	slotTitle = flowText(slotRow, "Slot", TITLE_SIZE, 3)
+	slotTag = tag(slotRow, "SlotTag", 2, C.Accent, C.Ground)
+	previewHolder = UIKit.frame({
+		Name = "Preview",
 		BackgroundTransparency = 1,
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -EDGE, 0, HEADER_Y),
-		Size = UDim2.fromOffset(PANEL_WIDTH, 440),
-		Parent = root,
+		Position = UDim2.fromOffset(PREVIEW_POSITION.X, PREVIEW_POSITION.Y),
+		Size = UDim2.fromOffset(PREVIEW_SIZE.X, PREVIEW_SIZE.Y),
+		Parent = column,
 	})
-	UIKit.shadowedText(root, {
-		Name = "Hint",
-		Text = "CLIC POUR ÉQUIPER  ·  ENREGISTRÉ AUSSITÔT",
+	local nameRow = flowRow(column, "WeaponName", NAME_Y, NAME_SIZE + 6)
+	weaponName = flowText(nameRow, "Weapon", NAME_SIZE, 2)
+	statusTag = tag(nameRow, "Status", 2, C.HitRed, C.Bone)
+	statusStroke = UIKit.stroke(statusTag, C.Bone, 1)
+	statusStroke.Transparency = 0.4
+	category, categoryShadow = UIKit.shadowedText(column, {
+		Name = "Category",
 		FontFace = F.DisplayMedium,
 		TextSize = 15,
 		TextColor3 = C.TextSoft,
-		TextXAlignment = Enum.TextXAlignment.Right,
-		AnchorPoint = Vector2.new(1, 1),
-		Position = UDim2.new(1, -EDGE, 1, -20),
-		Size = UDim2.fromOffset(PANEL_WIDTH, 18),
+		Position = UDim2.fromOffset(EDGE + 1, CATEGORY_Y),
+		Size = UDim2.fromOffset(400, 18),
 		ZIndex = 2,
-	}, 2)
+	}, 1)
 	for index, slotName in InventoryRules.SLOTS do
-		slotViews[index] = buildSlot(column, index, slotName)
+		tabViews[index] = buildTab(column, index, slotName)
 	end
-	rebuildList()
-	paintSlots()
-	updateHeld()
+	grid = UIKit.frame({
+		Name = "EquipGrid",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(EDGE, GRID_Y),
+		Size = UDim2.fromOffset(GRID_WIDTH, 2 * CARD_SIZE.Y + SECTION_HEIGHT + SECTION_GAP),
+		Parent = column,
+	})
+	buildHints(root)
+	selectSlot(selectedSlot)
 	LocalInventory.onChanged(function()
-		rebuildList()
-		paintSlots()
-		updateHeld()
+		selectSlot(selectedSlot)
 	end)
 end
 
@@ -479,10 +568,10 @@ end
 -- Cette méthode permet de remettre l'écran à l'arrivée (SNIPER actif, aucun survol) lorsque le joueur quitte l'accueil
 -- ou revient au menu.
 function EquipmentScreen.reset()
-	if not panel then
+	if not grid then
 		return
 	end
-	for _, view in slotViews do
+	for _, view in tabViews do
 		view.hovering = false
 	end
 	selectSlot(1)

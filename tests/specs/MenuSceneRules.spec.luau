@@ -115,20 +115,4 @@ return function(T, Loader)
 			T.expectEqual(math.abs(Rules.breathAngle(1.3)) <= Rules.BREATH_ANGLE, true)
 		end)
 	end)
-
-	T.describe("MenuSceneRules.statSegments", function()
-		T.it("remplit toute la barre pour l'arme la plus forte", function()
-			T.expectEqual(Rules.statSegments(115, 115, 10), 10)
-		end)
-
-		T.it("arrondit au segment et garde au moins un segment pour une valeur positive", function()
-			T.expectEqual(Rules.statSegments(50, 115, 10), 4)
-			T.expectEqual(Rules.statSegments(1, 1000, 10), 1)
-		end)
-
-		T.it("laisse la barre vide sans valeur ni maximum", function()
-			T.expectEqual(Rules.statSegments(0, 115, 10), 0)
-			T.expectEqual(Rules.statSegments(5, 0, 10), 0)
-		end)
-	end)
 end

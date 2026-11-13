@@ -47,33 +47,39 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
 
 ## Comment c'est construit
 
-- `src/client/ui/MainMenu.luau` : accueil (titre, onglets, fiche de l'arme tenue par le personnage, écran d'équipement ;
-  rien ne se tire). **Écran d'équipement (#280, `src/client/ui/EquipmentScreen.luau`)** : l'onglet ARMES le porte,
-  d'après la propale visuelle du 2026-11-12. À gauche, sous le titre de page « ÉQUIPEMENT » (ambre 30 px à ombre : en
-  libellé de 16 px, il ne disait pas assez qu'on est sur la page d'équipement), les deux emplacements (« 1 · SNIPER »,
-  arme équipée en Oswald gras 32 px à ombre, « SKIN · D'ORIGINE » dessous) remplacent l'ancien sélecteur ‹ › :
-  l'actif en os avec libellé ambré et barre ambrée à gauche, l'autre grisé (`BoneMuted`), survol en rouge d'impact.
-  À droite, **toujours ouverte** sur l'emplacement actif (SNIPER à l'arrivée et au retour sur l'accueil), sur un fond de
-  coin sombre (`cornerScrim` « TopRight », sans lui le mur clair du décor rendait le texte illisible) : titre
-  « COUTEAU · 2 POSSÉDÉS » (nombre possédé seulement, rien sur le reste du catalogue), une ligne par arme possédée
-  (silhouette `UIKit.weaponSilhouette`, nom, « ÉQUIPÉ » en rouge d'impact à droite, filet dessous), puis « SKINS ·
-  KA-BAR » en vignettes (silhouette, nom, trait rouge d'impact sous l'équipé ; « D'ORIGINE » seul est suivi d'une case
-  vide « AUCUN AUTRE SKIN »). Aide en bas à droite « CLIC POUR ÉQUIPER · ENREGISTRÉ AUSSITÔT ». Un clic sur l'autre
-  emplacement, sa touche (réglée dans TOUCHES, 1 et 2 par défaut) ou la molette (sens réglé, coupée sur AUCUNE)
-  changent d'emplacement actif. Le personnage tient l'arme survolée (emplacement, ligne ou vignette), sinon celle de
-  l'emplacement actif ; la fiche suit. Un clic équipe : remote `EquipItem`, l'écran ne change qu'à la réponse du serveur
-  (attribut `EquippedItems`, les deux attributs posés ensemble ne déclenchent qu'une mise à jour, `LocalInventory.onChanged`
-  différé), pas d'affichage optimiste. **Seuls les items possédés apparaissent**, jamais grisés (la propale montrait
-  « NON POSSÉDÉ », écarté par l'issue).
-  Pistes rejetées : liste en texte seul qui s'ouvre au clic sur un emplacement (premier rendu, refusé : « quand il faut
-  deviner quelque chose en UX c'est une mauvaise chose », et trop loin de la propale) ; armes puis skins en deux temps
-  avec retour « ‹ ARMES ». **Libellés ambrés : 16 px gras à ombre** (`UIKit.accentLabel`, écran d'équipement et fiche) ;
-  à 13 px avec contour noir, l'utilisateur les trouvait illisibles (la taille plus que la couleur). Pas de rang « n / m »
-  sur la fiche depuis que les armes ne défilent plus. Les onglets sont dans leur propre `ScreenGui` (`MenuTabs`, DisplayOrder 4), au-dessus des écrans
+- `src/client/ui/MainMenu.luau` : accueil (titre, onglets, fiche de statistiques, écran d'équipement ; rien ne se
+  tire). **Écran d'équipement (#280, disposition de #308, `src/client/ui/EquipmentScreen.luau`)** : l'onglet ARMES le
+  porte. **Disposition validée par l'utilisateur en #308**, d'après une capture d'un écran de choix d'arme d'un autre
+  FPS, prise pour sa disposition et non pour son style (la DA reste « Ligne de mire » : os, ambre, rouge d'impact,
+  Oswald). Tout tient à gauche, le personnage est au tiers droit (`MenuScene`, section « Menu : accueil sur la map »).
+  De haut en bas : « ÉQUIPEMENT » puis l'emplacement actif en Oswald gras 52 px à ombre, suivi de l'étiquette ambrée
+  « EMPLACEMENT n » ; à droite du titre, rendu texturé de l'arme montrée (`UIKit.weaponSilhouette` avec `textured`, un
+  `ViewportFrame` par viewmodel, gardé) ; nom « AWP / D'ORIGINE » avec l'étiquette « ÉQUIPÉ » pleine en rouge d'impact,
+  ou « CLIC POUR ÉQUIPER » en contour quand l'arme survolée ne l'est pas, catégorie de l'arme dessous ; onglets
+  « 1 · SNIPER » et « 2 · COUTEAU » (actif en boîte ambrée à texte sombre, survol en rouge d'impact) ; grille de
+  cartes sur quatre colonnes : une rangée d'armes possédées, puis « SKINS · ARME » et une rangée de skins (silhouette,
+  nom, coche et trait rouge d'impact sur l'équipé, contour rouge au survol). Les cases restantes d'une rangée sont
+  vides et barrées d'une croix : elles tiennent la grille tant qu'il y a une ou deux armes. Aide en bas à gauche,
+  touches en boîte (« MOLETTE » emplacement, « CLIC » équiper, « ENREGISTRÉ AUSSITÔT »). **Plus de stats d'arme**
+  (barres dégâts, cadence, précision retirées en #308 : inutiles tant qu'aucune autre arme n'est prévue).
+  Un clic sur un onglet, sa touche (réglée dans TOUCHES, 1 et 2 par défaut) ou la molette (sens réglé, coupée sur
+  AUCUNE) changent d'emplacement actif (SNIPER à l'arrivée et au retour sur l'accueil). Le personnage tient l'arme de
+  la carte survolée, sinon celle de l'emplacement actif ; le nom et le rendu suivent. Un clic équipe : remote
+  `EquipItem`, l'écran ne change qu'à la réponse du serveur (attribut `EquippedItems`, les deux attributs posés
+  ensemble ne déclenchent qu'une mise à jour, `LocalInventory.onChanged` différé), pas d'affichage optimiste. **Seuls
+  les items possédés apparaissent**, jamais grisés ni verrouillés. Piège : le fond de coin (`cornerScrim`
+  « BottomLeft ») est créé après la colonne de gauche ; à ZIndex égal il passait devant et voilait la grille, il est
+  donc en ZIndex 0. Non traité : en 4:3, la grille passe sur le personnage.
+  Pistes rejetées : liste en texte seul qui s'ouvre au clic sur un emplacement (premier rendu de #280, refusé :
+  « quand il faut deviner quelque chose en UX c'est une mauvaise chose ») ; armes puis skins en deux temps avec retour
+  « ‹ ARMES » ; emplacements à gauche et liste à droite du personnage (#280, remplacé en #308). **Libellés ambrés :
+  16 px gras à ombre** (`UIKit.accentLabel`) ; à 13 px avec contour noir, l'utilisateur les trouvait illisibles (la
+  taille plus que la couleur). Les onglets sont dans leur propre `ScreenGui` (`MenuTabs`, DisplayOrder 4), au-dessus des écrans
   secondaires. Sous les onglets, un message ponctuel (`MainMenu.showNotice`, 5 s, rouge d'impact à ombre) explique un
   retour au menu imprévu, par exemple une apparition impossible (#219) ; rendu provisoire, pas encore validé.
 - **Fiche de statistiques (#301, `src/client/ui/StatsCard.luau`)** : sur l'accueil (pas d'onglet en plus, choix de
-  l'utilisateur), en bas au centre sous les pieds du personnage, sur un fondu de bord (`cornerScrim` « Bottom »). Cinq
+  l'utilisateur), en bas à droite sous les pieds du personnage (#308 : la grille d'équipement occupe la gauche, la
+  fiche prend la place des stats d'arme de la référence), sur un fond de coin (`cornerScrim` « BottomRight »). Cinq
   colonnes séparées par des filets comme les onglets : chiffre os à ombre (Oswald 28 px), libellé ambré dessous (KILLS,
   MORTS, K/M, ROUNDS, VICTOIRES). Lue dans l'attribut informatif `PlayerStats` du Player (`StatsRules.ATTRIBUTE`, posé
   par `StatsStore` une fois le stocké lu puis à chaque kill, mort et fin de manche ; jamais relu par le serveur, pas de
@@ -81,8 +87,7 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   (`HUDRules.STATS_UNKNOWN`), jamais des zéros présentés comme vrais. Mise en forme dans `HUDRules.statsView` (testée,
   client : le module partagé `StatsRules` ne garde que l'attribut) : ratio du classement (`formatKD`, sans mort il vaut
   les kills, sans décimale à partir de 100), compteurs en chiffres complets sous 10 000 (espace des milliers dès 1 000)
-  puis abrégés et tronqués (« 12.3k », « 1.2M »). Posée au-dessus de l'aide en bas à droite de l'écran d'équipement :
-  à sa hauteur, elle la chevauchait sur un écran plus étroit que 16:9. Les kills et morts face aux bots ne comptent pas
+  puis abrégés et tronqués (« 12.3k », « 1.2M »). Les kills et morts face aux bots ne comptent pas
   (`ParticipantRules.killCountsInStats`) : la fiche ne suit donc pas le classement d'une manche jouée contre des bots.
 - `src/client/ui/MenuPage.luau` : gabarit des écrans secondaires, sans panneau : bloc centré sur le voile du classement,
   actions côte à côte en bas au centre (`MenuPage.ExitY`). Choix de l'utilisateur en #117, après un premier passage en
@@ -352,7 +357,7 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
   c'est ce que fait `UIKit.weaponSilhouette` (barre d'armes, écran d'équipement), à réutiliser.
 - **`CanvasGroup` interdit (#155) :** Roblox le rend dans une texture dont la résolution baisse avec la qualité graphique
   (et la mémoire) : texte flou, illisible au minimum. Sa `GroupTransparency` est aussi ignorée dans ce rendu simple : le
-  groupe reste affiché. Les écrans (classement, réapparition, résultat, Infos, Réglages, fiche d'arme) sont des `Frame` ;
+  groupe reste affiché. Les écrans (classement, réapparition, résultat, Infos, Réglages) sont des `Frame` ;
   `UIKit.reveal` / `UIKit.fadeIn` animent la transparence de chaque enfant (fond, texte, image, `UIStroke`) à partir des
   valeurs relevées au lancement. Un élément ajouté pendant le fondu n'est pas animé. Vérifier toute nouvelle interface à
   la qualité graphique minimale et maximale.
@@ -442,7 +447,9 @@ workspace pendant la partie) :
   d'équipement (#280, `MainMenu`) choisit l'arme tenue (`MenuScene.holdTool`) : survolée, sinon équipée de l'emplacement
   choisi ; la fiche suit. Les skins ne sont pas encore rendus sur le modèle (#268).
 - Caméra : fixe, FOV vertical 40° en 16:9 (ouvert sur un écran plus étroit, `fitFov`), léger suivi du curseur
-  (`aimAngles`). Flou du fond : `DepthOfFieldEffect` posé sous la caméra le temps du menu.
+  (`aimAngles`). Depuis #308 elle est tournée de 20° vers la gauche (`CHARACTER_YAW`) : le personnage passe au tiers
+  droit de l'image et laisse la gauche à l'écran d'équipement. Un lacet plutôt qu'un décalage (`shift`) : la caméra
+  ne bouge pas, elle ne risque pas d'entrer dans un mur du couloir. Flou du fond : `DepthOfFieldEffect` posé sous la caméra le temps du menu.
 - Éclairage : celui du jeu, plus une **lumière de portrait** (SpotLight chaud devant le personnage, du côté du soleil).
   Avec un soleil à 1,4° au-dessus de l'horizon, les bords du toit ombrent tout le couloir : sans elle le personnage
   est sombre. Piège : juste après le lancement, les ombres ne sont pas encore calculées et le personnage paraît au

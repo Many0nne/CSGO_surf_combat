@@ -4,6 +4,8 @@ Une image par écran, pour désigner ce qu'on veut changer (« dans `reglages-vi
 avoir à lancer le jeu. Direction artistique et construction de chaque écran : `docs/ui.md`.
 
 - **Prises le 2026-11-12** sur `main` (`7331170`, après #280), en playtest Studio, map Dizzy, 5 bots.
+  `menu-accueil.png` et `menu-equipement-couteau.png` refaites le 2026-11-13 (#308, nouvelle disposition de l'écran
+  d'équipement) ; les autres captures du menu montrent encore le personnage au centre derrière leur voile.
 - **Format :** viewport seul, 16:9, 1349 x 759 px (1079 x 607 px d'interface, échelle Windows 125 %).
 - **Réglages du compte de test, pas les valeurs par défaut :** visée simplifiée activée avec un viseur ambre sans
   contour, affichage des touches en mode `simple`. Par défaut, la visée simplifiée est coupée (pas de crosshair) et
@@ -15,8 +17,8 @@ avoir à lancer le jeu. Direction artistique et construction de chaque écran : 
 
 | Capture | Écran | Code | Comment y arriver |
 |---|---|---|---|
-| [menu-accueil.png](menu-accueil.png) | Accueil : onglets, écran d'équipement sur l'emplacement SNIPER, fiche de l'arme | `MainMenu`, `EquipmentScreen`, `MenuScene` | Au lancement, ou onglet ARMES |
-| [menu-equipement-couteau.png](menu-equipement-couteau.png) | Écran d'équipement sur l'emplacement COUTEAU (2 possédés) | `EquipmentScreen` | Clic sur « 2 · COUTEAU » |
+| [menu-accueil.png](menu-accueil.png) | Accueil : onglets, écran d'équipement sur l'emplacement SNIPER, fiche de statistiques | `MainMenu`, `EquipmentScreen`, `StatsCard`, `MenuScene` | Au lancement, ou onglet ARMES |
+| [menu-equipement-couteau.png](menu-equipement-couteau.png) | Écran d'équipement sur l'emplacement COUTEAU (2 possédés) | `EquipmentScreen` | Clic sur l'onglet « 2 · COUTEAU » |
 | [menu-message-apparition-impossible.png](menu-message-apparition-impossible.png) | Message ponctuel sous les onglets (« IMPOSSIBLE DE REJOINDRE LA PARTIE, RÉESSAIE ») | `MainMenu.showNotice` | JOUER avec `workspace:SetAttribute("DebugSpawnFail", true)`, après 30 s |
 | [transition-deploiement.png](transition-deploiement.png) | Volets blancs « DÉPLOIEMENT » | `Transition` | Juste après JOUER |
 | [infos-surfer.png](infos-surfer.png) | Infos > SURFER | `InfosScreen`, `MenuPage` | Onglet INFOS |

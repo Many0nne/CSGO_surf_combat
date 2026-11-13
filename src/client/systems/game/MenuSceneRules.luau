@@ -1,6 +1,6 @@
 -- Règles pures de la scène de l'accueil du menu (#253, sans Instance ni service) : amortis, léger suivi du curseur, FOV
 -- selon le format de l'écran, choix des pièces de la map copiées (champ de la caméra), défilement des armes, respiration
--- du personnage, barres de la fiche d'arme. Testées sous Lune (tests/specs/MenuSceneRules.spec.luau).
+-- du personnage. Testées sous Lune (tests/specs/MenuSceneRules.spec.luau).
 local MenuSceneRules = {}
 
 -- Respiration du personnage en pose : amplitude (rad) de la rotation de la taille et période (s)
@@ -74,15 +74,6 @@ end
 -- en pose : une oscillation lente et faible, nulle à t = 0.
 function MenuSceneRules.breathAngle(t: number): number
 	return MenuSceneRules.BREATH_ANGLE * math.sin(2 * math.pi * t / MenuSceneRules.BREATH_PERIOD)
-end
-
--- Cette méthode permet de compter les segments pleins d'une barre de la fiche d'arme lorsque la valeur est rapportée au
--- maximum des armes du menu : au moins un segment pour une valeur positive.
-function MenuSceneRules.statSegments(value: number, max: number, count: number): number
-	if max <= 0 or value <= 0 then
-		return 0
-	end
-	return math.clamp(math.round(value / max * count), 1, count)
 end
 
 -- Cette méthode permet de nommer un skin dans l'écran d'équipement (#280) lorsqu'il est affiché : « D'ORIGINE » sans

@@ -23,6 +23,9 @@ local OFFSET = Vector3.new(0, 0, 5000)
 -- FOV vertical au format de référence (16:9), ouvert sur un écran plus étroit pour garder le personnage entier
 local VERTICAL_FOV = 40
 local ASPECT_REF = 16 / 9
+-- Lacet de la caméra (degrés, vers la gauche) : met le personnage au tiers droit de l'image (#308, la grille
+-- d'équipement occupe la gauche) sans déplacer la caméra, qui resterait sinon contre un mur du couloir
+local CHARACTER_YAW = 20
 -- Pièces copiées : cône de la caméra (tangente du demi-angle, large pour le 21:9 et le suivi du curseur), distance
 -- maximale, voisinage de la caméra gardé en entier (studs)
 local COPY_TAN_HALF = 1.0
@@ -358,12 +361,14 @@ local function build()
 	folder.Name = "MenuStage"
 	local mapCopy = Instance.new("Folder")
 	mapCopy.Name = "Map"
-	copyMap(map, eye, (target - eye).Unit, mapCopy)
+	-- Caméra tournée vers la gauche : le personnage passe à droite de l'image, la gauche revient à l'équipement
+	local view = CFrame.lookAt(eye, target) * CFrame.Angles(0, math.rad(CHARACTER_YAW), 0)
+	copyMap(map, eye, view.LookVector, mapCopy)
 	mapCopy.Parent = folder
 	folder.Parent = workspace
 	stage = folder
 
-	baseCFrame = CFrame.lookAt(eye + OFFSET, target + OFFSET)
+	baseCFrame = view + OFFSET
 	local ground = groundUnder(shot.feet + OFFSET, mapCopy)
 	character = buildCharacter(ground, shot.facing, folder)
 end
