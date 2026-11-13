@@ -94,13 +94,19 @@ end
 
 -- Cette méthode permet de dessiner la silhouette plate d'une arme, de profil, à partir des MeshParts de son viewmodel
 -- (bras exclus) lorsqu'une icône d'arme est créée (barre d'armes, équipement) ; la teinte vient de ImageColor3.
-function UIKit.weaponSilhouette(parent: GuiObject, viewmodelName: string, aspect: number): ViewportFrame
+-- `textured` (#308) : l'arme garde ses textures et ses couleurs, éclairée, pour un grand rendu plutôt qu'une icône.
+function UIKit.weaponSilhouette(
+	parent: GuiObject,
+	viewmodelName: string,
+	aspect: number,
+	textured: boolean?
+): ViewportFrame
 	local fov = 15
 	local viewport = UIKit.create("ViewportFrame", {
 		Name = "Silhouette",
 		BackgroundTransparency = 1,
-		Ambient = C.White,
-		LightColor = C.Black,
+		Ambient = if textured then Color3.fromRGB(170, 170, 170) else C.White,
+		LightColor = if textured then C.White else C.Black,
 		Size = UDim2.fromScale(1, 1),
 		Parent = parent,
 	})
@@ -113,10 +119,18 @@ function UIKit.weaponSilhouette(parent: GuiObject, viewmodelName: string, aspect
 	for _, part in source:GetChildren() do
 		if part:IsA("MeshPart") and part.Transparency < 1 then
 			local copy = part:Clone()
-			copy:ClearAllChildren()
-			copy.TextureID = ""
-			copy.Color = C.White
-			copy.Material = Enum.Material.SmoothPlastic
+			if textured then
+				for _, child in copy:GetChildren() do
+					if not child:IsA("SurfaceAppearance") then
+						child:Destroy()
+					end
+				end
+			else
+				copy:ClearAllChildren()
+				copy.TextureID = ""
+				copy.Color = C.White
+				copy.Material = Enum.Material.SmoothPlastic
+			end
 			copy.Anchored = true
 			copy.Parent = model
 		end

@@ -1,5 +1,5 @@
--- Fiche de statistiques de l'accueil (#301, docs/ui.md) : bloc discret en bas au centre, sous les pieds du personnage,
--- sur un fondu de bord. Une colonne par chiffre (os à ombre) avec son libellé ambré dessous : KILLS, MORTS, K/M, ROUNDS,
+-- Fiche de statistiques de l'accueil (#301, docs/ui.md) : bloc discret en bas à droite (#308), sous les pieds du
+-- personnage, sur un fond de coin. Une colonne par chiffre (os à ombre) avec son libellé ambré dessous : KILLS, MORTS, K/M, ROUNDS,
 -- VICTOIRES. Lit l'attribut informatif `PlayerStats` du Player (StatsStore) : absent (chargement en cours ou en échec),
 -- « — » partout plutôt que des zéros. Les kills sur bots ne comptent pas (ParticipantRules.killCountsInStats).
 local Players = game:GetService("Players")
@@ -17,17 +17,16 @@ local F = UITheme.Fonts
 local StatsCard = {}
 
 -- Mise en page (px à 720 de haut)
--- Marge sous la fiche : au-dessus de l'aide en bas à droite de l'écran d'équipement, que la fiche chevaucherait en
--- largeur sur un écran plus étroit que 16:9
-local BOTTOM = 48
+-- En bas à droite depuis #308, sous les pieds du personnage (la grille d'équipement occupe la gauche)
+local BOTTOM = 28
+local RIGHT = 28
 local COLUMN_WIDTH = 84
 local COLUMN_GAP = 18
 local VALUE_SIZE = 28
 local LABEL_Y = 32
 local HEIGHT = 52
--- Fondu de bord sous la fiche (sol clair possible selon la map) ; son haut (y 624) reste sous la dernière barre de la
--- fiche d'arme (y 616 au plus)
-local SCRIM_SIZE = Vector2.new(620, 96)
+-- Fond de coin sous la fiche (sol clair possible selon la map)
+local SCRIM_SIZE = Vector2.new(640, 150)
 local SCRIM_TRANSPARENCY = 0.45
 -- Colonnes, de gauche à droite : nom de l'instance, libellé, et texte lu dans la vue (HUDRules.StatsView)
 type Column = { name: string, label: string, text: (HUDRules.StatsView) -> string }
@@ -115,22 +114,22 @@ local function buildColumn(parent: GuiObject, index: number, spec: Column)
 	})
 end
 
--- Cette méthode permet de construire la fiche en bas au centre de l'accueil lorsque le menu est initialisé, puis de la
+-- Cette méthode permet de construire la fiche en bas à droite de l'accueil lorsque le menu est initialisé, puis de la
 -- tenir à jour à chaque changement de l'attribut `PlayerStats`.
 function StatsCard.build(parent: GuiObject)
-	UIKit.cornerScrim(parent, "Bottom", SCRIM_SIZE, SCRIM_TRANSPARENCY)
+	UIKit.cornerScrim(parent, "BottomRight", SCRIM_SIZE, SCRIM_TRANSPARENCY)
 	local card = UIKit.frame({
 		Name = "StatsCard",
 		BackgroundTransparency = 1,
-		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -BOTTOM),
+		AnchorPoint = Vector2.new(1, 1),
+		Position = UDim2.new(1, -RIGHT, 1, -BOTTOM),
 		AutomaticSize = Enum.AutomaticSize.X,
 		Size = UDim2.fromOffset(0, HEIGHT),
 		Parent = parent,
 	})
 	UIKit.create("UIListLayout", {
 		FillDirection = Enum.FillDirection.Horizontal,
-		HorizontalAlignment = Enum.HorizontalAlignment.Center,
+		HorizontalAlignment = Enum.HorizontalAlignment.Right,
 		VerticalAlignment = Enum.VerticalAlignment.Center,
 		SortOrder = Enum.SortOrder.LayoutOrder,
 		Padding = UDim.new(0, COLUMN_GAP),
