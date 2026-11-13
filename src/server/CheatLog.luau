@@ -482,8 +482,9 @@ end
 -- débit dépassé = ignoré + violation faible, type impossible = ignoré + violation forte, Instance absente = ignoré.
 -- Le remote est le contrôle (#297). Renvoie true si le handler peut traiter l'appel.
 function CheatLog.admit(player: Player, remoteName: string, ...: any): boolean
-	-- Joueur déjà parti (appel traité après PlayerRemoving, ex. juste après un kick) : rien à recréer pour lui
-	if not player.Parent then
+	-- Joueur déjà parti (appel traité après PlayerRemoving, ex. juste après un kick) : rien à recréer pour lui, pas même
+	-- les seaux de la garde
+	if not player.Parent or departed[player] then
 		return false
 	end
 	local verdict, reason = guard:check(player, remoteName, now(), ...)
@@ -557,13 +558,18 @@ local function sortedKeys(t: { [string]: any }): { string }
 	return keys
 end
 
+-- Cette méthode permet de mesurer un texte d'embed (caractères, comme Discord) lorsqu'on vérifie ses limites.
+local function textLength(text: string): number
+	return utf8.len(text) or #text
+end
+
 -- Cette méthode permet d'assembler des lignes sous une longueur maximale (caractères) lorsqu'un champ ou une
 -- description d'embed doit tenir dans les limites de Discord : les lignes en trop deviennent « … (+N) ».
 function CheatLog.joinCapped(lines: { string }, max: number): string
 	local kept, size = {}, 0
 	for i, line in lines do
 		-- Dernière ligne : jusqu'à max ; avant elle, place gardée pour « … (+N) » (au plus une douzaine de caractères)
-		local cost = (utf8.len(line) or #line) + (if i > 1 then 1 else 0)
+		local cost = textLength(line) + (if i > 1 then 1 else 0)
 		local limit = if i == #lines then max else max - 16
 		if size + cost > limit then
 			table.insert(kept, string.format("… (+%d)", #lines - i + 1))
@@ -573,11 +579,6 @@ function CheatLog.joinCapped(lines: { string }, max: number): string
 		size += cost
 	end
 	return table.concat(kept, "\n")
-end
-
--- Cette méthode permet de mesurer un texte d'embed (caractères, comme Discord) lorsqu'on vérifie ses limites.
-local function textLength(text: string): number
-	return utf8.len(text) or #text
 end
 
 -- Cette méthode permet de mettre en forme le résumé d'un joueur lorsqu'il part avec des violations : nom, UserId,
@@ -647,7 +648,8 @@ function CheatLog.buildEmbed(record: Record): { [string]: any }
 	for _, field in fields do
 		budget -= textLength(field.name)
 	end
-	local perField = math.min(CheatLog.MAX_FIELD_VALUE, math.floor(budget / math.max(#fields, 1)))
+	-- Plancher : au moins la ligne des gravités et « … (+N) » par champ (description bornée, au plus 8 catégories)
+	local perField = math.clamp(math.floor(budget / math.max(#fields, 1)), 64, CheatLog.MAX_FIELD_VALUE)
 	for _, field in fields do
 		field.value = CheatLog.joinCapped(field.lines, perField)
 		field.lines = nil
@@ -815,9 +817,13 @@ end
 -- Cette méthode permet d'oublier un joueur qui part lorsque son bilan est clos : seaux de la garde libérés, résumé
 -- envoyé si le bilan le mérite (worthSummary), avec ses jugés et son ping ; ce qu'il a fait reste au relevé agrégé.
 function CheatLog.onPlayerRemoving(player: Player)
-	runClosingHooks({ player }, false)
 	departed[player] = true
 	guard:forget(player)
+	-- Après l'arrêt (close) : bilans déjà clos et rappels déjà lancés pour tous
+	if closed then
+		return
+	end
+	runClosingHooks({ player }, false)
 	local record = records[player.UserId]
 	local session = sessions[player.UserId]
 	records[player.UserId] = nil
@@ -841,16 +847,14 @@ end
 -- Cette méthode permet de faire tourner la boucle du journal lorsque le serveur démarre : ping échantillonné toutes les
 -- PING_SAMPLE_INTERVAL secondes, relevé agrégé toutes les REPORT_INTERVAL ; une erreur n'arrête pas la boucle.
 local function runSamplingLoop()
-	local sinceReport = 0
 	while true do
 		task.wait(CheatLog.PING_SAMPLE_INTERVAL)
 		local ok, err = pcall(samplePings)
 		if not ok then
 			warn("[CheatLog] mesure du ping en échec :", err)
 		end
-		sinceReport += CheatLog.PING_SAMPLE_INTERVAL
-		if sinceReport >= CheatLog.REPORT_INTERVAL then
-			sinceReport = 0
+		-- Mesuré depuis le début de la période : un relevé à la demande la redémarre aussi
+		if now() - period.startedAt >= CheatLog.REPORT_INTERVAL then
 			ok, err = pcall(CheatLog.flushReport, "périodique")
 			if not ok then
 				warn("[CheatLog] relevé périodique en échec :", err)
