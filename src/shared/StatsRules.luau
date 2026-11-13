@@ -169,12 +169,13 @@ end
 -- lu, puis à chaque kill, mort ou fin de manche ; jamais relu par le serveur. Absent : pas (encore) chargé. Mise en
 -- forme de la fiche : HUDRules.statsView (client).
 StatsRules.ATTRIBUTE = "PlayerStats"
+
 -- Cette méthode permet d'écrire les compteurs dans l'attribut du Player lorsque le serveur les publie : entiers séparés
--- par des virgules, dans l'ordre de FIELDS (« 12,3,5,1 ») ; « %.0f » et non « %d », qui rendrait négatif un compteur
--- de 2^63 ou plus (relu alors comme non chargé).
+-- par des virgules, dans l'ordre de FIELDS (« 12,3,5,1 »).
 function StatsRules.encode(stats: Stats): string
 	local parts = table.create(#StatsRules.FIELDS)
 	for i, field in StatsRules.FIELDS do
+		-- « %.0f » et non « %d », qui rendrait négatif un compteur de 2^63 ou plus (relu alors comme non chargé)
 		parts[i] = string.format("%.0f", stats[field])
 	end
 	return table.concat(parts, ",")

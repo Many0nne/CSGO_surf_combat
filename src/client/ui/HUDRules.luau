@@ -1,11 +1,10 @@
--- Règles pures du HUD (sans Instance ; modules requis : KeyBindings, InventoryRules, StatsRules) : paliers de vitesse,
--- timer, classement, barre d'armes, affichage des touches, fiche de statistiques de l'accueil.
+-- Règles pures du HUD (sans Instance ; modules requis : KeyBindings, InventoryRules) : paliers de vitesse, timer,
+-- classement, barre d'armes, affichage des touches, fiche de statistiques de l'accueil.
 -- Testées sous Lune (tests/specs/HUDRules.spec.luau).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local InventoryRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("InventoryRules"))
 local KeyBindings = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("KeyBindings"))
-local StatsRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("StatsRules"))
 
 local HUDRules = {}
 
@@ -97,12 +96,12 @@ end
 -- en échec) : pas de faux zéros
 HUDRules.STATS_UNKNOWN = "—"
 
--- Textes de la fiche de statistiques de l'accueil, prêts à afficher
+-- Compteurs relus de l'attribut `PlayerStats` (même forme que StatsRules.Stats), et textes de la fiche prêts à afficher
+export type PlayerStats = { kills: number, deaths: number, roundsPlayed: number, roundsWon: number }
 export type StatsView = { kills: string, deaths: string, ratio: string, roundsPlayed: string, roundsWon: string }
 
--- Cette méthode permet d'écrire un compteur de façon lisible lorsque la fiche de l'accueil l'affiche : chiffres complets
--- sous 10 000 (espace des milliers dès 1 000), puis abrégé en k et M, tronqué pour ne jamais grossir le chiffre
--- (« 12.3k », « 123k », « 1.2M »).
+-- Cette méthode permet d'écrire un compteur lisible lorsque la fiche de l'accueil l'affiche : chiffres complets sous
+-- 10 000 (espace des milliers), puis abrégé en k et M, tronqué pour ne jamais grossir le chiffre.
 function HUDRules.formatCount(n: number): string
 	n = math.max(0, math.floor(n))
 	if n < 1000 then
@@ -133,7 +132,7 @@ end
 
 -- Cette méthode permet de préparer les textes de la fiche de l'accueil lorsque l'attribut `PlayerStats` change
 -- (StatsRules.decode) : statistiques non chargées (nil) → STATS_UNKNOWN partout, ratio compris.
-function HUDRules.statsView(stats: StatsRules.Stats?): StatsView
+function HUDRules.statsView(stats: PlayerStats?): StatsView
 	if not stats then
 		local u = HUDRules.STATS_UNKNOWN
 		return { kills = u, deaths = u, ratio = u, roundsPlayed = u, roundsWon = u }

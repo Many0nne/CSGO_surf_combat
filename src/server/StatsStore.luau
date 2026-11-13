@@ -91,9 +91,8 @@ local function totalOf(profile: Profile): Stats
 	return if profile.pending then StatsRules.sum(total, profile.pending.delta) else total
 end
 
--- Cette méthode permet de poser l'attribut informatif `PlayerStats` du Player (#301, lu par la fiche de l'accueil)
--- lorsque ses statistiques changent ou sont lues ; rien tant que le stocké n'est pas connu : le client affiche « — »
--- plutôt que des zéros (chargement en cours ou en échec).
+-- Cette méthode permet de poser l'attribut informatif `PlayerStats` (#301) lorsque les statistiques changent ou sont
+-- lues ; rien tant que le stocké n'est pas connu, pour que la fiche affiche « — » plutôt que des zéros.
 local function publish(profile: Profile)
 	if profile.known and profiles[profile.player] == profile then
 		profile.player:SetAttribute(StatsRules.ATTRIBUTE, StatsRules.encode(totalOf(profile)))
