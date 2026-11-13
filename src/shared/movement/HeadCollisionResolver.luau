@@ -1,5 +1,6 @@
 -- Collisions de la tête (plafond, mur haut) pendant un déplacement. Une instance par personnage (#139).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CollisionGroups = require(ReplicatedStorage.Shared.CollisionGroups)
 local PhysicsUtils = require(ReplicatedStorage.Shared.PhysicsUtils)
 
 local HeadCollisionResolver = {}
@@ -17,6 +18,7 @@ function HeadCollisionResolver.new(char: Model): HeadCollisionResolver
 	local castParams = RaycastParams.new()
 	castParams.FilterType = Enum.RaycastFilterType.Exclude
 	castParams.FilterDescendantsInstances = { char, workspace.CurrentCamera }
+	CollisionGroups.ignoreCharacters(castParams)
 	return setmetatable({ castParams = castParams, lastSafeCenter = nil }, HeadCollisionResolver)
 end
 

@@ -11,6 +11,7 @@ local WeaponConfig = require(Shared:WaitForChild("WeaponConfig"))
 local MemoryTracker = require(Shared:WaitForChild("MemoryTracker"))
 local PerfRules = require(Shared:WaitForChild("PerfRules"))
 local ParticipantRules = require(Shared:WaitForChild("ParticipantRules"))
+local CollisionGroups = require(Shared:WaitForChild("CollisionGroups"))
 
 local SpawnManager = require(script.SpawnManager)
 local RoundManager = require(script.RoundManager)
@@ -32,6 +33,9 @@ local AimStats = require(script.AimStats)
 
 -- Spawn contrôlé : on gère LoadCharacter nous-mêmes
 Players.CharacterAutoLoads = false
+
+-- Les personnages se traversent (#312) : groupe enregistré avant qu'un personnage n'y soit rangé
+CollisionGroups.register()
 
 -- ── Création des RemoteEvents ──────────────────────────────────────────────
 
@@ -370,9 +374,11 @@ local function onDeathCounted(participant: Participants.Participant, killer: Par
 	end
 end
 
--- Cette méthode permet de brancher le personnage d'un participant (joueur ou bot, #139) lorsqu'il apparaît : arme 3P
--- suivie, mort comptée dans le round (et dans les stats pour un joueur), corps laissé aux clients le temps du ragdoll.
+-- Cette méthode permet de brancher le personnage d'un participant (joueur ou bot, #139) lorsqu'il apparaît : pièces
+-- rangées dans le groupe des personnages (#312), arme 3P suivie, mort comptée dans le round (et dans les stats pour un
+-- joueur), corps laissé aux clients le temps du ragdoll.
 local function onParticipantCharacter(participant: Participants.Participant, char: Model, respawn: () -> ())
+	CollisionGroups.assignCharacter(char)
 	forgetCombatState(participant)
 	trackWeapon3P(participant, char)
 	local humanoid = char:WaitForChild("Humanoid") :: Humanoid

@@ -1,6 +1,7 @@
 -- Détection du sol sous un personnage. Une instance par personnage (#139) : filtre de rayons et dimensions propres.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local CollisionGroups = require(ReplicatedStorage.Shared.CollisionGroups)
 local Config = require(ReplicatedStorage.Shared.MovementConfig)
 local PhysicsUtils = require(ReplicatedStorage.Shared.PhysicsUtils)
 local CharacterDimensions = require(script.Parent.CharacterDimensions)
@@ -46,6 +47,7 @@ function GroundDetection.new(character: Model, dims: CharacterDimensions.Charact
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = { character, workspace.CurrentCamera }
+	CollisionGroups.ignoreCharacters(params)
 	local stand = dims:getStand()
 	local castDist = stand.halfHeight + CAST_SKIN
 	return setmetatable({

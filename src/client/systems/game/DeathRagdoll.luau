@@ -127,6 +127,8 @@ local function rigClone(clone: Model): ({ BasePart }, { Decal })
 			-- Ni raycast (mouvement, tirs) ni contact : le corps est un décor local
 			inst.CanQuery = false
 			inst.CanTouch = false
+			-- Le corps reprend le groupe par défaut : dans celui des personnages (#312), ses membres se traverseraient
+			inst.CollisionGroup = "Default"
 			local isBody = inst.Parent == clone
 			inst.CanCollide = isBody
 			inst.Massless = not isBody
