@@ -23,6 +23,7 @@ export type Candidate = {
 	id: number,
 	isHuman: boolean,
 	distance: number,
+	inGrace: boolean?, -- encore dans son délai de grâce d'apparition (pas de tir possible)
 }
 
 export type StateInput = {
@@ -114,17 +115,17 @@ function BotBehaviorRules.forget(memory: { [number]: Memory }, now: number, ttl:
 	return freshest
 end
 
--- Cette méthode permet de choisir la cible d'un bot parmi celles qu'il voit lorsqu'il en voit plusieurs : un humain
--- plutôt qu'un bot (FFA, préférence pour les joueurs), puis la plus proche ; nil sans candidat.
-function BotBehaviorRules.pickTarget(candidates: { Candidate }): Candidate?
+-- Cette méthode permet de choisir la cible d'un bot parmi celles qu'il voit lorsqu'il en voit plusieurs (#298) : un
+-- humain hors grâce à moins de HUMAN_PREF_RANGE d'abord, puis la plus proche ; la cible actuelle (currentId) est
+-- comptée HUMAN_PREF_MARGIN plus proche (pas de va-et-vient, qui relancerait le temps de réaction). nil sans candidat.
+function BotBehaviorRules.pickTarget(candidates: { Candidate }, currentId: number?): Candidate?
 	local best: Candidate? = nil
+	local bestPreferred, bestDistance = false, math.huge
 	for _, c in candidates do
-		if
-			not best
-			or (c.isHuman and not best.isHuman)
-			or (c.isHuman == best.isHuman and c.distance < best.distance)
-		then
-			best = c
+		local distance = if c.id == currentId then c.distance - BotConfig.HUMAN_PREF_MARGIN else c.distance
+		local p = c.isHuman and not c.inGrace and distance <= BotConfig.HUMAN_PREF_RANGE
+		if not best or (p and not bestPreferred) or (p == bestPreferred and distance < bestDistance) then
+			best, bestPreferred, bestDistance = c, p, distance
 		end
 	end
 	return best

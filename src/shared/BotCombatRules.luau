@@ -67,6 +67,15 @@ function BotCombatRules.inSpawnGrace(spawnedAt: number?, now: number): boolean
 	return spawnedAt ~= nil and now - spawnedAt < BotConfig.SPAWN_GRACE
 end
 
+-- Cette méthode permet de dater le début du temps de réaction d'un bot lorsqu'il voit une cible (#298) : l'instant où
+-- il la voit, ou la fin de son délai de grâce si elle est plus tardive (pas de réaction ni de visée écoulées d'avance).
+function BotCombatRules.reactionStart(seenSince: number, spawnedAt: number?): number
+	if spawnedAt == nil then
+		return seenSince
+	end
+	return math.max(seenSince, spawnedAt + BotConfig.SPAWN_GRACE)
+end
+
 -- Cette méthode permet de choisir l'arme d'un bot lorsqu'il a une cible (distance entre les racines, nil sans
 -- cible) : couteau sous KNIFE_RANGE, fusil au-delà de KNIFE_DROP_RANGE ; entre les deux il garde la sienne (pas de
 -- va-et-vient).

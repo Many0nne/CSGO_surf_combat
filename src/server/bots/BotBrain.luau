@@ -65,7 +65,7 @@ export type BotBrain = typeof(setmetatable(
 		targetSpeed: number, -- vitesse estimée de la cible entre deux regards (studs/s)
 		lastSeen: { [number]: { position: Vector3, at: number } }, -- par participant vu, pour estimer sa vitesse
 		targetVisible: boolean, -- vue à ce regard (sinon gardée en tête un instant, sans tir)
-		seenSince: number, -- instant où la cible courante a été vue
+		seenSince: number, -- instant où la cible courante (cette vie) a été vue
 		lastShot: number?,
 		holdLook: Vector3?, -- point regardé en tenant un angle
 		lastHealth: number,
@@ -80,7 +80,7 @@ BotBrain.stats = {
 	stabs = 0,
 	hits = 0, -- touches appliquées (fusil et couteau), comptées par BotManager
 	kills = 0,
-	graceHolds = 0, -- regards de visée où le tir est retenu par le délai de grâce de la cible
+	graceHolds = 0, -- frames de visée (Heartbeat) sur une cible encore dans son délai de grâce
 	heard = 0,
 	investigations = 0,
 	replacements = 0,
@@ -228,25 +228,30 @@ function BotBrain._perceive(self: BotBrain, now: number)
 				}
 				-- Passif (debug) : les humains ne sont pas des cibles, le bot combat les autres bots
 				if not (other.isHuman and self.env.passive and self.env.passive()) then
-					table.insert(candidates, { id = other.id, isHuman = other.isHuman, distance = distance })
+					table.insert(candidates, {
+						id = other.id,
+						isHuman = other.isHuman,
+						distance = distance,
+						inGrace = BotCombatRules.inSpawnGrace(other.spawnedAt, now),
+					})
 				end
 				self.lastContact = now
 			end
 		end
 	end
 
-	local target = BotBehaviorRules.pickTarget(candidates)
+	local target = BotBehaviorRules.pickTarget(candidates, self.targetId)
 	if target then
-		if target.id ~= self.targetId then
+		local seen = seenOthers[target.id]
+		if target.id ~= self.targetId or seen.spawnedAt ~= self.targetSpawnedAt then
 			if not self.targetId then
 				BotBrain.stats.combats += 1
 			end
-			-- Nouvelle cible : le temps de réaction repart de zéro
+			-- Nouvelle cible (ou même cible réapparue) : le temps de réaction repart de zéro
 			self.targetId, self.seenSince, self.lastShot = target.id, now, nil
 		end
 		self.targetPos = positions[target.id]
 		self.targetVisible = true
-		local seen = seenOthers[target.id]
 		self.targetChar, self.targetSpawnedAt, self.targetSpeed = seen.character, seen.spawnedAt, seen.speed
 		self.targetIsHuman = seen.isHuman
 	elseif self.targetId then
@@ -449,10 +454,16 @@ function BotBrain.update(self: BotBrain, dt: number)
 	local gaze = self.motion.gaze
 	gaze.lookAt, gaze.aiming = nil, false
 	if state == "combattre" and self.targetPos then
+		-- Réaction et visée comptées depuis la fin du délai de grâce de la cible (#298), pas depuis qu'il la voit
+		local reactFrom = BotCombatRules.reactionStart(self.seenSince, self.targetSpawnedAt)
 		local looking, fire =
-			BotBehaviorRules.combatGaze(now - self.seenSince, if self.lastShot then now - self.lastShot else nil)
+			BotBehaviorRules.combatGaze(now - reactFrom, if self.lastShot then now - self.lastShot else nil)
 		if looking then
 			gaze.lookAt, gaze.aiming = self.targetPos, true
+			if self.targetVisible and BotCombatRules.inSpawnGrace(self.targetSpawnedAt, now) then
+				-- Visée sur une cible encore protégée : ni réaction ni tir avant la fin de sa grâce
+				BotBrain.stats.graceHolds += 1
+			end
 		end
 		if fire and self.targetVisible then
 			self:_tryFire(now)
@@ -486,9 +497,6 @@ function BotBrain._tryFire(self: BotBrain, now: number)
 		holdFire = self.targetIsHuman and self.env.passive ~= nil and self.env.passive(),
 	})
 	if not ok then
-		if inGrace then
-			BotBrain.stats.graceHolds += 1
-		end
 		return
 	end
 	local cfg = arsenal:config()

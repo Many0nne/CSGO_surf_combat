@@ -77,6 +77,22 @@ return function(T, Loader)
 			T.expectEqual(Rules.inSpawnGrace(nil, 100), false, "apparition inconnue")
 		end)
 
+		T.it("compte son temps de réaction à partir de la fin du délai de grâce (#298)", function()
+			local graceEnd = 100 + Config.SPAWN_GRACE
+			T.expectEqual(Rules.reactionStart(101, 100), graceEnd, "vue pendant la grâce : réaction à sa fin")
+			T.expectEqual(
+				Rules.reactionStart(graceEnd + 2, 100),
+				graceEnd + 2,
+				"vue après la grâce : dès qu'il la voit"
+			)
+			T.expectEqual(Rules.reactionStart(101, nil), 101, "apparition inconnue : dès qu'il la voit")
+			T.expectEqual(
+				Rules.reactionStart(100, 100),
+				graceEnd,
+				"vue dès l'apparition : réaction à la fin de la grâce"
+			)
+		end)
+
 		T.it("sort le couteau au contact, reprend le fusil à distance", function()
 			T.expectEqual(Rules.chooseWeapon(Rules.RIFLE, Config.KNIFE_RANGE - 1), Rules.KNIFE, "au contact")
 			T.expectEqual(Rules.chooseWeapon(Rules.RIFLE, Config.KNIFE_DROP_RANGE - 1), Rules.RIFLE, "garde le fusil")

@@ -147,7 +147,8 @@ réglages dans `BotConfig` (section « Comportement »). Il commande le suivi de
 `onArrive`, `setDestination`) et le regard de `BotMotion` (`gaze`).
 - **Perception** (tous les `PERCEPTION_INTERVAL`) : un autre participant en vie est vu s'il est dans `VIEW_FOV` (100°)
   autour du regard, à moins de `VIEW_RANGE`, et si un rayon des yeux vers sa tête ou son torse n'est coupé que par
-  lui (murs d'air ignorés). Cible : un humain plutôt qu'un bot, puis la plus proche.
+  lui (murs d'air ignorés). Cible : un humain à moins de `HUMAN_PREF_RANGE` plutôt qu'un bot, puis la plus
+  proche (cf. « Combat »).
 - **Ouïe** : `BotManager.hearShot` (appelé par `relayShot` d'`init.server` pour un tir au fusil d'un joueur accepté par
   le serveur, remote `ShotFired`, #156 ; et par `BotBrain` pour les tirs des bots). Un coup de couteau ne s'entend pas,
   ni un tir écarté du relais (cadence, equip, chargeur : cf. `docs/anticheat.md` « Relais des tirs »). À moins de `HEARING_RADIUS` (200), position faussée d'au plus `HEARING_FUZZ` (20 %) de la distance.
@@ -188,7 +189,38 @@ Règles pures dans `BotCombatRules`, armes dans `BotArsenal` (une par bot vivant
   (rechargement aussi quand il n'a rien à viser) ; vitesse de course selon l'arme (`BotMotion:setWeapon`).
 - **Délai de grâce** : `SpawnManager.place` pose l'attribut serveur `SpawnedAt` (os.clock) sur tout personnage ; un
   bot ne tire pas sur un participant apparu depuis moins de `SPAWN_GRACE` (4 s, lancement depuis le soleil compris).
-- **Cible** : un humain plutôt qu'un bot, puis la plus proche (`pickTarget` de #141) ; les bots se tirent dessus.
+  Son temps de réaction et de visée ne court qu'à partir de la fin de ce délai (`BotCombatRules.reactionStart`,
+  #298) : il peut se tourner vers la cible pendant la grâce, mais le tir part au plus tôt `REACTION_TIME` +
+  `COMBAT_AIM_TIME` après sa fin. Une cible qui réapparaît (nouveau `SpawnedAt`) est traitée comme une nouvelle cible.
+- **Cible** : un humain hors délai de grâce à moins de `HUMAN_PREF_RANGE` passe avant un bot ; au-delà, ou
+  pendant sa grâce, la cible la plus proche l'emporte (`pickTarget` de #141, borné par #298). La cible déjà visée
+  est comptée `HUMAN_PREF_MARGIN` studs plus proche (seuil et distances) : sans cette marge, un humain au seuil, ou
+  deux cibles à distances presque égales, faisaient changer de cible à chaque regard, et chaque changement relance le
+  temps de réaction (le bot ne tirait plus). Les bots se tirent dessus. `graceHolds` du bilan compte les frames
+  (Heartbeat) où un bot vise une cible encore dans sa grâce.
+
+Mesure #298 (13/11/2026, Studio, 5 bots, un round de 300 s par cas, joueur seul humain) :
+
+| Cas | Vies | Mortes entre 4,0 et 4,5 s | Vie moyenne | Tirs / touches / kills | `graceHolds` | Kills bot→joueur / bot→bot | Tueur à plus de 100 studs |
+|---|---|---|---|---|---|---|---|
+| Avant, immobile | 26 | 10 (38 %) | 7,9 s | 287 / 135 / 115 | 7 755 (tirs retenus) | 26 / 82 | non relevé |
+| Après (a318ecc), immobile | 28 | 0 | 7,8 s | 234 / 130 / 115 | 0 (tirs retenus) | 28 / 89 | non relevé |
+| Après (final), immobile | 31 | 0 | 7,2 s | 251 / 132 / 120 | 12 078 (frames de visée) | 31 / 94 | 5 sur 31 |
+| Avant, mobile | 25 | 8 (32 %) | 9,4 s | 255 / 127 / 112 | 5 572 (tirs retenus) | 24 / 90 | 7 sur 24 |
+| Après (a318ecc), mobile | 21 | 0 | 11,7 s | 275 / 115 / 100 | 0 (tirs retenus) | 21 / 83 | 2 sur 21 |
+| Après (final), mobile | 21 | 0 | 10,9 s | 257 / 134 / 118 | 12 462 (frames de visée) | 21 / 100 | 3 sur 21 |
+
+« a318ecc » : réaction après la grâce et seuil seuls ; « final » : avec la marge `HUMAN_PREF_MARGIN` et la perte de
+préférence pendant la grâce. `graceHolds` a changé de sens entre les deux (tirs retenus, puis frames de visée).
+Joueur mobile : allers-retours avant/arrière avec strafes et sauts (input simulé), sans visée ni tir.
+
+Lecture : la mort à la fin exacte de la grâce disparaît (0 vie entre 4,0 et 4,5 s, contre 32 à 38 %), mais un
+joueur **immobile** vu dès son apparition meurt toujours, `REACTION_TIME` + `COMBAT_AIM_TIME` plus tard (11 vies
+sur 31 entre 4,87 et 4,98 s) : la grâce ne protège pas d'un bot qui regarde déjà le point d'apparition, c'est le
+rôle de la protection côté joueur (#288). La vie moyenne ne change guère (un round par cas : l'écart est dans le
+bruit). La part des kills sur le joueur reste proche de 1 sur 5 (une cible parmi cinq) avant comme après : la
+convergence des 5 bots sur le joueur n'apparaît pas dans ce chiffre. Seuil de 100 studs : la plupart des kills sur
+le joueur partent de moins de 100 studs (médiane ~50) ; au-delà, l'humain n'est plus qu'une cible parmi d'autres.
 
 Mesure (09/11/2026, 5 bots + 1 joueur immobile au sol, 1 min) : 40 tirs, 23 touches, 22 kills (le joueur immobile
 est tué environ toutes les 7 s une fois son délai de grâce passé), 0 coup de couteau (les bots ne poursuivent pas).

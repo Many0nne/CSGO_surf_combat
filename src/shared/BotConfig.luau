@@ -124,7 +124,7 @@ return {
 
 	-- Combat (#141, #143) : il garde sa course (jamais d'arrêt ni de poursuite), se tourne vers la cible, tire et
 	-- reprend sa trajectoire. Difficulté unique : REACTION_TIME, COMBAT_AIM_TIME, COMBAT_TURN_RATE et AIM_SPREAD*
-	REACTION_TIME       = 0.55,   -- avant de pouvoir tirer, depuis qu'il voit la cible (s)
+	REACTION_TIME       = 0.55,   -- avant de pouvoir tirer, depuis qu'il voit la cible ou la fin de sa grâce (s)
 	COMBAT_AIM_TIME     = 0.3,    -- visée avant le tir, une fois réagi (s)
 	COMBAT_COOLDOWN     = 1.5,    -- après un tir, regard rendu à la course (au moins la cadence de l'AWP, 1,46 s)
 	COMBAT_TURN_RATE    = 720,    -- rotation du regard vers la cible (°/s)
@@ -134,6 +134,9 @@ return {
 	AIM_SPREAD_MAX      = 6,      -- dispersion au plus (°)
 	FIRE_RANGE          = 240,    -- tir au fusil à moins de tant (studs ; le serveur refuse au-delà de 250)
 	SPAWN_GRACE         = 4,      -- pas de tir sur un participant apparu depuis moins de tant (s, lancement compris)
+	                              -- le temps de réaction et de visée part de sa fin (#298), le bot peut s'y tourner avant
+	HUMAN_PREF_RANGE    = 100,    -- un humain hors grâce passe avant un bot plus proche à moins de tant (studs, #298)
+	HUMAN_PREF_MARGIN   = 20,     -- cible déjà visée comptée tant plus proche (pas de va-et-vient, studs)
 	KNIFE_RANGE         = 6,      -- cible à moins de tant : il sort le couteau (studs, entre les racines)
 	KNIFE_DROP_RANGE    = 14,     -- cible au-delà de tant : il reprend le fusil
 	KNIFE_HIT_RANGE     = 6.5,    -- coup de couteau porté à moins de tant (portée de l'arme : 7,5)
