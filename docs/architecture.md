@@ -51,6 +51,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 
 ## `src/`
 
+- `src/character/Health.server.luau` (#289): script vide mappé dans `StarterPlayer.StarterCharacterScripts`. **Pas de régénération de PV** : Roblox ajoute son script `Health` (~1 PV/s) au personnage à l'apparition, sauf si un script du même nom est déjà dans `StarterCharacterScripts` ; celui-ci le remplace. Ne pas le supprimer ni le renommer (contrôlé par `tools/rbxm/verify_place.luau`). Les bots (`BotManager`, qui détruit tous les scripts du clone) ne l'ont jamais reçu, donc joueurs et bots suivent la même règle.
 - `src/client/camera/FPSCamera.luau`: contrôles et logique de la caméra FPS (rendu, priorité `Camera`) : rotation à la souris, position lue sur `hrp.Position` juste après le pas de mouvement de la même frame.
 - `src/client/debug/DebugPlaytest.luau`: moitié client du helper de playtest (Studio uniquement) : exécute les commandes du serveur et observe pistes, marqueurs et sons.
 - `src/client/debug/FrameProbe.luau`: sonde de saccades (Studio uniquement, attribut joueur `FrameProbe`) : mesure chaque frame et signale les frames anormales, cf. `docs/performance.md`.
@@ -172,7 +173,6 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/shared/CharacterAnimator.luau`: pipeline d'animation 3e personne des joueurs (état de mouvement → piste, fondus, vitesse de lecture) ; alimenté par `MovementController` (client, répliqué via l'Animator). `isAirborneAnimationId` permet aux autres clients de déduire d'une piste répliquée qu'un personnage est en l'air.
 - `src/shared/CharacterAppearance.luau`: rig de référence (`StarterPlayer.StarterCharacter`, cloné pour la cible du helper de playtest) et application du skin commun (BodyColors + vêtements) côté serveur.
 - `src/shared/CharacterConfig.luau`: rig/skin communs (couleurs, ids d'images Shirt/Pants/visage) et animations 3e personne (ids, fallbacks, seuils de vitesse, fondus).
-- `src/character/Health.server.luau` (#289): script vide mappé dans `StarterPlayer.StarterCharacterScripts`. **Pas de régénération de PV** : Roblox ajoute son script `Health` (~1 PV/s) au personnage à l'apparition, sauf si un script du même nom est déjà dans `StarterCharacterScripts` ; celui-ci le remplace. Ne pas le supprimer ni le renommer (contrôlé par `tools/rbxm/verify_place.luau`). Les bots (`BotManager`, qui détruit tous les scripts du clone) ne l'ont jamais reçu, donc joueurs et bots suivent la même règle.
 - `src/shared/DebugPlaytestRules.luau`: règles pures du helper de playtest (choix de l'outil, marqueurs et dégâts attendus, visée, rapport PASS/FAIL).
 - `src/shared/PerfMarkers.luau`: repères `PerfMarkers.wrap(nom, callback)` posés sur les boucles par frame (mouvement, caméra, viewmodel, armes, armes 3P, menu, timer de round) : nommés dans le MicroProfiler, chronométrés pour l'overlay.
 - `src/shared/PerfRules.luau`: règles pures de l'environnement de performance (droit d'accès, écarts mémoire, coût des repères), testées (`tests/specs/PerfRules.spec.luau`).

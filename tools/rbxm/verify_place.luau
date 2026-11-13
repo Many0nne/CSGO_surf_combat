@@ -150,6 +150,16 @@ if not healthScript or not healthScript:IsA("Script") then
 	fail("StarterPlayer.StarterCharacterScripts.Health (Script) absent : Roblox rétablirait la régénération des PV")
 else
 	print("StarterCharacterScripts.Health " .. summarize(healthScript))
+	-- le script doit rester vide (commentaires seulement) et actif, sinon ce n'est plus un simple remplaçant
+	for line in string.gmatch(healthScript.Source, "[^\r\n]+") do
+		if not string.match(line, "^%s*%-%-") and string.match(line, "%S") then
+			fail("StarterCharacterScripts.Health doit ne contenir que des commentaires : " .. line)
+			break
+		end
+	end
+	if healthScript.Disabled then
+		fail("StarterCharacterScripts.Health est désactivé : Roblox rétablirait la régénération des PV")
+	end
 end
 
 -- maps (assets/rbx/Maps, #69) : chaque Workspace.Maps.<Nom> avec des points d'apparition ; lanceurs du soleil avec une
