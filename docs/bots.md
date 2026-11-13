@@ -203,19 +203,24 @@ Mesure #298 (13/11/2026, Studio, 5 bots, un round de 300 s par cas, joueur seul 
 
 | Cas | Vies | Mortes entre 4,0 et 4,5 s | Vie moyenne | Tirs / touches / kills | `graceHolds` | Kills bot→joueur / bot→bot | Tueur à plus de 100 studs |
 |---|---|---|---|---|---|---|---|
-| Avant, immobile | 26 | 10 (38 %) | 7,9 s | 287 / 135 / 115 | 7 755 | 26 / 82 | non relevé |
-| Après, immobile | 28 | 0 | 7,8 s | 234 / 130 / 115 | 0 | 28 / 89 | non relevé |
-| Avant, mobile | 25 | 8 (32 %) | 9,4 s | 255 / 127 / 112 | 5 572 | 24 / 90 | 7 sur 24 |
-| Après, mobile | 21 | 0 | 11,7 s | 275 / 115 / 100 | 0 | 21 / 83 | 2 sur 21 |
+| Avant, immobile | 26 | 10 (38 %) | 7,9 s | 287 / 135 / 115 | 7 755 (tirs retenus) | 26 / 82 | non relevé |
+| Après (a318ecc), immobile | 28 | 0 | 7,8 s | 234 / 130 / 115 | 0 (tirs retenus) | 28 / 89 | non relevé |
+| Après (final), immobile | 31 | 0 | 7,2 s | 251 / 132 / 120 | 12 078 (frames de visée) | 31 / 94 | 5 sur 31 |
+| Avant, mobile | 25 | 8 (32 %) | 9,4 s | 255 / 127 / 112 | 5 572 (tirs retenus) | 24 / 90 | 7 sur 24 |
+| Après (a318ecc), mobile | 21 | 0 | 11,7 s | 275 / 115 / 100 | 0 (tirs retenus) | 21 / 83 | 2 sur 21 |
+| Après (final), mobile | 21 | 0 | 10,9 s | 257 / 134 / 118 | 12 462 (frames de visée) | 21 / 100 | 3 sur 21 |
 
-Lecture : la mort à la fin exacte de la grâce disparaît, mais un joueur **immobile** vu dès son apparition meurt
-toujours, `REACTION_TIME` + `COMBAT_AIM_TIME` plus tard (13 vies sur 28 à 4,88 s) : la grâce ne protège pas d'un
-bot qui regarde déjà le point d'apparition, c'est le rôle de la protection côté joueur (#288). La part des kills
-sur le joueur reste proche de 1 sur 5 (une cible parmi cinq) avant comme après : la convergence des 5 bots sur
-le joueur n'apparaît pas dans ce chiffre. Dans la colonne « après », `graceHolds` tombe à 0 car le tir n'est plus
-tenté pendant la grâce (ancien compteur : tirs retenus ; il compte depuis les frames de visée, valeur non mesurée). Le seuil de 100 studs : avant, 7
-des 24 kills sur le joueur mobile venaient de plus de 100 studs, après 2 sur 21 (distance médiane du tueur ~55
-studs). La marge et la perte de préférence pendant la grâce, ajoutées après ces mesures, ne sont pas mesurées.
+« a318ecc » : réaction après la grâce et seuil seuls ; « final » : avec la marge `HUMAN_PREF_MARGIN` et la perte de
+préférence pendant la grâce. `graceHolds` a changé de sens entre les deux (tirs retenus, puis frames de visée).
+Joueur mobile : allers-retours avant/arrière avec strafes et sauts (input simulé), sans visée ni tir.
+
+Lecture : la mort à la fin exacte de la grâce disparaît (0 vie entre 4,0 et 4,5 s, contre 32 à 38 %), mais un
+joueur **immobile** vu dès son apparition meurt toujours, `REACTION_TIME` + `COMBAT_AIM_TIME` plus tard (11 vies
+sur 31 entre 4,87 et 4,98 s) : la grâce ne protège pas d'un bot qui regarde déjà le point d'apparition, c'est le
+rôle de la protection côté joueur (#288). La vie moyenne ne change guère (un round par cas : l'écart est dans le
+bruit). La part des kills sur le joueur reste proche de 1 sur 5 (une cible parmi cinq) avant comme après : la
+convergence des 5 bots sur le joueur n'apparaît pas dans ce chiffre. Seuil de 100 studs : la plupart des kills sur
+le joueur partent de moins de 100 studs (médiane ~50) ; au-delà, l'humain n'est plus qu'une cible parmi d'autres.
 
 Mesure (09/11/2026, 5 bots + 1 joueur immobile au sol, 1 min) : 40 tirs, 23 touches, 22 kills (le joueur immobile
 est tué environ toutes les 7 s une fois son délai de grâce passé), 0 coup de couteau (les bots ne poursuivent pas).
