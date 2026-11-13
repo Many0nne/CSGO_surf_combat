@@ -33,6 +33,7 @@ local BLOCK_WIDTH = 780
 local CATS_TOP = MenuPage.ContentTop
 local CAT_SIZE = 24
 local CAT_STEP = 42
+local CAT_LINE_PAD = 8 -- px d'interligne sous le texte d'un onglet (hauteur réelle ~ CAT_SIZE + CAT_LINE_PAD)
 local ROWS_X = 220
 local ROWS_TOP = MenuPage.ContentTop - 10
 local ROW_WIDTH = BLOCK_WIDTH - ROWS_X
@@ -46,7 +47,7 @@ local ACTION_SIZE = 30
 local ACTION_GAP = 46
 local KEY_HINT_TIME = 1.5 -- s d'affichage du refus d'une touche (« RÉSERVÉE AU JEU »)
 -- Aperçu du viseur (#251), sous les catégories : deux cases, fond clair et fond sombre, viseur à sa vraie taille en px
-local PREVIEW_TOP = 230 -- px sous le haut des lignes
+local PREVIEW_GAP_BELOW_TABS = 8 -- px entre la bande de la dernière catégorie et le libellé APERÇU
 local PREVIEW_SIZE = 100 -- 75 px à l'échelle minimale (0,75) : le plus grand viseur (36 px du centre) y tient
 local PREVIEW_GAP = 6
 local PREVIEW_LIGHT = Color3.fromRGB(222, 214, 200) -- sable clair, comme un ciel ou une rampe éclairée
@@ -492,6 +493,11 @@ local function selectCategory(index: number)
 	end
 end
 
+-- Cette méthode permet de donner le haut de l'onglet d'une catégorie lorsqu'on la crée ou qu'on se place sous elle.
+local function tabTop(index: number): number
+	return CATS_TOP + (index - 1) * CAT_STEP
+end
+
 -- Cette méthode permet de créer une catégorie (onglet à gauche, conteneur de lignes à droite) lorsque l'écran est construit.
 local function addCategory(block: Frame, title: string): Category
 	assert(page, "SettingsMenu : la page doit exister avant ses catégories")
@@ -509,7 +515,7 @@ local function addCategory(block: Frame, title: string): Category
 	local tab = page.choice({
 		text = title,
 		size = CAT_SIZE,
-		position = UDim2.fromOffset(0, CATS_TOP + (index - 1) * CAT_STEP),
+		position = UDim2.fromOffset(0, tabTop(index)),
 		parent = block,
 		action = function()
 			selectCategory(index)
@@ -612,11 +618,14 @@ end
 
 -- Cette méthode permet de construire l'aperçu du viseur (une case claire, une case sombre) sous les catégories lorsque la
 -- catégorie VISEUR est construite ; le viseur y est à sa taille réelle en px malgré la mise à l'échelle de l'écran.
+-- Doit être appelée une fois toutes les catégories créées : l'aperçu se place sous la dernière, quel que soit son rang.
 local function buildCrosshairPreview(category: Category)
+	-- Hauteur d'un onglet : sa taille de texte plus une marge pour l'interligne (mesurée, la bande réelle est un peu plus haute)
+	local previewTop = tabTop(#categories) + CAT_SIZE + CAT_LINE_PAD + PREVIEW_GAP_BELOW_TABS - ROWS_TOP
 	local preview = UIKit.frame({
 		Name = "Preview",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(-ROWS_X, PREVIEW_TOP),
+		Position = UDim2.fromOffset(-ROWS_X, previewTop),
 		Size = UDim2.fromOffset(PREVIEW_SIZE * 2 + PREVIEW_GAP, PREVIEW_SIZE + 26),
 		Parent = category.rows,
 	})
@@ -674,7 +683,7 @@ end
 
 -- Cette méthode permet de construire la catégorie VISEUR (#251 : visée simplifiée, puis style du crosshair et son
 -- aperçu) lorsque l'écran est initialisé ; RÉTABLIR y remet le style d'origine sans couper la visée simplifiée.
-local function buildCrosshairCategory(block: Frame)
+local function buildCrosshairCategory(block: Frame): Category
 	local crosshair = addCategory(block, "VISEUR")
 	local defaults = PlayerSettings.CROSSHAIR
 	-- Visée simplifiée (#195) : affiche le crosshair, coupée par défaut ; Crosshair suit LocalSettings
@@ -717,8 +726,7 @@ local function buildCrosshairCategory(block: Frame)
 		function() end,
 		true
 	)
-
-	buildCrosshairPreview(crosshair)
+	return crosshair
 end
 
 -- Cette méthode permet de construire les catégories et leurs réglages lorsque l'écran est initialisé ; une catégorie
@@ -811,7 +819,9 @@ local function buildCategories(block: Frame)
 		true
 	)
 
-	buildCrosshairCategory(block)
+	local crosshair = buildCrosshairCategory(block)
+	-- En dernier : l'aperçu se place sous la dernière catégorie existante
+	buildCrosshairPreview(crosshair)
 end
 
 -- Cette méthode permet de remettre aux valeurs par défaut les réglages de la catégorie affichée lorsque le joueur clique
