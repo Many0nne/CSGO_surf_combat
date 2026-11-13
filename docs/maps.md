@@ -33,7 +33,8 @@ boosts, mouvement et gravité du jeu inchangés.
   balles** : un mur invisible qui arrête une balle est incompréhensible. Tous les rayons de tir et de vue les écartent
   par `src/shared/MapGeometry.luau` (`bulletTransparent` en exclusion, `includeAllBut` en inclusion) : tir du joueur
   (`HitscanSystem`), ligne de vue du serveur (`isShotObstructed` d'`init.server`), tir et vue des bots, notes du plan.
-  Un nouveau rayon de tir passe par ce module. Les poteaux (`chainlink`, boîtes de 0,95 × 0,51 × 22,8, rhabillées en
+  Un nouveau rayon de tir passe par ce module. La mêlée n'est pas un tir : le couteau du client (`MeleeHitDetection`)
+  et sa ligne de vue serveur (`isMeleeObstructed`) gardent les murs d'air et les grillages. Les poteaux (`chainlink`, boîtes de 0,95 × 0,51 × 22,8, rhabillées en
   tube visible) arrêtent toujours les balles. Dossiers lus par le code (`MapGeometry.REQUIRED_FOLDERS` :
   `Geometry.Clips`, `Geometry.Ramps`, `GroundSpawns`, `Ladders`) : leur absence fait échouer `verify_place` (CI).
 

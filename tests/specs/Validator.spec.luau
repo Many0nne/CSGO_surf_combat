@@ -75,8 +75,16 @@ return function(T, Loader)
 		-- personnage, sinon pas d'historique ; elle peut rendre aussi la pose : cap et accroupi, #213), obstacle de la map
 		-- (booléen, ou fonction (from, delta) -> booléen), violations reçues, ping des joueurs (s, nil : inconnu, #214).
 		-- judged : touches et coups soumis aux contrôles (#297), dans l'ordre ({ attacker, kind }).
-		local world =
-			{ now = 100, histories = {}, obstructed = false :: any, reports = {}, ping = nil :: number?, judged = {} }
+		-- meleeObstructed (#292) : obstacle de la mêlée seule (murs d'air compris), nil : celui des tirs.
+		local world = {
+			now = 100,
+			histories = {},
+			obstructed = false :: any,
+			meleeObstructed = nil :: boolean?,
+			reports = {},
+			ping = nil :: number?,
+			judged = {},
+		}
 		Real.setShotWorld({
 			serverNow = function()
 				return world.now
@@ -95,6 +103,15 @@ return function(T, Loader)
 				table.insert(world.judged, { attacker = attacker, kind = kind })
 			end,
 			isObstructed = function(from, delta)
+				if type(world.obstructed) == "function" then
+					return world.obstructed(from, delta)
+				end
+				return world.obstructed
+			end,
+			isMeleeObstructed = function(from, delta)
+				if world.meleeObstructed ~= nil then
+					return world.meleeObstructed
+				end
 				if type(world.obstructed) == "function" then
 					return world.obstructed(from, delta)
 				end
@@ -1233,6 +1250,16 @@ return function(T, Loader)
 			T.expectEqual(reportedChecks(world), "lineOfSight")
 		end)
 
+		T.it(
+			"tir à travers un mur d'air : jugé par la ligne de vue des tirs, pas celle de la mêlée (#292)",
+			function()
+				local Validator, a, b, head, world = setupShot({ lineOfSight = "block" })
+				world.meleeObstructed = true
+				T.expectEqual(Validator.authorizeHitscan(a, b.Character, head, 0, shotToward(a, head.Position)), 460)
+				T.expectEqual(reportedChecks(world), "")
+			end
+		)
+
 		T.it("origine loin du tireur : journalisée en mode log, refusée en mode block", function()
 			for _, mode in { "log", "block" } do
 				local Validator, a, b, head, world = setupShot({ origin = mode })
@@ -1453,6 +1480,21 @@ return function(T, Loader)
 			world.obstructed = true
 			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), nil, "mode block : coup refusé")
 			T.expectEqual(reportedChecks(world), "meleeLineOfSight")
+		end)
+
+		T.it("mêlée jugée par sa propre ligne de vue : murs d'air compris, pas celle des tirs (#292)", function()
+			-- Mur d'air entre les deux : il arrête le coup (comme chez le client), pas une balle
+			local Validator, a, b, world = setupMelee(nil, ALL_BLOCK)
+			world.meleeObstructed = true
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), nil, "coup à travers un mur d'air")
+			T.expectEqual(reportedChecks(world), "meleeLineOfSight")
+
+			-- Obstacle des seuls tirs : sans effet sur la mêlée
+			Validator, a, b, world = setupMelee(nil, ALL_BLOCK)
+			world.obstructed = true
+			world.meleeObstructed = false
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 0), 50)
+			T.expectEqual(reportedChecks(world), "")
 		end)
 
 		T.it("accepte un coup par-dessus un obstacle bas : la ligne œil à œil est dégagée", function()

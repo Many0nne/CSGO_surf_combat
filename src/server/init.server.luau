@@ -529,16 +529,20 @@ meleeRmt.OnServerEvent:Connect(function(player, targetCharacter, attackKind, hit
 	onHitVerdict(player, meleeRmt, targetCharacter, damage, false)
 end)
 
--- Cette méthode permet de tester la ligne de vue d'un tir ou d'un coup de mêlée (#176) lorsque le Validator la vérifie
--- (#174) : raycast limité à la géométrie de la map jouée (Workspace.Maps, en inclusion : personnages et objets
--- mobiles ignorés), sans les murs d'air ni les grillages qui laissent passer les balles (#292, même règle que le tir
--- du client et des bots : MapGeometry.bulletTransparent).
+-- Lignes de vue des tirs et des coups de mêlée (#174, #176) : raycast limité à la géométrie de la map jouée
+-- (Workspace.Maps, en inclusion : personnages et objets mobiles ignorés). Le tir traverse les murs d'air et les grillages
+-- (#292, même règle que le tir du client et des bots : MapGeometry.bulletTransparent) ; la mêlée garde toute la map,
+-- comme le coup du client (MeleeHitDetection).
 -- Paramètres réutilisés tant que le dossier des maps et la map jouée sont les mêmes (reconstruits sinon).
 local shotParams: RaycastParams? = nil
-local shotParamsMaps: Instance? = nil
-local shotParamsMap: Instance? = nil
+local meleeParams: RaycastParams? = nil
+local sightParamsMaps: Instance? = nil
+local sightParamsMap: Instance? = nil
 local warnedNoMaps = false
-local function isShotObstructed(from: Vector3, delta: Vector3): boolean
+
+-- Cette méthode permet de préparer les rayons de ligne de vue lorsqu'un tir ou un coup est vérifié : paramètres du tir
+-- et de la mêlée, nil sans Workspace.Maps (signalé une fois).
+local function sightParams(): (RaycastParams?, RaycastParams?)
 	local maps = workspace:FindFirstChild("Maps")
 	if not maps then
 		-- Sans map, rien à tester : signalé une fois, la ligne de vue ne disparaît pas en silence
@@ -546,23 +550,37 @@ local function isShotObstructed(from: Vector3, delta: Vector3): boolean
 			warnedNoMaps = true
 			warn("[Validator] Workspace.Maps introuvable : ligne de vue des tirs non vérifiée")
 		end
-		return false
+		return nil, nil
 	end
 	local active = maps:GetAttribute(MapSelection.ACTIVE_ATTRIBUTE)
 	local map = if type(active) == "string" then maps:FindFirstChild(active) else nil
-	if not shotParams or shotParamsMaps ~= maps or shotParamsMap ~= map then
-		local params = RaycastParams.new()
-		params.FilterType = Enum.RaycastFilterType.Include
-		local include = { maps }
-		if map then
-			include = MapGeometry.includeAllBut(maps, MapGeometry.bulletTransparent(map))
-		end
-		params.FilterDescendantsInstances = include
-		shotParams = params
-		shotParamsMaps = maps
-		shotParamsMap = map
+	if not shotParams or not meleeParams or sightParamsMaps ~= maps or sightParamsMap ~= map then
+		local shot = RaycastParams.new()
+		shot.FilterType = Enum.RaycastFilterType.Include
+		shot.FilterDescendantsInstances = if map
+			then MapGeometry.includeAllBut(maps, MapGeometry.bulletTransparent(map))
+			else { maps }
+		local melee = RaycastParams.new()
+		melee.FilterType = Enum.RaycastFilterType.Include
+		melee.FilterDescendantsInstances = { maps }
+		shotParams, meleeParams = shot, melee
+		sightParamsMaps, sightParamsMap = maps, map
 	end
-	return workspace:Raycast(from, delta, shotParams) ~= nil
+	return shotParams, meleeParams
+end
+
+-- Cette méthode permet de tester la ligne de vue d'un tir lorsque le Validator la vérifie (#174) : murs d'air et
+-- grillages traversés (#292).
+local function isShotObstructed(from: Vector3, delta: Vector3): boolean
+	local params = sightParams()
+	return params ~= nil and workspace:Raycast(from, delta, params) ~= nil
+end
+
+-- Cette méthode permet de tester la ligne de vue d'un coup de mêlée lorsque le Validator la vérifie (#176) : toute la
+-- map, murs d'air compris.
+local function isMeleeObstructed(from: Vector3, delta: Vector3): boolean
+	local _, params = sightParams()
+	return params ~= nil and workspace:Raycast(from, delta, params) ~= nil
 end
 
 -- Validation des tirs de joueurs (#174) : cible rembobinée sur l'historique de CharacterSync, échecs au journal
@@ -573,6 +591,7 @@ Validator.setShotWorld({
 	end,
 	positionAt = CharacterSync.positionAt,
 	isObstructed = isShotObstructed,
+	isMeleeObstructed = isMeleeObstructed,
 	-- Cette méthode permet de lire l'aller-retour réseau d'un joueur (s) lorsqu'on borne l'instant annoncé d'un tir ou
 	-- d'un coup (#214) : mesuré par le moteur (Player:GetNetworkPing, même lecture que le ping du journal, #297), nil
 	-- pour un bot ou en cas d'erreur.

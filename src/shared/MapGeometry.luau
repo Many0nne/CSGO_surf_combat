@@ -66,7 +66,8 @@ end
 
 -- Cette méthode permet de lister ce qu'un rayon en inclusion doit garder lorsqu'il vise toute la map sauf `ignored` :
 -- les enfants de `root` sans élément écarté sont gardés entiers, ceux qui en contiennent sont parcourus (liste courte :
--- seuls les ancêtres des éléments écartés sont détaillés).
+-- seuls les ancêtres des éléments écartés sont détaillés). Une pièce qui contient un élément écarté reste gardée entière
+-- (une inclusion ne peut pas garder une pièce sans ses enfants) : la pièce solide prime.
 function MapGeometry.includeAllBut(root: Instance, ignored: { Instance }): { Instance }
 	-- Comparaisons par == et IsDescendantOf, pas de table indexée par instance (identité non garantie hors Roblox, Lune)
 	local include: { Instance } = {}
@@ -82,7 +83,7 @@ function MapGeometry.includeAllBut(root: Instance, ignored: { Instance }): { Ins
 				end
 				holds = holds or inst:IsDescendantOf(child)
 			end
-			if holds and not skipped then
+			if holds and not skipped and not child:IsA("BasePart") then
 				visit(child)
 			elseif not skipped then
 				table.insert(include, child)
