@@ -106,7 +106,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/client/ui/MainMenu.luau`: menu d'accueil sur la map (#253, souris système, rien ne se tire) : titre, onglets, fiche de statistiques (`StatsCard`), et l'écran d'équipement de l'onglet ARMES (`EquipmentScreen`).
 - `src/client/ui/EquipmentScreen.luau`: écran d'équipement (#280) : emplacements SNIPER et COUTEAU à gauche, liste toujours ouverte de l'emplacement actif à droite (armes possédées avec silhouette, puis skins en vignettes), arme survolée tenue par le personnage (`MenuScene.holdTool`), clic = `EquipItem` (cf. `docs/ui.md`).
 - `src/client/ui/MenuCursor.luau`: hitmarker qui remplace le curseur sur tous les écrans du menu.
-- `src/client/ui/MenuPage.luau`: gabarit des écrans secondaires du menu (bloc centré sur un voile, titre en texte pour Réglages en partie, choix et action de sortie en texte).
+- `src/client/ui/MenuPage.luau`: gabarit des écrans secondaires du menu (bloc centré sur un voile, titre, onglets en boîte, choix et actions en texte en bas au centre).
 - `src/client/ui/MenuShot.luau`: tir sur un élément du menu (impact, puis action) et choix en texte à ombre décalée.
 - `src/client/ui/RoundHUD.luau`: HUD en jeu (timer et rang, classement Tab, écran de réapparition, écran de fin de round).
 - `src/client/ui/ScopeOverlay.luau`: lunette des armes à scope, dessinée sans image (masque rond et réticule en Frames, branches tracées par `Reticle`).

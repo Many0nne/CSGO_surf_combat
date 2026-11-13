@@ -24,8 +24,10 @@ local OFFSET = Vector3.new(0, 0, 5000)
 local VERTICAL_FOV = 40
 local ASPECT_REF = 16 / 9
 -- Lacet de la caméra (degrés, vers la gauche) : met le personnage au tiers droit de l'image (#308, la grille
--- d'équipement occupe la gauche) sans déplacer la caméra, qui resterait sinon contre un mur du couloir
+-- d'équipement occupe la gauche) sans déplacer la caméra, qui resterait sinon contre un mur du couloir. Hors de
+-- l'onglet ARMES, le lacet revient à 0 : le personnage repasse au centre, derrière le bloc des écrans secondaires
 local CHARACTER_YAW = 20
+local YAW_RATE = 6 -- vitesse du retour de lacet (amorti, 1/s)
 -- Pièces copiées : cône de la caméra (tangente du demi-angle, large pour le 21:9 et le suivi du curseur), distance
 -- maximale, voisinage de la caméra gardé en entier (studs)
 local COPY_TAN_HALF = 1.0
@@ -83,7 +85,9 @@ local building = false
 local connection: RBXScriptConnection?
 local blur: DepthOfFieldEffect?
 local savedFov = 70
-local baseCFrame = CFrame.new()
+local baseCFrame = CFrame.new() -- caméra face au personnage, sans lacet
+local yaw = CHARACTER_YAW -- lacet courant (degrés), amorti vers yawTarget
+local yawTarget = CHARACTER_YAW
 local focusDistance = 17
 local aimX, aimY = 0, 0
 local clock = 0
@@ -368,7 +372,7 @@ local function build()
 	folder.Parent = workspace
 	stage = folder
 
-	baseCFrame = view + OFFSET
+	baseCFrame = CFrame.lookAt(eye, target) + OFFSET
 	local ground = groundUnder(shot.feet + OFFSET, mapCopy)
 	character = buildCharacter(ground, shot.facing, folder)
 end
@@ -383,12 +387,21 @@ local function update(dt: number)
 	aimY = Rules.damp(aimY, (mouse.Y / viewport.Y - 0.5) * 2, dt, 4)
 	local angles = Rules.aimAngles(aimX, aimY)
 	camera.CameraType = Enum.CameraType.Scriptable
-	camera.CFrame = baseCFrame * CFrame.Angles(math.rad(angles.camPitch), math.rad(angles.camYaw), 0)
+	yaw = Rules.damp(yaw, yawTarget, dt, YAW_RATE)
+	camera.CFrame = baseCFrame
+		* CFrame.Angles(0, math.rad(yaw), 0)
+		* CFrame.Angles(math.rad(angles.camPitch), math.rad(angles.camYaw), 0)
 	if viewport.Y > 0 then
 		camera.FieldOfView = Rules.fitFov(VERTICAL_FOV, ASPECT_REF, viewport.X / viewport.Y)
 	end
 	clock += dt
 	applyPose()
+end
+
+-- Cette méthode permet de recentrer le personnage (lacet de la caméra ramené à 0, en douceur) lorsque le menu ouvre un
+-- écran secondaire, ou de le remettre au tiers droit lorsqu'il revient sur l'onglet ARMES.
+function MenuScene.setCentered(centered: boolean)
+	yawTarget = if centered then 0 else CHARACTER_YAW
 end
 
 -- Cette méthode permet de changer l'arme tenue (clé de WeaponConfig) lorsque l'accueil montre une autre arme.

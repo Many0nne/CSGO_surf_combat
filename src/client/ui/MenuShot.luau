@@ -122,17 +122,67 @@ function MenuShot.textChoice(props: {
 	}, if props.size >= 26 then 3 else 2)
 	shadow.ZIndex = 1
 	local shadowRest = shadow.TextTransparency
-	return bindChoice(button, props, function(hovering: boolean, selected: boolean, enabled: boolean)
-		local color = if enabled and hovering
-			then C.HitRed
-			elseif selected then props.selectedColor or props.color
-			else props.color
-		UIKit.tween(label, Motion.Hover, {
-			TextColor3 = color,
-			TextTransparency = enabled and 0 or DISABLED_TRANSPARENCY,
-		})
-		UIKit.tween(shadow, Motion.Hover, { TextTransparency = enabled and shadowRest or 0.9 })
-	end)
+	return bindChoice(
+		button,
+		{ action = props.action },
+		function(hovering: boolean, selected: boolean, enabled: boolean)
+			local color = if enabled and hovering
+				then C.HitRed
+				elseif selected then props.selectedColor or props.color
+				else props.color
+			UIKit.tween(label, Motion.Hover, {
+				TextColor3 = color,
+				TextTransparency = enabled and 0 or DISABLED_TRANSPARENCY,
+			})
+			UIKit.tween(shadow, Motion.Hover, { TextTransparency = enabled and shadowRest or 0.9 })
+		end
+	)
+end
+
+-- Cette méthode permet de créer un choix en boîte (catégories des écrans secondaires, emplacements de l'équipement, #308)
+-- lorsqu'un écran est construit : boîte ambrée à texte sombre une fois choisi (« là où je suis »), texte os à ombre au
+-- repos, rouge d'impact au survol.
+function MenuShot.boxChoice(props: {
+	text: string,
+	parent: Instance,
+	layoutOrder: number?,
+	action: () -> (),
+}): Choice
+	local button = UIKit.create("TextButton", {
+		Name = props.text,
+		Text = "",
+		AutoButtonColor = false,
+		BackgroundColor3 = C.Accent,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 30),
+		LayoutOrder = props.layoutOrder or 0,
+		Parent = props.parent,
+	})
+	UIKit.padding(button, 0, 14, 0, 14)
+	local label, shadow = UIKit.shadowedText(button, {
+		Name = "Label",
+		Text = props.text,
+		FontFace = UITheme.Fonts.Display,
+		TextSize = 18,
+		TextColor3 = C.Bone,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromScale(0, 1),
+		ZIndex = 2,
+	}, 2)
+	shadow.ZIndex = 1
+	local shadowRest = shadow.TextTransparency
+	return bindChoice(
+		button,
+		{ action = props.action },
+		function(hovering: boolean, selected: boolean, enabled: boolean)
+			button.BackgroundTransparency = if selected then 0 else 1
+			label.TextColor3 = if selected then C.Ground elseif enabled and hovering then C.HitRed else C.Bone
+			label.TextTransparency = if enabled then 0 else DISABLED_TRANSPARENCY
+			shadow.TextTransparency = if selected then 1 else shadowRest
+		end
+	)
 end
 
 return MenuShot

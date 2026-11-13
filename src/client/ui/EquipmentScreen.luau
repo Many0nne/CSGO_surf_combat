@@ -15,6 +15,7 @@ local LocalSettings = require(script.Parent.Parent.systems.settings.LocalSetting
 local MenuScene = require(script.Parent.Parent.systems.game.MenuScene)
 local Rules = require(script.Parent.Parent.systems.game.MenuSceneRules)
 local HUDRules = require(script.Parent.HUDRules)
+local MenuPage = require(script.Parent.MenuPage)
 local MenuShot = require(script.Parent.MenuShot)
 local UIKit = require(script.Parent.UIKit)
 
@@ -25,15 +26,14 @@ local Motion = UITheme.Motion
 local EquipmentScreen = {}
 
 -- Mise en page (px à 720 de haut)
-local EDGE = 28
-local TITLE_Y = 108 -- « ÉQUIPEMENT », sous le titre du jeu
-local TITLE_SIZE = 52
+local EDGE = MenuPage.Edge
+local TITLE_Y = MenuPage.TitleY -- « ÉQUIPEMENT », sous le titre du jeu
+local TITLE_SIZE = MenuPage.TitleSize
 local TITLE_STEP = 54 -- écart entre les deux lignes du titre
 local NAME_Y = 236 -- nom de l'arme montrée et son étiquette
 local NAME_SIZE = 26
 local CATEGORY_Y = 272
 local TABS_Y = 318
-local TAB_SIZE = Vector2.new(118, 30)
 local TAB_GAP = 6
 local GRID_Y = 362
 local COLUMNS = 4
@@ -53,9 +53,8 @@ local SCRIM_SHOWN = 0.2
 type Hover = { tool: string, skin: string? }
 -- Texte à largeur automatique doublé de son ombre, pour une ligne qui enchaîne texte et étiquette
 type Flow = { set: (string) -> (), label: TextLabel }
-type TabView = { button: TextButton, hovering: boolean }
 
-local tabViews: { TabView } = {}
+local tabChoices: { MenuShot.Choice } = {}
 local grid: Frame
 local previewHolder: Frame
 local previews: { [string]: ViewportFrame } = {}
@@ -157,26 +156,6 @@ local function flowText(row: GuiObject, name: string, size: number, shadowOffset
 	}
 end
 
--- Cette méthode permet de poser une étiquette en boîte (texte court sur fond plein, largeur selon le texte) lorsqu'une
--- ligne précise un état ou une touche.
-local function tag(row: GuiObject, name: string, order: number, background: Color3, color: Color3): TextLabel
-	local label = UIKit.text({
-		Name = name,
-		FontFace = F.Display,
-		TextSize = 14,
-		TextColor3 = color,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		BackgroundColor3 = background,
-		BackgroundTransparency = 0,
-		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 22),
-		LayoutOrder = order,
-		Parent = row,
-	})
-	UIKit.padding(label, 0, 8, 0, 8)
-	return label
-end
-
 -- Cette méthode permet de donner l'arme et le skin montrés (carte survolée, sinon équipement de l'emplacement actif) et
 -- de dire s'ils sont équipés, lorsque la ligne de nom, le rendu ou le personnage se mettent à jour.
 local function shown(): (string?, string?, boolean)
@@ -227,13 +206,11 @@ local function paintHeader()
 	end
 end
 
--- Cette méthode permet de redessiner les onglets des emplacements (actif en boîte ambrée à texte sombre, autres en os,
--- survol en rouge d'impact) lorsque l'emplacement actif ou le survol change.
+-- Cette méthode permet de marquer l'onglet de l'emplacement actif (boîte ambrée à texte sombre, MenuShot.boxChoice)
+-- lorsque l'emplacement actif change.
 local function paintTabs()
-	for index, view in tabViews do
-		local active = selectedSlot == index
-		view.button.BackgroundTransparency = if active then 0 else 1
-		view.button.TextColor3 = if active then C.Ground elseif view.hovering then C.HitRed else C.Bone
+	for index, tab in tabChoices do
+		tab.setSelected(selectedSlot == index)
 	end
 end
 
@@ -413,83 +390,16 @@ local function selectSlot(index: number)
 	paintHeader()
 end
 
--- Cette méthode permet de construire l'onglet d'un emplacement (« 1 · SNIPER ») lorsque l'écran est construit.
-local function buildTab(parent: GuiObject, index: number, slotName: string): TabView
-	local button = UIKit.create("TextButton", {
-		Name = "Tab" .. index,
-		Text = string.format("%d  ·  %s", index, slotLabel(slotName)),
-		FontFace = F.Display,
-		TextSize = 18,
-		TextColor3 = C.Bone,
-		AutoButtonColor = false,
-		BackgroundColor3 = C.Accent,
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		Position = UDim2.fromOffset(EDGE + (index - 1) * (TAB_SIZE.X + TAB_GAP), TABS_Y),
-		Size = UDim2.fromOffset(TAB_SIZE.X, TAB_SIZE.Y),
-		Parent = parent,
-	})
-	local view: TabView = { button = button, hovering = false }
-	button.MouseEnter:Connect(function()
-		view.hovering = true
-		paintTabs()
-	end)
-	button.MouseLeave:Connect(function()
-		view.hovering = false
-		paintTabs()
-	end)
-	button.Activated:Connect(function()
-		if not MenuShot.isBusy() then
-			selectSlot(index)
-		end
-	end)
-	return view
-end
-
 -- Cette méthode permet de construire l'aide en bas à gauche (touche en boîte, action en texte) lorsque l'écran est
 -- construit.
 local function buildHints(root: Frame)
-	local row = UIKit.frame({
-		Name = "Hints",
-		BackgroundTransparency = 1,
+	local row = UIKit.hintRow(root, {
 		AnchorPoint = Vector2.new(0, 1),
 		Position = UDim2.new(0, EDGE, 1, -18),
-		Size = UDim2.fromOffset(GRID_WIDTH, 22),
-		Parent = root,
 	})
-	UIKit.create("UIListLayout", {
-		FillDirection = Enum.FillDirection.Horizontal,
-		VerticalAlignment = Enum.VerticalAlignment.Center,
-		SortOrder = Enum.SortOrder.LayoutOrder,
-		Padding = UDim.new(0, 8),
-		Parent = row,
-	})
-	local hints = { { "MOLETTE", "EMPLACEMENT" }, { "CLIC", "ÉQUIPER" } }
-	for i, hint in hints do
-		tag(row, "Key" .. i, 2 * i - 1, C.Bone, C.Ground).Text = hint[1]
-		UIKit.text({
-			Name = "Action" .. i,
-			Text = hint[2] .. "      ",
-			FontFace = F.DisplayMedium,
-			TextSize = 14,
-			TextColor3 = C.TextSoft,
-			AutomaticSize = Enum.AutomaticSize.X,
-			Size = UDim2.fromOffset(0, 22),
-			LayoutOrder = 2 * i,
-			Parent = row,
-		})
-	end
-	UIKit.text({
-		Name = "Saved",
-		Text = "ENREGISTRÉ AUSSITÔT",
-		FontFace = F.DisplayMedium,
-		TextSize = 14,
-		TextColor3 = C.Muted,
-		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 22),
-		LayoutOrder = 9,
-		Parent = row,
-	})
+	UIKit.keyHint(row, 1, "MOLETTE", "EMPLACEMENT")
+	UIKit.keyHint(row, 2, "CLIC", "ÉQUIPER")
+	UIKit.keyHint(row, 3, nil, "ENREGISTRÉ AUSSITÔT")
 end
 
 -- Cette méthode permet de construire l'écran (titre, rendu, nom, onglets et grille dans `column` à gauche, aide en bas
@@ -510,7 +420,7 @@ function EquipmentScreen.build(root: Frame, column: Frame)
 	}, 3)
 	local slotRow = flowRow(column, "SlotTitle", TITLE_Y + TITLE_STEP, TITLE_SIZE + 6)
 	slotTitle = flowText(slotRow, "Slot", TITLE_SIZE, 3)
-	slotTag = tag(slotRow, "SlotTag", 2, C.Accent, C.Ground)
+	slotTag = UIKit.tag(slotRow, "SlotTag", 2, C.Accent, C.Ground)
 	previewHolder = UIKit.frame({
 		Name = "Preview",
 		BackgroundTransparency = 1,
@@ -520,20 +430,40 @@ function EquipmentScreen.build(root: Frame, column: Frame)
 	})
 	local nameRow = flowRow(column, "WeaponName", NAME_Y, NAME_SIZE + 6)
 	weaponName = flowText(nameRow, "Weapon", NAME_SIZE, 2)
-	statusTag = tag(nameRow, "Status", 2, C.HitRed, C.Bone)
+	statusTag = UIKit.tag(nameRow, "Status", 2, C.HitRed, C.Bone)
 	statusStroke = UIKit.stroke(statusTag, C.Bone, 1)
 	statusStroke.Transparency = 0.4
 	category, categoryShadow = UIKit.shadowedText(column, {
 		Name = "Category",
 		FontFace = F.DisplayMedium,
-		TextSize = 15,
+		TextSize = UITheme.TextSize.Min,
 		TextColor3 = C.TextSoft,
 		Position = UDim2.fromOffset(EDGE + 1, CATEGORY_Y),
 		Size = UDim2.fromOffset(400, 18),
 		ZIndex = 2,
 	}, 1)
+	local tabRow = UIKit.frame({
+		Name = "SlotTabs",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(EDGE, TABS_Y),
+		Size = UDim2.fromOffset(GRID_WIDTH, 30),
+		Parent = column,
+	})
+	UIKit.create("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, TAB_GAP),
+		Parent = tabRow,
+	})
 	for index, slotName in InventoryRules.SLOTS do
-		tabViews[index] = buildTab(column, index, slotName)
+		tabChoices[index] = MenuShot.boxChoice({
+			text = string.format("%d  ·  %s", index, slotLabel(slotName)),
+			layoutOrder = index,
+			parent = tabRow,
+			action = function()
+				selectSlot(index)
+			end,
+		})
 	end
 	grid = UIKit.frame({
 		Name = "EquipGrid",
@@ -571,8 +501,8 @@ function EquipmentScreen.reset()
 	if not grid then
 		return
 	end
-	for _, view in tabViews do
-		view.hovering = false
+	for _, tab in tabChoices do
+		tab.reset()
 	end
 	selectSlot(1)
 end

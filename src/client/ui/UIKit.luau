@@ -92,6 +92,69 @@ function UIKit.accentLabel(parent: GuiObject, props: { [string]: any }): (TextLa
 	return UIKit.shadowedText(parent, merged, 1)
 end
 
+-- Cette méthode permet de poser une étiquette en boîte (texte court sur fond plein, largeur selon le texte) lorsqu'une
+-- ligne précise un état ou nomme une touche ; se range dans un UIListLayout par `order`.
+function UIKit.tag(parent: GuiObject, name: string, order: number, background: Color3, color: Color3): TextLabel
+	local label = UIKit.text({
+		Name = name,
+		FontFace = UITheme.Fonts.Display,
+		TextSize = UITheme.TextSize.Min,
+		TextColor3 = color,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		BackgroundColor3 = background,
+		BackgroundTransparency = 0,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 24),
+		LayoutOrder = order,
+		Parent = parent,
+	})
+	UIKit.padding(label, 0, 8, 0, 8)
+	return label
+end
+
+-- Cette méthode permet de poser une ligne horizontale d'aides (alignée à gauche, centrée en hauteur) lorsqu'un écran
+-- rappelle ses touches en bas à gauche ; à remplir avec UIKit.keyHint.
+function UIKit.hintRow(parent: GuiObject, props: { [string]: any }): Frame
+	local merged: { [string]: any } = {
+		Name = "Hints",
+		BackgroundTransparency = 1,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 24),
+		Parent = parent,
+	}
+	for key, value in props do
+		merged[key] = value
+	end
+	local row = UIKit.frame(merged)
+	UIKit.create("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, 8),
+		Parent = row,
+	})
+	return row
+end
+
+-- Cette méthode permet d'ajouter à une ligne d'aides une touche en boîte os suivie de son action lorsqu'un menu nomme
+-- une touche (#308 : même écriture partout) ; `key` nil : texte seul, atténué (remarque en fin de ligne).
+function UIKit.keyHint(row: GuiObject, order: number, key: string?, action: string)
+	if key then
+		UIKit.tag(row, "Key" .. order, 2 * order - 1, C.Bone, C.Ground).Text = key
+	end
+	UIKit.text({
+		Name = "Action" .. order,
+		Text = action .. "      ",
+		FontFace = UITheme.Fonts.DisplayMedium,
+		TextSize = UITheme.TextSize.Min,
+		TextColor3 = if key then C.TextSoft else C.Muted,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 24),
+		LayoutOrder = 2 * order,
+		Parent = row,
+	})
+end
+
 -- Cette méthode permet de dessiner la silhouette plate d'une arme, de profil, à partir des MeshParts de son viewmodel
 -- (bras exclus) lorsqu'une icône d'arme est créée (barre d'armes, équipement) ; la teinte vient de ImageColor3.
 -- `textured` (#308) : l'arme garde ses textures et ses couleurs, éclairée, pour un grand rendu plutôt qu'une icône.

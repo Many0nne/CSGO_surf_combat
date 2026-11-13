@@ -1,6 +1,6 @@
--- Réglages (direction « Ligne de mire », disposition C de #117) : bloc centré sur un voile, catégories à gauche,
--- lignes de réglages à droite (nom, contrôle, valeur), RÉTABLIR et RETOUR en bas au centre. Deux présentations du même
--- écran : « page » à même la scène du menu principal et « modal » avec son titre, ouverte depuis le menu en partie
+-- Réglages (MenuPage) : bloc centré sur un voile, titre, catégories en onglets en boîte (#308), lignes de réglages
+-- dessous (nom, contrôle, valeur), RÉTABLIR et RETOUR en bas au centre. Deux présentations du même écran : « page » à
+-- même la scène du menu principal et « modal », ouverte depuis le menu en partie
 -- (InGameMenu, #157, qui pose le voile sombre, libère la souris et route les touches), toutes deux à la souris système
 -- (#130). Pour ajouter un réglage : une entrée dans `buildCategories`, et un champ dans PlayerSettings s'il doit être
 -- conservé entre les sessions (LocalSettings, #100).
@@ -28,26 +28,19 @@ export type Mode = "page" | "modal"
 
 local SettingsMenu = {}
 
--- Bloc centré (px à 720 de haut) : catégories à gauche, lignes à droite
-local BLOCK_WIDTH = 780
-local CATS_TOP = MenuPage.ContentTop
-local CAT_SIZE = 24
-local CAT_STEP = 42
-local CAT_LINE_PAD = 8 -- px d'interligne sous le texte d'un onglet (hauteur réelle ~ CAT_SIZE + CAT_LINE_PAD)
-local ROWS_X = 220
-local ROWS_TOP = MenuPage.ContentTop - 10
-local ROW_WIDTH = BLOCK_WIDTH - ROWS_X
-local ROW_HEIGHT = 54
+-- Lignes sous les onglets (px à 720 de haut), sur toute la largeur du bloc ; celles de VISEUR laissent à droite la
+-- place de l'aperçu
+local ROWS_TOP = MenuPage.ContentTop
+local ROW_WIDTH = MenuPage.BlockWidth
+local ROW_HEIGHT = 46 -- 9 lignes au plus avant les actions (MenuPage.ContentBottom)
 local NAME_WIDTH = 246
 local VALUE_WIDTH = 70
 local VALUE_SIZE = 26
 local VALUE_SHADOW = 3
 local PICK_WIDTH = 120
-local ACTION_SIZE = 30
-local ACTION_GAP = 46
 local KEY_HINT_TIME = 1.5 -- s d'affichage du refus d'une touche (« RÉSERVÉE AU JEU »)
--- Aperçu du viseur (#251), sous les catégories : deux cases, fond clair et fond sombre, viseur à sa vraie taille en px
-local PREVIEW_GAP_BELOW_TABS = 8 -- px entre la bande de la dernière catégorie et le libellé APERÇU
+-- Aperçu du viseur (#251), à droite des lignes : deux cases, fond clair et fond sombre, viseur à sa vraie taille en px
+local PREVIEW_GAP_X = 24 -- px entre les lignes et l'aperçu
 local PREVIEW_SIZE = 100 -- 75 px à l'échelle minimale (0,75) : le plus grand viseur (36 px du centre) y tient
 local PREVIEW_GAP = 6
 local PREVIEW_LIGHT = Color3.fromRGB(222, 214, 200) -- sable clair, comme un ciel ou une rampe éclairée
@@ -55,13 +48,12 @@ local PREVIEW_DARK = Color3.fromRGB(28, 30, 34) -- mur ou sol dans l'ombre
 
 -- `sync` reporte sur la ligne les réglages sauvegardés, une fois arrivés du serveur
 type Row = { reset: () -> (), sync: (PlayerSettings.Settings) -> () }
-type Category = { title: string, rows: Frame, list: { Row }, rowCount: number }
+type Category = { title: string, rows: Frame, width: number, list: { Row }, rowCount: number }
 -- Saisie d'une touche en cours : emplacement, choix affiché, rappel qui remet la ligne au repos
 type Capture = { slot: number, finish: () -> () }
 
 local page: MenuPage.Page?
 local open = false
-local mode: Mode = "modal"
 local onClosedCallback: (() -> ())?
 -- Rappel de fermeture propre à l'ouverture en cours (retour au menu en partie), oublié une fois appelé
 local onceClosed: (() -> ())?
@@ -72,8 +64,8 @@ local fpsCamRef: {
 	getScopeMultiplier: () -> number,
 }?
 local categories: { Category } = {}
-local categoryTabs: { MenuShot.Choice } = {}
-local categoryBars: { Frame } = {}
+-- Marque l'onglet de la catégorie affichée (MenuPage.tabs), une fois les onglets posés
+local markCategory: ((number) -> ())?
 local selected = 1
 -- Vrai pendant la construction et le report des réglages chargés : les lignes appliquent leur valeur sans la renvoyer
 -- comme un choix du joueur (LocalSettings garderait sinon les valeurs par défaut à la place des réglages sauvegardés)
@@ -121,7 +113,7 @@ local function makeRow(category: Category, name: string): (Frame, TextLabel)
 		Name = name,
 		BackgroundTransparency = 1,
 		Position = UDim2.fromOffset(0, index * ROW_HEIGHT),
-		Size = UDim2.fromOffset(ROW_WIDTH, ROW_HEIGHT),
+		Size = UDim2.fromOffset(category.width, ROW_HEIGHT),
 		Parent = category.rows,
 	})
 	UIKit.frame({
@@ -481,56 +473,33 @@ local function addKeyBinding(category: Category, slot: number, weaponLabel: stri
 	return refresh, row, label
 end
 
--- Cette méthode permet d'afficher les lignes de la catégorie choisie et de marquer son onglet (os vif, barre ambrée)
--- lorsque le joueur clique sur une catégorie ou rouvre l'écran.
+-- Cette méthode permet d'afficher les lignes de la catégorie choisie et de marquer son onglet (boîte ambrée) lorsque le
+-- joueur clique sur une catégorie ou rouvre l'écran.
 local function selectCategory(index: number)
 	selected = index
 	for i, category in categories do
-		local on = i == index
-		category.rows.Visible = on
-		categoryTabs[i].setSelected(on)
-		categoryBars[i].Visible = on
+		category.rows.Visible = i == index
+	end
+	if markCategory then
+		markCategory(index)
 	end
 end
 
--- Cette méthode permet de donner le haut de l'onglet d'une catégorie lorsqu'on la crée ou qu'on se place sous elle.
-local function tabTop(index: number): number
-	return CATS_TOP + (index - 1) * CAT_STEP
-end
-
--- Cette méthode permet de créer une catégorie (onglet à gauche, conteneur de lignes à droite) lorsque l'écran est construit.
-local function addCategory(block: Frame, title: string): Category
-	assert(page, "SettingsMenu : la page doit exister avant ses catégories")
+-- Cette méthode permet de créer une catégorie (conteneur de lignes sous les onglets) lorsque l'écran est construit ; les
+-- onglets sont posés ensuite, une fois toutes les catégories connues (buildTabs). `width` : largeur des lignes
+-- (ROW_WIDTH par défaut).
+local function addCategory(block: Frame, title: string, width: number?): Category
 	local index = #categories + 1
 	local rows = UIKit.frame({
 		Name = title,
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(ROWS_X, ROWS_TOP),
+		Position = UDim2.fromOffset(0, ROWS_TOP),
 		Size = UDim2.new(0, ROW_WIDTH, 1, -ROWS_TOP),
 		Visible = false,
 		Parent = block,
 	})
-	local category: Category = { title = title, rows = rows, list = {}, rowCount = 0 }
+	local category: Category = { title = title, rows = rows, width = width or ROW_WIDTH, list = {}, rowCount = 0 }
 	categories[index] = category
-	local tab = page.choice({
-		text = title,
-		size = CAT_SIZE,
-		position = UDim2.fromOffset(0, tabTop(index)),
-		parent = block,
-		action = function()
-			selectCategory(index)
-		end,
-	})
-	categoryTabs[index] = tab
-	categoryBars[index] = UIKit.frame({
-		Name = "Bar",
-		AnchorPoint = Vector2.new(0, 0.5),
-		Position = UDim2.new(0, -15, 0.5, 0),
-		Size = UDim2.new(0, 3, 0.7, 0),
-		BackgroundColor3 = C.Accent,
-		Visible = false,
-		Parent = tab.button,
-	})
 	return category
 end
 
@@ -616,27 +585,21 @@ local function buildKeysCategory(block: Frame)
 	end)
 end
 
--- Cette méthode permet de construire l'aperçu du viseur (une case claire, une case sombre) sous les catégories lorsque la
--- catégorie VISEUR est construite ; le viseur y est à sa taille réelle en px malgré la mise à l'échelle de l'écran.
--- Doit être appelée une fois toutes les catégories créées : l'aperçu se place sous la dernière, quel que soit son rang.
+-- Cette méthode permet de construire l'aperçu du viseur (une case claire, une case sombre, l'une sous l'autre) à
+-- droite des lignes lorsque la catégorie VISEUR est construite ; le viseur y est à sa taille réelle en px malgré la
+-- mise à l'échelle de l'écran. Posé dans le conteneur de la catégorie : il n'apparaît qu'avec elle.
 local function buildCrosshairPreview(category: Category)
-	-- Hauteur d'un onglet : sa taille de texte plus une marge pour l'interligne (mesurée, la bande réelle est un peu plus haute)
-	local previewTop = tabTop(#categories) + CAT_SIZE + CAT_LINE_PAD + PREVIEW_GAP_BELOW_TABS - ROWS_TOP
 	local preview = UIKit.frame({
 		Name = "Preview",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(-ROWS_X, previewTop),
-		Size = UDim2.fromOffset(PREVIEW_SIZE * 2 + PREVIEW_GAP, PREVIEW_SIZE + 26),
+		Position = UDim2.fromOffset(category.width + PREVIEW_GAP_X, 0),
+		Size = UDim2.fromOffset(PREVIEW_SIZE, 26 + PREVIEW_SIZE * 2 + PREVIEW_GAP),
 		Parent = category.rows,
 	})
-	UIKit.text({
+	UIKit.accentLabel(preview, {
 		Name = "Label",
 		Text = "APERÇU",
-		FontFace = F.DisplayMedium,
-		TextSize = 16,
-		TextColor3 = C.Accent,
 		Size = UDim2.new(1, 0, 0, 20),
-		Parent = preview,
 	})
 	-- Mise à l'échelle de l'écran (UIKit.scaledRoot, attribut Scale) compensée : le viseur garde ses px comme en jeu
 	local root = scaledRoot
@@ -644,7 +607,7 @@ local function buildCrosshairPreview(category: Category)
 	for i, background in { PREVIEW_LIGHT, PREVIEW_DARK } do
 		local pane = UIKit.frame({
 			Name = if i == 1 then "Light" else "Dark",
-			Position = UDim2.fromOffset((i - 1) * (PREVIEW_SIZE + PREVIEW_GAP), 26),
+			Position = UDim2.fromOffset(0, 26 + (i - 1) * (PREVIEW_SIZE + PREVIEW_GAP)),
 			Size = UDim2.fromOffset(PREVIEW_SIZE, PREVIEW_SIZE),
 			BackgroundColor3 = background,
 			ClipsDescendants = true,
@@ -684,7 +647,7 @@ end
 -- Cette méthode permet de construire la catégorie VISEUR (#251 : visée simplifiée, puis style du crosshair et son
 -- aperçu) lorsque l'écran est initialisé ; RÉTABLIR y remet le style d'origine sans couper la visée simplifiée.
 local function buildCrosshairCategory(block: Frame): Category
-	local crosshair = addCategory(block, "VISEUR")
+	local crosshair = addCategory(block, "VISEUR", ROW_WIDTH - PREVIEW_GAP_X - PREVIEW_SIZE)
 	local defaults = PlayerSettings.CROSSHAIR
 	-- Visée simplifiée (#195) : affiche le crosshair, coupée par défaut ; Crosshair suit LocalSettings
 	local aimOptions = { { label = "ACTIVÉE", value = true }, { label = "COUPÉE", value = false } }
@@ -819,9 +782,20 @@ local function buildCategories(block: Frame)
 		true
 	)
 
-	local crosshair = buildCrosshairCategory(block)
-	-- En dernier : l'aperçu se place sous la dernière catégorie existante
-	buildCrosshairPreview(crosshair)
+	buildCrosshairPreview(buildCrosshairCategory(block))
+end
+
+-- Cette méthode permet de poser les onglets des catégories sous le titre lorsque toutes les catégories sont créées ;
+-- changer de catégorie annule une saisie de touche en cours.
+local function buildTabs(built: MenuPage.Page)
+	local titles = {}
+	for i, category in categories do
+		titles[i] = category.title
+	end
+	markCategory = built.tabs(titles, function(index: number)
+		endCapture()
+		selectCategory(index)
+	end)
 end
 
 -- Cette méthode permet de remettre aux valeurs par défaut les réglages de la catégorie affichée lorsque le joueur clique
@@ -840,7 +814,7 @@ local function setOpen(state: boolean)
 	end
 	open = state
 	if state then
-		page.show(mode == "modal")
+		page.show()
 		selectCategory(selected)
 	else
 		endCapture()
@@ -856,41 +830,15 @@ local function setOpen(state: boolean)
 	end
 end
 
--- Cette méthode permet de poser RÉTABLIR et RETOUR côte à côte en bas au centre lorsque l'écran est construit.
+-- Cette méthode permet de poser RÉTABLIR puis RETOUR (action principale, en os vif) en bas au centre lorsque l'écran
+-- est construit.
 local function buildActions(built: MenuPage.Page)
-	local actions = UIKit.frame({
-		Name = "Actions",
-		BackgroundTransparency = 1,
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, MenuPage.ExitY),
-		Size = UDim2.fromOffset(BLOCK_WIDTH, 44),
-		Parent = built.group,
-	})
-	UIKit.create("UIListLayout", {
-		FillDirection = Enum.FillDirection.Horizontal,
-		HorizontalAlignment = Enum.HorizontalAlignment.Center,
-		VerticalAlignment = Enum.VerticalAlignment.Center,
-		SortOrder = Enum.SortOrder.LayoutOrder,
-		Padding = UDim.new(0, ACTION_GAP),
-		Parent = actions,
-	})
-	built.choice({
-		text = "RÉTABLIR",
-		size = ACTION_SIZE,
-		layoutOrder = 1,
-		parent = actions,
-		action = resetCategory,
-	})
-	local back = built.choice({
-		text = "RETOUR",
-		size = ACTION_SIZE,
-		layoutOrder = 2,
-		parent = actions,
-		action = function()
+	built.action("RÉTABLIR", resetCategory)
+	built
+		.action("RETOUR", function()
 			setOpen(false)
-		end,
-	})
-	back.setSelected(true)
+		end)
+		.setSelected(true)
 end
 
 -- Cette méthode permet de construire l'écran lorsque le client démarre (touches routées par InGameMenu).
@@ -904,17 +852,10 @@ function SettingsMenu.init(fpsCam: typeof(fpsCamRef))
 	page = built
 	scaledRoot = built.group.Parent :: Frame
 
-	local block = UIKit.frame({
-		Name = "Block",
-		BackgroundTransparency = 1,
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.fromScale(0.5, 0),
-		Size = UDim2.new(0, BLOCK_WIDTH, 1, 0),
-		Parent = built.group,
-	})
 	syncing = true
-	buildCategories(block)
+	buildCategories(built.block)
 	syncing = false
+	buildTabs(built)
 	buildActions(built)
 	selectCategory(1)
 	-- Réglages sauvegardés arrivés du serveur : chaque ligne les affiche et les applique (caméra, ombres)
@@ -955,13 +896,12 @@ function SettingsMenu.setOnClosed(callback: () -> ())
 	onClosedCallback = callback
 end
 
--- Cette méthode permet d'ouvrir l'écran dans une présentation donnée lorsque le joueur clique sur RÉGLAGES ;
--- `onClosed` est appelé une fois, à la fermeture de cette ouverture (retour au menu en partie).
-function SettingsMenu.open(newMode: Mode, onClosed: (() -> ())?)
+-- Cette méthode permet d'ouvrir l'écran lorsque le joueur clique sur RÉGLAGES (`_mode` dit d'où : même rendu depuis
+-- #308) ; `onClosed` est appelé une fois, à la fermeture de cette ouverture (retour au menu en partie).
+function SettingsMenu.open(_mode: Mode, onClosed: (() -> ())?)
 	if open then
 		return
 	end
-	mode = newMode
 	onceClosed = onClosed
 	setOpen(true)
 end

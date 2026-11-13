@@ -1,6 +1,6 @@
 -- WeaponBar (direction « Ligne de mire ») : barre d'armes maison en bas à droite, en miroir du compteur de vitesse.
 -- Remplace le Backpack Roblox (désactivé dans init.client) : par arme, silhouette tirée de son viewmodel, nom et touche.
--- Texte droit (seul le compteur de vitesse est penché). L'arme en main est en os avec son numéro et un trait rouge
+-- L'arme en main est en os avec son numéro et un trait rouge
 -- d'impact. Toute la barre s'estompe peu après un changement d'arme et revient au suivant.
 -- Deux emplacements (#280) : le sac ne contient que l'arme équipée du SNIPER et du COUTEAU, rangées dans cet ordre
 -- (HUDRules.slotOrder). Équipement : touches des emplacements et molette réglables (#100, LocalSettings), toucher d'un

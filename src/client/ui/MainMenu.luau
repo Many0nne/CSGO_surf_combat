@@ -1,19 +1,19 @@
 -- Menu principal (docs/ui.md) : derrière, le personnage du jeu en pose sur une copie de la map (#253, MenuScene) ; on
 -- choisit à la souris système, rien ne se tire. Titre en haut à gauche, onglets ARMES · INFOS · JOUER · RÉGLAGES ·
--- FEEDBACK en haut au centre (au-dessus des écrans secondaires, qui s'ouvrent dessous), statistiques du joueur en bas à
+-- FEEDBACK en haut au centre (au-dessus des écrans secondaires, qui s'ouvrent dessous ; l'onglet ouvert est souligné
+-- d'ambre, #308), statistiques du joueur en bas à
 -- droite (#301, StatsCard). L'onglet ARMES est l'écran d'équipement (#280, disposition de #308, EquipmentScreen) : tout
 -- à gauche (titre, arme montrée, onglets des emplacements, grille de cartes), le personnage à droite tient l'arme
 -- survolée ou celle de l'emplacement actif.
-local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
 local MenuScene = require(script.Parent.Parent.systems.game.MenuScene)
-local Rules = require(script.Parent.Parent.systems.game.MenuSceneRules)
 local EquipmentScreen = require(script.Parent.EquipmentScreen)
 local MenuCursor = require(script.Parent.MenuCursor)
+local MenuPage = require(script.Parent.MenuPage)
 local MenuShot = require(script.Parent.MenuShot)
 local StatsCard = require(script.Parent.StatsCard)
 local UIKit = require(script.Parent.UIKit)
@@ -25,9 +25,9 @@ export type Page = "home" | "infos" | "settings" | "feedback"
 
 local MainMenu = {}
 
-local EDGE = 28 -- marge de la maquette (px à 720 de haut)
-local TITLE_Y = 46 -- sous les boutons Roblox du coin haut gauche (plus bas si la fenêtre est petite, followTopbar)
-local TOPBAR_GAP = 8 -- marge entre la barre de Roblox et le titre quand la colonne doit descendre (#306)
+local EDGE = MenuPage.Edge -- marge de la maquette (px à 720 de haut)
+-- Sous les boutons Roblox du coin haut gauche (plus bas si la fenêtre est petite, MenuPage.followTopbar)
+local TITLE_Y = MenuPage.GameTitleY
 local TABS_Y = 18
 local NOTICE_Y = 72 -- message sous les onglets (apparition impossible, #219)
 local NOTICE_TIME = 5 -- s d'affichage de ce message
@@ -43,6 +43,7 @@ local gui: ScreenGui
 local tabsGui: ScreenGui
 local content: Frame
 local tabs: { [string]: MenuShot.Choice } = {}
+local underlines: { [string]: Frame } = {}
 local choices: { MenuShot.Choice } = {}
 local callbacks: { [string]: (() -> ())? } = {}
 local currentPage: Page = "home"
@@ -71,7 +72,8 @@ local function goTo(page: string)
 	end
 end
 
--- Cette méthode permet de construire le titre du jeu en haut à gauche lorsque le menu est initialisé.
+-- Cette méthode permet de construire le titre du jeu en haut à gauche, visible sur toutes les pages du menu, lorsque
+-- celui-ci est initialisé.
 local function buildTitle(root: Frame)
 	UIKit.shadowedText(root, {
 		Name = "Title",
@@ -83,20 +85,17 @@ local function buildTitle(root: Frame)
 		Size = UDim2.fromOffset(240, 38),
 		ZIndex = 2,
 	}, 3)
-	UIKit.text({
+	UIKit.accentLabel(root, {
 		Name = "Subtitle",
 		Text = "COMBAT DE SURF",
-		FontFace = F.DisplayMedium,
-		TextSize = 12,
-		TextColor3 = C.Accent,
-		Position = UDim2.fromOffset(EDGE + 1, TITLE_Y + 40),
-		Size = UDim2.fromOffset(240, 14),
-		Parent = root,
+		Position = UDim2.fromOffset(EDGE + 1, TITLE_Y + 38),
+		Size = UDim2.fromOffset(240, 18),
 	})
 end
 
--- Cette méthode permet de construire la barre d'onglets lorsque le menu est initialisé : JOUER, plus grand et
--- souligné de rouge d'impact, lance la partie (les volets se ferment aussitôt).
+-- Cette méthode permet de construire la barre d'onglets lorsque le menu est initialisé : onglets en texte séparés par
+-- des filets, l'onglet ouvert en os vif souligné d'ambre (#308), JOUER plus grand, sans soulignement, lance la partie
+-- (les volets se ferment aussitôt).
 local function buildTabs(root: Frame)
 	local bar = UIKit.frame({
 		Name = "Tabs",
@@ -144,13 +143,15 @@ local function buildTabs(root: Frame)
 			end,
 			locks = isPlay,
 		})
-		if isPlay then
-			UIKit.frame({
+		if not isPlay then
+			-- Soulignement ambré de l'onglet ouvert (« là où je suis »), montré par MainMenu.setPage
+			underlines[tab.key] = UIKit.frame({
 				Name = "Underline",
 				AnchorPoint = Vector2.new(0, 1),
-				Position = UDim2.new(0, 0, 1, 4),
-				Size = UDim2.new(1, -2, 0, 3),
-				BackgroundColor3 = C.HitRed,
+				Position = UDim2.new(0, 0, 1, 6),
+				Size = UDim2.new(1, 0, 0, 3),
+				BackgroundColor3 = C.Accent,
+				Visible = false,
 				ZIndex = 3,
 				Parent = choice.button,
 			})
@@ -172,29 +173,24 @@ local function buildTabs(root: Frame)
 	}, 2)
 end
 
--- Cette méthode permet de descendre la colonne de gauche (titre, « ÉQUIPEMENT », emplacements) sous la barre de Roblox
--- lorsque l'échelle de l'écran ou la hauteur de cette barre change (#306) : elle reste en px réels, l'interface non.
-local function followTopbar(root: Frame, column: Frame)
-	local function update()
-		local scale = root:GetAttribute("Scale") or 1
-		local shift = Rules.topbarShift(GuiService.TopbarInset.Max.Y, scale, TITLE_Y, TOPBAR_GAP)
-		column.Position = UDim2.fromOffset(0, shift)
-	end
-	update()
-	root:GetAttributeChangedSignal("Scale"):Connect(update)
-	GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(update)
+-- Cette méthode permet de poser le titre du jeu avec les onglets, au-dessus des écrans secondaires (#308 : il reste
+-- affiché sur toutes les pages, hors du fond de coin de ces écrans), lorsque le menu est initialisé.
+local function buildTitleColumn(root: Frame)
+	local titleColumn =
+		UIKit.frame({ Name = "TitleColumn", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = root })
+	buildTitle(titleColumn)
+	MenuPage.followTopbar(root, titleColumn)
 end
 
--- Cette méthode permet de construire l'accueil (titre, statistiques, écran d'équipement) lorsque le menu est initialisé.
+-- Cette méthode permet de construire l'accueil (statistiques, écran d'équipement) lorsque le menu est initialisé.
 local function buildContent(root: Frame)
 	content = UIKit.frame({ Name = "Content", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = root })
-	-- Colonne de gauche, décalée d'un bloc sous la barre de Roblox dans les petites fenêtres
+	-- Colonne de gauche, décalée d'un bloc sous la barre de Roblox dans les petites fenêtres (#306)
 	local column =
 		UIKit.frame({ Name = "LeftColumn", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = content })
-	buildTitle(column)
 	StatsCard.build(content)
 	EquipmentScreen.build(content, column)
-	followTopbar(root, column)
+	MenuPage.followTopbar(root, column)
 end
 
 -- Cette méthode permet de passer les touches et la molette à l'écran d'équipement lorsque le joueur est sur l'accueil.
@@ -233,7 +229,9 @@ function MainMenu.init(
 	-- Les onglets passent au-dessus des écrans secondaires (DisplayOrder 2 et 3), qui s'ouvrent dessous
 	tabsGui = makeGui("MenuTabs", 4)
 	buildContent(UIKit.scaledRoot(gui))
-	buildTabs(UIKit.scaledRoot(tabsGui))
+	local tabsRoot = UIKit.scaledRoot(tabsGui)
+	buildTitleColumn(tabsRoot)
+	buildTabs(tabsRoot)
 	MainMenu.setPage("home")
 	UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
 		if gui.Enabled then
@@ -258,6 +256,11 @@ function MainMenu.setPage(page: Page)
 	for key, tab in tabs do
 		tab.setSelected(key == page)
 	end
+	for key, underline in underlines do
+		underline.Visible = key == page
+	end
+	-- Hors de l'onglet ARMES, le personnage repasse au centre, derrière le bloc de l'écran ouvert
+	MenuScene.setCentered(page ~= "home")
 	if page ~= "home" then
 		EquipmentScreen.reset()
 	end

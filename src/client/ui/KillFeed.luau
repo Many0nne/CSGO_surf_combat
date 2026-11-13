@@ -17,7 +17,7 @@ local MARGIN_TOP = 64 -- sous la barre Roblox
 local MARGIN_RIGHT = 20
 local WIDTH = 420
 local NAME_SIZE = 18
-local DETAIL_SIZE = 13
+local DETAIL_SIZE = 16 -- plancher des textes (UITheme.TextSize.Min, #308)
 
 local KillFeed = {}
 
