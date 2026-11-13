@@ -80,6 +80,8 @@ CheatLog.PING_BUCKET_MS = 10
 -- essai : les lignes en trop sont remplacées par « … (+N) ».
 CheatLog.MAX_FIELD_VALUE = 1000
 CheatLog.MAX_DESCRIPTION = 3800
+-- Limite de l'embed entier (titre, description, champs, pied : 6000 chez Discord, marge comprise).
+CheatLog.MAX_EMBED_TOTAL = 5800
 
 local SEVERITY_RANK: { [string]: number } = { low = 1, medium = 2, high = 3 }
 local SEVERITY_LABEL: { [string]: string } = { low = "faible", medium = "moyenne", high = "forte" }
@@ -139,6 +141,9 @@ local closed = false
 -- joueur en cours de clôture : ses signalements sont gardés même s'il n'a déjà plus de Parent.
 local closingHooks: { ({ Player }, boolean) -> () } = {}
 local closingPlayers: { [Player]: boolean } = {}
+-- Joueurs dont le bilan est clos (onPlayerRemoving) : PlayerRemoving arrive quand Parent est encore Players, un paquet
+-- ou une parade traités juste après ne doivent pas recréer de bilan ni de session (clés faibles : rien ne fuit).
+local departed: { [Player]: boolean } = setmetatable({}, { __mode = "k" }) :: any
 
 -- Cette méthode permet de lire l'horloge du serveur lorsqu'une violation est datée (os.clock, simulable en test).
 local function now(): number
@@ -208,10 +213,17 @@ function CheatLog.denominatorOf(key: string): JudgedKind?
 end
 
 -- Cette méthode permet de savoir si un participant est suivi par le journal lorsqu'une parade le signale : joueur
--- présent (ou en cours de clôture), jamais un bot, et rien une fois l'arrêt du serveur clos (closed).
+-- présent (ou en cours de clôture), jamais un bot ni un joueur au bilan déjà clos, et rien une fois l'arrêt du
+-- serveur clos (closed).
 local function isTracked(participant: Participants.Participant): boolean
+	if closed or participant.isBot then
+		return false
+	end
 	local owner = participant.player
-	return not closed and not participant.isBot and not (owner and not owner.Parent and not closingPlayers[owner])
+	if not owner or closingPlayers[owner] then
+		return true
+	end
+	return owner.Parent ~= nil and not departed[owner]
 end
 
 -- Cette méthode permet de lire le ping d'un joueur (s, Player:GetNetworkPing) lorsqu'une parade le borne (#214) ou
@@ -550,20 +562,27 @@ end
 function CheatLog.joinCapped(lines: { string }, max: number): string
 	local kept, size = {}, 0
 	for i, line in lines do
-		-- Place gardée pour la ligne finale « … (+N) » (au plus une douzaine de caractères)
-		local cost = utf8.len(line) or #line
-		if size + cost + 1 > max - 16 and i < #lines then
+		-- Dernière ligne : jusqu'à max ; avant elle, place gardée pour « … (+N) » (au plus une douzaine de caractères)
+		local cost = (utf8.len(line) or #line) + (if i > 1 then 1 else 0)
+		local limit = if i == #lines then max else max - 16
+		if size + cost > limit then
 			table.insert(kept, string.format("… (+%d)", #lines - i + 1))
 			return table.concat(kept, "\n")
 		end
 		table.insert(kept, line)
-		size += cost + 1
+		size += cost
 	end
 	return table.concat(kept, "\n")
 end
 
+-- Cette méthode permet de mesurer un texte d'embed (caractères, comme Discord) lorsqu'on vérifie ses limites.
+local function textLength(text: string): number
+	return utf8.len(text) or #text
+end
+
 -- Cette méthode permet de mettre en forme le résumé d'un joueur lorsqu'il part avec des violations : nom, UserId,
 -- compteurs par catégorie et par contrôle (taux sur ses jugés), jugés, ping, score maximal, pire violation et kick.
+-- Champs bornés pour que l'embed entier tienne sous MAX_EMBED_TOTAL (la place est partagée entre les champs).
 function CheatLog.buildEmbed(record: Record): { [string]: any }
 	local judged = record.judged or {}
 	local checkKeys = sortedKeys(record.checks or {})
@@ -592,11 +611,7 @@ function CheatLog.buildEmbed(record: Record): { [string]: any }
 				)
 			end
 		end
-		table.insert(fields, {
-			name = category,
-			value = CheatLog.joinCapped(lines, CheatLog.MAX_FIELD_VALUE),
-			inline = true,
-		})
+		table.insert(fields, { name = category, lines = lines, inline = true })
 	end
 	table.sort(fields, function(a, b)
 		return a.name < b.name
@@ -624,12 +639,25 @@ function CheatLog.buildEmbed(record: Record): { [string]: any }
 	if record.kicked then
 		table.insert(lines, "Expulsé pendant la session.")
 	end
+	local title = "Anti-triche : " .. record.name
+	local description = CheatLog.joinCapped(lines, CheatLog.MAX_DESCRIPTION)
+	local footer = record.name .. "  |  UserId " .. record.id
+	-- Place laissée aux valeurs des champs : le total de l'embed, moins le reste, partagé à parts égales
+	local budget = CheatLog.MAX_EMBED_TOTAL - textLength(title) - textLength(description) - textLength(footer)
+	for _, field in fields do
+		budget -= textLength(field.name)
+	end
+	local perField = math.min(CheatLog.MAX_FIELD_VALUE, math.floor(budget / math.max(#fields, 1)))
+	for _, field in fields do
+		field.value = CheatLog.joinCapped(field.lines, perField)
+		field.lines = nil
+	end
 	return {
-		title = "Anti-triche : " .. record.name,
-		description = CheatLog.joinCapped(lines, CheatLog.MAX_DESCRIPTION),
+		title = title,
+		description = description,
 		color = 12597547,
 		fields = fields,
-		footer = { text = record.name .. "  |  UserId " .. record.id },
+		footer = { text = footer },
 	}
 end
 
@@ -685,13 +713,18 @@ end
 
 -- Cette méthode permet de transmettre un embed lorsqu'un résumé ou un relevé est prêt : console dans Studio, sinon
 -- webhook avec nouveaux essais (WEBHOOK_ATTEMPTS), puis repli sur la console en entier si l'envoi échoue ou qu'aucun
--- webhook n'est configuré parmi names (StringValue, dans l'ordre). Bloquant (requête HTTP) : à lancer dans son fil.
-local function deliver(embed: { [string]: any }, label: string, names: { string })
+-- webhook n'est configuré parmi names (StringValue, dans l'ordre). optional : un webhook absent est un réglage prévu
+-- (relevé sans webhook dédié), le message va en console par print, sans avertissement. Bloquant : dans son propre fil.
+local function deliver(embed: { [string]: any }, label: string, names: { string }, optional: boolean)
 	if RunService:IsStudio() then
 		print(string.format("[CheatLog] %s :\n%s", label, CheatLog.consoleText(embed)))
 		return
 	end
 	local url = Webhook.url(table.unpack(names))
+	if not url and optional then
+		print(string.format("[CheatLog] %s :\n%s", label, CheatLog.consoleText(embed)))
+		return
+	end
 	if url then
 		local ok, err, attempts =
 			Webhook.postWithRetry(url, embed, CheatLog.WEBHOOK_ATTEMPTS, CheatLog.WEBHOOK_RETRY_DELAY)
@@ -707,10 +740,10 @@ end
 
 -- Cette méthode permet de construire puis transmettre un embed en tenant le compte des envois en cours lorsqu'un
 -- résumé ou un relevé part, pour que l'arrêt du serveur les attende ; une erreur est écrite avec son libellé.
-local function tracked(label: string, build: () -> { [string]: any }, names: { string })
+local function tracked(label: string, build: () -> { [string]: any }, names: { string }, optional: boolean)
 	pendingSends += 1
 	local ok, err = pcall(function()
-		deliver(build(), label, names)
+		deliver(build(), label, names, optional)
 	end)
 	pendingSends -= 1
 	if not ok then
@@ -723,14 +756,15 @@ end
 local function trackedSummary(record: Record)
 	tracked("résumé de " .. record.name, function()
 		return CheatLog.buildEmbed(record)
-	end, CheatLog.WEBHOOK_NAMES)
+	end, CheatLog.WEBHOOK_NAMES, false)
 end
 
--- Cette méthode permet d'envoyer un relevé agrégé dans son propre fil lorsqu'il est émis (webhook dédié seulement).
+-- Cette méthode permet d'envoyer un relevé agrégé dans son propre fil lorsqu'il est émis (webhook dédié seulement ;
+-- sans lui, console sans avertissement).
 local function trackedReport(embed: { [string]: any })
 	tracked("relevé du serveur", function()
 		return embed
-	end, CheatLog.REPORT_WEBHOOK_NAMES)
+	end, CheatLog.REPORT_WEBHOOK_NAMES, true)
 end
 
 -- Cette méthode permet d'émettre le relevé agrégé de la période écoulée lorsque REPORT_INTERVAL est passé, à l'arrêt
@@ -782,6 +816,7 @@ end
 -- envoyé si le bilan le mérite (worthSummary), avec ses jugés et son ping ; ce qu'il a fait reste au relevé agrégé.
 function CheatLog.onPlayerRemoving(player: Player)
 	runClosingHooks({ player }, false)
+	departed[player] = true
 	guard:forget(player)
 	local record = records[player.UserId]
 	local session = sessions[player.UserId]

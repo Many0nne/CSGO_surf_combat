@@ -417,6 +417,15 @@ return function(T, Loader)
 			T.expectEqual(C.summary(2), nil, "pas de bilan sans violation, mais une session")
 			T.expectEqual(C.session(-1), nil, "bot ignoré")
 			T.expectEqual(C.session(3), nil, "joueur parti ignoré")
+			-- PlayerRemoving arrive avant que Parent passe à nil : un paquet traité juste après ne recrée rien
+			local leaving = fakePlayer(4, "Zoé")
+			C.judged(participantOf(leaving), C.Judged.POSITION)
+			C.onPlayerRemoving(leaving :: any)
+			T.expect(leaving.Parent ~= nil)
+			C.judged(participantOf(leaving), C.Judged.POSITION)
+			C.report(participantOf(leaving), C.Category.MOVEMENT, C.Severity.MEDIUM, "tardif", "speed")
+			T.expectEqual(C.session(4), nil, "session non recréée après le départ")
+			T.expectEqual(C.summary(4), nil, "bilan non recréé après le départ")
 			C.report(alice, C.Category.HITSCAN, C.Severity.MEDIUM, "x", "direction")
 			T.expectEqual(C.summary(1).judged.shot, 3, "jugés joints au bilan")
 		end)
@@ -497,6 +506,27 @@ return function(T, Loader)
 			T.expect(utf8.len(value) <= C.MAX_FIELD_VALUE, "champ sous la limite : " .. utf8.len(value))
 			T.expect(string.find(value, "… (+", 1, true) ~= nil, "lignes coupées annoncées")
 			T.expectEqual(C.joinCapped({ "a", "b" }, 100), "a\nb", "rien coupé sous la limite")
+			-- Dernière ligne trop longue : coupée elle aussi
+			local capped = C.joinCapped({ "a", string.rep("x", 200) }, 50)
+			T.expect(utf8.len(capped) <= 50, capped)
+			T.expectEqual(capped, "a\n… (+1)")
+		end)
+
+		T.it("embed entier sous la limite totale, même avec beaucoup de catégories pleines", function()
+			local env = setup()
+			local C = env.CheatLog
+			local alice = participantOf(fakePlayer(1, "Alice"))
+			for c = 1, 10 do
+				for i = 1, 80 do
+					C.report(alice, "Categorie" .. c, C.Severity.LOW, "x", string.format("ControleAuNomLong%03d", i))
+				end
+			end
+			local embed = C.buildEmbed(C.summary(1))
+			local total = utf8.len(embed.title) + utf8.len(embed.description) + utf8.len(embed.footer.text)
+			for _, field in embed.fields do
+				total += utf8.len(field.name) + utf8.len(field.value)
+			end
+			T.expect(total <= 6000, "embed de " .. total .. " caractères")
 		end)
 
 		T.it("relevé agrégé : taux par contrôle sur les jugés de tous, joueurs sans violation compris", function()
@@ -553,7 +583,8 @@ return function(T, Loader)
 			C.flushReport("périodique")
 			env.run(#env.spawned)
 			T.expectEqual(env.posts, 0, "pas au webhook du feedback")
-			T.expect(string.find(table.concat(env.warns, "\n"), "relevé du serveur (repli console)", 1, true) ~= nil)
+			T.expect(string.find(table.concat(env.prints, "\n"), "relevé du serveur :", 1, true) ~= nil)
+			T.expectEqual(#env.warns, 0, "réglage prévu : console sans avertissement")
 			env.webhooks.CheatLogWebhookUrl = "https://exemple.invalid/anticheat"
 			C.judged(participantOf(fakePlayer(1, "Alice")), C.Judged.SHOT)
 			C.flushReport("périodique")
@@ -626,6 +657,16 @@ return function(T, Loader)
 			T.expectEqual(env.posts, 1, "un seul essai")
 			T.expectEqual(#env.waits, 0)
 			T.expect(string.find(table.concat(env.warns, "\n"), "repli console", 1, true) ~= nil)
+		end)
+
+		T.it("webhook : erreurs définitives et passagères reconnues", function()
+			local Webhook = Loader.new({ HttpService = {} }):require("src/server/Webhook")
+			T.expectEqual(Webhook.isRetryable("HTTP 429 (Too Many Requests)"), true)
+			T.expectEqual(Webhook.isRetryable("HTTP 502 (Bad Gateway)"), true)
+			T.expectEqual(Webhook.isRetryable("HttpError: Timedout"), true)
+			T.expectEqual(Webhook.isRetryable("HTTP 400 (Bad Request)"), false)
+			T.expectEqual(Webhook.isRetryable("HTTP 404 (Not Found)"), false)
+			T.expectEqual(Webhook.isRetryable("Http requests are not enabled. Enable via game settings"), false)
 		end)
 
 		T.it("webhook absent : repli console, rien posté ; Studio : résumé complet affiché", function()

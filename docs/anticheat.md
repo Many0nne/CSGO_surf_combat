@@ -1109,7 +1109,10 @@ CheatLog.session(participant.id) -- jugés et ping d'un joueur, avec ou sans vio
   antérieurs à une correction). Dénominateur d'une catégorie (`CheatLog.DENOMINATOR`) : `Hitscan` → touches, `Melee` →
   coups, `Movement` → positions, sauf `Movement:void` (jugé par passage de boucle) et `Hitscan:orphanRate` (signalé
   une fois par palier d'orphelines ; le taux par touche est celui de `Hitscan:shotLink`), listés dans
-  `NO_DENOMINATOR`. Les autres catégories n'en ont pas : nombres bruts.
+  `NO_DENOMINATOR`. Les autres catégories n'en ont pas : nombres bruts. Deux approximations, majorant le dénominateur
+  de quelques éléments seulement : `Movement:noclip` et `Movement:flight` ne jugent pas un paquet déjà refusé par le
+  seau (mode `block`) ni ceux d'avant le chargement de la géométrie de la map ; `Hitscan:shotLink` ne juge pas une
+  touche déjà refusée par un autre contrôle en `block` (forme, distance, equip, chargeur).
 - **Ping** (#297) : `Player:GetNetworkPing` de chaque joueur toutes les `PING_SAMPLE_INTERVAL` (5 s), en histogramme
   (classes de `PING_BUCKET_MS` = 10 ms : médiane à 5 ms près, maximum exact, mémoire fixe quelle que soit la durée de
   la session). Médiane et maximum de la session au résumé du joueur, de la période au relevé.
