@@ -88,12 +88,12 @@ function AmmoCounter.init()
 		Name = "Label",
 		Text = "MUNITIONS",
 		FontFace = F.DisplayMedium,
-		TextSize = 14,
+		TextSize = UITheme.TextSize.Min,
 		TextColor3 = C.Accent,
 		TextXAlignment = Enum.TextXAlignment.Right,
 		TextStrokeColor3 = C.Black,
 		TextStrokeTransparency = LABEL_STROKE_TRANSPARENCY,
-		Size = UDim2.fromOffset(BOX.width, 16),
+		Size = UDim2.fromOffset(BOX.width, 18),
 		Parent = box,
 	})
 	magazineText, magazineShadow = UIKit.shadowedText(box, {

@@ -21,7 +21,6 @@ local SettingsMenu = require(script.Parent.SettingsMenu)
 local UIKit = require(script.Parent.UIKit)
 
 local C = UITheme.Colors
-local F = UITheme.Fonts
 local Motion = UITheme.Motion
 
 type View = InGameMenuRules.View
@@ -30,12 +29,11 @@ local InGameMenu = {}
 
 local MENU_KEY = Enum.KeyCode[PlayerSettings.MENU_KEY]
 local TITLE = "MENU"
--- Colonne de choix centrée (px à 720 de haut), MENU PRINCIPAL écarté des deux autres
-local COLUMN_TOP = 250
+-- Colonne de choix centrée sous le titre (px à 720 de haut), MENU PRINCIPAL écarté des deux autres
+local COLUMN_TOP = MenuPage.ContentTop
 local CHOICE_SIZE = 40
 local CHOICE_GAP = 18
 local LEAVE_GAP = 40
-local HINT_SIZE = 16
 local BACKDROP_TRANSPARENCY = 0.45
 local BACKDROP_ORDER = 2 -- sous la page (3, comme SettingsMenu), au-dessus du HUD (0)
 -- Studio seulement : la touche P ne passe pas par l'input simulé du MCP en partie, cet attribut joueur ouvre (true) ou
@@ -122,7 +120,7 @@ local function setView(newView: View)
 		applyOverlay(isOpen)
 	end
 	if newView == "main" then
-		built.show(true)
+		built.show()
 		resumeChoice.setSelected(true)
 	else
 		built.hide()
@@ -184,7 +182,7 @@ local function buildChoices(built: MenuPage.Page)
 		AnchorPoint = Vector2.new(0.5, 0),
 		Position = UDim2.new(0.5, 0, 0, COLUMN_TOP),
 		Size = UDim2.fromOffset(500, 300),
-		Parent = built.group,
+		Parent = built.block,
 	})
 	UIKit.create("UIListLayout", {
 		FillDirection = Enum.FillDirection.Vertical,
@@ -228,19 +226,14 @@ local function buildChoices(built: MenuPage.Page)
 			choose("leave")
 		end,
 	})
-	UIKit.text({
-		Name = "Hint",
-		-- La partie n'est pas en pause : le joueur reste exposé tant que le menu est ouvert
-		Text = string.format("LA PARTIE CONTINUE · %s POUR REPRENDRE", LocalSettings.keyText(PlayerSettings.MENU_KEY)),
-		FontFace = F.DisplayMedium,
-		TextSize = HINT_SIZE,
-		TextColor3 = C.Accent,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, MenuPage.ExitY + 10),
-		Size = UDim2.fromOffset(500, HINT_SIZE + 6),
-		Parent = built.group,
+	-- Aide en bas au centre, touche en boîte comme sur l'écran d'équipement ; la partie n'est pas en pause : le joueur
+	-- reste exposé tant que le menu est ouvert
+	local hints = UIKit.hintRow(built.group, {
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.5, 0, 1, -MenuPage.HintBottom),
 	})
+	UIKit.keyHint(hints, 1, LocalSettings.keyText(PlayerSettings.MENU_KEY), "REPRENDRE")
+	UIKit.keyHint(hints, 2, nil, "LA PARTIE CONTINUE")
 end
 
 -- Cette méthode permet de construire le menu et de brancher la touche du menu et Échap lorsque le client démarre.

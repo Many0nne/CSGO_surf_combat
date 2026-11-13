@@ -22,6 +22,46 @@ Le canyon au couchant est abandonné (il collait à l'ancienne map), puis la sal
 l'accueil montre le **personnage du jeu en pose sur la map** (section « Menu : accueil sur la map » plus bas), avec
 la palette du HUD.
 
+## Règles communes à tous les écrans (#308)
+
+Harmonisation faite en #308, à partir de l'écran d'équipement (disposition validée par l'utilisateur) : les autres écrans
+avaient chacun leur écriture du même état. Un nouvel écran suit ces règles ; s'en écarter se décide avec l'utilisateur.
+
+- **Deux cadres, selon le rôle du personnage.** L'écran d'équipement tient à gauche, le personnage net à droite : il
+  tient l'arme qu'on choisit. Les écrans secondaires (Réglages, Infos, Feedback, menu en partie, `MenuPage`) sont un
+  bloc centré de 780 px sur un voile, sans panneau : titre, onglets en boîte, contenu, actions en bas au centre. Hors
+  de l'onglet ARMES, la caméra de l'accueil se recentre (`MenuScene.setCentered`) et le personnage repasse derrière le
+  bloc. **Piste rejetée (#308) : le cadre de l'équipement appliqué à tous les écrans.** Essayé dans le moteur, refusé
+  par l'utilisateur : « comme il n'y a rien à droite c'est trop bizarre, dans tous les jeux ces éléments sont
+  centrés » ; l'équipement est l'exception, pas la règle.
+- **Ambre = « là où je suis »**. Sous-onglets (catégories des Réglages et d'Infos, emplacements de l'équipement) : boîte
+  ambrée pleine à texte sombre (`MenuShot.boxChoice`), une seule à la fois. Barre du menu : texte os vif souligné
+  d'ambre. **Piste rejetée (#308) : les onglets du menu en boîtes** (onglet ouvert en boîte ambrée, JOUER en boîte
+  os) : deux boîtes pleines côte à côte, de tailles et de couleurs différentes, l'utilisateur n'a pas aimé le rendu.
+  JOUER reste en gros texte, sans soulignement (le soulignement veut dire « page ouverte »).
+- **Rouge d'impact = « à moi » ou survolé** : arme équipée, ligne du joueur au classement et au kill feed, survol d'un
+  choix. Jamais pour dire quelle page est ouverte.
+- **Touche nommée dans un menu = boîte os à texte sombre** (`UIKit.tag`, `UIKit.keyHint` : aide de l'équipement,
+  Infos > COMMANDES, menu en partie). Dans le HUD, les touches restent des keycaps en relief (`KeyDisplay`, #229).
+- **Action principale d'un écran** (RETOUR, ENVOYER, REPRENDRE) : texte os vif, les autres en os atténué (`page.action`,
+  `page.choice`), l'action principale en dernier (à droite).
+- **Aucun texte sous 16 px** (`UITheme.TextSize.Min`), libellés ambrés compris (`UIKit.accentLabel`) : à 12 ou 14 px ils
+  étaient illisibles une fois l'écran réduit (« COMBAT DE SURF », « FREE FOR ALL », « RANG », « MUNITIONS »,
+  « RÉAPPARITION », étiquettes et aide de l'équipement).
+- **Une seule famille de police, Oswald** : gras pour les titres et les chiffres, medium pour les libellés, regular
+  (`Fonts.DisplayText`) pour le texte courant (Infos, champ du Feedback, noms du classement). Titillium n'est plus
+  utilisé par les écrans.
+- **Filets** : os à 0,88 de transparence, partout (lignes des Réglages et des commandes).
+- **Ombre décalée** : 3 px au plus sous 50 px de texte ; à 5 px, « CLASSEMENT » se lisait en double.
+- **Mêmes mots pour les mêmes chiffres** : KILLS, MORTS, K/M au classement comme sur la fiche de statistiques.
+- **Rien de penché dans le HUD** : le compteur de vitesse est droit depuis #308 (il répondait au titrage penché de
+  l'accueil, disparu en #117).
+
+Piste écartée (#308) : le rapport « Industrial Competitive 2.0 » (PDF joint à l'issue, écrit sans accès au jeu) proposait
+des panneaux graphite partout, le jaune pour la sélection, Barlow Condensed et Inter. L'utilisateur a gardé la palette
+(os, ambre, rouge d'impact), Oswald et l'absence de panneau, et n'a repris que l'idée d'unifier les états. Les lots
+fonctionnels du rapport (HUD, aides de touches, responsive) ont leurs propres issues.
+
 ## Ce qui a été rejeté, et pourquoi
 
 Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vitesse ») :
@@ -50,13 +90,13 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
 - `src/client/ui/MainMenu.luau` : accueil (titre, onglets, fiche de statistiques, écran d'équipement ; rien ne se
   tire). **Écran d'équipement (#280, disposition de #308, `src/client/ui/EquipmentScreen.luau`)** : l'onglet ARMES le
   porte. **Disposition validée par l'utilisateur en #308**, d'après une capture d'un écran de choix d'arme d'un autre
-  FPS, prise pour sa disposition et non pour son style (la DA reste « Ligne de mire » : os, ambre, rouge d'impact,
-  Oswald). Tout tient à gauche, le personnage est au tiers droit (`MenuScene`, section « Menu : accueil sur la map »).
+  FPS, prise pour sa disposition et non pour son style (palette et police inchangées). Tout tient à gauche, le personnage est au tiers droit (`MenuScene`, section « Menu : accueil sur la map »).
   De haut en bas : « ÉQUIPEMENT » puis l'emplacement actif en Oswald gras 52 px à ombre, suivi de l'étiquette ambrée
   « EMPLACEMENT n » ; à droite du titre, rendu texturé de l'arme montrée (`UIKit.weaponSilhouette` avec `textured`, un
   `ViewportFrame` par viewmodel, gardé) ; nom « AWP / D'ORIGINE » avec l'étiquette « ÉQUIPÉ » pleine en rouge d'impact,
   ou « CLIC POUR ÉQUIPER » en contour quand l'arme survolée ne l'est pas, catégorie de l'arme dessous ; onglets
-  « 1 · SNIPER » et « 2 · COUTEAU » (actif en boîte ambrée à texte sombre, survol en rouge d'impact) ; grille de
+  « 1 · SNIPER » et « 2 · COUTEAU » (`MenuShot.boxChoice` : actif en boîte ambrée à texte sombre, survol en rouge
+  d'impact) ; grille de
   cartes sur quatre colonnes : une rangée d'armes possédées, puis « SKINS · ARME » et une rangée de skins (silhouette,
   nom, coche et trait rouge d'impact sur l'équipé, contour rouge au survol). Les cases restantes d'une rangée sont
   vides et barrées d'une croix : elles tiennent la grille tant qu'il y a une ou deux armes. Aide en bas à gauche,
@@ -75,7 +115,10 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   « ‹ ARMES » ; emplacements à gauche et liste à droite du personnage (#280, remplacé en #308). **Libellés ambrés :
   16 px gras à ombre** (`UIKit.accentLabel`) ; à 13 px avec contour noir, l'utilisateur les trouvait illisibles (la
   taille plus que la couleur). Les onglets sont dans leur propre `ScreenGui` (`MenuTabs`, DisplayOrder 4), au-dessus des écrans
-  secondaires. Sous les onglets, un message ponctuel (`MainMenu.showNotice`, 5 s, rouge d'impact à ombre) explique un
+  secondaires, avec le titre du jeu (« SURF FFA », « COMBAT DE SURF »), affiché sur toutes les pages (#308). **Onglet
+  ouvert en os vif souligné d'ambre** (#308) : avant, JOUER était le seul onglet marqué (plus gros, souligné de
+  rouge) et l'onglet ouvert à peine plus clair, on ne savait pas sur quelle page on était. JOUER reste plus gros,
+  sans soulignement. Sous les onglets, un message ponctuel (`MainMenu.showNotice`, 5 s, rouge d'impact à ombre) explique un
   retour au menu imprévu, par exemple une apparition impossible (#219) ; rendu provisoire, pas encore validé.
 - **Fiche de statistiques (#301, `src/client/ui/StatsCard.luau`)** : sur l'accueil (pas d'onglet en plus, choix de
   l'utilisateur), en bas à droite sous les pieds du personnage (#308 : la grille d'équipement occupe la gauche, la
@@ -89,16 +132,17 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   les kills, sans décimale à partir de 100), compteurs en chiffres complets sous 10 000 (espace des milliers dès 1 000)
   puis abrégés et tronqués (« 12.3k », « 1.2M »). Les kills et morts face aux bots ne comptent pas
   (`ParticipantRules.killCountsInStats`) : la fiche ne suit donc pas le classement d'une manche jouée contre des bots.
-- `src/client/ui/MenuPage.luau` : gabarit des écrans secondaires, sans panneau : bloc centré sur le voile du classement,
-  actions côte à côte en bas au centre (`MenuPage.ExitY`). Choix de l'utilisateur en #117, après un premier passage en
-  colonne sur un dégradé à gauche jugé peu changé. Infos et Réglages partagent la même disposition (catégories à gauche
-  avec barre ambrée sur l'active, contenu à droite, bloc de 780 px). Le titre en texte (Oswald à ombre, en
-  haut au centre) n'est montré qu'en partie (menu en partie et ses Réglages) : au menu, l'onglet actif sert de titre. En
-  partie, il se pose sous le timer du round (`TITLE_Y` 92 px, #220), resté visible au-dessus du voile. `page.choice` : choix en texte, os atténué au repos, os vif une fois choisi (`setSelected`, aussi pour
-  l'action principale comme ENVOYER ou RETOUR), rouge d'impact au survol.
-- Réglages (`SettingsMenu.luau`, disposition C des schémas de #117, préférée aux sous-onglets en haut et à la liste
-  unique qui défile) : catégories à gauche (barre ambrée sur l'active), lignes de 54 px à droite (nom, contrôle,
-  valeur os à ombre, filet). Place : 9 lignes au plus par catégorie avant les actions (`MenuPage.ExitY`), pas de
+- `src/client/ui/MenuPage.luau` : gabarit des écrans secondaires (Réglages, Infos, Feedback, menu en partie), sans
+  panneau : bloc centré de 780 px (`page.block`, cotes exportées : `BlockWidth`, `PageTitleY`, `TabsY`, `ContentTop`,
+  `ContentBottom`) sur le voile du classement. Choix de l'utilisateur en #117, confirmé en #308. Titre centré (Oswald
+  gras 40 px à ombre), toujours affiché : au menu sous les onglets, en partie sous le timer du round, resté visible
+  au-dessus du voile (#220). `page.tabs(titres, onSelect)` : onglets en boîte centrés sous le titre, renvoie de quoi
+  marquer l'actif ; `page.action(texte, action)` : actions en bas au centre, dans l'ordre des appels ; `page.choice` :
+  choix en texte, os atténué au repos, os vif une fois choisi (`setSelected`), rouge d'impact au survol.
+  `MenuPage.followTopbar` et les cotes `Edge`, `TitleY`, `TitleSize` servent à la colonne de gauche de l'accueil.
+- Réglages (`SettingsMenu.luau`) : catégories en onglets en boîte sous le titre (#308 ; avant, colonne à gauche avec
+  barre ambrée sur l'active, disposition C de #117), lignes de 46 px sur toute la largeur du bloc (nom, contrôle,
+  valeur os à ombre, filet). Place : 9 lignes au plus par catégorie avant les actions (`MenuPage.ContentBottom`), pas de
   défilement ; une section qui ne tient pas devient une catégorie (VISEUR, #251). Un curseur sans décimale donne des
   entiers (px du viseur) ; les autres gardent leur précision (ne pas arrondir : les sensibilités déjà sauvegardées
   changeraient au chargement). Contrôles : curseur (trace continue, poignée en pastille os, rouge au survol ; une barre segmentée ferait perdre
@@ -116,8 +160,8 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   la barre d'armes. RÉTABLIR remet molette et touches ensemble.
 - Menu en partie (`InGameMenu.luau`, #157) : la touche `PlayerSettings.MENU_KEY` (P, seule constante de cette touche :
   réservée pour la barre d'armes, rappelée dans Infos) ouvre en partie un écran `MenuPage` titré « MENU » : colonne
-  centrée de choix en texte (taille 40) REPRENDRE (os vif), RÉGLAGES, puis MENU PRINCIPAL écarté ; libellé ambré en bas
-  « LA PARTIE CONTINUE · P POUR REPRENDRE ». RÉGLAGES remplace l'accueil par l'écran Réglages (présentation `modal`,
+  centrée de choix en texte (taille 40) REPRENDRE (os vif), RÉGLAGES, puis MENU PRINCIPAL écarté ; aide en bas au
+  centre, touche en boîte : « P REPRENDRE », puis « LA PARTIE CONTINUE ». RÉGLAGES remplace l'accueil par l'écran Réglages (présentation `modal`,
   même écran que celui du menu principal, sans copie) dont RETOUR revient à l'accueil du menu. P referme tout, Échap
   aussi (Roblox ouvre son menu par-dessus ; `GuiService.MenuOpened` ferme tout). Le jeu n'est pas en pause (FFA) : le
   menu est une surcouche, sur un voile noir à part (`InGameMenuBackdrop`, DisplayOrder 2, actif : il retient les clics
@@ -139,7 +183,7 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
 - CoreGui Roblox désactivés dans `init.client.luau` : `PlayerList`, `Backpack`, `Health` (#307 : la barre de vie native
   apparaissait au premier dégât, au-dessus du kill feed, et restait jusqu'au menu). Pas d'affichage de la vie dans le HUD
   pour l'instant (choix de l'utilisateur) ; s'il en faut un, le brancher sur `HUDRules.gameHudVisible`.
-- `src/client/ui/Speedometer.luau` : compteur de vitesse, piste « Titrage » : gros chiffres os penchés (-6°) avec ombre noire décalée, nom du palier, bande ambrée en biais crantée aux seuils, tout passe au rouge d'impact au dernier palier (`HUDRules.speedTier`, `speedFill`). En bas à gauche, sur un fond sombre sans bord : image de dégradé de coin (`tools/ui/make_corner_scrim.py`, `assets/ui/hud/`) teintée par `ImageColor3`.
+- `src/client/ui/Speedometer.luau` : compteur de vitesse, en bas à gauche, en miroir du compteur de munitions : chiffres os droits de 72 px avec ombre noire décalée, alignés à droite d'une case fixe (le palier et l'unité ne bougent pas), nom du palier et « U/S » ambrés à droite, bande ambrée horizontale crantée aux seuils, tout passe au rouge d'impact au dernier palier (`HUDRules.speedTier`, `speedFill`). Sur un fond sombre sans bord : image de dégradé de coin (`tools/ui/make_corner_scrim.py`, `assets/ui/hud/`) teintée par `ImageColor3`. Jusqu'à #308 : piste « Titrage », chiffres de 92 px penchés de -6° et bande en biais (`UITheme.Layout.HudLean`, retiré).
 - `src/client/ui/WeaponBar.luau` : barre d'armes en bas à droite, en miroir du compteur ; remplace le Backpack Roblox
   (`CoreGuiType.Backpack` désactivé dans `init.client.luau`). Par arme : silhouette plate tirée des MeshParts de son viewmodel
   (bras exclus) dans un `ViewportFrame` blanc teinté par `ImageColor3`, nom et touche. L'arme en main est en os, avec son
@@ -164,10 +208,8 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   couleur), longueur 2 à 20 px, épaisseur 1 à 6, écart central 0 à 15, point central, contour, opacité 0,20 à 1 (pas
   d'invisible). Bornes et défauts : `PlayerSettings.CROSSHAIR` (défauts = rendu d'origine), validés par `sanitize` (px
   entiers, couleur hors palette refusée). L'opacité vaut pour le trait et le contour. RÉTABLIR remet le style d'origine
-  sans couper la visée simplifiée. Aperçu sous les catégories, placé en dernier dans `buildCategories` sous la dernière
-  catégorie créée (position calculée d'après leur nombre, #305 : en dur, un onglet de plus le recouvrait ; à vérifier
-  qu'il reste au-dessus de RÉTABLIR/RETOUR, `MenuPage.ExitY`, au-delà de 8 catégories) : deux cases (sable clair,
-  sombre) où `Crosshair.draw`
+  sans couper la visée simplifiée. Aperçu à droite des lignes de la catégorie, plus étroites que celles des autres catégories (#308 ; avant, sous la
+  colonne des catégories, d'où #305), dans son conteneur : deux cases l'une sous l'autre (sable clair, sombre) où `Crosshair.draw`
   trace le viseur à sa taille réelle en px (le `UIScale` de l'écran est compensé par un `UIScale` inverse lu dans
   l'attribut `Scale` de `UIKit.scaledRoot`). En jeu, le crosshair se redessine dès que son style change (clé
   `Crosshair.styleKey`), sans respawn.
@@ -226,11 +268,12 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   souris M1/M2 n'a pas été simulé. Coordonnées de clic des onglets du menu : y négatif (`AbsolutePosition` du bouton).
 - `src/client/ui/RoundHUD.luau` : timer et rang en haut au centre (chiffres os droits avec ombre, libellés ambrés, fondu
   sombre de bord (`cornerScrim` « Top »), timer en rouge d'impact sous 30 s) ; classement sous Tab : pas de panneau, voile sombre
-  central qui s'efface vers les côtés, titre « CLASSEMENT » sur un filet ambre, colonnes K / M / K/M, ligne du joueur
+  central qui s'efface vers les côtés, titre « CLASSEMENT » sur un filet ambre, colonnes KILLS / MORTS / K/M (les mots de la fiche de statistiques,
+  #308), ligne du joueur
   sur une bande rouge d'impact **droite** (penchée, elle se lisait mal en face des colonnes).
   Menu en partie ouvert (#220, choix de l'utilisateur : la partie continue derrière) : le timer et son fondu (calque
   `TimerLayer`) passent dans un `ScreenGui` à part (`RoundTimerOverMenu`, DisplayOrder 4, au-dessus du voile 2 et de la
-  page 3), selon `HUDRules.roundTimerOverMenu` ; le titre « MENU » / « RÉGLAGES » descend dessous. Menu fermé, le calque
+  page 3), selon `HUDRules.roundTimerOverMenu` ; le titre « MENU » / « RÉGLAGES » est dessous. Menu fermé, le calque
   revient dans `RoundHUD` en ZIndex 0, sous les voiles du classement et du résultat comme avant.
   Réapparition : la scène reste visible, désaturée (`ColorCorrectionEffect`), sans voile plein ; en bas au centre, sur
   un fondu de bord (`cornerScrim` « Bottom »), « ÉLIMINÉ » en rouge d'impact (le joueur a été touché), compte à rebours en gros
@@ -251,8 +294,7 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   scores de `RoundResult`) ; ordre et issue de la manche dans `src/shared/ScoreRules.luau`, communs au serveur.
 - `UIKit.cornerScrim` : fond de coin du HUD (`assets/ui/hud/scrim_coin.png`) dans les quatre orientations, par rotation ;
   `Top` / `Bottom` : fond centré sur un bord (`scrim_bord.png`, `make_corner_scrim.py --edge`), `size` = largeur totale.
-  Seul le compteur de vitesse est penché (`UITheme.Layout.HudLean`, -6°) : l'utilisateur a préféré le timer, la barre
-  d'armes et le classement droits.
+  Rien n'est penché dans le HUD depuis #308 (le compteur de vitesse l'était, de -6°).
 - Titrage en images usées (police Anton, `tools/ui/make_menu_type.py`) : abandonné en #117 au profit du texte Oswald à
   ombre partout ; script et images supprimés (dans l'historique git avant #117).
 
@@ -449,7 +491,9 @@ workspace pendant la partie) :
 - Caméra : fixe, FOV vertical 40° en 16:9 (ouvert sur un écran plus étroit, `fitFov`), léger suivi du curseur
   (`aimAngles`). Depuis #308 elle est tournée de 20° vers la gauche (`CHARACTER_YAW`) : le personnage passe au tiers
   droit de l'image et laisse la gauche à l'écran d'équipement. Un lacet plutôt qu'un décalage (`shift`) : la caméra
-  ne bouge pas, elle ne risque pas d'entrer dans un mur du couloir. Flou du fond : `DepthOfFieldEffect` posé sous la caméra le temps du menu.
+  ne bouge pas, elle ne risque pas d'entrer dans un mur du couloir. Hors de l'onglet ARMES, le lacet revient à 0 en
+  douceur (`MenuScene.setCentered`, appelé par `MainMenu.setPage`) : le personnage repasse au centre, derrière le bloc
+  de l'écran ouvert. Flou du fond : `DepthOfFieldEffect` posé sous la caméra le temps du menu.
 - Éclairage : celui du jeu, plus une **lumière de portrait** (SpotLight chaud devant le personnage, du côté du soleil).
   Avec un soleil à 1,4° au-dessus de l'horizon, les bords du toit ombrent tout le couloir : sans elle le personnage
   est sombre. Piège : juste après le lancement, les ombres ne sont pas encore calculées et le personnage paraît au

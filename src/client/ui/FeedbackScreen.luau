@@ -1,4 +1,5 @@
--- Écran Feedback (direction « Ligne de mire ») : message de 10 à 500 caractères envoyé au serveur, ENVOYER se tire.
+-- Écran Feedback (MenuPage) : bloc centré sur un voile, titre, champ de 10 à 500 caractères dessous, ANNULER et
+-- ENVOYER en bas au centre ; le message part au serveur.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -9,18 +10,15 @@ local UIKit = require(script.Parent.UIKit)
 
 local C = UITheme.Colors
 local F = UITheme.Fonts
-local T = UITheme.TextSize
 local Motion = UITheme.Motion
 
 local FeedbackScreen = {}
 
 local MIN_CHARS = 10
 local MAX_CHARS = 500
-local FIELD_WIDTH = 640
-local FIELD_TOP = MenuPage.ContentTop + 34
+local FIELD_WIDTH = MenuPage.BlockWidth
+local FIELD_TOP = MenuPage.ContentTop
 local FIELD_HEIGHT = 270
-local ACTION_SIZE = 30
-local ACTION_GAP = 46
 local CLOSE_DELAY = 2 -- le message de réussite reste lisible avant le retour à l'accueil
 
 local page: MenuPage.Page
@@ -105,8 +103,8 @@ local function buildField(parent: Instance)
 		PlaceholderText = "Ton message (10 à 500 caractères)…",
 		PlaceholderColor3 = C.Muted,
 		TextColor3 = C.Bone,
-		FontFace = F.Body,
-		TextSize = 19,
+		FontFace = F.DisplayText,
+		TextSize = 20,
 		TextWrapped = true,
 		MultiLine = true,
 		ClearTextOnFocus = false,
@@ -137,72 +135,40 @@ function FeedbackScreen.init(onClose: () -> ())
 	local ackRmt = NetworkProtocol.getRemote(N.FEEDBACK_ACK)
 
 	page = MenuPage.new("FeedbackScreen", 2, "FEEDBACK")
-	-- Colonne centrée : toutes les positions ci-dessous sont relatives à elle
-	local column = UIKit.frame({
-		Name = "Column",
-		BackgroundTransparency = 1,
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.fromScale(0.5, 0),
-		Size = UDim2.new(0, FIELD_WIDTH, 1, 0),
-		Parent = page.group,
-	})
-	UIKit.text({
+	local column = page.block
+	UIKit.accentLabel(column, {
 		Text = "SIGNALE UN BUG OU PARTAGE UNE IDÉE",
-		FontFace = F.DisplayMedium,
-		TextSize = 15,
-		TextColor3 = C.Accent,
 		TextXAlignment = Enum.TextXAlignment.Center,
-		Position = UDim2.fromOffset(0, MenuPage.ContentTop + 8),
-		Size = UDim2.fromOffset(FIELD_WIDTH, 18),
-		Parent = column,
+		Position = UDim2.fromOffset(0, MenuPage.TabsY + 6),
+		Size = UDim2.fromOffset(FIELD_WIDTH, 20),
 	})
 	buildField(column)
 
 	local belowField = FIELD_TOP + FIELD_HEIGHT + 8
 	charCountLabel = UIKit.text({
 		Text = "0 / " .. MAX_CHARS,
-		FontFace = F.Mono,
-		TextSize = T.Caption,
+		FontFace = F.DisplayMedium,
+		TextSize = UITheme.TextSize.Min,
 		TextColor3 = C.Muted,
 		Position = UDim2.fromOffset(0, belowField),
-		Size = UDim2.fromOffset(120, 20),
+		Size = UDim2.fromOffset(120, 22),
 		Parent = column,
 	})
 	statusLabel = UIKit.text({
 		Text = "",
-		TextSize = T.Small,
+		FontFace = F.DisplayMedium,
+		TextSize = UITheme.TextSize.Min,
 		TextColor3 = C.Bone,
 		TextXAlignment = Enum.TextXAlignment.Right,
 		Position = UDim2.fromOffset(130, belowField),
-		Size = UDim2.fromOffset(FIELD_WIDTH - 130, 20),
+		Size = UDim2.fromOffset(FIELD_WIDTH - 130, 22),
 		Parent = column,
 	})
-	-- Actions côte à côte sous le champ : ANNULER, puis ENVOYER (action principale, en os vif)
-	local actions = UIKit.frame({
-		Name = "Actions",
-		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(0, belowField + 34),
-		Size = UDim2.fromOffset(FIELD_WIDTH, 44),
-		Parent = column,
-	})
-	UIKit.create("UIListLayout", {
-		FillDirection = Enum.FillDirection.Horizontal,
-		HorizontalAlignment = Enum.HorizontalAlignment.Center,
-		VerticalAlignment = Enum.VerticalAlignment.Center,
-		SortOrder = Enum.SortOrder.LayoutOrder,
-		Padding = UDim.new(0, ACTION_GAP),
-		Parent = actions,
-	})
-	page.choice({ text = "ANNULER", size = ACTION_SIZE, layoutOrder = 1, parent = actions, action = leave })
-	sendChoice = page.choice({
-		text = "ENVOYER",
-		size = ACTION_SIZE,
-		layoutOrder = 2,
-		parent = actions,
-		action = function()
-			send(sendRmt)
-		end,
-	})
+	-- Actions en bas au centre : ANNULER, puis ENVOYER (action principale, en os vif)
+	page.action("ANNULER", leave)
+	sendChoice = page.action("ENVOYER", function()
+		send(sendRmt)
+	end)
 	sendChoice.setSelected(true)
 
 	ackRmt.OnClientEvent:Connect(function(success: boolean, message: string)

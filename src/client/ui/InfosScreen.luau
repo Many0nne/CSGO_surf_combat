@@ -1,5 +1,5 @@
--- Écran Infos (direction « Ligne de mire ») : même disposition que les Réglages, bloc centré sur un voile, onglets en
--- texte à tirer à gauche (barre ambrée sur l'actif), contenu à droite, RETOUR en bas au centre.
+-- Écran Infos (MenuPage) : bloc centré sur un voile, titre, sections en onglets en boîte (#308), contenu dessous
+-- (texte, ou lignes « touche en boîte → action » pour COMMANDES), RETOUR en bas au centre.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local PlayerSettings = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("PlayerSettings"))
@@ -20,14 +20,11 @@ local InfosScreen = {}
 -- derniers sont recomposés à chaque affichage depuis KeyBindings et les réglages du joueur (#290).
 type Section = { title: string, lines: { string }?, compose: ((InfosRules.Context) -> { string })?, keys: boolean? }
 
--- Bloc centré, mêmes cotes que les Réglages (px à 720 de haut)
-local BLOCK_WIDTH = 780
-local TAB_SIZE = 24
-local TAB_STEP = 42
-local CONTENT_X = 220
-local CONTENT_TOP = MenuPage.ContentTop - 10
-local CONTENT_WIDTH = BLOCK_WIDTH - CONTENT_X
-local CONTENT_HEIGHT = MenuPage.ExitY - 20 - CONTENT_TOP
+-- Contenu sous les onglets (px à 720 de haut)
+local CONTENT_WIDTH = MenuPage.BlockWidth
+local CONTENT_HEIGHT = MenuPage.ContentBottom - MenuPage.ContentTop
+local TEXT_SIZE = 22
+local KEY_COLUMN = 170 -- largeur réservée à la touche en boîte
 
 local SECTIONS: { Section } = {
 	{
@@ -59,8 +56,7 @@ local SECTIONS: { Section } = {
 
 local page: MenuPage.Page
 local content: ScrollingFrame
-local tabs = {}
-local tabBars: { Frame } = {}
+local markTab: (number) -> ()
 local selected = 1
 
 -- Cette méthode permet d'afficher une ligne de texte en fondu avec un décalage lorsqu'un onglet se remplit.
@@ -80,18 +76,20 @@ local function addParagraph(text: string, order: number): TextLabel
 	return UIKit.text({
 		Name = "Line" .. order,
 		Text = text,
-		TextSize = 22,
+		FontFace = F.DisplayText,
+		TextSize = TEXT_SIZE,
 		TextColor3 = C.Bone,
 		TextWrapped = true,
-		LineHeight = 1.15,
+		LineHeight = 1.2,
 		AutomaticSize = Enum.AutomaticSize.Y,
-		Size = UDim2.new(1, 0, 0, 22),
+		Size = UDim2.new(1, 0, 0, TEXT_SIZE),
 		LayoutOrder = order,
 		Parent = content,
 	})
 end
 
--- Cette méthode permet de créer une ligne « touche → action » soulignée d'un trait ambré lorsque l'onglet affiché est COMMANDES.
+-- Cette méthode permet de créer une ligne « touche en boîte os → action » sur un filet lorsque l'onglet affiché est
+-- COMMANDES (#308 : même écriture des touches que l'aide de l'écran d'équipement).
 local function addKeyRow(key: string, action: string, order: number): { TextLabel }
 	local row = UIKit.frame({
 		Name = "Key" .. order,
@@ -101,28 +99,25 @@ local function addKeyRow(key: string, action: string, order: number): { TextLabe
 		Parent = content,
 	})
 	UIKit.frame({
-		Name = "Underline",
+		Name = "Rule",
 		AnchorPoint = Vector2.new(0, 1),
 		Position = UDim2.fromScale(0, 1),
 		Size = UDim2.new(1, 0, 0, 1),
-		BackgroundColor3 = C.Accent,
-		BackgroundTransparency = 0.65,
+		BackgroundColor3 = C.Bone,
+		BackgroundTransparency = 0.88,
 		Parent = row,
 	})
-	local keyLbl = UIKit.text({
-		Text = key,
-		FontFace = F.Display,
-		TextSize = 22,
-		TextColor3 = C.Bone,
-		Size = UDim2.new(0, 150, 1, 0),
-		Parent = row,
-	})
+	local keyLbl = UIKit.tag(row, "KeyTag", 1, C.Bone, C.Ground)
+	keyLbl.Text = key
+	keyLbl.AnchorPoint = Vector2.new(0, 0.5)
+	keyLbl.Position = UDim2.fromScale(0, 0.5)
 	local actionLbl = UIKit.text({
 		Text = action,
-		TextSize = 22,
+		FontFace = F.DisplayText,
+		TextSize = TEXT_SIZE,
 		TextColor3 = C.Bone,
-		Position = UDim2.fromOffset(150, 0),
-		Size = UDim2.new(1, -150, 1, 0),
+		Position = UDim2.fromOffset(KEY_COLUMN, 0),
+		Size = UDim2.new(1, -KEY_COLUMN, 1, 0),
 		Parent = row,
 	})
 	return { keyLbl, actionLbl }
@@ -164,31 +159,19 @@ local function renderSection(index: number)
 	end
 end
 
--- Cette méthode permet de mettre en rouge l'onglet touché et d'afficher sa section lorsque le joueur tire dessus.
+-- Cette méthode permet de marquer l'onglet choisi (boîte ambrée) et d'afficher sa section lorsque le joueur clique dessus.
 local function selectTab(index: number)
 	selected = index
-	for i, tab in tabs do
-		tab.setSelected(i == index)
-		tabBars[i].Visible = i == index
-	end
+	markTab(index)
 	renderSection(index)
 end
 
 -- Cette méthode permet de construire l'écran, ses onglets et sa zone de contenu lorsque le client démarre.
 function InfosScreen.init(onClose: () -> ())
 	page = MenuPage.new("InfosScreen", 2, "INFOS")
-	local block = UIKit.frame({
-		Name = "Block",
-		BackgroundTransparency = 1,
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.fromScale(0.5, 0),
-		Size = UDim2.new(0, BLOCK_WIDTH, 1, 0),
-		Parent = page.group,
-	})
-
 	content = UIKit.create("ScrollingFrame", {
 		Name = "Text",
-		Position = UDim2.fromOffset(CONTENT_X, CONTENT_TOP),
+		Position = UDim2.fromOffset(0, MenuPage.ContentTop),
 		Size = UDim2.fromOffset(CONTENT_WIDTH, CONTENT_HEIGHT),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
@@ -196,7 +179,7 @@ function InfosScreen.init(onClose: () -> ())
 		ScrollBarImageColor3 = C.Accent,
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		CanvasSize = UDim2.fromScale(0, 0),
-		Parent = block,
+		Parent = page.block,
 	})
 	UIKit.padding(content, 6, 16, 6, 0)
 	UIKit.create("UIListLayout", {
@@ -205,27 +188,12 @@ function InfosScreen.init(onClose: () -> ())
 		Parent = content,
 	})
 
+	local titles = {}
 	for i, section in SECTIONS do
-		tabs[i] = page.choice({
-			text = section.title,
-			size = TAB_SIZE,
-			position = UDim2.fromOffset(0, MenuPage.ContentTop + (i - 1) * TAB_STEP),
-			parent = block,
-			action = function()
-				selectTab(i)
-			end,
-		})
-		tabBars[i] = UIKit.frame({
-			Name = "Bar",
-			AnchorPoint = Vector2.new(0, 0.5),
-			Position = UDim2.new(0, -15, 0.5, 0),
-			Size = UDim2.new(0, 3, 0.7, 0),
-			BackgroundColor3 = C.Accent,
-			Visible = false,
-			Parent = tabs[i].button,
-		})
+		titles[i] = section.title
 	end
-	page.exit("RETOUR", onClose)
+	markTab = page.tabs(titles, selectTab)
+	page.action("RETOUR", onClose).setSelected(true)
 
 	-- Touches d'armes ou molette changées dans Réglages pendant que Infos est ouvert : l'onglet se recompose ; les autres
 	-- réglages ne touchent pas l'écran (sinon le défilement reviendrait en haut).

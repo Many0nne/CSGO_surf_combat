@@ -53,7 +53,8 @@ local ROBOTO_MONO = "rbxasset://fonts/families/RobotoMono.json"
 local Fonts = {
 	Display       = Font.new(OSWALD, Enum.FontWeight.Bold),
 	DisplayMedium = Font.new(OSWALD, Enum.FontWeight.Medium),
-	Body          = Font.new(TITILLIUM, Enum.FontWeight.Regular),
+	DisplayText   = Font.new(OSWALD, Enum.FontWeight.Regular), -- texte courant des menus (#308 : une seule famille)
+	Body         = Font.new(TITILLIUM, Enum.FontWeight.Regular),
 	BodySemi      = Font.new(TITILLIUM, Enum.FontWeight.SemiBold),
 	BodyBold      = Font.new(TITILLIUM, Enum.FontWeight.Bold),
 	Mono          = Font.new(ROBOTO_MONO, Enum.FontWeight.Medium),
@@ -71,6 +72,7 @@ local TextSize = {
 	Title   = 22,
 	Nav     = 17,
 	Body    = 16,
+	Min     = 16, -- plancher de tout texte affiché (#308) : en dessous, illisible une fois l'écran réduit
 	Small   = 14,
 	Caption = 12,
 	Micro   = 11,
@@ -103,7 +105,6 @@ local Layout = {
 	ContentTop      = 112,
 	NavItemWidth    = 140,
 	TopbarSafeLeft  = 224, -- px écran occupés en haut à gauche par les boutons Roblox
-	HudLean         = -6,  -- inclinaison (degrés) du compteur de vitesse, seul élément penché du HUD
 }
 
 return {

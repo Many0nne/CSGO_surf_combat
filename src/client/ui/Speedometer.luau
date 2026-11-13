@@ -1,6 +1,7 @@
--- Speedometer (direction « Ligne de mire », piste « Titrage ») : vitesse horizontale en studs/s, en bas à gauche.
--- Gros chiffres os penchés avec ombre décalée, nom du palier, bande ambrée en biais crantée aux seuils de palier ;
--- au dernier palier, chiffres, palier et bande passent au rouge d'impact. Règles pures dans HUDRules.
+-- Speedometer : vitesse horizontale en studs/s, en bas à gauche, en miroir du compteur de munitions (#308 : droit, plus
+-- de chiffres penchés). Chiffres os à ombre décalée, nom du palier et unité ambrés à droite, bande ambrée horizontale
+-- crantée aux seuils de palier ; au dernier palier, chiffres, palier et bande passent au rouge d'impact. Règles pures
+-- dans HUDRules.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -12,16 +13,16 @@ local C = UITheme.Colors
 local F = UITheme.Fonts
 local Motion = UITheme.Motion
 
-local LEAN = UITheme.Layout.HudLean -- inclinaison commune du texte et de la bande (degrés)
-local NUMBER_SIZE = 92
-local SHADOW_OFFSET = Vector2.new(7, 7)
+local NUMBER_SIZE = 72
+local NUMBER_WIDTH = 150 -- chiffres alignés à droite : le palier et l'unité ne bougent pas quand la vitesse change
+local SHADOW_OFFSET = Vector2.new(4, 4)
 local SHADOW_TRANSPARENCY = 0.35
 local BAND_SIZE = Vector2.new(276, 9)
 local BAND_HOT_WIDTH = 34 -- zone rouge au bout de la bande, au-delà du remplissage plein
 local TRACK_TRANSPARENCY = 0.7
 local HOT_ZONE_TRANSPARENCY = 0.6
 local NOTCH_WIDTH = 3
-local SCRIM_SIZE = Vector2.new(560, 300)
+local SCRIM_SIZE = Vector2.new(560, 260)
 local SCRIM_TRANSPARENCY = 0.15
 
 local Speedometer = {}
@@ -36,9 +37,8 @@ local currentTier = 0
 local lastShown = -1
 local visible = false -- piloté par GameStateController ; init() peut arriver après le premier setVisible
 
--- Cette méthode permet de créer un texte penché du compteur lorsque le speedometer est construit.
-local function leanText(parent: GuiObject, props: { [string]: any }): TextLabel
-	props.Rotation = LEAN
+-- Cette méthode permet de créer un texte du compteur lorsque le speedometer est construit.
+local function hudText(parent: GuiObject, props: { [string]: any }): TextLabel
 	props.Parent = parent
 	return UIKit.text(props)
 end
@@ -73,12 +73,12 @@ function Speedometer.init()
 		Name = "Holder",
 		AnchorPoint = Vector2.new(0, 1),
 		Position = UDim2.new(0, 44, 1, -44),
-		Size = UDim2.fromOffset(BAND_SIZE.X + BAND_HOT_WIDTH, 132),
+		Size = UDim2.fromOffset(BAND_SIZE.X + BAND_HOT_WIDTH, 104),
 		BackgroundTransparency = 1,
 		Parent = root,
 	})
 
-	shadowLabel = leanText(holder, {
+	shadowLabel = hudText(holder, {
 		Name = "SpeedShadow",
 		Text = "0",
 		FontFace = F.Display,
@@ -87,41 +87,40 @@ function Speedometer.init()
 		TextTransparency = SHADOW_TRANSPARENCY,
 		TextXAlignment = Enum.TextXAlignment.Right,
 		Position = UDim2.fromOffset(SHADOW_OFFSET.X, SHADOW_OFFSET.Y),
-		Size = UDim2.fromOffset(170, NUMBER_SIZE),
+		Size = UDim2.fromOffset(NUMBER_WIDTH, NUMBER_SIZE),
 	})
-	speedLabel = leanText(holder, {
+	speedLabel = hudText(holder, {
 		Name = "SpeedValue",
 		Text = "0",
 		FontFace = F.Display,
 		TextSize = NUMBER_SIZE,
 		TextColor3 = C.Bone,
 		TextXAlignment = Enum.TextXAlignment.Right,
-		Size = UDim2.fromOffset(170, NUMBER_SIZE),
+		Size = UDim2.fromOffset(NUMBER_WIDTH, NUMBER_SIZE),
 	})
-	tierLabel = leanText(holder, {
+	tierLabel = hudText(holder, {
 		Name = "Tier",
 		Text = HUDRules.SPEED_TIERS[1].name,
 		FontFace = F.Display,
-		TextSize = 24,
+		TextSize = 22,
 		TextColor3 = C.Accent,
-		Position = UDim2.fromOffset(176, 24),
-		Size = UDim2.fromOffset(110, 26),
+		Position = UDim2.fromOffset(NUMBER_WIDTH + 10, 16),
+		Size = UDim2.fromOffset(130, 26),
 	})
-	leanText(holder, {
+	hudText(holder, {
 		Name = "Unit",
 		Text = "U/S",
 		FontFace = F.DisplayMedium,
 		TextSize = 17,
 		TextColor3 = C.Accent,
-		Position = UDim2.fromOffset(178, 52),
+		Position = UDim2.fromOffset(NUMBER_WIDTH + 10, 42),
 		Size = UDim2.fromOffset(60, 18),
 	})
 
 	local band = UIKit.frame({
 		Name = "Band",
-		Position = UDim2.fromOffset(0, 112),
+		Position = UDim2.fromOffset(0, 88),
 		Size = UDim2.fromOffset(BAND_SIZE.X, BAND_SIZE.Y),
-		Rotation = LEAN,
 		BackgroundColor3 = C.Bone,
 		BackgroundTransparency = TRACK_TRANSPARENCY,
 		Parent = holder,

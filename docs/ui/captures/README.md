@@ -6,6 +6,11 @@ avoir à lancer le jeu. Direction artistique et construction de chaque écran : 
 - **Prises le 2026-11-12** sur `main` (`7331170`, après #280), en playtest Studio, map Dizzy, 5 bots.
   `menu-accueil.png` et `menu-equipement-couteau.png` refaites le 2026-11-13 (#308, nouvelle disposition de l'écran
   d'équipement) ; les autres captures du menu montrent encore le personnage au centre derrière leur voile.
+- **Périmées depuis l'harmonisation de #308 (2026-11-14), à refaire :** toutes sauf la lunette, les volets et
+  l'overlay F3. Barre du menu (onglet ouvert souligné d'ambre, JOUER sans soulignement), écrans secondaires (titre,
+  catégories en onglets en boîte sous le titre, actions RÉTABLIR / RETOUR), Infos > COMMANDES (touches en boîte),
+  menu en partie (aide « P REPRENDRE »), compteur de vitesse (droit), petits libellés du HUD (16 px), classement
+  (colonnes KILLS / MORTS / K/M).
 - **Format :** viewport seul, 16:9, 1349 x 759 px (1079 x 607 px d'interface, échelle Windows 125 %).
 - **Réglages du compte de test, pas les valeurs par défaut :** visée simplifiée activée avec un viseur ambre sans
   contour, affichage des touches en mode `simple`. Par défaut, la visée simplifiée est coupée (pas de crosshair) et

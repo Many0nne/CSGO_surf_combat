@@ -22,7 +22,7 @@ local RoundHUD = {}
 local TOP_SCRIM_SIZE = Vector2.new(440, 110)
 local TOP_SCRIM_TRANSPARENCY = 0.3
 local TIMER_TOP = 10
-local TIMER_HEIGHT = 80
+local TIMER_HEIGHT = 84
 -- Menu en partie ouvert (#220) : le timer passe au-dessus de son voile (2) et de sa page (3), la partie continue
 local TIMER_OVER_MENU_ORDER = 4
 -- Classement : largeur fixe (px), colonnes en px ; JOUEUR prend la place restante
@@ -34,7 +34,7 @@ local LB_VEIL_EXTRA = 420 -- largeur du voile au-delà du tableau, où il s'effa
 local LB_VEIL_TRANSPARENCY = 0.3
 local COL_RANK = 36
 local COL_NAME = 56
-local COL_STATS = { 80, 64, 64 } -- K, M, K/M
+local COL_STATS = { 80, 72, 64 } -- KILLS, MORTS, K/M
 -- Réapparition : bloc en bas au centre sur un fondu de bord (une seule image, #247), scène désaturée sans voile plein
 local RESPAWN_SCRIM_SIZE = Vector2.new(520, 230)
 local RESPAWN_SCRIM_TRANSPARENCY = 0.2
@@ -142,11 +142,11 @@ local function buildTimer(root: Frame)
 	UIKit.text({
 		Text = "FREE FOR ALL",
 		FontFace = F.DisplayMedium,
-		TextSize = 12,
+		TextSize = UITheme.TextSize.Min,
 		TextColor3 = C.Accent,
 		TextXAlignment = Enum.TextXAlignment.Right,
 		Position = UDim2.fromOffset(0, 54),
-		Size = UDim2.fromOffset(130, 14),
+		Size = UDim2.fromOffset(130, 20),
 		Parent = block,
 	})
 	UIKit.frame({
@@ -170,10 +170,10 @@ local function buildTimer(root: Frame)
 	UIKit.text({
 		Text = "RANG",
 		FontFace = F.DisplayMedium,
-		TextSize = 12,
+		TextSize = UITheme.TextSize.Min,
 		TextColor3 = C.Accent,
 		Position = UDim2.fromOffset(156, 54),
-		Size = UDim2.fromOffset(84, 14),
+		Size = UDim2.fromOffset(84, 20),
 		Parent = block,
 	})
 end
@@ -239,8 +239,8 @@ local function fillColumns(row: GuiObject, values: { string }, fonts: { Font }, 
 	end
 end
 
--- Cette méthode permet de poser les en-têtes de colonnes (# JOUEUR K M K/M, atténués) lorsque le classement ou l'écran
--- de fin est construit.
+-- Cette méthode permet de poser les en-têtes de colonnes (# JOUEUR KILLS MORTS K/M, atténués, mêmes mots que la fiche
+-- de statistiques, #308) lorsque le classement ou l'écran de fin est construit.
 local function columnHeaders(parent: GuiObject, y: number)
 	local columns = UIKit.frame({
 		Name = "Columns",
@@ -251,7 +251,7 @@ local function columnHeaders(parent: GuiObject, y: number)
 	})
 	local m = C.Muted
 	local h = F.DisplayMedium
-	fillColumns(columns, { "#", "JOUEUR", "K", "M", "K/M" }, { h, h, h, h, h }, { m, m, m, m, m }, 15)
+	fillColumns(columns, { "#", "JOUEUR", "KILLS", "MORTS", "K/M" }, { h, h, h, h, h }, { m, m, m, m, m }, 16)
 end
 
 -- Cette méthode permet de construire le classement (voile sombre central sans panneau, titre sur un filet ambre,
@@ -304,7 +304,7 @@ local function buildLeaderboard(root: Frame)
 		TextSize = 46,
 		TextColor3 = C.Bone,
 		Size = UDim2.fromOffset(400, 52),
-	}, 5)
+	}, 3) -- à 5 px, l'ombre se lisait comme un second titre (#308)
 	UIKit.frame({
 		Name = "Rule",
 		BackgroundColor3 = C.Accent,
@@ -390,18 +390,18 @@ local function buildRespawnOverlay(root: Frame)
 		Name = "Detail",
 		Text = "",
 		FontFace = F.DisplayMedium,
-		TextSize = 14,
+		TextSize = UITheme.TextSize.Min,
 		TextColor3 = C.Accent,
 		TextXAlignment = centered,
-		Position = UDim2.fromOffset(0, 70),
-		Size = UDim2.new(1, 0, 0, 16),
+		Position = UDim2.fromOffset(0, 68),
+		Size = UDim2.new(1, 0, 0, 20),
 		Parent = respawnPanel,
 	})
 	-- Chiffre et ombre dans un cadre commun : la pulsation les agrandit ensemble
 	local count = UIKit.frame({
 		Name = "Count",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(0, 82),
+		Position = UDim2.fromOffset(0, 86),
 		Size = UDim2.new(1, 0, 0, 84),
 		Parent = respawnPanel,
 	})
@@ -419,11 +419,11 @@ local function buildRespawnOverlay(root: Frame)
 		Name = "Label",
 		Text = "RÉAPPARITION",
 		FontFace = F.DisplayMedium,
-		TextSize = 14,
+		TextSize = UITheme.TextSize.Min,
 		TextColor3 = C.Accent,
 		TextXAlignment = centered,
 		Position = UDim2.fromOffset(0, 170),
-		Size = UDim2.new(1, 0, 0, 16),
+		Size = UDim2.new(1, 0, 0, 20),
 		Parent = respawnPanel,
 	})
 end
@@ -732,7 +732,7 @@ local function scoreRow(parent: GuiObject, rank: number, score: Score, isMe: boo
 		tostring(score.kills),
 		tostring(score.deaths),
 		HUDRules.formatKD(score.kills, score.deaths),
-	}, { F.Display, isMe and F.BodyBold or F.BodySemi, F.Display, F.DisplayMedium, F.DisplayMedium }, {
+	}, { F.Display, isMe and F.Display or F.DisplayMedium, F.Display, F.DisplayMedium, F.DisplayMedium }, {
 		(leader and rank == 1) and C.Accent or statColor,
 		isMe and C.Bone or C.Text,
 		C.Bone,
