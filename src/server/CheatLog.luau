@@ -35,8 +35,10 @@ CheatLog.DENOMINATOR = {
 	[CheatTypes.Category.MELEE] = "melee",
 	[CheatTypes.Category.MOVEMENT] = "position",
 } :: { [string]: JudgedKind }
--- Contrôles qui ne jugent pas chaque élément de leur catégorie : le vide est jugé par passage de boucle, pas par paquet.
-CheatLog.NO_DENOMINATOR = { ["Movement:void"] = true } :: { [string]: boolean }
+-- Contrôles qui ne jugent pas chaque élément de leur catégorie : le vide est jugé par passage de boucle, pas par
+-- paquet ; le taux de touches orphelines (#246) est signalé une fois par palier d'orphelines, pas par touche (le taux
+-- par touche est celui de Hitscan:shotLink).
+CheatLog.NO_DENOMINATOR = { ["Movement:void"] = true, ["Hitscan:orphanRate"] = true } :: { [string]: boolean }
 
 -- Poids d'une violation dans le score, et décroissance du score (points par seconde).
 CheatLog.SCORE_WEIGHT = { low = 1, medium = 5, high = 20 } :: { [Severity]: number }
@@ -54,6 +56,9 @@ CheatLog.KICK_MESSAGE = "Déconnecté : comportement anormal détecté par le se
 -- StringValue de ServerScriptService lus pour le résumé, dans l'ordre (cf. Webhook) : un webhook dédié, sinon celui
 -- du feedback.
 CheatLog.WEBHOOK_NAMES = { "CheatLogWebhookUrl", "FeedbackWebhookUrl" }
+-- StringValue lus pour le relevé agrégé (#297) : le webhook dédié seulement. Un relevé part toutes les REPORT_INTERVAL
+-- dès qu'un joueur est en jeu : sans webhook dédié, il reste en console plutôt que d'encombrer le salon du feedback.
+CheatLog.REPORT_WEBHOOK_NAMES = { "CheatLogWebhookUrl" }
 -- Essais d'envoi au webhook, et attente (s) multipliée par le numéro d'essai entre deux ; après le dernier échec, le
 -- message est écrit en entier dans la console serveur (repli : il n'est jamais perdu en silence).
 CheatLog.WEBHOOK_ATTEMPTS = 3
@@ -71,6 +76,10 @@ CheatLog.REPORT_ATTRIBUTE = "CheatLogReport"
 -- l'histogramme qui donne la médiane sans garder chaque mesure.
 CheatLog.PING_SAMPLE_INTERVAL = 5
 CheatLog.PING_BUCKET_MS = 10
+-- Limites d'un embed Discord (caractères) : valeur d'un champ, description. Au-delà le webhook répond 400 à chaque
+-- essai : les lignes en trop sont remplacées par « … (+N) ».
+CheatLog.MAX_FIELD_VALUE = 1000
+CheatLog.MAX_DESCRIPTION = 3800
 
 local SEVERITY_RANK: { [string]: number } = { low = 1, medium = 2, high = 3 }
 local SEVERITY_LABEL: { [string]: string } = { low = "faible", medium = "moyenne", high = "forte" }
@@ -105,10 +114,12 @@ export type Record = {
 }
 -- Session d'un joueur, avec ou sans violation (#297) : ce que les parades ont jugé, et son ping.
 type Session = { judged: { [string]: number }, ping: PingHistogram }
--- Période du relevé agrégé : violations par contrôle, jugés, ping et joueurs vus (avec ou sans violation).
+-- Période du relevé agrégé : violations par contrôle, relevés de visée signalés (#178, pas des violations), jugés,
+-- ping et joueurs vus (avec ou sans violation).
 export type Period = {
 	startedAt: number,
 	checks: { [string]: number },
+	aim: number,
 	judged: { [string]: number },
 	ping: PingHistogram,
 	players: { [number]: boolean },
@@ -119,8 +130,11 @@ local records: { [number]: Record } = {}
 local sessions: { [number]: Session } = {}
 local guard = RemoteGuard.new()
 -- Envois en cours (résumés, relevés : attendus à l'arrêt du serveur), remotes sans règle déjà signalés.
-local pendingSummaries = 0
+local pendingSends = 0
 local warnedNoRule: { [string]: boolean } = {}
+-- Arrêt du serveur commencé (BindToClose) : bilans clos et dernier relevé émis, plus rien n'est compté (un départ
+-- traité après ne recrée pas un bilan sans session ni un second résumé).
+local closed = false
 -- Rappels lancés au départ d'un joueur avant la clôture de son bilan (ex. statistiques de visée finales, #178), et
 -- joueur en cours de clôture : ses signalements sont gardés même s'il n'a déjà plus de Parent.
 local closingHooks: { ({ Player }, boolean) -> () } = {}
@@ -138,7 +152,7 @@ end
 
 -- Cette méthode permet de créer une période vide du relevé agrégé lorsque le serveur démarre ou qu'un relevé est émis.
 local function newPeriod(t: number): Period
-	return { startedAt = t, checks = {}, judged = {}, ping = newPing(), players = {}, flagged = {} }
+	return { startedAt = t, checks = {}, aim = 0, judged = {}, ping = newPing(), players = {}, flagged = {} }
 end
 
 local period: Period = newPeriod(now())
@@ -194,10 +208,17 @@ function CheatLog.denominatorOf(key: string): JudgedKind?
 end
 
 -- Cette méthode permet de savoir si un participant est suivi par le journal lorsqu'une parade le signale : joueur
--- présent (ou en cours de clôture), jamais un bot.
+-- présent (ou en cours de clôture), jamais un bot, et rien une fois l'arrêt du serveur clos (closed).
 local function isTracked(participant: Participants.Participant): boolean
 	local owner = participant.player
-	return not participant.isBot and not (owner and not owner.Parent and not closingPlayers[owner])
+	return not closed and not participant.isBot and not (owner and not owner.Parent and not closingPlayers[owner])
+end
+
+-- Cette méthode permet de lire le ping d'un joueur (s, Player:GetNetworkPing) lorsqu'une parade le borne (#214) ou
+-- que le journal l'échantillonne (#297) : une seule lecture pour les deux ; nil en cas d'erreur du moteur.
+function CheatLog.pingOf(player: Player): number?
+	local ok, ping = pcall(player.GetNetworkPing, player)
+	return if ok and type(ping) == "number" then ping else nil
 end
 
 -- Cette méthode permet de lire la session d'un joueur suivi lorsqu'une parade juge ou qu'un ping arrive ; créée vide.
@@ -362,15 +383,17 @@ function CheatLog.report(
 		record.checks[key] = perCheck
 	end
 	perCheck[severity] += 1
-	period.checks[key] = (period.checks[key] or 0) + 1
 	period.players[participant.id] = true
 	if category == CheatLog.Category.AIM then
 		-- Relevé de visée (#178) : pas une violation. Compté dans sa catégorie et gardé pour le résumé, mais hors du
-		-- total, du score, de la « pire » violation et du warn limité (au plus un relevé par joueur toutes les 120 s)
+		-- total, du score, de la « pire » violation, du warn limité (au plus un relevé par joueur toutes les 120 s) et
+		-- des contrôles en violation du relevé agrégé (une ligne à part)
 		record.aim = violation.detail
+		period.aim += 1
 		warn(string.format("[CheatLog] %s (%d) Aim : %s", record.name, record.id, violation.detail))
 		return
 	end
+	period.checks[key] = (period.checks[key] or 0) + 1
 	period.flagged[participant.id] = true
 	record.total += 1
 	record.score = decayedScore(record, t) + CheatLog.SCORE_WEIGHT[severity]
@@ -522,10 +545,28 @@ local function sortedKeys(t: { [string]: any }): { string }
 	return keys
 end
 
+-- Cette méthode permet d'assembler des lignes sous une longueur maximale (caractères) lorsqu'un champ ou une
+-- description d'embed doit tenir dans les limites de Discord : les lignes en trop deviennent « … (+N) ».
+function CheatLog.joinCapped(lines: { string }, max: number): string
+	local kept, size = {}, 0
+	for i, line in lines do
+		-- Place gardée pour la ligne finale « … (+N) » (au plus une douzaine de caractères)
+		local cost = utf8.len(line) or #line
+		if size + cost + 1 > max - 16 and i < #lines then
+			table.insert(kept, string.format("… (+%d)", #lines - i + 1))
+			return table.concat(kept, "\n")
+		end
+		table.insert(kept, line)
+		size += cost + 1
+	end
+	return table.concat(kept, "\n")
+end
+
 -- Cette méthode permet de mettre en forme le résumé d'un joueur lorsqu'il part avec des violations : nom, UserId,
 -- compteurs par catégorie et par contrôle (taux sur ses jugés), jugés, ping, score maximal, pire violation et kick.
 function CheatLog.buildEmbed(record: Record): { [string]: any }
 	local judged = record.judged or {}
+	local checkKeys = sortedKeys(record.checks or {})
 	local fields = {}
 	for category, perCategory in record.counts do
 		-- Relevés de visée (#178) : pas des violations, ne pas les présenter comme des « faibles »
@@ -541,7 +582,7 @@ function CheatLog.buildEmbed(record: Record): { [string]: any }
 		}
 		-- Un contrôle par ligne (#297), avec son taux sur les jugés du joueur
 		local prefix = category .. ":"
-		for _, key in sortedKeys(record.checks or {}) do
+		for _, key in checkKeys do
 			if string.sub(key, 1, #prefix) == prefix then
 				local perCheck = record.checks[key]
 				local count = perCheck.low + perCheck.medium + perCheck.high
@@ -551,7 +592,11 @@ function CheatLog.buildEmbed(record: Record): { [string]: any }
 				)
 			end
 		end
-		table.insert(fields, { name = category, value = table.concat(lines, "\n"), inline = true })
+		table.insert(fields, {
+			name = category,
+			value = CheatLog.joinCapped(lines, CheatLog.MAX_FIELD_VALUE),
+			inline = true,
+		})
 	end
 	table.sort(fields, function(a, b)
 		return a.name < b.name
@@ -581,7 +626,7 @@ function CheatLog.buildEmbed(record: Record): { [string]: any }
 	end
 	return {
 		title = "Anti-triche : " .. record.name,
-		description = table.concat(lines, "\n"),
+		description = CheatLog.joinCapped(lines, CheatLog.MAX_DESCRIPTION),
 		color = 12597547,
 		fields = fields,
 		footer = { text = record.name .. "  |  UserId " .. record.id },
@@ -605,6 +650,10 @@ function CheatLog.buildReport(p: Period, t: number, reason: string): { [string]:
 		"Jugés : " .. judgedText(p.judged),
 		pingText(CheatLog.pingStats(p.ping)),
 	}
+	if p.aim > 0 then
+		-- Statistiques de visée (#178) : pas des violations, à part des contrôles
+		table.insert(lines, string.format("Relevés de visée signalés : %d (revue humaine)", p.aim))
+	end
 	local keys = sortedKeys(p.checks)
 	if #keys == 0 then
 		table.insert(lines, "Aucune violation.")
@@ -615,7 +664,7 @@ function CheatLog.buildReport(p: Period, t: number, reason: string): { [string]:
 	local jobId = (game :: any).JobId
 	return {
 		title = "Anti-triche : relevé du serveur",
-		description = table.concat(lines, "\n"),
+		description = CheatLog.joinCapped(lines, CheatLog.MAX_DESCRIPTION),
 		color = 5793266,
 		footer = { text = "Serveur " .. (if type(jobId) == "string" and jobId ~= "" then jobId else "?") },
 	}
@@ -636,13 +685,13 @@ end
 
 -- Cette méthode permet de transmettre un embed lorsqu'un résumé ou un relevé est prêt : console dans Studio, sinon
 -- webhook avec nouveaux essais (WEBHOOK_ATTEMPTS), puis repli sur la console en entier si l'envoi échoue ou qu'aucun
--- webhook n'est configuré. Bloquant (requête HTTP) : à lancer dans son propre fil.
-local function deliver(embed: { [string]: any }, label: string)
+-- webhook n'est configuré parmi names (StringValue, dans l'ordre). Bloquant (requête HTTP) : à lancer dans son fil.
+local function deliver(embed: { [string]: any }, label: string, names: { string })
 	if RunService:IsStudio() then
 		print(string.format("[CheatLog] %s :\n%s", label, CheatLog.consoleText(embed)))
 		return
 	end
-	local url = Webhook.url(table.unpack(CheatLog.WEBHOOK_NAMES))
+	local url = Webhook.url(table.unpack(names))
 	if url then
 		local ok, err, attempts =
 			Webhook.postWithRetry(url, embed, CheatLog.WEBHOOK_ATTEMPTS, CheatLog.WEBHOOK_RETRY_DELAY)
@@ -656,27 +705,32 @@ local function deliver(embed: { [string]: any }, label: string)
 	warn(string.format("[CheatLog] %s (repli console) :\n%s", label, CheatLog.consoleText(embed)))
 end
 
--- Cette méthode permet de lancer un envoi en tenant le compte des envois en cours lorsqu'un résumé ou un relevé part,
--- pour que l'arrêt du serveur les attende ; une erreur est écrite avec ce qui était envoyé.
-local function tracked(label: string, send: (...any) -> (), ...: any)
-	pendingSummaries += 1
-	local ok, err = pcall(send, ...)
-	pendingSummaries -= 1
+-- Cette méthode permet de construire puis transmettre un embed en tenant le compte des envois en cours lorsqu'un
+-- résumé ou un relevé part, pour que l'arrêt du serveur les attende ; une erreur est écrite avec son libellé.
+local function tracked(label: string, build: () -> { [string]: any }, names: { string })
+	pendingSends += 1
+	local ok, err = pcall(function()
+		deliver(build(), label, names)
+	end)
+	pendingSends -= 1
 	if not ok then
 		warn("[CheatLog] " .. label .. " perdu :", err)
 	end
 end
 
--- Cette méthode permet d'envoyer le résumé d'un joueur dans son propre fil lorsqu'il part.
+-- Cette méthode permet d'envoyer le résumé d'un joueur dans son propre fil lorsqu'il part (webhook dédié, sinon
+-- celui du feedback).
 local function trackedSummary(record: Record)
 	tracked("résumé de " .. record.name, function()
-		deliver(CheatLog.buildEmbed(record), "résumé de " .. record.name)
-	end)
+		return CheatLog.buildEmbed(record)
+	end, CheatLog.WEBHOOK_NAMES)
 end
 
--- Cette méthode permet d'envoyer un relevé agrégé dans son propre fil lorsqu'il est émis.
+-- Cette méthode permet d'envoyer un relevé agrégé dans son propre fil lorsqu'il est émis (webhook dédié seulement).
 local function trackedReport(embed: { [string]: any })
-	tracked("relevé du serveur", deliver, embed, "relevé du serveur")
+	tracked("relevé du serveur", function()
+		return embed
+	end, CheatLog.REPORT_WEBHOOK_NAMES)
 end
 
 -- Cette méthode permet d'émettre le relevé agrégé de la période écoulée lorsque REPORT_INTERVAL est passé, à l'arrêt
@@ -686,7 +740,7 @@ function CheatLog.flushReport(reason: string): { [string]: any }?
 	local p = period
 	local t = now()
 	period = newPeriod(t)
-	if next(p.players) == nil and next(p.checks) == nil then
+	if next(p.players) == nil then
 		return nil
 	end
 	local embed = CheatLog.buildReport(p, t, reason)
@@ -742,10 +796,43 @@ end
 -- erreur du moteur sur un joueur n'arrête pas les autres.
 local function samplePings()
 	for _, player in Players:GetPlayers() do
-		local ok, ping = pcall(player.GetNetworkPing, player)
-		if ok and type(ping) == "number" then
+		local ping = CheatLog.pingOf(player)
+		if ping then
 			CheatLog.notePing(Participants.fromPlayer(player), ping)
 		end
+	end
+end
+
+-- Cette méthode permet de faire tourner la boucle du journal lorsque le serveur démarre : ping échantillonné toutes les
+-- PING_SAMPLE_INTERVAL secondes, relevé agrégé toutes les REPORT_INTERVAL ; une erreur n'arrête pas la boucle.
+local function runSamplingLoop()
+	local sinceReport = 0
+	while true do
+		task.wait(CheatLog.PING_SAMPLE_INTERVAL)
+		local ok, err = pcall(samplePings)
+		if not ok then
+			warn("[CheatLog] mesure du ping en échec :", err)
+		end
+		sinceReport += CheatLog.PING_SAMPLE_INTERVAL
+		if sinceReport >= CheatLog.REPORT_INTERVAL then
+			sinceReport = 0
+			ok, err = pcall(CheatLog.flushReport, "périodique")
+			if not ok then
+				warn("[CheatLog] relevé périodique en échec :", err)
+			end
+		end
+	end
+end
+
+-- Cette méthode permet d'émettre le relevé à la demande lorsque l'attribut Workspace REPORT_ATTRIBUTE passe à true
+-- (vérification en Studio, contexte Server) ; l'attribut est remis à nil.
+local function onReportRequested()
+	if workspace:GetAttribute(CheatLog.REPORT_ATTRIBUTE) ~= true then
+		return
+	end
+	workspace:SetAttribute(CheatLog.REPORT_ATTRIBUTE, nil)
+	if not CheatLog.flushReport("à la demande") then
+		print("[CheatLog] relevé du serveur : rien à relever sur la période")
 	end
 end
 
@@ -754,51 +841,30 @@ end
 -- envois attendus (CLOSE_TIMEOUT au plus).
 function CheatLog.init()
 	Players.PlayerRemoving:Connect(CheatLog.onPlayerRemoving)
-	task.spawn(function()
-		local sinceReport = 0
-		while true do
-			task.wait(CheatLog.PING_SAMPLE_INTERVAL)
-			-- Une erreur ne doit arrêter ni les mesures ni les relevés suivants
-			local ok, err = pcall(samplePings)
-			if not ok then
-				warn("[CheatLog] mesure du ping en échec :", err)
-			end
-			sinceReport += CheatLog.PING_SAMPLE_INTERVAL
-			if sinceReport >= CheatLog.REPORT_INTERVAL then
-				sinceReport = 0
-				ok, err = pcall(CheatLog.flushReport, "périodique")
-				if not ok then
-					warn("[CheatLog] relevé périodique en échec :", err)
-				end
-			end
+	task.spawn(runSamplingLoop)
+	workspace:GetAttributeChangedSignal(CheatLog.REPORT_ATTRIBUTE):Connect(onReportRequested)
+	game:BindToClose(CheatLog.close)
+end
+
+-- Cette méthode permet de clore le journal lorsque le serveur s'arrête (BindToClose) : rappels de clôture des joueurs
+-- encore là (tous ensemble, contre la même population), leurs résumés et le dernier relevé envoyés, puis plus rien
+-- n'est compté (closed) ; attend les envois CLOSE_TIMEOUT au plus.
+function CheatLog.close()
+	-- Joueurs encore là à l'arrêt : leur PlayerRemoving peut arriver après ce rappel
+	runClosingHooks(Players:GetPlayers(), true)
+	for id, record in records do
+		records[id] = nil
+		if CheatLog.worthSummary(record) then
+			task.spawn(trackedSummary, withSession(record, sessions[id]))
 		end
-	end)
-	workspace:GetAttributeChangedSignal(CheatLog.REPORT_ATTRIBUTE):Connect(function()
-		if workspace:GetAttribute(CheatLog.REPORT_ATTRIBUTE) ~= true then
-			return
-		end
-		workspace:SetAttribute(CheatLog.REPORT_ATTRIBUTE, nil)
-		if not CheatLog.flushReport("à la demande") then
-			print("[CheatLog] relevé du serveur : rien à relever sur la période")
-		end
-	end)
-	game:BindToClose(function()
-		-- Joueurs encore là à l'arrêt : leur PlayerRemoving peut arriver après ce rappel. Tous ensemble, pour que chaque
-		-- parade les juge contre la même population
-		runClosingHooks(Players:GetPlayers(), true)
-		for id, record in records do
-			records[id] = nil
-			if CheatLog.worthSummary(record) then
-				task.spawn(trackedSummary, withSession(record, sessions[id]))
-			end
-		end
-		table.clear(sessions)
-		CheatLog.flushReport("arrêt du serveur")
-		local deadline = os.clock() + CheatLog.CLOSE_TIMEOUT
-		while pendingSummaries > 0 and os.clock() < deadline do
-			task.wait(0.1)
-		end
-	end)
+	end
+	table.clear(sessions)
+	CheatLog.flushReport("arrêt du serveur")
+	closed = true
+	local deadline = os.clock() + CheatLog.CLOSE_TIMEOUT
+	while pendingSends > 0 and os.clock() < deadline do
+		task.wait(0.1)
+	end
 end
 
 return CheatLog

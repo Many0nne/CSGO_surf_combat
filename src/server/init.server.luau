@@ -564,14 +564,11 @@ Validator.setShotWorld({
 	positionAt = CharacterSync.positionAt,
 	isObstructed = isShotObstructed,
 	-- Cette méthode permet de lire l'aller-retour réseau d'un joueur (s) lorsqu'on borne l'instant annoncé d'un tir ou
-	-- d'un coup (#214) : mesuré par le moteur (Player:GetNetworkPing), nil pour un bot ou en cas d'erreur.
+	-- d'un coup (#214) : mesuré par le moteur (Player:GetNetworkPing, même lecture que le ping du journal, #297), nil
+	-- pour un bot ou en cas d'erreur.
 	pingOf = function(attacker)
 		local player = attacker.player
-		if not player then
-			return nil
-		end
-		local ok, ping = pcall(player.GetNetworkPing, player)
-		return if ok and type(ping) == "number" then ping else nil
+		return if player then CheatLog.pingOf(player) else nil
 	end,
 	-- Cette méthode permet de journaliser un contrôle de tir en échec lorsqu'il est constaté (catégorie Hitscan, compté
 	-- par contrôle au journal et pour le décompte des violations fortes, #297).

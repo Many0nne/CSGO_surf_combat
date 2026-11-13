@@ -31,9 +31,16 @@ function Webhook.post(url: string, embed: { [string]: any }): (boolean, any)
 	end)
 end
 
+-- Cette méthode permet de savoir si un envoi en échec vaut un nouvel essai lorsque PostAsync a levé une erreur : oui,
+-- sauf une réponse HTTP 4xx autre que 429 (message refusé tel quel : le renvoyer échouerait pareil).
+function Webhook.isRetryable(err: any): boolean
+	local code = tonumber(string.match(tostring(err), "HTTP (%d%d%d)"))
+	return not (code and code >= 400 and code < 500 and code ~= 429)
+end
+
 -- Cette méthode permet de poster un embed en réessayant lorsqu'un envoi échoue (réseau, limite de débit du webhook) :
--- jusqu'à `attempts` essais, attente de delay × n° d'essai entre deux. Bloquant : renvoie la réussite, la dernière
--- erreur et le nombre d'essais faits.
+-- jusqu'à `attempts` essais, attente de delay × n° d'essai entre deux, arrêt sur une erreur définitive (isRetryable).
+-- Bloquant : renvoie la réussite, la dernière erreur et le nombre d'essais faits.
 function Webhook.postWithRetry(
 	url: string,
 	embed: { [string]: any },
@@ -48,6 +55,9 @@ function Webhook.postWithRetry(
 			return true, nil, attempt
 		end
 		err = attemptErr
+		if not Webhook.isRetryable(attemptErr) then
+			return false, err, attempt
+		end
 		if attempt < total then
 			task.wait(delay * attempt)
 		end

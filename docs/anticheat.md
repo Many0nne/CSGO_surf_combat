@@ -1107,8 +1107,9 @@ CheatLog.session(participant.id) -- jugés et ping d'un joueur, avec ou sans vio
   cible, portée et cadence ; touches refusées comprises), `melee` = coup de mêlée soumis aux contrôles
   (`authorizeMelee`), `position` = paquet `CharacterSync` jugé par le seau, le noclip et le vol (pas les paquets
   antérieurs à une correction). Dénominateur d'une catégorie (`CheatLog.DENOMINATOR`) : `Hitscan` → touches, `Melee` →
-  coups, `Movement` → positions, sauf `Movement:void` (jugé par passage de boucle, `NO_DENOMINATOR`). Les autres
-  catégories n'en ont pas : nombres bruts.
+  coups, `Movement` → positions, sauf `Movement:void` (jugé par passage de boucle) et `Hitscan:orphanRate` (signalé
+  une fois par palier d'orphelines ; le taux par touche est celui de `Hitscan:shotLink`), listés dans
+  `NO_DENOMINATOR`. Les autres catégories n'en ont pas : nombres bruts.
 - **Ping** (#297) : `Player:GetNetworkPing` de chaque joueur toutes les `PING_SAMPLE_INTERVAL` (5 s), en histogramme
   (classes de `PING_BUCKET_MS` = 10 ms : médiane à 5 ms près, maximum exact, mémoire fixe quelle que soit la durée de
   la session). Médiane et maximum de la session au résumé du joueur, de la période au relevé.
@@ -1120,17 +1121,22 @@ CheatLog.session(participant.id) -- jugés et ping d'un joueur, avec ou sans vio
   (DataStore/MemoryStore) : il relève du bannissement (#179). À l'arrêt du serveur, les résumés des joueurs encore là sont envoyés
   et attendus (`CLOSE_TIMEOUT`, 20 s). Une violation signalée pour un joueur déjà parti est ignorée.
 - **Envoi au webhook** (#297) : jusqu'à `WEBHOOK_ATTEMPTS` (3) essais, attente `WEBHOOK_RETRY_DELAY` × n° d'essai
-  (2 s, puis 4 s) entre deux (`Webhook.postWithRetry`) ; après le dernier échec, ou sans webhook configuré, le message
-  entier part en console serveur (`[CheatLog] résumé de <nom> (repli console)`). Avant #297, un échec ne laissait
-  qu'un `warn` avec l'erreur : le résumé était perdu. À l'arrêt, les essais tiennent dans `CLOSE_TIMEOUT` sauf si
-  chaque requête met longtemps à échouer.
+  (2 s, puis 4 s) entre deux (`Webhook.postWithRetry`), sauf refus définitif (HTTP 4xx autre que 429,
+  `Webhook.isRetryable`) ; après le dernier échec, ou sans webhook configuré, le message entier part en console serveur
+  (`[CheatLog] résumé de <nom> (repli console)`). Avant #297, un échec ne laissait qu'un `warn` avec l'erreur : le
+  résumé était perdu. À l'arrêt, les essais tiennent dans `CLOSE_TIMEOUT` sauf si chaque requête met longtemps à
+  échouer. Champs et description bornés sous les limites de Discord (`MAX_FIELD_VALUE`, `MAX_DESCRIPTION`) : les
+  lignes en trop deviennent `… (+N)` au lieu d'un refus 400.
 - **Relevé agrégé du serveur** (#297) : toutes les `REPORT_INTERVAL` (600 s), à l'arrêt du serveur, et à la demande
   (attribut Workspace `CheatLogReport` = true, en contexte Server, remis à nil après), un message « Anti-triche : relevé
-  du serveur » au webhook (console dans Studio) : durée de la période et raison, joueurs vus (dont ceux avec
-  violation), jugés de tous les joueurs, ping de la période, puis une ligne par contrôle en violation,
-  `Hitscan:direction : 2 / 10 touches (20.00 %)`, ou le nombre seul sans dénominateur. Les compteurs repartent de zéro
-  à chaque relevé (périodes additionnables entre serveurs, sans double compte) ; un joueur parti en cours de période
-  y reste. Pied : `JobId` du serveur. Rien n'est émis pour une période sans joueur.
+  du serveur » au webhook **dédié** `CheatLogWebhookUrl` seulement (`REPORT_WEBHOOK_NAMES` : sans lui, console
+  serveur, jamais le salon du feedback ; console dans Studio) : durée de la période et raison, joueurs vus (dont ceux
+  avec violation), jugés de tous les joueurs, ping de la période, relevés de visée signalés (à part : pas des
+  violations), puis une ligne par contrôle en violation, `Hitscan:direction : 2 / 10 touches (20.00 %)`, ou le nombre
+  seul sans dénominateur. Les compteurs repartent de zéro à chaque relevé (périodes additionnables entre serveurs, sans
+  double compte) ; un joueur parti en cours de période y reste. Pied : `JobId` du serveur. Rien n'est émis pour une
+  période sans joueur. Après le dernier relevé de l'arrêt (`CheatLog.close`), plus rien n'est compté : un
+  `PlayerRemoving` traité ensuite ne recrée ni bilan ni second résumé.
 - **Lire un taux.** Taux = violations du contrôle ÷ éléments jugés de sa catégorie, tous joueurs confondus : un
   contrôle absent du relevé a 0 violation sur ces jugés. Additionner numérateurs et dénominateurs sur plusieurs relevés
   avant de diviser (pas de moyenne de pourcentages). Un taux sur moins de quelques centaines de jugés ne dit rien. Un
@@ -1183,7 +1189,8 @@ Ce que le code envoie vraiment (`src/server/CheatLog.luau`, `src/server/Webhook.
   par catégorie (« forte N · moyenne N · faible N », puis une ligne par contrôle avec son taux sur les jugés du
   joueur), et en pied de page le nom et le **UserId**. C'est la source de référence : un résumé = une session.
   Un envoi en échec est réessayé, puis écrit en entier dans la console serveur (repli).
-- **Relevé agrégé du serveur** au webhook, toutes les 10 min et à l'arrêt (#297) : taux de violations par contrôle,
+- **Relevé agrégé du serveur** au webhook dédié `CheatLogWebhookUrl` (console sans lui), toutes les 10 min et à
+  l'arrêt (#297) : taux de violations par contrôle,
   tous joueurs confondus, joueurs sans violation compris. C'est la source pour mesurer les faux positifs avant un
   passage en `block` (voir « Lire un taux » ci-dessus), jamais une base de ban : il est anonyme.
 - **Console serveur** : lignes `[CheatLog]` au fil de l'eau (une par 2 s au plus et par joueur, avec le nombre de

@@ -15,6 +15,8 @@ return function(T, Loader)
 			webhooks = {} :: { [string]: string },
 			posts = 0,
 			failPosts = 0,
+			postError = "HTTP 429 (Too Many Requests)",
+			players = {},
 		}
 		local realServerScripts = Loader.new().game:GetService("ServerScriptService")
 		local loader = Loader.new({
@@ -22,6 +24,9 @@ return function(T, Loader)
 				PlayerRemoving = {
 					Connect = function() end,
 				},
+				GetPlayers = function()
+					return env.players
+				end,
 			},
 			RunService = {
 				IsStudio = function()
@@ -51,7 +56,7 @@ return function(T, Loader)
 				PostAsync = function()
 					env.posts += 1
 					if env.posts <= env.failPosts then
-						error("HTTP 429 (Too Many Requests)")
+						error(env.postError)
 					end
 				end,
 			},
@@ -475,6 +480,23 @@ return function(T, Loader)
 			T.expect(string.find(byName.Hitscan, "direction 1 / 4 touches (25.00 %)", 1, true) ~= nil, byName.Hitscan)
 			T.expect(string.find(byName.Movement, "void 1", 1, true) ~= nil, "vide : sans dénominateur")
 			T.expect(string.find(byName.Movement, "positions", 1, true) == nil, byName.Movement)
+			T.expectEqual(C.denominatorOf("Hitscan:orphanRate"), nil, "signalé par palier, pas par touche")
+			T.expectEqual(C.denominatorOf("Hitscan:shotLink"), "shot")
+			T.expectEqual(C.denominatorOf("RemoteRate:ShotFired"), nil)
+		end)
+
+		T.it("embed borné aux limites de Discord : lignes en trop résumées", function()
+			local env = setup()
+			local C = env.CheatLog
+			local alice = participantOf(fakePlayer(1, "Alice"))
+			for i = 1, 200 do
+				C.report(alice, C.Category.REMOTE_RATE, C.Severity.LOW, "flood", string.format("RemoteNumero%03d", i))
+			end
+			local embed = C.buildEmbed(C.summary(1))
+			local value = embed.fields[1].value
+			T.expect(utf8.len(value) <= C.MAX_FIELD_VALUE, "champ sous la limite : " .. utf8.len(value))
+			T.expect(string.find(value, "… (+", 1, true) ~= nil, "lignes coupées annoncées")
+			T.expectEqual(C.joinCapped({ "a", "b" }, 100), "a\nb", "rien coupé sous la limite")
 		end)
 
 		T.it("relevé agrégé : taux par contrôle sur les jugés de tous, joueurs sans violation compris", function()
@@ -513,6 +535,50 @@ return function(T, Loader)
 			T.expect(string.find(last.description, "Aucune violation.", 1, true) ~= nil)
 		end)
 
+		T.it("relevé : les relevés de visée sont à part, pas des contrôles en violation", function()
+			local env = setup()
+			local C = env.CheatLog
+			C.report(participantOf(fakePlayer(1, "Alice")), C.Category.AIM, C.Severity.LOW, "SIGNALÉ", C.Category.AIM)
+			local text = C.flushReport("périodique").description
+			T.expect(string.find(text, "Relevés de visée signalés : 1", 1, true) ~= nil, text)
+			T.expect(string.find(text, "Aucune violation.", 1, true) ~= nil, text)
+			T.expect(string.find(text, "dont 0 avec violation", 1, true) ~= nil, text)
+		end)
+
+		T.it("relevé : webhook dédié seulement, sinon console (jamais le salon du feedback)", function()
+			local env = setup()
+			local C = env.CheatLog
+			env.webhooks.FeedbackWebhookUrl = "https://exemple.invalid/feedback"
+			C.judged(participantOf(fakePlayer(1, "Alice")), C.Judged.SHOT)
+			C.flushReport("périodique")
+			env.run(#env.spawned)
+			T.expectEqual(env.posts, 0, "pas au webhook du feedback")
+			T.expect(string.find(table.concat(env.warns, "\n"), "relevé du serveur (repli console)", 1, true) ~= nil)
+			env.webhooks.CheatLogWebhookUrl = "https://exemple.invalid/anticheat"
+			C.judged(participantOf(fakePlayer(1, "Alice")), C.Judged.SHOT)
+			C.flushReport("périodique")
+			env.run(#env.spawned)
+			T.expectEqual(env.posts, 1, "posté au webhook dédié")
+		end)
+
+		T.it("arrêt du serveur : dernier relevé émis, puis plus rien compté (pas de second résumé)", function()
+			local env = setup()
+			local C = env.CheatLog
+			local player = fakePlayer(1, "Alice")
+			env.players = { player }
+			C.judged(participantOf(player), C.Judged.SHOT)
+			C.report(participantOf(player), C.Category.MOVEMENT, C.Severity.MEDIUM, "téléport", "speed")
+			C.close()
+			T.expectEqual(#env.spawned, 2, "résumé et relevé lancés")
+			-- PlayerRemoving traité après BindToClose : rien de recréé
+			C.report(participantOf(player), C.Category.MOVEMENT, C.Severity.MEDIUM, "tardive", "speed")
+			C.judged(participantOf(player), C.Judged.SHOT)
+			C.onPlayerRemoving(player :: any)
+			T.expectEqual(#env.spawned, 2, "pas de second résumé")
+			T.expectEqual(C.summary(1), nil)
+			T.expectEqual(C.session(1), nil)
+		end)
+
 		T.it("webhook : nouvel essai après un échec, sans repli console", function()
 			local env = setup()
 			local C = env.CheatLog
@@ -545,6 +611,21 @@ return function(T, Loader)
 			T.expect(string.find(console, "repli console", 1, true) ~= nil, console)
 			T.expect(string.find(console, "téléport refusé", 1, true) ~= nil, "détail du résumé gardé")
 			T.expect(string.find(console, "UserId 1", 1, true) ~= nil, "UserId gardé")
+		end)
+
+		T.it("webhook : pas de nouvel essai sur un refus définitif (HTTP 4xx autre que 429)", function()
+			local env = setup()
+			local C = env.CheatLog
+			env.webhooks.CheatLogWebhookUrl = "https://exemple.invalid/hook"
+			env.failPosts = math.huge
+			env.postError = "HTTP 400 (Bad Request)"
+			local player = fakePlayer(1, "Alice")
+			C.report(participantOf(player), C.Category.MOVEMENT, C.Severity.MEDIUM, "téléport", "speed")
+			C.onPlayerRemoving(player :: any)
+			env.run(1)
+			T.expectEqual(env.posts, 1, "un seul essai")
+			T.expectEqual(#env.waits, 0)
+			T.expect(string.find(table.concat(env.warns, "\n"), "repli console", 1, true) ~= nil)
 		end)
 
 		T.it("webhook absent : repli console, rien posté ; Studio : résumé complet affiché", function()
