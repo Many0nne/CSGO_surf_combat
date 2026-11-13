@@ -134,9 +134,9 @@ return {
 	AIM_SPREAD_MAX      = 6,      -- dispersion au plus (°)
 	FIRE_RANGE          = 240,    -- tir au fusil à moins de tant (studs ; le serveur refuse au-delà de 250)
 	SPAWN_GRACE         = 4,      -- pas de tir sur un participant apparu depuis moins de tant (s, lancement compris)
-	                              -- ni réaction ni visée avant sa fin (#298) : le temps de réaction part de là
-	HUMAN_PREFERENCE_RANGE = 100, -- un humain hors grâce passe avant un bot plus proche à moins de tant (studs, #298)
-	HUMAN_PREFERENCE_MARGIN = 20, -- en plus pour l'humain déjà visé (pas de va-et-vient au seuil, studs)
+	                              -- le temps de réaction et de visée part de sa fin (#298), le bot peut s'y tourner avant
+	HUMAN_PREF_RANGE    = 100,    -- un humain hors grâce passe avant un bot plus proche à moins de tant (studs, #298)
+	HUMAN_PREF_MARGIN   = 20,     -- en plus pour l'humain déjà visé (pas de va-et-vient au seuil, studs)
 	KNIFE_RANGE         = 6,      -- cible à moins de tant : il sort le couteau (studs, entre les racines)
 	KNIFE_DROP_RANGE    = 14,     -- cible au-delà de tant : il reprend le fusil
 	KNIFE_HIT_RANGE     = 6.5,    -- coup de couteau porté à moins de tant (portée de l'arme : 7,5)

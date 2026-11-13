@@ -147,7 +147,7 @@ réglages dans `BotConfig` (section « Comportement »). Il commande le suivi de
 `onArrive`, `setDestination`) et le regard de `BotMotion` (`gaze`).
 - **Perception** (tous les `PERCEPTION_INTERVAL`) : un autre participant en vie est vu s'il est dans `VIEW_FOV` (100°)
   autour du regard, à moins de `VIEW_RANGE`, et si un rayon des yeux vers sa tête ou son torse n'est coupé que par
-  lui (murs d'air ignorés). Cible : un humain à moins de `HUMAN_PREFERENCE_RANGE` plutôt qu'un bot, puis la plus
+  lui (murs d'air ignorés). Cible : un humain à moins de `HUMAN_PREF_RANGE` plutôt qu'un bot, puis la plus
   proche (cf. « Combat »).
 - **Ouïe** : `BotManager.hearShot` (appelé par `relayShot` d'`init.server` pour un tir au fusil d'un joueur accepté par
   le serveur, remote `ShotFired`, #156 ; et par `BotBrain` pour les tirs des bots). Un coup de couteau ne s'entend pas,
@@ -192,9 +192,9 @@ Règles pures dans `BotCombatRules`, armes dans `BotArsenal` (une par bot vivant
   Son temps de réaction et de visée ne court qu'à partir de la fin de ce délai (`BotCombatRules.reactionStart`,
   #298) : il peut se tourner vers la cible pendant la grâce, mais le tir part au plus tôt `REACTION_TIME` +
   `COMBAT_AIM_TIME` après sa fin. Une cible qui réapparaît (nouveau `SpawnedAt`) est traitée comme une nouvelle cible.
-- **Cible** : un humain hors délai de grâce à moins de `HUMAN_PREFERENCE_RANGE` passe avant un bot ; au-delà, ou
+- **Cible** : un humain hors délai de grâce à moins de `HUMAN_PREF_RANGE` passe avant un bot ; au-delà, ou
   pendant sa grâce, la cible la plus proche l'emporte (`pickTarget` de #141, borné par #298). L'humain déjà visé garde
-  sa préférence jusqu'à `HUMAN_PREFERENCE_MARGIN` studs de plus : sans cette marge, un humain au seuil faisait changer
+  sa préférence jusqu'à `HUMAN_PREF_MARGIN` studs de plus : sans cette marge, un humain au seuil faisait changer
   de cible à chaque regard, et chaque changement relance le temps de réaction (le bot ne tirait plus). Les bots se
   tirent dessus. `graceHolds` du bilan compte les regards de visée sur une cible encore dans sa grâce.
 

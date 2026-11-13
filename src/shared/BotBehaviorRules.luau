@@ -116,12 +116,12 @@ function BotBehaviorRules.forget(memory: { [number]: Memory }, now: number, ttl:
 end
 
 -- Cette méthode permet de savoir si un candidat passe avant les autres lorsqu'un bot choisit sa cible (#298) : un
--- humain hors délai de grâce à moins de HUMAN_PREFERENCE_RANGE, marge HUMAN_PREFERENCE_MARGIN en plus s'il est déjà
+-- humain hors délai de grâce à moins de HUMAN_PREF_RANGE, marge HUMAN_PREF_MARGIN en plus s'il est déjà
 -- la cible (pas de va-et-vient au seuil, qui relancerait le temps de réaction à chaque regard).
 local function preferred(c: Candidate, currentId: number?): boolean
-	local range = BotConfig.HUMAN_PREFERENCE_RANGE
+	local range = BotConfig.HUMAN_PREF_RANGE
 	if c.id == currentId then
-		range += BotConfig.HUMAN_PREFERENCE_MARGIN
+		range += BotConfig.HUMAN_PREF_MARGIN
 	end
 	return c.isHuman and not c.inGrace and c.distance <= range
 end

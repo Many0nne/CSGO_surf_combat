@@ -64,8 +64,8 @@ return function(T, Loader)
 			T.expectEqual(target and target.id, 8)
 		end)
 
-		T.it("ne préfère un humain que s'il est à moins de HUMAN_PREFERENCE_RANGE (#298)", function()
-			local range = Config.HUMAN_PREFERENCE_RANGE
+		T.it("ne préfère un humain que s'il est à moins de HUMAN_PREF_RANGE (#298)", function()
+			local range = Config.HUMAN_PREF_RANGE
 			local near = Rules.pickTarget({
 				{ id = -1, isHuman = false, distance = 10 },
 				{ id = 7, isHuman = true, distance = range },
@@ -90,7 +90,7 @@ return function(T, Loader)
 		end)
 
 		T.it("garde l'humain visé un peu au-delà du seuil, pas de va-et-vient (#298)", function()
-			local range, margin = Config.HUMAN_PREFERENCE_RANGE, Config.HUMAN_PREFERENCE_MARGIN
+			local range, margin = Config.HUMAN_PREF_RANGE, Config.HUMAN_PREF_MARGIN
 			local candidates = {
 				{ id = -1, isHuman = false, distance = 10 },
 				{ id = 7, isHuman = true, distance = range + margin / 2 },
