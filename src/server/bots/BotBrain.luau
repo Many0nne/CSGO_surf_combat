@@ -25,8 +25,8 @@ export type Env = {
 	others: () -> { { id: number, isHuman: boolean, character: Model, spawnedAt: number? } },
 	-- Destinations des autres bots (point → nombre)
 	claimed: (selfId: number) -> { [number]: number },
-	-- Murs d'air de la map : ne bloquent pas la vue
-	clips: Instance?,
+	-- Murs d'air et grillages de la map (MapGeometry.bulletTransparent) : n'arrêtent ni la vue ni les tirs (#292)
+	seeThrough: { Instance },
 	-- Tir de ce bot (position du tireur) : entendu par les autres bots
 	onShot: ((Vector3) -> ())?,
 	-- Vrai : le bot ne tire pas sur les humains (debug DebugBotsPassive), lu à chaque tir
@@ -99,8 +99,14 @@ function BotBrain.new(env: Env, char: Model, motion: BotMotion.BotMotion, arsena
 	local rng = motion.rng
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = if env.clips then { char, env.clips } else { char }
+	local ignored = table.clone(env.seeThrough)
+	table.insert(ignored, char)
+	params.FilterDescendantsInstances = ignored
 	params.RespectCanCollide = false
+	-- Même règle pour le tir que pour la vue : une cible vue à travers un mur d'air est touchable
+	if arsenal then
+		arsenal:ignore(env.seeThrough)
+	end
 	local humanoid = char:FindFirstChildOfClass("Humanoid")
 	local now = os.clock()
 	local self = setmetatable({

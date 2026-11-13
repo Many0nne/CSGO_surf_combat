@@ -27,8 +27,9 @@ Construit **automatiquement au démarrage du serveur** dans la vraie collision d
 4. **Points de passage** : cases regroupées par carré de `NAV_WAYPOINT_SIZE` studs et par étage (cases reliées à pied
    dans le carré), petites zones fondues dans leur voisine. Note fixe : vue (nombre de points visibles à hauteur des
    yeux, critère principal), hauteur, couvert (8 rayons), bonus de type (`rampe` : entrée ou sortie d'une arête de
-   rampe à moins de `NAV_RAMP_DIST`, `echelle`, `escalier`, `fosse`, `couloir`, `piece`). Les murs d'air ne bloquent ni
-   la vue ni le couvert.
+   rampe à moins de `NAV_RAMP_DIST`, `echelle`, `escalier`, `fosse`, `couloir`, `piece`). Les murs d'air et les
+   grillages `passbullets` ne bloquent ni la vue ni le couvert (`MapGeometry.castThrough`, cf. `docs/maps.md`
+   « Murs d'air et balles », #292).
 
 Mesure sur Dizzy (09/11/2026) : 40 841 cases (29 319 gardées), 1 056 points, 294 000 arêtes de marche, 9 250
 descentes, 4 500 sauts, 2 échelles ; **7,8 s** au démarrage (cases 4,0, marche 1,1, rebords 0,3, vue 2,1) avec
@@ -147,7 +148,7 @@ réglages dans `BotConfig` (section « Comportement »). Il commande le suivi de
 `onArrive`, `setDestination`) et le regard de `BotMotion` (`gaze`).
 - **Perception** (tous les `PERCEPTION_INTERVAL`) : un autre participant en vie est vu s'il est dans `VIEW_FOV` (100°)
   autour du regard, à moins de `VIEW_RANGE`, et si un rayon des yeux vers sa tête ou son torse n'est coupé que par
-  lui (murs d'air ignorés). Cible : un humain à moins de `HUMAN_PREF_RANGE` plutôt qu'un bot, puis la plus
+  lui (murs d'air et grillages ignorés, comme par son tir : `MapGeometry.bulletTransparent`, #292). Cible : un humain à moins de `HUMAN_PREF_RANGE` plutôt qu'un bot, puis la plus
   proche (cf. « Combat »).
 - **Ouïe** : `BotManager.hearShot` (appelé par `relayShot` d'`init.server` pour un tir au fusil d'un joueur accepté par
   le serveur, remote `ShotFired`, #156 ; et par `BotBrain` pour les tirs des bots). Un coup de couteau ne s'entend pas,
@@ -284,6 +285,10 @@ Règles pures dans `BotPopulationRules`, appliquées par `BotManager` (`adjustPo
 - Le temps affiché est surtout de l'attente entre frames : le calcul est découpé par tranches de `NAV_BUILD_BUDGET`.
   Le monter raccourcit la construction mais charge les frames serveur du début de partie.
 - Les dessus des murs d'air (escaliers) sont de vraies cases : c'est là que marchent les joueurs.
+- **Murs d'air : `Geometry.Clips`, pas `Clips`.** Le générateur range les murs d'air sous `Geometry` ; jusqu'à #292,
+  `BotManager` et `NavBuilder` les cherchaient à la racine de la map (`nil`) : la vue des bots, les notes de vue et de
+  couvert s'arrêtaient sur 666 murs invisibles. Murs d'air : `MapGeometry.clips` ; noms des dossiers de map lus par
+  le code dans `MapGeometry`, contrôlés par `tools/rbxm/verify_place.luau` en CI.
 - **Air strafe : alterner pendant le saut, pas d'un saut à l'autre.** Avec `AIR_SPEED_CAP` = 6, un strafe à 90°
   tourne la vitesse d'environ 11° par tick à 30 studs/s : tenir un côté tout un saut fait une spirale. Le côté suit
   l'écart au cap à chaque tick, et le zigzag visible vient du cap visé décalé d'un saut à l'autre.

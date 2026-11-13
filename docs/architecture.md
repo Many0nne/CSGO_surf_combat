@@ -188,6 +188,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/server/SpawnProtection.luau`: protection d'apparition (#288 : `ForceField` visible `SPAWN_PROTECTION` secondes, retiré au premier tir), testée (`tests/specs/SpawnProtection.spec.luau`).
 - `src/shared/HitZones.luau`: zones du corps touchées (tête, torse, bras, jambes), multiplicateurs de dégâts des armes à distance et règle de calcul.
 - `src/shared/LadderRules.luau`: règles pures des échelles (grimpe façon Source selon le regard, saut pour s'en détacher), testées (`tests/specs/LadderRules.spec.luau`).
+- `src/shared/MapGeometry.luau`: dossiers d'une map lus par le code (`Geometry.Clips`, `Geometry.Ramps`, `GroundSpawns`, `Ladders`, contrôlés par `tools/rbxm/verify_place.luau`) et règle des balles : murs d'air et grillages `passbullets` écartés des rayons de tir et de vue (#292, `docs/maps.md` « Murs d'air et balles »), testé (`tests/specs/MapGeometry.spec.luau`).
 - `src/shared/MapRules.luau`: règles pures de la map (volume et vitesse des boosts, hauteur de mort, tir balistique), testées (`tests/specs/MapRules.spec.luau`).
 - `src/shared/MovementConfig.luau`: constantes physique du mouvement uniquement (vitesses, accel, friction, saut, pentes, bhop, réseau, hitbox).
 - `src/shared/MovementState.luau`: structure d'état partagée pour le mouvement du joueur.

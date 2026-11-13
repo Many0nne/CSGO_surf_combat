@@ -41,10 +41,13 @@ Validator.MAX_HITSCAN_RANGE = MAX_HITSCAN_RANGE
 -- pingOf (#214) : aller-retour réseau du tireur (s), nil si inconnu ou absent (instant annoncé alors non borné).
 -- judged (#297) : appelé une fois par touche ("shot") ou coup ("melee") de joueur soumis aux contrôles, dénominateur
 -- des taux de violations du journal ; absent : rien n'est compté.
+-- isMeleeObstructed (#292) : ligne de vue de la mêlée, murs d'air compris (isObstructed, celle des tirs, les traverse) ;
+-- absent : isObstructed.
 export type ShotWorld = {
 	serverNow: () -> number,
 	positionAt: (char: Model, t: number) -> (Vector3?, number?, boolean?),
 	isObstructed: (from: Vector3, delta: Vector3) -> boolean,
+	isMeleeObstructed: ((from: Vector3, delta: Vector3) -> boolean)?,
 	pingOf: ((attacker: Participant) -> number?)?,
 	judged: ((attacker: Participant, kind: "shot" | "melee") -> ())?,
 	report: (
@@ -696,8 +699,9 @@ local function validateMelee(
 		else DEFAULT_HEAD_OFFSET
 	local segments = ShotRules.meleeSightSegments(attackerPos, targetPos, eyeOffset, headOffset)
 	local clear = #segments == 0
+	local isObstructed = world.isMeleeObstructed or world.isObstructed
 	for _, segment in segments do
-		if not world.isObstructed(segment.from, segment.delta) then
+		if not isObstructed(segment.from, segment.delta) then
 			clear = true
 			break
 		end

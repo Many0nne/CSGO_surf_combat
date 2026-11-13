@@ -2,15 +2,19 @@
 -- Relit la place produite par `rojo build` et vérifie que les viewmodels (assets/rbx/ViewModels), les Tools
 -- (assets/rbx/Tools, dans ReplicatedStorage.Tools, StarterPack vide), la map (assets/rbx/Maps) et ses matières (assets/rbx/Materials) y sont, avec leurs animations,
 -- sons, textures, attributs et scripts.
+-- Contrôle les dossiers de chaque map lus par le code (src/shared/MapGeometry.luau, #292) : un renommage casse la CI.
 -- Signale aussi les Tools dont le nom d'arme n'a pas d'entrée dans src/shared/WeaponConfig.luau (avertissement,
 -- sans échec).
 -- Usage (racine du dépôt) : rojo build default.project.json -o CSGO.rbxlx && lune run tools/rbxm/verify_place.luau [CSGO.rbxlx]
 
 local fs = require("@lune/fs")
+local luau = require("@lune/luau")
 local process = require("@lune/process")
 local roblox = require("@lune/roblox")
 
 local placePath = process.args[1] or "CSGO.rbxlx"
+-- module sans dépendance : chargé tel quel (source unique des noms de dossiers de map)
+local MapGeometry = luau.load(fs.readFile("src/shared/MapGeometry.luau"), { debugName = "MapGeometry" })()
 local game = roblox.deserializePlace(fs.readFile(placePath))
 local errors = 0
 
@@ -209,17 +213,26 @@ local function checkMap(map)
 	for name in missing do
 		fail("MaterialVariant " .. name .. " utilisée par Maps." .. map.Name .. " mais absente de MaterialService")
 	end
+	-- dossiers lus par le code (#292) : murs d'air, rampes, spawns au sol, échelles
+	for _, path in MapGeometry.missingFolders(map) do
+		fail("Maps." .. map.Name .. "." .. path .. " absent (dossier lu par le code, cf. src/shared/MapGeometry.luau)")
+	end
+	local clips = MapGeometry.clips(map)
+	local nClip = if clips then #clips:GetDescendants() else 0
+	local nPass = #MapGeometry.bulletTransparent(map) - (if clips then 1 else 0)
 	local kill = map:GetAttribute("KillHeight")
 	if kill ~= nil and type(kill) ~= "number" then
 		fail("Maps." .. map.Name .. ".KillHeight doit être un nombre")
 	end
 	print(
 		string.format(
-			"Maps.%s : %d instances, %d spawns au sol, %d boosts, KillHeight %s",
+			"Maps.%s : %d instances, %d spawns au sol, %d boosts, %d murs d'air, %d grillages passbullets, KillHeight %s",
 			map.Name,
 			#map:GetDescendants(),
 			nGround,
 			nBoost,
+			nClip,
+			nPass,
 			tostring(kill)
 		)
 	)

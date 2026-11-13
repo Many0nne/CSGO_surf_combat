@@ -100,6 +100,14 @@ function BotArsenal.new(char: Model, onHit: OnHit, onWeapon: (string) -> (), onF
 	return self
 end
 
+-- Cette méthode permet de faire traverser des instances aux tirs du bot lorsque son comportement est branché : murs
+-- d'air et grillages de la map (MapGeometry.bulletTransparent, #292), en plus de son propre personnage.
+function BotArsenal.ignore(self: BotArsenal, instances: { Instance })
+	local ignored = table.clone(instances)
+	table.insert(ignored, self.char)
+	self.params.FilterDescendantsInstances = ignored
+end
+
 -- Cette méthode permet de lire la fiche de l'arme en main lorsqu'on règle un tir ou une vitesse.
 function BotArsenal.config(self: BotArsenal): any
 	return self.current and WeaponConfig.Weapons[self.current]
