@@ -5,6 +5,7 @@ local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local NetworkProtocol = require(Shared:WaitForChild("NetworkProtocol"))
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local MapGeometry = require(Shared:WaitForChild("MapGeometry"))
 local MapSelection = require(Shared:WaitForChild("MapSelection"))
 local WeaponThirdPerson = require(Shared:WaitForChild("WeaponThirdPerson"))
 local WeaponConfig = require(Shared:WaitForChild("WeaponConfig"))
@@ -530,10 +531,12 @@ end)
 
 -- Cette méthode permet de tester la ligne de vue d'un tir ou d'un coup de mêlée (#176) lorsque le Validator la vérifie
 -- (#174) : raycast limité à la géométrie de la map jouée (Workspace.Maps, en inclusion : personnages et objets
--- mobiles ignorés).
--- Paramètres réutilisés tant que le dossier des maps est le même (reconstruits s'il est remplacé).
+-- mobiles ignorés), sans les murs d'air ni les grillages qui laissent passer les balles (#292, même règle que le tir
+-- du client et des bots : MapGeometry.bulletTransparent).
+-- Paramètres réutilisés tant que le dossier des maps et la map jouée sont les mêmes (reconstruits sinon).
 local shotParams: RaycastParams? = nil
 local shotParamsMaps: Instance? = nil
+local shotParamsMap: Instance? = nil
 local warnedNoMaps = false
 local function isShotObstructed(from: Vector3, delta: Vector3): boolean
 	local maps = workspace:FindFirstChild("Maps")
@@ -545,12 +548,19 @@ local function isShotObstructed(from: Vector3, delta: Vector3): boolean
 		end
 		return false
 	end
-	if not shotParams or shotParamsMaps ~= maps then
+	local active = maps:GetAttribute(MapSelection.ACTIVE_ATTRIBUTE)
+	local map = if type(active) == "string" then maps:FindFirstChild(active) else nil
+	if not shotParams or shotParamsMaps ~= maps or shotParamsMap ~= map then
 		local params = RaycastParams.new()
 		params.FilterType = Enum.RaycastFilterType.Include
-		params.FilterDescendantsInstances = { maps }
+		local include = { maps }
+		if map then
+			include = MapGeometry.includeAllBut(maps, MapGeometry.bulletTransparent(map))
+		end
+		params.FilterDescendantsInstances = include
 		shotParams = params
 		shotParamsMaps = maps
+		shotParamsMap = map
 	end
 	return workspace:Raycast(from, delta, shotParams) ~= nil
 end

@@ -12,6 +12,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
 local LadderRules = require(ReplicatedStorage.Shared.LadderRules)
+local MapGeometry = require(ReplicatedStorage.Shared.MapGeometry)
 local MovementConfig = require(ReplicatedStorage.Shared.MovementConfig)
 local NavRules = require(ReplicatedStorage.Shared.NavRules)
 local RampRules = require(ReplicatedStorage.Shared.RampRules)
@@ -134,11 +135,10 @@ function NavBuilder.build(map: Instance): Plan
 	overlap.FilterDescendantsInstances = { map }
 	overlap.RespectCanCollide = true
 	overlap.MaxParts = 1
-	-- Vue et couvert : les murs d'air n'arrêtent ni le regard ni les balles
-	local clips = map:FindFirstChild("Clips")
+	-- Vue et couvert : les murs d'air et les grillages n'arrêtent ni le regard ni les balles (#292)
 	local viewParams = RaycastParams.new()
 	viewParams.FilterType = Enum.RaycastFilterType.Include
-	viewParams.FilterDescendantsInstances = { map }
+	viewParams.FilterDescendantsInstances = MapGeometry.includeAllBut(map, MapGeometry.bulletTransparent(map))
 	viewParams.RespectCanCollide = true
 
 	local probe = Instance.new("Part")
@@ -514,16 +514,6 @@ function NavBuilder.build(map: Instance): Plan
 	for i, wp in clusters do
 		wpPositions[i] = wp.position
 		wpMinY, wpMaxY = math.min(wpMinY, wp.position.Y), math.max(wpMaxY, wp.position.Y)
-	end
-	if clips then
-		-- Vue et couvert sans les murs d'air : Include de tout le reste de la map
-		local include = {}
-		for _, child in map:GetChildren() do
-			if child ~= clips then
-				table.insert(include, child)
-			end
-		end
-		viewParams.FilterDescendantsInstances = include
 	end
 
 	phaseStart = os.clock()

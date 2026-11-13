@@ -1,6 +1,8 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local MapGeometry = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("MapGeometry"))
+local MapSelection = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("MapSelection"))
 local WeaponConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WeaponConfig"))
 local ShotEffects = require(script.Parent.ShotEffects)
 
@@ -16,6 +18,17 @@ function HitscanSystem.init(event: RemoteEvent?, shotEvent: RemoteEvent?)
 	shotFiredEvent = shotEvent
 end
 
+-- Cette méthode permet de lister ce que le tir traverse dans la map jouée lorsqu'un tir part : murs d'air et grillages
+-- (#292, même règle que la ligne de vue du serveur) ; vide tant que la map n'est pas choisie.
+local function seeThrough(): { Instance }
+	local maps = workspace:FindFirstChild("Maps")
+	local name = maps and maps:GetAttribute(MapSelection.ACTIVE_ATTRIBUTE)
+	local map = if maps and type(name) == "string" then maps:FindFirstChild(name) else nil
+	return if map then MapGeometry.bulletTransparent(map) else {}
+end
+
+-- Cette méthode permet de résoudre un tir du joueur lorsqu'il tire : rayon de la caméra (personnage, viewmodel, murs
+-- d'air et grillages traversés), effets locaux, puis touche envoyée au serveur.
 function HitscanSystem.resolveHit(activeViewmodel: Model?): string
 	local cam = workspace.CurrentCamera
 	if not cam then
@@ -23,7 +36,8 @@ function HitscanSystem.resolveHit(activeViewmodel: Model?): string
 	end
 
 	local params = RaycastParams.new()
-	local filtered = { Players.LocalPlayer.Character }
+	local filtered = table.clone(seeThrough())
+	table.insert(filtered, Players.LocalPlayer.Character)
 	if activeViewmodel then
 		table.insert(filtered, activeViewmodel)
 	end

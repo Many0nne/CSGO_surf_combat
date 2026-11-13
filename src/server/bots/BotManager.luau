@@ -22,6 +22,7 @@ local BotRules = require(ReplicatedStorage.Shared.BotRules)
 local CharacterAppearance = require(ReplicatedStorage.Shared.CharacterAppearance)
 local CharacterConfig = require(ReplicatedStorage.Shared.CharacterConfig)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local MapGeometry = require(ReplicatedStorage.Shared.MapGeometry)
 local MapSelection = require(ReplicatedStorage.Shared.MapSelection)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local Participants = require(ServerScriptService.Server.Participants)
@@ -68,7 +69,7 @@ local BotManager = {}
 
 local deps: Deps
 local bots: { Bot } = {}
-local clips: Instance? = nil -- murs d'air de la map jouée (ne bloquent pas la vue des bots)
+local seeThrough: { Instance } = {} -- murs d'air et grillages de la map jouée (n'arrêtent ni la vue ni les tirs, #292)
 local debugCount: number? = nil -- nombre de bots fixé par DebugBots (nil : population automatique)
 local pauseCount = 0 -- runs de DebugPlaytest en cours (population suspendue, aucun bot)
 local passive = false -- DebugBotsPassive : les bots (présents et ajoutés ensuite) ne tirent pas sur les humains
@@ -227,7 +228,7 @@ local function spawnBot(bot: Bot)
 			return aliveOthers(id)
 		end,
 		claimed = claimedDestinations,
-		clips = clips,
+		seeThrough = seeThrough,
 		onShot = function(position: Vector3)
 			BotManager.hearShot(participant, position)
 		end,
@@ -453,7 +454,7 @@ function BotManager.init(dependencies: Deps)
 	task.spawn(function()
 		local map = MapSelection.waitForActive(30)
 		if map then
-			clips = map:FindFirstChild("Clips")
+			seeThrough = MapGeometry.bulletTransparent(map)
 			NavPlan.start(map)
 		else
 			warn("[BotManager] pas de map jouée : pas de plan de navigation, les bots restent sur place")
