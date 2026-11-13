@@ -74,7 +74,9 @@ return function(T, Loader)
 		-- Monde simulé de la validation des tirs (#174) : horloge serveur, historiques (fonction t -> position par
 		-- personnage, sinon pas d'historique ; elle peut rendre aussi la pose : cap et accroupi, #213), obstacle de la map
 		-- (booléen, ou fonction (from, delta) -> booléen), violations reçues, ping des joueurs (s, nil : inconnu, #214).
-		local world = { now = 100, histories = {}, obstructed = false :: any, reports = {}, ping = nil :: number? }
+		-- judged : touches et coups soumis aux contrôles (#297), dans l'ordre ({ attacker, kind }).
+		local world =
+			{ now = 100, histories = {}, obstructed = false :: any, reports = {}, ping = nil :: number?, judged = {} }
 		Real.setShotWorld({
 			serverNow = function()
 				return world.now
@@ -88,6 +90,9 @@ return function(T, Loader)
 			end,
 			pingOf = function(attacker)
 				return if attacker.isBot then nil else world.ping
+			end,
+			judged = function(attacker, kind)
+				table.insert(world.judged, { attacker = attacker, kind = kind })
 			end,
 			isObstructed = function(from, delta)
 				if type(world.obstructed) == "function" then
@@ -276,6 +281,31 @@ return function(T, Loader)
 			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(1500, 0, 0))
 			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), 0), 115)
 			T.expectEqual(#world.reports, 0, "violation pour un tir légitime")
+		end)
+
+		T.it("compte chaque touche et chaque coup de joueur soumis aux contrôles (dénominateur, #297)", function()
+			local Validator, makePlayer, makeBot, world = setup()
+			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(100, 0, 0))
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), 0), 115)
+			T.expectEqual(#world.judged, 1)
+			T.expectEqual(world.judged[1].kind, "shot")
+			T.expectEqual(world.judged[1].attacker.id, a.UserId)
+			-- Refusé avant les contrôles (cadence pas finie) : pas jugé
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), 0.01), nil)
+			T.expectEqual(#world.judged, 1, "touche écartée avant les contrôles")
+			-- Tir hors de la portée : écarté avant les contrôles
+			local far = makePlayer(Vector3.new(Validator.MAX_HITSCAN_RANGE + 1, 0, 0))
+			Validator.authorizeHitscan(makePlayer(Vector3.zero, "AWP"), far.Character, rootOf(far.Character), 10)
+			T.expectEqual(#world.judged, 1, "hors de portée : pas jugé")
+			-- Bot : pas soumis aux contrôles
+			local bot = makeBot(Vector3.zero, "AWP")
+			T.expectEqual(Validator.authorizeHitscan(bot, b.Character, rootOf(b.Character), 0), 115)
+			T.expectEqual(#world.judged, 1, "un bot n'est pas jugé")
+			-- Coup de mêlée
+			local knife = makePlayer(Vector3.zero, "M9Bayonet")
+			T.expectEqual(Validator.authorizeMelee(knife, makePlayer(Vector3.new(5, 0, 0)).Character, "primary", 0), 50)
+			T.expectEqual(#world.judged, 2)
+			T.expectEqual(world.judged[2].kind, "melee")
 		end)
 
 		T.it("refuse un coup de melee au-delà de 10 studs", function()

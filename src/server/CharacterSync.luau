@@ -206,16 +206,23 @@ local function fireCorrection(player: Player, track: Track, now: number)
 end
 
 -- Cette méthode permet de journaliser un déplacement impossible lorsqu'une règle le refuse (catégorie Movement,
--- gravité moyenne : un vrai lag peut en produire un).
-local function reportMove(player: Player, detail: string)
-	CheatLog.report(Participants.fromPlayer(player), CheatLog.Category.MOVEMENT, CheatLog.Severity.MEDIUM, detail)
+-- gravité moyenne : un vrai lag peut en produire un) ; check = règle en cause (#297 : « speed » pour le seau de
+-- distance, « noclip », « flight »).
+local function reportMove(player: Player, check: string, detail: string)
+	CheatLog.report(
+		Participants.fromPlayer(player),
+		CheatLog.Category.MOVEMENT,
+		CheatLog.Severity.MEDIUM,
+		detail,
+		check
+	)
 end
 
 -- Cette méthode permet de refuser un paquet lorsqu'une règle de déplacement le juge impossible (seau de distance ;
 -- réutilisable par les règles suivantes, noclip et vol #177) : violation journalisée, puis le client est renvoyé à sa
 -- dernière position acceptée et ses paquets sont ignorés jusqu'à ce qu'il l'ait appliquée.
-local function refuse(player: Player, track: Track, detail: string, now: number)
-	reportMove(player, detail)
+local function refuse(player: Player, track: Track, check: string, detail: string, now: number)
+	reportMove(player, check, detail)
 	local seq = (correctionSeqs[player] or 0) + 1
 	correctionSeqs[player] = seq
 	track.requiredAck = seq
@@ -241,10 +248,10 @@ local function judgeGuard(player: Player, track: Track, pos: Vector3, now: numbe
 		return false
 	end
 	if verdict.enforce then
-		refuse(player, track, verdict.detail, now)
+		refuse(player, track, verdict.rule, verdict.detail, now)
 		return true
 	end
-	reportMove(player, verdict.detail)
+	reportMove(player, verdict.rule, verdict.detail)
 	return false
 end
 
@@ -286,6 +293,8 @@ local function onClientPosition(
 		return
 	end
 	track.acked = true
+	-- Paquet jugé (seau, puis noclip et vol) : dénominateur des taux de la catégorie Movement (#297)
+	CheatLog.judged(Participants.fromPlayer(player), CheatLog.Judged.POSITION)
 	-- Pas de délai minimal entre deux paquets : des paquets groupés passent, chacun consomme le seau (débit borné par
 	-- la garde commune, RemoteGuard)
 	local silence = now - track.budget.lastAt
@@ -293,11 +302,11 @@ local function onClientPosition(
 		local distance = (pos - track.lastPos).Magnitude
 		local detail = string.format("déplacement de %.1f studs en %.2f s refusé", distance, silence)
 		if CharacterSyncRules.ENFORCE_MOVEMENT then
-			refuse(player, track, detail, now)
+			refuse(player, track, "speed", detail, now)
 			return
 		end
 		-- Journal seul : violation comptée, déplacement appliqué quand même, seau vidé
-		reportMove(player, detail)
+		reportMove(player, "speed", detail)
 		track.budget.stored = 0
 	end
 	-- Noclip et vol (#177) : refus et correction en mode bloquant, journal seul sinon
@@ -350,7 +359,8 @@ local function checkVoid(fall: FallHooks)
 				string.format(
 					"vide : en l'air sans position depuis %.1f s, déclaré tombé",
 					now - track.guard.heardAt
-				)
+				),
+				"void"
 			)
 			if MovementGuardRules.ENFORCE_VOID then
 				fall.kill(track.char)

@@ -1,10 +1,22 @@
 -- Journal des violations (#170) : compteurs, score décroissant, warn limité, kick à 3 violations fortes, bots et
--- Studio sans sanction, résumé au départ, garde des remotes branchée sur le journal.
+-- Studio sans sanction, résumé au départ, garde des remotes branchée sur le journal. Mesure (#297) : compteurs par
+-- contrôle, dénominateurs, ping, relevé agrégé, nouvel essai du webhook puis repli console.
 return function(T, Loader)
-	-- Cette méthode permet de monter un CheatLog neuf avec horloge, console, Studio et `task` simulés lorsqu'un test
-	-- démarre ; spawned garde les résumés lancés au départ d'un joueur (sans les exécuter).
+	-- Cette méthode permet de monter un CheatLog neuf avec horloge, console, Studio, webhook et `task` simulés lorsqu'un
+	-- test démarre ; spawned garde les envois lancés (résumés, relevés) sans les exécuter, webhooks donne les URL
+	-- configurées par nom de StringValue, failPosts le nombre de PostAsync qui échouent avant le premier qui passe.
 	local function setup(isStudio: boolean?)
-		local env = { clock = 0, warns = {}, prints = {}, spawned = {} }
+		local env = {
+			clock = 0,
+			warns = {},
+			prints = {},
+			spawned = {},
+			waits = {},
+			webhooks = {} :: { [string]: string },
+			posts = 0,
+			failPosts = 0,
+		}
+		local realServerScripts = Loader.new().game:GetService("ServerScriptService")
 		local loader = Loader.new({
 			Players = {
 				PlayerRemoving = {
@@ -16,7 +28,33 @@ return function(T, Loader)
 					return isStudio == true
 				end,
 			},
-			HttpService = {},
+			-- Arborescence Rojo réelle, plus les StringValue des webhooks (Webhook.url)
+			ServerScriptService = {
+				Server = realServerScripts.Server,
+				FindFirstChild = function(_, name)
+					local url = env.webhooks[name]
+					if not url then
+						return nil
+					end
+					return {
+						Value = url,
+						IsA = function(_, className)
+							return className == "StringValue"
+						end,
+					}
+				end,
+			},
+			HttpService = {
+				JSONEncode = function()
+					return "{}"
+				end,
+				PostAsync = function()
+					env.posts += 1
+					if env.posts <= env.failPosts then
+						error("HTTP 429 (Too Many Requests)")
+					end
+				end,
+			},
 		}, {
 			os = {
 				clock = function()
@@ -35,10 +73,18 @@ return function(T, Loader)
 				spawn = function(fn, ...)
 					table.insert(env.spawned, table.pack(fn, ...))
 				end,
+				wait = function(seconds)
+					table.insert(env.waits, seconds)
+				end,
 			},
 		})
 		env.CheatLog = loader:require("src/server/CheatLog")
 		env.N = loader:require("src/shared/NetworkProtocol").Names
+		-- Cette méthode permet d'exécuter l'envoi lancé en i-ème lorsqu'un test vérifie ce qui part au webhook.
+		function env.run(i: number)
+			local spawned = env.spawned[i]
+			spawned[1](table.unpack(spawned, 2, spawned.n))
+		end
 		return env
 	end
 
@@ -310,6 +356,220 @@ return function(T, Loader)
 			bob.Parent = nil
 			C.report(participantOf(bob), C.Category.MOVEMENT, C.Severity.HIGH, "tardive")
 			T.expectEqual(C.summary(2), nil)
+		end)
+	end)
+
+	T.describe("CheatLog mesure (#297)", function()
+		T.it("compte chaque contrôle à part, sous Catégorie:contrôle", function()
+			local env = setup()
+			local C = env.CheatLog
+			local alice = participantOf(fakePlayer(1, "Alice"))
+			C.report(alice, C.Category.HITSCAN, C.Severity.MEDIUM, "direction : a", "direction")
+			C.report(alice, C.Category.HITSCAN, C.Severity.MEDIUM, "direction : b", "direction")
+			C.report(alice, C.Category.HITSCAN, C.Severity.MEDIUM, "origin : c", "origin")
+			C.report(alice, C.Category.SPAWN, C.Severity.LOW, "alive")
+			C.report(alice, C.Category.AIM, C.Severity.LOW, "relevé", C.Category.AIM)
+			local summary = C.summary(1)
+			T.expectEqual(summary.checks["Hitscan:direction"].medium, 2)
+			T.expectEqual(summary.checks["Hitscan:origin"].medium, 1)
+			T.expectEqual(summary.counts.Hitscan.medium, 3, "la catégorie compte toujours le total")
+			T.expectEqual(summary.checks.Spawn.low, 1, "sans contrôle nommé : la catégorie seule")
+			T.expectEqual(summary.checks.Aim.low, 1, "contrôle nommé comme sa catégorie : pas de doublon")
+			T.expectEqual(summary.checks["Aim:Aim"], nil)
+		end)
+
+		T.it("garde des remotes : le remote est le contrôle, débit compris", function()
+			local env = setup()
+			local C = env.CheatLog
+			local player = fakePlayer(1, "Alice")
+			for _ = 1, 50 do
+				C.admit(player :: any, env.N.REQUEST_SPAWN)
+			end
+			C.admit(player :: any, env.N.MELEE_DAMAGE, Instance.new("Model"), "kill", 0)
+			local summary = C.summary(1)
+			T.expect(summary.checks["RemoteRate:" .. env.N.REQUEST_SPAWN].low > 0)
+			T.expectEqual(summary.checks["RemoteArgs:" .. env.N.MELEE_DAMAGE].high, 1)
+		end)
+
+		T.it("dénominateurs par joueur, avec ou sans violation ; bots et joueurs partis ignorés", function()
+			local env = setup()
+			local C = env.CheatLog
+			local alice, bob = participantOf(fakePlayer(1, "Alice")), participantOf(fakePlayer(2, "Bob"))
+			for _ = 1, 3 do
+				C.judged(alice, C.Judged.SHOT)
+			end
+			C.judged(alice, C.Judged.MELEE)
+			for _ = 1, 5 do
+				C.judged(bob, C.Judged.POSITION)
+			end
+			C.judged({ id = -1, name = "Marcel", isBot = true }, C.Judged.SHOT)
+			local gone = fakePlayer(3, "Eve")
+			gone.Parent = nil
+			C.judged(participantOf(gone), C.Judged.SHOT)
+			T.expectEqual(C.session(1).judged.shot, 3)
+			T.expectEqual(C.session(1).judged.melee, 1)
+			T.expectEqual(C.session(2).judged.position, 5)
+			T.expectEqual(C.summary(2), nil, "pas de bilan sans violation, mais une session")
+			T.expectEqual(C.session(-1), nil, "bot ignoré")
+			T.expectEqual(C.session(3), nil, "joueur parti ignoré")
+			C.report(alice, C.Category.HITSCAN, C.Severity.MEDIUM, "x", "direction")
+			T.expectEqual(C.summary(1).judged.shot, 3, "jugés joints au bilan")
+		end)
+
+		T.it("ping de la session : médiane à la classe près et maximum, valeurs absurdes ignorées", function()
+			local env = setup()
+			local C = env.CheatLog
+			local alice = participantOf(fakePlayer(1, "Alice"))
+			for _, seconds in { 0.05, 0.08, 0.2, 0 / 0, -1, math.huge } do
+				C.notePing(alice, seconds)
+			end
+			local ping = C.session(1).ping
+			T.expectEqual(ping.samples, 3)
+			T.expectEqual(ping.medianMs, 85, "classe 80-90 ms")
+			T.expectNear(ping.maxMs, 200)
+			-- Ping nul (Studio) : la médiane ne dépasse pas le maximum
+			local bob = participantOf(fakePlayer(2, "Bob"))
+			C.notePing(bob, 0)
+			T.expectEqual(C.session(2).ping.medianMs, 0)
+		end)
+
+		T.it("pire violation : la plus grave, puis celle du contrôle le plus répété", function()
+			local env = setup()
+			local C = env.CheatLog
+			local alice = participantOf(fakePlayer(1, "Alice"))
+			C.report(alice, C.Category.HITSCAN, C.Severity.MEDIUM, "origin : isolée", "origin")
+			T.expectEqual(C.summary(1).worst.check, "Hitscan:origin")
+			C.report(alice, C.Category.HITSCAN, C.Severity.MEDIUM, "direction : 1", "direction")
+			T.expectEqual(C.summary(1).worst.check, "Hitscan:direction", "égalité : la plus récente")
+			C.report(alice, C.Category.HITSCAN, C.Severity.MEDIUM, "direction : 2", "direction")
+			C.report(alice, C.Category.HITSCAN, C.Severity.MEDIUM, "direction : 3", "direction")
+			C.report(alice, C.Category.HITSCAN, C.Severity.MEDIUM, "origin : 2, moins répétée", "origin")
+			T.expectEqual(C.summary(1).worst.detail, "direction : 3", "contrôle le plus répété, dernier détail")
+			C.report(alice, C.Category.REMOTE_RATE, C.Severity.LOW, "flood", "X")
+			T.expectEqual(C.summary(1).worst.check, "Hitscan:direction", "une faible ne remplace pas une moyenne")
+			C.report(alice, C.Category.REMOTE_ARGS, C.Severity.HIGH, "NaN", "CharacterSync")
+			T.expectEqual(C.summary(1).worst.check, "RemoteArgs:CharacterSync", "une forte l'emporte")
+		end)
+
+		T.it("résumé : contrôles avec leur taux, jugés et ping du joueur", function()
+			local env = setup()
+			local C = env.CheatLog
+			local player = fakePlayer(1, "Alice")
+			local alice = participantOf(player)
+			for _ = 1, 4 do
+				C.judged(alice, C.Judged.SHOT)
+			end
+			C.notePing(alice, 0.08)
+			C.report(alice, C.Category.HITSCAN, C.Severity.MEDIUM, "direction : a", "direction")
+			C.report(alice, C.Category.MOVEMENT, C.Severity.LOW, "vide", "void")
+			C.onPlayerRemoving(player :: any)
+			T.expectEqual(C.session(1), nil, "session oubliée au départ")
+			local embed = C.buildEmbed(env.spawned[1][2])
+			T.expect(string.find(embed.description, "Jugés : 4 touches · 0 coups · 0 positions", 1, true) ~= nil)
+			T.expect(string.find(embed.description, "Ping : médiane 80 ms, max 80 ms (1 mesures)", 1, true) ~= nil)
+			T.expect(string.find(embed.description, "Pire : Hitscan:direction moyenne", 1, true) ~= nil)
+			local byName = {}
+			for _, field in embed.fields do
+				byName[field.name] = field.value
+			end
+			T.expect(string.find(byName.Hitscan, "direction 1 / 4 touches (25.00 %)", 1, true) ~= nil, byName.Hitscan)
+			T.expect(string.find(byName.Movement, "void 1", 1, true) ~= nil, "vide : sans dénominateur")
+			T.expect(string.find(byName.Movement, "positions", 1, true) == nil, byName.Movement)
+		end)
+
+		T.it("relevé agrégé : taux par contrôle sur les jugés de tous, joueurs sans violation compris", function()
+			local env = setup()
+			local C = env.CheatLog
+			local alice, bob = fakePlayer(1, "Alice"), fakePlayer(2, "Bob")
+			for _ = 1, 3 do
+				C.judged(participantOf(alice), C.Judged.SHOT)
+			end
+			for _ = 1, 7 do
+				C.judged(participantOf(bob), C.Judged.SHOT)
+				C.judged(participantOf(bob), C.Judged.POSITION)
+			end
+			C.notePing(participantOf(bob), 0.1)
+			C.report(participantOf(alice), C.Category.HITSCAN, C.Severity.MEDIUM, "a", "direction")
+			C.report(participantOf(alice), C.Category.HITSCAN, C.Severity.MEDIUM, "b", "direction")
+			C.report(participantOf(alice), C.Category.REMOTE_RATE, C.Severity.LOW, "flood", "ShotFired")
+			-- Alice part avant le relevé : ce qu'elle a fait y reste
+			C.onPlayerRemoving(alice :: any)
+			env.clock = 120
+			local embed = C.flushReport("périodique")
+			T.expect(embed ~= nil)
+			local text = embed.description
+			T.expect(string.find(text, "Période de 2.0 min (périodique)", 1, true) ~= nil, text)
+			T.expect(string.find(text, "Joueurs : 2, dont 1 avec violation", 1, true) ~= nil, text)
+			T.expect(string.find(text, "Jugés : 10 touches · 0 coups · 7 positions", 1, true) ~= nil, text)
+			T.expect(string.find(text, "Hitscan:direction : 2 / 10 touches (20.00 %)", 1, true) ~= nil, text)
+			T.expect(string.find(text, "RemoteRate:ShotFired : 1", 1, true) ~= nil, "sans dénominateur : nombre brut")
+			T.expect(string.find(text, "Ping : médiane 100 ms, max 100 ms", 1, true) ~= nil, text)
+			-- Envoi lancé dans son propre fil ; la période suivante repart de zéro
+			T.expectEqual(env.spawned[#env.spawned][2], embed)
+			T.expectEqual(C.flushReport("périodique"), nil, "période vide : rien d'émis")
+			C.judged(participantOf(bob), C.Judged.POSITION)
+			local last = C.flushReport("arrêt du serveur")
+			T.expect(string.find(last.description, "Jugés : 0 touches · 0 coups · 1 positions", 1, true) ~= nil)
+			T.expect(string.find(last.description, "Aucune violation.", 1, true) ~= nil)
+		end)
+
+		T.it("webhook : nouvel essai après un échec, sans repli console", function()
+			local env = setup()
+			local C = env.CheatLog
+			env.webhooks.CheatLogWebhookUrl = "https://exemple.invalid/hook"
+			env.failPosts = C.WEBHOOK_ATTEMPTS - 1
+			local player = fakePlayer(1, "Alice")
+			C.report(participantOf(player), C.Category.MOVEMENT, C.Severity.MEDIUM, "téléport", "speed")
+			C.onPlayerRemoving(player :: any)
+			local before = #env.warns
+			env.run(1)
+			T.expectEqual(env.posts, C.WEBHOOK_ATTEMPTS, "posté au dernier essai")
+			T.expectEqual(#env.waits, C.WEBHOOK_ATTEMPTS - 1)
+			T.expectEqual(env.waits[1], C.WEBHOOK_RETRY_DELAY)
+			T.expectEqual(env.waits[2], 2 * C.WEBHOOK_RETRY_DELAY, "attente croissante")
+			T.expectEqual(#env.warns, before, "rien en console : le résumé est parti")
+		end)
+
+		T.it("webhook : après le dernier essai, le résumé entier part en console", function()
+			local env = setup()
+			local C = env.CheatLog
+			env.webhooks.FeedbackWebhookUrl = "https://exemple.invalid/hook"
+			env.failPosts = math.huge
+			local player = fakePlayer(1, "Alice")
+			C.report(participantOf(player), C.Category.MOVEMENT, C.Severity.MEDIUM, "téléport refusé", "speed")
+			C.onPlayerRemoving(player :: any)
+			env.run(1)
+			T.expectEqual(env.posts, C.WEBHOOK_ATTEMPTS)
+			local console = table.concat(env.warns, "\n")
+			T.expect(string.find(console, "après " .. C.WEBHOOK_ATTEMPTS .. " essai(s)", 1, true) ~= nil, console)
+			T.expect(string.find(console, "repli console", 1, true) ~= nil, console)
+			T.expect(string.find(console, "téléport refusé", 1, true) ~= nil, "détail du résumé gardé")
+			T.expect(string.find(console, "UserId 1", 1, true) ~= nil, "UserId gardé")
+		end)
+
+		T.it("webhook absent : repli console, rien posté ; Studio : résumé complet affiché", function()
+			local env = setup()
+			local C = env.CheatLog
+			local player = fakePlayer(1, "Alice")
+			C.report(participantOf(player), C.Category.MOVEMENT, C.Severity.MEDIUM, "téléport", "speed")
+			C.onPlayerRemoving(player :: any)
+			env.run(1)
+			T.expectEqual(env.posts, 0)
+			local console = table.concat(env.warns, "\n")
+			T.expect(string.find(console, "aucun webhook configuré", 1, true) ~= nil, console)
+			T.expect(string.find(console, "Movement : ", 1, true) ~= nil, "champs du résumé en console")
+
+			local studio = setup(true)
+			local S = studio.CheatLog
+			studio.webhooks.CheatLogWebhookUrl = "https://exemple.invalid/hook"
+			local bob = fakePlayer(2, "Bob")
+			S.report(participantOf(bob), S.Category.MOVEMENT, S.Severity.MEDIUM, "téléport", "speed")
+			S.onPlayerRemoving(bob :: any)
+			studio.run(1)
+			T.expectEqual(studio.posts, 0, "jamais de webhook depuis Studio")
+			local printed = table.concat(studio.prints, "\n")
+			T.expect(string.find(printed, "résumé de Bob", 1, true) ~= nil, printed)
+			T.expect(string.find(printed, "Jugés :", 1, true) ~= nil, printed)
 		end)
 	end)
 
