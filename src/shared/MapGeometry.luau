@@ -64,15 +64,12 @@ function MapGeometry.bulletTransparent(map: Instance): { Instance }
 	return list
 end
 
--- Cette méthode permet de lister ce qu'un rayon en inclusion doit garder lorsqu'il vise toute la map sauf `ignored` :
--- les enfants de `root` sans élément écarté sont gardés entiers, ceux qui en contiennent sont parcourus (liste courte :
--- seuls les ancêtres des éléments écartés sont détaillés). Une pièce qui contient un élément écarté reste gardée entière
--- (une inclusion ne peut pas garder une pièce sans ses enfants) : la pièce solide prime.
+-- Cette méthode permet de lister ce qu'un rayon en inclusion garde lorsqu'il vise tout `root` sauf `ignored` : seuls les
+-- dossiers ancêtres d'un élément écarté sont détaillés (une pièce qui en contient un reste entière : la pièce prime).
 function MapGeometry.includeAllBut(root: Instance, ignored: { Instance }): { Instance }
 	-- Comparaisons par == et IsDescendantOf, pas de table indexée par instance (identité non garantie hors Roblox, Lune)
 	local include: { Instance } = {}
-	-- Cette méthode permet de parcourir un niveau de l'arbre lorsqu'il contient un élément écarté : chaque enfant est
-	-- écarté, détaillé (il contient un élément écarté) ou gardé entier.
+	-- Cette méthode permet de trier les enfants d'un nœud lorsqu'il contient un élément écarté : écarté, détaillé, gardé.
 	local function visit(node: Instance)
 		for _, child in node:GetChildren() do
 			local skipped, holds = false, false
