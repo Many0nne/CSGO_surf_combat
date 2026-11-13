@@ -46,7 +46,7 @@ local ACTION_SIZE = 30
 local ACTION_GAP = 46
 local KEY_HINT_TIME = 1.5 -- s d'affichage du refus d'une touche (« RÉSERVÉE AU JEU »)
 -- Aperçu du viseur (#251), sous les catégories : deux cases, fond clair et fond sombre, viseur à sa vraie taille en px
-local PREVIEW_TOP = 230 -- px sous le haut des lignes
+local PREVIEW_GAP_BELOW_TABS = 16 -- px entre la dernière catégorie et le libellé APERÇU
 local PREVIEW_SIZE = 100 -- 75 px à l'échelle minimale (0,75) : le plus grand viseur (36 px du centre) y tient
 local PREVIEW_GAP = 6
 local PREVIEW_LIGHT = Color3.fromRGB(222, 214, 200) -- sable clair, comme un ciel ou une rampe éclairée
@@ -613,10 +613,14 @@ end
 -- Cette méthode permet de construire l'aperçu du viseur (une case claire, une case sombre) sous les catégories lorsque la
 -- catégorie VISEUR est construite ; le viseur y est à sa taille réelle en px malgré la mise à l'échelle de l'écran.
 local function buildCrosshairPreview(category: Category)
+	-- Sous la dernière catégorie créée (et non à une position en dur) : une catégorie ajoutée plus tard ne le recouvre pas.
+	-- Les lignes démarrent à ROWS_TOP, les onglets à CATS_TOP + (rang - 1) * CAT_STEP.
+	local tabsBottom = CATS_TOP + (#categories - 1) * CAT_STEP + CAT_SIZE
+	local previewTop = tabsBottom + PREVIEW_GAP_BELOW_TABS - ROWS_TOP
 	local preview = UIKit.frame({
 		Name = "Preview",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(-ROWS_X, PREVIEW_TOP),
+		Position = UDim2.fromOffset(-ROWS_X, previewTop),
 		Size = UDim2.fromOffset(PREVIEW_SIZE * 2 + PREVIEW_GAP, PREVIEW_SIZE + 26),
 		Parent = category.rows,
 	})
