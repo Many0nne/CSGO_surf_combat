@@ -409,4 +409,54 @@ return function(T, Loader)
 			T.expectEqual(HUDRules.escapeRichText("<a&b>"), "&lt;a&amp;b&gt;")
 		end)
 	end)
+
+	T.describe("HUDRules : fiche de statistiques de l'accueil (#301)", function()
+		T.it("vue non chargée : « — » partout, ratio compris", function()
+			local view = HUDRules.statsView(nil)
+			for _, key in { "kills", "deaths", "ratio", "roundsPlayed", "roundsWon" } do
+				T.expectEqual(view[key], HUDRules.STATS_UNKNOWN, key)
+			end
+			T.expectEqual(HUDRules.STATS_UNKNOWN, "—")
+		end)
+
+		T.it("ratio : deux décimales comme le classement, sans mort il vaut les kills", function()
+			T.expectEqual(HUDRules.statsRatio(0, 0), "0.00")
+			T.expectEqual(HUDRules.statsRatio(7, 0), "7.00")
+			T.expectEqual(HUDRules.statsRatio(3, 2), "1.50")
+			T.expectEqual(HUDRules.statsRatio(2, 3), "0.67")
+			T.expectEqual(HUDRules.statsRatio(250, 0), "250", "à partir de 100, sans décimale")
+			T.expectEqual(
+				HUDRules.statsRatio(19999, 200),
+				"100",
+				"99.995 arrondi à 100 : sans décimale, pas « 100.00 »"
+			)
+			T.expectEqual(HUDRules.statsRatio(19899, 200), "99.50", "même arrondi que le classement")
+			T.expectEqual(HUDRules.statsRatio(3, 2), HUDRules.formatKD(3, 2), "identique au classement sous 100")
+			T.expectEqual(HUDRules.statsRatio(25000, 0), "25.0k")
+		end)
+
+		T.it("grands nombres : chiffres complets sous 10 000, puis k et M tronqués", function()
+			T.expectEqual(HUDRules.formatCount(0), "0")
+			T.expectEqual(HUDRules.formatCount(999), "999")
+			T.expectEqual(HUDRules.formatCount(1000), "1 000")
+			T.expectEqual(HUDRules.formatCount(9999), "9 999")
+			T.expectEqual(HUDRules.formatCount(10000), "10.0k")
+			T.expectEqual(HUDRules.formatCount(12345), "12.3k")
+			T.expectEqual(HUDRules.formatCount(99999), "99.9k", "tronqué : jamais 100.0k")
+			T.expectEqual(HUDRules.formatCount(123456), "123k")
+			T.expectEqual(HUDRules.formatCount(999999), "999k")
+			T.expectEqual(HUDRules.formatCount(1000000), "1.0M")
+			T.expectEqual(HUDRules.formatCount(1250000), "1.2M")
+			T.expectEqual(HUDRules.formatCount(123456789), "123M")
+		end)
+
+		T.it("vue chargée : compteurs mis en forme", function()
+			local view = HUDRules.statsView({ kills = 12345, deaths = 0, roundsPlayed = 40, roundsWon = 9 })
+			T.expectEqual(view.kills, "12.3k")
+			T.expectEqual(view.deaths, "0")
+			T.expectEqual(view.ratio, "12.3k")
+			T.expectEqual(view.roundsPlayed, "40")
+			T.expectEqual(view.roundsWon, "9")
+		end)
+	end)
 end

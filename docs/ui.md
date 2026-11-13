@@ -78,9 +78,11 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   MORTS, K/M, ROUNDS, VICTOIRES). Lue dans l'attribut informatif `PlayerStats` du Player (`StatsRules.ATTRIBUTE`, posé
   par `StatsStore` une fois le stocké lu puis à chaque kill, mort et fin de manche ; jamais relu par le serveur, pas de
   remote). Attribut absent (chargement en cours, ou en échec : Studio sans accès aux API) : « — » partout
-  (`StatsRules.UNKNOWN`), jamais des zéros présentés comme vrais. Mise en forme dans `StatsRules.view` (testée) : ratio à
-  deux décimales comme le classement (sans mort, il vaut les kills), compteurs tels quels sous 10 000 puis abrégés et
-  tronqués (« 12.3k », « 1.2M »). Les kills et morts face aux bots ne comptent pas
+  (`HUDRules.STATS_UNKNOWN`), jamais des zéros présentés comme vrais. Mise en forme dans `HUDRules.statsView` (testée,
+  client : le module partagé `StatsRules` ne garde que l'attribut) : ratio du classement (`formatKD`, sans mort il vaut
+  les kills, sans décimale à partir de 100), compteurs en chiffres complets sous 10 000 (espace des milliers dès 1 000)
+  puis abrégés et tronqués (« 12.3k », « 1.2M »). Posée au-dessus de l'aide en bas à droite de l'écran d'équipement :
+  à sa hauteur, elle la chevauchait sur un écran plus étroit que 16:9. Les kills et morts face aux bots ne comptent pas
   (`ParticipantRules.killCountsInStats`) : la fiche ne suit donc pas le classement d'une manche jouée contre des bots.
 - `src/client/ui/MenuPage.luau` : gabarit des écrans secondaires, sans panneau : bloc centré sur le voile du classement,
   actions côte à côte en bas au centre (`MenuPage.ExitY`). Choix de l'utilisateur en #117, après un premier passage en

@@ -234,12 +234,14 @@ function StatsStore.getStats(player: Player): Stats
 	return totalOf(profile)
 end
 
--- Cette méthode permet d'ajouter un écart au profil d'un joueur inscrit lorsqu'un événement compté arrive, et de
--- republier son attribut (une fin de manche met donc la fiche à jour avant le retour au menu).
-local function record(player: Player, field: StatsRules.Field)
+-- Cette méthode permet d'ajouter des écarts au profil d'un joueur inscrit lorsqu'un événement compté arrive, puis de
+-- republier son attribut une seule fois (une fin de manche met donc la fiche à jour avant le retour au menu).
+local function record(player: Player, ...: StatsRules.Field)
 	local profile = profiles[player]
 	if profile then
-		StatsRules.add(profile.delta, field)
+		for _, field in { ... } do
+			StatsRules.add(profile.delta, field)
+		end
 		publish(profile)
 	end
 end
@@ -257,9 +259,11 @@ end
 -- Cette méthode permet de compter une manche jouée (et gagnée si `won`) lorsqu'une manche se termine avec ce joueur en
 -- jeu (RoundManager, vainqueur désigné par id).
 function StatsStore.recordRoundEnd(player: Player, won: boolean)
-	record(player, "roundsPlayed")
+	-- Manche jouée et gagnée ajoutées ensemble : l'attribut ne passe pas par un état « jouée, pas encore gagnée »
 	if won then
-		record(player, "roundsWon")
+		record(player, "roundsPlayed", "roundsWon")
+	else
+		record(player, "roundsPlayed")
 	end
 end
 

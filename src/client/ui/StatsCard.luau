@@ -8,6 +8,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local StatsRules = require(Shared:WaitForChild("StatsRules"))
 local UITheme = require(Shared:WaitForChild("UITheme"))
+local HUDRules = require(script.Parent.HUDRules)
 local UIKit = require(script.Parent.UIKit)
 
 local C = UITheme.Colors
@@ -16,15 +17,18 @@ local F = UITheme.Fonts
 local StatsCard = {}
 
 -- Mise en page (px à 720 de haut)
-local BOTTOM = 24 -- marge sous la fiche, au niveau de l'aide de l'écran d'équipement
+-- Marge sous la fiche : au-dessus de l'aide en bas à droite de l'écran d'équipement, que la fiche chevaucherait en
+-- largeur sur un écran plus étroit que 16:9
+local BOTTOM = 48
 local COLUMN_WIDTH = 84
 local COLUMN_GAP = 18
 local VALUE_SIZE = 28
 local LABEL_Y = 32
 local HEIGHT = 52
-local SCRIM_SIZE = Vector2.new(620, 130) -- fondu de bord sous la fiche (sol clair possible selon la map)
+-- Fondu de bord sous la fiche (sol clair possible selon la map) ; il s'arrête sous les barres de la fiche d'arme
+local SCRIM_SIZE = Vector2.new(620, 110)
 local SCRIM_TRANSPARENCY = 0.45
--- Colonnes, de gauche à droite : champ de StatsRules.View et libellé
+-- Colonnes, de gauche à droite : champ de HUDRules.StatsView et libellé
 local COLUMNS = {
 	{ key = "kills", label = "KILLS" },
 	{ key = "deaths", label = "MORTS" },
@@ -39,7 +43,7 @@ local values: { [string]: { TextLabel } } = {}
 -- Cette méthode permet de remplir les colonnes avec l'attribut du joueur lorsque la fiche est construite ou que le
 -- serveur republie ses statistiques.
 local function refresh()
-	local view = StatsRules.view(StatsRules.decode(Players.LocalPlayer:GetAttribute(StatsRules.ATTRIBUTE)))
+	local view = HUDRules.statsView(StatsRules.decode(Players.LocalPlayer:GetAttribute(StatsRules.ATTRIBUTE)))
 	for key, labels in values do
 		local text = (view :: any)[key]
 		for _, label in labels do
@@ -61,7 +65,7 @@ local function buildColumn(parent: GuiObject, key: string, label: string, order:
 	local centered = Enum.TextXAlignment.Center
 	local value, shadow = UIKit.shadowedText(column, {
 		Name = "Value",
-		Text = StatsRules.UNKNOWN,
+		Text = HUDRules.STATS_UNKNOWN,
 		FontFace = F.Display,
 		TextSize = VALUE_SIZE,
 		TextColor3 = C.Bone,

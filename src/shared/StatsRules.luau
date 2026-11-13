@@ -166,14 +166,9 @@ function StatsRules.mergeForSave(old: any, batch: Batch): (Payload?, MergeStatus
 end
 
 -- Lecture côté client (#301) : attribut informatif du Player, posé par le serveur (StatsStore) une fois le profil stocké
--- lu, puis à chaque kill, mort ou fin de manche ; jamais relu par le serveur. Absent : pas (encore) chargé.
+-- lu, puis à chaque kill, mort ou fin de manche ; jamais relu par le serveur. Absent : pas (encore) chargé. Mise en
+-- forme de la fiche : HUDRules.statsView (client).
 StatsRules.ATTRIBUTE = "PlayerStats"
--- Valeur affichée tant que les statistiques ne sont pas connues (chargement en cours ou en échec) : pas de faux zéros
-StatsRules.UNKNOWN = "—"
-
--- Vue de la fiche de l'accueil : textes prêts à afficher
-export type View = { kills: string, deaths: string, ratio: string, roundsPlayed: string, roundsWon: string }
-
 -- Cette méthode permet d'écrire les compteurs dans l'attribut du Player lorsque le serveur les publie : entiers séparés
 -- par des virgules, dans l'ordre de FIELDS (« 12,3,5,1 »).
 function StatsRules.encode(stats: Stats): string
@@ -203,51 +198,6 @@ function StatsRules.decode(value: any): Stats?
 		stats[field] = count
 	end
 	return stats
-end
-
--- Cette méthode permet d'écrire un compteur de façon lisible lorsque la fiche l'affiche : tel quel sous 10 000 (espace des
--- milliers), puis abrégé en k et M, tronqué pour ne jamais grossir le chiffre (« 12.3k », « 123k », « 1.2M »).
-function StatsRules.formatCount(n: number): string
-	n = math.max(0, math.floor(n))
-	if n < 1000 then
-		return tostring(n)
-	elseif n < 10000 then
-		return string.format("%d %03d", n // 1000, n % 1000)
-	end
-	local value, suffix = n / 1000, "k"
-	if n >= 1000000 then
-		value, suffix = n / 1000000, "M"
-	end
-	if value < 100 then
-		return string.format("%.1f%s", math.floor(value * 10) / 10, suffix)
-	end
-	return string.format("%d%s", math.floor(value), suffix)
-end
-
--- Cette méthode permet de calculer le ratio kills/morts affiché lorsque la fiche se remplit : deux décimales comme le
--- classement de la manche (HUDRules.formatKD) ; sans mort, le ratio vaut les kills ; à partir de 100, sans décimale.
-function StatsRules.ratio(kills: number, deaths: number): string
-	local value = if deaths == 0 then kills else kills / deaths
-	if value >= 100 then
-		return StatsRules.formatCount(value)
-	end
-	return string.format("%.2f", value)
-end
-
--- Cette méthode permet de préparer les textes de la fiche lorsque l'attribut change : statistiques non chargées (nil) →
--- UNKNOWN partout, ratio compris.
-function StatsRules.view(stats: Stats?): View
-	if not stats then
-		local u = StatsRules.UNKNOWN
-		return { kills = u, deaths = u, ratio = u, roundsPlayed = u, roundsWon = u }
-	end
-	return {
-		kills = StatsRules.formatCount(stats.kills),
-		deaths = StatsRules.formatCount(stats.deaths),
-		ratio = StatsRules.ratio(stats.kills, stats.deaths),
-		roundsPlayed = StatsRules.formatCount(stats.roundsPlayed),
-		roundsWon = StatsRules.formatCount(stats.roundsWon),
-	}
 end
 
 return StatsRules
