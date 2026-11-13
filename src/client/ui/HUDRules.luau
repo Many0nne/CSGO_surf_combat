@@ -1,10 +1,12 @@
--- Règles pures du HUD (sans Instance ; modules requis : KeyBindings, InventoryRules) : paliers de vitesse, timer,
--- classement, barre d'armes, affichage des touches.
+-- Règles pures du HUD (sans Instance ; modules requis : KeyBindings, InventoryRules, ParticipantRules, ScoreRules) :
+-- paliers de vitesse, timer, classement, écran de fin de manche, barre d'armes, affichage des touches.
 -- Testées sous Lune (tests/specs/HUDRules.spec.luau).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local InventoryRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("InventoryRules"))
 local KeyBindings = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("KeyBindings"))
+local ParticipantRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ParticipantRules"))
+local ScoreRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ScoreRules"))
 
 local HUDRules = {}
 
@@ -25,7 +27,7 @@ HUDRules.LOW_TIME_THRESHOLD = 30
 -- Secondes sans changement d'arme avant que la barre ne garde que l'arme en main
 HUDRules.WEAPON_BAR_FADE_DELAY = 2.5
 
-export type Score = { name: string, isBot: boolean?, kills: number, deaths: number }
+export type Score = ScoreRules.Score
 
 -- Cette méthode permet de trouver l'index du palier atteint lorsque le speedometer reçoit une vitesse.
 function HUDRules.speedTier(speed: number): number
@@ -55,18 +57,16 @@ function HUDRules.isLowTime(seconds: number): boolean
 end
 
 -- Cette méthode permet de trier les scores du meilleur au moins bon lorsque le classement est reconstruit :
--- plus de kills d'abord, puis moins de morts, puis ordre alphabétique pour un affichage stable.
+-- ordre de ScoreRules.compare (celui du vainqueur), puis ordre alphabétique pour un affichage stable.
 function HUDRules.sortScores(scores: { [any]: Score }): { Score }
 	local sorted = {}
 	for _, score in pairs(scores) do
 		table.insert(sorted, score)
 	end
 	table.sort(sorted, function(a, b)
-		if a.kills ~= b.kills then
-			return a.kills > b.kills
-		end
-		if a.deaths ~= b.deaths then
-			return a.deaths < b.deaths
+		local diff = ScoreRules.compare(a, b)
+		if diff ~= 0 then
+			return diff < 0
 		end
 		return a.name < b.name
 	end)
@@ -369,6 +369,86 @@ end
 -- joueur est en partie (IN_ROUND ou DEAD), sinon l'état bloquerait en RESULT au menu ou pendant le spawn (#110).
 function HUDRules.acceptsRoundResult(state: string): boolean
 	return state == "IN_ROUND" or state == "DEAD"
+end
+
+-- Écran de fin de manche (#295) : lignes du podium, titres sans vainqueur
+HUDRules.PODIUM_SIZE = 3
+HUDRules.RESULT_TIE = "ÉGALITÉ"
+HUDRules.RESULT_NONE = "AUCUN VAINQUEUR"
+
+-- Ligne de l'écran de fin : rang dans le classement (tri de sortScores), score, joueur local ou non
+export type ResultRow = { rank: number, score: Score, isMe: boolean }
+
+-- Contenu de l'écran de fin : titre (vainqueur en majuscules, égalité ou aucun vainqueur), sous-titre, vainqueur désigné
+-- (sinon le premier du podium n'est pas mis en avant), victoire du joueur local, podium, et ligne du joueur local quand
+-- il n'est pas sur le podium (nil sinon, ou s'il n'a pas joué)
+export type RoundResultView = {
+	title: string,
+	subtitle: string,
+	hasWinner: boolean,
+	meWins: boolean,
+	podium: { ResultRow },
+	me: ResultRow?,
+}
+
+-- Cette méthode permet de lire les scores d'un résultat de manche lorsqu'il arrive du serveur : entrées mal formées
+-- écartées, drapeau bot ramené à un booléen (le préfixe BOT est posé à l'affichage).
+local function readResultScores(data: any): { Score }
+	local scores: { Score } = {}
+	if type(data) ~= "table" or type(data.scores) ~= "table" then
+		return scores
+	end
+	for _, entry in data.scores do
+		if
+			type(entry) == "table"
+			and type(entry.id) == "number"
+			and type(entry.name) == "string"
+			and type(entry.kills) == "number"
+			and type(entry.deaths) == "number"
+		then
+			table.insert(scores, {
+				id = entry.id,
+				name = entry.name,
+				isBot = entry.isBot == true,
+				kills = entry.kills,
+				deaths = entry.deaths,
+			})
+		end
+	end
+	return scores
+end
+
+-- Cette méthode permet de composer l'écran de fin de manche lorsque RoundResult arrive : podium des PODIUM_SIZE premiers et
+-- ligne du joueur local hors podium (même tri que le classement de Tab), nom du vainqueur résolu par son id dans les scores.
+function HUDRules.readRoundResult(data: any, localUserId: number): RoundResultView
+	local sorted = HUDRules.sortScores(readResultScores(data))
+	local podium: { ResultRow } = {}
+	local me: ResultRow? = nil
+	local winner: ResultRow? = nil
+	local winnerId = if type(data) == "table" and data.outcome == "winner" then data.winnerId else nil
+	for i, score in sorted do
+		local row = { rank = i, score = score, isMe = not score.isBot and score.id == localUserId }
+		if i <= HUDRules.PODIUM_SIZE then
+			table.insert(podium, row)
+		elseif row.isMe then
+			me = row
+		end
+		if winnerId ~= nil and score.id == winnerId then
+			winner = row
+		end
+	end
+
+	local view =
+		{ title = HUDRules.RESULT_NONE, subtitle = "", hasWinner = false, meWins = false, podium = podium, me = me }
+	if winner then
+		view.title = string.upper(ParticipantRules.displayName(winner.score.name, winner.score.isBot))
+		view.hasWinner = true
+		view.meWins = winner.isMe
+		view.subtitle = if winner.isMe then "TU REMPORTES LE ROUND" else "REMPORTE LE ROUND"
+	elseif type(data) == "table" and data.outcome == "tie" then
+		view.title = HUDRules.RESULT_TIE
+	end
+	return view
 end
 
 return HUDRules

@@ -392,9 +392,9 @@ local function listenToRemotes()
 		RoundHUD.updateScores(scores)
 	end)
 
-	-- RoundResult : { winnerName, scores }
+	-- RoundResult : { outcome, winnerId, scores } (#295), lu par HUDRules.readRoundResult
 	local roundResultRmt = NetworkProtocol.getRemote(N.ROUND_RESULT)
-	roundResultRmt.OnClientEvent:Connect(function(data: { winnerName: string })
+	roundResultRmt.OnClientEvent:Connect(function(data: any)
 		-- Hors partie (menu, infos, spawn en cours), ignorer : RESULT bloquerait la promotion vers IN_ROUND (#110)
 		if not HUDRules.acceptsRoundResult(state) then
 			return
@@ -405,7 +405,7 @@ local function listenToRemotes()
 		end
 		setState("RESULT")
 		RoundHUD.show()
-		RoundHUD.showResult(data.winnerName)
+		RoundHUD.showResult(data)
 		-- Fin de la bannière : enchaînement sur la manche suivante sans repasser par le menu (#300). Le serveur repasse
 		-- idle après le même RESULT_DURATION, compté avant la réception : une demande un peu en avance reçoit "result" et
 		-- est renvoyée (SpawnRequestRules.RESULT_RETRY) ; la première acceptée démarre la manche (beforeSpawn).

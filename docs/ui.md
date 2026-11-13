@@ -225,7 +225,13 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   s'efface vers la gauche, comme sa ligne au classement. Affiché vivant ou mort (`HUDRules.killFeedVisible`), pas au
   menu ni au résultat.
   Fin de round : voile central du classement, « ROUND TERMINÉ » ambré, nom du vainqueur en os géant, filet ambre,
-  « REMPORTE LE ROUND » ; le rouge d'impact n'apparaît que si le joueur gagne (bande derrière son nom).
+  « REMPORTE LE ROUND » ; le rouge d'impact n'apparaît que si le joueur gagne (bande derrière son nom). Sans vainqueur
+  (#295) : « AUCUN VAINQUEUR » (aucun kill) ou « ÉGALITÉ » (mêmes kills et mêmes morts en tête) à la place du nom, sans
+  sous-titre. Dessous, le podium (3 premiers) puis, après un écart, la ligne du joueur s'il n'y est pas : ce sont les
+  lignes du classement de Tab (`scoreRow`, en-têtes `columnHeaders`, tri `HUDRules.sortScores`), pas un second dessin.
+  Pas de classement complet à la fin : Tab maintenu remplace l'écran de fin par le classement, rendu au relâchement
+  (jamais l'un sur l'autre). Contenu composé par `HUDRules.readRoundResult` (nom du vainqueur résolu par son id dans les
+  scores de `RoundResult`) ; ordre et issue de la manche dans `src/shared/ScoreRules.luau`, communs au serveur.
 - `UIKit.cornerScrim` : fond de coin du HUD (`assets/ui/hud/scrim_coin.png`) dans les quatre orientations, par rotation ;
   `Top` / `Bottom` : fond centré sur un bord (`scrim_bord.png`, `make_corner_scrim.py --edge`), `size` = largeur totale.
   Seul le compteur de vitesse est penché (`UITheme.Layout.HudLean`, -6°) : l'utilisateur a préféré le timer, la barre
