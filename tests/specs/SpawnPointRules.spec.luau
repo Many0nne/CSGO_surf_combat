@@ -63,16 +63,37 @@ return function(T, Loader)
 			T.expectEqual(safe, false)
 		end)
 
-		T.it("retombe sur le hasard parmi tous les points si aucun ne convient", function()
+		T.it("sans point sûr : retombe sur le point le plus loin de son ennemi le plus proche", function()
 			local always = function()
 				return true
 			end
-			local index, safe = Rules.choose({ WEST, EAST }, { WEST }, always, function(count)
-				T.expectEqual(count, 2, "repli : tous les points")
-				return 2
-			end)
+			local far = WEST + Vector3.new(80, 0, 0)
+			local enemies = { WEST, EAST }
+			local index, safe = Rules.choose(
+				{ WEST + Vector3.new(10, 0, 0), far, EAST },
+				enemies,
+				always,
+				function(count)
+					T.expectEqual(count, 1, "un seul point le plus éloigné")
+					return 1
+				end
+			)
 			T.expectEqual(index, 2)
 			T.expectEqual(safe, false)
+		end)
+
+		T.it("repli : à distance égale, le point que voient le moins d'ennemis, puis tirage", function()
+			local enemy = Vector3.new(0, 0, 0)
+			local points = { Vector3.new(50, 0, 0), Vector3.new(-50, 0, 0), Vector3.new(0, 0, 50) }
+			local function sees(_, to)
+				return to == points[1]
+			end
+			T.expectEqual(table.concat(Rules.farthest(points, { enemy }, sees), ","), "2,3")
+			local index = Rules.choose(points, { enemy }, sees, function(count)
+				T.expectEqual(count, 2)
+				return 2
+			end)
+			T.expectEqual(index, 3)
 		end)
 
 		T.it("tire parmi les seuls points sûrs, uniformément", function()

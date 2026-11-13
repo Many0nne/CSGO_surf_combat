@@ -44,9 +44,44 @@ function SpawnPointRules.isSafe(point: Vector3, enemies: { Vector3 }, isVisible:
 	return true
 end
 
+-- Cette méthode permet de choisir le repli lorsqu'aucun point n'est sûr : les points les plus loin de leur ennemi le
+-- plus proche, puis, à égalité, ceux que voient le moins d'ennemis ; renvoie leurs indices (au moins un).
+function SpawnPointRules.farthest(points: { Vector3 }, enemies: { Vector3 }, isVisible: IsVisible): { number }
+	local best, tied = -math.huge, {}
+	for i, point in points do
+		local nearest = math.huge
+		for _, enemy in enemies do
+			nearest = math.min(nearest, (enemy - point).Magnitude)
+		end
+		if nearest > best + 1e-6 then
+			best, tied = nearest, { i }
+		elseif nearest >= best - 1e-6 then
+			table.insert(tied, i)
+		end
+	end
+	if #tied <= 1 then
+		return tied
+	end
+	local fewest, kept = math.huge, {}
+	for _, i in tied do
+		local seers = 0
+		for _, enemy in enemies do
+			if isVisible(enemy, points[i]) then
+				seers += 1
+			end
+		end
+		if seers < fewest then
+			fewest, kept = seers, { i }
+		elseif seers == fewest then
+			table.insert(kept, i)
+		end
+	end
+	return kept
+end
+
 -- Cette méthode permet de choisir un point d'apparition lorsqu'un personnage apparaît : tirage uniforme parmi les
--- points sûrs (isSafe), ou parmi tous si aucun ne l'est. Points et ennemis sont des positions d'yeux. Renvoie l'indice
--- du point (nil sans point) et true s'il est sûr.
+-- points sûrs (isSafe), sinon parmi les plus éloignés des ennemis (farthest, décision de #288). Points et ennemis sont
+-- des positions d'yeux. Renvoie l'indice du point (nil sans point) et true s'il est sûr.
 function SpawnPointRules.choose(
 	points: { Vector3 },
 	enemies: { Vector3 },
@@ -63,7 +98,8 @@ function SpawnPointRules.choose(
 		end
 	end
 	if #safe == 0 then
-		return pick(#points), false
+		local fallback = SpawnPointRules.farthest(points, enemies, isVisible)
+		return fallback[pick(#fallback)], false
 	end
 	return safe[pick(#safe)], true
 end
