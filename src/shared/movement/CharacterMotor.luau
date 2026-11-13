@@ -9,6 +9,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local CollisionGroups = require(ReplicatedStorage.Shared.CollisionGroups)
 local Config = require(ReplicatedStorage.Shared.MovementConfig)
 local MovementState = require(ReplicatedStorage.Shared.MovementState)
 local PhysicsUtils = require(ReplicatedStorage.Shared.PhysicsUtils)
@@ -64,6 +65,7 @@ function CharacterMotor.new(char: Model, hrp: BasePart, writeRoot: boolean): Cha
 	local slideParams = RaycastParams.new()
 	slideParams.FilterType = Enum.RaycastFilterType.Exclude
 	slideParams.FilterDescendantsInstances = { char, workspace.CurrentCamera }
+	CollisionGroups.ignoreCharacters(slideParams)
 	return setmetatable({
 		hrp = hrp,
 		writeRoot = writeRoot,

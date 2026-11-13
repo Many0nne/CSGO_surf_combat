@@ -8,6 +8,7 @@
 --   * Snap de surface : équivalent du ground-snap de Source. On recolle la capsule à la rampe
 --     en sondant DEPUIS L'EXTÉRIEUR (sinon Roblox ignore les casts qui démarrent dans une part).
 
+local CollisionGroups = require(game:GetService("ReplicatedStorage").Shared.CollisionGroups)
 local Config = require(game:GetService("ReplicatedStorage").Shared.MovementConfig)
 local PhysicsUtils = require(game:GetService("ReplicatedStorage").Shared.PhysicsUtils)
 local function dbg(...)
@@ -58,9 +59,11 @@ function WallSlide.new(character: Model): WallSlide
 	local castParams = RaycastParams.new()
 	castParams.FilterType = Enum.RaycastFilterType.Exclude
 	castParams.FilterDescendantsInstances = { character, workspace.CurrentCamera }
+	CollisionGroups.ignoreCharacters(castParams)
 	local penOP = OverlapParams.new()
 	penOP.FilterType = Enum.RaycastFilterType.Exclude
 	penOP.FilterDescendantsInstances = { character, penProbe, workspace.CurrentCamera }
+	CollisionGroups.ignoreCharactersOverlap(penOP)
 	if penProbe.Parent ~= workspace then
 		penProbe.Parent = workspace
 	end

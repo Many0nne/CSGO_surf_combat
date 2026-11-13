@@ -1,6 +1,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
+local CollisionGroups = require(ReplicatedStorage.Shared.CollisionGroups)
 local CharacterDimensions = require(ReplicatedStorage.Shared.movement.CharacterDimensions)
 local InputModule = require(script.Parent.Parent.Parent.input.InputModule)
 
@@ -25,6 +26,8 @@ local function canUncrouch(): boolean
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = { hrpRef.Parent :: Instance }
+	-- Un autre personnage au-dessus ne bloque pas le relevé : les personnages se traversent (#312)
+	CollisionGroups.ignoreCharacters(params)
 	local origin = hrpRef.Position + Vector3.new(0, CROUCH_ROOT_TOP, 0)
 	local result = workspace:Raycast(origin, Vector3.new(0, UNCROUCH_CAST_DIST, 0), params)
 	return result == nil

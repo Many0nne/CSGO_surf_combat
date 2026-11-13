@@ -11,6 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local BotBehaviorRules = require(ReplicatedStorage.Shared.BotBehaviorRules)
 local BotCombatRules = require(ReplicatedStorage.Shared.BotCombatRules)
 local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
+local CollisionGroups = require(ReplicatedStorage.Shared.CollisionGroups)
 local BotArsenal = require(script.Parent.BotArsenal)
 local BotMotion = require(script.Parent.BotMotion)
 local NavPlan = require(script.Parent.NavPlan)
@@ -101,6 +102,8 @@ function BotBrain.new(env: Env, char: Model, motion: BotMotion.BotMotion, arsena
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = if env.clips then { char, env.clips } else { char }
 	params.RespectCanCollide = false
+	-- Un personnage entre le bot et sa cible ne masque pas la vue : les personnages se traversent (#312)
+	CollisionGroups.ignoreCharacters(params)
 	local humanoid = char:FindFirstChildOfClass("Humanoid")
 	local now = os.clock()
 	local self = setmetatable({

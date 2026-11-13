@@ -1,5 +1,6 @@
 -- Montée de petits obstacles au sol. Une instance par personnage (#139) : filtre de rayons et dimensions propres.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CollisionGroups = require(ReplicatedStorage.Shared.CollisionGroups)
 local Config = require(ReplicatedStorage.Shared.MovementConfig)
 local CharacterDimensions = require(script.Parent.CharacterDimensions)
 
@@ -17,6 +18,7 @@ function StepupSystem.new(character: Model, dims: CharacterDimensions.CharacterD
 	local castParams = RaycastParams.new()
 	castParams.FilterType = Enum.RaycastFilterType.Exclude
 	castParams.FilterDescendantsInstances = { character, workspace.CurrentCamera }
+	CollisionGroups.ignoreCharacters(castParams)
 	local stand = dims:getStand()
 	return setmetatable({
 		castParams = castParams,
