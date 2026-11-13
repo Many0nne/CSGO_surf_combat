@@ -1,0 +1,5 @@
+-- Health.server.luau
+-- Script volontairement vide (#289). Roblox ajoute son script `Health` (régénération d'environ 1 PV/s) à chaque
+-- personnage à l'apparition, sauf si `StarterCharacterScripts` en contient déjà un du même nom : celui-ci prend sa
+-- place. Les dégâts du jeu sont pensés sans régénération (deux coups de couteau à 50 doivent tuer).
+-- Ne pas supprimer ni renommer : la régénération reviendrait. Contrôlé par tools/rbxm/verify_place.luau.

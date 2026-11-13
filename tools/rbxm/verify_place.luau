@@ -143,6 +143,28 @@ for _, name in rbxmNames("assets/rbx/Tools") do
 	end
 end
 
+-- régénération de PV retirée (#289) : un Script `Health` dans StarterCharacterScripts remplace celui de Roblox
+local charScripts = game:GetService("StarterPlayer"):FindFirstChild("StarterCharacterScripts")
+local healthScript = charScripts and charScripts:FindFirstChild("Health")
+if charScripts and charScripts.ClassName ~= "StarterCharacterScripts" then
+	fail("StarterPlayer.StarterCharacterScripts est un " .. charScripts.ClassName .. " : Roblox l'ignorerait")
+elseif not healthScript or not healthScript:IsA("Script") then
+	fail("StarterPlayer.StarterCharacterScripts.Health (Script) absent : Roblox rétablirait la régénération des PV")
+else
+	print("StarterCharacterScripts.Health " .. summarize(healthScript))
+	-- le script doit rester vide (commentaires seulement) et actif, sinon ce n'est plus un simple remplaçant
+	local source = string.gsub(healthScript.Source, "%-%-%[(=*)%[.-%]%1%]", "")
+	for line in string.gmatch(source, "[^\r\n]+") do
+		if not string.match(line, "^%s*%-%-") and string.match(line, "%S") then
+			fail("StarterCharacterScripts.Health doit ne contenir que des commentaires : " .. line)
+			break
+		end
+	end
+	if healthScript.Disabled then
+		fail("StarterCharacterScripts.Health est désactivé : Roblox rétablirait la régénération des PV")
+	end
+end
+
 -- maps (assets/rbx/Maps, #69) : chaque Workspace.Maps.<Nom> avec des points d'apparition ; lanceurs du soleil avec une
 -- vitesse ; boosts configurés ; hauteur de mort numérique si présente
 local maps = game.Workspace:FindFirstChild("Maps")

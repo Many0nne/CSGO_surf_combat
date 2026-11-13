@@ -51,6 +51,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 
 ## `src/`
 
+- `src/character/Health.server.luau` (#289): script vide mappé dans `StarterPlayer.StarterCharacterScripts`. **Pas de régénération de PV** : Roblox ajoute son script `Health` (~1 PV/s) au personnage à l'apparition, sauf si un script du même nom est déjà dans `StarterCharacterScripts` ; celui-ci le remplace. Ne pas le supprimer ni le renommer (contrôlé par `tools/rbxm/verify_place.luau`). Les bots (`BotManager`, qui détruit tous les scripts du clone) ne l'ont jamais reçu, donc joueurs et bots suivent la même règle.
 - `src/client/camera/FPSCamera.luau`: contrôles et logique de la caméra FPS (rendu, priorité `Camera`) : rotation à la souris, position lue sur `hrp.Position` juste après le pas de mouvement de la même frame.
 - `src/client/debug/DebugPlaytest.luau`: moitié client du helper de playtest (Studio uniquement) : exécute les commandes du serveur et observe pistes, marqueurs et sons.
 - `src/client/debug/FrameProbe.luau`: sonde de saccades (Studio uniquement, attribut joueur `FrameProbe`) : mesure chaque frame et signale les frames anormales, cf. `docs/performance.md`.
