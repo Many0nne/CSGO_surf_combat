@@ -442,6 +442,29 @@ return function(T, Loader)
 			T.expectEqual(ping.samples, 3)
 			T.expectEqual(ping.medianMs, 85, "classe 80-90 ms")
 			T.expectNear(ping.maxMs, 200)
+			-- Lecture du moteur partagée avec le Validator : nil sur erreur ou valeur non numérique
+			local pinged = {
+				GetNetworkPing = function()
+					return 0.12
+				end,
+			}
+			T.expectEqual(C.pingOf(pinged :: any), 0.12)
+			T.expectEqual(
+				C.pingOf({
+					GetNetworkPing = function()
+						error("moteur")
+					end,
+				} :: any),
+				nil
+			)
+			T.expectEqual(
+				C.pingOf({
+					GetNetworkPing = function()
+						return "x"
+					end,
+				} :: any),
+				nil
+			)
 			-- Ping nul (Studio) : la médiane ne dépasse pas le maximum
 			local bob = participantOf(fakePlayer(2, "Bob"))
 			C.notePing(bob, 0)
