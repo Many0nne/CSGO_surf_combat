@@ -55,8 +55,11 @@ return function(T, Loader)
 			},
 			Stats = {},
 		}
+		-- Durées des délais programmés, dans l'ordre (fin de manche : RESULT_DURATION, #300)
+		local delays = {}
 		local fakeTask = {
-			delay = function(_seconds, fn, ...)
+			delay = function(seconds, fn, ...)
+				table.insert(delays, seconds)
 				table.insert(pending, table.pack(fn, ...))
 			end,
 			spawn = function(fn, ...)
@@ -89,8 +92,14 @@ return function(T, Loader)
 			end,
 		} :: any)
 
-		local env =
-			{ RoundManager = RoundManager, Participants = Participants, remotes = remotes, roundEnds = roundEnds }
+		local env = {
+			RoundManager = RoundManager,
+			Participants = Participants,
+			remotes = remotes,
+			roundEnds = roundEnds,
+			delays = delays,
+			GameConfig = loader:require("src/shared/GameConfig"),
+		}
 		-- Cette méthode permet d'inscrire un joueur au classement lorsqu'un test en a besoin ; sans position, il est resté
 		-- au menu (pas de personnage).
 		function env.addPlayer(userId: number, name: string, position: Vector3?)
@@ -529,6 +538,63 @@ return function(T, Loader)
 			T.expectEqual(#env.roundEnds[1].participants, 0)
 			T.expectEqual(env.roundEnds[1].winner, nil)
 			T.expectEqual(env.remotes.roundResult.last().winnerName, "Personne")
+		end)
+	end)
+
+	T.describe("RoundManager : manches enchaînées (#300)", function()
+		T.it("reste en result RESULT_DURATION, puis repasse idle avec les scores remis à zéro", function()
+			local env = setup()
+			local alice = env.addPlayer(1, "Alice", Vector3.zero)
+			local bot = env.addBot("Marcel", Vector3.new(0, 0, 5))
+			env.RoundManager.startRound(60)
+			env.RoundManager.recordDamage(alice, bot, "AWP", false)
+			env.RoundManager.onCharacterDied(bot, function() end)
+			env.flush() -- réapparition du bot (round actif)
+			table.clear(env.delays)
+			env.tick(61)
+			T.expectEqual(env.RoundManager.getState(), "result")
+			T.expectEqual(env.delays[1], env.GameConfig.RESULT_DURATION, "bannière : une seule source, GameConfig")
+			env.flush()
+			T.expectEqual(env.RoundManager.getState(), "idle")
+			T.expectEqual(env.remotes.roundState.last().state, "idle")
+		end)
+
+		T.it("démarre la manche suivante avec des scores neufs pour un joueur qui enchaîne", function()
+			local env = setup()
+			local alice = env.addPlayer(1, "Alice", Vector3.zero)
+			local bot = env.addBot("Marcel", Vector3.new(0, 0, 5))
+			env.RoundManager.startRound(60)
+			env.RoundManager.recordDamage(alice, bot, "AWP", false)
+			env.RoundManager.onCharacterDied(bot, function() end)
+			env.RoundManager.recordDamage(alice, bot, "AWP", false) -- coup encore en attente à la fin de la manche
+			env.tick(61)
+			env.flush()
+			-- Demande d'apparition acceptée après la bannière (beforeSpawn) : round démarré, joueur réinscrit
+			env.RoundManager.startRound(60)
+			env.RoundManager.addParticipant(alice)
+			T.expectEqual(env.RoundManager.getState(), "active")
+			local scores = env.remotes.scoreUpdate.last()
+			T.expectEqual(scores[alice.id].kills, 0, "kills de la manche précédente oubliés")
+			T.expectEqual(scores[bot.id], nil, "bot réinscrit seulement à sa réapparition (BotManager)")
+			-- Un coup de la manche précédente ne désigne plus de tueur
+			env.Participants.setCharacter(bot, makeCharacter(Vector3.zero)) -- réapparu (BotManager)
+			env.RoundManager.addParticipant(bot)
+			local killer = env.RoundManager.onCharacterDied(bot, function() end)
+			T.expectEqual(killer, nil)
+		end)
+
+		T.it("enchaîne trois manches de suite", function()
+			local env = setup()
+			env.addPlayer(1, "Alice", Vector3.zero)
+			for round = 1, 3 do
+				env.RoundManager.startRound(60)
+				T.expectEqual(env.RoundManager.getState(), "active", "manche " .. round)
+				env.tick(61)
+				T.expectEqual(env.RoundManager.getState(), "result", "manche " .. round)
+				env.flush()
+				T.expectEqual(env.RoundManager.getState(), "idle", "manche " .. round)
+			end
+			T.expectEqual(#env.roundEnds, 3)
 		end)
 	end)
 end

@@ -28,11 +28,13 @@ function SpawnRules.request(r: Request): Refusal?
 	if r.roundState == "active" and r.diedAt and r.now - r.diedAt < r.respawnDelay then
 		return "early"
 	end
-	if r.hasCharacter then
-		return "alive"
-	end
+	-- Avant "alive" : un personnage arrivé pendant la bannière (réapparition en vol à la fin de manche) n'est repris
+	-- qu'en idle, où beforeSpawn démarre la manche suivante (#300) ; repris en "result", aucune manche ne démarrerait
 	if r.roundState == "result" then
 		return "result"
+	end
+	if r.hasCharacter then
+		return "alive"
 	end
 	return nil
 end
@@ -78,6 +80,12 @@ end
 -- par-dessus un personnage vivant ni un autre LoadCharacterAsync en vol.
 function SpawnRules.scheduled(spawning: boolean, alive: boolean): boolean
 	return not spawning and not alive
+end
+
+-- Cette méthode permet de décider si un personnage chargé est gardé lorsqu'il arrive : pas pour un joueur revenu au
+-- menu (#157), ni pendant la bannière de fin (#300 : protection d'apparition écoulée avant la manche suivante).
+function SpawnRules.keepsArrival(away: boolean, roundState: string): boolean
+	return not away and roundState ~= "result"
 end
 
 -- Cette méthode permet de savoir si un joueur a un personnage en place dans le jeu (vivant ou corps pas encore

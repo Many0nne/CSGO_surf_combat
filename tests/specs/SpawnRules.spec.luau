@@ -65,6 +65,24 @@ return function(T, Loader)
 			T.expectEqual(SpawnRules.request(request({ spawning = true })), "spawning")
 			T.expectEqual(SpawnRules.request(request({ roundState = "result" })), "result")
 		end)
+
+		T.it(
+			"bannière de fin avec un personnage arrivé pendant : « result », repris seulement en idle (#300)",
+			function()
+				T.expectEqual(SpawnRules.request(request({ roundState = "result", hasCharacter = true })), "result")
+				T.expectEqual(SpawnRules.request(request({ roundState = "idle", hasCharacter = true })), "alive")
+			end
+		)
+
+		T.it(
+			"personnage chargé : détruit pour un joueur revenu au menu ou pendant la bannière (#157, #300)",
+			function()
+				T.expectEqual(SpawnRules.keepsArrival(false, "active"), true)
+				T.expectEqual(SpawnRules.keepsArrival(false, "idle"), true)
+				T.expectEqual(SpawnRules.keepsArrival(true, "active"), false)
+				T.expectEqual(SpawnRules.keepsArrival(false, "result"), false)
+			end
+		)
 	end)
 
 	T.describe("SpawnRules.reply (#219)", function()

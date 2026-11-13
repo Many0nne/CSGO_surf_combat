@@ -24,8 +24,11 @@ local diedAt: { [Player]: number } = {}
 local away: { [Player]: boolean } = {}
 -- Joueurs revenus du menu pendant une réapparition encore en vol : leur demande est servie à la fin de ce chargement
 local rejoin: { [Player]: boolean } = {}
--- Gravité d'un refus de RequestSpawn au journal ; "result" n'y va pas (Play cliqué pendant la bannière de fin).
--- "early" est moyen : notre client n'envoie RequestSpawn que depuis le menu, où un joueur mort en round ne revient pas,
+-- État du round, branché par init (hooks.roundState) : une réapparition arrivée pendant la bannière est détruite (#300)
+local roundStateFn: (() -> string)? = nil
+-- Gravité d'un refus de RequestSpawn au journal ; "result" n'y va pas (Play cliqué pendant la bannière de fin, ou
+-- enchaînement automatique de la manche suivante, #300). "early" est moyen : notre client n'envoie RequestSpawn que
+-- depuis le menu, où un joueur mort en round ne revient pas, à la fin de la bannière (#300, round alors pas actif),
 -- ou en DEAD passé RESPAWN_DELAY + RESPAWN_MARGIN (#245), jamais pendant RESPAWN_DELAY. Cette redemande peut tomber
 -- sur une réapparition programmée encore en vol ("spawning", LOW) si le chargement dépasse RESPAWN_MARGIN.
 local REFUSAL_SEVERITY: { [string]: CheatLog.Severity } = {
@@ -127,8 +130,10 @@ function SpawnManager.spawnPlayer(player: Player): boolean
 	local conn: RBXScriptConnection
 	conn = player.CharacterAdded:Connect(function(char)
 		conn:Disconnect()
-		-- Réapparition partie avant le retour au menu : le joueur n'a plus de personnage dans le round
-		if away[player] then
+		-- Réapparition partie avant le retour au menu : le joueur n'a plus de personnage dans le round. Arrivée pendant
+		-- la bannière de fin (#300) : sans protection d'apparition à la manche suivante, la demande qui enchaîne en
+		-- fait apparaître un neuf
+		if not SpawnRules.keepsArrival(away[player] == true, if roundStateFn then roundStateFn() else "idle") then
 			char:Destroy()
 			return
 		end
@@ -209,6 +214,7 @@ function SpawnManager.init(
 	hooks: { roundState: () -> string, beforeSpawn: (Player) -> () }
 )
 	replyRemote = requestSpawnRemote
+	roundStateFn = hooks.roundState
 	requestSpawnRemote.OnServerEvent:Connect(function(player)
 		-- Garde commune (#170) : débit
 		if not CheatLog.admit(player, requestSpawnRemote.Name) then

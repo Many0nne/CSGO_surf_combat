@@ -361,4 +361,53 @@ return function(T, Loader)
 			end
 		end)
 	end)
+
+	T.describe("SpawnRequestRules : manches enchaînées (#300)", function()
+		local GameConfig = Loader.new():require("src/shared/GameConfig")
+
+		T.it("fin de la bannière : seul un joueur encore en RESULT enchaîne", function()
+			T.expectEqual(Rules.afterResult("RESULT"), "SPAWNING")
+			-- MENU, INFOS (revenu au menu ou resté au menu), SPAWNING (#110) : pas relancé de force
+			for _, state in { "MENU", "INFOS", "SPAWNING", "IN_ROUND", "DEAD" } do
+				T.expectEqual(Rules.afterResult(state), nil, state)
+			end
+		end)
+
+		T.it(
+			"demande partie pendant les derniers instants de result : renvoyée puis acceptée au round suivant",
+			function()
+				-- Le serveur repasse idle 0,5 s après l'envoi (bannière client comptée après la fin de manche serveur)
+				local result, t, sends = simulate(function(_, now)
+					if now < 0.5 then
+						return { status = "result" }, 0.05
+					end
+					return { status = "accepted" }, 0.05
+				end, Rules.LOAD_TIMEOUT)
+				T.expectEqual(result, "running", "acceptée : en attente du personnage, pas d'abandon")
+				T.expect(t > Rules.LOAD_TIMEOUT, "rejoué jusqu'au bout")
+				T.expectEqual(#sends, 2, "un renvoi")
+				T.expect(sends[2] - sends[1] >= Rules.RESULT_RETRY, "renvoi au rythme RESULT_RETRY")
+				T.expect(sends[2] < 2, "renvoi en moins de 2 s : " .. sends[2])
+			end
+		)
+
+		-- Cas limite (serveur figé ou bannière client raccourcie) : le client enchaîne alors que le serveur est encore en
+		-- result pour toute une durée de bannière
+		T.it("serveur en retard d'une bannière entière : renvois sans abandon, puis acceptée", function()
+			local accepted = nil
+			local result = simulate(function(_, now)
+				if now < GameConfig.RESULT_DURATION then
+					return { status = "result" }, 0.05
+				end
+				accepted = accepted or now
+				return { status = "accepted" }, 0.05
+			end, GameConfig.RESULT_DURATION + 2)
+			T.expectEqual(result, "running", "pas d'abandon")
+			T.expect(accepted ~= nil, "acceptée dès le retour à idle")
+			T.expect(
+				(accepted :: number) < GameConfig.RESULT_DURATION + Rules.RESULT_RETRY + Rules.TICK,
+				"au plus un RESULT_RETRY de retard"
+			)
+		end)
+	end)
 end

@@ -111,9 +111,13 @@ local function setState(newState: State)
 		-- Réapparition, menu ou fin de round : la caméra revient à FPSCamera ou au menu
 		DeathCamera.stop()
 	end
-	if newState == "MENU" then
+	if newState == "MENU" or newState == "SPAWNING" then
+		-- Corps de la manche finie retirés aussi quand elle s'enchaîne sans passer par le menu (#300)
 		DeathRagdoll.clear()
-		-- Mouvement et caméra coupés au menu : un personnage repris ensuite (JOUER, "alive") doit être rebranché
+	end
+	if newState == "MENU" or newState == "RESULT" then
+		-- Mouvement et caméra coupés au menu et à la fin de manche : un personnage repris ensuite (JOUER, enchaînement
+		-- #300, "alive") doit être rebranché
 		boundChar = nil
 	end
 
@@ -171,15 +175,23 @@ local function atMenu(): boolean
 	return state == "MENU" or state == "INFOS"
 end
 
+-- Cette méthode permet de savoir si un personnage qui arrive est ignoré lorsqu'il apparaît : au menu, ou pendant la
+-- bannière de fin de manche (#300), y compris après une attente.
+local function ignoresCharacter(): boolean
+	return atMenu() or state == "RESULT"
+end
+
 local function onCharacterAdded(char: Model)
-	-- Au menu, un personnage n'est pas attendu (réapparition partie avant un retour au menu, détruite par le serveur, #157)
-	if atMenu() then
+	-- Au menu, un personnage n'est pas attendu (réapparition partie avant un retour au menu, détruite par le serveur, #157).
+	-- Pendant la bannière non plus (réapparition en vol à la fin de manche) : la demande qui enchaîne le reprend ("alive",
+	-- #300), d'où boundChar remis à nil en RESULT
+	if ignoresCharacter() then
 		return
 	end
 	-- Connecter la mort
 	local humanoid = char:WaitForChild("Humanoid") :: Humanoid
 	-- Après l'attente : retour au menu entre-temps (abandon, #245), ou personnage déjà branché par l'autre voie
-	if atMenu() or boundChar == char then
+	if ignoresCharacter() or boundChar == char then
 		return
 	end
 	boundChar = char
@@ -341,6 +353,16 @@ local function watchRespawn(watch: SpawnRequestRules.DeadWatch)
 	end, RESPAWN_FAILED_NOTICE)
 end
 
+-- Cette méthode permet de passer en SPAWNING et d'envoyer une demande d'apparition suivie (#219) lorsque le joueur
+-- clique JOUER ou enchaîne la manche suivante après la bannière de fin (#300).
+local function startSpawnRequest()
+	setState("SPAWNING")
+	-- Le serveur répond à chaque demande ; sans réponse ou après un refus temporaire, elle est renvoyée (#219)
+	local attempt = SpawnRequestRules.new(os.clock())
+	spawnAttempt = attempt
+	task.spawn(watchSpawnRequest, attempt)
+end
+
 -- Cette méthode permet de lancer la surveillance de la réapparition lorsque le joueur local passe en DEAD.
 function startRespawnWatch()
 	local watch = SpawnRequestRules.newDeadWatch(os.clock())
@@ -384,10 +406,16 @@ local function listenToRemotes()
 		setState("RESULT")
 		RoundHUD.show()
 		RoundHUD.showResult(data.winnerName)
+		-- Fin de la bannière : enchaînement sur la manche suivante sans repasser par le menu (#300). Le serveur repasse
+		-- idle après le même RESULT_DURATION, compté avant la réception : une demande un peu en avance reçoit "result" et
+		-- est renvoyée (SpawnRequestRules.RESULT_RETRY) ; la première acceptée démarre la manche (beforeSpawn).
 		resultTimer = task.delay(GameConfig.RESULT_DURATION, function()
+			resultTimer = nil
 			RoundHUD.hideResult()
 			RoundHUD.hide()
-			setState("MENU")
+			if SpawnRequestRules.afterResult(state) == "SPAWNING" then
+				startSpawnRequest()
+			end
 		end)
 	end)
 
@@ -405,11 +433,7 @@ function GameStateController.requestPlay(): boolean
 	if state ~= "MENU" and state ~= "INFOS" then
 		return false
 	end
-	setState("SPAWNING")
-	-- Le serveur répond à chaque demande ; sans réponse ou après un refus temporaire, elle est renvoyée (#219)
-	local attempt = SpawnRequestRules.new(os.clock())
-	spawnAttempt = attempt
-	task.spawn(watchSpawnRequest, attempt)
+	startSpawnRequest()
 	return true
 end
 

@@ -116,7 +116,8 @@ local function endRound()
 		task.spawn(roundEndHandler, participants, if winnerId then Participants.get(winnerId) else nil)
 	end
 
-	-- Personnages détruits (joueurs et bots) : les clients repassent par le menu
+	-- Personnages détruits (joueurs et bots) : les clients en jeu enchaînent après la bannière (#300), par une demande
+	-- d'apparition répondue "result" jusqu'au retour à idle, puis acceptée (beforeSpawn démarre la manche suivante)
 	for _, participant in Participants.all() do
 		local character = Participants.characterOf(participant)
 		if character then
@@ -124,13 +125,14 @@ local function endRound()
 		end
 	end
 
-	task.delay(6, function() -- RESULT_DURATION
+	-- Même durée que la bannière des clients : une seule source, GameConfig
+	task.delay(GameConfig.RESULT_DURATION, function()
 		state = "idle"
 		scores = {}
 		lastAttacker = {}
 		withdrawn = {}
 		broadcastState()
-		-- personnages détruits depuis 6 s : ce qui reste d'un round à l'autre est candidat à une fuite
+		-- personnages détruits depuis RESULT_DURATION : ce qui reste d'un round à l'autre est candidat à une fuite
 		MemoryTracker.snapshot("fin de round")
 	end)
 end

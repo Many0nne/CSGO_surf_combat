@@ -163,7 +163,7 @@ Instances et +270 Mo de `LuaHeap`. Il faut donc mesurer dans le jeu publié, et 
 ne change.
 
 1. Jeu publié, console F9 > Server, ligne de commande serveur : `workspace:SetAttribute("RoundDuration", 60)`.
-2. Jouer trois ou quatre rounds, avec quelques morts par round. Revenir au menu à chaque fin de round.
+2. Jouer trois ou quatre rounds, avec quelques morts par round. Ils s'enchaînent seuls après la bannière de fin (#300).
 3. F9 > Server > Log, filtre `[Perf] MEM` : une ligne au début et une à la fin de chaque round.
 4. Lire l'écart entre deux `début de round` consécutifs. S'il retombe près de zéro après le premier round, ce n'est
    pas une fuite : c'est le chargement du premier round. S'il est du même ordre à chaque round, c'est une fuite : la
