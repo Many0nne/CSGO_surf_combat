@@ -65,7 +65,7 @@ export type BotBrain = typeof(setmetatable(
 		targetSpeed: number, -- vitesse estimée de la cible entre deux regards (studs/s)
 		lastSeen: { [number]: { position: Vector3, at: number } }, -- par participant vu, pour estimer sa vitesse
 		targetVisible: boolean, -- vue à ce regard (sinon gardée en tête un instant, sans tir)
-		seenSince: number, -- instant où la cible courante a été vue
+		seenSince: number, -- instant où la cible courante (cette vie) a été vue
 		lastShot: number?,
 		holdLook: Vector3?, -- point regardé en tenant un angle
 		lastHealth: number,
@@ -237,16 +237,16 @@ function BotBrain._perceive(self: BotBrain, now: number)
 
 	local target = BotBehaviorRules.pickTarget(candidates)
 	if target then
-		if target.id ~= self.targetId then
+		local seen = seenOthers[target.id]
+		if target.id ~= self.targetId or seen.spawnedAt ~= self.targetSpawnedAt then
 			if not self.targetId then
 				BotBrain.stats.combats += 1
 			end
-			-- Nouvelle cible : le temps de réaction repart de zéro
+			-- Nouvelle cible (ou même cible réapparue) : le temps de réaction repart de zéro
 			self.targetId, self.seenSince, self.lastShot = target.id, now, nil
 		end
 		self.targetPos = positions[target.id]
 		self.targetVisible = true
-		local seen = seenOthers[target.id]
 		self.targetChar, self.targetSpawnedAt, self.targetSpeed = seen.character, seen.spawnedAt, seen.speed
 		self.targetIsHuman = seen.isHuman
 	elseif self.targetId then
@@ -449,8 +449,10 @@ function BotBrain.update(self: BotBrain, dt: number)
 	local gaze = self.motion.gaze
 	gaze.lookAt, gaze.aiming = nil, false
 	if state == "combattre" and self.targetPos then
+		-- Réaction et visée comptées depuis la fin du délai de grâce de la cible (#298), pas depuis qu'il la voit
+		local reactFrom = BotCombatRules.reactionStart(self.seenSince, self.targetSpawnedAt)
 		local looking, fire =
-			BotBehaviorRules.combatGaze(now - self.seenSince, if self.lastShot then now - self.lastShot else nil)
+			BotBehaviorRules.combatGaze(now - reactFrom, if self.lastShot then now - self.lastShot else nil)
 		if looking then
 			gaze.lookAt, gaze.aiming = self.targetPos, true
 		end

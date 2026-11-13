@@ -64,6 +64,31 @@ return function(T, Loader)
 			T.expectEqual(target and target.id, 8)
 		end)
 
+		T.it("ne préfère un humain que s'il est à moins de HUMAN_PREFERENCE_RANGE (#298)", function()
+			local range = Config.HUMAN_PREFERENCE_RANGE
+			local near = Rules.pickTarget({
+				{ id = -1, isHuman = false, distance = 10 },
+				{ id = 7, isHuman = true, distance = range },
+			})
+			T.expectEqual(near and near.id, 7, "humain au seuil : préféré au bot plus proche")
+			local far = Rules.pickTarget({
+				{ id = 7, isHuman = true, distance = range + 1 },
+				{ id = -1, isHuman = false, distance = 10 },
+			})
+			T.expectEqual(far and far.id, -1, "humain au-delà du seuil : le plus proche l'emporte")
+			local closer = Rules.pickTarget({
+				{ id = -1, isHuman = false, distance = range + 50 },
+				{ id = 7, isHuman = true, distance = range + 10 },
+			})
+			T.expectEqual(closer and closer.id, 7, "au-delà du seuil, un humain plus proche reste choisi")
+			local twoHumans = Rules.pickTarget({
+				{ id = 8, isHuman = true, distance = range + 5 },
+				{ id = 7, isHuman = true, distance = range - 5 },
+				{ id = -1, isHuman = false, distance = 1 },
+			})
+			T.expectEqual(twoHumans and twoHumans.id, 7, "humain proche avant bot et humain lointain")
+		end)
+
 		T.it("garde un instant une cible sortie du champ, puis ne la poursuit que parfois", function()
 			T.expectEqual(Rules.keepTarget(10, 10 + Config.TARGET_KEEP_TIME), true)
 			T.expectEqual(Rules.keepTarget(10, 10 + Config.TARGET_KEEP_TIME + 0.1), false)

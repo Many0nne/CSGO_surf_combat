@@ -77,6 +77,24 @@ return function(T, Loader)
 			T.expectEqual(Rules.inSpawnGrace(nil, 100), false, "apparition inconnue")
 		end)
 
+		T.it("compte son temps de réaction à partir de la fin du délai de grâce (#298)", function()
+			local graceEnd = 100 + Config.SPAWN_GRACE
+			T.expectEqual(Rules.reactionStart(101, 100), graceEnd, "vue pendant la grâce : réaction à sa fin")
+			T.expectEqual(
+				Rules.reactionStart(graceEnd + 2, 100),
+				graceEnd + 2,
+				"vue après la grâce : dès qu'il la voit"
+			)
+			T.expectEqual(Rules.reactionStart(101, nil), 101, "apparition inconnue : dès qu'il la voit")
+			-- Vue dès l'apparition : le tir ne part qu'après REACTION_TIME + COMBAT_AIM_TIME, une fois la grâce finie
+			local BehaviorRules = Loader.new():require("src/shared/BotBehaviorRules")
+			local ready = Config.REACTION_TIME + Config.COMBAT_AIM_TIME
+			local _, fire = BehaviorRules.combatGaze(graceEnd + 0.01 - Rules.reactionStart(100, 100), nil)
+			T.expectEqual(fire, false, "pas de tir juste à la fin de la grâce")
+			_, fire = BehaviorRules.combatGaze(graceEnd + ready + 1e-6 - Rules.reactionStart(100, 100), nil)
+			T.expectEqual(fire, true, "tir après réaction et visée comptées depuis la fin de la grâce")
+		end)
+
 		T.it("sort le couteau au contact, reprend le fusil à distance", function()
 			T.expectEqual(Rules.chooseWeapon(Rules.RIFLE, Config.KNIFE_RANGE - 1), Rules.KNIFE, "au contact")
 			T.expectEqual(Rules.chooseWeapon(Rules.RIFLE, Config.KNIFE_DROP_RANGE - 1), Rules.RIFLE, "garde le fusil")

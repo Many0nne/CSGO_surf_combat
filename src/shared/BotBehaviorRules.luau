@@ -114,15 +114,21 @@ function BotBehaviorRules.forget(memory: { [number]: Memory }, now: number, ttl:
 	return freshest
 end
 
+-- Cette méthode permet de savoir si un candidat passe avant les autres lorsqu'un bot choisit sa cible : un humain à
+-- moins de HUMAN_PREFERENCE_RANGE (au-delà, il n'est qu'une cible parmi d'autres, #298).
+local function preferred(c: Candidate): boolean
+	return c.isHuman and c.distance <= BotConfig.HUMAN_PREFERENCE_RANGE
+end
+
 -- Cette méthode permet de choisir la cible d'un bot parmi celles qu'il voit lorsqu'il en voit plusieurs : un humain
--- plutôt qu'un bot (FFA, préférence pour les joueurs), puis la plus proche ; nil sans candidat.
+-- proche (HUMAN_PREFERENCE_RANGE) plutôt qu'un bot, puis la plus proche ; nil sans candidat.
 function BotBehaviorRules.pickTarget(candidates: { Candidate }): Candidate?
 	local best: Candidate? = nil
 	for _, c in candidates do
 		if
 			not best
-			or (c.isHuman and not best.isHuman)
-			or (c.isHuman == best.isHuman and c.distance < best.distance)
+			or (preferred(c) and not preferred(best))
+			or (preferred(c) == preferred(best) and c.distance < best.distance)
 		then
 			best = c
 		end
