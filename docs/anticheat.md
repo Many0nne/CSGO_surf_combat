@@ -607,8 +607,8 @@ D1). S'y ajoutent les boosts de la map (`Maps.Map.Boosts`, geysers et lanceurs �
 ajoutent `Boost` studs/s, `docs/maps.md:251-254`), détectés et appliqués par le client seul (commentaire d'en-tête de
 `src/client/systems/movement/BoostSystem.luau`) : une parade qui juge la vitesse ou la gravité doit les connaître
 (règles pures dans `src/shared/MapRules.luau`, réutilisables par le serveur). Un geyser ou un lanceur impose sa vitesse
-(`Velocity`) et le lancement depuis le soleil prend l'attribut `Speed`, mais tous deux sont ramenés à
-`MAX_SPEED_SERVER` (450 studs/s, norme 3D) au plus (`MapRules.imposedVelocity`, `SpawnLaunch.velocity`, #212), sans
+(`Velocity`), ramenée à `MAX_SPEED_SERVER` (450 studs/s, norme 3D) au plus (`MapRules.imposedVelocity`, #212 ; le
+lancement depuis le soleil, borné de même, a été retiré par #288), sans
 avertissement, puis le client plafonne l'horizontale à 420 : une map ne peut pas, par erreur, faire refuser un joueur
 par le seau de D1. Un lanceur réglé au-delà (ou à plus de 420 horizontaux) n'atteint plus son point de chute calculé.
 Le serveur borne la vitesse verticale d'un geyser de la même façon pour l'enveloppe du vol (D2).
@@ -652,7 +652,7 @@ cible rend le kill aura (M1) praticable sur toute la map.
    qui n'accuse jamais réception reste figé côté serveur à sa dernière position acceptée.
    **Mode journal seul** : `CharacterSyncRules.ENFORCE_MOVEMENT = false` garde le journal mais applique le
    déplacement refusé (seau vidé), sans correction. À utiliser si des joueurs honnêtes sont corrigés en surf.
-3. Apparitions et lancement depuis le soleil : la piste (et le seau, plein) repart de la racine posée par
+3. Apparitions : la piste (et le seau, plein) repart de la racine posée par
    `SpawnManager` à chaque nouveau personnage ; tout futur téléport de gameplay devra passer par le serveur et
    réinitialiser la piste.
 4. Option non faite : borne d'accélération plutôt que de vitesse (la vitesse ne peut croître que de `AIR_ACCEL`/gravité
@@ -680,7 +680,7 @@ surfeur, la règle de Source a été reprise :
 - **Consommateurs de `MAX_SPEED_SERVER`** élargis volontairement (une cible honnête peut aller à 450 studs/s pendant
   le rembobinage) : `ShotRelayRules.ORIGIN_MAX` 125 → 185 studs (son du tir seulement), `Validator.MAX_HITSCAN_RANGE`
   2 196 → 2 256 studs, majoration de la vitesse de décollage de D2 (`takeoffVy`) 338 → 488 studs/s, plafond des
-  vitesses imposées (`MapRules.imposedVelocity`, `SpawnLaunch.velocity`) aucun → 450 (norme 3D ; l'horizontale
+  vitesses imposées (`MapRules.imposedVelocity`) aucun → 450 (norme 3D ; l'horizontale
   repasse ensuite à 420 au tick suivant). Les portiques (`MapRules.velocityAfter`) plafonnent à
   `MAX_HORIZONTAL_SPEED` (420) au lieu de 300.
 
@@ -743,8 +743,8 @@ par le seau (D1) passe par `MovementGuardRules.judge` (`judgeGuard`, `src/server
    `SUSPECT_WINDOW` (2) paquets d'écart** = vol (un seul : paquet ancien arrivé après un plus récent ; l'alternance
    haut/bas d'un tricheur est prise). Un vol bloquant passe avant un noclip en journal seul. Après un vol signalé,
    l'enveloppe repart du point atteint, vitesse nulle : un joueur qui plane encore est signalé environ deux fois par
-   seconde, pas à chaque paquet. Lancement depuis le soleil : la vitesse `LaunchVelocity` du personnage ouvre
-   l'enveloppe. Correction (D1 ou D2) : enveloppe repartie de la position de correction avec la vitesse d'un saut.
+   seconde, pas à chaque paquet. Le paramètre `launchVy` (vitesse du lancement depuis le soleil, retiré
+   par #288) ouvrait l'enveloppe ; `CharacterSync` ne le passe plus. Correction (D1 ou D2) : enveloppe repartie de la position de correction avec la vitesse d'un saut.
 3. **Vide** (`fellIntoVoid`, boucle `checkVoid` toutes les 0,25 s) : joueur en l'air (dernier paquet jugé non porté),
    sans paquet reçu depuis `VOID_SILENCE` (2 s ; un paquet ignoré en attente d'accusé compte comme signe de vie pendant
    `VOID_SILENCE` après le refus, pas au-delà), dont même la plus haute position de l'enveloppe est passée sous

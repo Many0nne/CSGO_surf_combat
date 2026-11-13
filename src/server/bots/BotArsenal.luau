@@ -4,12 +4,14 @@
 -- sortie, cadence, chargeur, réserve et rechargement de WeaponConfig. Le tir part du regard réel du bot
 -- (BotCombatRules) en vrai raycast ; la touche est ensuite validée par le serveur comme celle d'un joueur (onHit).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 
 local BotCombatRules = require(ReplicatedStorage.Shared.BotCombatRules)
 local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
 local InventoryRules = require(ReplicatedStorage.Shared.InventoryRules)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 local WeaponThirdPerson = require(ReplicatedStorage.Shared.WeaponThirdPerson)
+local SpawnProtection = require(ServerScriptService.Server.SpawnProtection)
 
 -- Touche d'un bot à valider (personnage visé, partie touchée ; nil pour un coup de couteau)
 export type OnHit = (targetCharacter: Model, hitPart: BasePart?) -> ()
@@ -184,6 +186,8 @@ function BotArsenal.fire(self: BotArsenal, now: number, eye: Vector3, direction:
 		return nil
 	end
 	self.readyAt = now + (cfg.FireDelay or 0)
+	-- Premier tir ou coup du bot : sa protection d'apparition tombe (#288), même si le relais écarte le tir
+	SpawnProtection.drop(self.char)
 	if cfg.IsMelee then
 		WeaponThirdPerson.setAction(self.char, "Shoot")
 		self.onHit(target, nil)

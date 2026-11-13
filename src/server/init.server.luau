@@ -14,6 +14,7 @@ local ParticipantRules = require(Shared:WaitForChild("ParticipantRules"))
 local CollisionGroups = require(Shared:WaitForChild("CollisionGroups"))
 
 local SpawnManager = require(script.SpawnManager)
+local SpawnProtection = require(script.SpawnProtection)
 local RoundManager = require(script.RoundManager)
 local StatsStore = require(script.StatsStore)
 local SettingsStore = require(script.SettingsStore)
@@ -222,6 +223,10 @@ weaponActionRmt.OnServerEvent:Connect(function(player, action)
 		return
 	end
 	lastWeaponAction[player] = now
+	-- Coup de couteau (manqué compris) : la protection d'apparition tombe au premier coup (#288)
+	if action == "Shoot" then
+		SpawnProtection.drop(char)
+	end
 	-- Pose 3P seulement : l'ouïe des bots (#141) part des tirs acceptés par le serveur (relayShot, ShotFired, #156)
 	WeaponThirdPerson.setAction(char, action)
 end)
@@ -261,6 +266,8 @@ local function relayShot(
 	if shotTime then
 		Validator.noteShotFired(participant, shotTime, now)
 	end
+	-- Premier tir accepté : la protection d'apparition du tireur tombe (#288)
+	SpawnProtection.drop(char)
 	-- Recul de l'arme 3P vu par les autres : seulement pour un tir accepté, à sa cadence (#215)
 	WeaponThirdPerson.setAction(char, "Shoot")
 	for _, recipient in ShotRelayRules.recipients(Players:GetPlayers(), participant.player) do
@@ -492,6 +499,8 @@ local function applyHit(
 	if not humanoid or humanoid.Health <= 0 then
 		return nil
 	end
+	-- Touche validée (couteau compris) : la protection d'apparition du tireur tombe (#288)
+	SpawnProtection.drop(Participants.characterOf(attacker))
 	recordHit(attacker, targetCharacter, isHeadshot)
 	local healthBefore = humanoid.Health
 	humanoid:TakeDamage(damage)

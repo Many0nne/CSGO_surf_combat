@@ -1,15 +1,15 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
-local Debris = game:GetService("Debris")
 local RunService = game:GetService("RunService")
 
 local BotCombatRules = require(ReplicatedStorage.Shared.BotCombatRules)
 local CharacterAppearance = require(ReplicatedStorage.Shared.CharacterAppearance)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local MapSelection = require(ReplicatedStorage.Shared.MapSelection)
-local SpawnLaunch = require(ReplicatedStorage.Shared.SpawnLaunch)
 local CheatLog = require(ServerScriptService.Server.CheatLog)
 local Participants = require(ServerScriptService.Server.Participants)
+local SpawnPointRules = require(ServerScriptService.Server.SpawnPointRules)
+local SpawnProtection = require(ServerScriptService.Server.SpawnProtection)
 local SpawnRules = require(ServerScriptService.Server.SpawnRules)
 
 local SpawnManager = {}
@@ -47,55 +47,78 @@ local function getMap(): Instance?
 	return mapModel
 end
 
--- Cette méthode permet de tirer un enfant au hasard d'un dossier de la map lorsqu'on choisit un point d'apparition.
-local function pickPoint(folderName: string): BasePart?
-	local map = getMap()
-	local folder = map and map:FindFirstChild(folderName)
-	local points = folder and folder:GetChildren() or {}
-	if #points == 0 then
-		return nil
+-- Tirage des points d'apparition et paramètres du raycast de vue, créés au premier placement
+local rng: Random? = nil
+local sightParams: RaycastParams? = nil
+local sightMap: Instance? = nil
+
+-- Cette méthode permet de tester si un ennemi voit un point d'apparition lorsqu'on choisit où faire apparaître un
+-- personnage (#288) : raycast d'yeux à yeux limité à la géométrie de la map jouée (personnages ignorés).
+local function isVisible(map: Instance, from: Vector3, to: Vector3): boolean
+	if not sightParams or sightMap ~= map then
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Include
+		params.FilterDescendantsInstances = { map }
+		sightParams = params
+		sightMap = map
 	end
-	return points[math.random(1, #points)] :: BasePart
+	return workspace:Raycast(from, to - from, sightParams) == nil
 end
 
--- Cette méthode permet de rendre le joueur invulnérable pendant le lancement lorsqu'il sort du soleil
--- (ForceField invisible : Humanoid:TakeDamage l'ignore, cf. Validator.hitOutcome).
-local function protect(char: Model)
-	local field = Instance.new("ForceField")
-	field.Visible = false
-	field.Parent = char
-	Debris:AddItem(field, GameConfig.SPAWN_PROTECTION)
+-- Cette méthode permet de lister les yeux des ennemis vivants (tous les autres participants) lorsqu'un personnage
+-- apparaît (#288).
+local function enemyEyes(char: Model): { Vector3 }
+	local eyes = {}
+	for _, participant in Participants.all() do
+		local other = Participants.characterOf(participant)
+		local humanoid = other and other ~= char and other:FindFirstChildOfClass("Humanoid")
+		local root = humanoid and humanoid.Health > 0 and (other :: Model):FindFirstChild("HumanoidRootPart")
+		if root and root:IsA("BasePart") then
+			table.insert(eyes, root.Position + Vector3.new(0, SpawnPointRules.ROOT_EYE_OFFSET, 0))
+		end
+	end
+	return eyes
 end
 
--- Cette méthode permet de placer un personnage qui vient d'apparaître (joueur ou bot, #139) : lancé depuis le soleil
--- (#69) si la map a des points Maps.Map.SunLaunch, sinon posé sur un point au sol. Lancement : ForceField de protection,
--- origine puis vitesse posées en attributs (lues par MovementController, ou BotMotion pour un bot) ; renvoie la vitesse
--- du lancement (nil pour une apparition au sol).
-function SpawnManager.place(char: Model): Vector3?
-	local launch = pickPoint("SunLaunch")
-	local ground = if launch then nil else pickPoint("GroundSpawns")
-	if not launch and not ground then
-		warn("[SpawnManager] aucun point dans Maps.Map.SunLaunch ni Maps.Map.GroundSpawns")
+-- Cette méthode permet de choisir un point au sol (GroundSpawns) loin et hors de vue des ennemis vivants lorsqu'un
+-- personnage apparaît (#288, SpawnPointRules) ; nil si la map n'a aucun point.
+local function pickGround(char: Model): BasePart?
+	local map = getMap()
+	local folder = map and map:FindFirstChild("GroundSpawns")
+	local parts: { BasePart } = {}
+	local eyes: { Vector3 } = {}
+	for _, child in if folder then folder:GetChildren() else {} do
+		if child:IsA("BasePart") then
+			table.insert(parts, child)
+			table.insert(eyes, child.Position + Vector3.new(0, SpawnPointRules.POINT_EYE_OFFSET, 0))
+		end
+	end
+	if not rng then
+		rng = Random.new()
+	end
+	local random = rng :: Random
+	local index = SpawnPointRules.choose(eyes, enemyEyes(char), function(from, to)
+		return isVisible(map :: Instance, from, to)
+	end, function(n)
+		return random:NextInteger(1, n)
+	end)
+	return if index then parts[index] else nil
+end
+
+-- Cette méthode permet de placer un personnage qui vient d'apparaître (joueur ou bot, #139) : posé sur un point au sol
+-- choisi loin des ennemis (#288), protégé SPAWN_PROTECTION secondes (SpawnProtection) ; sans point, (0, 10, 0).
+function SpawnManager.place(char: Model)
+	local ground = pickGround(char)
+	if not ground then
+		warn("[SpawnManager] aucun point dans Maps.Map.GroundSpawns")
 	end
 	local root = char:WaitForChild("HumanoidRootPart", 5) :: BasePart?
 	-- Délai de grâce : un bot ne tire pas sur un participant qui vient d'apparaître (#143)
 	char:SetAttribute(BotCombatRules.SPAWNED_AT_ATTRIBUTE, os.clock())
-	if launch then
-		local origin = launch.Position
-		local speed = launch:GetAttribute("Speed")
-		local velocity = SpawnLaunch.velocity(launch.CFrame.LookVector, if type(speed) == "number" then speed else 0)
-		protect(char)
-		if root then
-			root.CFrame = CFrame.new(origin)
-		end
-		-- Origine d'abord : le client applique le lancement quand la vitesse arrive (MovementController)
-		char:SetAttribute(SpawnLaunch.ORIGIN_ATTRIBUTE, origin)
-		char:SetAttribute(SpawnLaunch.VELOCITY_ATTRIBUTE, velocity)
-		return velocity
-	elseif root then
+	SpawnProtection.protect(char)
+	if root then
 		root.CFrame = CFrame.new((if ground then ground.Position else Vector3.new(0, 5, 0)) + Vector3.new(0, 5, 0))
 	end
-	return nil
 end
 
 -- Cette méthode permet de répondre au client lorsque sa demande d'apparition est jugée ou que son chargement échoue

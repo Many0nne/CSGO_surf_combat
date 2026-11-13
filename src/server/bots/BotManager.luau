@@ -1,6 +1,6 @@
 -- Bots du round (#133), étapes 3/9 (#139) et 4/9 (#140) : un bot est un participant sans Player (Participants.addBot) dont le
--- personnage est construit par le serveur (rig de référence, skin commun, AWP), lancé depuis le soleil comme un
--- joueur, déplacé par BotMotion et branché comme un joueur sur l'arme 3P, la mort et le corps (onCharacter).
+-- personnage est construit par le serveur (rig de référence, skin commun, AWP), placé au sol comme un joueur
+-- (SpawnManager.place), déplacé par BotMotion et branché comme un joueur sur l'arme 3P, la mort et le corps (onCharacter).
 -- Il réapparaît RESPAWN_DELAY après sa mort, et au début de chaque round, tant que le round est actif.
 -- Le plan de navigation de la map est construit au démarrage (NavPlan) ; chaque bot le suit (BotNavigator), guidé par
 -- son comportement (BotBrain, #141 : perception, mémoire, états), qui entend les tirs relayés par hearShot.
@@ -36,8 +36,8 @@ type Participant = Participants.Participant
 export type Deps = {
 	-- Branchement commun joueur/bot du personnage (arme 3P, mort, corps), cf. init.server
 	onCharacter: (Participant, Model, () -> ()) -> (),
-	-- Placement à l'apparition (soleil ou sol) ; renvoie la vitesse du lancement
-	place: (Model) -> Vector3?,
+	-- Placement à l'apparition (point au sol loin des ennemis, protection ; SpawnManager.place)
+	place: (Model) -> (),
 	-- Publication de la position aux clients (CharacterSync.relayBot)
 	relay: (Model, BasePart, CFrame) -> (),
 	-- Touches d'un bot, validées et appliquées comme celles d'un joueur (tireur, personnage visé, partie touchée) ;
@@ -180,7 +180,7 @@ local function dropCharacter(bot: Bot)
 end
 
 -- Cette méthode permet de faire apparaître un bot lorsque le round est actif et que son délai de réapparition est
--- passé : personnage construit, inscrit, branché, mis en jeu puis lancé depuis le soleil.
+-- passé : personnage construit, inscrit, branché, mis en jeu puis placé au sol (SpawnManager.place).
 local function spawnBot(bot: Bot)
 	local char = buildCharacter(bot.participant.name)
 	if not char then
@@ -201,8 +201,8 @@ local function spawnBot(bot: Bot)
 		bot.brain = nil
 	end)
 	char.Parent = workspace
-	local launchVelocity = deps.place(char)
-	local motion = BotMotion.new(char, root, humanoid, launchVelocity, BotCombatRules.RIFLE, deps.relay)
+	deps.place(char)
+	local motion = BotMotion.new(char, root, humanoid, BotCombatRules.RIFLE, deps.relay)
 	motion:setFrozen(bot.frozen)
 	bot.motion = motion
 	local participant = bot.participant
