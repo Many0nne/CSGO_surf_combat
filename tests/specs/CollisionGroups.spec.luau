@@ -98,10 +98,12 @@ return function(T, Loader)
 		-- Garde-fou : une requête de mouvement oubliée referait des personnages des obstacles, sans erreur visible.
 		T.it("fait ignorer les personnages à chaque requête des modules de mouvement", function()
 			local fs = require("@lune/fs")
-			local files = { "src/client/systems/movement/CrouchSystem.luau" }
-			for _, name in fs.readDir("src/shared/movement") do
-				if string.match(name, "%.luau$") then
-					table.insert(files, "src/shared/movement/" .. name)
+			local files = {}
+			for _, dir in { "src/shared/movement", "src/client/systems/movement" } do
+				for _, name in fs.readDir(dir) do
+					if string.match(name, "%.luau$") then
+						table.insert(files, dir .. "/" .. name)
+					end
 				end
 			end
 			for _, path in files do
