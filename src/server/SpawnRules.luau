@@ -82,6 +82,12 @@ function SpawnRules.scheduled(spawning: boolean, alive: boolean): boolean
 	return not spawning and not alive
 end
 
+-- Cette méthode permet de décider si un personnage chargé est gardé lorsqu'il arrive : pas pour un joueur revenu au
+-- menu (#157), ni pendant la bannière de fin (#300 : protection d'apparition écoulée avant la manche suivante).
+function SpawnRules.keepsArrival(away: boolean, roundState: string): boolean
+	return not away and roundState ~= "result"
+end
+
 -- Cette méthode permet de savoir si un joueur a un personnage en place dans le jeu (vivant ou corps pas encore
 -- détruit) lorsqu'une demande d'apparition arrive.
 function SpawnRules.inPlace(character: any): boolean
