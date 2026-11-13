@@ -1,4 +1,4 @@
--- Apparition (#288) : choix du point loin et hors de vue des ennemis vivants, retrait de la protection au premier tir.
+-- Apparition (#288) : choix du point loin et hors de vue des ennemis vivants.
 return function(T, Loader)
 	local Rules = Loader.new():require("src/server/SpawnPointRules")
 	local GameConfig = Loader.new():require("src/shared/GameConfig")
@@ -92,42 +92,13 @@ return function(T, Loader)
 		end)
 	end)
 
-	T.describe("SpawnProtection.drop", function()
-		local Protection = Loader.new():require("src/server/SpawnProtection")
-
-		-- Cette méthode permet de construire un faux personnage avec des enfants nommés lorsqu'un test vérifie le retrait.
-		local function fakeCharacter(names: { string })
-			local char = { children = {} }
-			for _, name in names do
-				local child = { Name = name }
-				function child.Destroy(self)
-					local list = char.children
-					table.remove(list, table.find(list, self) :: number)
-				end
-				table.insert(char.children, child)
-			end
-			function char.GetChildren(self)
-				return table.clone(self.children)
-			end
-			return char
-		end
-
-		T.it("retire la protection au premier tir, puis plus rien", function()
-			local char = fakeCharacter({ Protection.NAME, "Humanoid" })
-			T.expectEqual(Protection.drop(char :: any), true)
-			T.expectEqual(#char.children, 1)
-			T.expectEqual(char.children[1].Name, "Humanoid")
-			T.expectEqual(Protection.drop(char :: any), false, "second tir : plus de protection")
-		end)
-
-		T.it("ne retire pas un autre ForceField", function()
-			local char = fakeCharacter({ "ForceField" })
-			T.expectEqual(Protection.drop(char :: any), false)
-			T.expectEqual(#char.children, 1)
-		end)
-
-		T.it("sans personnage : rien", function()
-			T.expectEqual(Protection.drop(nil), false)
+	T.describe("SpawnPointRules.seesThrough", function()
+		T.it("traverse les murs d'air et les pièces transparentes, pas un mur", function()
+			T.expectEqual(Rules.seesThrough(true, 0), true, "mur d'air (Clips)")
+			T.expectEqual(Rules.seesThrough(false, 0.55), true, "grillage")
+			T.expectEqual(Rules.seesThrough(false, 1), true, "pièce invisible")
+			T.expectEqual(Rules.seesThrough(false, 0), false, "mur")
+			T.expectEqual(Rules.seesThrough(false, 0.2), false, "vitre teintée")
 		end)
 	end)
 end

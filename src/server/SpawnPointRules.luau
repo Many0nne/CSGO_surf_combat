@@ -11,6 +11,17 @@ local SpawnPointRules = {}
 SpawnPointRules.POINT_EYE_OFFSET = 6.5
 SpawnPointRules.ROOT_EYE_OFFSET = 1.5
 
+-- Pièces traversées au plus par un test de vue (murs d'air, grillages) avant de conclure qu'il est bloqué
+SpawnPointRules.SIGHT_MAX_HITS = 8
+-- Une pièce au moins aussi transparente se voit au travers (grillages de Dizzy : 0,55 ; murs d'air : 1)
+SpawnPointRules.SEE_THROUGH_TRANSPARENCY = 0.5
+
+-- Cette méthode permet de savoir si le regard traverse une pièce touchée lorsqu'on teste la vue d'un ennemi sur un
+-- point : mur d'air (dossier Clips, il n'arrête ni le regard ni les balles) ou pièce transparente.
+function SpawnPointRules.seesThrough(inClips: boolean, transparency: number): boolean
+	return inClips or transparency >= SpawnPointRules.SEE_THROUGH_TRANSPARENCY
+end
+
 -- Test de vue injecté : true si un ennemi aux yeux en `from` voit des yeux en `to`
 export type IsVisible = (from: Vector3, to: Vector3) -> boolean
 -- Tirage injecté : un entier uniforme de 1 à n

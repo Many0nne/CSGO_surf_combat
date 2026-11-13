@@ -743,8 +743,8 @@ par le seau (D1) passe par `MovementGuardRules.judge` (`judgeGuard`, `src/server
    `SUSPECT_WINDOW` (2) paquets d'écart** = vol (un seul : paquet ancien arrivé après un plus récent ; l'alternance
    haut/bas d'un tricheur est prise). Un vol bloquant passe avant un noclip en journal seul. Après un vol signalé,
    l'enveloppe repart du point atteint, vitesse nulle : un joueur qui plane encore est signalé environ deux fois par
-   seconde, pas à chaque paquet. Le paramètre `launchVy` (vitesse du lancement depuis le soleil, retiré
-   par #288) ouvrait l'enveloppe ; `CharacterSync` ne le passe plus. Correction (D1 ou D2) : enveloppe repartie de la position de correction avec la vitesse d'un saut.
+   seconde, pas à chaque paquet. Le lancement depuis le soleil, qui ouvrait l'enveloppe par sa vitesse,
+   a été retiré par #288. Correction (D1 ou D2) : enveloppe repartie de la position de correction avec la vitesse d'un saut.
 3. **Vide** (`fellIntoVoid`, boucle `checkVoid` toutes les 0,25 s) : joueur en l'air (dernier paquet jugé non porté),
    sans paquet reçu depuis `VOID_SILENCE` (2 s ; un paquet ignoré en attente d'accusé compte comme signe de vie pendant
    `VOID_SILENCE` après le refus, pas au-delà), dont même la plus haute position de l'enveloppe est passée sous

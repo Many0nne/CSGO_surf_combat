@@ -133,7 +133,7 @@ return {
 	AIM_SPREAD_SPEED    = 0.05,   -- en plus par stud/s de vitesse de la cible (° ; aucun malus selon sa propre vitesse)
 	AIM_SPREAD_MAX      = 6,      -- dispersion au plus (°)
 	FIRE_RANGE          = 240,    -- tir au fusil à moins de tant (studs ; le serveur refuse au-delà de 250)
-	SPAWN_GRACE         = 4,      -- pas de tir sur un participant apparu depuis moins de tant (s, lancement compris)
+	SPAWN_GRACE         = 4,      -- pas de tir sur un participant apparu depuis moins de tant (s)
 	                              -- le temps de réaction et de visée part de sa fin (#298), le bot peut s'y tourner avant
 	HUMAN_PREF_RANGE    = 100,    -- un humain hors grâce passe avant un bot plus proche à moins de tant (studs, #298)
 	HUMAN_PREF_MARGIN   = 20,     -- cible déjà visée comptée tant plus proche (pas de va-et-vient, studs)

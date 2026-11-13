@@ -53,7 +53,8 @@ local sightParams: RaycastParams? = nil
 local sightMap: Instance? = nil
 
 -- Cette méthode permet de tester si un ennemi voit un point d'apparition lorsqu'on choisit où faire apparaître un
--- personnage (#288) : raycast d'yeux à yeux limité à la géométrie de la map jouée (personnages ignorés).
+-- personnage (#288) : raycast d'yeux à yeux sur la géométrie de la map jouée (personnages ignorés), qui traverse les
+-- murs d'air (Clips) et les pièces transparentes (grillages, SpawnPointRules.seesThrough).
 local function isVisible(map: Instance, from: Vector3, to: Vector3): boolean
 	if not sightParams or sightMap ~= map then
 		local params = RaycastParams.new()
@@ -62,16 +63,39 @@ local function isVisible(map: Instance, from: Vector3, to: Vector3): boolean
 		sightParams = params
 		sightMap = map
 	end
-	return workspace:Raycast(from, to - from, sightParams) == nil
+	local clips = map:FindFirstChild("Clips")
+	local origin = from
+	for _ = 1, SpawnPointRules.SIGHT_MAX_HITS do
+		local delta = to - origin
+		if delta.Magnitude < 1e-3 then
+			return true
+		end
+		local hit = workspace:Raycast(origin, delta, sightParams)
+		if not hit then
+			return true
+		end
+		local part = hit.Instance
+		local inClips = clips ~= nil and part:IsDescendantOf(clips)
+		if not SpawnPointRules.seesThrough(inClips, if part:IsA("BasePart") then part.Transparency else 0) then
+			return false
+		end
+		-- Au-delà de la pièce traversée : le rayon repart juste derrière le point touché
+		origin = hit.Position + delta.Unit * 0.05
+	end
+	return false
 end
 
 -- Cette méthode permet de lister les yeux des ennemis vivants (tous les autres participants) lorsqu'un personnage
--- apparaît (#288).
+-- apparaît (#288) ; un personnage pas encore placé (sans SpawnedAt, encore à sa position de chargement) est ignoré.
 local function enemyEyes(char: Model): { Vector3 }
 	local eyes = {}
 	for _, participant in Participants.all() do
 		local other = Participants.characterOf(participant)
-		local humanoid = other and other ~= char and other:FindFirstChildOfClass("Humanoid")
+		local placed = other ~= nil
+			and other ~= char
+			and other.Parent ~= nil
+			and other:GetAttribute(BotCombatRules.SPAWNED_AT_ATTRIBUTE) ~= nil
+		local humanoid = placed and (other :: Model):FindFirstChildOfClass("Humanoid")
 		local root = humanoid and humanoid.Health > 0 and (other :: Model):FindFirstChild("HumanoidRootPart")
 		if root and root:IsA("BasePart") then
 			table.insert(eyes, root.Position + Vector3.new(0, SpawnPointRules.ROOT_EYE_OFFSET, 0))
