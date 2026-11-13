@@ -4,6 +4,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local PlayerSettings = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("PlayerSettings"))
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
+local LocalSettings = require(script.Parent.Parent.systems.settings.LocalSettings)
+local HUDRules = require(script.Parent.HUDRules)
+local InfosRules = require(script.Parent.InfosRules)
 local MenuPage = require(script.Parent.MenuPage)
 local UIKit = require(script.Parent.UIKit)
 
@@ -13,7 +16,9 @@ local Motion = UITheme.Motion
 
 local InfosScreen = {}
 
-type Section = { title: string, lines: { string }?, keys: { { string } }? }
+-- `lines` : texte fixe ; `compose` : texte qui cite des touches ; `keys` : lignes touche → action (COMMANDES). Les deux
+-- derniers sont recomposés à chaque affichage depuis KeyBindings et les réglages du joueur (#290).
+type Section = { title: string, lines: { string }?, compose: ((InfosRules.Context) -> { string })?, keys: boolean? }
 
 -- Bloc centré, mêmes cotes que les Réglages (px à 720 de haut)
 local BLOCK_WIDTH = 780
@@ -27,27 +32,11 @@ local CONTENT_HEIGHT = MenuPage.ExitY - 20 - CONTENT_TOP
 local SECTIONS: { Section } = {
 	{
 		title = "SURFER",
-		lines = {
-			"Approche une rampe et place-toi PARALLÈLE à sa surface.",
-			"Maintiens A ou D pour appuyer contre la rampe. Ne touche jamais à W pendant le surf.",
-			"Oriente-toi avec la souris dans le sens de la rampe pour gagner de la vitesse.",
-			"Reste sur la bonne zone de la rampe : ni trop haut, ni trop bas.",
-			"Enchaîne les rampes en douceur, avec des air strafes (A/D + souris) entre elles.",
-			"Ne saute jamais sur une rampe : laisse la gravité t'y amener.",
-		},
+		compose = InfosRules.surfLines,
 	},
 	{
 		title = "COMMANDES",
-		keys = {
-			{ "W A S D", "Se déplacer" },
-			{ "ESPACE", "Sauter / bhop (auto-bhop réglable dans Réglages)" },
-			{ "CTRL", "S'accroupir" },
-			{ "CLIC GAUCHE", "Tirer" },
-			{ "R", "Recharger" },
-			{ "F", "Inspecter le couteau" },
-			{ "TAB", "Classement" },
-			{ PlayerSettings.MENU_KEY, "Menu en partie (réglages, retour au menu)" },
-		},
+		keys = true,
 	},
 	{
 		title = "CRÉDITS",
@@ -139,6 +128,20 @@ local function addKeyRow(key: string, action: string, order: number): { TextLabe
 	return { keyLbl, actionLbl }
 end
 
+-- Cette méthode permet de réunir ce dont les textes à touches dépendent lorsqu'une section est composée : actions de
+-- l'affichage des touches (KeyBindings), libellés du clavier du joueur et réglages d'armes.
+local function composeContext(): InfosRules.Context
+	local settings = LocalSettings.get()
+	return {
+		entries = HUDRules.keyDisplayEntries("full"),
+		keyText = LocalSettings.keyText,
+		menuKey = PlayerSettings.MENU_KEY,
+		slotKeys = settings.slotKeys,
+		defaultSlotKeys = PlayerSettings.DEFAULT_SLOT_KEYS,
+		wheel = settings.wheel,
+	}
+end
+
 -- Cette méthode permet de remplir la zone de contenu avec la section choisie lorsque l'onglet change.
 local function renderSection(index: number)
 	for _, child in content:GetChildren() do
@@ -150,11 +153,12 @@ local function renderSection(index: number)
 
 	local section = SECTIONS[index]
 	if section.keys then
-		for i, pair in section.keys do
-			fadeIn(addKeyRow(pair[1], pair[2], i), i * Motion.Stagger)
+		for i, row in InfosRules.commandRows(composeContext()) do
+			fadeIn(addKeyRow(row.key, row.action, i), i * Motion.Stagger)
 		end
 	else
-		for i, line in section.lines or {} do
+		local lines = if section.compose then section.compose(composeContext()) else section.lines or {}
+		for i, line in lines do
 			fadeIn({ addParagraph(line, i) }, i * Motion.Stagger)
 		end
 	end
@@ -222,6 +226,20 @@ function InfosScreen.init(onClose: () -> ())
 		})
 	end
 	page.exit("RETOUR", onClose)
+
+	-- Touches d'armes ou molette changées dans Réglages pendant que Infos est ouvert : l'onglet se recompose ; les autres
+	-- réglages ne touchent pas l'écran (sinon le défilement reviendrait en haut).
+	local shownSlotKeys, shownWheel = table.concat(LocalSettings.get().slotKeys, ","), LocalSettings.get().wheel
+	LocalSettings.onChanged(function(settings)
+		local slotKeys = table.concat(settings.slotKeys, ",")
+		if slotKeys == shownSlotKeys and settings.wheel == shownWheel then
+			return
+		end
+		shownSlotKeys, shownWheel = slotKeys, settings.wheel
+		if page.gui.Enabled then
+			renderSection(selected)
+		end
+	end)
 
 	selectTab(1)
 end
