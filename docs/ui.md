@@ -72,6 +72,16 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   sur la fiche depuis que les armes ne défilent plus. Les onglets sont dans leur propre `ScreenGui` (`MenuTabs`, DisplayOrder 4), au-dessus des écrans
   secondaires. Sous les onglets, un message ponctuel (`MainMenu.showNotice`, 5 s, rouge d'impact à ombre) explique un
   retour au menu imprévu, par exemple une apparition impossible (#219) ; rendu provisoire, pas encore validé.
+- **Fiche de statistiques (#301, `src/client/ui/StatsCard.luau`)** : sur l'accueil (pas d'onglet en plus, choix de
+  l'utilisateur), en bas au centre sous les pieds du personnage, sur un fondu de bord (`cornerScrim` « Bottom »). Cinq
+  colonnes séparées par des filets comme les onglets : chiffre os à ombre (Oswald 28 px), libellé ambré dessous (KILLS,
+  MORTS, K/M, ROUNDS, VICTOIRES). Lue dans l'attribut informatif `PlayerStats` du Player (`StatsRules.ATTRIBUTE`, posé
+  par `StatsStore` une fois le stocké lu puis à chaque kill, mort et fin de manche ; jamais relu par le serveur, pas de
+  remote). Attribut absent (chargement en cours, ou en échec : Studio sans accès aux API) : « — » partout
+  (`StatsRules.UNKNOWN`), jamais des zéros présentés comme vrais. Mise en forme dans `StatsRules.view` (testée) : ratio à
+  deux décimales comme le classement (sans mort, il vaut les kills), compteurs tels quels sous 10 000 puis abrégés et
+  tronqués (« 12.3k », « 1.2M »). Les kills et morts face aux bots ne comptent pas
+  (`ParticipantRules.killCountsInStats`) : la fiche ne suit donc pas le classement d'une manche jouée contre des bots.
 - `src/client/ui/MenuPage.luau` : gabarit des écrans secondaires, sans panneau : bloc centré sur le voile du classement,
   actions côte à côte en bas au centre (`MenuPage.ExitY`). Choix de l'utilisateur en #117, après un premier passage en
   colonne sur un dégradé à gauche jugé peu changé. Infos et Réglages partagent la même disposition (catégories à gauche

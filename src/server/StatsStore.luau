@@ -7,6 +7,8 @@
 -- `GameConfig.AUTO_SAVE_INTERVAL` s, au départ du joueur et à l'arrêt du serveur (en parallèle). Une écriture en échec
 -- est signalée (warn) et son lot gardé pour la suivante. Lecture en échec, format stocké inconnu ou plus récent :
 -- sauvegarde coupée pour la session, l'enregistrement n'est pas touché.
+-- Le client lit ces statistiques dans l'attribut informatif `PlayerStats` du Player (#301, fiche de l'accueil), posé une
+-- fois le stocké connu puis à chaque kill, mort ou fin de manche ; jamais relu par le serveur.
 local DataStoreService = game:GetService("DataStoreService")
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
@@ -82,6 +84,22 @@ local function hasWork(profile: Profile): boolean
 	return profile.pending ~= nil or not StatsRules.isEmpty(profile.delta)
 end
 
+-- Cette méthode permet de calculer les statistiques d'un profil (stockées, plus lot en écriture et écarts pas encore
+-- écrits) lorsqu'un système serveur ou l'attribut du Player les lit.
+local function totalOf(profile: Profile): Stats
+	local total = StatsRules.sum(profile.stored, profile.delta)
+	return if profile.pending then StatsRules.sum(total, profile.pending.delta) else total
+end
+
+-- Cette méthode permet de poser l'attribut informatif `PlayerStats` du Player (#301, lu par la fiche de l'accueil)
+-- lorsque ses statistiques changent ou sont lues ; rien tant que le stocké n'est pas connu : le client affiche « — »
+-- plutôt que des zéros (chargement en cours ou en échec).
+local function publish(profile: Profile)
+	if profile.known and profiles[profile.player] == profile then
+		profile.player:SetAttribute(StatsRules.ATTRIBUTE, StatsRules.encode(totalOf(profile)))
+	end
+end
+
 -- Cette méthode permet de tenir à jour la liste des joueurs partis à écrire lorsqu'un profil part ou finit une écriture.
 local function track(profile: Profile)
 	if profiles[profile.player] == profile then
@@ -130,6 +148,8 @@ local function saveProfile(profile: Profile)
 		profile.stored = StatsRules.read(if status == "merged" then written else seen)
 		profile.known = true
 		profile.failures = 0
+		-- Écriture faite pendant le chargement : c'est elle qui rend le stocké connu
+		publish(profile)
 	elseif ok then
 		-- Un autre serveur (version plus récente) a écrit un format que celle-ci ne sait pas réécrire
 		profile.canSave = false
@@ -193,12 +213,14 @@ function StatsStore.load(player: Player)
 	if profile.known then
 		return -- une écriture faite pendant le chargement a déjà relu le stocké (plus récent) et prouvé son format
 	elseif not canSave then
-		-- Lecture en échec (services d'API coupés en Studio compris) ou format inconnu : rien n'est écrit
+		-- Lecture en échec (services d'API coupés en Studio compris) ou format inconnu : rien n'est écrit, et pas
+		-- d'attribut (la fiche reste sur « — »)
 		profile.canSave = false
 		warn("[StatsStore] chargement impossible pour", player.Name, "— statistiques non sauvegardées")
 	else
 		profile.stored = stored
 		profile.known = true
+		publish(profile)
 	end
 end
 
@@ -209,15 +231,16 @@ function StatsStore.getStats(player: Player): Stats
 	if not profile then
 		return StatsRules.zero()
 	end
-	local total = StatsRules.sum(profile.stored, profile.delta)
-	return if profile.pending then StatsRules.sum(total, profile.pending.delta) else total
+	return totalOf(profile)
 end
 
--- Cette méthode permet d'ajouter un écart au profil d'un joueur inscrit lorsqu'un événement compté arrive.
+-- Cette méthode permet d'ajouter un écart au profil d'un joueur inscrit lorsqu'un événement compté arrive, et de
+-- republier son attribut (une fin de manche met donc la fiche à jour avant le retour au menu).
 local function record(player: Player, field: StatsRules.Field)
 	local profile = profiles[player]
 	if profile then
 		StatsRules.add(profile.delta, field)
+		publish(profile)
 	end
 end
 
