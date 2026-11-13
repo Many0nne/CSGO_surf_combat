@@ -169,23 +169,16 @@ else
 	end
 end
 
--- maps (assets/rbx/Maps, #69) : chaque Workspace.Maps.<Nom> avec des points d'apparition ; lanceurs du soleil avec une
--- vitesse ; boosts configurés ; hauteur de mort numérique si présente
+-- maps (assets/rbx/Maps, #69) : chaque Workspace.Maps.<Nom> avec des points d'apparition au sol ; boosts configurés ;
+-- hauteur de mort numérique si présente
 local maps = game.Workspace:FindFirstChild("Maps")
 
--- Cette méthode permet de contrôler une map lorsqu'on vérifie la place : spawns, lanceurs, boosts, matières, dunes.
+-- Cette méthode permet de contrôler une map lorsqu'on vérifie la place : spawns, boosts, matières, dunes.
 local function checkMap(map)
 	local ground = map:FindFirstChild("GroundSpawns")
-	local launches = map:FindFirstChild("SunLaunch")
 	local nGround = if ground then #ground:GetChildren() else 0
-	local nLaunch = if launches then #launches:GetChildren() else 0
-	if nGround + nLaunch == 0 then
-		fail("Maps." .. map.Name .. " sans point d'apparition (GroundSpawns ni SunLaunch)")
-	end
-	for _, launch in if launches then launches:GetChildren() else {} do
-		if type(launch:GetAttribute("Speed")) ~= "number" then
-			fail("Maps." .. map.Name .. ".SunLaunch." .. launch.Name .. " sans attribut Speed")
-		end
+	if nGround == 0 then
+		fail("Maps." .. map.Name .. " sans point d'apparition (GroundSpawns)")
 	end
 	-- boosts (MapRules) : chaque volume a un type connu et le réglage qui va avec
 	local boosts = map:FindFirstChild("Boosts")
@@ -233,11 +226,10 @@ local function checkMap(map)
 	end
 	print(
 		string.format(
-			"Maps.%s : %d instances, %d spawns au sol, %d lanceurs, %d boosts, %d murs d'air, %d grillages passbullets, KillHeight %s",
+			"Maps.%s : %d instances, %d spawns au sol, %d boosts, %d murs d'air, %d grillages passbullets, KillHeight %s",
 			map.Name,
 			#map:GetDescendants(),
 			nGround,
-			nLaunch,
 			nBoost,
 			nClip,
 			nPass,

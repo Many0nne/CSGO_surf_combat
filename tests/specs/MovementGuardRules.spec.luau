@@ -57,18 +57,18 @@ return function(T, Loader)
 				return false
 			end,
 			support = function(from: Vector3, to: Vector3): (boolean, number)
-				local launchVy = 0
+				local boostVy = 0
 				for _, boost in boosts or {} do
 					if Rules.touchesVolume(from, to, boost.CFrame, boost.Size) then
-						launchVy = math.max(launchVy, boost.vy)
+						boostVy = math.max(boostVy, boost.vy)
 					end
 				end
 				for _, ladder in ladders or {} do
 					if Rules.touchesVolume(from, to, ladder.CFrame, ladder.Size) then
-						return true, launchVy
+						return true, boostVy
 					end
 				end
-				return Rules.supportedAlong(parts, from, to), launchVy
+				return Rules.supportedAlong(parts, from, to), boostVy
 			end,
 		}
 	end
@@ -113,8 +113,8 @@ return function(T, Loader)
 
 	-- Cette méthode permet de rejouer des paquets devant les règles comme CharacterSync lorsqu'un test simule une
 	-- partie : une violation en mode bloquant garde lastPos (paquet refusé), sinon la position est appliquée.
-	local function replay(list, geometry, start: Vector3, launchVy: number?)
-		local guard = Rules.newGuard(0, start, launchVy)
+	local function replay(list, geometry, start: Vector3)
+		local guard = Rules.newGuard(0, start)
 		local lastPos = start
 		local verdicts = {}
 		for _, packet in list do
@@ -420,21 +420,6 @@ return function(T, Loader)
 				end
 			end
 		)
-
-		T.it("un lancement depuis le soleil n'est pas signalé, même au premier paquet tardif", function()
-			local launch = V(100, 80, 0)
-			local origin = V(0, 500, 0)
-			local function path(t: number): Vector3
-				return V(origin.X + launch.X * t, math.max(STAND, freeFall(origin.Y, launch.Y, t)), 0)
-			end
-			local list = packets(path, 6, 0.05)
-			-- Les 0,3 premières secondes de paquets sont perdues
-			while list[1].t < 0.35 do
-				table.remove(list, 1)
-			end
-			local verdicts = replay(list, geometryOf({ FLOOR }), origin, launch.Y)
-			T.expectEqual(#verdicts, 0, describe(verdicts))
-		end)
 
 		T.it("un joueur qui plane au-dessus de la map est signalé en moins de 1,5 s, puis régulièrement", function()
 			local function path(t: number): Vector3

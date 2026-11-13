@@ -13,7 +13,6 @@ local LocalSettings = require(script.Parent.Parent.settings.LocalSettings)
 local InputModule = require(script.Parent.Parent.Parent.input.InputModule)
 local PhysicsUtils = require(ReplicatedStorage.Shared.PhysicsUtils)
 local Config = require(ReplicatedStorage.Shared.MovementConfig)
-local SpawnLaunch = require(ReplicatedStorage.Shared.SpawnLaunch)
 local LadderRules = require(ReplicatedStorage.Shared.LadderRules)
 local CharacterAnimator = require(ReplicatedStorage.Shared.CharacterAnimator)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
@@ -63,30 +62,6 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 	local ownCFrame: CFrame? = nil
 	local prevCFrame: CFrame? = nil
 	local tickAccumulator = 0 -- temps rendu pas encore simulé (< un tick)
-
-	-- Lancement depuis le soleil (#69) : le serveur pose l'origine puis la vitesse sur le personnage.
-	local launched = false
-	-- Cette méthode permet d'appliquer une seule fois le lancement du serveur lorsque ses attributs sont arrivés
-	-- (déjà là à l'init, ou répliqués juste après) : position, vitesse en l'air et caméra tournée vers la ville.
-	local function applyLaunch()
-		local origin = char:GetAttribute(SpawnLaunch.ORIGIN_ATTRIBUTE)
-		local launchVelocity = char:GetAttribute(SpawnLaunch.VELOCITY_ATTRIBUTE)
-		if launched or typeof(origin) ~= "Vector3" or typeof(launchVelocity) ~= "Vector3" then
-			return
-		end
-		launched = true
-		motor:teleport(CFrame.new(origin) * hrp.CFrame.Rotation)
-		-- Téléportation : pas d'interpolation depuis l'ancienne position (sinon traînée d'une frame vers le soleil)
-		ownCFrame = hrp.CFrame
-		prevCFrame = hrp.CFrame
-		motor.velocity = launchVelocity
-		motor:setAirborne()
-		if camera and camera.setAngles and launchVelocity.Magnitude > 1e-3 then
-			camera.setAngles(SpawnLaunch.cameraAngles(launchVelocity))
-		end
-	end
-	applyLaunch()
-	char:GetAttributeChangedSignal(SpawnLaunch.VELOCITY_ATTRIBUTE):Connect(applyLaunch)
 
 	-- Correction du serveur (#172) : position refusée, retour à la dernière position acceptée, vitesse nulle, sans
 	-- interpolation depuis l'ancienne position ; l'état (sol, surf) est recalculé au tick suivant.

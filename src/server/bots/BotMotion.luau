@@ -14,7 +14,6 @@ local CharacterAnimator = require(ReplicatedStorage.Shared.CharacterAnimator)
 local CharacterMotor = require(ReplicatedStorage.Shared.movement.CharacterMotor)
 local CharacterSyncRules = require(ReplicatedStorage.Shared.CharacterSyncRules)
 local LadderRules = require(ReplicatedStorage.Shared.LadderRules)
-local MathRules = require(ReplicatedStorage.Shared.MathRules)
 local Config = require(ReplicatedStorage.Shared.MovementConfig)
 local PhysicsUtils = require(ReplicatedStorage.Shared.PhysicsUtils)
 local RampRules = require(ReplicatedStorage.Shared.RampRules)
@@ -63,16 +62,8 @@ local function runSpeedFor(weaponName: string?): number
 	return Config.RUN_SPEED * multiplier
 end
 
--- Cette méthode permet de démarrer le mouvement d'un bot lorsqu'il apparaît ; launchVelocity est la vitesse de son
--- lancement depuis le soleil (nil pour une apparition au sol), weaponName l'arme qu'il tient.
-function BotMotion.new(
-	char: Model,
-	root: BasePart,
-	humanoid: Humanoid,
-	launchVelocity: Vector3?,
-	weaponName: string?,
-	relay: Relay
-): BotMotion
+-- Cette méthode permet de démarrer le mouvement d'un bot lorsqu'il apparaît ; weaponName est l'arme qu'il tient.
+function BotMotion.new(char: Model, root: BasePart, humanoid: Humanoid, weaponName: string?, relay: Relay): BotMotion
 	local rng = Random.new()
 	local runSpeed = runSpeedFor(weaponName)
 	local self = setmetatable({
@@ -90,15 +81,6 @@ function BotMotion.new(
 		wishSpeed = runSpeed,
 		gaze = { lookAt = nil, aiming = false },
 	}, BotMotion)
-	if launchVelocity then
-		self.motor.velocity = launchVelocity
-		self.motor:setAirborne()
-		local flat = Vector3.new(launchVelocity.X, 0, launchVelocity.Z)
-		if flat.Magnitude > 1e-3 then
-			-- Cap = direction du lancement : le bot regarde vers la ville, comme la caméra du joueur lancé
-			self.yaw = MathRules.headingDeg(flat.X, flat.Z) % 360
-		end
-	end
 	return self
 end
 

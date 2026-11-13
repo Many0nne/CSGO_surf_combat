@@ -24,7 +24,6 @@ local MovementGuardRules = require(ReplicatedStorage.Shared.MovementGuardRules)
 local Participants = require(ServerScriptService.Server.Participants)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local PositionHistory = require(ReplicatedStorage.Shared.PositionHistory)
-local SpawnLaunch = require(ReplicatedStorage.Shared.SpawnLaunch)
 
 local CharacterSync = {}
 
@@ -174,8 +173,6 @@ end
 local function trackFor(player: Player, char: Model, root: BasePart, now: number): Track
 	local track = tracks[player]
 	if not track or track.char ~= char then
-		-- Lancement depuis le soleil (#69, SpawnManager) : sa vitesse verticale ouvre l'enveloppe du vol
-		local launch = char:GetAttribute(SpawnLaunch.VELOCITY_ATTRIBUTE)
 		track = {
 			char = char,
 			lastPos = root.Position,
@@ -185,11 +182,7 @@ local function trackFor(player: Player, char: Model, root: BasePart, now: number
 			correctedAt = -math.huge,
 			refusedAt = -math.huge,
 			voidReportedAt = -math.huge,
-			guard = MovementGuardRules.newGuard(
-				now,
-				root.Position,
-				if typeof(launch) == "Vector3" then launch.Y else nil
-			),
+			guard = MovementGuardRules.newGuard(now, root.Position),
 		}
 		tracks[player] = track
 	end
