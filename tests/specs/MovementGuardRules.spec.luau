@@ -57,18 +57,18 @@ return function(T, Loader)
 				return false
 			end,
 			support = function(from: Vector3, to: Vector3): (boolean, number)
-				local launchVy = 0
+				local boostVy = 0
 				for _, boost in boosts or {} do
 					if Rules.touchesVolume(from, to, boost.CFrame, boost.Size) then
-						launchVy = math.max(launchVy, boost.vy)
+						boostVy = math.max(boostVy, boost.vy)
 					end
 				end
 				for _, ladder in ladders or {} do
 					if Rules.touchesVolume(from, to, ladder.CFrame, ladder.Size) then
-						return true, launchVy
+						return true, boostVy
 					end
 				end
-				return Rules.supportedAlong(parts, from, to), launchVy
+				return Rules.supportedAlong(parts, from, to), boostVy
 			end,
 		}
 	end
