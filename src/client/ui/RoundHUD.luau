@@ -830,13 +830,14 @@ function RoundHUD.hideRespawning()
 end
 
 -- Cette méthode permet d'afficher l'écran de fin de manche lorsque RoundResult arrive (#295) : vainqueur (ou « ÉGALITÉ »,
--- « AUCUN VAINQUEUR »), podium et ligne du joueur hors podium ; il passe devant le classement de Tab s'il était ouvert.
+-- « AUCUN VAINQUEUR »), podium et ligne du joueur hors podium ; Tab encore maintenu garde le classement jusqu'au relâchement.
 function RoundHUD.showResult(data: any)
 	if not resultRoot then
 		return
 	end
 	local view = HUDRules.readRoundResult(data, Players.LocalPlayer.UserId)
-	leaderboard.Visible = false
+	local tabHeld = UserInputService:IsKeyDown(Enum.KeyCode.Tab)
+	leaderboard.Visible = tabHeld
 	resultName.Text = view.title
 	resultNameShadow.Text = view.title
 	resultMeBand.Visible = view.meWins
@@ -853,7 +854,7 @@ function RoundHUD.showResult(data: any)
 	end
 
 	resultShown = true
-	resultRoot.Visible = true
+	resultRoot.Visible = not tabHeld
 	resultVeil.BackgroundTransparency = 1
 	UIKit.tween(resultVeil, Motion.Enter, { BackgroundTransparency = 0 })
 	UIKit.reveal(resultContent, 0.15, 16)
