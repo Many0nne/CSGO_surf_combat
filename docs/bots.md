@@ -285,8 +285,8 @@ Règles pures dans `BotPopulationRules`, appliquées par `BotManager` (`adjustPo
 - Les dessus des murs d'air (escaliers) sont de vraies cases : c'est là que marchent les joueurs.
 - **Murs d'air : `Geometry.Clips`, pas `Clips`.** Le générateur range les murs d'air sous `Geometry` ; jusqu'à #292,
   `BotManager` et `NavBuilder` les cherchaient à la racine de la map (`nil`) : la vue des bots, les notes de vue et de
-  couvert s'arrêtaient sur 666 murs invisibles. Chemins des dossiers de map : `MapGeometry` (jamais de
-  `FindFirstChild` à la main), contrôlés par `tools/rbxm/verify_place.luau` en CI.
+  couvert s'arrêtaient sur 666 murs invisibles. Murs d'air : `MapGeometry.clips` ; noms des dossiers de map lus par
+  le code dans `MapGeometry`, contrôlés par `tools/rbxm/verify_place.luau` en CI.
 - **Air strafe : alterner pendant le saut, pas d'un saut à l'autre.** Avec `AIR_SPEED_CAP` = 6, un strafe à 90°
   tourne la vitesse d'environ 11° par tick à 30 studs/s : tenir un côté tout un saut fait une spirale. Le côté suit
   l'écart au cap à chaque tick, et le zigzag visible vient du cap visé décalé d'un saut à l'autre.

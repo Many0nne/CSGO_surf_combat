@@ -480,7 +480,7 @@ function NavBuilder.build(map: Instance): Plan
 
 	-- 3. Cases gardées, depuis le point d'apparition au sol le plus central (sinon la case la plus reliée)
 	local seed: number? = nil
-	local spawns = map:FindFirstChild("GroundSpawns")
+	local spawns = map:FindFirstChild(MapGeometry.GROUND_SPAWNS)
 	if spawns then
 		for _, spawn in spawns:GetChildren() do
 			if spawn:IsA("BasePart") then

@@ -70,9 +70,10 @@ return function(T, Loader)
 			T.expectEqual(#MapGeometry.bulletTransparent(map), 2)
 		end)
 
-		T.it("calcule la liste une fois par map", function()
+		T.it("calcule la liste une fois par map, figée (partagée par tous les rayons)", function()
 			local map = fakeMap()
 			T.expectEqual(MapGeometry.bulletTransparent(map), MapGeometry.bulletTransparent(map))
+			T.expect(table.isfrozen(MapGeometry.bulletTransparent(map)), "liste modifiable")
 		end)
 
 		T.it("rend une liste vide pour une map sans Geometry", function()

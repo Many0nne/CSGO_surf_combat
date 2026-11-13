@@ -44,7 +44,7 @@ function MapGeometry.passesBullets(inst: Instance): boolean
 end
 
 -- Cette méthode permet de lister ce que les balles et le regard traversent dans une map lorsqu'on prépare un rayon : le
--- dossier des murs d'air, puis les pièces des grillages `passbullets`. Calculée une fois par map (map statique).
+-- dossier des murs d'air, puis les pièces des grillages `passbullets`. Une fois par map (statique), liste figée.
 function MapGeometry.bulletTransparent(map: Instance): { Instance }
 	if cachedMap and cachedMap == map then
 		return cachedList
@@ -60,6 +60,7 @@ function MapGeometry.bulletTransparent(map: Instance): { Instance }
 			table.insert(list, inst)
 		end
 	end
+	table.freeze(list)
 	cachedMap, cachedList = map, list
 	return list
 end
