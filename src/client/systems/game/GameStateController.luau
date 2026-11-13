@@ -111,7 +111,8 @@ local function setState(newState: State)
 		-- Réapparition, menu ou fin de round : la caméra revient à FPSCamera ou au menu
 		DeathCamera.stop()
 	end
-	if newState == "MENU" then
+	if newState == "MENU" or newState == "SPAWNING" then
+		-- Corps de la manche finie retirés aussi quand elle s'enchaîne sans passer par le menu (#300)
 		DeathRagdoll.clear()
 	end
 	if newState == "MENU" or newState == "RESULT" then

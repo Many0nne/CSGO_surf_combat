@@ -28,11 +28,13 @@ function SpawnRules.request(r: Request): Refusal?
 	if r.roundState == "active" and r.diedAt and r.now - r.diedAt < r.respawnDelay then
 		return "early"
 	end
-	if r.hasCharacter then
-		return "alive"
-	end
+	-- Avant "alive" : un personnage arrivé pendant la bannière (réapparition en vol à la fin de manche) n'est repris
+	-- qu'en idle, où beforeSpawn démarre la manche suivante (#300) ; repris en "result", aucune manche ne démarrerait
 	if r.roundState == "result" then
 		return "result"
+	end
+	if r.hasCharacter then
+		return "alive"
 	end
 	return nil
 end

@@ -65,6 +65,14 @@ return function(T, Loader)
 			T.expectEqual(SpawnRules.request(request({ spawning = true })), "spawning")
 			T.expectEqual(SpawnRules.request(request({ roundState = "result" })), "result")
 		end)
+
+		T.it(
+			"bannière de fin avec un personnage arrivé pendant : « result », repris seulement en idle (#300)",
+			function()
+				T.expectEqual(SpawnRules.request(request({ roundState = "result", hasCharacter = true })), "result")
+				T.expectEqual(SpawnRules.request(request({ roundState = "idle", hasCharacter = true })), "alive")
+			end
+		)
 	end)
 
 	T.describe("SpawnRules.reply (#219)", function()
