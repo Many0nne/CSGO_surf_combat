@@ -53,6 +53,7 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 	-- Animations 3e personne : jouées sur l'Animator du personnage local, donc répliquées aux autres clients.
 	local charAnimator = CharacterAnimator.new(hum)
 	CrouchSystem.init(hrp, motor.dims)
+	CoyoteJump.init()
 	BoostSystem.init()
 	LadderSystem.init()
 	local ladderRegrab = 0 -- délai avant de pouvoir reprendre une échelle après en avoir sauté
@@ -120,7 +121,10 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 		local _, isGroundedState, isAirborneState = motor:updateState(gnd, crouchInfo.isCrouching)
 
 		-- 4. Saut (coyote + buffer + normal) — consomme isJumpPressed() en interne
-		local shouldJump = CoyoteJump.update(gnd.onGround, dt)
+		local shouldJump = CoyoteJump.update(gnd.onGround, dt, {
+			jumpPressed = InputModule.isJumpPressed(), -- edge, consommé ici
+			timeSincePress = tick() - InputModule.getJumpPressTime(),
+		})
 
 		-- 5. Direction souhaitée depuis le yaw de la caméra FPS
 		local wishdir = InputModule.getWishDir(camera and camera.getCameraYaw() or 0)
@@ -168,6 +172,9 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 				jumpHeld = InputModule.isJumpHeld(),
 				autoBhop = LocalSettings.get().autoBhop,
 			})
+			if bhop.forceJump then
+				CoyoteJump.notifyForcedJump() -- sinon le coyote s'ouvre après ce saut (#294)
+			end
 			willJump = motor:groundPhysics(
 				gnd,
 				wishdir,
