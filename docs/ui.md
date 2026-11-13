@@ -147,8 +147,10 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   couleur), longueur 2 à 20 px, épaisseur 1 à 6, écart central 0 à 15, point central, contour, opacité 0,20 à 1 (pas
   d'invisible). Bornes et défauts : `PlayerSettings.CROSSHAIR` (défauts = rendu d'origine), validés par `sanitize` (px
   entiers, couleur hors palette refusée). L'opacité vaut pour le trait et le contour. RÉTABLIR remet le style d'origine
-  sans couper la visée simplifiée. Aperçu sous les catégories, 16 px sous la dernière (position calculée dans
-  `buildCrosshairPreview` d'après le nombre de catégories, jamais en dur : un onglet ajouté le recouvrait, #305) : deux cases (sable clair, sombre) où `Crosshair.draw`
+  sans couper la visée simplifiée. Aperçu sous les catégories, placé en dernier dans `buildCategories` sous la dernière
+  catégorie créée (position calculée d'après leur nombre, #305 : en dur, un onglet de plus le recouvrait ; à vérifier
+  qu'il reste au-dessus de RÉTABLIR/RETOUR, `MenuPage.ExitY`, au-delà de 8 catégories) : deux cases (sable clair,
+  sombre) où `Crosshair.draw`
   trace le viseur à sa taille réelle en px (le `UIScale` de l'écran est compensé par un `UIScale` inverse lu dans
   l'attribut `Scale` de `UIKit.scaledRoot`). En jeu, le crosshair se redessine dès que son style change (clé
   `Crosshair.styleKey`), sans respawn.
