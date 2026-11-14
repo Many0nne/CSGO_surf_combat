@@ -48,7 +48,7 @@ local SECTIONS: { Section } = {
 			"Le but n'est pas de cloner CS:GO, mais de reprendre ce qui rend le surf génial et de bâtir quelque chose d'original dessus.",
 			"De nouvelles armes, skins et animations sont prévus, tous créés de zéro avec l'originalité en tête.",
 			"Merci de jouer alors que le jeu est encore brut de décoffrage.",
-			"Envie de donner ton avis ou de filer un coup de main ? Rejoins le Discord : discord.gg/QK66g32mbB",
+			"Envie de donner ton avis ou de filer un coup de main ? Rejoins le Discord : discord.gg/ZwWrnVG2ar",
 		},
 	},
 }
