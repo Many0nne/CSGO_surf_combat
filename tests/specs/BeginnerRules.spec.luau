@@ -117,5 +117,14 @@ return function(T, Loader)
 			T.expectEqual(string.find(on, "garde ESPACE", 1, true) ~= nil, true, on)
 			T.expectEqual(string.find(off, "appuie sur ESPACE", 1, true) ~= nil, true, off)
 		end)
+
+		T.it("renvoie à la démo d'APPRENDRE pour le bhop et l'air strafe, pas pour le surf", function()
+			local tips = InfosRules.deathTips(context({}, true))
+			for _, topic in { "BHOP", "AIR STRAFE" } do
+				local text = tipOf(tips, topic).text
+				T.expectEqual(string.sub(text, -#InfosRules.DEMO_POINTER), InfosRules.DEMO_POINTER, topic)
+			end
+			T.expectEqual(string.find(tipOf(tips, "SURF").text, "APPRENDRE", 1, true), nil)
+		end)
 	end)
 end

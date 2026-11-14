@@ -1,4 +1,4 @@
--- Démo rejouée de l'écran Infos > SURFER (#285), enregistrée dans Studio (debug/ClipRecorder) et écrite par
+-- Démo rejouée de l'écran Apprendre (#285), enregistrée dans Studio (debug/ClipRecorder) et écrite par
 -- tools/clips/write_clip.luau. Format : DemoClipRules (en-tête, puis écarts x y z yeux lacet tangage en
 -- centièmes, touches, vitesse x 10).
 return [[

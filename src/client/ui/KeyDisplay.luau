@@ -184,7 +184,7 @@ local function buildKey(container: Frame, entry: HUDRules.KeyDisplayEntry): (Tex
 end
 
 -- Cette méthode permet de construire un keycap du HUD hors de la grille du HUD lorsqu'un autre écran montre des touches
--- (démos d'Infos > SURFER, #285) : même dessin, même libellé ; renvoie le libellé et la fonction qui peint la touche.
+-- (démos de l'écran Apprendre, #285) : même dessin, même libellé ; renvoie le libellé et la fonction qui peint la touche.
 function KeyDisplay.buildKeycap(container: Frame, entry: HUDRules.KeyDisplayEntry): (TextLabel, (boolean) -> ())
 	local label, paintKey = buildKey(container, entry)
 	paintKey(false)

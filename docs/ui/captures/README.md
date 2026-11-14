@@ -11,6 +11,8 @@ avoir à lancer le jeu. Direction artistique et construction de chaque écran : 
   catégories en onglets en boîte sous le titre, actions RÉTABLIR / RETOUR), Infos > COMMANDES (touches en boîte),
   menu en partie (aide « P REPRENDRE »), compteur de vitesse (droit), petits libellés du HUD (16 px), classement
   (colonnes KILLS / MORTS / K/M).
+- **Écran retiré par #285 :** Infos > SURFER (capture supprimée) ; l'explication du surf et sa démo sont dans le nouvel
+  écran Apprendre (onglet APPRENDRE), pas encore capturé.
 - **Format :** viewport seul, 16:9, 1349 x 759 px (1079 x 607 px d'interface, échelle Windows 125 %).
 - **Réglages du compte de test, pas les valeurs par défaut :** visée simplifiée activée avec un viseur ambre sans
   contour, affichage des touches en mode `simple`. Par défaut, la visée simplifiée est coupée (pas de crosshair) et
@@ -26,7 +28,6 @@ avoir à lancer le jeu. Direction artistique et construction de chaque écran : 
 | [menu-equipement-couteau.png](menu-equipement-couteau.png) | Écran d'équipement sur l'emplacement COUTEAU (2 possédés) | `EquipmentScreen` | Clic sur l'onglet « 2 · COUTEAU » |
 | [menu-message-apparition-impossible.png](menu-message-apparition-impossible.png) | Message ponctuel sous les onglets (« IMPOSSIBLE DE REJOINDRE LA PARTIE, RÉESSAIE ») | `MainMenu.showNotice` | JOUER avec `workspace:SetAttribute("DebugSpawnFail", true)`, après 30 s |
 | [transition-deploiement.png](transition-deploiement.png) | Volets blancs « DÉPLOIEMENT » | `Transition` | Juste après JOUER |
-| [infos-surfer.png](infos-surfer.png) | Infos > SURFER | `InfosScreen`, `MenuPage` | Onglet INFOS |
 | [infos-commandes.png](infos-commandes.png) | Infos > COMMANDES | `InfosScreen` | Onglet INFOS, catégorie COMMANDES |
 | [infos-credits.png](infos-credits.png) | Infos > CRÉDITS | `InfosScreen` | Onglet INFOS, catégorie CRÉDITS |
 | [infos-a-propos.png](infos-a-propos.png) | Infos > À PROPOS | `InfosScreen` | Onglet INFOS, catégorie À PROPOS |

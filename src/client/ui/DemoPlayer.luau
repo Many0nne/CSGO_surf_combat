@@ -1,4 +1,4 @@
--- Lecteur des démos rejouées de l'écran Infos > SURFER (#285). Un clip (ui/DemoClips, format DemoClipRules) est rejoué
+-- Lecteur des démos rejouées de l'écran Apprendre (#285). Un clip (ui/DemoClips, format DemoClipRules) est rejoué
 -- en boucle, en vue 1re personne depuis la caméra enregistrée, dans un ViewportFrame qui contient une copie des pièces de
 -- la map autour des trajectoires des clips : ni le personnage, ni la caméra du joueur, ni la map jouée ne sont touchés.
 -- Par-dessus : légende du geste, et ce que font les mains au même instant (touches en keycaps du HUD, KeyDisplay ;
@@ -112,7 +112,7 @@ local function fadeBand(parent: GuiObject, name: string, top: boolean, height: n
 	return band
 end
 
--- Cette méthode permet de construire le lecteur dans `parent` lorsque la section SURFER s'affiche ; rien n'est copié de
+-- Cette méthode permet de construire le lecteur dans `parent` lorsque l'écran Apprendre s'affiche ; rien n'est copié de
 -- la map avant le premier `play`, qui copie alors le décor autour des trajectoires de tous les clips `clipIds`.
 function DemoPlayer.new(parent: GuiObject, layoutOrder: number, clipIds: { string }): Demo
 	local frame = UIKit.frame({
@@ -487,7 +487,7 @@ function DemoPlayer.new(parent: GuiObject, layoutOrder: number, clipIds: { strin
 	end
 
 	-- Cette méthode permet d'arrêter la lecture et de libérer le cadre, la copie de la map et la connexion de rendu
-	-- lorsque le joueur quitte l'onglet SURFER ou l'écran Infos.
+	-- lorsque le joueur quitte l'écran Apprendre.
 	local function destroy()
 		alive = false
 		if conn then

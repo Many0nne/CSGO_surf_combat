@@ -1,4 +1,4 @@
--- Règles pures des démos rejouées de l'écran Infos > SURFER (#285), sans Instance ni service : format texte d'un clip
+-- Règles pures des démos rejouées de l'écran Apprendre (#285), sans Instance ni service : format texte d'un clip
 -- (encodage, décodage), état à un instant t (interpolation entre échantillons, touches, rotation de la souris), bouclage
 -- et fondu au point de bouclage, choix des pièces de la map autour de la trajectoire.
 -- Un clip est une suite d'échantillons pris à pas fixe (`hz`) par l'enregistreur de Studio (debug/ClipRecorder) : position

@@ -1,16 +1,14 @@
 -- Écran Infos (MenuPage) : bloc centré sur un voile, titre, sections en onglets en boîte (#308), contenu dessous
--- (texte, ou lignes « touche en boîte → action » pour COMMANDES), RETOUR en bas au centre. SURFER montre d'abord une
--- démo rejouée par mécanique (#285, DemoPlayer), choisie dans un sélecteur s'il y en a plusieurs, puis le texte.
+-- (texte, ou lignes « touche en boîte → action » pour COMMANDES), RETOUR en bas au centre. L'explication du surf et sa
+-- démo sont dans l'écran Apprendre (#285, LearnScreen).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local PlayerSettings = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("PlayerSettings"))
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
 local LocalSettings = require(script.Parent.Parent.systems.settings.LocalSettings)
-local DemoPlayer = require(script.Parent.DemoPlayer)
 local HUDRules = require(script.Parent.HUDRules)
 local InfosRules = require(script.Parent.InfosRules)
 local MenuPage = require(script.Parent.MenuPage)
-local MenuShot = require(script.Parent.MenuShot)
 local UIKit = require(script.Parent.UIKit)
 
 local C = UITheme.Colors
@@ -19,32 +17,20 @@ local Motion = UITheme.Motion
 
 local InfosScreen = {}
 
--- `lines` : texte fixe ; `compose` : texte qui cite des touches ; `keys` : lignes touche → action (COMMANDES). Les deux
--- derniers sont recomposés à chaque affichage depuis KeyBindings et les réglages du joueur (#290). `demos` : démos
--- rejouées des mécaniques au-dessus du texte (#285).
+-- `lines` : texte fixe ; `keys` : lignes touche → action (COMMANDES), recomposées à chaque affichage depuis
+-- KeyBindings et les réglages du joueur (#290).
 type Section = {
 	title: string,
 	lines: { string }?,
-	compose: ((InfosRules.Context) -> { string })?,
 	keys: boolean?,
-	demos: boolean?,
 }
 
 -- Contenu sous les onglets (px à 720 de haut)
 local CONTENT_WIDTH = MenuPage.BlockWidth
 local CONTENT_HEIGHT = MenuPage.ContentBottom - MenuPage.ContentTop
-local TEXT_SIZE = 22
 local KEY_COLUMN = 170 -- largeur réservée à la touche en boîte
-local DEMO_CHOICE_SIZE = 20
-local DEMO_CHOICE_GAP = 28
-local DEMO_UNDERLINE = 2 -- trait ambré sous la démo choisie (« là où je suis »)
 
 local SECTIONS: { Section } = {
-	{
-		title = "SURFER",
-		compose = InfosRules.surfLines,
-		demos = true,
-	},
 	{
 		title = "COMMANDES",
 		keys = true,
@@ -72,37 +58,6 @@ local page: MenuPage.Page
 local content: ScrollingFrame
 local markTab: (number) -> ()
 local selected = 1
-local selectedDemo = 1
-local demo: DemoPlayer.Demo? -- lecteur de la section SURFER, détruit dès qu'on la quitte
-
--- Cette méthode permet d'afficher une ligne de texte en fondu avec un décalage lorsqu'un onglet se remplit.
-local function fadeIn(labels: { TextLabel }, delay: number)
-	for _, lbl in labels do
-		lbl.TextTransparency = 1
-	end
-	task.delay(delay, function()
-		for _, lbl in labels do
-			UIKit.tween(lbl, Motion.Enter, { TextTransparency = 0 })
-		end
-	end)
-end
-
--- Cette méthode permet de créer une ligne de paragraphe à hauteur automatique lorsque l'onglet affiché est du texte.
-local function addParagraph(text: string, order: number): TextLabel
-	return UIKit.text({
-		Name = "Line" .. order,
-		Text = text,
-		FontFace = F.DisplayText,
-		TextSize = TEXT_SIZE,
-		TextColor3 = C.Bone,
-		TextWrapped = true,
-		LineHeight = 1.2,
-		AutomaticSize = Enum.AutomaticSize.Y,
-		Size = UDim2.new(1, 0, 0, TEXT_SIZE),
-		LayoutOrder = order,
-		Parent = content,
-	})
-end
 
 -- Cette méthode permet de créer une ligne « touche en boîte os → action » sur un filet lorsque l'onglet affiché est
 -- COMMANDES (#308 : même écriture des touches que l'aide de l'écran d'équipement).
@@ -130,7 +85,7 @@ local function addKeyRow(key: string, action: string, order: number): { TextLabe
 	local actionLbl = UIKit.text({
 		Text = action,
 		FontFace = F.DisplayText,
-		TextSize = TEXT_SIZE,
+		TextSize = MenuPage.ParagraphSize,
 		TextColor3 = C.Bone,
 		Position = UDim2.fromOffset(KEY_COLUMN, 0),
 		Size = UDim2.new(1, -KEY_COLUMN, 1, 0),
@@ -139,9 +94,9 @@ local function addKeyRow(key: string, action: string, order: number): { TextLabe
 	return { keyLbl, actionLbl }
 end
 
--- Cette méthode permet de réunir ce dont les textes à touches dépendent lorsqu'une section est composée : actions de
--- l'affichage des touches (KeyBindings), libellés du clavier du joueur et réglages d'armes.
-local function composeContext(): InfosRules.Context
+-- Cette méthode permet de réunir ce dont les textes à touches dépendent lorsqu'un écran les compose (Infos, Apprendre) :
+-- actions de l'affichage des touches (KeyBindings), libellés du clavier du joueur et réglages d'armes.
+function InfosScreen.composeContext(): InfosRules.Context
 	local settings = LocalSettings.get()
 	return {
 		entries = HUDRules.keyDisplayEntries("full"),
@@ -153,91 +108,8 @@ local function composeContext(): InfosRules.Context
 	}
 end
 
--- Cette méthode permet d'arrêter la démo et de libérer son lecteur (copie de la map comprise) lorsque le joueur quitte
--- la section SURFER ou l'écran.
-local function stopDemo()
-	if demo then
-		demo.destroy()
-		demo = nil
-	end
-end
-
--- Cette méthode permet de poser le sélecteur des démos (s'il y en a plusieurs) puis le lecteur en tête de la section
--- SURFER lorsqu'elle s'affiche ; un choix relance la lecture sur sa démo, soulignée d'ambre.
-local function addDemos(ctx: InfosRules.Context)
-	local clips = InfosRules.demoClips(ctx)
-	local ids = {}
-	for i, clip in clips do
-		ids[i] = clip.id
-	end
-	local row = UIKit.frame({
-		Name = "DemoChoices",
-		BackgroundTransparency = 1,
-		Size = UDim2.new(1, 0, 0, DEMO_CHOICE_SIZE + 12),
-		Visible = #clips > 1,
-		LayoutOrder = 1,
-		Parent = content,
-	})
-	UIKit.create("UIListLayout", {
-		FillDirection = Enum.FillDirection.Horizontal,
-		HorizontalAlignment = Enum.HorizontalAlignment.Center,
-		SortOrder = Enum.SortOrder.LayoutOrder,
-		Padding = UDim.new(0, DEMO_CHOICE_GAP),
-		Parent = row,
-	})
-	local holder = UIKit.frame({
-		Name = "DemoHolder",
-		BackgroundTransparency = 1,
-		Size = UDim2.new(1, 0, 0, DemoPlayer.Size.Y),
-		LayoutOrder = 2,
-		Parent = content,
-	})
-	local player = DemoPlayer.new(holder, 0, ids)
-	player.frame.AnchorPoint = Vector2.new(0.5, 0)
-	player.frame.Position = UDim2.fromScale(0.5, 0)
-	demo = player
-
-	local choices: { MenuShot.Choice } = {}
-	local underlines: { Frame } = {}
-	-- Cette méthode permet de marquer la démo choisie et de la lancer lorsque le joueur clique sur son nom.
-	local function choose(index: number)
-		selectedDemo = index
-		for i, choice in choices do
-			choice.setSelected(i == index)
-			underlines[i].Visible = i == index
-		end
-		local clip = clips[index]
-		player.play(clip.id, clip.title, clip.caption)
-	end
-	for i, clip in clips do
-		choices[i] = MenuShot.textChoice({
-			text = clip.title,
-			font = F.Display,
-			size = DEMO_CHOICE_SIZE,
-			color = C.TextSoft,
-			selectedColor = C.Bone,
-			layoutOrder = i,
-			parent = row,
-			action = function()
-				choose(i)
-			end,
-		})
-		underlines[i] = UIKit.frame({
-			Name = "Underline",
-			AnchorPoint = Vector2.new(0, 1),
-			Position = UDim2.new(0, 0, 1, 4),
-			Size = UDim2.new(1, 0, 0, DEMO_UNDERLINE),
-			BackgroundColor3 = C.Accent,
-			Visible = false,
-			Parent = choices[i].button,
-		})
-	end
-	choose(math.clamp(selectedDemo, 1, #clips))
-end
-
 -- Cette méthode permet de remplir la zone de contenu avec la section choisie lorsque l'onglet change.
 local function renderSection(index: number)
-	stopDemo()
 	for _, child in content:GetChildren() do
 		if child:IsA("GuiObject") then
 			child:Destroy()
@@ -247,19 +119,12 @@ local function renderSection(index: number)
 
 	local section = SECTIONS[index]
 	if section.keys then
-		for i, row in InfosRules.commandRows(composeContext()) do
-			fadeIn(addKeyRow(row.key, row.action, i), i * Motion.Stagger)
+		for i, row in InfosRules.commandRows(InfosScreen.composeContext()) do
+			MenuPage.fadeIn(addKeyRow(row.key, row.action, i), i * Motion.Stagger)
 		end
 	else
-		local ctx = composeContext()
-		if section.demos then
-			addDemos(ctx)
-		end
-		local lines = if section.compose then section.compose(ctx) else section.lines or {}
-		-- Après le sélecteur et le lecteur des démos (ordres 1 et 2)
-		local first = if section.demos then 2 else 0
-		for i, line in lines do
-			fadeIn({ addParagraph(line, first + i) }, i * Motion.Stagger)
+		for i, line in section.lines or {} do
+			MenuPage.fadeIn({ MenuPage.paragraph(content, line, i) }, i * Motion.Stagger)
 		end
 	end
 end
@@ -328,7 +193,6 @@ end
 
 -- Cette méthode permet de masquer l'écran lorsque le joueur le quitte ou que la partie démarre.
 function InfosScreen.hide()
-	stopDemo()
 	if page then
 		page.hide()
 	end

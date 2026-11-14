@@ -57,7 +57,7 @@ local text = Rules.encode(clip)
 local path = OUT_DIR .. "/" .. name .. ".luau"
 fs.writeDir(OUT_DIR)
 -- Fins de ligne CRLF, celles de StyLua (stylua.toml) : DemoClipRules.decode ignore les \r
-local module = "-- Démo rejouée de l'écran Infos > SURFER (#285), enregistrée dans Studio (debug/ClipRecorder) et écrite par\n"
+local module = "-- Démo rejouée de l'écran Apprendre (#285), enregistrée dans Studio (debug/ClipRecorder) et écrite par\n"
 	.. "-- tools/clips/write_clip.luau. Format : DemoClipRules (en-tête, puis écarts x y z yeux lacet tangage en\n"
 	.. "-- centièmes, touches, vitesse x 10).\n"
 	.. "return [[\n"

@@ -143,7 +143,7 @@ DebugPlaytest.init({
 	fpsCamera = FPSCamera,
 })
 
--- Enregistreur des démos d'Infos > SURFER (#285) : attribut joueur `DebugClipRecorder` dans Studio, puis F7 (docs/ui.md).
+-- Enregistreur des démos de l'écran Apprendre (#285) : attribut joueur `DebugClipRecorder` dans Studio, puis F7 (docs/ui.md).
 ClipRecorder.init({ player = player, fpsCamera = FPSCamera, movement = MovementController })
 
 -- Sonde de saccades : attribut joueur `FrameProbe` = true dans Studio (cf. docs/performance.md).

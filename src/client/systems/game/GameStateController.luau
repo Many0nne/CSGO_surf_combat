@@ -9,6 +9,7 @@ local BotCharacters = require(Shared:WaitForChild("BotCharacters"))
 
 local MainMenu = require(script.Parent.Parent.Parent.ui.MainMenu)
 local InfosScreen = require(script.Parent.Parent.Parent.ui.InfosScreen)
+local LearnScreen = require(script.Parent.Parent.Parent.ui.LearnScreen)
 local RoundHUD = require(script.Parent.Parent.Parent.ui.RoundHUD)
 local FeedbackScreen = require(script.Parent.Parent.Parent.ui.FeedbackScreen)
 local SettingsMenu = require(script.Parent.Parent.Parent.ui.SettingsMenu)
@@ -170,6 +171,7 @@ local function setState(newState: State)
 		-- Le menu reste visible sous les volets qui se ferment ; il est masqué une fois l'écran couvert
 		SettingsMenu.close()
 		FeedbackScreen.hide()
+		LearnScreen.hide()
 		Transition.close(function()
 			if state == "SPAWNING" then
 				MainMenu.hide()
@@ -179,6 +181,7 @@ local function setState(newState: State)
 	elseif newState == "IN_ROUND" then
 		MainMenu.hide()
 		InfosScreen.hide()
+		LearnScreen.hide()
 		Transition.open()
 		RoundHUD.show()
 		RoundHUD.hideRespawning()
@@ -535,8 +538,12 @@ function GameStateController.init(player: Player, setupCharacter: (char: Model) 
 			setState("MENU")
 		end
 		FeedbackScreen.hide()
+		LearnScreen.hide()
 		SettingsMenu.close()
 		MainMenu.setPage("home")
+	end, function() -- Apprendre (#285)
+		MainMenu.setPage("learn")
+		LearnScreen.show()
 	end)
 	-- Menu en partie (#157) ; au menu principal, sa touche ouvre ou ferme les Réglages de l'accueil
 	InGameMenu.init({
@@ -559,6 +566,10 @@ function GameStateController.init(player: Player, setupCharacter: (char: Model) 
 	end)
 	InfosScreen.init(function() -- fermer infos
 		setState("MENU")
+	end)
+	LearnScreen.init(function() -- fermer Apprendre
+		LearnScreen.hide()
+		MainMenu.setPage("home")
 	end)
 	RoundHUD.init()
 	LocalSettings.onChanged(applyDeathTip)

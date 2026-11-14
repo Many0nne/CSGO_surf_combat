@@ -123,7 +123,7 @@ function InfosRules.commandRows(ctx: Context): { KeyRow }
 	return rows
 end
 
--- Cette méthode permet de composer les conseils de la section SURFER lorsque l'écran Infos s'ouvre : les touches citées
+-- Cette méthode permet de composer les conseils de surf de l'écran Apprendre lorsqu'il s'ouvre : les touches citées
 -- (gauche, droite, avant) suivent la disposition du clavier du joueur.
 function InfosRules.surfLines(ctx: Context): { string }
 	local left, right, forward = actionKey(ctx, "left"), actionKey(ctx, "right"), actionKey(ctx, "forward")
@@ -146,11 +146,11 @@ function InfosRules.surfLines(ctx: Context): { string }
 	}
 end
 
--- Démo rejouée de la section SURFER (#285) : `id` nomme le module de données (ui/DemoClips), `title` le sélecteur,
+-- Démo rejouée de l'écran Apprendre (#285) : `id` nomme le module de données (ui/DemoClips), `title` le sélecteur,
 -- `caption` le geste en une ligne, posé sur le clip
 export type DemoClip = { id: string, title: string, caption: string }
 
--- Cette méthode permet de composer les démos de la section SURFER et leurs légendes lorsque l'écran Infos s'ouvre,
+-- Cette méthode permet de composer les démos de l'écran Apprendre et leurs légendes lorsqu'il s'ouvre,
 -- touches telles qu'imprimées sur le clavier du joueur ; plusieurs démos donnent un sélecteur, une seule n'en a pas.
 -- Une seule pour l'instant (Dizzy n'a pas de rampe assez longue pour le surf ni l'enchaînement) : bhop et air strafe,
 -- jouée avec l'auto-bhop (saut tenu).
@@ -173,6 +173,9 @@ function InfosRules.demoClips(ctx: Context): { DemoClip }
 	}
 end
 
+-- Renvoi des conseils de l'écran de mort vers la démo de l'écran Apprendre (#285)
+InfosRules.DEMO_POINTER = " Démo : APPRENDRE."
+
 -- Contexte des conseils de l'écran de mort (#291) : entrées d'actions, libellé d'une touche, auto-bhop réglé (le conseil
 -- de bhop en dépend)
 export type TipContext = {
@@ -185,7 +188,8 @@ export type TipContext = {
 export type Tip = { topic: string, text: string }
 
 -- Cette méthode permet de composer les conseils de l'écran de mort d'un débutant (#291) lorsqu'un conseil est choisi :
--- surf, bhop (selon l'auto-bhop) et air strafe, touches telles qu'imprimées sur le clavier du joueur.
+-- surf, bhop (selon l'auto-bhop) et air strafe, touches telles qu'imprimées sur le clavier du joueur. Bhop et air strafe
+-- renvoient à leur démo (#285, onglet APPRENDRE du menu) : DEMO_POINTER, sur la même ligne.
 function InfosRules.deathTips(ctx: TipContext): { Tip }
 	local left, right, forward = actionKey(ctx, "left"), actionKey(ctx, "right"), actionKey(ctx, "forward")
 	local jumpEntry = entryOf(ctx.entries, "jump")
@@ -193,6 +197,7 @@ function InfosRules.deathTips(ctx: TipContext): { Tip }
 	local bhop = if ctx.autoBhop
 		then string.format("garde %s enfoncé, tu ressautes dès que tu touches le sol.", jump)
 		else string.format("appuie sur %s à chaque fois que tu touches le sol.", jump)
+	bhop ..= InfosRules.DEMO_POINTER
 	return {
 		{
 			topic = "SURF",
@@ -201,7 +206,8 @@ function InfosRules.deathTips(ctx: TipContext): { Tip }
 		{ topic = "BHOP", text = bhop },
 		{
 			topic = "AIR STRAFE",
-			text = string.format("en l'air, tiens %s en tournant la souris à gauche, %s à droite.", left, right),
+			text = string.format("en l'air, tiens %s en tournant la souris à gauche, %s à droite.", left, right)
+				.. InfosRules.DEMO_POINTER,
 		},
 	}
 end

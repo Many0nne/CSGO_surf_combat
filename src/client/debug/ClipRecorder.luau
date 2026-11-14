@@ -1,5 +1,5 @@
 -- ClipRecorder.luau (client)
--- Enregistreur des démos de l'écran Infos > SURFER (#285), actif uniquement dans Studio. L'attribut joueur
+-- Enregistreur des démos de l'écran Apprendre (#285), actif uniquement dans Studio. L'attribut joueur
 -- `DebugClipRecorder` (nom du clip : "surf", "bhop", "strafe", "chain") l'arme ; F6 passe au clip suivant, F7 lance puis
 -- arrête la prise. Un second bandeau liste les clips déjà pris dans la session. Il lit
 -- seulement : position de la racine, caméra (hauteur, lacet et tangage de FPSCamera), touches de mouvement tenues
