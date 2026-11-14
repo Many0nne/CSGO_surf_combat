@@ -393,9 +393,9 @@ Rojo gère `Workspace.Maps` : un objet posé à la main dans une map est supprim
   du sol (Dizzy : +0,029 stud) : pieds du rig (4,765 studs sous la racine) à 0,76 stud du sol à l'apparition. Contrôle
   (#328) : `tools/map/SpawnCheck.luau` tire un rayon vertical depuis la racine sur les pièces `CanQuery`, et
   `verify_place.luau` (CI) échoue si les pieds sont sous le sol ou à plus de 1,5 stud au-dessus, si le point est dans
-  un volume ou au-dessus du vide. Un rig plus grand ou plus petit : mettre à jour `SpawnCheck.ROOT_TO_FEET`. `SpawnManager` choisit un point à plus de `SPAWN_SAFE_RADIUS` et hors
-  de vue des ennemis vivants (`SpawnPointRules`) : prévoir des points dans plusieurs zones éloignées et sans vue entre
-  elles, sinon le choix retombe au hasard.
+  un volume ou au-dessus du vide. Un rig plus grand ou plus petit : mettre à jour `SpawnCheck.ROOT_TO_FEET`.
+  `SpawnManager` choisit un point à plus de `SPAWN_SAFE_RADIUS` et hors de vue des ennemis vivants (`SpawnPointRules`) :
+  prévoir des points dans plusieurs zones éloignées et sans vue entre elles, sinon le choix retombe au hasard.
 - `Maps.Map.Boosts` : volumes invisibles (`CanCollide`, `CanQuery`, `CanTouch` faux), attribut `Kind` :
   `Geyser` / `Launcher` avec `Velocity` (Vector3 imposé), `Portal` avec `Boost` (studs/s ajoutés), `Cooldown`
   optionnel. Le client teste sa position dans la boîte (marge `CHAR_RADIUS`) à chaque frame : un portique doit être
