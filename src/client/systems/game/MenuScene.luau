@@ -7,6 +7,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+local CameraConfig = require(Shared:WaitForChild("CameraConfig"))
 local CharacterAppearance = require(Shared:WaitForChild("CharacterAppearance"))
 local InventoryRules = require(Shared:WaitForChild("InventoryRules"))
 local MapSelection = require(Shared:WaitForChild("MapSelection"))
@@ -86,7 +87,6 @@ local running = false
 local building = false
 local connection: RBXScriptConnection?
 local blur: DepthOfFieldEffect?
-local savedFov = 70
 local baseCFrame = CFrame.new() -- caméra face au personnage, sans lacet
 local yaw = CHARACTER_YAW -- lacet courant (degrés), amorti vers yawTarget
 local yawTarget = CHARACTER_YAW
@@ -514,7 +514,6 @@ function MenuScene.start()
 		return
 	end
 	running = true
-	savedFov = workspace.CurrentCamera.FieldOfView
 	if not stage and not building then
 		building = true
 		build()
@@ -540,8 +539,8 @@ function MenuScene.start()
 	connection = RunService.RenderStepped:Connect(PerfMarkers.wrap("menu 3D", update))
 end
 
--- Cette méthode permet d'arrêter la scène et de rendre le champ de vision lorsque le menu se ferme ; la copie de la map
--- est gardée hors du workspace pour le prochain retour au menu.
+-- Cette méthode permet d'arrêter la scène et de rendre le FOV du jeu (CameraConfig.DEFAULT_FOV) lorsque le menu se
+-- ferme ; la copie de la map est gardée hors du workspace pour le prochain retour au menu.
 function MenuScene.stop()
 	if not running then
 		return
@@ -558,7 +557,10 @@ function MenuScene.stop()
 	if stage then
 		stage.Parent = nil
 	end
-	workspace.CurrentCamera.FieldOfView = savedFov
+	-- Pas de FOV capturé à l'ouverture (#352) : au premier menu, la caméra n'a pas encore été prise par FPSCamera et vaut
+	-- 70 (défaut Roblox). Quand le personnage arrive complet, FPSCamera.init (DEFAULT_FOV) tourne avant cet arrêt, qui
+	-- remettait alors 70. La lunette est déjà remise à zéro en quittant la partie (GameStateController.applyGameHud).
+	workspace.CurrentCamera.FieldOfView = CameraConfig.DEFAULT_FOV
 end
 
 return MenuScene
