@@ -1,5 +1,5 @@
 -- Menu principal (docs/ui.md) : derrière, le personnage du jeu en pose sur une copie de la map (#253, MenuScene) ; on
--- choisit à la souris système, rien ne se tire. Titre en haut à gauche, onglets ARMES · INFOS · APPRENDRE · JOUER ·
+-- choisit à la souris système, rien ne se tire. Titre en haut à gauche, onglets ARMES · SHOP · INFOS · APPRENDRE · JOUER ·
 -- RÉGLAGES · FEEDBACK en haut au centre (au-dessus des écrans secondaires, qui s'ouvrent dessous ; l'onglet ouvert est
 -- souligné d'ambre, #308), statistiques du joueur en bas à droite (#301, StatsCard). L'onglet ARMES est l'écran
 -- d'équipement (#280, disposition de #308, EquipmentScreen) : tout
@@ -21,7 +21,7 @@ local UIKit = require(script.Parent.UIKit)
 local C = UITheme.Colors
 local F = UITheme.Fonts
 
-export type Page = "home" | "infos" | "learn" | "settings" | "feedback"
+export type Page = "home" | "shop" | "infos" | "learn" | "settings" | "feedback"
 
 local MainMenu = {}
 
@@ -32,9 +32,10 @@ local TABS_Y = 18
 local NOTICE_Y = 72 -- message sous les onglets (apparition impossible, #219)
 local NOTICE_TIME = 5 -- s d'affichage de ce message
 -- Onglets, de gauche à droite ; ARMES est l'accueil (le personnage et son arme), JOUER l'appel à l'action, APPRENDRE
--- juste avant (#285 : on apprend le geste, puis on joue)
+-- juste avant (#285 : on apprend le geste, puis on joue), SHOP à côté d'ARMES (#347 : les caisses donnent les skins)
 local TABS = {
 	{ key = "home", text = "ARMES" },
+	{ key = "shop", text = "SHOP" },
 	{ key = "infos", text = "INFOS" },
 	{ key = "learn", text = "APPRENDRE" },
 	{ key = "play", text = "JOUER" },
@@ -217,19 +218,22 @@ local function makeGui(name: string, displayOrder: number): ScreenGui
 end
 
 -- Cette méthode permet d'initialiser le menu et d'enregistrer les rappels lorsque le client démarre ;
--- onSettings, onHome et onLearn sont optionnels (navigation vers Settings, retour à l'accueil, écran Apprendre).
+-- onSettings, onHome, onLearn et onShop sont optionnels (navigation vers Settings, retour à l'accueil, écrans
+-- Apprendre et Shop).
 function MainMenu.init(
 	onPlay: () -> (),
 	onInfos: () -> (),
 	onFeedback: () -> (),
 	onSettings: (() -> ())?,
 	onHome: (() -> ())?,
-	onLearn: (() -> ())?
+	onLearn: (() -> ())?,
+	onShop: (() -> ())?
 )
 	callbacks = {
 		play = onPlay,
 		infos = onInfos,
 		learn = onLearn,
+		shop = onShop,
 		feedback = onFeedback,
 		settings = onSettings,
 		home = onHome,

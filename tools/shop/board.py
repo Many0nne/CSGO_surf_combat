@@ -8,6 +8,8 @@
 #   blender -b --factory-startup --python tools/map/render_dizzy.py -- <dossier>/B_parts.json <dossier>/B_views.json <sortie>
 #   (rendu éclairé validé : DIZZY_EEVEE=1 DIZZY_AMBIENT=0.12 DIZZY_SPOT_GAIN=3, ~6 s par vue)
 #   python -I tools/shop/sheet.py <sortie> [B_salle.png]   (esquisse d'interface ; sans 2e argument : planche A/B/C)
+# Vue d'ensemble (vitrine du mur de droite, V2/V2n/V6, rendues comme B) : python -I tools/shop/sheet.py <sortie> ensemble <dossier>
+# A et C ne sont écrites que si leurs exports de la map (storage.json, menu.json) sont dans <dossier>.
 import json, math, os, sys
 
 D = sys.argv[1]
@@ -191,111 +193,201 @@ def clear(parts, fr, x0, x1, z0, z1, maxsize=12):
 RES = [1600, 900]
 FOV = 40  # FOV vertical de la caméra du menu (MenuScene.VERTICAL_FOV)
 
-# ---- A : rack de caisses dans la zone de stockage T, contre le mur en tôle -------------------------------------
-wall = Frame((1918.72, 70.56, -357.63), (0.894, 0, -0.447))  # avant = hors du mur
-rk = wall.sub(-14, 0, 2.1)
-crates_a = [
-    (rk.sub(-2.6, 0.33, 0, yaw=4), (226, 58, 40)),
-    (rk.sub(2.6, 0.33, 0.1, yaw=-3), (40, 150, 160)),
-    (rk.sub(-2.5, 3.03, 0, yaw=-2), (150, 70, 170)),
-    (rk.sub(2.7, 3.03, 0, yaw=5), (190, 140, 60)),
-    (rk.sub(-2.6, 5.73, 0, yaw=3), (90, 120, 200)),
-    (rk.sub(2.5, 5.73, 0.05, yaw=-4), (226, 58, 40)),
-]
-PARTS.clear()
-rack(rk)
-for fr, col in crates_a:
-    crate(fr, col)
-# caisse choisie, sortie du rack sur une palette au sol
-pal = wall.sub(-8.5, 0, 5.5, yaw=-18)
-for i, x in enumerate((-1.9, 0, 1.9)):
-    box(pal, x, 0.25, 0, 0.5, 0.5, 3.6, (128, 94, 64))
-for z in (-1.4, 0, 1.4):
-    box(pal, 0, 0.56, z, 4.4, 0.12, 0.7, (150, 112, 76))
-crate(pal.sub(0, 0.62, 0), (242, 169, 0))
-base = clear(load("storage.json")["parts"], wall, -27, 4, 0, 14, maxsize=40)
-lights_a = load("storage.json").get("lights", [])
-# cadrage : le sujet au tiers droit, le mur fuit à gauche sous l'interface
-eye = wall.p(2, 5.6, 22)
-write("A", base + PARTS, lights_a, [{"name": "A_rack", "position": eye, "target": wall.p(-24, 3, -2), "fov": FOV, "res": RES}])
+if os.path.exists(os.path.join(D, "storage.json")):  # dump de la zone de stockage absent : A sauté
+    # ---- A : rack de caisses dans la zone de stockage T, contre le mur en tôle -------------------------------------
+    wall = Frame((1918.72, 70.56, -357.63), (0.894, 0, -0.447))  # avant = hors du mur
+    rk = wall.sub(-14, 0, 2.1)
+    crates_a = [
+        (rk.sub(-2.6, 0.33, 0, yaw=4), (226, 58, 40)),
+        (rk.sub(2.6, 0.33, 0.1, yaw=-3), (40, 150, 160)),
+        (rk.sub(-2.5, 3.03, 0, yaw=-2), (150, 70, 170)),
+        (rk.sub(2.7, 3.03, 0, yaw=5), (190, 140, 60)),
+        (rk.sub(-2.6, 5.73, 0, yaw=3), (90, 120, 200)),
+        (rk.sub(2.5, 5.73, 0.05, yaw=-4), (226, 58, 40)),
+    ]
+    PARTS.clear()
+    rack(rk)
+    for fr, col in crates_a:
+        crate(fr, col)
+    # caisse choisie, sortie du rack sur une palette au sol
+    pal = wall.sub(-8.5, 0, 5.5, yaw=-18)
+    for i, x in enumerate((-1.9, 0, 1.9)):
+        box(pal, x, 0.25, 0, 0.5, 0.5, 3.6, (128, 94, 64))
+    for z in (-1.4, 0, 1.4):
+        box(pal, 0, 0.56, z, 4.4, 0.12, 0.7, (150, 112, 76))
+    crate(pal.sub(0, 0.62, 0), (242, 169, 0))
+    base = clear(load("storage.json")["parts"], wall, -27, 4, 0, 14, maxsize=40)
+    lights_a = load("storage.json").get("lights", [])
+    # cadrage : le sujet au tiers droit, le mur fuit à gauche sous l'interface
+    eye = wall.p(2, 5.6, 22)
+    write("A", base + PARTS, lights_a, [{"name": "A_rack", "position": eye, "target": wall.p(-24, 3, -2), "fov": FOV, "res": RES}])
 
 # ---- B : salle de présentation dédiée (hors map) -------------------------------------------------------------
-PARTS.clear()
+# Caisses en vente (vue d'ensemble, #347) : nom, bande de collection, prix provisoire. Les deux premières existent
+# (séries de #268 et #337), les suivantes sont factices et ne servent qu'à juger la vitrine pleine.
+SERIES = [
+    ("SÉRIE 1", (226, 58, 40), 500),
+    ("SÉRIE 2", (40, 150, 160), 500),
+    ("SÉRIE 3", (150, 70, 170), 750),
+    ("SÉRIE 4", (190, 140, 60), 750),
+    ("SÉRIE 5", (90, 120, 200), 1000),
+    ("SÉRIE 6", (226, 120, 40), 1000),
+]
+VITRINE_W, VITRINE_LEVELS, VITRINE_H, SLOT = 13.2, (1.45, 4.95), 8.4, 4.3
+TAG_W, TAG_H = 3.4, 0.62
+
+
+# Cette méthode permet de construire la vitrine du shop (rack à deux étages, trois caisses par étage, étiquette os
+# clipsée sur le longeron devant chaque caisse) et de rendre, pour chaque caisse en vente, le repère de son étiquette.
+def vitrine(fr, n, neutral=False, hover=None):
+    W, Dp, H = VITRINE_W, 3.0, VITRINE_H
+    for sx in (-1, 0, 1):
+        for sz in (-1, 1):
+            if sx or sz < 0:  # montant central à l'arrière seulement, pour ne pas couper la rangée de face
+                box(fr, sx * (W / 2 - 0.15), H / 2, sz * (Dp / 2 - 0.15), 0.3, H, 0.3, (70, 74, 80), "Metal")
+    for y in VITRINE_LEVELS:
+        box(fr, 0, y, 0, W, 0.16, Dp, (88, 92, 98), "DiamondPlate")
+        box(fr, 0, y + 0.02, Dp / 2 - 0.08, W, 0.3, 0.12, AMBER, "Metal")
+    box(fr, 0, H - 0.1, 0, W, 0.2, Dp, (70, 74, 80), "Metal")
+    tags = []
+    # remplissage : étage du haut (à hauteur d'œil) d'abord, rangée centrée sur le nombre de caisses
+    rows = [list(range(min(n, 3))), list(range(3, n))]
+    for level, row in zip(VITRINE_LEVELS[::-1], rows):
+        for k, i in enumerate(row):
+            x = (k - (len(row) - 1) / 2) * SLOT
+            name, stripe, price = SERIES[i]
+            crate(fr.sub(x, level + 0.08, -0.1, yaw=((i * 7) % 5) - 2), stripe, W=3.7)
+            ty = level - 0.12
+            col = RED if hover == i else BONE
+            box(fr, x, ty, Dp / 2 + 0.03, TAG_W, TAG_H, 0.05, col, "SmoothPlastic")
+            tags.append({"i": i, "center": fr.p(x, ty, Dp / 2 + 0.06), "w": fr.p(x + TAG_W / 2, ty, Dp / 2 + 0.06)})
+    if neutral:  # étage vide garni de caisses sans marque (stock, pas en vente)
+        for level, row in zip(VITRINE_LEVELS[::-1], rows):
+            if not row:
+                for x in (-SLOT, 0, SLOT):
+                    crate(fr.sub(x, level + 0.08, -0.15, yaw=(x * 0.4) % 3 - 1.5), (36, 38, 42), W=3.7)
+    return tags
+
+
+# Cette méthode permet de projeter un point du monde sur l'image d'une vue (FOV vertical, pixels depuis le coin haut gauche).
+def project(view, p):
+    pos, tgt = view["position"], view["target"]
+    f = norm(tuple(t - q for t, q in zip(tgt, pos)))
+    r = norm(cross(f, UP))
+    u = cross(r, f)
+    d = tuple(a - b for a, b in zip(p, pos))
+    z = sum(a * b for a, b in zip(d, f))
+    k = (view["res"][1] / 2) / math.tan(math.radians(view["fov"] / 2))
+    return [view["res"][0] / 2 + sum(a * b for a, b in zip(d, r)) / z * k, view["res"][1] / 2 - sum(a * b for a, b in zip(d, u)) / z * k]
+
+
+# Cette méthode permet de construire la salle de présentation (socle, tableau du contenu, racks, vitrine du shop)
+# avec n caisses en vente ; rend les étiquettes de la vitrine.
+def room_scene(n, neutral=False, hover=None):
+    PARTS.clear()
+    box(room, 0, -0.5, 0, 40, 1, 40, (58, 56, 54), "Concrete")
+    for i in range(-9, 10):  # joints du sol
+        box(room, i * 2.0, 0.005, 0, 0.06, 0.02, 40, (40, 39, 38))
+    # mur du fond en tôle nervurée, bande basse ocre
+    box(room, 0, 9, -9, 40, 18, 0.5, (150, 154, 156), "Metal")
+    for i in range(-25, 26):
+        box(room, i * 0.8, 9, -8.7, 0.25, 18, 0.25, (172, 176, 178), "Metal")
+    box(room, 0, 1.6, -8.55, 40, 3.2, 0.12, (200, 156, 72), "Metal")
+    for sx in (-1, 1):  # murs latéraux
+        box(room, sx * 16, 9, 2, 0.5, 18, 24, (128, 132, 134), "Metal")
+    box(room, 0, 18, 2, 40, 0.5, 24, (40, 42, 46), "Metal")
+    # le mur de droite se prolonge vers la caméra de la vue détail (hors de son champ) : la vitrine s'y adosse en entier
+    box(room, 16, 9, 19, 0.5, 18, 10, (128, 132, 134), "Metal")
+    box(room, 8, 18, 19, 16, 0.5, 10, (40, 42, 46), "Metal")
+    for i in range(-12, 30):  # nervures du mur de droite, comme le mur du fond
+        box(room, 15.7, 9, i * 0.8, 0.25, 18, 0.25, (150, 154, 156), "Metal")
+    for x in (-8, 0, 8):  # poutres du plafond
+        box(room, x, 17, 2, 0.8, 1.2, 24, (128, 94, 64), "WoodPlanks")
+    # socle : plateau d'acier sur deux palettes, liseré ambre
+    for y in (0.25, 0.85):
+        for z in (-1.6, 0, 1.6):
+            box(room, 0, y + 0.1, z, 5.2, 0.2, 0.9, (150, 112, 76))
+        for x in (-2.2, 0, 2.2):
+            box(room, x, y - 0.12, 0, 0.6, 0.26, 4.2, (128, 94, 64))
+    box(room, 0, 1.25, 0, 5.4, 0.18, 4.4, (70, 74, 80), "DiamondPlate")
+    box(room, 0, 1.25, 2.21, 5.4, 0.2, 0.04, AMBER, "Metal")
+    crate(room.sub(0, 1.34, 0, yaw=-14), (226, 58, 40))
+    # liseré ambré lumineux au sol autour du socle (plateau de jeu télévisé)
+    for sx in (-1, 1):
+        box(room, sx * 4.0, 0.03, 0, 0.14, 0.04, 7.0, AMBER, "Neon")
+        box(room, 0, 0.03, sx * 3.5, 8.14, 0.04, 0.14, AMBER, "Neon")
+    # stock : rack de caisses contre le mur du fond, à droite du tableau
+    srk = room.sub(9.8, 0, -6.9)
+    rack(srk, W=8.4)
+    for y, cols in ((0.33, ((40, 150, 160), (150, 70, 170))), (3.03, ((190, 140, 60), (226, 58, 40))), (5.73, ((90, 120, 200), (40, 150, 160)))):
+        for x, c in zip((-2.05, 2.05), cols):
+            crate(srk.sub(x, y, 0.05, yaw=(x * 1.7) % 5 - 2.5), c, W=3.7)
+    # tableau du contenu sur le mur du fond : contreplaqué, une ligne AWP et une ligne M9, rareté sous chaque arme
+    board = room.sub(-3, 6.6, -8.3)
+    box(board, 0, 0, 0, 15.5, 7.6, 0.2, (206, 170, 118), "WoodPlanks")
+    for i in range(-15, 16):
+        box(board, i * 0.5, 3.8, 0.12, 0.05, 0.05, 0.05, (90, 70, 50))
+    items = [("couchant", "commun"), ("impact", "rare"), ("releve", "exceptionnel")]
+    for j, (skin, rar) in enumerate(items):
+        x = -4.9 + j * 4.9
+        awp(board.sub(x, 1.9, 0.35), skin, 0.95)
+        box(board, x, 0.75, 0.13, 3.8, 0.18, 0.06, RARITY[rar])
+        m9(board.sub(x, -1.4, 0.3), skin, 1.5)
+        box(board, x, -2.6, 0.13, 3.8, 0.18, 0.06, RARITY[rar])
+    # stock à gauche : second rack contre le mur latéral, derrière la colonne de texte de la vue détail
+    lrk = room.sub(-14.3, 0, -2.6, yaw=90)
+    rack(lrk, W=8.4)
+    for y, cols in ((0.33, ((226, 58, 40), (90, 120, 200))), (3.03, ((40, 150, 160), (190, 140, 60))), (5.73, ((150, 70, 170), (226, 58, 40)))):
+        for x, c in zip((-2.05, 2.05), cols):
+            crate(lrk.sub(x, y, 0.05, yaw=(x * 1.3) % 5 - 2.5), c, W=3.7)
+    # vitrine du shop contre le mur latéral droit, hors du champ de la vue détail, face à la pièce
+    tags = vitrine(VITRINE, n, neutral, hover)
+    # suspension industrielle au-dessus de la caisse : câble, cloche émaillée, ampoule
+    box(room, 0, 14.0, 0, 0.06, 8.0, 0.06, (20, 20, 20))
+    box(room, 0, 10.15, 0, 0.45, 0.4, 0.45, (30, 32, 34), "Metal", "Cylinder", axis="y")  # douille
+    box(room, 0, 9.85, 0, 1.0, 0.3, 1.0, (52, 58, 54), "Metal", "Cylinder", axis="y")  # haut de la cloche
+    box(room, 0, 9.6, 0, 1.9, 0.25, 1.9, (52, 58, 54), "Metal", "Cylinder", axis="y")
+    box(room, 0, 9.42, 0, 2.4, 0.14, 2.4, (52, 58, 54), "Metal", "Cylinder", axis="y")  # bord
+    box(room, 0, 9.36, 0, 2.2, 0.04, 2.2, (243, 233, 220), "SmoothPlastic", "Cylinder", axis="y")  # intérieur émaillé
+    box(room, 0, 9.3, 0, 0.6, 0.6, 0.6, (255, 241, 224), "Neon", "Ball")
+    return tags
+
+
 room = Frame((0, 500, 0), (0, 0, 1))
-box(room, 0, -0.5, 0, 40, 1, 40, (58, 56, 54), "Concrete")
-for i in range(-9, 10):  # joints du sol
-    box(room, i * 2.0, 0.005, 0, 0.06, 0.02, 40, (40, 39, 38))
-# mur du fond en tôle nervurée, bande basse ocre
-box(room, 0, 9, -9, 40, 18, 0.5, (150, 154, 156), "Metal")
-for i in range(-25, 26):
-    box(room, i * 0.8, 9, -8.7, 0.25, 18, 0.25, (172, 176, 178), "Metal")
-box(room, 0, 1.6, -8.55, 40, 3.2, 0.12, (200, 156, 72), "Metal")
-for sx in (-1, 1):  # murs latéraux
-    box(room, sx * 16, 9, 2, 0.5, 18, 24, (128, 132, 134), "Metal")
-box(room, 0, 18, 2, 40, 0.5, 24, (40, 42, 46), "Metal")
-for x in (-8, 0, 8):  # poutres du plafond
-    box(room, x, 17, 2, 0.8, 1.2, 24, (128, 94, 64), "WoodPlanks")
-# socle : plateau d'acier sur deux palettes, liseré ambre
-for y in (0.25, 0.85):
-    for z in (-1.6, 0, 1.6):
-        box(room, 0, y + 0.1, z, 5.2, 0.2, 0.9, (150, 112, 76))
-    for x in (-2.2, 0, 2.2):
-        box(room, x, y - 0.12, 0, 0.6, 0.26, 4.2, (128, 94, 64))
-box(room, 0, 1.25, 0, 5.4, 0.18, 4.4, (70, 74, 80), "DiamondPlate")
-box(room, 0, 1.25, 2.21, 5.4, 0.2, 0.04, AMBER, "Metal")
-crate(room.sub(0, 1.34, 0, yaw=-14), (226, 58, 40))
-# tableau du contenu sur le mur du fond : contreplaqué, une ligne AWP et une ligne M9, rareté sous chaque arme
-# liseré ambré lumineux au sol autour du socle (plateau de jeu télévisé)
-for sx in (-1, 1):
-    box(room, sx * 4.0, 0.03, 0, 0.14, 0.04, 7.0, AMBER, "Neon")
-    box(room, 0, 0.03, sx * 3.5, 8.14, 0.04, 0.14, AMBER, "Neon")
-# stock : rack de caisses contre le mur du fond, à droite du tableau
-srk = room.sub(9.8, 0, -6.9)
-rack(srk, W=8.4)
-for y, cols in ((0.33, ((40, 150, 160), (150, 70, 170))), (3.03, ((190, 140, 60), (226, 58, 40))), (5.73, ((90, 120, 200), (40, 150, 160)))):
-    for x, c in zip((-2.05, 2.05), cols):
-        crate(srk.sub(x, y, 0.05, yaw=(x * 1.7) % 5 - 2.5), c, W=3.7)
-board = room.sub(-3, 6.6, -8.3)
-box(board, 0, 0, 0, 15.5, 7.6, 0.2, (206, 170, 118), "WoodPlanks")
-for i in range(-15, 16):
-    box(board, i * 0.5, 3.8, 0.12, 0.05, 0.05, 0.05, (90, 70, 50))
-items = [("couchant", "commun"), ("impact", "rare"), ("releve", "exceptionnel")]
-for j, (skin, rar) in enumerate(items):
-    x = -4.9 + j * 4.9
-    awp(board.sub(x, 1.9, 0.35), skin, 0.95)
-    box(board, x, 0.75, 0.13, 3.8, 0.18, 0.06, RARITY[rar])
-    m9(board.sub(x, -1.4, 0.3), skin, 1.5)
-    box(board, x, -2.6, 0.13, 3.8, 0.18, 0.06, RARITY[rar])
-# stock à gauche : second rack contre le mur latéral, derrière la colonne de texte
-lrk = room.sub(-14.3, 0, -2.6, yaw=90)
-rack(lrk, W=8.4)
-for y, cols in ((0.33, ((226, 58, 40), (90, 120, 200))), (3.03, ((40, 150, 160), (190, 140, 60))), (5.73, ((150, 70, 170), (226, 58, 40)))):
-    for x, c in zip((-2.05, 2.05), cols):
-        crate(lrk.sub(x, y, 0.05, yaw=(x * 1.3) % 5 - 2.5), c, W=3.7)
-# suspension industrielle au-dessus de la caisse : câble, cloche émaillée, ampoule
-box(room, 0, 14.0, 0, 0.06, 8.0, 0.06, (20, 20, 20))
-box(room, 0, 10.15, 0, 0.45, 0.4, 0.45, (30, 32, 34), "Metal", "Cylinder", axis="y")  # douille
-box(room, 0, 9.85, 0, 1.0, 0.3, 1.0, (52, 58, 54), "Metal", "Cylinder", axis="y")  # haut de la cloche
-box(room, 0, 9.6, 0, 1.9, 0.25, 1.9, (52, 58, 54), "Metal", "Cylinder", axis="y")
-box(room, 0, 9.42, 0, 2.4, 0.14, 2.4, (52, 58, 54), "Metal", "Cylinder", axis="y")  # bord
-box(room, 0, 9.36, 0, 2.2, 0.04, 2.2, (243, 233, 220), "SmoothPlastic", "Cylinder", axis="y")  # intérieur émaillé
-box(room, 0, 9.3, 0, 0.6, 0.6, 0.6, (255, 241, 224), "Neon", "Ball")
+VITRINE = room.sub(14.2, 0, 7.3, yaw=-90)  # avant de la vitrine = -x de la salle, x local = +z
 spot = [list(room.p(0, 11.9, 0)) + [0, -1, 0] + [60, 30, 2.5] + [255, 228, 190]]
 spot += [list(room.p(8.5, 9.5, 3)) + list(norm((0.15, -0.45, -1))) + [55, 30, 0.8] + [200, 214, 255]]  # rack, plus froid, de face
 spot += [list(room.p(-3, 16, -2)) + list(norm((0, -1, -0.6))) + [80, 30, 0.9] + [255, 236, 210]]  # tableau
 # appoint de face (anciens projecteurs sur trépied, retirés de l'image) : gardé, l'éclairage a été validé avec
 spots = [list(room.p(sx * 6.5, 4.3, 3.5)) + list(norm(add(room.p(0, 2.5, 0), mul(room.p(sx * 6.5, 4.3, 3.5), -1)))) + [50, 30, 1.6] + [255, 220, 170] for sx in (-1, 1)]
-eye = room.p(4, 5.2, 20)
-write("B", PARTS[:], spot + spots, [{"name": "B_salle", "position": eye, "target": room.p(-4.5, 4.5, 0), "fov": FOV, "res": RES, "radius": 100000}])
+# vue d'ensemble : la vitrine éclairée de face par deux lampes chaudes au plafond (éteintes dans la vue détail, où la
+# gauche doit rester sombre sous l'interface)
+vit_spots = [
+    list(VITRINE.p(sx * 4.3, 15.5, 5.5)) + list(norm(add(VITRINE.p(sx * 3.6, 2.6, 0.5), mul(VITRINE.p(sx * 4.3, 15.5, 5.5), -1)))) + [44, 30, 1.2] + [255, 226, 186]
+    for sx in (-1, 1)
+]
+DETAIL = {"name": "B_salle", "position": room.p(4, 5.2, 20), "target": room.p(-4.5, 4.5, 0), "fov": FOV, "res": RES, "radius": 100000}
+OVERVIEW = {"name": "V", "position": VITRINE.p(-2.8, 5.2, 17), "target": VITRINE.p(-2.8, 3.6, 0), "fov": FOV, "res": RES, "radius": 100000}
+room_scene(2)
+write("B", PARTS[:], spot + spots, [DETAIL])
+for name, n, neutral, hover in (("V2", 2, False, 0), ("V2n", 2, True, 0), ("V6", 6, False, 1)):
+    tags = room_scene(n, neutral, hover)
+    view = dict(OVERVIEW, name=name)
+    view["labels"] = [
+        {"name": SERIES[t["i"]][0], "price": SERIES[t["i"]][2], "hover": t["i"] == hover, "xy": project(view, t["center"]), "half": project(view, t["w"])[0] - project(view, t["center"])[0]}
+        for t in tags
+    ]
+    write(name, PARTS[:], spot + spots + vit_spots, [view])
 
-# ---- C : caisse posée près du personnage de l'accueil (plan Dizzy de MenuScene) ----------------------------------
-PARTS.clear()
-feet = (1768, 104.65, -375)
-me = Frame(feet, (-1, 0, 0))  # regarde la caméra (-X)
-character(me)
-awp(me.sub(0, 3.2, 0.75, roll=38), "impact", 0.95)
-crate(me.sub(-3.0, 0, 1.6, yaw=24), (226, 58, 40))  # x local négatif = gauche de l'image
-eye = (1751, 107.8, -375)
-look = rot(norm((17, 0.8, 0)), UP, 20)
-write("C", load("menu.json")["parts"] + PARTS, [], [{"name": "C_accueil", "position": eye, "target": add(eye, look), "fov": FOV, "res": RES}])
+if os.path.exists(os.path.join(D, "menu.json")):  # dump du plan de l'accueil absent : C sauté
+    # ---- C : caisse posée près du personnage de l'accueil (plan Dizzy de MenuScene) ----------------------------------
+    PARTS.clear()
+    feet = (1768, 104.65, -375)
+    me = Frame(feet, (-1, 0, 0))  # regarde la caméra (-X)
+    character(me)
+    awp(me.sub(0, 3.2, 0.75, roll=38), "impact", 0.95)
+    crate(me.sub(-3.0, 0, 1.6, yaw=24), (226, 58, 40))  # x local négatif = gauche de l'image
+    eye = (1751, 107.8, -375)
+    look = rot(norm((17, 0.8, 0)), UP, 20)
+    write("C", load("menu.json")["parts"] + PARTS, [], [{"name": "C_accueil", "position": eye, "target": add(eye, look), "fov": FOV, "res": RES}])
 print("ok")

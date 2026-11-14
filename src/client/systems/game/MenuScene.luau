@@ -83,6 +83,7 @@ local weaponsVersion = -1 -- LocalInventory.version() de la liste retenue
 local current: string? = nil
 local currentSkin: string? = nil -- skin montré sur l'arme tenue (#268, nil : d'origine)
 local running = false
+local paused = false -- shop ouvert (#347) : sa propre salle tient la caméra
 local building = false
 local connection: RBXScriptConnection?
 local blur: DepthOfFieldEffect?
@@ -383,6 +384,9 @@ end
 -- Cette méthode permet de placer la caméra (léger suivi du curseur, FOV adapté au format) et de faire respirer le
 -- personnage lorsqu'une image est rendue.
 local function update(dt: number)
+	if paused then
+		return
+	end
 	local camera = workspace.CurrentCamera
 	local mouse = UserInputService:GetMouseLocation()
 	local viewport = camera.ViewportSize
@@ -405,6 +409,15 @@ end
 -- écran secondaire, ou de le remettre au tiers droit lorsqu'il revient sur l'onglet ARMES.
 function MenuScene.setCentered(centered: boolean)
 	yawTarget = if centered then 0 else CHARACTER_YAW
+end
+
+-- Cette méthode permet de laisser la caméra à une autre scène du menu (salle du shop, #347 : plus de caméra ni de flou
+-- de l'accueil) lorsque le shop s'ouvre, puis de la reprendre lorsqu'il se ferme.
+function MenuScene.setPaused(value: boolean)
+	paused = value
+	if blur then
+		blur.Enabled = not value
+	end
 end
 
 -- Cette méthode permet de lire le skin équipé (#268) de l'arme `key` lorsque la scène la montre sans skin imposé.
@@ -535,6 +548,7 @@ function MenuScene.start()
 	effect.InFocusRadius = FOCUS_RADIUS
 	effect.FarIntensity = FAR_BLUR
 	effect.NearIntensity = 0
+	effect.Enabled = not paused
 	effect.Parent = workspace.CurrentCamera
 	blur = effect
 	connection = RunService.RenderStepped:Connect(PerfMarkers.wrap("menu 3D", update))
