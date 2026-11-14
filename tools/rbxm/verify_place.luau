@@ -183,15 +183,22 @@ local function checkMap(map)
 	if nGround == 0 then
 		fail("Maps." .. map.Name .. " sans point d'apparition (GroundSpawns)")
 	end
-	-- hauteur des points (#328) : face basse au niveau du sol mesuré par un rayon vertical (tools/map/SpawnCheck.luau)
-	local spawnLines, spawnErrors, spawnWorst = SpawnCheck.check(map)
+	-- hauteur des points (#328) : pieds du rig au-dessus du sol mesuré par un rayon vertical (tools/map/SpawnCheck.luau)
+	local spawnLines, spawnErrors, spawnLow, spawnHigh = SpawnCheck.check(map)
 	for _, message in spawnErrors do
 		fail(message)
 	end
 	if #spawnErrors > 0 then
 		print(table.concat(spawnLines, "\n"))
 	elseif nGround > 0 then
-		print(string.format("Maps.%s : points d'apparition à %.3f stud du sol au plus", map.Name, spawnWorst))
+		print(
+			string.format(
+				"Maps.%s : pieds de %.3f à %.3f stud au-dessus du sol à l'apparition",
+				map.Name,
+				spawnLow,
+				spawnHigh
+			)
+		)
 	end
 	-- boosts (MapRules) : chaque volume a un type connu et le réglage qui va avec
 	local boosts = map:FindFirstChild("Boosts")

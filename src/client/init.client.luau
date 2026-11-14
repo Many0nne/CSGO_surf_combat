@@ -51,9 +51,11 @@ local function setupCharacter(char: Model)
 	if #missing > 0 then
 		warn("[Client] personnage incomplet après " .. RIG_WAIT .. " s, manque : " .. table.concat(missing, ", "))
 	end
-	-- Parti au menu pendant ces attentes (#217), ou personnage déjà remplacé : ne rien rebrancher (caméra FPS, mouvement)
+	-- Parti au menu pendant ces attentes (#217), fin de manche (bannière), mort pendant l'attente du corps (#328), ou
+	-- personnage déjà remplacé : ne rien rebrancher (caméra FPS, mouvement). Pas de test de l'état DEAD : sans attente,
+	-- setupCharacter tourne avant que GameStateController passe de DEAD (réapparition) à IN_ROUND.
 	local state = GameStateController.getState()
-	if state == "MENU" or state == "INFOS" or player.Character ~= char then
+	if state == "MENU" or state == "INFOS" or state == "RESULT" or humanoid.Health <= 0 or player.Character ~= char then
 		return
 	end
 

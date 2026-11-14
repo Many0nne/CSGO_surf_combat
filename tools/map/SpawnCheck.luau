@@ -1,10 +1,10 @@
 --!nocheck
 -- SpawnCheck.luau
 -- Mesure la hauteur des points d'apparition d'une map (dossier GroundSpawns, #328) : sous chaque point, un rayon
--- vertical part de la hauteur où SpawnManager pose la racine (RAY_HEIGHT studs au-dessus du centre du point) et
--- cherche le premier sol que voient les rayons du mouvement (pièces CanQuery). L'écart signé entre la face basse du
--- point et ce sol doit rester sous TOL : le point est au niveau du sol, et le personnage y apparaît pieds au-dessus.
--- Un point sans sol sous lui (vide) ou dans un volume (sol au-dessus de la racine) est fautif.
+-- vertical part de la racine telle que SpawnManager la pose (ROOT_ABOVE_POINT studs au-dessus du centre du point) et
+-- cherche le premier sol que voient les rayons du mouvement (pièces CanQuery). L'écart signé entre les pieds du rig
+-- posé là (ROOT_TO_FEET sous la racine) et ce sol doit rester dans [0, MAX_FALL] : pieds au-dessus du sol, petite
+-- chute. Un point au-dessus du vide ou dans un volume (sol au-dessus de la racine) est fautif.
 -- Arithmétique sur des boîtes (RampCheck.box, ShadowCulling.rayEntry) : tourne dans Lune sans Studio. Lancé par
 -- tools/rbxm/verify_place.luau (CI) ; testé : tests/specs/SpawnCheck.spec.luau.
 
@@ -14,15 +14,16 @@ local ShadowCulling = require("./ShadowCulling")
 local SpawnCheck = {}
 
 SpawnCheck.FOLDER = "GroundSpawns"
--- studs : départ du rayon au-dessus du centre du point (racine posée là, SpawnPointRules.ROOT_ABOVE_POINT)
-SpawnCheck.RAY_HEIGHT = 5
-SpawnCheck.MAX_DROP = 20 -- studs sous la face basse du point : au-delà, pas de sol (vide)
--- studs : écart toléré entre la face basse du point et le sol. Racine posée à 5 studs du centre, rig à 4,77 studs de
--- la racine aux pieds : un point plus bas que le sol de plus de 0,7 stud ferait apparaître les pieds dans le sol.
-SpawnCheck.TOL = 0.25
+-- studs : racine posée au-dessus du centre du point, égal à SpawnPointRules.ROOT_ABOVE_POINT (vérifié par le test)
+SpawnCheck.ROOT_ABOVE_POINT = 5
+-- studs : de la racine aux pieds du StarterCharacter au repos (HipHeight 3,176 + moitié de la racine 1,588), relevé
+-- dans Studio : le rig n'est pas dans la place construite par Rojo
+SpawnCheck.ROOT_TO_FEET = 4.765
+SpawnCheck.MAX_FALL = 1.5 -- studs : pieds plus haut que ça au-dessus du sol, le joueur tombe à l'apparition
+SpawnCheck.MAX_DROP = 20 -- studs sous les pieds : au-delà, pas de sol (vide)
 
 -- Cette méthode permet de mesurer chaque point d'apparition d'une map lorsqu'on vérifie leur hauteur : renvoie
--- { { name, position, floorY (nil : vide), gap (face basse − sol, nil : vide) } } trié par nom.
+-- { { name, position, floorY, gap (pieds − sol) } } trié par nom, floorY et gap nil au-dessus du vide.
 function SpawnCheck.measure(map)
 	local folder = map:FindFirstChild(SpawnCheck.FOLDER)
 	local points, solids = {}, {}
@@ -41,55 +42,53 @@ function SpawnCheck.measure(map)
 	local out = {}
 	for _, point in points do
 		local c = point.CFrame.Position
-		local bottom = c.Y - point.Size.Y / 2
-		local oy = c.Y + SpawnCheck.RAY_HEIGHT
-		local best = oy - bottom + SpawnCheck.MAX_DROP
+		local rootY = c.Y + SpawnCheck.ROOT_ABOVE_POINT
+		local feetY = rootY - SpawnCheck.ROOT_TO_FEET
+		local best = SpawnCheck.ROOT_TO_FEET + SpawnCheck.MAX_DROP
 		local found = false
 		for _, b in solids do
-			local t = ShadowCulling.rayEntry(b, c.X, oy, c.Z, 0, -1, 0, best)
+			local t = ShadowCulling.rayEntry(b, c.X, rootY, c.Z, 0, -1, 0, best)
 			if t and t <= best then
 				best, found = t, true
 			end
 		end
-		local floorY = if found then oy - best else nil
+		local floorY = if found then rootY - best else nil
 		table.insert(out, {
 			name = point.Name,
 			position = c,
 			floorY = floorY,
-			gap = if floorY then bottom - floorY else nil,
+			gap = if floorY then feetY - floorY else nil,
 		})
 	end
 	return out
 end
 
--- Cette méthode permet de juger les points d'une map lorsque la CI relit la place : renvoie le bilan (une ligne par
--- point), la liste des messages d'erreur (point vide, ou écart au sol au-delà de TOL) et le plus grand écart mesuré
--- en valeur absolue (math.huge si un point est vide).
+-- Cette méthode permet de juger les points d'une map lorsque la CI relit la place : renvoie le bilan par point, les
+-- erreurs (vide, pieds sous le sol ou trop haut) et les écarts pieds/sol extrêmes des points qui ont un sol.
 function SpawnCheck.check(map)
-	local lines, errors, worst = {}, {}, 0
+	local lines, errors, low, high = {}, {}, math.huge, -math.huge
 	for _, m in SpawnCheck.measure(map) do
 		local where = string.format("%s.%s.%s", map.Name, SpawnCheck.FOLDER, m.name)
 		if not m.gap then
-			table.insert(errors, string.format("%s : aucun sol à moins de %d studs sous le point", where, SpawnCheck.MAX_DROP))
+			table.insert(errors, string.format("%s : aucun sol à moins de %d studs sous les pieds", where, SpawnCheck.MAX_DROP))
 			table.insert(lines, string.format("  %s : vide", m.name))
-			worst = math.huge
 		else
-			table.insert(lines, string.format("  %s : sol %.3f, écart %+.3f", m.name, m.floorY, m.gap))
-			worst = math.max(worst, math.abs(m.gap))
-			if math.abs(m.gap) > SpawnCheck.TOL then
+			table.insert(lines, string.format("  %s : sol %.3f, pieds-sol %+.3f", m.name, m.floorY, m.gap))
+			low, high = math.min(low, m.gap), math.max(high, m.gap)
+			if m.gap < 0 or m.gap > SpawnCheck.MAX_FALL then
 				table.insert(
 					errors,
 					string.format(
-						"%s : face basse à %+.3f stud du sol (tolérance %.2f, cf. docs/maps.md)",
+						"%s : pieds à %+.3f stud du sol à l'apparition (attendu 0 à %.1f, cf. docs/maps.md)",
 						where,
 						m.gap,
-						SpawnCheck.TOL
+						SpawnCheck.MAX_FALL
 					)
 				)
 			end
 		end
 	end
-	return lines, errors, worst
+	return lines, errors, low, high
 end
 
 return SpawnCheck

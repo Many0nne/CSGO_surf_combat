@@ -90,12 +90,12 @@ function CharacterAppearance.partNames(rig: Instance): { string }
 	return names
 end
 
--- Cette méthode permet d'attendre, côté client, que toutes les pièces du rig de référence soient arrivées sur un
--- personnage lorsqu'on le prend en main (#328) : la réplication annonce le personnage avant son corps entier, et un
--- rig mesuré sans ses jambes est posé enfoncé dans le sol. Renvoie les pièces encore absentes au bout de `timeout` s.
+-- Cette méthode permet d'attendre côté client les pièces du rig de référence sur un personnage arrivé incomplet par la
+-- réplication (#328), avant de mesurer son rig ; renvoie celles encore absentes au bout de `timeout` secondes.
 function CharacterAppearance.waitForParts(char: Model, timeout: number): { string }
 	local template = CharacterAppearance.getTemplate()
 	if not template then
+		warn("[CharacterAppearance] pas de StarterCharacter : corps du personnage non attendu (#328)")
 		return {}
 	end
 	local deadline = os.clock() + timeout
