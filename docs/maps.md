@@ -223,6 +223,11 @@ zones différentes (attribut `Zone`, sinon `Team`), yeux à yeux comme `SpawnMan
 transparents), code de sortie 1 si une paire se voit. État : 36 points, 486 paires, 0 visible. Hauteur :
 `SpawnCheck` (CI), pieds à 0,764 stud du sol sur les 36 points.
 
+Mesure en jeu (Studio, 14/11/2026, joueur et 5 bots passifs envers lui, un bot tué toutes les 3,5 s pendant 24
+cycles, zone de chaque réapparition relevée côté serveur ; « avant » = mêmes conditions, points FFA retirés le temps de
+la mesure) : avant, 44 réapparitions, CT 31, T 13 (2 zones) ; après, 35 réapparitions, BalconNord 9, ToitT 9,
+BalconSud 8, CT 7, ToitCT 2, T 0 (5 zones sur 6). Plan des bots : 29 555 cases gardées, aucune arête ratée.
+
 ### Corriger un détail de Dizzy
 
 La géométrie est régénérée en entier depuis le relevé : **une retouche faite dans Studio est perdue** (Rojo la supprime
