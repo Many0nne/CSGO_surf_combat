@@ -1,5 +1,6 @@
--- Canaux de volume (#249) : un SoundGroup général (« Master », tous les sons du jeu) et un canal « Weapons » enfant du
--- général (tirs, rechargement, sons d'animation d'arme) : volume effectif d'une arme = général × armes. Les valeurs
+-- Canaux de volume (#249) : un SoundGroup général (« Master », tous les sons du jeu) et deux canaux enfants du général,
+-- « Weapons » (tirs, rechargement, sons d'animation d'arme : volume effectif d'une arme = général × armes) et « Music »
+-- (musique de fond, #286 : suit le général ; ses volumes menu et partie sont appliqués par MusicPlayer). Les valeurs
 -- viennent des réglages (LocalSettings) et s'appliquent en direct. Règle : tout nouveau son d'arme passe par
 -- SoundChannels.weapon(sound) avant d'être joué ; les autres sons sont rattachés au général automatiquement.
 local SoundService = game:GetService("SoundService")
@@ -10,6 +11,7 @@ local SoundChannels = {}
 
 local master: SoundGroup
 local weapons: SoundGroup
+local music: SoundGroup
 local started = false
 
 -- Cette méthode permet de rattacher au canal général un son créé sans groupe lorsqu'il apparaît dans le jeu (filet de
@@ -37,6 +39,14 @@ function SoundChannels.weapon(sound: Sound): Sound
 	return sound
 end
 
+-- Cette méthode permet de rattacher la musique de fond au canal musique lorsqu'elle est créée (#286) ; renvoie le son.
+function SoundChannels.music(sound: Sound): Sound
+	if started then
+		sound.SoundGroup = music
+	end
+	return sound
+end
+
 -- Cette méthode permet de créer les groupes, d'y rattacher les sons existants et futurs, et de suivre les réglages
 -- lorsque le client démarre.
 function SoundChannels.init()
@@ -49,6 +59,9 @@ function SoundChannels.init()
 	weapons = Instance.new("SoundGroup")
 	weapons.Name = "Weapons"
 	weapons.Parent = master
+	music = Instance.new("SoundGroup")
+	music.Name = "Music"
+	music.Parent = master
 	started = true
 
 	for _, instance in game:GetDescendants() do

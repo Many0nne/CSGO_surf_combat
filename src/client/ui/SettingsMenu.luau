@@ -775,6 +775,34 @@ local function buildCategories(block: Frame)
 		function() end,
 		true
 	)
+	-- Musique de fond (#286) : coupée par défaut, un volume au menu et un en partie (en plus du général) ; MusicPlayer
+	-- suit LocalSettings
+	local musicOptions = { { label = "ACTIVÉE", value = true }, { label = "COUPÉE", value = false } }
+	local musicDefault = if PlayerSettings.DEFAULT_MUSIC then 1 else 2
+	addPicker(audio, "Musique", "music", musicOptions, musicDefault, musicDefault, function() end, 150)
+	local musicMenu, musicGame = PlayerSettings.MUSIC_MENU_VOLUME, PlayerSettings.MUSIC_GAME_VOLUME
+	addSlider(
+		audio,
+		"Musique au menu",
+		"volumeMusicMenu",
+		musicMenu.min,
+		musicMenu.max,
+		musicMenu.default,
+		0,
+		function() end,
+		true
+	)
+	addSlider(
+		audio,
+		"Musique en partie",
+		"volumeMusicGame",
+		musicGame.min,
+		musicGame.max,
+		musicGame.default,
+		0,
+		function() end,
+		true
+	)
 
 	buildKeysCategory(block)
 

@@ -53,6 +53,12 @@ function KillAnnouncer.onKill(headshot: boolean)
 	end
 end
 
+-- Cette méthode permet de savoir si une annonce vocale est en train de jouer lorsque la musique de fond (#286) doit
+-- baisser le temps de la voix.
+function KillAnnouncer.isSpeaking(): boolean
+	return playing ~= nil and playing.IsPlaying
+end
+
 -- Cette méthode permet de remettre la série à 0 lorsque le joueur local meurt ou quitte la partie.
 function KillAnnouncer.reset()
 	streak = 0
