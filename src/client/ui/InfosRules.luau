@@ -143,7 +143,7 @@ export type DemoClip = { id: string, title: string, caption: string }
 function InfosRules.demoClips(ctx: Context): { DemoClip }
 	local left, right, forward = actionKey(ctx, "left"), actionKey(ctx, "right"), actionKey(ctx, "forward")
 	local jump = if ctx.autoBhop == false
-		then string.format("%s à chaque atterrissage (démo en auto-bhop)", jumpLabel(ctx))
+		then string.format("Appuie sur %s à chaque atterrissage (démo en auto-bhop)", jumpLabel(ctx))
 		else string.format("Garde %s (auto-bhop)", jumpLabel(ctx))
 	return {
 		{

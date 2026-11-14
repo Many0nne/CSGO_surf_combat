@@ -104,6 +104,24 @@ local function copyPart(part: BasePart, parent: Instance)
 	copy.Parent = parent
 end
 
+-- Cette méthode permet de détruire une copie du décor par lots sur plusieurs images lorsque le lecteur s'en sépare
+-- (fermeture, ou copie interrompue) : d'un coup, ses 17 000 pièces faisaient une image de plus de 100 ms ; `after`
+-- (le cadre du lecteur) est détruit ensuite.
+local function freeInBatches(model: Instance, after: Instance?)
+	task.spawn(function()
+		for i, part in model:GetChildren() do
+			part:Destroy()
+			if i % FREE_BATCH == 0 then
+				task.wait()
+			end
+		end
+		model:Destroy()
+		if after then
+			after:Destroy()
+		end
+	end)
+end
+
 -- Cette méthode permet de poser un dégradé vertical de transparence sur un fond lorsque la légende ou les mains doivent
 -- rester lisibles sur la scène : opaque (`opacity`) au bord haut (`top`) ou bas du cadre, effacé vers le milieu.
 local function fadeBand(parent: GuiObject, name: string, top: boolean, height: number, opacity: number): Frame
@@ -431,7 +449,7 @@ function DemoPlayer.new(parent: GuiObject, layoutOrder: number, clipIds: { strin
 			end)
 			if not ok then
 				warn("[DemoPlayer] copie du décor impossible : " .. tostring(err))
-				model:Destroy()
+				freeInBatches(model)
 				building = false
 				if alive then
 					setMessage("DÉCOR INDISPONIBLE")
@@ -439,7 +457,7 @@ function DemoPlayer.new(parent: GuiObject, layoutOrder: number, clipIds: { strin
 				return
 			end
 			if not alive then
-				model:Destroy()
+				freeInBatches(model)
 				return
 			end
 			model.Parent = viewport
@@ -510,8 +528,7 @@ function DemoPlayer.new(parent: GuiObject, layoutOrder: number, clipIds: { strin
 	end
 
 	-- Cette méthode permet d'arrêter la lecture et de libérer le cadre, la copie de la map et la connexion de rendu
-	-- lorsque le joueur quitte l'écran Apprendre ; la copie est détruite par lots sur plusieurs images (d'un coup, ses
-	-- 17 000 pièces faisaient une image de plus de 100 ms, au départ en partie compris).
+	-- lorsque le joueur quitte l'écran Apprendre ; la copie est détruite par lots (freeInBatches).
 	local function destroy()
 		alive = false
 		if conn then
@@ -522,17 +539,11 @@ function DemoPlayer.new(parent: GuiObject, layoutOrder: number, clipIds: { strin
 		frame.Visible = false
 		local built = scene
 		scene = nil
-		task.spawn(function()
-			if built then
-				for i, part in built:GetChildren() do
-					part:Destroy()
-					if i % FREE_BATCH == 0 then
-						task.wait()
-					end
-				end
-			end
+		if built then
+			freeInBatches(built, frame)
+		else
 			frame:Destroy()
-		end)
+		end
 	end
 
 	setMessage("CHARGEMENT…")

@@ -144,7 +144,10 @@ return function(T, Loader)
 			local on = InfosRules.demoClips(context(AZERTY, { autoBhop = true }))[1].caption
 			local off = InfosRules.demoClips(context(AZERTY, { autoBhop = false }))[1].caption
 			T.expect(string.find(on, "Garde ESPACE (auto-bhop)", 1, true) ~= nil, on)
-			T.expect(string.find(off, "ESPACE à chaque atterrissage (démo en auto-bhop)", 1, true) ~= nil, off)
+			T.expect(
+				string.find(off, "Appuie sur ESPACE à chaque atterrissage (démo en auto-bhop)", 1, true) ~= nil,
+				off
+			)
 			T.expect(string.find(off, "Garde", 1, true) == nil, off)
 		end)
 	end)

@@ -220,7 +220,8 @@ local function start()
 	end
 	recording = true
 	samples = {}
-	elapsed, nextAt, previous, previousAt = 0, 0, nil, 0
+	-- État à l'instant 0 : le premier échantillon n'attend pas la fin de la première image
+	elapsed, nextAt, previous, previousAt = 0, 0, readState(), 0
 	log("REC " .. (armedName :: string))
 	RunService:BindToRenderStep(BIND_NAME, Enum.RenderPriority.Camera.Value + 1, step)
 end

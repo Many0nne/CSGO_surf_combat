@@ -1,7 +1,8 @@
 -- Menu principal (docs/ui.md) : derrière, le personnage du jeu en pose sur une copie de la map (#253, MenuScene) ; on
 -- choisit à la souris système, rien ne se tire. Titre en haut à gauche, onglets ARMES · INFOS · APPRENDRE · JOUER ·
 -- RÉGLAGES · FEEDBACK en haut au centre (au-dessus des écrans secondaires, qui s'ouvrent dessous ; l'onglet ouvert est
--- souligné d'ambre, #308), statistiques du joueur en bas à droite (#301, StatsCard). L'onglet ARMES est l'écran d'équipement (#280, disposition de #308, EquipmentScreen) : tout
+-- souligné d'ambre, #308), statistiques du joueur en bas à droite (#301, StatsCard). L'onglet ARMES est l'écran
+-- d'équipement (#280, disposition de #308, EquipmentScreen) : tout
 -- à gauche (titre, arme montrée, onglets des emplacements, grille de cartes), le personnage à droite tient l'arme
 -- survolée ou celle de l'emplacement actif.
 local Players = game:GetService("Players")
