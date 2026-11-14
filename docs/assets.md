@@ -151,6 +151,21 @@ bash tools/anim/publish.sh <dossier> <prefixe> <Nom1> [Nom2 ...] # plusieurs ani
   `axis_forward` et `bake_space_transform` n'ont aucun effet : l'importeur Roblox donne toujours `(-x, z, y)` depuis un FBX
   brut (4 combinaisons testées). `export_mesh_fbx.py` compense donc par une rotation de 180° autour de Z.
 
+## Caisse du shop (#332)
+
+Source : `tools/shop/crate_model.py` (Blender sans interface). Une MeshPart par matière : `Interior`, `BodyPlanks`,
+`BodyFrame`, `BodySteel`, `Rope`, et pour le couvercle (à ouvrir d'un bloc) `LidPlanks`, `LidFrame`, `LidSteel`,
+`LidStripe` (bande de la collection), `LidStencil`. Origine au centre du dessous, avant vers -Y Blender (+Z Roblox), UV en
+projection cubique (4 studs par unité). Couleurs et matières sont posées par le jeu (`ShopScene`, `CRATE_LOOK`), le
+`.rbxm` ne porte que la géométrie ; `verify_place.luau` vérifie que les dix pièces existent.
+
+1. `blender -b --factory-startup --python tools/shop/crate_model.py -- <sortie.fbx> [aperçu.png]`
+2. `bash tools/publish_asset.sh <sortie.fbx> Model Crate` (id du Model).
+3. Studio (réservé, connecté au worktree, mode Edit) : `insert_asset(<id>, parentPath = game.ReplicatedStorage.Props)`.
+   L'insertion ajoute un `PackageLink` : le supprimer. Le pivot du Model arrive déjà au centre du dessous.
+4. `lune run tools/rbxm/receive.luau Props`, puis `studio_export.luau` avec `ONLY = "Props"` ; détruire ensuite la caisse
+   insérée à la main (Rojo la recrée depuis `assets/rbx/Props/Crate.rbxm`, sinon elle est en double).
+
 ## Modèle d'arme procédural dans Blender (couteau Ka-Bar)
 
 Source : `assets/kabar_knife/` (`build_knife.py` forme + UV, `make_textures.py` cartes PBR, `render_board.py` planche).

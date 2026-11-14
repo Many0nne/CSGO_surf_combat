@@ -15,6 +15,9 @@
       },
       "Skins": {
         "$path": "assets/rbx/Skins"
+      },
+      "Props": {
+        "$path": "assets/rbx/Props"
       }
     },
 

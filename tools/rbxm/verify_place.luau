@@ -267,6 +267,40 @@ for _, mapName in rbxmNames("assets/rbx/Maps") do
 	end
 end
 
+-- Props (assets/rbx/Props) : la caisse du shop doit garder les pièces que ShopScene habille et recolore (#332)
+local CRATE_PARTS = {
+	"Interior",
+	"BodyPlanks",
+	"BodyFrame",
+	"BodySteel",
+	"Rope",
+	"LidPlanks",
+	"LidFrame",
+	"LidSteel",
+	"LidStripe",
+	"LidStencil",
+}
+local props = game.ReplicatedStorage:FindFirstChild("Props")
+for _, name in rbxmNames("assets/rbx/Props") do
+	local prop = props and props:FindFirstChild(name)
+	if not prop then
+		fail("ReplicatedStorage.Props." .. name .. " absent de la place")
+	else
+		print("Props." .. name .. " " .. summarize(prop))
+	end
+end
+local crateModel = props and props:FindFirstChild("Crate")
+if not crateModel then
+	fail("ReplicatedStorage.Props.Crate absent (caisse du shop)")
+else
+	for _, partName in CRATE_PARTS do
+		local part = crateModel:FindFirstChild(partName)
+		if not (part and part:IsA("MeshPart")) then
+			fail("Props.Crate." .. partName .. " absent ou pas une MeshPart")
+		end
+	end
+end
+
 -- ids d'assets : une animation, un mesh ou une matière sans texture est une erreur ; un son sans id est seulement
 -- signalé
 for class, entries in scanAssetIds(fs.readFile(placePath)) do
