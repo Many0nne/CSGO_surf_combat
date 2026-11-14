@@ -558,8 +558,8 @@ function MenuScene.stop()
 		stage.Parent = nil
 	end
 	-- Pas de FOV capturé à l'ouverture (#352) : au premier menu, la caméra n'a pas encore été prise par FPSCamera et vaut
-	-- 70 (défaut Roblox). Quand le personnage arrive complet, FPSCamera.init (90) tourne avant cet arrêt, qui remettait
-	-- alors 70. La lunette est déjà remise à zéro en quittant la partie (GameStateController.applyGameHud).
+	-- 70 (défaut Roblox). Quand le personnage arrive complet, FPSCamera.init (DEFAULT_FOV) tourne avant cet arrêt, qui
+	-- remettait alors 70. La lunette est déjà remise à zéro en quittant la partie (GameStateController.applyGameHud).
 	workspace.CurrentCamera.FieldOfView = CameraConfig.DEFAULT_FOV
 end
 
