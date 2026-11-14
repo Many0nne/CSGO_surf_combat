@@ -665,6 +665,18 @@ l'étiquette BIENTÔT tant que l'achat n'existe pas.
 - Piste écartée : vitrine contre le mur de gauche (à la place du rack de la planche B). Vue de face, elle remplissait
   l'image sans place pour le titre, et la vue détail perdait sa gauche sombre.
 
+**Gros plan sur une arme du tableau (#358) :** dans la vue détail, la souris posée 0,2 s sur une arme (zone invisible :
+sa rangée, bande de rareté comprise) fait glisser la caméra (0,5 s) face à elle, l'arme sur 45 % de la largeur, centrée
+à 66 % (à droite de la colonne). La ligne du skin reste en avant, les autres atténuées. Le gros plan tient tant que la
+souris reste sur la zone ; il se défait en la quittant (0,2 s aussi), et passer sur l'arme voisine change de cible.
+Aucune décision pendant un glissement : sinon l'arme passe sous la souris ou la quitte sans que le joueur bouge.
+
+- Piège : **décaler la caméra, pas la tourner**, pour poser l'objet à droite (`MenuSceneRules.closeUp`). Tournée de 15°
+  à 4 studs, la perspective repoussait le bout de l'arme à 97 % de la largeur et la zone de survol sortait de l'écran :
+  impossible de quitter le gros plan par la droite.
+- Zone de survol à peine plus longue que l'arme (+0,2 stud) : la zone du gros plan occupe à l'écran la même part que
+  l'arme, une marge de 0,4 la faisait déborder.
+
 Cotes (studs) et placement : `tools/shop/board.py` (scène B, vues d'ensemble V2, V2n, V6 ; `sheet.py <sortie> ensemble
 <dossier>` pour la planche), rendu par `tools/map/render_dizzy.py` (commandes en tête
 du script). Une salle fermée se rend en EEVEE avec `DIZZY_AMBIENT=0.12` : à l'ambiance par défaut du crépuscule, la

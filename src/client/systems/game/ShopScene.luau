@@ -25,6 +25,16 @@ local ORIGIN = Vector3.new(0, 600, 12000)
 local VERTICAL_FOV = 40 -- comme l'accueil
 local ASPECT_REF = 16 / 9
 local GLIDE_TIME = 0.9 -- s du glissement entre la vitrine et le socle
+-- Gros plan sur une arme du tableau (#358) : survol retenu après HOVER_DELAY (un passage ne fait rien), l'arme couvre
+-- FOCUS_FILL de la largeur de l'écran, centrée à FOCUS_SCREEN_X (à droite : la colonne de l'interface reste à gauche)
+local FOCUS_GLIDE_TIME = 0.5
+local HOVER_DELAY = 0.2
+local FOCUS_FILL = 0.45
+local FOCUS_SCREEN_X = 0.66
+-- Zone de survol d'une arme : sa rangée du tableau (bande de rareté comprise), à peine plus longue que l'arme ; plus
+-- longue, en gros plan elle sortait de l'écran et la souris ne pouvait plus la quitter par la droite
+local HOVER_HEIGHT = 3.2
+local HOVER_MARGIN = 0.2
 -- Ambiance de la salle fermée (Lighting.Ambient pendant le shop) : celle du crépuscule baignait toute la pièce et
 -- écrasait les lampes (planche : DIZZY_AMBIENT = 0,12)
 local ROOM_AMBIENT = Color3.fromRGB(34, 32, 40)
@@ -81,6 +91,8 @@ local WEAPON_ROWS = {
 
 type Frame = CFrame
 type SaleCrate = { model: Model, tag: BasePart, name: TextLabel, price: TextLabel }
+-- Arme du tableau : zone de survol invisible, ligne du contenu (rang dans ShopCatalog.contents), centre et longueur
+type BoardTarget = { hitbox: BasePart, row: number, center: CFrame, length: number }
 
 local room = CFrame.new(ORIGIN)
 local vitrineFrame = room * CFrame.new(14.2, 0, 7.3) * CFrame.Angles(0, math.rad(-90), 0)
@@ -104,10 +116,15 @@ local shownCrate = 0
 local hovered = 0
 local glideFrom = CAMERAS.overview
 local glideStart = -math.huge
+local glideTime = GLIDE_TIME
 local aimX, aimY = 0, 0
 local savedAmbient: Color3?
 local savedFov = 70
 local onCrateClicked: ((number) -> ())?
+local targets: { BoardTarget } = {} -- armes du tableau de la caisse montrée
+local focus = 0 -- arme en gros plan (rang dans `targets`), 0 = plan détail
+local hoverState: Rules.HoverState = { candidate = 0, since = 0, focused = 0 }
+local onWeaponFocus: ((number?) -> ())?
 
 -- Cette méthode permet de poser une pièce ancrée sans collision dans un repère (centre local, taille) lorsque la salle
 -- ou un prop est construit ; `shape` Cylinder couché sur l'axe Y du repère si `upright`.
@@ -538,12 +555,13 @@ local function buildVitrine(parent: Instance)
 end
 
 -- Cette méthode permet de construire une arme de profil (pièces de son viewmodel, bras exclus, habillées du skin) de
--- `length` studs, centrée en `at` et tournée comme le tableau, lorsque le tableau montre le contenu d'une caisse.
-local function boardWeapon(parent: Instance, viewmodelName: string, skinId: string, at: CFrame, length: number)
+-- `length` studs, centrée en `at` et tournée comme le tableau, lorsque le tableau montre le contenu d'une caisse ; faux
+-- si le viewmodel manque.
+local function boardWeapon(parent: Instance, viewmodelName: string, skinId: string, at: CFrame, length: number): boolean
 	local viewModels = ReplicatedStorage:FindFirstChild("ViewModels")
 	local source = viewModels and viewModels:FindFirstChild(viewmodelName)
 	if not source then
-		return
+		return false
 	end
 	local model = Instance.new("Model")
 	model.Name = skinId
@@ -564,7 +582,7 @@ local function boardWeapon(parent: Instance, viewmodelName: string, skinId: stri
 	end
 	if #model:GetChildren() == 0 then
 		model:Destroy()
-		return
+		return false
 	end
 	WeaponSkins.apply(model, viewmodelName, skinId)
 	-- Profil : axe le plus long le long du tableau, axe le plus mince face à la pièce (comme UIKit.weaponSilhouette)
@@ -583,15 +601,42 @@ local function boardWeapon(parent: Instance, viewmodelName: string, skinId: stri
 	model:PivotTo(at * profile:Inverse() * frame)
 	model:ScaleTo(length / axes[1].length)
 	model.Parent = parent
+	return true
+end
+
+-- Cette méthode permet d'oublier le survol en cours (aucune arme candidate ni retenue) lorsque la vue change.
+local function resetHover()
+	hoverState.candidate, hoverState.since, hoverState.focused = 0, 0, 0
+end
+
+-- Cette méthode permet de rapprocher la caméra d'une arme du tableau (0 : retour au plan détail) en glissant depuis
+-- l'image courante, et de prévenir l'interface, lorsque l'arme retenue change ; `instant` sans glissement.
+local function setFocus(index: number, instant: boolean?)
+	if index == focus then
+		return
+	end
+	focus = index
+	if running and not instant then
+		glideFrom = workspace.CurrentCamera.CFrame
+		glideStart = os.clock()
+		glideTime = FOCUS_GLIDE_TIME
+	end
+	if onWeaponFocus then
+		local target = targets[index]
+		onWeaponFocus(if target then target.row else nil)
+	end
 end
 
 -- Cette méthode permet de montrer une caisse dans la vue détail (sa caisse sur le socle, ses armes et la rareté de
--- chacune au tableau) lorsque le joueur la choisit.
+-- chacune au tableau, une zone de survol par arme) lorsque le joueur la choisit.
 local function dressCrate(index: number)
 	local def = ShopCatalog.CRATES[index]
 	if not (def and stage) then
 		return
 	end
+	setFocus(0)
+	resetHover()
+	table.clear(targets)
 	if podium then
 		podium:Destroy()
 	end
@@ -614,14 +659,25 @@ local function dressCrate(index: number)
 			for _, weapon in WEAPON_ROWS do
 				for _, skinId in row.skins do
 					local item = InventoryRules.item(skinId)
-					if item and item.weapon == weapon.item then
-						boardWeapon(
+					local center = boardFrame * CFrame.new(x, weapon.y, 0.35)
+					if
+						item
+						and item.weapon == weapon.item
+						and boardWeapon(boardFolder, weapon.viewmodel, skinId, center, weapon.length)
+					then
+						-- Zone de survol invisible, plus large que l'arme (un profil d'AWP est trop fin à viser)
+						local hitbox = box(
 							boardFolder,
-							weapon.viewmodel,
-							skinId,
-							boardFrame * CFrame.new(x, weapon.y, 0.35),
-							weapon.length
+							boardFrame,
+							Vector3.new(x, weapon.y - 0.4, 0.4),
+							Vector3.new(weapon.length + HOVER_MARGIN, HOVER_HEIGHT, 0.3),
+							BONE
 						)
+						hitbox.Name = "Hover"
+						hitbox.Transparency = 1
+						hitbox.CastShadow = false
+						hitbox.CanQuery = true
+						table.insert(targets, { hitbox = hitbox, row = j, center = center, length = weapon.length })
 					end
 				end
 				box(boardFolder, boardFrame, Vector3.new(x, weapon.y - 1.15, 0.13), Vector3.new(3.8, 0.18, 0.06), color)
@@ -675,27 +731,71 @@ local function crateUnderMouse(camera: Camera): number
 	return if type(index) == "number" then index else 0
 end
 
--- Cette méthode permet de placer la caméra (glissement entre les deux plans, léger suivi du curseur, FOV adapté au
--- format) et de suivre le survol lorsqu'une image est rendue.
+-- Cette méthode permet de trouver l'arme du tableau sous la souris (rayon sur les zones de survol) lorsque la vue
+-- détail est affichée ; 0 si aucune.
+local function weaponUnderMouse(camera: Camera): number
+	if mode ~= "detail" or #targets == 0 then
+		return 0
+	end
+	local mouse = UserInputService:GetMouseLocation()
+	local ray = camera:ViewportPointToRay(mouse.X, mouse.Y)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Include
+	local hitboxes = {}
+	for _, target in targets do
+		table.insert(hitboxes, target.hitbox)
+	end
+	params.FilterDescendantsInstances = hitboxes
+	local hit = workspace:Raycast(ray.Origin, ray.Direction * 200, params)
+	if hit then
+		for i, target in targets do
+			if target.hitbox == hit.Instance then
+				return i
+			end
+		end
+	end
+	return 0
+end
+
+-- Cette méthode permet de donner le plan visé par la caméra (vitrine, socle, ou gros plan de face de l'arme retenue,
+-- décalée à droite) lorsqu'une image est rendue ; `aspect` (au moins 16:9, comme le FOV) règle le recul du gros plan.
+local function targetFrame(aspect: number): CFrame
+	local target = if mode == "detail" then targets[focus] else nil
+	if not target then
+		return CAMERAS[mode]
+	end
+	local distance, offset = Rules.closeUp(target.length, VERTICAL_FOV, aspect, FOCUS_FILL, FOCUS_SCREEN_X)
+	-- face au tableau (+Z du repère vers la pièce), décalée à gauche de l'arme
+	return target.center * CFrame.new(-offset, 0, distance)
+end
+
+-- Cette méthode permet de placer la caméra (glissement entre les plans, léger suivi du curseur, FOV adapté au format) et
+-- de suivre le survol (étiquettes de la vitrine, gros plan d'une arme du tableau) lorsqu'une image est rendue.
 local function update(dt: number)
 	local camera = workspace.CurrentCamera
 	local viewport = camera.ViewportSize
 	local mouse = UserInputService:GetMouseLocation()
+	local aspect = ASPECT_REF
 	if viewport.X > 0 and viewport.Y > 0 then
 		aimX = Rules.damp(aimX, (mouse.X / viewport.X - 0.5) * 2, dt, 4)
 		aimY = Rules.damp(aimY, (mouse.Y / viewport.Y - 0.5) * 2, dt, 4)
 		camera.FieldOfView = Rules.fitFov(VERTICAL_FOV, ASPECT_REF, viewport.X / viewport.Y)
+		aspect = math.max(ASPECT_REF, viewport.X / viewport.Y)
 	end
-	local t = math.clamp((os.clock() - glideStart) / GLIDE_TIME, 0, 1)
+	local t = math.clamp((os.clock() - glideStart) / glideTime, 0, 1)
 	local eased = t * t * (3 - 2 * t)
 	local angles = Rules.aimAngles(aimX, aimY)
 	camera.CameraType = Enum.CameraType.Scriptable
-	camera.CFrame = glideFrom:Lerp(CAMERAS[mode], eased)
+	camera.CFrame = glideFrom:Lerp(targetFrame(aspect), eased)
 		* CFrame.Angles(math.rad(angles.camPitch), math.rad(angles.camYaw), 0)
 	local index = crateUnderMouse(camera)
 	if index ~= hovered then
 		hovered = index
 		paintTags()
+	end
+	-- Pas de décision pendant un glissement : l'arme passe sous la souris ou la quitte sans que le joueur bouge
+	if mode == "detail" and t >= 1 then
+		setFocus(Rules.settleHover(hoverState, weaponUnderMouse(camera), os.clock(), HOVER_DELAY))
 	end
 end
 
@@ -704,8 +804,11 @@ local function glideTo(newMode: "overview" | "detail")
 	if newMode == mode then
 		return
 	end
+	setFocus(0, true)
+	resetHover()
 	glideFrom = if running then workspace.CurrentCamera.CFrame else CAMERAS[newMode]
 	glideStart = if running then os.clock() else -math.huge
+	glideTime = GLIDE_TIME
 	mode = newMode
 	for _, light in vitrineLights do
 		light.Enabled = newMode == "overview"
@@ -736,6 +839,12 @@ end
 -- Cette méthode permet d'enregistrer le rappel appelé quand le joueur clique une caisse de la vitrine.
 function ShopScene.onCrateClicked(callback: (number) -> ())
 	onCrateClicked = callback
+end
+
+-- Cette méthode permet d'enregistrer le rappel appelé quand le gros plan change (#358) : rang de la ligne du contenu
+-- dont l'arme est en gros plan, nil au retour au plan détail.
+function ShopScene.onWeaponFocus(callback: (number?) -> ())
+	onWeaponFocus = callback
 end
 
 -- Cette méthode permet de lancer le shop (construction au premier appel, scène de l'accueil suspendue, ambiance de la
@@ -798,6 +907,8 @@ function ShopScene.stop()
 	workspace.CurrentCamera.FieldOfView = savedFov
 	hovered = 0
 	paintTags()
+	setFocus(0, true)
+	resetHover()
 	MenuScene.setPaused(false)
 end
 

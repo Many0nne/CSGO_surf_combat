@@ -57,6 +57,8 @@ local price: { TextLabel }
 local position: TextLabel
 local back: MenuShot.Choice
 local current = 1
+local lines: { Frame } = {} -- lignes du contenu de la caisse ouverte, dans l'ordre de ShopCatalog.contents
+local DIMMED = 0.65 -- atténuation des autres lignes quand une arme du tableau est en gros plan (#358)
 
 -- Cette méthode permet de changer un texte et son ombre ensemble lorsqu'un libellé de l'écran change.
 local function setText(pair: { TextLabel }, text: string)
@@ -78,6 +80,31 @@ local function label(parent: GuiObject, props: { [string]: any }, offset: number
 	return { text, shadow }
 end
 
+-- Cette méthode permet de mettre en avant la ligne du skin dont l'arme est en gros plan (#358), les autres atténuées,
+-- lorsque le gros plan change ; `row` nil rend toutes les lignes (transparence d'origine gardée en attribut).
+local function highlightRow(row: number?)
+	for i, line in lines do
+		local dim = if row and i ~= row then DIMMED else 0
+		for _, item in line:GetDescendants() do
+			if item:IsA("TextLabel") then
+				local base = item:GetAttribute("BaseTransparency")
+				if type(base) ~= "number" then
+					base = item.TextTransparency
+					item:SetAttribute("BaseTransparency", base)
+				end
+				item.TextTransparency = base + (1 - base) * dim
+			elseif item:IsA("Frame") then
+				local base = item:GetAttribute("BaseTransparency")
+				if type(base) ~= "number" then
+					base = item.BackgroundTransparency
+					item:SetAttribute("BaseTransparency", base)
+				end
+				item.BackgroundTransparency = base + (1 - base) * dim
+			end
+		end
+	end
+end
+
 -- Cette méthode permet de remplir la vue détail pour la caisse courante (nom, contenu par rareté, prix, place dans la
 -- liste) lorsque le joueur ouvre une caisse ou passe à la voisine.
 local function paintDetail()
@@ -90,33 +117,41 @@ local function paintDetail()
 	for _, child in rows:GetChildren() do
 		child:Destroy()
 	end
+	table.clear(lines)
 	local contents = ShopCatalog.contents(crate, InventoryRules.ITEMS)
 	for i, row in contents do
-		local y = (i - 1) * ROW_STEP
 		local color = rgb(row.rarity.color)
-		UIKit.frame({
-			Name = "Bar",
-			Position = UDim2.fromOffset(0, y + 6),
-			Size = UDim2.fromOffset(4, ROW_TEXT),
-			BackgroundColor3 = color,
+		local line = UIKit.frame({
+			Name = "Row" .. i,
+			BackgroundTransparency = 1,
+			Position = UDim2.fromOffset(0, (i - 1) * ROW_STEP),
+			Size = UDim2.fromOffset(COLUMN_WIDTH, ROW_STEP),
 			Parent = rows,
 		})
-		label(rows, {
+		lines[i] = line
+		UIKit.frame({
+			Name = "Bar",
+			Position = UDim2.fromOffset(0, 6),
+			Size = UDim2.fromOffset(4, ROW_TEXT),
+			BackgroundColor3 = color,
+			Parent = line,
+		})
+		label(line, {
 			Name = "Skin",
 			Text = table.concat(row.weapons, " · ") .. "   " .. row.name,
 			FontFace = F.DisplayText,
 			TextSize = ROW_TEXT,
 			TextColor3 = C.Bone,
-			Position = UDim2.fromOffset(16, y),
+			Position = UDim2.fromOffset(16, 0),
 			Size = UDim2.fromOffset(RARITY_X - 16, ROW_STEP),
 		}, 2)
-		label(rows, {
+		label(line, {
 			Name = "Rarity",
 			Text = string.format("%s  %d %%", row.rarity.label, row.rarity.chance),
 			FontFace = F.Display,
 			TextSize = 18,
 			TextColor3 = color,
-			Position = UDim2.fromOffset(RARITY_X, y),
+			Position = UDim2.fromOffset(RARITY_X, 0),
 			Size = UDim2.fromOffset(COLUMN_WIDTH - RARITY_X, ROW_STEP),
 		}, 1)
 	end
@@ -375,6 +410,7 @@ function ShopScreen.init()
 	buildDetail(column)
 	MenuPage.followTopbar(root, column)
 	ShopScene.onCrateClicked(openCrate)
+	ShopScene.onWeaponFocus(highlightRow)
 end
 
 -- Cette méthode permet d'ouvrir le shop sur la vitrine (salle, caméra, interface) lorsque le joueur touche l'onglet SHOP.
