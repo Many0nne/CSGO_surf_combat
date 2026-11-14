@@ -190,7 +190,7 @@ local function checkMap(map)
 	end
 	if #spawnErrors > 0 then
 		print(table.concat(spawnLines, "\n"))
-	elseif nGround > 0 then
+	elseif spawnLow <= spawnHigh then
 		print(
 			string.format(
 				"Maps.%s : pieds de %.3f à %.3f stud au-dessus du sol à l'apparition",

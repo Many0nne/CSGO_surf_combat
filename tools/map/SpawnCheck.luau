@@ -5,7 +5,9 @@
 -- cherche le premier sol que voient les rayons du mouvement (pièces CanQuery). L'écart signé entre les pieds du rig
 -- posé là (ROOT_TO_FEET sous la racine) et ce sol doit rester dans [0, MAX_FALL] : pieds au-dessus du sol, petite
 -- chute. Un point au-dessus du vide ou dans un volume (sol au-dessus de la racine) est fautif.
--- Arithmétique sur des boîtes (RampCheck.box, ShadowCulling.rayEntry) : tourne dans Lune sans Studio. Lancé par
+-- Seuls les enfants BasePart directs du dossier sont des points.
+-- Arithmétique sur des boîtes (RampCheck.box, ShadowCulling.rayEntry ; un MeshPart, une union ou un cylindre est
+-- approché par sa boîte, ce qui peut signaler à tort un sol trop haut) : tourne dans Lune sans Studio. Lancé par
 -- tools/rbxm/verify_place.luau (CI) ; testé : tests/specs/SpawnCheck.spec.luau.
 
 local RampCheck = require("./RampCheck")
@@ -48,7 +50,7 @@ function SpawnCheck.measure(map)
 		local found = false
 		for _, b in solids do
 			local t = ShadowCulling.rayEntry(b, c.X, rootY, c.Z, 0, -1, 0, best)
-			if t and t <= best then
+			if t then
 				best, found = t, true
 			end
 		end
