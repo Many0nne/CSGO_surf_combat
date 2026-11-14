@@ -2,12 +2,13 @@
 -- SpawnSight.luau
 -- Lignes de vue entre les points d'apparition d'une map (dossier GroundSpawns, #329) : les points sont rangés par zone
 -- (attribut `Zone`, sinon `Team`), et deux points de zones différentes ne doivent pas se voir, sans quoi SpawnPointRules
--- n'a plus de point « hors de vue » à proposer et retombe au hasard. Même test que SpawnManager : yeux à yeux
+-- n'a plus de point « hors de vue » à proposer et retombe au hasard. Règle de SpawnPointRules.blocksSight : yeux à yeux
 -- (POINT_EYE studs au-dessus du centre du point), arrêté par les pièces CanQuery hors murs d'air (dossier Clips) et
--- moins transparentes que SEE_THROUGH (grillages), SpawnPointRules.blocksSight.
--- Arithmétique sur des boîtes et des coins (RampCheck.box, ShadowCulling.rayEntry) dans une grille en plan : tourne dans
--- Lune sans Studio. Les cylindres et boules ne sont pas comptés comme obstacles (leur boîte cacherait plus qu'en jeu). Lancé par tools/map/spawn_sight.luau ; testé :
--- tests/specs/SpawnSight.spec.luau.
+-- moins transparentes que SEE_THROUGH (grillages). Prudent : il ne peut que voir plus que le jeu (seuls les blocs et
+-- les coins arrêtent le regard ; un cylindre approché par sa boîte cacherait plus qu'en jeu ; SpawnManager.isVisible
+-- cherche Clips à la racine de la map, si bien qu'en jeu les murs d'air de Dizzy arrêtent aussi le regard).
+-- Arithmétique sur des boîtes (RampCheck.box, ShadowCulling.rayEntry) dans une grille en plan, dans Lune sans Studio.
+-- Lancé par tools/map/spawn_sight.luau et build_dizzy.luau ; testé : tests/specs/SpawnSight.spec.luau.
 
 local RampCheck = require("./RampCheck")
 local ShadowCulling = require("./ShadowCulling")

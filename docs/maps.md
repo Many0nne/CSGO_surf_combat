@@ -221,8 +221,12 @@ Méthode de placement (à refaire pour une autre map) :
    à l'utilisateur avant la génération.
 
 Contrôle : `lune run tools/map/spawn_sight.luau` (`tools/map/SpawnSight.luau`, testé) teste chaque paire de points de
-zones différentes (attribut `Zone`, sinon `Team`), yeux à yeux comme `SpawnManager` (murs d'air et grillages
-transparents), code de sortie 1 si une paire se voit. État : 36 points, 486 paires, 0 visible. Hauteur :
+zones différentes (attribut `Zone`, sinon `Team`), yeux à yeux selon `SpawnPointRules.blocksSight` (murs d'air et
+grillages transparents), code de sortie 1 si une paire se voit ou si aucune n'est testée. Il est prudent : il ne
+compte comme obstacles que les blocs et les coins (pas les cylindres, boules ni maillages), et `SpawnManager.isVisible`
+cherche `Clips` à la racine de la map, si bien qu'en jeu les murs d'air de Dizzy (`Geometry.Clips`) arrêtent aussi le
+regard (écart à corriger dans `SpawnManager`) ; « 0 visible » ici reste vrai en jeu. État : 36 points, 486 paires,
+0 visible. Hauteur :
 `SpawnCheck` (CI), pieds à 0,764 stud du sol sur les 36 points.
 
 Mesure en jeu (Studio, 14/11/2026, joueur et 5 bots passifs envers lui, un bot tué toutes les 3,5 s pendant 24
