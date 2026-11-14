@@ -150,51 +150,24 @@ end
 -- `caption` le geste en une ligne, posé sur le clip
 export type DemoClip = { id: string, title: string, caption: string }
 
--- Cette méthode permet de composer le sélecteur et les légendes des démos de la section SURFER lorsque l'écran Infos
--- s'ouvre : surf, bhop, air strafe, enchaînement, touches telles qu'imprimées sur le clavier du joueur.
+-- Cette méthode permet de composer les démos de la section SURFER et leurs légendes lorsque l'écran Infos s'ouvre,
+-- touches telles qu'imprimées sur le clavier du joueur ; plusieurs démos donnent un sélecteur, une seule n'en a pas.
+-- Une seule pour l'instant (Dizzy n'a pas de rampe assez longue pour le surf ni l'enchaînement) : bhop et air strafe,
+-- jouée avec l'auto-bhop (saut tenu).
 function InfosRules.demoClips(ctx: Context): { DemoClip }
 	local left, right, forward = actionKey(ctx, "left"), actionKey(ctx, "right"), actionKey(ctx, "forward")
 	local jumpEntry = entryOf(ctx.entries, "jump")
 	local jump = if jumpEntry and jumpEntry.label then jumpEntry.label else actionKey(ctx, "jump")
 	return {
 		{
-			id = "surf",
-			title = "SURF",
-			caption = string.format(
-				"Tiens %s ou %s vers la rampe, sans jamais %s, et vise dans le sens de la rampe.",
-				left,
-				right,
-				forward
-			),
-		},
-		{
 			id = "bhop",
-			title = "BHOP",
+			title = "BHOP · AIR STRAFE",
 			caption = string.format(
-				"%s à chaque atterrissage, %s ou %s en l'air avec la souris (auto-bhop : garde %s).",
+				"Garde %s (auto-bhop), puis en l'air %s en tournant la souris à gauche, %s à droite, sans %s.",
 				jump,
 				left,
 				right,
-				jump
-			),
-		},
-		{
-			id = "strafe",
-			title = "AIR STRAFE",
-			caption = string.format(
-				"En l'air, %s en tournant la souris à gauche, %s à droite, sans %s.",
-				left,
-				right,
 				forward
-			),
-		},
-		{
-			id = "chain",
-			title = "ENCHAÎNEMENT",
-			caption = string.format(
-				"Quitte la rampe, air strafe (%s/%s + souris) jusqu'à la suivante, puis reprends le surf.",
-				left,
-				right
 			),
 		},
 	}

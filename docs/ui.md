@@ -325,14 +325,19 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
 
 ## Démos rejouées (Infos > SURFER, #285)
 
-**Où :** en tête de l'onglet SURFER d'Infos, rien au premier lancement. Sélecteur SURF · BHOP · AIR STRAFE · ENCHAÎNEMENT
-(choix en texte, la démo choisie en os vif soulignée d'ambre : les onglets d'Infos sont déjà en boîte ambrée juste
-au-dessus, deux boîtes pleines empilées disaient deux fois « là où je suis »), puis le lecteur 640x360 (16:9), puis le
-texte de SURFER (`InfosRules.surfLines`), inchangé, sous le lecteur (défilement). La démo choisie est gardée d'une
-ouverture à l'autre.
+**Où :** en tête de l'onglet SURFER d'Infos, rien au premier lancement. Le lecteur 640x360 (16:9), puis le texte de
+SURFER (`InfosRules.surfLines`), inchangé, sous le lecteur (défilement).
+
+**Une seule démo : BHOP · AIR STRAFE.** Prise jouée par l'utilisateur avec l'auto-bhop (Espace tenu), Q/D en tournant la
+souris du même côté, vitesse de 25 à 126 en 15 s. Surf et enchaînement abandonnés le 2026-11-14 : Dizzy n'a pas de
+rampe assez longue pour une démo lisible (une rampe se traverse en 2 s environ). Ils pourront revenir avec une autre map :
+le code reste générique (`InfosRules.demoClips` renvoie une liste ; à partir de deux démos, un sélecteur en choix de
+texte apparaît, la démo choisie en os vif soulignée d'ambre, gardée d'une ouverture à l'autre : les onglets d'Infos sont
+déjà en boîte ambrée juste au-dessus, deux boîtes pleines empilées disaient deux fois « là où je suis »). Piste écartée :
+un bhop joué par entrées simulées (MCP) ; la prise humaine était déjà propre (98 % des virages dans le sens de la touche).
 
 **Pas de vidéo :** un clip est une trajectoire enregistrée dans Studio puis rejouée dans le moteur.
-- Données : `src/client/ui/DemoClips/<Nom>.luau` (`Surf`, `Bhop`, `Strafe`, `Chain`), un module qui renvoie le texte du
+- Données : `src/client/ui/DemoClips/<Nom>.luau` (aujourd'hui `Bhop`), un module qui renvoie le texte du
   clip. Format `DemoClipRules` : en-tête `CLIP 1 <hz> <map>`, puis une ligne d'entiers par échantillon (30 Hz) : écarts
   avec l'échantillon précédent de x, y, z de la racine, hauteur des yeux, lacet et tangage de la caméra (centièmes de
   stud ou de degré, écarts pris entre valeurs arrondies : pas de dérive), masque des touches (avant, gauche, arrière,
@@ -376,8 +381,8 @@ ouverture à l'autre.
    de 2 000 caractères, sans blanc). Si le playtest est arrêté, copier la sortie (ou `get_console_output`, qui rogne le
    début d'une longue sortie : extraire au plus tôt) dans un fichier : `write_clip` reconnaît ces lignes et recolle la
    dernière prise complète du clip demandé.
-5. `lune run tools/clips/write_clip.luau %TEMP%\surf.txt Surf [début_s] [fin_s]` : valide le clip, garde au besoin la
-   partie entre début et fin, et réécrit `src/client/ui/DemoClips/Surf.luau` (CRLF, comme StyLua).
+5. `lune run tools/clips/write_clip.luau %TEMP%\bhop.txt Bhop [début_s] [fin_s]` : valide le clip, garde au besoin la
+   partie entre début et fin, et réécrit `src/client/ui/DemoClips/Bhop.luau` (CRLF, comme StyLua).
 6. Arrêter le playtest (Rojo ne synchronise qu'en mode Edit), relancer, ouvrir Infos > SURFER et vérifier la démo.
 
 ## Règles des écrans secondaires

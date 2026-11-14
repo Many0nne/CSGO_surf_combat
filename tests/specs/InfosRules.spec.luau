@@ -149,21 +149,21 @@ return function(T, Loader)
 	end)
 
 	T.describe("InfosRules.demoClips", function()
-		T.it("propose les 4 démos dans l'ordre, une par module de données", function()
+		T.it("propose la démo bhop et air strafe, une par module de données", function()
 			local clips = InfosRules.demoClips(context(AZERTY))
-			local ids = {}
-			for _, clip in clips do
-				table.insert(ids, clip.id)
-			end
-			T.expectEqual(table.concat(ids, ","), "surf,bhop,strafe,chain")
+			T.expectEqual(#clips, 1)
+			T.expectEqual(clips[1].id, "bhop")
+			T.expectEqual(clips[1].title, "BHOP · AIR STRAFE")
 		end)
 
-		T.it("cite les touches du clavier du joueur dans les légendes", function()
-			local clips = InfosRules.demoClips(context(AZERTY))
-			T.expect(string.find(clips[1].caption, "Tiens Q ou D", 1, true) ~= nil, "surf : gauche et droite")
-			T.expect(string.find(clips[1].caption, "sans jamais Z", 1, true) ~= nil, "surf : pas d'avant")
-			T.expect(string.find(clips[2].caption, "ESPACE à chaque atterrissage", 1, true) ~= nil, "bhop : saut")
-			T.expect(string.find(clips[3].caption, "Q en tournant la souris à gauche", 1, true) ~= nil, "air strafe")
+		T.it("cite les touches du clavier du joueur dans la légende", function()
+			local caption = InfosRules.demoClips(context(AZERTY))[1].caption
+			T.expect(string.find(caption, "Garde ESPACE (auto-bhop)", 1, true) ~= nil, "saut tenu")
+			T.expect(
+				string.find(caption, "Q en tournant la souris à gauche, D à droite", 1, true) ~= nil,
+				"air strafe"
+			)
+			T.expect(string.find(caption, "sans Z", 1, true) ~= nil, "pas d'avant")
 		end)
 	end)
 end

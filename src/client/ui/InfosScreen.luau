@@ -1,6 +1,6 @@
 -- Écran Infos (MenuPage) : bloc centré sur un voile, titre, sections en onglets en boîte (#308), contenu dessous
 -- (texte, ou lignes « touche en boîte → action » pour COMMANDES), RETOUR en bas au centre. SURFER montre d'abord une
--- démo rejouée par mécanique (#285, DemoPlayer), choisie dans un sélecteur, puis le texte.
+-- démo rejouée par mécanique (#285, DemoPlayer), choisie dans un sélecteur s'il y en a plusieurs, puis le texte.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local PlayerSettings = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("PlayerSettings"))
@@ -162,8 +162,8 @@ local function stopDemo()
 	end
 end
 
--- Cette méthode permet de poser le sélecteur des démos puis le lecteur en tête de la section SURFER lorsqu'elle
--- s'affiche ; un choix relance la lecture sur sa démo, soulignée d'ambre.
+-- Cette méthode permet de poser le sélecteur des démos (s'il y en a plusieurs) puis le lecteur en tête de la section
+-- SURFER lorsqu'elle s'affiche ; un choix relance la lecture sur sa démo, soulignée d'ambre.
 local function addDemos(ctx: InfosRules.Context)
 	local clips = InfosRules.demoClips(ctx)
 	local ids = {}
@@ -174,6 +174,7 @@ local function addDemos(ctx: InfosRules.Context)
 		Name = "DemoChoices",
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 0, DEMO_CHOICE_SIZE + 12),
+		Visible = #clips > 1,
 		LayoutOrder = 1,
 		Parent = content,
 	})
