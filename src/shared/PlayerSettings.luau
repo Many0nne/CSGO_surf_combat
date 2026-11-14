@@ -34,6 +34,10 @@ export type Settings = {
 	-- Volume (#249) en pourcents entiers : général (tous les sons) et canal armes (en plus du général)
 	volumeMaster: number,
 	volumeWeapons: number,
+	-- Musique de fond (#286) : désactivée par défaut (DEFAULT_MUSIC), absent = désactivée ; volume du canal musique en
+	-- pourcents entiers (en plus du général)
+	music: boolean,
+	volumeMusic: number,
 	-- Échelle du HUD (#250) en pourcents entiers (50 à 100) : éléments de bord du HUD de partie, hors réticule et hitmarker
 	hudScale: number,
 	-- Conseils de l'écran de mort des débutants (#291) ; activés par défaut (DEFAULT_DEATH_TIPS), absent = activés
@@ -70,6 +74,8 @@ PlayerSettings.CROSSHAIR = {
 -- Volume (#249) : pourcents entiers, 100 par défaut (volume d'origine des sons). Volume effectif d'une arme =
 -- général × armes (SoundChannels).
 PlayerSettings.VOLUME = { min = 0, max = 100, default = 100 }
+-- Musique de fond (#286) : désactivée par défaut, y compris pour un réglage sauvegardé avant elle
+PlayerSettings.DEFAULT_MUSIC = false
 -- Échelle du HUD (#250) : pourcents entiers, 100 par défaut = HUD d'origine (pas d'agrandissement)
 PlayerSettings.HUD_SCALE = { min = 50, max = 100, default = 100 }
 -- Conseils de l'écran de mort des débutants (#291) : activés par défaut, y compris pour un réglage sauvegardé avant eux
@@ -146,6 +152,8 @@ function PlayerSettings.defaults(): Settings
 		crosshairOpacity = PlayerSettings.CROSSHAIR.opacity.default,
 		volumeMaster = PlayerSettings.VOLUME.default,
 		volumeWeapons = PlayerSettings.VOLUME.default,
+		music = PlayerSettings.DEFAULT_MUSIC,
+		volumeMusic = PlayerSettings.VOLUME.default,
 		hudScale = PlayerSettings.HUD_SCALE.default,
 		deathTips = PlayerSettings.DEFAULT_DEATH_TIPS,
 		slotKeys = table.clone(PlayerSettings.DEFAULT_SLOT_KEYS),
@@ -245,6 +253,10 @@ function PlayerSettings.sanitize(raw: any): Settings
 	settings.crosshairOpacity = math.round(rawOpacity * 100) / 100
 	settings.volumeMaster = clampPixels(raw.volumeMaster, PlayerSettings.VOLUME)
 	settings.volumeWeapons = clampPixels(raw.volumeWeapons, PlayerSettings.VOLUME)
+	if type(raw.music) == "boolean" then
+		settings.music = raw.music
+	end
+	settings.volumeMusic = clampPixels(raw.volumeMusic, PlayerSettings.VOLUME)
 	settings.hudScale = clampPixels(raw.hudScale, PlayerSettings.HUD_SCALE)
 	if type(raw.deathTips) == "boolean" then
 		settings.deathTips = raw.deathTips

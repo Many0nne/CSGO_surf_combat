@@ -17,6 +17,8 @@ return function(T, Loader)
 				T.expectEqual(s.simpleAim, false)
 				T.expectEqual(s.keyDisplay, "off")
 				T.expectEqual(s.autoBhop, PlayerSettings.DEFAULT_AUTO_BHOP)
+				T.expectEqual(s.music, false, "musique coupée par défaut (#286)")
+				T.expectEqual(s.volumeMusic, PlayerSettings.VOLUME.default)
 				T.expectEqual(keysOf(s.slotKeys), keysOf(PlayerSettings.DEFAULT_SLOT_KEYS))
 			end
 		end)
@@ -62,6 +64,14 @@ return function(T, Loader)
 				T.expectEqual(PlayerSettings.sanitize({ deathTips = bad }).deathTips, true, "conseils (#291)")
 			end
 			T.expectEqual(PlayerSettings.sanitize({ autoBhop = false }).autoBhop, false)
+			for _, bad in { "oui", 1, {} } do
+				T.expectEqual(PlayerSettings.sanitize({ music = bad }).music, false, "musique (#286)")
+			end
+			T.expectEqual(PlayerSettings.sanitize({ music = true }).music, true)
+			T.expectEqual(PlayerSettings.sanitize({ sensitivity = 0.3 }).music, false) -- sauvegarde d'avant #286
+			T.expectEqual(PlayerSettings.sanitize({ volumeMusic = 140 }).volumeMusic, 100)
+			T.expectEqual(PlayerSettings.sanitize({ volumeMusic = 33.6 }).volumeMusic, 34)
+			T.expectEqual(PlayerSettings.sanitize({ volumeMusic = "50" }).volumeMusic, PlayerSettings.VOLUME.default)
 			T.expectEqual(PlayerSettings.sanitize({ sensitivity = 0.3 }).autoBhop, true) -- ancienne sauvegarde
 			for _, bad in { true, 1, "complet", "FULL", {} } do
 				T.expectEqual(PlayerSettings.sanitize({ keyDisplay = bad }).keyDisplay, "off")

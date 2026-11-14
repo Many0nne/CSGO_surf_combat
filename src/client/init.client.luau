@@ -18,6 +18,7 @@ local SettingsMenu = require(script.ui.SettingsMenu)
 local LocalSettings = require(script.systems.settings.LocalSettings)
 local SkinPreloader = require(script.systems.inventory.SkinPreloader)
 local SoundChannels = require(script.systems.settings.SoundChannels)
+local MusicPlayer = require(script.systems.audio.MusicPlayer)
 local UIKit = require(script.ui.UIKit)
 local Speedometer = require(script.ui.Speedometer)
 local WeaponBar = require(script.ui.WeaponBar)
@@ -130,6 +131,8 @@ GameStateController.init(player, setupCharacter, stopCharacter)
 RemoteShotSounds.init(GameStateController.getState)
 -- Flamme de bouche et rayon de leurs tirs, sur leur arme 3P (#54), hors écrans du menu
 ShotEffects.init(GameStateController.getState)
+-- Musique de fond (#286) : coupée par défaut ; pleine au menu, atténuée en partie, au plus bas pendant un combat
+MusicPlayer.init(GameStateController.getState, WeaponSystem.getState)
 -- Douilles éjectées à l'ouverture de culasse (#237) : les nôtres héritent de notre vitesse, celles des autres partent
 -- de leur arme 3P après le délai d'ouverture
 CasingEjection.init(GameStateController.getState, MovementController.getVelocity)
