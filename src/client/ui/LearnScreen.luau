@@ -107,7 +107,9 @@ local function addDemos(ctx: InfosRules.Context)
 			Parent = choices[i].button,
 		})
 	end
-	choose(math.clamp(selectedDemo, 1, #clips))
+	if #clips > 0 then
+		choose(math.clamp(selectedDemo, 1, #clips))
+	end
 end
 
 -- Cette méthode permet de remplir le contenu (sélecteur et démo, légende aux touches du joueur) lorsque l'écran s'ouvre.

@@ -88,6 +88,11 @@ local function copyPart(part: BasePart, parent: Instance)
 			or child:IsA("JointInstance")
 			or child:IsA("Constraint")
 			or child:IsA("LuaSourceContainer")
+			or child:IsA("Light")
+			or child:IsA("Sound")
+			or child:IsA("ParticleEmitter")
+			or child:IsA("Beam")
+			or child:IsA("Trail")
 		then
 			child:Destroy()
 		end

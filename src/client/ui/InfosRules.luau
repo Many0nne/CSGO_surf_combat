@@ -180,7 +180,7 @@ export type Tip = { topic: string, text: string }
 function InfosRules.deathTips(ctx: TipContext): { Tip }
 	local left, right, forward = actionKey(ctx, "left"), actionKey(ctx, "right"), actionKey(ctx, "forward")
 	local jump = jumpLabel(ctx)
-	local bhop = if ctx.autoBhop
+	local bhop = if ctx.autoBhop ~= false
 		then string.format("garde %s enfoncé, tu ressautes dès que tu touches le sol.", jump)
 		else string.format("appuie sur %s à chaque fois que tu touches le sol.", jump)
 	bhop ..= InfosRules.DEMO_POINTER

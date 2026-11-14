@@ -246,8 +246,8 @@ function ClipRecorder.init(dependencies: Deps)
 	end
 	deps = dependencies
 	deps.player:GetAttributeChangedSignal(ATTRIBUTE):Connect(onAttribute)
-	UserInputService.InputBegan:Connect(function(input)
-		if not armedName then
+	UserInputService.InputBegan:Connect(function(input, processed)
+		if processed or not armedName then
 			return
 		end
 		if input.KeyCode == NEXT_KEY then

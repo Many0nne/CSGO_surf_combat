@@ -17,6 +17,8 @@ if not rawPath or not name then
 	print("usage : lune run tools/clips/write_clip.luau <texte_brut.txt> <Nom> [début_s] [fin_s]")
 	process.exit(1)
 end
+-- Même casse que DemoPlayer.loadClip (première lettre en majuscule) : « bhop » écrit Bhop.luau
+name = string.upper(string.sub(name, 1, 1)) .. string.lower(string.sub(name, 2))
 
 local Rules = luau.load(fs.readFile(RULES), { debugName = RULES })()
 -- Fins de ligne Windows retirées : le texte vient d'un copier-coller
