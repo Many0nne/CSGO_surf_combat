@@ -293,8 +293,8 @@ return function(T, Loader)
 			T.expectEqual(tools(Rules.weaponsForSlot(Rules.resolve(nil, false), "knife")), "KaBar")
 			T.expectEqual(tools(Rules.weaponsForSlot(Rules.resolve(nil, true), "knife")), "KaBar,M9Bayonet")
 			T.expectEqual(tools(Rules.weaponsForSlot(Rules.resolve(nil, true), "sniper")), "AWP")
-			-- Skins de #268 : l'admin a les trois de l'AWP, un joueur sans sauvegarde aucun
-			T.expectEqual(#Rules.skinsFor(Rules.resolve(nil, true), "weapon.awp"), 3)
+			-- Skins (#268, #337) : l'admin a les six de l'AWP, un joueur sans sauvegarde aucun
+			T.expectEqual(#Rules.skinsFor(Rules.resolve(nil, true), "weapon.awp"), 6)
 			T.expectEqual(#Rules.skinsFor(Rules.resolve(nil, false), "weapon.awp"), 0)
 		end)
 
