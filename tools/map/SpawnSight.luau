@@ -5,8 +5,8 @@
 -- n'a plus de point « hors de vue » à proposer et retombe au hasard. Même test que SpawnManager : yeux à yeux
 -- (POINT_EYE studs au-dessus du centre du point), arrêté par les pièces CanQuery hors murs d'air (dossier Clips) et
 -- moins transparentes que SEE_THROUGH (grillages), SpawnPointRules.blocksSight.
--- Arithmétique sur des boîtes (RampCheck.box, ShadowCulling.rayEntry ; un cylindre est approché par sa boîte) dans
--- une grille en plan : tourne dans Lune sans Studio. Lancé par tools/map/spawn_sight.luau ; testé :
+-- Arithmétique sur des boîtes et des coins (RampCheck.box, ShadowCulling.rayEntry) dans une grille en plan : tourne dans
+-- Lune sans Studio. Les cylindres et boules ne sont pas comptés comme obstacles (leur boîte cacherait plus qu'en jeu). Lancé par tools/map/spawn_sight.luau ; testé :
 -- tests/specs/SpawnSight.spec.luau.
 
 local RampCheck = require("./RampCheck")
@@ -21,6 +21,11 @@ SpawnSight.POINT_EYE = 6.5
 -- une pièce au moins aussi transparente se voit au travers (SpawnPointRules.SEE_THROUGH_TRANSPARENCY)
 SpawnSight.SEE_THROUGH = 0.5
 SpawnSight.CELL = 16 -- studs, côté d'une cellule de la grille en plan
+
+-- Cette méthode permet de calculer la clé d'une cellule de la grille en plan (indices décalés, toujours positifs).
+local function cellKey(ix, iz)
+	return (ix + 32768) * 65536 + (iz + 32768)
+end
 
 -- Cette méthode permet de savoir si une pièce est sous un dossier nommé Clips (murs d'air) lorsqu'on liste ce qui
 -- arrête le regard.
@@ -48,6 +53,7 @@ function SpawnSight.index(map)
 			and p.Transparency < SpawnSight.SEE_THROUGH
 			and not (spawnFolder and p:IsDescendantOf(spawnFolder))
 			and not inClips(p)
+			and (p.ClassName == "WedgePart" or (p.ClassName == "Part" and p.Shape.Name == "Block"))
 		then
 			local b = RampCheck.box(p)
 			table.insert(boxes, b)
@@ -56,7 +62,7 @@ function SpawnSight.index(map)
 			local hz = math.abs(b.xz) * b.sx / 2 + math.abs(b.yz) * b.sy / 2 + math.abs(b.zz) * b.sz / 2
 			for ix = math.floor((b.px - hx) / cell), math.floor((b.px + hx) / cell) do
 				for iz = math.floor((b.pz - hz) / cell), math.floor((b.pz + hz) / cell) do
-					local key = ix * 65536 + iz
+					local key = cellKey(ix, iz)
 					local list = grid[key]
 					if not list then
 						list = {}
@@ -70,9 +76,8 @@ function SpawnSight.index(map)
 	return { boxes = boxes, grid = grid, stamp = {}, round = 0 }
 end
 
--- Cette méthode permet de savoir si le segment de a à b (positions {x, y, z}) ne traverse aucune pièce de l'index
--- lorsqu'on teste une vue d'yeux à yeux : parcourt les cellules du plan que couvre le segment ; une pièce qui contient
--- `a` est ignorée, comme par workspace:Raycast (le sens compte, cf. SpawnSight.check).
+-- Cette méthode permet de savoir si le segment de a à b ne traverse aucune pièce de l'index lorsqu'on teste une vue
+-- d'yeux à yeux ; une pièce qui contient `a` est ignorée, comme par workspace:Raycast (le sens compte).
 function SpawnSight.clear(index, a, b)
 	local dx, dy, dz = b[1] - a[1], b[2] - a[2], b[3] - a[3]
 	local len = math.sqrt(dx * dx + dy * dy + dz * dz)
@@ -92,7 +97,7 @@ function SpawnSight.clear(index, a, b)
 		local cz = math.floor((a[3] + dz * t) / cell)
 		for ix = cx - 1, cx + 1 do
 			for iz = cz - 1, cz + 1 do
-				local key = ix * 65536 + iz
+				local key = cellKey(ix, iz)
 				if not seen[key] then
 					seen[key] = true
 					for _, id in grid[key] or {} do
@@ -133,9 +138,8 @@ function SpawnSight.points(map)
 	return out
 end
 
--- Cette méthode permet de vérifier qu'aucun point ne voit un point d'une autre zone lorsqu'on contrôle une map :
--- renvoie le nombre de paires testées, la liste des paires qui se voient ({ a, b }) et le bilan par paire de zones
--- (zones triées, { za, zb, pairs, visible }).
+-- Cette méthode permet de vérifier qu'aucun point ne voit un point d'une autre zone lorsqu'on contrôle une map : renvoie
+-- le nombre de paires testées, les paires qui se voient ({ a, b }) et le bilan trié par paire de zones.
 function SpawnSight.check(map)
 	local index = SpawnSight.index(map)
 	local points = SpawnSight.points(map)

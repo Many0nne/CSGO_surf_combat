@@ -232,9 +232,8 @@ local function spawnPoint(f, name, cf, team, zone)
 	p.Parent = f
 end
 
--- Cette méthode permet de poser les points d'apparition au sol : info_player_* de l'original (attribut Team T ou CT,
--- point mis au niveau du sol, 0,406 m sous l'origine source), puis les zones FFA_SPAWNS des deux côtés de la map
--- (#329). Le joueur apparaît 5 studs au-dessus du point (SpawnManager). Renvoie le nombre de points.
+-- Cette méthode permet de poser les points d'apparition au sol : info_player_* de l'original (Team T ou CT, 0,406 m sous
+-- l'origine source), puis les zones FFA_SPAWNS des deux côtés de la map (#329) ; renvoie le nombre de points.
 local function spawns(parent, data)
 	local f = folder(parent, "GroundSpawns")
 	for i, s in data.spawns do
@@ -340,11 +339,11 @@ local spawnCount = spawns(map, data)
 -- zones d'apparition hors de vue l'une de l'autre (#329), sinon SpawnPointRules retombe au hasard : arrêt avant d'écrire
 local sightTested, sightVisible = SpawnSight.check(map)
 print(string.format("  vues entre zones d'apparition : %d paire(s) testée(s), %d visible(s)", sightTested, #sightVisible))
-if #sightVisible > 0 then
+if #sightVisible > 0 or sightTested == 0 then
 	for _, v in sightVisible do
 		print(string.format("  VU : %s <-> %s", v.a, v.b))
 	end
-	error("deux zones d'apparition se voient (tools/map/spawn_sight.luau), map non écrite")
+	error("zones d'apparition qui se voient, ou aucune paire testée (tools/map/spawn_sight.luau) : map non écrite")
 end
 local rampLines, rampWorst = RampCheck.check(map)
 if rampWorst > RampCheck.TOL then

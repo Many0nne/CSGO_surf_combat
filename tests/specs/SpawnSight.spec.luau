@@ -97,6 +97,15 @@ return function(T, Loader)
 			end
 		)
 
+		T.it("un cylindre n'arrête pas le regard (sa boîte cacherait plus qu'en jeu)", function()
+			local map, geometry, _, spawns = emptyMap()
+			point(spawns, "A", 0, "FFA", "Nord")
+			point(spawns, "B", 60, "FFA", "Sud")
+			local pipe = part(geometry, "pipe", Vector3.new(30, 5, 0), Vector3.new(20, 20, 20))
+			pipe.Shape = require("@lune/roblox").Enum.PartType.Cylinder
+			T.expectEqual(#select(2, SpawnSight.check(map)), 1)
+		end)
+
 		T.it("un mur sous la ligne des yeux ne la coupe pas", function()
 			local map, geometry, _, spawns = emptyMap()
 			point(spawns, "A", 0, "FFA", "Nord")
