@@ -71,7 +71,8 @@ function SpawnSight.index(map)
 end
 
 -- Cette méthode permet de savoir si le segment de a à b (positions {x, y, z}) ne traverse aucune pièce de l'index
--- lorsqu'on teste une vue d'yeux à yeux : parcourt les cellules du plan que couvre le segment.
+-- lorsqu'on teste une vue d'yeux à yeux : parcourt les cellules du plan que couvre le segment ; une pièce qui contient
+-- `a` est ignorée, comme par workspace:Raycast (le sens compte, cf. SpawnSight.check).
 function SpawnSight.clear(index, a, b)
 	local dx, dy, dz = b[1] - a[1], b[2] - a[2], b[3] - a[3]
 	local len = math.sqrt(dx * dx + dy * dy + dz * dz)
@@ -97,7 +98,9 @@ function SpawnSight.clear(index, a, b)
 					for _, id in grid[key] or {} do
 						if stamp[id] ~= round then
 							stamp[id] = round
-							if ShadowCulling.rayEntry(boxes[id], a[1], a[2], a[3], dx, dy, dz, len) then
+							local t = ShadowCulling.rayEntry(boxes[id], a[1], a[2], a[3], dx, dy, dz, len)
+							-- t = 0 : l'origine est dans la pièce, que workspace:Raycast ignore (comme SpawnManager)
+							if t and t > 1e-6 then
 								return false
 							end
 						end
@@ -153,7 +156,8 @@ function SpawnSight.check(map)
 					byZone[key] = row
 				end
 				row.pairs += 1
-				if SpawnSight.clear(index, a.eye, b.eye) then
+				-- SpawnManager lance le rayon depuis l'ennemi : les deux sens, une pièce qui contient l'origine ne compte pas
+				if SpawnSight.clear(index, a.eye, b.eye) or SpawnSight.clear(index, b.eye, a.eye) then
 					row.visible += 1
 					table.insert(visible, { a = a.name, b = b.name })
 				end

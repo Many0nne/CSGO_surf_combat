@@ -85,6 +85,18 @@ return function(T, Loader)
 			T.expectEqual(#select(2, SpawnSight.check(map)), 0)
 		end)
 
+		T.it(
+			"une pièce qui contient les yeux d'un point ne cache rien, dans les deux sens (comme workspace:Raycast)",
+			function()
+				local map, geometry, _, spawns = emptyMap()
+				point(spawns, "A", 0, "FFA", "Nord")
+				point(spawns, "B", 60, "FFA", "Sud")
+				-- poutre autour des yeux de A (6,5 studs au-dessus du centre du point)
+				part(geometry, "beam", Vector3.new(0, 7, 0), Vector3.new(3, 2, 3))
+				T.expectEqual(#select(2, SpawnSight.check(map)), 1)
+			end
+		)
+
 		T.it("un mur sous la ligne des yeux ne la coupe pas", function()
 			local map, geometry, _, spawns = emptyMap()
 			point(spawns, "A", 0, "FFA", "Nord")

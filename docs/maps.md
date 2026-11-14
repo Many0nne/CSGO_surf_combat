@@ -200,7 +200,9 @@ grappes de 12 points (bases T et CT), il retombait vite au hasard. Quatre zones 
 Attributs : `Team` = `FFA` (ni `SpawnPointRules` ni `SpawnManager` ne le lisent), `Zone` = nom de la zone. Les points
 sont posés par le générateur, pas par `SPAWNS` d'`extract_dizzy.py` : un relevé neuf ne redonne pas le plan versionné
 (cf. « Rampes de surf »). Regard horizontal vers la sortie : vers le centre de la map, on avait un mur proche devant
-soi (décision de l'utilisateur).
+soi (décision de l'utilisateur). **Le regard n'est que dans le repère du point** : `SpawnManager.place` pose la racine
+par `CFrame.new(position)` et ignore l'orientation des points, T et CT compris (à corriger dans `SpawnManager`, hors
+#329). Le générateur refuse d'écrire la map si deux zones se voient (`SpawnSight.check`).
 
 Méthode de placement (à refaire pour une autre map) :
 1. Candidats : points des dessus de `Floors` tous les 5 studs, avec le dégagement du corps et un sol sous les épaules,

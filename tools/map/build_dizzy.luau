@@ -14,6 +14,7 @@ local DizzyPatches = require("./DizzyPatches")
 local RampCheck = require("./RampCheck")
 local RampEdges = require("./RampEdges")
 local ShadowCulling = require("./ShadowCulling")
+local SpawnSight = require("./SpawnSight")
 
 local CFrame = roblox.CFrame
 local Color3 = roblox.Color3
@@ -213,17 +214,16 @@ local FFA_SPAWNS = {
 		points = { { -241.037, -261.783 }, { -230.668, -256.516 }, { -241.037, -251.249 } },
 	},
 }
-local MIRROR_Z = -260.1 -- centre du demi-tour de la map (z), en x : 0
 local SPAWN_SKIN = 0.029 -- studs : face basse du point au-dessus du sol, comme les points T/CT relevés
 
--- Cette méthode permet de poser un point d'apparition au sol (pièce invisible sans collision, regard horizontal) lorsque
--- le générateur remplit GroundSpawns.
-local function spawnPoint(f, name, center, lookX, lookZ, team, zone)
+-- Cette méthode permet de poser un point d'apparition au sol (pièce invisible sans collision, repère `cf`) lorsque le
+-- générateur remplit GroundSpawns.
+local function spawnPoint(f, name, cf, team, zone)
 	local p = ghost(Instance.new("Part"))
 	p.Anchored = true
 	p.Transparency = 1
 	p.Size = Vector3.new(2, 1, 2)
-	p.CFrame = CFrame.lookAt(center, center + Vector3.new(lookX, 0, lookZ))
+	p.CFrame = cf
 	p.Name = name
 	p:SetAttribute("Team", team)
 	if zone then
@@ -239,20 +239,21 @@ local function spawns(parent, data)
 	local f = folder(parent, "GroundSpawns")
 	for i, s in data.spawns do
 		local feet = Vector3.new(s[2], s[3] - 0.406 * data.scale.v + 0.5, s[4]) + OFFSET
-		spawnPoint(f, string.format("%s%02d", s[1], i), feet, s[5], s[6], s[1], nil)
+		local cf = CFrame.lookAt(feet, feet + Vector3.new(s[5], 0, s[6]))
+		spawnPoint(f, string.format("%s%02d", s[1], i), cf, s[1], nil)
 	end
 	local n = 0
 	for _, z in FFA_SPAWNS do
 		local y = z.floor + SPAWN_SKIN + 0.5
-		for _, side in { { z.zone, 1 }, { z.mirror, -1 } } do
-			local sign = side[2]
+		for _, side in { { z.zone, false }, { z.mirror, true } } do
 			for _, pt in z.points do
-				-- côté CT : demi-tour autour de (0, MIRROR_Z), le regard tourne avec
-				local x = sign * pt[1]
-				local zz = if sign == 1 then pt[2] else 2 * MIRROR_Z - pt[2]
+				-- repère du plan (sans décalage) ; côté CT, demi-tour de la map, le regard tourne avec
+				local cf = DizzyDressing.aim(Vector3.new(pt[1], y, pt[2]), Vector3.new(z.look[1], 0, z.look[2]))
+				if side[2] then
+					cf = DizzyDressing.mirror(cf)
+				end
 				n += 1
-				local center = Vector3.new(x, y, zz) + OFFSET
-				spawnPoint(f, string.format("FFA%02d", n), center, sign * z.look[1], sign * z.look[2], "FFA", side[1])
+				spawnPoint(f, string.format("FFA%02d", n), cf + OFFSET, "FFA", side[1])
 			end
 		end
 	end
@@ -336,6 +337,15 @@ end
 local dressed = DizzyDressing.build(map, OFFSET)
 underside(map, data)
 local spawnCount = spawns(map, data)
+-- zones d'apparition hors de vue l'une de l'autre (#329), sinon SpawnPointRules retombe au hasard : arrêt avant d'écrire
+local sightTested, sightVisible = SpawnSight.check(map)
+print(string.format("  vues entre zones d'apparition : %d paire(s) testée(s), %d visible(s)", sightTested, #sightVisible))
+if #sightVisible > 0 then
+	for _, v in sightVisible do
+		print(string.format("  VU : %s <-> %s", v.a, v.b))
+	end
+	error("deux zones d'apparition se voient (tools/map/spawn_sight.luau), map non écrite")
+end
 local rampLines, rampWorst = RampCheck.check(map)
 if rampWorst > RampCheck.TOL then
 	-- bilan en entier (un message d'erreur long est tronqué), puis arrêt avant d'écrire la map
