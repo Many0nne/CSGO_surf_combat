@@ -622,9 +622,9 @@ propre décor, pas une grille de cartes neutres), sans capture précise.
 - **Le stock** : deux racks de caisses (montants sombres, longerons ambrés), un à droite contre le mur du fond (coupé
   par le cadre, il suggère qu'il y en a d'autres), un à gauche contre le mur latéral, dans la pénombre derrière le
   texte : sans lui la gauche faisait vide.
-- **Lumière** : une suspension industrielle (cloche sombre émaillée os dedans, ampoule visible) au-dessus de la caisse,
-  cône chaud et serré ; le tableau éclairé par le haut ; le rack de droite en lumière plus froide, de face ; ambiance
-  très basse, la gauche reste sombre pour l'interface.
+- **Lumière** : une suspension industrielle (cloche sombre émaillée os dedans, ampoule visible), d'abord au-dessus de
+  la caisse sur la planche, passée au-dessus du tableau dans Roblox (voir « Faisceau » plus bas) ; le rack de droite
+  en lumière plus froide, de face ; ambiance très basse, la gauche reste sombre pour l'interface.
 - **Interface** : colonne de gauche sur fond de coin (cadre de l'écran d'équipement, objet à droite) : nom de la caisse,
   contenu avec rareté et chance, prix, ACHETER, caisse suivante. Esquisse en Arial Narrow pour juger la place, pas le
   style ; prix et monnaie non décidés (#347). Les coins clairs des caisses du rack de gauche passent derrière le texte :
@@ -662,6 +662,36 @@ l'étiquette BIENTÔT tant que l'achat n'existe pas.
   (à 30, elles éclairaient le rack du fond sous le texte), lumière froide du rack du fond éteinte face à la vitrine.
   `Lighting.Ambient` assombri pendant le shop change peu de chose : ce sont les lampes qui comptent. Fond de la colonne :
   dégradé horizontal sur toute la hauteur (comme la planche), le fond de coin de l'équipement ne fonçait que le bas.
+- **Faisceau de la suspension (simulé, `lightBeam`, 14/11/2026) :** sans faisceau visible, on ne voyait pas que la
+  lumière partait de la lampe. La suspension éclaire **les armes** (l'intérêt de la vue) : au-dessus du tableau, 1,6
+  stud devant lui, cloche sous les onglets du menu (plus haute, elle les chevauchait). Cône court sous l'ampoule
+  (deux rubans `Beam`, halo et cœur, `FaceCamera`, `LightEmission` 1, texturés par un dégradé blanc en travers,
+  `beam_profile.png`, pas plus large que la cloche en haut), effacé au-dessus de la rangée d'AWP ; trace pâle sur le
+  contreplaqué (`wall_wash.png` dans un `SurfaceGui` collé au panneau, derrière les armes et les bandes) : rien
+  au-dessus de la cloche, bord haut en arc, pleine largeur dès 30 % de la hauteur pour éclairer les trois colonnes
+  (plus étroite, seule l'arme du milieu l'était). Lampe Voxel 1,5 stud sous l'ampoule, puissance 3,5. Ombre douce
+  sous chaque arme (`weapon_shadow.png` teintée en noir, `weaponShadow`), juste sous son bord bas : le Voxel ne donne
+  pas d'ombre aux lampes, et sans elle l'arme semblait collée devant le fond éclairé. Images :
+  `tools/shop/make_light_textures.py`, publiées en Decal (ids dans `ShopScene`).
+- Limite connue : la trace éclaircit le fond mais pas les armes (le Voxel les éclaire à peine), elles semblent un peu
+  devant la lumière. Monter les vraies lampes éclaire les armes mais aussi toute la salle (Voxel) : rejeté. Piège :
+  **`SurfaceAppearance.EmissiveMaskContent` ne s'écrit pas depuis un script du jeu** (capacité Plugin) : un essai par
+  le MCP marche (droits de plugin), le jeu lève une erreur et le shop ne se construit plus. Dosage relevé par le MCP
+  avec un masque blanc, teinte de la trace : 0,35 à 1,5 invisible, 2 à 2,5 juste, 5 sature les skins.
+- Ombres rejetées : la vraie projection depuis l'ampoule (à 1,6 stud du tableau, elle étirait les ombres jusque hors
+  du tableau) ; une ombre ronde, ou plus basse et plus sombre (en gros plan, une tache détachée sous l'arme).
+- Rejetés par l'utilisateur (15/11/2026) : **une tache ronde** centrée sur le tableau (elle éclairait plus haut que
+  la cloche, impossible pour une lampe tournée vers le bas) ; **une trace forte** : l'image n'est pas éclairée par le
+  moteur, plus claire que les armes devant elle, le fond ressortait et les armes semblaient collées par-dessus. La
+  lampe Voxel à l'ampoule éclairait aussi la tôle au-dessus de la cloche (le Voxel ignore l'angle du cône).
+- Piste écartée : **suspension au-dessus de la caisse avec un cône jusqu'au sol** (et flaque autour du socle). Dans
+  l'axe de la caméra, la lampe est devant les colonnes du milieu et de droite du tableau : tout cône qui en descend
+  voile les armes. Autre limite du Voxel : la caisse sous la lampe ne prend presque pas sa lumière (couvercle et face
+  avant restés sombres, même avec une lampe juste au-dessus) ; seul l'appoint de face (1,6) éclaire sa face avant.
+- Piège : **des rubans ou disques sans texture empilés font des traits**, même à 8 rubans et 18 disques à 95 % de
+  transparence (rejeté par l'utilisateur). Même règle que pour les fonds d'interface : une image de dégradé.
+- Sur un `Beam`, la largeur de la texture suit la largeur du ruban et sa hauteur suit la longueur (haut de l'image sur
+  `Attachment0`), vérifié en jeu avec `scrim_bord.png`.
 - Piste écartée : vitrine contre le mur de gauche (à la place du rack de la planche B). Vue de face, elle remplissait
   l'image sans place pour le titre, et la vue détail perdait sa gauche sombre.
 
