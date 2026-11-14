@@ -51,8 +51,8 @@ local boundChar: Model? = nil
 local resultTimer: thread?
 -- Dernière mort du joueur local annoncée par le serveur (qui, avec quoi), pour l'écran de mort
 local lastDeath: { killer: string?, weapon: string?, headshot: boolean, at: number }? = nil
--- Morts du joueur local depuis le lancement : les conseils de l'écran de mort tournent, un par mort (#291)
-local deathCount = 0
+-- Morts du joueur local avec un conseil à l'écran (#291) : les conseils tournent, un par mort, en commençant au premier
+local tipCount = 0
 
 -- Remotes (résolus une seule fois)
 local spawnRemote: RemoteEvent?
@@ -102,12 +102,17 @@ local function applyDeathTip()
 		return
 	end
 	local settings = LocalSettings.get()
+	local beginner = BeginnerState.isBeginner()
+	if not (beginner and settings.deathTips) then
+		RoundHUD.setTip(nil)
+		return
+	end
 	local tips = InfosRules.deathTips({
 		entries = HUDRules.keyDisplayEntries("full"),
 		keyText = LocalSettings.keyText,
 		autoBhop = settings.autoBhop,
 	})
-	RoundHUD.setTip(BeginnerRules.pickTip(tips, BeginnerState.isBeginner(), settings.deathTips, deathCount))
+	RoundHUD.setTip(BeginnerRules.pickTip(tips, beginner, settings.deathTips, tipCount))
 end
 
 local startRespawnWatch: () -> ()
@@ -173,7 +178,9 @@ local function setState(newState: State)
 	elseif newState == "DEAD" then
 		RoundHUD.showRespawning(GameConfig.RESPAWN_DELAY)
 		applyDeathInfo()
-		deathCount += 1
+		if BeginnerState.isBeginner() and LocalSettings.get().deathTips then
+			tipCount += 1
+		end
 		applyDeathTip()
 		startRespawnWatch()
 	elseif newState == "RESULT" then
