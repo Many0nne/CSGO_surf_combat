@@ -36,6 +36,38 @@ function MenuSceneRules.fitFov(verticalFov: number, aspectRef: number, aspect: n
 	return math.deg(2 * math.atan(halfWidth / aspect))
 end
 
+-- Cette méthode permet de placer la caméra d'un gros plan (#358, arme du tableau du shop) lorsqu'un objet de `length`
+-- studs, vu de face, doit couvrir la fraction `fill` de la largeur de l'écran, centré à `screenX` (0 à gauche, 1 à
+-- droite) ; renvoie la distance et le décalage latéral de la caméra (studs, positif = caméra à gauche de l'objet).
+-- Décaler plutôt que tourner : tournée, la caméra déformait l'objet et repoussait son bout droit au bord de l'écran.
+function MenuSceneRules.closeUp(
+	length: number,
+	verticalFov: number,
+	aspect: number,
+	fill: number,
+	screenX: number
+): (number, number)
+	local tanHalfWidth = math.tan(math.rad(verticalFov) / 2) * aspect
+	local distance = length / (2 * fill * tanHalfWidth)
+	local offset = (screenX - 0.5) * 2 * distance * tanHalfWidth
+	return distance, offset
+end
+
+export type HoverState = { candidate: number, since: number, focused: number }
+
+-- Cette méthode permet de retenir l'élément survolé avec un délai (#358) lorsque la souris passe d'un élément à l'autre :
+-- la cible retenue (0 = aucune) ne change qu'après `delay` s sur la même candidate, un simple passage ne fait rien.
+function MenuSceneRules.settleHover(state: HoverState, candidate: number, now: number, delay: number): number
+	if candidate ~= state.candidate then
+		state.candidate = candidate
+		state.since = now
+	end
+	if state.focused ~= candidate and now - state.since >= delay then
+		state.focused = candidate
+	end
+	return state.focused
+end
+
 -- Cette méthode permet de décider si une pièce de la map (sphère englobante `center`, `radius`) doit être copiée pour
 -- la scène lorsque le menu construit sa copie : dans le cône de la caméra (`eye`, `forward` unitaire, demi-angle de
 -- tangente `tanHalf`) jusqu'à `maxDistance`, ou à moins de `nearRadius` de la caméra (ombres et bords du cadre).
