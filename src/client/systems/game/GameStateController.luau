@@ -26,7 +26,7 @@ local DeathCamera = require(script.Parent.Parent.Parent.camera.DeathCamera)
 local DeathRagdoll = require(script.Parent.DeathRagdoll)
 local SpawnRequestRules = require(script.Parent.SpawnRequestRules)
 local BeginnerState = require(script.Parent.BeginnerState)
-local BeginnerRules = require(script.Parent.Parent.Parent.ui.BeginnerRules)
+local BeginnerRules = require(script.Parent.BeginnerRules)
 local InfosRules = require(script.Parent.Parent.Parent.ui.InfosRules)
 local LocalSettings = require(script.Parent.Parent.settings.LocalSettings)
 

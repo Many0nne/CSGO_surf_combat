@@ -1,6 +1,6 @@
 -- HUD de round, direction « Ligne de mire » : timer et rang en haut, classement (Tab maintenu), écran de réapparition
--- (scène désaturée, compte à rebours en bas au centre, conseil d'un débutant dessous, #291) et écran de fin de round (voile central, nom du vainqueur,
--- podium et ligne du joueur).
+-- (scène désaturée, compte à rebours en bas au centre, conseil d'un débutant dessous, #291) et écran de fin de round
+-- (voile central, nom du vainqueur, podium et ligne du joueur).
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -71,6 +71,7 @@ local leaderboard: Frame
 local leaderboardList: Frame
 local respawnRoot: Frame
 local respawnScrim: ImageLabel
+local respawnTipScrim: ImageLabel
 local respawnPanel: Frame
 local respawnCount: TextLabel
 local respawnCountShadow: TextLabel
@@ -364,6 +365,9 @@ local function buildRespawnOverlay(root: Frame)
 		Parent = root,
 	})
 	respawnScrim = UIKit.cornerScrim(respawnRoot, "Bottom", RESPAWN_SCRIM_SIZE, 1)
+	-- Fondu agrandi, montré à la place du premier quand un conseil est affiché (#291)
+	respawnTipScrim = UIKit.cornerScrim(respawnRoot, "Bottom", RESPAWN_TIP_SCRIM_SIZE, 1)
+	respawnTipScrim.Visible = false
 	respawnPanel = UIKit.create("Frame", {
 		Name = "Panel",
 		BackgroundTransparency = 1,
@@ -449,13 +453,6 @@ local function buildRespawnOverlay(root: Frame)
 		Size = UDim2.fromOffset(RESPAWN_TIP_WIDTH, RESPAWN_TIP_HEIGHT),
 		Parent = respawnPanel,
 	})
-end
-
--- Cette méthode permet de dimensionner le fondu de bord de l'écran de mort lorsqu'un conseil apparaît ou disparaît :
--- même pose que UIKit.cornerScrim « Bottom » (centré en bas, `size` vue).
-local function sizeRespawnScrim(size: Vector2)
-	respawnScrim.Size = UDim2.fromOffset(size.X, size.Y)
-	respawnScrim.Position = UDim2.new(0.5, 0, 1, -size.Y / 2)
 end
 
 -- Cette méthode permet d'écrire le titre, le nom et le détail de l'écran de mort lorsqu'ils changent (titre et nom
@@ -799,8 +796,10 @@ function RoundHUD.showRespawning(delaySeconds: number)
 		return
 	end
 	respawnRoot.Visible = true
-	respawnScrim.ImageTransparency = 1
-	UIKit.tween(respawnScrim, Motion.Enter, { ImageTransparency = RESPAWN_SCRIM_TRANSPARENCY })
+	for _, scrim in { respawnScrim, respawnTipScrim } do
+		scrim.ImageTransparency = 1
+		UIKit.tween(scrim, Motion.Enter, { ImageTransparency = RESPAWN_SCRIM_TRANSPARENCY })
+	end
 	respawnLabel.Text = "RÉAPPARITION"
 	setRespawnLines("ÉLIMINÉ", "", "")
 	UIKit.reveal(respawnPanel, 0, 16)
@@ -848,18 +847,24 @@ function RoundHUD.setTip(tip: { topic: string, text: string }?)
 	if not respawnTip then
 		return
 	end
-	if tip then
-		respawnTip.Text = string.format(
+	local text = if tip
+		then string.format(
 			'<font color="#%s">%s :</font> %s',
 			C.Accent:ToHex(),
 			HUDRules.escapeRichText(tip.topic),
 			HUDRules.escapeRichText(tip.text)
 		)
+		else ""
+	-- Réglage sans rapport changé (curseur glissé) : rien à redessiner
+	if text == respawnTip.Text and respawnTip.Visible == (tip ~= nil) then
+		return
 	end
+	respawnTip.Text = text
 	respawnTip.Visible = tip ~= nil
+	respawnTipScrim.Visible = tip ~= nil
+	respawnScrim.Visible = tip == nil
 	local extra = if tip then RESPAWN_TIP_GAP + RESPAWN_TIP_HEIGHT else 0
 	respawnPanel.Size = UDim2.fromOffset(RESPAWN_WIDTH, RESPAWN_HEIGHT + extra)
-	sizeRespawnScrim(if tip then RESPAWN_TIP_SCRIM_SIZE else RESPAWN_SCRIM_SIZE)
 end
 
 function RoundHUD.hideRespawning()

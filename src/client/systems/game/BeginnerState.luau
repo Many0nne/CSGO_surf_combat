@@ -7,7 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local StatsRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("StatsRules"))
-local BeginnerRules = require(script.Parent.Parent.Parent.ui.BeginnerRules)
+local BeginnerRules = require(script.Parent.BeginnerRules)
 
 local BeginnerState = {}
 

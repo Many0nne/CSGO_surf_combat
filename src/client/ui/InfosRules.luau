@@ -59,8 +59,8 @@ local function entryOf(entries: { Entry }, id: string): Entry?
 end
 
 -- Cette méthode permet de donner le libellé de la première touche d'une action lorsqu'un texte la cite (AZERTY : Q pour
--- la touche « gauche »).
-local function actionKey(ctx: Context, id: string): string
+-- la touche « gauche ») ; ne lit que les entrées et `keyText`, communs à Context et TipContext.
+local function actionKey(ctx: { entries: { Entry }, keyText: (keyName: string) -> string }, id: string): string
 	local entry = entryOf(ctx.entries, id)
 	local name = entry and entry.keys and entry.keys[1]
 	return name and ctx.keyText(name) or "?"
@@ -160,10 +160,9 @@ export type Tip = { topic: string, text: string }
 -- Cette méthode permet de composer les conseils de l'écran de mort d'un débutant (#291) lorsqu'un conseil est choisi :
 -- surf, bhop (selon l'auto-bhop) et air strafe, touches telles qu'imprimées sur le clavier du joueur.
 function InfosRules.deathTips(ctx: TipContext): { Tip }
-	local keys = ctx :: any -- actionKey ne lit que `entries` et `keyText`
-	local left, right, forward = actionKey(keys, "left"), actionKey(keys, "right"), actionKey(keys, "forward")
+	local left, right, forward = actionKey(ctx, "left"), actionKey(ctx, "right"), actionKey(ctx, "forward")
 	local jumpEntry = entryOf(ctx.entries, "jump")
-	local jump = if jumpEntry and jumpEntry.label then jumpEntry.label else actionKey(keys, "jump")
+	local jump = if jumpEntry and jumpEntry.label then jumpEntry.label else actionKey(ctx, "jump")
 	local bhop = if ctx.autoBhop
 		then string.format("garde %s enfoncé, tu ressautes dès que tu touches le sol.", jump)
 		else string.format("appuie sur %s à chaque fois que tu touches le sol.", jump)

@@ -2,7 +2,7 @@
 return function(T, Loader)
 	-- Même contexte : InfosRules, HUDRules et le test lisent la même instance de KeyBindings
 	local loader = Loader.new()
-	local BeginnerRules = loader:require("src/client/ui/BeginnerRules")
+	local BeginnerRules = loader:require("src/client/systems/game/BeginnerRules")
 	local InfosRules = loader:require("src/client/ui/InfosRules")
 	local HUDRules = loader:require("src/client/ui/HUDRules")
 
