@@ -7,11 +7,16 @@
 # vues.json : [{ "name": "grue", "position": [x, y, z], "target": [x, y, z], "fov": 90, "res": [1613, 761] }, ...]
 # (coordonnées du monde Roblox ; fov vertical en degrés, 90 par défaut comme CameraConfig.DEFAULT_FOV ; "radius" : les
 # tuiles de la map à plus de radius studs de la caméra, en plan, ne sont pas rendues, 300 par défaut ; "percent").
+# Intérieurs (EEVEE) : DIZZY_AMBIENT multiplie l'ambiance du crépuscule (1 par défaut ; 0.12 pour une salle fermée, sinon
+# elle baigne tout et écrase les lampes), DIZZY_SPOT_GAIN la puissance des SpotLight (1 par défaut).
 import bpy, json, math, os, sys
 from mathutils import Vector, Matrix
 
 argv = sys.argv[sys.argv.index("--") + 1 :]
-PARTS, VIEWS, OUT = argv[0], argv[1], argv[2]
+# dossier de sortie absolu : Blender résout un chemin de rendu relatif ailleurs que le dossier courant (rien n'était écrit)
+PARTS, VIEWS, OUT = argv[0], argv[1], os.path.abspath(argv[2])
+AMBIENT_GAIN = float(os.environ.get("DIZZY_AMBIENT", "1"))
+SPOT_GAIN = float(os.environ.get("DIZZY_SPOT_GAIN", "1"))
 os.makedirs(OUT, exist_ok=True)
 
 # direction vers le soleil (Roblox), SUN de build_dizzy.luau, valable pour l'heure et la latitude ci-dessous ; l'ambiance
@@ -223,7 +228,7 @@ def world():
     mid.color = (*lin((120, 100, 140)), 1)
     path = nt.nodes.new("ShaderNodeLightPath")
     mix = nt.nodes.new("ShaderNodeMixRGB")
-    mix.inputs["Color1"].default_value = (*lin([v * 255 for v in _AMBIENT_SRGB]), 1)
+    mix.inputs["Color1"].default_value = (*[c * AMBIENT_GAIN for c in lin([v * 255 for v in _AMBIENT_SRGB])], 1)
     nt.links.new(path.outputs["Is Camera Ray"], mix.inputs["Fac"])
     nt.links.new(ramp.outputs["Color"], mix.inputs["Color2"])
     nt.links.new(mix.outputs["Color"], bg.inputs["Color"])
@@ -248,7 +253,7 @@ def lights(spots):
     o.rotation_euler = d.to_track_quat("Z", "Y").to_euler()
     for s in spots:
         l = bpy.data.lights.new("Spot", "SPOT")
-        l.energy = s[8] * 900
+        l.energy = s[8] * 900 * SPOT_GAIN
         l.color = lin(s[9:12])
         l.spot_size = math.radians(min(s[6], 170))
         l.spot_blend = 0.6

@@ -371,7 +371,9 @@ captures de l'utilisateur, avec exactement les pièces du générateur :
    Par défaut Workbench : couleurs des pièces, ombres dans la direction du soleil du jeu, ~1 s par vue. EEVEE
    (`DIZZY_EEVEE=1`, éclairage du crépuscule) prend 5 minutes par vue sur la carte graphique intégrée du poste (plus de
    30 min pour une planche de 7 vues, jugé trop long) : ne s'en servir que pour une image finale isolée. Les tuiles de
-   la map à plus de `radius` studs de la caméra (300 par défaut) ne sont pas rendues.
+   la map à plus de `radius` studs de la caméra (300 par défaut) ne sont pas rendues. Pièce fermée (salle du shop,
+   `docs/ui.md`) : `DIZZY_AMBIENT=0.12` baisse l'ambiance du crépuscule, qui sinon baigne tout ; `DIZZY_SPOT_GAIN`
+   multiplie la puissance des SpotLight.
 3. Retrouver un point de vue d'une capture : la hauteur d'œil est à ~5 studs au-dessus du sol, le FOV vertical est 90 ;
    comparer la vue rapide à la capture et ajuster.
 La planche n'a ni les textures des matières Roblox ni l'Atmosphere : elle juge la composition, pas le rendu final.
