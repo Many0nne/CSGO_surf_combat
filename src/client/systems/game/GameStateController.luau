@@ -10,6 +10,7 @@ local BotCharacters = require(Shared:WaitForChild("BotCharacters"))
 local MainMenu = require(script.Parent.Parent.Parent.ui.MainMenu)
 local InfosScreen = require(script.Parent.Parent.Parent.ui.InfosScreen)
 local LearnScreen = require(script.Parent.Parent.Parent.ui.LearnScreen)
+local ShopScreen = require(script.Parent.Parent.Parent.ui.ShopScreen)
 local RoundHUD = require(script.Parent.Parent.Parent.ui.RoundHUD)
 local FeedbackScreen = require(script.Parent.Parent.Parent.ui.FeedbackScreen)
 local SettingsMenu = require(script.Parent.Parent.Parent.ui.SettingsMenu)
@@ -179,11 +180,14 @@ local function setState(newState: State)
 		LearnScreen.hide()
 		Transition.close(function()
 			if state == "SPAWNING" then
+				-- Le shop garde sa salle sous les volets : la caméra ne saute pas à l'accueil pendant qu'ils se ferment
+				ShopScreen.hide()
 				MainMenu.hide()
 				InfosScreen.hide()
 			end
 		end)
 	elseif newState == "IN_ROUND" then
+		ShopScreen.hide()
 		MainMenu.hide()
 		InfosScreen.hide()
 		LearnScreen.hide()
@@ -552,11 +556,15 @@ function GameStateController.init(player: Player, setupCharacter: (char: Model) 
 		end
 		FeedbackScreen.hide()
 		LearnScreen.hide()
+		ShopScreen.hide()
 		SettingsMenu.close()
 		MainMenu.setPage("home")
 	end, function() -- Apprendre (#285)
 		MainMenu.setPage("learn")
 		LearnScreen.show()
+	end, function() -- Shop (#347)
+		MainMenu.setPage("shop")
+		ShopScreen.show()
 	end)
 	-- Menu en partie (#157) ; au menu principal, sa touche ouvre ou ferme les Réglages de l'accueil
 	InGameMenu.init({
@@ -580,6 +588,7 @@ function GameStateController.init(player: Player, setupCharacter: (char: Model) 
 	InfosScreen.init(function() -- fermer infos
 		setState("MENU")
 	end)
+	ShopScreen.init()
 	LearnScreen.init(function() -- fermer Apprendre
 		LearnScreen.hide()
 		MainMenu.setPage("home")

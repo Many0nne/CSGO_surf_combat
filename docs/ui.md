@@ -604,8 +604,9 @@ workspace pendant la partie) :
 
 ## Shop : salle de présentation (#347)
 
-**Validé par l'utilisateur sur planche (14/11/2026), pas encore construit dans Roblox.** Le shop se fait en deux
-étapes : la présentation des caisses (ici), puis l'ouverture (#332 : animation 3D d'après les packs d'Apex Legends,
+**Validé par l'utilisateur sur planche (14/11/2026), construit dans Roblox** (`ShopScene`, `ShopScreen`,
+`ShopCatalog`, onglet SHOP entre ARMES et INFOS). Le shop se fait en deux étapes : la présentation des caisses (ici),
+puis l'ouverture (#332 : animation 3D d'après les packs d'Apex Legends,
 repli sur le défilement de CS:GO). Référence d'esprit pour la présentation : le shop de The Finals (le shop a son
 propre décor, pas une grille de cartes neutres), sans capture précise.
 
@@ -630,7 +631,34 @@ propre décor, pas une grille de cartes neutres), sans capture précise.
   fond de coin ou flou à prévoir.
 - Caméra : FOV vertical 40° comme l'accueil, à hauteur d'œil (5,2 studs), sujet au tiers droit.
 
-Cotes (studs) et placement : `tools/shop/board.py` (scène B), rendu par `tools/map/render_dizzy.py` (commandes en tête
+**Vue d'ensemble (validée le 14/11/2026, `docs/ui/shop/planche_vue_ensemble.png`) :** toutes les caisses en vente
+dans une **vitrine** à deux étages contre le mur de droite de la salle, hors du champ de la vue détail (la planche B
+reste intacte). Trois caisses par étage, l'étage à hauteur d'œil d'abord ; un étage vide est garni de caisses sans
+marque (stock, pas en vente, pas d'étiquette : à deux caisses, la vitrine vide faisait magasin en rupture). Chaque
+caisse en vente porte une étiquette os clipsée sur le longeron (nom et prix, « 500 CRÉDITS ») ; survol = étiquette en
+rouge d'impact à texte os. Deux lampes chaudes au plafond éclairent la vitrine, éteintes dans la vue détail (la gauche
+doit y rester sombre). Interface : « SHOP », « CAISSES », « n EN VENTE · UNE PAR SÉRIE DE SKINS », aide « CLIC · VOIR
+LE CONTENU ET ACHETER ». Un clic sur une caisse fait glisser la caméra jusqu'au socle (0,9 s) ; dans la vue détail,
+« ‹ SHOP » ramène à la vitrine, « ‹ CAISSE n / N › » passe à la voisine, ACHETER est en contour atténué avec
+l'étiquette BIENTÔT tant que l'achat n'existe pas.
+
+![Vue d'ensemble validée](ui/shop/vue_ensemble_ui.png)
+
+- Valeurs d'attente (points ouverts de #347 et #332) : prix 500 CRÉDITS par caisse, raretés COMMUN 70 %, RARE 25 %,
+  EXCEPTIONNEL 5 %, rareté des skins de la série 2 dans l'ordre du catalogue (RECUIT, STRATE, SILLAGE). Tout est dans
+  `ShopCatalog`. Pas de solde affiché tant que la monnaie n'est pas décidée.
+- Les caisses sont faites de pièces (cotes de la planche) en attendant le modèle de #332.
+- **Éclairage dans Roblox (Voxel, réglé dans Studio le 14/11/2026) :** chaque SpotLight s'étale sur toute la pièce, pas de
+  cône ni de flaque nette comme sur la planche EEVEE. Intensités à 0,6 fois celles de la planche (`LIGHT_GAIN` : à 2,
+  la salle était éclairée à plat), suspension plus forte et plus courte (portée 16), lampes de la vitrine à portée 20
+  (à 30, elles éclairaient le rack du fond sous le texte), lumière froide du rack du fond éteinte face à la vitrine.
+  `Lighting.Ambient` assombri pendant le shop change peu de chose : ce sont les lampes qui comptent. Fond de la colonne :
+  dégradé horizontal sur toute la hauteur (comme la planche), le fond de coin de l'équipement ne fonçait que le bas.
+- Piste écartée : vitrine contre le mur de gauche (à la place du rack de la planche B). Vue de face, elle remplissait
+  l'image sans place pour le titre, et la vue détail perdait sa gauche sombre.
+
+Cotes (studs) et placement : `tools/shop/board.py` (scène B, vues d'ensemble V2, V2n, V6 ; `sheet.py <sortie> ensemble
+<dossier>` pour la planche), rendu par `tools/map/render_dizzy.py` (commandes en tête
 du script). Une salle fermée se rend en EEVEE avec `DIZZY_AMBIENT=0.12` : à l'ambiance par défaut du crépuscule, la
 lumière bleutée baignait toute la salle et écrasait les lampes. Rendu éclairé : ~6 s par vue (petite scène).
 
