@@ -34,10 +34,11 @@ export type Settings = {
 	-- Volume (#249) en pourcents entiers : général (tous les sons) et canal armes (en plus du général)
 	volumeMaster: number,
 	volumeWeapons: number,
-	-- Musique de fond (#286) : désactivée par défaut (DEFAULT_MUSIC), absent = désactivée ; volume du canal musique en
-	-- pourcents entiers (en plus du général)
+	-- Musique de fond (#286) : désactivée par défaut (DEFAULT_MUSIC), absent = désactivée ; volumes en pourcents
+	-- entiers (en plus du général), l'un dans les écrans du menu, l'autre en partie
 	music: boolean,
-	volumeMusic: number,
+	volumeMusicMenu: number,
+	volumeMusicGame: number,
 	-- Échelle du HUD (#250) en pourcents entiers (50 à 100) : éléments de bord du HUD de partie, hors réticule et hitmarker
 	hudScale: number,
 	-- Conseils de l'écran de mort des débutants (#291) ; activés par défaut (DEFAULT_DEATH_TIPS), absent = activés
@@ -76,6 +77,9 @@ PlayerSettings.CROSSHAIR = {
 PlayerSettings.VOLUME = { min = 0, max = 100, default = 100 }
 -- Musique de fond (#286) : désactivée par défaut, y compris pour un réglage sauvegardé avant elle
 PlayerSettings.DEFAULT_MUSIC = false
+-- Volumes de la musique (#286) : pleine au menu, plus basse en partie pour garder les pas et les tirs audibles
+PlayerSettings.MUSIC_MENU_VOLUME = { min = 0, max = 100, default = 100 }
+PlayerSettings.MUSIC_GAME_VOLUME = { min = 0, max = 100, default = 35 }
 -- Échelle du HUD (#250) : pourcents entiers, 100 par défaut = HUD d'origine (pas d'agrandissement)
 PlayerSettings.HUD_SCALE = { min = 50, max = 100, default = 100 }
 -- Conseils de l'écran de mort des débutants (#291) : activés par défaut, y compris pour un réglage sauvegardé avant eux
@@ -153,7 +157,8 @@ function PlayerSettings.defaults(): Settings
 		volumeMaster = PlayerSettings.VOLUME.default,
 		volumeWeapons = PlayerSettings.VOLUME.default,
 		music = PlayerSettings.DEFAULT_MUSIC,
-		volumeMusic = PlayerSettings.VOLUME.default,
+		volumeMusicMenu = PlayerSettings.MUSIC_MENU_VOLUME.default,
+		volumeMusicGame = PlayerSettings.MUSIC_GAME_VOLUME.default,
 		hudScale = PlayerSettings.HUD_SCALE.default,
 		deathTips = PlayerSettings.DEFAULT_DEATH_TIPS,
 		slotKeys = table.clone(PlayerSettings.DEFAULT_SLOT_KEYS),
@@ -256,7 +261,8 @@ function PlayerSettings.sanitize(raw: any): Settings
 	if type(raw.music) == "boolean" then
 		settings.music = raw.music
 	end
-	settings.volumeMusic = clampPixels(raw.volumeMusic, PlayerSettings.VOLUME)
+	settings.volumeMusicMenu = clampPixels(raw.volumeMusicMenu, PlayerSettings.MUSIC_MENU_VOLUME)
+	settings.volumeMusicGame = clampPixels(raw.volumeMusicGame, PlayerSettings.MUSIC_GAME_VOLUME)
 	settings.hudScale = clampPixels(raw.hudScale, PlayerSettings.HUD_SCALE)
 	if type(raw.deathTips) == "boolean" then
 		settings.deathTips = raw.deathTips

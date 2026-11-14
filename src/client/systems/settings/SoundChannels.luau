@@ -1,6 +1,6 @@
 -- Canaux de volume (#249) : un SoundGroup général (« Master », tous les sons du jeu) et deux canaux enfants du général,
 -- « Weapons » (tirs, rechargement, sons d'animation d'arme : volume effectif d'une arme = général × armes) et « Music »
--- (musique de fond, #286 : général × musique). Les valeurs
+-- (musique de fond, #286 : suit le général ; ses volumes menu et partie sont appliqués par MusicPlayer). Les valeurs
 -- viennent des réglages (LocalSettings) et s'appliquent en direct. Règle : tout nouveau son d'arme passe par
 -- SoundChannels.weapon(sound) avant d'être joué ; les autres sons sont rattachés au général automatiquement.
 local SoundService = game:GetService("SoundService")
@@ -28,7 +28,6 @@ end
 local function apply(settings)
 	master.Volume = settings.volumeMaster / 100
 	weapons.Volume = settings.volumeWeapons / 100
-	music.Volume = settings.volumeMusic / 100
 end
 
 -- Cette méthode permet de rattacher un son d'arme au canal armes lorsqu'il va être joué (viewmodel, 3P, tirs des autres) ;
