@@ -154,7 +154,8 @@ DemoClipRules.LOG_SPACE = ","
 DemoClipRules.LOG_CHUNK = 2000
 
 -- Cette méthode permet de découper le texte d'une prise en lignes de sortie lorsque l'enregistreur la recopie dans la
--- sortie de Studio ; `take` numérote les prises de la session pour que la dernière l'emporte au recollage.
+-- sortie de Studio ; `take` numérote la prise (croissant et unique, l'heure en ms) : la plus grande l'emporte au
+-- recollage.
 function DemoClipRules.toLogLines(name: string, take: number, text: string): { string }
 	local flat = string.gsub(string.gsub(text, "\n", DemoClipRules.LOG_BREAK), " ", DemoClipRules.LOG_SPACE)
 	local count = math.max(1, math.ceil(#flat / DemoClipRules.LOG_CHUNK))

@@ -3,10 +3,9 @@
 -- démo sont dans l'écran Apprendre (#285, LearnScreen).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local PlayerSettings = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("PlayerSettings"))
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
 local LocalSettings = require(script.Parent.Parent.systems.settings.LocalSettings)
-local HUDRules = require(script.Parent.HUDRules)
+local InfosContext = require(script.Parent.InfosContext)
 local InfosRules = require(script.Parent.InfosRules)
 local MenuPage = require(script.Parent.MenuPage)
 local UIKit = require(script.Parent.UIKit)
@@ -124,20 +123,6 @@ local function addKeyRow(key: string, action: string, order: number): { TextLabe
 	return { keyLbl, actionLbl }
 end
 
--- Cette méthode permet de réunir ce dont les textes à touches dépendent lorsqu'un écran les compose (Infos, Apprendre) :
--- actions de l'affichage des touches (KeyBindings), libellés du clavier du joueur et réglages d'armes.
-function InfosScreen.composeContext(): InfosRules.Context
-	local settings = LocalSettings.get()
-	return {
-		entries = HUDRules.keyDisplayEntries("full"),
-		keyText = LocalSettings.keyText,
-		menuKey = PlayerSettings.MENU_KEY,
-		slotKeys = settings.slotKeys,
-		defaultSlotKeys = PlayerSettings.DEFAULT_SLOT_KEYS,
-		wheel = settings.wheel,
-	}
-end
-
 -- Cette méthode permet de remplir la zone de contenu avec la section choisie lorsque l'onglet change.
 local function renderSection(index: number)
 	for _, child in content:GetChildren() do
@@ -149,7 +134,7 @@ local function renderSection(index: number)
 
 	local section = SECTIONS[index]
 	if section.keys then
-		for i, row in InfosRules.commandRows(InfosScreen.composeContext()) do
+		for i, row in InfosRules.commandRows(InfosContext.compose()) do
 			fadeIn(addKeyRow(row.key, row.action, i), i * Motion.Stagger)
 		end
 	else

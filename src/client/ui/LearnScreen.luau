@@ -5,8 +5,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
 local DemoPlayer = require(script.Parent.DemoPlayer)
+local InfosContext = require(script.Parent.InfosContext)
 local InfosRules = require(script.Parent.InfosRules)
-local InfosScreen = require(script.Parent.InfosScreen)
 local MenuPage = require(script.Parent.MenuPage)
 local MenuShot = require(script.Parent.MenuShot)
 local UIKit = require(script.Parent.UIKit)
@@ -119,7 +119,7 @@ local function render()
 		end
 	end
 	content.CanvasPosition = Vector2.zero
-	addDemos(InfosScreen.composeContext())
+	addDemos(InfosContext.compose())
 end
 
 -- Cette méthode permet de construire l'écran et sa zone de contenu lorsque le client démarre.

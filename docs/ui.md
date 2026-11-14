@@ -363,12 +363,14 @@ un bhop joué par entrées simulées (MCP) ; la prise humaine était déjà prop
 - Par-dessus : légende (nom du geste en ambre, geste en une ligne, `InfosRules.demoClips`, touches selon le clavier du
   joueur), vitesse au style du compteur (`HUDRules.speedTier` / `speedFill`), touches en keycaps du HUD
   (`KeyDisplay.buildKeycap`, mode simple : directions et saut, à 80 %), souris (icône et demi-barre du côté où elle tourne).
-- Libération : `InfosScreen` détruit le lecteur (cadre, copie de la map, boucle de rendu) dès qu'on change d'onglet ou
-  qu'on quitte l'écran. Vérifié : 0 `ViewportFrame` et 16 476 Instances de moins après RETOUR.
+- Libération : `LearnScreen` détruit le lecteur (cadre, copie de la map, boucle de rendu) dès qu'on quitte l'écran
+  (RETOUR, autre onglet, JOUER). La copie est détruite par lots de 2 000 pièces sur plusieurs images
+  (`DemoPlayer.destroy`) : d'un coup, l'image de la fermeture montait à 131 ms. Vérifié : 0 `ViewportFrame` et
+  16 476 Instances de moins après RETOUR.
 - Éclairage du viewport (pas d'ombres portées ni de ciel dans un `ViewportFrame`) : `Ambient` (190, 178, 190),
   `LightColor` (255, 214, 170), `LightDirection` opposée au soleil de `Lighting`, ciel en dégradé sous le viewport. Avec
   l'éclairage par défaut (150, 146, 140), la scène était presque noire.
-- Coût mesuré (Studio, qualité auto 1/10, menu principal, overlay F3, bilans de 10 s, repère `démo infos`) : lecteur
+- Coût mesuré (Studio, qualité auto 1/10, menu principal, overlay F3, bilans de 10 s, repère `démo apprendre`) : lecteur
   ouvert CPU 3,9 à 4,6 ms, GPU 7,2 à 8,6 ms, boucle du lecteur 0,04 à 0,05 ms par image ; fermé CPU 3,7 ms, GPU 3,1 ms.
   Soit environ 4 à 5 ms de GPU tant que la démo est affichée, rien après. Copie du décor : 17 443 pièces en 0,30 s.
   Image la plus longue : 51 ms à l'ouverture, 131 ms dans la période de la fermeture (un seul relevé, cause non isolée).

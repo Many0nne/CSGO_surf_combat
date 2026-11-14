@@ -46,7 +46,6 @@ local previousAt = 0
 local status: TextLabel?
 local takenLabel: TextLabel?
 local taken: { [string]: number } = {} -- durée de la dernière prise rangée, par clip
-local takeCount = 0 -- prises rangées dans la session (numéro de la copie dans la sortie)
 
 -- Cette méthode permet d'écrire une ligne préfixée lorsque l'enregistreur change d'état.
 local function log(text: string)
@@ -166,9 +165,10 @@ local function stop()
 		local clip = { version = DemoClipRules.VERSION, hz = HZ, map = GameConfig.ACTIVE_MAP, samples = samples }
 		local text = DemoClipRules.encode(clip)
 		store(name, text)
-		takeCount += 1
 		taken[name] = DemoClipRules.duration(clip)
-		for _, line in DemoClipRules.toLogLines(name, takeCount, text) do
+		-- Numéro de prise : l'heure en ms, unique d'un playtest à l'autre (la sortie de Studio les cumule), la plus
+		-- récente l'emporte au recollage
+		for _, line in DemoClipRules.toLogLines(name, DateTime.now().UnixTimestampMillis, text) do
 			print(line)
 		end
 		log(
@@ -193,6 +193,9 @@ local function step(dt: number)
 	elapsed += dt
 	local current = readState()
 	if not current then
+		-- Personnage perdu (mort, réapparition) : la prise s'arrête là, sans glisser jusqu'au point d'apparition
+		log("personnage perdu, prise arrêtée")
+		stop()
 		return
 	end
 	local before = previous or current

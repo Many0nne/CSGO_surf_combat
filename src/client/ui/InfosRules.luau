@@ -17,7 +17,8 @@ export type Entry = {
 	full: boolean,
 }
 
--- Contexte de composition : entrées d'actions (mode « full »), libellé d'une touche, touche du menu, réglages d'armes
+-- Contexte de composition : entrées d'actions (mode « full »), libellé d'une touche, touche du menu, réglages d'armes,
+-- auto-bhop réglé (légende de la démo de bhop ; absent : activé, la valeur par défaut)
 export type Context = {
 	entries: { Entry },
 	keyText: (keyName: string) -> string,
@@ -25,6 +26,7 @@ export type Context = {
 	slotKeys: { string },
 	defaultSlotKeys: { string },
 	wheel: string,
+	autoBhop: boolean?,
 }
 
 export type KeyRow = { key: string, action: string }
@@ -64,6 +66,13 @@ local function actionKey(ctx: { entries: { Entry }, keyText: (keyName: string) -
 	local entry = entryOf(ctx.entries, id)
 	local name = entry and entry.keys and entry.keys[1]
 	return name and ctx.keyText(name) or "?"
+end
+
+-- Cette méthode permet de donner le libellé du saut (fixe, ESPACE, sinon la touche du clavier du joueur) lorsqu'un
+-- texte de bhop est composé.
+local function jumpLabel(ctx: { entries: { Entry }, keyText: (keyName: string) -> string }): string
+	local entry = entryOf(ctx.entries, "jump")
+	return if entry and entry.label then entry.label else actionKey(ctx, "jump")
 end
 
 -- Cette méthode permet de donner le libellé d'une entrée d'action lorsqu'une ligne de COMMANDES est composée : bouton de
@@ -130,17 +139,18 @@ export type DemoClip = { id: string, title: string, caption: string }
 -- Cette méthode permet de composer les démos de l'écran Apprendre et leurs légendes lorsqu'il s'ouvre,
 -- touches telles qu'imprimées sur le clavier du joueur ; plusieurs démos donnent un sélecteur, une seule n'en a pas.
 -- Une seule pour l'instant (Dizzy n'a pas de rampe assez longue pour le surf ni l'enchaînement) : bhop et air strafe,
--- jouée avec l'auto-bhop (saut tenu).
+-- jouée avec l'auto-bhop (saut tenu) ; sans auto-bhop, la légende dit d'appuyer à chaque atterrissage.
 function InfosRules.demoClips(ctx: Context): { DemoClip }
 	local left, right, forward = actionKey(ctx, "left"), actionKey(ctx, "right"), actionKey(ctx, "forward")
-	local jumpEntry = entryOf(ctx.entries, "jump")
-	local jump = if jumpEntry and jumpEntry.label then jumpEntry.label else actionKey(ctx, "jump")
+	local jump = if ctx.autoBhop == false
+		then string.format("%s à chaque atterrissage (démo en auto-bhop)", jumpLabel(ctx))
+		else string.format("Garde %s (auto-bhop)", jumpLabel(ctx))
 	return {
 		{
 			id = "bhop",
 			title = "BHOP",
 			caption = string.format(
-				"Garde %s (auto-bhop), puis en l'air %s en tournant la souris à gauche, %s à droite, sans %s.",
+				"%s, puis en l'air %s en tournant la souris à gauche, %s à droite, sans %s.",
 				jump,
 				left,
 				right,
@@ -169,8 +179,7 @@ export type Tip = { topic: string, text: string }
 -- renvoient à leur démo (#285, onglet APPRENDRE du menu) : DEMO_POINTER, sur la même ligne.
 function InfosRules.deathTips(ctx: TipContext): { Tip }
 	local left, right, forward = actionKey(ctx, "left"), actionKey(ctx, "right"), actionKey(ctx, "forward")
-	local jumpEntry = entryOf(ctx.entries, "jump")
-	local jump = if jumpEntry and jumpEntry.label then jumpEntry.label else actionKey(ctx, "jump")
+	local jump = jumpLabel(ctx)
 	local bhop = if ctx.autoBhop
 		then string.format("garde %s enfoncé, tu ressautes dès que tu touches le sol.", jump)
 		else string.format("appuie sur %s à chaque fois que tu touches le sol.", jump)

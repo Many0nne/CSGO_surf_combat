@@ -27,6 +27,7 @@ DemoPlayer.Size = Vector2.new(640, 360)
 local COPY_DISTANCE = 450 -- studs autour d'un point de passage (le décor lointain des rampes reste visible)
 local PATH_EVERY = 15 -- un point de passage tous les n échantillons (0,5 s à 30 Hz)
 local COPY_BATCH = 1500 -- pièces parcourues entre deux images pendant la copie
+local FREE_BATCH = 2000 -- pièces détruites entre deux images à la fermeture
 local LOOP_FADE = 0.35 -- secondes de fondu au noir de part et d'autre du point de bouclage
 local KEYS_SCALE = 0.8
 local MARGIN = 16
@@ -58,7 +59,11 @@ local function loadClip(id: string): DemoClipRules.Clip?
 	local clip: DemoClipRules.Clip? = nil
 	if module and module:IsA("ModuleScript") then
 		local ok, text = pcall(require, module)
-		if ok and type(text) == "string" then
+		if not ok then
+			warn("[DemoPlayer] clip " .. id .. " : module en erreur : " .. tostring(text))
+		elseif type(text) ~= "string" then
+			warn("[DemoPlayer] clip " .. id .. " : le module doit renvoyer un texte, pas " .. typeof(text))
+		else
 			local result, why = DemoClipRules.decode(text)
 			clip = result
 			if not result then
@@ -74,6 +79,9 @@ end
 -- construit (les Decal, Texture et SurfaceAppearance restent).
 local function copyPart(part: BasePart, parent: Instance)
 	local copy = part:Clone()
+	if not copy then
+		return -- Archivable = false : pas de copie possible
+	end
 	for _, child in copy:GetDescendants() do
 		if
 			child:IsA("BasePart")
@@ -398,22 +406,32 @@ function DemoPlayer.new(parent: GuiObject, layoutOrder: number, clipIds: { strin
 		task.spawn(function()
 			local started = os.clock()
 			local copied = 0
-			for i, part in map:GetDescendants() do
-				if i % COPY_BATCH == 0 then
-					task.wait()
-					if not alive then
-						model:Destroy()
-						return
+			local ok, err = pcall(function()
+				for i, part in map:GetDescendants() do
+					if i % COPY_BATCH == 0 then
+						task.wait()
+						if not alive then
+							return
+						end
+					end
+					if
+						part:IsA("BasePart")
+						and part.Transparency < 1
+						and DemoClipRules.nearPath(part.Position, part.Size.Magnitude / 2, points, COPY_DISTANCE)
+					then
+						copyPart(part, model)
+						copied += 1
 					end
 				end
-				if
-					part:IsA("BasePart")
-					and part.Transparency < 1
-					and DemoClipRules.nearPath(part.Position, part.Size.Magnitude / 2, points, COPY_DISTANCE)
-				then
-					copyPart(part, model)
-					copied += 1
+			end)
+			if not ok then
+				warn("[DemoPlayer] copie du décor impossible : " .. tostring(err))
+				model:Destroy()
+				building = false
+				if alive then
+					setMessage("DÉCOR INDISPONIBLE")
 				end
+				return
 			end
 			if not alive then
 				model:Destroy()
@@ -449,7 +467,7 @@ function DemoPlayer.new(parent: GuiObject, layoutOrder: number, clipIds: { strin
 		setMessage(nil)
 		viewport.Visible = true
 		if not conn then
-			conn = RunService.RenderStepped:Connect(PerfMarkers.wrap("démo infos", render))
+			conn = RunService.RenderStepped:Connect(PerfMarkers.wrap("démo apprendre", render))
 		end
 		render(0)
 	end
@@ -476,9 +494,9 @@ function DemoPlayer.new(parent: GuiObject, layoutOrder: number, clipIds: { strin
 		end
 		pause()
 		setMessage("CHARGEMENT…")
-		local clips = {}
+		local clips = { chosen }
 		for _, other in clipIds do
-			local loaded = loadClip(other)
+			local loaded = if other ~= id then loadClip(other) else nil
 			if loaded and loaded.map == chosen.map then
 				table.insert(clips, loaded)
 			end
@@ -487,7 +505,8 @@ function DemoPlayer.new(parent: GuiObject, layoutOrder: number, clipIds: { strin
 	end
 
 	-- Cette méthode permet d'arrêter la lecture et de libérer le cadre, la copie de la map et la connexion de rendu
-	-- lorsque le joueur quitte l'écran Apprendre.
+	-- lorsque le joueur quitte l'écran Apprendre ; la copie est détruite par lots sur plusieurs images (d'un coup, ses
+	-- 17 000 pièces faisaient une image de plus de 100 ms, au départ en partie compris).
 	local function destroy()
 		alive = false
 		if conn then
@@ -495,8 +514,20 @@ function DemoPlayer.new(parent: GuiObject, layoutOrder: number, clipIds: { strin
 			conn = nil
 		end
 		clip = nil
+		frame.Visible = false
+		local built = scene
 		scene = nil
-		frame:Destroy()
+		task.spawn(function()
+			if built then
+				for i, part in built:GetChildren() do
+					part:Destroy()
+					if i % FREE_BATCH == 0 then
+						task.wait()
+					end
+				end
+			end
+			frame:Destroy()
+		end)
 	end
 
 	setMessage("CHARGEMENT…")
