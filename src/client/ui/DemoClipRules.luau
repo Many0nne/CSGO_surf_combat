@@ -145,6 +145,62 @@ function DemoClipRules.decode(text: string): (Clip?, string?)
 	return { version = DemoClipRules.VERSION, hz = rate, map = map :: string, samples = samples }, nil
 end
 
+-- Copie d'une prise dans la sortie de Studio (elle survit à l'arrêt du playtest, pas Player.DebugClips) : lignes
+-- « [ClipData <nom> <prise> <i>/<n>] <morceau> », sauts de ligne et espaces du texte remplacés par LOG_BREAK et
+-- LOG_SPACE : aucun blanc dans un morceau, que la sortie pourrait rogner en fin de ligne.
+DemoClipRules.LOG_TAG = "ClipData"
+DemoClipRules.LOG_BREAK = "/"
+DemoClipRules.LOG_SPACE = ","
+DemoClipRules.LOG_CHUNK = 2000
+
+-- Cette méthode permet de découper le texte d'une prise en lignes de sortie lorsque l'enregistreur la recopie dans la
+-- sortie de Studio ; `take` numérote les prises de la session pour que la dernière l'emporte au recollage.
+function DemoClipRules.toLogLines(name: string, take: number, text: string): { string }
+	local flat = string.gsub(string.gsub(text, "\n", DemoClipRules.LOG_BREAK), " ", DemoClipRules.LOG_SPACE)
+	local count = math.max(1, math.ceil(#flat / DemoClipRules.LOG_CHUNK))
+	local lines = {}
+	for i = 1, count do
+		local first = (i - 1) * DemoClipRules.LOG_CHUNK + 1
+		local chunk = string.sub(flat, first, first + DemoClipRules.LOG_CHUNK - 1)
+		table.insert(lines, string.format("[%s %s %d %d/%d] %s", DemoClipRules.LOG_TAG, name, take, i, count, chunk))
+	end
+	return lines
+end
+
+-- Cette méthode permet de recoller la dernière prise complète d'un clip à partir d'une copie de la sortie de Studio
+-- lorsque la prise n'a pas pu être lue dans le joueur (playtest arrêté) ; nil et la raison si aucune n'est complète.
+function DemoClipRules.fromLog(log: string, name: string): (string?, string?)
+	local takes: { [number]: { count: number, parts: { [number]: string } } } = {}
+	local pattern = "%[" .. DemoClipRules.LOG_TAG .. " (%S+) (%d+) (%d+)/(%d+)%] (%S+)"
+	for clipName, take, index, count, chunk in string.gmatch(log, pattern) do
+		if clipName == name then
+			local id = tonumber(take) :: number
+			local entry = takes[id] or { count = tonumber(count) :: number, parts = {} }
+			takes[id] = entry
+			entry.parts[tonumber(index) :: number] = chunk
+		end
+	end
+	local best: number? = nil
+	for id, entry in takes do
+		local complete = true
+		for i = 1, entry.count do
+			if not entry.parts[i] then
+				complete = false
+			end
+		end
+		if complete and (best == nil or id > best) then
+			best = id
+		end
+	end
+	if not best then
+		return nil, if next(takes) then "aucune prise complète de " .. name else "aucune prise de " .. name
+	end
+	local entry = takes[best :: number]
+	local flat = table.concat(entry.parts, "", 1, entry.count)
+	local text = string.gsub(string.gsub(flat, DemoClipRules.LOG_BREAK, "\n"), DemoClipRules.LOG_SPACE, " ")
+	return text, nil
+end
+
 -- Cette méthode permet de donner la durée d'un clip (secondes, du premier au dernier échantillon) lorsque le lecteur
 -- boucle ou affiche sa longueur.
 function DemoClipRules.duration(clip: Clip): number

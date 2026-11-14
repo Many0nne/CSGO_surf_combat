@@ -1,10 +1,12 @@
 -- ClipRecorder.luau (client)
 -- Enregistreur des démos de l'écran Infos > SURFER (#285), actif uniquement dans Studio. L'attribut joueur
--- `DebugClipRecorder` (nom du clip : "surf", "bhop", "strafe", "chain") l'arme ; F7 lance puis arrête la prise. Il lit
+-- `DebugClipRecorder` (nom du clip : "surf", "bhop", "strafe", "chain") l'arme ; F6 passe au clip suivant, F7 lance puis
+-- arrête la prise. Un second bandeau liste les clips déjà pris dans la session. Il lit
 -- seulement : position de la racine, caméra (hauteur, lacet et tangage de FPSCamera), touches de mouvement tenues
 -- (KeyBindings), vitesse horizontale (MovementController.getVelocity). Il ne touche ni au mouvement ni à la caméra.
 -- Échantillons à pas fixe (DemoClipRules, HZ), placés entre deux images rendues par interpolation. À l'arrêt, le clip
--- encodé est rangé dans `Player.DebugClips.<nom>` (StringValue locale, lue par le MCP en contexte Client) : procédure
+-- encodé est rangé dans `Player.DebugClips.<nom>` (StringValue locale, lue par le MCP en contexte Client) et recopié dans
+-- la sortie de Studio (lignes `[ClipData …]`, DemoClipRules.toLogLines), qui survit à l'arrêt du playtest : procédure
 -- d'extraction dans docs/ui.md, « Démos rejouées ».
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -18,6 +20,8 @@ local DemoClipRules = require(script.Parent.Parent.ui.DemoClipRules)
 
 local ATTRIBUTE = "DebugClipRecorder"
 local TOGGLE_KEY = Enum.KeyCode.F7
+local NEXT_KEY = Enum.KeyCode.F6
+local CLIP_NAMES = { "surf", "bhop", "strafe", "chain" } -- ordre de F6
 local HZ = 30
 local MAX_SECONDS = 30 -- prise arrêtée d'office au-delà (taille du module de données)
 local BIND_NAME = "ClipRecorderSample"
@@ -40,6 +44,9 @@ local nextAt = 0 -- instant du prochain échantillon à pas fixe
 local previous: DemoClipRules.Sample? -- état de l'image précédente
 local previousAt = 0
 local status: TextLabel?
+local takenLabel: TextLabel?
+local taken: { [string]: number } = {} -- durée de la dernière prise rangée, par clip
+local takeCount = 0 -- prises rangées dans la session (numéro de la copie dans la sortie)
 
 -- Cette méthode permet d'écrire une ligne préfixée lorsque l'enregistreur change d'état.
 local function log(text: string)
@@ -60,18 +67,37 @@ local function showStatus(text: string?, live: boolean?)
 		local label = Instance.new("TextLabel")
 		label.AnchorPoint = Vector2.new(0.5, 0)
 		label.Position = UDim2.new(0.5, 0, 0, 70)
-		label.Size = UDim2.fromOffset(420, 28)
+		label.Size = UDim2.fromOffset(560, 28)
 		label.BackgroundColor3 = UITheme.Colors.Black
 		label.BackgroundTransparency = 0.3
 		label.FontFace = UITheme.Fonts.Display
 		label.TextSize = 18
 		label.Parent = gui
 		status = label
+		local list = label:Clone()
+		list.Position = UDim2.new(0.5, 0, 0, 100)
+		list.Size = UDim2.fromOffset(560, 22)
+		list.TextSize = 14
+		list.Parent = gui
+		takenLabel = list
 	end
 	local label = status :: TextLabel
 	label.Visible = text ~= nil
 	label.Text = text or ""
 	label.TextColor3 = if live then UITheme.Colors.HitRed else UITheme.Colors.Bone
+	local words = {}
+	for _, name in CLIP_NAMES do
+		table.insert(words, if taken[name] then string.format("%s %.0f s", name, taken[name]) else name .. " —")
+	end
+	local list = takenLabel :: TextLabel
+	list.Visible = text ~= nil
+	list.Text = "PRIS : " .. table.concat(words, " · ")
+	list.TextColor3 = UITheme.Colors.Bone
+end
+
+-- Cette méthode permet de composer le bandeau de l'enregistreur armé lorsqu'il attend une prise.
+local function readyText(): string?
+	return if armedName then string.format("CLIP %s PRÊT · F7 ENREGISTRER · F6 CLIP SUIVANT", armedName) else nil
 end
 
 -- Cette méthode permet de lire l'état du joueur à l'image courante lorsque l'enregistreur tourne ; nil sans personnage.
@@ -140,6 +166,11 @@ local function stop()
 		local clip = { version = DemoClipRules.VERSION, hz = HZ, map = GameConfig.ACTIVE_MAP, samples = samples }
 		local text = DemoClipRules.encode(clip)
 		store(name, text)
+		takeCount += 1
+		taken[name] = DemoClipRules.duration(clip)
+		for _, line in DemoClipRules.toLogLines(name, takeCount, text) do
+			print(line)
+		end
 		log(
 			string.format(
 				"STOP %s : %.1f s, %d échantillons, %d octets, rangé dans Player.%s.%s",
@@ -153,7 +184,7 @@ local function stop()
 		)
 	end
 	samples = {}
-	showStatus(if armedName then string.format("CLIP %s PRÊT · F7 POUR ENREGISTRER", armedName) else nil)
+	showStatus(readyText())
 end
 
 -- Cette méthode permet de prendre les échantillons à pas fixe tombés entre l'image précédente et celle-ci lorsque
@@ -196,7 +227,13 @@ local function onAttribute()
 	local value = deps.player:GetAttribute(ATTRIBUTE)
 	stop()
 	armedName = if type(value) == "string" and value ~= "" then value else nil
-	showStatus(if armedName then string.format("CLIP %s PRÊT · F7 POUR ENREGISTRER", armedName) else nil)
+	showStatus(readyText())
+end
+
+-- Cette méthode permet d'armer le clip suivant de la liste lorsque F6 est pressé, hors prise en cours.
+local function armNext()
+	local index = table.find(CLIP_NAMES, armedName or "") or 0
+	deps.player:SetAttribute(ATTRIBUTE, CLIP_NAMES[index % #CLIP_NAMES + 1])
 end
 
 -- Cette méthode permet de brancher l'enregistreur lorsque le client démarre ; ne fait rien hors Studio.
@@ -207,7 +244,16 @@ function ClipRecorder.init(dependencies: Deps)
 	deps = dependencies
 	deps.player:GetAttributeChangedSignal(ATTRIBUTE):Connect(onAttribute)
 	UserInputService.InputBegan:Connect(function(input)
-		if input.KeyCode ~= TOGGLE_KEY or not armedName then
+		if not armedName then
+			return
+		end
+		if input.KeyCode == NEXT_KEY then
+			if not recording then
+				armNext()
+			end
+			return
+		end
+		if input.KeyCode ~= TOGGLE_KEY then
 			return
 		end
 		if recording then

@@ -362,13 +362,20 @@ ouverture à l'autre.
 **Refaire un clip :**
 1. Studio réservé, playtest lancé, partie lancée (`DebugPlaytest`), bots retirés (`workspace:SetAttribute("DebugBots", 0)`).
 2. Armer l'enregistreur (contexte `Server` ou `Client`) : `game.Players:GetPlayers()[1]:SetAttribute("DebugClipRecorder",
-   "surf")` (`surf`, `bhop`, `strafe` ou `chain`). Un bandeau « CLIP surf PRÊT · F7 POUR ENREGISTRER » s'affiche en haut.
+   "surf")` (`surf`, `bhop`, `strafe` ou `chain`). Un bandeau « CLIP surf PRÊT · F7 ENREGISTRER · F6 CLIP SUIVANT »
+   s'affiche en haut, et dessous la liste des clips déjà pris (« PRIS : surf 14 s · bhop — … »). **F6** passe au clip
+   suivant (surf, bhop, strafe, chain) : pas besoin de la barre de commande pour changer de clip.
 3. Se placer, appuyer sur **F7**, jouer le geste (10 à 20 s ; arrêt d'office à 30 s), **F7** pour arrêter. La console
    écrit `[ClipRecorder] STOP surf : … s, … échantillons`. Recommencer autant que voulu : la dernière prise remplace la
    précédente. L'enregistreur ne fait que lire (racine, caméra, `KeyBindings`, `MovementController.getVelocity`).
 4. Extraire (contexte `Client`, sans écrire de `Source`) : `return game.Players.LocalPlayer.DebugClips.surf.Value`, et
    enregistrer le texte rendu tel quel dans un fichier hors du dépôt (ex. `%TEMP%\surf.txt`). À la main : barre de
    commande de Studio en contexte client, `print(...)`, puis copier la sortie.
+   **Piège (#285) :** `Player.DebugClips` disparaît à l'arrêt du playtest (6 prises perdues ainsi). Chaque prise est donc
+   aussi recopiée dans la sortie de Studio, qui survit à l'arrêt : lignes `[ClipData <clip> <prise> <i>/<n>] …` (morceaux
+   de 2 000 caractères, sans blanc). Si le playtest est arrêté, copier la sortie (ou `get_console_output`, qui rogne le
+   début d'une longue sortie : extraire au plus tôt) dans un fichier : `write_clip` reconnaît ces lignes et recolle la
+   dernière prise complète du clip demandé.
 5. `lune run tools/clips/write_clip.luau %TEMP%\surf.txt Surf [début_s] [fin_s]` : valide le clip, garde au besoin la
    partie entre début et fin, et réécrit `src/client/ui/DemoClips/Surf.luau` (CRLF, comme StyLua).
 6. Arrêter le playtest (Rojo ne synchronise qu'en mode Edit), relancer, ouvrir Infos > SURFER et vérifier la démo.

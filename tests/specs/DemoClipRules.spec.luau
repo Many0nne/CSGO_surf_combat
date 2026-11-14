@@ -149,6 +149,38 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("DemoClipRules : copie d'une prise dans la sortie de Studio", function()
+		local text = Rules.encode(lineClip(400))
+
+		T.it("découpe en morceaux sans blanc et recolle le texte à l'identique", function()
+			local lines = Rules.toLogLines("surf", 1, text)
+			T.expectEqual(#lines > 1, true, "plusieurs morceaux")
+			for _, line in lines do
+				local chunk = string.match(line, "%] (.*)$")
+				T.expectEqual(string.find(chunk, "%s") == nil, true, "aucun blanc dans un morceau")
+				T.expectEqual(#chunk <= Rules.LOG_CHUNK, true, "morceau trop long")
+			end
+			local log = "12:00:01 bruit\n" .. table.concat(lines, "\r\n") .. "\nautre ligne\n"
+			T.expectEqual(Rules.fromLog(log, "surf"), text)
+		end)
+
+		T.it("prend la dernière prise complète du clip demandé, et ignore les autres clips", function()
+			local older = Rules.encode(lineClip(5))
+			local newer = Rules.toLogLines("surf", 3, text)
+			table.remove(newer) -- prise 3 incomplète (sortie rognée)
+			local log = table.concat(Rules.toLogLines("surf", 1, older), "\n")
+				.. "\n"
+				.. table.concat(Rules.toLogLines("bhop", 2, text), "\n")
+				.. "\n"
+				.. table.concat(newer, "\n")
+			T.expectEqual(Rules.fromLog(log, "surf"), older)
+			T.expectEqual(Rules.fromLog(log, "bhop"), text)
+			local none, why = Rules.fromLog(log, "chain")
+			T.expectEqual(none, nil)
+			T.expectEqual(why, "aucune prise de chain")
+		end)
+	end)
+
 	T.describe("DemoClipRules : pièces autour de la trajectoire", function()
 		local clip = lineClip(31)
 

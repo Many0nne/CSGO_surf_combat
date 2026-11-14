@@ -1,7 +1,8 @@
 -- Écrit un clip de démo (#285) extrait de Studio dans son module de données, après l'avoir validé et, au besoin, coupé.
 -- Usage, depuis la racine du worktree :
 --   lune run tools/clips/write_clip.luau <texte_brut.txt> <Nom> [début_s] [fin_s]
--- <texte_brut.txt> : valeur de Player.DebugClips.<nom> lue par le MCP (contexte Client), copiée telle quelle ;
+-- <texte_brut.txt> : valeur de Player.DebugClips.<nom> lue par le MCP (contexte Client), copiée telle quelle, ou copie
+-- de la sortie de Studio contenant les lignes [ClipData …] (playtest arrêté : dernière prise complète du clip) ;
 -- <Nom> : Surf, Bhop, Strafe ou Chain (module src/client/ui/DemoClips/<Nom>.luau, remplacé) ;
 -- début et fin (secondes, optionnels) : garde seulement cette partie de la prise.
 local fs = require("@lune/fs")
@@ -20,6 +21,15 @@ end
 local Rules = luau.load(fs.readFile(RULES), { debugName = RULES })()
 -- Fins de ligne Windows retirées : le texte vient d'un copier-coller
 local raw = string.gsub(fs.readFile(rawPath), "\r", "")
+-- Copie de la sortie de Studio (lignes [ClipData …]) : dernière prise complète du clip
+if string.find(raw, "[" .. Rules.LOG_TAG .. " ", 1, true) then
+	local fromLog, missing = Rules.fromLog(raw, string.lower(name))
+	if not fromLog then
+		print("sortie de Studio : " .. tostring(missing))
+		process.exit(1)
+	end
+	raw = fromLog :: string
+end
 raw = string.gsub(raw, "^%s+", "")
 raw = string.gsub(raw, "%s+$", "")
 local clip, why = Rules.decode(raw)
