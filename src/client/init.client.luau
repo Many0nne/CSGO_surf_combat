@@ -2,6 +2,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
 
+local CharacterAppearance = require(ReplicatedStorage.Shared.CharacterAppearance)
 local PlayerSettings = require(ReplicatedStorage.Shared.PlayerSettings)
 
 local MovementController = require(script.systems.movement.MovementController)
@@ -30,6 +31,8 @@ local PerfOverlay = require(script.debug.PerfOverlay)
 local PerfBench = require(script.debug.PerfBench)
 
 local player = Players.LocalPlayer
+-- Secondes d'attente au plus du corps entier d'un personnage avant de le prendre en main (#328)
+local RIG_WAIT = 5
 
 ViewmodelSystem.init(player)
 WeaponSystem.init(player)
@@ -42,6 +45,12 @@ local stateConn: RBXScriptConnection?
 local function setupCharacter(char: Model)
 	local humanoid = char:WaitForChild("Humanoid") :: Humanoid
 	local rootPart = char:WaitForChild("HumanoidRootPart") :: BasePart
+	-- Corps entier avant MovementController (#328) : CharacterMotor mesure la hauteur racine→pieds sur le rig, et le
+	-- personnage arrive souvent sans ses jambes (1,59 stud mesuré au lieu de 4,77 : pieds 3,3 studs sous le sol)
+	local missing = CharacterAppearance.waitForParts(char, RIG_WAIT)
+	if #missing > 0 then
+		warn("[Client] personnage incomplet après " .. RIG_WAIT .. " s, manque : " .. table.concat(missing, ", "))
+	end
 	-- Parti au menu pendant ces attentes (#217), ou personnage déjà remplacé : ne rien rebrancher (caméra FPS, mouvement)
 	local state = GameStateController.getState()
 	if state == "MENU" or state == "INFOS" or player.Character ~= char then

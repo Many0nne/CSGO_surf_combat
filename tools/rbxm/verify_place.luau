@@ -3,6 +3,7 @@
 -- (assets/rbx/Tools, dans ReplicatedStorage.Tools, StarterPack vide), la map (assets/rbx/Maps) et ses matières (assets/rbx/Materials) y sont, avec leurs animations,
 -- sons, textures, attributs et scripts.
 -- Contrôle les dossiers de chaque map lus par le code (src/shared/MapGeometry.luau, #292) : un renommage casse la CI.
+-- Contrôle la hauteur des points d'apparition au sol (tools/map/SpawnCheck.luau, #328).
 -- Signale aussi les Tools dont le nom d'arme n'a pas d'entrée dans src/shared/WeaponConfig.luau (avertissement,
 -- sans échec).
 -- Usage (racine du dépôt) : rojo build default.project.json -o CSGO.rbxlx && lune run tools/rbxm/verify_place.luau [CSGO.rbxlx]
@@ -11,6 +12,8 @@ local fs = require("@lune/fs")
 local luau = require("@lune/luau")
 local process = require("@lune/process")
 local roblox = require("@lune/roblox")
+
+local SpawnCheck = require("../map/SpawnCheck")
 
 local placePath = process.args[1] or "CSGO.rbxlx"
 -- module sans dépendance : chargé tel quel (source unique des noms de dossiers de map)
@@ -179,6 +182,16 @@ local function checkMap(map)
 	local nGround = if ground then #ground:GetChildren() else 0
 	if nGround == 0 then
 		fail("Maps." .. map.Name .. " sans point d'apparition (GroundSpawns)")
+	end
+	-- hauteur des points (#328) : face basse au niveau du sol mesuré par un rayon vertical (tools/map/SpawnCheck.luau)
+	local spawnLines, spawnErrors, spawnWorst = SpawnCheck.check(map)
+	for _, message in spawnErrors do
+		fail(message)
+	end
+	if #spawnErrors > 0 then
+		print(table.concat(spawnLines, "\n"))
+	elseif nGround > 0 then
+		print(string.format("Maps.%s : points d'apparition à %.3f stud du sol au plus", map.Name, spawnWorst))
 	end
 	-- boosts (MapRules) : chaque volume a un type connu et le réglage qui va avec
 	local boosts = map:FindFirstChild("Boosts")

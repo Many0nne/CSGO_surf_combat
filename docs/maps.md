@@ -388,8 +388,11 @@ Rojo gère `Workspace.Maps` : un objet posé à la main dans une map est supprim
   monte (regard baissé : descend), reculer descend, de côté on glisse le long, saut = poussée hors du mur
   (`LADDER_*` de `MovementConfig`). Le volume doit dépasser le haut du mur d'environ une hauteur de corps, sinon on
   reste coincé sous l'acrotère ; aucun mur d'air ne doit avancer devant le mur à la hauteur de la grimpe.
-- `Maps.Map.GroundSpawns` : points d'apparition (parties, le personnage est posé 5 studs au-dessus), seuls utilisés
-  depuis #288 (lancement depuis le soleil retiré). `SpawnManager` choisit un point à plus de `SPAWN_SAFE_RADIUS` et hors
+- `Maps.Map.GroundSpawns` : points d'apparition (parties, la racine est posée 5 studs au-dessus du centre du point),
+  seuls utilisés depuis #288 (lancement depuis le soleil retiré). Face basse du point au niveau du sol, à 0,25 stud
+  près (#328) : `tools/map/SpawnCheck.luau` tire un rayon vertical depuis la racine sur les pièces `CanQuery` et
+  `verify_place.luau` (CI) échoue sur un point enfoncé, trop haut, dans un volume ou au-dessus du vide (Dizzy : 0,029
+  stud au plus). `SpawnManager` choisit un point à plus de `SPAWN_SAFE_RADIUS` et hors
   de vue des ennemis vivants (`SpawnPointRules`) : prévoir des points dans plusieurs zones éloignées et sans vue entre
   elles, sinon le choix retombe au hasard.
 - `Maps.Map.Boosts` : volumes invisibles (`CanCollide`, `CanQuery`, `CanTouch` faux), attribut `Kind` :
