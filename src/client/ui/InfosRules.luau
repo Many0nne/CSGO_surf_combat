@@ -1,4 +1,5 @@
--- Règles pures de l'écran Infos (#290) : composition des textes qui citent des touches, sans Instance ni service.
+-- Règles pures de l'écran Infos (#290) : composition des textes qui citent des touches, sans Instance ni service ; aussi
+-- les conseils de l'écran de mort des débutants (#291, deathTips).
 -- Les touches viennent de KeyBindings via les entrées de HUDRules.keyDisplayEntries (une seule liste d'actions) et des
 -- réglages du joueur ; le libellé de chaque touche est celui de `keyText` (LocalSettings.keyText, disposition du clavier).
 -- Testées sous Lune (tests/specs/InfosRules.spec.luau).
@@ -142,6 +143,40 @@ function InfosRules.surfLines(ctx: Context): { string }
 			right
 		),
 		"Ne saute jamais sur une rampe : laisse la gravité t'y amener.",
+	}
+end
+
+-- Contexte des conseils de l'écran de mort (#291) : entrées d'actions, libellé d'une touche, auto-bhop réglé (le conseil
+-- de bhop en dépend)
+export type TipContext = {
+	entries: { Entry },
+	keyText: (keyName: string) -> string,
+	autoBhop: boolean,
+}
+
+-- Conseil de l'écran de mort : thème (affiché en ambre) et phrase
+export type Tip = { topic: string, text: string }
+
+-- Cette méthode permet de composer les conseils de l'écran de mort d'un débutant (#291) lorsqu'un conseil est choisi :
+-- surf, bhop (selon l'auto-bhop) et air strafe, touches telles qu'imprimées sur le clavier du joueur.
+function InfosRules.deathTips(ctx: TipContext): { Tip }
+	local keys = ctx :: any -- actionKey ne lit que `entries` et `keyText`
+	local left, right, forward = actionKey(keys, "left"), actionKey(keys, "right"), actionKey(keys, "forward")
+	local jumpEntry = entryOf(ctx.entries, "jump")
+	local jump = if jumpEntry and jumpEntry.label then jumpEntry.label else actionKey(keys, "jump")
+	local bhop = if ctx.autoBhop
+		then string.format("garde %s enfoncé, tu ressautes dès que tu touches le sol.", jump)
+		else string.format("appuie sur %s à chaque fois que tu touches le sol.", jump)
+	return {
+		{
+			topic = "SURF",
+			text = string.format("maintiens %s ou %s contre la rampe, ne touche jamais à %s.", left, right, forward),
+		},
+		{ topic = "BHOP", text = bhop },
+		{
+			topic = "AIR STRAFE",
+			text = string.format("en l'air, tiens %s en tournant la souris à gauche, %s à droite.", left, right),
+		},
 	}
 end
 

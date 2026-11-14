@@ -1,5 +1,5 @@
 -- HUD de round, direction « Ligne de mire » : timer et rang en haut, classement (Tab maintenu), écran de réapparition
--- (scène désaturée, compte à rebours en bas au centre) et écran de fin de round (voile central, nom du vainqueur,
+-- (scène désaturée, compte à rebours en bas au centre, conseil d'un débutant dessous, #291) et écran de fin de round (voile central, nom du vainqueur,
 -- podium et ligne du joueur).
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
@@ -39,7 +39,14 @@ local COL_STATS = { 80, 72, 64 } -- KILLS, MORTS, K/M
 local RESPAWN_SCRIM_SIZE = Vector2.new(520, 230)
 local RESPAWN_SCRIM_TRANSPARENCY = 0.2
 local RESPAWN_WIDTH = 400
+local RESPAWN_HEIGHT = 196
 local RESPAWN_BOTTOM = 40
+-- Conseil d'un débutant (#291) sous « RÉAPPARITION » : une ligne plus large que le bloc, fondu de bord agrandi d'autant
+local RESPAWN_TIP_GAP = 8
+local RESPAWN_TIP_HEIGHT = 24
+local RESPAWN_TIP_WIDTH = 680
+local RESPAWN_TIP_SIZE = 18
+local RESPAWN_TIP_SCRIM_SIZE = Vector2.new(780, 270)
 -- Fin de round : même voile central que le classement, un peu plus dense ; sous le vainqueur, podium et ligne du joueur
 -- hors podium (#295) en lignes du classement, à `RESULT_BOARD_TOP` px du haut, ligne du joueur après un écart
 local RESULT_WIDTH = 720
@@ -74,6 +81,7 @@ local respawnTitleShadow: TextLabel
 local respawnKiller: TextLabel
 local respawnKillerShadow: TextLabel
 local respawnDetail: TextLabel
+local respawnTip: TextLabel
 local deathGrade: ColorCorrectionEffect
 local resultRoot: Frame
 local resultVeil: Frame
@@ -362,7 +370,7 @@ local function buildRespawnOverlay(root: Frame)
 		BorderSizePixel = 0,
 		AnchorPoint = Vector2.new(0.5, 1),
 		Position = UDim2.new(0.5, 0, 1, -RESPAWN_BOTTOM),
-		Size = UDim2.fromOffset(RESPAWN_WIDTH, 196),
+		Size = UDim2.fromOffset(RESPAWN_WIDTH, RESPAWN_HEIGHT),
 		Parent = respawnRoot,
 	})
 	local centered = Enum.TextXAlignment.Center
@@ -426,6 +434,28 @@ local function buildRespawnOverlay(root: Frame)
 		Size = UDim2.new(1, 0, 0, 20),
 		Parent = respawnPanel,
 	})
+	-- Conseil d'un débutant (#291) : thème en ambre puis phrase en os, texte courant (Oswald regular) ; masqué sinon
+	respawnTip = UIKit.text({
+		Name = "Tip",
+		Text = "",
+		RichText = true,
+		Visible = false,
+		FontFace = F.DisplayText,
+		TextSize = RESPAWN_TIP_SIZE,
+		TextColor3 = C.Bone,
+		TextXAlignment = centered,
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, RESPAWN_HEIGHT + RESPAWN_TIP_GAP),
+		Size = UDim2.fromOffset(RESPAWN_TIP_WIDTH, RESPAWN_TIP_HEIGHT),
+		Parent = respawnPanel,
+	})
+end
+
+-- Cette méthode permet de dimensionner le fondu de bord de l'écran de mort lorsqu'un conseil apparaît ou disparaît :
+-- même pose que UIKit.cornerScrim « Bottom » (centré en bas, `size` vue).
+local function sizeRespawnScrim(size: Vector2)
+	respawnScrim.Size = UDim2.fromOffset(size.X, size.Y)
+	respawnScrim.Position = UDim2.new(0.5, 0, 1, -size.Y / 2)
 end
 
 -- Cette méthode permet d'écrire le titre, le nom et le détail de l'écran de mort lorsqu'ils changent (titre et nom
@@ -810,6 +840,26 @@ function RoundHUD.setDeathInfo(killer: string?, weapon: string?, headshot: boole
 	else
 		setRespawnLines("ÉLIMINÉ", HUDRules.killDetail(nil, weapon, headshot), "")
 	end
+end
+
+-- Cette méthode permet d'afficher ou de retirer le conseil de l'écran de mort lorsque le joueur meurt ou que son état
+-- débutant, ses réglages ou ses touches changent (#291) : le bloc remonte de la hauteur du conseil, le fondu s'agrandit.
+function RoundHUD.setTip(tip: { topic: string, text: string }?)
+	if not respawnTip then
+		return
+	end
+	if tip then
+		respawnTip.Text = string.format(
+			'<font color="#%s">%s :</font> %s',
+			C.Accent:ToHex(),
+			HUDRules.escapeRichText(tip.topic),
+			HUDRules.escapeRichText(tip.text)
+		)
+	end
+	respawnTip.Visible = tip ~= nil
+	local extra = if tip then RESPAWN_TIP_GAP + RESPAWN_TIP_HEIGHT else 0
+	respawnPanel.Size = UDim2.fromOffset(RESPAWN_WIDTH, RESPAWN_HEIGHT + extra)
+	sizeRespawnScrim(if tip then RESPAWN_TIP_SCRIM_SIZE else RESPAWN_SCRIM_SIZE)
 end
 
 function RoundHUD.hideRespawning()

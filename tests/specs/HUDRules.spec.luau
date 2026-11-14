@@ -118,6 +118,21 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("HUDRules.keyDisplayMode (#291)", function()
+		T.it("affiche le mode complet à un débutant, quel que soit son réglage", function()
+			for _, setting in { "off", "simple", "full" } do
+				T.expectEqual(HUDRules.keyDisplayMode(setting, true), "full", setting)
+			end
+			T.expectEqual(HUDRules.keyDisplayVisible(hud(), HUDRules.keyDisplayMode("off", true)), true)
+		end)
+
+		T.it("rend son réglage au joueur qui n'est plus débutant", function()
+			for _, setting in { "off", "simple", "full" } do
+				T.expectEqual(HUDRules.keyDisplayMode(setting, false), setting, setting)
+			end
+		end)
+	end)
+
 	T.describe("HUDRules.keyDisplayGridSize", function()
 		T.it("mesure la grille : 3 colonnes en simple, 6 en full, 3 rangées, rien en off", function()
 			local w, h = HUDRules.keyDisplayGridSize("simple")
