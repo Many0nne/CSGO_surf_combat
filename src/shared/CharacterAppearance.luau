@@ -78,4 +78,37 @@ function CharacterAppearance.apply(model: Model)
 	end
 end
 
+-- Cette méthode permet de lister les pièces du corps d'un rig (ses enfants BasePart) lorsqu'on vérifie qu'un
+-- personnage a reçu tout son corps.
+function CharacterAppearance.partNames(rig: Instance): { string }
+	local names = {}
+	for _, child in rig:GetChildren() do
+		if child:IsA("BasePart") then
+			table.insert(names, child.Name)
+		end
+	end
+	return names
+end
+
+-- Cette méthode permet d'attendre côté client les pièces du rig de référence sur un personnage arrivé incomplet par la
+-- réplication (#328), avant de mesurer son rig ; renvoie celles encore absentes au bout de `timeout` secondes.
+function CharacterAppearance.waitForParts(char: Model, timeout: number): { string }
+	local template = CharacterAppearance.getTemplate()
+	if not template then
+		warn("[CharacterAppearance] pas de StarterCharacter : corps du personnage non attendu (#328)")
+		return {}
+	end
+	local deadline = os.clock() + timeout
+	local missing = {}
+	for _, name in CharacterAppearance.partNames(template) do
+		if not char:FindFirstChild(name) then
+			local left = deadline - os.clock()
+			if left <= 0 or not char:WaitForChild(name, left) then
+				table.insert(missing, name)
+			end
+		end
+	end
+	return missing
+end
+
 return CharacterAppearance
