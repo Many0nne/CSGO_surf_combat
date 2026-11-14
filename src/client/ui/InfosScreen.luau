@@ -28,6 +28,7 @@ type Section = {
 -- Contenu sous les onglets (px à 720 de haut)
 local CONTENT_WIDTH = MenuPage.BlockWidth
 local CONTENT_HEIGHT = MenuPage.ContentBottom - MenuPage.ContentTop
+local TEXT_SIZE = 22
 local KEY_COLUMN = 170 -- largeur réservée à la touche en boîte
 
 local SECTIONS: { Section } = {
@@ -59,6 +60,35 @@ local content: ScrollingFrame
 local markTab: (number) -> ()
 local selected = 1
 
+-- Cette méthode permet d'afficher une ligne de texte en fondu avec un décalage lorsqu'un onglet se remplit.
+local function fadeIn(labels: { TextLabel }, delay: number)
+	for _, lbl in labels do
+		lbl.TextTransparency = 1
+	end
+	task.delay(delay, function()
+		for _, lbl in labels do
+			UIKit.tween(lbl, Motion.Enter, { TextTransparency = 0 })
+		end
+	end)
+end
+
+-- Cette méthode permet de créer une ligne de paragraphe à hauteur automatique lorsque l'onglet affiché est du texte.
+local function addParagraph(text: string, order: number): TextLabel
+	return UIKit.text({
+		Name = "Line" .. order,
+		Text = text,
+		FontFace = F.DisplayText,
+		TextSize = TEXT_SIZE,
+		TextColor3 = C.Bone,
+		TextWrapped = true,
+		LineHeight = 1.2,
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Size = UDim2.new(1, 0, 0, TEXT_SIZE),
+		LayoutOrder = order,
+		Parent = content,
+	})
+end
+
 -- Cette méthode permet de créer une ligne « touche en boîte os → action » sur un filet lorsque l'onglet affiché est
 -- COMMANDES (#308 : même écriture des touches que l'aide de l'écran d'équipement).
 local function addKeyRow(key: string, action: string, order: number): { TextLabel }
@@ -85,7 +115,7 @@ local function addKeyRow(key: string, action: string, order: number): { TextLabe
 	local actionLbl = UIKit.text({
 		Text = action,
 		FontFace = F.DisplayText,
-		TextSize = MenuPage.ParagraphSize,
+		TextSize = TEXT_SIZE,
 		TextColor3 = C.Bone,
 		Position = UDim2.fromOffset(KEY_COLUMN, 0),
 		Size = UDim2.new(1, -KEY_COLUMN, 1, 0),
@@ -120,11 +150,11 @@ local function renderSection(index: number)
 	local section = SECTIONS[index]
 	if section.keys then
 		for i, row in InfosRules.commandRows(InfosScreen.composeContext()) do
-			MenuPage.fadeIn(addKeyRow(row.key, row.action, i), i * Motion.Stagger)
+			fadeIn(addKeyRow(row.key, row.action, i), i * Motion.Stagger)
 		end
 	else
 		for i, line in section.lines or {} do
-			MenuPage.fadeIn({ MenuPage.paragraph(content, line, i) }, i * Motion.Stagger)
+			fadeIn({ addParagraph(line, i) }, i * Motion.Stagger)
 		end
 	end
 end

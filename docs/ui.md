@@ -326,9 +326,9 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
 ## Démos rejouées (écran Apprendre, #285)
 
 **Où :** écran Apprendre (`LearnScreen`), onglet APPRENDRE du menu principal, juste avant JOUER (on apprend le geste,
-puis on joue ; JOUER n'est plus pile au centre avec six onglets). Rien au premier lancement. Le lecteur 640x360 (16:9),
-puis le texte du surf (`InfosRules.surfLines`) sous le lecteur (défilement). Pas d'onglets : le contenu commence à leur
-hauteur. Page du menu comme Feedback, pas un état de jeu comme Infos ; le lecteur est libéré à RETOUR, à un autre onglet
+puis on joue ; JOUER n'est plus pile au centre avec six onglets). Rien au premier lancement. Le lecteur 640x360 (16:9)
+seul, sa légende en une ligne dessus ; pas de texte dessous : l'ancien texte de SURFER (`surfLines`) expliquait le surf,
+pas le bhop montré, il a été retiré (2026-11-14). Pas d'onglets : le contenu commence à leur hauteur. Page du menu comme Feedback, pas un état de jeu comme Infos ; le lecteur est libéré à RETOUR, à un autre onglet
 et au départ en partie (`SPAWNING`, `IN_ROUND`).
 - Déplacé d'Infos (onglet SURFER retiré, Infos s'ouvre sur COMMANDES) : Infos sert de référence, pas de tuto.
 - L'écran de mort renvoie à la démo : les conseils BHOP et AIR STRAFE finissent par « Démo : APPRENDRE. »

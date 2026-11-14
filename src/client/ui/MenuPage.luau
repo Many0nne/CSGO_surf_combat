@@ -16,8 +16,6 @@ local F = UITheme.Fonts
 
 local MenuPage = {}
 
-MenuPage.ParagraphSize = 22 -- texte courant des écrans (Infos, Apprendre)
-
 -- Cotes de la colonne de gauche de l'accueil (px à la hauteur de référence de 720), reprises par l'écran d'équipement
 MenuPage.Edge = 28 -- marge gauche
 MenuPage.GameTitleY = 46 -- titre du jeu, sous les boutons Roblox du coin haut gauche
@@ -243,36 +241,6 @@ function MenuPage.new(name: string, displayOrder: number, title: string): Page
 	end
 
 	return page :: any
-end
-
--- Cette méthode permet de créer une ligne de paragraphe à hauteur automatique lorsqu'un écran affiche du texte courant
--- dans une liste (Infos, Apprendre).
-function MenuPage.paragraph(parent: Instance, text: string, order: number): TextLabel
-	return UIKit.text({
-		Name = "Line" .. order,
-		Text = text,
-		FontFace = F.DisplayText,
-		TextSize = MenuPage.ParagraphSize,
-		TextColor3 = C.Bone,
-		TextWrapped = true,
-		LineHeight = 1.2,
-		AutomaticSize = Enum.AutomaticSize.Y,
-		Size = UDim2.new(1, 0, 0, MenuPage.ParagraphSize),
-		LayoutOrder = order,
-		Parent = parent,
-	})
-end
-
--- Cette méthode permet d'afficher des textes en fondu après un délai lorsqu'un contenu se remplit, ligne après ligne.
-function MenuPage.fadeIn(labels: { TextLabel }, delay: number)
-	for _, lbl in labels do
-		lbl.TextTransparency = 1
-	end
-	task.delay(delay, function()
-		for _, lbl in labels do
-			UIKit.tween(lbl, UITheme.Motion.Enter, { TextTransparency = 0 })
-		end
-	end)
 end
 
 return MenuPage

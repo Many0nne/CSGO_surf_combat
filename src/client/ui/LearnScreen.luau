@@ -1,7 +1,6 @@
 -- Écran Apprendre (MenuPage, #285) : onglet APPRENDRE du menu principal. Bloc centré sur un voile, titre, démo rejouée
--- dans le moteur (DemoPlayer : touches, souris et vitesse synchronisées), sélecteur s'il y a plusieurs démos, puis le
--- texte d'explication du surf (InfosRules.surfLines), RETOUR en bas au centre. Le lecteur (copie de la map comprise)
--- n'existe que tant que l'écran est affiché.
+-- dans le moteur (DemoPlayer : touches, souris et vitesse synchronisées, légende du geste), sélecteur s'il y a plusieurs
+-- démos, RETOUR en bas au centre. Le lecteur (copie de la map comprise) n'existe que tant que l'écran est affiché.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
@@ -14,7 +13,6 @@ local UIKit = require(script.Parent.UIKit)
 
 local C = UITheme.Colors
 local F = UITheme.Fonts
-local Motion = UITheme.Motion
 
 local LearnScreen = {}
 
@@ -112,8 +110,7 @@ local function addDemos(ctx: InfosRules.Context)
 	choose(math.clamp(selectedDemo, 1, #clips))
 end
 
--- Cette méthode permet de remplir le contenu (démo puis texte du surf, touches du joueur) lorsque l'écran s'ouvre ou
--- que les touches changent pendant qu'il est ouvert.
+-- Cette méthode permet de remplir le contenu (sélecteur et démo, légende aux touches du joueur) lorsque l'écran s'ouvre.
 local function render()
 	stopDemo()
 	for _, child in content:GetChildren() do
@@ -122,12 +119,7 @@ local function render()
 		end
 	end
 	content.CanvasPosition = Vector2.zero
-	local ctx = InfosScreen.composeContext()
-	addDemos(ctx)
-	-- Après le sélecteur et le lecteur (ordres 1 et 2)
-	for i, line in InfosRules.surfLines(ctx) do
-		MenuPage.fadeIn({ MenuPage.paragraph(content, line, 2 + i) }, i * Motion.Stagger)
-	end
+	addDemos(InfosScreen.composeContext())
 end
 
 -- Cette méthode permet de construire l'écran et sa zone de contenu lorsque le client démarre.

@@ -123,29 +123,6 @@ function InfosRules.commandRows(ctx: Context): { KeyRow }
 	return rows
 end
 
--- Cette méthode permet de composer les conseils de surf de l'écran Apprendre lorsqu'il s'ouvre : les touches citées
--- (gauche, droite, avant) suivent la disposition du clavier du joueur.
-function InfosRules.surfLines(ctx: Context): { string }
-	local left, right, forward = actionKey(ctx, "left"), actionKey(ctx, "right"), actionKey(ctx, "forward")
-	return {
-		"Approche une rampe et place-toi PARALLÈLE à sa surface.",
-		string.format(
-			"Maintiens %s ou %s pour appuyer contre la rampe. Ne touche jamais à %s pendant le surf.",
-			left,
-			right,
-			forward
-		),
-		"Oriente-toi avec la souris dans le sens de la rampe pour gagner de la vitesse.",
-		"Reste sur la bonne zone de la rampe : ni trop haut, ni trop bas.",
-		string.format(
-			"Enchaîne les rampes en douceur, avec des air strafes (%s/%s + souris) entre elles.",
-			left,
-			right
-		),
-		"Ne saute jamais sur une rampe : laisse la gravité t'y amener.",
-	}
-end
-
 -- Démo rejouée de l'écran Apprendre (#285) : `id` nomme le module de données (ui/DemoClips), `title` le sélecteur,
 -- `caption` le geste en une ligne, posé sur le clip
 export type DemoClip = { id: string, title: string, caption: string }

@@ -45,32 +45,6 @@ return function(T, Loader)
 		return nil
 	end
 
-	T.describe("InfosRules.surfLines", function()
-		T.it("cite les touches du clavier du joueur : Q, D et Z en AZERTY", function()
-			local text = table.concat(InfosRules.surfLines(context(AZERTY)), "\n")
-			T.expectEqual(string.find(text, "Maintiens Q ou D", 1, true) ~= nil, true, "gauche et droite")
-			T.expectEqual(string.find(text, "Ne touche jamais à Z", 1, true) ~= nil, true, "avant")
-			T.expectEqual(string.find(text, "(Q/D + souris)", 1, true) ~= nil, true, "air strafe")
-		end)
-
-		T.it("cite A, D et W en QWERTY", function()
-			local text = table.concat(InfosRules.surfLines(context({})), "\n")
-			T.expectEqual(string.find(text, "Maintiens A ou D", 1, true) ~= nil, true, "gauche et droite")
-			T.expectEqual(string.find(text, "Ne touche jamais à W", 1, true) ~= nil, true, "avant")
-		end)
-
-		T.it("suit KeyBindings : une touche gauche changée change le texte", function()
-			local entries = HUDRules.keyDisplayEntries("full")
-			for _, entry in entries do
-				if entry.id == "left" then
-					entry.keys = { "J" }
-				end
-			end
-			local text = table.concat(InfosRules.surfLines(context({}, { entries = entries })), "\n")
-			T.expectEqual(string.find(text, "Maintiens J ou D", 1, true) ~= nil, true)
-		end)
-	end)
-
 	T.describe("InfosRules.commandRows", function()
 		T.it("liste les directions telles qu'imprimées : Z Q S D en AZERTY, W A S D en QWERTY", function()
 			T.expectEqual(rowFor(InfosRules.commandRows(context(AZERTY)), "déplacer").key, "Z Q S D")
