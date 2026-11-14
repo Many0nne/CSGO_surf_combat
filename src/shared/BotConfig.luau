@@ -131,7 +131,7 @@ return {
 	FIRE_YAW_TOLERANCE  = 2,      -- tire seulement si son cap est à moins de tant de la cible (°)
 	AIM_SPREAD          = 2,      -- dispersion d'un tir sur une cible immobile (demi-angle du cône, °)
 	AIM_SPREAD_SPEED    = 0.07,   -- en plus par stud/s de vitesse de la cible (° ; aucun malus selon sa propre vitesse)
-	AIM_SPREAD_MAX      = 9,      -- dispersion au plus (°), atteinte vers 100 studs/s
+	AIM_SPREAD_MAX      = 9,      -- dispersion au plus (°), atteinte à (MAX - BASE) / SPEED studs/s
 	FIRE_RANGE          = 240,    -- tir au fusil à moins de tant (studs ; le serveur refuse au-delà de 250)
 	SPAWN_GRACE         = 4,      -- pas de tir sur un participant apparu depuis moins de tant (s)
 	                              -- le temps de réaction et de visée part de sa fin (#298), le bot peut s'y tourner avant

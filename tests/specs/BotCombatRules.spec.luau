@@ -135,6 +135,7 @@ return function(T, Loader)
 					"COMBAT_TURN_RATE",
 					"AIM_SPREAD",
 					"AIM_SPREAD_SPEED",
+					"AIM_SPREAD_MAX",
 					"SPAWN_GRACE",
 				}
 			do
