@@ -25,6 +25,10 @@ local KillFeed = require(script.Parent.Parent.Parent.ui.KillFeed)
 local DeathCamera = require(script.Parent.Parent.Parent.camera.DeathCamera)
 local DeathRagdoll = require(script.Parent.DeathRagdoll)
 local SpawnRequestRules = require(script.Parent.SpawnRequestRules)
+local BeginnerState = require(script.Parent.BeginnerState)
+local BeginnerRules = require(script.Parent.BeginnerRules)
+local InfosRules = require(script.Parent.Parent.Parent.ui.InfosRules)
+local LocalSettings = require(script.Parent.Parent.settings.LocalSettings)
 
 -- PlayerDied et Humanoid.Died arrivent dans un ordre quelconque : l'info du tueur reste applicable ce temps-là (s)
 local DEATH_INFO_TTL = 1
@@ -47,6 +51,11 @@ local boundChar: Model? = nil
 local resultTimer: thread?
 -- Dernière mort du joueur local annoncée par le serveur (qui, avec quoi), pour l'écran de mort
 local lastDeath: { killer: string?, weapon: string?, headshot: boolean, at: number }? = nil
+-- Conseils de l'écran de mort (#291) : morts du joueur local, et morts qui ont montré un conseil (les conseils tournent,
+-- un par mort, en commençant au premier) ; `tipDeath` : dernière mort comptée, pour ne la compter qu'une fois
+local deathCount = 0
+local tipCount = 0
+local tipDeath = 0
 
 -- Remotes (résolus une seule fois)
 local spawnRemote: RemoteEvent?
@@ -87,6 +96,31 @@ local function applyDeathInfo()
 	if state == "DEAD" and lastDeath and os.clock() - lastDeath.at < DEATH_INFO_TTL then
 		RoundHUD.setDeathInfo(lastDeath.killer, lastDeath.weapon, lastDeath.headshot)
 	end
+end
+
+-- Cette méthode permet de poser le conseil de l'écran de mort (#291) lorsque le joueur meurt, ou que son état débutant
+-- ou ses réglages (conseils, auto-bhop, touches) changent pendant qu'il est mort ; rien pour un non-débutant.
+local function applyDeathTip()
+	if state ~= "DEAD" then
+		return
+	end
+	local settings = LocalSettings.get()
+	local beginner = BeginnerState.isBeginner()
+	if not (beginner and settings.deathTips) then
+		RoundHUD.setTip(nil)
+		return
+	end
+	-- Premier conseil de cette mort (à la mort, ou conseils activés pendant qu'il est mort) : conseil suivant
+	if tipDeath ~= deathCount then
+		tipDeath = deathCount
+		tipCount += 1
+	end
+	local tips = InfosRules.deathTips({
+		entries = HUDRules.keyDisplayEntries("full"),
+		keyText = LocalSettings.keyText,
+		autoBhop = settings.autoBhop,
+	})
+	RoundHUD.setTip(BeginnerRules.pickTip(tips, beginner, settings.deathTips, tipCount))
 end
 
 local startRespawnWatch: () -> ()
@@ -152,6 +186,8 @@ local function setState(newState: State)
 	elseif newState == "DEAD" then
 		RoundHUD.showRespawning(GameConfig.RESPAWN_DELAY)
 		applyDeathInfo()
+		deathCount += 1
+		applyDeathTip()
 		startRespawnWatch()
 	elseif newState == "RESULT" then
 		RoundHUD.hide()
@@ -525,6 +561,8 @@ function GameStateController.init(player: Player, setupCharacter: (char: Model) 
 		setState("MENU")
 	end)
 	RoundHUD.init()
+	LocalSettings.onChanged(applyDeathTip)
+	BeginnerState.onChanged(applyDeathTip)
 	KillFeed.init()
 	Transition.init()
 

@@ -58,6 +58,9 @@ return function(T, Loader)
 			for _, bad in { "non", 0, {} } do
 				T.expectEqual(PlayerSettings.sanitize({ autoBhop = bad }).autoBhop, true)
 			end
+			for _, bad in { "non", 0, {} } do
+				T.expectEqual(PlayerSettings.sanitize({ deathTips = bad }).deathTips, true, "conseils (#291)")
+			end
 			T.expectEqual(PlayerSettings.sanitize({ autoBhop = false }).autoBhop, false)
 			T.expectEqual(PlayerSettings.sanitize({ sensitivity = 0.3 }).autoBhop, true) -- ancienne sauvegarde
 			for _, bad in { true, 1, "complet", "FULL", {} } do
@@ -242,6 +245,19 @@ return function(T, Loader)
 			T.expectEqual(PlayerSettings.hudScaleFactor(300), 1)
 			T.expectEqual(PlayerSettings.hudScaleFactor(nil), 1)
 			T.expectEqual(PlayerSettings.hudScaleFactor("x"), 1)
+		end)
+	end)
+
+	T.describe("PlayerSettings : conseils de l'écran de mort (#291)", function()
+		T.it("active les conseils par défaut, y compris pour un réglage sauvegardé avant eux", function()
+			T.expectEqual(PlayerSettings.DEFAULT_DEATH_TIPS, true)
+			T.expectEqual(PlayerSettings.defaults().deathTips, true)
+			T.expectEqual(PlayerSettings.sanitize({ sensitivity = 0.25 }).deathTips, true, "champ absent")
+		end)
+
+		T.it("garde le choix du joueur", function()
+			T.expectEqual(PlayerSettings.sanitize({ deathTips = false }).deathTips, false)
+			T.expectEqual(PlayerSettings.sanitize({ deathTips = true }).deathTips, true)
 		end)
 	end)
 

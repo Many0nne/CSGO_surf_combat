@@ -275,6 +275,12 @@ function HUDRules.keyDisplayEntries(mode: string): { KeyDisplayEntry }
 	return result
 end
 
+-- Cette méthode permet de choisir le mode d'affichage des touches appliqué lorsque le réglage ou l'état débutant changent
+-- (#291) : « full » pour un débutant (BeginnerRules.isBeginner), quel que soit son réglage, sinon le réglage du joueur.
+function HUDRules.keyDisplayMode(setting: string, beginner: boolean): string
+	return if beginner then "full" else setting
+end
+
 -- Cette méthode permet de savoir si l'affichage des touches est montré lorsque le réglage ou l'état du HUD changent : mode
 -- actif, HUD de jeu visible (donc ni menu, ni mort, ni résultat), menu en partie fermé ; la lunette ne le masque pas.
 function HUDRules.keyDisplayVisible(hud: HUDSnapshot, mode: string): boolean

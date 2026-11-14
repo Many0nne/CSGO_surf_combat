@@ -200,6 +200,9 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   chargeur (couteau) et hors partie (`HUDRules.gameHudVisible`, via `GameStateController.applyGameHud`). Contrairement à
   la barre d'armes, il ne s'estompe pas.
 - Réglage « Auto-bhop » (#255) : catégorie MOUVEMENT de `SettingsMenu` (une seule ligne, ACTIVÉ par défaut), `PlayerSettings.autoBhop`, lu à chaque tick par `MovementController` et passé à `BhopSystem` : sans respawn.
+- Réglage « Conseils » (#291) : catégorie GRAPHISMES de `SettingsMenu`, juste sous « Affichage des touches » (les deux
+  aides affichées à l'écran côte à côte), ACTIVÉS par défaut, suivi par RÉTABLIR ; `PlayerSettings.deathTips` (absent d'un
+  réglage sauvegardé = activés). Coupé, l'écran de mort d'un débutant n'affiche plus de conseil ; sans effet pour les autres.
 - `src/client/ui/Crosshair.luau` (#195) : réglage « Visée simplifiée » (Réglages > VISEUR depuis #251, `PlayerSettings.simpleAim`, coupé par
   défaut). Par défaut, quatre traits fins os (longueur 9 px, épaisseur 2, écart 5) sans point central, doublés d'un contour
   noir de `OUTLINE` 1 px (`OUTLINE_TRANSPARENCY` 0,1) : sur fond blanc seul le contour se lit, sur sol ou mur sombre le trait os.
@@ -263,7 +266,8 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   ni lunette ; clavier ignoré pendant la saisie de texte (`GetFocusedTextBox`), pas de suivi du `gameProcessed` (piste non retenue,
   elle demandait un état par touche au lieu d'un sondage).
   Affichage (`HUDRules.keyDisplayVisible` appliquée à `HUDState`) : mode actif, HUD de jeu visible, menu en partie fermé ; la
-  lunette ne le masque pas (les touches restent utiles).
+  lunette ne le masque pas (les touches restent utiles). Mode actif : le réglage, ou `full` pour un débutant (#291,
+  `HUDRules.keyDisplayMode`), le réglage sauvegardé restant intact.
   Vérifié en Studio avec `user_keyboard_input` (`keyDown` W/D/S/Espace/Ctrl/R passent en partie et enfoncent les touches) ; le clic de
   souris M1/M2 n'a pas été simulé. Coordonnées de clic des onglets du menu : y négatif (`AbsolutePosition` du bouton).
 - `src/client/ui/RoundHUD.luau` : timer et rang en haut au centre (chiffres os droits avec ombre, libellés ambrés, fondu
@@ -280,6 +284,9 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   chiffres os à ombre, libellé ambré « RÉAPPARITION ». Au-dessus du compte à rebours (#102) : « ÉLIMINÉ PAR », nom du
   tueur en os, arme et « TÊTE » en ambre ; sans tueur, « ÉLIMINÉ » puis « CHUTE ». La caméra reste au lieu de la mort
   et pivote vers le tueur, marqué d'un losange et de « NOM · distance » en rouge d'impact (`DeathCamera`).
+  Débutant (#291, conseils non coupés) : sous « RÉAPPARITION », une ligne de conseil en texte courant (Oswald regular,
+  18 px, os), son thème en ambre (« SURF : », « BHOP : », « AIR STRAFE : »), plus large que le bloc (680 px) ; le
+  bloc remonte d'autant et le fondu de bord s'agrandit (780x270 au lieu de 520x230). Rien de plus pour les autres.
 - `src/client/ui/KillFeed.luau` (#102) : en haut à droite, sans fond, une ligne par mort (tueur et victime en os, arme
   en ambre plus petite), 4 lignes, 5 s chacune ; les lignes du joueur sont sur une bande rouge d'impact droite qui
   s'efface vers la gauche, comme sa ligne au classement. Affiché vivant ou mort (`HUDRules.killFeedVisible`), pas au

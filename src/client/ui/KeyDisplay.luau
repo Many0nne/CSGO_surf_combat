@@ -3,7 +3,8 @@
 -- est un keycap en relief : dessus os bombé, rebord plus sombre sur les côtés et dessous, ombre portée ; Espace, Ctrl,
 -- Maj et la souris en ambre ; enfoncée, la touche s'enfonce et passe au rouge d'impact. Libellés selon la disposition
 -- du clavier (LocalSettings.keyText). Affiché selon HUDRules.keyDisplayVisible appliquée à HUDState (#223) : mode actif,
--- HUD de jeu visible (donc ni menu ni mort) et menu en partie fermé. Pas de CanvasGroup (cf. docs/ui.md) : de simples
+-- HUD de jeu visible (donc ni menu ni mort) et menu en partie fermé. Mode actif : réglage du joueur, ou « full » pour un
+-- débutant (HUDRules.keyDisplayMode, BeginnerState, #291). Pas de CanvasGroup (cf. docs/ui.md) : de simples
 -- Frame et TextLabel.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -11,6 +12,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 local UITheme = require(ReplicatedStorage.Shared.UITheme)
+local BeginnerState = require(script.Parent.Parent.systems.game.BeginnerState)
 local LocalSettings = require(script.Parent.Parent.systems.settings.LocalSettings)
 local HUDRules = require(script.Parent.HUDRules)
 local HUDState = require(script.Parent.HUDState)
@@ -226,7 +228,8 @@ local function update()
 	if not gui then
 		return
 	end
-	local mode = LocalSettings.get().keyDisplay
+	-- Débutant (#291) : mode complet quel que soit le réglage, jamais réécrit
+	local mode = HUDRules.keyDisplayMode(LocalSettings.get().keyDisplay, BeginnerState.isBeginner())
 	gui.Enabled = HUDRules.keyDisplayVisible(HUDState.get(), mode)
 	if mode ~= builtMode then
 		build(mode)
@@ -313,6 +316,7 @@ function KeyDisplay.init()
 	scaled:GetAttributeChangedSignal("Scale"):Connect(replace)
 
 	LocalSettings.onChanged(update)
+	BeginnerState.onChanged(update)
 	HUDState.onChanged(onHudChanged)
 	RunService.Heartbeat:Connect(poll)
 	update()

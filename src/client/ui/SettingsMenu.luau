@@ -768,6 +768,10 @@ local function buildCategories(block: Frame)
 		{ label = "COMPLET", value = "full" },
 	}
 	addPicker(graphics, "Affichage des touches", "keyDisplay", keyDisplayOptions, 1, 1, function() end, 150)
+	-- Conseils de l'écran de mort des débutants (#291), à côté de l'autre aide affichée ; GameStateController suit LocalSettings
+	local tipOptions = { { label = "ACTIVÉS", value = true }, { label = "COUPÉS", value = false } }
+	local tipDefault = if PlayerSettings.DEFAULT_DEATH_TIPS then 1 else 2
+	addPicker(graphics, "Conseils", "deathTips", tipOptions, tipDefault, tipDefault, function() end, 150)
 	-- Échelle du HUD (#250) en pourcents entiers : éléments de bord du HUD ; init.client la relaie à UIKit.setHudScale
 	local hudScale = PlayerSettings.HUD_SCALE
 	addSlider(

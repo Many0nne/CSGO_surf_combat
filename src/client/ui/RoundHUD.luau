@@ -1,6 +1,6 @@
 -- HUD de round, direction « Ligne de mire » : timer et rang en haut, classement (Tab maintenu), écran de réapparition
--- (scène désaturée, compte à rebours en bas au centre) et écran de fin de round (voile central, nom du vainqueur,
--- podium et ligne du joueur).
+-- (scène désaturée, compte à rebours en bas au centre, conseil d'un débutant dessous, #291) et écran de fin de round
+-- (voile central, nom du vainqueur, podium et ligne du joueur).
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -39,7 +39,14 @@ local COL_STATS = { 80, 72, 64 } -- KILLS, MORTS, K/M
 local RESPAWN_SCRIM_SIZE = Vector2.new(520, 230)
 local RESPAWN_SCRIM_TRANSPARENCY = 0.2
 local RESPAWN_WIDTH = 400
+local RESPAWN_HEIGHT = 196
 local RESPAWN_BOTTOM = 40
+-- Conseil d'un débutant (#291) sous « RÉAPPARITION » : une ligne plus large que le bloc, fondu de bord agrandi d'autant
+local RESPAWN_TIP_GAP = 8
+local RESPAWN_TIP_HEIGHT = 24
+local RESPAWN_TIP_WIDTH = 680
+local RESPAWN_TIP_SIZE = 18
+local RESPAWN_TIP_SCRIM_SIZE = Vector2.new(780, 270)
 -- Fin de round : même voile central que le classement, un peu plus dense ; sous le vainqueur, podium et ligne du joueur
 -- hors podium (#295) en lignes du classement, à `RESULT_BOARD_TOP` px du haut, ligne du joueur après un écart
 local RESULT_WIDTH = 720
@@ -64,6 +71,7 @@ local leaderboard: Frame
 local leaderboardList: Frame
 local respawnRoot: Frame
 local respawnScrim: ImageLabel
+local respawnTipScrim: ImageLabel
 local respawnPanel: Frame
 local respawnCount: TextLabel
 local respawnCountShadow: TextLabel
@@ -74,6 +82,7 @@ local respawnTitleShadow: TextLabel
 local respawnKiller: TextLabel
 local respawnKillerShadow: TextLabel
 local respawnDetail: TextLabel
+local respawnTip: TextLabel
 local deathGrade: ColorCorrectionEffect
 local resultRoot: Frame
 local resultVeil: Frame
@@ -356,13 +365,16 @@ local function buildRespawnOverlay(root: Frame)
 		Parent = root,
 	})
 	respawnScrim = UIKit.cornerScrim(respawnRoot, "Bottom", RESPAWN_SCRIM_SIZE, 1)
+	-- Fondu agrandi, montré à la place du premier quand un conseil est affiché (#291)
+	respawnTipScrim = UIKit.cornerScrim(respawnRoot, "Bottom", RESPAWN_TIP_SCRIM_SIZE, 1)
+	respawnTipScrim.Visible = false
 	respawnPanel = UIKit.create("Frame", {
 		Name = "Panel",
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		AnchorPoint = Vector2.new(0.5, 1),
 		Position = UDim2.new(0.5, 0, 1, -RESPAWN_BOTTOM),
-		Size = UDim2.fromOffset(RESPAWN_WIDTH, 196),
+		Size = UDim2.fromOffset(RESPAWN_WIDTH, RESPAWN_HEIGHT),
 		Parent = respawnRoot,
 	})
 	local centered = Enum.TextXAlignment.Center
@@ -424,6 +436,21 @@ local function buildRespawnOverlay(root: Frame)
 		TextXAlignment = centered,
 		Position = UDim2.fromOffset(0, 170),
 		Size = UDim2.new(1, 0, 0, 20),
+		Parent = respawnPanel,
+	})
+	-- Conseil d'un débutant (#291) : thème en ambre puis phrase en os, texte courant (Oswald regular) ; masqué sinon
+	respawnTip = UIKit.text({
+		Name = "Tip",
+		Text = "",
+		RichText = true,
+		Visible = false,
+		FontFace = F.DisplayText,
+		TextSize = RESPAWN_TIP_SIZE,
+		TextColor3 = C.Bone,
+		TextXAlignment = centered,
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, RESPAWN_HEIGHT + RESPAWN_TIP_GAP),
+		Size = UDim2.fromOffset(RESPAWN_TIP_WIDTH, RESPAWN_TIP_HEIGHT),
 		Parent = respawnPanel,
 	})
 end
@@ -769,8 +796,10 @@ function RoundHUD.showRespawning(delaySeconds: number)
 		return
 	end
 	respawnRoot.Visible = true
-	respawnScrim.ImageTransparency = 1
-	UIKit.tween(respawnScrim, Motion.Enter, { ImageTransparency = RESPAWN_SCRIM_TRANSPARENCY })
+	for _, scrim in { respawnScrim, respawnTipScrim } do
+		scrim.ImageTransparency = 1
+		UIKit.tween(scrim, Motion.Enter, { ImageTransparency = RESPAWN_SCRIM_TRANSPARENCY })
+	end
 	respawnLabel.Text = "RÉAPPARITION"
 	setRespawnLines("ÉLIMINÉ", "", "")
 	UIKit.reveal(respawnPanel, 0, 16)
@@ -810,6 +839,32 @@ function RoundHUD.setDeathInfo(killer: string?, weapon: string?, headshot: boole
 	else
 		setRespawnLines("ÉLIMINÉ", HUDRules.killDetail(nil, weapon, headshot), "")
 	end
+end
+
+-- Cette méthode permet d'afficher ou de retirer le conseil de l'écran de mort lorsque le joueur meurt ou que son état
+-- débutant, ses réglages ou ses touches changent (#291) : le bloc remonte de la hauteur du conseil, le fondu s'agrandit.
+function RoundHUD.setTip(tip: { topic: string, text: string }?)
+	if not respawnTip then
+		return
+	end
+	local text = if tip
+		then string.format(
+			'<font color="#%s">%s :</font> %s',
+			C.Accent:ToHex(),
+			HUDRules.escapeRichText(tip.topic),
+			HUDRules.escapeRichText(tip.text)
+		)
+		else ""
+	-- Réglage sans rapport changé (curseur glissé) : rien à redessiner
+	if text == respawnTip.Text and respawnTip.Visible == (tip ~= nil) then
+		return
+	end
+	respawnTip.Text = text
+	respawnTip.Visible = tip ~= nil
+	respawnTipScrim.Visible = tip ~= nil
+	respawnScrim.Visible = tip == nil
+	local extra = if tip then RESPAWN_TIP_GAP + RESPAWN_TIP_HEIGHT else 0
+	respawnPanel.Size = UDim2.fromOffset(RESPAWN_WIDTH, RESPAWN_HEIGHT + extra)
 end
 
 function RoundHUD.hideRespawning()

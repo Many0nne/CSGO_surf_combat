@@ -1,4 +1,5 @@
--- Règles pures de l'écran Infos (#290) : composition des textes qui citent des touches, sans Instance ni service.
+-- Règles pures de l'écran Infos (#290) : composition des textes qui citent des touches, sans Instance ni service ; aussi
+-- les conseils de l'écran de mort des débutants (#291, deathTips).
 -- Les touches viennent de KeyBindings via les entrées de HUDRules.keyDisplayEntries (une seule liste d'actions) et des
 -- réglages du joueur ; le libellé de chaque touche est celui de `keyText` (LocalSettings.keyText, disposition du clavier).
 -- Testées sous Lune (tests/specs/InfosRules.spec.luau).
@@ -58,8 +59,8 @@ local function entryOf(entries: { Entry }, id: string): Entry?
 end
 
 -- Cette méthode permet de donner le libellé de la première touche d'une action lorsqu'un texte la cite (AZERTY : Q pour
--- la touche « gauche »).
-local function actionKey(ctx: Context, id: string): string
+-- la touche « gauche ») ; ne lit que les entrées et `keyText`, communs à Context et TipContext.
+local function actionKey(ctx: { entries: { Entry }, keyText: (keyName: string) -> string }, id: string): string
 	local entry = entryOf(ctx.entries, id)
 	local name = entry and entry.keys and entry.keys[1]
 	return name and ctx.keyText(name) or "?"
@@ -142,6 +143,39 @@ function InfosRules.surfLines(ctx: Context): { string }
 			right
 		),
 		"Ne saute jamais sur une rampe : laisse la gravité t'y amener.",
+	}
+end
+
+-- Contexte des conseils de l'écran de mort (#291) : entrées d'actions, libellé d'une touche, auto-bhop réglé (le conseil
+-- de bhop en dépend)
+export type TipContext = {
+	entries: { Entry },
+	keyText: (keyName: string) -> string,
+	autoBhop: boolean,
+}
+
+-- Conseil de l'écran de mort : thème (affiché en ambre) et phrase
+export type Tip = { topic: string, text: string }
+
+-- Cette méthode permet de composer les conseils de l'écran de mort d'un débutant (#291) lorsqu'un conseil est choisi :
+-- surf, bhop (selon l'auto-bhop) et air strafe, touches telles qu'imprimées sur le clavier du joueur.
+function InfosRules.deathTips(ctx: TipContext): { Tip }
+	local left, right, forward = actionKey(ctx, "left"), actionKey(ctx, "right"), actionKey(ctx, "forward")
+	local jumpEntry = entryOf(ctx.entries, "jump")
+	local jump = if jumpEntry and jumpEntry.label then jumpEntry.label else actionKey(ctx, "jump")
+	local bhop = if ctx.autoBhop
+		then string.format("garde %s enfoncé, tu ressautes dès que tu touches le sol.", jump)
+		else string.format("appuie sur %s à chaque fois que tu touches le sol.", jump)
+	return {
+		{
+			topic = "SURF",
+			text = string.format("maintiens %s ou %s contre la rampe, ne touche jamais à %s.", left, right, forward),
+		},
+		{ topic = "BHOP", text = bhop },
+		{
+			topic = "AIR STRAFE",
+			text = string.format("en l'air, tiens %s en tournant la souris à gauche, %s à droite.", left, right),
+		},
 	}
 end
 

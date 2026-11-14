@@ -36,6 +36,8 @@ export type Settings = {
 	volumeWeapons: number,
 	-- Échelle du HUD (#250) en pourcents entiers (50 à 100) : éléments de bord du HUD de partie, hors réticule et hitmarker
 	hudScale: number,
+	-- Conseils de l'écran de mort des débutants (#291) ; activés par défaut (DEFAULT_DEATH_TIPS), absent = activés
+	deathTips: boolean,
 	-- une touche par emplacement de la barre d'armes, dans l'ordre des emplacements
 	slotKeys: { string },
 }
@@ -70,6 +72,8 @@ PlayerSettings.CROSSHAIR = {
 PlayerSettings.VOLUME = { min = 0, max = 100, default = 100 }
 -- Échelle du HUD (#250) : pourcents entiers, 100 par défaut = HUD d'origine (pas d'agrandissement)
 PlayerSettings.HUD_SCALE = { min = 50, max = 100, default = 100 }
+-- Conseils de l'écran de mort des débutants (#291) : activés par défaut, y compris pour un réglage sauvegardé avant eux
+PlayerSettings.DEFAULT_DEATH_TIPS = true
 -- Touche du menu en partie (#157 : reprendre, réglages, retour au menu principal), nom d'Enum.KeyCode ; au menu
 -- principal elle ouvre les Réglages. Seule source de cette touche : InGameMenu, l'écran Infos et la liste des réservées.
 PlayerSettings.MENU_KEY = "P"
@@ -143,6 +147,7 @@ function PlayerSettings.defaults(): Settings
 		volumeMaster = PlayerSettings.VOLUME.default,
 		volumeWeapons = PlayerSettings.VOLUME.default,
 		hudScale = PlayerSettings.HUD_SCALE.default,
+		deathTips = PlayerSettings.DEFAULT_DEATH_TIPS,
 		slotKeys = table.clone(PlayerSettings.DEFAULT_SLOT_KEYS),
 	}
 end
@@ -241,6 +246,9 @@ function PlayerSettings.sanitize(raw: any): Settings
 	settings.volumeMaster = clampPixels(raw.volumeMaster, PlayerSettings.VOLUME)
 	settings.volumeWeapons = clampPixels(raw.volumeWeapons, PlayerSettings.VOLUME)
 	settings.hudScale = clampPixels(raw.hudScale, PlayerSettings.HUD_SCALE)
+	if type(raw.deathTips) == "boolean" then
+		settings.deathTips = raw.deathTips
+	end
 	settings.slotKeys = sanitizeKeys(raw.slotKeys)
 	return settings
 end
