@@ -6,8 +6,9 @@
 local MusicRules = {}
 
 -- Piste jouée en boucle : son de la bibliothèque sous licence de Roblox (un son mis en ligne par un tiers ne joue pas
--- dans le jeu). Vide : pas de musique.
-MusicRules.TRACK_ID = ""
+-- dans le jeu). Vide : pas de musique. « Hot For a Minute (underscore) », APM (hip-hop sourd, cuivres, 2:23), choisie
+-- parmi des pistes sans synthé en avant : la synthwave faisait « néon », hors de la DA « Ligne de mire » (docs/ui.md).
+MusicRules.TRACK_ID = "rbxassetid://9044591415"
 -- Volume du son à niveau 1 (menu, curseurs à 100) : la piste ne doit pas couvrir les sons du jeu
 MusicRules.BASE_VOLUME = 0.5
 
