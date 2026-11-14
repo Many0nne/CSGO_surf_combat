@@ -14,6 +14,7 @@ local DizzyPatches = require("./DizzyPatches")
 local RampCheck = require("./RampCheck")
 local RampEdges = require("./RampEdges")
 local ShadowCulling = require("./ShadowCulling")
+local SpawnSight = require("./SpawnSight")
 
 local CFrame = roblox.CFrame
 local Color3 = roblox.Color3
@@ -192,21 +193,70 @@ local function underside(parent, data)
 	end
 end
 
--- Cette méthode permet de poser les points d'apparition au sol (info_player_* de l'original) : le joueur apparaît
--- 5 studs au-dessus du point (SpawnManager), le point est mis au niveau du sol (0,406 m sous l'origine source).
+-- Points d'apparition ajoutés (#329) : SpawnPointRules choisit un point loin et hors de vue des ennemis, et deux grappes
+-- (bases T et CT) ne lui laissaient presque pas de choix. Zones choisies hors de vue l'une de l'autre et des bases
+-- (tools/map/spawn_sight.luau), accessibles à pied aller et retour (le plan des bots ne garde que la partie reliée au
+-- premier point). Coordonnées du plan sans le décalage, y = dessus du sol ; regard horizontal vers la sortie de la
+-- zone. Décrites côté T, recopiées côté CT par le demi-tour de la map autour de (0, -260,1) (cf. DizzyDressing.mirror).
+local FFA_SPAWNS = {
+	{
+		zone = "BalconSud",
+		mirror = "BalconNord",
+		floor = 48.1045,
+		look = { -1, 0 },
+		points = { { -38.486, -506.212 }, { -38.486, -517.428 }, { -38.486, -494.995 } },
+	},
+	{
+		zone = "ToitT",
+		mirror = "ToitCT",
+		floor = 96.1105,
+		look = { 1, 0 },
+		points = { { -241.037, -261.783 }, { -230.668, -256.516 }, { -241.037, -251.249 } },
+	},
+}
+local SPAWN_SKIN = 0.029 -- studs : face basse du point au-dessus du sol, comme les points T/CT relevés
+
+-- Cette méthode permet de poser un point d'apparition au sol (pièce invisible sans collision, repère `cf`) lorsque le
+-- générateur remplit GroundSpawns.
+local function spawnPoint(f, name, cf, team, zone)
+	local p = ghost(Instance.new("Part"))
+	p.Anchored = true
+	p.Transparency = 1
+	p.Size = Vector3.new(2, 1, 2)
+	p.CFrame = cf
+	p.Name = name
+	p:SetAttribute("Team", team)
+	if zone then
+		p:SetAttribute("Zone", zone)
+	end
+	p.Parent = f
+end
+
+-- Cette méthode permet de poser les points d'apparition au sol : info_player_* de l'original (Team T ou CT, 0,406 m sous
+-- l'origine source), puis les zones FFA_SPAWNS des deux côtés de la map (#329) ; renvoie le nombre de points.
 local function spawns(parent, data)
 	local f = folder(parent, "GroundSpawns")
 	for i, s in data.spawns do
-		local p = ghost(Instance.new("Part"))
-		p.Anchored = true
-		p.Transparency = 1
-		p.Size = Vector3.new(2, 1, 2)
 		local feet = Vector3.new(s[2], s[3] - 0.406 * data.scale.v + 0.5, s[4]) + OFFSET
-		p.CFrame = CFrame.lookAt(feet, feet + Vector3.new(s[5], 0, s[6]))
-		p.Name = string.format("%s%02d", s[1], i)
-		p:SetAttribute("Team", s[1])
-		p.Parent = f
+		local cf = CFrame.lookAt(feet, feet + Vector3.new(s[5], 0, s[6]))
+		spawnPoint(f, string.format("%s%02d", s[1], i), cf, s[1], nil)
 	end
+	local n = 0
+	for _, z in FFA_SPAWNS do
+		local y = z.floor + SPAWN_SKIN + 0.5
+		for _, side in { { z.zone, false }, { z.mirror, true } } do
+			for _, pt in z.points do
+				-- repère du plan (sans décalage) ; côté CT, demi-tour de la map, le regard tourne avec
+				local cf = DizzyDressing.aim(Vector3.new(pt[1], y, pt[2]), Vector3.new(z.look[1], 0, z.look[2]))
+				if side[2] then
+					cf = DizzyDressing.mirror(cf)
+				end
+				n += 1
+				spawnPoint(f, string.format("FFA%02d", n), cf + OFFSET, "FFA", side[1])
+			end
+		end
+	end
+	return #data.spawns + n
 end
 
 -- Cette méthode permet de vérifier que l'heure et la latitude de default.project.json sont celles du soleil SUN
@@ -285,7 +335,16 @@ for _, r in RampEdges.apply(geometry) do
 end
 local dressed = DizzyDressing.build(map, OFFSET)
 underside(map, data)
-spawns(map, data)
+local spawnCount = spawns(map, data)
+-- zones d'apparition hors de vue l'une de l'autre (#329), sinon SpawnPointRules retombe au hasard : arrêt avant d'écrire
+local sightTested, sightVisible = SpawnSight.check(map)
+print(string.format("  vues entre zones d'apparition : %d paire(s) testée(s), %d visible(s)", sightTested, #sightVisible))
+if #sightVisible > 0 or sightTested == 0 then
+	for _, v in sightVisible do
+		print(string.format("  VU : %s <-> %s", v.a, v.b))
+	end
+	error("zones d'apparition qui se voient, ou aucune paire testée (tools/map/spawn_sight.luau) : map non écrite")
+end
 local rampLines, rampWorst = RampCheck.check(map)
 if rampWorst > RampCheck.TOL then
 	-- bilan en entier (un message d'erreur long est tronqué), puis arrêt avant d'écrire la map
@@ -316,7 +375,7 @@ print(
 		#data.parts,
 		#patches,
 		dressed,
-		#data.spawns,
+		spawnCount,
 		data.killY,
 		OUT
 	)
