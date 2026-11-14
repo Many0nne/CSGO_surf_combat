@@ -25,6 +25,7 @@ local HUDRules = require(script.Parent.Parent.Parent.ui.HUDRules)
 local KillFeed = require(script.Parent.Parent.Parent.ui.KillFeed)
 local DeathCamera = require(script.Parent.Parent.Parent.camera.DeathCamera)
 local DeathRagdoll = require(script.Parent.DeathRagdoll)
+local KillAnnouncer = require(script.Parent.KillAnnouncer)
 local SpawnRequestRules = require(script.Parent.SpawnRequestRules)
 local BeginnerState = require(script.Parent.BeginnerState)
 local BeginnerRules = require(script.Parent.BeginnerRules)
@@ -128,6 +129,10 @@ local startRespawnWatch: () -> ()
 
 local function setState(newState: State)
 	state = newState
+	if newState ~= "IN_ROUND" then
+		-- Mort, fin de manche ou retour au menu : la série de kills de l'annonceur repart à 0
+		KillAnnouncer.reset()
+	end
 	if newState ~= "SPAWNING" then
 		-- La surveillance de la demande s'arrête d'elle-même (GameStateController.requestPlay)
 		spawnAttempt = nil
@@ -276,7 +281,15 @@ local function onPlayerDied(data: any)
 	DeathRagdoll.spawn(victimChar, death.direction, death.weapon, death.headshot)
 	KillFeed.add(death)
 
-	if not death.victimIsBot and death.victimId == localPlayer.UserId then
+	local victimIsLocal = not death.victimIsBot and death.victimId == localPlayer.UserId
+	if victimIsLocal then
+		KillAnnouncer.reset()
+	elseif state == "IN_ROUND" and not death.killerIsBot and death.killerId == localPlayer.UserId then
+		-- Kill du joueur local vivant : annonce « Headshot » ou palier de série (KillStreakRules)
+		KillAnnouncer.onKill(death.headshot)
+	end
+
+	if victimIsLocal then
 		lastDeath = {
 			killer = death.killer and ParticipantRules.displayName(death.killer, death.killerIsBot),
 			weapon = death.weapon,
