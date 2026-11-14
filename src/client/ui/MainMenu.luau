@@ -1,8 +1,8 @@
 -- Menu principal (docs/ui.md) : derrière, le personnage du jeu en pose sur une copie de la map (#253, MenuScene) ; on
--- choisit à la souris système, rien ne se tire. Titre en haut à gauche, onglets ARMES · INFOS · JOUER · RÉGLAGES ·
--- FEEDBACK en haut au centre (au-dessus des écrans secondaires, qui s'ouvrent dessous ; l'onglet ouvert est souligné
--- d'ambre, #308), statistiques du joueur en bas à
--- droite (#301, StatsCard). L'onglet ARMES est l'écran d'équipement (#280, disposition de #308, EquipmentScreen) : tout
+-- choisit à la souris système, rien ne se tire. Titre en haut à gauche, onglets ARMES · INFOS · APPRENDRE · JOUER ·
+-- RÉGLAGES · FEEDBACK en haut au centre (au-dessus des écrans secondaires, qui s'ouvrent dessous ; l'onglet ouvert est
+-- souligné d'ambre, #308), statistiques du joueur en bas à droite (#301, StatsCard). L'onglet ARMES est l'écran
+-- d'équipement (#280, disposition de #308, EquipmentScreen) : tout
 -- à gauche (titre, arme montrée, onglets des emplacements, grille de cartes), le personnage à droite tient l'arme
 -- survolée ou celle de l'emplacement actif.
 local Players = game:GetService("Players")
@@ -21,7 +21,7 @@ local UIKit = require(script.Parent.UIKit)
 local C = UITheme.Colors
 local F = UITheme.Fonts
 
-export type Page = "home" | "infos" | "settings" | "feedback"
+export type Page = "home" | "infos" | "learn" | "settings" | "feedback"
 
 local MainMenu = {}
 
@@ -31,10 +31,12 @@ local TITLE_Y = MenuPage.GameTitleY
 local TABS_Y = 18
 local NOTICE_Y = 72 -- message sous les onglets (apparition impossible, #219)
 local NOTICE_TIME = 5 -- s d'affichage de ce message
--- Onglets, de gauche à droite ; ARMES est l'accueil (le personnage et son arme), JOUER l'appel à l'action
+-- Onglets, de gauche à droite ; ARMES est l'accueil (le personnage et son arme), JOUER l'appel à l'action, APPRENDRE
+-- juste avant (#285 : on apprend le geste, puis on joue)
 local TABS = {
 	{ key = "home", text = "ARMES" },
 	{ key = "infos", text = "INFOS" },
+	{ key = "learn", text = "APPRENDRE" },
 	{ key = "play", text = "JOUER" },
 	{ key = "settings", text = "RÉGLAGES" },
 	{ key = "feedback", text = "FEEDBACK" },
@@ -215,15 +217,23 @@ local function makeGui(name: string, displayOrder: number): ScreenGui
 end
 
 -- Cette méthode permet d'initialiser le menu et d'enregistrer les rappels lorsque le client démarre ;
--- onSettings et onHome sont optionnels (navigation vers Settings et retour à l'accueil).
+-- onSettings, onHome et onLearn sont optionnels (navigation vers Settings, retour à l'accueil, écran Apprendre).
 function MainMenu.init(
 	onPlay: () -> (),
 	onInfos: () -> (),
 	onFeedback: () -> (),
 	onSettings: (() -> ())?,
-	onHome: (() -> ())?
+	onHome: (() -> ())?,
+	onLearn: (() -> ())?
 )
-	callbacks = { play = onPlay, infos = onInfos, feedback = onFeedback, settings = onSettings, home = onHome }
+	callbacks = {
+		play = onPlay,
+		infos = onInfos,
+		learn = onLearn,
+		feedback = onFeedback,
+		settings = onSettings,
+		home = onHome,
+	}
 
 	gui = makeGui("MainMenu", 1)
 	-- Les onglets passent au-dessus des écrans secondaires (DisplayOrder 2 et 3), qui s'ouvrent dessous

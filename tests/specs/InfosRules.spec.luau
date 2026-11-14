@@ -45,32 +45,6 @@ return function(T, Loader)
 		return nil
 	end
 
-	T.describe("InfosRules.surfLines", function()
-		T.it("cite les touches du clavier du joueur : Q, D et Z en AZERTY", function()
-			local text = table.concat(InfosRules.surfLines(context(AZERTY)), "\n")
-			T.expectEqual(string.find(text, "Maintiens Q ou D", 1, true) ~= nil, true, "gauche et droite")
-			T.expectEqual(string.find(text, "Ne touche jamais à Z", 1, true) ~= nil, true, "avant")
-			T.expectEqual(string.find(text, "(Q/D + souris)", 1, true) ~= nil, true, "air strafe")
-		end)
-
-		T.it("cite A, D et W en QWERTY", function()
-			local text = table.concat(InfosRules.surfLines(context({})), "\n")
-			T.expectEqual(string.find(text, "Maintiens A ou D", 1, true) ~= nil, true, "gauche et droite")
-			T.expectEqual(string.find(text, "Ne touche jamais à W", 1, true) ~= nil, true, "avant")
-		end)
-
-		T.it("suit KeyBindings : une touche gauche changée change le texte", function()
-			local entries = HUDRules.keyDisplayEntries("full")
-			for _, entry in entries do
-				if entry.id == "left" then
-					entry.keys = { "J" }
-				end
-			end
-			local text = table.concat(InfosRules.surfLines(context({}, { entries = entries })), "\n")
-			T.expectEqual(string.find(text, "Maintiens J ou D", 1, true) ~= nil, true)
-		end)
-	end)
-
 	T.describe("InfosRules.commandRows", function()
 		T.it("liste les directions telles qu'imprimées : Z Q S D en AZERTY, W A S D en QWERTY", function()
 			T.expectEqual(rowFor(InfosRules.commandRows(context(AZERTY)), "déplacer").key, "Z Q S D")
@@ -145,6 +119,36 @@ return function(T, Loader)
 			T.expectEqual(rowFor(rows, "Recharger").key, "#R")
 			T.expectEqual(rowFor(rows, "Inspecter").key, "#F")
 			T.expectEqual(rowFor(rows, "Menu en partie").key, "#P")
+		end)
+	end)
+
+	T.describe("InfosRules.demoClips", function()
+		T.it("propose la démo bhop et air strafe, une par module de données", function()
+			local clips = InfosRules.demoClips(context(AZERTY))
+			T.expectEqual(#clips, 1)
+			T.expectEqual(clips[1].id, "bhop")
+			T.expectEqual(clips[1].title, "BHOP")
+		end)
+
+		T.it("cite les touches du clavier du joueur dans la légende", function()
+			local caption = InfosRules.demoClips(context(AZERTY))[1].caption
+			T.expect(string.find(caption, "Garde ESPACE (auto-bhop)", 1, true) ~= nil, "saut tenu")
+			T.expect(
+				string.find(caption, "Q en tournant la souris à gauche, D à droite", 1, true) ~= nil,
+				"air strafe"
+			)
+			T.expect(string.find(caption, "sans Z", 1, true) ~= nil, "pas d'avant")
+		end)
+
+		T.it("suit le réglage auto-bhop : garder le saut, ou l'appuyer à chaque atterrissage", function()
+			local on = InfosRules.demoClips(context(AZERTY, { autoBhop = true }))[1].caption
+			local off = InfosRules.demoClips(context(AZERTY, { autoBhop = false }))[1].caption
+			T.expect(string.find(on, "Garde ESPACE (auto-bhop)", 1, true) ~= nil, on)
+			T.expect(
+				string.find(off, "Appuie sur ESPACE à chaque atterrissage (démo en auto-bhop)", 1, true) ~= nil,
+				off
+			)
+			T.expect(string.find(off, "Garde", 1, true) == nil, off)
 		end)
 	end)
 end

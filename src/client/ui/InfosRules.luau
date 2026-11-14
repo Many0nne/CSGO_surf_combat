@@ -17,7 +17,8 @@ export type Entry = {
 	full: boolean,
 }
 
--- Contexte de composition : entrées d'actions (mode « full »), libellé d'une touche, touche du menu, réglages d'armes
+-- Contexte de composition : entrées d'actions (mode « full »), libellé d'une touche, touche du menu, réglages d'armes,
+-- auto-bhop réglé (légende de la démo de bhop ; absent : activé, la valeur par défaut)
 export type Context = {
 	entries: { Entry },
 	keyText: (keyName: string) -> string,
@@ -25,6 +26,7 @@ export type Context = {
 	slotKeys: { string },
 	defaultSlotKeys: { string },
 	wheel: string,
+	autoBhop: boolean?,
 }
 
 export type KeyRow = { key: string, action: string }
@@ -64,6 +66,13 @@ local function actionKey(ctx: { entries: { Entry }, keyText: (keyName: string) -
 	local entry = entryOf(ctx.entries, id)
 	local name = entry and entry.keys and entry.keys[1]
 	return name and ctx.keyText(name) or "?"
+end
+
+-- Cette méthode permet de donner le libellé du saut (fixe, ESPACE, sinon la touche du clavier du joueur) lorsqu'un
+-- texte de bhop est composé.
+local function jumpLabel(ctx: { entries: { Entry }, keyText: (keyName: string) -> string }): string
+	local entry = entryOf(ctx.entries, "jump")
+	return if entry and entry.label then entry.label else actionKey(ctx, "jump")
 end
 
 -- Cette méthode permet de donner le libellé d'une entrée d'action lorsqu'une ligne de COMMANDES est composée : bouton de
@@ -123,28 +132,36 @@ function InfosRules.commandRows(ctx: Context): { KeyRow }
 	return rows
 end
 
--- Cette méthode permet de composer les conseils de la section SURFER lorsque l'écran Infos s'ouvre : les touches citées
--- (gauche, droite, avant) suivent la disposition du clavier du joueur.
-function InfosRules.surfLines(ctx: Context): { string }
+-- Démo rejouée de l'écran Apprendre (#285) : `id` nomme le module de données (ui/DemoClips), `title` le sélecteur,
+-- `caption` le geste en une ligne, posé sur le clip
+export type DemoClip = { id: string, title: string, caption: string }
+
+-- Cette méthode permet de composer les démos de l'écran Apprendre et leurs légendes lorsqu'il s'ouvre,
+-- touches telles qu'imprimées sur le clavier du joueur ; plusieurs démos donnent un sélecteur, une seule n'en a pas.
+-- Une seule pour l'instant (Dizzy n'a pas de rampe assez longue pour le surf ni l'enchaînement) : bhop et air strafe,
+-- jouée avec l'auto-bhop (saut tenu) ; sans auto-bhop, la légende dit d'appuyer à chaque atterrissage.
+function InfosRules.demoClips(ctx: Context): { DemoClip }
 	local left, right, forward = actionKey(ctx, "left"), actionKey(ctx, "right"), actionKey(ctx, "forward")
+	local jump = if ctx.autoBhop == false
+		then string.format("Appuie sur %s à chaque atterrissage (démo en auto-bhop)", jumpLabel(ctx))
+		else string.format("Garde %s (auto-bhop)", jumpLabel(ctx))
 	return {
-		"Approche une rampe et place-toi PARALLÈLE à sa surface.",
-		string.format(
-			"Maintiens %s ou %s pour appuyer contre la rampe. Ne touche jamais à %s pendant le surf.",
-			left,
-			right,
-			forward
-		),
-		"Oriente-toi avec la souris dans le sens de la rampe pour gagner de la vitesse.",
-		"Reste sur la bonne zone de la rampe : ni trop haut, ni trop bas.",
-		string.format(
-			"Enchaîne les rampes en douceur, avec des air strafes (%s/%s + souris) entre elles.",
-			left,
-			right
-		),
-		"Ne saute jamais sur une rampe : laisse la gravité t'y amener.",
+		{
+			id = "bhop",
+			title = "BHOP",
+			caption = string.format(
+				"%s, puis en l'air %s en tournant la souris à gauche, %s à droite, sans %s.",
+				jump,
+				left,
+				right,
+				forward
+			),
+		},
 	}
 end
+
+-- Renvoi des conseils de l'écran de mort vers la démo de l'écran Apprendre (#285)
+InfosRules.DEMO_POINTER = " Démo : APPRENDRE."
 
 -- Contexte des conseils de l'écran de mort (#291) : entrées d'actions, libellé d'une touche, auto-bhop réglé (le conseil
 -- de bhop en dépend)
@@ -158,14 +175,15 @@ export type TipContext = {
 export type Tip = { topic: string, text: string }
 
 -- Cette méthode permet de composer les conseils de l'écran de mort d'un débutant (#291) lorsqu'un conseil est choisi :
--- surf, bhop (selon l'auto-bhop) et air strafe, touches telles qu'imprimées sur le clavier du joueur.
+-- surf, bhop (selon l'auto-bhop) et air strafe, touches telles qu'imprimées sur le clavier du joueur. Bhop et air strafe
+-- renvoient à leur démo (#285, onglet APPRENDRE du menu) : DEMO_POINTER, sur la même ligne.
 function InfosRules.deathTips(ctx: TipContext): { Tip }
 	local left, right, forward = actionKey(ctx, "left"), actionKey(ctx, "right"), actionKey(ctx, "forward")
-	local jumpEntry = entryOf(ctx.entries, "jump")
-	local jump = if jumpEntry and jumpEntry.label then jumpEntry.label else actionKey(ctx, "jump")
-	local bhop = if ctx.autoBhop
+	local jump = jumpLabel(ctx)
+	local bhop = if ctx.autoBhop ~= false
 		then string.format("garde %s enfoncé, tu ressautes dès que tu touches le sol.", jump)
 		else string.format("appuie sur %s à chaque fois que tu touches le sol.", jump)
+	bhop ..= InfosRules.DEMO_POINTER
 	return {
 		{
 			topic = "SURF",
@@ -174,7 +192,8 @@ function InfosRules.deathTips(ctx: TipContext): { Tip }
 		{ topic = "BHOP", text = bhop },
 		{
 			topic = "AIR STRAFE",
-			text = string.format("en l'air, tiens %s en tournant la souris à gauche, %s à droite.", left, right),
+			text = string.format("en l'air, tiens %s en tournant la souris à gauche, %s à droite.", left, right)
+				.. InfosRules.DEMO_POINTER,
 		},
 	}
 end

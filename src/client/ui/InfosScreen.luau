@@ -1,11 +1,11 @@
 -- Écran Infos (MenuPage) : bloc centré sur un voile, titre, sections en onglets en boîte (#308), contenu dessous
--- (texte, ou lignes « touche en boîte → action » pour COMMANDES), RETOUR en bas au centre.
+-- (texte, ou lignes « touche en boîte → action » pour COMMANDES), RETOUR en bas au centre. L'explication du surf et sa
+-- démo sont dans l'écran Apprendre (#285, LearnScreen).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local PlayerSettings = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("PlayerSettings"))
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
 local LocalSettings = require(script.Parent.Parent.systems.settings.LocalSettings)
-local HUDRules = require(script.Parent.HUDRules)
+local InfosContext = require(script.Parent.InfosContext)
 local InfosRules = require(script.Parent.InfosRules)
 local MenuPage = require(script.Parent.MenuPage)
 local UIKit = require(script.Parent.UIKit)
@@ -16,9 +16,13 @@ local Motion = UITheme.Motion
 
 local InfosScreen = {}
 
--- `lines` : texte fixe ; `compose` : texte qui cite des touches ; `keys` : lignes touche → action (COMMANDES). Les deux
--- derniers sont recomposés à chaque affichage depuis KeyBindings et les réglages du joueur (#290).
-type Section = { title: string, lines: { string }?, compose: ((InfosRules.Context) -> { string })?, keys: boolean? }
+-- `lines` : texte fixe ; `keys` : lignes touche → action (COMMANDES), recomposées à chaque affichage depuis
+-- KeyBindings et les réglages du joueur (#290).
+type Section = {
+	title: string,
+	lines: { string }?,
+	keys: boolean?,
+}
 
 -- Contenu sous les onglets (px à 720 de haut)
 local CONTENT_WIDTH = MenuPage.BlockWidth
@@ -27,10 +31,6 @@ local TEXT_SIZE = 22
 local KEY_COLUMN = 170 -- largeur réservée à la touche en boîte
 
 local SECTIONS: { Section } = {
-	{
-		title = "SURFER",
-		compose = InfosRules.surfLines,
-	},
 	{
 		title = "COMMANDES",
 		keys = true,
@@ -123,20 +123,6 @@ local function addKeyRow(key: string, action: string, order: number): { TextLabe
 	return { keyLbl, actionLbl }
 end
 
--- Cette méthode permet de réunir ce dont les textes à touches dépendent lorsqu'une section est composée : actions de
--- l'affichage des touches (KeyBindings), libellés du clavier du joueur et réglages d'armes.
-local function composeContext(): InfosRules.Context
-	local settings = LocalSettings.get()
-	return {
-		entries = HUDRules.keyDisplayEntries("full"),
-		keyText = LocalSettings.keyText,
-		menuKey = PlayerSettings.MENU_KEY,
-		slotKeys = settings.slotKeys,
-		defaultSlotKeys = PlayerSettings.DEFAULT_SLOT_KEYS,
-		wheel = settings.wheel,
-	}
-end
-
 -- Cette méthode permet de remplir la zone de contenu avec la section choisie lorsque l'onglet change.
 local function renderSection(index: number)
 	for _, child in content:GetChildren() do
@@ -148,12 +134,11 @@ local function renderSection(index: number)
 
 	local section = SECTIONS[index]
 	if section.keys then
-		for i, row in InfosRules.commandRows(composeContext()) do
+		for i, row in InfosRules.commandRows(InfosContext.compose()) do
 			fadeIn(addKeyRow(row.key, row.action, i), i * Motion.Stagger)
 		end
 	else
-		local lines = if section.compose then section.compose(composeContext()) else section.lines or {}
-		for i, line in lines do
+		for i, line in section.lines or {} do
 			fadeIn({ addParagraph(line, i) }, i * Motion.Stagger)
 		end
 	end

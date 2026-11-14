@@ -323,6 +323,80 @@ local model = game:GetService("InsertService"):LoadAsset(<id du Decal>)
 return model:FindFirstChildWhichIsA("Decal", true).Texture
 ```
 
+## Démos rejouées (écran Apprendre, #285)
+
+**Où :** écran Apprendre (`LearnScreen`), onglet APPRENDRE du menu principal, juste avant JOUER (on apprend le geste,
+puis on joue ; JOUER n'est plus pile au centre avec six onglets). Rien au premier lancement. Le lecteur 640x360 (16:9)
+seul, sa légende en une ligne dessus ; pas de texte dessous : l'ancien texte de SURFER (`surfLines`) expliquait le surf,
+pas le bhop montré, il a été retiré (2026-11-14). Pas d'onglets : le contenu commence à leur hauteur. Page du menu comme Feedback, pas un état de jeu comme Infos ; le lecteur est libéré à RETOUR, à un autre onglet
+et au départ en partie (`SPAWNING`, `IN_ROUND`).
+- Déplacé d'Infos (onglet SURFER retiré, Infos s'ouvre sur COMMANDES) : Infos sert de référence, pas de tuto.
+- L'écran de mort renvoie à la démo : les conseils BHOP et AIR STRAFE finissent par « Démo : APPRENDRE. »
+  (`InfosRules.DEMO_POINTER`), en texte (souris verrouillée pendant la mort ; une mini-démo sur l'écran de mort coûterait
+  la copie de la map à chaque mort). Mode entraînement (rejouer soi-même le geste) : #345.
+
+**Une seule démo : BHOP** (le geste montre aussi l'air strafe). Prise jouée par l'utilisateur avec l'auto-bhop (Espace tenu), Q/D en tournant la
+souris du même côté, vitesse de 25 à 126 en 15 s. Surf et enchaînement abandonnés le 2026-11-14 : Dizzy n'a pas de
+rampe assez longue pour une démo lisible (une rampe se traverse en 2 s environ). Ils pourront revenir avec une autre map :
+le code reste générique (`InfosRules.demoClips` renvoie une liste ; à partir de deux démos, un sélecteur en choix de
+texte apparaît, la démo choisie en os vif soulignée d'ambre, gardée d'une ouverture à l'autre : les onglets d'Infos sont
+déjà en boîte ambrée juste au-dessus, deux boîtes pleines empilées disaient deux fois « là où je suis »). Piste écartée :
+un bhop joué par entrées simulées (MCP) ; la prise humaine était déjà propre (98 % des virages dans le sens de la touche).
+
+**Pas de vidéo :** un clip est une trajectoire enregistrée dans Studio puis rejouée dans le moteur.
+- Données : `src/client/ui/DemoClips/<Nom>.luau` (aujourd'hui `Bhop`), un module qui renvoie le texte du
+  clip. Format `DemoClipRules` : en-tête `CLIP 1 <hz> <map>`, puis une ligne d'entiers par échantillon (30 Hz) : écarts
+  avec l'échantillon précédent de x, y, z de la racine, hauteur des yeux, lacet et tangage de la caméra (centièmes de
+  stud ou de degré, écarts pris entre valeurs arrondies : pas de dérive), masque des touches (avant, gauche, arrière,
+  droite, saut, accroupi), vitesse horizontale x 10. Environ 25 octets par échantillon, 9 Ko pour 12 s. Un module absent
+  ou illisible affiche « CLIP À ENREGISTRER ».
+- Souris : lue dans la rotation du lacet (degrés par seconde, lissée sur ± 2 échantillons), pas dans le delta brut de
+  la souris : l'indicateur ne dépend pas de la sensibilité de celui qui a enregistré. Plein à 400°/s
+  (`DemoClipRules.TURN_FULL`), rouge d'impact au-delà de 75 %.
+- Lecteur (`DemoPlayer.luau`) : `ViewportFrame` contenant une copie des pièces visibles de la map (`Workspace.Maps.<map
+  du clip>`) à moins de 450 studs des trajectoires de tous les clips, copiée sur plusieurs images à la première lecture
+  (Dizzy : 16 365 pièces en 0,43 s dans Studio, quasiment toute la map), gardée tant que l'onglet est ouvert. Caméra du
+  viewport au FOV du jeu (`CameraConfig.DEFAULT_FOV`), même composition lacet puis tangage que `FPSCamera`. Position et
+  angles interpolés par Catmull-Rom entre échantillons (pas de saccade à 60 i/s), touches sans interpolation. Boucle avec
+  fondu au noir de 0,35 s de part et d'autre du raccord, trait d'avancement ambré au bas du cadre. Le personnage, la
+  caméra et la map du joueur ne sont pas touchés.
+- Par-dessus : légende (nom du geste en ambre, geste en une ligne, `InfosRules.demoClips`, touches selon le clavier du
+  joueur), vitesse au style du compteur (`HUDRules.speedTier` / `speedFill`), touches en keycaps du HUD
+  (`KeyDisplay.buildKeycap`, mode simple : directions et saut, à 80 %), souris (icône et demi-barre du côté où elle tourne).
+- Libération : `LearnScreen` détruit le lecteur (cadre, copie de la map, boucle de rendu) dès qu'on quitte l'écran
+  (RETOUR, autre onglet, JOUER). La copie est détruite par lots de 2 000 pièces sur plusieurs images
+  (`freeInBatches`, aussi pour une copie interrompue) : d'un coup, l'image de la fermeture montait à 131 ms (bilan F3).
+  Mesuré après (image la plus longue sur 4 s autour de RETOUR, `Heartbeat`) : 37,5 ms, contre 18,7 ms sans rien
+  toucher. Vérifié : 0 `ViewportFrame` et environ 17 500 Instances de moins après RETOUR.
+- Éclairage du viewport (pas d'ombres portées ni de ciel dans un `ViewportFrame`) : `Ambient` (190, 178, 190),
+  `LightColor` (255, 214, 170), `LightDirection` opposée au soleil de `Lighting`, ciel en dégradé sous le viewport. Avec
+  l'éclairage par défaut (150, 146, 140), la scène était presque noire.
+- Coût mesuré (Studio, qualité auto 1/10, menu principal, overlay F3, bilans de 10 s, repère `démo apprendre`) : lecteur
+  ouvert CPU 3,9 à 4,6 ms, GPU 7,2 à 8,6 ms, boucle du lecteur 0,04 à 0,05 ms par image ; fermé CPU 3,7 ms, GPU 3,1 ms.
+  Soit environ 4 à 5 ms de GPU tant que la démo est affichée, rien après. Copie du décor : 17 443 pièces en 0,30 s.
+  Image la plus longue : 51 ms à l'ouverture ; fermeture : voir « Libération ».
+
+**Refaire un clip :**
+1. Studio réservé, playtest lancé, partie lancée (`DebugPlaytest`), bots retirés (`workspace:SetAttribute("DebugBots", 0)`).
+2. Armer l'enregistreur (contexte `Server` ou `Client`) : `game.Players:GetPlayers()[1]:SetAttribute("DebugClipRecorder",
+   "surf")` (`surf`, `bhop`, `strafe` ou `chain`). Un bandeau « CLIP surf PRÊT · F7 ENREGISTRER · F6 CLIP SUIVANT »
+   s'affiche en haut, et dessous la liste des clips déjà pris (« PRIS : surf 14 s · bhop — … »). **F6** passe au clip
+   suivant (surf, bhop, strafe, chain) : pas besoin de la barre de commande pour changer de clip.
+3. Se placer, appuyer sur **F7**, jouer le geste (10 à 20 s ; arrêt d'office à 30 s), **F7** pour arrêter. La console
+   écrit `[ClipRecorder] STOP surf : … s, … échantillons`. Recommencer autant que voulu : la dernière prise remplace la
+   précédente. L'enregistreur ne fait que lire (racine, caméra, `KeyBindings`, `MovementController.getVelocity`).
+4. Extraire (contexte `Client`, sans écrire de `Source`) : `return game.Players.LocalPlayer.DebugClips.surf.Value`, et
+   enregistrer le texte rendu tel quel dans un fichier hors du dépôt (ex. `%TEMP%\surf.txt`). À la main : barre de
+   commande de Studio en contexte client, `print(...)`, puis copier la sortie.
+   **Piège (#285) :** `Player.DebugClips` disparaît à l'arrêt du playtest (6 prises perdues ainsi). Chaque prise est donc
+   aussi recopiée dans la sortie de Studio, qui survit à l'arrêt : lignes `[ClipData <clip> <prise> <i>/<n>] …` (morceaux
+   de 2 000 caractères, sans blanc). Si le playtest est arrêté, copier la sortie (ou `get_console_output`, qui rogne le
+   début d'une longue sortie : extraire au plus tôt) dans un fichier : `write_clip` reconnaît ces lignes et recolle la
+   dernière prise complète du clip demandé.
+5. `lune run tools/clips/write_clip.luau %TEMP%\bhop.txt Bhop [début_s] [fin_s]` : valide le clip, garde au besoin la
+   partie entre début et fin, et réécrit `src/client/ui/DemoClips/Bhop.luau` (CRLF, comme StyLua).
+6. Arrêter le playtest (Rojo ne synchronise qu'en mode Edit), relancer, ouvrir APPRENDRE et vérifier la démo.
+
 ## Règles des écrans secondaires
 
 - Rien ne se tire (#130) : souris système, un clic agit tout de suite. Un curseur de réglage se place d'un clic, puis se glisse.

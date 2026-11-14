@@ -28,6 +28,7 @@ local Hitmarker = require(script.ui.Hitmarker)
 local GameStateController = require(script.systems.game.GameStateController)
 local DebugPlaytest = require(script.debug.DebugPlaytest)
 local FrameProbe = require(script.debug.FrameProbe)
+local ClipRecorder = require(script.debug.ClipRecorder)
 local PerfOverlay = require(script.debug.PerfOverlay)
 local PerfBench = require(script.debug.PerfBench)
 
@@ -141,6 +142,9 @@ DebugPlaytest.init({
 	viewmodelSystem = ViewmodelSystem,
 	fpsCamera = FPSCamera,
 })
+
+-- Enregistreur des démos de l'écran Apprendre (#285) : attribut joueur `DebugClipRecorder` dans Studio, puis F7 (docs/ui.md).
+ClipRecorder.init({ player = player, fpsCamera = FPSCamera, movement = MovementController })
 
 -- Sonde de saccades : attribut joueur `FrameProbe` = true dans Studio (cf. docs/performance.md).
 FrameProbe.init({ player = player, fpsCamera = FPSCamera, movement = MovementController })

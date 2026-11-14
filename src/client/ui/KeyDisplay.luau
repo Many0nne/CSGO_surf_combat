@@ -183,6 +183,14 @@ local function buildKey(container: Frame, entry: HUDRules.KeyDisplayEntry): (Tex
 		end
 end
 
+-- Cette méthode permet de construire un keycap du HUD hors de la grille du HUD lorsqu'un autre écran montre des touches
+-- (démos de l'écran Apprendre, #285) : même dessin, même libellé ; renvoie le libellé et la fonction qui peint la touche.
+function KeyDisplay.buildKeycap(container: Frame, entry: HUDRules.KeyDisplayEntry): (TextLabel, (boolean) -> ())
+	local label, paintKey = buildKey(container, entry)
+	paintKey(false)
+	return label, paintKey
+end
+
 -- Cette méthode permet de poser la grille en bas au centre lorsque la taille de l'écran ou de la grille change : au-dessus
 -- du compteur de munitions si elle l'atteindrait sur un écran étroit (HUDRules.keyDisplayBottom, #247).
 local function place()
