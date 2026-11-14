@@ -56,5 +56,15 @@ return function(T, Loader)
 				T.expect(cfg.ThirdPerson and cfg.ThirdPerson.Grip ~= nil, name .. " : tenue 3P sans Grip")
 			end
 		end)
+
+		T.it("donne une inspection (touche F) à chaque arme, décrite dans AnimationSounds", function()
+			for name, cfg in WeaponConfig.Weapons do
+				T.expect(cfg.InspectAnimation ~= nil, name .. " : pas d'InspectAnimation, F ne fait rien")
+				T.expect(
+					cfg.AnimationSounds[cfg.InspectAnimation] ~= nil,
+					name .. " : piste " .. tostring(cfg.InspectAnimation) .. " sans entrée AnimationSounds"
+				)
+			end
+		end)
 	end)
 end

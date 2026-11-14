@@ -1,5 +1,5 @@
 # build_anims.py
-# Génère les animations viewmodel de l'AWP (Idle, Equip, Shoot, Reload) dans AWP_Viewmodel_Anims.blend.
+# Génère les animations viewmodel de l'AWP (Idle, Equip, Shoot, Reload, Inspect) dans AWP_Viewmodel_Anims.blend.
 # À lancer depuis Blender (Text Editor > Run, ou exec(open(path).read())) avec le rig "Rig" déjà construit.
 #
 # Principe : la pose de l'arme vient d'une trajectoire mesurée sur la vidéo de référence (position à l'écran de l'œilleton
@@ -402,6 +402,104 @@ RELOAD_DEPTH = [
 	(25.10, 1.3), (25.20, 1.15), (25.30, 1.05), (25.40, 1.0), (25.80, 1.1), (25.90, 1.1), (26.20, 1.0), (26.70, 1.0),
 ]
 
+# Inspect (references/anim/awp showcase.mp4, 5,30 → 10,30 s) : l'arme pivote de profil (canon à gauche, crosse à droite),
+# tenue 2,5 s, puis se dresse à la verticale lunette à gauche et revient au repos. De profil, l'« œilleton » relevé est
+# l'arrière de la lunette (côté crosse) ; le canon sort du recadrage habituel (x < 0,4), d'où les abscisses négatives.
+INSPECT_TRACK = [
+	(5.30, 212, 238, 105, 222),
+	(5.40, 212, 238, 105, 222),
+	(5.43, 212, 238, 105, 222),
+	(5.47, 212, 238, 105, 222),
+	(5.50, 212, 238, 105, 222),
+	(5.53, 212, 238, 105, 222),
+	(5.57, 208, 240, 93, 241),
+	(5.60, 202, 240, 79, 257),
+	(5.63, 190, 237, 61, 270),
+	(5.67, 176, 231, 47, 277),
+	(5.70, 176, 231, 37, 277),
+	(5.73, 170, 231, 30, 277),
+	(5.77, 162, 227, 20, 277),
+	(5.80, 158, 218, 8, 277),
+	(5.83, 152, 218, 1, 277),
+	(5.87, 152, 214, -6, 281),
+	(5.90, 152, 214, -13, 281),
+	(5.93, 138, 220, -27, 283),
+	(5.97, 138, 220, -41, 283),
+	(6.00, 138, 220, -48, 285),
+	(6.03, 138, 220, -55, 285),
+	(6.07, 138, 221, -55, 284),
+	(6.10, 138, 221, -58, 284),
+	(6.13, 138, 221, -58, 284),
+	(6.17, 142, 217, -58, 284),
+	(6.20, 138, 215, -58, 285),
+	(6.80, 156, 214, -67, 277),
+	(7.40, 142, 211, -64, 278),
+	(8.00, 138, 213, -67, 278),
+	(8.40, 144, 211, -55, 270),
+	(8.43, 144, 211, -48, 267),
+	(8.47, 138, 213, -27, 266),
+	(8.50, 136, 211, -10, 264),
+	(8.53, 130, 211, 1, 263),
+	(8.57, 124, 211, 10, 261),
+	(8.60, 116, 213, 16, 260),
+	(8.63, 110, 215, 23, 264),
+	(8.67, 116, 231, 30, 251),
+	(8.70, 116, 231, 37, 251),
+	(8.73, 110, 237, 47, 237),
+	(8.77, 110, 257, 55, 237),
+	(8.80, 110, 277, 58, 237),
+	(8.83, 104, 302, 58, 231),
+	(8.87, 96, 333, 58, 223),
+	(8.90, 94, 346, 58, 217),
+	(8.93, 80, 362, 58, 204),
+	(8.97, 74, 362, 51, 204),
+	(9.00, 66, 362, 51, 204),
+	(9.03, 70, 359, 55, 189),
+	(9.20, 70, 359, 55, 189),
+	(9.43, 70, 359, 55, 189),
+	(9.47, 76, 353, 51, 199),
+	(9.50, 80, 346, 51, 196),
+	(9.53, 80, 349, 51, 203),
+	(9.57, 80, 362, 58, 200),
+	(9.60, 80, 362, 58, 200),
+	(9.63, 94, 335, 65, 206),
+	(9.67, 116, 316, 79, 241),
+	(9.70, 120, 311, 81, 237),
+	(9.73, 130, 304, 86, 241),
+	(9.77, 158, 279, 93, 236),
+	(9.80, 164, 271, 98, 231),
+	(9.83, 168, 262, 98, 230),
+	(9.87, 172, 251, 100, 229),
+	(9.90, 184, 255, 100, 230),
+	(9.93, 194, 252, 100, 230),
+	(9.97, 202, 245, 108, 227),
+	(10.00, 204, 245, 108, 223),
+	(10.03, 208, 240, 108, 220),
+	(10.07, 212, 240, 108, 220),
+	(10.10, 212, 238, 105, 222),
+	(10.13, 212, 238, 105, 222),
+	(10.20, 212, 238, 105, 222),
+	(10.30, 212, 238, 105, 222),
+]
+# Profondeur : une seule rampe pendant le pivot (une clé intermédiaire relançait l'arme en fin de pivot).
+INSPECT_DEPTH = [(5.30, 1.0), (5.53, 1.0), (6.10, 1.1), (8.43, 1.1), (8.80, 1.0), (10.30, 1.0)]
+# Roulis de l'Inspect (degrés, négatif = lunette vers la gauche quand l'arme est dressée), choisi à l'œil : nul de profil,
+# lunette à gauche pendant la verticale (8,9 → 9,6 s), retour à plat pendant la descente.
+# Clés espacées régulièrement (≈ 0,25 s) : des clés serrées et irrégulières faisaient accélérer le poignet pendant que la
+# bascule ralentissait, d'où un creux de vitesse à 8,73 s.
+INSPECT_ROLL = [
+	(5.30, 0.0), (8.40, 0.0), (8.70, -45.0), (9.00, -88.0), (9.25, -93.0), (9.55, -86.0), (9.80, -40.0), (10.00, -8.0),
+	(10.15, -0.5), (10.30, 0.0),  # vitesse quasi nulle à la fin : sinon à-coup en rejoignant l'Idle
+]
+# Lissage des relevés de l'Inspect (s) : un relevé à l'œil tremble de ±5 px d'une image à l'autre, ce qui, suivi point par
+# point par la spline, fait des pics de vitesse (saccades). Une image dure 0,033 s : σ = 0,06 s lisse sur 3 à 4 images
+# (à 0,04 s, l'arme réaccélérait encore au milieu des gestes : 8,52, 8,73, 9,6 et 10,1 s).
+# Fin du pivot de profil (5,62 → 6,3 s) : le canon se pose lentement et ±5 px y pèsent lourd, l'arme réaccélérait deux
+# fois (5,75 et 5,95 s) ; σ monte en douceur jusqu'à 0,09 s sur cette fenêtre pour un ralenti continu.
+def INSPECT_SMOOTH(t):
+	ramp = min(max((t - 5.58) / 0.08, 0.0), 1.0) * min(max((6.38 - t) / 0.08, 0.0), 1.0)
+	return 0.06 + 0.03 * ramp
+
 
 # Cette méthode permet de convertir un relevé de planche en écart à l'écran par rapport à la référence au repos,
 # en largeur et hauteur d'écran, lorsque le cadrage de repos de la référence et le nôtre diffèrent légèrement.
@@ -455,6 +553,20 @@ def spline(table, t):
 			+ (-2 * s**3 + 3 * s**2) * p2[c]
 			+ (s**3 - s**2) * h * m2
 		)
+	return out
+
+
+# Cette méthode permet de lisser une table de relevés [(t, v1, v2, ...)] par une moyenne pondérée gaussienne en temps (écart
+# type sigma, constant ou fonction du temps) lorsque les relevés tremblent ; la première et la dernière ligne sont gardées.
+def smooth_table(table, sigma):
+	out = [table[0]]
+	for t, *_ in table[1:-1]:
+		s = sigma(t) if callable(sigma) else sigma
+		weights = [math.exp(-0.5 * ((row[0] - t) / s) ** 2) for row in table]
+		total = sum(weights)
+		values = [sum(w * row[c] for w, row in zip(weights, table, strict=True)) / total for c in range(1, len(table[0]))]
+		out.append((t, *values))
+	out.append(table[-1])
 	return out
 
 
@@ -605,7 +717,24 @@ def spec_reload():
 	)
 
 
-SPECS = {"Idle": spec_idle, "Equip": spec_equip, "Shoot": spec_shoot, "Reload": spec_reload}
+# Cette méthode permet de décrire l'Inspect : pivot de profil, tenue, arme dressée à la verticale puis retour au repos
+# (référence 5,30 → 10,30 s, à vitesse réelle) ; les deux mains restent sur l'arme.
+def spec_inspect():
+	L, t0 = 5.0, 5.30
+	roll = lambda video: spline(INSPECT_ROLL, video)[0]
+	gun_loc, gun_rot = measured_gun(smooth_table(INSPECT_TRACK, INSPECT_SMOOTH), INSPECT_DEPTH, roll, t0, 1.0)
+	return dict(
+		length=L,
+		gun_loc=gun_loc,
+		gun_rot=gun_rot,
+		bolt_lift=const(),
+		bolt_travel=const(),
+		hand_R=[(0, 0, GRIP_R, GRIP_R, Z, "l")],
+		hand_L=[(0, 0, FOREND_L, FOREND_L, Z, "l")],
+	)
+
+
+SPECS = {"Idle": spec_idle, "Equip": spec_equip, "Shoot": spec_shoot, "Reload": spec_reload, "Inspect": spec_inspect}
 
 # ------------------------------------------------------------------------------------------------
 # Export Roblox : Transform de chaque Motor6D, calculé depuis les matrices monde des pièces.
