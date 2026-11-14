@@ -61,6 +61,10 @@ InventoryRules.ITEMS = {
 	{ id = "skin.awp.couchant", type = "skin", weapon = "weapon.awp", name = "COUCHANT", appearance = "couchant" },
 	{ id = "skin.awp.impact", type = "skin", weapon = "weapon.awp", name = "IMPACT", appearance = "impact" },
 	{ id = "skin.awp.releve", type = "skin", weapon = "weapon.awp", name = "RELEVÉ", appearance = "releve" },
+	-- Deuxième série (#337)
+	{ id = "skin.awp.recuit", type = "skin", weapon = "weapon.awp", name = "RECUIT", appearance = "recuit" },
+	{ id = "skin.awp.strate", type = "skin", weapon = "weapon.awp", name = "STRATE", appearance = "strate" },
+	{ id = "skin.awp.sillage", type = "skin", weapon = "weapon.awp", name = "SILLAGE", appearance = "sillage" },
 	{
 		id = "skin.m9bayonet.couchant",
 		type = "skin",
@@ -81,6 +85,27 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.m9bayonet",
 		name = "RELEVÉ",
 		appearance = "releve",
+	},
+	{
+		id = "skin.m9bayonet.recuit",
+		type = "skin",
+		weapon = "weapon.m9bayonet",
+		name = "RECUIT",
+		appearance = "recuit",
+	},
+	{
+		id = "skin.m9bayonet.strate",
+		type = "skin",
+		weapon = "weapon.m9bayonet",
+		name = "STRATE",
+		appearance = "strate",
+	},
+	{
+		id = "skin.m9bayonet.sillage",
+		type = "skin",
+		weapon = "weapon.m9bayonet",
+		name = "SILLAGE",
+		appearance = "sillage",
 	},
 } :: { Item }
 

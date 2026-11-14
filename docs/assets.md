@@ -235,7 +235,7 @@ que soit le découpage UV) ou projetés depuis la vue de profil (livrée, texte)
    blender -b --factory-startup --python tools/skins/bake_maps.py -- <sortie>/m9 --glb <m9.glb>
    ```
 2. **Cartes PBR** : `uv run --with numpy --with pillow --with scipy tools/skins/make_skins.py <bake> <m9_orig> <sortie>
-   [skin…]` (une fonction par skin et par arme dans le script : couchant, impact, releve).
+   [skin…]` (une fonction par skin et par arme dans le script : couchant, impact, releve, recuit, strate, sillage).
 3. **Planche** : `tools/skins/render_views.py` (Cycles, HDRI de Blender, une vue par PNG, ~12 s par vue à 32
    échantillons) puis `tools/skins/compose_board.py`. Se comparer aux références `references/skins/` avant de montrer.
 4. **Publier** : `uv run tools/skins/publish_skin.py assets/skins/<skin> <skin>` (Decals, puis id de l'image par Asset
@@ -260,7 +260,16 @@ Luau qui pose un skin sur les viewmodels de Studio (mode Edit) ; Disconnect/Conn
   d'après la silhouette mesurée sur les cartes cuites (la crosse de l'AWP n'a que ~0,18 de hauteur de boîte à la poignée).
 - **Densité de texture** : la crosse de l'AWP a peu de pixels dans sa carte (îlots en diagonale) ; une livrée plus fine
   demanderait de redéplier ses UV (mesh à republier).
+- **Bois teinté (crosse de l'AWP)** : partir de la couleur et de la rugosité du bois d'origine. Des couleurs posées à
+  plat virent au pastel sous le voile du vernis ; teinter en divisant canal par canal par la couleur moyenne fait virer
+  au violet. Moduler la nouvelle teinte par la luminance d'origine (`mat.lum`) garde le grain et la saturation.
+- **Laque noire brillante = chrome** sous l'HDRI : une peinture noire se fait satinée (rugosité ~0,38).
+- **Biseau de la M9** : le masque `Knife.grind` couvre tout le grand biseau, pas seulement le fil. Un skin peint (laque,
+  céramique) ne garde poli que le fil (`blade_height < 0.1` dans `grind`), sinon la lame paraît chromée.
 - Sous l'éclairage du mode Edit (crépuscule), les skins métalliques paraissent bien plus sombres qu'en Blender.
+- **Tester un skin en jeu** : le serveur refuse `EquipItem` pendant un round ; équiper depuis l'accueil (remote
+  `ReplicatedStorage.EquipItem:FireServer(slot, armeId, skinId)` côté client, juste après le lancement du playtest), puis
+  `DebugPlaytest`. Les premières images montrent l'arme grise le temps que les cartes chargent (#333).
 - Rojo (7.7) écrit bien `ColorMapContent`… d'une `SurfaceAppearance` depuis un `.model.json`, en build comme en synchro
   directe (vérifié dans Studio) : pas besoin de `.rbxm` pour les skins.
 - Suites ouvertes : caisses (#332), préchargement des textures (#333), UV de la crosse de l'AWP (#335).

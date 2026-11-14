@@ -9,7 +9,7 @@ Usage (depuis la racine du worktree) :
     <bake>     dossier de bake_maps.py, avec les sous-dossiers awp/ et m9/
     <m9_orig>  dossier des cartes d'origine de la M9 (sortie de fetch_viewmodel.py : m9_Handle_*.png)
     <sortie>   écrit <sortie>/<skin>/AWP/<MAT>_<Carte>.png et <sortie>/<skin>/M9Bayonet/Handle_<Carte>.png
-Skins : couchant, impact, releve (tous par défaut).
+Skins : couchant, impact, releve (#268), recuit, strate, sillage (#337) ; tous par défaut.
 """
 
 import json
@@ -172,7 +172,7 @@ def ramp(v, stops):
 # Cette méthode permet de mélanger deux valeurs (scalaires, couleurs ou cartes) selon un masque 0..1.
 def mix(a, b, m):
 	m = np.asarray(m, dtype=np.float32)
-	if np.ndim(a) == 3 or np.ndim(b) == 3:
+	if np.ndim(a) in (1, 3) or np.ndim(b) in (1, 3):  # couleur (rgb seul ou carte) : masque étendu aux canaux
 		m = m[..., None] if m.ndim == 2 else m
 	return a * (1 - m) + b * m
 
@@ -664,6 +664,396 @@ def releve_awp(mat):
 	return col, rough, metal, add_relief(mat.normal, height, 0.7, mat.cov)
 
 
+# Cette méthode permet de donner la hauteur dans la lame de la M9 (0 au tranchant, 1 au dos) lorsqu'un motif suit le
+# profil de la lame.
+def blade_height(mat, k):
+	hb = (mat.pos - k.c) @ k.height
+	hb = (hb - hb[k.blade].min()) / (np.ptp(hb[k.blade]) + 1e-6)
+	if np.mean(hb[k.grind]) > 0.5:
+		hb = 1 - hb
+	return hb
+
+
+# Cette méthode permet de donner la position de profil de l'AWP (u le long de l'arme, 0 = bouche du canon ; v de haut
+# en bas de la boîte de l'arme), le repère des livrées.
+def awp_uv(mat):
+	u = (mat.pos[..., 0] - mat.bmin[0]) / (mat.bmax[0] - mat.bmin[0])
+	v = 1 - (mat.pos[..., 2] - mat.bmin[2]) / (mat.bmax[2] - mat.bmin[2])
+	return u, v
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Skin « Recuit » : acier trempé en caisse (façon Case Hardened), marbrures d'oxydation bleu nuit, violet, bronze et
+# paille sur acier gris ; le bleu domine
+
+TEMPER = [
+	(0.00, (18, 30, 84)),
+	(0.18, (34, 62, 150)),
+	(0.32, (58, 96, 182)),
+	(0.42, (104, 66, 146)),
+	(0.52, (150, 84, 92)),
+	(0.62, (168, 112, 56)),
+	(0.74, (214, 172, 88)),
+	(0.86, (178, 176, 168)),
+	(1.00, (122, 124, 128)),
+]
+
+
+# Cette méthode permet de calculer les marbrures de la trempe (nappes déformées à grande échelle, taches et mouchetures
+# sombres à petite échelle) sur les positions 3D, pour une fréquence donnée ; renvoie la teinte (0..1) et les taches.
+def temper_fields(mat, freq, seed=71, bias=0.0):
+	def flow(p):
+		q = p * freq
+		w = np.stack([fbm(q + 4.1, 3, seed), fbm(q + 8.3, 3, seed + 3), fbm(q + 1.7, 3, seed + 6)], 1)
+		w2 = np.stack([fbm(q * 2.1 + w * 1.5 + 3.3, 3, seed + 9), fbm(q * 2.1 + w * 1.5 + 9.1, 3, seed + 12), fbm(q * 2.1 + 5.5, 2, seed + 15)], 1)
+		return fbm(q + w * 1.6 + w2 * 0.6, 5, seed + 20)
+
+	def spots(p):
+		return fbm(p * freq * 7, 4, seed + 40)
+
+	v = mat.field(flow)
+	v = np.clip(0.5 + v * 1.25 + bias, 0, 1)
+	sp = smooth(0.18, 0.34, mat.field(spots))
+	return v, sp
+
+
+# Cette méthode permet de colorer la trempe : rampe d'oxydation, mouchetures sombres, et le grain de l'acier gardé.
+def temper_color(mat, v, sp, detail=0.35):
+	col = ramp(v, TEMPER) * (1 - 0.45 * sp[..., None])
+	return col * mix(1, mat.detail, detail)[..., None]
+
+
+# Cette méthode permet de produire les cartes « Recuit » de la M9 : lame, garde et pommeau trempés, tranchant repoli plus
+# clair, manche d'origine.
+def recuit_m9(mat, k):
+	v, sp = temper_fields(mat, 1.1, bias=-0.08)
+	col = temper_color(mat, v, sp)
+	rough = 0.18 + 0.08 * sp + 0.05 * smooth(0.6, 0.9, v)
+	metal = np.ones((mat.H, mat.W))
+	brush = mat.field(lambda p: perlin3(np.stack([(p @ k.axis) * 3, (p @ k.height) * 220, (p @ k.flat) * 220], 1), 13))
+	height = brush * 0.3 - sp * 0.15
+	# Tranchant repoli : l'oxydation part, il reste un voile paille et bleu clair
+	gcol = mix(temper_color(mat, v, sp, 0.5), STEEL * mix(1, mat.detail, 0.5)[..., None], 0.62)
+	col = mix(col, gcol, k.grind)
+	rough = mix(rough, 0.1, k.grind)
+	hw = k.guard | k.pommel
+	v2, sp2 = temper_fields(mat, 2.2, seed=91, bias=-0.12)
+	col = mix(col, temper_color(mat, v2, sp2, 0.5), hw)
+	rough = mix(rough, 0.2, hw)
+	col = mix(col, mat.color, k.grip)
+	rough = mix(rough, mat.rough, k.grip)
+	metal = mix(metal, mat.metal, k.grip)
+	height = height * (k.blade | hw)
+	col = col * mix(1, mat.ao, 0.5)[..., None]
+	return col, rough, metal, add_relief(mat.normal, height, 0.6, mat.cov)
+
+
+# Cette méthode permet de produire les cartes « Recuit » d'un matériau de l'AWP : carcasse, canon et garnitures trempés,
+# lunette en acier bleui, fût et crosse en noyer huilé (l'arme de chasse classique).
+def recuit_awp(mat):
+	if mat.name == "WOOD":
+		# Noyer : le bois d'origine, plus rouge et plus contrasté (un bois plus sombre prend un voile gris sous les reflets)
+		figure = mat.field(lambda p: fbm(p * np.array([0.6, 3.0, 3.0]), 4, 77)) * 0.5 + 0.5
+		col = mat.color * np.array([0.92, 0.72, 0.6]) * (0.85 + 0.3 * figure[..., None])
+		rough = mat.rough * 0.9
+		metal = np.zeros((mat.H, mat.W))
+		height = np.zeros((mat.H, mat.W))
+	elif mat.name == "SCOPE":
+		# Acier bleui : bleu nuit profond, reflets bleutés, arêtes usées vers l'acier
+		blue = mat.field(lambda p: fbm(p * 1.2, 3, 83)) * 0.5 + 0.5
+		col = mix(np.array([0.05, 0.08, 0.17]), np.array([0.10, 0.16, 0.34]), blue) * mix(1, mat.detail, 0.5)[..., None]
+		col = mix(col, STEEL * 0.75, mat.edges * 0.5)
+		rough = 0.2 + 0.06 * blue
+		metal = np.ones((mat.H, mat.W))
+		height = np.zeros((mat.H, mat.W))
+	else:
+		v, sp = temper_fields(mat, 0.42, bias=-0.06)
+		col = temper_color(mat, v, sp)
+		rough = 0.2 + 0.08 * sp + 0.05 * smooth(0.6, 0.9, v)
+		metal = np.ones((mat.H, mat.W))
+		height = -sp * 0.2
+		col = mix(col, STEEL * 0.8, mat.edges * 0.3)
+	col = col * mix(1, mat.ao, 0.5)[..., None]
+	return col, rough, metal, add_relief(mat.normal, height, 0.6, mat.cov)
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Skin « Strate » : mokume (acier, cuivre, shakudō sombre, laiton), couches ondulées comme les strates du canyon ; crosse
+# en bois lamellé aux couleurs du grès
+
+MOKUME = [
+	(0.00, (176, 176, 172)),
+	(0.17, (168, 168, 164)),
+	(0.21, (178, 92, 56)),
+	(0.39, (156, 76, 46)),
+	(0.43, (40, 34, 33)),
+	(0.60, (50, 40, 37)),
+	(0.64, (200, 156, 78)),
+	(0.83, (182, 138, 64)),
+	(0.87, (176, 176, 172)),
+	(1.00, (176, 176, 172)),
+]
+MOK_ROUGH = [(0.0, 0.14), (0.21, 0.14), (0.23, 0.2), (0.45, 0.2), (0.47, 0.34), (0.60, 0.34), (0.62, 0.18), (0.85, 0.18), (0.87, 0.14), (1.0, 0.14)]
+GRES = [
+	(0.00, (178, 128, 80)),
+	(0.08, (170, 120, 74)),
+	(0.12, (158, 66, 32)),
+	(0.40, (140, 56, 26)),
+	(0.44, (74, 36, 18)),
+	(0.60, (66, 32, 16)),
+	(0.64, (186, 112, 40)),
+	(0.86, (172, 102, 36)),
+	(0.90, (178, 128, 80)),
+	(1.00, (178, 128, 80)),
+]
+
+
+# Cette méthode permet de calculer les couches (coordonnée de strate, 1 période = 1 cycle des quatre métaux) : un axe de
+# strate, ondulé par un bruit déformé et percé de « gouttes » (anneaux concentriques du mokume martelé).
+def strata(mat, direction, period, freq, amp, seed=101, drops=0.0):
+	direction = np.asarray(direction, dtype=np.float32)
+	direction = direction / np.linalg.norm(direction)
+
+	def layer(p):
+		q = p * freq
+		w = np.stack([fbm(q + 2.2, 3, seed), fbm(q + 6.6, 3, seed + 4), fbm(q + 9.9, 3, seed + 8)], 1)
+		warp = fbm(q + w * 1.2, 4, seed + 12) * amp
+		d = (p @ direction) / period + warp
+		if drops:
+			bump = fbm(p * freq * 4.5, 2, seed + 20)
+			d = d + drops * np.clip(bump, 0, None) ** 1.5 * 6
+		return d
+
+	return mat.field(layer)
+
+
+# Cette méthode permet de colorer et de régler la rugosité des couches : rampe nette, relief en marches (les métaux
+# tendres sont plus creusés par l'attaque à l'acide).
+def strata_maps(mat, d, stops, rough_stops, detail=0.3):
+	f = d - np.floor(d)
+	col = ramp(f, stops) * mix(1, mat.detail, detail)[..., None]
+	rough = np.interp(f, [s[0] for s in rough_stops], [s[1] for s in rough_stops])
+	height = -smooth(0.2, 0.24, f) * smooth(0.62, 0.6, f) * 0.8
+	return col, rough, height
+
+
+# Cette méthode permet de produire les cartes « Strate » de la M9 : lame en mokume (couches le long du dos, ondulées),
+# tranchant en acier poli, garde et pommeau en laiton, manche d'origine.
+def strate_m9(mat, k):
+	direction = k.height * 1.0 + k.axis * 0.35
+	d = strata(mat, direction, 0.034, 1.6, 2.2, drops=0.45)
+	col, rough, height = strata_maps(mat, d, MOKUME, MOK_ROUGH)
+	metal = np.ones((mat.H, mat.W))
+	col = mix(col, STEEL * mix(1, mat.detail, 0.5)[..., None], k.grind)
+	rough = mix(rough, 0.1, k.grind)
+	height = height * (k.blade & ~k.grind)
+	hw = k.guard | k.pommel
+	col = mix(col, np.array([214, 168, 86]) / 255 * mix(1, mat.detail, 0.5)[..., None], hw)
+	rough = mix(rough, 0.18, hw)
+	col = mix(col, mat.color, k.grip)
+	rough = mix(rough, mat.rough, k.grip)
+	metal = mix(metal, mat.metal, k.grip)
+	col = col * mix(1, mat.ao, 0.5)[..., None]
+	return col, rough, metal, add_relief(mat.normal, height, 0.8, mat.cov)
+
+
+# Cette méthode permet de produire les cartes « Strate » d'un matériau de l'AWP : carcasse et canon en mokume (strates
+# horizontales), lunette en shakudō sombre à bagues de laiton, crosse en bois lamellé couleur grès.
+def strate_awp(mat):
+	if mat.name == "WOOD":
+		d = strata(mat, (0.12, 0, 1), 0.1, 0.5, 1.4, seed=131)
+		# Bois d'origine (grain, rugosité) teinté couche par couche : des couleurs posées à plat viraient au pastel
+		# sous le voile du vernis
+		col, _, height = strata_maps(mat, d, GRES, MOK_ROUGH, 0.0)
+		col = col * np.clip(mat.lum / mat.lum[mat.cov].mean(), 0.5, 1.5)[..., None] * 0.9
+		rough = mat.rough * 0.9
+		metal = np.zeros((mat.H, mat.W))
+		height = height * 0.5
+	elif mat.name == "SCOPE":
+		u, _ = awp_uv(mat)
+		dark = np.array([46, 40, 38]) / 255 * mix(1, mat.detail, 0.5)[..., None]
+		col = mix(dark, STEEL * 0.7, mat.edges * 0.35)
+		rough = np.full((mat.H, mat.W), 0.3)
+		metal = np.ones((mat.H, mat.W))
+		rings = mat.cov & (((u > 0.335) & (u < 0.37)) | ((u > 0.64) & (u < 0.68)) | (mat.pos[..., 2] > mat.bmin[2] + 0.93 * (mat.bmax[2] - mat.bmin[2])))
+		col = mix(col, np.array([214, 168, 86]) / 255 * mix(1, mat.detail, 0.5)[..., None], rings)
+		rough = mix(rough, 0.18, rings)
+		height = np.zeros((mat.H, mat.W))
+	else:
+		d = strata(mat, (0.1, 0, 1), 0.03, 0.6, 2.0, seed=101, drops=0.4)
+		col, rough, height = strata_maps(mat, d, MOKUME, MOK_ROUGH)
+		metal = np.ones((mat.H, mat.W))
+		trig = mat.obj("Trigger") | mat.obj("Bolt")
+		col = mix(col, np.array([214, 168, 86]) / 255 * mix(1, mat.detail, 0.5)[..., None], trig)
+		rough = mix(rough, 0.18, trig)
+	col = col * mix(1, mat.ao, 0.5)[..., None]
+	return col, rough, metal, add_relief(mat.normal, height, 0.8, mat.cov)
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Skin « Sillage » : nacre blanche, traînées de vitesse noires qui balaient l'arme de la crosse vers la bouche (le
+# sillage d'un surfeur), filet ambre, marquages techniques
+
+PEARL = np.array([238, 235, 230]) / 255
+INK = np.array([20, 20, 23]) / 255
+
+
+# Cette méthode permet de calculer la nacre : blanc cassé dont la teinte dérive doucement vers le rose et le bleu
+# (irisation peinte), et un grain très fin de laque.
+def pearl(mat, freq):
+	a = smooth(0.0, 0.45, mat.field(lambda p: fbm(p * freq, 3, 151)))
+	b = smooth(0.0, 0.45, mat.field(lambda p: fbm(p * freq * 1.3 + 5, 3, 157)))
+	rose, ciel = np.array([1.0, 0.94, 0.975]), np.array([0.94, 0.975, 1.0])
+	tint = mix(mix(np.ones(3), rose, a), ciel, b * (1 - a * 0.5))
+	speck = mat.field(lambda p: fbm(p * freq * 50, 2, 163))
+	return PEARL * tint * (1 + 0.015 * speck[..., None]), speck
+
+
+# Cette méthode permet de donner, pour une position u le long de l'AWP, la hauteur v du bord de l'aplat noir « Sillage ».
+def sillage_curve(u):
+	# Bord de l'aplat noir : bas du fût à l'avant, remonte en arc jusqu'à mi-hauteur du talon de crosse
+	q = np.clip((u - 0.58) / 0.42, 0, 1)
+	return 0.63 - 0.1 * q**1.3 - 0.03 * np.clip((0.58 - u) / 0.58, 0, 1)
+
+
+# Cette méthode permet de dessiner la livrée « Sillage » de profil (u, v en 0..1, cf. awp_uv) : aplat noir sous la courbe
+# de la crosse, traînées parallèles qui s'affinent vers la bouche du canon, filet ambre ; renvoie les masques noir et ambre.
+def sillage_livery(u, v):
+	f = v - sillage_curve(u)  # > 0 sous la courbe
+	black = smooth(-0.002, 0.002, f) * smooth(0.6, 0.63, u)
+	px = 1.0 / 2048
+	ink = black
+	amber = np.zeros_like(u)
+	for i, (off, w0) in enumerate(((0.026, 0.011), (0.05, 0.006), (0.068, 0.004), (0.1, 0.005))):
+		# Chaque traînée s'affine et s'arrête plus tôt vers l'avant (sillage qui se dissipe)
+		stop = 0.12 + 0.06 * i
+		w = w0 * smooth(stop, stop + 0.25, u)
+		line = smooth(w + px, w - px, np.abs(f + off)) * (u > stop)
+		if i == 1:
+			amber = np.maximum(amber, line)
+		else:
+			ink = np.maximum(ink, line)
+	return np.clip(ink, 0, 1), np.clip(amber, 0, 1)
+
+
+# Cette méthode permet de dessiner les marquages de la livrée « Sillage » (nom, numéro, graduations) sur une toile de
+# profil, lisibles du côté voulu ; renvoie un masque (h, w).
+def sillage_marks(w, h, flip_text):
+	sc = 3
+	W, H = w * sc, h * sc
+	txt = Image.new("L", (W, H), 0)
+	td = ImageDraw.Draw(txt)
+	try:
+		font = ImageFont.truetype("arialbd.ttf", int(0.085 * H))
+		small = ImageFont.truetype("arialbd.ttf", int(0.03 * H))
+	except OSError:
+		font = small = ImageFont.load_default()
+
+	def P(u, v):
+		return (int(u * W), int(v * H))
+
+	# Fût (bande plate entre u 0,18 et 0,38, v 0,45 à 0,58) : nom et numéro ; graduations le long de la traînée
+	td.text(P(0.19, 0.448), "SILLAGE", fill=255, font=font)
+	td.text(P(0.19, 0.548), "LIGNE DE MIRE  //  N° 002", fill=255, font=small)
+	for i in range(16):
+		x = 0.19 + i * 0.0105
+		td.rectangle([P(x, 0.43), P(x + 0.0016, 0.43 + (0.016 if i % 5 == 0 else 0.008))], fill=255)
+	# Repère de visée sur la crosse : chevrons « >> » au-dessus de la traînée
+	for i in range(3):
+		x0 = 0.8 + i * 0.022
+		td.polygon([P(x0, 0.47), P(x0 + 0.012, 0.495), P(x0, 0.52), P(x0 + 0.006, 0.52), P(x0 + 0.018, 0.495), P(x0 + 0.006, 0.47)], fill=255)
+	if flip_text:
+		bbox = txt.getbbox()
+		if bbox:
+			crop = txt.crop(bbox).transpose(Image.FLIP_LEFT_RIGHT)
+			txt = Image.new("L", (W, H), 0)
+			txt.paste(crop, bbox[:2])
+	return np.asarray(txt.resize((w, h), Image.LANCZOS), dtype=np.float32) / 255
+
+
+# Cette méthode permet de produire les cartes « Sillage » de la M9 : lame laquée nacre, aplat noir au talon et traînées
+# qui filent vers la pointe, filet ambre, tranchant poli ; garde et pommeau noirs.
+def sillage_m9(mat, k):
+	col, speck = pearl(mat, 2.5)
+	col = col * mix(1, mat.detail, 0.15)[..., None]
+	rough = 0.2 + 0.03 * speck
+	metal = np.zeros((mat.H, mat.W))
+	hb = blade_height(mat, k)
+	# Aplat noir en coin au talon, côté tranchant, qui s'effile vers la pointe ; traînées parallèles au-dessus
+	q = np.clip((k.g - 0.45) / 0.55, 0, 1)
+	base = 0.12 + 0.5 * q**2
+	f = base - hb  # > 0 sous la courbe (côté tranchant)
+	black = smooth(-0.004, 0.004, f) * smooth(0.5, 0.56, k.g)
+	amber = np.zeros((mat.H, mat.W))
+	for i, (off, w) in enumerate(((0.08, 0.03), (0.14, 0.016), (0.19, 0.012))):
+		stop = 0.06 + 0.07 * i
+		ww = w * smooth(stop, stop + 0.3, k.g)
+		line = smooth(ww + 0.004, ww - 0.004, np.abs(f + off)) * (k.g > stop)
+		if i == 1:
+			amber = np.maximum(amber, line)
+		else:
+			black = np.maximum(black, line)
+	# Seul un filet de tranchant reste poli : le grand biseau est laqué comme le plat
+	edge = k.grind & (hb < 0.1)
+	paint = k.blade & ~edge
+	black, amber = black * paint, amber * paint
+	col = mix(col, INK, black)
+	col = mix(col, AMBER, amber)
+	rough = mix(rough, 0.38, black)  # laque noire satinée : brillante, elle passait pour du chrome
+	height = (black + amber) * 0.25 + speck * 0.05
+	# Laque écaillée aux arêtes vives : acier dessous
+	chips = smooth(0.55, 0.62, mat.edges * (0.5 + mat.field(lambda p: fbm(p * 6, 3, 171)) * 0.5 + 0.25))
+	col = mix(col, STEEL * mix(1, mat.detail, 0.5)[..., None], chips * k.blade)
+	metal = mix(metal, 1, chips * k.blade)
+	col = mix(col, STEEL * mix(1, mat.detail, 0.5)[..., None], edge)
+	rough = mix(rough, 0.1, edge)
+	metal = mix(metal, 1, edge)
+	hw = k.guard | k.pommel
+	col = mix(col, mix(INK * 1.6, STEEL * 0.7, mat.edges * 0.4) * mix(1, mat.detail, 0.4)[..., None], hw)
+	rough = mix(rough, 0.22, hw)
+	metal = mix(metal, 1, hw)
+	col = mix(col, mat.color, k.grip)
+	rough = mix(rough, mat.rough, k.grip)
+	metal = mix(metal, mat.metal, k.grip)
+	col = col * mix(1, mat.ao, 0.5)[..., None]
+	return col, rough, metal, add_relief(mat.normal, height * k.blade, 0.6, mat.cov)
+
+
+# Cette méthode permet de produire les cartes « Sillage » d'un matériau de l'AWP : laque nacre sur toute l'arme, livrée
+# de profil (aplat noir de crosse, traînées, filet ambre, marquages), culasse, détente et chargeur noirs, bagues noires.
+def sillage_awp(mat, marks):
+	col, speck = pearl(mat, 0.8)
+	col = col * mix(1, mat.detail, 0.12)[..., None]
+	rough = 0.2 + 0.03 * speck
+	metal = np.zeros((mat.H, mat.W))
+	u, v = awp_uv(mat)
+	side = smooth(0.15, 0.4, np.abs(mat.nrm[..., 1]))
+	ink, amber = sillage_livery(u, v)
+	# L'aplat noir fait le tour de la crosse ; les traînées et marquages restent sur les flancs
+	full = smooth(-0.002, 0.002, v - sillage_curve(u)) * smooth(0.6, 0.63, u)
+	ink = np.maximum(ink * side, full * (mat.name == "WOOD"))
+	amber = amber * side
+	ink = np.maximum(ink, sample_side(mat, *marks) * (mat.name == "WOOD"))
+	parts = np.zeros((mat.H, mat.W), bool)
+	for name in ("Bolt", "Trigger", "Magazine", "Fittings"):
+		parts |= mat.obj(name)
+	parts |= mat.cov & (u < 0.025)  # bouche du canon
+	if mat.name == "SCOPE":
+		parts |= mat.cov & (((u > 0.335) & (u < 0.37)) | ((u > 0.64) & (u < 0.68)) | (mat.pos[..., 2] > mat.bmin[2] + 0.93 * (mat.bmax[2] - mat.bmin[2])))
+	ink = np.maximum(ink, parts)
+	col = mix(col, INK * mix(1, mat.detail, 0.3)[..., None], ink)
+	col = mix(col, AMBER, amber * (1 - ink))
+	rough = mix(rough, 0.26, ink)
+	height = (ink + amber) * 0.2 + speck * 0.05
+	chips = smooth(0.55, 0.62, mat.edges * (0.5 + mat.field(lambda p: fbm(p * 2, 3, 171)) * 0.5 + 0.25))
+	if mat.name != "WOOD":
+		col = mix(col, STEEL * 0.8 * mix(1, mat.detail, 0.5)[..., None], chips)
+		metal = mix(metal, 1, chips)
+		metal = mix(metal, 0.6, parts)
+	col = col * mix(1, mat.ao, 0.5)[..., None]
+	return col, rough, metal, add_relief(mat.normal, height, 0.6, mat.cov)
+
+
 # ---------------------------------------------------------------------------------------------------------------------
 
 
@@ -671,29 +1061,34 @@ def releve_awp(mat):
 def build(skin, bake, m9_orig, out):
 	m9 = Mat("m9", "Handle", os.path.join(bake, "m9"), {k: os.path.join(m9_orig, f"m9_Handle_{k}.png") for k in ("Color", "Rough", "Metal", "Normal")})
 	k = Knife(m9)
-	fn = {"couchant": couchant_m9, "impact": impact_m9, "releve": releve_m9}[skin]
-	write(os.path.join(out, skin, "M9Bayonet"), "Handle", m9, *fn(m9, k))
+	m9_fns = {"couchant": couchant_m9, "impact": impact_m9, "releve": releve_m9, "recuit": recuit_m9, "strate": strate_m9, "sillage": sillage_m9}
+	write(os.path.join(out, skin, "M9Bayonet"), "Handle", m9, *m9_fns[skin](m9, k))
 	print(f"[skins] {skin} M9Bayonet")
-	livery = None
+	cw, ch = 2048, 375  # proportions de la boîte de l'AWP vue de profil (x, z)
+	livery = marks = None
 	if skin == "impact":
-		cw, ch = 2048, 375  # proportions de la boîte de l'AWP vue de profil (x, z)
 		left, right = impact_livery(cw, ch, False), impact_livery(cw, ch, True)
 		livery = {"red": (left[0], np.fliplr(right[0])), "black": (left[1], np.fliplr(right[1]))}
+	if skin == "sillage":
+		marks = (sillage_marks(cw, ch, False), np.fliplr(sillage_marks(cw, ch, True)))
+	awp_fns = {
+		"couchant": couchant_awp,
+		"impact": lambda m: impact_awp(m, livery),
+		"releve": releve_awp,
+		"recuit": recuit_awp,
+		"strate": strate_awp,
+		"sillage": lambda m: sillage_awp(m, marks),
+	}
 	for name in AWP_MATS:
 		mat = Mat("awp", name + "_PBR", os.path.join(bake, "awp"), {k2: os.path.join(AWP_TEX, f"{name}_{k2}.png") for k2 in ("Color", "Rough", "Metal", "Normal")})
 		mat.name = name
-		if skin == "couchant":
-			maps = couchant_awp(mat)
-		elif skin == "impact":
-			maps = impact_awp(mat, livery)
-		else:
-			maps = releve_awp(mat)
+		maps = awp_fns[skin](mat)
 		write(os.path.join(out, skin, "AWP"), name, mat, *maps)
 		print(f"[skins] {skin} AWP {name}")
 
 
 if __name__ == "__main__":
 	bake, m9_orig, out = sys.argv[1:4]
-	skins = sys.argv[4:] or ["couchant", "impact", "releve"]
+	skins = sys.argv[4:] or ["couchant", "impact", "releve", "recuit", "strate", "sillage"]
 	for s in skins:
 		build(s, bake, m9_orig, out)
