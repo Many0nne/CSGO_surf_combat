@@ -192,21 +192,71 @@ local function underside(parent, data)
 	end
 end
 
--- Cette méthode permet de poser les points d'apparition au sol (info_player_* de l'original) : le joueur apparaît
--- 5 studs au-dessus du point (SpawnManager), le point est mis au niveau du sol (0,406 m sous l'origine source).
+-- Points d'apparition ajoutés (#329) : SpawnPointRules choisit un point loin et hors de vue des ennemis, et deux grappes
+-- (bases T et CT) ne lui laissaient presque pas de choix. Zones choisies hors de vue l'une de l'autre et des bases
+-- (tools/map/spawn_sight.luau), accessibles à pied aller et retour (le plan des bots ne garde que la partie reliée au
+-- premier point). Coordonnées du plan sans le décalage, y = dessus du sol ; regard horizontal vers la sortie de la
+-- zone. Décrites côté T, recopiées côté CT par le demi-tour de la map autour de (0, -260,1) (cf. DizzyDressing.mirror).
+local FFA_SPAWNS = {
+	{
+		zone = "BalconSud",
+		mirror = "BalconNord",
+		floor = 48.1045,
+		look = { -1, 0 },
+		points = { { -38.486, -506.212 }, { -38.486, -517.428 }, { -38.486, -494.995 } },
+	},
+	{
+		zone = "ToitT",
+		mirror = "ToitCT",
+		floor = 96.1105,
+		look = { 1, 0 },
+		points = { { -241.037, -261.783 }, { -230.668, -256.516 }, { -241.037, -251.249 } },
+	},
+}
+local MIRROR_Z = -260.1 -- centre du demi-tour de la map (z), en x : 0
+local SPAWN_SKIN = 0.029 -- studs : face basse du point au-dessus du sol, comme les points T/CT relevés
+
+-- Cette méthode permet de poser un point d'apparition au sol (pièce invisible sans collision, regard horizontal) lorsque
+-- le générateur remplit GroundSpawns.
+local function spawnPoint(f, name, center, lookX, lookZ, team, zone)
+	local p = ghost(Instance.new("Part"))
+	p.Anchored = true
+	p.Transparency = 1
+	p.Size = Vector3.new(2, 1, 2)
+	p.CFrame = CFrame.lookAt(center, center + Vector3.new(lookX, 0, lookZ))
+	p.Name = name
+	p:SetAttribute("Team", team)
+	if zone then
+		p:SetAttribute("Zone", zone)
+	end
+	p.Parent = f
+end
+
+-- Cette méthode permet de poser les points d'apparition au sol : info_player_* de l'original (attribut Team T ou CT,
+-- point mis au niveau du sol, 0,406 m sous l'origine source), puis les zones FFA_SPAWNS des deux côtés de la map
+-- (#329). Le joueur apparaît 5 studs au-dessus du point (SpawnManager). Renvoie le nombre de points.
 local function spawns(parent, data)
 	local f = folder(parent, "GroundSpawns")
 	for i, s in data.spawns do
-		local p = ghost(Instance.new("Part"))
-		p.Anchored = true
-		p.Transparency = 1
-		p.Size = Vector3.new(2, 1, 2)
 		local feet = Vector3.new(s[2], s[3] - 0.406 * data.scale.v + 0.5, s[4]) + OFFSET
-		p.CFrame = CFrame.lookAt(feet, feet + Vector3.new(s[5], 0, s[6]))
-		p.Name = string.format("%s%02d", s[1], i)
-		p:SetAttribute("Team", s[1])
-		p.Parent = f
+		spawnPoint(f, string.format("%s%02d", s[1], i), feet, s[5], s[6], s[1], nil)
 	end
+	local n = 0
+	for _, z in FFA_SPAWNS do
+		local y = z.floor + SPAWN_SKIN + 0.5
+		for _, side in { { z.zone, 1 }, { z.mirror, -1 } } do
+			local sign = side[2]
+			for _, pt in z.points do
+				-- côté CT : demi-tour autour de (0, MIRROR_Z), le regard tourne avec
+				local x = sign * pt[1]
+				local zz = if sign == 1 then pt[2] else 2 * MIRROR_Z - pt[2]
+				n += 1
+				local center = Vector3.new(x, y, zz) + OFFSET
+				spawnPoint(f, string.format("FFA%02d", n), center, sign * z.look[1], sign * z.look[2], "FFA", side[1])
+			end
+		end
+	end
+	return #data.spawns + n
 end
 
 -- Cette méthode permet de vérifier que l'heure et la latitude de default.project.json sont celles du soleil SUN
@@ -285,7 +335,7 @@ for _, r in RampEdges.apply(geometry) do
 end
 local dressed = DizzyDressing.build(map, OFFSET)
 underside(map, data)
-spawns(map, data)
+local spawnCount = spawns(map, data)
 local rampLines, rampWorst = RampCheck.check(map)
 if rampWorst > RampCheck.TOL then
 	-- bilan en entier (un message d'erreur long est tronqué), puis arrêt avant d'écrire la map
@@ -316,7 +366,7 @@ print(
 		#data.parts,
 		#patches,
 		dressed,
-		#data.spawns,
+		spawnCount,
 		data.killY,
 		OUT
 	)

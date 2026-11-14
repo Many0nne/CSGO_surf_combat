@@ -17,8 +17,9 @@ code qui lit la map doit passer par là, jamais par un nom de map en dur. Rotati
 Toit d'un gratte-ciel au-dessus des nuages, reproduit d'après `ar_dizzy` (CS:GO, port CS2 `ar_dizzy.vpk` de ModDB) :
 pièces, escaliers, mât central, deux grandes rampes de surf dans les fosses d'angle. Habillage à nous (béton, enduit
 blanc cassé à bande bleu clair, tôle ondulée, acier, fût de tour aux fenêtres allumées, mer de nuages au
-crépuscule). Jouable à pied, apparition au sol (24 points, `info_player_*` de l'original, attribut `Team`), pas de
-boosts, mouvement et gravité du jeu inchangés.
+crépuscule). Jouable à pied, apparition au sol (36 points : 24 `info_player_*` de l'original, attribut `Team` T ou
+CT, et 12 points ajoutés en 4 zones, `Team` = `FFA`, cf. « Points d'apparition »), pas de boosts, mouvement et gravité
+du jeu inchangés.
 
 - **Échelle** : 10 studs par mètre en plan, 7 en hauteur (`H_SCALE`, `V_SCALE` de `extract_dizzy.py`), environ
   560 × 600 studs, toit à Y = 0. Rampes de surf à ~62° (69° dans l'original). Une v1 à 5 et 3,5 studs par mètre
@@ -184,6 +185,43 @@ Pièges :
   l'emprise (angle rentrant, parallèle au surf) : les rayons du bord sont tirés à 0,05 stud de l'arête ;
 - un relevé neuf (`extract_dizzy.py`, Blender 5.2.3) ne redonne pas le `dizzy_layout.json` versionné (14 606 pièces
   au lieu de 14 019) : ne pas corriger les rampes en relançant le relevé sans comparer toute la map.
+
+### Points d'apparition (#329)
+
+`SpawnPointRules` choisit un point à plus de `SPAWN_SAFE_RADIUS` des ennemis et hors de leur vue ; avec les deux seules
+grappes de 12 points (bases T et CT), il retombait vite au hasard. Quatre zones de 3 points ont été ajoutées
+(`FFA_SPAWNS` de `build_dizzy.luau`), décrites côté T et recopiées côté CT par le demi-tour de la map :
+
+| Zone | Où | Sol (y) | Regard |
+|---|---|---|---|
+| `BalconSud` / `BalconNord` | balcons des bouts de la map, entre les climatiseurs (x 1961,5 / 2038,5) | 48,10 | vers la sortie du balcon (−X / +X) |
+| `ToitT` / `ToitCT` | toits à y 96 côté T / côté CT (x ~1760 / ~2240, z ~−256 / ~−264) | 96,11 | vers la sortie du toit (+X / −X) |
+
+Attributs : `Team` = `FFA` (ni `SpawnPointRules` ni `SpawnManager` ne le lisent), `Zone` = nom de la zone. Les points
+sont posés par le générateur, pas par `SPAWNS` d'`extract_dizzy.py` : un relevé neuf ne redonne pas le plan versionné
+(cf. « Rampes de surf »). Regard horizontal vers la sortie : vers le centre de la map, on avait un mur proche devant
+soi (décision de l'utilisateur).
+
+Méthode de placement (à refaire pour une autre map) :
+1. Candidats : points des dessus de `Floors` tous les 5 studs, avec le dégagement du corps et un sol sous les épaules,
+   à plus de 100 studs des bases et hors de vue de tous leurs points.
+2. Amas de candidats contigus au même niveau, matrice de vue entre amas, paires symétriques sans vue entre elles.
+3. **Accessibilité aller et retour** depuis les bases : le plan des bots (`NavBuilder`) ne garde que la composante
+   fortement connexe du premier point d'apparition ; un point dans un cul-de-sac laisse un bot coincé. Test hors Studio
+   par un graphe 2,5D (colonnes de 2 studs, marche à 2,2 studs au plus, descentes, échelles, rayons de passage du corps
+   entre colonnes, **aucun saut**). Pièges rencontrés : une version qui acceptait les sauts de 5 studs passait sur un
+   mur de 5,7 par une moulure ; sans rayon entre colonnes, un mur fin tombait entre deux colonnes. Les deux faisaient
+   sortir d'un bâtiment fermé (pièces à y 69, signalées par l'utilisateur sur la planche). Écartés aussi : les
+   corniches extérieures (x 1730 et 2268, y 71, vide aux deux bouts), les toits les plus hauts, la fosse sud, et la paire
+   à y 42 au bord de la fosse (les deux côtés se voient à travers). Fosse centrale accessible et cachée, mais c'est là
+   qu'on se bat : non retenue.
+4. Planche de dessus (Workbench, caméra à 3 000 studs, FOV 12°, quasi orthographique) et vues à hauteur d'œil soumises
+   à l'utilisateur avant la génération.
+
+Contrôle : `lune run tools/map/spawn_sight.luau` (`tools/map/SpawnSight.luau`, testé) teste chaque paire de points de
+zones différentes (attribut `Zone`, sinon `Team`), yeux à yeux comme `SpawnManager` (murs d'air et grillages
+transparents), code de sortie 1 si une paire se voit. État : 36 points, 486 paires, 0 visible. Hauteur :
+`SpawnCheck` (CI), pieds à 0,764 stud du sol sur les 36 points.
 
 ### Corriger un détail de Dizzy
 
@@ -395,7 +433,9 @@ Rojo gère `Workspace.Maps` : un objet posé à la main dans une map est supprim
   `verify_place.luau` (CI) échoue si les pieds sont sous le sol ou à plus de 1,5 stud au-dessus, si le point est dans
   un volume ou au-dessus du vide. Un rig plus grand ou plus petit : mettre à jour `SpawnCheck.ROOT_TO_FEET`.
   `SpawnManager` choisit un point à plus de `SPAWN_SAFE_RADIUS` et hors de vue des ennemis vivants (`SpawnPointRules`) :
-  prévoir des points dans plusieurs zones éloignées et sans vue entre elles, sinon le choix retombe au hasard.
+  prévoir des points dans plusieurs zones éloignées et sans vue entre elles, sinon le choix retombe au hasard
+  (`tools/map/spawn_sight.luau`), et accessibles aller et retour depuis les autres (plan des bots, cf. « Points
+  d'apparition (#329) »).
 - `Maps.Map.Boosts` : volumes invisibles (`CanCollide`, `CanQuery`, `CanTouch` faux), attribut `Kind` :
   `Geyser` / `Launcher` avec `Velocity` (Vector3 imposé), `Portal` avec `Boost` (studs/s ajoutés), `Cooldown`
   optionnel. Le client teste sa position dans la boîte (marge `CHAR_RADIUS`) à chaque frame : un portique doit être
