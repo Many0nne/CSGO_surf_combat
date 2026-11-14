@@ -361,8 +361,10 @@ un bhop joué par entrées simulées (MCP) ; la prise humaine était déjà prop
 - Éclairage du viewport (pas d'ombres portées ni de ciel dans un `ViewportFrame`) : `Ambient` (190, 178, 190),
   `LightColor` (255, 214, 170), `LightDirection` opposée au soleil de `Lighting`, ciel en dégradé sous le viewport. Avec
   l'éclairage par défaut (150, 146, 140), la scène était presque noire.
-- Coût mesuré (Studio, qualité 10, fenêtre 1291x607, overlay F3) : voir « Coût » dans le compte rendu de #285 ; repère
-  `démo infos` dans les scripts de l'overlay.
+- Coût mesuré (Studio, qualité auto 1/10, menu principal, overlay F3, bilans de 10 s, repère `démo infos`) : lecteur
+  ouvert CPU 3,9 à 4,6 ms, GPU 7,2 à 8,6 ms, boucle du lecteur 0,04 à 0,05 ms par image ; fermé CPU 3,7 ms, GPU 3,1 ms.
+  Soit environ 4 à 5 ms de GPU tant que la démo est affichée, rien après. Copie du décor : 17 443 pièces en 0,30 s.
+  Image la plus longue : 51 ms à l'ouverture, 131 ms dans la période de la fermeture (un seul relevé, cause non isolée).
 
 **Refaire un clip :**
 1. Studio réservé, playtest lancé, partie lancée (`DebugPlaytest`), bots retirés (`workspace:SetAttribute("DebugBots", 0)`).
