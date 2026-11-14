@@ -151,7 +151,12 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   conservé) ; une catégorie sans réglage n'est pas créée.
   TOUCHES (#100) : chaque ligne nomme l'action et la valeur donne le geste (choix de l'utilisateur : « Arme suivante :
   MOLETTE BAS », pas « Molette vers le haut : PRÉCÉDENTE »). « Arme suivante » (MOLETTE BAS par défaut) et « Arme
-  précédente » (MOLETTE HAUT) portent le même réglage et se suivent ; AUCUNE coupe la molette. Puis une ligne par emplacement
+  précédente » (MOLETTE HAUT) portent le même réglage et se suivent ; AUCUNE coupe la molette. Les gestes de molette
+  s'affichent en icônes (#254, `UIKit.mouseIcon`, option `icon` de `addPicker`) : souris dessinée en Frames (contour,
+  molette pleine), chevron au-dessus (vers le haut) ou en dessous (vers le bas), en os à ombre de 1 px (à 2 ou 3 px le
+  chevron se lit en double ; corps de 14x20 px : plus large, la souris passait pour un œuf) ; AUCUNE reste en texte. L'icône
+  « clic molette » (`wheelClick`, sans chevron) existe mais ne sert pas : le clic molette n'est pas une touche proposée.
+  L'aide de l'équipement et Infos > COMMANDES gardent « MOLETTE » en boîte. Puis une ligne par emplacement
   (#280 : « Arme 1 · AWP », « Arme 2 · KA BAR », nommées d'après l'arme équipée, renommées quand l'équipement arrive ou
   change). On clique sur la touche, elle affiche « APPUIE… », la
   touche suivante est prise ; Échap ou un clic ailleurs annule. Une touche d'un autre emplacement est échangée ; une
