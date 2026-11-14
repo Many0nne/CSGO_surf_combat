@@ -269,10 +269,17 @@ Luau qui pose un skin sur les viewmodels de Studio (mode Edit) ; Disconnect/Conn
 - Sous l'éclairage du mode Edit (crépuscule), les skins métalliques paraissent bien plus sombres qu'en Blender.
 - **Tester un skin en jeu** : le serveur refuse `EquipItem` pendant un round ; équiper depuis l'accueil (remote
   `ReplicatedStorage.EquipItem:FireServer(slot, armeId, skinId)` côté client, juste après le lancement du playtest), puis
-  `DebugPlaytest`. Les premières images montrent l'arme grise le temps que les cartes chargent (#333).
+  `DebugPlaytest`.
+- **Préchargement (#333)** : un skin jamais affiché met 1 à 3 s à charger ses cartes (16 cartes de l'AWP : ~2,9 s à
+  froid, 66 ms en cache, mesuré dans Studio), l'arme paraît grise entre-temps. `SkinPreloader` (client) précharge les
+  skins équipés au démarrage et à chaque changement d'équipement. `ContentProvider:PreloadAsync` ne lit **pas** les
+  cartes d'une `SurfaceAppearance` (aucune requête) et échoue sur un id brut (`Asset type does not match`) ; passer
+  chaque carte par un `ImageLabel` (un `Decal` marche aussi mais écrit deux avertissements par carte). Le rendu d'une
+  arme ne remplit pas `GetAssetFetchStatus` : ce statut ne dit pas si l'arme affichée est texturée. Le cache persiste
+  d'un playtest à l'autre dans une même session Studio : mesurer à froid sur un skin jamais chargé.
 - Rojo (7.7) écrit bien `ColorMapContent`… d'une `SurfaceAppearance` depuis un `.model.json`, en build comme en synchro
   directe (vérifié dans Studio) : pas besoin de `.rbxm` pour les skins.
-- Suites ouvertes : caisses (#332), préchargement des textures (#333), UV de la crosse de l'AWP (#335).
+- Suites ouvertes : caisses (#332), UV de la crosse de l'AWP (#335).
 
 ## Ajouter un couteau
 
