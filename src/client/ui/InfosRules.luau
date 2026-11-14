@@ -161,7 +161,7 @@ function InfosRules.demoClips(ctx: Context): { DemoClip }
 	return {
 		{
 			id = "bhop",
-			title = "BHOP · AIR STRAFE",
+			title = "BHOP",
 			caption = string.format(
 				"Garde %s (auto-bhop), puis en l'air %s en tournant la souris à gauche, %s à droite, sans %s.",
 				jump,

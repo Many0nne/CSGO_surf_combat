@@ -153,7 +153,7 @@ return function(T, Loader)
 			local clips = InfosRules.demoClips(context(AZERTY))
 			T.expectEqual(#clips, 1)
 			T.expectEqual(clips[1].id, "bhop")
-			T.expectEqual(clips[1].title, "BHOP · AIR STRAFE")
+			T.expectEqual(clips[1].title, "BHOP")
 		end)
 
 		T.it("cite les touches du clavier du joueur dans la légende", function()

@@ -328,7 +328,7 @@ return model:FindFirstChildWhichIsA("Decal", true).Texture
 **Où :** en tête de l'onglet SURFER d'Infos, rien au premier lancement. Le lecteur 640x360 (16:9), puis le texte de
 SURFER (`InfosRules.surfLines`), inchangé, sous le lecteur (défilement).
 
-**Une seule démo : BHOP · AIR STRAFE.** Prise jouée par l'utilisateur avec l'auto-bhop (Espace tenu), Q/D en tournant la
+**Une seule démo : BHOP** (le geste montre aussi l'air strafe). Prise jouée par l'utilisateur avec l'auto-bhop (Espace tenu), Q/D en tournant la
 souris du même côté, vitesse de 25 à 126 en 15 s. Surf et enchaînement abandonnés le 2026-11-14 : Dizzy n'a pas de
 rampe assez longue pour une démo lisible (une rampe se traverse en 2 s environ). Ils pourront revenir avec une autre map :
 le code reste générique (`InfosRules.demoClips` renvoie une liste ; à partir de deux démos, un sélecteur en choix de
