@@ -580,6 +580,11 @@ workspace pendant la partie) :
   ne bouge pas, elle ne risque pas d'entrer dans un mur du couloir. Hors de l'onglet ARMES, le lacet revient à 0 en
   douceur (`MenuScene.setCentered`, appelé par `MainMenu.setPage`) : le personnage repasse au centre, derrière le bloc
   de l'écran ouvert. Flou du fond : `DepthOfFieldEffect` posé sous la caméra le temps du menu.
+  À la fermeture, `MenuScene.stop` rend `CameraConfig.DEFAULT_FOV`, jamais un FOV capturé à l'ouverture (#352) : au
+  premier menu la caméra vaut encore 70 (défaut Roblox), et `FPSCamera.init` peut passer avant `stop` (personnage
+  arrivé complet avant la fin des volets), qui remettait alors 70 en partie. Mesure : en contexte `Client`, écouter
+  `GetPropertyChangedSignal("FieldOfView")` sur `workspace.CurrentCamera` et imprimer les sauts, puis lancer
+  `DebugPlaytest`.
 - Éclairage : celui du jeu, plus une **lumière de portrait** (SpotLight chaud devant le personnage, du côté du soleil).
   Avec un soleil à 1,4° au-dessus de l'horizon, les bords du toit ombrent tout le couloir : sans elle le personnage
   est sombre. Piège : juste après le lancement, les ombres ne sont pas encore calculées et le personnage paraît au
