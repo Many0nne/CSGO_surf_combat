@@ -312,6 +312,57 @@ function UIKit.arrowIcon(parent: GuiObject, color: Color3): Frame
 	return box
 end
 
+export type MouseIconKind = "wheelUp" | "wheelDown" | "wheelClick"
+
+-- Icône de souris (#254) : corps de 14x20 px (trait compris) centré dans une boîte de 20x34, chevron de 4 px au-dessus
+-- (molette vers le haut) ou en dessous (vers le bas), dans le sens du geste
+local MOUSE_ICON_SIZE = Vector2.new(20, 34)
+local MOUSE_BODY = Vector2.new(14, 20)
+local MOUSE_STROKE = 2
+UIKit.MouseIconSize = MOUSE_ICON_SIZE
+
+-- Cette méthode permet de dessiner une souris (contour, molette pleine) avec un chevron au-dessus ou en dessous lorsqu'un
+-- geste de molette remplace son libellé (Réglages > TOUCHES) ; sans chevron : clic molette.
+function UIKit.mouseIcon(parent: GuiObject, kind: MouseIconKind, color: Color3, transparency: number?): Frame
+	local alpha = transparency or 0
+	local box = iconBox(parent, MOUSE_ICON_SIZE, "MouseIcon")
+	box:SetAttribute("Kind", kind)
+	local cx = MOUSE_ICON_SIZE.X / 2
+	local bodyTop = (MOUSE_ICON_SIZE.Y - MOUSE_BODY.Y) / 2
+	-- Corps : le trait (UIStroke) est posé à l'extérieur du cadre, d'où le retrait de MOUSE_STROKE de chaque côté
+	local body = UIKit.frame({
+		Name = "Body",
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.fromOffset(cx, bodyTop + MOUSE_STROKE),
+		Size = UDim2.fromOffset(MOUSE_BODY.X - 2 * MOUSE_STROKE, MOUSE_BODY.Y - 2 * MOUSE_STROKE),
+		BackgroundTransparency = 1,
+		Parent = box,
+	})
+	UIKit.create("UICorner", { CornerRadius = UDim.new(0, 7), Parent = body })
+	UIKit.create("UIStroke", { Color = color, Thickness = MOUSE_STROKE, Transparency = alpha, Parent = body })
+	local wheel = UIKit.frame({
+		Name = "Wheel",
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.fromOffset(cx, bodyTop + 4),
+		Size = UDim2.fromOffset(4, 7),
+		BackgroundColor3 = color,
+		BackgroundTransparency = alpha,
+		Parent = box,
+	})
+	UIKit.create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = wheel })
+	if kind ~= "wheelClick" then
+		-- Chevron de 8 px de large et 4 px de haut, à 2 px du corps
+		local up = kind == "wheelUp"
+		local tipY = if up then 1 else MOUSE_ICON_SIZE.Y - 1
+		local baseY = if up then 5 else MOUSE_ICON_SIZE.Y - 5
+		for _, side in { -4, 4 } do
+			local line = UIKit.line(box, cx + side, baseY, cx, tipY, 2, color)
+			line.BackgroundTransparency = alpha
+		end
+	end
+	return box
+end
+
 -- Cette méthode permet de dessiner l'emblème du jeu (deux rampes en Λ) lorsque le logo est affiché.
 function UIKit.emblem(parent: GuiObject): Frame
 	local box = iconBox(parent, Vector2.new(30, 30), "Emblem")

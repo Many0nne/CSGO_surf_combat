@@ -38,6 +38,8 @@ local VALUE_WIDTH = 70
 local VALUE_SIZE = 26
 local VALUE_SHADOW = 3
 local PICK_WIDTH = 120
+-- Ombre des icônes de molette (#254) : 1 px, à 2 ou 3 px (ombre des valeurs) le chevron se lisait en double
+local ICON_SHADOW = 1
 local KEY_HINT_TIME = 1.5 -- s d'affichage du refus d'une touche (« RÉSERVÉE AU JEU »)
 -- Aperçu du viseur (#251), à droite des lignes : deux cases, fond clair et fond sombre, viseur à sa vraie taille en px
 local PREVIEW_GAP_X = 24 -- px entre les lignes et l'aperçu
@@ -280,13 +282,13 @@ local function addSlider(
 end
 
 -- Cette méthode permet d'ajouter un réglage à choix fermé (« ‹ VALEUR › », flèches à cliquer, en boucle) à une catégorie
--- lorsque l'écran est construit ; `options` (libellé, valeur, couleur en option), `field` (champ de PlayerSettings),
+-- lorsque l'écran est construit ; `options` (libellé, valeur, couleur ou icône en option), `field` (champ de PlayerSettings),
 -- `width` (PICK_WIDTH par défaut) ; `keepOnReset` : RÉTABLIR ne touche pas à cette ligne.
 local function addPicker(
 	category: Category,
 	name: string,
 	field: string,
-	options: { { label: string, value: any, color: Color3? } },
+	options: { { label: string, value: any, color: Color3?, icon: UIKit.MouseIconKind? } },
 	initial: number,
 	default: number,
 	onChange: (any) -> (),
@@ -329,10 +331,33 @@ local function addPicker(
 		Parent = holder,
 	})
 	shadowValue(value)
+	-- Option dessinée (#254, gestes de molette) : icône os à ombre décalée à la place du libellé, gardé comme nom
+	local icons: { [number]: Frame } = {}
+	for i, option in options do
+		if option.icon then
+			local icon = UIKit.frame({
+				Name = option.label,
+				BackgroundTransparency = 1,
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Position = UDim2.fromScale(0.5, 0.5),
+				Size = UDim2.fromOffset(UIKit.MouseIconSize.X, UIKit.MouseIconSize.Y),
+				Visible = false,
+				Parent = holder,
+			})
+			local shadow = UIKit.mouseIcon(icon, option.icon, C.Black, 0.35)
+			shadow.Position = UDim2.fromOffset(ICON_SHADOW, ICON_SHADOW)
+			shadow.ZIndex = 1
+			UIKit.mouseIcon(icon, option.icon, C.Bone).ZIndex = 2
+			icons[i] = icon
+		end
+	end
 
 	local function apply(index: number)
 		current = (index - 1) % #options + 1
-		value.Text = options[current].label
+		value.Text = if options[current].icon then "" else options[current].label
+		for i, icon in icons do
+			icon.Visible = i == current
+		end
 		value.TextColor3 = options[current].color or C.Bone
 		onChange(options[current].value)
 		store(field, options[current].value)
@@ -520,16 +545,16 @@ local function buildKeysCategory(block: Frame)
 		{
 			name = "Arme suivante",
 			options = {
-				{ label = "MOLETTE BAS", value = "previous" },
-				{ label = "MOLETTE HAUT", value = "next" },
+				{ label = "MOLETTE BAS", value = "previous", icon = "wheelDown" },
+				{ label = "MOLETTE HAUT", value = "next", icon = "wheelUp" },
 				{ label = "AUCUNE", value = "off" },
 			},
 		},
 		{
 			name = "Arme précédente",
 			options = {
-				{ label = "MOLETTE HAUT", value = "previous" },
-				{ label = "MOLETTE BAS", value = "next" },
+				{ label = "MOLETTE HAUT", value = "previous", icon = "wheelUp" },
+				{ label = "MOLETTE BAS", value = "next", icon = "wheelDown" },
 				{ label = "AUCUNE", value = "off" },
 			},
 		},
