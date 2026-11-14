@@ -88,6 +88,9 @@ return function(T, Loader)
 		T.it("nomme le skin d'origine et un skin du catalogue", function()
 			T.expectEqual(Rules.skinLabel(nil), "D'ORIGINE")
 			T.expectEqual(Rules.skinLabel("skin.awp.dragon_lore"), "DRAGON LORE")
+			-- Nom du catalogue (#268) prioritaire sur l'id, accents compris
+			T.expectEqual(Rules.skinLabel("skin.awp.releve", "RELEVÉ"), "RELEVÉ")
+			T.expectEqual(Rules.skinLabel(nil, "RELEVÉ"), "D'ORIGINE")
 		end)
 	end)
 

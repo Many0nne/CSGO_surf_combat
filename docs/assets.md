@@ -204,20 +204,66 @@ jamais d'un effet propre à three.js. C'est ce qui permet de publier telle quell
    vient de jsDelivr). Avec `"height": 560` et `"maxSize": 512` dans le spec, elle s'affiche dans la conversation
    (`html_render` de T3) ; sans, elle prend tout l'écran du navigateur. L'aperçu sans GPU de T3 (`html_preview`) dépasse
    son délai au-delà d'environ 3 Mo : réduire `maxSize` pour un contrôle.
-4. **Version retenue** : ses PNG à pleine résolution dans `assets/skins/<Viewmodel>/<skin>/` (LFS), avec le `spec.json`
-   qui l'a produite. Puis l'appliquer dans le jeu (ci-dessous).
+4. **Version retenue** : voir « Skins d'arme (#268) » ci-dessous (la méthode des skins a changé : plus de three.js).
 
-### Appliquer un skin dans le jeu
+## Skins d'arme (#268)
 
-1. Publier chaque PNG (`bash tools/publish_asset.sh <png> Decal <nom>`) et relever l'id de l'image contenue dans le
-   Decal (procédure dans `docs/ui.md` : l'id du Decal lui-même ne s'affiche pas). Noter les ids dans
-   `assets/skins/<Viewmodel>/<skin>/ids.json`.
-2. Studio réservé et connecté au worktree, mode Edit : poser les ids sur la `SurfaceAppearance` de chaque pièce du
-   viewmodel (`ColorMapContent`, `RoughnessMapContent`, `MetalnessMapContent`, `NormalMapContent`, avec
-   `Content.fromUri("rbxassetid://…")`), via `execute_luau`.
-3. Réexporter le viewmodel (« Mettre à jour un `.rbxm` » ci-dessus), puis vérifier en jeu (helper de playtest, étape
-   `VIEWMODEL`) et faire juger le rendu par l'utilisateur. Le modèle 3P clone les pièces du viewmodel : il suit, comme
-   l'arme du personnage de l'accueil du menu (`MenuScene`, même modèle 3P).
+Un skin est un item de l'inventaire (`InventoryRules.ITEMS` : `skin.<arme>.<nom>`, `name` affiché, `appearance`), choisi
+à l'écran d'équipement et rendu partout où l'arme apparaît : 1re personne (`ViewmodelSystem`), arme vue par les autres
+(`WeaponThirdPerson.attach` côté serveur, skin lu dans l'équipement du joueur), personnage de l'accueil (`MenuScene`),
+grand rendu et cartes de l'écran d'équipement (`UIKit.weaponSilhouette`). Tous passent par `WeaponSkins.apply`.
+
+**Un script de jeu ne peut pas écrire les cartes d'une `SurfaceAppearance`** (`ColorMapContent`… : sécurité plugin). Les
+`SurfaceAppearance` d'un skin sont donc toutes faites : `assets/rbx/Skins/<Viewmodel>/<skin>.model.json` (Rojo :
+`ReplicatedStorage.Skins.<Viewmodel>.<skin>`, une par pièce, nommée comme elle), et le jeu les clone sur les pièces de
+l'arme clonée. Le skin d'origine reprend les `SurfaceAppearance` du viewmodel. Le viewmodel 1re personne est cloné une
+fois par session (cache) : seules ses `SurfaceAppearance` changent quand le skin change.
+
+Sources versionnées : `assets/skins/<skin>/<Viewmodel>/<PREFIXE>_<Carte>.png` (LFS, une paire AWP + M9 par dossier) et
+`assets/skins/<skin>/ids.json` (ids des images publiées). Pas de skin par défaut : ils viendront des caisses, l'admin a
+tout le catalogue.
+
+### Fabriquer un skin
+
+Tout est généré par script : motifs calculés sur la position 3D de chaque texel (continus d'une pièce à l'autre, quel
+que soit le découpage UV) ou projetés depuis la vue de profil (livrée, texte), détail des cartes d'origine gardé.
+
+1. **Cartes utilitaires** (une fois par arme, hors du dépôt) : position, normale, occlusion, arêtes et objet de chaque
+   texel, à la résolution des textures. La M9 vient du jeu (`fetch_viewmodel.py`, section « Aperçus three.js »).
+   ```bash
+   blender -b assets/sniper/Sniper.blend --factory-startup --python tools/skins/bake_maps.py -- <sortie>/awp
+   blender -b --factory-startup --python tools/skins/bake_maps.py -- <sortie>/m9 --glb <m9.glb>
+   ```
+2. **Cartes PBR** : `uv run --with numpy --with pillow --with scipy tools/skins/make_skins.py <bake> <m9_orig> <sortie>
+   [skin…]` (une fonction par skin et par arme dans le script : couchant, impact, releve).
+3. **Planche** : `tools/skins/render_views.py` (Cycles, HDRI de Blender, une vue par PNG, ~12 s par vue à 32
+   échantillons) puis `tools/skins/compose_board.py`. Se comparer aux références `references/skins/` avant de montrer.
+4. **Publier** : `uv run tools/skins/publish_skin.py assets/skins/<skin> <skin>` (Decals, puis id de l'image par Asset
+   Delivery, ~5 s par carte, reprise possible), puis `uv run tools/skins/make_rbx.py assets/skins/<skin>`.
+5. **Catalogue** : une ligne par arme dans `InventoryRules.ITEMS` (`appearance` = nom du fichier `.model.json`). Le test
+   du catalogue vérifie que le fichier existe.
+6. **Juger en jeu** (Studio, écran d'équipement) : l'éclairage du jeu change beaucoup le rendu des métaux.
+
+Pour un aperçu sans code (avant d'avoir le catalogue) : `tools/skins/apply_skin_lua.py <ids.json | origine>` écrit le
+Luau qui pose un skin sur les viewmodels de Studio (mode Edit) ; Disconnect/Connect de Rojo remet l'origine.
+
+### Pièges
+
+- **Juger la couleur en « Standard »**, pas en AgX : AgX fait virer un rouge vif au saumon.
+- **Un bois ou une peinture sombre non métallique prend un voile gris** sous les reflets (Fresnel) et fait plastique :
+  une peinture « candy » sombre se fait en métal (métal 1, couleur sombre saturée, rugosité basse).
+- **Profondeur d'un Doppler** : fond presque noir marbré, nappes lumineuses saturées, rugosité 0,05 à 0,12. Des
+  paillettes en points clairs font poussière : à éviter.
+- **Courbes de niveau** : écart mesuré en unités monde (taille monde d'un pixel, propre à chaque îlot UV), pas en pixels
+  UV ; les courbes trop serrées s'effacent (intermédiaires d'abord), sinon une pièce fine se couvre de rayures.
+- **Livrée projetée de profil** : texte lisible des deux côtés en retournant la toile de la face +y ; placer le texte
+  d'après la silhouette mesurée sur les cartes cuites (la crosse de l'AWP n'a que ~0,18 de hauteur de boîte à la poignée).
+- **Densité de texture** : la crosse de l'AWP a peu de pixels dans sa carte (îlots en diagonale) ; une livrée plus fine
+  demanderait de redéplier ses UV (mesh à republier).
+- Sous l'éclairage du mode Edit (crépuscule), les skins métalliques paraissent bien plus sombres qu'en Blender.
+- Rojo (7.7) écrit bien `ColorMapContent`… d'une `SurfaceAppearance` depuis un `.model.json`, en build comme en synchro
+  directe (vérifié dans Studio) : pas besoin de `.rbxm` pour les skins.
+- Suites ouvertes : caisses (#332), préchargement des textures (#333), UV de la crosse de l'AWP (#335).
 
 ## Ajouter un couteau
 

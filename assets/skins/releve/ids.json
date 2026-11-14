@@ -1,0 +1,36 @@
+{
+ "AWP": {
+  "METAL_A": {
+   "Color": "rbxassetid://107602012581798",
+   "Metal": "rbxassetid://123315517660034",
+   "Normal": "rbxassetid://105958659333340",
+   "Rough": "rbxassetid://85315114519418"
+  },
+  "METAL_B": {
+   "Color": "rbxassetid://110232280529237",
+   "Metal": "rbxassetid://84926621514566",
+   "Normal": "rbxassetid://126361209247964",
+   "Rough": "rbxassetid://98244719306397"
+  },
+  "SCOPE": {
+   "Color": "rbxassetid://133322400356947",
+   "Metal": "rbxassetid://75464839323345",
+   "Normal": "rbxassetid://140220944473347",
+   "Rough": "rbxassetid://100335282818380"
+  },
+  "WOOD": {
+   "Color": "rbxassetid://115862628523319",
+   "Metal": "rbxassetid://123812535190276",
+   "Normal": "rbxassetid://102714547143432",
+   "Rough": "rbxassetid://83069899833190"
+  }
+ },
+ "M9Bayonet": {
+  "Handle": {
+   "Color": "rbxassetid://96487076210103",
+   "Metal": "rbxassetid://95120540205534",
+   "Normal": "rbxassetid://100843261418639",
+   "Rough": "rbxassetid://121962077918068"
+  }
+ }
+}

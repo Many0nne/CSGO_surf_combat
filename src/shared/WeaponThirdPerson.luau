@@ -15,6 +15,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 local CharacterConfig = require(ReplicatedStorage.Shared.CharacterConfig)
+local WeaponSkins = require(ReplicatedStorage.Shared.WeaponSkins)
 
 local WeaponThirdPerson = {}
 
@@ -293,9 +294,9 @@ local function findAny(model: Instance, names: { string }): Instance?
 	return nil
 end
 
--- Cette méthode permet de construire le modèle 3P (pièces de l'arme soudées à la poignée, mises à l'échelle)
--- lorsqu'on l'attache à un personnage ; nil si le viewmodel ou sa Handle est introuvable.
-local function buildModel(viewmodelName: string, scale: number): (Model?, BasePart?)
+-- Cette méthode permet de construire le modèle 3P (pièces de l'arme soudées à la poignée, habillées du skin, mises à
+-- l'échelle) lorsqu'on l'attache à un personnage ; nil si le viewmodel ou sa Handle est introuvable.
+local function buildModel(viewmodelName: string, scale: number, skinId: string?): (Model?, BasePart?)
 	local container = ReplicatedStorage:FindFirstChild("ViewModels")
 	local template = container and container:FindFirstChild(viewmodelName)
 	if not (template and template:IsA("Model")) then
@@ -328,6 +329,9 @@ local function buildModel(viewmodelName: string, scale: number): (Model?, BasePa
 	if not handle then
 		gun:Destroy()
 		return nil, nil
+	end
+	if skinId then
+		WeaponSkins.apply(gun, viewmodelName, skinId)
 	end
 
 	-- Disposition interne de l'arme relative à sa poignée (pleine échelle, avant ScaleTo).
@@ -380,15 +384,16 @@ function WeaponThirdPerson.detach(character: Model)
 end
 
 -- Cette méthode permet d'attacher le modèle 3P d'une arme à la main d'un personnage côté
--- serveur lorsqu'il l'équipe : grip de WeaponConfig, action "Equip" ; renvoie le modèle.
-function WeaponThirdPerson.attach(character: Model, weaponName: string, viewmodelName: string?): Model?
+-- serveur lorsqu'il l'équipe : grip de WeaponConfig, skin équipé (#268, nil : d'origine), action "Equip" ; renvoie le
+-- modèle.
+function WeaponThirdPerson.attach(character: Model, weaponName: string, viewmodelName: string?, skinId: string?): Model?
 	WeaponThirdPerson.detach(character)
 	local hand = findAny(character, HANDS)
 	if not (hand and hand:IsA("BasePart")) then
 		return nil
 	end
 	local settings = WeaponThirdPerson.getSettings(weaponName)
-	local gun, handle = buildModel(viewmodelName or weaponName, settings.Scale)
+	local gun, handle = buildModel(viewmodelName or weaponName, settings.Scale, skinId)
 	if not gun or not handle then
 		return nil
 	end

@@ -8,6 +8,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local CharacterAppearance = require(Shared:WaitForChild("CharacterAppearance"))
+local InventoryRules = require(Shared:WaitForChild("InventoryRules"))
 local MapSelection = require(Shared:WaitForChild("MapSelection"))
 local PerfMarkers = require(Shared:WaitForChild("PerfMarkers"))
 local WeaponConfig = require(Shared:WaitForChild("WeaponConfig"))
@@ -80,6 +81,7 @@ local pose: { [string]: CFrame } = {}
 local weapons: { Weapon }? = nil
 local weaponsVersion = -1 -- LocalInventory.version() de la liste retenue
 local current: string? = nil
+local currentSkin: string? = nil -- skin montré sur l'arme tenue (#268, nil : d'origine)
 local running = false
 local building = false
 local connection: RBXScriptConnection?
@@ -309,9 +311,10 @@ local function applyPose()
 	end
 end
 
--- Cette méthode permet de mettre l'arme `key` dans les mains du personnage, dans sa tenue du menu (fusil en travers du
--- torse, couteau le long du corps), lorsque le joueur la choisit ou que la scène se construit.
-local function holdWeapon(key: string)
+-- Cette méthode permet de mettre l'arme `key` dans les mains du personnage, habillée du skin `skinId` (nil : d'origine),
+-- dans sa tenue du menu (fusil en travers du torse, couteau le long du corps), lorsque le joueur la choisit ou que la
+-- scène se construit.
+local function holdWeapon(key: string, skinId: string?)
 	local model = character
 	if not model then
 		return
@@ -326,7 +329,7 @@ local function holdWeapon(key: string)
 		return
 	end
 	local settings = WeaponThirdPerson.getSettings(key)
-	local gun = WeaponThirdPerson.attach(model, key, entry.viewmodel)
+	local gun = WeaponThirdPerson.attach(model, key, entry.viewmodel, skinId)
 	-- Hors du rendu des armes 3P (WeaponThirdPersonView) : la tenue et la prise sont celles du menu
 	model:SetAttribute(WeaponThirdPerson.ACTION_ATTR, nil)
 	model:SetAttribute(WeaponThirdPerson.ACTION_AT_ATTR, nil)
@@ -404,9 +407,20 @@ function MenuScene.setCentered(centered: boolean)
 	yawTarget = if centered then 0 else CHARACTER_YAW
 end
 
--- Cette méthode permet de changer l'arme tenue (clé de WeaponConfig) lorsque l'accueil montre une autre arme.
-function MenuScene.setWeapon(key: string)
-	if key == current then
+-- Cette méthode permet de lire le skin équipé (#268) de l'arme `key` lorsque la scène la montre sans skin imposé.
+local function equippedSkin(key: string): string?
+	for _, weapon in listWeapons() do
+		if weapon.key == key then
+			return InventoryRules.skinOfTool(LocalInventory.equipped(), weapon.tool)
+		end
+	end
+	return nil
+end
+
+-- Cette méthode permet de montrer l'arme `key` habillée du skin `skinId` (nil : d'origine) lorsque l'arme ou le skin
+-- montré change ; sans effet si l'arme n'est pas possédée ou si rien ne change.
+local function show(key: string, skinId: string?)
+	if key == current and skinId == currentSkin then
 		return
 	end
 	local known = false
@@ -416,19 +430,28 @@ function MenuScene.setWeapon(key: string)
 	if not known then
 		return
 	end
+	local changed = key ~= current
 	current = key
-	holdWeapon(key)
-	if weaponChanged then
+	currentSkin = skinId
+	holdWeapon(key, skinId)
+	if changed and weaponChanged then
 		weaponChanged(key)
 	end
 end
 
--- Cette méthode permet de mettre dans les mains du personnage l'arme dont le Tool porte ce nom lorsque l'écran
--- d'équipement (#280) montre une arme équipée ou survolée ; sans effet si elle n'est pas possédée.
-function MenuScene.holdTool(toolName: string)
+-- Cette méthode permet de changer l'arme tenue (clé de WeaponConfig), avec son skin équipé, lorsque l'accueil montre une
+-- autre arme.
+function MenuScene.setWeapon(key: string)
+	show(key, equippedSkin(key))
+end
+
+-- Cette méthode permet de mettre dans les mains du personnage l'arme dont le Tool porte ce nom, habillée du skin montré
+-- (nil : d'origine), lorsque l'écran d'équipement (#280, #268) montre une arme ou un skin équipé ou survolé ; sans effet
+-- si elle n'est pas possédée.
+function MenuScene.holdTool(toolName: string, skinId: string?)
 	for _, weapon in listWeapons() do
 		if weapon.tool == toolName then
-			MenuScene.setWeapon(weapon.key)
+			show(weapon.key, skinId)
 			return
 		end
 	end
@@ -473,8 +496,9 @@ local function onInventoryChanged()
 	if not kept then
 		local first = list[1]
 		current = if first then first.key else ""
+		currentSkin = if first then equippedSkin(first.key) else nil
 		if first then
-			holdWeapon(first.key)
+			holdWeapon(first.key, currentSkin)
 		end
 	end
 	if weaponChanged then
@@ -496,7 +520,9 @@ function MenuScene.start()
 		build()
 		building = false
 		if character then
-			holdWeapon(MenuScene.getWeapon())
+			local key = MenuScene.getWeapon()
+			currentSkin = equippedSkin(key)
+			holdWeapon(key, currentSkin)
 		end
 	end
 	if not running or not stage then -- menu refermé pendant la construction, ou map introuvable
