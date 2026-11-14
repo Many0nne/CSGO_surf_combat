@@ -200,6 +200,9 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   chargeur (couteau) et hors partie (`HUDRules.gameHudVisible`, via `GameStateController.applyGameHud`). Contrairement à
   la barre d'armes, il ne s'estompe pas.
 - Réglage « Auto-bhop » (#255) : catégorie MOUVEMENT de `SettingsMenu` (une seule ligne, ACTIVÉ par défaut), `PlayerSettings.autoBhop`, lu à chaque tick par `MovementController` et passé à `BhopSystem` : sans respawn.
+- Réglage « Conseils » (#291) : catégorie GRAPHISMES de `SettingsMenu`, juste sous « Affichage des touches » (les deux
+  aides affichées à l'écran côte à côte), ACTIVÉS par défaut, suivi par RÉTABLIR ; `PlayerSettings.deathTips` (absent d'un
+  réglage sauvegardé = activés). Coupé, l'écran de mort d'un débutant n'affiche plus de conseil ; sans effet pour les autres.
 - `src/client/ui/Crosshair.luau` (#195) : réglage « Visée simplifiée » (Réglages > VISEUR depuis #251, `PlayerSettings.simpleAim`, coupé par
   défaut). Par défaut, quatre traits fins os (longueur 9 px, épaisseur 2, écart 5) sans point central, doublés d'un contour
   noir de `OUTLINE` 1 px (`OUTLINE_TRANSPARENCY` 0,1) : sur fond blanc seul le contour se lit, sur sol ou mur sombre le trait os.
