@@ -647,7 +647,15 @@ l'étiquette BIENTÔT tant que l'achat n'existe pas.
 - Valeurs d'attente (points ouverts de #347 et #332) : prix 500 CRÉDITS par caisse, raretés COMMUN 70 %, RARE 25 %,
   EXCEPTIONNEL 5 %, rareté des skins de la série 2 dans l'ordre du catalogue (RECUIT, STRATE, SILLAGE). Tout est dans
   `ShopCatalog`. Pas de solde affiché tant que la monnaie n'est pas décidée.
-- Les caisses sont faites de pièces (cotes de la planche) en attendant le modèle de #332.
+- **Modèle de la caisse (validé le 14/11/2026, #332)** : caisse d'armes en bois (piste B de
+  `docs/ui/shop/planche_caisses.png`) : planches, cadre et écharpe en Z, coins et moraillons en acier, poignées en
+  corde, bande peinte de la collection sur l'avant et le dessus du couvercle, numéro au pochoir. Elle reprend le bois des
+  palettes et des poutres de la salle et se détache sur la vitrine sombre. Modèle et publication : `docs/assets.md`
+  (« Caisse du shop ») ; couleurs et matières dans `ShopScene` (`CRATE_LOOK`). Les caisses rangées (vitrine, racks)
+  font 3,4 studs de large au lieu de 4 : poignées comprises, elles tiennent dans 3,7 studs, sans quoi deux voisines se
+  chevauchaient. Les caisses de stock sans marque n'ont pas de bande.
+- Pistes écartées pour la caisse (même planche) : A mallette en polymère (trop proche de la caisse en pièces d'avant),
+  C coffre à munitions en tôle, D flight case (lisible, mais « matériel de tournée » plus que militaire).
 - **Éclairage dans Roblox (Voxel, réglé dans Studio le 14/11/2026) :** chaque SpotLight s'étale sur toute la pièce, pas de
   cône ni de flaque nette comme sur la planche EEVEE. Intensités à 0,6 fois celles de la planche (`LIGHT_GAIN` : à 2,
   la salle était éclairée à plat), suspension plus forte et plus courte (portée 16), lampes de la vitrine à portée 20

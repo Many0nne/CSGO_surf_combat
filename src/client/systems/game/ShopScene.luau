@@ -37,13 +37,33 @@ local LIGHT_RANGE = 30
 local BONE = UITheme.Colors.Bone
 local AMBER = Color3.fromRGB(242, 169, 0)
 local GLOW = Color3.fromRGB(215, 85, 20) -- liseré lumineux du socle : l'ambre de l'interface sort jaune vif en Neon
-local GRAPHITE = Color3.fromRGB(44, 48, 54)
 local HIT_RED = UITheme.Colors.HitRed
 local INK = UITheme.Colors.Ground
-local UNMARKED = Color3.fromRGB(36, 38, 42) -- bande des caisses sans marque (stock, pas en vente)
 local WOOD = Color3.fromRGB(128, 94, 64)
 local WOOD_LIGHT = Color3.fromRGB(150, 112, 76)
 local STEEL_DARK = Color3.fromRGB(70, 74, 80)
+
+-- Caisse d'armes en bois (#332, tools/shop/crate_model.py) : une MeshPart par matière, couvercle en « Lid* » pour
+-- l'ouverture ; couleur et matière posées ici, la bande LidStripe prend la couleur de la collection
+local CRATE = ReplicatedStorage:WaitForChild("Props"):WaitForChild("Crate") :: Model
+local CRATE_WIDTH = 4.0 -- largeur du modèle, en studs
+-- largeur des caisses rangées (vitrine, racks) : poignées en corde comprises, elles tiennent dans 3,7 studs (pas de 4,3)
+local SHELF_CRATE_WIDTH = 3.4
+local CRATE_PLANKS = { Color3.fromRGB(150, 104, 62), Enum.Material.Wood }
+local CRATE_FRAME = { Color3.fromRGB(128, 90, 56), Enum.Material.Wood }
+local CRATE_STEEL = { Color3.fromRGB(62, 64, 68), Enum.Material.Metal }
+local CRATE_LOOK: { [string]: { any } } = {
+	Interior = { Color3.fromRGB(34, 26, 18), Enum.Material.SmoothPlastic },
+	BodyPlanks = CRATE_PLANKS,
+	LidPlanks = CRATE_PLANKS,
+	BodyFrame = CRATE_FRAME,
+	LidFrame = CRATE_FRAME,
+	BodySteel = CRATE_STEEL,
+	LidSteel = CRATE_STEEL,
+	Rope = { Color3.fromRGB(176, 156, 116), Enum.Material.Fabric },
+	LidStripe = { Color3.fromRGB(226, 58, 40), Enum.Material.SmoothPlastic },
+	LidStencil = { Color3.fromRGB(24, 22, 20), Enum.Material.SmoothPlastic },
+}
 
 -- Vitrine (repère local : x le long de la vitrine, y en haut, z vers la pièce)
 local VITRINE_W, VITRINE_H, VITRINE_D = 13.2, 8.4, 3.0
@@ -123,57 +143,37 @@ local function box(
 	return part
 end
 
--- Cette méthode permet de construire une caisse d'armes (origine : centre du dessous, face avant vers +z) aux couleurs
--- d'une collection lorsque la vitrine, un rack ou le socle se construit : coque graphite, coins et fermoirs os, bande de
--- la collection sur le couvercle (cotes de board.py, `crate`).
-local function crate(parent: Instance, frame: Frame, stripe: Color3, width: number?): Model
-	local model = Instance.new("Model")
-	model.Name = "Crate"
-	local W, H, D = width or 4.0, 2.0, 2.4
-	local metal = Enum.Material.Metal
-	box(model, frame, Vector3.new(0, H / 2, 0), Vector3.new(W - 0.16, H - 0.16, D - 0.16), GRAPHITE, metal)
-	local seam = H * 0.62
-	box(model, frame, Vector3.new(0, seam, 0), Vector3.new(W - 0.1, 0.07, D - 0.1), Color3.fromRGB(14, 15, 17))
-	box(
-		model,
-		frame,
-		Vector3.new(0, H - 0.02, 0),
-		Vector3.new(W - 0.5, 0.08, D - 0.5),
-		Color3.fromRGB(54, 58, 64),
-		metal
-	)
-	for _, sx in { -1, 1 } do
-		for _, sy in { 0, 1 } do
-			for _, sz in { -1, 1 } do
-				local corner = Vector3.new(sx * (W / 2 - 0.22), 0.22 + sy * (H - 0.44), sz * (D / 2 - 0.22))
-				box(model, frame, corner, Vector3.new(0.5, 0.5, 0.5), BONE, metal)
+-- Cette méthode permet de poser une caisse d'armes (modèle `Props.Crate`, origine au centre du dessous, face avant vers
+-- +z) aux couleurs d'une collection lorsque la vitrine, un rack ou le socle se construit ; `width` l'étire en largeur,
+-- sans `stripe` la caisse n'a pas de bande (stock sans marque).
+local function crate(parent: Instance, frame: Frame, stripe: Color3?, width: number?): Model
+	local model = CRATE:Clone()
+	local pivot = CRATE:GetPivot()
+	local k = (width or CRATE_WIDTH) / CRATE_WIDTH
+	for _, part in model:GetChildren() do
+		if part:IsA("BasePart") then
+			local look = CRATE_LOOK[part.Name]
+			if look then
+				part.Color, part.Material = look[1], look[2]
 			end
+			if part.Name == "LidStripe" then
+				if stripe then
+					part.Color = stripe
+				else
+					part:Destroy()
+					continue
+				end
+			end
+			local rel = pivot:ToObjectSpace(part.CFrame)
+			part.Size = Vector3.new(part.Size.X * k, part.Size.Y, part.Size.Z)
+			part.CFrame = frame * CFrame.new(rel.X * k, rel.Y, rel.Z) * rel.Rotation
+			part.Anchored = true
+			part.CanCollide = false
+			part.CanQuery = false
+			part.CanTouch = false
 		end
 	end
-	box(
-		model,
-		frame,
-		Vector3.new(0, (seam + H) / 2, D / 2 - 0.05),
-		Vector3.new(W - 1.1, (H - seam) * 0.55, 0.06),
-		stripe
-	)
-	box(model, frame, Vector3.new(0, H + 0.03, 0), Vector3.new(W - 1.1, 0.04, 0.45), stripe)
-	for _, sx in { -0.9, 0.9 } do
-		box(model, frame, Vector3.new(sx, seam, D / 2 - 0.02), Vector3.new(0.32, 0.42, 0.12), BONE, metal)
-	end
-	for _, sx in { -1, 1 } do
-		box(model, frame, Vector3.new(sx * (W / 2 - 0.02), seam - 0.25, 0), Vector3.new(0.1, 0.12, 0.9), INK, metal)
-	end
-	for i = 0, 2 do -- pochoir : trois traits os (numéro de série)
-		local x = -W / 2 + 0.75 + i * 0.32
-		box(
-			model,
-			frame,
-			Vector3.new(x, seam * 0.45, D / 2 - 0.05),
-			Vector3.new(0.18, 0.5, 0.04),
-			Color3.fromRGB(200, 196, 186)
-		)
-	end
+	model.WorldPivot = frame
 	model.Parent = parent
 	return model
 end
@@ -225,7 +225,7 @@ local function fillRack(parent: Instance, frame: Frame, colors: { { number } }, 
 				parent,
 				frame * CFrame.new(x, y, 0.05) * CFrame.Angles(0, math.rad((x * twist) % 5 - 2.5), 0),
 				Color3.fromRGB(c[1], c[2], c[3]),
-				3.7
+				SHELF_CRATE_WIDTH
 			)
 		end
 	end
@@ -498,8 +498,12 @@ local function buildVitrine(parent: Instance)
 		local x = slot.column * SLOT
 		local twist = ((slot.index * 7) % 5) - 2
 		local stripe = Color3.fromRGB(def.stripe[1], def.stripe[2], def.stripe[3])
-		local model =
-			crate(parent, f * CFrame.new(x, level + 0.08, -0.1) * CFrame.Angles(0, math.rad(twist), 0), stripe, 3.7)
+		local model = crate(
+			parent,
+			f * CFrame.new(x, level + 0.08, -0.1) * CFrame.Angles(0, math.rad(twist), 0),
+			stripe,
+			SHELF_CRATE_WIDTH
+		)
 		local tag = box(
 			model,
 			f,
@@ -526,8 +530,8 @@ local function buildVitrine(parent: Instance)
 				f
 					* CFrame.new(x, VITRINE_LEVELS[row] + 0.08, -0.15)
 					* CFrame.Angles(0, math.rad((x * 0.4) % 3 - 1.5), 0),
-				UNMARKED,
-				3.7
+				nil,
+				SHELF_CRATE_WIDTH
 			)
 		end
 	end

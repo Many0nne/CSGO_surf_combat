@@ -1,6 +1,6 @@
 -- receive.luau
 -- Serveur local qui reçoit les .rbxm envoyés par tools/rbxm/studio_export.luau (exécuté dans Studio)
--- et les écrit sous assets/rbx/{ViewModels,Tools,Maps,Materials}/. Un export complet réussi supprime aussi les .rbxm
+-- et les écrit sous assets/rbx/{ViewModels,Tools,Maps,Materials,Props}/. Un export complet réussi supprime aussi les .rbxm
 -- qui n'existent plus dans la place (arme renommée ou retirée). S'arrête tout seul à la fin de l'export.
 -- Usage (racine du dépôt) : lune run tools/rbxm/receive.luau [Dossier]   (port fixe 34990, cf. studio_export.luau)
 -- Avec un dossier (ex. Maps, à passer aussi à studio_export via ONLY), seul ce dossier est reçu et nettoyé.
@@ -11,7 +11,7 @@ local process = require("@lune/process")
 local task = require("@lune/task")
 
 local PORT = 34990
-local FOLDERS = { "ViewModels", "Tools", "Maps", "Materials" }
+local FOLDERS = { "ViewModels", "Tools", "Maps", "Materials", "Props" }
 local only = process.args[1]
 if only then
 	assert(table.find(FOLDERS, only), "dossier inconnu : " .. only .. " (attendu : " .. table.concat(FOLDERS, ", ") .. ")")
@@ -36,7 +36,7 @@ local function fromHex(hex: string): string
 end
 
 -- Cette méthode permet de valider un chemin cible lorsqu'il vient de la requête : il doit être
--- assets/rbx/<ViewModels|Tools|Maps|Materials>/<Nom>.rbxm, sans remontée de dossier.
+-- assets/rbx/<ViewModels|Tools|Maps|Materials|Props>/<Nom>.rbxm, sans remontée de dossier.
 local function isSafePath(path: string): boolean
 	local folder = string.match(path, "^assets/rbx/(%w+)/[%w_%-]+%.rbxm$")
 	return folder ~= nil and table.find(FOLDERS, folder) ~= nil
