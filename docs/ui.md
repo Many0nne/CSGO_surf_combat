@@ -597,6 +597,46 @@ workspace pendant la partie) :
 | Tenue fusil du jeu (épaulé) vue de face | Le canon pointe vers la caméra et la crosse cache le buste |
 | Garde du couteau du jeu vue de face | Avant-bras levé vers la caméra : on croit qu'il salue |
 
+## Shop : salle de présentation (#347)
+
+**Validé par l'utilisateur sur planche (14/11/2026), pas encore construit dans Roblox.** Le shop se fait en deux
+étapes : la présentation des caisses (ici), puis l'ouverture (#332 : animation 3D d'après les packs d'Apex Legends,
+repli sur le défilement de CS:GO). Référence d'esprit pour la présentation : le shop de The Finals (le shop a son
+propre décor, pas une grille de cartes neutres), sans capture précise.
+
+![Salle de présentation validée](ui/shop/B_salle_eclairee_ui.png)
+
+- **Salle dédiée, hors de la map**, faite de la matière de Dizzy : sol en béton à joints, mur du fond en tôle
+  nervurée à bande basse ocre, murs latéraux en tôle, poutres en bois au plafond.
+- **La caisse choisie** sur un socle (deux palettes, plateau d'acier larmé à liseré ambre), au tiers droit de l'image ;
+  un liseré ambré lumineux au sol l'entoure (plateau de jeu télévisé). À teinter plus orangé que l'ambre de l'interface :
+  en lumière émise, `C.Accent` sort jaune vif.
+- **Le contenu au mur**, derrière la caisse : panneau de contreplaqué, une ligne d'AWP et une ligne de M9 aux couleurs
+  des skins, une bande de rareté sous chaque arme.
+- **Le stock** : deux racks de caisses (montants sombres, longerons ambrés), un à droite contre le mur du fond (coupé
+  par le cadre, il suggère qu'il y en a d'autres), un à gauche contre le mur latéral, dans la pénombre derrière le
+  texte : sans lui la gauche faisait vide.
+- **Lumière** : une suspension industrielle (cloche sombre émaillée os dedans, ampoule visible) au-dessus de la caisse,
+  cône chaud et serré ; le tableau éclairé par le haut ; le rack de droite en lumière plus froide, de face ; ambiance
+  très basse, la gauche reste sombre pour l'interface.
+- **Interface** : colonne de gauche sur fond de coin (cadre de l'écran d'équipement, objet à droite) : nom de la caisse,
+  contenu avec rareté et chance, prix, ACHETER, caisse suivante. Esquisse en Arial Narrow pour juger la place, pas le
+  style ; prix et monnaie non décidés (#347). Les coins clairs des caisses du rack de gauche passent derrière le texte :
+  fond de coin ou flou à prévoir.
+- Caméra : FOV vertical 40° comme l'accueil, à hauteur d'œil (5,2 studs), sujet au tiers droit.
+
+Cotes (studs) et placement : `tools/shop/board.py` (scène B), rendu par `tools/map/render_dizzy.py` (commandes en tête
+du script). Une salle fermée se rend en EEVEE avec `DIZZY_AMBIENT=0.12` : à l'ambiance par défaut du crépuscule, la
+lumière bleutée baignait toute la salle et écrasait les lampes. Rendu éclairé : ~6 s par vue (petite scène).
+
+**Pistes écartées (planche `docs/ui/shop/planche_shop.png`) :**
+
+| Piste | Pourquoi |
+|---|---|
+| A : rack de caisses contre le mur en tôle de la zone de stockage de Dizzy, caisse choisie sortie sur une palette | Le stock a plu (repris dans la salle), mais la zone fait entrepôt plus que vitrine |
+| C : caisse posée aux pieds du personnage de l'accueil | La caisse cache le personnage, le décor ne dit rien du shop |
+| Projecteurs de chantier sur trépied tournés vers la caisse | Retirés par l'utilisateur : leur orientation ne justifiait pas la lumière, têtes blanches face à la caméra ; remplacés par la suspension |
+
 ## Reste à faire
 
 - Piste écartée pour l'instant sur le compteur : chiffres en images usées comme le titrage, et inclinaison qui augmente avec la vitesse.
