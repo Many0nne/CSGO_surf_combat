@@ -35,11 +35,11 @@ return function(T, Loader)
 		T.it("ne dépasse jamais un skin par emplacement, même avec un attribut trop long", function()
 			local text = "weapon.awp:skin.awp.strate,weapon.m9bayonet:skin.m9bayonet.strate,weapon.awp:skin.awp.sillage"
 			local list = Rules.skinsOf(OWNED, text, viewmodelOf)
-			T.expect(#list <= Rules.MAX_PER_PLAYER, "au plus MAX_PER_PLAYER skins")
+			T.expectEqual(#list, 2)
+			T.expectEqual(list[1].skin, "skin.awp.strate")
 		end)
 
-		T.it("ne duplique pas un même viewmodel et skin", function()
-			-- KaBar et M9Bayonet partagent un viewmodel, mais un seul est équipé à la fois : au plus 1 demande ici
+		T.it("ne demande pas le skin d'une arme sans skin équipé", function()
 			local list = Rules.skinsOf(OWNED, "weapon.awp:skin.awp.strate,weapon.kabar", viewmodelOf)
 			T.expectEqual(#list, 1)
 		end)

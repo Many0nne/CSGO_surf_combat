@@ -8,11 +8,8 @@ local SkinPreloadRules = {}
 
 export type Request = { viewmodel: string, skin: string }
 
--- Nombre maximal de skins demandés par joueur : un par emplacement, donc les skins équipés seulement
-SkinPreloadRules.MAX_PER_PLAYER = #InventoryRules.SLOTS
-
--- Cette méthode permet de lister les skins équipés d'un joueur (viewmodel et id), sans doublon et au plus un par
--- emplacement, lorsque ses attributs `OwnedItems` / `EquippedItems` arrivent ou changent ; `viewmodelOf` donne le
+-- Cette méthode permet de lister les skins équipés d'un joueur (viewmodel et id), au plus un par emplacement
+-- (`#InventoryRules.SLOTS`, borne tenue par decodeEquipped), lorsque ses attributs `OwnedItems` / `EquippedItems` arrivent ou changent ; `viewmodelOf` donne le
 -- viewmodel d'un Tool. Attribut absent ou illisible : équipement par défaut, donc aucun skin.
 function SkinPreloadRules.skinsOf(
 	ownedText: any,
@@ -21,16 +18,10 @@ function SkinPreloadRules.skinsOf(
 ): { Request }
 	local equipped = InventoryRules.decodeEquipped(equippedText, InventoryRules.decode(ownedText))
 	local requests: { Request } = {}
-	local seen: { [string]: boolean } = {}
 	for _, toolName in InventoryRules.equippedTools(equipped) do
 		local skin = InventoryRules.skinOfTool(equipped, toolName)
 		if skin then
-			local viewmodel = viewmodelOf(toolName)
-			local key = viewmodel .. "/" .. skin
-			if not seen[key] then
-				seen[key] = true
-				table.insert(requests, { viewmodel = viewmodel, skin = skin })
-			end
+			table.insert(requests, { viewmodel = viewmodelOf(toolName), skin = skin })
 		end
 	end
 	return requests

@@ -1,7 +1,9 @@
 -- Préchargement des textures des skins équipés (#333) : les cartes d'un skin (4 par pièce, 1024²) ne se chargent
 -- qu'au premier affichage, et l'arme paraît grise le temps qu'elles arrivent (~2 à 3 s mesurées dans Studio pour un
 -- skin jamais affiché). Dès le démarrage, puis à chaque changement d'équipement, le client demande les cartes des skins
--- équipés, pour que le premier équipement en partie les trouve déjà en cache.
+-- équipés, pour que le premier équipement en partie les trouve déjà en cache. Les skins équipés des autres joueurs
+-- (arme 3P, #342) sont préchargés de même, au plus 1 par emplacement et par joueur ; le joueur local passe en premier.
+-- Coût mémoire de ce volet : mesuré ~100 Mo par skin froid, gain visible non mesuré (cf. docs/assets.md).
 --
 -- ContentProvider:PreloadAsync ne lit pas les cartes d'une SurfaceAppearance (aucune requête) et échoue sur un id
 -- brut (type d'asset deviné) : chaque carte passe par un ImageLabel hors de l'interface (cf. docs/assets.md).
@@ -95,8 +97,18 @@ local function watchOther(player: Player)
 			end
 		end)
 	end
-	player:GetAttributeChangedSignal(InventoryRules.ATTRIBUTE):Connect(schedule)
-	player:GetAttributeChangedSignal(InventoryRules.EQUIPPED_ATTRIBUTE):Connect(schedule)
+	local connections = {
+		player:GetAttributeChangedSignal(InventoryRules.ATTRIBUTE):Connect(schedule),
+		player:GetAttributeChangedSignal(InventoryRules.EQUIPPED_ATTRIBUTE):Connect(schedule),
+	}
+	-- Au départ du joueur : plus rien à suivre, les cartes déjà demandées restent au cache moteur
+	player.AncestryChanged:Connect(function()
+		if not player.Parent then
+			for _, connection in connections do
+				connection:Disconnect()
+			end
+		end
+	end)
 	preloadPlayer(player)
 end
 
