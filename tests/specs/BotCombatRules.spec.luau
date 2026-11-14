@@ -59,6 +59,14 @@ return function(T, Loader)
 			T.expectEqual(Rules.spread(10000), Config.AIM_SPREAD_MAX, "plafond")
 		end)
 
+		-- Cette méthode permet de vérifier le plafond lorsque la cible atteint la vitesse où il s'applique (#351).
+		T.it("atteint le plafond de dispersion à la vitesse calculée, pas avant", function()
+			local capSpeed = (Config.AIM_SPREAD_MAX - Config.AIM_SPREAD) / Config.AIM_SPREAD_SPEED
+			T.expectEqual(math.abs(Rules.spread(capSpeed) - Config.AIM_SPREAD_MAX) < 1e-9, true, "plafond atteint")
+			T.expectEqual(Rules.spread(capSpeed * 2), Config.AIM_SPREAD_MAX, "au-delà : plafond")
+			T.expectEqual(Rules.spread(capSpeed * 0.5) < Config.AIM_SPREAD_MAX, true, "avant : sous le plafond")
+		end)
+
 		T.it("reste dans le cône de dispersion", function()
 			local dir = Vector3.new(0, 0, -1)
 			for _, rolls in { { 0, 0 }, { 0.5, 0.25 }, { 0.999, 0.7 }, { 1, 0.5 } } do
