@@ -113,12 +113,32 @@ Méthode de la refonte de l'Equip, du Shoot et du Reload de l'AWP (référence C
   sur la caméra à chaque image (`PivotTo`) et son animation n'a aucun effet.
 - **Durée :** le cycle de tir CS2 dure environ `FireDelay`, et le Reload colle à `ReloadTime`. Seul l'Equip est étiré
   (1,13 s de geste dans la vidéo, 1,58 s en jeu pour garder l'équilibrage).
+- **Inspect (`references/anim/awp showcase.mp4`, 5,30 → 10,30 s) :** pivot de profil, tenue, arme dressée lunette à
+  gauche, retour. La v1, relevée toutes les 0,1 s, saccadait : 528°/s sur une image à 8,6 s, tremblement pendant la
+  tenue. Trois causes, trois règles :
+  - **Chaque image (1/30 s) pendant un mouvement rapide**, pas 0,1 s : à 0,1 s, un point mal lu (canon caché derrière
+    la lunette, perdu dans le décor) devient une clé et la spline le suit. Pendant une tenue, au contraire, peu de points
+    (un toutes les 0,6 s) : chaque relevé de plus ajoute du tremblement.
+  - **Lisser avant la spline** (`smooth_table`) : un relevé à l'œil tremble de ±5 px d'une image à l'autre. σ = 0,04 s
+    laissait encore l'arme réaccélérer au milieu des gestes ; 0,06 s partout, 0,09 s quand l'arme se pose lentement (fin
+    du pivot), où ±5 px pèsent le plus.
+  - **Roulis à clés régulières (≈ 0,25 s) et vitesse nulle à la fin :** des clés serrées faisaient accélérer le poignet
+    pendant que la bascule ralentissait (creux de vitesse), et un roulis encore en mouvement à la dernière image donne un
+    à-coup au retour à l'Idle. La dernière clé et l'avant-dernière doivent être presque égales.
+  - **Recaler ses relevés sur `REF_IDLE`** : un autre relevé du repos tombe à quelques pixels près (6 px sur le canon
+    ici). Coller seulement les images de repos sur `REF_IDLE` crée un saut en entrée et en sortie de piste.
+  - **Contrôle sans rendu :** vitesse angulaire de la `Handle` image par image dans `frames_<Nom>.json`, calculée par la
+    partie antisymétrique de R1ᵀ·R2 (l'`acos` de la trace est faux aux petits angles sur des matrices arrondies). Une
+    rotation propre monte puis redescend ; un pic isolé, un creux au milieu d'un geste ou une réaccélération pendant un
+    ralenti est une saccade. L'utilisateur les voit dès 10 % d'écart : les chercher toutes avant de montrer une vidéo.
+- **FOV :** le viewmodel CS2 a un champ bien plus étroit que notre 90° vertical. Placer œilleton et canon aux mêmes
+  points de l'écran incline l'arme vers la profondeur : le profil et la verticale de l'Inspect paraissent moins amples.
 
 ```bash
 # Construire sans toucher au Blender ouvert : écrit anim_<Nom>.json (make_rbxm) et frames_<Nom>.json (studio_render, à 60 images/s)
-blender -b assets/awp_viewmodel/AWP_Viewmodel_Anims.blend --python assets/awp_viewmodel/run_build.py -- <sortie> Equip Shoot Reload
-lune run assets/awp_viewmodel/make_rbxm.luau <sortie> <sortie> Equip Shoot Reload
-bash tools/anim/publish.sh <sortie> AWP_ Equip Shoot Reload
+blender -b assets/awp_viewmodel/AWP_Viewmodel_Anims.blend --python assets/awp_viewmodel/run_build.py -- <sortie> Equip Shoot Reload Inspect
+lune run assets/awp_viewmodel/make_rbxm.luau <sortie> <sortie> Equip Shoot Reload Inspect
+bash tools/anim/publish.sh <sortie> AWP_ Equip Shoot Reload Inspect
 ```
 
 Pour le rendu : `VIEWMODEL = "AWP"` et `RECENTER_HANDLE = false` dans `studio_render.luau`. `dump_frames.py` sert aux couteaux (scripts `build_viewmodel.py`), pas à l'AWP.

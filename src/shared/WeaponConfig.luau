@@ -32,6 +32,9 @@ WeaponConfig.Weapons = {
 		-- Verrou d'action (#221) = cadence, comme la M9 : le tir suivant coupe la fin de la piste Shoot (1,63 s)
 		ShootAnimTime = AWP_FIRE_DELAY,
 		HasScope = true,
+		-- Touche F : pivot de profil puis arme dressée (référence CS2, 5 s), purement visuel, interrompu par une attaque ;
+		-- refusé lunette active (l'inspection exige l'état IDLE).
+		InspectAnimation = "Inspect",
 		ScopeFov1 = 40,
 		ScopeFov2 = 10,
 		ScopeTweenTime = 0.1,
@@ -65,6 +68,7 @@ WeaponConfig.Weapons = {
 			Shoot = { "Shoot", "Bolt" },
 			Reload = { "Bolt", "ClipIn", "ClipOut", "ClipHit" },
 			Zoom = { "ZoomIn", "ZoomOut" },
+			Inspect = {},
 		},
 		-- Tir entendu par les autres joueurs (#156, ShotSoundRules) : son "Shoot" du viewmodel en 3D sur l'arme 3P du
 		-- tireur, plein jusqu'à RollOffMinDistance studs puis en 1/distance, coupé à RollOffMaxDistance (portée du

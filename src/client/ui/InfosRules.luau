@@ -37,7 +37,7 @@ local ACTION_TEXT = {
 	fire = "Tirer",
 	aim = "Viser avec la lunette / estoc au couteau",
 	reload = "Recharger",
-	inspect = "Inspecter le couteau",
+	inspect = "Inspecter l'arme",
 }
 
 -- Ordre d'affichage des actions (les directions viennent d'abord, en une ligne)
