@@ -61,6 +61,30 @@ function WeaponSkins.apply(model: Instance, viewmodelName: string, skinId: strin
 	return count
 end
 
+-- Cartes d'une SurfaceAppearance, lues pour les précharger (#333)
+local MAP_PROPERTIES = { "ColorMapContent", "MetalnessMapContent", "NormalMapContent", "RoughnessMapContent" }
+
+-- Cette méthode permet de lister sans doublon les ids des cartes d'un dossier de skin (WeaponSkins.folder) lorsqu'on
+-- veut les précharger ; une pièce peut réutiliser les cartes d'une autre, une carte vide est ignorée.
+function WeaponSkins.mapUris(folder: Instance): { string }
+	local uris: { string } = {}
+	local seen: { [string]: boolean } = {}
+	for _, appearance in folder:GetChildren() do
+		if not appearance:IsA("SurfaceAppearance") then
+			continue
+		end
+		for _, property in MAP_PROPERTIES do
+			local content = (appearance :: any)[property]
+			local uri = content and content.Uri
+			if type(uri) == "string" and uri ~= "" and not seen[uri] then
+				seen[uri] = true
+				table.insert(uris, uri)
+			end
+		end
+	end
+	return uris
+end
+
 -- Cette méthode permet de savoir si un modèle porte déjà ce skin (nil ou "" : d'origine) lorsqu'on veut éviter de
 -- l'habiller à nouveau.
 function WeaponSkins.isApplied(model: Instance, viewmodelName: string, skinId: string?): boolean
