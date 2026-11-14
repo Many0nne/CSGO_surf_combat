@@ -277,6 +277,12 @@ Luau qui pose un skin sur les viewmodels de Studio (mode Edit) ; Disconnect/Conn
   chaque carte par un `ImageLabel` (un `Decal` marche aussi mais écrit deux avertissements par carte). Le rendu d'une
   arme ne remplit pas `GetAssetFetchStatus` : ce statut ne dit pas si l'arme affichée est texturée. Le cache persiste
   d'un playtest à l'autre dans une même session Studio : mesurer à froid sur un skin jamais chargé.
+  **Autres joueurs (#342)** : `SkinPreloader` lit aussi `OwnedItems` / `EquippedItems` des autres `Player` (déjà présents,
+  arrivants, changements), au plus 1 skin par emplacement (`SkinPreloadRules.skinsOf`, spec `SkinPreloadRules`), même
+  passage par `ImageLabel` et même table `requested`. Mesure (Studio, 1 seul client) : `PreloadAsync` des 16 cartes
+  d'un skin froid = 0,64 s (+100 Mo de `Memory`), mais le même appel sur un skin déjà demandé met encore 0,45 à
+  0,60 s : ce chronomètre ne distingue pas le froid du chaud, il ne mesure donc pas le gris visible. Le gain du
+  préchargement des autres joueurs n'est **pas mesuré** (il faut un 2e client : Test > Clients and Servers).
 - Rojo (7.7) écrit bien `ColorMapContent`… d'une `SurfaceAppearance` depuis un `.model.json`, en build comme en synchro
   directe (vérifié dans Studio) : pas besoin de `.rbxm` pour les skins.
 - Suites ouvertes : caisses (#332), UV de la crosse de l'AWP (#335).
