@@ -323,6 +323,56 @@ local model = game:GetService("InsertService"):LoadAsset(<id du Decal>)
 return model:FindFirstChildWhichIsA("Decal", true).Texture
 ```
 
+## Démos rejouées (Infos > SURFER, #285)
+
+**Où :** en tête de l'onglet SURFER d'Infos, rien au premier lancement. Sélecteur SURF · BHOP · AIR STRAFE · ENCHAÎNEMENT
+(choix en texte, la démo choisie en os vif soulignée d'ambre : les onglets d'Infos sont déjà en boîte ambrée juste
+au-dessus, deux boîtes pleines empilées disaient deux fois « là où je suis »), puis le lecteur 640x360 (16:9), puis le
+texte de SURFER (`InfosRules.surfLines`), inchangé, sous le lecteur (défilement). La démo choisie est gardée d'une
+ouverture à l'autre.
+
+**Pas de vidéo :** un clip est une trajectoire enregistrée dans Studio puis rejouée dans le moteur.
+- Données : `src/client/ui/DemoClips/<Nom>.luau` (`Surf`, `Bhop`, `Strafe`, `Chain`), un module qui renvoie le texte du
+  clip. Format `DemoClipRules` : en-tête `CLIP 1 <hz> <map>`, puis une ligne d'entiers par échantillon (30 Hz) : écarts
+  avec l'échantillon précédent de x, y, z de la racine, hauteur des yeux, lacet et tangage de la caméra (centièmes de
+  stud ou de degré, écarts pris entre valeurs arrondies : pas de dérive), masque des touches (avant, gauche, arrière,
+  droite, saut, accroupi), vitesse horizontale x 10. Environ 25 octets par échantillon, 9 Ko pour 12 s. Un module absent
+  ou illisible affiche « CLIP À ENREGISTRER ».
+- Souris : lue dans la rotation du lacet (degrés par seconde, lissée sur ± 2 échantillons), pas dans le delta brut de
+  la souris : l'indicateur ne dépend pas de la sensibilité de celui qui a enregistré. Plein à 400°/s
+  (`DemoClipRules.TURN_FULL`), rouge d'impact au-delà de 75 %.
+- Lecteur (`DemoPlayer.luau`) : `ViewportFrame` contenant une copie des pièces visibles de la map (`Workspace.Maps.<map
+  du clip>`) à moins de 450 studs des trajectoires de tous les clips, copiée sur plusieurs images à la première lecture
+  (Dizzy : 16 365 pièces en 0,43 s dans Studio, quasiment toute la map), gardée tant que l'onglet est ouvert. Caméra du
+  viewport au FOV du jeu (`CameraConfig.DEFAULT_FOV`), même composition lacet puis tangage que `FPSCamera`. Position et
+  angles interpolés par Catmull-Rom entre échantillons (pas de saccade à 60 i/s), touches sans interpolation. Boucle avec
+  fondu au noir de 0,35 s de part et d'autre du raccord, trait d'avancement ambré au bas du cadre. Le personnage, la
+  caméra et la map du joueur ne sont pas touchés.
+- Par-dessus : légende (nom du geste en ambre, geste en une ligne, `InfosRules.demoClips`, touches selon le clavier du
+  joueur), vitesse au style du compteur (`HUDRules.speedTier` / `speedFill`), touches en keycaps du HUD
+  (`KeyDisplay.buildKeycap`, mode simple : directions et saut, à 80 %), souris (icône et demi-barre du côté où elle tourne).
+- Libération : `InfosScreen` détruit le lecteur (cadre, copie de la map, boucle de rendu) dès qu'on change d'onglet ou
+  qu'on quitte l'écran. Vérifié : 0 `ViewportFrame` et 16 476 Instances de moins après RETOUR.
+- Éclairage du viewport (pas d'ombres portées ni de ciel dans un `ViewportFrame`) : `Ambient` (190, 178, 190),
+  `LightColor` (255, 214, 170), `LightDirection` opposée au soleil de `Lighting`, ciel en dégradé sous le viewport. Avec
+  l'éclairage par défaut (150, 146, 140), la scène était presque noire.
+- Coût mesuré (Studio, qualité 10, fenêtre 1291x607, overlay F3) : voir « Coût » dans le compte rendu de #285 ; repère
+  `démo infos` dans les scripts de l'overlay.
+
+**Refaire un clip :**
+1. Studio réservé, playtest lancé, partie lancée (`DebugPlaytest`), bots retirés (`workspace:SetAttribute("DebugBots", 0)`).
+2. Armer l'enregistreur (contexte `Server` ou `Client`) : `game.Players:GetPlayers()[1]:SetAttribute("DebugClipRecorder",
+   "surf")` (`surf`, `bhop`, `strafe` ou `chain`). Un bandeau « CLIP surf PRÊT · F7 POUR ENREGISTRER » s'affiche en haut.
+3. Se placer, appuyer sur **F7**, jouer le geste (10 à 20 s ; arrêt d'office à 30 s), **F7** pour arrêter. La console
+   écrit `[ClipRecorder] STOP surf : … s, … échantillons`. Recommencer autant que voulu : la dernière prise remplace la
+   précédente. L'enregistreur ne fait que lire (racine, caméra, `KeyBindings`, `MovementController.getVelocity`).
+4. Extraire (contexte `Client`, sans écrire de `Source`) : `return game.Players.LocalPlayer.DebugClips.surf.Value`, et
+   enregistrer le texte rendu tel quel dans un fichier hors du dépôt (ex. `%TEMP%\surf.txt`). À la main : barre de
+   commande de Studio en contexte client, `print(...)`, puis copier la sortie.
+5. `lune run tools/clips/write_clip.luau %TEMP%\surf.txt Surf [début_s] [fin_s]` : valide le clip, garde au besoin la
+   partie entre début et fin, et réécrit `src/client/ui/DemoClips/Surf.luau` (CRLF, comme StyLua).
+6. Arrêter le playtest (Rojo ne synchronise qu'en mode Edit), relancer, ouvrir Infos > SURFER et vérifier la démo.
+
 ## Règles des écrans secondaires
 
 - Rien ne se tire (#130) : souris système, un clic agit tout de suite. Un curseur de réglage se place d'un clic, puis se glisse.

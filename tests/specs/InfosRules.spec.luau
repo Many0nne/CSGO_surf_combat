@@ -147,4 +147,23 @@ return function(T, Loader)
 			T.expectEqual(rowFor(rows, "Menu en partie").key, "#P")
 		end)
 	end)
+
+	T.describe("InfosRules.demoClips", function()
+		T.it("propose les 4 démos dans l'ordre, une par module de données", function()
+			local clips = InfosRules.demoClips(context(AZERTY))
+			local ids = {}
+			for _, clip in clips do
+				table.insert(ids, clip.id)
+			end
+			T.expectEqual(table.concat(ids, ","), "surf,bhop,strafe,chain")
+		end)
+
+		T.it("cite les touches du clavier du joueur dans les légendes", function()
+			local clips = InfosRules.demoClips(context(AZERTY))
+			T.expect(string.find(clips[1].caption, "Tiens Q ou D", 1, true) ~= nil, "surf : gauche et droite")
+			T.expect(string.find(clips[1].caption, "sans jamais Z", 1, true) ~= nil, "surf : pas d'avant")
+			T.expect(string.find(clips[2].caption, "ESPACE à chaque atterrissage", 1, true) ~= nil, "bhop : saut")
+			T.expect(string.find(clips[3].caption, "Q en tournant la souris à gauche", 1, true) ~= nil, "air strafe")
+		end)
+	end)
 end
