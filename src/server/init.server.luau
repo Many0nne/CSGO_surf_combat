@@ -8,6 +8,7 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local MapGeometry = require(Shared:WaitForChild("MapGeometry"))
 local MapSelection = require(Shared:WaitForChild("MapSelection"))
 local WeaponThirdPerson = require(Shared:WaitForChild("WeaponThirdPerson"))
+local InventoryRules = require(Shared:WaitForChild("InventoryRules"))
 local WeaponConfig = require(Shared:WaitForChild("WeaponConfig"))
 local MemoryTracker = require(Shared:WaitForChild("MemoryTracker"))
 local PerfRules = require(Shared:WaitForChild("PerfRules"))
@@ -114,15 +115,18 @@ local WEAPON_ACTION_MIN_INTERVAL = 0.05
 -- Délai (s) entre la mort et la destruction du personnage, le temps que les clients le clonent en ragdoll (#102)
 local CORPSE_HANDOFF_DELAY = 0.3
 
--- Cette méthode permet d'attacher le modèle 3P lorsqu'un outil arrive dans le personnage (équipement) ;
--- les pièces propres de l'outil sont masquées pour ne pas doubler l'arme collée à la main.
+-- Cette méthode permet d'attacher le modèle 3P lorsqu'un outil arrive dans le personnage (équipement), habillé du skin
+-- équipé du joueur (#268 ; bots : d'origine) ; les pièces propres de l'outil sont masquées pour ne pas doubler l'arme.
 local function onToolEquipped(char: Model, tool: Tool)
 	local weaponName = tool:GetAttribute("WeaponName") or tool.Name
 	local viewmodelName = tool:GetAttribute("ViewmodelName")
+	local player = Players:GetPlayerFromCharacter(char)
+	local skinId = if player then InventoryRules.skinOfTool(InventoryStore.equipped(player), tool.Name) else nil
 	local gun = WeaponThirdPerson.attach(
 		char,
 		weaponName,
-		if type(viewmodelName) == "string" and viewmodelName ~= "" then viewmodelName else weaponName
+		if type(viewmodelName) == "string" and viewmodelName ~= "" then viewmodelName else weaponName,
+		skinId
 	)
 	if not gun then
 		equippedTools[char] = nil

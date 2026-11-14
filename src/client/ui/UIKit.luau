@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
+local WeaponSkins = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WeaponSkins"))
 
 local C = UITheme.Colors
 local Motion = UITheme.Motion
@@ -157,12 +158,14 @@ end
 
 -- Cette méthode permet de dessiner la silhouette plate d'une arme, de profil, à partir des MeshParts de son viewmodel
 -- (bras exclus) lorsqu'une icône d'arme est créée (barre d'armes, équipement) ; la teinte vient de ImageColor3.
--- `textured` (#308) : l'arme garde ses textures et ses couleurs, éclairée, pour un grand rendu plutôt qu'une icône.
+-- `textured` (#308) : l'arme garde ses textures et ses couleurs, éclairée, pour un grand rendu plutôt qu'une icône ;
+-- habillée du skin `skinId` (#268, nil : d'origine).
 function UIKit.weaponSilhouette(
 	parent: GuiObject,
 	viewmodelName: string,
 	aspect: number,
-	textured: boolean?
+	textured: boolean?,
+	skinId: string?
 ): ViewportFrame
 	local fov = 15
 	local viewport = UIKit.create("ViewportFrame", {
@@ -197,6 +200,9 @@ function UIKit.weaponSilhouette(
 			copy.Anchored = true
 			copy.Parent = model
 		end
+	end
+	if textured and skinId then
+		WeaponSkins.apply(model, viewmodelName, skinId)
 	end
 	model.Parent = viewport
 	if #model:GetChildren() == 0 then

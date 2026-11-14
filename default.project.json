@@ -12,6 +12,9 @@
       },
       "Tools": {
         "$path": "assets/rbx/Tools"
+      },
+      "Skins": {
+        "$path": "assets/rbx/Skins"
       }
     },
 

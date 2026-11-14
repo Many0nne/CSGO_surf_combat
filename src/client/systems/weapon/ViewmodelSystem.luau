@@ -6,7 +6,10 @@ local AnimationSoundSystem = require(script.Parent.AnimationSoundSystem)
 local CasingEjection = require(script.Parent.CasingEjection)
 local EquipRules = require(script.Parent.EquipRules)
 local SoundChannels = require(script.Parent.Parent.settings.SoundChannels)
+local LocalInventory = require(script.Parent.Parent.inventory.LocalInventory)
+local InventoryRules = require(ReplicatedStorage.Shared.InventoryRules)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
+local WeaponSkins = require(ReplicatedStorage.Shared.WeaponSkins)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local SpringRules = require(ReplicatedStorage.Shared.SpringRules)
 
@@ -238,6 +241,12 @@ local function equipTool(tool: Tool)
 	if not activeViewmodel or not activeViewmodel.PrimaryPart then
 		activeViewmodel = nil
 		return
+	end
+
+	-- Skin équipé (#268) : le clone gardé en cache garde ses pièces, seules leurs SurfaceAppearance changent
+	local skinId = InventoryRules.skinOfTool(LocalInventory.equipped(), tool.Name)
+	if not WeaponSkins.isApplied(activeViewmodel, viewmodelName, skinId) then
+		WeaponSkins.apply(activeViewmodel, viewmodelName, skinId)
 	end
 
 	local offset = tool:GetAttribute("ViewmodelOffset")

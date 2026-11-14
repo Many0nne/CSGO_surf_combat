@@ -167,21 +167,29 @@ local function shown(): (string?, string?, boolean)
 	return equippedTool, skin, equippedTool ~= nil
 end
 
--- Cette méthode permet d'afficher le rendu texturé de l'arme montrée (un par viewmodel, gardé une fois construit)
--- lorsque l'arme montrée change.
-local function showPreview(toolName: string?)
+-- Cette méthode permet d'afficher le rendu texturé de l'arme montrée, habillée de son skin (#268 ; un rendu par
+-- viewmodel et par skin, gardé une fois construit) lorsque l'arme ou le skin montré change.
+local function showPreview(toolName: string?, skinId: string?)
 	if not SHOW_PREVIEW then
 		return
 	end
 	local viewmodel = toolName and viewmodelOf(toolName)
-	if viewmodel and not previews[viewmodel] then
-		local viewport = UIKit.weaponSilhouette(previewHolder, viewmodel, PREVIEW_SIZE.X / PREVIEW_SIZE.Y, true)
-		viewport.Name = "Preview" .. viewmodel
-		previews[viewmodel] = viewport
+	local key = viewmodel and (viewmodel .. "|" .. (skinId or ""))
+	if viewmodel and key and not previews[key] then
+		local viewport = UIKit.weaponSilhouette(previewHolder, viewmodel, PREVIEW_SIZE.X / PREVIEW_SIZE.Y, true, skinId)
+		viewport.Name = "Preview" .. key
+		previews[key] = viewport
 	end
 	for name, viewport in previews do
-		viewport.Visible = name == viewmodel
+		viewport.Visible = name == key
 	end
+end
+
+-- Cette méthode permet de nommer un skin (nom du catalogue, « D'ORIGINE » sans skin) lorsqu'une carte ou la ligne de
+-- nom l'affiche.
+local function skinTitle(skinId: string?): string
+	local item = skinId and InventoryRules.item(skinId)
+	return Rules.skinLabel(skinId, item and item.name)
 end
 
 -- Cette méthode permet de mettre à jour le titre, la ligne de nom (« ÉQUIPÉ » plein en rouge d'impact, sinon « CLIC POUR
@@ -191,7 +199,7 @@ local function paintHeader()
 	slotTitle.set(if slotName then slotLabel(slotName) else "")
 	slotTag.Text = string.format("EMPLACEMENT %d", selectedSlot)
 	local tool, skin, isEquipped = shown()
-	weaponName.set(if tool then string.format("%s  /  %s", weaponTitle(tool), Rules.skinLabel(skin)) else "")
+	weaponName.set(if tool then string.format("%s  /  %s", weaponTitle(tool), skinTitle(skin)) else "")
 	statusTag.Visible = tool ~= nil
 	statusTag.Text = if isEquipped then "ÉQUIPÉ" else "CLIC POUR ÉQUIPER"
 	statusTag.BackgroundTransparency = if isEquipped then 0 else 1
@@ -200,9 +208,9 @@ local function paintHeader()
 	local text = if cfg and cfg.Category then string.upper(cfg.Category) else ""
 	category.Text = text
 	categoryShadow.Text = text
-	showPreview(tool)
+	showPreview(tool, skin)
 	if tool then
-		MenuScene.holdTool(tool)
+		MenuScene.holdTool(tool, skin)
 	end
 end
 
@@ -231,7 +239,16 @@ end
 
 -- Cette méthode permet de poser une carte de la grille (silhouette, nom, coche et trait rouge d'impact sur l'équipée)
 -- lorsque la grille se construit ; survoler la carte montre l'arme (titre, rendu, personnage), cliquer l'équipe.
-local function card(x: number, y: number, text: string, item: Hover, equipped: boolean, action: () -> ())
+-- `textured` (cartes de skins, #268) : mini-rendu de l'arme habillée de son skin au lieu de la silhouette plate.
+local function card(
+	x: number,
+	y: number,
+	text: string,
+	item: Hover,
+	equipped: boolean,
+	action: () -> (),
+	textured: boolean?
+)
 	local button = UIKit.create("TextButton", {
 		Name = "Card" .. text,
 		Text = "",
@@ -253,10 +270,13 @@ local function card(x: number, y: number, text: string, item: Hover, equipped: b
 		Size = UDim2.fromOffset(CARD_ICON.X, CARD_ICON.Y),
 		Parent = button,
 	})
-	-- Skin pas encore rendu (#268) : la silhouette de l'arme, la même pour tous ses skins
-	local silhouette = UIKit.weaponSilhouette(icon, viewmodelOf(item.tool), CARD_ICON.X / CARD_ICON.Y)
+	-- Carte d'arme : silhouette plate teintée ; carte de skin : l'arme habillée de ce skin, sans teinte
+	local silhouette =
+		UIKit.weaponSilhouette(icon, viewmodelOf(item.tool), CARD_ICON.X / CARD_ICON.Y, textured, item.skin)
 	local restColor = if equipped then C.Bone else C.TextSoft
-	silhouette.ImageColor3 = restColor
+	local iconRest = if textured then C.White else restColor
+	local iconHover = if textured then C.White else C.Bone
+	silhouette.ImageColor3 = iconRest
 	local label = UIKit.shadowedText(button, {
 		Name = "Name",
 		Text = text,
@@ -292,14 +312,14 @@ local function card(x: number, y: number, text: string, item: Hover, equipped: b
 		stroke.Color = C.HitRed
 		stroke.Transparency = 0
 		UIKit.tween(label, Motion.Hover, { TextColor3 = C.HitRed })
-		silhouette.ImageColor3 = C.Bone
+		silhouette.ImageColor3 = iconHover
 		paintHeader()
 	end)
 	button.MouseLeave:Connect(function()
 		stroke.Color = C.Bone
 		stroke.Transparency = restStroke
 		UIKit.tween(label, Motion.Hover, { TextColor3 = restColor })
-		silhouette.ImageColor3 = restColor
+		silhouette.ImageColor3 = iconRest
 		if hover == item then
 			hover = nil
 			paintHeader()
@@ -374,9 +394,9 @@ local function rebuildGrid()
 		local skinId = skin.id
 		rowY = y + ((i - 1) // COLUMNS) * (CARD_SIZE.Y + CARD_GAP)
 		local item = { tool = currentTool, skin = skinId }
-		card(((i - 1) % COLUMNS) * step, rowY, Rules.skinLabel(skinId), item, skinId == currentSkin, function()
+		card(((i - 1) % COLUMNS) * step, rowY, skinTitle(skinId), item, skinId == currentSkin, function()
 			LocalInventory.equip(slotName, weaponId, skinId)
-		end)
+		end, true)
 	end
 	fillRow(#skins, rowY)
 end

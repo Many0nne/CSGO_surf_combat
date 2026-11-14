@@ -77,10 +77,14 @@ function MenuSceneRules.breathAngle(t: number): number
 end
 
 -- Cette méthode permet de nommer un skin dans l'écran d'équipement (#280) lorsqu'il est affiché : « D'ORIGINE » sans
--- skin, sinon la fin de son id en majuscules (« skin.awp.dragon_lore » → « DRAGON LORE », en attendant #268).
-function MenuSceneRules.skinLabel(skinId: string?): string
+-- skin, son nom du catalogue (#268) s'il en a un, sinon la fin de son id en majuscules (« skin.awp.dragon_lore » →
+-- « DRAGON LORE »).
+function MenuSceneRules.skinLabel(skinId: string?, name: string?): string
 	if not skinId then
 		return "D'ORIGINE"
+	end
+	if name and name ~= "" then
+		return name
 	end
 	local last = string.match(skinId, "([^%.]+)$") or skinId
 	return string.upper((string.gsub(last, "_", " ")))

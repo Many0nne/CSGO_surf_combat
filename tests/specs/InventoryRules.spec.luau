@@ -35,6 +35,28 @@ return function(T, Loader)
 			end
 		end)
 
+		T.it("chaque skin a un nom affiché et des SurfaceAppearance pour Rojo (#268)", function()
+			local fs = require("@lune/fs")
+			for _, entry in Rules.ITEMS do
+				if entry.type == Rules.Type.SKIN then
+					T.expect(type(entry.name) == "string" and entry.name ~= "", "nom du skin " .. entry.id)
+					T.expect(type(entry.appearance) == "string" and entry.appearance ~= "", "apparence " .. entry.id)
+					-- Le viewmodel des armes à skins porte le nom de leur Tool (attribut ViewmodelName des Tools)
+					local weapon = Rules.item(entry.weapon :: string)
+					local path =
+						string.format("assets/rbx/Skins/%s/%s.model.json", weapon and weapon.tool, entry.appearance)
+					T.expect(fs.isFile(path), "fichier de SurfaceAppearance " .. path)
+				end
+			end
+		end)
+
+		T.it("aucun skin n'est dans l'inventaire par défaut : ils viendront des caisses (#268)", function()
+			for _, id in Rules.DEFAULT_ITEMS do
+				local item = Rules.item(id)
+				T.expect(item ~= nil and item.type ~= Rules.Type.SKIN, "item par défaut hors skin : " .. id)
+			end
+		end)
+
 		T.it("l'inventaire par défaut ne nomme que des items du catalogue", function()
 			for _, id in Rules.DEFAULT_ITEMS do
 				T.expect(Rules.item(id) ~= nil, "item par défaut connu : " .. id)
@@ -200,7 +222,7 @@ return function(T, Loader)
 		end)
 
 		T.it("attribut : aller-retour, ids inconnus ignorés, défaut sans attribut", function()
-			local owned = Rules.resolve(nil, true)
+			local owned = Rules.resolve({ "weapon.m9bayonet" }, false)
 			local text = Rules.encode(owned)
 			T.expectEqual(text, "weapon.awp,weapon.kabar,weapon.m9bayonet")
 			T.expectEqual(table.concat(ids(Rules.decode(text)), ","), text)
@@ -271,7 +293,9 @@ return function(T, Loader)
 			T.expectEqual(tools(Rules.weaponsForSlot(Rules.resolve(nil, false), "knife")), "KaBar")
 			T.expectEqual(tools(Rules.weaponsForSlot(Rules.resolve(nil, true), "knife")), "KaBar,M9Bayonet")
 			T.expectEqual(tools(Rules.weaponsForSlot(Rules.resolve(nil, true), "sniper")), "AWP")
-			T.expectEqual(#Rules.skinsFor(Rules.resolve(nil, true), "weapon.awp"), 0)
+			-- Skins de #268 : l'admin a les trois de l'AWP, un joueur sans sauvegarde aucun
+			T.expectEqual(#Rules.skinsFor(Rules.resolve(nil, true), "weapon.awp"), 3)
+			T.expectEqual(#Rules.skinsFor(Rules.resolve(nil, false), "weapon.awp"), 0)
 		end)
 
 		T.it("équipe une arme possédée de l'emplacement, sans toucher à l'autre emplacement", function()
@@ -429,6 +453,19 @@ return function(T, Loader)
 				Rules.encodeEquipped({ sniper = { weapon = "weapon.awp", skin = "skin.awp.x" } }),
 				"weapon.awp:skin.awp.x,"
 			)
+		end)
+	end)
+
+	T.describe("InventoryRules.skinOfTool (#268)", function()
+		T.it("donne le skin équipé de l'arme d'un Tool, nil pour d'origine ou une arme hors équipement", function()
+			local resolved = {
+				sniper = { weapon = "weapon.awp", skin = "skin.awp.couchant" },
+				knife = { weapon = "weapon.kabar" },
+			}
+			T.expectEqual(Rules.skinOfTool(resolved, "AWP"), "skin.awp.couchant")
+			T.expectEqual(Rules.skinOfTool(resolved, "KaBar"), nil)
+			T.expectEqual(Rules.skinOfTool(resolved, "M9Bayonet"), nil)
+			T.expectEqual(Rules.skinOfTool(resolved, "Inconnu"), nil)
 		end)
 	end)
 end

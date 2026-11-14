@@ -16,7 +16,17 @@ local InventoryRules = {}
 
 export type ItemType = "weapon" | "skin"
 export type Slot = "sniper" | "knife"
-export type Item = { id: string, type: ItemType, tool: string?, slot: Slot?, weapon: string? }
+-- Un skin porte aussi son nom affiché (`name`) et le nom de ses SurfaceAppearance (`appearance` : dossier
+-- ReplicatedStorage.Skins.<viewmodel de l'arme>.<appearance>, cf. WeaponSkins)
+export type Item = {
+	id: string,
+	type: ItemType,
+	tool: string?,
+	slot: Slot?,
+	weapon: string?,
+	name: string?,
+	appearance: string?,
+}
 -- Items possédés : ensemble d'ids du catalogue
 export type Owned = { [string]: boolean }
 -- Équipement d'un emplacement : id de l'arme, id du skin (nil : d'origine)
@@ -47,6 +57,31 @@ InventoryRules.ITEMS = {
 	{ id = "weapon.awp", type = "weapon", tool = "AWP", slot = "sniper" },
 	{ id = "weapon.kabar", type = "weapon", tool = "KaBar", slot = "knife" },
 	{ id = "weapon.m9bayonet", type = "weapon", tool = "M9Bayonet", slot = "knife" },
+	-- Skins (#268), par paires AWP + M9 sur un même thème ; obtenus plus tard par les caisses (l'admin les a tous)
+	{ id = "skin.awp.couchant", type = "skin", weapon = "weapon.awp", name = "COUCHANT", appearance = "couchant" },
+	{ id = "skin.awp.impact", type = "skin", weapon = "weapon.awp", name = "IMPACT", appearance = "impact" },
+	{ id = "skin.awp.releve", type = "skin", weapon = "weapon.awp", name = "RELEVÉ", appearance = "releve" },
+	{
+		id = "skin.m9bayonet.couchant",
+		type = "skin",
+		weapon = "weapon.m9bayonet",
+		name = "COUCHANT",
+		appearance = "couchant",
+	},
+	{
+		id = "skin.m9bayonet.impact",
+		type = "skin",
+		weapon = "weapon.m9bayonet",
+		name = "IMPACT",
+		appearance = "impact",
+	},
+	{
+		id = "skin.m9bayonet.releve",
+		type = "skin",
+		weapon = "weapon.m9bayonet",
+		name = "RELEVÉ",
+		appearance = "releve",
+	},
 } :: { Item }
 
 -- Inventaire de tout joueur (et des bots), sauvegardé ou non : Ka-Bar et AWP
@@ -360,6 +395,22 @@ function InventoryRules.equippedTools(resolved: Equipped): { string }
 		end
 	end
 	return names
+end
+
+-- Cette méthode permet de lire le skin équipé de l'arme dont le Tool porte ce nom lorsqu'elle est rendue (1re personne,
+-- 3e personne, accueil) ; nil : skin d'origine, ou arme absente de l'équipement résolu.
+function InventoryRules.skinOfTool(resolved: Equipped, toolName: string): string?
+	local weaponId = weaponIdByTool[toolName]
+	if not weaponId then
+		return nil
+	end
+	for _, slot in InventoryRules.SLOTS do
+		local loadout = resolved[slot]
+		if loadout and loadout.weapon == weaponId then
+			return loadout.skin
+		end
+	end
+	return nil
 end
 
 -- Cette méthode permet de comparer les Tools d'un joueur (sac et main) à ceux voulus (#280 : armes équipées) lorsque le
