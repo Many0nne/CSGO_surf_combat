@@ -438,11 +438,13 @@ un bhop joué par entrées simulées (MCP) ; la prise humaine était déjà prop
 
 Le joueur rejoue lui-même le geste de la démo, la démo sous les yeux.
 - **Entrée :** action S'ENTRAÎNER de l'écran Apprendre, après RETOUR. Elle téléporte vers un serveur d'entraînement
-  partagé (serveur réservé de la même place, un seul code d'accès commun gardé en MemoryStore, remplacé quand le serveur
-  est plein : les joueurs s'entraînent ensemble, pas une copie de la map par joueur). À l'arrivée, le joueur est mis en
-  jeu tout de suite, comme JOUER.
-- **Sur ce serveur :** map Dizzy, jeu libre (pas de point de départ ni de relance), ni bots, ni armes, ni dégâts, ni
-  stats (une chute ne compte pas), manche sans fin qui garde la réapparition. Pas de timer, de rang, de classement (Tab)
+  réservé pour ce seul joueur (#388 : un serveur neuf à chaque demande ; un serveur réservé vide s'éteint seul, et Roblox
+  ne limite pas le nombre de serveurs). À l'arrivée, le joueur est mis en jeu tout de suite, comme JOUER.
+- **Sur ce serveur :** map Dizzy, jeu libre (pas de point de départ ni de relance), ni bots ni stats (une chute ne
+  compte pas), manche sans fin qui garde la réapparition. Le joueur a ses armes équipées et leurs skins (#388), pour les
+  regarder ou bhoper avec : seul sur le serveur, il n'a personne à toucher.
+- **Piste écartée (#388) :** un serveur partagé entre tous les joueurs (code d'accès commun en MemoryStore, #345) obligeait
+  à retirer les armes pour qu'ils ne s'attaquent pas. Jouer ou s'entraîner entre amis passera par des parties privées. Pas de timer, de rang, de classement (Tab)
   ni de fil des kills.
 - **Démo :** la même que l'écran Apprendre (`DemoPlayer`, option `compact` : nom du geste sans sa phrase), à 60 %
   (384 x 216 à 720 de haut), en haut à droite à la place du fil des kills ; le compteur de vitesse (bas à gauche) et les
@@ -464,7 +466,7 @@ Le joueur rejoue lui-même le geste de la démo, la démo sous les yeux.
   serveur d'entraînement (JOUER y rejoue l'entraînement).
 - **Studio :** pas de téléportation (message « TÉLÉPORTATION IMPOSSIBLE DANS STUDIO »). Pour voir un serveur
   d'entraînement, poser en mode Edit `workspace:SetAttribute("DebugTraining", true)` avant le playtest (lu au démarrage
-  du serveur), et le retirer après. Le partage du serveur ne se vérifie que dans le jeu publié.
+  du serveur), et le retirer après. La téléportation ne se vérifie que dans le jeu publié.
 - Coût mesuré (Studio, 2026-11-15) : copie du décor à l'apparition, 17 443 pièces en 2,46 s (contre 0,30 s depuis le
   menu : elle part en même temps que le chargement du personnage, sur plusieurs images). Coût par image non mesuré à
   part ; celui du lecteur d'Apprendre (4 à 5 ms de GPU) en donne l'ordre.

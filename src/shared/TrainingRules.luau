@@ -1,10 +1,11 @@
--- Règles pures du mode entraînement (#345), sans Instance ni service : reconnaître un serveur d'entraînement, partager un
--- même serveur réservé entre les joueurs (code d'accès commun, remplacé quand ce serveur est plein ou introuvable), et
--- message montré au joueur pour chaque réponse du serveur. Testées sous Lune (tests/specs/TrainingRules.spec.luau).
+-- Règles pures du mode entraînement (#345), sans Instance ni service : reconnaître un serveur d'entraînement, retenter
+-- une téléportation qui échoue, et message montré au joueur pour chaque réponse du serveur. Testées sous Lune
+-- (tests/specs/TrainingRules.spec.luau).
 --
 -- Un serveur d'entraînement est un serveur réservé de la même place (TeleportService:ReserveServer) : le jeu n'en
--- réserve pour rien d'autre. Il garde le moteur de jeu (mouvement, map, mort par chute) sans bots, sans armes ni
--- dégâts, sans stats, dans une manche sans fin ; le client y montre la démo dans un coin (TrainingClient).
+-- réserve pour rien d'autre. Chaque joueur a le sien (#388) : seul, il garde ses armes et ses skins sans pouvoir être
+-- attaqué. Il garde le moteur de jeu (mouvement, map, mort par chute) sans bots ni stats, dans une manche sans fin ; le
+-- client y montre la démo dans un coin (TrainingClient).
 local TrainingRules = {}
 
 -- Attribut de ReplicatedStorage posé par le serveur au démarrage : true sur un serveur d'entraînement
@@ -13,13 +14,6 @@ TrainingRules.ATTRIBUTE = "TrainingServer"
 -- que le serveur du playtest se comporte en serveur d'entraînement
 TrainingRules.DEBUG_ATTRIBUTE = "DebugTraining"
 
--- Clé du code d'accès partagé dans la MemoryStore (SortedMap TrainingRules.MAP), et durée de vie de l'entrée (s),
--- prolongée à chaque usage : un code reste valable tant qu'on l'utilise (un serveur réservé vide s'éteint, le même code
--- en relance un neuf)
-TrainingRules.MAP = "TrainingServers"
-TrainingRules.KEY = "shared"
-TrainingRules.CODE_TTL = 24 * 3600
-
 -- Demandes du client (remote Training, client → serveur)
 TrainingRules.JOIN = "join"
 TrainingRules.LEAVE = "leave"
@@ -27,8 +21,8 @@ TrainingRules.LEAVE = "leave"
 -- Réponses du serveur (même remote, serveur → client)
 export type Status = "teleporting" | "studio" | "failed" | "busy" | "unavailable"
 
--- Résultats de téléportation (noms de Enum.TeleportResult) pour lesquels le code partagé est remplacé par un neuf avant
--- un nouvel essai : serveur plein, ou introuvable
+-- Résultats de téléportation (noms de Enum.TeleportResult) pour lesquels un serveur neuf est réservé avant un nouvel
+-- essai : serveur plein, ou introuvable
 local ROTATE_ON = { GameFull = true, GameNotFound = true }
 -- Essais d'une même demande (le premier, puis un avec un code neuf)
 TrainingRules.MAX_TRIES = 2
@@ -53,24 +47,6 @@ function TrainingRules.isTrainingServer(
 		return true
 	end
 	return isStudio and debugFlag == true
-end
-
--- Cette méthode permet de garder le code partagé déjà en place lorsque deux serveurs en réservent un en même temps
--- (transformation d'UpdateAsync, pure) : le premier écrit l'emporte, `candidate` ne sert que s'il n'y en a pas.
-function TrainingRules.keepCode(stored: any, candidate: string): string
-	if type(stored) == "string" and stored ~= "" then
-		return stored
-	end
-	return candidate
-end
-
--- Cette méthode permet de remplacer le code partagé par `fresh` lorsqu'une téléportation vers `failed` a échoué
--- (serveur plein) ; un code déjà remplacé par un autre serveur entre-temps est gardé (transformation d'UpdateAsync).
-function TrainingRules.rotateCode(stored: any, failed: string, fresh: string): string
-	if type(stored) ~= "string" or stored == "" or stored == failed then
-		return fresh
-	end
-	return stored
 end
 
 -- Cette méthode permet de décider si un échec de téléportation est retenté avec un code neuf lorsqu'il arrive : selon le
