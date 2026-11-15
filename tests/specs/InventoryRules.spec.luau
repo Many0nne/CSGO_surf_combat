@@ -468,4 +468,177 @@ return function(T, Loader)
 			T.expectEqual(Rules.skinOfTool(resolved, "Inconnu"), nil)
 		end)
 	end)
+
+	T.describe("InventoryRules : portefeuille et transactions (#396)", function()
+		local Wallet = Loader.new({}):require("src/shared/WalletRules")
+
+		-- Cette méthode permet de construire un enregistrement de schéma 2 lorsqu'un test part d'un solde stocké.
+		local function record(earned: number, purchased: number?, items: { string }?)
+			local w = Wallet.empty()
+			w.earned = earned
+			w.purchased = purchased or 0
+			return { schemaVersion = 2, items = items or {}, wallet = w }
+		end
+
+		-- Cette méthode permet de construire l'opération d'une dépense lorsqu'un test simule un achat (#393) : débit,
+		-- objet donné en option, refus avec le motif.
+		local function buy(price: number, itemId: string?)
+			return function(rec)
+				local w, reason = Wallet.debit(rec.wallet, price)
+				if not w then
+					return nil, reason
+				end
+				rec.wallet = w
+				if itemId then
+					table.insert(rec.items, itemId)
+				end
+				return rec, "achat"
+			end
+		end
+
+		T.it("enregistrement v1 sans `wallet` : portefeuille de départ, réécrivable, réécrit en v2", function()
+			local v1 = {
+				schemaVersion = 1,
+				items = { "weapon.m9bayonet" },
+				equipped = { knife = { weapon = "weapon.m9bayonet" } },
+			}
+			local stored, canSave, equipped, wallet = Rules.loadOutcome(true, v1)
+			T.expect(canSave)
+			T.expectEqual(table.concat(stored, ","), "weapon.m9bayonet")
+			T.expectEqual(equipped.knife.weapon, "weapon.m9bayonet")
+			T.expectEqual(Wallet.balance(wallet), Wallet.STARTING_BALANCE)
+			local written, status = Rules.mergeForSave(v1, {}, nil)
+			assert(written)
+			T.expectEqual(status, "merged")
+			T.expectEqual(written.schemaVersion, Rules.SCHEMA_VERSION)
+			T.expectEqual(written.schemaVersion, 2)
+			T.expectEqual(written.items[1], "weapon.m9bayonet", "items intacts")
+			T.expectEqual(written.equipped.knife.weapon, "weapon.m9bayonet", "équipement intact")
+			T.expectEqual(Wallet.balance(written.wallet), Wallet.STARTING_BALANCE)
+		end)
+
+		T.it("schéma plus récent ou portefeuille illisible : sauvegarde coupée, rien d'écrit", function()
+			local _, canSave = Rules.loadOutcome(true, { schemaVersion = Rules.SCHEMA_VERSION + 1, items = {} })
+			T.expect(not canSave)
+			local bad = { schemaVersion = 2, items = {}, wallet = { earned = -4, purchased = 0 } }
+			local _, badSave, _, wallet = Rules.loadOutcome(true, bad)
+			T.expect(not badSave)
+			T.expectEqual(Wallet.balance(wallet), Wallet.STARTING_BALANCE)
+			local written, status = Rules.mergeForSave(bad, {}, nil, { session = "a", batches = {}, upTo = 1 }, buy(1))
+			T.expectEqual(written, nil)
+			T.expectEqual(status, "refused")
+		end)
+
+		T.it("relit le portefeuille d'un enregistrement v2", function()
+			local _, canSave, _, wallet = Rules.loadOutcome(true, record(300, 200))
+			T.expect(canSave)
+			T.expectEqual(Wallet.balance(wallet), 500)
+		end)
+
+		T.it("fusion : lots de gains ajoutés, lot rejoué non recompté, deux serveurs additionnés", function()
+			local change = { session = "a", batches = { { seq = 1, earned = 40 } }, upTo = 1 }
+			local first = Rules.mergeForSave(record(100), { "weapon.m9bayonet" }, nil, change)
+			assert(first)
+			T.expectEqual(first.wallet.earned, 140)
+			local replay = Rules.mergeForSave(first, {}, nil, change)
+			assert(replay)
+			T.expectEqual(replay.wallet.earned, 140, "lot rejoué")
+			local other = Rules.mergeForSave(
+				replay,
+				{},
+				nil,
+				{ session = "b", batches = { { seq = 1, earned = 7 } }, upTo = 1 }
+			)
+			assert(other)
+			T.expectEqual(other.wallet.earned, 147)
+			T.expectEqual(other.items[1], "weapon.m9bayonet")
+		end)
+
+		T.it("fusion sans portefeuille de session : celui stocké est gardé tel quel", function()
+			local written = Rules.mergeForSave(record(70, 30), {}, nil)
+			assert(written)
+			T.expectEqual(written.wallet.earned, 70)
+			T.expectEqual(written.wallet.purchased, 30)
+		end)
+
+		T.it("transaction : débit et objet dans la même écriture, gains de la session comptés avant", function()
+			local change = { session = "a", batches = { { seq = 1, earned = 20 } }, upTo = 2 }
+			local written, status, result =
+				Rules.mergeForSave(record(90, 0), {}, nil, change, buy(100, "skin.awp.couchant"))
+			assert(written)
+			T.expectEqual(status, "applied")
+			T.expectEqual(result, "achat")
+			T.expectEqual(Wallet.balance(written.wallet), 10)
+			T.expect(table.find(written.items, "skin.awp.couchant") ~= nil, "objet donné")
+			T.expectEqual(Wallet.appliedSeq(written.wallet, "a"), 2, "marque de l'opération")
+		end)
+
+		T.it("transaction refusée (solde stocké insuffisant) : rien à écrire", function()
+			local old = record(50)
+			local change = { session = "a", batches = {}, upTo = 1 }
+			local written, status, result = Rules.mergeForSave(old, {}, nil, change, buy(80, "skin.awp.couchant"))
+			T.expectEqual(written, nil)
+			T.expectEqual(status, "rejected")
+			T.expectEqual(result, "insufficient")
+			T.expectEqual(old.wallet.earned, 50, "stocké intact")
+			T.expectEqual(#old.items, 0, "stocké intact")
+		end)
+
+		T.it("transaction déjà écrite (réponse perdue) : pas rejouée", function()
+			local change = { session = "a", batches = {}, upTo = 1 }
+			local first = Rules.mergeForSave(record(100), {}, nil, change, buy(30))
+			assert(first)
+			local again, status = Rules.mergeForSave(first, {}, nil, change, buy(30))
+			assert(again)
+			T.expectEqual(status, "replayed")
+			T.expectEqual(Wallet.balance(again.wallet), 70)
+		end)
+
+		T.it("transaction : une opération ne retire pas d'objet et ne rend pas un solde négatif", function()
+			local change = { session = "a", batches = {}, upTo = 1 }
+			local kept = Rules.mergeForSave(record(10, 0, { "weapon.m9bayonet" }), {}, nil, change, function(rec)
+				rec.items = {}
+				return rec, nil
+			end)
+			assert(kept)
+			T.expectEqual(kept.items[1], "weapon.m9bayonet")
+			local negative, status, reason = Rules.mergeForSave(record(10), {}, nil, change, function(rec)
+				rec.wallet.earned = -5
+				return rec, nil
+			end)
+			T.expectEqual(negative, nil)
+			T.expectEqual(status, "rejected")
+			T.expectEqual(reason, "invalid")
+		end)
+
+		T.it("transaction : un reçu mal formé est refusé, pas retiré en silence", function()
+			local change = { session = "a", batches = {}, upTo = 1 }
+			local tooLong = string.rep("x", Wallet.MAX_RECEIPT_LENGTH + 1)
+			for _, bad in { tooLong, "", 42 } do
+				local written, status, reason = Rules.mergeForSave(record(0), {}, nil, change, function(rec)
+					rec.wallet.purchased += 500
+					table.insert(rec.wallet.receipts, bad)
+					return rec, nil
+				end)
+				T.expectEqual(written, nil)
+				T.expectEqual(status, "rejected")
+				T.expectEqual(reason, "invalid")
+			end
+		end)
+
+		T.it("transaction : l'opération reçoit une copie, la fusion est pure", function()
+			local old = record(100)
+			local change = { session = "a", batches = { { seq = 1, earned = 5 } }, upTo = 2 }
+			local seen
+			Rules.mergeForSave(old, {}, nil, change, function(rec)
+				seen = rec
+				rec.wallet.earned = 0
+				return nil, "non"
+			end)
+			T.expectEqual(old.wallet.earned, 100)
+			T.expectEqual(#old.wallet.writes, 0)
+			T.expectEqual(seen.wallet.earned, 0, "copie modifiée par l'opération seulement")
+			T.expectEqual(#change.batches, 1)
+		end)
+	end)
 end

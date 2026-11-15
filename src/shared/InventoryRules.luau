@@ -12,6 +12,16 @@
 -- « d'origine »). Seules ces armes vont dans le sac. Le choix est sauvegardé tel quel (`equipped` de PlayerInventory_v1)
 -- et résolu à chaque usage contre les items possédés : un item qui n'est plus possédé (rôle retiré) laisse la place à
 -- l'équipement par défaut, sans effacer le choix enregistré.
+--
+-- Portefeuille (#396) : les crédits vivent dans le même enregistrement (clé `wallet`, format de WalletRules), pour
+-- qu'une seule UpdateAsync change à la fois le solde et les objets (achat de caisse #393, reçu Robux #395). La fusion
+-- (`mergeForSave`) réunit les objets, l'équipement choisi et les lots de gains de la session, puis applique s'il y en a
+-- une l'opération d'une transaction (`Operation`), qui peut refuser selon l'état stocké. Contrat dans
+-- docs/architecture.md (« Crédits »).
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local WalletRules = require(ReplicatedStorage.Shared.WalletRules)
+
 local InventoryRules = {}
 
 export type ItemType = "weapon" | "skin"
@@ -35,8 +45,22 @@ export type Owned = { [string]: boolean }
 export type Loadout = { weapon: string, skin: string? }
 -- Équipement par emplacement ; une version enregistrée peut être partielle, une version résolue est complète
 export type Equipped = { [string]: Loadout }
+-- Enregistrement de PlayerInventory_v1 (schéma 2, #396 ; le schéma 1 n'avait pas `wallet`)
+export type Record = { schemaVersion: number, items: { string }, equipped: Equipped?, wallet: WalletRules.Wallet }
+-- Gains d'une session envoyés avec une écriture : lots pas encore confirmés et numéro du dernier lot envoyé (`upTo`,
+-- celui d'une transaction compris : il marque l'opération comme appliquée)
+export type WalletChange = { session: string, batches: { WalletRules.Batch }, upTo: number }
+-- Opération d'une transaction : reçoit une copie de l'enregistrement fusionné (stocké + session), renvoie
+-- l'enregistrement voulu, ou nil pour refuser (rien n'est écrit), et un résultat libre rendu à l'appelant. Pure : Roblox
+-- peut l'appeler plusieurs fois. Seuls `wallet` (compteurs, jour, reçus) et les ajouts à `items` sont gardés.
+export type Operation = (record: Record) -> (Record?, any)
+-- Issue d'une fusion : sans opération (`merged`), opération appliquée (`applied`), déjà appliquée par une écriture
+-- signalée en échec (`replayed`, rien de réappliqué), refusée par l'opération (`rejected`, rien à écrire) ou format
+-- stocké refusé (`refused`, rien à écrire)
+export type MergeStatus = "merged" | "applied" | "replayed" | "rejected" | "refused"
 
-InventoryRules.SCHEMA_VERSION = 1
+-- 2 (#396) : portefeuille `wallet` ; un enregistrement 1 se relit avec le portefeuille de départ et se réécrit en 2
+InventoryRules.SCHEMA_VERSION = 2
 -- Attribut informatif posé par le serveur sur le Player (ids séparés par des virgules) : il n'ouvre aucun droit, le
 -- serveur ne le relit jamais (comme l'attribut `Role`, #266)
 InventoryRules.ATTRIBUTE = "OwnedItems"
@@ -237,8 +261,8 @@ function InventoryRules.sanitizeEquipped(raw: any): Equipped
 end
 
 -- Cette méthode permet de savoir si une valeur relue du DataStore est d'un format que cette version sait réécrire :
--- absente (nouveau joueur), ou table de schéma connu (pas plus récent) dont `items` est une liste ou absent et
--- `equipped` (#280) une table ou absent.
+-- absente (nouveau joueur), ou table de schéma connu (pas plus récent) dont `items` est une liste ou absent,
+-- `equipped` (#280) une table ou absent et `wallet` (#396) un portefeuille réécrivable ou absent (schéma 1).
 local function isWritable(data: any): boolean
 	if data == nil then
 		return true
@@ -252,43 +276,90 @@ local function isWritable(data: any): boolean
 	end
 	return (data.items == nil or type(data.items) == "table")
 		and (data.equipped == nil or type(data.equipped) == "table")
+		and WalletRules.isWritable(data.wallet)
 end
 
--- Cette méthode permet de décider des ids, du droit d'écrire et de l'équipement relu lorsque le chargement DataStore se
--- termine : échec ou format inconnu/plus récent → sauvegarde coupée ; aucune donnée → écriture permise, équipement vide.
-function InventoryRules.loadOutcome(ok: boolean, data: any): ({ string }, boolean, Equipped)
+-- Cette méthode permet de décider des ids, du droit d'écrire, de l'équipement et du portefeuille relus au chargement :
+-- échec ou format inconnu/plus récent → sauvegarde coupée ; rien ou schéma 1 sans `wallet` → portefeuille de départ.
+function InventoryRules.loadOutcome(ok: boolean, data: any): ({ string }, boolean, Equipped, WalletRules.Wallet)
 	if not ok then
-		return {}, false, {}
+		return {}, false, {}, WalletRules.empty()
 	end
 	local tableData = if type(data) == "table" then data else nil
+	local writable = isWritable(data)
 	return InventoryRules.sanitizeStored(tableData and tableData.items),
-		isWritable(data),
-		InventoryRules.sanitizeEquipped(tableData and tableData.equipped)
+		writable,
+		InventoryRules.sanitizeEquipped(tableData and tableData.equipped),
+		if writable then WalletRules.read(tableData and tableData.wallet) else WalletRules.empty()
 end
 
 -- Cette méthode permet de construire la valeur écrite dans le DataStore lorsqu'un inventaire est sauvegardé ;
--- l'équipement n'est écrit que s'il y en a un (choisi ou déjà enregistré).
-function InventoryRules.payload(
-	stored: { string },
-	equipped: Equipped?
-): { schemaVersion: number, items: { string }, equipped: Equipped? }
+-- l'équipement n'est écrit que s'il y en a un (choisi ou déjà enregistré), le portefeuille toujours (départ s'il manque).
+function InventoryRules.payload(stored: { string }, equipped: Equipped?, wallet: WalletRules.Wallet?): Record
 	local hasEquipped = equipped ~= nil and next(equipped) ~= nil
 	return {
 		schemaVersion = InventoryRules.SCHEMA_VERSION,
 		items = table.clone(stored),
 		equipped = if hasEquipped then table.clone(equipped :: Equipped) else nil,
+		wallet = WalletRules.read(wallet),
 	}
 end
 
--- Cette méthode permet de calculer la valeur écrite par UpdateAsync lorsqu'un inventaire est sauvegardé : ids réunis sans
--- plafond (un inventaire ne fait que grandir), équipement enregistré remplacé emplacement par emplacement par la session.
+-- Cette méthode permet de copier une valeur en profondeur lorsqu'une opération reçoit l'enregistrement fusionné (elle
+-- ne doit pas pouvoir modifier celui de la fusion).
+local function deepCopy(value: any): any
+	if type(value) ~= "table" then
+		return value
+	end
+	local copy = {}
+	for key, child in value do
+		copy[key] = deepCopy(child)
+	end
+	return copy
+end
+
+-- Cette méthode permet de garder d'un enregistrement rendu par une opération ce qu'elle peut changer : ids ajoutés et
+-- portefeuille (marques de lots de la fusion) ; nil si ce portefeuille n'est pas valide (négatif, au-delà du plafond).
+local function adoptOperation(merged: Record, proposed: any): Record?
+	if type(proposed) ~= "table" or proposed.wallet == nil or not WalletRules.isWritable(proposed.wallet) then
+		return nil
+	end
+	-- Un reçu mal formé serait retiré en silence par `WalletRules.read` : les crédits achetés seraient écrits sans leur
+	-- PurchaseId, et le reçu rejoué par Roblox crédité deux fois (#395). Refuser plutôt.
+	if type(proposed.wallet.receipts) == "table" then
+		for _, id in ipairs(proposed.wallet.receipts) do
+			if type(id) ~= "string" or #id == 0 or #id > WalletRules.MAX_RECEIPT_LENGTH then
+				return nil
+			end
+		end
+	end
+	local ids = table.clone(merged.items)
+	if type(proposed.items) == "table" then
+		for _, id in InventoryRules.sanitizeStored(proposed.items, math.huge) do
+			table.insert(ids, id)
+		end
+	end
+	local wallet = WalletRules.read(proposed.wallet)
+	wallet.writes = merged.wallet.writes
+	return {
+		schemaVersion = InventoryRules.SCHEMA_VERSION,
+		items = InventoryRules.sanitizeStored(ids, math.huge),
+		equipped = merged.equipped,
+		wallet = wallet,
+	}
+end
+
+-- Cette méthode permet de calculer la valeur écrite par UpdateAsync : ids réunis, équipement de la session, lots de gains
+-- pas encore comptés, puis opération `op` (refus possible) ; pure, rend l'enregistrement (nil : rien), l'issue, le résultat.
 function InventoryRules.mergeForSave(
 	old: any,
 	stored: { string },
-	equipped: Equipped?
-): { schemaVersion: number, items: { string }, equipped: Equipped? }?
+	equipped: Equipped?,
+	wallet: WalletChange?,
+	op: Operation?
+): (Record?, MergeStatus, any)
 	if not isWritable(old) then
-		return nil
+		return nil, "refused"
 	end
 	local merged = table.clone(if type(old) == "table" and type(old.items) == "table" then old.items else {})
 	table.move(stored, 1, #stored, #merged + 1, merged)
@@ -307,7 +378,28 @@ function InventoryRules.mergeForSave(
 	for slot, loadout in InventoryRules.sanitizeEquipped(equipped) do
 		keptEquipped[slot] = loadout
 	end
-	return InventoryRules.payload(InventoryRules.sanitizeStored(merged, math.huge), keptEquipped)
+	local oldWallet = WalletRules.read(if type(old) == "table" then old.wallet else nil)
+	local nextWallet = if wallet
+		then WalletRules.applyBatches(oldWallet, wallet.session, wallet.batches, wallet.upTo)
+		else oldWallet
+	local record = InventoryRules.payload(InventoryRules.sanitizeStored(merged, math.huge), keptEquipped, nextWallet)
+	if not op then
+		return record, "merged"
+	end
+	assert(wallet, "une opération demande le numéro de lot de la session (wallet.upTo)")
+	-- Opération déjà écrite par un essai signalé en échec (réponse perdue) : sa marque est stockée, ne pas la rejouer
+	if WalletRules.appliedSeq(oldWallet, wallet.session) >= wallet.upTo then
+		return record, "replayed"
+	end
+	local proposed, result = op(deepCopy(record))
+	if proposed == nil then
+		return nil, "rejected", result
+	end
+	local adopted = adoptOperation(record, proposed)
+	if not adopted then
+		return nil, "rejected", "invalid"
+	end
+	return adopted, "applied", result
 end
 
 -- Cette méthode permet de calculer les items possédés lorsqu'un système en a besoin : défaut + ids sauvegardés connus +
