@@ -21,9 +21,10 @@ CasingRules.PORT_PATH = { "Handle", "EjectPort" }
 CasingRules.MARKER = "Eject"
 
 -- Douille à l'échelle du viewmodel (studs ; l'arme 3P la réduit avec son échelle) : cylindre couché le long de
--- l'arme, laiton.
-CasingRules.LENGTH = 0.62
-CasingRules.DIAMETER = 0.11
+-- l'arme, laiton. Étui de .338 Lapua Magnum (69 × 15 mm) à l'échelle de l'AWP de #403 (1 stud ≈ 142 mm : 1 300 mm
+-- de crosse à bouche pour 9,15 studs).
+CasingRules.LENGTH = 0.49
+CasingRules.DIAMETER = 0.105
 CasingRules.COLOR_RGB = { 214, 170, 84 }
 
 -- Vitesse de départ (studs/s, échelle du viewmodel) dans le repère de l'EjectPort : vers la droite, vers le haut,

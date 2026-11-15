@@ -49,12 +49,14 @@ WeaponConfig.Weapons = {
 		-- repère de la main) et tenue du haut du corps (cf. WeaponThirdPerson.POSES).
 		-- Tenue F1 : main droite sur la poignée pistolet (grip généré par tools/anim/poses3p/export_pose.js) ;
 		-- échelle 0,7 (7,1 studs) : la crosse disparaît dans l'épaule, l'arme doit rester lisible de loin.
+		-- Modèle de #403 : position recalée du déplacement du centre de la Handle (boîtier), même point de l'arme dans la
+		-- main (1,38 ; -0,66 du repère de assets/awp/build_awp.py, sur la poignée à trou de pouce).
 		ThirdPerson = {
 			Scale = 0.7,
 			Grip = CFrame.new(
-				0.29883,
-				-1.0026,
-				-0.08662,
+				0.24144,
+				-0.97118,
+				-0.12468,
 				0.55516,
 				-0.547,
 				0.62657,

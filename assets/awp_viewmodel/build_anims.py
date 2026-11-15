@@ -8,6 +8,7 @@
 # FakeCamera étant recalé sur la caméra en jeu (PivotTo), tout le mouvement passe par l'arme, jamais par FakeCamera.
 
 import math
+import os
 
 import bpy
 from mathutils import Euler, Matrix, Quaternion, Vector
@@ -28,6 +29,29 @@ EQUIP_ROLL_LOW = 0.0  # arme encore basse à la sortie
 SHOULDER = {"R": Vector((1.75, 0.25, -1.95)), "L": Vector((0.05, 2.1, -2.55))}
 POLE = {"R": Vector((2.9, 0.4, -3.0)), "L": Vector((0.4, 2.2, -4.2))}
 HAND_CENTER_TO_WRIST = 0.1496
+# Allonge maximale épaule → poignet de chaque bras (somme des deux os). Au-delà, l'IK tend le bras et le bloque, puis le
+# relâche d'un coup : à-coup visible (fin du Reload de #403, bras gauche tendu 0,2 s). L'épaule suit donc la main dès
+# REACH_SOFT de l'allonge, en douceur (docs/animations.md, « IK à deux os »).
+ARM_REACH = {
+	s: (ARM.bones["LowerArm." + s].head_local - ARM.bones["UpperArm." + s].head_local).length
+	+ (ARM.bones["Hand." + s].head_local - ARM.bones["LowerArm." + s].head_local).length
+	for s in ("R", "L")
+}
+# Fractions de l'allonge : début de la compression, plafond jamais atteint. Le bras gauche est déjà à 96 % au repos
+# (FOREND_L) : commencer plus bas changerait la tenue de toutes les pistes.
+REACH_SOFT, REACH_MAX = 0.965, 0.985
+
+
+# Cette méthode permet de rapprocher l'épaule du poignet lorsque la main part hors de portée : la distance est comprimée
+# en douceur (tanh) entre REACH_SOFT et REACH_MAX de l'allonge, sans cassure de vitesse ; renvoie l'épaule déplacée.
+def follow_shoulder(side, shoulder, wrist):
+	d = (wrist - shoulder).length
+	soft, top = ARM_REACH[side] * REACH_SOFT, ARM_REACH[side] * REACH_MAX
+	if d <= soft:
+		return shoulder
+	kept = soft + (top - soft) * math.tanh((d - soft) / (top - soft))
+	return shoulder + (wrist - shoulder).normalized() * (d - kept)
+
 
 # Points de prise : (repère parent, position locale du centre de la main dans ce repère au repos)
 HANDLE_REST = REST["Handle"].translation
@@ -40,10 +64,12 @@ def local_to(bone, world_point):
 	return REST[bone].inverted() @ Vector(world_point)
 
 
-GRIP_R = ("Handle", local_to("Handle", (1.17, 1.0, -1.18)))
-FOREND_L = ("Handle", local_to("Handle", (1.0, 3.35, -1.5)))
-KNOB_R = ("Bolt", local_to("Bolt", (1.72, 1.86, -1.22)))
-MAG_L = ("Magazine", local_to("Magazine", (1.1, 2.6, -1.78)))
+# Prises de l'AWP de assets/awp (#403) : même écart à la surface que sur l'ancien fusil (assets/sniper), recalé sur la
+# poignée à trou de pouce (plus en avant et plus bas), le fût, le chargeur plus long et la boule de culasse.
+GRIP_R = ("Handle", local_to("Handle", (1.17, 1.50, -1.31)))
+FOREND_L = ("Handle", local_to("Handle", (1.0, 3.35, -1.523)))
+KNOB_R = ("Bolt", local_to("Bolt", (1.731, 1.868, -1.104)))
+MAG_L = ("Magazine", local_to("Magazine", (1.1, 2.606, -1.914)))
 
 
 # ------------------------------------------------------------------------------------------------
@@ -212,6 +238,7 @@ def bake(name, spec):
 			sh = pose["FakeCamera"] @ (SHOULDER[s] + spec.get("shoulder_" + s, lambda _t: Vector((0, 0, 0)))(t))
 			d = (c - sh).normalized()
 			wrist = c - d * HAND_CENTER_TO_WRIST
+			sh = follow_shoulder(s, sh, wrist)
 			key_basis(pbs["IK." + s], basis_for_position("IK." + s, wrist, pose), f)
 			key_basis(pbs["UpperArm." + s], basis_for_position("UpperArm." + s, sh, pose), f)
 			key_basis(pbs["Pole." + s], basis_for_position("Pole." + s, pose["FakeCamera"] @ POLE[s], pose), f)
@@ -290,8 +317,8 @@ def K(keys):
 # ------------------------------------------------------------------------------------------------
 REF_IDLE = ((212, 238), (105, 222))  # œilleton et canon de la référence au repos
 HEIGHT_OVER_WIDTH = 9 / 16  # le joueur voit du 16:9, au FOV vertical de 90° du jeu (tan 45° = 1)
-EYE_REST = Vector((1.08, 1.59, -0.15))  # œilleton de notre arme, repère caméra au repos
-MUZZLE_REST = Vector((1.074, 8.35, -0.587))  # bout du canon de notre arme, repère caméra au repos
+EYE_REST = Vector((1.09, 1.491, -0.146))  # œilleton de notre arme (verre arrière, assets/awp), repère caméra au repos
+MUZZLE_REST = Vector((1.09, 8.35, -0.65))  # bout du canon de notre arme (axe du canon), repère caméra au repos
 GUN_AXIS_REST = (MUZZLE_REST - EYE_REST).normalized()
 GUN_LENGTH = (MUZZLE_REST - EYE_REST).length
 
@@ -383,23 +410,34 @@ RELOAD_TRACK = [
 	(25.20, 307, 230, 57, 132),
 	(25.30, 250, 249, 70, 192),
 	(25.40, 228, 252, 93, 232),
-	(25.50, 210, 239, 100, 254),
-	(25.60, 205, 229, 95, 254),
-	(25.70, 202, 234, 107, 249),
-	(25.80, 230, 249, 120, 239),
-	(25.90, 233, 254, 123, 229),
-	(26.00, 210, 241, 122, 219),
-	(26.10, 205, 241, 112, 239),
-	(26.20, 207, 241, 110, 231),
-	(26.30, 215, 241, 110, 221),
-	(26.40, 213, 236, 113, 218),
-	(26.50, 215, 236, 115, 221),
-	(26.60, 210, 233, 105, 220),
+	# Fin du cycle de culasse, relevée de nouveau image par image (#403) sur des vues agrandies ×2 quadrillées, puis recalée
+	# sur REF_IDLE (repos lu à (218 ; 238) et (109 ; 217,5) : décalage de -6 ; -0,3 et -4 ; +4,5). Les anciens relevés
+	# (toutes les 0,1 s, à l'œil) faisaient replonger le canon de 20 px à 26,10 s alors que l'arme remonte doucement au
+	# repos dès la douille éjectée : à-coup signalé par l'utilisateur.
+	(25.50, 209, 242.2, 105, 242),
+	(25.60, 211.5, 239.7, 111, 232),
+	(25.70, 209, 234.7, 113.5, 234.5),
+	(25.80, 203, 243.7, 111, 239.5),
+	(25.867, 201.5, 244.7, 98.5, 238.5),
+	(25.90, 201.5, 245.7, 102, 238.5),
+	(25.933, 204, 242.2, 103.5, 239.5),
+	(25.967, 209, 242.2, 103.5, 232),
+	(26.00, 208, 242.2, 105, 229.5),
+	(26.033, 206.5, 242.2, 105, 228.5),
+	(26.067, 206.5, 237.2, 103.5, 224.5),
+	(26.10, 210.5, 237.2, 103.5, 222),
+	(26.133, 211.5, 238.2, 105, 222),
+	(26.30, 212, 238, 105, 222),
+	(26.50, 212, 238, 105, 222),
 	(26.70, 212, 238, 105, 222),
 ]
+# Lissage des relevés image par image de la fin du Reload (±2 px d'une image à l'autre), nul avant (relevés espacés).
+def RELOAD_SMOOTH(t):
+	return 0.001 + 0.04 * min(max((t - 25.55) / 0.1, 0.0), 1.0)
 RELOAD_DEPTH = [
 	(22.95, 1.0), (23.55, 1.0), (23.85, 1.15), (24.05, 1.2), (24.35, 1.15), (24.55, 1.25), (24.90, 1.1), (25.00, 1.35),
-	(25.10, 1.3), (25.20, 1.15), (25.30, 1.05), (25.40, 1.0), (25.80, 1.1), (25.90, 1.1), (26.20, 1.0), (26.70, 1.0),
+	# Cycle de culasse (25,6 → 26,2) : l'œilleton garde le diamètre du repos sur les vues agrandies (#403), plus de ×1,1.
+	(25.10, 1.3), (25.20, 1.15), (25.30, 1.05), (25.40, 1.0), (26.70, 1.0),
 ]
 
 # Inspect (references/anim/awp showcase.mp4, 5,30 → 10,30 s) : l'arme pivote de profil (canon à gauche, crosse à droite),
@@ -501,6 +539,13 @@ def INSPECT_SMOOTH(t):
 	return 0.06 + 0.03 * ramp
 
 
+# Lacet ajouté pendant la tenue de profil de l'Inspect (#403) : notre FOV de 90° rend le pivot mesuré moins ample que dans
+# CS2, le flanc de l'arme (le skin) se voyait mal. Fraction de INSPECT_YAW_DEG, qui monte avec le pivot mesuré, tient,
+# et retombe pendant que l'arme se dresse. Variantes : variable d'environnement AWP_INSPECT_YAW (degrés).
+INSPECT_YAW_DEG = float(os.environ.get("AWP_INSPECT_YAW", "15"))  # variante A retenue (15, 25, 35 montrées)
+INSPECT_YAW = [(5.30, 0.0), (5.53, 0.0), (6.20, 1.0), (6.80, 1.0), (8.40, 1.0), (8.80, 0.0), (10.30, 0.0)]
+
+
 # Cette méthode permet de convertir un relevé de planche en écart à l'écran par rapport à la référence au repos,
 # en largeur et hauteur d'écran, lorsque le cadrage de repos de la référence et le nôtre diffèrent légèrement.
 def ref_delta(point, rest):
@@ -519,7 +564,7 @@ def screen_ray(uv):
 
 # Cette méthode permet de retrouver la pose de l'arme (décalage, angles en degrés) qui place l'œilleton et le canon aux
 # positions d'écran voulues ; la profondeur vient du grossissement mesuré et le roulis est un choix, invisible sur ces deux points.
-def solve_gun(eye_uv, muzzle_uv, magnify, roll_deg):
+def solve_gun(eye_uv, muzzle_uv, magnify, roll_deg, yaw_deg=0.0):
 	eye = screen_ray(eye_uv) * (EYE_REST.y / magnify)
 	ray = screen_ray(muzzle_uv)
 	a, b, c = ray.dot(ray), -2 * ray.dot(eye), eye.dot(eye) - GUN_LENGTH * GUN_LENGTH
@@ -527,6 +572,11 @@ def solve_gun(eye_uv, muzzle_uv, magnify, roll_deg):
 	axis = (ray * depth - eye).normalized()
 	rotation = Quaternion(axis, math.radians(roll_deg)) @ GUN_AXIS_REST.rotation_difference(axis)
 	loc = eye - RECOIL_PIVOT - rotation @ (EYE_REST - RECOIL_PIVOT)
+	if yaw_deg:
+		# lacet en plus autour de la verticale, centré sur le boîtier : il reste en place à l'écran
+		pivot = RECOIL_PIVOT + loc + rotation @ (HANDLE_REST - RECOIL_PIVOT)
+		rotation = Quaternion((0, 0, 1), math.radians(yaw_deg)) @ rotation
+		loc = pivot - RECOIL_PIVOT - rotation @ (HANDLE_REST - RECOIL_PIVOT)
 	euler = rotation.to_euler("YXZ")
 	return loc, Vector([math.degrees(v) for v in euler])
 
@@ -572,7 +622,7 @@ def smooth_table(table, sigma):
 
 # Cette méthode permet de construire les pistes de l'arme d'une animation depuis sa trajectoire mesurée : `t0` est l'instant
 # vidéo de la frame 0, `stretch` le rapport durée en jeu / durée vidéo, et `roll` donne le roulis en fonction du temps vidéo.
-def measured_gun(track, depth, roll, t0, stretch):
+def measured_gun(track, depth, roll, t0, stretch, yaw=None):
 	cache = {}
 	eye_rest_uv, muzzle_rest_uv = project(EYE_REST), project(MUZZLE_REST)
 
@@ -583,7 +633,8 @@ def measured_gun(track, depth, roll, t0, stretch):
 			ex, ey, mx, my = spline(track, video)
 			eye_uv = eye_rest_uv + ref_delta((ex, ey), REF_IDLE[0])
 			muzzle_uv = muzzle_rest_uv + ref_delta((mx, my), REF_IDLE[1])
-			cache[key] = solve_gun(eye_uv, muzzle_uv, spline(depth, video)[0], roll(video))
+			extra = yaw(video) if yaw else 0.0
+			cache[key] = solve_gun(eye_uv, muzzle_uv, spline(depth, video)[0], roll(video), extra)
 		return cache[key]
 
 	return (lambda t: pose(t)[0]), (lambda t: pose(t)[1])
@@ -682,11 +733,12 @@ def spec_reload():
 	k = L / (26.70 - t0)
 	A = lambda video: (video - t0) * k
 	roll = lambda video: spline([(22.95, 0.0), (23.55, 0.0), (23.95, RELOAD_ROLL), (25.10, RELOAD_ROLL), (25.40, 4.0), (25.70, BOLT_ROLL), (25.95, BOLT_ROLL), (26.30, 0.0), (26.70, 0.0)], video)[0]
-	gun_loc, gun_rot = measured_gun(RELOAD_TRACK, RELOAD_DEPTH, roll, t0, k)
+	gun_loc, gun_rot = measured_gun(smooth_table(RELOAD_TRACK, RELOAD_SMOOTH), RELOAD_DEPTH, roll, t0, k)
 	lk, tk, bt = bolt_keys(A(25.60), A(25.68), A(25.80), A(25.90), A(26.00), A(26.10))
-	t_out, t_in, t_hit, t_home = A(23.45), A(24.85), A(25.00), A(26.22)
+	# retour de la main droite sur la poignée après la culasse (instant vidéo) ; variantes : AWP_RELOAD_HOME
+	t_out, t_in, t_hit, t_home = A(23.45), A(24.85), A(25.00), A(float(os.environ.get("AWP_RELOAD_HOME", "26.22")))
 	away = ("FC", Vector((-0.2, 1.7, -3.9)))  # main gauche hors écran : elle lâche l'ancien chargeur et prend le neuf
-	under_well = ("Handle", local_to("Handle", (1.1, 2.6, -1.55)))
+	under_well = ("Handle", local_to("Handle", (1.1, 2.6, -1.684)))  # sous le chargeur engagé (#403 : 0,134 plus long)
 	return dict(
 		length=L,
 		gun_loc=gun_loc,
@@ -722,7 +774,8 @@ def spec_reload():
 def spec_inspect():
 	L, t0 = 5.0, 5.30
 	roll = lambda video: spline(INSPECT_ROLL, video)[0]
-	gun_loc, gun_rot = measured_gun(smooth_table(INSPECT_TRACK, INSPECT_SMOOTH), INSPECT_DEPTH, roll, t0, 1.0)
+	yaw = lambda video: spline(INSPECT_YAW, video)[0] * INSPECT_YAW_DEG
+	gun_loc, gun_rot = measured_gun(smooth_table(INSPECT_TRACK, INSPECT_SMOOTH), INSPECT_DEPTH, roll, t0, 1.0, yaw)
 	return dict(
 		length=L,
 		gun_loc=gun_loc,
