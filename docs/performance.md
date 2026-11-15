@@ -355,7 +355,8 @@ Banc F4 dans Studio, Dizzy, qualité 10, fenêtre 1291×607 :
   ombres est ce qui coûte : banc avant et après en activer une.
 - À faire dans le client publié (seul juge) : banc F4 en qualité 10 et 1080p, à comparer au Voxel du bilan #88 ci-dessous
   (GPU 8,0 ms, p99 19 ms), puis un tour en qualité basse pour voir l'éclairage réduit.
-- Rendu : pas de différence visible sur Dizzy au premier essai ; le shop, réglé pour le Voxel, est à reprendre (#362).
+- Rendu : pas de différence visible sur Dizzy au premier essai. Le shop a été réglé à nouveau pour Future (#362,
+  `docs/ui.md`, « Shop ») : trois lampes à ombres, coût non mesurable dans Studio (mesuré avec la suspension à 130°).
 
 ## Bilan #88 : banc F4 dans le client publié (2026-11-06, Dizzy, 1920×1080, qualité 10, écran 59 Hz)
 

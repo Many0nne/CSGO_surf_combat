@@ -38,34 +38,37 @@ local HOVER_MARGIN = 0.2
 -- Ambiance de la salle fermée (Lighting.Ambient pendant le shop) : celle du crépuscule baignait toute la pièce et
 -- écrasait les lampes (planche : DIZZY_AMBIENT = 0,12)
 local ROOM_AMBIENT = Color3.fromRGB(24, 23, 29)
--- Brightness des SpotLight = intensité de la planche x LIGHT_GAIN (réglé dans Studio : l'éclairage Voxel du jeu étale
--- chaque lampe sur toute la pièce, plus fort, il éclairait la salle à plat)
-local LIGHT_GAIN = 0.6
+-- Lampes réglées dans Studio pour l'éclairage Future (LightingStyle Realistic, #362) : chaque SpotLight éclaire en
+-- cône et peut projeter des ombres. Les intensités sont absolues (plus de gain commun : sous le Voxel, chaque lampe
+-- s'étalait sur toute la pièce et toutes étaient baissées à 0,6 fois la planche)
 local LIGHT_RANGE = 30
 -- Suspension au-dessus du tableau, devant le mur (repère : centre de la suspension au sol, mêmes hauteurs que sur la
 -- planche + LAMP_LIFT) : elle éclaire les armes, l'intérêt de la vue. Au-dessus de la caisse, son cône passait devant
 -- le tableau dans l'axe de la caméra
 local LAMP_LIFT = 1.5 -- plus haut, la cloche passait sous les onglets du menu
 local CEILING_Y = 17.75 -- dessous du plafond, dans la salle
--- Faisceau : le Voxel ne dessine ni cône ni tache, on les simule avec deux dégradés blancs teintés
--- (tools/shop/make_light_textures.py ; des calques translucides empilés laissaient des traits). Cône = deux rubans Beam
+-- Lampe de la suspension, à l'ampoule et à ombres : demi-sphère penchée vers le mur (sa tache en arc couvre tout le
+-- tableau, la cloche coupe la lumière au-dessus) ; les AWP y projettent leur vraie ombre. À 130°, les armes des
+-- colonnes de côté étaient au bord du cône et restaient sombres
+local SUSPENSION_ANGLE = 180
+local SUSPENSION_BRIGHTNESS = 5
+local SUSPENSION_RANGE = 20
+-- Appoint du gros plan (#358) : lampe de face sur le tableau, allumée en fondu quand la caméra s'approche d'une arme.
+-- Les skins métalliques (AWP Couchant) reflètent la pièce sombre et ne prennent que la lumière venue presque de face ;
+-- toujours allumée, elle aplatissait la tache de la suspension et effaçait les ombres des AWP en vue large
+local FOCUS_LIGHT_BRIGHTNESS = 1.2
+local FOCUS_LIGHT_RATE = 6 -- vitesse du fondu (Rules.damp), environ le temps du glissement
+-- Faisceau : Future ne dessine pas la lumière dans l'air, on simule le cône sous l'ampoule par un dégradé blanc teinté
+-- (tools/shop/make_light_textures.py ; des calques translucides empilés laissaient des traits). Deux rubans Beam
 -- tournés vers la caméra, un halo et un cœur pas plus larges que la cloche en haut, texture du profil en travers
 -- (largeur en haut, en bas, transparence au départ de l'ampoule), court : il s'efface au-dessus de la rangée d'AWP,
--- sans passer devant les armes. Trace = image sur le contreplaqué, derrière les armes, de toute la hauteur du tableau
--- depuis son haut (largeur en studs, plus large que le tableau : les trois colonnes éclairées, côtés coupés au bord) :
--- rien au-dessus de la cloche, arc qui s'ouvre vers le bas. Pâle : plus forte, le fond (non éclairé par le moteur)
--- sortait plus clair que les armes posées devant. Ombre douce sous chaque arme (le Voxel n'en donne pas aux lampes :
--- sans elle, l'arme semblait collée devant le fond), à l'aplomb de l'arme et un peu plus basse loin de la lampe. La
--- vraie projection depuis l'ampoule, à 1,6 stud du tableau, étirait les ombres hors du tableau (rejeté)
+-- sans passer devant les armes. Ombre simulée sous les couteaux seulement (`fakeShadow` de WEAPON_ROWS) : leur vraie
+-- ombre, avec une lampe rasante 5,6 studs plus haut, tombait en tache floue un stud sous la lame
 local BEAM_TEXTURE = "rbxassetid://86578020001310" -- beam_profile.png (Decal 123228552734348)
-local WASH_TEXTURE = "rbxassetid://79765628082365" -- wall_wash.png (Decal 140266501515319)
 local SHADOW_TEXTURE = "rbxassetid://86395832963926" -- weapon_shadow.png (Decal 115998334428092)
 local BEAM_COLOR = Color3.fromRGB(255, 222, 176)
 local BEAM_LENGTH = 1.6 -- depuis l'ampoule
 local BEAM_LAYERS = { { 2.0, 3.6, 0.5 }, { 1.2, 2.2, 0.6 } }
-local WASH_COLOR = Color3.fromRGB(255, 214, 160)
-local WASH_WIDTH = 17
-local WASH_TRANSPARENCY = 0.55
 local BOARD_FACE = 0.1 -- face avant du contreplaqué, en profondeur dans le repère du tableau
 local WEAPON_DEPTH = 0.35 -- axe des armes, même repère
 -- Ombre : descente par stud sous l'ampoule, hauteur, plus son flou par stud de descente. Plus basse (0,08) et plus
@@ -113,12 +116,13 @@ local SLOT = 4.3
 local TAG_SIZE = Vector2.new(3.4, 0.62)
 local TAG_PIXELS = 100 -- pixels par stud du texte des étiquettes
 
--- Tableau du contenu : panneau de contreplaqué (largeur, hauteur), armes posées de profil, longueur en studs
+-- Tableau du contenu : panneau de contreplaqué (largeur, hauteur), armes posées de profil, longueur en studs ; les AWP
+-- projettent leur ombre (lampe de la suspension), les couteaux en reçoivent une simulée (`fakeShadow`)
 local BOARD_SIZE = Vector2.new(15.5, 7.6)
 local BOARD_COLUMNS = { -4.9, 0, 4.9 }
 local WEAPON_ROWS = {
-	{ viewmodel = "AWP", item = "weapon.awp", y = 1.9, length = 4.4 },
-	{ viewmodel = "M9Bayonet", item = "weapon.m9bayonet", y = -1.4, length = 2.7 },
+	{ viewmodel = "AWP", item = "weapon.awp", y = 1.9, length = 4.4, fakeShadow = false },
+	{ viewmodel = "M9Bayonet", item = "weapon.m9bayonet", y = -1.4, length = 2.7, fakeShadow = true },
 }
 
 type Frame = CFrame
@@ -141,6 +145,7 @@ local board: Folder? -- armes du tableau, refaites à chaque caisse montrée
 local sale: { SaleCrate } = {}
 local vitrineLights: { SpotLight } = {} -- allumées dans la vue d'ensemble seulement
 local detailLights: { SpotLight } = {} -- allumées dans la vue détail seulement
+local focusLight: SpotLight? -- appoint du gros plan, intensité en fondu
 local running = false
 local connection: RBXScriptConnection?
 local inputConnection: RBXScriptConnection?
@@ -281,8 +286,8 @@ local function fillRack(parent: Instance, frame: Frame, colors: { { number } }, 
 	end
 end
 
--- Cette méthode permet de poser un projecteur (SpotLight sur une pièce invisible) lorsque la salle s'éclaire ; intensité
--- et angle de la planche, portée `range` (LIGHT_RANGE par défaut).
+-- Cette méthode permet de poser un projecteur (SpotLight sur une pièce invisible) lorsque la salle s'éclaire ; portée
+-- `range` (LIGHT_RANGE par défaut), ombres projetées si `shadows`.
 local function spot(
 	parent: Instance,
 	position: Vector3,
@@ -290,7 +295,8 @@ local function spot(
 	angle: number,
 	brightness: number,
 	color: Color3,
-	range: number?
+	range: number?,
+	shadows: boolean?
 ): SpotLight
 	local holder = Instance.new("Part")
 	holder.Name = "Lamp"
@@ -305,16 +311,16 @@ local function spot(
 	light.Face = Enum.NormalId.Front
 	light.Angle = angle
 	light.Range = range or LIGHT_RANGE
-	light.Brightness = brightness * LIGHT_GAIN
+	light.Brightness = brightness
 	light.Color = color
-	light.Shadows = false
+	light.Shadows = shadows == true
 	light.Parent = holder
 	holder.Parent = parent
 	return light
 end
 
--- Cette méthode permet de rendre visible la lumière de la suspension (cône court sous l'ampoule, trace sur le
--- contreplaqué derrière les armes) lorsque la salle s'éclaire ; l'éclairage Voxel n'en dessine aucun des deux.
+-- Cette méthode permet de rendre visible la lumière de la suspension dans l'air (cône court sous l'ampoule) lorsque la
+-- salle s'éclaire ; le moteur ne dessine que la tache sur le mur.
 local function lightBeam(parent: Instance)
 	local holder = Instance.new("Part")
 	holder.Name = "LampBeam"
@@ -352,39 +358,10 @@ local function lightBeam(parent: Instance)
 		beam.Parent = holder
 	end
 	holder.Parent = parent
-	-- trace : SurfaceGui sur une plaque invisible collée au contreplaqué, devant lui mais derrière les armes et les
-	-- bandes de rareté
-	local wash = Instance.new("Part")
-	wash.Name = "LampWash"
-	wash.Anchored = true
-	wash.CanCollide = false
-	wash.CanQuery = false
-	wash.CanTouch = false
-	wash.CastShadow = false
-	wash.Transparency = 1
-	wash.Size = Vector3.new(BOARD_SIZE.X, BOARD_SIZE.Y, 0.01)
-	wash.CFrame = boardFrame * CFrame.new(0, 0, 0.11)
-	local gui = Instance.new("SurfaceGui")
-	gui.Face = Enum.NormalId.Back -- +Z du repère du tableau : vers la pièce
-	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-	gui.PixelsPerStud = 40
-	gui.LightInfluence = 0
-	gui.Parent = wash
-	local image = Instance.new("ImageLabel")
-	image.BackgroundTransparency = 1
-	image.AnchorPoint = Vector2.new(0.5, 0)
-	image.Position = UDim2.fromScale(0.5, 0)
-	image.Size = UDim2.fromScale(WASH_WIDTH / BOARD_SIZE.X, 1)
-	image.Image = WASH_TEXTURE
-	image.ImageColor3 = WASH_COLOR
-	image.ImageTransparency = WASH_TRANSPARENCY
-	image.Parent = gui
-	wash.Parent = parent
 end
 
--- Cette méthode permet de poser l'ombre d'une arme du tableau (centre `x`, `y` et longueur dans le repère du tableau)
--- lorsque la caisse montrée change : à l'aplomb de l'arme, plus basse et plus floue quand l'arme est loin sous
--- l'ampoule ; entre la trace et les bandes de rareté, en profondeur.
+-- Cette méthode permet de poser l'ombre simulée d'un couteau du tableau (centre `x`, `y` et longueur dans le repère du
+-- tableau) lorsque la caisse montrée change : à l'aplomb de l'arme, plus basse et plus floue loin sous l'ampoule.
 local function weaponShadow(parent: Instance, x: number, y: number, length: number)
 	local bulb = boardFrame:PointToObjectSpace(lampFrame * Vector3.new(0, 9.3, 0))
 	local shift = SHADOW_DROP * math.max(bulb.Y - y, 0)
@@ -543,7 +520,7 @@ local function buildRoom(parent: Instance)
 	box(parent, lampFrame, Vector3.new(0, 9.6, 0), Vector3.new(1.9, 0.25, 1.9), enamel, metal, cyl, true)
 	box(parent, lampFrame, Vector3.new(0, 9.42, 0), Vector3.new(2.4, 0.14, 2.4), enamel, metal, cyl, true)
 	box(parent, lampFrame, Vector3.new(0, 9.36, 0), Vector3.new(2.2, 0.04, 2.2), BONE, nil, cyl, true)
-	box(
+	local bulb = box(
 		parent,
 		lampFrame,
 		Vector3.new(0, 9.3, 0),
@@ -552,6 +529,7 @@ local function buildRoom(parent: Instance)
 		Enum.Material.Neon,
 		Enum.PartType.Ball
 	)
+	bulb.CastShadow = false -- la lampe à ombres est en son centre : sinon l'ampoule masquerait toute sa lumière
 end
 
 -- Cette méthode permet d'éclairer la salle comme la planche (suspension, tableau, rack de droite, appoint de face) et de
@@ -563,31 +541,55 @@ local function buildLights(parent: Instance)
 	local function dir(v: Vector3): Vector3
 		return room:VectorToWorldSpace(v.Unit)
 	end
-	-- Suspension, tournée vers les armes du tableau. Lampe 1,5 stud sous l'ampoule et modérée : le Voxel étale la lumière
-	-- dans toutes les directions, à l'ampoule elle éclairait aussi la tôle au-dessus de la cloche
-	local bulb = lampFrame * Vector3.new(0, 7.5, 0)
-	spot(parent, bulb, dir(Vector3.new(0, -1, -0.45)), 50, 3.5, Color3.fromRGB(255, 228, 190), 14)
+	-- Suspension, à l'ampoule, tournée vers les armes du tableau
+	local bulb = lampFrame * Vector3.new(0, 9.3, 0)
+	spot(
+		parent,
+		bulb,
+		dir(Vector3.new(0, -1, -0.8)),
+		SUSPENSION_ANGLE,
+		SUSPENSION_BRIGHTNESS,
+		Color3.fromRGB(255, 228, 190),
+		SUSPENSION_RANGE,
+		true
+	)
 	lightBeam(parent)
-	-- Rack du fond, lumière froide : éteinte face à la vitrine, où ce rack passe sous le texte
+	-- Appoint du gros plan, de face et un peu au-dessus du milieu du tableau : éteint (intensité 0) hors gros plan
+	local focusFrom = Vector3.new(-3, 7.5, 3)
+	focusLight = spot(
+		parent,
+		at(focusFrom),
+		dir(Vector3.new(-3, 6.6, -8.3) - focusFrom),
+		70,
+		0,
+		Color3.fromRGB(255, 228, 190),
+		16
+	)
+	-- Rack du fond, lumière froide d'en haut vers le milieu du rack (plus bas et plus rasante, elle brûlait le bord d'un
+	-- plateau d'acier) ; éteinte face à la vitrine, où ce rack passe sous le texte
+	local coldFrom = Vector3.new(8.5, 10, 3)
 	local cold = spot(
 		parent,
-		at(Vector3.new(8.5, 9.5, 3)),
-		dir(Vector3.new(0.15, -0.45, -1)),
-		55,
+		at(coldFrom),
+		dir(Vector3.new(9.8, 3, -6.9) - coldFrom),
+		50,
 		0.8,
-		Color3.fromRGB(200, 214, 255)
+		Color3.fromRGB(200, 214, 255),
+		20
 	)
 	table.insert(detailLights, cold)
-	spot(parent, at(Vector3.new(-3, 16, -2)), dir(Vector3.new(0, -1, -0.6)), 80, 0.9, Color3.fromRGB(255, 236, 210))
+	-- Appoint de face sur la caisse du socle, cône serré et portée courte : plus ouvert, il éclairait aussi tout le
+	-- tableau et effaçait la tache de la suspension (pour la même raison, plus d'appoint au plafond)
 	for _, sx in { -1, 1 } do
 		local from = Vector3.new(sx * 6.5, 4.3, 3.5)
-		spot(parent, at(from), dir(Vector3.new(0, 2.5, 0) - from), 50, 1.6, Color3.fromRGB(255, 220, 170))
+		spot(parent, at(from), dir(Vector3.new(0, 2.5, 0) - from), 35, 1.4, Color3.fromRGB(255, 220, 170), 11)
 	end
 	for _, sx in { -1, 1 } do
 		local from = vitrineFrame * Vector3.new(sx * 4.3, 15.5, 5.5)
 		local to = vitrineFrame * Vector3.new(sx * 3.6, 2.6, 0.5)
-		-- Portée courte : à 30 studs, elles éclairaient aussi le rack du fond, sous le texte de la vue d'ensemble
-		table.insert(vitrineLights, spot(parent, from, to - from, 44, 1.2, Color3.fromRGB(255, 226, 186), 20))
+		-- Portée courte : à 30 studs, elles éclairaient aussi le rack du fond, sous le texte de la vue d'ensemble. Ombres :
+		-- l'étage du haut ombre celui du bas, comme sur la planche
+		table.insert(vitrineLights, spot(parent, from, to - from, 60, 1.3, Color3.fromRGB(255, 226, 186), 22, true))
 	end
 end
 
@@ -699,9 +701,16 @@ local function buildVitrine(parent: Instance)
 end
 
 -- Cette méthode permet de construire une arme de profil (pièces de son viewmodel, bras exclus, habillées du skin) de
--- `length` studs, centrée en `at` et tournée comme le tableau, lorsque le tableau montre le contenu d'une caisse ; faux
--- si le viewmodel manque.
-local function boardWeapon(parent: Instance, viewmodelName: string, skinId: string, at: CFrame, length: number): boolean
+-- `length` studs, centrée en `at` et tournée comme le tableau, projetant son ombre si `castShadow`, lorsque le tableau
+-- montre le contenu d'une caisse ; faux si le viewmodel manque.
+local function boardWeapon(
+	parent: Instance,
+	viewmodelName: string,
+	skinId: string,
+	at: CFrame,
+	length: number,
+	castShadow: boolean
+): boolean
 	local viewModels = ReplicatedStorage:FindFirstChild("ViewModels")
 	local source = viewModels and viewModels:FindFirstChild(viewmodelName)
 	if not source then
@@ -721,6 +730,7 @@ local function boardWeapon(parent: Instance, viewmodelName: string, skinId: stri
 			copy.CanCollide = false
 			copy.CanQuery = false
 			copy.CanTouch = false
+			copy.CastShadow = castShadow -- explicite : les viewmodels diffèrent (celui du M9 n'en projette pas)
 			copy.Parent = model
 		end
 	end
@@ -807,9 +817,18 @@ local function dressCrate(index: number)
 					if
 						item
 						and item.weapon == weapon.item
-						and boardWeapon(boardFolder, weapon.viewmodel, skinId, center, weapon.length)
+						and boardWeapon(
+							boardFolder,
+							weapon.viewmodel,
+							skinId,
+							center,
+							weapon.length,
+							not weapon.fakeShadow
+						)
 					then
-						weaponShadow(boardFolder, x, weapon.y, weapon.length)
+						if weapon.fakeShadow then
+							weaponShadow(boardFolder, x, weapon.y, weapon.length)
+						end
 						-- Zone de survol invisible, plus large que l'arme (un profil d'AWP est trop fin à viser)
 						local hitbox = box(
 							boardFolder,
@@ -933,6 +952,10 @@ local function update(dt: number)
 	camera.CameraType = Enum.CameraType.Scriptable
 	camera.CFrame = glideFrom:Lerp(targetFrame(aspect), eased)
 		* CFrame.Angles(math.rad(angles.camPitch), math.rad(angles.camYaw), 0)
+	if focusLight then
+		local target = if mode == "detail" and focus > 0 then FOCUS_LIGHT_BRIGHTNESS else 0
+		focusLight.Brightness = Rules.damp(focusLight.Brightness, target, dt, FOCUS_LIGHT_RATE)
+	end
 	local index = crateUnderMouse(camera)
 	if index ~= hovered then
 		hovered = index
@@ -1054,6 +1077,9 @@ function ShopScene.stop()
 	paintTags()
 	setFocus(0, true)
 	resetHover()
+	if focusLight then
+		focusLight.Brightness = 0
+	end
 	MenuScene.setPaused(false)
 end
 
