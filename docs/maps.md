@@ -204,6 +204,12 @@ soi (décision de l'utilisateur). **Le regard n'est que dans le repère du point
 par `CFrame.new(position)` et ignore l'orientation des points, T et CT compris (à corriger dans `SpawnManager`, hors
 #329). Le générateur refuse d'écrire la map si deux zones se voient (`SpawnSight.check`).
 
+**Capacité (#369, parties de 8) :** 36 points, mais **6 zones seulement** à plus de `SPAWN_SAFE_RADIUS` (100 studs)
+les unes des autres (les deux bases, chacune d'un seul tenant à 100 studs, et les quatre zones de 3 points). Mesure en
+jeu (distance de l'apparu à l'ennemi vivant le plus proche) : à 6 participants, 42 apparitions en cours de round, aucune
+sous 100 studs ; à 8, 54 apparitions, aucune sous 100 studs en cours de round, mais **4 des 8 placements du début de
+round à 49 studs** (8 participants placés d'un coup pour 6 zones). Plus de zones éloignées serait la seule correction.
+
 Méthode de placement (à refaire pour une autre map) :
 1. Candidats : points des dessus de `Floors` tous les 5 studs, avec le dégagement du corps et un sol sous les épaules,
    à plus de 100 studs des bases et hors de vue de tous leurs points.

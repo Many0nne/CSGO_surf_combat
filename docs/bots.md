@@ -231,7 +231,7 @@ est tué environ toutes les 7 s une fois son délai de grâce passé), 0 coup de
 ## Population (#144)
 
 Règles pures dans `BotPopulationRules`, appliquées par `BotManager` (`adjustPopulation`, toutes les
-`POPULATION_INTERVAL` s). Réglages `TARGET_POPULATION` (6), `MAX_BOTS` (5), `POPULATION_DUEL_TIME` (4 s).
+`POPULATION_INTERVAL` s). Réglages `TARGET_POPULATION` (8, #369), `MAX_BOTS` (7), `POPULATION_DUEL_TIME` (4 s).
 - **Bots voulus** = `TARGET_POPULATION` − joueurs connectés, borné à `MAX_BOTS` ; aucun sans joueur. Ils apparaissent
   dès que le round est actif (un joueur a cliqué Play).
 - **Retrait** à l'arrivée d'un joueur, **un bot par passage** : d'abord un bot hors du jeu (mort), sinon le vivant le plus

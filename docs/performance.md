@@ -97,6 +97,26 @@ processus : les chiffres en ms ne valent que pour comparer, le jugement final se
   3 minutes avec 5 bots, overlay F3 ouvert, comparer `FPS médian`, `p99` et `max` des lignes `[Perf] BILAN` à ceux d'une
   partie sans bot (`DebugBots` = 0), même qualité fixée à la main.
 
+### Passage à 7 bots (#369, mesure du 2026-11-15)
+
+Studio, Dizzy, joueur immobile après un run `DebugPlaytest`, sonde `PerfServer`, même session : 2 min 20 à 5 bots
+(`DebugBots` = 5), puis 2 min 20 à 7 (lignes de 10 s, hors la première de chaque palier, qui contient les apparitions).
+
+| | 5 bots | 7 bots |
+|---|---|---|
+| `srv bots` moyenne par frame | 1,3 à 1,7 ms | 1,7 à 2,7 ms |
+| `bots mouvement` / `bots cerveau` moyenne | 0,9 à 1,25 / 0,15 à 0,22 ms | 1,3 à 2,0 / 0,22 à 0,35 ms |
+| `bots chemin` pire appel | 1,9 à 6,2 ms | 2,1 à 6,5 ms |
+| `Heartbeat` serveur méd / p99 | 16,9 / 19 à 22 ms (une fois 38) | 16,9 / 19 à 25 ms |
+| `Heartbeat` serveur max | 52 à 116 ms | 30 à 141 ms (une fois 282) |
+
+- Coût moyen de 0,3 à 0,5 ms par bot : +0,6 à +1 ms par frame pour les 2 bots de plus, médiane du `Heartbeat`
+  inchangée.
+- Les pics du `max` (40 à 140 ms à 5 comme à 7 bots, 270 ms une fois à 7) viennent de `srv bots` **hors** de ses
+  sous-repères (mouvement, chemin, cerveau tous sous 12 ms) : c'est l'apparition d'un bot (`BotManager`, construction
+  du personnage), déjà là à 5 bots. Le coût d'une apparition ne change pas avec le nombre de bots, mais 7 bots meurent
+  et réapparaissent plus souvent. Piste si ces pics gênent : préparer le personnage d'un bot à l'avance (réserve).
+
 ## Streaming désactivé (#88)
 
 `Workspace.StreamingEnabled` vaut **false**, fixé dans `default.project.json` (avant, réglage de la place : activé, rayon
