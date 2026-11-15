@@ -113,21 +113,13 @@ LocalSettings.init()
 LocalSettings.onChanged(function(settings)
 	UIKit.setHudScale(PlayerSettings.hudScaleFactor(settings.hudScale))
 end)
--- HUD masqué jusqu'à son échelle sauvegardée (#282), sans retenir le reste du client : affiché à l'arrivée des réglages,
--- ou passé HUD_SETTINGS_TIMEOUT à l'échelle courante
-local hudWaitStart = os.clock()
--- Cette méthode permet d'afficher le HUD lorsque son échelle est connue ou que le délai d'attente des réglages est passé.
-local function revealHud(elapsed: number)
-	if HUDRules.hudRevealed(LocalSettings.isLoaded(), elapsed) then
-		UIKit.showHud()
-	end
-end
+-- HUD masqué jusqu'à son échelle sauvegardée (#282), sans retenir le reste du client : affiché à l'arrivée des réglages
+-- (échelle posée d'abord, sans attendre l'abonné ci-dessus), ou passé HUD_SETTINGS_TIMEOUT à l'échelle courante
 LocalSettings.onLoaded(function(settings)
 	UIKit.setHudScale(PlayerSettings.hudScaleFactor(settings.hudScale))
-	revealHud(os.clock() - hudWaitStart)
+	UIKit.showHud()
 end)
--- Le délai écoulé est passé tel quel : une horloge relue pourrait donner un rien de moins et laisser le HUD masqué
-task.delay(HUDRules.HUD_SETTINGS_TIMEOUT, revealHud, HUDRules.HUD_SETTINGS_TIMEOUT)
+task.delay(HUDRules.HUD_SETTINGS_TIMEOUT, UIKit.showHud)
 -- Textures des skins équipés (#333) : chargées dès l'accueil, pas au premier équipement en partie
 SkinPreloader.init()
 -- Canaux de volume (#249) : groupes général et armes, créés avant le premier son

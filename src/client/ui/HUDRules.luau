@@ -524,12 +524,6 @@ function HUDRules.flooredTextSize(base: number, scale: number, floor: number?): 
 	return math.ceil(minimum / scale)
 end
 
--- Cette méthode permet de savoir si le HUD peut s'afficher lorsque le client démarre : dès que les réglages sauvegardés
--- (donc son échelle) sont appliqués, ou passé HUD_SETTINGS_TIMEOUT secondes sans réponse.
-function HUDRules.hudRevealed(settingsLoaded: boolean, elapsed: number): boolean
-	return settingsLoaded or elapsed >= HUDRules.HUD_SETTINGS_TIMEOUT
-end
-
 -- Cette méthode permet d'écrire une valeur en pourcents entiers (« 50 % ») lorsqu'un curseur en pourcents l'affiche.
 function HUDRules.percentText(value: number): string
 	return string.format("%d %%", math.round(value))

@@ -418,6 +418,8 @@ local hiddenUntilShown: { GuiObject } = {}
 -- Attributs d'un texte du HUD sous plancher (#282) : taille voulue par l'élément, échelle de son cadre
 local TEXT_BASE_ATTR = "HudTextBase"
 local TEXT_SCALE_ATTR = "HudTextScale"
+-- Textes dont les changements de taille directs sont suivis (clés faibles : pas de fuite à leur destruction)
+local watchedTexts: { [Instance]: boolean } = setmetatable({}, { __mode = "k" }) :: any
 
 -- Cette méthode permet d'afficher les éléments de bord du HUD lorsque son échelle sauvegardée est appliquée, ou que son
 -- délai d'attente est passé (init.client) : avant, ils restent masqués pour ne pas paraître à 100 % puis sauter.
@@ -460,11 +462,27 @@ local function floorText(label: TextLabel, scale: number)
 	end
 	label:SetAttribute(TEXT_SCALE_ATTR, scale)
 	label.TextSize = HUDRules.flooredTextSize(base :: number, scale)
+	if not watchedTexts[label] then
+		watchedTexts[label] = true
+		-- Taille écrite directement par un élément (autre que la nôtre) : elle devient la base, plancher réappliqué
+		label:GetPropertyChangedSignal("TextSize"):Connect(function()
+			local current = label:GetAttribute(TEXT_SCALE_ATTR)
+			local known = label:GetAttribute(TEXT_BASE_ATTR)
+			if type(current) ~= "number" or type(known) ~= "number" then
+				return
+			end
+			if label.TextSize ~= HUDRules.flooredTextSize(known, current) then
+				label:SetAttribute(TEXT_BASE_ATTR, label.TextSize)
+				label.TextSize = HUDRules.flooredTextSize(label.TextSize, current)
+			end
+		end)
+	end
 end
 
 -- Cette méthode permet de garder les textes d'un cadre du HUD lisibles (#282) lorsqu'il est réduit : chaque texte, présent
 -- ou ajouté plus tard, ne descend pas sous le plancher à l'écran. Renvoie la fonction à rappeler quand `getScale` change.
 function UIKit.floorHudText(container: Instance, getScale: () -> number): () -> ()
+	-- Cette méthode permet de reposer tous les textes du cadre lorsque son échelle change.
 	local function apply()
 		local scale = getScale()
 		for _, inst in container:GetDescendants() do

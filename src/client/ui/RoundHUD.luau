@@ -92,6 +92,10 @@ local blinkTween: Tween?
 local lowTime = false
 local rankLabel: TextLabel
 local rankShadow: TextLabel
+-- Rang affiché (nil : « — ») et taille du total dans le texte riche, px du repère du timer
+local rankShown: { rank: number, total: number }? = nil
+local RANK_TOTAL_SIZE = 18
+local renderRank: () -> ()
 local streakRow: Frame
 local streakRing: UIStroke
 local streakArms: { { frame: Frame, stroke: UIStroke, dir: Vector2 } } = {}
@@ -414,6 +418,9 @@ local function buildTimer(root: Frame)
 		Position = UDim2.fromOffset(156, 10),
 		Size = UDim2.fromOffset(84, 40),
 	}, 3)
+	rankLabel:GetAttributeChangedSignal("HudTextScale"):Connect(function()
+		renderRank()
+	end)
 	UIKit.text({
 		Text = "RANG",
 		FontFace = F.DisplayMedium,
@@ -1047,6 +1054,21 @@ local function scoreRow(parent: GuiObject, rank: number, score: Score, isMe: boo
 	return row
 end
 
+-- Cette méthode permet d'écrire le rang (« 3/12 », total en petit) lorsque les scores ou l'échelle du timer changent : la
+-- taille du total, écrite dans le texte riche, suit le plancher de lisibilité du HUD réduit (#282) comme le TextSize.
+function renderRank()
+	local text = "—"
+	if rankShown then
+		local scale = rankLabel:GetAttribute("HudTextScale")
+		local size = if type(scale) == "number"
+			then HUDRules.flooredTextSize(RANK_TOTAL_SIZE, scale)
+			else RANK_TOTAL_SIZE
+		text = string.format('%d<font size="%d" transparency="0.4">/%d</font>', rankShown.rank, size, rankShown.total)
+	end
+	rankLabel.Text = text
+	rankShadow.Text = text
+end
+
 function RoundHUD.updateScores(scores: { [number]: Score })
 	if not leaderboardList then
 		return
@@ -1058,9 +1080,8 @@ function RoundHUD.updateScores(scores: { [number]: Score })
 	local sorted = HUDRules.sortScores(scores)
 	local localName = Players.LocalPlayer.Name
 	local rank = HUDRules.rankOf(sorted, localName)
-	local rankText = rank and string.format('%d<font size="18" transparency="0.4">/%d</font>', rank, #sorted) or "—"
-	rankLabel.Text = rankText
-	rankShadow.Text = rankText
+	rankShown = if rank then { rank = rank, total = #sorted } else nil
+	renderRank()
 
 	for i, score in sorted do
 		local isMe = not score.isBot and score.name == localName
