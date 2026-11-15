@@ -1,55 +1,17 @@
 return function(T, Loader)
 	local EquipRules = Loader.new({}):require("src/client/systems/weapon/EquipRules")
 
-	T.describe("EquipRules.duration", function()
-		T.it("divise la longueur de la piste par la vitesse", function()
-			T.expectNear(EquipRules.duration(1.5, 1.5, 0.8), 1, 1e-9)
+	T.describe("EquipRules.lockTime (#404)", function()
+		T.it("reprend EquipTime de la config, sans regarder la piste Equip", function()
+			T.expectEqual(EquipRules.lockTime({ EquipTime = 1.267 }), 1.267)
+			T.expectEqual(EquipRules.lockTime({ EquipTime = 1, EquipAnimSpeed = 1.3 }), 1, "vitesse de piste ignorée")
+			T.expectEqual(EquipRules.lockTime({ EquipTime = 0 }), 0)
 		end)
 
-		T.it("retombe sur la durée de la config sans piste ou sans vitesse valide", function()
-			T.expectEqual(EquipRules.duration(0, 1, 0.8), 0.8)
-			T.expectEqual(EquipRules.duration(1.2, 0, 0.8), 0.8)
-		end)
-	end)
-
-	T.describe("EquipRules.animSpeed", function()
-		T.it("renvoie la vitesse de la config lorsqu'elle est valide", function()
-			T.expectEqual(EquipRules.animSpeed(1.3), 1.3)
-		end)
-
-		T.it("retombe sur 1 sans vitesse, à 0 ou négative", function()
-			T.expectEqual(EquipRules.animSpeed(nil), 1)
-			T.expectEqual(EquipRules.animSpeed(0), 1)
-			T.expectEqual(EquipRules.animSpeed(-2), 1)
-		end)
-	end)
-
-	T.describe("EquipRules.settleTime (#184)", function()
-		local TIMEOUT = EquipRules.LOAD_TIMEOUT
-
-		T.it("donne longueur / vitesse dès que la piste est chargée", function()
-			T.expectNear(EquipRules.settleTime(1, 1.3, 0.77, 0, TIMEOUT) :: number, 1 / 1.3, 1e-9)
-		end)
-
-		T.it("ne retombe pas sur EquipTime quand la piste est chargée après un temps d'attente", function()
-			T.expectNear(EquipRules.settleTime(1.58, nil, 0.5, 0.8, TIMEOUT) :: number, 1.58, 1e-9)
-		end)
-
-		T.it("attend (nil) tant que la piste n'est pas chargée et que le délai n'est pas écoulé", function()
-			T.expectEqual(EquipRules.settleTime(0, 1.3, 0.77, 0, TIMEOUT), nil)
-			T.expectEqual(EquipRules.settleTime(0, 1.3, 0.77, TIMEOUT - 0.01, TIMEOUT), nil)
-		end)
-
-		T.it(
-			"retombe sur EquipTime dès le départ pour une arme sans piste Equip (nil), sans attendre le délai",
-			function()
-				T.expectEqual(EquipRules.settleTime(nil, 1.3, 0.77, 0, TIMEOUT), 0.77)
-			end
-		)
-
-		T.it("ne cumule pas l'attente et EquipTime : le repli tient compte du temps déjà attendu", function()
-			T.expectEqual(EquipRules.settleTime(nil, nil, 0.8, 0.3, TIMEOUT), 0.5)
-			T.expectEqual(EquipRules.settleTime(0, 1.3, 0.77, TIMEOUT, TIMEOUT), 0) -- 2 s attendues > EquipTime
+		T.it("retombe sur le verrou par défaut sans config ou sans EquipTime valide", function()
+			T.expectEqual(EquipRules.lockTime(nil), EquipRules.DEFAULT_EQUIP_TIME)
+			T.expectEqual(EquipRules.lockTime({}), EquipRules.DEFAULT_EQUIP_TIME)
+			T.expectEqual(EquipRules.lockTime({ EquipTime = -1 }), EquipRules.DEFAULT_EQUIP_TIME)
 		end)
 	end)
 

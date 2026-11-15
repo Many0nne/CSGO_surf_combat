@@ -1,51 +1,21 @@
 --!strict
--- Règles pures de la sélection d'une arme (#159, #183) : durée de l'equip et identité de l'action en cours (equip, tir,
--- coup, rechargement), pour qu'un délai resté d'une action précédente ne termine jamais la nouvelle.
+-- Règles pures de la sélection d'une arme (#159, #183, #404) : verrou de l'equip et identité de l'action en cours (equip,
+-- tir, coup, rechargement), pour qu'un délai resté d'une action précédente ne termine jamais la nouvelle.
 
 local EquipRules = {}
 
--- Durée maximale d'attente du chargement de la piste Equip (#184) : au-delà, l'equip retombe sur `EquipTime`.
-EquipRules.LOAD_TIMEOUT = 2
+-- Verrou d'equip par défaut (s) d'une arme sans `EquipTime`.
+EquipRules.DEFAULT_EQUIP_TIME = 0.8
 
--- Cette méthode permet de lire la vitesse de lecture de la piste Equip lorsque la config en déclare une (> 0) ;
--- sinon 1. Seul point de lecture de `EquipAnimSpeed` : le viewmodel (lecture) et WeaponSystem (durée) l'utilisent tous deux.
-function EquipRules.animSpeed(configSpeed: number?): number
-	if configSpeed and configSpeed > 0 then
-		return configSpeed
+-- Cette méthode permet de lire la durée pendant laquelle une arme reste inutilisable après sa sortie lorsqu'elle est
+-- équipée : `EquipTime` de la config (valeur CS:GO, #404), indépendant de la longueur de la piste Equip, que l'action
+-- suivante coupe si elle dure plus longtemps.
+function EquipRules.lockTime(cfg: any): number
+	local equipTime = cfg and cfg.EquipTime
+	if type(equipTime) == "number" and equipTime >= 0 then
+		return equipTime
 	end
-	return 1
-end
-
--- Cette méthode permet de calculer la durée d'un equip lorsque la piste est connue (longueur > 0, vitesse > 0) ;
--- sinon elle renvoie la durée de repli de la config.
-function EquipRules.duration(animLength: number, animSpeed: number, fallback: number): number
-	if animLength > 0 and animSpeed > 0 then
-		return animLength / animSpeed
-	end
-	return fallback
-end
-
--- Cette méthode permet de savoir combien de temps l'arme reste inutilisable après l'attente `waited` : la durée de
--- l'animation dès que la piste est chargée (`animLength` > 0, comptée depuis ce chargement, par prudence), nil tant
--- qu'elle existe mais n'est pas chargée (0), et `EquipTime` (`fallback`) sans piste (nil) ou une fois `timeout` écoulé,
--- diminué de l'attente déjà passée (jamais d'attente cumulée plus longue que `EquipTime` pour une arme sans piste).
-function EquipRules.settleTime(
-	animLength: number?,
-	configSpeed: number?,
-	fallback: number,
-	waited: number,
-	timeout: number
-): number?
-	if animLength == nil then
-		return math.max(0, fallback - waited)
-	end
-	if animLength > 0 then
-		return EquipRules.duration(animLength, EquipRules.animSpeed(configSpeed), fallback)
-	end
-	if waited >= timeout then
-		return math.max(0, fallback - waited)
-	end
-	return nil
+	return EquipRules.DEFAULT_EQUIP_TIME
 end
 
 -- Cette méthode permet de créer le compteur d'actions : chaque action reçoit un jeton, et seul le dernier jeton émis

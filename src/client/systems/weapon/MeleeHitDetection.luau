@@ -4,6 +4,9 @@ local MeleeHitDetection = {}
 
 local meleeEvent: RemoteEvent? = nil
 
+-- Son d'un coup qui ne rencontre rien : seul ce cas garde la cadence courte (CS:GO compte un mur comme touché, #404).
+MeleeHitDetection.MISS_SOUND = "Shoot_void"
+
 function MeleeHitDetection.init(event: RemoteEvent?)
 	meleeEvent = event
 end
@@ -14,7 +17,7 @@ function MeleeHitDetection.resolveHit(cfg, activeViewmodel: Model?, attackKind: 
 	local range = cfg and cfg.MeleeRange or 80
 	local cam = workspace.CurrentCamera
 	if not cam then
-		return "Shoot_void"
+		return MeleeHitDetection.MISS_SOUND
 	end
 
 	local params = RaycastParams.new()
@@ -29,7 +32,7 @@ function MeleeHitDetection.resolveHit(cfg, activeViewmodel: Model?, attackKind: 
 	local hitTime = workspace:GetServerTimeNow()
 	local result = workspace:Raycast(cam.CFrame.Position, cam.CFrame.LookVector * range, params)
 	if not result then
-		return "Shoot_void"
+		return MeleeHitDetection.MISS_SOUND
 	end
 
 	local hit = result.Instance

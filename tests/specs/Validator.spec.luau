@@ -1,4 +1,9 @@
 return function(T, Loader)
+	-- Verrous de l'AWP et des couteaux lus dans la config (valeurs CS:GO, #404) : les tests suivent leurs changements.
+	local Weapons = Loader.new():require("src/shared/WeaponConfig").Weapons
+	local AWP_EQUIP, AWP_RELOAD = Weapons.AWP.EquipTime, Weapons.AWP.ReloadTime
+	local KNIFE_EQUIP = Weapons.M9Bayonet.EquipTime
+
 	-- Cette méthode permet de construire un personnage minimal (root + humanoid) lorsqu'un test a besoin d'une cible ;
 	-- facing oriente le root (Lune ne déduit pas Position de CFrame : les deux sont posés).
 	local function makeCharacter(position: Vector3, health: number?, facing: Vector3?)
@@ -504,11 +509,11 @@ return function(T, Loader)
 			local a, b = makePlayer(Vector3.zero, "M9Bayonet"), makePlayer(Vector3.new(5, 0, 0))
 			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 10), 50)
 			T.expectEqual(
-				Validator.authorizeMelee(a, b.Character, "primary", 10.2),
+				Validator.authorizeMelee(a, b.Character, "primary", 10.3),
 				nil,
-				"0,2 s après un slash de 0,4 s"
+				"0,3 s après une taille qui touche (0,5 s, CS:GO)"
 			)
-			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 10.3), 50, "tolérance non appliquée")
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 10.36), 50, "tolérance non appliquée")
 		end)
 
 		T.it("partage la cadence entre les deux clics et applique celle de l'attaque précédente", function()
@@ -517,8 +522,12 @@ return function(T, Loader)
 			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 10), 50)
 			T.expectEqual(Validator.authorizeMelee(a, b.Character, "secondary", 10.2), nil, "estoc pendant un slash")
 			T.expectEqual(Validator.authorizeMelee(a, b.Character, "secondary", 10.4), 65, "estoc après un slash")
-			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 10.9), nil, "slash pendant l'estoc (1 s)")
-			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 11.4), 50, "slash après l'estoc")
+			T.expectEqual(
+				Validator.authorizeMelee(a, b.Character, "primary", 11.3),
+				nil,
+				"slash pendant l'estoc (1,1 s)"
+			)
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 11.36), 50, "slash après l'estoc")
 		end)
 
 		T.it("ne relance pas la cadence sur un coup refusé", function()
@@ -526,7 +535,7 @@ return function(T, Loader)
 			local a, b = makePlayer(Vector3.zero, "M9Bayonet"), makePlayer(Vector3.new(5, 0, 0))
 			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 10), 50)
 			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 10.2), nil)
-			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 10.3), 50)
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 10.36), 50)
 		end)
 
 		T.it("ne démarre pas la cadence sur une cible invalide", function()
@@ -543,7 +552,7 @@ return function(T, Loader)
 			T.expectEqual(
 				Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), 11),
 				nil,
-				"1 s après un tir (cadence 1,46 s)"
+				"1 s après un tir (cadence 1,455 s)"
 			)
 			T.expectEqual(
 				Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), 11.4),
@@ -586,7 +595,7 @@ return function(T, Loader)
 			local a = makePlayer(Vector3.zero)
 			local b = makePlayer(Vector3.new(50, 0, 0))
 			equip(a, "AWP", nil, 10)
-			local limit = 10 + 1.58 - ShotRules.EQUIP_TOLERANCE
+			local limit = 10 + AWP_EQUIP - ShotRules.EQUIP_TOLERANCE
 			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), 10.5), nil, "tir à 0,5 s")
 			T.expectEqual(#world.reports, 1, "refus journalisé")
 			T.expectEqual(world.reports[1].check, "equip")
@@ -608,11 +617,11 @@ return function(T, Loader)
 			local a = makePlayer(Vector3.zero)
 			local b = makePlayer(Vector3.new(5, 0, 0))
 			equip(a, "AWP", nil, 10)
-			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), 11.58), 115)
+			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), 10 + AWP_EQUIP), 115)
 			local knifer = makePlayer(Vector3.zero)
 			equip(knifer, "M9Bayonet", nil, 20)
-			-- Piste Equip du couteau : 1 s à vitesse 1,3, soit 0,769 s, à peine sous EquipTime (0,77)
-			T.expectEqual(Validator.authorizeMelee(knifer, b.Character, "primary", 20 + 1 / 1.3), 50)
+			-- Verrou d'equip du couteau (1 s, CS:GO) : le client frappe au plus tôt à EquipTime, quelle que soit sa piste
+			T.expectEqual(Validator.authorizeMelee(knifer, b.Character, "primary", 20 + KNIFE_EQUIP), 50)
 			T.expectEqual(#world.reports, 0)
 		end)
 
@@ -625,7 +634,7 @@ return function(T, Loader)
 			T.expectEqual(world.reports[1].check, "equip")
 			T.expectEqual(world.reports[1].category, "Melee")
 			T.expectEqual(
-				Validator.authorizeMelee(a, b.Character, "primary", 10.6),
+				Validator.authorizeMelee(a, b.Character, "primary", 10 + KNIFE_EQUIP - 0.2),
 				50,
 				"cadence relancée par le refus"
 			)
@@ -696,7 +705,7 @@ return function(T, Loader)
 			local last = fire(Validator, a, b, 5, 10)
 			local reloadAt = last + 1.5
 			Validator.noteReload(a, reloadAt)
-			local ready = reloadAt + 3.7 - ShotRules.RELOAD_TOLERANCE
+			local ready = reloadAt + AWP_RELOAD - ShotRules.RELOAD_TOLERANCE
 			T.expectEqual(
 				Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), ready - 0.01),
 				nil,
@@ -712,9 +721,9 @@ return function(T, Loader)
 			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(50, 0, 0))
 			local last = fire(Validator, a, b, 3, 10)
 			Validator.noteReload(a, last + 1.5)
-			last = fire(Validator, a, b, 5, last + 1.5 + 3.7)
+			last = fire(Validator, a, b, 5, last + 1.5 + AWP_RELOAD)
 			Validator.noteReload(a, last + 1.5)
-			fire(Validator, a, b, 5, last + 1.5 + 3.7)
+			fire(Validator, a, b, 5, last + 1.5 + AWP_RELOAD)
 			T.expectEqual(#world.reports, 0)
 		end)
 
@@ -756,7 +765,7 @@ return function(T, Loader)
 				-- Rechargement vraiment interrompu (plus d'une marge avant sa fin) : annulé
 				last = fire(Validator, a, b, 4, last + 9.1)
 				Validator.noteReload(a, last + 1.5)
-				Validator.noteUnequip(a, awp, last + 1.5 + 3.7 - ShotRules.RELOAD_CANCEL_TOLERANCE - 0.1)
+				Validator.noteUnequip(a, awp, last + 1.5 + AWP_RELOAD - ShotRules.RELOAD_CANCEL_TOLERANCE - 0.1)
 				Validator.noteEquip(a, awp, last + 6)
 				T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), last + 8), nil)
 			end
@@ -766,8 +775,12 @@ return function(T, Loader)
 			local Validator, makePlayer, _, _, ShotRules = setup()
 			local a, b = makePlayer(Vector3.zero, "AWP"), makePlayer(Vector3.new(50, 0, 0))
 			local last = fire(Validator, a, b, 5, 10)
-			Validator.noteReload(a, last + 0.01) -- client modifié : le client attend FireDelay (1,46 s)
-			local ready = last + 60 / 41 - ShotRules.RELOAD_TOLERANCE + 3.7 - ShotRules.RELOAD_TOLERANCE
+			Validator.noteReload(a, last + 0.01) -- client modifié : le client attend FireDelay (1,455 s)
+			local ready = last
+				+ Weapons.AWP.FireDelay
+				- ShotRules.RELOAD_TOLERANCE
+				+ AWP_RELOAD
+				- ShotRules.RELOAD_TOLERANCE
 			T.expectEqual(
 				Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), last + 3.6),
 				nil,
@@ -803,7 +816,7 @@ return function(T, Loader)
 					accepted += 1
 				end
 			end
-			-- 60 s de tir continu : 41 tirs voulus ; un client honnête en place 5 par cycle de 5 × 1,46 + 3,7 s
+			-- 60 s de tir continu : 41 tirs voulus ; un client honnête en place 5 par cycle de 5 × 1,455 + 3,667 s
 			T.expect(accepted <= 5, "touches acceptées : " .. accepted)
 		end)
 
@@ -815,8 +828,8 @@ return function(T, Loader)
 			Validator.noteUnequip(a, awp, last + 2)
 			Validator.noteEquip(a, awp, last + 2)
 			Validator.noteReload(a, last + 2) -- dès la sortie, pendant l'equip
-			local equipEnd = last + 2 + 1.58 - ShotRules.EQUIP_TOLERANCE
-			local ready = equipEnd + 3.7 - ShotRules.RELOAD_TOLERANCE
+			local equipEnd = last + 2 + AWP_EQUIP - ShotRules.EQUIP_TOLERANCE
+			local ready = equipEnd + AWP_RELOAD - ShotRules.RELOAD_TOLERANCE
 			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), ready - 0.05), nil)
 			T.expectEqual(Validator.authorizeHitscan(a, b.Character, rootOf(b.Character), ready), 115)
 		end)
@@ -853,7 +866,7 @@ return function(T, Loader)
 	end)
 
 	T.describe("Validator : tirs comptés et touches rattachées (#215, #216)", function()
-		local AWP_DELAY = 60 / 41
+		local AWP_DELAY = Weapons.AWP.FireDelay
 
 		-- Cette méthode permet de construire le tir honnête d'un joueur vers sa cible avec un instant donné lorsqu'un
 		-- test règle lui-même l'ordre des remotes.
@@ -915,7 +928,7 @@ return function(T, Loader)
 				t += 1.5
 			end
 			Validator.noteReload(a, t)
-			local ready = t + 3.7 - ShotRules.RELOAD_TOLERANCE
+			local ready = t + AWP_RELOAD - ShotRules.RELOAD_TOLERANCE
 			T.expectEqual(Validator.shotFired(a, 200, ready - 0.05), false, "rechargement inachevé")
 			for i = 1, 5 do
 				T.expectEqual(Validator.shotFired(a, 200 + i, ready + (i - 1) * 1.5), true, "après rechargement " .. i)
@@ -1064,7 +1077,7 @@ return function(T, Loader)
 				T.expectEqual(Validator.shotFired(a, 100 + i, last), true)
 			end
 			Validator.noteReload(a, last + 0.01) -- client modifié : recharge dès son dernier tir
-			local ready = last + AWP_DELAY - ShotRules.RELOAD_TOLERANCE + 3.7 - ShotRules.RELOAD_TOLERANCE
+			local ready = last + AWP_DELAY - ShotRules.RELOAD_TOLERANCE + AWP_RELOAD - ShotRules.RELOAD_TOLERANCE
 			T.expectEqual(Validator.shotFired(a, 200, ready - 0.05), false)
 			T.expectEqual(Validator.shotFired(a, 201, ready + 0.01), true)
 		end)
@@ -1791,7 +1804,7 @@ return function(T, Loader)
 			awp.Name = "AWP"
 			awp.Parent = a.Character
 			Validator.noteEquip(a, awp, 10)
-			local ready = 10 + 1.58 - ShotRules.EQUIP_TOLERANCE
+			local ready = 10 + AWP_EQUIP - ShotRules.EQUIP_TOLERANCE
 			T.expectEqual(Validator.isReadyToFire(a, ready - 0.01), false, "pendant l'equip")
 			T.expectEqual(Validator.isReadyToFire(a, ready + 0.01), true, "equip fini")
 		end)
@@ -1807,7 +1820,7 @@ return function(T, Loader)
 			T.expectEqual(Validator.isReadyToFire(a, last + 1.5), false, "chargeur vidé")
 			local reloadAt = last + 1.5
 			Validator.noteReload(a, reloadAt)
-			local ready = reloadAt + 3.7 - ShotRules.RELOAD_TOLERANCE
+			local ready = reloadAt + AWP_RELOAD - ShotRules.RELOAD_TOLERANCE
 			T.expectEqual(Validator.isReadyToFire(a, ready - 0.01), false, "rechargement inachevé")
 			T.expectEqual(Validator.isReadyToFire(a, ready + 0.01), true, "rechargé")
 		end)

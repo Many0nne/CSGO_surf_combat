@@ -7,9 +7,16 @@ local WeaponConfig = {}
 -- (ShotRules.checkDistance, avec une marge) : un tir légitime n'est jamais refusé pour sa distance (#174).
 WeaponConfig.HITSCAN_RANGE = 2048
 
--- Cadence de l'AWP (41 coups/min, CS) : écart entre deux tirs, côté client (WeaponSystem) comme côté serveur (Validator,
--- ShotRules, ShotRelayRules), et verrou d'action du tir (#221).
-local AWP_FIRE_DELAY = 60 / 41
+-- Cadence de l'AWP (`cycletime` 1,455 s de CS:GO, items_game.txt ; 41 coups/min) : écart entre deux tirs, côté client
+-- (WeaponSystem) comme côté serveur (Validator, ShotRules, ShotRelayRules), et verrou d'action du tir (#221, #404).
+local AWP_FIRE_DELAY = 1.455
+
+-- Verrous d'action (#404) : ils reprennent les valeurs de CS:GO et ne dépendent pas de la longueur des pistes. Une piste
+-- plus longue que son verrou est coupée par l'action suivante (tir, lunette, rechargement), comme dans CS:GO.
+--   EquipTime : arme inutilisable après la sortie (AWP : séquence draw, 1,267 s, `m_flDeployDuration` de CS2 ;
+--               couteaux : 1 s codé en dur pour tous les couteaux, `hardcoded_knife_deploy_time` de weapon_knife.cpp).
+--   ReloadTime : arme inutilisable pendant tout le rechargement, comme CS:GO (fin de la séquence reload, pas de tir
+--                anticipé) ; AWP 3,667 s (`m_flDisallowAttackAfterReloadStartDuration` de CS2).
 
 WeaponConfig.Weapons = {
 	AWP = {
@@ -21,15 +28,15 @@ WeaponConfig.Weapons = {
 		Damage = 115,
 		RPM = 41,
 		FireDelay = AWP_FIRE_DELAY, -- seconds between shots
-		ReloadTime = 3.7,
+		ReloadTime = 3.667, -- 110 images à 30 i/s (CS:GO)
 		Magazine = 5,
 		Reserve = math.huge, -- réserve illimitée (#165) : le rechargement remplit toujours le chargeur
 		Penetration = 250, -- TODO: implement penetration handling
 		-- Recommended run speed multiplier while holding this weapon (client-side).
 		-- Not a fixed game-units value; movement system multiplies wishspeed by this.
 		RunSpeedMultiplier = 0.75,
-		EquipTime = 1.58,
-		-- Verrou d'action (#221) = cadence, comme la M9 : le tir suivant coupe la fin de la piste Shoot (1,63 s)
+		EquipTime = 1.267, -- 38 images à 30 i/s (CS:GO) : le tir ou la lunette coupe la fin de la piste Equip (1,58 s)
+		-- Verrou d'action (#221) = cadence : le tir suivant coupe la fin de la piste Shoot (1,63 s)
 		ShootAnimTime = AWP_FIRE_DELAY,
 		HasScope = true,
 		-- Touche F : pivot de profil puis arme dressée (référence CS2, 5 s), purement visuel, interrompu par une attaque ;
@@ -85,16 +92,20 @@ WeaponConfig.Weapons = {
 		Accuracy = 0.7,
 		Damage = 50,
 		RPM = 150,
-		FireDelay = 0.4, -- cadence CS:GO du clic gauche
+		-- Cadences CS:GO du clic gauche (weapon_knife.cpp) : 0,4 s après un coup dans le vide, 0,5 s après un coup qui
+		-- touche ; l'estoc attend 0,5 s après une taille, touchée ou non.
+		FireDelay = 0.4,
+		HitFireDelay = 0.5,
+		SecondaryDelay = 0.5,
 		Penetration = 0,
 		RunSpeedMultiplier = 1.0,
-		EquipTime = 0.77,
-		EquipAnimSpeed = 1.3, -- vitesse de lecture de la piste Equip (1 s) : sortie en 0,77 s
+		EquipTime = 1, -- piste Equip de 1 s, jouée à sa vitesse
 		ShootAnimTime = 0.4, -- verrou d'action : le coup suivant coupe la fin de la piste (0,7 s)
 		ShootAnimations = { "Shoot", "Shoot2" }, -- slashs du clic gauche, joués en alternance
 		AttackFadeTime = 0, -- les coups partent sans fondu : la piste commence sur la pose de repos
-		-- Clic droit : coup d'estoc, plus lourd et plus lent (dégâts et cadence CS:GO).
-		SecondaryAttack = { Animation = "Stab", Damage = 65, FireDelay = 1, AnimTime = 1 },
+		-- Clic droit : coup d'estoc, plus lourd et plus lent (dégâts et cadences CS:GO : 1 s dans le vide, 1,1 s touché,
+		-- pour les deux clics).
+		SecondaryAttack = { Animation = "Stab", Damage = 65, FireDelay = 1, HitFireDelay = 1.1, AnimTime = 1 },
 		InspectAnimation = "Inspect", -- touche F : purement visuel, interrompu par une attaque
 		IsMelee = true,
 		MeleeRange = 7.5,
@@ -123,16 +134,17 @@ WeaponConfig.Weapons = {
 		Accuracy = 0.7,
 		Damage = 50,
 		RPM = 150,
-		FireDelay = 0.4, -- cadence du clic gauche, comme la M9
+		FireDelay = 0.4, -- cadences du clic gauche, comme la M9
+		HitFireDelay = 0.5,
+		SecondaryDelay = 0.5,
 		Penetration = 0,
 		RunSpeedMultiplier = 1.0,
-		EquipTime = 0.77,
-		EquipAnimSpeed = 1.1, -- vitesse de lecture de la piste Equip (0,85 s, durée du couteau CT) : sortie en 0,77 s
+		EquipTime = 1, -- piste Equip de 0,85 s (durée du couteau CT), puis repos jusqu'au verrou, comme dans CS:GO
 		ShootAnimTime = 0.4, -- verrou d'action : le coup suivant coupe la fin de la piste (1,1 s et 0,87 s)
 		ShootAnimations = { "Shoot", "Shoot2" }, -- coups du clic gauche, joués en alternance
 		AttackFadeTime = 0, -- les coups partent sans fondu : la piste commence sur la pose de repos
 		-- Clic droit : estoc droit, plus lourd et plus lent (mêmes dégâts et cadence que l'estoc de la M9).
-		SecondaryAttack = { Animation = "Stab", Damage = 65, FireDelay = 1, AnimTime = 1 },
+		SecondaryAttack = { Animation = "Stab", Damage = 65, FireDelay = 1, HitFireDelay = 1.1, AnimTime = 1 },
 		InspectAnimation = "Inspect", -- touche F : purement visuel, interrompu par une attaque
 		IsMelee = true,
 		MeleeRange = 7.5,
@@ -161,20 +173,32 @@ WeaponConfig.AttackKind = {
 	SECONDARY = "secondary",
 }
 
--- Cette méthode permet de lire les dégâts et la cadence d'une attaque de mêlée lorsque le serveur valide un coup ;
--- nil si l'arme n'est pas une arme de mêlée ou n'a pas cette attaque.
+-- Cette méthode permet de lire les dégâts et la cadence d'une attaque de mêlée qui touche lorsque le serveur valide un
+-- coup (il ne voit que les coups qui touchent) ; nil si l'arme n'est pas une arme de mêlée ou n'a pas cette attaque.
 function WeaponConfig.getMeleeAttack(cfg: any, attackKind: any): (number?, number?)
 	if not cfg.IsMelee then
 		return nil, nil
 	end
 	if attackKind == WeaponConfig.AttackKind.PRIMARY then
-		return cfg.Damage, cfg.FireDelay
+		return cfg.Damage, cfg.HitFireDelay or cfg.FireDelay
 	end
 	local secondary = cfg.SecondaryAttack
 	if attackKind == WeaponConfig.AttackKind.SECONDARY and secondary then
-		return secondary.Damage, secondary.FireDelay
+		return secondary.Damage, secondary.HitFireDelay or secondary.FireDelay
 	end
 	return nil, nil
+end
+
+-- Cette méthode permet de calculer, après une attaque de mêlée, les délais (s) avant le prochain clic gauche et le
+-- prochain clic droit lorsque le client lance un coup (hit faux) puis apprend qu'il a touché (hit vrai), comme CS:GO.
+function WeaponConfig.meleeCooldowns(cfg: any, attackKind: any, hit: boolean): (number, number)
+	local secondary = cfg.SecondaryAttack
+	if attackKind == WeaponConfig.AttackKind.SECONDARY and secondary then
+		local delay = if hit then secondary.HitFireDelay or secondary.FireDelay else secondary.FireDelay
+		return delay, delay
+	end
+	local primary = if hit then cfg.HitFireDelay or cfg.FireDelay else cfg.FireDelay
+	return primary, math.max(primary, cfg.SecondaryDelay or primary)
 end
 
 return WeaponConfig

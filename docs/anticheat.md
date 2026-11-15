@@ -22,7 +22,7 @@ envoyant des données plausibles. Là, on ne peut que détecter statistiquement,
 
 | Domaine | Validation actuelle | Où |
 |---|---|---|
-| Mêlée | Cible = autre participant vivant, arme de mêlée réellement en main, distance des racines ≤ 10 studs, dégâts et cadence lus dans `WeaponConfig` selon le type d'attaque, backstab recalculé sur les positions serveur (#47) ; pour un joueur, durée d'equip (#175, voir T2), instant du coup borné par le ping (#214, journal seul), orientation et ligne de vue vers la cible rembobinée à cet instant, pose comprise (#176, #213, journal seul, voir M1) | `src/server/Validator.luau` (`authorizeMelee`), `src/server/ShotRules.luau` |
+| Mêlée | Cible = autre participant vivant, arme de mêlée réellement en main, distance des racines ≤ 10 studs, dégâts et cadence lus dans `WeaponConfig` selon le type d'attaque (cadence d'un coup qui touche, `HitFireDelay` : le serveur ne voit que ceux-là, #404), backstab recalculé sur les positions serveur (#47) ; pour un joueur, durée d'equip (#175, voir T2), instant du coup borné par le ping (#214, journal seul), orientation et ligne de vue vers la cible rembobinée à cet instant, pose comprise (#176, #213, journal seul, voir M1) | `src/server/Validator.luau` (`authorizeMelee`), `src/server/ShotRules.luau` |
 | Tir | Cible valide (vivante), arme à distance en main, partie touchée appartenant à la cible, distance des racines ≤ `Validator.MAX_HITSCAN_RANGE` (~2 256 studs ; bots : 250), cadence `FireDelay` à 0,15 s près, dégâts calculés par le serveur selon la zone ; pour un joueur, forme, instant du tir borné par le ping (#214, journal seul), origine, visée sur la cible rembobinée dans sa pose (cap, accroupi, #213), portée et ligne de vue (#174, voir T1), durée d'equip et chargeur (#175, voir T2 ; l'equip vaut aussi pour la mêlée), touche rattachée à son `ShotFired` par `shotTime` (#216, journal seul) | `src/server/Validator.luau` (`authorizeHitscan`, `validateShot`), `src/server/ShotRules.luau`, `src/server/ShotLinkRules.luau` |
 | Position | Forme (Vector3 et angle finis, coordonnées ≤ 1e5, accroupi booléen), personnage vivant, seau de distance (450 studs/s soutenus, client plafonné à 420 horizontaux, silence plafonné), refus journalisé et corrigé (#172) ; noclip et vol journalisés (#177, journal seul), joueur silencieux au-dessus du vide déclaré tombé | `src/server/CharacterSync.luau` (`refuse`, `judgeGuard`, `onClientPosition`), `src/shared/CharacterSyncRules.luau` (`tryMove`), `src/shared/MovementGuardRules.luau` |
 | Réglages | Réglages entièrement assainis par `PlayerSettings.sanitize`, une écriture DataStore au plus toutes les 10 s | `src/server/SettingsStore.luau` (`onSaveSettings`) |
@@ -372,13 +372,12 @@ contrôles de plus. Règles pures dans `src/server/ShotRules.luau` (`checkEquip`
 | `equip` | Touche acceptée à partir de `equippedAt + EquipTime - EQUIP_TOLERANCE` (0,2 s). `equippedAt` = arrivée de l'outil dans le personnage vue par le serveur (`ChildAdded` de `trackWeapon3P`, `Validator.noteEquip`). Outil en main sans arrivée notée : refusé (« sans equip vu par le serveur »), jamais accepté en silence. Tir et mêlée (catégorie `Melee` pour le couteau) | `block` | moyenne |
 | `magazine` | Arme à `Magazine` : **tirs** comptés par participant et par arme depuis #215 (chaque `ShotFired` accepté, touché ou manqué, et chaque touche orpheline, voir « Tirs comptés et touches rattachées ») ; le `Magazine`+1e tir est refusé sans rechargement fini (`ShotFired` non relayé, touche refusée), et tout tir est refusé pendant un rechargement qui n'a pas encore duré `ReloadTime - RELOAD_TOLERANCE` (0,2 s). Début du rechargement : action `Reload` du remote `WeaponAction` (`Validator.noteReload`), lue avant les filtres de la pose 3P (intervalle de 0,05 s, modèle 3P attaché) qui pourraient écarter une action honnête | `block` | moyenne |
 
-- **Borne d'equip.** Le client honnête n'est jamais prêt avant `EquipTime` (#184 : il attend le chargement de la piste
-  puis sa durée), sauf piste plus courte qu'`EquipTime` : couteau 1 s / 1,3 = 0,769 s pour 0,77 (couvert par la
-  tolérance). AWP : piste étirée à 1,58 s (`docs/animations.md`). **Raccourcir une piste `Equip` sous `EquipTime - 0,2`
-  ferait refuser des tirs honnêtes** : baisser `EquipTime` avec.
+- **Borne d'equip.** Le client honnête est prêt à `EquipTime` pile (#404 : son verrou est `EquipTime`, quelle que soit
+  la longueur de la piste `Equip`, que le tir coupe). Client et serveur lisent la même valeur : la changer dans
+  `WeaponConfig` suffit.
 - **Tolérances.** Equip et rechargement : 0,2 s chacun, la gigue entre deux paquets fiables (arrivée de l'outil ou action
-  `Reload`, puis la touche) ; même ordre que `CADENCE_TOLERANCE` (0,15 s). Un tricheur gagne au plus 0,2 s sur 1,58 s
-  (equip) ou 3,7 s (rechargement). Livrés en `block` sans phase de mesure : Studio n'a pas de latence, mais un paquet
+  `Reload`, puis la touche) ; même ordre que `CADENCE_TOLERANCE` (0,15 s). Un tricheur gagne au plus 0,2 s sur 1,267 s
+  (equip) ou 3,667 s (rechargement). Livrés en `block` sans phase de mesure : Studio n'a pas de latence, mais un paquet
   retardé de plus de 0,2 s ne coûte au pire qu'une touche, la première après l'equip ou le rechargement, sans
   cascade. Si les résumés `CheatLog` du jeu publié montrent des `equip`/`magazine` sur des joueurs honnêtes (détail :
   écart à la borne), élargir `EQUIP_TOLERANCE`/`RELOAD_TOLERANCE` ou repasser le contrôle en `"log"` dans `ShotRules.MODES`.

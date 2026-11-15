@@ -193,7 +193,13 @@ function BotArsenal.fire(self: BotArsenal, now: number, eye: Vector3, direction:
 	if not cfg or not self:isReady(now) then
 		return nil
 	end
-	self.readyAt = now + (cfg.FireDelay or 0)
+	if cfg.IsMelee then
+		-- Le coup du bot touche toujours (portée vérifiée avant) : cadence d'un coup qui touche, comme le Validator (#404)
+		local _, hitDelay = WeaponConfig.getMeleeAttack(cfg, WeaponConfig.AttackKind.PRIMARY)
+		self.readyAt = now + (hitDelay or cfg.FireDelay or 0)
+	else
+		self.readyAt = now + (cfg.FireDelay or 0)
+	end
 	-- Premier tir ou coup du bot : sa protection d'apparition tombe (#288), même si le relais écarte le tir
 	SpawnProtection.drop(self.char)
 	if cfg.IsMelee then
