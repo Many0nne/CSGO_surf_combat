@@ -275,8 +275,11 @@ Luau qui pose un skin sur les viewmodels de Studio (mode Edit) ; Disconnect/Conn
   UV ; les courbes trop serrées s'effacent (intermédiaires d'abord), sinon une pièce fine se couvre de rayures.
 - **Livrée projetée de profil** : texte lisible des deux côtés en retournant la toile de la face +y ; placer le texte
   d'après la silhouette mesurée sur les cartes cuites (la crosse de l'AWP n'a que ~0,18 de hauteur de boîte à la poignée).
-- **Densité de texture** : la crosse de l'AWP a peu de pixels dans sa carte (îlots en diagonale) ; une livrée plus fine
-  demanderait de redéplier ses UV (mesh à republier).
+- **Densité de texture** : voir « Redéplier les UV d'un matériau » ci-dessous. Un réglage de `make_skins.py` exprimé en
+  pixels (flou, épaisseur de trait, force du relief) change de taille dans le monde avec la densité : `PX_SCALE` le
+  ramène à celle pour laquelle il a été choisi.
+- **Toile de profil (livrées)** : `sample_side` la lit en bilinéaire, à ~400 px par unité (deux fois la crosse) ; au plus
+  proche et à 200 px par unité, texte et filets se crénelaient.
 - **Bois teinté (crosse de l'AWP)** : partir de la couleur et de la rugosité du bois d'origine. Des couleurs posées à
   plat virent au pastel sous le voile du vernis ; teinter en divisant canal par canal par la couleur moyenne fait virer
   au violet. Moduler la nouvelle teinte par la luminance d'origine (`mat.lum`) garde le grain et la saturation.
@@ -302,7 +305,39 @@ Luau qui pose un skin sur les viewmodels de Studio (mode Edit) ; Disconnect/Conn
   préchargement des autres joueurs n'est **pas mesuré** (il faut un 2e client : Test > Clients and Servers).
 - Rojo (7.7) écrit bien `ColorMapContent`… d'une `SurfaceAppearance` depuis un `.model.json`, en build comme en synchro
   directe (vérifié dans Studio) : pas besoin de `.rbxm` pour les skins.
-- Suites ouvertes : caisses (#332), UV de la crosse de l'AWP (#335).
+- Suites ouvertes : caisses (#332).
+
+### Redéplier les UV d'un matériau (#335)
+
+La crosse de l'AWP (`WOOD` : `Stock`, `Handguard`) n'occupait que 16 % de sa carte (longues bandes en diagonale, 111 px
+par unité contre 250 à 300 pour les métaux) : les livrées y étaient floues. Redépliée : 55 %, 205 px par unité.
+
+1. `blender -b assets/sniper/Sniper.blend --factory-startup --python tools/skins/repack_uv.py -- <sortie.blend>
+   <corresp.npz> Stock,Handguard` : garde l'aplatissement d'origine, coupe en tronçons les îlots trop longs (le long de
+   leur grand axe, coutures marquées), puis range tout à plat avec le packer de Blender. Chaque tronçon ne subit qu'une
+   similitude. Le packer n'est pas déterministe d'un lancement à l'autre : garder ensemble le `.blend` et le `.npz` d'un
+   même lancement. Le `.blend` réenregistré perd les données orphelines (Blender les retire à chaque enregistrement).
+2. `uv run --with numpy --with pillow --with scipy tools/skins/remap_textures.py <corresp.npz> assets/sniper/textures
+   <sortie> WOOD --check <aller-retour.png>` : transpose les cartes d'origine triangle par triangle et tourne la carte
+   de normales avec son repère tangent. L'aller-retour (nouvelle carte reprojetée sur l'ancien dépliage) doit rester
+   sous 1/255 : 0,25/255 en moyenne sur la crosse.
+3. Recuire les cartes utilitaires (`bake_maps.py`), mettre à jour `PX_SCALE` dans `make_skins.py`, regénérer les skins
+   (seules les cartes du matériau redéplié changent : les autres sortent identiques au bit près), comparer aux rendus
+   d'avant (`render_views.py`, mêmes vues), puis republier : cartes d'origine, cartes des skins, mesh (`--only` de
+   `export_mesh_fbx.py`), et poser mesh et cartes sur le viewmodel dans Studio avant de le réexporter.
+- **Mesh d'une pièce de l'AWP** : exporter avec `--only <pièces> --no-turn`. Les meshes de l'AWP ont été publiés depuis
+  un FBX brut ; avec la rotation habituelle d'`export_mesh_fbx.py`, la pièce arrive tournée de 180° (constaté : crosse à
+  l'envers). Dans Studio (mode Edit, MCP) : `insert_asset` du Model dans `ServerStorage`, puis
+  `vm.<Pièce>:ApplyMesh(modèle.<Pièce>)` : l'instance, ses `Motor6D`, sa taille et sa `SurfaceAppearance` sont gardés
+  (taille et centre de masse identiques à 10⁻⁶ près si le repère est le bon).
+- **Couper Rojo avant l'export sans clic** : ne pas utiliser `-Stop` ni `-ReleaseStudio` (Studio se reconnecte au checkout
+  principal et le patch écrase les modifications faites dans Studio). Arrêter le processus `rojo` du worktree (le
+  `.pid` de `worktrees/.run` est celui du `pwsh` parent : le tuer laisse `rojo` tourner), puis vérifier qu'aucune
+  connexion TCP ne reste sur le port (`Get-NetTCPConnection -LocalPort <port>`), pas par une requête HTTP. Après
+  l'export : relancer le script (Rojo) puis `-AcquireStudio`, qui reconnecte avec le patch de rattrapage.
+- Référence : avant toute modification, regénérer les skins sur la cuisson actuelle et vérifier qu'ils sortent
+  identiques aux PNG versionnés (écart 0 constaté). `make_skins.py` relit `assets/sniper/textures` pour chaque skin : ne
+  pas remplacer ces cartes pendant qu'il tourne.
 
 ## Ajouter un couteau
 

@@ -32,6 +32,11 @@ STEEL = np.array([200, 203, 208]) / 255
 BLACK_STEEL = np.array([58, 60, 66]) / 255
 GOLD = np.array([228, 178, 96]) / 255
 
+# Densité de texels d'un matériau rapportée à celle pour laquelle ses réglages en pixels (flou du détail, épaisseur des
+# courbes de niveau, force du relief) ont été choisis. La crosse de l'AWP a été redépliée (#335 : 111 -> 205 px par
+# unité) : ses réglages sont multipliés d'autant pour garder leur taille dans le monde, donc le même rendu, plus net.
+PX_SCALE = {("awp", "WOOD_PBR"): 1.846}
+
 
 # ---------------------------------------------------------------------------------------------------------------------
 # Bruit
@@ -108,6 +113,7 @@ class Mat:
 		d = np.load(os.path.join(bake_dir, f"{name}.npz"))
 		bb = json.load(open(os.path.join(bake_dir, "bbox.json")))
 		self.weapon, self.name = weapon, name
+		self.px = PX_SCALE.get((weapon, name), 1.0)
 		self.bmin, self.bmax = np.array(bb["min"]), np.array(bb["max"])
 		self.npos = d["pos"].astype(np.float32)
 		self.pos = self.npos * (self.bmax - self.bmin) + self.bmin
@@ -125,7 +131,7 @@ class Mat:
 		lum = self.color @ np.array([0.299, 0.587, 0.114], dtype=np.float32)
 		self.lum = lum
 		# Détail d'origine : luminance rapportée à sa moyenne locale (rayures, quadrillage, saleté cuite)
-		blur = ndimage.gaussian_filter(lum, 6) + 1e-3
+		blur = ndimage.gaussian_filter(lum, 6 * self.px) + 1e-3
 		self.detail = np.clip(lum / blur, 0.6, 1.4)
 		# Arêtes : nœud Bevel cuit + écart de la normale d'origine (biseaux peints dans la carte)
 		dev = np.clip((1 - self.normal[..., 2]) * 6, 0, 1)
@@ -150,10 +156,12 @@ def dilate(img, cov):
 	return img[iy, ix]
 
 
-# Cette méthode permet de convertir un relief (hauteur en pixels) en normale tangente et de la combiner à la normale
-# d'origine (mélange « whiteout »), lorsqu'un skin ajoute gravure, incrustation ou brossage.
-def add_relief(normal, height, strength, cov):
-	h = dilate(height, cov)
+# Cette méthode permet de convertir un relief (hauteur par pixel, à la densité de référence du matériau) en normale
+# tangente et de la combiner à la normale d'origine (mélange « whiteout »), lorsqu'un skin ajoute gravure ou brossage.
+def add_relief(mat, height, strength):
+	normal = mat.normal
+	strength = strength * mat.px
+	h = dilate(height, mat.cov)
 	gy, gx = np.gradient(h)
 	n2 = np.stack([-gx * strength, gy * strength, np.ones_like(h)], -1)  # +V vers le haut de l'image
 	n2 /= np.linalg.norm(n2, axis=-1, keepdims=True)
@@ -324,7 +332,7 @@ def couchant_m9(mat, k):
 	metal = mix(metal, mat.metal, k.grip)
 	height = height * (k.blade | hw)
 	col = col * mix(1, mat.ao, 0.5)[..., None]
-	return col, rough, metal, add_relief(mat.normal, height, 0.6, mat.cov)
+	return col, rough, metal, add_relief(mat, height, 0.6)
 
 
 # Cette méthode permet de produire les cartes « Couchant » d'un matériau de l'AWP : métal anodisé marbré en dégradé de
@@ -349,7 +357,7 @@ def couchant_awp(mat):
 		# Arêtes polies plus claires (usure du film anodisé)
 		col = mix(col, ramp(v, SUNSET) * 0.5 + 0.45 * np.array([0.93, 0.89, 0.82]), mat.edges * 0.4)
 	col = col * mix(1, mat.ao, 0.5)[..., None]
-	return col, rough, metal, add_relief(mat.normal, height, 0.6, mat.cov)
+	return col, rough, metal, add_relief(mat, height, 0.6)
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -469,7 +477,7 @@ def impact_m9(mat, k):
 	rough = mix(rough, mat.rough, k.grip)
 	metal = mix(metal, mat.metal, k.grip)
 	col = col * mix(1, mat.ao, 0.5)[..., None]
-	return col, rough, metal, add_relief(mat.normal, height * k.blade, 0.9, mat.cov)
+	return col, rough, metal, add_relief(mat, height * k.blade, 0.9)
 
 
 # Cette méthode permet de dessiner la livrée « Impact » de profil sur une toile (u le long de l'arme, 0 = bouche du
@@ -519,14 +527,17 @@ def impact_livery(w, h, flip_text):
 
 # Cette méthode permet d'échantillonner une toile de profil sur les texels d'un matériau de l'AWP (projection selon
 # x et z, toile miroir pour la face +y), avec un poids qui s'éteint sur les faces du dessus et du dessous.
+# Échantillonnage bilinéaire : la toile n'a qu'environ deux fois la densité de la crosse (#335), un plus proche crénelait.
 def sample_side(mat, canvas_left, canvas_right):
 	ch, cw = canvas_left.shape
 	u = (mat.pos[..., 0] - mat.bmin[0]) / (mat.bmax[0] - mat.bmin[0])
 	v = 1 - (mat.pos[..., 2] - mat.bmin[2]) / (mat.bmax[2] - mat.bmin[2])
-	x = np.clip((u * (cw - 1)).astype(int), 0, cw - 1)
-	y = np.clip((v * (ch - 1)).astype(int), 0, ch - 1)
+	x = np.clip(u * (cw - 1), 0, cw - 1)
+	y = np.clip(v * (ch - 1), 0, ch - 1)
 	left = mat.nrm[..., 1] < 0
-	val = np.where(left, canvas_left[y, x], canvas_right[y, cw - 1 - x])
+	val_left = ndimage.map_coordinates(canvas_left, [y, x], order=1)
+	val_right = ndimage.map_coordinates(canvas_right, [y, (cw - 1) - x], order=1)
+	val = np.where(left, val_left, val_right)
 	weight = smooth(0.15, 0.4, np.abs(mat.nrm[..., 1]))
 	return val * weight
 
@@ -586,7 +597,7 @@ def impact_awp(mat, livery):
 		col = mix(col, mix(acol, STEEL, chips * 0.7), accent)
 		rough = mix(rough, 0.22, accent)
 	col = col * mix(1, mat.ao, 0.5)[..., None]
-	return col, rough, metal, add_relief(mat.normal, height, 0.9, mat.cov)
+	return col, rough, metal, add_relief(mat, height, 0.9)
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -608,7 +619,7 @@ def contours(mat, freq, levels, width_px=1.3, squash_y=0.25, seed=61, min_gap=0.
 	gpx = np.hypot(gx, gy) + 1e-4
 	frac = np.abs(c - np.round(c))  # distance au niveau le plus proche, en niveaux
 	major = (np.round(c).astype(int) % 5) == 0
-	wdt = width_px * np.where(major, 1.9, 1.0)
+	wdt = width_px * mat.px * np.where(major, 1.9, 1.0)
 	line = smooth(wdt * 0.5 + 0.6, wdt * 0.5 - 0.4, frac / gpx)
 	# Écart entre deux courbes en unités monde (pixels x taille monde d'un pixel, propre à chaque îlot UV) : sous
 	# min_gap, les intermédiaires s'effacent, puis les maîtresses, comme sur une vraie carte
@@ -639,7 +650,7 @@ def releve_m9(mat, k):
 	rough = mix(rough, mat.rough, k.grip)
 	metal = mix(metal, mat.metal, k.grip)
 	col = col * mix(1, mat.ao, 0.5)[..., None]
-	return col, rough, metal, add_relief(mat.normal, height, 0.7, mat.cov)
+	return col, rough, metal, add_relief(mat, height, 0.7)
 
 
 # Cette méthode permet de produire les cartes « Relevé » d'un matériau de l'AWP.
@@ -661,7 +672,7 @@ def releve_awp(mat):
 	col = mix(col, GOLD * mix(1, mat.detail, 0.5)[..., None], gold_parts)
 	rough = mix(rough, 0.18, gold_parts)
 	col = col * mix(1, mat.ao, 0.5)[..., None]
-	return col, rough, metal, add_relief(mat.normal, height, 0.7, mat.cov)
+	return col, rough, metal, add_relief(mat, height, 0.7)
 
 
 # Cette méthode permet de donner la hauteur dans la lame de la M9 (0 au tranchant, 1 au dos) lorsqu'un motif suit le
@@ -745,7 +756,7 @@ def recuit_m9(mat, k):
 	metal = mix(metal, mat.metal, k.grip)
 	height = height * (k.blade | hw)
 	col = col * mix(1, mat.ao, 0.5)[..., None]
-	return col, rough, metal, add_relief(mat.normal, height, 0.6, mat.cov)
+	return col, rough, metal, add_relief(mat, height, 0.6)
 
 
 # Cette méthode permet de produire les cartes « Recuit » d'un matériau de l'AWP : carcasse, canon et garnitures trempés,
@@ -774,7 +785,7 @@ def recuit_awp(mat):
 		height = -sp * 0.2
 		col = mix(col, STEEL * 0.8, mat.edges * 0.3)
 	col = col * mix(1, mat.ao, 0.5)[..., None]
-	return col, rough, metal, add_relief(mat.normal, height, 0.6, mat.cov)
+	return col, rough, metal, add_relief(mat, height, 0.6)
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -854,7 +865,7 @@ def strate_m9(mat, k):
 	rough = mix(rough, mat.rough, k.grip)
 	metal = mix(metal, mat.metal, k.grip)
 	col = col * mix(1, mat.ao, 0.5)[..., None]
-	return col, rough, metal, add_relief(mat.normal, height, 0.8, mat.cov)
+	return col, rough, metal, add_relief(mat, height, 0.8)
 
 
 # Cette méthode permet de produire les cartes « Strate » d'un matériau de l'AWP : carcasse et canon en mokume (strates
@@ -887,7 +898,7 @@ def strate_awp(mat):
 		col = mix(col, np.array([214, 168, 86]) / 255 * mix(1, mat.detail, 0.5)[..., None], trig)
 		rough = mix(rough, 0.18, trig)
 	col = col * mix(1, mat.ao, 0.5)[..., None]
-	return col, rough, metal, add_relief(mat.normal, height, 0.8, mat.cov)
+	return col, rough, metal, add_relief(mat, height, 0.8)
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -1016,7 +1027,7 @@ def sillage_m9(mat, k):
 	rough = mix(rough, mat.rough, k.grip)
 	metal = mix(metal, mat.metal, k.grip)
 	col = col * mix(1, mat.ao, 0.5)[..., None]
-	return col, rough, metal, add_relief(mat.normal, height * k.blade, 0.6, mat.cov)
+	return col, rough, metal, add_relief(mat, height * k.blade, 0.6)
 
 
 # Cette méthode permet de produire les cartes « Sillage » d'un matériau de l'AWP : laque nacre sur toute l'arme, livrée
@@ -1051,7 +1062,7 @@ def sillage_awp(mat, marks):
 		metal = mix(metal, 1, chips)
 		metal = mix(metal, 0.6, parts)
 	col = col * mix(1, mat.ao, 0.5)[..., None]
-	return col, rough, metal, add_relief(mat.normal, height, 0.6, mat.cov)
+	return col, rough, metal, add_relief(mat, height, 0.6)
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -1064,7 +1075,8 @@ def build(skin, bake, m9_orig, out):
 	m9_fns = {"couchant": couchant_m9, "impact": impact_m9, "releve": releve_m9, "recuit": recuit_m9, "strate": strate_m9, "sillage": sillage_m9}
 	write(os.path.join(out, skin, "M9Bayonet"), "Handle", m9, *m9_fns[skin](m9, k))
 	print(f"[skins] {skin} M9Bayonet")
-	cw, ch = 2048, 375  # proportions de la boîte de l'AWP vue de profil (x, z)
+	# Proportions de la boîte de l'AWP vue de profil (x, z) ; ~400 px par unité, deux fois la crosse redépliée (#335)
+	cw, ch = 4096, 750
 	livery = marks = None
 	if skin == "impact":
 		left, right = impact_livery(cw, ch, False), impact_livery(cw, ch, True)

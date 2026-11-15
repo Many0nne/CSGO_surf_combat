@@ -74,6 +74,6 @@ if __name__ == "__main__":
 			decal = res.stdout.strip().splitlines()[-1]
 			img = image_id(decal, key)
 			ids.setdefault(vm, {}).setdefault(prefix, {})[kind] = f"rbxassetid://{img}"
-			json.dump(ids, open(out_path, "w"), indent=1)
+			json.dump(ids, open(out_path, "w"), indent=1, sort_keys=True)  # une carte republiée garde sa place
 			print(f"[publish_skin] {skin} {vm} {prefix} {kind} : Decal {decal} -> image {img}", flush=True)
 	print(f"[publish_skin] {out_path}")
