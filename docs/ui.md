@@ -656,6 +656,8 @@ l'étiquette BIENTÔT tant que l'achat n'existe pas.
   chevauchaient. Les caisses de stock sans marque n'ont pas de bande.
 - Pistes écartées pour la caisse (même planche) : A mallette en polymère (trop proche de la caisse en pièces d'avant),
   C coffre à munitions en tôle, D flight case (lisible, mais « matériel de tournée » plus que militaire).
+- **Le jeu est passé en Future le 15/11/2026** (`LightingStyle = Realistic`, cf. `docs/performance.md`, « Éclairage ») :
+  les réglages et astuces ci-dessous ont été faits pour le Voxel et sont à reprendre (#362).
 - **Éclairage dans Roblox (Voxel, réglé dans Studio le 14/11/2026) :** chaque SpotLight s'étale sur toute la pièce, pas de
   cône ni de flaque nette comme sur la planche EEVEE. Intensités à 0,6 fois celles de la planche (`LIGHT_GAIN` : à 2,
   la salle était éclairée à plat), suspension plus forte et plus courte (portée 16), lampes de la vitrine à portée 20

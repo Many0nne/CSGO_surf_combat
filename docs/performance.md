@@ -324,6 +324,39 @@ Streaming : voir « Streaming désactivé » plus haut. Une fois coupé, en mouv
 max de 49-70 à 37 ms, « bien mieux » au ressenti ; restent de petites pertes de frames (CPU et GPU de rendu vers 15 ms
 dans Studio, proches des 16,7 ms d'une frame). Ces chiffres ne valent que pour Studio (mesure publiée ci-dessous).
 
+## Éclairage : Future (`LightingStyle`, 2026-11-15)
+
+`Lighting.Technology` n'existe plus (Unified Lighting, 2025) : Studio ne l'affiche plus et Rojo ne le synchronise pas
+en direct (`Could not swap instances Lighting and Lighting`). Il est remplacé par deux propriétés, réglées dans
+`default.project.json` :
+
+| Ancien `Technology` | `LightingStyle` | `PrioritizeLightingQuality` |
+|---|---|---|
+| Voxel (réglage du jeu jusqu'au 15/11/2026) | `Soft` | false |
+| ShadowMap | `Soft` | true |
+| **Future (réglage actuel)** | **`Realistic`** | **true** |
+
+`PrioritizeLightingQuality` choisit ce que Roblox réduit d'abord sur une machine qui peine (qualité d'éclairage ou
+distance d'affichage) ; un script ne peut pas l'écrire. Pour comparer dans Studio : Properties > Lighting, à la main.
+
+Banc F4 dans Studio, Dizzy, qualité 10, fenêtre 1291×607 :
+
+| | GPU moy | CPU moy | frame médiane | p99 |
+|---|---|---|---|---|
+| Voxel, référence / contrôle | 17,9 / 17,2 | 17,8 / 17,5 | 20,0 / 19,6 | 39,4 / 22,6 |
+| Future, référence et 6 phases suivantes | 9,6 à 11,4 | 5,3 à 6,2 | 16,7 | 18 à 25 |
+| Future, contrôle | 18,3 | 19,1 | 21,3 | 43,3 |
+
+- Pas de dégradation visible, mais **pas de gain mesuré** non plus : Studio alterne entre un état rapide (CPU de rendu 5
+  à 6 ms) et un état lent (CPU 17 à 19 ms, GPU vers 18 ms), sans lien avec l'éclairage. Le run Voxel est resté dans
+  l'état lent ; le run Future y est passé à sa dernière phase et a retrouvé les chiffres du Voxel. Un CPU de rendu
+  multiplié par trois ne vient pas du type d'éclairage, qui pèse sur le GPU.
+- Nos lampes sont le cas bon marché de Future : 19 SpotLight sur Dizzy, toutes sans ombre. Une lampe qui projette des
+  ombres est ce qui coûte : banc avant et après en activer une.
+- À faire dans le client publié (seul juge) : banc F4 en qualité 10 et 1080p, à comparer au Voxel du bilan #88 ci-dessous
+  (GPU 8,0 ms, p99 19 ms), puis un tour en qualité basse pour voir l'éclairage réduit.
+- Rendu : pas de différence visible sur Dizzy au premier essai ; le shop, réglé pour le Voxel, est à reprendre (#362).
+
 ## Bilan #88 : banc F4 dans le client publié (2026-11-06, Dizzy, 1920×1080, qualité 10, écran 59 Hz)
 
 | Phase | GPU moy | CPU moy | frame médiane | p99 |

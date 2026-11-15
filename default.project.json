@@ -74,7 +74,8 @@
           0.5098
         ],
         "Outlines": false,
-        "Technology": "Voxel"
+        "LightingStyle": "Realistic",
+        "PrioritizeLightingQuality": true
       },
       "Atmosphere": {
         "$className": "Atmosphere",
