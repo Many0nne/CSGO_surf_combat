@@ -353,8 +353,19 @@ Banc F4 dans Studio, Dizzy, qualité 10, fenêtre 1291×607 :
   multiplié par trois ne vient pas du type d'éclairage, qui pèse sur le GPU.
 - Nos lampes sont le cas bon marché de Future : 19 SpotLight sur Dizzy, toutes sans ombre. Une lampe qui projette des
   ombres est ce qui coûte : banc avant et après en activer une.
-- À faire dans le client publié (seul juge) : banc F4 en qualité 10 et 1080p, à comparer au Voxel du bilan #88 ci-dessous
-  (GPU 8,0 ms, p99 19 ms), puis un tour en qualité basse pour voir l'éclairage réduit.
+- **Client publié (seul juge), Future, qualité 10, 1920×1080, même banc que le bilan #88 ci-dessous (Voxel) :**
+
+  | Phase | Voxel (#88) GPU / CPU / frame méd. / p99 | Future GPU (p95) / CPU / frame méd. / p99 |
+  |---|---|---|
+  | référence | 8,0 / 2,4 / 17,0 / 19,1 | 7,4 (12,8) / 3,2 / 16,9 / 19,0 |
+  | sans ombres | 8,2 / 2,1 / 17,0 / 19 | 6,5 (11,8) / 3,3 / 16,9 / 21,0 |
+  | tout coupé | 8,4 / 2,1 / 16,9 / 19 | 7,3 (11,8) / 3,1 / 16,9 / 23,1 |
+  | référence (contrôle) | 7,9 / 2,2 / 16,9 / 19,3 | 6,7 (12,3) / 3,2 / 16,9 / 18,9 |
+
+  **Future ne coûte rien de mesurable** : GPU dans le bruit (6,5 à 7,6 ms contre 7,8 à 8,4), toujours au rythme de
+  l'écran (16,9 ms, p99 19 ms). CPU de rendu 2,6 à 3,5 ms contre 2,1 à 2,4 : moins de 1 ms, à la limite du bruit.
+  Aucun levier (ombres, Atmosphere, effets, translucides) ne fait gagner plus de 1 ms. Pas encore regardé : le rendu en
+  qualité basse, où Roblox réduit l'éclairage.
 - Rendu : pas de différence visible sur Dizzy au premier essai ; le shop, réglé pour le Voxel, est à reprendre (#362).
 
 ## Bilan #88 : banc F4 dans le client publié (2026-11-06, Dizzy, 1920×1080, qualité 10, écran 59 Hz)
