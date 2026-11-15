@@ -19,6 +19,8 @@ local ShopCatalog = require(Shared:WaitForChild("ShopCatalog"))
 local UITheme = require(Shared:WaitForChild("UITheme"))
 local WalletRules = require(Shared:WaitForChild("WalletRules"))
 local ShopScene = require(script.Parent.Parent.systems.game.ShopScene)
+local LocalWallet = require(script.Parent.Parent.systems.inventory.LocalWallet)
+local CreditPackWindow = require(script.Parent.CreditPackWindow)
 local MenuPage = require(script.Parent.MenuPage)
 local MenuShot = require(script.Parent.MenuShot)
 local UIKit = require(script.Parent.UIKit)
@@ -97,6 +99,15 @@ local DEBUG_ATTRIBUTE = "DebugCrateOpening" -- Studio seulement, voir debugOpeni
 local BUY_TEXT = "ACHETER"
 local BUYING_TEXT = "ACHAT…"
 local OPEN_TEXT = "OUVERTURE DE TEST  ·  GRATUITE"
+-- Joueur restreint (objets aléatoires payants, #395) : ACHETER inactif avec cette étiquette, refus `region` du serveur
+local REGION_TEXT = "INDISPONIBLE DANS TA RÉGION"
+-- Packs de crédits (#395) : bouton sous les gains du jour (MainMenu, en haut à droite), fenêtre CreditPackWindow
+local PACKS_TEXT = "+ CRÉDITS"
+local PACKS_Y = 100 -- sous « GAINS DU JOUR » de la barre du menu (68 à 90)
+local PACKS_SIZE = Vector2.new(124, 34)
+local shopColumn: Frame
+local shopVeil: Frame
+local packButton: Frame
 -- Motifs de refus du serveur (CrateService), affichés sous ACHETER
 local REFUSALS = {
 	rate = "PATIENTE",
@@ -106,11 +117,13 @@ local REFUSALS = {
 	unknown = "CAISSE INCONNUE",
 	empty = "CAISSE VIDE",
 	owned = "TOUT OBTENU",
+	region = REGION_TEXT,
 	insufficient = "CRÉDITS INSUFFISANTS",
 	-- Pas « rien n'est débité » : une écriture passée dont la vérification échoue est aussi `failed` (InventoryStore)
 	failed = "ACHAT IMPOSSIBLE  ·  RÉESSAIE PLUS TARD",
 }
 local paintActions: () -> ()
+local paintPackButton: () -> () = function() end
 
 -- Cette méthode permet de changer un texte et son ombre ensemble lorsqu'un libellé de l'écran change.
 local function setText(pair: { TextLabel }, text: string)
@@ -359,18 +372,25 @@ paintActions = function()
 		return
 	end
 	local complete = ownsWholeCrate()
+	-- Restriction pas encore connue : ACHETER reste ouvert, le serveur répond `region` s'il le faut
+	local region = LocalWallet.restricted() == true
 	local busy = requesting ~= nil
 	local buying = requesting == NetworkProtocol.Names.BUY_CRATE
-	buyChoice.setEnabled(not (busy or complete))
+	buyChoice.setEnabled(not (busy or complete or region))
 	setChoiceText(buyChoice, if buying then BUYING_TEXT else BUY_TEXT)
-	buyStroke.Color = if complete or busy then C.Muted else C.Bone
-	buyOwned.Visible = complete and not buying
+	buyStroke.Color = if complete or busy or region then C.Muted else C.Bone
+	-- Même étiquette pour les deux états ; celle de la région, plus longue que le bouton, part de son coin gauche
+	buyOwned.Text = if region then REGION_TEXT else "TOUT OBTENU"
+	buyOwned.AnchorPoint = if region then Vector2.new(0, 0.5) else Vector2.new(1, 0.5)
+	buyOwned.Position = if region then UDim2.fromOffset(-12, 0) else UDim2.new(1, 12, 0, 0)
+	buyOwned.Visible = (complete or region) and not buying
 	testRow.Visible = canOpen()
 	openChoice.setEnabled(not busy)
 	-- Pendant une demande, la caisse affichée reste celle qui est payée : l'ouverture se joue sur son socle
 	for _, choice in navigation do
 		choice.setEnabled(not busy)
 	end
+	paintPackButton()
 end
 
 -- Cette méthode permet d'afficher un message sous ACHETER pendant 3 s (refus ou échec en rouge d'impact, `ok` en ambre)
@@ -471,6 +491,7 @@ local function requestCrate(remoteName: string)
 			detail.Visible = true
 			showStatus(revealHeadline(added, refund), true)
 		end
+		paintPackButton()
 	end)
 end
 
@@ -778,6 +799,69 @@ local function debugOpening()
 	print("[DebugCrateOpening] " .. value .. " : " .. tostring(started))
 end
 
+-- Cette méthode permet de montrer « + CRÉDITS » (#395) lorsque le shop s'affiche, qu'une vue change ou que la
+-- restriction change : seulement pour un joueur connu comme non restreint, sur la vitrine ou la vue détail (pas pendant
+-- une ouverture), fenêtre des packs fermée.
+paintPackButton = function()
+	if not packButton then
+		return
+	end
+	packButton.Visible = gui.Enabled
+		and LocalWallet.restricted() == false
+		and not CreditPackWindow.isOpen()
+		and (overview.Visible or detail.Visible)
+end
+
+-- Cette méthode permet de fermer la fenêtre des packs et de rendre la salle et la colonne du shop lorsque le joueur
+-- clique RETOUR, devient restreint ou quitte le shop.
+local function closePacks()
+	CreditPackWindow.hide()
+	ShopScene.setInteractive(true)
+	shopColumn.Visible = true
+	shopVeil.Visible = true
+	paintPackButton()
+end
+
+-- Cette méthode permet d'ouvrir la fenêtre des packs (#395) lorsque le joueur clique « + CRÉDITS » : la colonne du shop
+-- se masque (elle chevaucherait le bloc centré) et la salle ne réagit plus à la souris ; refusé pendant une demande.
+local function openPacks()
+	if requesting or ShopScene.isOpening() or CreditPackWindow.isOpen() then
+		return
+	end
+	CreditPackWindow.show()
+	if CreditPackWindow.isOpen() then
+		shopColumn.Visible = false
+		shopVeil.Visible = false
+		ShopScene.setInteractive(false)
+	end
+	paintPackButton()
+end
+
+-- Cette méthode permet de construire « + CRÉDITS » en haut à droite, sous les gains du jour de la barre du menu (contour
+-- os, survol en rouge d'impact comme ACHETER, en plus petit) lorsque l'écran est construit.
+local function buildPackButton(root: Frame)
+	packButton = UIKit.frame({
+		Name = "CreditPacks",
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -EDGE, 0, PACKS_Y),
+		Size = UDim2.fromOffset(PACKS_SIZE.X, PACKS_SIZE.Y),
+		Visible = false,
+		Parent = root,
+	})
+	UIKit.stroke(packButton, C.Bone, 2)
+	MenuShot.textChoice({
+		text = PACKS_TEXT,
+		font = F.Display,
+		size = 18,
+		color = C.Bone,
+		anchor = Vector2.new(0.5, 0.5),
+		position = UDim2.fromScale(0.5, 0.5),
+		parent = packButton,
+		action = openPacks,
+	})
+end
+
 -- Cette méthode permet de construire l'écran (fond de coin, colonne de gauche, deux vues) lorsque le client démarre.
 function ShopScreen.init()
 	gui = UIKit.create("ScreenGui", {
@@ -790,26 +874,33 @@ function ShopScreen.init()
 		Parent = Players.LocalPlayer:WaitForChild("PlayerGui"),
 	})
 	local root = UIKit.scaledRoot(gui)
-	local veil = UIKit.frame({
+	shopVeil = UIKit.frame({
 		Name = "Veil",
 		BackgroundColor3 = C.Scrim,
 		Size = UDim2.new(0, VEIL_WIDTH, 1, 0),
 		ZIndex = 0,
 		Parent = root,
 	})
-	UIKit.create("UIGradient", { Transparency = VEIL, Parent = veil })
-	local column =
+	UIKit.create("UIGradient", { Transparency = VEIL, Parent = shopVeil })
+	shopColumn =
 		UIKit.frame({ Name = "Column", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = root })
-	buildOverview(column, root)
-	buildDetail(column)
-	buildReveal(column, root)
-	MenuPage.followTopbar(root, column)
+	buildOverview(shopColumn, root)
+	buildDetail(shopColumn)
+	buildReveal(shopColumn, root)
+	buildPackButton(root)
+	MenuPage.followTopbar(root, shopColumn)
+	CreditPackWindow.init(closePacks)
 	ShopScene.onCrateClicked(openCrate)
 	ShopScene.onWeaponFocus(highlightRow)
 	paintActions()
 	Players.LocalPlayer:GetAttributeChangedSignal("Role"):Connect(paintActions)
 	-- Skin obtenu (achat, ouverture de test, autre serveur) : TOUT OBTENU peut changer
 	Players.LocalPlayer:GetAttributeChangedSignal(InventoryRules.ATTRIBUTE):Connect(paintActions)
+	-- Restriction des objets aléatoires payants (#395) connue ou changée : ACHETER et « + CRÉDITS » suivent
+	LocalWallet.observeRestricted(function()
+		paintActions()
+		paintPackButton()
+	end)
 	if RunService:IsStudio() then
 		Players.LocalPlayer:GetAttributeChangedSignal(DEBUG_ATTRIBUTE):Connect(debugOpening)
 	end
@@ -824,6 +915,7 @@ function ShopScreen.show()
 	reveal.Visible = false
 	ShopScene.start()
 	openOverview()
+	paintPackButton()
 end
 
 -- Cette méthode permet de fermer le shop (salle retirée, scène de l'accueil reprise) lorsque le joueur change d'onglet
@@ -834,6 +926,7 @@ function ShopScreen.hide()
 	end
 	gui.Enabled = false
 	view += 1
+	closePacks()
 	ShopScene.stop()
 end
 

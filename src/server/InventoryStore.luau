@@ -672,6 +672,13 @@ function InventoryStore.credits(player: Player): number?
 	return walletBalance(profile :: Profile)
 end
 
+-- Cette méthode permet de savoir si la lecture de l'inventaire d'un joueur est terminée (réussie ou non) lorsqu'un reçu
+-- Robux (#395) attend la fin du chargement avant de décider.
+function InventoryStore.isLoaded(player: Player): boolean
+	local profile = profiles[player]
+	return profile ~= nil and profile.loaded
+end
+
 -- Cette méthode permet de savoir si le solde d'un joueur peut changer lorsqu'un système serveur s'apprête à donner ou
 -- faire payer (WalletStore.canChange).
 function InventoryStore.canChangeCredits(player: Player): boolean

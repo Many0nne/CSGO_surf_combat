@@ -2,17 +2,19 @@
 -- l'arme de la caisse aux chances affichées (`Random` serveur, `ShopCatalog.draw`) et répond une fois l'issue connue.
 --
 -- Achat (#393, remote `BuyCrate`, RemoteFunction, tous les joueurs) : un seul achat en vol par joueur (un double clic
--- est refusé `busy` sans rien faire) ; refus avant tout tirage si la caisse est inconnue, si le solde ne peut pas changer
--- (inventaire pas chargé ou pas sauvegardable, `WalletStore.canChange`) ou si tout son contenu est déjà possédé. Puis
--- tirage, remboursement d'un doublon lu dans `ShopCatalog`, et une seule `InventoryStore.transact` qui vérifie le solde
--- stocké, débite et donne le skin (ou rembourse le doublon dans `earned`) : `CratePurchaseRules`. La réponse ne part
--- qu'après l'écriture ; une écriture en échec ne débite rien et ne donne rien.
+-- est refusé `busy` sans rien faire) ; refus avant tout tirage si la caisse est inconnue, si le joueur est restreint
+-- (objets aléatoires payants, #395, `PaidRandomPolicy`), si le solde ne peut pas changer (inventaire pas chargé ou pas
+-- sauvegardable, `WalletStore.canChange`) ou si tout son contenu est déjà possédé. Puis tirage, remboursement d'un
+-- doublon lu dans `ShopCatalog`, et une seule `InventoryStore.transact` qui vérifie le solde stocké, débite et donne le
+-- skin (ou rembourse le doublon dans le compteur débité) : `CratePurchaseRules`. La réponse ne part qu'après
+-- l'écriture ; une écriture en échec ne débite rien et ne donne rien.
 --
 -- Ouverture de test (#332, remote `OpenCrate`, admin et Studio seulement) : gratuite, ni débit ni remboursement, un
 -- doublon ne donne rien de plus (`added` = false) ; un autre joueur reçoit `forbidden`, sans journal.
 --
 -- Réponses : { ok = true, skinId, rarity (id de rareté), added, refund? } ou { ok = false, reason } avec reason = "rate"
--- (garde commune), "busy" (achat déjà en vol), "forbidden" (ouverture de test), "unknown" (caisse inconnue), "loading"
+-- (garde commune), "busy" (achat déjà en vol), "forbidden" (ouverture de test), "unknown" (caisse inconnue), "region"
+-- (joueur restreint : objets aléatoires payants, #395), "loading"
 -- (inventaire pas chargé ou non sauvegardable : rien de tiré), "owned" (tout le contenu déjà possédé), "empty" (caisse
 -- sans skin connu), "insufficient" (solde stocké insuffisant), "failed" (écriture en échec : rien débité ni donné, sauf
 -- la limite documentée de `InventoryStore.transact`, écriture passée dont la vérification échoue ; ne jamais rembourser
@@ -26,6 +28,7 @@ local ShopCatalog = require(ReplicatedStorage.Shared.ShopCatalog)
 local CheatLog = require(ServerScriptService.Server.CheatLog)
 local CratePurchaseRules = require(ServerScriptService.Server.CratePurchaseRules)
 local InventoryStore = require(ServerScriptService.Server.InventoryStore)
+local PaidRandomPolicy = require(ServerScriptService.Server.PaidRandomPolicy)
 local Roles = require(ServerScriptService.Server.Roles)
 local WalletStore = require(ServerScriptService.Server.WalletStore)
 
@@ -79,6 +82,10 @@ local function purchase(player: Player, crateId: string): Result
 	local crate = ShopCatalog.crate(crateId)
 	if not crate then
 		return refuse("unknown")
+	end
+	-- Objets aléatoires payants (#395) : un joueur restreint (ou dont PolicyService n'a pas répondu) n'achète pas de caisse
+	if PaidRandomPolicy.isRestricted(player) then
+		return refuse("region")
 	end
 	-- Chargé et sauvegardable, ou solde de session de Studio sans accès aux API (achat appliqué en mémoire) : c'est ce
 	-- que `transact` accepte. `canGrant` refuserait ce dernier cas, sans rien protéger de plus.

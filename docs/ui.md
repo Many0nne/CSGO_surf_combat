@@ -899,6 +899,10 @@ Règles serveur : `docs/architecture.md`, « Achat d'une caisse ». Dans la vue 
 - **Révélation d'un doublon** (`added` = false) : la ligne « OBTENU » devient « DOUBLON · +N CRÉDITS » en ambre (achat),
   « DOUBLON » seul pour l'ouverture de test ; skin et rareté inchangés. La scène d'ouverture est celle de #332.
 - Shop fermé (autre onglet) pendant l'achat : pas de révélation, le skin et le solde suivent quand même.
+- **Joueur restreint** (objets aléatoires payants, #395, `docs/economie.md`) : ACHETER en contour atténué, étiquette os
+  atténué « INDISPONIBLE DANS TA RÉGION » à cheval sur le coin gauche du bouton (plus longue que lui, elle déborderait à
+  gauche de l'écran depuis le coin droit) ; le contenu et ses chances restent visibles. Restriction pas encore connue :
+  ACHETER reste ouvert, le serveur répond `region` s'il le faut.
 - **Ouverture de test** (admin et Studio) : « OUVERTURE DE TEST · GRATUITE », texte os atténué 16 px sous ACHETER ;
   OUVRIR ne remplace plus ACHETER. Pour tester l'achat avec le compte propriétaire (admin, donc TOUT OBTENU), poser
   `DebugInventory = "default"` (contexte serveur) ; `DebugCredits` donne des crédits.
@@ -929,6 +933,22 @@ caisses : « Achat d'une caisse (#393) ».
   ont atteint 250 (seul s'il n'y a rien gagné). Rien si la manche n'a rien rapporté sous le plafond, ou si le solde ne
   peut pas changer (Studio sans accès aux API).
 - **Prix du shop** : voir « Shop : salle de présentation ».
+
+## Packs de crédits (#395)
+
+Achat de crédits en Robux (règles : `docs/economie.md`). Sur la page SHOP seulement :
+
+- **« + CRÉDITS »** en haut à droite, sous « GAINS DU JOUR » (y = 100, contour os 2 px, Oswald gras 18 px, survol en
+  rouge d'impact comme ACHETER, en plus petit). Montré à un joueur **connu** comme non restreint (attribut
+  `PaidRandomRestricted` = false), sur la vitrine ou la vue détail, pas pendant une ouverture.
+- **Fenêtre** (`CreditPackWindow`, gabarit des écrans secondaires `MenuPage` : bloc centré sur un voile, sans panneau,
+  sous la barre du menu dont le solde reste visible) : titre « PACKS DE CRÉDITS », trois packs côte à côte (jeton
+  56 px, montant Oswald gras 52 px, « CRÉDITS », prix « 99 R$ » dans un contour os comme ACHETER), une ligne atténuée
+  « PAIEMENT EN ROBUX · LES CRÉDITS ARRIVENT DÈS QUE ROBLOX CONFIRME L'ACHAT », RETOUR en bas au centre. Pendant
+  qu'elle est ouverte, la colonne du shop est masquée (elle chevaucherait le bloc) et la salle ne réagit plus à la
+  souris (`ShopScene.setInteractive`). Un clic sur un prix : le serveur ouvre le prompt de Roblox ; un refus s'affiche
+  sous les packs (étiquette rouge d'impact, 3 s), les crédits reçus en ambre (« +500 CRÉDITS »).
+- Le prix en Robux s'écrit « R$ » : pas d'icône Robux dans les polices de l'interface.
 
 ![Planche du jeton](ui/credits/planche_jeton.png)
 

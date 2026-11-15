@@ -170,7 +170,7 @@ RemoteGuard.FEEDBACK_MAX_BYTES = 1000
 --   SendFeedback : clic ENVOYER ; SaveSettings : 1 envoi par seconde au plus (LocalSettings) ; GetSettings : une
 --   demande au démarrage du client ; EquipItem : un clic sur une arme ou un skin de l'accueil (#280) ; OpenCrate : un
 --   clic sur OUVRIR, l'animation d'ouverture dure plusieurs secondes (#332) ; BuyCrate : un clic sur ACHETER, suivi de la
---   même animation (#393).
+--   même animation (#393) ; BuyCreditPack : un clic sur un pack, suivi du prompt Roblox (#395).
 -- Une arme plus rapide (automatique) demandera de relever HitscanDamage, ShotFired et WeaponAction.
 local N = NetworkProtocol.Names
 RemoteGuard.RULES = {
@@ -225,6 +225,8 @@ RemoteGuard.RULES = {
 	[N.OPEN_CRATE] = { rate = 1, burst = 3, args = { RemoteGuard.string(InventoryRules.MAX_ID_LENGTH) } },
 	-- Id de la caisse à acheter (#393) ; existence, prix, solde et achat déjà en vol vérifiés ensuite par CrateService
 	[N.BUY_CRATE] = { rate = 1, burst = 3, args = { RemoteGuard.string(InventoryRules.MAX_ID_LENGTH) } },
+	-- Id du pack de crédits (#395) ; pack connu et joueur non restreint vérifiés ensuite par ReceiptService
+	[N.BUY_CREDIT_PACK] = { rate = 1, burst = 3, args = { RemoteGuard.string(InventoryRules.MAX_ID_LENGTH) } },
 	[N.SEND_FEEDBACK] = { rate = 0.5, burst = 3, args = { RemoteGuard.string(RemoteGuard.FEEDBACK_MAX_BYTES) } },
 	[N.SAVE_SETTINGS] = { rate = 2, burst = 5, args = { RemoteGuard.table() } },
 	[N.GET_SETTINGS] = { rate = 0.2, burst = 3, args = {} },
