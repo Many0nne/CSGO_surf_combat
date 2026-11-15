@@ -27,27 +27,35 @@ local TIMER_TOP = 10
 local TIMER_HEIGHT = 84
 -- Menu en partie ouvert (#220) : le timer passe au-dessus de son voile (2) et de sa page (3), la partie continue
 local TIMER_OVER_MENU_ORDER = 4
--- Série de kills (#364) : crâne dans un cercle de visée et nombre, sans mot, centrés sous le timer. À un palier annoncé
--- à la voix, sans changer de taille : les quatre branches d'un réticule se ferment sur le cercle, la croix du hitmarker
--- s'allume sur le crâne, le tout en rouge d'impact le temps de l'annonce (STREAK_RED_HOLD), puis retour à l'os
--- assets/ui/hud/crane_serie.png (tools/ui/make_skull_icon.py, Decal 124978015444007 ; ci-dessous l'id de l'image du Decal)
-local STREAK_SKULL = "rbxassetid://86920012092825"
+-- Série de kills (#364) : crâne éclaté et nombre, sans mot ni cercle, centrés sous le timer (KillStreakRules.view).
+-- Crâne os, hachuré dès 5 kills, sur une tache de sang dès 5 (plus grande à 10 puis 15) ; nombre rouge d'impact dès 10.
+-- Le crâne reste os au repos pour se lire sur le sang. À un palier annoncé à la voix, sans changer de taille : la croix
+-- du hitmarker s'allume autour du crâne, crâne en rouge d'impact et nombre en rouge (en os s'il est déjà rouge) le temps
+-- de l'annonce (STREAK_FLASH_HOLD), et une nouvelle tache de sang éclot.
+-- assets/ui/hud/crane_serie.png et crane_serie_hachures.png (tools/ui/make_skull_icon.py, Decals 80650103001496 et
+-- 77308507647947), sang_serie_<1|2|3>.png (tools/ui/make_blood_splats.py, Decals 101612824947936, 127305380479289 et
+-- 130052758414545) ; ci-dessous les ids des images de ces Decals
+local STREAK_SKULL = "rbxassetid://99336092680581"
+local STREAK_SKULL_HATCHED = "rbxassetid://72136449871345"
+local STREAK_BLOOD = {
+	"rbxassetid://100157208120295",
+	"rbxassetid://71830836929202",
+	"rbxassetid://105641732929847",
+}
 local STREAK_TOP = TIMER_TOP + TIMER_HEIGHT + 2
-local STREAK_SIGHT = 40 -- diamètre du cercle de visée (px)
-local STREAK_HEIGHT = STREAK_SIGHT + 4
-local STREAK_SKULL_SIZE = 22
-local STREAK_RING = 2 -- épaisseur du cercle et des branches
-local STREAK_ARM_LENGTH = 10
-local STREAK_ARM_CLOSED = STREAK_SIGHT / 2 - 4 -- début d'une branche fermée : elle mord le cercle
-local STREAK_ARM_OPEN = STREAK_SIGHT / 2 + 8 -- début d'une branche qui arrive
--- Croix du hitmarker autour du crâne : du centre, début et fin de chaque diagonale (px). Elle part du bord du crâne et
--- dépasse le cercle : posée sur le crâne (7 à 15 px), elle cachait les orbites
-local STREAK_CROSS = { 12, 23 }
+local STREAK_SKULL_SIZE = 40
+local STREAK_HEIGHT = STREAK_SKULL_SIZE + 4
+local STREAK_BLOOD_SIZE = 64 -- 1,6 fois le crâne : la tache déborde autour
+local STREAK_BLOOD_POP = TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+local STREAK_BLOOD_POP_FROM = 0.4 -- échelle de départ d'une tache qui éclot
+-- Croix du hitmarker autour du crâne : du centre, début et fin de chaque diagonale (px), et épaisseur. Elle part du bord
+-- du crâne : posée dessus, elle cachait les orbites
+local STREAK_CROSS = { 21, 30 }
+local STREAK_CROSS_THICKNESS = 2
 local STREAK_CROSS_HOLD = 0.6
 local STREAK_TEXT_SIZE = 30
-local STREAK_GAP = 14
-local STREAK_RED_HOLD = 1.2
-local STREAK_CLOSE = TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local STREAK_GAP = 10
+local STREAK_FLASH_HOLD = 1.2
 -- Classement : largeur fixe (px), colonnes en px ; JOUEUR prend la place restante
 local LB_WIDTH = 620
 local LB_TOP = 118
@@ -97,14 +105,18 @@ local rankShown: { rank: number, total: number }? = nil
 local RANK_TOTAL_SIZE = 18
 local renderRank: () -> ()
 local streakRow: Frame
-local streakRing: UIStroke
-local streakArms: { { frame: Frame, stroke: UIStroke, dir: Vector2 } } = {}
 local streakCross: { Frame } = {}
 local streakSkull: ImageLabel
+local streakSkullShadow: ImageLabel
 local streakCount: TextLabel
 local streakCountShadow: TextLabel
 local streakShown = false -- série d'au moins KillStreakRules.MIN_SHOWN kills (masquée en plus sous le menu en partie)
-local streakPulse = 0 -- jeton de la dernière pulsation : un retour à l'os ne s'applique qu'à elle
+local streakBlood: ImageLabel
+local streakBloodScale: UIScale
+local streakBloodTier = 0 -- tache affichée (0 : aucune), pour ne faire éclore que la nouvelle
+local streakRest: Color3 = C.Bone -- couleur de repos du nombre (rouge d'impact dès 10 kills ; le crâne reste os)
+local streakPulse = 0 -- jeton du dernier flash : un retour au repos ne s'applique qu'à lui
+local streakFlashing = false -- flash d'un palier en cours : la couleur de repos attend sa fin
 local leaderboard: Frame
 local leaderboardList: Frame
 local respawnRoot: Frame
@@ -163,40 +175,36 @@ local function buildStreak(anchor: Frame)
 		Parent = streakRow,
 	})
 
-	local sightBox = UIKit.frame({
-		Name = "Sight",
+	local skullBox = UIKit.frame({
+		Name = "SkullBox",
 		BackgroundTransparency = 1,
 		LayoutOrder = 1,
 		Size = UDim2.fromOffset(STREAK_HEIGHT, STREAK_HEIGHT),
 		Parent = streakRow,
 	})
-	-- Centre du viseur : les branches et la croix y sont posées en px depuis le centre
+	-- Centre du crâne : la croix y est posée en px depuis le centre
 	local center = UIKit.frame({
 		Name = "Center",
 		BackgroundTransparency = 1,
 		Position = UDim2.fromScale(0.5, 0.5),
 		Size = UDim2.fromOffset(0, 0),
-		Parent = sightBox,
+		Parent = skullBox,
 	})
-	-- Cercle de visée et crâne, chacun doublé d'une ombre noire décalée de 2 px, comme le texte du HUD sur la scène
+	-- Tache de sang sous le crâne et son ombre, en couleur (pas de teinte), cachée sous 5 kills
+	streakBlood = UIKit.create("ImageLabel", {
+		Name = "Blood",
+		Image = STREAK_BLOOD[1],
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Size = UDim2.fromOffset(STREAK_BLOOD_SIZE, STREAK_BLOOD_SIZE),
+		ZIndex = 0,
+		Visible = false,
+		Parent = center,
+	})
+	streakBloodScale = UIKit.create("UIScale", { Parent = streakBlood })
+	-- Crâne doublé d'une ombre noire décalée de 2 px, comme le texte du HUD sur la scène
 	for _, layer in { { name = "Shadow", offset = 2, z = 1 }, { name = "", offset = 0, z = 2 } } do
 		local shadow = layer.name == "Shadow"
-		local ring = UIKit.frame({
-			Name = "Ring" .. layer.name,
-			BackgroundTransparency = 1,
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.fromOffset(layer.offset, layer.offset),
-			Size = UDim2.fromOffset(STREAK_SIGHT - STREAK_RING, STREAK_SIGHT - STREAK_RING),
-			ZIndex = layer.z,
-			Parent = center,
-		})
-		UIKit.create("UICorner", { CornerRadius = UDim.new(0.5, 0), Parent = ring })
-		local stroke = UIKit.create("UIStroke", {
-			Thickness = STREAK_RING,
-			Color = if shadow then C.Black else C.Bone,
-			Transparency = if shadow then 0.35 else 0,
-			Parent = ring,
-		})
 		local skull = UIKit.create("ImageLabel", {
 			Name = "Skull" .. layer.name,
 			Image = STREAK_SKULL,
@@ -209,42 +217,20 @@ local function buildStreak(anchor: Frame)
 			ZIndex = layer.z,
 			Parent = center,
 		})
-		if not shadow then
-			streakRing = stroke
+		if shadow then
+			streakSkullShadow = skull
+		else
 			streakSkull = skull
 		end
 	end
-	-- Branches du réticule, cachées hors palier : rouge d'impact à contour noir, comme le crosshair
-	for _, dir in { Vector2.new(-1, 0), Vector2.new(1, 0), Vector2.new(0, -1), Vector2.new(0, 1) } do
-		local horizontal = dir.Y == 0
-		local arm = UIKit.frame({
-			Name = "Arm",
-			BackgroundColor3 = C.HitRed,
-			BackgroundTransparency = 1,
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Size = if horizontal
-				then UDim2.fromOffset(STREAK_ARM_LENGTH, STREAK_RING)
-				else UDim2.fromOffset(STREAK_RING, STREAK_ARM_LENGTH),
-			ZIndex = 3,
-			Parent = center,
-		})
-		local stroke = UIKit.create("UIStroke", {
-			Thickness = 1,
-			Color = C.Black,
-			Transparency = 1,
-			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-			Parent = arm,
-		})
-		table.insert(streakArms, { frame = arm, stroke = stroke, dir = dir })
-	end
-	-- Croix du hitmarker sur le crâne, cachée hors palier : contour noir dessous, trait rouge d'impact dessus
+	-- Croix du hitmarker autour du crâne, cachée hors palier : contour noir dessous, trait rouge d'impact dessus
 	local diagonal = math.sqrt(0.5)
 	local inner, outer = STREAK_CROSS[1] * diagonal, STREAK_CROSS[2] * diagonal
 	for _, d in { { 1, 1 }, { -1, 1 }, { -1, -1 }, { 1, -1 } } do
 		for _, layer in
 			{
-				{ thickness = STREAK_RING + 2, color = C.Black, z = 4 },
-				{ thickness = STREAK_RING, color = C.HitRed, z = 5 },
+				{ thickness = STREAK_CROSS_THICKNESS + 2, color = C.Black, z = 4 },
+				{ thickness = STREAK_CROSS_THICKNESS, color = C.HitRed, z = 5 },
 			}
 		do
 			local line =
@@ -285,32 +271,39 @@ local function applyStreakVisible()
 	end
 end
 
--- Cette méthode permet de placer une branche du réticule à `start` px du centre (son bout intérieur) lorsque les
--- branches arrivent ou se ferment.
-local function armPosition(dir: Vector2, start: number): UDim2
-	local d = start + STREAK_ARM_LENGTH / 2
-	return UDim2.fromOffset(dir.X * d, dir.Y * d)
+-- Cette méthode permet de remettre le crâne (os) et le nombre à leur couleur de repos lorsque la série change hors
+-- d'un flash.
+local function paintStreakRest()
+	streakSkull.ImageColor3 = C.Bone
+	streakCount.TextColor3 = streakRest
 end
 
--- Cette méthode permet de marquer un palier annoncé à la voix, sans changer de taille : branches qui se ferment sur le
--- cercle, croix du hitmarker sur le crâne, tout en rouge d'impact ; retour à l'os après l'annonce, sauf si un palier plus
+-- Cette méthode permet d'afficher la tache de sang du niveau demandé lorsque la série change : une tache nouvelle éclot
+-- (échelle qui rebondit jusqu'à 1), aucune tache sous 5 kills.
+local function setStreakBlood(tier: number)
+	if tier == streakBloodTier then
+		return
+	end
+	streakBloodTier = tier
+	streakBlood.Visible = tier > 0
+	if tier == 0 then
+		return
+	end
+	streakBlood.Image = STREAK_BLOOD[tier]
+	streakBloodScale.Scale = STREAK_BLOOD_POP_FROM
+	UIKit.tween(streakBloodScale, STREAK_BLOOD_POP, { Scale = 1 })
+end
+
+-- Cette méthode permet de marquer un palier annoncé à la voix, sans changer de taille : croix du hitmarker autour du
+-- crâne, crâne en rouge d'impact (sauf sur une tache de sang, où il disparaîtrait : la tache qui éclot marque alors le
+-- palier) et nombre en rouge (en os s'il est déjà rouge) ; retour au repos après l'annonce, sauf si un palier plus
 -- récent a pris la main.
 local function pulseStreak()
 	streakPulse += 1
+	streakFlashing = true
 	local token = streakPulse
-	streakSkull.ImageColor3 = C.HitRed
-	streakRing.Color = C.HitRed
-	streakCount.TextColor3 = C.HitRed
-	for _, arm in streakArms do
-		arm.frame.Position = armPosition(arm.dir, STREAK_ARM_OPEN)
-		arm.frame.BackgroundTransparency = 1
-		arm.stroke.Transparency = 1
-		UIKit.tween(arm.frame, STREAK_CLOSE, {
-			Position = armPosition(arm.dir, STREAK_ARM_CLOSED),
-			BackgroundTransparency = 0,
-		})
-		UIKit.tween(arm.stroke, STREAK_CLOSE, { Transparency = 0.35 })
-	end
+	streakSkull.ImageColor3 = if streakBloodTier > 0 then C.Bone else C.HitRed
+	streakCount.TextColor3 = if streakRest == C.HitRed then C.Bone else C.HitRed
 	for _, line in streakCross do
 		line.BackgroundTransparency = 0
 	end
@@ -322,17 +315,13 @@ local function pulseStreak()
 			UIKit.tween(line, Motion.Hit, { BackgroundTransparency = 1 })
 		end
 	end)
-	task.delay(STREAK_RED_HOLD, function()
+	task.delay(STREAK_FLASH_HOLD, function()
 		if token ~= streakPulse then
 			return
 		end
+		streakFlashing = false
 		UIKit.tween(streakSkull, Motion.Color, { ImageColor3 = C.Bone })
-		UIKit.tween(streakRing, Motion.Color, { Color = C.Bone })
-		UIKit.tween(streakCount, Motion.Color, { TextColor3 = C.Bone })
-		for _, arm in streakArms do
-			UIKit.tween(arm.frame, Motion.Exit, { BackgroundTransparency = 1 })
-			UIKit.tween(arm.stroke, Motion.Exit, { Transparency = 1 })
-		end
+		UIKit.tween(streakCount, Motion.Color, { TextColor3 = streakRest })
 	end)
 end
 
@@ -910,9 +899,13 @@ function RoundHUD.init()
 
 	buildRespawnOverlay(root)
 	buildTimer(root)
-	-- Crâne de la série chargé d'avance : une image chargée à sa première apparition manquait au premier palier (#364)
+	-- Crânes de la série chargés d'avance : une image chargée à sa première apparition manquait au premier palier (#364)
 	task.spawn(function()
-		pcall(ContentProvider.PreloadAsync, ContentProvider, { streakSkull })
+		pcall(
+			ContentProvider.PreloadAsync,
+			ContentProvider,
+			{ STREAK_SKULL, STREAK_SKULL_HATCHED, table.unpack(STREAK_BLOOD) }
+		)
 	end)
 	buildLeaderboard(root)
 	buildResultBanner(root)
@@ -961,7 +954,8 @@ function RoundHUD.hide()
 end
 
 -- Cette méthode permet de montrer la série de kills du joueur local (KillAnnouncer) lorsqu'elle change : crâne et nombre
--- dès le double kill (KillStreakRules.view), pulsation rouge à un palier annoncé, masqué à la mort et hors partie.
+-- dès le double kill (KillStreakRules.view), hachuré et sur une tache de sang dès 5, nombre rouge dès 10, flash à un
+-- palier annoncé, masqué à la mort et hors partie.
 function RoundHUD.setStreak(streak: number)
 	if not streakRow then
 		return
@@ -970,9 +964,21 @@ function RoundHUD.setStreak(streak: number)
 	streakShown = view.visible
 	streakCount.Text = view.count
 	streakCountShadow.Text = view.count
+	local image = if view.hatched then STREAK_SKULL_HATCHED else STREAK_SKULL
+	streakSkull.Image = image
+	streakSkullShadow.Image = image
+	streakRest = if view.red then C.HitRed else C.Bone
+	setStreakBlood(view.blood)
 	applyStreakVisible()
 	if view.visible and view.tier then
 		pulseStreak()
+	elseif not view.visible then
+		-- série perdue : un flash en cours ne doit pas repeindre l'ancienne couleur
+		streakPulse += 1
+		streakFlashing = false
+		paintStreakRest()
+	elseif not streakFlashing then
+		paintStreakRest()
 	end
 end
 
