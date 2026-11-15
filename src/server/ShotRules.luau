@@ -118,8 +118,9 @@ ShotRules.CADENCE_TOLERANCE = 0.15
 -- Fenêtre (s) sur laquelle la vitesse d'un personnage est estimée dans son historique.
 ShotRules.SPEED_WINDOW = 0.1
 -- Equip (#175) : une touche est acceptée à partir de equippedAt + EquipTime - EQUIP_TOLERANCE. equippedAt est
--- l'arrivée de l'outil dans le personnage sur le serveur, la touche arrive au moins EquipTime plus tard (le client
--- honnête n'est jamais prêt plus tôt, #184) : la tolérance couvre la gigue entre les deux paquets.
+-- l'arrivée de l'outil dans le personnage sur le serveur, la touche arrive au moins EquipTime plus tard (verrou du
+-- client honnête = EquipTime pile, compté depuis son propre equip, #404) : la tolérance couvre seule la gigue entre les
+-- deux paquets.
 ShotRules.EQUIP_TOLERANCE = 0.2
 -- Chargeur (#175) : un rechargement compte comme fini ReloadTime - RELOAD_TOLERANCE après l'arrivée de l'action
 -- Reload (même gigue entre l'action et la touche suivante).

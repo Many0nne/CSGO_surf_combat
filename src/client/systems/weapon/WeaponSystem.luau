@@ -63,6 +63,7 @@ local function ensureAmmoState(tool, cfg)
 	s.ammo = s.magazine
 	s.lastFire = 0
 	s.nextFireTime = 0
+	s.nextSecondaryTime = 0
 	s.slashIndex = 0
 	toolState[tool] = s
 	return s
@@ -159,17 +160,31 @@ local function inspectCurrent()
 	ViewmodelSystem.playAnimation(animation)
 end
 
+-- Cette méthode permet d'allonger les prochains clics gauche et droit possibles lorsqu'un coup lancé à `startedAt`
+-- rencontre quelque chose (cadence d'un coup qui touche, comme CS:GO, #404), sans jamais raccourcir un délai posé.
+local function applyHitCooldowns(s, cfg, attackKind: string, startedAt: number)
+	local primary, secondary = WeaponConfig.meleeCooldowns(cfg, attackKind, true)
+	s.nextFireTime = math.max(s.nextFireTime, startedAt + primary)
+	s.nextSecondaryTime = math.max(s.nextSecondaryTime, startedAt + secondary)
+end
+
 -- Cette méthode permet de lancer un coup de mêlée lorsque l'arme est prête : l'animation porte le marqueur qui résout
--- l'impact, cooldown fixe le prochain coup possible (tous clics confondus) et lockTime la durée de l'état FIRING.
-local function startMeleeAttack(tool, cfg, s, animation: string, attackKind: string, cooldown: number, lockTime: number)
+-- l'impact (un coup qui touche allonge la cadence), et lockTime fixe la durée de l'état FIRING.
+local function startMeleeAttack(tool, cfg, s, animation: string, attackKind: string, lockTime: number)
 	local now = tick()
+	local primaryDelay, secondaryDelay = WeaponConfig.meleeCooldowns(cfg, attackKind, false)
 	s.lastFire = now
-	s.nextFireTime = now + cooldown
+	s.nextFireTime = now + primaryDelay
+	s.nextSecondaryTime = now + secondaryDelay
 	weaponState = "FIRING"
 	replicateAction("Shoot")
 	local markerOverrides: { [string]: string | () -> string } = {
 		["Stab Sound"] = function()
-			return MeleeHitDetection.resolveHit(cfg, ViewmodelSystem.getActiveViewmodel(), attackKind)
+			local sound, contact = MeleeHitDetection.resolveHit(cfg, ViewmodelSystem.getActiveViewmodel(), attackKind)
+			if contact then
+				applyHitCooldowns(s, cfg, attackKind, now)
+			end
+			return sound
 		end,
 	}
 	ViewmodelSystem.playAnimation(animation, markerOverrides, cfg.AttackFadeTime)
@@ -189,18 +204,10 @@ local function onSecondaryAttack(tool, cfg)
 		return
 	end
 	local s = ensureAmmoState(tool, cfg)
-	if tick() < s.nextFireTime then
+	if tick() < s.nextSecondaryTime then
 		return
 	end
-	startMeleeAttack(
-		tool,
-		cfg,
-		s,
-		attack.Animation,
-		WeaponConfig.AttackKind.SECONDARY,
-		attack.FireDelay,
-		attack.AnimTime
-	)
+	startMeleeAttack(tool, cfg, s, attack.Animation, WeaponConfig.AttackKind.SECONDARY, attack.AnimTime)
 end
 
 local function onToolActivated(tool)
@@ -229,7 +236,6 @@ local function onToolActivated(tool)
 			s,
 			nextAttackAnimation(s, cfg),
 			WeaponConfig.AttackKind.PRIMARY,
-			firedelay,
 			cfg.ShootAnimTime or 0.4
 		)
 		return
@@ -265,31 +271,10 @@ local function disconnectInputs()
 	end
 end
 
--- Cette méthode permet de terminer l'equip d'un outil lorsque son animation Equip est finie : elle attend d'abord le
--- chargement de la piste du viewmodel de CET outil (Length > 0, pas de l'arme précédemment active : l'ordre des connexions
--- Equipped entre systèmes n'est pas garanti), puis la durée réelle ; sans piste Equip, EquipTime tout de suite ; piste jamais
--- chargée après EquipRules.LOAD_TIMEOUT, l'arme est libérée à ce moment (EquipTime déjà dépassé, #184).
+-- Cette méthode permet de rendre l'arme utilisable lorsque son verrou d'equip (EquipTime, valeur CS:GO) est écoulé, sans
+-- attendre la fin de la piste Equip (#404) : le tir, la lunette ou le rechargement suivant la coupe.
 local function finishEquip(tool, cfg, token: number)
-	local fallback = cfg and cfg.EquipTime or 0.8
-	local waited = 0
-	local duration
-	while true do
-		if not actionGate.isCurrent(token) or currentTool ~= tool then
-			return
-		end
-		duration = EquipRules.settleTime(
-			ViewmodelSystem.getToolTrackLength(tool, "Equip"),
-			cfg and cfg.EquipAnimSpeed,
-			fallback,
-			waited,
-			EquipRules.LOAD_TIMEOUT
-		)
-		if duration then
-			break
-		end
-		waited += task.wait()
-	end
-	task.wait(duration)
+	task.wait(EquipRules.lockTime(cfg))
 	if actionGate.isCurrent(token) and currentTool == tool and weaponState == "EQUIPPING" then
 		weaponState = "IDLE"
 	end
@@ -313,7 +298,7 @@ local function onToolEquipped(tool, char)
 		createSpeedValueForChar(char, cfg.RunSpeedMultiplier)
 	end
 
-	-- Le jeton périme le délai d'un equip antérieur ; la fin de l'equip suit la vraie piste (#184).
+	-- Le jeton périme le délai d'un equip antérieur ; la fin de l'equip suit EquipTime, pas la piste (#404).
 	local token = actionGate.begin()
 	task.spawn(finishEquip, tool, cfg, token)
 
@@ -329,6 +314,8 @@ local function onToolEquipped(tool, char)
 				if not canAct() then
 					return
 				end
+				-- Lunette après le verrou d'equip : la fin de la piste Equip est coupée, comme par un tir (#404)
+				ViewmodelSystem.cutEquip()
 				weaponState = ScopeSystem.toggle(cfg)
 			end
 		end)

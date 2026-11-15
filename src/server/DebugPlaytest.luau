@@ -43,6 +43,23 @@ local replyOwners: { [number]: Player } = {}
 local nextRequestId = 0
 local running: { [Player]: boolean } = {}
 local dummies: { [Player]: Model } = {}
+-- Dernière arme arrivée dans le personnage (horloge serveur) et sa connexion, pour dater chaque touche (#404)
+local lastEquips: { [Player]: { name: string, at: number } } = {}
+local equipConns: { [Player]: RBXScriptConnection } = {}
+
+-- Cette méthode permet de noter l'arrivée de chaque arme dans le personnage lorsqu'un run démarre, pour que chaque
+-- touche sur la cible soit datée depuis la sortie de l'arme (mesure des verrous d'equip, #404), même après le run.
+local function watchEquips(player: Player, char: Model)
+	local previous = equipConns[player]
+	if previous then
+		previous:Disconnect()
+	end
+	equipConns[player] = char.ChildAdded:Connect(function(child)
+		if child:IsA("Tool") then
+			lastEquips[player] = { name = child.Name, at = os.clock() }
+		end
+	end)
+end
 
 -- Cette méthode permet d'écrire une ligne préfixée dans la console lorsque le run avance.
 local function log(text: string)
@@ -207,6 +224,7 @@ local function run(player: Player, selector: any)
 		return finish()
 	end
 	assert(char and humanoid and root, "personnage incomplet")
+	watchEquips(player, char)
 
 	-- 2. Équipement serveur de l'outil demandé (déséquipé d'abord s'il l'était, pour rejouer l'Equip).
 	local tools = collectTools(player)
@@ -277,7 +295,18 @@ local function run(player: Player, selector: any)
 		lastHealth = health
 		if delta > 0 then
 			damageTaken += delta
-			log(string.format("serveur : cible touchée -%g PV (reste %g/%g)", delta, health, dummyHum.MaxHealth))
+			local equip = lastEquips[player]
+			log(
+				string.format(
+					"serveur : cible touchée -%g PV (reste %g/%g), %s",
+					delta,
+					health,
+					dummyHum.MaxHealth,
+					if equip
+						then string.format("%.3f s après l'arrivée de %s", os.clock() - equip.at, equip.name)
+						else "arme sortie avant le run"
+				)
+			)
 		end
 	end)
 	local aimReply = callClient(player, "aim", { target = dummyRoot.Position })
@@ -387,6 +416,12 @@ function DebugPlaytest.init(dependencies: Deps)
 	Players.PlayerRemoving:Connect(function(player)
 		clearDummy(player)
 		running[player] = nil
+		lastEquips[player] = nil
+		local conn = equipConns[player]
+		equipConns[player] = nil
+		if conn then
+			conn:Disconnect()
+		end
 	end)
 	log('helper actif (Studio) : player:SetAttribute("' .. Rules.ATTRIBUTE .. '", "AWP") en contexte Server')
 end

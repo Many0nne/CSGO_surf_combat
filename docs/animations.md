@@ -111,8 +111,10 @@ Méthode de la refonte de l'Equip, du Shoot et du Reload de l'AWP (référence C
   différence de cadrage entre CS2 et le jeu.
 - **Tout passe par l'arme, jamais par `FakeCamera` :** quand le `PrimaryPart` du viewmodel est `FakeCamera`, cet os est recalé
   sur la caméra à chaque image (`PivotTo`) et son animation n'a aucun effet.
-- **Durée :** le cycle de tir CS2 dure environ `FireDelay`, et le Reload colle à `ReloadTime`. Seul l'Equip est étiré
-  (1,13 s de geste dans la vidéo, 1,58 s en jeu pour garder l'équilibrage).
+- **Durée :** le cycle de tir CS2 dure environ `FireDelay`, et le Reload colle à `ReloadTime`. La piste Equip dure 1,58 s
+  (1,13 s de geste dans la vidéo, étirée à l'époque pour l'équilibrage), mais l'arme est utilisable dès `EquipTime`
+  (1,267 s, valeur CS:GO, #404) : le tir ou la lunette coupe la fin de la piste. Une piste n'est plus étirée ni accélérée
+  pour l'équilibrage, voir « Verrou d'action et longueur de piste ».
 - **Inspect (`references/anim/awp showcase.mp4`, 5,30 → 10,30 s) :** pivot de profil, tenue, arme dressée lunette à
   gauche, retour. La v1, relevée toutes les 0,1 s, saccadait : 528°/s sur une image à 8,6 s, tremblement pendant la
   tenue. Trois causes, trois règles :
@@ -150,6 +152,27 @@ arrière, `bt["back"]`, 0,817 s : la douille sort, #237, `docs/assets.md`). Un m
 proche (`make_rbxm.luau`). **Ajouter un marqueur sans toucher au mouvement :** reconstruire la piste, puis comparer ses
 poses à celles de la piste publiée (téléchargée par `asset-delivery-api`) avant de publier : pour #237, 1 144 poses
 identiques, seul `Eject` en plus.
+
+## Verrou d'action et longueur de piste (#404)
+
+Le temps pendant lequel une arme est inutilisable (equip, tir, coup, rechargement) est une valeur de jeu, réglée dans
+`WeaponConfig` (`EquipTime`, `FireDelay`/`ShootAnimTime`, `SecondaryAttack.AnimTime`, `ReloadTime`) d'après CS:GO. Il ne
+se déduit jamais de la longueur d'une piste, et une piste ne s'étire ni ne s'accélère pour régler l'équilibrage.
+
+- **Piste plus longue que le verrou :** l'action suivante la coupe (tir et coup : `ViewmodelSystem.playAnimation`, fondu
+  de l'arme ; lunette : `ViewmodelSystem.cutEquip`, sans fondu, l'arme est masquée ; rechargement : `playReload`). C'est
+  ce que fait CS:GO (« animation-cancel » du deploy des couteaux dans `weapon_knife.cpp`).
+- **Piste plus courte :** l'arme reste au repos jusqu'à la fin du verrou (Ka-Bar : Equip de 0,85 s, verrou de 1 s).
+- **Couper sans fondu une piste finie** passe par `TrackStop.stop(track, 0)` (#368) : Roblox ignore `Stop(0)` pendant le
+  fondu de fin naturel.
+- **Sources des valeurs CS:GO :** `items_game.txt` de CS:GO (`cycletime`), code du jeu (`weapon_knife.cpp` :
+  `hardcoded_knife_deploy_time` 1 s, tailles 0,4 s / 0,5 s touché, estoc 1 s / 1,1 s ; deploy et rechargement des
+  armes à feu = durée de la séquence, `weapon_csbase.cpp` et `basecombatweapon_shared.cpp`), et `weapons.vdata` de CS2
+  pour cette durée (`m_flDeployDuration`, `m_flDisallowAttackAfterReloadStartDuration`), CS:GO ne l'écrivant nulle part
+  ailleurs que dans le modèle. Dépôt `SteamDatabase/GameTracking-CSGO` (CS:GO : dernier commit avant CS2, `64b7772`).
+- **Rechargement :** CS:GO n'autorise aucun tir avant la fin de la séquence (`DefaultReload`), le verrou reste donc
+  `ReloadTime` (AWP : 3,667 s), la durée du rechargement CS:GO. La piste Reload de l'AWP, construite pour l'ancien
+  `ReloadTime` (3,7 s), dure ~0,03 s de plus : le premier tir coupe cette fin.
 
 ## Vidéos de référence
 
@@ -360,7 +383,7 @@ Repris du retour d'expérience de la M9 (`docs/notes/retex-viewmodel-m9.md`).
   image, coup lancé dès la fin de l'equip puis après 3 s : les deux doivent donner les mêmes écarts.
 - **Verrou de tir et cadence (#221) :** `ShootAnimTime` (état `FIRING` de `WeaponSystem`, qui refuse tout clic) ne
   dépasse jamais `FireDelay`, seule cadence connue du serveur : sinon le client tire moins vite que la cadence de l'arme.
-  Une piste de tir plus longue que la cadence (AWP : Shoot dure 1,63 s, cadence 60/41 = 1,46 s) est coupée par le tir
+  Une piste de tir plus longue que la cadence (AWP : Shoot dure 1,63 s, cadence 1,455 s) est coupée par le tir
   suivant, comme les slashs de la M9 : `playAnimation` arrête la piste en cours et relance Shoot avec le fondu par défaut
   (0,1 s). Les 0,17 s coupées sont la fin du réarmement, proche de la pose de repos : rendu de la coupure à juger à
   l'œil en jeu (non vérifié par capture, #221). Le son `Bolt` de la piste part avant la coupure (`DebugPlaytest` AWP :

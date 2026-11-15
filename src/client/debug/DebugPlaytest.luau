@@ -79,6 +79,23 @@ local function clearWatch()
 	events = { anims = {}, markers = {}, sounds = {} }
 end
 
+-- Cette méthode permet de journaliser chaque changement d'état de l'arme (EQUIPPING, FIRING, RELOADING…) avec la durée
+-- de l'état quitté lorsqu'un run observe une arme : mesure des verrous d'equip et de rechargement (#404).
+local function watchWeaponState()
+	local state = deps.weaponSystem.getState()
+	local since = os.clock()
+	table.insert(
+		conns,
+		RunService.Heartbeat:Connect(function()
+			local current = deps.weaponSystem.getState()
+			if current ~= state then
+				log(string.format("état arme %s → %s après %.3f s", state, current, os.clock() - since))
+				state, since = current, os.clock()
+			end
+		end)
+	)
+end
+
 -- Cette méthode permet de brancher les observateurs (pistes, marqueurs, sons) sur le viewmodel de l'outil
 -- lorsque le serveur s'apprête à l'équiper ; le viewmodel est préchargé sous la caméra par ViewmodelSystem.
 local function watch(payload: any): (boolean, string)
@@ -116,6 +133,7 @@ local function watch(payload: any): (boolean, string)
 			end)
 		)
 	end
+	watchWeaponState()
 	local sounds = model:FindFirstChild("Sounds")
 	if sounds then
 		for _, s in sounds:GetChildren() do

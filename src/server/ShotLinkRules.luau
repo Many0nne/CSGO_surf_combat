@@ -17,7 +17,7 @@ ShotLinkRules.LINK_TOLERANCE = 0.001
 -- Âge maximal (s, horloge d'arrivée du serveur) d'un tir à qui rattacher une touche. Les deux remotes fiables d'un
 -- client arrivent dans l'ordre d'envoi (doc Roblox « Remote events », y compris entre deux RemoteEvent différents) et
 -- partent dans la même frame : la touche suit son tir de quelques millisecondes. 1 s couvre un handler retardé
--- (débit de Roblox, frame serveur lente) sans garder de tir plus vieux que la cadence de l'AWP (1,46 s).
+-- (débit de Roblox, frame serveur lente) sans garder de tir plus vieux que la cadence de l'AWP (1,455 s).
 ShotLinkRules.MAX_AGE = 1
 -- Entrées gardées au plus par registre : borne la mémoire même si l'horloge passée ne fait rien vieillir (le débit de
 -- ShotFired et HitscanDamage, 5/s chacun, en laisse ~10 en MAX_AGE).

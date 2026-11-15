@@ -4,7 +4,6 @@ local RunService = game:GetService("RunService")
 
 local AnimationSoundSystem = require(script.Parent.AnimationSoundSystem)
 local CasingEjection = require(script.Parent.CasingEjection)
-local EquipRules = require(script.Parent.EquipRules)
 local TrackStop = require(script.Parent.TrackStop)
 local SoundChannels = require(script.Parent.Parent.settings.SoundChannels)
 local LocalInventory = require(script.Parent.Parent.inventory.LocalInventory)
@@ -202,14 +201,15 @@ local function playIdleAnimation()
 	track:Play(0)
 end
 
-local function playEquipAnimation(model: Model, speed: number)
+local function playEquipAnimation(model: Model)
 	local track = preloadedTracks["Equip"]
 	if not track then
 		return
 	end
 
 	equipTrack = track
-	equipTrack:Play(0, 1, speed) -- sans fondu : la piste démarre hors champ
+	-- Sans fondu (la piste démarre hors champ), à sa vitesse : le verrou d'equip (EquipTime) ne dépend pas d'elle (#404)
+	equipTrack:Play(0)
 
 	local sounds = currentAnimSounds and currentAnimSounds["Equip"] or {}
 	local newConns = AnimationSoundSystem.connectSoundMarkers(equipTrack, model, sounds)
@@ -260,7 +260,7 @@ local function equipTool(tool: Tool)
 	setModelVisibility(viewmodelName, true)
 
 	playIdleAnimation()
-	playEquipAnimation(activeViewmodel, EquipRules.animSpeed(cfg and cfg.EquipAnimSpeed))
+	playEquipAnimation(activeViewmodel)
 end
 
 local function hookTool(tool: Instance)
@@ -387,20 +387,11 @@ function ViewmodelSystem.getActiveViewmodel()
 	return activeViewmodel
 end
 
--- Cette méthode permet de lire la longueur d'une piste du viewmodel d'un outil donné lorsque l'outil vient d'être
--- équipé, sans dépendre de l'arme active (ordre des connexions Equipped non garanti) ; nil si la piste n'existe pas
--- (pas de viewmodel ni d'animation de ce nom, rien à attendre), 0 si elle existe mais n'est pas encore chargée (#184).
-function ViewmodelSystem.getToolTrackLength(tool: Tool, name: string): number?
-	local viewmodelName = tool:GetAttribute("ViewmodelName")
-	if type(viewmodelName) ~= "string" or viewmodelName == "" then
-		return nil
-	end
-	if not tracksCache[viewmodelName] then
-		prewarmViewmodel(tool)
-	end
-	local tracks = tracksCache[viewmodelName]
-	local t = tracks and tracks[name]
-	return t and t.Length or nil
+-- Cette méthode permet de couper net la fin de la piste Equip lorsqu'une action sans piste propre (lunette) commence
+-- après le verrou d'equip (#404) ; sans effet si l'Equip est déjà fini ou coupé.
+function ViewmodelSystem.cutEquip()
+	stopTrack(equipTrack, 0)
+	equipTrack = nil
 end
 
 -- Cette méthode permet de savoir si une animation préchargée de l'arme active est en cours, pour ne pas la relancer.
