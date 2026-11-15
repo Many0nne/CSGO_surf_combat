@@ -18,6 +18,7 @@ local InventoryRules = require(Shared:WaitForChild("InventoryRules"))
 local PerfMarkers = require(Shared:WaitForChild("PerfMarkers"))
 local ShopCatalog = require(Shared:WaitForChild("ShopCatalog"))
 local UITheme = require(Shared:WaitForChild("UITheme"))
+local WalletRules = require(Shared:WaitForChild("WalletRules"))
 local WeaponSkins = require(Shared:WaitForChild("WeaponSkins"))
 local CrateOpening = require(script.Parent.CrateOpening)
 local MenuScene = require(script.Parent.MenuScene)
@@ -619,7 +620,8 @@ local function buildLights(parent: Instance)
 end
 
 -- Cette méthode permet d'écrire le nom et le prix d'une caisse sur son étiquette (SurfaceGui sur la face tournée vers la
--- pièce) lorsque la vitrine se construit.
+-- pièce) lorsque la vitrine se construit ; le prix est le jeton du crédit suivi du montant (#391 : le mot CRÉDITS ne
+-- tiendrait plus à côté du jeton sur 3,4 studs).
 local function tagText(tag: BasePart, crateDef: ShopCatalog.Crate): (TextLabel, TextLabel)
 	local gui = Instance.new("SurfaceGui")
 	gui.Face = Enum.NormalId.Back -- +Z du repère de la vitrine : vers la pièce
@@ -635,9 +637,11 @@ local function tagText(tag: BasePart, crateDef: ShopCatalog.Crate): (TextLabel, 
 	layout.FillDirection = Enum.FillDirection.Horizontal
 	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	layout.VerticalAlignment = Enum.VerticalAlignment.Center
+	-- Tri par LayoutOrder : celui par défaut d'Instance.new est le nom, qui mettait le cadre « Price » avant le nom
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Padding = UDim.new(0, 22)
 	layout.Parent = row
-	local function label(text: string, font: Font, size: number, order: number): TextLabel
+	local function label(text: string, font: Font, size: number, order: number, parent: Instance): TextLabel
 		local t = Instance.new("TextLabel")
 		t.BackgroundTransparency = 1
 		t.AutomaticSize = Enum.AutomaticSize.X
@@ -647,11 +651,32 @@ local function tagText(tag: BasePart, crateDef: ShopCatalog.Crate): (TextLabel, 
 		t.TextColor3 = INK
 		t.Text = text
 		t.LayoutOrder = order
-		t.Parent = row
+		t.Parent = parent
 		return t
 	end
-	local name = label(crateDef.name, UITheme.Fonts.Display, 36, 1)
-	local price = label(ShopCatalog.priceLabel(crateDef), UITheme.Fonts.DisplayText, 30, 2)
+	local name = label(crateDef.name, UITheme.Fonts.Display, 36, 1, row)
+	-- Prix : jeton collé au montant, dans son propre cadre (l'écart de 22 px sépare le nom du prix)
+	local priceGroup = Instance.new("Frame")
+	priceGroup.Name = "Price"
+	priceGroup.BackgroundTransparency = 1
+	priceGroup.AutomaticSize = Enum.AutomaticSize.X
+	priceGroup.Size = UDim2.fromScale(0, 1)
+	priceGroup.LayoutOrder = 2
+	priceGroup.Parent = row
+	local priceLayout = Instance.new("UIListLayout")
+	priceLayout.FillDirection = Enum.FillDirection.Horizontal
+	priceLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	priceLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	priceLayout.Padding = UDim.new(0, 6)
+	priceLayout.Parent = priceGroup
+	local coin = Instance.new("ImageLabel")
+	coin.Name = "Credit"
+	coin.BackgroundTransparency = 1
+	coin.Size = UDim2.fromOffset(32, 32)
+	coin.Image = WalletRules.ICON
+	coin.LayoutOrder = 1
+	coin.Parent = priceGroup
+	local price = label(ShopCatalog.priceLabel(crateDef), UITheme.Fonts.DisplayText, 30, 2, priceGroup)
 	return name, price
 end
 

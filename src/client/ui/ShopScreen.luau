@@ -38,6 +38,8 @@ local RARITY_X = 250 -- colonne des raretés et chances
 local COLUMN_WIDTH = 440
 local BUY_SIZE = Vector2.new(160, 42)
 local PRICE_SIZE = 44
+local PRICE_ICON = 34 -- jeton du crédit devant le prix (#391)
+local PRICE_ICON_LIFT = 6
 -- Fond sombre de la colonne, sur toute la hauteur et effacé vers la droite (planche) : le fond de coin de l'écran
 -- d'équipement ne fonçait que le bas, le titre restait sur les caisses éclairées du rack de gauche
 local VEIL_WIDTH = 760
@@ -182,7 +184,7 @@ local function paintDetail()
 	filet.Position = UDim2.fromOffset(EDGE, below)
 	priceRow.Position = UDim2.fromOffset(EDGE, below + 14)
 	actions.Position = UDim2.fromOffset(EDGE, below + 14 + PRICE_SIZE + 26)
-	setText(price, tostring(crate.price))
+	setText(price, ShopCatalog.priceLabel(crate))
 	position.Text = string.format("CAISSE  %d / %d", current, #ShopCatalog.CRATES)
 end
 
@@ -509,6 +511,11 @@ local function buildDetail(column: Frame)
 		Padding = UDim.new(0, 14),
 		Parent = priceRow,
 	})
+	-- Jeton du crédit (#391) devant le montant, remonté de PRICE_ICON_LIFT : aligné sur le bas de la boîte du texte, il
+	-- tombait sous les chiffres (la boîte compte la place des jambages)
+	local coin = UIKit.creditIcon(priceRow, PRICE_ICON, 2, { LayoutOrder = 0 })
+	coin.Size = UDim2.fromOffset(PRICE_ICON, PRICE_ICON + PRICE_ICON_LIFT)
+	UIKit.create("UIPadding", { PaddingBottom = UDim.new(0, PRICE_ICON_LIFT), Parent = coin })
 	local amount = UIKit.frame({
 		Name = "Amount",
 		BackgroundTransparency = 1,

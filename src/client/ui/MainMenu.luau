@@ -4,12 +4,15 @@
 -- souligné d'ambre, #308), statistiques du joueur en bas à droite (#301, StatsCard). L'onglet ARMES est l'écran
 -- d'équipement (#280, disposition de #308, EquipmentScreen) : tout
 -- à gauche (titre, arme montrée, onglets des emplacements, grille de cartes), le personnage à droite tient l'arme
--- survolée ou celle de l'emplacement actif.
+-- survolée ou celle de l'emplacement actif. Solde de crédits (#391) en haut à droite, sur toutes les pages du menu.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
-local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local UITheme = require(Shared:WaitForChild("UITheme"))
+local WalletRules = require(Shared:WaitForChild("WalletRules"))
+local LocalWallet = require(script.Parent.Parent.systems.inventory.LocalWallet)
 local MenuScene = require(script.Parent.Parent.systems.game.MenuScene)
 local EquipmentScreen = require(script.Parent.EquipmentScreen)
 local MenuCursor = require(script.Parent.MenuCursor)
@@ -31,6 +34,9 @@ local TITLE_Y = MenuPage.GameTitleY
 local TABS_Y = 18
 local NOTICE_Y = 72 -- message sous les onglets (apparition impossible, #219)
 local NOTICE_TIME = 5 -- s d'affichage de ce message
+-- Solde de crédits (#391), à droite à hauteur des onglets : jeton puis montant
+local BALANCE_ICON = 26
+local BALANCE_SIZE = 24
 -- Onglets, de gauche à droite ; ARMES est l'accueil (le personnage et son arme), JOUER l'appel à l'action, APPRENDRE
 -- juste avant (#285 : on apprend le geste, puis on joue), SHOP à côté d'ARMES (#347 : les caisses donnent les skins)
 local TABS = {
@@ -176,6 +182,51 @@ local function buildTabs(root: Frame)
 	}, 2)
 end
 
+-- Cette méthode permet de construire le solde de crédits en haut à droite (jeton, montant en os à ombre, « — » tant
+-- qu'il n'est pas chargé) lorsque le menu est initialisé ; il suit l'attribut `Credits` (LocalWallet).
+local function buildBalance(root: Frame)
+	local row = UIKit.frame({
+		Name = "Balance",
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -EDGE, 0, TABS_Y),
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 48),
+		Parent = root,
+	})
+	UIKit.create("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		HorizontalAlignment = Enum.HorizontalAlignment.Right,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, 8),
+		Parent = row,
+	})
+	UIKit.creditIcon(row, BALANCE_ICON, 2, { LayoutOrder = 1 })
+	local amount = UIKit.frame({
+		Name = "Amount",
+		BackgroundTransparency = 1,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, BALANCE_SIZE + 4),
+		LayoutOrder = 2,
+		Parent = row,
+	})
+	local text, shadow = UIKit.shadowedText(amount, {
+		Name = "Value",
+		FontFace = F.Display,
+		TextSize = BALANCE_SIZE,
+		TextColor3 = C.Bone,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromScale(0, 1),
+		ZIndex = 2,
+	}, 2)
+	LocalWallet.observe(function(balance: number?)
+		local value = WalletRules.format(balance)
+		text.Text = value
+		shadow.Text = value
+	end)
+end
+
 -- Cette méthode permet de poser le titre du jeu avec les onglets, au-dessus des écrans secondaires (#308 : il reste
 -- affiché sur toutes les pages, hors du fond de coin de ces écrans), lorsque le menu est initialisé.
 local function buildTitleColumn(root: Frame)
@@ -246,6 +297,7 @@ function MainMenu.init(
 	local tabsRoot = UIKit.scaledRoot(tabsGui)
 	buildTitleColumn(tabsRoot)
 	buildTabs(tabsRoot)
+	buildBalance(tabsRoot)
 	MainMenu.setPage("home")
 	UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
 		if gui.Enabled then
