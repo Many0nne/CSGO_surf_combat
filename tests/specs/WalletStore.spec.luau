@@ -1,6 +1,7 @@
--- WalletStore (#391) avec un DataStore, des joueurs et une horloge simulés : gain et dépense refusés avant le
--- chargement ou après une lecture en échec, solde insuffisant, écriture peu après un changement, deux serveurs, lot
--- renvoyé, départ et arrêt du serveur, solde de session de Studio (DebugCredits).
+-- WalletStore (#391) sur l'enregistrement de l'inventaire (#396, InventoryStore) avec un DataStore, des joueurs et une
+-- horloge simulés : solde publié, gains et dépenses refusés avant le chargement, gains écrits par lots (deux serveurs,
+-- lot renvoyé), débit immédiat vérifié sur le solde stocké (ordre, refus, échec d'écriture), transactions d'un même
+-- joueur l'une après l'autre, enregistrement v1 sans `wallet`, départ et arrêt, solde de session de Studio.
 return function(T, Loader)
 	-- Cette méthode permet de simuler `task` et `os.clock` par coroutines lorsqu'un test fait avancer le temps lui-même.
 	local function makeScheduler()
@@ -14,18 +15,25 @@ return function(T, Loader)
 		end
 		sched.task = {
 			spawn = function(fn, ...)
-				resume(coroutine.create(fn), ...)
+				resume(if type(fn) == "thread" then fn else coroutine.create(fn), ...)
 			end,
 			wait = function(seconds: number?)
 				table.insert(sched.sleepers, { co = coroutine.running(), at = sched.now + (seconds or 0) })
 				coroutine.yield()
 			end,
+			delay = function(seconds: number, fn, ...)
+				local args = table.pack(...)
+				local co = coroutine.create(function()
+					fn(table.unpack(args, 1, args.n))
+				end)
+				table.insert(sched.sleepers, { co = co, at = sched.now + seconds })
+			end,
 		}
-		sched.os = {
+		sched.os = setmetatable({
 			clock = function()
 				return sched.now
 			end,
-		}
+		}, { __index = os })
 		-- Cette méthode permet d'avancer l'horloge de `seconds` lorsqu'un test laisse passer le temps, en réveillant les
 		-- coroutines dans l'ordre de leurs échéances.
 		function sched.advance(seconds: number)
@@ -76,12 +84,12 @@ return function(T, Loader)
 				error("DataStore indisponible (simulé)")
 			end
 		end
-		-- Cette méthode permet de lire un enregistrement (copie) lorsque WalletStore charge un joueur.
+		-- Cette méthode permet de lire un enregistrement (copie) lorsque InventoryStore charge un joueur.
 		function ds.GetAsync(_, key: string)
 			request()
 			return deepCopy(ds.data[key])
 		end
-		-- Cette méthode permet d'appliquer une fusion à un enregistrement lorsque WalletStore écrit ; nil annule
+		-- Cette méthode permet d'appliquer une fusion à un enregistrement lorsque InventoryStore écrit ; nil annule
 		-- l'écriture (non comptée), comme Roblox.
 		function ds.UpdateAsync(_, key: string, transform)
 			request()
@@ -100,13 +108,26 @@ return function(T, Loader)
 		return ds
 	end
 
+	-- Cette méthode permet de simuler un signal Roblox (plusieurs abonnés) lorsqu'un module s'y connecte au chargement.
+	local function makeSignal()
+		local signal = { handlers = {} }
+		function signal.Connect(_, fn)
+			table.insert(signal.handlers, fn)
+			return { Disconnect = function() end }
+		end
+		return signal
+	end
+
 	local guids = 0
 
-	-- Cette méthode permet de monter un serveur (un WalletStore isolé) sur un DataStore et une horloge partagés lorsqu'un
-	-- test démarre ; renvoie le module, les avertissements émis et de quoi faire partir un joueur ou arrêter le serveur.
+	-- Cette méthode permet de monter un serveur (InventoryStore et WalletStore isolés) sur un DataStore et une horloge
+	-- partagés lorsqu'un test démarre ; renvoie la façade, l'inventaire, les avertissements et de quoi faire arriver ou
+	-- partir un joueur et arrêter le serveur.
 	local function makeServer(sched, ds)
-		local removing, closing = nil, nil
+		local closing = nil
 		local warnings = {}
+		local removing = makeSignal()
+		local opened = {}
 		local services = {
 			HttpService = {
 				GenerateGUID = function()
@@ -115,23 +136,32 @@ return function(T, Loader)
 				end,
 			},
 			DataStoreService = {
-				GetDataStore = function()
+				GetDataStore = function(_, name: string)
+					table.insert(opened, name)
 					return ds
 				end,
 			},
-			Players = {
-				PlayerRemoving = {
-					Connect = function(_, fn)
-						removing = fn
-					end,
-				},
+			Players = { PlayerRemoving = removing, PlayerAdded = makeSignal() },
+			RunService = {
+				IsStudio = function()
+					return false
+				end,
+			},
+			StarterPack = {
+				GetChildren = function()
+					return {}
+				end,
 			},
 		}
 		local loader = Loader.new(services, {
 			task = sched.task,
 			os = sched.os,
 			warn = function(...)
-				table.insert(warnings, table.concat({ ... }, " "))
+				local parts = {}
+				for _, v in { ... } do
+					table.insert(parts, tostring(v))
+				end
+				table.insert(warnings, table.concat(parts, " "))
 			end,
 			print = function() end,
 		})
@@ -142,13 +172,30 @@ return function(T, Loader)
 			BindToClose = function(_, fn)
 				closing = fn
 			end,
+			CreatorType = "Group",
+			CreatorId = 0,
 		}
-		local server = { warnings = warnings, Wallet = loader:require("src/server/WalletStore") }
-		server.Wallet.init()
-		-- Cette méthode permet de faire arriver un joueur lorsqu'un test en a besoin (chargement lancé comme init.server).
+		local server = {
+			warnings = warnings,
+			opened = opened,
+			Inventory = loader:require("src/server/InventoryStore"),
+			Wallet = loader:require("src/server/WalletStore"),
+		}
+		server.Inventory.init({ Name = "EquipItem", OnServerEvent = makeSignal() }, function()
+			return false
+		end)
+		-- Cette méthode permet de faire arriver un joueur lorsqu'un test en a besoin (inscription puis chargement lancé
+		-- comme init.server).
 		function server.join(userId: number)
-			local player = { UserId = userId, Name = "Joueur" .. userId, attributes = {} }
-			-- Cette méthode permet de simuler Player:SetAttribute lorsque WalletStore publie le solde.
+			local player = {
+				UserId = userId,
+				Name = "Joueur" .. userId,
+				Parent = true,
+				Character = nil,
+				attributes = {},
+				ChildAdded = makeSignal(),
+			}
+			-- Cette méthode permet de simuler Player:SetAttribute lorsque les stores publient un attribut.
 			function player.SetAttribute(self, name: string, value: any)
 				self.attributes[name] = value
 			end
@@ -156,12 +203,36 @@ return function(T, Loader)
 			function player.GetAttribute(self, name: string)
 				return self.attributes[name]
 			end
-			sched.task.spawn(server.Wallet.load, player)
+			server.Inventory.setup(player)
+			sched.task.spawn(server.Inventory.load, player)
 			return player
+		end
+		-- Cette méthode permet de lancer une dépense dans sa propre coroutine (elle attend l'écriture) lorsqu'un test la
+		-- demande ; renvoie un état rempli à la fin (`done`, `status`).
+		function server.spend(player, amount: number)
+			local state = { done = false, status = nil }
+			sched.task.spawn(function()
+				state.status = server.Wallet.spend(player, amount)
+				state.done = true
+			end)
+			return state
+		end
+		-- Cette méthode permet de lancer une transaction dans sa propre coroutine lorsqu'un test en simule une (#393) ;
+		-- renvoie un état rempli à la fin (`done`, `status`, `result`).
+		function server.transact(player, op)
+			local state = { done = false, status = nil, result = nil }
+			sched.task.spawn(function()
+				state.status, state.result = server.Inventory.transact(player, op)
+				state.done = true
+			end)
+			return state
 		end
 		-- Cette méthode permet de faire partir un joueur lorsqu'un test simule sa déconnexion.
 		function server.leave(player)
-			sched.task.spawn(removing, player)
+			player.Parent = nil
+			for _, handler in removing.handlers do
+				sched.task.spawn(handler, player)
+			end
 		end
 		-- Cette méthode permet de lancer l'arrêt du serveur lorsqu'un test simule BindToClose ; renvoie un drapeau de fin.
 		function server.close()
@@ -175,13 +246,37 @@ return function(T, Loader)
 		return server
 	end
 
-	-- Cette méthode permet de lire le solde stocké d'un joueur dans le faux DataStore lorsqu'un test le vérifie.
-	local function storedCredits(ds, userId: number): number?
-		local record = ds.data[tostring(userId)]
-		return record and record.credits
+	local Wallet = Loader.new({}):require("src/shared/WalletRules")
+
+	-- Cette méthode permet de poser un enregistrement de schéma 2 dans le faux DataStore lorsqu'un test part d'un solde.
+	local function seed(ds, userId: number, earned: number, purchased: number?, items: { string }?)
+		local w = Wallet.empty()
+		w.earned = earned
+		w.purchased = purchased or 0
+		ds.data[tostring(userId)] = { schemaVersion = 2, items = items or {}, wallet = w }
 	end
 
-	local INTERVAL = Loader.new({}):require("src/shared/GameConfig").AUTO_SAVE_INTERVAL
+	-- Cette méthode permet de lire le portefeuille stocké d'un joueur dans le faux DataStore lorsqu'un test le vérifie.
+	local function storedWallet(ds, userId: number)
+		local record = ds.data[tostring(userId)]
+		return record and record.wallet
+	end
+
+	-- Cette méthode permet de lire le solde stocké (gagnés + achetés) d'un joueur lorsqu'un test le vérifie.
+	local function storedBalance(ds, userId: number): number?
+		local w = storedWallet(ds, userId)
+		return w and (w.earned + w.purchased)
+	end
+
+	-- Cette méthode permet de trouver un avertissement contenant un texte lorsqu'un test vérifie un signalement.
+	local function hasWarning(server, text: string): boolean
+		for _, line in server.warnings do
+			if string.find(line, text, 1, true) then
+				return true
+			end
+		end
+		return false
+	end
 
 	T.describe("WalletStore : solde", function()
 		T.it("nouveau joueur : 0 publié dans l'attribut, aucune écriture au menu", function()
@@ -198,7 +293,7 @@ return function(T, Loader)
 		T.it("refuse gain et dépense avant la fin du chargement", function()
 			local sched = makeScheduler()
 			local ds = makeDataStore(sched)
-			ds.data["1"] = { schemaVersion = 1, credits = 300 }
+			seed(ds, 1, 300)
 			ds.latency = 5
 			local server = makeServer(sched, ds)
 			local alice = server.join(1)
@@ -206,24 +301,23 @@ return function(T, Loader)
 			T.expectEqual(alice.attributes.Credits, nil, "pas d'attribut avant le chargement")
 			T.expect(not server.Wallet.canChange(alice))
 			T.expect(not server.Wallet.add(alice, 10))
-			T.expect(not server.Wallet.spend(alice, 10))
+			local early = server.spend(alice, 10)
+			T.expect(early.done)
+			T.expectEqual(early.status, "loading")
 			sched.advance(5)
 			T.expectEqual(server.Wallet.balance(alice), 300)
+			T.expectEqual(alice.attributes.Credits, 300)
 			T.expect(server.Wallet.add(alice, 10))
 			T.expectEqual(server.Wallet.balance(alice), 310)
 		end)
 
-		T.it("dépense : refus si le solde ne suffit pas, rien de débité", function()
+		T.it("attribut = gagnés + achetés", function()
 			local sched = makeScheduler()
 			local ds = makeDataStore(sched)
-			ds.data["1"] = { schemaVersion = 1, credits = 400 }
+			seed(ds, 1, 120, 80)
 			local server = makeServer(sched, ds)
 			local alice = server.join(1)
-			T.expect(not server.Wallet.spend(alice, 500))
-			T.expectEqual(server.Wallet.balance(alice), 400)
-			T.expect(server.Wallet.spend(alice, 400))
-			T.expectEqual(server.Wallet.balance(alice), 0)
-			T.expectEqual(alice.attributes.Credits, 0)
+			T.expectEqual(alice.attributes.Credits, 200)
 		end)
 
 		T.it("refuse un montant invalide", function()
@@ -233,9 +327,10 @@ return function(T, Loader)
 			local alice = server.join(1)
 			for _, amount in { 0, -10, 2.5, math.huge, 0 / 0 } do
 				T.expect(not server.Wallet.add(alice, amount), "gain " .. tostring(amount))
-				T.expect(not server.Wallet.spend(alice, amount), "dépense " .. tostring(amount))
+				T.expectEqual(server.spend(alice, amount).status, "invalid", "dépense " .. tostring(amount))
 			end
 			T.expectEqual(server.Wallet.balance(alice), 0)
+			T.expectEqual(ds.writes, 0)
 		end)
 
 		T.it("écrête un gain au plafond", function()
@@ -243,10 +338,11 @@ return function(T, Loader)
 			local ds = makeDataStore(sched)
 			local server = makeServer(sched, ds)
 			local alice = server.join(1)
-			local max = Loader.new({}):require("src/shared/WalletRules").MAX_BALANCE
-			T.expect(server.Wallet.add(alice, max))
+			T.expect(server.Wallet.add(alice, Wallet.MAX_BALANCE))
 			T.expect(server.Wallet.add(alice, 5))
-			T.expectEqual(server.Wallet.balance(alice), max)
+			T.expectEqual(server.Wallet.balance(alice), Wallet.MAX_BALANCE)
+			sched.advance(10)
+			T.expectEqual(storedBalance(ds, 1), Wallet.MAX_BALANCE)
 		end)
 
 		T.it("lecture en échec : solde indisponible, aucun changement ni écriture", function()
@@ -257,46 +353,101 @@ return function(T, Loader)
 			local alice = server.join(1)
 			sched.advance(10)
 			T.expectEqual(server.Wallet.balance(alice), nil)
+			T.expectEqual(alice.attributes.Credits, nil)
 			T.expect(not server.Wallet.add(alice, 50))
-			sched.advance(INTERVAL)
+			T.expectEqual(server.spend(alice, 5).status, "loading")
+			sched.advance(600)
 			T.expectEqual(ds.writes, 0)
-			T.expect(string.find(server.warnings[1], "chargement impossible", 1, true) ~= nil)
+			T.expect(hasWarning(server, "chargement impossible"))
+		end)
+
+		T.it("schéma plus récent : sauvegarde coupée, solde indisponible, enregistrement intact", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			ds.data["1"] = { schemaVersion = 99, items = {}, wallet = { future = true } }
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			T.expectEqual(server.Wallet.balance(alice), nil)
+			T.expectEqual(server.spend(alice, 5).status, "loading")
+			server.leave(alice)
+			sched.advance(600)
+			T.expectEqual(ds.writes, 0)
+			T.expectEqual(ds.data["1"].schemaVersion, 99)
 		end)
 	end)
 
-	T.describe("WalletStore : écritures", function()
-		T.it("écrit une fois peu après des changements rapprochés", function()
+	T.describe("WalletStore : enregistrement de l'inventaire", function()
+		T.it(
+			"enregistrement v1 sans `wallet` : solde de départ, skins et équipement gardés à l'écriture",
+			function()
+				local sched = makeScheduler()
+				local ds = makeDataStore(sched)
+				ds.data["1"] = {
+					schemaVersion = 1,
+					items = { "skin.awp.couchant", "weapon.m9bayonet" },
+					equipped = { knife = { weapon = "weapon.m9bayonet" } },
+				}
+				local server = makeServer(sched, ds)
+				local alice = server.join(1)
+				T.expectEqual(server.Wallet.balance(alice), Wallet.STARTING_BALANCE)
+				T.expect(server.Wallet.add(alice, 25))
+				sched.advance(10)
+				local record = ds.data["1"]
+				T.expectEqual(record.schemaVersion, 2)
+				T.expectEqual(table.concat(record.items, ","), "skin.awp.couchant,weapon.m9bayonet")
+				T.expectEqual(record.equipped.knife.weapon, "weapon.m9bayonet")
+				T.expectEqual(record.wallet.earned, 25)
+			end
+		)
+
+		T.it("seul PlayerInventory_v1 est ouvert (PlayerWallet_v1 abandonné)", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			server.Wallet.add(alice, 10)
+			sched.advance(10)
+			server.spend(alice, 5)
+			T.expect(#server.opened > 0)
+			for _, name in server.opened do
+				T.expectEqual(name, "PlayerInventory_v1")
+			end
+		end)
+	end)
+
+	T.describe("WalletStore : gains", function()
+		T.it("écrit une fois peu après des gains rapprochés", function()
 			local sched = makeScheduler()
 			local ds = makeDataStore(sched)
 			local server = makeServer(sched, ds)
 			local alice = server.join(1)
 			server.Wallet.add(alice, 200)
 			sched.advance(1)
-			server.Wallet.spend(alice, 50)
-			T.expectEqual(ds.writes, 0, "pas d'écriture immédiate")
+			server.Wallet.add(alice, 50)
+			T.expectEqual(server.Wallet.balance(alice), 250)
 			sched.advance(10)
-			T.expectEqual(ds.writes, 1, "une seule écriture pour les deux changements")
-			T.expectEqual(storedCredits(ds, 1), 150)
+			T.expectEqual(ds.writes, 1, "une seule écriture pour les deux gains")
+			T.expectEqual(storedWallet(ds, 1).earned, 250)
 			sched.advance(600)
 			T.expectEqual(ds.writes, 1, "plus rien ensuite")
 		end)
 
-		T.it("deux serveurs sur le même joueur additionnent leurs écarts", function()
+		T.it("deux serveurs sur le même joueur additionnent leurs gains", function()
 			local sched = makeScheduler()
 			local ds = makeDataStore(sched)
-			ds.data["1"] = { schemaVersion = 1, credits = 1000 }
+			seed(ds, 1, 1000)
 			local old = makeServer(sched, ds)
 			local fresh = makeServer(sched, ds)
 			local onOld = old.join(1)
 			local onFresh = fresh.join(1)
-			old.Wallet.spend(onOld, 300)
+			old.Wallet.add(onOld, 300)
 			fresh.Wallet.add(onFresh, 50)
 			fresh.leave(onFresh)
 			old.leave(onOld)
-			T.expectEqual(storedCredits(ds, 1), 750)
+			T.expectEqual(storedBalance(ds, 1), 1350)
 		end)
 
-		T.it("garde l'écart après un échec et le renvoie tel quel", function()
+		T.it("garde les gains après un échec et les renvoie", function()
 			local sched = makeScheduler()
 			local ds = makeDataStore(sched)
 			local server = makeServer(sched, ds)
@@ -305,13 +456,13 @@ return function(T, Loader)
 			ds.failures = 3
 			sched.advance(20)
 			T.expectEqual(ds.writes, 0)
-			T.expect(string.find(server.warnings[1], "sauvegarde impossible", 1, true) ~= nil)
+			T.expect(hasWarning(server, "sauvegarde impossible"))
 			T.expectEqual(server.Wallet.balance(alice), 80, "solde gardé en mémoire")
-			sched.advance(INTERVAL)
-			T.expectEqual(storedCredits(ds, 1), 80)
+			sched.advance(120)
+			T.expectEqual(storedBalance(ds, 1), 80)
 		end)
 
-		T.it("une écriture passée mais signalée en échec n'est pas comptée deux fois", function()
+		T.it("un lot écrit mais signalé en échec n'est pas compté deux fois", function()
 			local sched = makeScheduler()
 			local ds = makeDataStore(sched)
 			local server = makeServer(sched, ds)
@@ -319,10 +470,10 @@ return function(T, Loader)
 			server.Wallet.add(alice, 100)
 			ds.commitThenFail = 1
 			sched.advance(20)
-			T.expectEqual(storedCredits(ds, 1), 100)
+			T.expectEqual(storedBalance(ds, 1), 100)
 			server.Wallet.add(alice, 1)
 			sched.advance(20)
-			T.expectEqual(storedCredits(ds, 1), 101)
+			T.expectEqual(storedBalance(ds, 1), 101)
 			T.expectEqual(server.Wallet.balance(alice), 101)
 		end)
 
@@ -335,11 +486,197 @@ return function(T, Loader)
 			server.Wallet.add(alice, 30)
 			server.Wallet.add(bob, 70)
 			server.leave(alice)
-			T.expectEqual(storedCredits(ds, 1), 30, "écrit au départ, sans attendre")
+			T.expectEqual(storedBalance(ds, 1), 30, "écrit au départ, sans attendre")
 			local state = server.close()
 			sched.advance(1)
 			T.expect(state.done)
-			T.expectEqual(storedCredits(ds, 2), 70, "écrit à l'arrêt")
+			T.expectEqual(storedBalance(ds, 2), 70, "écrit à l'arrêt")
+		end)
+	end)
+
+	T.describe("WalletStore : dépenses", function()
+		T.it("débit écrit tout de suite, achetés d'abord puis gagnés, rendu après l'écriture", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 400, 100)
+			ds.latency = 1
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			sched.advance(1)
+			local spend = server.spend(alice, 150)
+			T.expect(not spend.done, "attend l'écriture")
+			sched.advance(1)
+			T.expect(spend.done)
+			T.expectEqual(spend.status, "ok")
+			T.expectEqual(ds.writes, 1)
+			T.expectEqual(storedWallet(ds, 1).purchased, 0)
+			T.expectEqual(storedWallet(ds, 1).earned, 350)
+			T.expectEqual(server.Wallet.balance(alice), 350)
+			T.expectEqual(alice.attributes.Credits, 350)
+		end)
+
+		T.it("refus si le solde stocké ne suffit pas, même si la copie locale suffisait", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 400)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			-- Un autre serveur a dépensé entre-temps : le stocké n'a plus que 100
+			seed(ds, 1, 100)
+			local writes = ds.writes
+			local spend = server.spend(alice, 300)
+			T.expectEqual(spend.status, "insufficient")
+			T.expectEqual(ds.writes, writes, "rien d'écrit")
+			T.expectEqual(storedBalance(ds, 1), 100)
+			T.expectEqual(server.Wallet.balance(alice), 100, "copie locale recalée sur le stocké")
+			T.expectEqual(alice.attributes.Credits, 100)
+		end)
+
+		T.it("compte les gains de la session pas encore écrits", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 50)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			server.Wallet.add(alice, 30)
+			local spend = server.spend(alice, 70)
+			T.expectEqual(spend.status, "ok")
+			T.expectEqual(storedBalance(ds, 1), 10)
+			sched.advance(600)
+			T.expectEqual(storedBalance(ds, 1), 10, "gain pas recompté ensuite")
+			T.expectEqual(server.Wallet.balance(alice), 10)
+		end)
+
+		T.it("écriture en échec : `failed`, rien débité, gains gardés", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 200)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			server.Wallet.add(alice, 10)
+			ds.failures = 4 -- trois essais d'écriture, puis la lecture de vérification
+			local spend = server.spend(alice, 50)
+			sched.advance(10)
+			T.expect(spend.done)
+			T.expectEqual(spend.status, "failed")
+			T.expectEqual(storedBalance(ds, 1), 200)
+			T.expectEqual(server.Wallet.balance(alice), 210)
+			sched.advance(120)
+			T.expectEqual(storedBalance(ds, 1), 210, "gain écrit plus tard, dépense non rejouée")
+		end)
+
+		T.it("écriture passée mais signalée en échec : `ok`, débitée une seule fois", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 200)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			ds.commitThenFail = 1
+			local spend = server.spend(alice, 50)
+			sched.advance(10)
+			T.expectEqual(spend.status, "ok")
+			T.expectEqual(storedBalance(ds, 1), 150)
+			T.expectEqual(server.Wallet.balance(alice), 150)
+		end)
+
+		T.it("deux dépenses du même joueur passent l'une après l'autre : jamais sous 0", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 100)
+			ds.latency = 1
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			sched.advance(1)
+			local first = server.spend(alice, 60)
+			local second = server.spend(alice, 60)
+			sched.advance(5)
+			T.expectEqual(first.status, "ok")
+			T.expectEqual(second.status, "insufficient")
+			T.expectEqual(storedBalance(ds, 1), 40)
+		end)
+
+		T.it("deux serveurs qui dépensent le même solde : un seul débit passe", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 100)
+			local a = makeServer(sched, ds)
+			local b = makeServer(sched, ds)
+			local onA = a.join(1)
+			local onB = b.join(1)
+			T.expectEqual(a.spend(onA, 80).status, "ok")
+			T.expectEqual(b.spend(onB, 80).status, "insufficient")
+			T.expectEqual(storedBalance(ds, 1), 20)
+		end)
+	end)
+
+	T.describe("InventoryStore.transact (#396)", function()
+		T.it("débit et objet dans la même écriture, inventaire publié", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 500)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			local state = server.transact(alice, function(record)
+				local w = Wallet.debit(record.wallet, 300)
+				if not w then
+					return nil, "insufficient"
+				end
+				record.wallet = w
+				table.insert(record.items, "skin.awp.couchant")
+				return record, "skin.awp.couchant"
+			end)
+			T.expectEqual(state.status, "ok")
+			T.expectEqual(state.result, "skin.awp.couchant")
+			T.expectEqual(ds.writes, 1)
+			T.expectEqual(storedBalance(ds, 1), 200)
+			T.expectEqual(ds.data["1"].items[1], "skin.awp.couchant")
+			T.expect(server.Inventory.owned(alice)["skin.awp.couchant"], "possédé tout de suite")
+			T.expect(string.find(alice.attributes.OwnedItems, "skin.awp.couchant", 1, true) ~= nil)
+		end)
+
+		T.it("transaction refusée : rien ne change (stocké, solde, inventaire)", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 50, 0, { "weapon.m9bayonet" })
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			local before = deepCopy(ds.data["1"])
+			local state = server.transact(alice, function(record)
+				local w, reason = Wallet.debit(record.wallet, 300)
+				if not w then
+					return nil, reason
+				end
+				record.wallet = w
+				table.insert(record.items, "skin.awp.couchant")
+				return record, nil
+			end)
+			T.expectEqual(state.status, "rejected")
+			T.expectEqual(state.result, "insufficient")
+			T.expectEqual(ds.writes, 0)
+			T.expectEqual(storedBalance(ds, 1), before.wallet.earned)
+			T.expectEqual(#ds.data["1"].items, 1)
+			T.expectEqual(server.Wallet.balance(alice), 50)
+			T.expect(not server.Inventory.owned(alice)["skin.awp.couchant"])
+			sched.advance(600)
+			T.expectEqual(ds.writes, 0, "rien à écrire ensuite")
+		end)
+
+		T.it("attend l'écriture en cours du joueur (sauvegarde des gains) avant de partir", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 0)
+			ds.latency = 2
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			sched.advance(2)
+			server.Wallet.add(alice, 40)
+			sched.advance(6) -- la sauvegarde des gains part (2 s de latence)
+			local spend = server.spend(alice, 40)
+			T.expect(not spend.done)
+			sched.advance(10)
+			T.expectEqual(spend.status, "ok")
+			T.expectEqual(storedBalance(ds, 1), 0)
+			T.expectEqual(ds.writes, 2)
 		end)
 	end)
 
@@ -353,9 +690,12 @@ return function(T, Loader)
 			server.Wallet.applyDebug(alice)
 			T.expectEqual(server.Wallet.balance(alice), 1500)
 			T.expectEqual(alice.attributes.DebugCredits, nil, "attribut remis à nil")
+			sched.advance(10)
+			T.expectEqual(storedBalance(ds, 1), 1500)
 			alice.attributes.DebugCredits = -2000
-			server.Wallet.applyDebug(alice)
+			sched.task.spawn(server.Wallet.applyDebug, alice)
 			T.expectEqual(server.Wallet.balance(alice), 0)
+			T.expectEqual(storedBalance(ds, 1), 0)
 		end)
 
 		T.it("sans accès aux API : solde de session, jamais écrit", function()
@@ -369,8 +709,11 @@ return function(T, Loader)
 			server.Wallet.applyDebug(alice)
 			T.expectEqual(server.Wallet.balance(alice), 500)
 			T.expectEqual(alice.attributes.Credits, 500)
+			alice.attributes.DebugCredits = -200
+			server.Wallet.applyDebug(alice)
+			T.expectEqual(server.Wallet.balance(alice), 300)
 			server.leave(alice)
-			sched.advance(INTERVAL)
+			sched.advance(600)
 			T.expectEqual(ds.writes, 0)
 		end)
 	end)

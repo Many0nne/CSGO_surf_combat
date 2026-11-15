@@ -1,7 +1,15 @@
--- WalletRules (#391) : montants valides, chargement tolérant, fusion des écarts (lots numérotés, plancher à 0, plafond),
--- attribut du Player et affichage du solde.
+-- WalletRules (#391, #396) : montants valides, portefeuille relu (format de `wallet` dans PlayerInventory_v1), lots de
+-- gains fusionnés (lot rejoué, deux sessions, plafond), débit (achetés d'abord, jamais négatif), attribut et affichage.
 return function(T, Loader)
 	local Wallet = Loader.new({}):require("src/shared/WalletRules")
+
+	-- Cette méthode permet de construire un portefeuille stocké lorsqu'un test part d'un état donné.
+	local function wallet(earned: number, purchased: number?)
+		local w = Wallet.empty()
+		w.earned = earned
+		w.purchased = purchased or 0
+		return w
+	end
 
 	T.describe("WalletRules : montants", function()
 		T.it("accepte un solde entier entre 0 et le plafond", function()
@@ -26,106 +34,139 @@ return function(T, Loader)
 		end)
 	end)
 
-	T.describe("WalletRules : chargement", function()
-		T.it("nouveau joueur : solde de départ, écriture permise", function()
-			local balance, canSave = Wallet.loadOutcome(true, nil)
-			T.expectEqual(balance, Wallet.STARTING_BALANCE)
-			T.expect(canSave)
+	T.describe("WalletRules : format", function()
+		T.it("portefeuille absent : départ, réécrivable", function()
+			T.expect(Wallet.isWritable(nil))
+			local w = Wallet.read(nil)
+			T.expectEqual(Wallet.balance(w), Wallet.STARTING_BALANCE)
+			T.expectEqual(w.purchased, 0)
+			T.expectEqual(w.day, 0)
+			T.expectEqual(w.dayEarned, 0)
+			T.expectEqual(#w.receipts, 0)
+			T.expectEqual(#w.writes, 0)
 		end)
 
-		T.it("relit le solde stocké", function()
-			local balance, canSave = Wallet.loadOutcome(true, { schemaVersion = 1, credits = 1200 })
-			T.expectEqual(balance, 1200)
-			T.expect(canSave)
+		T.it("relit les deux compteurs, le jour (#394), les reçus (#395) et les marques", function()
+			local w = Wallet.read({
+				earned = 300,
+				purchased = 200,
+				day = 20400,
+				dayEarned = 50,
+				receipts = { "achat-1", 12, "achat-2" },
+				writes = { { session = "a", seq = 3 }, "x" },
+			})
+			T.expectEqual(Wallet.balance(w), 500)
+			T.expectEqual(w.day, 20400)
+			T.expectEqual(w.dayEarned, 50)
+			T.expectEqual(table.concat(w.receipts, ","), "achat-1,achat-2")
+			T.expectEqual(#w.writes, 1)
+			T.expectEqual(Wallet.appliedSeq(w, "a"), 3)
+			T.expectEqual(Wallet.appliedSeq(w, "b"), 0)
 		end)
 
-		T.it("lecture en échec, format inconnu ou plus récent : départ et sauvegarde coupée", function()
-			for _, case in
+		T.it("borne les reçus retenus aux plus récents", function()
+			local receipts = {}
+			for i = 1, Wallet.MAX_RECEIPTS + 5 do
+				table.insert(receipts, "r" .. i)
+			end
+			local w = Wallet.read({ earned = 0, purchased = 0, receipts = receipts })
+			T.expectEqual(#w.receipts, Wallet.MAX_RECEIPTS)
+			T.expectEqual(w.receipts[#w.receipts], "r" .. (Wallet.MAX_RECEIPTS + 5))
+		end)
+
+		T.it("refuse un portefeuille d'une forme inconnue", function()
+			for _, raw in
 				{
-					{ ok = false, data = nil },
-					{ ok = true, data = "texte" },
-					{ ok = true, data = { schemaVersion = 1 } },
-					{ ok = true, data = { schemaVersion = 1, credits = -3 } },
-					{ ok = true, data = { schemaVersion = 2, credits = 10 } },
-					{ ok = true, data = { schemaVersion = 1, credits = 10, writes = "x" } },
+					"texte",
+					{ earned = 10 },
+					{ earned = -1, purchased = 0 },
+					{ earned = 1.5, purchased = 0 },
+					{ earned = Wallet.MAX_BALANCE, purchased = 1 },
+					{ earned = 0, purchased = 0, day = -1 },
+					{ earned = 0, purchased = 0, receipts = "x" },
+					{ earned = 0, purchased = 0, writes = "x" },
 				}
 			do
-				local balance, canSave = Wallet.loadOutcome(case.ok, case.data)
-				T.expectEqual(balance, Wallet.STARTING_BALANCE)
-				T.expect(not canSave)
+				T.expect(not Wallet.isWritable(raw), tostring(raw))
+				T.expectEqual(Wallet.balance(Wallet.read(raw)), Wallet.STARTING_BALANCE)
 			end
 		end)
 	end)
 
-	T.describe("WalletRules : fusion", function()
-		T.it("ajoute un écart au solde stocké et retient le lot", function()
-			local payload, status = Wallet.mergeForSave(
-				{ schemaVersion = 1, credits = 100, extra = "gardé" },
-				{ session = "a", seq = 1, delta = 50 }
-			)
-			T.expectEqual(status, "merged")
-			T.expectEqual(payload.credits, 150)
-			T.expectEqual(payload.extra, "gardé", "champ inconnu recopié")
-			T.expectEqual(#payload.writes, 1)
+	T.describe("WalletRules : lots de gains", function()
+		T.it("ajoute les lots à `earned` et avance la marque de la session", function()
+			local w =
+				Wallet.applyBatches(wallet(100, 40), "a", { { seq = 1, earned = 30 }, { seq = 2, earned = 5 } }, 2)
+			T.expectEqual(w.earned, 135)
+			T.expectEqual(w.purchased, 40, "achetés intacts")
+			T.expectEqual(Wallet.appliedSeq(w, "a"), 2)
 		end)
 
-		T.it("crée l'enregistrement d'un nouveau joueur", function()
-			local payload, status = Wallet.mergeForSave(nil, { session = "a", seq = 1, delta = 30 })
-			T.expectEqual(status, "merged")
-			T.expectEqual(payload.credits, 30)
-			T.expectEqual(payload.schemaVersion, Wallet.SCHEMA_VERSION)
+		T.it("un lot rejoué n'est pas recompté", function()
+			local first = Wallet.applyBatches(wallet(0), "a", { { seq = 1, earned = 40 } }, 1)
+			local again = Wallet.applyBatches(first, "a", { { seq = 1, earned = 40 } }, 1)
+			T.expectEqual(again.earned, 40)
+			-- Lot 1 renvoyé avec le lot 2 (réponse du premier perdue) : seul le 2 compte
+			local both = Wallet.applyBatches(first, "a", { { seq = 1, earned = 40 }, { seq = 2, earned = 10 } }, 2)
+			T.expectEqual(both.earned, 50)
 		end)
 
-		T.it("ne compte pas deux fois un lot renvoyé", function()
-			local first = Wallet.mergeForSave(
-				{ schemaVersion = 1, credits = 0 },
-				{ session = "a", seq = 1, delta = 40 }
-			)
-			local again, status = Wallet.mergeForSave(first, { session = "a", seq = 1, delta = 40 })
-			T.expectEqual(again, nil)
-			T.expectEqual(status, "applied")
-			local nextOne = Wallet.mergeForSave(first, { session = "a", seq = 2, delta = 10 })
-			T.expectEqual(nextOne.credits, 50)
-		end)
-
-		T.it("additionne les écarts de deux sessions", function()
-			local a = Wallet.mergeForSave({ schemaVersion = 1, credits = 100 }, { session = "a", seq = 1, delta = -60 })
-			local b = Wallet.mergeForSave(a, { session = "b", seq = 1, delta = 25 })
-			T.expectEqual(b.credits, 65)
+		T.it("deux sessions additionnent leurs gains", function()
+			local a = Wallet.applyBatches(wallet(100), "a", { { seq = 1, earned = 60 } }, 1)
+			local b = Wallet.applyBatches(a, "b", { { seq = 1, earned = 25 } }, 1)
+			T.expectEqual(b.earned, 185)
 			T.expectEqual(#b.writes, 2)
 		end)
 
-		T.it("ne descend jamais sous 0 ni au-dessus du plafond", function()
-			local low = Wallet.mergeForSave(
-				{ schemaVersion = 1, credits = 30 },
-				{ session = "a", seq = 1, delta = -80 }
-			)
-			T.expectEqual(low.credits, 0)
-			local high = Wallet.mergeForSave(
-				{ schemaVersion = 1, credits = Wallet.MAX_BALANCE - 1 },
-				{ session = "a", seq = 1, delta = 10 }
-			)
-			T.expectEqual(high.credits, Wallet.MAX_BALANCE)
+		T.it("écrête au plafond (somme des deux compteurs)", function()
+			local w = Wallet.applyBatches(wallet(Wallet.MAX_BALANCE - 10, 5), "a", { { seq = 1, earned = 100 } }, 1)
+			T.expectEqual(Wallet.balance(w), Wallet.MAX_BALANCE)
 		end)
 
-		T.it("ne touche pas un format refusé", function()
-			local payload, status = Wallet.mergeForSave({ schemaVersion = 9, credits = 5 }, {
-				session = "a",
-				seq = 1,
-				delta = 1,
-			})
-			T.expectEqual(payload, nil)
-			T.expectEqual(status, "refused")
+		T.it("une marque sans lot (transaction) avance aussi, sans rien ajouter", function()
+			local w = Wallet.applyBatches(wallet(10), "a", {}, 4)
+			T.expectEqual(w.earned, 10)
+			T.expectEqual(Wallet.appliedSeq(w, "a"), 4)
 		end)
 
-		T.it("ne retient que les dernières sessions", function()
-			local record = { schemaVersion = 1, credits = 0 }
+		T.it("ne retient que les dernières sessions, sans modifier l'entrée", function()
+			local w = wallet(0)
 			for i = 1, Wallet.MAX_WRITE_MARKS + 3 do
-				record = Wallet.mergeForSave(record, { session = "s" .. i, seq = 1, delta = 1 })
+				w = Wallet.applyBatches(w, "s" .. i, { { seq = 1, earned = 1 } }, 1)
 			end
-			T.expectEqual(#record.writes, Wallet.MAX_WRITE_MARKS)
-			T.expectEqual(record.writes[#record.writes].session, "s" .. (Wallet.MAX_WRITE_MARKS + 3))
-			T.expectEqual(record.credits, Wallet.MAX_WRITE_MARKS + 3)
+			T.expectEqual(#w.writes, Wallet.MAX_WRITE_MARKS)
+			T.expectEqual(w.writes[#w.writes].session, "s" .. (Wallet.MAX_WRITE_MARKS + 3))
+			T.expectEqual(w.earned, Wallet.MAX_WRITE_MARKS + 3)
+			local source = wallet(5)
+			Wallet.applyBatches(source, "a", { { seq = 1, earned = 1 } }, 1)
+			T.expectEqual(source.earned, 5, "pure")
+			T.expectEqual(#source.writes, 0, "pure")
+		end)
+	end)
+
+	T.describe("WalletRules : débit", function()
+		T.it("débite les achetés d'abord, puis les gagnés", function()
+			local w = Wallet.debit(wallet(100, 30), 50)
+			assert(w)
+			T.expectEqual(w.purchased, 0)
+			T.expectEqual(w.earned, 80)
+			local onlyPurchased = Wallet.debit(wallet(100, 30), 20)
+			assert(onlyPurchased)
+			T.expectEqual(onlyPurchased.purchased, 10)
+			T.expectEqual(onlyPurchased.earned, 100)
+		end)
+
+		T.it("refuse un solde insuffisant ou un montant invalide, sans rien changer", function()
+			local source = wallet(40, 10)
+			local w, reason = Wallet.debit(source, 51)
+			T.expectEqual(w, nil)
+			T.expectEqual(reason, "insufficient")
+			local _, invalid = Wallet.debit(source, -5)
+			T.expectEqual(invalid, "invalid")
+			T.expectEqual(Wallet.balance(source), 50)
+			local exact = Wallet.debit(source, 50)
+			assert(exact)
+			T.expectEqual(Wallet.balance(exact), 0, "jamais négatif")
 		end)
 	end)
 
