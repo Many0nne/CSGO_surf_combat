@@ -370,7 +370,7 @@ et au départ en partie (`SPAWNING`, `IN_ROUND`).
 - Déplacé d'Infos (onglet SURFER retiré, Infos s'ouvre sur COMMANDES) : Infos sert de référence, pas de tuto.
 - L'écran de mort renvoie à la démo : les conseils BHOP et AIR STRAFE finissent par « Démo : APPRENDRE. »
   (`InfosRules.DEMO_POINTER`), en texte (souris verrouillée pendant la mort ; une mini-démo sur l'écran de mort coûterait
-  la copie de la map à chaque mort). Mode entraînement (rejouer soi-même le geste) : #345.
+  la copie de la map à chaque mort). Mode entraînement (rejouer soi-même le geste) : voir plus bas, #345.
 
 **Une seule démo : BHOP** (le geste montre aussi l'air strafe). Prise jouée par l'utilisateur avec l'auto-bhop (Espace tenu), Q/D en tournant la
 souris du même côté, vitesse de 25 à 126 en 15 s. Surf et enchaînement abandonnés le 2026-11-14 : Dizzy n'a pas de
@@ -434,6 +434,41 @@ un bhop joué par entrées simulées (MCP) ; la prise humaine était déjà prop
    partie entre début et fin, et réécrit `src/client/ui/DemoClips/Bhop.luau` (CRLF, comme StyLua).
 6. Arrêter le playtest (Rojo ne synchronise qu'en mode Edit), relancer, ouvrir APPRENDRE et vérifier la démo.
 
+## Mode entraînement (#345)
+
+Le joueur rejoue lui-même le geste de la démo, la démo sous les yeux.
+- **Entrée :** action S'ENTRAÎNER de l'écran Apprendre, après RETOUR. Elle téléporte vers un serveur d'entraînement
+  partagé (serveur réservé de la même place, un seul code d'accès commun gardé en MemoryStore, remplacé quand le serveur
+  est plein : les joueurs s'entraînent ensemble, pas une copie de la map par joueur). À l'arrivée, le joueur est mis en
+  jeu tout de suite, comme JOUER.
+- **Sur ce serveur :** map Dizzy, jeu libre (pas de point de départ ni de relance), ni bots, ni armes, ni dégâts, ni
+  stats (une chute ne compte pas), manche sans fin qui garde la réapparition. Pas de timer, de rang, de classement (Tab)
+  ni de fil des kills.
+- **Démo :** la même que l'écran Apprendre (`DemoPlayer`, option `compact` : nom du geste sans sa phrase), à 60 %
+  (384 x 216 à 720 de haut), en haut à droite à la place du fil des kills ; le compteur de vitesse (bas à gauche) et les
+  touches (bas au centre) du joueur restent dégagés. Elle tourne tant que le joueur est en partie, mort compris (la copie
+  de la map n'est pas refaite à chaque réapparition), sous le menu en partie, et est libérée au retour au menu.
+- **Masquable** (un joueur qui sait déjà bhoper n'en a pas besoin) : choix MASQUER LA DÉMO / AFFICHER LA DÉMO du menu en
+  partie, entre RÉGLAGES et QUITTER L'ENTRAÎNEMENT (le menu reste ouvert après le clic), et ligne « Démo d'entraînement »
+  de Réglages > GRAPHISMES. Réglage sauvegardé `trainingDemo` (affichée par défaut) : chaque arrivée sur l'entraînement
+  est une nouvelle session (téléportation), un choix gardé pour la session seulement serait perdu. Masquée, la démo est
+  libérée (copie de la map comprise) ; réaffichée, la copie est refaite. Elle attend l'arrivée des réglages sauvegardés
+  avant de s'afficher, sinon le défaut la montrait un instant à un joueur qui l'a masquée. Sous la démo, aligné sur son
+  bord droit : « P · MASQUER LA DÉMO » (touche en boîte, comme les aides du menu en partie), masqué avec elle.
+- **Aucun jugement du geste** (choix de l'utilisateur) : le joueur compare lui-même ses touches, sa souris et sa vitesse
+  à celles de la démo. Pistes écartées : score d'essai (part des virages dans le bon sens, gain de vitesse), touches
+  vertes ou rouges en direct, fantôme dans le monde, relance au point de départ par une touche, touche dédiée pour
+  masquer la démo (le menu P suffit).
+- **Sortie :** QUITTER L'ENTRAÎNEMENT remplace MENU PRINCIPAL dans le menu en partie (et S'ENTRAÎNER sur Apprendre) :
+  retour au menu, puis téléportation vers un serveur public. Échec : message sous les onglets, le joueur reste au menu du
+  serveur d'entraînement (JOUER y rejoue l'entraînement).
+- **Studio :** pas de téléportation (message « TÉLÉPORTATION IMPOSSIBLE DANS STUDIO »). Pour voir un serveur
+  d'entraînement, poser en mode Edit `workspace:SetAttribute("DebugTraining", true)` avant le playtest (lu au démarrage
+  du serveur), et le retirer après. Le partage du serveur ne se vérifie que dans le jeu publié.
+- Coût mesuré (Studio, 2026-11-15) : copie du décor à l'apparition, 17 443 pièces en 2,46 s (contre 0,30 s depuis le
+  menu : elle part en même temps que le chargement du personnage, sur plusieurs images). Coût par image non mesuré à
+  part ; celui du lecteur d'Apprendre (4 à 5 ms de GPU) en donne l'ordre.
+
 ## Règles des écrans secondaires
 
 - Rien ne se tire (#130) : souris système, un clic agit tout de suite. Un curseur de réglage se place d'un clic, puis se glisse.
@@ -441,6 +476,11 @@ un bhop joué par entrées simulées (MCP) ; la prise humaine était déjà prop
 - Piste rejetée (#130) : un impact de balle laissé sur chaque élément cliqué, et le hitmarker comme curseur partout. Peu beau et peu lisible.
 
 ## Pièges connus
+
+- **`ZIndexBehavior` d'un nouveau `ScreenGui` (#345) :** `Instance.new("ScreenGui")` (donc `UIKit.create`) est en
+  `Global`. Le lecteur de démo et les écrans du jeu sont construits pour `Sibling` (enfants au-dessus du parent) : en
+  `Global`, les libellés des keycaps et l'icône de la souris du `DemoPlayer` (ZIndex 1) passaient sous la vue (ZIndex 2)
+  et disparaissaient, les touches restaient des pavés vides. Poser `ZIndexBehavior = Sibling` sur tout nouveau `ScreenGui`.
 
 - **HUD de jeu visible seulement en partie (#105) :** un `ScreenGui` créé avec `ResetOnSpawn = false` reste affiché après la fin du
   round. Source unique : `HUDRules.gameHudVisible(état)`, appliquée par `applyGameHud` dans

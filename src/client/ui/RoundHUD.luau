@@ -144,6 +144,7 @@ local resultNameShadow: TextLabel
 local resultLabel: TextLabel
 local resultRows: Frame
 local resultShown = false -- écran de fin en cours : Tab maintenu le remplace par le classement, sans superposition
+local training = false -- serveur d'entraînement (#345) : ni timer, ni rang, ni classement
 
 local hudStateConn: (() -> ())? -- désabonnement de HUDState
 local tabConn: RBXScriptConnection?
@@ -914,7 +915,7 @@ function RoundHUD.init()
 
 	-- Pendant l'écran de fin, Tab maintenu le remplace par le classement complet, rendu au relâchement (#295)
 	tabConn = UserInputService.InputBegan:Connect(function(input, _processed)
-		if input.KeyCode == Enum.KeyCode.Tab then
+		if input.KeyCode == Enum.KeyCode.Tab and not training then
 			if resultShown then
 				resultRoot.Visible = false
 			end
@@ -950,6 +951,18 @@ function RoundHUD.hide()
 	end
 	if deathGrade then
 		deathGrade.Enabled = false
+	end
+end
+
+-- Cette méthode permet de retirer timer, rang et classement (Tab) lorsque le client est sur un serveur d'entraînement
+-- (#345) : manche sans fin, sans score ; l'écran de mort reste.
+function RoundHUD.setTraining(enabled: boolean)
+	training = enabled
+	if timerLayer then
+		timerLayer.Visible = not enabled
+	end
+	if enabled and leaderboard then
+		leaderboard.Visible = false
 	end
 end
 

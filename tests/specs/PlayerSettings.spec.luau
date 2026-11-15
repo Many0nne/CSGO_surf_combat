@@ -276,6 +276,20 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("PlayerSettings : démo de l'entraînement (#345)", function()
+		T.it("affiche la démo par défaut, y compris pour un réglage sauvegardé avant elle", function()
+			T.expectEqual(PlayerSettings.DEFAULT_TRAINING_DEMO, true)
+			T.expectEqual(PlayerSettings.defaults().trainingDemo, true)
+			T.expectEqual(PlayerSettings.sanitize({ sensitivity = 0.25 }).trainingDemo, true, "champ absent")
+			T.expectEqual(PlayerSettings.sanitize({ trainingDemo = "non" }).trainingDemo, true, "valeur abîmée")
+		end)
+
+		T.it("garde le choix du joueur", function()
+			T.expectEqual(PlayerSettings.sanitize({ trainingDemo = false }).trainingDemo, false)
+			T.expectEqual(PlayerSettings.sanitize({ trainingDemo = true }).trainingDemo, true)
+		end)
+	end)
+
 	T.describe("PlayerSettings.assignKey", function()
 		local defaults = PlayerSettings.DEFAULT_SLOT_KEYS
 

@@ -831,6 +831,20 @@ local function buildCategories(block: Frame)
 	local tipOptions = { { label = "ACTIVÉS", value = true }, { label = "COUPÉS", value = false } }
 	local tipDefault = if PlayerSettings.DEFAULT_DEATH_TIPS then 1 else 2
 	addPicker(graphics, "Conseils", "deathTips", tipOptions, tipDefault, tipDefault, function() end, 150)
+	-- Démo du coin sur le serveur d'entraînement (#345), aussi basculée par le menu en partie ; TrainingClient suit
+	-- LocalSettings
+	local demoOptions = { { label = "AFFICHÉE", value = true }, { label = "MASQUÉE", value = false } }
+	local demoDefault = if PlayerSettings.DEFAULT_TRAINING_DEMO then 1 else 2
+	addPicker(
+		graphics,
+		"Démo d'entraînement",
+		"trainingDemo",
+		demoOptions,
+		demoDefault,
+		demoDefault,
+		function() end,
+		150
+	)
 	-- Échelle du HUD (#250) en pourcents entiers : éléments de bord du HUD ; init.client la relaie à UIKit.setHudScale
 	local hudScale = PlayerSettings.HUD_SCALE
 	addSlider(

@@ -32,6 +32,7 @@ local BeginnerState = require(script.Parent.BeginnerState)
 local BeginnerRules = require(script.Parent.BeginnerRules)
 local InfosRules = require(script.Parent.Parent.Parent.ui.InfosRules)
 local LocalSettings = require(script.Parent.Parent.settings.LocalSettings)
+local TrainingClient = require(script.Parent.TrainingClient)
 
 -- PlayerDied et Humanoid.Died arrivent dans un ordre quelconque : l'info du tueur reste applicable ce temps-là (s)
 local DEATH_INFO_TTL = 1
@@ -87,7 +88,8 @@ local function applyGameHud()
 	Speedometer.setVisible(show)
 	WeaponBar.setVisible(show)
 	AmmoCounter.setVisible(show)
-	KillFeed.setVisible(HUDRules.killFeedVisible(state))
+	-- Entraînement (#345) : pas de fil des kills (seulement des chutes), la démo prend sa place en haut à droite
+	KillFeed.setVisible(HUDRules.killFeedVisible(state) and not TrainingClient.isTraining())
 	if not show then
 		ScopeSystem.reset()
 	end
@@ -148,6 +150,8 @@ local function setState(newState: State)
 	-- Avant le reste : le menu en partie rend la souris au jeu avant que le menu principal la reprenne
 	InGameMenu.onGameState(newState)
 	applyGameHud()
+	-- Démo dans un coin sur un serveur d'entraînement (#345), libérée au menu
+	TrainingClient.onGameState(newState)
 	if newState ~= "DEAD" then
 		-- Réapparition, menu ou fin de round : la caméra revient à FPSCamera ou au menu
 		DeathCamera.stop()
@@ -511,6 +515,11 @@ local function leaveRound()
 		leaveRemote:FireServer()
 	end
 	setState("MENU")
+	-- QUITTER L'ENTRAÎNEMENT (#345) : retour au menu comme MENU PRINCIPAL, puis téléportation vers un serveur public ;
+	-- si elle échoue, le joueur reste au menu (message), d'où il peut réessayer (APPRENDRE) ou rejouer
+	if TrainingClient.isTraining() then
+		TrainingClient.request()
+	end
 end
 
 -- Cette méthode permet de lire l'état client courant (MENU, IN_ROUND…) lorsqu'un module doit s'y adapter.
@@ -536,6 +545,9 @@ function GameStateController.init(player: Player, setupCharacter: (char: Model) 
 
 	-- Connexions RemoteEvent (attend que le serveur les crée)
 	task.spawn(listenToRemotes)
+	-- Mode du serveur (#345) connu avant les écrans qui en dépendent (libellés, HUD)
+	TrainingClient.waitForMode()
+	local training = TrainingClient.isTraining()
 
 	-- UI
 	FeedbackScreen.init(function() -- fermer Feedback
@@ -579,6 +591,11 @@ function GameStateController.init(player: Player, setupCharacter: (char: Model) 
 				openSettingsPage()
 			end
 		end,
+		leaveLabel = if training then TrainingClient.actionLabel() else nil,
+		-- Entraînement (#345) : la démo du coin se masque ou se réaffiche depuis le menu
+		toggle = if training
+			then { label = TrainingClient.demoToggleLabel, action = TrainingClient.toggleDemo }
+			else nil,
 	})
 	SettingsMenu.setOnClosed(function()
 		if state == "MENU" then
@@ -592,8 +609,9 @@ function GameStateController.init(player: Player, setupCharacter: (char: Model) 
 	LearnScreen.init(function() -- fermer Apprendre
 		LearnScreen.hide()
 		MainMenu.setPage("home")
-	end)
+	end, { label = TrainingClient.actionLabel(), action = TrainingClient.request })
 	RoundHUD.init()
+	RoundHUD.setTraining(training)
 	-- Série de kills montrée sous le timer (#364), comptée par l'annonceur
 	KillAnnouncer.onStreak(RoundHUD.setStreak)
 	LocalSettings.onChanged(applyDeathTip)
@@ -612,6 +630,10 @@ function GameStateController.init(player: Player, setupCharacter: (char: Model) 
 
 	-- Démarrer en MENU
 	setState("MENU")
+	-- Arrivée sur un serveur d'entraînement (#345) : en jeu tout de suite, comme JOUER (le joueur vient de le demander)
+	if training then
+		GameStateController.requestPlay()
+	end
 end
 
 return GameStateController

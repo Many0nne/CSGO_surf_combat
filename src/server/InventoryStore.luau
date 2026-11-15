@@ -126,6 +126,15 @@ function InventoryStore.equipped(player: Player): InventoryRules.Equipped
 	return if profile then profile.resolved else InventoryRules.resolveEquipped(nil, InventoryStore.owned(player))
 end
 
+-- Armes données aux joueurs : coupé sur un serveur d'entraînement (#345, setToolsEnabled)
+local toolsEnabled = true
+
+-- Cette méthode permet de couper (ou rendre) les armes de tous les joueurs lorsque le serveur démarre en serveur
+-- d'entraînement (#345) : le sac est ensuite vidé à chaque synchronisation (apparition, changement d'inventaire).
+function InventoryStore.setToolsEnabled(enabled: boolean)
+	toolsEnabled = enabled
+end
+
 -- Cette méthode permet de lister les Tools du joueur (sac et main) lorsqu'ils sont comparés à son inventaire.
 local function presentTools(player: Player): { Tool }
 	local tools: { Tool } = {}
@@ -159,7 +168,8 @@ function InventoryStore.syncTools(player: Player)
 	for _, tool in tools do
 		table.insert(names, tool.Name)
 	end
-	local wanted = InventoryRules.equippedTools(InventoryStore.equipped(player))
+	-- Serveur d'entraînement (#345) : aucune arme, le sac est vidé
+	local wanted = if toolsEnabled then InventoryRules.equippedTools(InventoryStore.equipped(player)) else {}
 	local give, remove = InventoryRules.toolChanges(wanted, names)
 	for _, tool in tools do
 		if table.find(remove, tool.Name) then
