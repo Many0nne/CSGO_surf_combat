@@ -53,6 +53,7 @@ local function qualityText(): string
 	end
 	return tostring(level.Value) .. "/10"
 end
+PerfOverlay.qualityText = qualityText
 
 -- Cette méthode permet d'ajouter les totaux d'un relevé de repères à ceux de la période de bilan lorsque l'overlay
 -- se rafraîchit (le bilan console couvre LOG_PERIOD, l'affichage la dernière demi-seconde).
