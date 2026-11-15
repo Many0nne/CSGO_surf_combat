@@ -144,6 +144,86 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("WalletRules : plafond du jour dans la fusion (#394)", function()
+		local DAY = 20407
+
+		-- Cette méthode permet de construire un lot de gains en jouant d'un jour lorsqu'un test simule une session.
+		local function play(seq: number, capped: number, day: number?)
+			return { seq = seq, earned = 0, capped = capped, day = day or DAY }
+		end
+
+		T.it("compte les gains en jouant du jour et plafonne à 250", function()
+			local w = Wallet.applyBatches(wallet(0), "a", { play(1, 40) }, 1)
+			T.expectEqual(w.earned, 40)
+			T.expectEqual(w.day, DAY)
+			T.expectEqual(w.dayEarned, 40)
+			w.dayEarned = 240
+			local capped = Wallet.applyBatches(w, "a", { play(2, 60) }, 2)
+			T.expectEqual(capped.earned, 50, "10 seulement sous le plafond")
+			T.expectEqual(capped.dayEarned, 250)
+		end)
+
+		T.it("deux serveurs au plafond en même temps ne le dépassent pas", function()
+			-- Chacun a vu 200 et crédité 50 de son côté
+			local stored = wallet(200)
+			stored.day = DAY
+			stored.dayEarned = 200
+			local a = Wallet.applyBatches(stored, "a", { play(1, 50) }, 1)
+			local b = Wallet.applyBatches(a, "b", { play(1, 50) }, 1)
+			T.expectEqual(b.dayEarned, 250)
+			T.expectEqual(b.earned, 250, "le second serveur n'ajoute rien")
+		end)
+
+		T.it("un nouveau jour UTC remet le compteur à zéro", function()
+			local stored = wallet(500)
+			stored.day = DAY
+			stored.dayEarned = 250
+			local w = Wallet.applyBatches(stored, "a", { play(1, 60, DAY + 1) }, 1)
+			T.expectEqual(w.day, DAY + 1)
+			T.expectEqual(w.dayEarned, 60)
+			T.expectEqual(w.earned, 560)
+		end)
+
+		T.it("lots de part et d'autre de minuit : chacun compté dans son jour", function()
+			local stored = wallet(0)
+			stored.day = DAY
+			stored.dayEarned = 230
+			local w = Wallet.applyBatches(stored, "a", { play(1, 40, DAY), play(2, 30, DAY + 1) }, 2)
+			T.expectEqual(w.earned, 20 + 30, "20 sous le plafond de la veille, 30 le lendemain")
+			T.expectEqual(w.day, DAY + 1)
+			T.expectEqual(w.dayEarned, 30)
+		end)
+
+		T.it("lot en retard d'un jour déjà dépassé : rien de crédité, jour stocké intact", function()
+			local stored = wallet(100)
+			stored.day = DAY + 1
+			stored.dayEarned = 70
+			local w = Wallet.applyBatches(stored, "a", { play(1, 25, DAY) }, 1)
+			T.expectEqual(w.earned, 100, "le plafond de la veille ne peut plus être vérifié")
+			T.expectEqual(Wallet.appliedSeq(w, "a"), 1, "lot marqué appliqué, pas renvoyé")
+			T.expectEqual(w.day, DAY + 1)
+			T.expectEqual(w.dayEarned, 70)
+		end)
+
+		T.it("crédits hors plafond (lot d'avant #394, remboursement) : jamais plafonnés", function()
+			local stored = wallet(0)
+			stored.day = DAY
+			stored.dayEarned = 250
+			local w = Wallet.applyBatches(stored, "a", { { seq = 1, earned = 300 } }, 1)
+			T.expectEqual(w.earned, 300)
+			T.expectEqual(w.dayEarned, 250)
+			local mixed = Wallet.applyBatches(stored, "b", { { seq = 1, earned = 20, capped = 15, day = DAY } }, 1)
+			T.expectEqual(mixed.earned, 20, "seule la part plafonnée est retenue au plafond")
+		end)
+
+		T.it("un lot rejoué ne recompte pas les gains du jour", function()
+			local first = Wallet.applyBatches(wallet(0), "a", { play(1, 40) }, 1)
+			local again = Wallet.applyBatches(first, "a", { play(1, 40) }, 1)
+			T.expectEqual(again.dayEarned, 40)
+			T.expectEqual(again.earned, 40)
+		end)
+	end)
+
 	T.describe("WalletRules : débit", function()
 		T.it("débite les achetés d'abord, puis les gagnés", function()
 			local w = Wallet.debit(wallet(100, 30), 50)

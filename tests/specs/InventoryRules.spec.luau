@@ -554,6 +554,43 @@ return function(T, Loader)
 			T.expectEqual(other.items[1], "weapon.m9bayonet")
 		end)
 
+		T.it(
+			"fusion (#394) : deux serveurs au plafond du jour ne le dépassent pas, remboursement hors plafond",
+			function()
+				local day = 20407
+				local stored = record(500)
+				stored.wallet.day = day
+				stored.wallet.dayEarned = 210
+				-- Chaque serveur a vu 210 et crédité 40 de son côté
+				local function play(session: string)
+					return { session = session, batches = { { seq = 1, earned = 0, capped = 40, day = day } }, upTo = 1 }
+				end
+				local a = Rules.mergeForSave(stored, {}, nil, play("a"))
+				assert(a)
+				local b = Rules.mergeForSave(a, {}, nil, play("b"))
+				assert(b)
+				T.expectEqual(b.wallet.dayEarned, 250)
+				T.expectEqual(b.wallet.earned, 540, "le second serveur n'ajoute rien au-delà du plafond")
+				-- Doublon remboursé par une transaction (#393) : `earned` seul, sans toucher `dayEarned`
+				local refund = function(rec)
+					rec.wallet.earned += 100
+					return rec, nil
+				end
+				local refunded, status = Rules.mergeForSave(
+					b,
+					{},
+					nil,
+					{ session = "a", batches = {}, upTo = 2 },
+					refund
+				)
+				assert(refunded)
+				T.expectEqual(status, "applied")
+				T.expectEqual(refunded.wallet.earned, 640)
+				T.expectEqual(refunded.wallet.dayEarned, 250)
+				T.expectEqual(refunded.wallet.day, day)
+			end
+		)
+
 		T.it("fusion sans portefeuille de session : celui stocké est gardé tel quel", function()
 			local written = Rules.mergeForSave(record(70, 30), {}, nil)
 			assert(written)

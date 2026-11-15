@@ -12,6 +12,7 @@ local UserInputService = game:GetService("UserInputService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local UITheme = require(Shared:WaitForChild("UITheme"))
 local WalletRules = require(Shared:WaitForChild("WalletRules"))
+local EconomyRules = require(Shared:WaitForChild("EconomyRules"))
 local LocalWallet = require(script.Parent.Parent.systems.inventory.LocalWallet)
 local MenuScene = require(script.Parent.Parent.systems.game.MenuScene)
 local EquipmentScreen = require(script.Parent.EquipmentScreen)
@@ -37,6 +38,9 @@ local NOTICE_TIME = 5 -- s d'affichage de ce message
 -- Solde de crédits (#391), à droite à hauteur des onglets : jeton puis montant
 local BALANCE_ICON = 26
 local BALANCE_SIZE = 24
+-- Gains du jour (#394), sous le solde, sur la page SHOP seulement : « GAINS DU JOUR » en ambre, « N / 250 » en os
+local DAILY_Y = TABS_Y + 50
+local DAILY_SIZE = 18
 -- Onglets, de gauche à droite ; ARMES est l'accueil (le personnage et son arme), JOUER l'appel à l'action, APPRENDRE
 -- juste avant (#285 : on apprend le geste, puis on joue), SHOP à côté d'ARMES (#347 : les caisses donnent les skins)
 local TABS = {
@@ -59,6 +63,8 @@ local currentPage: Page = "home"
 local notice: TextLabel
 local noticeShadow: TextLabel
 local noticeGeneration = 0
+local dailyRow: Frame
+local paintDaily: () -> () = function() end
 
 -- Cette méthode permet d'appeler un rappel enregistré lorsqu'un choix du menu est confirmé.
 local function fire(name: string)
@@ -227,6 +233,70 @@ local function buildBalance(root: Frame)
 	end)
 end
 
+-- Cette méthode permet de construire la ligne des gains du jour sous le solde (#394, page SHOP seulement) lorsque le
+-- menu est initialisé ; elle suit l'attribut `DailyCredits` (« — » tant qu'il n'est pas chargé, 0 après minuit UTC).
+local function buildDaily(root: Frame)
+	dailyRow = UIKit.frame({
+		Name = "DailyCredits",
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -EDGE, 0, DAILY_Y),
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, DAILY_SIZE + 4),
+		Visible = false,
+		Parent = root,
+	})
+	UIKit.create("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		HorizontalAlignment = Enum.HorizontalAlignment.Right,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, 10),
+		Parent = dailyRow,
+	})
+	-- Chaque texte et son ombre dans un cadre : posés directement dans la liste, ils seraient rangés côte à côte
+	local labelBox = UIKit.frame({
+		Name = "Label",
+		BackgroundTransparency = 1,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromScale(0, 1),
+		LayoutOrder = 1,
+		Parent = dailyRow,
+	})
+	UIKit.accentLabel(labelBox, {
+		Name = "Text",
+		Text = "GAINS DU JOUR",
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromScale(0, 1),
+	})
+	local valueBox = UIKit.frame({
+		Name = "Value",
+		BackgroundTransparency = 1,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromScale(0, 1),
+		LayoutOrder = 2,
+		Parent = dailyRow,
+	})
+	local text, shadow = UIKit.shadowedText(valueBox, {
+		Name = "Text",
+		FontFace = F.Display,
+		TextSize = DAILY_SIZE,
+		TextColor3 = C.Bone,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromScale(0, 1),
+		ZIndex = 2,
+	}, 2)
+	local player = Players.LocalPlayer
+	-- Cette méthode permet de réécrire « N / 250 » lorsque l'attribut change ou que le shop s'ouvre (minuit UTC passé).
+	paintDaily = function()
+		local value = EconomyRules.dailyLabel(LocalWallet.dailyEarned())
+		text.Text = value
+		shadow.Text = value
+	end
+	paintDaily()
+	player:GetAttributeChangedSignal(EconomyRules.DAILY_ATTRIBUTE):Connect(paintDaily)
+end
+
 -- Cette méthode permet de poser le titre du jeu avec les onglets, au-dessus des écrans secondaires (#308 : il reste
 -- affiché sur toutes les pages, hors du fond de coin de ces écrans), lorsque le menu est initialisé.
 local function buildTitleColumn(root: Frame)
@@ -298,6 +368,7 @@ function MainMenu.init(
 	buildTitleColumn(tabsRoot)
 	buildTabs(tabsRoot)
 	buildBalance(tabsRoot)
+	buildDaily(tabsRoot)
 	MainMenu.setPage("home")
 	UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
 		if gui.Enabled then
@@ -324,6 +395,10 @@ function MainMenu.setPage(page: Page)
 	end
 	for key, underline in underlines do
 		underline.Visible = key == page
+	end
+	if dailyRow then
+		dailyRow.Visible = page == "shop"
+		paintDaily()
 	end
 	-- Hors de l'onglet ARMES, le personnage repasse au centre, derrière le bloc de l'écran ouvert
 	MenuScene.setCentered(page ~= "home")

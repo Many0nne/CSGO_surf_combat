@@ -34,10 +34,16 @@ function WalletStore.canChange(player: Player): boolean
 	return InventoryStore.canChangeCredits(player)
 end
 
--- Cette méthode permet de créditer un joueur lorsqu'il gagne des crédits (compteur `earned`) ; refus (false) si le
--- montant est invalide ou si le solde ne peut pas changer. Le solde est écrêté à WalletRules.MAX_BALANCE.
+-- Cette méthode permet de créditer un joueur hors plafond du jour (debug ; un gain en jouant passe par `addPlayGain`) ;
+-- false si le montant est invalide ou si le solde ne peut pas changer, solde écrêté à WalletRules.MAX_BALANCE.
 function WalletStore.add(player: Player, amount: number): boolean
 	return InventoryStore.addCredits(player, amount)
+end
+
+-- Cette méthode permet de créditer un gain en jouant (#394, kill, manche jouée, victoire) du jour UTC `day`, soumis au
+-- plafond du jour (EconomyRules.DAILY_CAP) ; renvoie le montant crédité (0 au plafond), nil si le solde ne peut pas changer.
+function WalletStore.addPlayGain(player: Player, amount: number, day: number): number?
+	return InventoryStore.addPlayCredits(player, amount, day)
 end
 
 -- Cette méthode permet de débiter un joueur lorsqu'il paie, achetés d'abord puis gagnés : écriture immédiate qui
