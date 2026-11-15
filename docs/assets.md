@@ -184,6 +184,54 @@ l'export). Trois objets, un par matériau (lame, ferrures, cuir), donc trois Mes
 - **Dépliage** : lame à plat par côté (moitié droite de la texture pour x >= 0, marquage d'un seul côté), pièces de révolution
   en cylindre (u = angle, v = y), garde et fonds plats en planaire dans la zone médiane de la texture (sinon stries radiales).
 
+## AWP : modèle procédural (#403)
+
+Source : `assets/awp/` (remplace `assets/sniper/Sniper.blend`, fusil générique à crosse en bois ; les outils de skins
+lisent encore l'ancienne source jusqu'à leur passage sur le nouveau dépliage). Tout se refait sans interface :
+
+```bash
+blender -b --factory-startup --python assets/awp/build_awp.py -- <abs>/assets/awp/AWP.blend   # formes, UV, matériaux
+blender -b assets/awp/AWP.blend --factory-startup --python tools/skins/bake_maps.py -- <cuisson>
+uv run assets/awp/make_textures.py <cuisson> assets/awp/textures                             # cartes PBR d'origine
+blender -b --factory-startup --python assets/awp/build_awp.py -- <abs>/assets/awp/AWP.blend   # rebranche les cartes
+blender -b assets/awp/AWP.blend --factory-startup --python assets/awp/render_board.py -- <dossier> new
+uv run assets/awp/compose_board.py <dossier> references/awp_reel/L115A3_sniper_rifle.jpg references/skins/AWP/Default/01-repos.png <planche.jpg>
+```
+
+- **Repère hérité de l'ancien modèle** : bouche vers -X, haut +Z, droite du tireur +Y, origine = `Joint` du viewmodel,
+  1 unité = 1 stud en 1P. L'œilleton (X 1,42, axe à Z 0,5) et la bouche (X -5,45, Z 0) sont à la place de ceux de
+  l'ancien : ce sont les deux points que suivent les pistes (`build_anims.py`, `EYE_REST`, `MUZZLE_REST`), le cadrage
+  ne bouge pas. Pivots gardés : culasse (0,95 ; 0 ; 0), chargeur (0,29 ; 0 ; -0,45), détente (1,06 ; 0 ; -0,36).
+- **Proportions** relevées sur une photo de profil (L115A3, Wikimedia Commons, `references/awp_reel/`, non versionné) :
+  `X(px)`, `Z(py)` de `build_awp.py`. La planche superpose le modèle à la photo (vue 2) : un écart s'y voit tout de suite.
+  Lunette montée 0,10 plus haut que sur la photo pour garder l'œilleton à Z 0,5. La lunette suit l'AWP de CS2 plutôt
+  que la photo : tourelles basses (celle de la photo, 0,42 au-dessus de l'axe, rendait mal au repos) et oculaire
+  resserré avant son évasement final. Toucher la géométrie déplace la boîte de l'arme qui normalise la cuisson : toutes
+  les cartes changent un peu, les republier toutes.
+- **Tube fermé derrière les verres** : `ScopeLens` est en Glass à 60 % de transparence ; un tube ouvert laisse voir le
+  décor à travers la lunette. Le profil de la lunette se ferme par un fond noir juste derrière chaque verre.
+- **Dépliage** : îlots en unités monde (faces planes à plat, pourtours en bandes, pièces de révolution en cylindre), coupés
+  en tronçons de 1,5, rangés par un empaquetage en étagères déterministe (le packer de Blender ne l'est pas). Une seule
+  densité pour les quatre matériaux, celle du plus chargé (le châssis) : 226 px/unité en 1024.
+- **Booléens** (fenêtre d'éjection, évents du frein) : seulement sur une coque isolée, puis fusionner. Sur un maillage
+  qui contient plusieurs coques qui se chevauchent (canon + frein, boîtier + rail), le booléen EXACT jette des pièces.
+- `ob.dimensions` reste périmé après un `bmesh.to_mesh` tant que `view_layer.update()` n'a pas tourné.
+- **Couleurs** (`make_textures.py`) : vert olive tirant sur le kaki, lunette peinte du même olive (comme l'AWP Default
+  de CS2), bagues et tourelles noires moletées, culasse en acier nu. Le rendu Cycles de `render_views.py` délave l'olive
+  sous sa lumière principale : juger en jeu.
+- **Publication** : `export_mesh_fbx.py --no-turn` (repère des meshes de l'AWP), `publish_asset.sh … Model`, cartes par
+  `tools/skins/publish_skin.py` sur un dossier `<x>/AWP/<PREFIXE>_<Carte>.png` (ids dans `assets/awp/texture_ids.json`).
+- **Poser le modèle sur le viewmodel** (Studio, mode Edit, MCP) : `insert_asset` dans `ServerStorage`, puis pour chaque
+  pièce `ApplyMesh`, `Size` du mesh inséré et `CFrame` = `Joint.Position + (cx, cz, -cy)` (centre de la boîte Blender)
+  avec la rotation de l'ancienne pièce. Joints : désactiver les Motor6D de l'arme, garder leur repère de pivot monde
+  `J = Part0.CFrame * C0`, puis `C0 = Part0⁻¹ J`, `C1 = Part1⁻¹ J` : les pistes publiées s'appliquent telles quelles.
+  `Barrel.ShootPart` garde sa position monde ; `Handle.EjectPort` va sur la nouvelle fenêtre (X 0,22, côté +Y).
+- **3P** : `ThirdPerson.Grip` est la Handle (centre du boîtier) dans le repère de la main : un déplacement du centre
+  de la Handle se compense par `Grip * CFrame.new(0,7 · L(c_neuf - c_ancien))`, avec L = (-X, Z, Y) du repère Blender.
+- **Rig d'animation** : `assets/awp/update_anim_rig.py` remplace les pièces de l'arme de `AWP_Viewmodel_Anims.blend`
+  (origine au centre de chaque pièce, comme une MeshPart), sinon `frames_<Nom>.json` place les nouvelles pièces aux
+  centres des anciennes.
+
 ## Aperçus three.js (skins, nouveaux modèles)
 
 > Piste abandonnée pour créer un modèle ou un skin (essai jeté le 2026-11-10) : modéliser dans Blender (section ci-dessus). Les

@@ -135,6 +135,8 @@ Méthode de la refonte de l'Equip, du Shoot et du Reload de l'AWP (référence C
     ralenti est une saccade. L'utilisateur les voit dès 10 % d'écart : les chercher toutes avant de montrer une vidéo.
 - **FOV :** le viewmodel CS2 a un champ bien plus étroit que notre 90° vertical. Placer œilleton et canon aux mêmes
   points de l'écran incline l'arme vers la profondeur : le profil et la verticale de l'Inspect paraissent moins amples.
+  Le profil se compense par un lacet en plus, centré sur le boîtier (`INSPECT_YAW`, `solve_gun(…, yaw_deg)`) : le flanc
+  de l'arme, qui porte le skin, se voyait mal (#403). Variantes : `AWP_INSPECT_YAW=<degrés>` avant `run_build.py`.
 
 ```bash
 # Construire sans toucher au Blender ouvert : écrit anim_<Nom>.json (make_rbxm) et frames_<Nom>.json (studio_render, à 60 images/s)
@@ -146,6 +148,15 @@ bash tools/anim/publish.sh <sortie> AWP_ Equip Shoot Reload Inspect
 Pour le rendu : `VIEWMODEL = "AWP"` et `RECENTER_HANDLE = false` dans `studio_render.luau`. `dump_frames.py` sert aux couteaux (scripts `build_viewmodel.py`), pas à l'AWP.
 
 Le `.blend` garde les anciennes actions : `run_build.py` les régénère à chaque lancement et ne sauvegarde pas le fichier.
+
+**Changer le modèle de l'arme sans toucher au mouvement (#403) :** le Transform exporté ne dépend que du repère de
+pivot de chaque joint (`Part0 · C0`), pas de la forme des pièces. En gardant ces repères dans Studio (`docs/assets.md`,
+« AWP : modèle procédural »), les pistes publiées jouent juste sur le nouveau modèle ; seules les mains changent de
+prise. Pour l'AWP de #403 : `GRIP_R`, `FOREND_L`, `KNOB_R`, `MAG_L` et `under_well` recalés en gardant le même écart à
+la surface que sur l'ancien fusil (poignée à trou de pouce 0,5 plus en avant et 0,13 plus bas, chargeur 0,134 plus
+long, boule de culasse 0,12 plus haute), `EYE_REST` et `MUZZLE_REST` sur le verre arrière et l'axe du canon du nouveau
+modèle. `assets/awp/update_anim_rig.py` pose d'abord les nouvelles pièces sur le rig, sinon `frames_<Nom>.json` les rend
+aux centres des anciennes. Rendu Studio à 30 i/s (une pose sur deux de `frames_<Nom>.json`) pour la vidéo côte à côte.
 
 **Marqueurs de `Shoot` :** `Shoot Sound` (0 s), `Bolt Sound` (culasse levée moins 0,07 s) et `Eject` (culasse en
 arrière, `bt["back"]`, 0,817 s : la douille sort, #237, `docs/assets.md`). Un marqueur se rattache à la keyframe la plus
@@ -343,6 +354,15 @@ Repris du retour d'expérience de la M9 (`docs/notes/retex-viewmodel-m9.md`).
 
 - **Rig par script :** extraire de Studio les CFrames relatifs à la `HumanoidRootPart` et les C0/C1 des Motor6D (`rig.json`), puis les reconstruire dans Blender avec `C = (x, -z, y)`. L'export applique `Transform = C0⁻¹·Part0⁻¹·Part1·C1`.
 - **La pose de repos du rig est la pose idle**, en recalculant `C1 = Part1⁻¹·Part0·C0` : sans animation Idle, le rig y revient à la fin de chaque piste, sans saut visible.
+- **Retour au repos d'une piste mesurée :** les derniers relevés, pris quand l'arme se pose, tremblent de ±5 à 10 px
+  autour du repos et la spline relance l'arme (fin du Reload de l'AWP : 18 puis 43 °/s alors qu'elle ralentissait,
+  perçu comme un mouvement parasite du bras tendu, #403). Remplacer ces relevés par une approche continue et vérifier
+  que la vitesse angulaire de la Handle ne fait plus que décroître (`frames_<Nom>.json`, voir l'Inspect plus haut).
+- **Bras tendu = à-coup :** une main hors de portée tend le bras, l'IK le bloque puis le relâche d'un coup (fin du
+  Reload de l'AWP, #403 : bras gauche tendu 0,2 s, signalé par l'utilisateur). `follow_shoulder` (`build_anims.py`)
+  avance l'épaule en douceur au-delà de 96,5 % de l'allonge ; le bras gauche de l'AWP est déjà à 96 % au repos, une
+  compression plus tôt changerait la tenue de toutes les pistes. Contrôle sans rendu : allonge et alignement épaule,
+  coude, poignet image par image (alignement 1 = bras tendu).
 - **IK à deux os :** si la cible est hors de portée, c'est l'épaule qui suit la main. Sinon la main se décroche de l'avant-bras, ce qui se voit à une translation non nulle de `RightHand` dans la piste. Dans le viewmodel R15, le pivot du Motor6D d'épaule est à environ 3 studs du bras (grande translation dans C1).
 - **Orientations :** ne pas deviner des angles d'Euler. Les calculer par ajustement numérique à partir de directions cibles (axe du couteau, sens du tranchant).
 - **Mêlée :** le coup est déclenché par le marqueur `Stab Sound` (`WeaponSystem`).
