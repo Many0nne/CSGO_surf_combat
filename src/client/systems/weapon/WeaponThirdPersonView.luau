@@ -59,31 +59,99 @@ local function settingsOf(gun: Instance)
 	return getSettings(if type(weaponName) == "string" then weaponName else "")
 end
 
+-- Modèles 3P suivis (tag Weapon3P) : pièces relevées une fois puis tenues à jour, soudure du grip et dernier C0
+-- écrit. Sans cela, chaque frame relisait les descendants de chaque modèle et réécrivait un C0 inchangé (#370).
+type GunState = {
+	parts: { BasePart },
+	weld: Weld?,
+	lastC0: CFrame?,
+	conns: { RBXScriptConnection },
+}
+local guns: { [Instance]: GunState } = {}
+
+-- Cette méthode permet de commencer à suivre un modèle 3P lorsqu'il reçoit le tag (réplication, clone d'un corps) :
+-- ses pièces sont relevées, puis ajoutées ou retirées à mesure qu'elles arrivent ou partent.
+local function trackGun(gun: Instance)
+	if guns[gun] then
+		return
+	end
+	local state: GunState = { parts = {}, weld = nil, lastC0 = nil, conns = {} }
+	guns[gun] = state
+	for _, inst in gun:GetDescendants() do
+		if inst:IsA("BasePart") then
+			table.insert(state.parts, inst)
+		end
+	end
+	table.insert(
+		state.conns,
+		gun.DescendantAdded:Connect(function(inst: Instance)
+			if inst:IsA("BasePart") then
+				table.insert(state.parts, inst)
+			end
+		end)
+	)
+	table.insert(
+		state.conns,
+		gun.DescendantRemoving:Connect(function(inst: Instance)
+			local index = table.find(state.parts, inst :: BasePart)
+			if index then
+				table.remove(state.parts, index)
+			end
+		end)
+	)
+end
+
+-- Cette méthode permet d'oublier un modèle 3P lorsqu'il perd le tag ou quitte le jeu (arme rangée, personnage détruit).
+local function untrackGun(gun: Instance)
+	local state = guns[gun]
+	if not state then
+		return
+	end
+	for _, conn in state.conns do
+		conn:Disconnect()
+	end
+	guns[gun] = nil
+end
+
 -- Cette méthode permet d'appliquer une transparence locale à toutes les pièces d'un modèle 3P
 -- lorsque sa visibilité pour ce client est recalculée.
-local function setLocalVisible(gun: Instance, visible: boolean)
+local function setLocalVisible(state: GunState, visible: boolean)
 	local modifier = if visible then 0 else 1
-	for _, inst in gun:GetDescendants() do
-		if inst:IsA("BasePart") and inst.LocalTransparencyModifier ~= modifier then
-			inst.LocalTransparencyModifier = modifier
+	for _, part in state.parts do
+		if part.LocalTransparencyModifier ~= modifier then
+			part.LocalTransparencyModifier = modifier
 		end
 	end
 end
 
+-- Cette méthode permet de retrouver la soudure du grip d'un modèle 3P lorsqu'on anime son arme : gardée d'une frame à
+-- l'autre tant qu'elle est en place, recherchée sinon (réplication en cours, modèle remplacé).
+local function gripWeld(gun: Instance, state: GunState): Weld?
+	local weld = state.weld
+	if weld and weld.Parent and weld.Parent.Parent == gun then
+		return weld
+	end
+	local handle = gun:FindFirstChild("Handle")
+	local found = handle and handle:FindFirstChild(WeaponThirdPerson.WELD_NAME)
+	weld = if found and found:IsA("Weld") then found else nil
+	state.weld = weld
+	state.lastC0 = nil
+	return weld
+end
+
 -- Cette méthode permet de mettre à jour un modèle 3P lorsqu'une frame est rendue : visibilité
--- puis C0 du grip = grip de base * décalage de l'action en cours.
-local function updateGun(gun: Instance, localChar: Model?)
+-- puis C0 du grip = grip de base * décalage de l'action en cours, écrit seulement quand il change.
+local function updateGun(gun: Instance, state: GunState, localChar: Model?)
 	local char = gun.Parent
 	if not char or not char:IsA("Model") then
 		return
 	end
 
-	setLocalVisible(gun, WeaponThirdPerson.isVisibleTo(char == localChar))
+	setLocalVisible(state, WeaponThirdPerson.isVisibleTo(char == localChar))
 
-	local handle = gun:FindFirstChild("Handle")
-	local weld = handle and handle:FindFirstChild(WeaponThirdPerson.WELD_NAME)
+	local weld = gripWeld(gun, state)
 	local grip = gun:GetAttribute("GripC0")
-	if not (weld and weld:IsA("Weld") and typeof(grip) == "CFrame") then
+	if not (weld and typeof(grip) == "CFrame") then
 		return
 	end
 	local action = char:GetAttribute(WeaponThirdPerson.ACTION_ATTR)
@@ -92,7 +160,11 @@ local function updateGun(gun: Instance, localChar: Model?)
 	if type(action) == "string" and type(at) == "number" then
 		offset = WeaponThirdPerson.actionOffset(action, workspace:GetServerTimeNow() - at, settingsOf(gun))
 	end
-	weld.C0 = grip * offset
+	local c0 = grip * offset
+	if c0 ~= state.lastC0 then
+		weld.C0 = c0
+		state.lastC0 = c0
+	end
 end
 
 -- Cette méthode permet de (re)chercher les Motor6D du haut du corps lorsqu'une tenue commence ou qu'il en manque
@@ -243,7 +315,7 @@ end
 local function updateHolds(dt: number)
 	local localChar = Players.LocalPlayer and Players.LocalPlayer.Character
 	table.clear(posesThisFrame)
-	for _, gun in CollectionService:GetTagged(WeaponThirdPerson.TAG) do
+	for gun in guns do
 		local char = gun.Parent
 		if char and char:IsA("Model") and char ~= localChar then
 			posesThisFrame[char] = settingsOf(gun).Pose
@@ -275,10 +347,15 @@ end
 -- Cette méthode permet de démarrer la boucle de rendu des armes 3P et la tenue des personnages lorsque le client
 -- s'initialise.
 function WeaponThirdPersonView.init()
+	CollectionService:GetInstanceAddedSignal(WeaponThirdPerson.TAG):Connect(trackGun)
+	CollectionService:GetInstanceRemovedSignal(WeaponThirdPerson.TAG):Connect(untrackGun)
+	for _, gun in CollectionService:GetTagged(WeaponThirdPerson.TAG) do
+		trackGun(gun)
+	end
 	RunService.RenderStepped:Connect(PerfMarkers.wrap("armes 3P", function()
 		local localChar = Players.LocalPlayer and Players.LocalPlayer.Character
-		for _, gun in CollectionService:GetTagged(WeaponThirdPerson.TAG) do
-			updateGun(gun, localChar)
+		for gun, state in guns do
+			updateGun(gun, state, localChar)
 		end
 	end))
 	-- PreAnimation précède l'Animator, PreSimulation le suit : un Transform posé en PreSimulation remplace celui
