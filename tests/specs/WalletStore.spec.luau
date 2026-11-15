@@ -135,11 +135,14 @@ return function(T, Loader)
 		-- Joueurs présents sur ce serveur (Players:GetPlayerByUserId, reçus Robux de #395)
 		local present = {}
 		-- Réponse du faux PolicyService (#395) : `restricted` par UserId, `fail` fait échouer l'appel ; `calls` compte
-		local policy = { restricted = {}, fail = false, calls = 0 }
+		local policy = { restricted = {}, fail = false, calls = 0, latency = 0 }
 		local services = {
 			PolicyService = {
 				GetPolicyInfoForPlayerAsync = function(_, player)
 					policy.calls += 1
+					if policy.latency > 0 then
+						sched.task.wait(policy.latency)
+					end
 					if policy.fail then
 						error("PolicyService indisponible (simulé)")
 					end
@@ -225,6 +228,7 @@ return function(T, Loader)
 			-- coroutine reprise par l'horloge simulée n'attend pas
 			Crates = loader:require("src/server/CrateService"),
 			Receipts = loader:require("src/server/ReceiptService"),
+			Policy = loader:require("src/server/PaidRandomPolicy"),
 		}
 		server.Inventory.init({ Name = "EquipItem", OnServerEvent = makeSignal() }, function()
 			return false
@@ -1589,6 +1593,38 @@ return function(T, Loader)
 			sched.advance(100)
 			server.buy(alice, AWP1, 10)
 			T.expectEqual(server.policy.calls, 2)
+		end)
+
+		T.it("demandes simultanées à PolicyService : un seul appel, la même réponse pour tous", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			server.policy.latency = 1
+			local answers = {}
+			for i = 1, 3 do
+				sched.task.spawn(function()
+					answers[i] = server.Policy.isRestricted(alice)
+				end)
+			end
+			T.expectEqual(#answers, 0, "tous attendent la réponse")
+			sched.advance(1)
+			T.expectEqual(server.policy.calls, 1)
+			T.expectEqual(answers[1], false)
+			T.expectEqual(answers[2], false)
+			T.expectEqual(answers[3], false)
+		end)
+
+		T.it("reçu d'un joueur dont la restriction n'est pas connue : n'attend pas PolicyService", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			local server = makeServer(sched, ds)
+			server.join(1)
+			server.policy.latency = 10
+			local receipt = server.receipt(1, PACK.productId, "achat-1")
+			T.expect(receipt.done, "accordé sans attendre")
+			T.expectEqual(receipt.verdict, "granted")
+			T.expectEqual(server.policy.calls, 0)
 		end)
 
 		T.it("doublon d'une caisse payée en crédits achetés : remboursé dans `purchased`", function()

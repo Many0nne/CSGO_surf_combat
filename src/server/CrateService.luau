@@ -83,19 +83,20 @@ local function purchase(player: Player, crateId: string): Result
 	if not crate then
 		return refuse("unknown")
 	end
-	-- Objets aléatoires payants (#395) : un joueur restreint (ou dont PolicyService n'a pas répondu) n'achète pas de caisse
-	if PaidRandomPolicy.isRestricted(player) then
-		return refuse("region")
-	end
 	-- Chargé et sauvegardable, ou solde de session de Studio sans accès aux API (achat appliqué en mémoire) : c'est ce
 	-- que `transact` accepte. `canGrant` refuserait ce dernier cas, sans rien protéger de plus.
 	if not WalletStore.canChange(player) then
 		return refuse("loading")
 	end
-	local owned = InventoryStore.owned(player)
-	if ShopCatalog.allOwned(crate, InventoryRules.ITEMS, owned) then
+	if ShopCatalog.allOwned(crate, InventoryRules.ITEMS, InventoryStore.owned(player)) then
 		return refuse("owned")
 	end
+	-- Objets aléatoires payants (#395) : un joueur restreint (ou dont PolicyService n'a pas répondu) n'achète pas de
+	-- caisse. Après les refus sans réseau : cet appel peut attendre PolicyService
+	if PaidRandomPolicy.isRestricted(player) then
+		return refuse("region")
+	end
+	local owned = InventoryStore.owned(player)
 	local row, skinId = ShopCatalog.draw(crate, InventoryRules.ITEMS, roll())
 	if not (row and skinId) then
 		return refuse("empty")

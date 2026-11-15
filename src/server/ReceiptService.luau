@@ -7,8 +7,9 @@
 -- connexion du joueur, sans délai programmé ni remboursement) : produit inconnu, PurchaseId invalide, joueur absent,
 -- inventaire pas chargé (attendu LOAD_WAIT s, le reçu arrive souvent à la connexion) ou pas sauvegardable, écriture en
 -- échec (WRITE_ROUNDS tours espacés de ROUND_GAP s, sans risque : le PurchaseId rend chaque tour idempotent) ou refus
--- de l'opération. Chaque reçu est journalisé (accordé, rejoué, refusé, motif). Le thread qui appelle `transact` n'est
--- jamais annulé (Roblox n'impose pas de délai à ProcessReceipt).
+-- de l'opération (`invalid`). Solde au plafond : crédits écrêtés, reçu accordé (ReceiptRules). Chaque reçu est
+-- journalisé (accordé, rejoué, refusé, motif). Le thread qui appelle `transact` n'est jamais annulé (Roblox n'impose
+-- pas de délai à ProcessReceipt).
 --
 -- Joueur restreint (objets aléatoires payants, PaidRandomPolicy) : le prompt lui est refusé (`region`) et le bouton des
 -- packs lui est masqué ; un reçu qui arrive quand même (achat par l'onglet Store de la page du jeu, client modifié) est
@@ -83,8 +84,9 @@ function ReceiptService.handle(info: any): (ReceiptRules.Verdict, string, string
 	if not (player.Parent and WalletStore.canChange(player)) then
 		return "retry", "profil pas chargé ou pas sauvegardable"
 	end
-	local extra = string.format("+%d crédits", pack.credits)
-	if PaidRandomPolicy.isRestricted(player) then
+	local extra = string.format("pack de %d crédits", pack.credits)
+	-- Lecture du cache seule : le reçu n'attend pas PolicyService pour une note du journal
+	if PaidRandomPolicy.cached(player) == true then
 		-- Accordé quand même (voir l'en-tête) : signalé pour qu'on sache d'où viennent ces achats
 		extra ..= ", joueur restreint (objets aléatoires payants)"
 	end

@@ -12,8 +12,7 @@ Règles d'argent réel du jeu (#395). Stockage des crédits, contrat de `Invento
   celui du dashboard ; `robux` n'est que l'affichage, à garder égal.
 - Tant qu'un pack garde un id provisoire (`CreditPacks.isReady`), « + CRÉDITS » est masqué et le prompt refusé
   (`unavailable`) hors de Studio : une publication faite avant de coller les ids ne montre pas un achat qui échoue.
-- Prompt refusé (`full`) si le pack ferait dépasser `WalletRules.MAX_BALANCE` : le reçu serait refusé par
-  l'opération et resterait en attente, Robux pris.
+- Prompt refusé (`full`) si le pack ferait dépasser `WalletRules.MAX_BALANCE` : ses crédits seraient écrêtés.
 - Ne jamais retirer de la config un produit déjà vendu : ses reçus en attente ne seraient plus jamais accordés.
 - Crédits achetés : compteur `purchased` du portefeuille, hors plafond du jour (#394).
 
@@ -36,7 +35,11 @@ Règles du jeu :
   sans rien ajouter (rejeu de Roblox, deux serveurs, écriture passée mais signalée en échec).
 - `NotProcessedYet` : produit inconnu, PurchaseId invalide (vide, plus de `WalletRules.MAX_RECEIPT_LENGTH`), joueur
   absent, inventaire pas chargé (attendu 30 s : le reçu arrive souvent pendant la connexion, et Roblox ne le
-  rejouerait qu'à la suivante) ou pas sauvegardable, refus de l'opération (solde au plafond), écriture en échec.
+  rejouerait qu'à la suivante) ou pas sauvegardable, écriture en échec.
+- Solde au plafond (`WalletRules.MAX_BALANCE`) : crédits écrêtés et reçu accordé, jamais laissé en attente (Robux pris
+  sans rien donner). Le prompt est déjà refusé près du plafond ; ce cas demande un solde monté entre le prompt et le reçu.
+- Le journal note un joueur restreint d'après le cache de `PaidRandomPolicy` seulement : un reçu n'attend jamais
+  PolicyService.
 - Une écriture en échec est retentée dans le callback (3 transactions espacées de 5 s, tant que le joueur est là) : sans
   risque, le PurchaseId rend chaque tour idempotent, et Roblox ne rejouerait pas le reçu avant longtemps.
 - Le thread qui appelle `transact` n'est jamais annulé (cf. pièges de `transact`).

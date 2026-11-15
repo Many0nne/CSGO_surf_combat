@@ -898,9 +898,9 @@ function ShopScreen.init()
 	-- Skin obtenu (achat, ouverture de test, autre serveur) : TOUT OBTENU peut changer
 	Players.LocalPlayer:GetAttributeChangedSignal(InventoryRules.ATTRIBUTE):Connect(paintActions)
 	-- Restriction des objets aléatoires payants (#395) connue ou changée : ACHETER et « + CRÉDITS » suivent
+	-- (paintActions repeint aussi le bouton des packs)
 	LocalWallet.observeRestricted(function()
 		paintActions()
-		paintPackButton()
 	end)
 	if RunService:IsStudio() then
 		Players.LocalPlayer:GetAttributeChangedSignal(DEBUG_ATTRIBUTE):Connect(debugOpening)

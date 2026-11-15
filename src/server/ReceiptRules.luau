@@ -22,8 +22,8 @@ function ReceiptRules.isPurchaseId(id: any): boolean
 end
 
 -- Cette méthode permet de construire l'opération pure de `InventoryStore.transact` lorsqu'un reçu de pack est traité :
--- refus `duplicate` si le PurchaseId est déjà inscrit, `full` si le solde dépasserait le plafond ; sinon crédits ajoutés
--- à `purchased` (hors plafond du jour) et PurchaseId inscrit. Résultat : `{ credits }`.
+-- refus `duplicate` si le PurchaseId est déjà inscrit ; sinon crédits ajoutés à `purchased` (hors plafond du jour, écrêtés
+-- au plafond du solde) et PurchaseId inscrit. Résultat : `{ credits }` (crédits réellement ajoutés).
 function ReceiptRules.operation(purchaseId: string, credits: number): (record: any) -> (any, any)
 	return function(record)
 		local wallet = WalletRules.read(record.wallet)
@@ -33,13 +33,13 @@ function ReceiptRules.operation(purchaseId: string, credits: number): (record: a
 		if not WalletRules.isAmount(credits) or not ReceiptRules.isPurchaseId(purchaseId) then
 			return nil, "invalid"
 		end
-		if WalletRules.balance(wallet) + credits > WalletRules.MAX_BALANCE then
-			return nil, "full"
-		end
-		wallet.purchased += credits
+		-- Écrêté plutôt que refusé : un reçu refusé resterait en attente pour toujours, Robux pris (le prompt est déjà
+		-- refusé près du plafond, ReceiptService.promptFor ; ce cas demande un solde monté entre-temps)
+		local added = math.min(credits, math.max(WalletRules.MAX_BALANCE - WalletRules.balance(wallet), 0))
+		wallet.purchased += added
 		table.insert(wallet.receipts, purchaseId)
 		record.wallet = wallet
-		return record, { credits = credits }
+		return record, { credits = added }
 	end
 end
 
@@ -48,7 +48,10 @@ end
 function ReceiptRules.decide(status: string, result: any): (Verdict, string)
 	if status == "ok" then
 		-- `ok` sans résultat : écriture passée mais signalée en échec, retrouvée par sa marque (crédits et reçu écrits)
-		return "granted", if type(result) == "table" then "accordé" else "accordé (écriture rejouée)"
+		if type(result) ~= "table" then
+			return "granted", "accordé (écriture rejouée)"
+		end
+		return "granted", string.format("accordé, +%s crédits écrits", tostring(result.credits))
 	elseif status == "rejected" then
 		if result == "duplicate" then
 			return "granted", "déjà traité (reçu rejoué)"
