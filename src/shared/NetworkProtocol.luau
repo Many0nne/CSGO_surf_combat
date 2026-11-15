@@ -45,8 +45,11 @@ Protocol.Names = {
 	-- skin ou "" pour d'origine) ; le serveur valide, applique et publie l'attribut `EquippedItems` du Player
 	EQUIP_ITEM = "EquipItem",
 	-- Ouverture d'une caisse du shop (#332), cf. server/CrateService : RemoteFunction client → serveur (id de la caisse),
-	-- réponse { ok, reason?, skinId?, rarity?, added? } ; réservé à l'admin et à Studio
+	-- réponse { ok, reason?, skinId?, rarity?, added? } ; ouverture de test gratuite, réservée à l'admin et à Studio
 	OPEN_CRATE = "OpenCrate",
+	-- Achat d'une caisse du shop (#393), cf. server/CrateService : RemoteFunction client → serveur (id de la caisse),
+	-- réponse après l'écriture { ok, reason?, skinId?, rarity?, added?, refund? } ; prix et tirage décidés par le serveur
+	BUY_CRATE = "BuyCrate",
 	-- Helper de playtest debug (#30) : créé uniquement dans Studio (RunService:IsStudio()), jamais en jeu publié
 	DEBUG_PLAYTEST = "DebugPlaytest",
 	-- Rejeu d'un parcours de mesure (#379) : client → serveur (position du point de contrôle) ; le serveur y replace le

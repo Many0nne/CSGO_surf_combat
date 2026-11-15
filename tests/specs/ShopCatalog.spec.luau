@@ -288,4 +288,93 @@ return function(T, Loader)
 			T.expectEqual(Shop.priceLabel(Shop.crate("crate.awp.serie1")), "500")
 		end)
 	end)
+
+	-- Cette méthode permet de fabriquer des lignes de contenu aux chances données lorsqu'un test vérifie l'arrondi.
+	local function rowsWith(chances: { number })
+		local rows = {}
+		for i, chance in chances do
+			table.insert(rows, {
+				rarity = { id = "r" .. i, label = "R" .. i, chance = chance, color = { 0, 0, 0 }, refund = 0 },
+				name = "",
+				weapons = {},
+				skins = { "skin." .. i },
+				luminance = 1,
+			})
+		end
+		return rows
+	end
+
+	-- Cette méthode permet de sommer une liste de nombres lorsqu'un test vérifie un total.
+	local function sum(values: { number }): number
+		local total = 0
+		for _, value in values do
+			total += value
+		end
+		return total
+	end
+
+	T.describe("ShopCatalog : achat (#393)", function()
+		T.it("remboursement d'un doublon pour une caisse à 500 : 100, 200, 350", function()
+			local crate = Shop.crate("crate.awp.serie1")
+			T.expectEqual(crate.price, 500)
+			T.expectEqual(Shop.refund(crate, "common"), 100)
+			T.expectEqual(Shop.refund(crate, "rare"), 200)
+			T.expectEqual(Shop.refund(crate, "exceptional"), 350)
+			T.expectEqual(Shop.refund(crate, "inconnue"), 0)
+		end)
+
+		T.it("remboursement proportionnel au prix, entier, jamais plus que le prix", function()
+			local crate = table.clone(Shop.crate("crate.awp.serie1"))
+			crate.price = 333
+			T.expectEqual(Shop.refund(crate, "common"), 66, "333 x 20 % arrondi en dessous")
+			T.expectEqual(Shop.refund(crate, "exceptional"), 233)
+			for _, rarity in Shop.RARITIES do
+				T.expect(rarity.refund >= 0 and rarity.refund <= 100, "part en pour cent : " .. rarity.id)
+			end
+		end)
+
+		T.it("chances d'une caisse : 70 %, 25 %, 5 %, total exactement 100 %", function()
+			local rows = Shop.contents(Shop.crate("crate.m9.serie2"), Inventory.ITEMS)
+			local tenths = Shop.chances(rows)
+			T.expectEqual(table.concat(tenths, ","), "700,250,50")
+			T.expectEqual(Shop.chanceLabel(tenths[1]), "70 %")
+			T.expectEqual(Shop.chanceLabel(tenths[3]), "5 %")
+		end)
+
+		T.it("arrondi au plus fort reste : la somme fait toujours 100,0 %", function()
+			for _, chances in
+				{
+					{ 1, 1, 1 },
+					{ 2, 1 },
+					{ 70, 25 },
+					{ 0.3, 0.3, 0.4 },
+					{ 1, 2, 3, 4, 5, 6, 7 },
+					{ 99.99, 0.005, 0.005 },
+				}
+			do
+				local tenths = Shop.chances(rowsWith(chances))
+				T.expectEqual(#tenths, #chances)
+				T.expectEqual(sum(tenths), 1000, "somme pour " .. table.concat(chances, "/"))
+			end
+			-- Tiers : 333,3 x 3 → le reste va à la première ligne (la plus courante)
+			T.expectEqual(table.concat(Shop.chances(rowsWith({ 1, 1, 1 })), ","), "334,333,333")
+			T.expectEqual(Shop.chanceLabel(334), "33,4 %")
+			-- Rareté absente (caisse sans skin rare) : proportions renormalisées comme le tirage
+			T.expectEqual(table.concat(Shop.chances(rowsWith({ 70, 5 })), ","), "933,67")
+			T.expectEqual(#Shop.chances({}), 0)
+			T.expectEqual(#Shop.chances(rowsWith({ 0, 0 })), 0)
+		end)
+
+		T.it("tout obtenu seulement si tous les skins de la caisse sont possédés", function()
+			local crate = Shop.crate("crate.awp.serie1")
+			local owned = { ["skin.awp.couchant"] = true, ["skin.awp.impact"] = true }
+			T.expectEqual(Shop.allOwned(crate, Inventory.ITEMS, owned), false)
+			owned["skin.awp.releve"] = true
+			T.expectEqual(Shop.allOwned(crate, Inventory.ITEMS, owned), true)
+			T.expectEqual(Shop.allOwned(Shop.crate("crate.m9.serie1"), Inventory.ITEMS, owned), false, "autre arme")
+			local empty = table.clone(crate)
+			empty.contents = {}
+			T.expectEqual(Shop.allOwned(empty, Inventory.ITEMS, owned), false, "caisse vide : refusée comme vide")
+		end)
+	end)
 end

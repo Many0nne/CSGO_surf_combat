@@ -122,12 +122,15 @@ return function(T, Loader)
 
 	-- Cette méthode permet de monter un serveur (InventoryStore et WalletStore isolés) sur un DataStore et une horloge
 	-- partagés lorsqu'un test démarre ; renvoie la façade, l'inventaire, les avertissements et de quoi faire arriver ou
-	-- partir un joueur et arrêter le serveur.
-	local function makeServer(sched, ds)
+	-- partir un joueur et arrêter le serveur. `options.studio` : serveur de Studio (ouverture de test des caisses).
+	local function makeServer(sched, ds, options: { studio: boolean? }?)
+		local studio = options ~= nil and options.studio == true
 		local closing = nil
 		local warnings = {}
 		local removing = makeSignal()
 		local opened = {}
+		-- Tirage des caisses (#393) : valeur dans [0, 100) rendue par le faux `Random` de CrateService
+		local rolls = { value = 0 }
 		local services = {
 			HttpService = {
 				GenerateGUID = function()
@@ -144,7 +147,7 @@ return function(T, Loader)
 			Players = { PlayerRemoving = removing, PlayerAdded = makeSignal() },
 			RunService = {
 				IsStudio = function()
-					return false
+					return studio
 				end,
 			},
 			StarterPack = {
@@ -164,6 +167,15 @@ return function(T, Loader)
 				table.insert(warnings, table.concat(parts, " "))
 			end,
 			print = function() end,
+			Random = {
+				new = function()
+					return {
+						NextNumber = function()
+							return rolls.value
+						end,
+					}
+				end,
+			},
 		})
 		loader.globals.game = {
 			GetService = function(_, name)
@@ -178,8 +190,12 @@ return function(T, Loader)
 		local server = {
 			warnings = warnings,
 			opened = opened,
+			rolls = rolls,
 			Inventory = loader:require("src/server/InventoryStore"),
 			Wallet = loader:require("src/server/WalletStore"),
+			-- Chargé ici, hors coroutine : la lecture d'un module par Lune cède la main à son propre ordonnanceur, qu'une
+			-- coroutine reprise par l'horloge simulée n'attend pas
+			Crates = loader:require("src/server/CrateService"),
 		}
 		server.Inventory.init({ Name = "EquipItem", OnServerEvent = makeSignal() }, function()
 			return false
@@ -202,6 +218,10 @@ return function(T, Loader)
 			-- Cette méthode permet de simuler Player:GetAttribute lorsque WalletStore lit DebugCredits.
 			function player.GetAttribute(self, name: string)
 				return self.attributes[name]
+			end
+			-- Cette méthode permet de simuler le signal d'un attribut lorsque InventoryStore suit DebugInventory (Studio).
+			function player.GetAttributeChangedSignal(_self, _name: string)
+				return makeSignal()
 			end
 			server.Inventory.setup(player)
 			sched.task.spawn(server.Inventory.load, player)
@@ -226,6 +246,22 @@ return function(T, Loader)
 				state.done = true
 			end)
 			return state
+		end
+		-- Cette méthode permet de lancer un achat de caisse (#393, CrateService chargé sur ce serveur) dans sa propre
+		-- coroutine lorsqu'un test le demande ; renvoie un état rempli à la fin (`done`, `reply`).
+		function server.buy(player, crateId: string, roll: number?)
+			rolls.value = roll or 0
+			local state = { done = false, reply = nil }
+			sched.task.spawn(function()
+				state.reply = server.Crates.buy(player, crateId)
+				state.done = true
+			end)
+			return state
+		end
+		-- Cette méthode permet d'ouvrir une caisse gratuitement (test, #332) lorsqu'un test compare avec l'achat.
+		function server.open(player, crateId: string, roll: number?)
+			rolls.value = roll or 0
+			return server.Crates.open(player, crateId)
 		end
 		-- Cette méthode permet de faire partir un joueur lorsqu'un test simule sa déconnexion.
 		function server.leave(player)
@@ -888,6 +924,259 @@ return function(T, Loader)
 			server.leave(alice)
 			sched.advance(600)
 			T.expectEqual(ds.writes, 0)
+		end)
+	end)
+
+	-- Tirages de la caisse AWP série 1 (chances 70 / 25 / 5) : COUCHANT < 70, IMPACT < 95, RELEVÉ au-delà
+	local AWP1 = "crate.awp.serie1"
+	local ROLL_IMPACT = 80
+
+	-- Cette méthode permet de savoir si un skin est dans les items stockés d'un joueur lorsqu'un test vérifie un achat.
+	local function storedHas(ds, userId: number, id: string): boolean
+		local record = ds.data[tostring(userId)]
+		return record ~= nil and table.find(record.items, id) ~= nil
+	end
+
+	T.describe("Achat de caisse (#393, CrateService.buy)", function()
+		T.it("achat : débité et skin donné en une écriture, réponse après l'écriture", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 400, 200)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			ds.latency = 1
+			local buy = server.buy(alice, AWP1, ROLL_IMPACT)
+			T.expect(not buy.done, "attend l'écriture")
+			sched.advance(1)
+			T.expect(buy.done)
+			T.expectEqual(buy.reply.ok, true)
+			T.expectEqual(buy.reply.skinId, "skin.awp.impact")
+			T.expectEqual(buy.reply.rarity, "rare")
+			T.expectEqual(buy.reply.added, true)
+			T.expectEqual(buy.reply.refund, 0)
+			T.expectEqual(ds.writes, 1, "une seule écriture")
+			T.expectEqual(storedWallet(ds, 1).purchased, 0, "achetés d'abord")
+			T.expectEqual(storedWallet(ds, 1).earned, 100)
+			T.expect(storedHas(ds, 1, "skin.awp.impact"), "skin écrit avec le débit")
+			T.expectEqual(server.Inventory.owned(alice)["skin.awp.impact"], true, "possédé tout de suite")
+			T.expectEqual(alice.attributes.Credits, 100)
+		end)
+
+		T.it("doublon : remboursé dans `earned` hors plafond du jour, aucun item ajouté", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 600, 0, { "skin.awp.impact" })
+			ds.data["1"].wallet.day = 20000
+			ds.data["1"].wallet.dayEarned = 120
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			local buy = server.buy(alice, AWP1, ROLL_IMPACT)
+			T.expectEqual(buy.reply.ok, true)
+			T.expectEqual(buy.reply.added, false)
+			T.expectEqual(buy.reply.refund, 200)
+			T.expectEqual(storedWallet(ds, 1).earned, 600 - 500 + 200)
+			T.expectEqual(storedWallet(ds, 1).dayEarned, 120, "plafond du jour pas touché")
+			T.expectEqual(#ds.data["1"].items, 1)
+			T.expectEqual(alice.attributes.Credits, 300)
+		end)
+
+		T.it("solde stocké insuffisant : refus, rien d'écrit, rien donné", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 499)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			local buy = server.buy(alice, AWP1, ROLL_IMPACT)
+			T.expectEqual(buy.reply.ok, false)
+			T.expectEqual(buy.reply.reason, "insufficient")
+			T.expectEqual(ds.writes, 0)
+			T.expectEqual(storedBalance(ds, 1), 499)
+			T.expectEqual(server.Inventory.owned(alice)["skin.awp.impact"], nil)
+		end)
+
+		T.it("solde local suffisant mais dépensé sur un autre serveur : refus sur le stocké", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 600)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			seed(ds, 1, 100)
+			local buy = server.buy(alice, AWP1, ROLL_IMPACT)
+			T.expectEqual(buy.reply.reason, "insufficient")
+			T.expectEqual(alice.attributes.Credits, 100, "copie locale recalée")
+		end)
+
+		T.it("deux serveurs achètent en même temps avec 600 : un seul passe, solde jamais négatif", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 600)
+			local serverA = makeServer(sched, ds)
+			local serverB = makeServer(sched, ds)
+			local onA = serverA.join(1)
+			local onB = serverB.join(1)
+			ds.latency = 1
+			local buyA = serverA.buy(onA, AWP1, 10)
+			local buyB = serverB.buy(onB, "crate.awp.serie2", 10)
+			sched.advance(5)
+			T.expect(buyA.done and buyB.done)
+			local passed = (if buyA.reply.ok then 1 else 0) + (if buyB.reply.ok then 1 else 0)
+			T.expectEqual(passed, 1)
+			local refused = if buyA.reply.ok then buyB.reply else buyA.reply
+			T.expectEqual(refused.reason, "insufficient")
+			T.expectEqual(storedBalance(ds, 1), 100)
+			T.expectEqual(#ds.data["1"].items, 1, "un seul skin")
+		end)
+
+		T.it("écriture en échec : `failed`, rien débité, rien donné", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 600)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			ds.failures = 4 -- trois essais d'écriture, puis la lecture de vérification
+			local buy = server.buy(alice, AWP1, ROLL_IMPACT)
+			sched.advance(10)
+			T.expect(buy.done)
+			T.expectEqual(buy.reply.ok, false)
+			T.expectEqual(buy.reply.reason, "failed")
+			T.expectEqual(buy.reply.skinId, nil, "rien de révélé")
+			T.expectEqual(storedBalance(ds, 1), 600)
+			T.expect(not storedHas(ds, 1, "skin.awp.impact"))
+			T.expectEqual(server.Inventory.owned(alice)["skin.awp.impact"], nil)
+			T.expectEqual(alice.attributes.Credits, 600)
+		end)
+
+		T.it("écrit mais réponse perdue (rejeu) : débité une fois, réponse juste, skin neuf", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 600)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			ds.commitThenFail = 1
+			local buy = server.buy(alice, AWP1, ROLL_IMPACT)
+			sched.advance(10)
+			T.expect(buy.done)
+			T.expectEqual(buy.reply.ok, true)
+			T.expectEqual(buy.reply.added, true)
+			T.expectEqual(buy.reply.refund, 0)
+			-- Le nouvel essai trouve la marque de l'achat : il réécrit la fusion sans réappliquer l'opération
+			T.expectEqual(storedBalance(ds, 1), 100, "débité une seule fois")
+			T.expectEqual(#ds.data["1"].items, 1)
+			T.expectEqual(server.Inventory.owned(alice)["skin.awp.impact"], true)
+		end)
+
+		T.it("rejeu d'un doublon : remboursé une fois, réponse « doublon »", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 600, 0, { "skin.awp.impact" })
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			ds.commitThenFail = 1
+			local buy = server.buy(alice, AWP1, ROLL_IMPACT)
+			sched.advance(10)
+			T.expectEqual(buy.reply.ok, true)
+			T.expectEqual(buy.reply.added, false)
+			T.expectEqual(buy.reply.refund, 200)
+			T.expectEqual(storedBalance(ds, 1), 300)
+		end)
+
+		T.it("double clic : le second achat est refusé `busy` sans rien faire", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 2000)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			ds.latency = 1
+			local first = server.buy(alice, AWP1, ROLL_IMPACT)
+			local second = server.buy(alice, AWP1, ROLL_IMPACT)
+			T.expect(second.done, "refusé tout de suite")
+			T.expectEqual(second.reply.reason, "busy")
+			sched.advance(2)
+			T.expectEqual(first.reply.ok, true)
+			T.expectEqual(storedBalance(ds, 1), 1500, "un seul débit")
+			-- Le tour est rendu : un achat suivant passe
+			local third = server.buy(alice, AWP1, 10)
+			sched.advance(2)
+			T.expectEqual(third.reply.ok, true)
+			T.expectEqual(storedBalance(ds, 1), 1000)
+		end)
+
+		T.it("tout le contenu déjà possédé : refus `owned` avant tout tirage, rien d'écrit", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 600, 0, { "skin.awp.couchant", "skin.awp.impact", "skin.awp.releve" })
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			local buy = server.buy(alice, AWP1, ROLL_IMPACT)
+			T.expectEqual(buy.reply.reason, "owned")
+			T.expectEqual(ds.writes, 0)
+			T.expectEqual(storedBalance(ds, 1), 600)
+			T.expectEqual(server.buy(alice, "crate.m9.serie1", 10).reply.ok, true, "l'autre arme reste en vente")
+		end)
+
+		T.it("inventaire pas chargé, caisse inconnue : refus sans écriture", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 600)
+			ds.latency = 5
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			local early = server.buy(alice, AWP1, ROLL_IMPACT)
+			T.expectEqual(early.reply.reason, "loading")
+			sched.advance(5)
+			local unknown = server.buy(alice, "crate.inconnue", ROLL_IMPACT)
+			T.expectEqual(unknown.reply.reason, "unknown")
+			T.expectEqual(ds.writes, 0)
+		end)
+
+		T.it("format stocké refusé (schéma plus récent) : refus `loading`", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			ds.data["1"] = { schemaVersion = 99, items = {}, wallet = { earned = 600, purchased = 0 } }
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			local buy = server.buy(alice, AWP1, ROLL_IMPACT)
+			T.expectEqual(buy.reply.reason, "loading")
+			T.expectEqual(ds.data["1"].schemaVersion, 99, "rien de réécrit")
+		end)
+
+		T.it("ouverture de test (Studio) : gratuite, ni débit ni remboursement, distincte de l'achat", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 600, 0, { "skin.awp.impact" })
+			local server = makeServer(sched, ds, { studio = true })
+			local alice = server.join(1)
+			local opened = server.open(alice, AWP1, ROLL_IMPACT)
+			T.expectEqual(opened.ok, true)
+			T.expectEqual(opened.added, false, "doublon : rien de plus")
+			T.expectEqual(opened.refund, nil, "pas de remboursement")
+			sched.advance(600)
+			T.expectEqual(storedBalance(ds, 1), 600, "pas de débit")
+		end)
+
+		T.it("ouverture de test refusée hors Studio pour un joueur ordinaire", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			T.expectEqual(server.open(alice, AWP1, ROLL_IMPACT).reason, "forbidden")
+		end)
+
+		T.it("Studio sans accès aux API : achat appliqué au solde de session, jamais écrit", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			ds.failures = 3 -- lecture du chargement en échec (trois essais)
+			local server = makeServer(sched, ds, { studio = true })
+			local alice = server.join(1)
+			sched.advance(10)
+			alice.attributes.DebugCredits = 700
+			server.Wallet.applyDebug(alice)
+			T.expectEqual(alice.attributes.Credits, 700)
+			local buy = server.buy(alice, AWP1, ROLL_IMPACT)
+			T.expectEqual(buy.reply.ok, true)
+			T.expectEqual(alice.attributes.Credits, 200)
+			T.expectEqual(server.Inventory.owned(alice)["skin.awp.impact"], true)
+			T.expectEqual(ds.writes, 0, "jamais écrit")
 		end)
 	end)
 end

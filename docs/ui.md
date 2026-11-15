@@ -727,8 +727,8 @@ caisse en vente porte une étiquette os clipsée sur le longeron (nom et prix, �
 rouge d'impact à texte os. Deux lampes chaudes au plafond éclairent la vitrine, éteintes dans la vue détail (la gauche
 doit y rester sombre). Interface : « SHOP », « CAISSES », « n EN VENTE · UNE PAR SÉRIE DE SKINS », aide « CLIC · VOIR
 LE CONTENU ET ACHETER ». Un clic sur une caisse fait glisser la caméra jusqu'au socle (0,9 s) ; dans la vue détail,
-« ‹ SHOP » ramène à la vitrine, « ‹ CAISSE n / N › » passe à la voisine, ACHETER est en contour atténué avec
-l'étiquette BIENTÔT tant que l'achat n'existe pas.
+« ‹ SHOP » ramène à la vitrine, « ‹ CAISSE n / N › » passe à la voisine. ACHETER était en contour atténué avec
+l'étiquette BIENTÔT jusqu'à #393 (voir « Achat d'une caisse »).
 
 ![Vue d'ensemble validée](ui/shop/vue_ensemble_ui.png)
 
@@ -736,10 +736,8 @@ l'étiquette BIENTÔT tant que l'achat n'existe pas.
   série 1, AWP série 2, M9 série 2 (`crate.awp.serie1`, `crate.m9.serie1`, `crate.awp.serie2`, `crate.m9.serie2`, nom « AWP ·
   SÉRIE 1 »), prix 500 CRÉDITS par caisse, une ouverture = un seul skin de l'arme de la caisse, raretés COMMUN 70 %, RARE
   25 %, EXCEPTIONNEL 5 % (série 1 : COUCHANT, IMPACT, RELEVÉ ; série 2 : RECUIT, STRATE, SILLAGE). Doublons possibles : le
-  tirage suit les chances affichées même si le skin est déjà possédé, et ne donne alors rien de plus (inventaire à
-  revoir plus tard). Ouverture réservée à l'admin et à Studio (remote `OpenCrate`, `CrateService`, `docs/anticheat.md`),
-  OUVRIR remplace ACHETER pour eux (attribut informatif `Role`, le serveur revérifie), ACHETER reste BIENTÔT pour les
-  autres. Tout est dans `ShopCatalog`. L'étiquette de la vitrine (3,4 studs) tient « AWP · SÉRIE 1 » + « 500 CRÉDITS »
+  tirage suit les chances affichées même si le skin est déjà possédé ; un achat rembourse alors une part du prix
+  (#393), l'ouverture de test ne donne rien de plus. Tout est dans `ShopCatalog`. L'étiquette de la vitrine (3,4 studs) tient « AWP · SÉRIE 1 » + « 500 CRÉDITS »
   (vérifié en Studio) ; sous-titre de la vue d'ensemble « UNE PAR ARME ET PAR SÉRIE ». Depuis #391, le prix est le jeton
   du crédit suivi du montant : sur l'étiquette, le jeton (32 px) remplace le mot CRÉDITS, qui ne tiendrait plus ; dans la
   vue détail, jeton (34 px), montant puis CRÉDITS. Le solde est en haut à droite de la barre du menu (voir « Crédits »).
@@ -842,7 +840,7 @@ lumière bleutée baignait toute la salle et écrasait les lampes. Rendu éclair
 ## Ouverture d'une caisse (#332)
 
 **Validée par l'utilisateur le 15/11/2026 sur vidéo côte à côte** (`tools/anim/side_by_side.py`, Apex à gauche, jeu
-à droite). Dans la vue détail, OUVRIR demande le tirage au serveur (`CrateService`), puis la scène joue l'ouverture sur
+à droite). Dans la vue détail, ACHETER (ou l'ouverture de test) demande le tirage au serveur (`CrateService`), puis la scène joue l'ouverture sur
 le socle ; la colonne de l'interface disparaît, puis la révélation affiche « OBTENU », l'arme et le skin, la rareté dans
 sa couleur et « CLIC · CONTINUER ». Un clic pendant l'ouverture saute à la révélation ; après, il ramène à la vue
 détail (caisse et tableau refaits).
@@ -876,13 +874,35 @@ détail (caisse et tableau refaits).
   - Couvercle en 0,6 s : il restait dressé derrière la colonne ; 0,4 s.
 - **Vérifier dans Studio** (debug, Studio seulement, attributs du joueur en contexte Client) : `DebugCrateOpening =
   "crate:N"` montre la caisse N (shop ouvert), `"skin.awp.releve|exceptional"` joue l'ouverture sans le serveur (rien
-  n'est gagné) ; `DebugCrateOpeningTime = t` fige l'ouverture au temps `t` (poses à capturer), nil la relâche. La vidéo
+  n'est gagné), `"skin.awp.impact|rare|200"` la joue comme un doublon remboursé de 200 (révélation DOUBLON, #393) ;
+  `DebugCrateOpeningTime = t` fige l'ouverture au temps `t` (poses à capturer), nil la relâche. La vidéo
   se fait en temps réel avec `tools/anim/record_window.py` (`docs/animations.md`). Le message
   `ContentId: rbxassetid://86578020001310 failed … do_not_fallback_to_baseline` (texture des faisceaux) existait avant.
 
+## Achat d'une caisse (#393)
+
+Règles serveur : `docs/architecture.md`, « Achat d'une caisse ». Dans la vue détail (`ShopScreen`) :
+
+- **Contenu** : en-têtes os atténués « CHANCE » (au-dessus de la colonne des raretés) et « SI DOUBLON » (calé à
+  droite), 16 px. Chaque ligne : skin, rareté et chance en pour cent (`ShopCatalog.chances`, total exactement 100 %,
+  « 2,5 % » s'il le faut), puis jeton 18 px et crédits rendus pour un doublon de cette rareté. Visible avant l'achat
+  (règle Roblox des objets aléatoires payants).
+- **ACHETER** : contour os, survol en rouge d'impact, comme l'ancien OUVRIR. Pendant la demande : « ACHAT… », contour
+  atténué, pas de second clic. Tout le contenu possédé : contour atténué, étiquette « TOUT OBTENU » à cheval sur le coin
+  (la place de l'ancienne BIENTÔT). Le solde insuffisant n'est pas anticipé : le serveur répond, le message s'affiche.
+- **Refus et échecs** : étiquette rouge d'impact à texte os sous ACHETER, 3 s (« CRÉDITS INSUFFISANTS », « ACHAT
+  IMPOSSIBLE · RIEN N'EST DÉBITÉ », « TOUT OBTENU », « INVENTAIRE EN CHARGEMENT »…). Sous les actions, elle ne cache
+  plus les flèches de la caisse voisine (l'ancienne étiquette d'OUVRIR se posait à droite du bouton).
+- **Révélation d'un doublon** : la ligne « OBTENU » devient « DOUBLON · +N CRÉDITS » en ambre ; skin et rareté
+  inchangés. La scène d'ouverture est celle de #332.
+- **Ouverture de test** (admin et Studio) : « OUVERTURE DE TEST · GRATUITE », texte os atténué 16 px sous ACHETER ;
+  OUVRIR ne remplace plus ACHETER. Pour tester l'achat avec le compte propriétaire (admin, donc TOUT OBTENU), poser
+  `DebugInventory = "default"` (contexte serveur) ; `DebugCredits` donne des crédits.
+
 ## Crédits (#391)
 
-Monnaie du jeu (règles et sauvegarde : `docs/architecture.md`, « Crédits »). Pas encore de gain ni d'achat.
+Monnaie du jeu (règles et sauvegarde : `docs/architecture.md`, « Crédits »). Achat des caisses : « Achat d'une caisse
+(#393) » ; pas encore de gain en jouant (#394).
 
 - **Jeton** (choisi par l'utilisateur le 15/11/2026, sans référence précise) : pièce en laiton, le métal des douilles,
   frappée d'un réticule en creux (cercle, quatre branches, point central), tranche plus claire en haut à gauche, liseré
