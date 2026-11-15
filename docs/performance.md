@@ -153,7 +153,8 @@ Les écarts de moins de 2 ms entre phases sont du bruit, d'où la référence de
 `src/shared/PerfMarkers.luau` : `PerfMarkers.wrap("nom", callback)` entoure un callback sans valeur de retour (Heartbeat,
 RenderStepped, BindToRenderStep). Le repère est toujours posé (`debug.profilebegin`, coût négligeable si le profiler est
 fermé), et il est chronométré seulement quand l'overlay est ouvert. Repères posés : `mouvement`, `caméra`, `viewmodel`,
-`armes`, `armes 3P`, `tenue 3P` (sous `PreSimulation`), `menu 3D`, `curseur menu`, `autres joueurs` (client),
+`armes`, `armes 3P`, `tenue 3P` (sous `PreSimulation`), `menu 3D`, `curseur menu`, `autres joueurs`, `munitions`,
+`touches` (client),
 `srv round`, `srv bots` et ses sous-repères `bots mouvement`, `bots cerveau`, `bots chemin` (serveur, sonde `PerfServer`). Toute nouvelle boucle par frame doit
 passer par `wrap`.
 
@@ -324,6 +325,109 @@ Piège de mesure : **Studio ne rend presque rien quand sa fenêtre n'est pas au 
 GPU à 0, peu de triangles). Une mesure pilotée par le MCP pendant qu'on travaille dans une autre fenêtre ne vaut rien
 pour le rendu : mesurer Studio au premier plan, ou dans le client publié.
 
+## Bilan #370 : passe du 2026-11-15 (Studio, Dizzy, 7 bots, qualité 10, fenêtre 1291×607)
+
+Passe d'optimisation sans dégradation visuelle. Tout est mesuré dans Studio, piloté par le MCP, joueur immobile après
+un run `DebugPlaytest` (la simulation de touches n'atteint pas le jeu : surf et combat du joueur non mesurés).
+**Rien n'est mesuré dans le client publié** : protocole en fin de section.
+
+### Mesures de départ (main, 410f334)
+
+| Poste | Mesure |
+|---|---|
+| Rendu, état rapide de Studio (avec ou sans bots) | 60 FPS, p99 18 à 28 ms, CPU de rendu 4,3 à 6,1 ms, GPU 9,3 à 14,1 ms |
+| Rendu, état lent de Studio | 44 à 56 FPS, p99 37 à 51 ms, CPU de rendu 15,6 à 24,5 ms, GPU 14,8 à 23,1 ms |
+| Scène | 18 à 31 draw calls, 16 (sans bots) à 98 draw calls d'ombres, 32 à 35k triangles |
+| Scripts client, 7 bots | 0,85 à 1,2 ms par frame : `armes 3P` 0,25 à 0,32, `autres joueurs` 0,22 à 0,35, `tenue 3P` 0,15 à 0,21, `mouvement` 0,12 à 0,19, `viewmodel` 0,06 à 0,07, le reste sous 0,03 chacun (`touches` 0,02, `munitions` 0,01) |
+| Scripts serveur, 7 bots | `srv bots` 0,9 à 3,9 ms par frame (`bots mouvement` 0,6 à 2,5, `bots cerveau` 0,1 à 0,5, `bots chemin` 0,1 à 0,7) |
+| Pics serveur | `srv bots` pire appel 44 à 84 ms par relevé de 10 s (178 une fois) : l'apparition d'un bot |
+| Plan de navigation | 12,6 à 14,3 s au démarrage du serveur, étalé (`NAV_BUILD_BUDGET` par frame), une fois par serveur |
+| Mémoire | Instances serveur 84 379 puis +0 d'un round au suivant ; client 78 750 à 80 728 selon les corps et les bots en scène, sans tendance sur 11 min et deux rounds : pas de fuite relevée |
+| Réseau | envoi du client 4,4 kbps (sa position, 20 Hz) ; réception non mesurée (Studio renvoie 0) : 7 bots à 20 Hz, soit 140 paquets de position par seconde |
+| Map (`audit_map`) | 19 939 pièces, 2 141 projettent une ombre (0 de moins de 2 studs), 22 translucides, 14 372 `CanQuery`, 0 `CanTouch`, 19 lampes sans ombre |
+
+### Postes de coût, du plus gros au plus petit
+
+1. **Pics du serveur à chaque apparition** (40 à 180 ms) : seul poste qui dépassait une frame. Corrigé.
+2. **Scripts client des autres personnages** (`armes 3P`, `autres joueurs`, `tenue 3P`) : 0,6 à 0,9 ms par frame à 7 bots,
+   contre 0,2 ms pour tout le reste. `armes 3P` corrigé.
+3. **Mouvement des bots côté serveur** : 0,15 à 0,25 ms par bot et par frame le plus souvent. C'est la physique du joueur
+   (`CharacterMotor`) : non touché, le mouvement est hors périmètre.
+4. **Rendu** : aucun levier mesurable dans Studio (ci-dessous), et le client publié tenait 59 FPS avec moitié de marge
+   au bilan #88.
+
+### Gains obtenus
+
+| PR | Changement | Avant | Après |
+|---|---|---|---|
+| #376 | Rayon de vue des points d'apparition : map entière en inclusion et `MapGeometry.castThrough`, au lieu d'une liste de 12 015 pièces | 270 µs par rayon ; placement 6 à 25,6 ms ; `srv bots` pire appel 44 à 84 ms | 6,2 µs par rayon ; placement 1,2 à 2,8 ms ; `srv bots` pire appel 4,3 à 10,2 ms (16 à 19 ms quand les 7 bots apparaissent ensemble, contre 79) |
+| #377 | Boucle `armes 3P` : modèles suivis par les signaux du tag, pièces relevées une fois, `C0` écrit seulement s'il change | 0,25 à 0,32 ms par frame | 0,10 à 0,12 ms par frame |
+
+Aucun des deux ne change le rendu : mêmes résultats sur 1 260 rayons de vue, mêmes transparences et mêmes `C0` sur
+les 9 armes en scène (contrôle par script, détail dans les PR).
+
+### L'état lent de Studio ne vient pas du jeu
+
+Studio passe de 60 FPS (CPU de rendu 5 ms) à 42-50 FPS (CPU de rendu 17 à 21 ms) en cours de session, puis revient.
+Coupés un par un pendant l'état lent, 3 à 4 s chacun, avec un contrôle entre chaque (référence : 43 à 48 FPS) :
+
+| Levier coupé | FPS |
+|---|---|
+| chacun des 10 `ScreenGui` du HUD | 40 à 50 |
+| ombres des 7 bots (125 pièces) | 45 |
+| ombres du soleil (`GlobalShadows`) | 48 |
+| étiquettes des bots | 51 |
+| bots figés (`DebugBotsFreeze`) | 42 |
+
+Bots figés et scène immobile, le FPS a dérivé seul en 36 s : 42, 54, 58, 60, 44, 52, 55, 46. Retirer tous les bots a
+ramené l'état rapide en 10 s, et les remettre a laissé 45 s d'état rapide avant le retour de l'état lent. La
+fréquence du processeur n'était pas bridée pendant l'état lent (Core Ultra 5 125U, 347 % de sa fréquence nominale).
+Cause non trouvée ; restent le circuit graphique intégré (budget thermique ou d'alimentation) et Studio lui-même.
+Conséquences :
+
+- un FPS, un CPU ou un GPU de rendu relevés dans Studio ne comparent pas deux versions : seuls les temps de nos
+  scripts (`PerfMarkers`) et les compteurs (draw calls, triangles, instances) le font, à état égal ;
+- le « gain » du streaming et les écarts du banc F4 relevés dans Studio (sections ci-dessous) sont à lire avec cette
+  réserve.
+
+### Pistes écartées
+
+- **Ombres, Atmosphere, effets, translucides** : aucun gain mesurable (banc #88 dans le client publié, banc F4 et
+  leviers ci-dessus dans Studio). Les couper serait une dégradation sans contrepartie.
+- **Géométrie de la map** (fusions, faces cachées) : 18 à 31 draw calls et 35k triangles, rien à gagner.
+- **`CanQuery`, `CanCollide`, `CanTouch` du décor** : déjà coupés (`Dressing` : 92 pièces sur 5 569 ; `CanTouch` : 0).
+- **Boucles du HUD** (`munitions`, `touches`, non mesurées jusqu'ici) : 0,01 et 0,02 ms par frame. Repères posés,
+  code inchangé.
+- **Fuites** : aucune relevée (mémoire ci-dessus, aucun repère à plus d'un appel par frame hors `tenue 3P`, à 2 par
+  construction).
+- **Autres rayons** (vue et tirs des bots, tirs du joueur, mouvement) : 2,3 à 2,8 µs par rayon, listes de filtre de
+  9 instances au plus.
+
+### Pistes ouvertes, non appliquées
+
+- **Réserve de personnages de bots** : après #376, une apparition coûte encore 3 à 7 ms au pire (copie du rig 0,8 à
+  2,3 ms, mise en jeu 0,6 à 1,9 ms, placement 1,2 à 2,8 ms). Préparer le rig à l'avance gagnerait 1 à 2 ms par
+  apparition. Faible.
+- **`autres joueurs` et `tenue 3P`** (0,4 à 0,55 ms par frame à 7 bots) : le coût est celui des écritures de `CFrame`
+  et de `Transform` par personnage. Ne plus écrire pour un personnage hors du champ de la caméra le réduirait, mais
+  un personnage qui entre dans le champ aurait une frame de retard : à juger à l'œil, donc non appliqué.
+- **Paquets de position des bots groupés** : un paquet par tick pour tous les bots au lieu d'un par bot (140 par
+  seconde à 7 bots). Gain en débit non mesurable dans Studio ; change le protocole (`CharacterSync`).
+- **Plan de navigation précalculé** (12 à 14 s au démarrage du serveur, bots immobiles en attendant) : à calculer
+  hors jeu et à charger. Ne coûte rien en partie.
+
+### À mesurer dans le client publié
+
+Une fois #376 et #377 fusionnées et le jeu publié, en partie sur Dizzy avec les bots, immobile, 1080p :
+
+1. Qualité 10, fixée à la main. F3 (overlay) pendant 2 min : relever `FPS médian`, `p99`, `CPU rendu`, `GPU` et la
+   ligne `Scripts` des lignes `[Perf] BILAN` (F9 > Log, filtre `[Perf]`). Attendu : `armes 3P` vers 0,1 ms ou moins.
+2. F4 (banc), sans quitter la fenêtre : comparer la référence au bilan #88 (GPU 8,0 ms, p99 19 ms, éclairage Voxel).
+   C'est la première mesure de l'éclairage Future dans le client publié.
+3. Qualité 1, à la main : F3 pendant 1 min, mêmes relevés. Un script ne peut pas changer la qualité, y compris
+   dans Studio (`lacking capability RobloxScript`).
+4. F9 > Server : `workspace:SetAttribute("PerfServer", true)`, 2 min. Attendu : `srv bots` pire appel sous 20 ms.
+
 ## Mesure du 2026-11-06 (Studio, Dizzy, qualités 10, 5 et 1, après le passage du mouvement sur le rendu)
 
 Ressenti inchangé par le passage du mouvement sur le rendu. Les saccades suivent la qualité graphique :
@@ -367,7 +471,8 @@ Banc F4 dans Studio, Dizzy, qualité 10, fenêtre 1291×607 :
 | Future, référence et 6 phases suivantes | 9,6 à 11,4 | 5,3 à 6,2 | 16,7 | 18 à 25 |
 | Future, contrôle | 18,3 | 19,1 | 21,3 | 43,3 |
 
-- Pas de dégradation visible, mais **pas de gain mesuré** non plus : Studio alterne entre un état rapide (CPU de rendu 5
+- Pas de dégradation visible, mais **pas de gain mesuré** non plus (état lent de Studio : voir le bilan #370, « L'état
+  lent de Studio ne vient pas du jeu ») : Studio alterne entre un état rapide (CPU de rendu 5
   à 6 ms) et un état lent (CPU 17 à 19 ms, GPU vers 18 ms), sans lien avec l'éclairage. Le run Voxel est resté dans
   l'état lent ; le run Future y est passé à sa dernière phase et a retrouvé les chiffres du Voxel. Un CPU de rendu
   multiplié par trois ne vient pas du type d'éclairage, qui pèse sur le GPU.

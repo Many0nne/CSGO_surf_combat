@@ -11,6 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
+local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local UITheme = require(ReplicatedStorage.Shared.UITheme)
 local BeginnerState = require(script.Parent.Parent.systems.game.BeginnerState)
 local LocalSettings = require(script.Parent.Parent.systems.settings.LocalSettings)
@@ -326,7 +327,7 @@ function KeyDisplay.init()
 	LocalSettings.onChanged(update)
 	BeginnerState.onChanged(update)
 	HUDState.onChanged(onHudChanged)
-	RunService.Heartbeat:Connect(poll)
+	RunService.Heartbeat:Connect(PerfMarkers.wrap("touches", poll))
 	update()
 end
 
