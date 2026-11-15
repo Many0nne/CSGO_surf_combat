@@ -324,6 +324,15 @@ local function adoptOperation(merged: Record, proposed: any): Record?
 	if type(proposed) ~= "table" or proposed.wallet == nil or not WalletRules.isWritable(proposed.wallet) then
 		return nil
 	end
+	-- Un reçu mal formé serait retiré en silence par `WalletRules.read` : les crédits achetés seraient écrits sans leur
+	-- PurchaseId, et le reçu rejoué par Roblox crédité deux fois (#395). Refuser plutôt.
+	if type(proposed.wallet.receipts) == "table" then
+		for _, id in ipairs(proposed.wallet.receipts) do
+			if type(id) ~= "string" or #id == 0 or #id > WalletRules.MAX_RECEIPT_LENGTH then
+				return nil
+			end
+		end
+	end
 	local ids = table.clone(merged.items)
 	if type(proposed.items) == "table" then
 		for _, id in InventoryRules.sanitizeStored(proposed.items, math.huge) do

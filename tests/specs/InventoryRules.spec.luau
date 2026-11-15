@@ -611,6 +611,21 @@ return function(T, Loader)
 			T.expectEqual(reason, "invalid")
 		end)
 
+		T.it("transaction : un reçu mal formé est refusé, pas retiré en silence", function()
+			local change = { session = "a", batches = {}, upTo = 1 }
+			local tooLong = string.rep("x", Wallet.MAX_RECEIPT_LENGTH + 1)
+			for _, bad in { tooLong, "", 42 } do
+				local written, status, reason = Rules.mergeForSave(record(0), {}, nil, change, function(rec)
+					rec.wallet.purchased += 500
+					table.insert(rec.wallet.receipts, bad)
+					return rec, nil
+				end)
+				T.expectEqual(written, nil)
+				T.expectEqual(status, "rejected")
+				T.expectEqual(reason, "invalid")
+			end
+		end)
+
 		T.it("transaction : l'opération reçoit une copie, la fusion est pure", function()
 			local old = record(100)
 			local change = { session = "a", batches = { { seq = 1, earned = 5 } }, upTo = 2 }
