@@ -794,6 +794,47 @@ return function(T, Loader)
 			T.expectEqual(server.spend(alice, 500).status, "insufficient")
 			T.expectEqual(ds.writes, 0)
 		end)
+		T.it("une erreur après l'écriture rend quand même le tour : les écritures suivantes passent", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 500)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			local setAttribute = alice.SetAttribute
+			local thrown = false
+			-- Cette méthode permet de faire échouer une seule publication de l'inventaire lorsqu'un test simule un bug.
+			function alice.SetAttribute(self, name: string, value: any)
+				if name == "OwnedItems" and not thrown then
+					thrown = true
+					error("publication en panne (simulé)")
+				end
+				setAttribute(self, name, value)
+			end
+			local state = server.transact(alice, function(record)
+				table.insert(record.items, "skin.awp.couchant")
+				return record, nil
+			end)
+			T.expect(state.done)
+			T.expect(thrown)
+			T.expect(hasWarning(server, "écriture en erreur"))
+			local spend = server.spend(alice, 100)
+			sched.advance(10)
+			T.expect(spend.done, "pas de blocage")
+			T.expectEqual(spend.status, "ok")
+			T.expectEqual(storedBalance(ds, 1), 400)
+		end)
+
+		T.it("DebugCredits sur un enregistrement d'un format refusé : pas de solde de session", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			ds.data["1"] = { schemaVersion = 99, items = {} }
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			alice.attributes.DebugCredits = 500
+			server.Wallet.applyDebug(alice)
+			T.expectEqual(server.Wallet.balance(alice), nil)
+			T.expectEqual(alice.attributes.Credits, nil)
+		end)
 	end)
 
 	T.describe("WalletStore : DebugCredits (Studio)", function()
