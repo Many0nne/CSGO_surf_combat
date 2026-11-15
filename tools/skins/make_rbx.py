@@ -30,7 +30,7 @@ if __name__ == "__main__":
 	for viewmodel, prefixes in ids.items():
 		children = []
 		for prefix, maps in sorted(prefixes.items()):
-			props = {PROPS[k]: v for k, v in maps.items() if k in PROPS}
+			props = dict(sorted((PROPS[k], v) for k, v in maps.items() if k in PROPS))  # ordre stable des diffs
 			missing = set(PROPS) - set(maps)
 			if missing:
 				raise SystemExit(f"[make_rbx] {skin} {viewmodel} {prefix} : cartes manquantes {sorted(missing)}")
