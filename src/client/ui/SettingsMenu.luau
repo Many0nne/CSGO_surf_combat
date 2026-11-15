@@ -141,7 +141,8 @@ end
 
 -- Cette méthode permet d'ajouter un réglage à curseur (trace, poignée en impact, valeur éditable) à une catégorie lorsque
 -- l'écran est construit : un clic place la valeur, puis la poignée se glisse ; `field` est le champ de
--- PlayerSettings où la valeur est conservée ; `snap` garde la valeur à la précision affichée.
+-- PlayerSettings où la valeur est conservée ; `snap` garde la valeur à la précision affichée ; `percent` affiche
+-- « 50 % » (pourcents entiers, #282).
 local function addSlider(
 	category: Category,
 	name: string,
@@ -151,9 +152,14 @@ local function addSlider(
 	default: number,
 	decimals: number,
 	onChange: (number) -> (),
-	snap: boolean?
+	snap: boolean?,
+	percent: boolean?
 )
 	local fmt = "%." .. decimals .. "f"
+	-- Cette méthode permet d'écrire la valeur du curseur lorsqu'elle est affichée, suivie de « % » s'il est en pourcents.
+	local function display(v: number): string
+		return if percent then HUDRules.percentText(v) else string.format(fmt, v)
+	end
 	local currentVal = default
 	local row, label = makeRow(category, name)
 
@@ -168,7 +174,7 @@ local function addSlider(
 		TextColor3 = C.Bone,
 		TextXAlignment = Enum.TextXAlignment.Right,
 		ClearTextOnFocus = false,
-		Text = string.format(fmt, default),
+		Text = display(default),
 		ZIndex = 2,
 		Parent = row,
 	})
@@ -230,18 +236,18 @@ local function addSlider(
 		local t = (v - minVal) / (maxVal - minVal)
 		fill.Size = UDim2.fromScale(t, 1)
 		handle.Position = UDim2.fromScale(t, 0.5)
-		valBox.Text = string.format(fmt, v)
+		valBox.Text = display(v)
 		onChange(v)
 		store(field, v)
 	end
 
 	valBox.FocusLost:Connect(function()
 		UIKit.tween(valLine, Motion.Hover, { BackgroundTransparency = 1 })
-		local num = tonumber(valBox.Text)
+		local num = if percent then HUDRules.parsePercent(valBox.Text) else tonumber(valBox.Text)
 		if num then
 			applyValue(num)
 		else
-			valBox.Text = string.format(fmt, currentVal)
+			valBox.Text = display(currentVal)
 		end
 	end)
 
@@ -836,6 +842,7 @@ local function buildCategories(block: Frame)
 		hudScale.default,
 		0,
 		function() end,
+		true,
 		true
 	)
 

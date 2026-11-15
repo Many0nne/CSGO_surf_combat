@@ -5,6 +5,7 @@ local TweenService = game:GetService("TweenService")
 
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
 local WeaponSkins = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WeaponSkins"))
+local HUDRules = require(script.Parent.HUDRules)
 
 local C = UITheme.Colors
 local Motion = UITheme.Motion
@@ -411,6 +412,101 @@ end
 -- Échelle du HUD (#250, facteur 0,5 à 1) et rappels des éléments qui la suivent
 local hudFactor = 1
 local hudScaleListeners: { (number) -> () } = {}
+-- HUD masqué jusqu'à ce que son échelle sauvegardée soit appliquée (#282) et cadres à afficher alors
+local hudShown = false
+local hiddenUntilShown: { GuiObject } = {}
+-- Attributs d'un texte du HUD sous plancher (#282) : taille voulue par l'élément, échelle de son cadre
+local TEXT_BASE_ATTR = "HudTextBase"
+local TEXT_SCALE_ATTR = "HudTextScale"
+-- Textes dont les changements de taille directs sont suivis (clés faibles : pas de fuite à leur destruction)
+local watchedTexts: { [Instance]: boolean } = setmetatable({}, { __mode = "k" }) :: any
+
+-- Cette méthode permet d'afficher les éléments de bord du HUD lorsque son échelle sauvegardée est appliquée, ou que son
+-- délai d'attente est passé (init.client) : avant, ils restent masqués pour ne pas paraître à 100 % puis sauter.
+function UIKit.showHud()
+	if hudShown then
+		return
+	end
+	hudShown = true
+	for _, frame in hiddenUntilShown do
+		frame.Visible = true
+	end
+	hiddenUntilShown = {}
+end
+
+-- Cette méthode permet de masquer un cadre du HUD lorsqu'il est construit avant que son échelle soit connue ; il
+-- s'affiche à UIKit.showHud.
+function UIKit.hideUntilHudShown(frame: GuiObject)
+	if hudShown then
+		return
+	end
+	frame.Visible = false
+	table.insert(hiddenUntilShown, frame)
+end
+
+-- Cette méthode permet de savoir si une instance est un texte dont la taille compte lorsqu'un plancher s'applique.
+local function isText(inst: Instance): boolean
+	return inst:IsA("TextLabel") or inst:IsA("TextButton") or inst:IsA("TextBox")
+end
+
+-- Cette méthode permet de poser la taille d'un texte du HUD lorsque son cadre est à l'échelle `scale` : la première
+-- taille lue devient sa base, relevée au plancher de HUDRules si elle ferait moins à l'écran.
+local function floorText(label: TextLabel, scale: number)
+	if label.TextScaled then
+		return
+	end
+	local base = label:GetAttribute(TEXT_BASE_ATTR)
+	if type(base) ~= "number" then
+		base = label.TextSize
+		label:SetAttribute(TEXT_BASE_ATTR, base)
+	end
+	label:SetAttribute(TEXT_SCALE_ATTR, scale)
+	label.TextSize = HUDRules.flooredTextSize(base :: number, scale)
+	if not watchedTexts[label] then
+		watchedTexts[label] = true
+		-- Taille écrite directement par un élément (autre que la nôtre) : elle devient la base, plancher réappliqué
+		label:GetPropertyChangedSignal("TextSize"):Connect(function()
+			local current = label:GetAttribute(TEXT_SCALE_ATTR)
+			local known = label:GetAttribute(TEXT_BASE_ATTR)
+			if type(current) ~= "number" or type(known) ~= "number" then
+				return
+			end
+			if label.TextSize ~= HUDRules.flooredTextSize(known, current) then
+				label:SetAttribute(TEXT_BASE_ATTR, label.TextSize)
+				label.TextSize = HUDRules.flooredTextSize(label.TextSize, current)
+			end
+		end)
+	end
+end
+
+-- Cette méthode permet de garder les textes d'un cadre du HUD lisibles (#282) lorsqu'il est réduit : chaque texte, présent
+-- ou ajouté plus tard, ne descend pas sous le plancher à l'écran. Renvoie la fonction à rappeler quand `getScale` change.
+function UIKit.floorHudText(container: Instance, getScale: () -> number): () -> ()
+	-- Cette méthode permet de reposer tous les textes du cadre lorsque son échelle change.
+	local function apply()
+		local scale = getScale()
+		for _, inst in container:GetDescendants() do
+			if isText(inst) then
+				floorText(inst :: TextLabel, scale)
+			end
+		end
+	end
+	container.DescendantAdded:Connect(function(inst)
+		if isText(inst) then
+			floorText(inst :: TextLabel, getScale())
+		end
+	end)
+	apply()
+	return apply
+end
+
+-- Cette méthode permet de changer en direct la taille d'un texte du HUD lorsqu'un élément la fait varier (arme en main,
+-- libellé de touche) : la taille demandée devient la base, et le plancher de son cadre reste appliqué.
+function UIKit.setHudTextSize(label: TextLabel, size: number)
+	label:SetAttribute(TEXT_BASE_ATTR, size)
+	local scale = label:GetAttribute(TEXT_SCALE_ATTR)
+	label.TextSize = if type(scale) == "number" then HUDRules.flooredTextSize(size, scale) else size
+end
 
 -- Cette méthode permet de changer l'échelle des éléments de bord du HUD lorsque le réglage change : chaque racine
 -- `edge` et chaque UIScale branché par onHudScale se met à jour en direct.
@@ -443,6 +539,7 @@ end
 function UIKit.scaledRoot(gui: ScreenGui, edge: boolean?): Frame
 	local root = UIKit.frame({ Name = "Root", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Parent = gui })
 	local scale = UIKit.create("UIScale", { Parent = root })
+	local floorTexts: (() -> ())? = nil
 	local function update()
 		local camera = workspace.CurrentCamera
 		local height = camera and camera.ViewportSize.Y or UITheme.Layout.ReferenceHeight
@@ -453,6 +550,9 @@ function UIKit.scaledRoot(gui: ScreenGui, edge: boolean?): Frame
 		scale.Scale = s
 		root.Size = UDim2.fromScale(1 / s, 1 / s)
 		root:SetAttribute("Scale", s)
+		if floorTexts then
+			floorTexts()
+		end
 	end
 	update()
 	local camera = workspace.CurrentCamera
@@ -460,6 +560,11 @@ function UIKit.scaledRoot(gui: ScreenGui, edge: boolean?): Frame
 		camera:GetPropertyChangedSignal("ViewportSize"):Connect(update)
 	end
 	if edge then
+		-- #282 : textes au plancher à l'échelle totale, et racine masquée tant que l'échelle sauvegardée n'est pas connue
+		floorTexts = UIKit.floorHudText(root, function()
+			return scale.Scale
+		end)
+		UIKit.hideUntilHudShown(root)
 		UIKit.onHudScale(root, update)
 	end
 	return root

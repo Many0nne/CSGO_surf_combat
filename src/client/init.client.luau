@@ -20,6 +20,7 @@ local SkinPreloader = require(script.systems.inventory.SkinPreloader)
 local SoundChannels = require(script.systems.settings.SoundChannels)
 local MusicPlayer = require(script.systems.audio.MusicPlayer)
 local UIKit = require(script.ui.UIKit)
+local HUDRules = require(script.ui.HUDRules)
 local Speedometer = require(script.ui.Speedometer)
 local WeaponBar = require(script.ui.WeaponBar)
 local AmmoCounter = require(script.ui.AmmoCounter)
@@ -112,6 +113,13 @@ LocalSettings.init()
 LocalSettings.onChanged(function(settings)
 	UIKit.setHudScale(PlayerSettings.hudScaleFactor(settings.hudScale))
 end)
+-- HUD masqué jusqu'à son échelle sauvegardée (#282), sans retenir le reste du client : affiché à l'arrivée des réglages
+-- (échelle posée d'abord, sans attendre l'abonné ci-dessus), ou passé HUD_SETTINGS_TIMEOUT à l'échelle courante
+LocalSettings.onLoaded(function(settings)
+	UIKit.setHudScale(PlayerSettings.hudScaleFactor(settings.hudScale))
+	UIKit.showHud()
+end)
+task.delay(HUDRules.HUD_SETTINGS_TIMEOUT, UIKit.showHud)
 -- Textures des skins équipés (#333) : chargées dès l'accueil, pas au premier équipement en partie
 SkinPreloader.init()
 -- Canaux de volume (#249) : groupes général et armes, créés avant le premier son
