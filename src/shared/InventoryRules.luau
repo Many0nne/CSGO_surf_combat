@@ -17,7 +17,8 @@ local InventoryRules = {}
 export type ItemType = "weapon" | "skin"
 export type Slot = "sniper" | "knife"
 -- Un skin porte aussi son nom affiché (`name`) et le nom de ses SurfaceAppearance (`appearance` : dossier
--- ReplicatedStorage.Skins.<viewmodel de l'arme>.<appearance>, cf. WeaponSkins)
+-- ReplicatedStorage.Skins.<viewmodel de l'arme>.<appearance>, cf. WeaponSkins), et sa luminance (`luminance`, 0 à 1 :
+-- moyenne de ses cartes de couleur, mesurée par tools/skins/luminance.py ; le shop met les plus sombres sous sa lampe)
 export type Item = {
 	id: string,
 	type: ItemType,
@@ -26,6 +27,7 @@ export type Item = {
 	weapon: string?,
 	name: string?,
 	appearance: string?,
+	luminance: number?,
 }
 -- Items possédés : ensemble d'ids du catalogue
 export type Owned = { [string]: boolean }
@@ -58,19 +60,62 @@ InventoryRules.ITEMS = {
 	{ id = "weapon.kabar", type = "weapon", tool = "KaBar", slot = "knife" },
 	{ id = "weapon.m9bayonet", type = "weapon", tool = "M9Bayonet", slot = "knife" },
 	-- Skins (#268), par paires AWP + M9 sur un même thème ; obtenus plus tard par les caisses (l'admin les a tous)
-	{ id = "skin.awp.couchant", type = "skin", weapon = "weapon.awp", name = "COUCHANT", appearance = "couchant" },
-	{ id = "skin.awp.impact", type = "skin", weapon = "weapon.awp", name = "IMPACT", appearance = "impact" },
-	{ id = "skin.awp.releve", type = "skin", weapon = "weapon.awp", name = "RELEVÉ", appearance = "releve" },
+	{
+		id = "skin.awp.couchant",
+		type = "skin",
+		weapon = "weapon.awp",
+		name = "COUCHANT",
+		appearance = "couchant",
+		luminance = 0.026,
+	},
+	{
+		id = "skin.awp.impact",
+		type = "skin",
+		weapon = "weapon.awp",
+		name = "IMPACT",
+		appearance = "impact",
+		luminance = 0.101,
+	},
+	{
+		id = "skin.awp.releve",
+		type = "skin",
+		weapon = "weapon.awp",
+		name = "RELEVÉ",
+		appearance = "releve",
+		luminance = 0.046,
+	},
 	-- Deuxième série (#337)
-	{ id = "skin.awp.recuit", type = "skin", weapon = "weapon.awp", name = "RECUIT", appearance = "recuit" },
-	{ id = "skin.awp.strate", type = "skin", weapon = "weapon.awp", name = "STRATE", appearance = "strate" },
-	{ id = "skin.awp.sillage", type = "skin", weapon = "weapon.awp", name = "SILLAGE", appearance = "sillage" },
+	{
+		id = "skin.awp.recuit",
+		type = "skin",
+		weapon = "weapon.awp",
+		name = "RECUIT",
+		appearance = "recuit",
+		luminance = 0.047,
+	},
+	{
+		id = "skin.awp.strate",
+		type = "skin",
+		weapon = "weapon.awp",
+		name = "STRATE",
+		appearance = "strate",
+		luminance = 0.131,
+	},
+	{
+		id = "skin.awp.sillage",
+		type = "skin",
+		weapon = "weapon.awp",
+		name = "SILLAGE",
+		appearance = "sillage",
+		luminance = 0.308,
+	},
 	{
 		id = "skin.m9bayonet.couchant",
 		type = "skin",
 		weapon = "weapon.m9bayonet",
 		name = "COUCHANT",
 		appearance = "couchant",
+		luminance = 0.095,
 	},
 	{
 		id = "skin.m9bayonet.impact",
@@ -78,6 +123,7 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.m9bayonet",
 		name = "IMPACT",
 		appearance = "impact",
+		luminance = 0.240,
 	},
 	{
 		id = "skin.m9bayonet.releve",
@@ -85,6 +131,7 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.m9bayonet",
 		name = "RELEVÉ",
 		appearance = "releve",
+		luminance = 0.194,
 	},
 	{
 		id = "skin.m9bayonet.recuit",
@@ -92,6 +139,7 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.m9bayonet",
 		name = "RECUIT",
 		appearance = "recuit",
+		luminance = 0.135,
 	},
 	{
 		id = "skin.m9bayonet.strate",
@@ -99,6 +147,7 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.m9bayonet",
 		name = "STRATE",
 		appearance = "strate",
+		luminance = 0.249,
 	},
 	{
 		id = "skin.m9bayonet.sillage",
@@ -106,6 +155,7 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.m9bayonet",
 		name = "SILLAGE",
 		appearance = "sillage",
+		luminance = 0.292,
 	},
 } :: { Item }
 
