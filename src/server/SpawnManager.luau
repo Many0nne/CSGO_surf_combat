@@ -5,6 +5,7 @@ local RunService = game:GetService("RunService")
 local BotCombatRules = require(ReplicatedStorage.Shared.BotCombatRules)
 local CharacterAppearance = require(ReplicatedStorage.Shared.CharacterAppearance)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local MapGeometry = require(ReplicatedStorage.Shared.MapGeometry)
 local MapSelection = require(ReplicatedStorage.Shared.MapSelection)
 local CheatLog = require(ServerScriptService.Server.CheatLog)
 local Participants = require(ServerScriptService.Server.Participants)
@@ -47,34 +48,36 @@ local function getMap(): Instance?
 	return mapModel
 end
 
--- Tirage des points d'apparition et paramètres du raycast de vue, créés au premier placement
+-- Tirage des points d'apparition, paramètres du raycast de vue et règle des pièces traversées, créés au premier placement
 local rng: Random? = nil
 local sightParams: RaycastParams? = nil
 local sightMap: Instance? = nil
+local sightSkip: ((Instance) -> boolean)? = nil
 
 -- Cette méthode permet de tester si un ennemi voit un point d'apparition lorsqu'on choisit où faire apparaître un
--- personnage (#288) : raycast d'yeux à yeux limité aux pièces de la map jouée qui arrêtent le regard (ni murs d'air
--- Clips, ni grillages, SpawnPointRules.blocksSight), listées une fois par map (géométrie fixe pendant la partie).
+-- personnage (#288) : raycast d'yeux à yeux sur la map jouée, relancé derrière chaque pièce qui n'arrête pas le regard
+-- (murs d'air Clips, grillages, SpawnPointRules.blocksSight). La map entière est en inclusion (#370) : la liste des
+-- 12 000 pièces opaques coûtait 270 µs par rayon, soit 6 à 25 ms par apparition (jusqu'à 252 rayons).
 local function isVisible(map: Instance, from: Vector3, to: Vector3): boolean
 	if not sightParams or sightMap ~= map then
-		local clips = map:FindFirstChild("Clips")
-		local blockers = {}
-		for _, d in map:GetDescendants() do
-			if
-				d:IsA("BasePart")
-				and d.CanQuery
-				and SpawnPointRules.blocksSight(clips ~= nil and d:IsDescendantOf(clips), d.Transparency)
-			then
-				table.insert(blockers, d)
-			end
-		end
+		local clips = MapGeometry.clips(map)
 		local params = RaycastParams.new()
 		params.FilterType = Enum.RaycastFilterType.Include
-		params.FilterDescendantsInstances = blockers
+		params.FilterDescendantsInstances = { map }
 		sightParams = params
 		sightMap = map
+		-- Cette méthode permet de savoir si le regard traverse une pièce touchée lorsque le rayon de vue la rencontre.
+		sightSkip = function(inst: Instance): boolean
+			local inClips = clips ~= nil and inst:IsDescendantOf(clips)
+			return not SpawnPointRules.blocksSight(inClips, (inst :: BasePart).Transparency)
+		end
 	end
-	return workspace:Raycast(from, to - from, sightParams) == nil
+	local params = sightParams :: RaycastParams
+	-- Cette méthode permet de lancer un tronçon du rayon de vue lorsque castThrough avance derrière une pièce traversée.
+	local function cast(origin: Vector3, delta: Vector3): RaycastResult?
+		return workspace:Raycast(origin, delta, params)
+	end
+	return MapGeometry.castThrough(cast, from, to - from, sightSkip :: (Instance) -> boolean) == nil
 end
 
 -- Cette méthode permet de lister les yeux des ennemis vivants (tous les autres participants) lorsqu'un personnage

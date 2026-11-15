@@ -459,6 +459,15 @@ le jeu : surf et combat restent à mesurer à la main, dans le client publié.
 
 ## Pièges connus
 
+- **Une longue liste de filtre rend chaque rayon lent** (#370) : le coût d'un `workspace:Raycast` croît avec le nombre
+  d'instances de `FilterDescendantsInstances`, pas avec la scène. Mesure sur Dizzy (1 260 rayons de 313 studs en
+  moyenne entre les points d'apparition, serveur Studio) : 2,1 µs avec `{ map }` en inclusion, 2,3 à 2,8 µs sans
+  filtre ou avec 9 instances en exclusion, **270 µs avec les 12 015 pièces opaques listées une à une**. Le choix du
+  point d'apparition (`SpawnManager`, jusqu'à 36 points × 7 ennemis) coûtait ainsi 6 à 25 ms par apparition, et 80 ms
+  quand les 7 bots apparaissaient dans la même frame. Règle : filtrer par un ancêtre (la map, un dossier), et écarter
+  les pièces à traverser après coup avec `MapGeometry.castThrough` (6,2 µs par rayon, mêmes résultats sur les 1 260
+  rayons).
+
 - Interpoler la position de la caméra entre deux `Heartbeat` (ancien `FPSCamera.updateRoot`, supprimé) crée des
   saccades : `Heartbeat` tourne une fois par frame, pas à 60 Hz fixe, donc l'`alpha` basé sur `os.clock()` varie d'une
   frame à l'autre. Le mouvement tourne maintenant sur le rendu, l'interpolation n'a plus lieu d'être.
