@@ -220,13 +220,22 @@ return function(T, Loader)
 	end)
 
 	T.describe("HUDRules.killDetail", function()
-		T.it("donne l'arme, la tête si tir à la tête, et CHUTE sans tueur", function()
-			T.expectEqual(HUDRules.killDetail("Kev", "AWP", false), "AWP")
-			T.expectEqual(HUDRules.killDetail("Kev", "AWP", true), "AWP · TÊTE")
-			T.expectEqual(HUDRules.killDetail("Kev", "M9Bayonet", false), "M9 BAYONET")
-			T.expectEqual(HUDRules.killDetail("Kev", nil, true), "TÊTE")
-			T.expectEqual(HUDRules.killDetail(nil, "AWP", true), "CHUTE")
-		end)
+		-- Texte et icône de tête rendus ensemble, en une chaîne comparable
+		local function detail(killer: string?, weapon: string?, headshot: boolean): string
+			local text, icon = HUDRules.killDetail(killer, weapon, headshot)
+			return text .. (if icon then " +icône" else "")
+		end
+
+		T.it(
+			"donne l'arme, l'icône de tête (à la place du mot TÊTE) si tir à la tête, et CHUTE sans tueur",
+			function()
+				T.expectEqual(detail("Kev", "AWP", false), "AWP")
+				T.expectEqual(detail("Kev", "AWP", true), "AWP +icône")
+				T.expectEqual(detail("Kev", "M9Bayonet", false), "M9 BAYONET")
+				T.expectEqual(detail("Kev", nil, true), " +icône", "tête sans arme connue : l'icône seule")
+				T.expectEqual(detail(nil, "AWP", true), "CHUTE", "pas d'icône sans tueur")
+			end
+		)
 	end)
 
 	T.describe("HUDRules.pushKillFeed / pruneKillFeed", function()

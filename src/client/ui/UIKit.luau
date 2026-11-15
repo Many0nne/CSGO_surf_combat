@@ -74,6 +74,40 @@ function UIKit.shadowedText(parent: GuiObject, props: { [string]: any }, offset:
 	return UIKit.text(props), shadow
 end
 
+-- Icône du tir à la tête (#365) : tête de profil percée à la tempe, blanche, teinte par ImageColor3.
+-- assets/ui/hud/tete_headshot.png (tools/ui/make_headshot_icon.py, Decal 84172163666417 ; ci-dessous l'id de l'image)
+UIKit.HEADSHOT_IMAGE = "rbxassetid://137640274134996"
+
+-- Cette méthode permet de poser l'icône du tir à la tête (ambre, doublée d'une ombre noire décalée) lorsqu'une ligne du
+-- kill feed ou l'écran de mort signale un kill à la tête ; renvoie son cadre, à la taille de l'icône.
+function UIKit.headshotIcon(parent: GuiObject, size: number, shadowOffset: number, props: { [string]: any }?): Frame
+	local holder = UIKit.frame({
+		Name = "Headshot",
+		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(size, size),
+	})
+	if props then
+		for key, value in props do
+			(holder :: any)[key] = value
+		end
+	end
+	for _, shadow in { true, false } do
+		UIKit.create("ImageLabel", {
+			Name = if shadow then "IconShadow" else "Icon",
+			Image = UIKit.HEADSHOT_IMAGE,
+			ImageColor3 = if shadow then C.Black else C.Accent,
+			ImageTransparency = if shadow then 0.35 else 0,
+			BackgroundTransparency = 1,
+			Position = if shadow then UDim2.fromOffset(shadowOffset, shadowOffset) else UDim2.new(),
+			Size = UDim2.fromScale(1, 1),
+			ZIndex = if shadow then 1 else 2,
+			Parent = holder,
+		})
+	end
+	holder.Parent = parent
+	return holder
+end
+
 -- Taille des libellés ambrés du menu (#280) : à 13 px avec contour noir, l'utilisateur les trouvait illisibles
 local ACCENT_LABEL_SIZE = 16
 

@@ -287,7 +287,8 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   Réapparition : la scène reste visible, désaturée (`ColorCorrectionEffect`), sans voile plein ; en bas au centre, sur
   un fondu de bord (`cornerScrim` « Bottom »), « ÉLIMINÉ » en rouge d'impact (le joueur a été touché), compte à rebours en gros
   chiffres os à ombre, libellé ambré « RÉAPPARITION ». Au-dessus du compte à rebours (#102) : « ÉLIMINÉ PAR », nom du
-  tueur en os, arme et « TÊTE » en ambre ; sans tueur, « ÉLIMINÉ » puis « CHUTE ». La caméra reste au lieu de la mort
+  tueur en os, arme en ambre suivie de l'icône du tir à la tête (18 px, voir kill feed) ; sans tueur, « ÉLIMINÉ » puis
+  « CHUTE ». La caméra reste au lieu de la mort
   et pivote vers le tueur, marqué d'un losange et de « NOM · distance » en rouge d'impact (`DeathCamera`).
   Débutant (#291, conseils non coupés) : sous « RÉAPPARITION », une ligne de conseil en texte courant (Oswald regular,
   18 px, os), son thème en ambre (« SURF : », « BHOP : », « AIR STRAFE : »), plus large que le bloc (680 px) ; le
@@ -314,6 +315,14 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   en ambre plus petite), 4 lignes, 5 s chacune ; les lignes du joueur sont sur une bande rouge d'impact droite qui
   s'efface vers la gauche, comme sa ligne au classement. Affiché vivant ou mort (`HUDRules.killFeedVisible`), pas au
   menu ni au résultat.
+  **Tir à la tête (#365)** : une icône remplace le mot « TÊTE » après l'arme, dans le kill feed et sur l'écran de mort
+  (pas au hitmarker, qui change seulement de couleur : une icône au centre gênerait la visée). Tête de profil tournée
+  vers la gauche (vers le tueur), percée à la tempe, éclats projetés à l'arrière dans le sens de la ligne
+  (`tools/ui/make_headshot_icon.py`, `assets/ui/hud/tete_headshot.png`, Decal 84172163666417, `UIKit.headshotIcon`),
+  ambre comme l'arme (le rouge d'impact disparaîtrait sur la bande du joueur), à ombre noire, 20 px dans le feed.
+  Le crâne est réservé à la série de kills. Une image ne passe pas dans un texte RichText : une ligne est une rangée
+  de morceaux (`UIListLayout`), un texte à ombre par morceau, et la bande du joueur suit la largeur de la rangée.
+  `HUDRules.killDetail` renvoie le libellé de l'arme et, à part, s'il faut l'icône (testé). Icône préchargée à l'init.
   Fin de round : voile central du classement, « ROUND TERMINÉ » ambré, nom du vainqueur en os géant, filet ambre,
   « REMPORTE LE ROUND » ; le rouge d'impact n'apparaît que si le joueur gagne (bande derrière son nom). Sans vainqueur
   (#295) : « AUCUN VAINQUEUR » (aucun kill) ou « ÉGALITÉ » (mêmes kills et mêmes morts en tête) à la place du nom, sans

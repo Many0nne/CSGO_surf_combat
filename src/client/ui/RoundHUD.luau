@@ -64,6 +64,8 @@ local RESPAWN_SCRIM_TRANSPARENCY = 0.2
 local RESPAWN_WIDTH = 400
 local RESPAWN_HEIGHT = 196
 local RESPAWN_BOTTOM = 40
+-- Icône du tir à la tête (#365) après l'arme, sous le nom du tueur : un peu plus haute que les lettres (16 px)
+local RESPAWN_HEADSHOT_SIZE = 18
 -- Conseil d'un débutant (#291) sous « RÉAPPARITION » : une ligne plus large que le bloc, fondu de bord agrandi d'autant
 local RESPAWN_TIP_GAP = 8
 local RESPAWN_TIP_HEIGHT = 24
@@ -114,6 +116,7 @@ local respawnTitleShadow: TextLabel
 local respawnKiller: TextLabel
 local respawnKillerShadow: TextLabel
 local respawnDetail: TextLabel
+local respawnHeadshot: Frame
 local respawnTip: TextLabel
 local deathGrade: ColorCorrectionEffect
 local resultRoot: Frame
@@ -625,17 +628,34 @@ local function buildRespawnOverlay(root: Frame)
 		Position = UDim2.fromOffset(0, 36),
 		Size = UDim2.new(1, 0, 0, 34),
 	}, 3)
-	respawnDetail = UIKit.text({
+	-- Arme puis icône du tir à la tête (#365, à la place du mot « TÊTE »), centrées ensemble
+	local detailRow = UIKit.frame({
 		Name = "Detail",
-		Text = "",
-		FontFace = F.DisplayMedium,
-		TextSize = UITheme.TextSize.Min,
-		TextColor3 = C.Accent,
-		TextXAlignment = centered,
+		BackgroundTransparency = 1,
 		Position = UDim2.fromOffset(0, 68),
 		Size = UDim2.new(1, 0, 0, 20),
 		Parent = respawnPanel,
 	})
+	UIKit.create("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		HorizontalAlignment = Enum.HorizontalAlignment.Center,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, 4),
+		Parent = detailRow,
+	})
+	respawnDetail = UIKit.text({
+		Name = "Text",
+		Text = "",
+		FontFace = F.DisplayMedium,
+		TextSize = UITheme.TextSize.Min,
+		TextColor3 = C.Accent,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromScale(0, 1),
+		LayoutOrder = 1,
+		Parent = detailRow,
+	})
+	respawnHeadshot = UIKit.headshotIcon(detailRow, RESPAWN_HEADSHOT_SIZE, 1, { LayoutOrder = 2, Visible = false })
 	-- Chiffre et ombre dans un cadre commun : la pulsation les agrandit ensemble
 	local count = UIKit.frame({
 		Name = "Count",
@@ -684,12 +704,13 @@ end
 
 -- Cette méthode permet d'écrire le titre, le nom et le détail de l'écran de mort lorsqu'ils changent (titre et nom
 -- doublés de leur ombre).
-local function setRespawnLines(title: string, killer: string, detail: string)
+local function setRespawnLines(title: string, killer: string, detail: string, headshot: boolean?)
 	respawnTitle.Text = title
 	respawnTitleShadow.Text = title
 	respawnKiller.Text = killer
 	respawnKillerShadow.Text = killer
 	respawnDetail.Text = detail
+	respawnHeadshot.Visible = headshot == true
 end
 
 -- Cette méthode permet d'afficher le nouveau chiffre du compte à rebours avec une pulsation lorsqu'une seconde passe.
@@ -1077,15 +1098,16 @@ function RoundHUD.showRespawning(delaySeconds: number)
 end
 
 -- Cette méthode permet d'indiquer qui a tué le joueur sur l'écran de mort lorsque PlayerDied arrive (#102) :
--- « ÉLIMINÉ PAR », nom du tueur, arme et tir à la tête ; sans tueur, « ÉLIMINÉ » et « CHUTE ».
+-- « ÉLIMINÉ PAR », nom du tueur, arme et icône du tir à la tête ; sans tueur, « ÉLIMINÉ » et « CHUTE ».
 function RoundHUD.setDeathInfo(killer: string?, weapon: string?, headshot: boolean)
 	if not respawnTitle then
 		return
 	end
 	if killer then
-		setRespawnLines("ÉLIMINÉ PAR", string.upper(killer), HUDRules.killDetail(killer, weapon, headshot))
+		local detail, showHeadshot = HUDRules.killDetail(killer, weapon, headshot)
+		setRespawnLines("ÉLIMINÉ PAR", string.upper(killer), detail, showHeadshot)
 	else
-		setRespawnLines("ÉLIMINÉ", HUDRules.killDetail(nil, weapon, headshot), "")
+		setRespawnLines("ÉLIMINÉ", (HUDRules.killDetail(nil, weapon, headshot)), "")
 	end
 end
 

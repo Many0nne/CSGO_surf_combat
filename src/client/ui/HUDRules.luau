@@ -389,16 +389,12 @@ function HUDRules.readDeath(data: any, localUserId: number): Death?
 end
 
 -- Cette méthode permet de décrire l'arme d'une ligne de kill feed ou de l'écran de mort lorsqu'une mort arrive :
--- libellé de l'arme, « TÊTE » si tir à la tête, « CHUTE » sans tueur.
-function HUDRules.killDetail(killer: string?, weapon: string?, headshot: boolean): string
+-- libellé de l'arme (« CHUTE » sans tueur), puis vrai s'il faut l'icône du tir à la tête (#365), qui remplace « TÊTE ».
+function HUDRules.killDetail(killer: string?, weapon: string?, headshot: boolean): (string, boolean)
 	if not killer then
-		return "CHUTE"
+		return "CHUTE", false
 	end
-	local label = if weapon then HUDRules.weaponLabel(weapon) else ""
-	if headshot then
-		return if label ~= "" then label .. " · TÊTE" else "TÊTE"
-	end
-	return label
+	return if weapon then HUDRules.weaponLabel(weapon) else "", headshot
 end
 
 -- Cette méthode permet d'ajouter une ligne au kill feed lorsqu'une mort arrive : plus récente en premier, les lignes
