@@ -13,6 +13,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+local CreditPacks = require(Shared:WaitForChild("CreditPacks"))
 local InventoryRules = require(Shared:WaitForChild("InventoryRules"))
 local NetworkProtocol = require(Shared:WaitForChild("NetworkProtocol"))
 local ShopCatalog = require(Shared:WaitForChild("ShopCatalog"))
@@ -767,8 +768,8 @@ local function debugOpening()
 		return
 	end
 	player:SetAttribute(DEBUG_ATTRIBUTE, nil)
-	if not gui.Enabled then
-		warn("[DebugCrateOpening] shop fermé : ouvrir l'onglet SHOP d'abord")
+	if not gui.Enabled or CreditPackWindow.isOpen() then
+		warn("[DebugCrateOpening] shop fermé ou fenêtre des packs ouverte : ouvrir l'onglet SHOP, fermer les packs")
 		return
 	end
 	local index = string.match(value, "^crate:(%d+)$")
@@ -799,14 +800,14 @@ local function debugOpening()
 	print("[DebugCrateOpening] " .. value .. " : " .. tostring(started))
 end
 
--- Cette méthode permet de montrer « + CRÉDITS » (#395) lorsque le shop s'affiche, qu'une vue change ou que la
--- restriction change : seulement pour un joueur connu comme non restreint, sur la vitrine ou la vue détail (pas pendant
--- une ouverture), fenêtre des packs fermée.
+-- Cette méthode permet de montrer « + CRÉDITS » (#395, joueur connu non restreint, vitrine ou vue détail, fenêtre fermée,
+-- vrais ids ou Studio) lorsque le shop s'affiche, qu'une vue change ou que la restriction change.
 paintPackButton = function()
 	if not packButton then
 		return
 	end
 	packButton.Visible = gui.Enabled
+		and (CreditPacks.isReady() or RunService:IsStudio())
 		and LocalWallet.restricted() == false
 		and not CreditPackWindow.isOpen()
 		and (overview.Visible or detail.Visible)

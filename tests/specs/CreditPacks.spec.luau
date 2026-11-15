@@ -36,6 +36,16 @@ return function(T, Loader)
 			T.expectEqual(Packs.byProduct(tostring(pack.productId)), nil, "un id en texte n'est pas un produit")
 		end)
 
+		T.it("prêt seulement quand aucun pack ne garde un id provisoire", function()
+			local fresh = Loader.new({}):require("src/shared/CreditPacks")
+			for i, pack in fresh.PACKS do
+				pack.productId = 1_000_000_000 + i
+			end
+			T.expect(fresh.isReady(), "vrais ids")
+			fresh.PACKS[2].productId = 3_950_002
+			T.expect(not fresh.isReady(), "un id provisoire restant")
+		end)
+
 		T.it("prix affiché en Robux", function()
 			T.expectEqual(Packs.priceLabel(Packs.PACKS[1]), "99 R$")
 		end)

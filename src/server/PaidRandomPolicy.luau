@@ -3,7 +3,7 @@
 -- et choix (caisses bloquées, packs masqués) : docs/economie.md.
 --
 -- Réponse mise en cache par joueur, demandée à son arrivée. Appel en échec ou réponse illisible = **restreint** ; un
--- échec est redemandé au plus toutes les RETRY_AFTER s (panne passagère), une réponse lue est gardée pour la session.
+-- échec est redemandé d'office RETRY_AFTER s plus tard (panne passagère), une réponse lue est gardée pour la session.
 -- L'attribut informatif `PaidRandomRestricted` du Player (CreditPacks.RESTRICTED_ATTRIBUTE) en est la copie pour le
 -- client, jamais relu par le serveur. Studio seulement : attribut Player `DebugPaidRandomRestricted` (true/false, en
 -- contexte serveur) remplace la réponse de PolicyService, pour voir les deux cas.
@@ -72,7 +72,16 @@ function PaidRandomPolicy.isRestricted(player: Player): boolean
 		)
 	end
 	if player.Parent then
-		cache[player] = { restricted = restricted, known = known, at = os.clock() }
+		local stored = { restricted = restricted, known = known, at = os.clock() }
+		cache[player] = stored
+		if not known then
+			-- Redemandée d'office : le client ne rappelle plus le serveur une fois l'achat masqué ou bloqué
+			task.delay(RETRY_AFTER, function()
+				if cache[player] == stored and player.Parent then
+					PaidRandomPolicy.isRestricted(player)
+				end
+			end)
+		end
 	end
 	publish(player, restricted)
 	return restricted
@@ -81,6 +90,7 @@ end
 -- Cette méthode permet de demander la restriction des joueurs à leur arrivée et d'oublier ceux qui partent lorsque le
 -- serveur démarre ; Studio : la valeur de debug est republiée à chaque changement.
 function PaidRandomPolicy.init()
+	-- Cette méthode permet de lancer la demande d'un joueur et de suivre sa valeur de debug lorsqu'il arrive.
 	local function onPlayer(player: Player)
 		task.spawn(PaidRandomPolicy.isRestricted, player)
 		if RunService:IsStudio() then

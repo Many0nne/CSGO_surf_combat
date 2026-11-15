@@ -34,6 +34,8 @@ local REFUSALS = {
 	rate = "PATIENTE",
 	region = "INDISPONIBLE DANS TA RÉGION",
 	unknown = "PACK INCONNU",
+	unavailable = "PACKS PAS ENCORE EN VENTE",
+	full = "SOLDE AU MAXIMUM",
 	failed = "ACHAT IMPOSSIBLE  ·  RÉESSAIE PLUS TARD",
 }
 

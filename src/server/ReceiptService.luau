@@ -16,9 +16,11 @@
 -- (CrateService), ses crédits achetés ne mènent donc à aucun objet aléatoire (choix de l'utilisateur, #395).
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local CreditPacks = require(ReplicatedStorage.Shared.CreditPacks)
+local WalletRules = require(ReplicatedStorage.Shared.WalletRules)
 local CheatLog = require(ServerScriptService.Server.CheatLog)
 local InventoryStore = require(ServerScriptService.Server.InventoryStore)
 local PaidRandomPolicy = require(ServerScriptService.Server.PaidRandomPolicy)
@@ -120,6 +122,15 @@ function ReceiptService.promptFor(player: Player, packId: string): (Reply, Credi
 	end
 	if PaidRandomPolicy.isRestricted(player) then
 		return { ok = false, reason = "region" }, nil
+	end
+	-- Ids provisoires : produit inexistant, le prompt échouerait (Studio l'accepte, ses achats sont simulés)
+	if not (CreditPacks.isReady() or RunService:IsStudio()) then
+		return { ok = false, reason = "unavailable" }, nil
+	end
+	-- Un reçu qui dépasserait le plafond resterait en attente (Robux pris, rien donné) : ne pas proposer l'achat
+	local balance = WalletStore.balance(player)
+	if balance and balance + pack.credits > WalletRules.MAX_BALANCE then
+		return { ok = false, reason = "full" }, nil
 	end
 	return { ok = true }, pack
 end

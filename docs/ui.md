@@ -940,7 +940,8 @@ Achat de crédits en Robux (règles : `docs/economie.md`). Sur la page SHOP seul
 
 - **« + CRÉDITS »** en haut à droite, sous « GAINS DU JOUR » (y = 100, contour os 2 px, Oswald gras 18 px, survol en
   rouge d'impact comme ACHETER, en plus petit). Montré à un joueur **connu** comme non restreint (attribut
-  `PaidRandomRestricted` = false), sur la vitrine ou la vue détail, pas pendant une ouverture.
+  `PaidRandomRestricted` = false), sur la vitrine ou la vue détail, pas pendant une ouverture ; hors de Studio,
+  seulement une fois les vrais ids des produits collés (`CreditPacks.isReady`).
 - **Fenêtre** (`CreditPackWindow`, gabarit des écrans secondaires `MenuPage` : bloc centré sur un voile, sans panneau,
   sous la barre du menu dont le solde reste visible) : titre « PACKS DE CRÉDITS », trois packs côte à côte (jeton
   56 px, montant Oswald gras 52 px, « CRÉDITS », prix « 99 R$ » dans un contour os comme ACHETER), une ligne atténuée

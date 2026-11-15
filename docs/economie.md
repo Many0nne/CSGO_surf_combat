@@ -10,6 +10,10 @@ Règles d'argent réel du jeu (#395). Stockage des crédits, contrat de `Invento
 - **Ids provisoires** (3 950 001 à 3 950 003) tant que les produits n'existent pas : les créer sur le dashboard Creator
   (expérience > Monetization > Developer Products), puis coller leurs ids dans `CreditPacks.PACKS`. Le prix réel est
   celui du dashboard ; `robux` n'est que l'affichage, à garder égal.
+- Tant qu'un pack garde un id provisoire (`CreditPacks.isReady`), « + CRÉDITS » est masqué et le prompt refusé
+  (`unavailable`) hors de Studio : une publication faite avant de coller les ids ne montre pas un achat qui échoue.
+- Prompt refusé (`full`) si le pack ferait dépasser `WalletRules.MAX_BALANCE` : le reçu serait refusé par
+  l'opération et resterait en attente, Robux pris.
 - Ne jamais retirer de la config un produit déjà vendu : ses reçus en attente ne seraient plus jamais accordés.
 - Crédits achetés : compteur `purchased` du portefeuille, hors plafond du jour (#394).
 
@@ -70,7 +74,8 @@ du débit, et le remboursement d'un doublon rend déjà les crédits au compteur
 
 - Restriction lue par `PolicyService:GetPolicyInfoForPlayerAsync` (champ `ArePaidRandomItemsRestricted`), dans un
   `pcall`, demandée à l'arrivée du joueur et mise en cache pour la session. **Appel en échec ou réponse sans le champ
-  = restreint** ; un échec est redemandé au plus toutes les 30 s.
+  = restreint** ; un échec est redemandé d'office 30 s plus tard (le client, qui masque alors les achats, ne rappelle
+  plus le serveur : sans cela, une panne passagère à l'arrivée bloquait le joueur toute la session).
 - Côté serveur : `BuyCrate` refusé `region` avant tout tirage (`CrateService`) ; prompt d'un pack refusé `region`
   (`ReceiptService.promptFor`, le prompt est ouvert par le serveur).
 - Côté client (attribut informatif `PaidRandomRestricted`, absent tant que la réponse n'est pas arrivée) : « + CRÉDITS »
