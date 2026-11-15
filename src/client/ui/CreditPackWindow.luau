@@ -44,18 +44,30 @@ local REFUSALS = {
 local page: MenuPage.Page
 local status: TextLabel
 local statusToken = 0
--- Demande au serveur en vol, ou prompt de Roblox ouvert : les prix restent inactifs jusqu'à la fin du prompt
-local requesting = false
-local prompting = false
--- Prompt ouvert puis pas annulé : la prochaine hausse du solde est annoncée (« +500 CRÉDITS »), pas une autre
-local awaitingCredits = false
+-- s au plus pendant lesquels les prix attendent la fin du prompt de Roblox (secours si elle n'arrive jamais)
+local PROMPT_TIMEOUT = 120
+-- Achat en cours, de la demande au serveur à la fin du prompt de Roblox (PromptProductPurchaseFinished) : les prix
+-- restent inactifs, fenêtre fermée et rouverte comprise. Numéroté : une fin ou un délai d'un achat passé est ignoré
+local purchase = 0
+local purchasing = false
+-- Crédits du pack attendus après un prompt pas annulé : seule une hausse du solde de ce montant est annoncée
+local awaitingCredits: number? = nil
 local priceChoices: { MenuShot.Choice } = {}
 local lastBalance: number? = nil
 
--- Cette méthode permet d'activer ou non les prix lorsqu'une demande ou un prompt commence ou se termine.
+-- Cette méthode permet d'activer ou non les prix lorsqu'un achat commence ou se termine.
 local function setPricesEnabled(enabled: boolean)
 	for _, choice in priceChoices do
 		choice.setEnabled(enabled)
+	end
+end
+
+-- Cette méthode permet de terminer l'achat en cours `id` (prix rendus) lorsque le prompt se ferme, que le serveur refuse
+-- ou que le délai de secours passe ; sans effet si un autre achat a commencé depuis.
+local function endPurchase(id: number)
+	if id == purchase and purchasing then
+		purchasing = false
+		setPricesEnabled(true)
 	end
 end
 
@@ -78,11 +90,16 @@ end
 -- Cette méthode permet de demander au serveur le prompt d'achat d'un pack lorsque le joueur clique sur son prix ; une
 -- demande à la fois, réponse affichée seulement en cas de refus (le prompt de Roblox suffit sinon).
 local function requestPack(pack: CreditPacks.Pack)
-	if requesting or prompting then
+	if purchasing then
 		return
 	end
-	requesting = true
+	-- Commencé avant l'appel : le serveur ouvre le prompt avant de répondre, sa fin peut arriver avant la réponse
+	purchase += 1
+	local id = purchase
+	purchasing = true
+	awaitingCredits = pack.credits
 	setPricesEnabled(false)
+	task.delay(PROMPT_TIMEOUT, endPurchase, id)
 	task.spawn(function()
 		local remote = ReplicatedStorage:FindFirstChild(NetworkProtocol.Names.BUY_CREDIT_PACK)
 		local ok, result = false, nil
@@ -91,33 +108,27 @@ local function requestPack(pack: CreditPacks.Pack)
 				return remote:InvokeServer(pack.id)
 			end)
 		end
-		requesting = false
 		if ok and type(result) == "table" and result.ok then
-			-- Prompt ouvert par le serveur : prix inactifs jusqu'à PromptProductPurchaseFinished
-			prompting = true
-			awaitingCredits = true
-			return
+			return -- prompt ouvert : l'achat se termine avec PromptProductPurchaseFinished
 		end
-		setPricesEnabled(true)
-		if not (ok and type(result) == "table") then
-			showStatus("ÉCHEC")
-		else
-			showStatus(REFUSALS[result.reason] or "ÉCHEC")
+		if id == purchase then
+			awaitingCredits = nil
 		end
+		endPurchase(id)
+		showStatus(if ok and type(result) == "table" then REFUSALS[result.reason] or "ÉCHEC" else "ÉCHEC")
 	end)
 end
 
--- Cette méthode permet de rendre les prix lorsque le prompt de Roblox se ferme (acheté ou annulé) ; une annulation
--- n'attend plus de crédits.
+-- Cette méthode permet de terminer l'achat en cours lorsque le prompt de Roblox se ferme (acheté ou annulé) ; une
+-- annulation n'attend plus de crédits.
 local function onPromptFinished(userId: number, _productId: number, isPurchased: boolean)
-	if userId ~= Players.LocalPlayer.UserId or not prompting then
+	if userId ~= Players.LocalPlayer.UserId or not purchasing then
 		return
 	end
-	prompting = false
-	setPricesEnabled(not requesting)
 	if not isPurchased then
-		awaitingCredits = false
+		awaitingCredits = nil
 	end
+	endPurchase(purchase)
 end
 
 -- Cette méthode permet de construire un pack (jeton, montant, CRÉDITS, prix en Robux dans un contour os) lorsque la
@@ -197,13 +208,14 @@ local function buildPack(parent: Frame, pack: CreditPacks.Pack, order: number)
 	table.insert(priceChoices, choice)
 end
 
--- Cette méthode permet d'annoncer en ambre les crédits reçus lorsque le solde monte, fenêtre ouverte, après un prompt
--- pas annulé (reçu accordé par le serveur) ; une autre hausse (gain, autre serveur) n'est pas annoncée.
+-- Cette méthode permet d'annoncer en ambre les crédits d'un pack lorsque le solde monte de ce montant, fenêtre ouverte,
+-- après un prompt pas annulé ; une autre hausse (gain, autre serveur) n'est pas annoncée et n'efface pas l'attente.
 local function onBalance(balance: number?)
 	local opened = page ~= nil and page.gui.Enabled
-	if opened and awaitingCredits and balance and lastBalance and balance > lastBalance then
-		awaitingCredits = false
-		showStatus(string.format("+%s %s", WalletRules.format(balance - lastBalance), WalletRules.CURRENCY), true)
+	local expected = awaitingCredits
+	if opened and expected and balance and lastBalance and balance - lastBalance == expected then
+		awaitingCredits = nil
+		showStatus(string.format("+%s %s", WalletRules.format(expected), WalletRules.CURRENCY), true)
 	end
 	lastBalance = balance
 end
@@ -264,15 +276,14 @@ function CreditPackWindow.show()
 	end
 	status.Visible = false
 	lastBalance = LocalWallet.balance()
-	-- Prompt resté sans fin connue (fenêtre fermée pendant qu'il était ouvert) : les prix repartent actifs
-	prompting = false
-	setPricesEnabled(not requesting)
+	-- Un achat lancé avant la fermeture garde les prix inactifs jusqu'à la fin de son prompt (ou PROMPT_TIMEOUT)
+	setPricesEnabled(not purchasing)
 	page.show()
 end
 
 -- Cette méthode permet de fermer la fenêtre lorsque le joueur clique RETOUR, change d'onglet ou lance la partie.
 function CreditPackWindow.hide()
-	awaitingCredits = false
+	awaitingCredits = nil
 	if page and page.gui.Enabled then
 		page.hide()
 	end

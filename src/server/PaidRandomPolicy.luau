@@ -21,6 +21,8 @@ type Entry = { restricted: boolean, known: boolean, at: number }
 local cache: { [Player]: Entry } = {}
 -- Demandes en cours à PolicyService, par joueur : les appels suivants attendent la même réponse (threads en attente)
 local inflight: { [Player]: { thread } } = {}
+-- Joueurs dont la dernière demande a échoué (avertissement déjà donné pour cette série d'échecs)
+local failing: { [Player]: boolean } = {}
 
 local PaidRandomPolicy = {}
 
@@ -56,11 +58,17 @@ local function fetch(player: Player): boolean
 		return game:GetService("PolicyService"):GetPolicyInfoForPlayerAsync(player)
 	end)
 	local restricted, known = PaidRandomPolicy.fromResponse(ok, info)
-	if not known then
+	if known then
+		failing[player] = nil
+	elseif not failing[player] then
+		-- Signalé au premier échec d'une série seulement : les nouveaux essais toutes les RETRY_AFTER s se taisent
+		failing[player] = true
 		warn(
 			"[PaidRandomPolicy] réponse de PolicyService illisible pour",
 			player.Name,
-			"— traité comme restreint :",
+			"— traité comme restreint, nouvel essai toutes les",
+			RETRY_AFTER,
+			"s :",
 			info
 		)
 	end
@@ -105,6 +113,7 @@ function PaidRandomPolicy.isRestricted(player: Player): boolean
 	if not ok then
 		warn("[PaidRandomPolicy] erreur pour", player.Name, ":", restricted)
 		restricted = true
+		publish(player, true)
 	end
 	for _, waiter in waiters do
 		task.spawn(waiter, restricted)
@@ -112,14 +121,15 @@ function PaidRandomPolicy.isRestricted(player: Player): boolean
 	return restricted
 end
 
--- Cette méthode permet de lire la restriction en cache sans attendre lorsqu'un journal veut la noter ; nil si inconnue.
+-- Cette méthode permet de lire sans attendre la restriction lue de PolicyService lorsqu'un journal veut la noter ; nil
+-- si elle n'est pas connue (pas encore demandée, ou appel en échec : restreint par prudence, pas par Roblox).
 function PaidRandomPolicy.cached(player: Player): boolean?
 	local forced = debugValue(player)
 	if forced ~= nil then
 		return forced
 	end
 	local entry = cache[player]
-	return if entry then entry.restricted else nil
+	return if entry and entry.known then entry.restricted else nil
 end
 
 -- Cette méthode permet de demander la restriction des joueurs à leur arrivée et d'oublier ceux qui partent lorsque le
@@ -141,6 +151,7 @@ function PaidRandomPolicy.init()
 	end
 	Players.PlayerRemoving:Connect(function(player)
 		cache[player] = nil
+		failing[player] = nil
 	end)
 end
 

@@ -1615,6 +1615,30 @@ return function(T, Loader)
 			T.expectEqual(answers[3], false)
 		end)
 
+		T.it(
+			"PolicyService en échec : le reçu n'est pas noté « restreint », un seul avertissement par série",
+			function()
+				local sched = makeScheduler()
+				local ds = makeDataStore(sched)
+				local server = makeServer(sched, ds)
+				local alice = server.join(1)
+				server.policy.fail = true
+				server.Receipts.promptFor(alice, PACK.id)
+				sched.advance(95) -- trois nouveaux essais en échec
+				local receipt = server.receipt(1, PACK.productId, "achat-1")
+				T.expectEqual(receipt.verdict, "granted")
+				T.expect(string.find(receipt.extra, "restreint", 1, true) == nil, "échec ≠ restreint par Roblox")
+				local count = 0
+				for _, line in server.warnings do
+					if string.find(line, "PolicyService", 1, true) then
+						count += 1
+					end
+				end
+				T.expectEqual(count, 1)
+				T.expect(server.policy.calls >= 4, "redemandé toutes les 30 s")
+			end
+		)
+
 		T.it("reçu d'un joueur dont la restriction n'est pas connue : n'attend pas PolicyService", function()
 			local sched = makeScheduler()
 			local ds = makeDataStore(sched)

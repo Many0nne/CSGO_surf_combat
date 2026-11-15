@@ -129,7 +129,8 @@ function ReceiptService.promptFor(player: Player, packId: string): (Reply, Credi
 	if not (CreditPacks.isReady() or RunService:IsStudio()) then
 		return { ok = false, reason = "unavailable" }, nil
 	end
-	-- Un reçu qui dépasserait le plafond resterait en attente (Robux pris, rien donné) : ne pas proposer l'achat
+	-- Un reçu au-delà du plafond serait écrêté (Robux payés pour moins de crédits) : ne pas proposer l'achat. Solde pas
+	-- encore connu : proposé, le reçu attendra le chargement
 	local balance = WalletStore.balance(player)
 	if balance and balance + pack.credits > WalletRules.MAX_BALANCE then
 		return { ok = false, reason = "full" }, nil

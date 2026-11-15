@@ -800,13 +800,14 @@ local function debugOpening()
 	print("[DebugCrateOpening] " .. value .. " : " .. tostring(started))
 end
 
--- Cette méthode permet de montrer « + CRÉDITS » (#395, joueur connu non restreint, vitrine ou vue détail, fenêtre fermée,
--- vrais ids ou Studio) lorsque le shop s'affiche, qu'une vue change ou que la restriction change.
+-- Cette méthode permet de montrer « + CRÉDITS » (#395 : joueur connu non restreint, vitrine ou vue détail sans achat en
+-- vol, fenêtre fermée, vrais ids ou Studio) lorsque le shop s'affiche, qu'une vue ou que la restriction change.
 paintPackButton = function()
 	if not packButton then
 		return
 	end
 	packButton.Visible = gui.Enabled
+		and requesting == nil
 		and (CreditPacks.isReady() or RunService:IsStudio())
 		and LocalWallet.restricted() == false
 		and not CreditPackWindow.isOpen()
