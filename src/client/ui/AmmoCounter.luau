@@ -6,6 +6,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+local PerfMarkers = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("PerfMarkers"))
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
 local HUDRules = require(script.Parent.HUDRules)
 local UIKit = require(script.Parent.UIKit)
@@ -117,7 +118,7 @@ function AmmoCounter.init()
 		Size = UDim2.fromOffset(72, 30),
 	}, SHADOW)
 
-	RunService.Heartbeat:Connect(update)
+	RunService.Heartbeat:Connect(PerfMarkers.wrap("munitions", update))
 end
 
 return AmmoCounter
