@@ -40,7 +40,7 @@ local HEADER_SIZE = UITheme.TextSize.Min
 local ROWS_Y = HEADER_Y + HEADER_SIZE + 6
 local ROW_STEP = 32
 local ROW_TEXT = 20
-local RARITY_X = 230 -- colonne des raretés et chances
+local RARITY_X = 210 -- colonne des raretés et chances (« EXCEPTIONNEL  2,5 % » tient avant le remboursement)
 local COLUMN_WIDTH = 440
 local REFUND_ICON = 18 -- jeton devant le remboursement d'un doublon, à droite de la ligne
 local REFUND_WIDTH = 70
@@ -354,7 +354,8 @@ end
 -- Cette méthode permet de peindre ACHETER (actif, « ACHAT… » pendant un achat, inactif « TOUT OBTENU »), l'ouverture de
 -- test et la navigation (figée pendant une demande) lorsque la vue détail s'affiche, qu'une demande part ou revient.
 paintActions = function()
-	if not buyButton then
+	-- Shop fermé : rien à peindre, la vue détail se repeint en s'ouvrant (paintDetail)
+	if not (buyButton and gui.Enabled) then
 		return
 	end
 	local complete = ownsWholeCrate()
@@ -446,17 +447,17 @@ local function requestCrate(remoteName: string)
 		end
 		requesting = nil
 		paintActions()
+		if not gui.Enabled or view ~= seen then
+			-- Shop fermé ou rouvert pendant la demande : un skin gagné l'est quand même, le solde et l'inventaire suivent ;
+			-- ni scène ni message sur une autre vue que celle de la caisse demandée
+			return
+		end
 		if not (ok and type(result) == "table") then
 			showStatus("ÉCHEC")
 			return
 		end
 		if not result.ok then
 			showStatus(REFUSALS[result.reason] or "ÉCHEC")
-			return
-		end
-		if not gui.Enabled or view ~= seen then
-			-- Shop fermé ou rouvert pendant la demande : le skin est gagné, le solde et l'inventaire suivent ; ni scène ni
-			-- message sur une autre vue que celle de la caisse payée
 			return
 		end
 		local added = result.added ~= false
@@ -754,8 +755,11 @@ local function debugOpening()
 		openCrate(tonumber(index) :: number)
 		return
 	end
-	local skinId, rarityId, refundText = string.match(value, "^([^|]+)|([^|]+)|?(%d*)$")
-	local refund = tonumber(refundText or "")
+	local skinId, rarityId, refundText = string.match(value, "^([^|]+)|([^|]+)|(%d+)$")
+	if not skinId then
+		skinId, rarityId = string.match(value, "^([^|]+)|([^|]+)$")
+	end
+	local refund = if refundText then tonumber(refundText) else nil
 	if not (skinId and rarityId) or ShopScene.isOpening() then
 		warn("[DebugCrateOpening] valeur ou état invalide : " .. value)
 		return
