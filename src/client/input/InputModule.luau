@@ -42,10 +42,14 @@ local inspectPressedEdge = false
 local lastWishdir = Vector3.zero
 -- Menu en partie ouvert (#157) : touches de jeu ignorées, rien n'est tenu
 local suspended = false
+-- Parcours rejoué (#379, debug/PerfReplay) : le clavier est ignoré, les entrées viennent de applyVirtual
+local virtual = false
+-- Appuis comptés depuis le démarrage, lus par l'enregistreur de parcours (debug/PerfRecorder) sans consommer les fronts
+local pressCounts = { jump = 0, reload = 0, inspect = 0 }
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	local action = KEY_MAP[input.KeyCode]
-	if not action or suspended then
+	if not action or suspended or virtual then
 		return
 	end
 	-- Bloquer le saut si l'UI a capturé l'input (ex: chat ouvert), mais laisser passer
@@ -57,10 +61,13 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if action == "jump" then
 		jumpPressedEdge = true
 		jumpPressTime = tick()
+		pressCounts.jump += 1
 	elseif action == "reload" then
 		reloadPressedEdge = true
+		pressCounts.reload += 1
 	elseif action == "inspect" and not gameProcessed then
 		inspectPressedEdge = true
+		pressCounts.inspect += 1
 	end
 end)
 
@@ -77,7 +84,7 @@ end
 
 UserInputService.InputEnded:Connect(function(input)
 	local action = KEY_MAP[input.KeyCode]
-	if not action then
+	if not action or virtual then
 		return
 	end
 	-- Pour les actions à deux touches (L/R Shift, L/R Ctrl), ne relâcher que si aucune des deux n'est tenue
@@ -99,6 +106,45 @@ function InputModule.setSuspended(on: boolean)
 		jumpPressedEdge = false
 		reloadPressedEdge = false
 		inspectPressedEdge = false
+	end
+end
+
+-- Cette méthode permet de lire les actions tenues et les appuis comptés depuis le démarrage lorsque l'enregistreur de
+-- parcours note un tick (#379) ; ne consomme aucun front.
+function InputModule.snapshot(): ({ [string]: boolean }, { jump: number, reload: number, inspect: number })
+	return table.clone(held) :: any, table.clone(pressCounts)
+end
+
+-- Cette méthode permet de passer les entrées sur une source virtuelle (clavier ignoré) ou de rendre le clavier lorsque
+-- le rejeu d'un parcours démarre ou s'arrête (#379) ; rien n'est tenu ni en attente au changement.
+function InputModule.setVirtual(on: boolean)
+	virtual = on
+	for key in held do
+		held[key] = false
+	end
+	jumpPressedEdge = false
+	reloadPressedEdge = false
+	inspectPressedEdge = false
+end
+
+-- Cette méthode permet de poser les actions tenues et les appuis d'un tick rejoué lorsque la source virtuelle est
+-- active ; un appui pose le même front que la touche (saut horodaté pour le buffer de saut).
+function InputModule.applyVirtual(state: { [string]: boolean }, presses: { [string]: boolean })
+	if not virtual then
+		return
+	end
+	for key in held do
+		held[key] = state[key] == true
+	end
+	if presses.jump then
+		jumpPressedEdge = true
+		jumpPressTime = tick()
+	end
+	if presses.reload then
+		reloadPressedEdge = true
+	end
+	if presses.inspect then
+		inspectPressedEdge = true
 	end
 end
 

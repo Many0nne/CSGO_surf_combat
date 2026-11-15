@@ -211,20 +211,46 @@ local function reportMove(player: Player, check: string, detail: string)
 	)
 end
 
+-- Cette méthode permet de renvoyer le client à track.lastPos par une nouvelle correction numérotée lorsque le serveur
+-- refuse un paquet ou le replace ; ses paquets sont ignorés jusqu'à ce qu'il l'ait appliquée.
+local function requireCorrection(player: Player, track: Track, now: number)
+	local seq = (correctionSeqs[player] or 0) + 1
+	correctionSeqs[player] = seq
+	track.requiredAck = seq
+	track.acked = false
+	fireCorrection(player, track, now)
+end
+
 -- Cette méthode permet de refuser un paquet lorsqu'une règle de déplacement le juge impossible (seau de distance ;
 -- réutilisable par les règles suivantes, noclip et vol #177) : violation journalisée, puis le client est renvoyé à sa
 -- dernière position acceptée et ses paquets sont ignorés jusqu'à ce qu'il l'ait appliquée.
 local function refuse(player: Player, track: Track, check: string, detail: string, now: number)
 	reportMove(player, check, detail)
-	local seq = (correctionSeqs[player] or 0) + 1
-	correctionSeqs[player] = seq
-	track.requiredAck = seq
-	track.acked = false
 	track.refusedAt = now
 	-- Le client repart de lastPos vitesse nulle : l'enveloppe du vol aussi (et un client qui n'accuse jamais réception
 	-- au-dessus du vide finit déclaré tombé)
 	MovementGuardRules.restart(track.guard.flight, now, track.lastPos.Y)
-	fireCorrection(player, track, now)
+	requireCorrection(player, track, now)
+end
+
+-- Cette méthode permet de replacer un joueur vivant à une position décidée par le serveur lorsqu'un outil autorisé le
+-- demande (rejeu d'un parcours de mesure, #379) : racine posée, piste repartie de là (seau plein, noclip et vol remis à
+-- zéro), puis correction envoyée sans violation ; les paquets partis de l'ancienne position sont ignorés.
+function CharacterSync.teleport(player: Player, pos: Vector3): boolean
+	local char = player.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if not char or not root or not hum or hum.Health <= 0 then
+		return false
+	end
+	local now = os.clock()
+	local track = trackFor(player, char, root, now)
+	root.CFrame = CFrame.new(pos) * root.CFrame.Rotation
+	track.lastPos = pos
+	track.budget = CharacterSyncRules.newBudget(now)
+	track.guard = MovementGuardRules.newGuard(now, pos)
+	requireCorrection(player, track, now)
+	return true
 end
 
 -- Cette méthode permet de juger un paquet accepté par le seau avec les règles du noclip et du vol lorsque la map est

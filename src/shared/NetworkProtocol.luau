@@ -46,6 +46,9 @@ Protocol.Names = {
 	EQUIP_ITEM = "EquipItem",
 	-- Helper de playtest debug (#30) : créé uniquement dans Studio (RunService:IsStudio()), jamais en jeu publié
 	DEBUG_PLAYTEST = "DebugPlaytest",
+	-- Rejeu d'un parcours de mesure (#379) : client → serveur (position du point de contrôle) ; le serveur y replace le
+	-- personnage par une correction (CharacterSync.teleport). Refusé sauf dans Studio ou pour le créateur du jeu publié
+	PERF_ROUTE_TELEPORT = "PerfRouteTeleport",
 }
 
 function Protocol.getRemote(name: string): RemoteEvent

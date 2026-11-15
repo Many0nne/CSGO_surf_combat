@@ -209,6 +209,8 @@ RemoteGuard.RULES = {
 		args = { RemoteGuard.vector3(), RemoteGuard.number(), RemoteGuard.number(), RemoteGuard.boolean() },
 	},
 	[N.REQUEST_SPAWN] = { rate = 1, burst = 3, args = {} },
+	-- Point de contrôle d'un parcours rejoué (#379) ; droit de mesurer vérifié ensuite (PerfRules.canUse)
+	[N.PERF_ROUTE_TELEPORT] = { rate = 2, burst = 4, args = { RemoteGuard.vector3() } },
 	[N.LEAVE_ROUND] = { rate = 1, burst = 3, args = {} },
 	[N.SEND_FEEDBACK] = { rate = 0.5, burst = 3, args = { RemoteGuard.string(RemoteGuard.FEEDBACK_MAX_BYTES) } },
 	[N.SAVE_SETTINGS] = { rate = 2, burst = 5, args = { RemoteGuard.table() } },

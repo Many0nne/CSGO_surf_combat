@@ -33,6 +33,9 @@ local FrameProbe = require(script.debug.FrameProbe)
 local ClipRecorder = require(script.debug.ClipRecorder)
 local PerfOverlay = require(script.debug.PerfOverlay)
 local PerfBench = require(script.debug.PerfBench)
+local PerfRecorder = require(script.debug.PerfRecorder)
+local PerfReplay = require(script.debug.PerfReplay)
+local InputModule = require(script.input.InputModule)
 
 local player = Players.LocalPlayer
 -- Secondes d'attente au plus du corps entier d'un personnage avant de le prendre en main (#328)
@@ -157,3 +160,13 @@ FrameProbe.init({ player = player, fpsCamera = FPSCamera, movement = MovementCon
 -- (cf. docs/performance.md).
 PerfOverlay.init(player)
 PerfBench.init(player)
+-- Parcours enregistré puis rejoué pour mesurer en mouvement (#379) : attributs joueur `PerfRecord` (puis F7) et
+-- `PerfRun`, mêmes droits que l'overlay (cf. docs/performance.md, « Parcours rejoué »).
+PerfRecorder.init({ player = player, fpsCamera = FPSCamera, movement = MovementController, input = InputModule })
+PerfReplay.init({
+	player = player,
+	fpsCamera = FPSCamera,
+	movement = MovementController,
+	input = InputModule,
+	gameState = GameStateController,
+})
