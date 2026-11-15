@@ -946,8 +946,10 @@ Achat de crédits en Robux (règles : `docs/economie.md`). Sur la page SHOP seul
   sous la barre du menu dont le solde reste visible) : titre « PACKS DE CRÉDITS », trois packs côte à côte (jeton
   56 px, montant Oswald gras 52 px, « CRÉDITS », prix « 99 R$ » dans un contour os comme ACHETER), une ligne atténuée
   « PAIEMENT EN ROBUX · LES CRÉDITS ARRIVENT DÈS QUE ROBLOX CONFIRME L'ACHAT », RETOUR en bas au centre. Pendant
-  qu'elle est ouverte, la colonne du shop est masquée (elle chevaucherait le bloc) et la salle ne réagit plus à la
-  souris (`ShopScene.setInteractive`). Un clic sur un prix : le serveur ouvre le prompt de Roblox ; un refus s'affiche
+  qu'elle est ouverte, la colonne du shop et l'aide de la vitrine sont masquées (elles chevaucheraient le bloc ou
+  parleraient de caisses inertes) et la salle ne réagit plus à la souris (`ShopScene.setInteractive`). Un voile plein
+  écran (`Scrim`, 0,35) passe sous le voile central : sans lui, les étiquettes claires de la vitrine ressortaient sur
+  les côtés et concurrençaient les packs (vu dans Studio). Un clic sur un prix : le serveur ouvre le prompt de Roblox ; un refus s'affiche
   sous les packs (étiquette rouge d'impact, 3 s), les crédits reçus en ambre (« +500 CRÉDITS »).
 - Le prix en Robux s'écrit « R$ » : pas d'icône Robux dans les polices de l'interface.
 

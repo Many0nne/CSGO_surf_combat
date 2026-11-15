@@ -31,6 +31,7 @@ local AMOUNT_SIZE = 52
 local PRICE_SIZE = Vector2.new(160, 42)
 local NOTE_Y = PACKS_Y + 290
 local STATUS_TIME = 3 -- s d'affichage d'un message
+local DIM_TRANSPARENCY = 0.35 -- voile plein écran sous le voile central (salle du shop assombrie)
 -- Motifs de refus du serveur (ReceiptService), affichés sous les packs
 local REFUSALS = {
 	rate = "PATIENTE",
@@ -224,6 +225,16 @@ end
 function CreditPackWindow.init(onClose: () -> ())
 	-- Sous les onglets du menu (4), au-dessus du shop (2) : le solde de la barre reste visible et suit les achats
 	page = MenuPage.new("CreditPackWindow", 3, "PACKS DE CRÉDITS")
+	-- Sous le voile central : la vitrine du shop garde des étiquettes claires qui ressortaient sur les côtés du voile
+	-- et concurrençaient les packs (vu dans Studio) ; toute la salle est assombrie
+	UIKit.frame({
+		Name = "Dim",
+		BackgroundColor3 = C.Scrim,
+		BackgroundTransparency = DIM_TRANSPARENCY,
+		Size = UDim2.fromScale(1, 1),
+		ZIndex = -1,
+		Parent = (page.group.Parent :: any) :: Instance,
+	})
 	local row = UIKit.frame({
 		Name = "Packs",
 		BackgroundTransparency = 1,

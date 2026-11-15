@@ -108,6 +108,7 @@ local PACKS_Y = 100 -- sous « GAINS DU JOUR » de la barre du menu (68 à 90)
 local PACKS_SIZE = Vector2.new(124, 34)
 local shopColumn: Frame
 local shopVeil: Frame
+local overviewHints: Frame -- aide de la vitrine, hors de la colonne (bas de l'écran)
 local packButton: Frame
 -- Motifs de refus du serveur (CrateService), affichés sous ACHETER
 local REFUSALS = {
@@ -333,8 +334,9 @@ local function buildOverview(column: Frame, root: Frame)
 		Position = UDim2.new(0, EDGE, 1, -18),
 	})
 	UIKit.keyHint(hints, 1, "CLIC", "VOIR LE CONTENU ET ACHETER")
+	overviewHints = hints
 	overview:GetPropertyChangedSignal("Visible"):Connect(function()
-		hints.Visible = overview.Visible
+		hints.Visible = overview.Visible and not CreditPackWindow.isOpen()
 	end)
 end
 
@@ -821,6 +823,7 @@ local function closePacks()
 	ShopScene.setInteractive(true)
 	shopColumn.Visible = true
 	shopVeil.Visible = true
+	overviewHints.Visible = overview.Visible
 	paintPackButton()
 end
 
@@ -834,6 +837,8 @@ local function openPacks()
 	if CreditPackWindow.isOpen() then
 		shopColumn.Visible = false
 		shopVeil.Visible = false
+		-- L'aide de la vitrine parle de cliquer les caisses, inertes sous la fenêtre
+		overviewHints.Visible = false
 		ShopScene.setInteractive(false)
 	end
 	paintPackButton()
