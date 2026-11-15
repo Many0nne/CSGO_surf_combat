@@ -2,9 +2,9 @@
 -- leur prix et leur contenu par rareté, tirage d'une ouverture, et rangement des caisses dans la vitrine de la vue
 -- d'ensemble. Règles pures, testées (tests/specs/ShopCatalog.spec.luau).
 --
--- Provisoire : prix, raretés et chances sont des valeurs d'attente (points ouverts de #347 et #332). Les prix sont en
--- crédits, la monnaie du jeu (#391, WalletRules), mais l'achat n'existe pas encore : le prix affiché ne fait jamais foi
--- côté serveur.
+-- Provisoire : prix, raretés, chances et remboursements sont des valeurs d'attente (points ouverts de #347, #332 et
+-- #393). Les prix sont en crédits, la monnaie du jeu (#391, WalletRules) ; l'achat (#393, CrateService) relit le prix et
+-- le remboursement d'un doublon dans ce module côté serveur : ce que le client affiche ne fait jamais foi.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local WalletRules = require(ReplicatedStorage.Shared.WalletRules)
@@ -12,7 +12,8 @@ local WalletRules = require(ReplicatedStorage.Shared.WalletRules)
 local ShopCatalog = {}
 
 export type Rgb = { number }
-export type Rarity = { id: string, label: string, chance: number, color: Rgb }
+-- `refund` : part du prix de la caisse rendue en crédits pour un doublon (#393), en pour cent (entier, 0 à 100)
+export type Rarity = { id: string, label: string, chance: number, color: Rgb, refund: number }
 -- `weapon` : id de l'arme dont la caisse donne un skin (`id` d'un item `weapon` de InventoryRules.ITEMS) ; `contents` :
 -- nom d'apparence des skins (`appearance` de InventoryRules.ITEMS) par id de rareté, le skin étant celui de cette arme
 export type Crate = {
@@ -29,11 +30,13 @@ export type Slot = { index: number, row: number, column: number }
 
 ShopCatalog.CURRENCY = WalletRules.CURRENCY
 
--- Raretés, de la plus courante à la plus rare ; chances en pour cent (total 100)
+-- Raretés, de la plus courante à la plus rare ; chances en pour cent (total 100). Remboursement d'un doublon (#393) en
+-- part du prix, pour qu'une caisse d'un autre prix suive sans nouvelle table : 20 / 40 / 70 % (100, 200, 350 crédits
+-- pour une caisse à 500)
 ShopCatalog.RARITIES = {
-	{ id = "common", label = "COMMUN", chance = 70, color = { 150, 160, 172 } },
-	{ id = "rare", label = "RARE", chance = 25, color = { 70, 120, 230 } },
-	{ id = "exceptional", label = "EXCEPTIONNEL", chance = 5, color = { 170, 70, 220 } },
+	{ id = "common", label = "COMMUN", chance = 70, color = { 150, 160, 172 }, refund = 20 },
+	{ id = "rare", label = "RARE", chance = 25, color = { 70, 120, 230 }, refund = 40 },
+	{ id = "exceptional", label = "EXCEPTIONNEL", chance = 5, color = { 170, 70, 220 }, refund = 70 },
 } :: { Rarity }
 
 -- Caisses en vente, dans l'ordre de la vitrine : une par arme et par série, une ouverture donne un seul skin de
@@ -225,6 +228,78 @@ function ShopCatalog.cycle(index: number, step: number, count: number): number
 		return 1
 	end
 	return (index - 1 + step) % count + 1
+end
+
+-- Cette méthode permet de lire les crédits rendus pour un doublon d'une rareté (part `refund` du prix, arrondie en
+-- dessous ; 0 si inconnue) lorsque le serveur règle un achat ou que la vue détail l'affiche (#393).
+function ShopCatalog.refund(crate: Crate, rarityId: string): number
+	for _, rarity in ShopCatalog.RARITIES do
+		if rarity.id == rarityId then
+			local share = math.clamp(math.floor(rarity.refund), 0, 100)
+			return crate.price * share // 100
+		end
+	end
+	return 0
+end
+
+-- Mêmes proportions que `draw` ; arrondi au plus fort reste, à égalité la ligne la plus courante ; vide si total nul.
+-- Cette méthode permet de convertir les chances en dixièmes de pour cent de somme exacte 1000 lorsque la vue détail les
+-- affiche (#393, règle Roblox des objets aléatoires payants).
+function ShopCatalog.chances(rows: { Row }): { number }
+	local total = 0
+	for _, row in rows do
+		total += math.max(row.rarity.chance, 0)
+	end
+	if total <= 0 then
+		return {}
+	end
+	local tenths, remainders, given = {}, {}, 0
+	for i, row in rows do
+		local exact = math.max(row.rarity.chance, 0) / total * 1000
+		tenths[i] = math.floor(exact)
+		remainders[i] = exact - tenths[i]
+		given += tenths[i]
+	end
+	local order = {}
+	for i = 1, #rows do
+		table.insert(order, i)
+	end
+	table.sort(order, function(a, b)
+		if remainders[a] ~= remainders[b] then
+			return remainders[a] > remainders[b]
+		end
+		return a < b
+	end)
+	for k = 1, 1000 - given do
+		local i = order[(k - 1) % #order + 1]
+		tenths[i] += 1
+	end
+	return tenths
+end
+
+-- Cette méthode permet d'écrire une chance en dixièmes de pour cent (« 70 % », « 2,5 % ») lorsque la vue détail
+-- l'affiche.
+function ShopCatalog.chanceLabel(tenths: number): string
+	if tenths % 10 == 0 then
+		return string.format("%d %%", tenths // 10)
+	end
+	return string.format("%d,%d %%", tenths // 10, tenths % 10)
+end
+
+-- Cette méthode permet de savoir si un joueur possède tous les skins d'une caisse (false pour une caisse vide) lorsque
+-- la vue détail choisit ACHETER ou TOUT OBTENU et que le serveur reçoit un achat (#393).
+function ShopCatalog.allOwned(crate: Crate, items: { any }, owned: { [string]: boolean }): boolean
+	local rows = ShopCatalog.contents(crate, items)
+	if #rows == 0 then
+		return false
+	end
+	for _, row in rows do
+		-- Le skin que `draw` donne pour cette rareté
+		if not owned[row.skins[1]] then
+			return false
+		end
+	end
+	return true
 end
 
 -- Cette méthode permet d'écrire le montant d'un prix (« 500 », « 1 500 ») lorsque la vitrine ou la vue détail

@@ -1,10 +1,13 @@
 -- Écran Shop (#347, onglet SHOP du menu, docs/ui.md « Shop ») : interface posée sur la salle de présentation
 -- (ShopScene), colonne à gauche sur fond de coin comme l'écran d'équipement. Vue d'ensemble : titre « CAISSES », les
 -- caisses en vente sont dans la vitrine (nom et prix sur leur étiquette), un clic sur une caisse ouvre la vue détail.
--- Vue détail : « ‹ SHOP » (retour à la vitrine), nom de la caisse, contenu par rareté avec ses chances, prix, ACHETER
--- (inactif tant que l'achat n'existe pas, étiquette BIENTÔT) et passage à la caisse voisine. Pour l'admin et dans
--- Studio, OUVRIR à la place d'ACHETER (#332) : le serveur tire le skin, la scène joue l'ouverture, la colonne laisse
--- place à la révélation (« OBTENU », skin et rareté) jusqu'au clic.
+-- Vue détail : « ‹ SHOP » (retour à la vitrine), nom de la caisse, contenu par rareté avec ses chances en pour cent
+-- (total exactement 100 %) et le remboursement d'un doublon, prix, ACHETER et passage à la caisse voisine.
+-- ACHETER (#393, remote `BuyCrate`) : le serveur débite, tire et donne le skin (ou rembourse le doublon) en une écriture,
+-- puis la scène joue l'ouverture et la colonne laisse place à la révélation (« OBTENU » ou « DOUBLON · +N CRÉDITS »,
+-- skin et rareté) jusqu'au clic. Pendant l'achat : « ACHAT… », pas de second clic ; tout le contenu possédé : ACHETER
+-- inactif « TOUT OBTENU » ; refus ou échec : message sous le bouton. Pour l'admin et dans Studio, ouverture de test
+-- gratuite en plus (#332, remote `OpenCrate`), sous ACHETER.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -14,6 +17,7 @@ local InventoryRules = require(Shared:WaitForChild("InventoryRules"))
 local NetworkProtocol = require(Shared:WaitForChild("NetworkProtocol"))
 local ShopCatalog = require(Shared:WaitForChild("ShopCatalog"))
 local UITheme = require(Shared:WaitForChild("UITheme"))
+local WalletRules = require(Shared:WaitForChild("WalletRules"))
 local ShopScene = require(script.Parent.Parent.systems.game.ShopScene)
 local MenuPage = require(script.Parent.MenuPage)
 local MenuShot = require(script.Parent.MenuShot)
@@ -31,12 +35,18 @@ local LABEL_SIZE = 20
 local TITLE_Y = LABEL_Y + 24
 local TITLE_SIZE = MenuPage.TitleSize
 local SUBTITLE_Y = TITLE_Y + TITLE_SIZE + 10
-local ROWS_Y = SUBTITLE_Y + 38
+local HEADER_Y = SUBTITLE_Y + 34 -- en-têtes CHANCE et SI DOUBLON au-dessus du contenu (#393)
+local HEADER_SIZE = UITheme.TextSize.Min
+local ROWS_Y = HEADER_Y + HEADER_SIZE + 6
 local ROW_STEP = 32
 local ROW_TEXT = 20
-local RARITY_X = 250 -- colonne des raretés et chances
+local RARITY_X = 210 -- colonne des raretés et chances (« EXCEPTIONNEL  2,5 % » tient avant le remboursement)
 local COLUMN_WIDTH = 440
+local REFUND_ICON = 18 -- jeton devant le remboursement d'un doublon, à droite de la ligne
+local REFUND_WIDTH = 70
 local BUY_SIZE = Vector2.new(160, 42)
+local STATUS_GAP = 10 -- entre ACHETER et le message de refus
+local TEST_GAP = 46 -- entre ACHETER et l'ouverture de test (admin, Studio), sous la place du message
 local PRICE_SIZE = 44
 local PRICE_ICON = 34 -- jeton du crédit devant le prix (#391)
 local PRICE_ICON_LIFT = 6
@@ -65,25 +75,42 @@ local back: MenuShot.Choice
 local current = 1
 local lines: { Frame } = {} -- lignes du contenu de la caisse ouverte, dans l'ordre de ShopCatalog.contents
 local DIMMED = 0.65 -- atténuation des autres lignes quand une arme du tableau est en gros plan (#358)
--- Ouverture (#332)
-local buySoon: Frame
-local openButton: Frame
-local openLabel: TextLabel
-local openStatus: TextLabel
+-- Achat (#393) et ouverture de test (#332)
+local buyButton: Frame
+local buyStroke: UIStroke
+local buyChoice: MenuShot.Choice
+local buyOwned: TextLabel -- étiquette TOUT OBTENU
+local testRow: Frame
+local openChoice: MenuShot.Choice
+local status: TextLabel
 local reveal: Frame
+local revealHeading: { TextLabel }
 local revealTitle: { TextLabel }
 local revealRarity: { TextLabel }
-local requesting = false
+local requesting: string? = nil -- remote de la demande en vol (achat ou ouverture de test)
+local navigation: { MenuShot.Choice } = {} -- « ‹ SHOP » et flèches de la caisse voisine, figés pendant une demande
+-- Numéro de la vue affichée, augmenté à chaque changement (caisse, vitrine, shop fermé) : une réponse arrivée après un
+-- changement n'est plus jouée
+local view = 0
 local statusToken = 0
 local DEBUG_ATTRIBUTE = "DebugCrateOpening" -- Studio seulement, voir debugOpening
--- Motifs de refus du serveur (CrateService), affichés à côté d'OUVRIR
+local BUY_TEXT = "ACHETER"
+local BUYING_TEXT = "ACHAT…"
+local OPEN_TEXT = "OUVERTURE DE TEST  ·  GRATUITE"
+-- Motifs de refus du serveur (CrateService), affichés sous ACHETER
 local REFUSALS = {
 	rate = "PATIENTE",
+	busy = "ACHAT DÉJÀ EN COURS",
 	loading = "INVENTAIRE EN CHARGEMENT",
 	forbidden = "RÉSERVÉ",
 	unknown = "CAISSE INCONNUE",
 	empty = "CAISSE VIDE",
+	owned = "TOUT OBTENU",
+	insufficient = "CRÉDITS INSUFFISANTS",
+	-- Pas « rien n'est débité » : une écriture passée dont la vérification échoue est aussi `failed` (InventoryStore)
+	failed = "ACHAT IMPOSSIBLE  ·  RÉESSAIE PLUS TARD",
 }
+local paintActions: () -> ()
 
 -- Cette méthode permet de changer un texte et son ombre ensemble lorsqu'un libellé de l'écran change.
 local function setText(pair: { TextLabel }, text: string)
@@ -125,6 +152,14 @@ local function highlightRow(row: number?)
 					item:SetAttribute("BaseTransparency", base)
 				end
 				item.BackgroundTransparency = base + (1 - base) * dim
+			elseif item:IsA("ImageLabel") then
+				-- Jeton du remboursement (#393)
+				local base = item:GetAttribute("BaseTransparency")
+				if type(base) ~= "number" then
+					base = item.ImageTransparency
+					item:SetAttribute("BaseTransparency", base)
+				end
+				item.ImageTransparency = base + (1 - base) * dim
 			end
 		end
 	end
@@ -144,6 +179,7 @@ local function paintDetail()
 	end
 	table.clear(lines)
 	local contents = ShopCatalog.contents(crate, InventoryRules.ITEMS)
+	local chances = ShopCatalog.chances(contents)
 	for i, row in contents do
 		local color = rgb(row.rarity.color)
 		local line = UIKit.frame({
@@ -172,20 +208,54 @@ local function paintDetail()
 		}, 2)
 		label(line, {
 			Name = "Rarity",
-			Text = string.format("%s  %d %%", row.rarity.label, row.rarity.chance),
+			Text = string.format("%s  %s", row.rarity.label, ShopCatalog.chanceLabel(chances[i] or 0)),
 			FontFace = F.Display,
 			TextSize = 18,
 			TextColor3 = color,
 			Position = UDim2.fromOffset(RARITY_X, 0),
-			Size = UDim2.fromOffset(COLUMN_WIDTH - RARITY_X, ROW_STEP),
+			Size = UDim2.fromOffset(COLUMN_WIDTH - RARITY_X - REFUND_WIDTH, ROW_STEP),
 		}, 1)
+		-- Remboursement d'un doublon (#393) : jeton puis montant, calé à droite de la ligne
+		local refund = UIKit.frame({
+			Name = "Refund",
+			BackgroundTransparency = 1,
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.fromOffset(COLUMN_WIDTH, 0),
+			Size = UDim2.fromOffset(REFUND_WIDTH, ROW_STEP),
+			Parent = line,
+		})
+		UIKit.create("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			HorizontalAlignment = Enum.HorizontalAlignment.Right,
+			VerticalAlignment = Enum.VerticalAlignment.Center,
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			Padding = UDim.new(0, 5),
+			Parent = refund,
+		})
+		UIKit.creditIcon(refund, REFUND_ICON, 1, { LayoutOrder = 0 })
+		UIKit.text({
+			Name = "Amount",
+			Text = WalletRules.format(ShopCatalog.refund(crate, row.rarity.id)),
+			FontFace = F.Display,
+			TextSize = 18,
+			TextColor3 = C.TextSoft,
+			AutomaticSize = Enum.AutomaticSize.X,
+			Size = UDim2.fromOffset(0, ROW_STEP),
+			LayoutOrder = 1,
+			ZIndex = 2,
+			Parent = refund,
+		})
 	end
 	local below = ROWS_Y + #contents * ROW_STEP + 10
 	filet.Position = UDim2.fromOffset(EDGE, below)
 	priceRow.Position = UDim2.fromOffset(EDGE, below + 14)
-	actions.Position = UDim2.fromOffset(EDGE, below + 14 + PRICE_SIZE + 26)
+	local actionsY = below + 14 + PRICE_SIZE + 26
+	actions.Position = UDim2.fromOffset(EDGE, actionsY)
+	status.Position = UDim2.fromOffset(EDGE, actionsY + BUY_SIZE.Y + STATUS_GAP)
+	testRow.Position = UDim2.fromOffset(EDGE, actionsY + BUY_SIZE.Y + TEST_GAP)
 	setText(price, ShopCatalog.priceLabel(crate))
 	position.Text = string.format("CAISSE  %d / %d", current, #ShopCatalog.CRATES)
+	paintActions()
 end
 
 -- Cette méthode permet d'ouvrir la vue détail d'une caisse (glissement de la caméra jusqu'au socle) lorsque le joueur
@@ -195,6 +265,7 @@ local function openCrate(index: number)
 		return
 	end
 	current = index
+	view += 1
 	overview.Visible = false
 	detail.Visible = true
 	paintDetail()
@@ -204,6 +275,7 @@ end
 -- Cette méthode permet de revenir à la vitrine (toutes les caisses) lorsque le joueur clique « ‹ SHOP » ou que l'écran
 -- s'ouvre.
 local function openOverview()
+	view += 1
 	overview.Visible = true
 	detail.Visible = false
 	back.reset()
@@ -252,65 +324,87 @@ local function buildOverview(column: Frame, root: Frame)
 	end)
 end
 
--- Cette méthode permet de construire le bouton ACHETER inactif (contour atténué, étiquette BIENTÔT) lorsque la vue
--- détail est construite : l'achat côté serveur n'existe pas encore (#347).
-local function buildBuy(parent: Frame)
-	local buy = UIKit.frame({
-		Name = "Buy",
-		Size = UDim2.fromOffset(BUY_SIZE.X, BUY_SIZE.Y),
-		BackgroundTransparency = 1,
-		LayoutOrder = 1,
-		Parent = parent,
-	})
-	UIKit.stroke(buy, C.Muted, 2)
-	UIKit.text({
-		Name = "Label",
-		Text = "ACHETER",
-		FontFace = F.Display,
-		TextSize = 24,
-		TextColor3 = C.Muted,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		Size = UDim2.fromScale(1, 1),
-		Parent = buy,
-	})
-	local soon = UIKit.tag(buy, "Soon", 0, C.Muted, C.Ground)
-	soon.Text = "BIENTÔT"
-	soon.AnchorPoint = Vector2.new(1, 0.5)
-	soon.Position = UDim2.new(1, 12, 0, 0)
-	soon.ZIndex = 3
-	buySoon = buy
+-- Cette méthode permet de changer le texte d'un choix et de son ombre ensemble lorsqu'un bouton change d'état.
+local function setChoiceText(choice: MenuShot.Choice, text: string)
+	for _, name in { "Label", "LabelShadow" } do
+		local item = choice.button:FindFirstChild(name, true)
+		if item and item:IsA("TextLabel") then
+			item.Text = text
+		end
+	end
 end
 
--- Cette méthode permet de savoir si le joueur local peut ouvrir une caisse (Studio, ou rôle Admin affiché par le
--- serveur) lorsque la vue détail choisit entre OUVRIR et ACHETER ; le serveur revérifie de son côté.
+-- Cette méthode permet de savoir si le joueur local peut ouvrir une caisse gratuitement (Studio, ou rôle Admin affiché
+-- par le serveur) lorsque la vue détail montre ou non l'ouverture de test ; le serveur revérifie de son côté.
 local function canOpen(): boolean
 	return RunService:IsStudio() or Players.LocalPlayer:GetAttribute("Role") == "Admin"
 end
 
--- Cette méthode permet de montrer OUVRIR ou ACHETER (BIENTÔT) selon le droit d'ouvrir lorsque la vue détail s'affiche
--- ou que le rôle du joueur arrive.
-local function paintActions()
-	local allowed = canOpen()
-	openButton.Visible = allowed
-	buySoon.Visible = not allowed
+-- Cette méthode permet de savoir si le joueur local possède déjà tout le contenu de la caisse courante (attribut
+-- informatif `OwnedItems`, relu ici pour ne pas dépendre de l'ordre des abonnés) lorsque ACHETER se peint.
+local function ownsWholeCrate(): boolean
+	local crate = ShopCatalog.CRATES[current]
+	if not crate then
+		return false
+	end
+	local owned = InventoryRules.decode(Players.LocalPlayer:GetAttribute(InventoryRules.ATTRIBUTE))
+	return ShopCatalog.allOwned(crate, InventoryRules.ITEMS, owned)
 end
 
--- Cette méthode permet d'afficher un refus à côté d'OUVRIR pendant 2,5 s lorsque le serveur refuse l'ouverture.
-local function showStatus(text: string)
+-- Cette méthode permet de peindre ACHETER (actif, « ACHAT… » pendant un achat, inactif « TOUT OBTENU »), l'ouverture de
+-- test et la navigation (figée pendant une demande) lorsque la vue détail s'affiche, qu'une demande part ou revient.
+paintActions = function()
+	-- Shop fermé : rien à peindre, la vue détail se repeint en s'ouvrant (paintDetail)
+	if not (buyButton and gui.Enabled) then
+		return
+	end
+	local complete = ownsWholeCrate()
+	local busy = requesting ~= nil
+	local buying = requesting == NetworkProtocol.Names.BUY_CRATE
+	buyChoice.setEnabled(not (busy or complete))
+	setChoiceText(buyChoice, if buying then BUYING_TEXT else BUY_TEXT)
+	buyStroke.Color = if complete or busy then C.Muted else C.Bone
+	buyOwned.Visible = complete and not buying
+	testRow.Visible = canOpen()
+	openChoice.setEnabled(not busy)
+	-- Pendant une demande, la caisse affichée reste celle qui est payée : l'ouverture se joue sur son socle
+	for _, choice in navigation do
+		choice.setEnabled(not busy)
+	end
+end
+
+-- Cette méthode permet d'afficher un message sous ACHETER pendant 3 s (refus ou échec en rouge d'impact, `ok` en ambre)
+-- lorsque le serveur répond sans que l'ouverture puisse se jouer.
+local function showStatus(text: string, ok: boolean?)
 	statusToken += 1
 	local token = statusToken
-	openStatus.Text = text
-	openStatus.Visible = true
-	task.delay(2.5, function()
+	status.Text = text
+	status.BackgroundColor3 = if ok then C.Accent else C.HitRed
+	status.TextColor3 = if ok then C.Ground else C.Bone
+	status.Visible = true
+	task.delay(3, function()
 		if token == statusToken then
-			openStatus.Visible = false
+			status.Visible = false
 		end
 	end)
 end
 
--- Cette méthode permet d'afficher la révélation (skin obtenu, arme, rareté dans sa couleur) lorsque l'ouverture montre
--- l'arme habillée.
-local function showReveal(crate: ShopCatalog.Crate, skinId: string)
+-- Cette méthode permet d'écrire la ligne au-dessus du skin révélé lorsque l'ouverture le montre : « OBTENU », ou pour un
+-- skin déjà possédé « DOUBLON », suivi des crédits rendus par un achat (« DOUBLON · +200 CRÉDITS », #393).
+local function revealHeadline(added: boolean, refund: number): string
+	if added then
+		return "OBTENU"
+	elseif refund > 0 then
+		return string.format("DOUBLON  ·  +%s %s", WalletRules.format(refund), ShopCatalog.CURRENCY)
+	end
+	return "DOUBLON"
+end
+
+-- Cette méthode permet d'afficher la révélation (ligne d'en-tête, skin, rareté dans sa couleur) lorsque l'ouverture
+-- montre l'arme habillée ; un doublon s'écrit en ambre.
+local function showReveal(crate: ShopCatalog.Crate, skinId: string, added: boolean, refund: number)
+	setText(revealHeading, revealHeadline(added, refund))
+	revealHeading[1].TextColor3 = if added then C.TextSoft else C.Accent
 	for _, row in ShopCatalog.contents(crate, InventoryRules.ITEMS) do
 		if table.find(row.skins, skinId) then
 			setText(revealTitle, table.concat(row.weapons, " · ") .. "  " .. row.name)
@@ -333,25 +427,31 @@ local function endOpening()
 	paintDetail()
 end
 
--- Cette méthode permet de demander au serveur d'ouvrir la caisse courante, puis de jouer l'ouverture avec le skin tiré
--- (colonne masquée pendant la charge) lorsque le joueur clique OUVRIR ; un refus s'affiche à côté du bouton.
-local function requestOpen()
+-- Cette méthode permet de demander la caisse courante au serveur (`remoteName` : achat ou ouverture de test), puis de
+-- jouer l'ouverture du skin reçu lorsque le joueur clique ; une demande à la fois, navigation figée jusqu'à la réponse.
+local function requestCrate(remoteName: string)
 	local crate = ShopCatalog.CRATES[current]
 	if requesting or not crate or ShopScene.isOpening() then
 		return
 	end
-	requesting = true
-	openLabel.Text = "…"
+	requesting = remoteName
+	local seen = view
+	paintActions()
 	task.spawn(function()
-		local remote = ReplicatedStorage:FindFirstChild(NetworkProtocol.Names.OPEN_CRATE)
+		local remote = ReplicatedStorage:FindFirstChild(remoteName)
 		local ok, result = false, nil
 		if remote and remote:IsA("RemoteFunction") then
 			ok, result = pcall(function()
 				return remote:InvokeServer(crate.id)
 			end)
 		end
-		requesting = false
-		openLabel.Text = "OUVRIR"
+		requesting = nil
+		paintActions()
+		if not gui.Enabled or view ~= seen then
+			-- Shop fermé ou rouvert pendant la demande : un skin gagné l'est quand même, le solde et l'inventaire suivent ;
+			-- ni scène ni message sur une autre vue que celle de la caisse demandée
+			return
+		end
 		if not (ok and type(result) == "table") then
 			showStatus("ÉCHEC")
 			return
@@ -360,48 +460,75 @@ local function requestOpen()
 			showStatus(REFUSALS[result.reason] or "ÉCHEC")
 			return
 		end
-		if not gui.Enabled or ShopCatalog.CRATES[current] ~= crate then
-			return -- le joueur a quitté le shop ou changé de caisse pendant la requête : le skin est quand même gagné
-		end
+		local added = result.added ~= false
+		local refund = if type(result.refund) == "number" then result.refund else 0
 		detail.Visible = false
 		local started = ShopScene.playOpening(result.skinId, result.rarity, function()
-			showReveal(crate, result.skinId)
+			showReveal(crate, result.skinId, added, refund)
 		end, endOpening)
 		if not started then
+			-- Le serveur a déjà donné le skin (ou remboursé) : le dire, même sans la scène
 			detail.Visible = true
-			showStatus("ÉCHEC")
+			showStatus(revealHeadline(added, refund), true)
 		end
 	end)
 end
 
--- Cette méthode permet de construire OUVRIR (contour os, survol en rouge d'impact) et son étiquette de refus lorsque
--- la vue détail est construite.
-local function buildOpen(parent: Frame)
-	openButton = UIKit.frame({
-		Name = "Open",
+-- Cette méthode permet de construire ACHETER (contour os, survol en rouge d'impact, étiquette TOUT OBTENU quand tout
+-- est possédé) et le message de refus sous les actions lorsque la vue détail est construite.
+local function buildBuy(parent: Frame)
+	buyButton = UIKit.frame({
+		Name = "Buy",
 		Size = UDim2.fromOffset(BUY_SIZE.X, BUY_SIZE.Y),
 		BackgroundTransparency = 1,
 		LayoutOrder = 1,
-		Visible = false,
 		Parent = parent,
 	})
-	UIKit.stroke(openButton, C.Bone, 2)
-	local choice = MenuShot.textChoice({
-		text = "OUVRIR",
+	buyStroke = UIKit.stroke(buyButton, C.Bone, 2)
+	buyChoice = MenuShot.textChoice({
+		text = BUY_TEXT,
 		font = F.Display,
 		size = 24,
 		color = C.Bone,
 		anchor = Vector2.new(0.5, 0.5),
 		position = UDim2.fromScale(0.5, 0.5),
-		parent = openButton,
-		action = requestOpen,
+		parent = buyButton,
+		action = function()
+			requestCrate(NetworkProtocol.Names.BUY_CRATE)
+		end,
 	})
-	openLabel = choice.button:FindFirstChild("Label", true) :: TextLabel
-	openStatus = UIKit.tag(openButton, "Status", 0, C.HitRed, C.Bone)
-	openStatus.AnchorPoint = Vector2.new(0, 0.5)
-	openStatus.Position = UDim2.new(1, 12, 0.5, 0)
-	openStatus.ZIndex = 3
-	openStatus.Visible = false
+	-- Même étiquette que BIENTÔT avant l'achat (#347) : os atténué à texte sombre, à cheval sur le coin du bouton
+	buyOwned = UIKit.tag(buyButton, "Owned", 0, C.Muted, C.Ground)
+	buyOwned.Text = "TOUT OBTENU"
+	buyOwned.AnchorPoint = Vector2.new(1, 0.5)
+	buyOwned.Position = UDim2.new(1, 12, 0, 0)
+	buyOwned.ZIndex = 3
+	buyOwned.Visible = false
+end
+
+-- Cette méthode permet de construire le message de refus (rouge d'impact, texte os) et l'ouverture de test gratuite
+-- (admin et Studio, #332 : texte atténué sous ACHETER) lorsque la vue détail est construite.
+local function buildTestAndStatus(parent: Frame)
+	status = UIKit.tag(parent, "Status", 0, C.HitRed, C.Bone)
+	status.ZIndex = 3
+	status.Visible = false
+	testRow = UIKit.frame({
+		Name = "TestOpen",
+		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(COLUMN_WIDTH, 24),
+		Visible = false,
+		Parent = parent,
+	})
+	openChoice = MenuShot.textChoice({
+		text = OPEN_TEXT,
+		font = F.DisplayMedium,
+		size = UITheme.TextSize.Min,
+		color = C.TextSoft,
+		parent = testRow,
+		action = function()
+			requestCrate(NetworkProtocol.Names.OPEN_CRATE)
+		end,
+	})
 end
 
 -- Cette méthode permet de construire la révélation (« OBTENU », arme et skin, rareté, aide CLIC · CONTINUER) lorsque
@@ -414,14 +541,14 @@ local function buildReveal(column: Frame, root: Frame)
 		Visible = false,
 		Parent = column,
 	})
-	label(reveal, {
+	revealHeading = label(reveal, {
 		Name = "Label",
 		Text = "OBTENU",
 		FontFace = F.DisplayMedium,
 		TextSize = LABEL_SIZE,
 		TextColor3 = C.TextSoft,
 		Position = UDim2.fromOffset(EDGE, LABEL_Y),
-		Size = UDim2.fromOffset(200, LABEL_SIZE + 4),
+		Size = UDim2.fromOffset(COLUMN_WIDTH, LABEL_SIZE + 4),
 	}, 2)
 	revealTitle = label(reveal, {
 		Name = "Title",
@@ -470,6 +597,7 @@ local function buildDetail(column: Frame)
 		parent = detail,
 		action = openOverview,
 	})
+	table.insert(navigation, back)
 	title = label(detail, {
 		Name = "Title",
 		FontFace = F.Display,
@@ -484,6 +612,27 @@ local function buildDetail(column: Frame)
 		Size = UDim2.fromOffset(COLUMN_WIDTH, 18),
 	})
 	subtitle = { text, shadow }
+	-- En-têtes du contenu (#393) : chance de chaque rareté (total 100 %) et crédits rendus pour un doublon
+	label(detail, {
+		Name = "ChanceHeader",
+		Text = "CHANCE",
+		FontFace = F.DisplayMedium,
+		TextSize = HEADER_SIZE,
+		TextColor3 = C.TextSoft,
+		Position = UDim2.fromOffset(EDGE + RARITY_X, HEADER_Y),
+		Size = UDim2.fromOffset(COLUMN_WIDTH - RARITY_X - REFUND_WIDTH, HEADER_SIZE + 2),
+	}, 1)
+	label(detail, {
+		Name = "RefundHeader",
+		Text = "SI DOUBLON",
+		FontFace = F.DisplayMedium,
+		TextSize = HEADER_SIZE,
+		TextColor3 = C.TextSoft,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.fromOffset(EDGE + COLUMN_WIDTH, HEADER_Y),
+		Size = UDim2.fromOffset(120, HEADER_SIZE + 2),
+	}, 1)
 	rows = UIKit.frame({
 		Name = "Contents",
 		BackgroundTransparency = 1,
@@ -557,10 +706,10 @@ local function buildDetail(column: Frame)
 		Parent = actions,
 	})
 	buildBuy(actions)
-	buildOpen(actions)
+	buildTestAndStatus(detail)
 	-- Caisse voisine : ‹ CAISSE n / N ›
 	local function arrow(glyph: string, order: number, step: number)
-		MenuShot.textChoice({
+		local choice = MenuShot.textChoice({
 			text = glyph,
 			font = F.Display,
 			size = 22,
@@ -571,6 +720,7 @@ local function buildDetail(column: Frame)
 				openCrate(ShopCatalog.cycle(current, step, #ShopCatalog.CRATES))
 			end,
 		})
+		table.insert(navigation, choice)
 	end
 	arrow("‹", 2, -1)
 	position = UIKit.text({
@@ -587,7 +737,8 @@ local function buildDetail(column: Frame)
 end
 
 -- Cette méthode permet, dans Studio, de piloter le shop par l'attribut DebugCrateOpening du joueur (MCP, docs/ui.md) :
--- « crate:N » montre la caisse N, « skinId|rareté » joue l'ouverture sans passer par le serveur (rien n'est gagné).
+-- « crate:N » montre la caisse N, « skinId|rareté » joue l'ouverture sans passer par le serveur (rien n'est gagné),
+-- « skinId|rareté|N » la joue comme un doublon remboursé de N crédits (#393).
 local function debugOpening()
 	local player = Players.LocalPlayer
 	local value = player:GetAttribute(DEBUG_ATTRIBUTE)
@@ -604,7 +755,11 @@ local function debugOpening()
 		openCrate(tonumber(index) :: number)
 		return
 	end
-	local skinId, rarityId = string.match(value, "^([^|]+)|([^|]+)$")
+	local skinId, rarityId, refundText = string.match(value, "^([^|]+)|([^|]+)|(%d+)$")
+	if not skinId then
+		skinId, rarityId = string.match(value, "^([^|]+)|([^|]+)$")
+	end
+	local refund = if refundText then tonumber(refundText) else nil
 	if not (skinId and rarityId) or ShopScene.isOpening() then
 		warn("[DebugCrateOpening] valeur ou état invalide : " .. value)
 		return
@@ -613,7 +768,7 @@ local function debugOpening()
 	detail.Visible = false
 	local started = ShopScene.playOpening(skinId, rarityId, function()
 		if crate then
-			showReveal(crate, skinId)
+			showReveal(crate, skinId, refund == nil, refund or 0)
 		end
 	end, endOpening)
 	if not started then
@@ -653,6 +808,8 @@ function ShopScreen.init()
 	ShopScene.onWeaponFocus(highlightRow)
 	paintActions()
 	Players.LocalPlayer:GetAttributeChangedSignal("Role"):Connect(paintActions)
+	-- Skin obtenu (achat, ouverture de test, autre serveur) : TOUT OBTENU peut changer
+	Players.LocalPlayer:GetAttributeChangedSignal(InventoryRules.ATTRIBUTE):Connect(paintActions)
 	if RunService:IsStudio() then
 		Players.LocalPlayer:GetAttributeChangedSignal(DEBUG_ATTRIBUTE):Connect(debugOpening)
 	end
@@ -676,6 +833,7 @@ function ShopScreen.hide()
 		return
 	end
 	gui.Enabled = false
+	view += 1
 	ShopScene.stop()
 end
 

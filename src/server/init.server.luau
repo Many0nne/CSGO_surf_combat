@@ -88,6 +88,10 @@ local trainingRmt = makeRemote(N.TRAINING)
 local openCrateRmt = Instance.new("RemoteFunction")
 openCrateRmt.Name = N.OPEN_CRATE
 openCrateRmt.Parent = ReplicatedStorage
+-- Achat d'une caisse (#393) : RemoteFunction, le client attend l'écriture (débit et skin) avant de jouer l'ouverture
+local buyCrateRmt = Instance.new("RemoteFunction")
+buyCrateRmt.Name = N.BUY_CRATE
+buyCrateRmt.Parent = ReplicatedStorage
 
 -- ── Initialisation des sous-systèmes ──────────────────────────────────────
 
@@ -96,11 +100,11 @@ CheatLog.init()
 StatsStore.init()
 SettingsStore.init(getSettingsRmt, saveSettingsRmt)
 -- Inventaire (#267) : StarterPack vidé, Tools donnés selon l'équipement (#280), armes non possédées refusées par le
--- Validator. Crédits (#391, #396) : portefeuille dans le même enregistrement, API WalletStore ; pas encore de gain ni
--- d'achat
+-- Validator. Crédits (#391, #396) : portefeuille dans le même enregistrement, API WalletStore ; achat des caisses (#393)
+-- par CrateService
 InventoryStore.init(equipItemRmt, SpawnManager.isSpawning)
 Validator.setOwnership(InventoryStore.ownsTool)
-CrateService.init(openCrateRmt)
+CrateService.init(openCrateRmt, buyCrateRmt)
 FeedbackService.init(sendFeedbackRmt, feedbackAckRmt)
 -- Mode publié aux clients (attribut de ReplicatedStorage) et téléportations vers ou depuis l'entraînement
 TrainingService.init(trainingRmt)
