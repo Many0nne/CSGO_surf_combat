@@ -261,7 +261,7 @@ local function refreshLabels()
 		local text = labelOf(view.entry)
 		if view.label.Text ~= text then
 			view.label.Text = text
-			view.label.TextSize = textSizeOf(view.entry, text)
+			UIKit.setHudTextSize(view.label, textSizeOf(view.entry, text)) -- plancher du HUD réduit (#282)
 		end
 	end
 end

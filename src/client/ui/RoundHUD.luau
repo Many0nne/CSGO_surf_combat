@@ -355,8 +355,17 @@ local function buildTimer(root: Frame)
 		Parent = layer,
 	})
 	local anchorScale = UIKit.create("UIScale", { Parent = anchor })
+	-- #282 : textes au plancher à l'échelle vue (écran du calque x HUD ; les deux calques du timer ont celle de `root`),
+	-- et timer masqué tant que l'échelle sauvegardée n'est pas connue
+	local floorTexts = UIKit.floorHudText(anchor, function()
+		local screen = root:GetAttribute("Scale")
+		return (if type(screen) == "number" then screen else 1) * anchorScale.Scale
+	end)
+	root:GetAttributeChangedSignal("Scale"):Connect(floorTexts)
+	UIKit.hideUntilHudShown(anchor)
 	UIKit.onHudScale(anchor, function(factor)
 		anchorScale.Scale = factor
+		floorTexts()
 	end)
 	UIKit.cornerScrim(anchor, "Top", TOP_SCRIM_SIZE, TOP_SCRIM_TRANSPARENCY)
 

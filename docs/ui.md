@@ -457,6 +457,14 @@ un bhop joué par entrées simulées (MCP) ; la prise humaine était déjà prop
   calque plein écran partagé avec le classement et qui change de `ScreenGui` (menu en partie) ; il porte donc son propre `UIScale`
   sur une ancre sans taille au milieu du bord haut (`TimerAnchor`), un `UIScale` sur le calque ferait dériver le timer.
   `KeyDisplay` et `AmmoCounter` s'échelonnent ensemble : le calcul d'#247 (`keyDisplayBottom`) reste en px du repère commun.
+  **Ordre d'application (#282) :** les racines de bord (et l'ancre du timer) naissent masquées (`UIKit.hideUntilHudShown`) ;
+  `init.client` les affiche (`UIKit.showHud`) à l'arrivée des réglages sauvegardés, après avoir posé leur échelle, ou au bout
+  de `HUDRules.HUD_SETTINGS_TIMEOUT` (3 s) à l'échelle courante. Le client n'attend pas `GetSettings` pour construire le HUD.
+  **Plancher du texte (#282) :** à 50 % sur un petit écran, l'échelle totale descend à 0,375 et un texte de 12 px tombait à
+  4,5 px. Les cadres rétrécissent toujours, mais chaque texte d'une racine de bord reste à `HUDRules.HUD_TEXT_FLOOR` (9 px
+  réels) au moins (`UIKit.floorHudText`, taille voulue gardée dans l'attribut `HudTextBase`). 9 px = le plus petit texte de
+  bord à 100 % au plus petit écran (13 px x 0,75) : à 100 % rien ne change. Piège : un élément qui change la taille d'un de
+  ces textes en direct passe par `UIKit.setHudTextSize`, sinon il échappe au plancher et l'ancienne taille revient au changement d'échelle suivant.
 
 - **Libellé d'une touche (#100) :** `Enum.KeyCode` désigne la position sur un clavier QWERTY. Sur un clavier AZERTY,
   `KeyCode.Q` est la touche imprimée « A » : afficher `UserInputService:GetStringForKeyCode` (`LocalSettings.keyText`),

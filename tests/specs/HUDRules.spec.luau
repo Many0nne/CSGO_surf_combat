@@ -574,4 +574,61 @@ return function(T, Loader)
 			T.expectEqual(#empty.podium, 0)
 		end)
 	end)
+
+	T.describe("HUDRules.flooredTextSize", function()
+		T.it("garde la taille de base tant qu'elle reste au-dessus du plancher à l'écran", function()
+			T.expectEqual(HUDRules.flooredTextSize(50, 0.5), 50)
+			T.expectEqual(HUDRules.flooredTextSize(13, 0.75), 13, "plus petit texte à 100 %, plus petit écran")
+			T.expectEqual(HUDRules.flooredTextSize(16, 1), 16)
+			T.expectEqual(HUDRules.flooredTextSize(18, 0.5), 18, "pile au plancher")
+		end)
+
+		T.it("relève un texte réduit sous le plancher jusqu'à 9 px à l'écran", function()
+			T.expectEqual(HUDRules.flooredTextSize(16, 0.5), 18)
+			T.expectEqual(HUDRules.flooredTextSize(13, 0.5), 18)
+			T.expectEqual(HUDRules.flooredTextSize(12, 0.375), 24, "cas de l'issue : 4,5 px avant")
+			T.expectEqual(HUDRules.flooredTextSize(16, 0.375), 24)
+			T.expectEqual(HUDRules.flooredTextSize(13, 0.7), 13, "13 x 0,7 = 9,1")
+			T.expectEqual(HUDRules.flooredTextSize(13, 0.6), 15, "ceil(9 / 0,6)")
+		end)
+
+		T.it("ne change rien à 100 % quelle que soit l'échelle d'écran (0,75 à 1,6)", function()
+			for _, base in { 13, 16, 17, 18, 22, 26, 34, 50, 56 } do
+				for _, screen in { 0.75, 1, 1.5, 1.6 } do
+					T.expectEqual(HUDRules.flooredTextSize(base, screen), base, base .. " px x " .. screen)
+				end
+			end
+		end)
+
+		T.it("accepte un plancher donné et ignore une échelle nulle", function()
+			T.expectEqual(HUDRules.flooredTextSize(10, 0.5, 12), 24)
+			T.expectEqual(HUDRules.flooredTextSize(10, 0), 10)
+		end)
+	end)
+
+	T.describe("HUDRules.hudRevealed", function()
+		T.it("affiche le HUD dès les réglages appliqués, sinon après le délai maximal", function()
+			T.expectEqual(HUDRules.hudRevealed(true, 0), true)
+			T.expectEqual(HUDRules.hudRevealed(false, 0), false)
+			T.expectEqual(HUDRules.hudRevealed(false, HUDRules.HUD_SETTINGS_TIMEOUT - 0.1), false)
+			T.expectEqual(HUDRules.hudRevealed(false, HUDRules.HUD_SETTINGS_TIMEOUT), true)
+		end)
+	end)
+
+	T.describe("HUDRules.percentText / parsePercent", function()
+		T.it("affiche des pourcents entiers suivis de « % »", function()
+			T.expectEqual(HUDRules.percentText(50), "50 %")
+			T.expectEqual(HUDRules.percentText(100), "100 %")
+			T.expectEqual(HUDRules.percentText(72.6), "73 %")
+		end)
+
+		T.it("relit une saisie avec ou sans « % »", function()
+			T.expectEqual(HUDRules.parsePercent("50 %"), 50)
+			T.expectEqual(HUDRules.parsePercent("75%"), 75)
+			T.expectEqual(HUDRules.parsePercent(" 80 "), 80)
+			T.expectEqual(HUDRules.parsePercent(HUDRules.percentText(65)), 65)
+			T.expectEqual(HUDRules.parsePercent("abc"), nil)
+			T.expectEqual(HUDRules.parsePercent("%"), nil)
+		end)
+	end)
 end

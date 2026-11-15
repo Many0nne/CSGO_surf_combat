@@ -209,11 +209,12 @@ local function applySlots(animate: boolean)
 		end
 		slot.silhouette.ImageColor3 = color
 		slot.name.FontFace = active and F.Display or F.DisplayMedium
-		slot.name.TextSize = active and 22 or 16
+		-- Tailles par UIKit.setHudTextSize : plancher de lisibilité du HUD réduit (#282)
+		UIKit.setHudTextSize(slot.name, active and 22 or 16)
 		slot.name.TextColor3 = color
 		slot.name.Position = UDim2.new(1, -KEY_WIDTH, 0, iconSize.Y - 10)
 		local keySize = if utf8.len(slot.key.Text) == 1 then KEY_SIZE_SHORT else KEY_SIZE_LONG
-		slot.key.TextSize = active and keySize.X or keySize.Y
+		UIKit.setHudTextSize(slot.key, active and keySize.X or keySize.Y)
 		slot.key.TextColor3 = active and C.HitRed or color
 		slot.key.Position = UDim2.new(1, 0, 0, active and 10 or 12)
 		slot.tick.Visible = active

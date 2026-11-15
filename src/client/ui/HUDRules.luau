@@ -508,4 +508,37 @@ function HUDRules.readRoundResult(data: any, localUserId: number): RoundResultVi
 	return view
 end
 
+-- Échelle du HUD (#282) : taille plancher d'un texte à l'écran, en px réels. 9 px = le plus petit texte de bord du HUD
+-- à 100 % au plus petit écran (13 px x échelle d'écran 0,75) : à 100 % rien ne bouge, à 50 % les textes s'y arrêtent.
+HUDRules.HUD_TEXT_FLOOR = 9
+-- Secondes d'attente au plus des réglages sauvegardés avant d'afficher le HUD à l'échelle par défaut
+HUDRules.HUD_SETTINGS_TIMEOUT = 3
+
+-- Cette méthode permet de donner la taille d'un texte du HUD (px du repère de son cadre) lorsque son cadre est réduit
+-- à `scale` : la taille de base, sauf si elle ferait moins de `floor` px à l'écran (HUD_TEXT_FLOOR par défaut).
+function HUDRules.flooredTextSize(base: number, scale: number, floor: number?): number
+	local minimum = floor or HUDRules.HUD_TEXT_FLOOR
+	if scale <= 0 or base * scale >= minimum then
+		return base
+	end
+	return math.ceil(minimum / scale)
+end
+
+-- Cette méthode permet de savoir si le HUD peut s'afficher lorsque le client démarre : dès que les réglages sauvegardés
+-- (donc son échelle) sont appliqués, ou passé HUD_SETTINGS_TIMEOUT secondes sans réponse.
+function HUDRules.hudRevealed(settingsLoaded: boolean, elapsed: number): boolean
+	return settingsLoaded or elapsed >= HUDRules.HUD_SETTINGS_TIMEOUT
+end
+
+-- Cette méthode permet d'écrire une valeur en pourcents entiers (« 50 % ») lorsqu'un curseur en pourcents l'affiche.
+function HUDRules.percentText(value: number): string
+	return string.format("%d %%", math.round(value))
+end
+
+-- Cette méthode permet de relire une valeur saisie dans un curseur en pourcents lorsque le joueur la tape, avec ou sans
+-- « % » et espaces ; nil si ce n'est pas un nombre.
+function HUDRules.parsePercent(text: string): number?
+	return tonumber((string.gsub(text, "[%s%%]", "")))
+end
+
 return HUDRules
