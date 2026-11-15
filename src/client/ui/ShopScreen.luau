@@ -2,12 +2,16 @@
 -- (ShopScene), colonne à gauche sur fond de coin comme l'écran d'équipement. Vue d'ensemble : titre « CAISSES », les
 -- caisses en vente sont dans la vitrine (nom et prix sur leur étiquette), un clic sur une caisse ouvre la vue détail.
 -- Vue détail : « ‹ SHOP » (retour à la vitrine), nom de la caisse, contenu par rareté avec ses chances, prix, ACHETER
--- (inactif tant que l'achat n'existe pas, étiquette BIENTÔT) et passage à la caisse voisine.
+-- (inactif tant que l'achat n'existe pas, étiquette BIENTÔT) et passage à la caisse voisine. Pour l'admin et dans
+-- Studio, OUVRIR à la place d'ACHETER (#332) : le serveur tire le skin, la scène joue l'ouverture, la colonne laisse
+-- place à la révélation (« OBTENU », skin et rareté) jusqu'au clic.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local InventoryRules = require(Shared:WaitForChild("InventoryRules"))
+local NetworkProtocol = require(Shared:WaitForChild("NetworkProtocol"))
 local ShopCatalog = require(Shared:WaitForChild("ShopCatalog"))
 local UITheme = require(Shared:WaitForChild("UITheme"))
 local ShopScene = require(script.Parent.Parent.systems.game.ShopScene)
@@ -59,6 +63,25 @@ local back: MenuShot.Choice
 local current = 1
 local lines: { Frame } = {} -- lignes du contenu de la caisse ouverte, dans l'ordre de ShopCatalog.contents
 local DIMMED = 0.65 -- atténuation des autres lignes quand une arme du tableau est en gros plan (#358)
+-- Ouverture (#332)
+local buySoon: Frame
+local openButton: Frame
+local openLabel: TextLabel
+local openStatus: TextLabel
+local reveal: Frame
+local revealTitle: { TextLabel }
+local revealRarity: { TextLabel }
+local requesting = false
+local statusToken = 0
+local DEBUG_ATTRIBUTE = "DebugCrateOpening" -- Studio seulement, voir debugOpening
+-- Motifs de refus du serveur (CrateService), affichés à côté d'OUVRIR
+local REFUSALS = {
+	rate = "PATIENTE",
+	loading = "INVENTAIRE EN CHARGEMENT",
+	forbidden = "RÉSERVÉ",
+	unknown = "CAISSE INCONNUE",
+	empty = "CAISSE VIDE",
+}
 
 -- Cette méthode permet de changer un texte et son ombre ensemble lorsqu'un libellé de l'écran change.
 local function setText(pair: { TextLabel }, text: string)
@@ -214,7 +237,7 @@ local function buildOverview(column: Frame, root: Frame)
 		Size = UDim2.fromOffset(COLUMN_WIDTH, 18),
 	})
 	countLabel = { text, shadow }
-	setText(countLabel, string.format("%d EN VENTE  ·  UNE PAR SÉRIE DE SKINS", #ShopCatalog.CRATES))
+	setText(countLabel, string.format("%d EN VENTE  ·  UNE PAR ARME ET PAR SÉRIE", #ShopCatalog.CRATES))
 	-- L'aide n'est pas dans la colonne (qui descend sous la barre de Roblox) : elle tient le bas de l'écran
 	local hints = UIKit.hintRow(root, {
 		Name = "OverviewHints",
@@ -253,6 +276,177 @@ local function buildBuy(parent: Frame)
 	soon.AnchorPoint = Vector2.new(1, 0.5)
 	soon.Position = UDim2.new(1, 12, 0, 0)
 	soon.ZIndex = 3
+	buySoon = buy
+end
+
+-- Cette méthode permet de savoir si le joueur local peut ouvrir une caisse (Studio, ou rôle Admin affiché par le
+-- serveur) lorsque la vue détail choisit entre OUVRIR et ACHETER ; le serveur revérifie de son côté.
+local function canOpen(): boolean
+	return RunService:IsStudio() or Players.LocalPlayer:GetAttribute("Role") == "Admin"
+end
+
+-- Cette méthode permet de montrer OUVRIR ou ACHETER (BIENTÔT) selon le droit d'ouvrir lorsque la vue détail s'affiche
+-- ou que le rôle du joueur arrive.
+local function paintActions()
+	local allowed = canOpen()
+	openButton.Visible = allowed
+	buySoon.Visible = not allowed
+end
+
+-- Cette méthode permet d'afficher un refus à côté d'OUVRIR pendant 2,5 s lorsque le serveur refuse l'ouverture.
+local function showStatus(text: string)
+	statusToken += 1
+	local token = statusToken
+	openStatus.Text = text
+	openStatus.Visible = true
+	task.delay(2.5, function()
+		if token == statusToken then
+			openStatus.Visible = false
+		end
+	end)
+end
+
+-- Cette méthode permet d'afficher la révélation (skin obtenu, arme, rareté dans sa couleur) lorsque l'ouverture montre
+-- l'arme habillée.
+local function showReveal(crate: ShopCatalog.Crate, skinId: string)
+	for _, row in ShopCatalog.contents(crate, InventoryRules.ITEMS) do
+		if table.find(row.skins, skinId) then
+			setText(revealTitle, table.concat(row.weapons, " · ") .. "  " .. row.name)
+			setText(revealRarity, row.rarity.label)
+			for _, item in revealRarity do
+				if item.Name == "Rarity" then
+					item.TextColor3 = rgb(row.rarity.color)
+				end
+			end
+		end
+	end
+	reveal.Visible = true
+end
+
+-- Cette méthode permet de revenir à la vue détail de la caisse lorsque l'ouverture se termine (clic après la
+-- révélation).
+local function endOpening()
+	reveal.Visible = false
+	detail.Visible = true
+	paintDetail()
+end
+
+-- Cette méthode permet de demander au serveur d'ouvrir la caisse courante, puis de jouer l'ouverture avec le skin tiré
+-- (colonne masquée pendant la charge) lorsque le joueur clique OUVRIR ; un refus s'affiche à côté du bouton.
+local function requestOpen()
+	local crate = ShopCatalog.CRATES[current]
+	if requesting or not crate or ShopScene.isOpening() then
+		return
+	end
+	requesting = true
+	openLabel.Text = "…"
+	task.spawn(function()
+		local remote = ReplicatedStorage:FindFirstChild(NetworkProtocol.Names.OPEN_CRATE)
+		local ok, result = false, nil
+		if remote and remote:IsA("RemoteFunction") then
+			ok, result = pcall(function()
+				return remote:InvokeServer(crate.id)
+			end)
+		end
+		requesting = false
+		openLabel.Text = "OUVRIR"
+		if not (ok and type(result) == "table") then
+			showStatus("ÉCHEC")
+			return
+		end
+		if not result.ok then
+			showStatus(REFUSALS[result.reason] or "ÉCHEC")
+			return
+		end
+		if not gui.Enabled or ShopCatalog.CRATES[current] ~= crate then
+			return -- le joueur a quitté le shop ou changé de caisse pendant la requête : le skin est quand même gagné
+		end
+		detail.Visible = false
+		local started = ShopScene.playOpening(result.skinId, result.rarity, function()
+			showReveal(crate, result.skinId)
+		end, endOpening)
+		if not started then
+			detail.Visible = true
+			showStatus("ÉCHEC")
+		end
+	end)
+end
+
+-- Cette méthode permet de construire OUVRIR (contour os, survol en rouge d'impact) et son étiquette de refus lorsque
+-- la vue détail est construite.
+local function buildOpen(parent: Frame)
+	openButton = UIKit.frame({
+		Name = "Open",
+		Size = UDim2.fromOffset(BUY_SIZE.X, BUY_SIZE.Y),
+		BackgroundTransparency = 1,
+		LayoutOrder = 1,
+		Visible = false,
+		Parent = parent,
+	})
+	UIKit.stroke(openButton, C.Bone, 2)
+	local choice = MenuShot.textChoice({
+		text = "OUVRIR",
+		font = F.Display,
+		size = 24,
+		color = C.Bone,
+		anchor = Vector2.new(0.5, 0.5),
+		position = UDim2.fromScale(0.5, 0.5),
+		parent = openButton,
+		action = requestOpen,
+	})
+	openLabel = choice.button:FindFirstChild("Label", true) :: TextLabel
+	openStatus = UIKit.tag(openButton, "Status", 0, C.HitRed, C.Bone)
+	openStatus.AnchorPoint = Vector2.new(0, 0.5)
+	openStatus.Position = UDim2.new(1, 12, 0.5, 0)
+	openStatus.ZIndex = 3
+	openStatus.Visible = false
+end
+
+-- Cette méthode permet de construire la révélation (« OBTENU », arme et skin, rareté, aide CLIC · CONTINUER) lorsque
+-- l'écran est construit ; masquée hors ouverture.
+local function buildReveal(column: Frame, root: Frame)
+	reveal = UIKit.frame({
+		Name = "Reveal",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		Visible = false,
+		Parent = column,
+	})
+	label(reveal, {
+		Name = "Label",
+		Text = "OBTENU",
+		FontFace = F.DisplayMedium,
+		TextSize = LABEL_SIZE,
+		TextColor3 = C.TextSoft,
+		Position = UDim2.fromOffset(EDGE, LABEL_Y),
+		Size = UDim2.fromOffset(200, LABEL_SIZE + 4),
+	}, 2)
+	revealTitle = label(reveal, {
+		Name = "Title",
+		FontFace = F.Display,
+		TextSize = TITLE_SIZE,
+		TextColor3 = C.Bone,
+		Position = UDim2.fromOffset(EDGE, TITLE_Y),
+		Size = UDim2.fromOffset(COLUMN_WIDTH, TITLE_SIZE + 6),
+	}, 3)
+	revealRarity = label(reveal, {
+		Name = "Rarity",
+		FontFace = F.Display,
+		TextSize = 22,
+		TextColor3 = C.Bone,
+		Position = UDim2.fromOffset(EDGE + 1, SUBTITLE_Y),
+		Size = UDim2.fromOffset(COLUMN_WIDTH, 26),
+	}, 2)
+	local hints = UIKit.hintRow(root, {
+		Name = "RevealHints",
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, EDGE, 1, -18),
+		Visible = false,
+	})
+	UIKit.keyHint(hints, 1, "CLIC", "CONTINUER")
+	reveal:GetPropertyChangedSignal("Visible"):Connect(function()
+		hints.Visible = reveal.Visible
+	end)
 end
 
 -- Cette méthode permet de construire la vue détail (retour, nom, contenu, filet, prix, ACHETER, caisse voisine)
@@ -356,6 +550,7 @@ local function buildDetail(column: Frame)
 		Parent = actions,
 	})
 	buildBuy(actions)
+	buildOpen(actions)
 	-- Caisse voisine : ‹ CAISSE n / N ›
 	local function arrow(glyph: string, order: number, step: number)
 		MenuShot.textChoice({
@@ -384,6 +579,43 @@ local function buildDetail(column: Frame)
 	arrow("›", 4, 1)
 end
 
+-- Cette méthode permet, dans Studio, de piloter le shop par l'attribut DebugCrateOpening du joueur (MCP, docs/ui.md) :
+-- « crate:N » montre la caisse N, « skinId|rareté » joue l'ouverture sans passer par le serveur (rien n'est gagné).
+local function debugOpening()
+	local player = Players.LocalPlayer
+	local value = player:GetAttribute(DEBUG_ATTRIBUTE)
+	if type(value) ~= "string" then
+		return
+	end
+	player:SetAttribute(DEBUG_ATTRIBUTE, nil)
+	if not gui.Enabled then
+		warn("[DebugCrateOpening] shop fermé : ouvrir l'onglet SHOP d'abord")
+		return
+	end
+	local index = string.match(value, "^crate:(%d+)$")
+	if index then
+		openCrate(tonumber(index) :: number)
+		return
+	end
+	local skinId, rarityId = string.match(value, "^([^|]+)|([^|]+)$")
+	if not (skinId and rarityId) or ShopScene.isOpening() then
+		warn("[DebugCrateOpening] valeur ou état invalide : " .. value)
+		return
+	end
+	local crate = ShopCatalog.CRATES[current]
+	detail.Visible = false
+	local started = ShopScene.playOpening(skinId, rarityId, function()
+		if crate then
+			showReveal(crate, skinId)
+		end
+	end, endOpening)
+	if not started then
+		detail.Visible = true
+		warn("[DebugCrateOpening] ouverture impossible : " .. value)
+	end
+	print("[DebugCrateOpening] " .. value .. " : " .. tostring(started))
+end
+
 -- Cette méthode permet de construire l'écran (fond de coin, colonne de gauche, deux vues) lorsque le client démarre.
 function ShopScreen.init()
 	gui = UIKit.create("ScreenGui", {
@@ -408,9 +640,15 @@ function ShopScreen.init()
 		UIKit.frame({ Name = "Column", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = root })
 	buildOverview(column, root)
 	buildDetail(column)
+	buildReveal(column, root)
 	MenuPage.followTopbar(root, column)
 	ShopScene.onCrateClicked(openCrate)
 	ShopScene.onWeaponFocus(highlightRow)
+	paintActions()
+	Players.LocalPlayer:GetAttributeChangedSignal("Role"):Connect(paintActions)
+	if RunService:IsStudio() then
+		Players.LocalPlayer:GetAttributeChangedSignal(DEBUG_ATTRIBUTE):Connect(debugOpening)
+	end
 end
 
 -- Cette méthode permet d'ouvrir le shop sur la vitrine (salle, caméra, interface) lorsque le joueur touche l'onglet SHOP.
@@ -419,6 +657,7 @@ function ShopScreen.show()
 		return
 	end
 	gui.Enabled = true
+	reveal.Visible = false
 	ShopScene.start()
 	openOverview()
 end

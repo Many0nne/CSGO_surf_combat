@@ -5,16 +5,21 @@
 -- habillées de leurs skins). La caméra glisse de l'une à l'autre. Tout est local au client ; pendant le shop, la scène
 -- de l'accueil est suspendue (MenuScene.setPaused) et l'ambiance du jeu est assombrie (salle fermée).
 local Lighting = game:GetService("Lighting")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
+local IS_STUDIO = RunService:IsStudio()
+
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+local CrateOpeningRules = require(Shared:WaitForChild("CrateOpeningRules"))
 local InventoryRules = require(Shared:WaitForChild("InventoryRules"))
 local PerfMarkers = require(Shared:WaitForChild("PerfMarkers"))
 local ShopCatalog = require(Shared:WaitForChild("ShopCatalog"))
 local UITheme = require(Shared:WaitForChild("UITheme"))
 local WeaponSkins = require(Shared:WaitForChild("WeaponSkins"))
+local CrateOpening = require(script.Parent.CrateOpening)
 local MenuScene = require(script.Parent.MenuScene)
 local Rules = require(script.Parent.MenuSceneRules)
 
@@ -134,10 +139,19 @@ local room = CFrame.new(ORIGIN)
 local vitrineFrame = room * CFrame.new(14.2, 0, 7.3) * CFrame.Angles(0, math.rad(-90), 0)
 local boardFrame = room * CFrame.new(-3, 6.6, -8.3)
 local lampFrame = room * CFrame.new(-3, LAMP_LIFT, -6.7) -- devant le tableau, à l'aplomb de son milieu
+local podiumFrame = room * CFrame.new(0, 1.34, 0) * CFrame.Angles(0, math.rad(-14), 0) -- caisse sur le socle
+-- Ouverture (#332) : la caméra avance vers la caisse (×1,8, la référence Apex avance de ×2,5) ; décalée, pas tournée,
+-- pour poser la caisse et l'arme au tiers droit (colonne de l'interface à gauche), de la caisse à l'arme au-dessus
 local CAMERAS = {
 	detail = CFrame.lookAt(room * Vector3.new(4, 5.2, 20), room * Vector3.new(-4.5, 4.5, 0)),
 	overview = CFrame.lookAt(vitrineFrame * Vector3.new(-2.8, 5.2, 17), vitrineFrame * Vector3.new(-2.8, 3.6, 0)),
+	opening = CFrame.lookAt(room * Vector3.new(-2.4, 4.9, 13), room * Vector3.new(-2.4, 3.3, 0)),
 }
+local OPENING_SHAKE = 0.04 -- secousse de la caméra à pleine charge, en studs
+-- Part de l'éclairage de la salle gardée pendant l'ouverture : salle éclairée, le tableau et ses armes concurrençaient
+-- l'arme révélée (la référence se joue sur fond sombre, la lumière vient de l'objet)
+local OPENING_ROOM_LIGHT = 0.15
+local roomLights: { [SpotLight]: number } = {} -- intensité d'origine des lampes de la salle, pendant l'ouverture
 
 local stage: Folder?
 local podium: Folder? -- caisse du socle, refaite à chaque caisse montrée
@@ -149,7 +163,18 @@ local focusLight: SpotLight? -- appoint du gros plan, intensité en fondu
 local running = false
 local connection: RBXScriptConnection?
 local inputConnection: RBXScriptConnection?
-local mode: "overview" | "detail" = "overview"
+local mode: "overview" | "detail" | "opening" = "overview"
+local podiumCrate: Model?
+-- Ouverture en cours (#332) : effets, rareté tirée, départ (os.clock), rappels de l'interface
+type Opening = {
+	fx: any,
+	rarity: string,
+	start: number,
+	revealed: boolean,
+	onRevealed: () -> (),
+	onFinished: () -> (),
+}
+local opening: Opening?
 local shownCrate = 0
 local hovered = 0
 local glideFrom = CAMERAS.overview
@@ -702,7 +727,7 @@ end
 
 -- Cette méthode permet de construire une arme de profil (pièces de son viewmodel, bras exclus, habillées du skin) de
 -- `length` studs, centrée en `at` et tournée comme le tableau, projetant son ombre si `castShadow`, lorsque le tableau
--- montre le contenu d'une caisse ; faux si le viewmodel manque.
+-- montre le contenu d'une caisse ou qu'une ouverture révèle un skin ; nil si le viewmodel manque.
 local function boardWeapon(
 	parent: Instance,
 	viewmodelName: string,
@@ -710,11 +735,11 @@ local function boardWeapon(
 	at: CFrame,
 	length: number,
 	castShadow: boolean
-): boolean
+): Model?
 	local viewModels = ReplicatedStorage:FindFirstChild("ViewModels")
 	local source = viewModels and viewModels:FindFirstChild(viewmodelName)
 	if not source then
-		return false
+		return nil
 	end
 	local model = Instance.new("Model")
 	model.Name = skinId
@@ -736,7 +761,7 @@ local function boardWeapon(
 	end
 	if #model:GetChildren() == 0 then
 		model:Destroy()
-		return false
+		return nil
 	end
 	WeaponSkins.apply(model, viewmodelName, skinId)
 	-- Profil : axe le plus long le long du tableau, axe le plus mince face à la pièce (comme UIKit.weaponSilhouette)
@@ -755,7 +780,7 @@ local function boardWeapon(
 	model:PivotTo(at * profile:Inverse() * frame)
 	model:ScaleTo(length / axes[1].length)
 	model.Parent = parent
-	return true
+	return model
 end
 
 -- Cette méthode permet d'oublier le survol en cours (aucune arme candidate ni retenue) lorsque la vue change.
@@ -800,7 +825,7 @@ local function dressCrate(index: number)
 	local podiumFolder = Instance.new("Folder")
 	podiumFolder.Name = "Podium"
 	local stripe = Color3.fromRGB(def.stripe[1], def.stripe[2], def.stripe[3])
-	crate(podiumFolder, room * CFrame.new(0, 1.34, 0) * CFrame.Angles(0, math.rad(-14), 0), stripe)
+	podiumCrate = crate(podiumFolder, podiumFrame, stripe)
 	podiumFolder.Parent = stage
 	podium = podiumFolder
 	local boardFolder = Instance.new("Folder")
@@ -815,6 +840,10 @@ local function dressCrate(index: number)
 			local c = row.rarity.color
 			local color = Color3.fromRGB(c[1], c[2], c[3])
 			for _, weapon in WEAPON_ROWS do
+				-- Une caisse ne donne que l'arme de sa rangée (#332) : l'autre rangée reste vide
+				if weapon.item ~= def.weapon then
+					continue
+				end
 				for _, skinId in row.skins do
 					local item = InventoryRules.item(skinId)
 					local center = boardFrame * CFrame.new(x, weapon.y, WEAPON_DEPTH)
@@ -928,6 +957,9 @@ end
 -- Cette méthode permet de donner le plan visé par la caméra (vitrine, socle, ou gros plan de face de l'arme retenue,
 -- décalée à droite) lorsqu'une image est rendue ; `aspect` (au moins 16:9, comme le FOV) règle le recul du gros plan.
 local function targetFrame(aspect: number): CFrame
+	if mode == "opening" then
+		return CAMERAS.opening
+	end
 	local target = if mode == "detail" then targets[focus] else nil
 	if not target then
 		return CAMERAS[mode]
@@ -953,9 +985,36 @@ local function update(dt: number)
 	local t = math.clamp((os.clock() - glideStart) / glideTime, 0, 1)
 	local eased = t * t * (3 - 2 * t)
 	local angles = Rules.aimAngles(aimX, aimY)
+	local shake = CFrame.identity
+	local current = opening
+	if current then
+		local elapsed = os.clock() - current.start
+		-- Studio : temps figé par l'attribut DebugCrateOpeningTime (poses à comparer à la référence, docs/ui.md)
+		local frozen = if IS_STUDIO then Players.LocalPlayer:GetAttribute("DebugCrateOpeningTime") else nil
+		if type(frozen) == "number" then
+			elapsed = frozen
+			current.start = os.clock() - frozen
+			current.fx:jump(frozen)
+		end
+		local state = CrateOpeningRules.sample(elapsed, current.rarity)
+		current.fx:update(state, elapsed)
+		for light, base in roomLights do
+			light.Brightness = base * (1 - (1 - OPENING_ROOM_LIGHT) * state.push)
+		end
+		eased = state.push -- la caméra suit la chronologie (temps figé, clic pour passer)
+		if state.shake > 0 then
+			local x, y = CrateOpeningRules.jitter(elapsed * 0.7)
+			shake = CFrame.new(x * OPENING_SHAKE * state.shake, y * OPENING_SHAKE * state.shake, 0)
+		end
+		if state.revealed and not current.revealed then
+			current.revealed = true
+			current.onRevealed()
+		end
+	end
 	camera.CameraType = Enum.CameraType.Scriptable
 	camera.CFrame = glideFrom:Lerp(targetFrame(aspect), eased)
 		* CFrame.Angles(math.rad(angles.camPitch), math.rad(angles.camYaw), 0)
+		* shake
 	if focusLight then
 		local target = if mode == "detail" and focus > 0 then FOCUS_LIGHT_BRIGHTNESS else 0
 		focusLight.Brightness = Rules.damp(focusLight.Brightness, target, dt, FOCUS_LIGHT_RATE)
@@ -1019,6 +1078,116 @@ function ShopScene.onWeaponFocus(callback: (number?) -> ())
 	onWeaponFocus = callback
 end
 
+-- Cette méthode permet de terminer l'ouverture (effets retirés, caisse et tableau refaits, retour au plan détail) lorsque
+-- le joueur clique après la révélation ou quitte le shop ; `notify` prévient l'interface.
+local function finishOpening(notify: boolean)
+	local current = opening
+	if not current then
+		return
+	end
+	opening = nil
+	current.fx:destroy()
+	for light, base in roomLights do
+		light.Brightness = base
+	end
+	table.clear(roomLights)
+	if stage then
+		dressCrate(shownCrate)
+	end
+	if running then
+		glideTo("detail")
+	else
+		mode = "detail"
+	end
+	if notify then
+		current.onFinished()
+	end
+end
+
+-- Cette méthode permet de savoir si une ouverture est en cours (de la charge à la révélation tenue) lorsque
+-- l'interface doit masquer ses commandes.
+function ShopScene.isOpening(): boolean
+	return opening ~= nil
+end
+
+-- Cette méthode permet de lancer l'ouverture de la caisse du socle (#332) avec le skin tiré par le serveur (`skinId`,
+-- rareté `rarityId`) lorsque la vue détail est affichée ; `onRevealed` à la révélation, `onFinished` au retour au plan
+-- détail. Faux si l'ouverture ne peut pas se jouer (pas de caisse sur le socle, arme introuvable).
+function ShopScene.playOpening(skinId: string, rarityId: string, onRevealed: () -> (), onFinished: () -> ()): boolean
+	local item = InventoryRules.item(skinId)
+	local crateModel = podiumCrate
+	if opening or not (running and item and crateModel and stage) or mode ~= "detail" then
+		return false
+	end
+	local row
+	for _, weapon in WEAPON_ROWS do
+		if weapon.item == item.weapon then
+			row = weapon
+		end
+	end
+	if not row then
+		return false
+	end
+	-- Palette de la montée de couleur : une couleur par rareté, dans l'ordre des paliers (CrateOpeningRules.TIERS)
+	local colors = {}
+	for _, r in ShopCatalog.RARITIES do
+		table.insert(colors, Color3.fromRGB(r.color[1], r.color[2], r.color[3]))
+	end
+	local at = podiumFrame * CFrame.new(0, 3.7, 0)
+	local weapon = boardWeapon(stage, row.viewmodel, skinId, at, row.length, true)
+	if not weapon then
+		return false
+	end
+	setFocus(0, true)
+	resetHover()
+	-- Lampes de la salle relevées avant les effets (qui ont leurs propres lumières) ; l'appoint du gros plan est déjà à 0
+	for _, light in stage:GetDescendants() do
+		if light:IsA("SpotLight") and light ~= focusLight then
+			roomLights[light] = light.Brightness
+		end
+	end
+	local fx = CrateOpening.new({
+		parent = stage,
+		crate = crateModel,
+		frame = podiumFrame,
+		colors = colors,
+		weapon = weapon,
+		weaponAt = at,
+		facing = CAMERAS.opening.Position,
+		beamTexture = BEAM_TEXTURE,
+	})
+	opening = {
+		fx = fx,
+		rarity = rarityId,
+		start = os.clock(),
+		revealed = false,
+		onRevealed = onRevealed,
+		onFinished = onFinished,
+	}
+	-- La caméra avance vers la caisse pendant la montée de la charge (CrateOpeningRules : `push`, PUSH_TIME mesurée sur
+	-- la référence), depuis le plan détail
+	glideFrom = CAMERAS.detail
+	mode = "opening"
+	return true
+end
+
+-- Cette méthode permet de réagir à un clic dans la scène pendant l'ouverture : avant la révélation il y saute, après il
+-- termine l'ouverture.
+local function clickOpening()
+	local current = opening
+	if not current then
+		return
+	end
+	if current.revealed then
+		finishOpening(true)
+		return
+	end
+	local elapsed = os.clock() - current.start
+	local target = CrateOpeningRules.skip(elapsed, current.rarity)
+	current.start = os.clock() - target
+	current.fx:jump(target)
+end
+
 -- Cette méthode permet de lancer le shop (construction au premier appel, scène de l'accueil suspendue, ambiance de la
 -- salle fermée, caméra et survol) lorsque l'écran Shop s'ouvre, sur la vitrine.
 function ShopScene.start()
@@ -1048,6 +1217,10 @@ function ShopScene.start()
 		if processed or input.UserInputType ~= Enum.UserInputType.MouseButton1 then
 			return
 		end
+		if opening then
+			clickOpening()
+			return
+		end
 		if hovered > 0 and onCrateClicked then
 			onCrateClicked(hovered)
 		end
@@ -1061,6 +1234,7 @@ function ShopScene.stop()
 		return
 	end
 	running = false
+	finishOpening(false)
 	if connection then
 		connection:Disconnect()
 		connection = nil

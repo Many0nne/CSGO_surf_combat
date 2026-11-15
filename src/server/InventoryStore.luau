@@ -338,6 +338,13 @@ function InventoryStore.load(player: Player)
 	refresh(player, profile)
 end
 
+-- Cette méthode permet de savoir si un item obtenu serait gardé lorsqu'une ouverture de caisse (#332) va le tirer :
+-- inventaire chargé et sauvegardable (sinon `grant` refuse et le tirage serait perdu).
+function InventoryStore.canGrant(player: Player): boolean
+	local profile = profiles[player]
+	return profile ~= nil and profile.loaded and profile.canSave
+end
+
 -- Cette méthode permet de donner un item à un joueur lorsqu'il l'obtient (boutique, déblocage : à venir, hors #267) :
 -- ajouté, publié, sac mis à jour, écrit tout de suite. Refusé (false) tant que l'inventaire n'est pas chargé ou s'il ne
 -- peut pas être sauvegardé (l'item serait perdu au départ), ou si l'id est inconnu ou déjà possédé.

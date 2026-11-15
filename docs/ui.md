@@ -705,7 +705,8 @@ propre décor, pas une grille de cartes neutres), sans capture précise.
   un liseré ambré lumineux au sol l'entoure (plateau de jeu télévisé). À teinter plus orangé que l'ambre de l'interface :
   en lumière émise, `C.Accent` sort jaune vif.
 - **Le contenu au mur**, derrière la caisse : panneau de contreplaqué, une ligne d'AWP et une ligne de M9 aux couleurs
-  des skins, une bande de rareté sous chaque arme.
+  des skins, une bande de rareté sous chaque arme. Depuis #332, une caisse ne donne que l'arme de son type : le tableau
+  n'affiche que la rangée de cette arme (AWP en haut, M9 en bas), l'autre reste vide.
 - **Le stock** : deux racks de caisses (montants sombres, longerons ambrés), un à droite contre le mur du fond (coupé
   par le cadre, il suggère qu'il y en a d'autres), un à gauche contre le mur latéral, dans la pénombre derrière le
   texte : sans lui la gauche faisait vide.
@@ -731,9 +732,16 @@ l'étiquette BIENTÔT tant que l'achat n'existe pas.
 
 ![Vue d'ensemble validée](ui/shop/vue_ensemble_ui.png)
 
-- Valeurs d'attente (points ouverts de #347 et #332) : prix 500 CRÉDITS par caisse, raretés COMMUN 70 %, RARE 25 %,
-  EXCEPTIONNEL 5 %, rareté des skins de la série 2 dans l'ordre du catalogue (RECUIT, STRATE, SILLAGE). Tout est dans
-  `ShopCatalog`. Pas de solde affiché tant que la monnaie n'est pas décidée.
+- Valeurs d'attente (points ouverts de #347 et #332) : **quatre caisses**, dans l'ordre de la vitrine AWP série 1, M9
+  série 1, AWP série 2, M9 série 2 (`crate.awp.serie1`, `crate.m9.serie1`, `crate.awp.serie2`, `crate.m9.serie2`, nom « AWP ·
+  SÉRIE 1 »), prix 500 CRÉDITS par caisse, une ouverture = un seul skin de l'arme de la caisse, raretés COMMUN 70 %, RARE
+  25 %, EXCEPTIONNEL 5 % (série 1 : COUCHANT, IMPACT, RELEVÉ ; série 2 : RECUIT, STRATE, SILLAGE). Doublons possibles : le
+  tirage suit les chances affichées même si le skin est déjà possédé, et ne donne alors rien de plus (inventaire à
+  revoir plus tard). Ouverture réservée à l'admin et à Studio (remote `OpenCrate`, `CrateService`, `docs/anticheat.md`),
+  OUVRIR remplace ACHETER pour eux (attribut informatif `Role`, le serveur revérifie), ACHETER reste BIENTÔT pour les
+  autres. Tout est dans `ShopCatalog`. L'étiquette de la vitrine (3,4 studs) tient « AWP · SÉRIE 1 » + « 500 CRÉDITS »
+  (vérifié en Studio) ; sous-titre de la vue d'ensemble « UNE PAR ARME ET PAR SÉRIE ». Pas de solde affiché tant que la
+  monnaie n'est pas décidée.
 - **Modèle de la caisse (validé le 14/11/2026, #332)** : caisse d'armes en bois (piste B de
   `docs/ui/shop/planche_caisses.png`) : planches, cadre et écharpe en Z, coins et moraillons en acier, poignées en
   corde, bande peinte de la collection sur l'avant et le dessus du couvercle, numéro au pochoir. Elle reprend le bois des
@@ -829,6 +837,47 @@ lumière bleutée baignait toute la salle et écrasait les lampes. Rendu éclair
 | A : rack de caisses contre le mur en tôle de la zone de stockage de Dizzy, caisse choisie sortie sur une palette | Le stock a plu (repris dans la salle), mais la zone fait entrepôt plus que vitrine |
 | C : caisse posée aux pieds du personnage de l'accueil | La caisse cache le personnage, le décor ne dit rien du shop |
 | Projecteurs de chantier sur trépied tournés vers la caisse | Retirés par l'utilisateur : leur orientation ne justifiait pas la lumière, têtes blanches face à la caméra ; remplacés par la suspension |
+
+## Ouverture d'une caisse (#332)
+
+**Validée par l'utilisateur le 15/11/2026 sur vidéo côte à côte** (`tools/anim/side_by_side.py`, Apex à gauche, jeu
+à droite). Dans la vue détail, OUVRIR demande le tirage au serveur (`CrateService`), puis la scène joue l'ouverture sur
+le socle ; la colonne de l'interface disparaît, puis la révélation affiche « OBTENU », l'arme et le skin, la rareté dans
+sa couleur et « CLIC · CONTINUER ». Un clic pendant l'ouverture saute à la révélation ; après, il ramène à la vue
+détail (caisse et tableau refaits).
+
+- **Référence** : les ouvertures de packs d'Apex Legends (`references/anim/apex-packs-toutes-raretes.mp4`, repères dans
+  `docs/animations.md`). Chronologie, temps relevés et retours de l'utilisateur en tête de `CrateOpeningRules` (règles
+  pures, testées) ; effets dans `CrateOpening` ; caméra, salle et clic dans `ShopScene` (`playOpening`).
+- **Déroulé** (exceptionnel, ~6,7 s jusqu'à la révélation) : la caméra avance vers la caisse ; charge étirée ×1,5 par
+  rapport à Apex (4,5 s), caisse qui tremble, bouffées de lumière qui jaillissent **par la fente entre le corps et le
+  couvercle** ; montée de couleur blanc → bleu (2,85 s) → violet (3,6 s), arrêtée à la rareté tirée ; tension (secousses
+  doublées, caisse soulevée de 0,3 stud, fente saturée) puis 0,15 s d'arrêt ; explosion, couvercle qui saute et retombe
+  à l'envers derrière le socle ; colonne qui grandit depuis la caisse, braises, silhouette de l'arme en lumière unie qui
+  s'élève en 1 s en tournant de trois quarts au profil, tenue 0,3 / 0,5 / 0,7 s selon la rareté ; éclair, arme habillée.
+- **Rejeté par l'utilisateur** : la charge à la vitesse d'Apex (3 s, la montée de couleur ne se lisait pas) ; des rayons
+  qui sortent par le dessus de la caisse fermée (« la lumière traverse le couvercle, c'est illogique ») ; la couleur de
+  la rareté dès le début de la charge (pas de suspense) ; la montée de couleur pendant la silhouette (il la voulait
+  pendant la charge, caisse qui tremble) ; une fin trop sèche face à la charge (colonne en une image, silhouette qui
+  jaillit en 0,12 s).
+- **Pièges** :
+  - Salle éclairée = le tableau et ses armes concurrencent l'arme révélée : les lampes de la salle descendent à 15 %
+    pendant l'ouverture (la lumière vient de la caisse, comme chez Apex). Arme révélée à contre-jour : lampe de face
+    allumée à la révélation.
+  - La pièce `Interior` du modèle est un bloc plein jusqu'au couvercle : en néon, la caisse ouverte faisait une dalle de
+    couleur. Elle disparaît au départ du couvercle et un fond lumineux au ras du dessous montre une caisse creuse.
+    Fermée, elle sert de lueur dans la fente ; la lampe intérieure projette des ombres, sa lumière ne sort donc que par
+    la fente et les jours entre les planches (et dessine une traînée sur le mur).
+  - Le néon sature en blanc : intérieur assombri (×0,55), silhouette et nappes de la fente dans la couleur presque pure,
+    sinon la montée de couleur ne se voit pas.
+  - Deux tours complets de l'arme montraient la silhouette par la tranche (une tache) : elle tourne de -70° au profil.
+  - Éclair de l'explosion trop fort (PointLight 10) : le tableau brûlait en blanc ; 6.
+  - Couvercle en 0,6 s : il restait dressé derrière la colonne ; 0,4 s.
+- **Vérifier dans Studio** (debug, Studio seulement, attributs du joueur en contexte Client) : `DebugCrateOpening =
+  "crate:N"` montre la caisse N (shop ouvert), `"skin.awp.releve|exceptional"` joue l'ouverture sans le serveur (rien
+  n'est gagné) ; `DebugCrateOpeningTime = t` fige l'ouverture au temps `t` (poses à capturer), nil la relâche. La vidéo
+  se fait en temps réel avec `tools/anim/record_window.py` (`docs/animations.md`). Le message
+  `ContentId: rbxassetid://86578020001310 failed … do_not_fallback_to_baseline` (texture des faisceaux) existait avant.
 
 ## Reste à faire
 

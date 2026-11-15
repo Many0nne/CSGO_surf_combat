@@ -44,6 +44,9 @@ Protocol.Names = {
 	-- Équipement (#280), cf. server/InventoryStore : client → serveur depuis l'accueil (emplacement, id de l'arme, id du
 	-- skin ou "" pour d'origine) ; le serveur valide, applique et publie l'attribut `EquippedItems` du Player
 	EQUIP_ITEM = "EquipItem",
+	-- Ouverture d'une caisse du shop (#332), cf. server/CrateService : RemoteFunction client → serveur (id de la caisse),
+	-- réponse { ok, reason?, skinId?, rarity?, added? } ; réservé à l'admin et à Studio
+	OPEN_CRATE = "OpenCrate",
 	-- Helper de playtest debug (#30) : créé uniquement dans Studio (RunService:IsStudio()), jamais en jeu publié
 	DEBUG_PLAYTEST = "DebugPlaytest",
 	-- Rejeu d'un parcours de mesure (#379) : client → serveur (position du point de contrôle) ; le serveur y replace le

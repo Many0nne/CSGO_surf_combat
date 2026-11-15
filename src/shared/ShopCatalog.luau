@@ -1,6 +1,6 @@
--- Catalogue du shop (#347, docs/ui.md « Shop ») : caisses en vente, une par série de skins, avec leur prix et leur
--- contenu par rareté, et rangement des caisses dans la vitrine de la vue d'ensemble. Règles pures, testées
--- (tests/specs/ShopCatalog.spec.luau).
+-- Catalogue du shop (#347, docs/ui.md « Shop ») : caisses en vente, une par série de skins et par arme (#332), avec
+-- leur prix et leur contenu par rareté, tirage d'une ouverture, et rangement des caisses dans la vitrine de la vue
+-- d'ensemble. Règles pures, testées (tests/specs/ShopCatalog.spec.luau).
 --
 -- Provisoire : prix, monnaie (CRÉDITS), raretés et chances sont des valeurs d'attente (points ouverts de #347 et
 -- #332). L'achat n'existe pas encore : le prix affiché ne fait jamais foi côté serveur.
@@ -8,9 +8,16 @@ local ShopCatalog = {}
 
 export type Rgb = { number }
 export type Rarity = { id: string, label: string, chance: number, color: Rgb }
--- `contents` : nom d'apparence des skins (`appearance` de InventoryRules.ITEMS) par id de rareté ; une apparence
--- désigne la paire AWP + M9 de la série
-export type Crate = { id: string, name: string, stripe: Rgb, price: number, contents: { [string]: string } }
+-- `weapon` : id de l'arme dont la caisse donne un skin (`id` d'un item `weapon` de InventoryRules.ITEMS) ; `contents` :
+-- nom d'apparence des skins (`appearance` de InventoryRules.ITEMS) par id de rareté, le skin étant celui de cette arme
+export type Crate = {
+	id: string,
+	name: string,
+	weapon: string,
+	stripe: Rgb,
+	price: number,
+	contents: { [string]: string },
+}
 -- `luminance` : moyenne de celles des skins de la ligne (1 pour un skin non mesuré)
 export type Row = { rarity: Rarity, name: string, weapons: { string }, skins: { string }, luminance: number }
 export type Slot = { index: number, row: number, column: number }
@@ -24,18 +31,37 @@ ShopCatalog.RARITIES = {
 	{ id = "exceptional", label = "EXCEPTIONNEL", chance = 5, color = { 170, 70, 220 } },
 } :: { Rarity }
 
--- Caisses en vente, dans l'ordre de la vitrine. Ajouter une série = une ligne ici (ses skins dans InventoryRules)
+-- Caisses en vente, dans l'ordre de la vitrine : une par arme et par série, une ouverture donne un seul skin de
+-- l'arme (#332). Ajouter une série = deux lignes ici (ses skins dans InventoryRules)
 ShopCatalog.CRATES = {
 	{
-		id = "crate.serie1",
-		name = "SÉRIE 1",
+		id = "crate.awp.serie1",
+		name = "AWP · SÉRIE 1",
+		weapon = "weapon.awp",
 		stripe = { 226, 58, 40 },
 		price = 500,
 		contents = { common = "couchant", rare = "impact", exceptional = "releve" },
 	},
 	{
-		id = "crate.serie2",
-		name = "SÉRIE 2",
+		id = "crate.m9.serie1",
+		name = "M9 · SÉRIE 1",
+		weapon = "weapon.m9bayonet",
+		stripe = { 226, 58, 40 },
+		price = 500,
+		contents = { common = "couchant", rare = "impact", exceptional = "releve" },
+	},
+	{
+		id = "crate.awp.serie2",
+		name = "AWP · SÉRIE 2",
+		weapon = "weapon.awp",
+		stripe = { 40, 150, 160 },
+		price = 500,
+		contents = { common = "recuit", rare = "strate", exceptional = "sillage" },
+	},
+	{
+		id = "crate.m9.serie2",
+		name = "M9 · SÉRIE 2",
+		weapon = "weapon.m9bayonet",
 		stripe = { 40, 150, 160 },
 		price = 500,
 		contents = { common = "recuit", rare = "strate", exceptional = "sillage" },
@@ -46,7 +72,7 @@ ShopCatalog.CRATES = {
 ShopCatalog.PER_ROW = 3
 ShopCatalog.ROWS = 2
 
--- Nom court d'une arme dans la liste du contenu (« AWP · M9 COUCHANT »)
+-- Nom court d'une arme dans la liste du contenu (« AWP   COUCHANT »)
 local WEAPON_LABELS = { ["weapon.awp"] = "AWP", ["weapon.m9bayonet"] = "M9" }
 
 -- Cette méthode permet de trouver une caisse par son id lorsqu'un écran ou un remote la désigne ; nil si inconnue.
@@ -60,8 +86,8 @@ function ShopCatalog.crate(id: string): Crate?
 end
 
 -- Cette méthode permet de lister le contenu d'une caisse par rareté (de la plus courante à la plus rare) lorsque la vue
--- détail l'affiche : nom du skin, armes concernées et ids des skins, lus dans le catalogue des items (`items` :
--- InventoryRules.ITEMS) ; une rareté sans skin connu est omise.
+-- détail l'affiche : nom du skin, arme concernée et id du skin, lus dans le catalogue des items (`items` :
+-- InventoryRules.ITEMS), seuls les skins de l'arme de la caisse comptant ; une rareté sans skin connu est omise.
 function ShopCatalog.contents(crate: Crate, items: { any }): { Row }
 	local rows = {}
 	for _, rarity in ShopCatalog.RARITIES do
@@ -69,7 +95,7 @@ function ShopCatalog.contents(crate: Crate, items: { any }): { Row }
 		local row: Row = { rarity = rarity, name = "", weapons = {}, skins = {}, luminance = 1 }
 		local total = 0
 		for _, item in items do
-			if item.type == "skin" and appearance and item.appearance == appearance then
+			if item.type == "skin" and appearance and item.appearance == appearance and item.weapon == crate.weapon then
 				row.name = item.name or string.upper(appearance)
 				table.insert(row.weapons, WEAPON_LABELS[item.weapon] or string.upper(tostring(item.weapon)))
 				table.insert(row.skins, item.id)
@@ -82,6 +108,31 @@ function ShopCatalog.contents(crate: Crate, items: { any }): { Row }
 		end
 	end
 	return rows
+end
+
+-- Cette méthode permet de tirer le skin d'une ouverture de caisse lorsque le serveur la traite : `roll` (nombre dans
+-- [0, 100), hors bornes ramené dedans) est placé sur les chances des raretés de la caisse, les raretés sans skin connu
+-- étant exclues et les chances renormalisées. Renvoie la ligne tirée et l'id de son skin ; nil si la caisse est vide.
+function ShopCatalog.draw(crate: Crate, items: { any }, roll: number): (Row?, string?)
+	local rows = ShopCatalog.contents(crate, items)
+	local total = 0
+	for _, row in rows do
+		total += row.rarity.chance
+	end
+	if #rows == 0 or total <= 0 then
+		return nil, nil
+	end
+	local clamped = if roll == roll then math.clamp(roll, 0, 100 - 1e-9) else 0
+	local target = clamped / 100 * total
+	local cumulative = 0
+	for _, row in rows do
+		cumulative += row.rarity.chance
+		if target < cumulative then
+			return row, row.skins[1]
+		end
+	end
+	local last = rows[#rows]
+	return last, last.skins[1]
 end
 
 -- Cette méthode permet de placer les lignes du contenu dans les `count` colonnes du tableau lorsque la vue détail
