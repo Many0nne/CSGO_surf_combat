@@ -1,6 +1,7 @@
 -- HUD de round, direction « Ligne de mire » : timer et rang en haut, classement (Tab maintenu), écran de réapparition
 -- (scène désaturée, compte à rebours en bas au centre, conseil d'un débutant dessous, #291) et écran de fin de round
 -- (voile central, nom du vainqueur, podium et ligne du joueur).
+local ContentProvider = game:GetService("ContentProvider")
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -11,6 +12,7 @@ local ParticipantRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitFo
 local UIKit = require(script.Parent.UIKit)
 local HUDRules = require(script.Parent.HUDRules)
 local HUDState = require(script.Parent.HUDState)
+local KillStreakRules = require(script.Parent.Parent.systems.game.KillStreakRules)
 
 local C = UITheme.Colors
 local F = UITheme.Fonts
@@ -25,6 +27,27 @@ local TIMER_TOP = 10
 local TIMER_HEIGHT = 84
 -- Menu en partie ouvert (#220) : le timer passe au-dessus de son voile (2) et de sa page (3), la partie continue
 local TIMER_OVER_MENU_ORDER = 4
+-- Série de kills (#364) : crâne dans un cercle de visée et nombre, sans mot, centrés sous le timer. À un palier annoncé
+-- à la voix, sans changer de taille : les quatre branches d'un réticule se ferment sur le cercle, la croix du hitmarker
+-- s'allume sur le crâne, le tout en rouge d'impact le temps de l'annonce (STREAK_RED_HOLD), puis retour à l'os
+-- assets/ui/hud/crane_serie.png (tools/ui/make_skull_icon.py, Decal 124978015444007 ; ci-dessous l'id de l'image du Decal)
+local STREAK_SKULL = "rbxassetid://86920012092825"
+local STREAK_TOP = TIMER_TOP + TIMER_HEIGHT + 2
+local STREAK_SIGHT = 40 -- diamètre du cercle de visée (px)
+local STREAK_HEIGHT = STREAK_SIGHT + 4
+local STREAK_SKULL_SIZE = 22
+local STREAK_RING = 2 -- épaisseur du cercle et des branches
+local STREAK_ARM_LENGTH = 10
+local STREAK_ARM_CLOSED = STREAK_SIGHT / 2 - 4 -- début d'une branche fermée : elle mord le cercle
+local STREAK_ARM_OPEN = STREAK_SIGHT / 2 + 8 -- début d'une branche qui arrive
+-- Croix du hitmarker autour du crâne : du centre, début et fin de chaque diagonale (px). Elle part du bord du crâne et
+-- dépasse le cercle : posée sur le crâne (7 à 15 px), elle cachait les orbites
+local STREAK_CROSS = { 12, 23 }
+local STREAK_CROSS_HOLD = 0.6
+local STREAK_TEXT_SIZE = 30
+local STREAK_GAP = 14
+local STREAK_RED_HOLD = 1.2
+local STREAK_CLOSE = TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 -- Classement : largeur fixe (px), colonnes en px ; JOUEUR prend la place restante
 local LB_WIDTH = 620
 local LB_TOP = 118
@@ -67,6 +90,15 @@ local blinkTween: Tween?
 local lowTime = false
 local rankLabel: TextLabel
 local rankShadow: TextLabel
+local streakRow: Frame
+local streakRing: UIStroke
+local streakArms: { { frame: Frame, stroke: UIStroke, dir: Vector2 } } = {}
+local streakCross: { Frame } = {}
+local streakSkull: ImageLabel
+local streakCount: TextLabel
+local streakCountShadow: TextLabel
+local streakShown = false -- série d'au moins KillStreakRules.MIN_SHOWN kills (masquée en plus sous le menu en partie)
+local streakPulse = 0 -- jeton de la dernière pulsation : un retour à l'os ne s'applique qu'à elle
 local leaderboard: Frame
 local leaderboardList: Frame
 local respawnRoot: Frame
@@ -102,6 +134,200 @@ local respawnTask: thread?
 -- ── Timer et rang ──────────────────────────────────────────────────────────────
 
 local shadowedText = UIKit.shadowedText
+
+-- Cette méthode permet de construire l'indicateur de série de kills (#364) sous le timer lorsque le HUD est initialisé :
+-- crâne teinté et nombre à ombre, centrés ensemble, masqués tant que la série n'atteint pas le double kill.
+local function buildStreak(anchor: Frame)
+	streakRow = UIKit.frame({
+		Name = "Streak",
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromOffset(0, STREAK_TOP + STREAK_HEIGHT / 2),
+		Size = UDim2.fromOffset(0, STREAK_HEIGHT),
+		AutomaticSize = Enum.AutomaticSize.X,
+		Visible = false,
+		Parent = anchor,
+	})
+	UIKit.create("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, STREAK_GAP),
+		Parent = streakRow,
+	})
+
+	local sightBox = UIKit.frame({
+		Name = "Sight",
+		BackgroundTransparency = 1,
+		LayoutOrder = 1,
+		Size = UDim2.fromOffset(STREAK_HEIGHT, STREAK_HEIGHT),
+		Parent = streakRow,
+	})
+	-- Centre du viseur : les branches et la croix y sont posées en px depuis le centre
+	local center = UIKit.frame({
+		Name = "Center",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(0, 0),
+		Parent = sightBox,
+	})
+	-- Cercle de visée et crâne, chacun doublé d'une ombre noire décalée de 2 px, comme le texte du HUD sur la scène
+	for _, layer in { { name = "Shadow", offset = 2, z = 1 }, { name = "", offset = 0, z = 2 } } do
+		local shadow = layer.name == "Shadow"
+		local ring = UIKit.frame({
+			Name = "Ring" .. layer.name,
+			BackgroundTransparency = 1,
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromOffset(layer.offset, layer.offset),
+			Size = UDim2.fromOffset(STREAK_SIGHT - STREAK_RING, STREAK_SIGHT - STREAK_RING),
+			ZIndex = layer.z,
+			Parent = center,
+		})
+		UIKit.create("UICorner", { CornerRadius = UDim.new(0.5, 0), Parent = ring })
+		local stroke = UIKit.create("UIStroke", {
+			Thickness = STREAK_RING,
+			Color = if shadow then C.Black else C.Bone,
+			Transparency = if shadow then 0.35 else 0,
+			Parent = ring,
+		})
+		local skull = UIKit.create("ImageLabel", {
+			Name = "Skull" .. layer.name,
+			Image = STREAK_SKULL,
+			ImageColor3 = if shadow then C.Black else C.Bone,
+			ImageTransparency = if shadow then 0.35 else 0,
+			BackgroundTransparency = 1,
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromOffset(layer.offset, layer.offset),
+			Size = UDim2.fromOffset(STREAK_SKULL_SIZE, STREAK_SKULL_SIZE),
+			ZIndex = layer.z,
+			Parent = center,
+		})
+		if not shadow then
+			streakRing = stroke
+			streakSkull = skull
+		end
+	end
+	-- Branches du réticule, cachées hors palier : rouge d'impact à contour noir, comme le crosshair
+	for _, dir in { Vector2.new(-1, 0), Vector2.new(1, 0), Vector2.new(0, -1), Vector2.new(0, 1) } do
+		local horizontal = dir.Y == 0
+		local arm = UIKit.frame({
+			Name = "Arm",
+			BackgroundColor3 = C.HitRed,
+			BackgroundTransparency = 1,
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Size = if horizontal
+				then UDim2.fromOffset(STREAK_ARM_LENGTH, STREAK_RING)
+				else UDim2.fromOffset(STREAK_RING, STREAK_ARM_LENGTH),
+			ZIndex = 3,
+			Parent = center,
+		})
+		local stroke = UIKit.create("UIStroke", {
+			Thickness = 1,
+			Color = C.Black,
+			Transparency = 1,
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+			Parent = arm,
+		})
+		table.insert(streakArms, { frame = arm, stroke = stroke, dir = dir })
+	end
+	-- Croix du hitmarker sur le crâne, cachée hors palier : contour noir dessous, trait rouge d'impact dessus
+	local diagonal = math.sqrt(0.5)
+	local inner, outer = STREAK_CROSS[1] * diagonal, STREAK_CROSS[2] * diagonal
+	for _, d in { { 1, 1 }, { -1, 1 }, { -1, -1 }, { 1, -1 } } do
+		for _, layer in
+			{
+				{ thickness = STREAK_RING + 2, color = C.Black, z = 4 },
+				{ thickness = STREAK_RING, color = C.HitRed, z = 5 },
+			}
+		do
+			local line =
+				UIKit.line(center, inner * d[1], inner * d[2], outer * d[1], outer * d[2], layer.thickness, layer.color)
+			line.Name = "Cross"
+			line.BackgroundTransparency = 1
+			line.ZIndex = layer.z
+			UIKit.create("UICorner", { CornerRadius = UDim.new(0.5, 0), Parent = line })
+			table.insert(streakCross, line)
+		end
+	end
+
+	local countBox = UIKit.frame({
+		Name = "CountBox",
+		BackgroundTransparency = 1,
+		LayoutOrder = 2,
+		Size = UDim2.fromOffset(0, STREAK_HEIGHT),
+		AutomaticSize = Enum.AutomaticSize.X,
+		Parent = streakRow,
+	})
+	streakCount, streakCountShadow = shadowedText(countBox, {
+		Name = "Count",
+		Text = "",
+		FontFace = F.Display,
+		TextSize = STREAK_TEXT_SIZE,
+		TextColor3 = C.Bone,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Size = UDim2.fromOffset(0, STREAK_HEIGHT),
+		AutomaticSize = Enum.AutomaticSize.X,
+	}, 3)
+end
+
+-- Cette méthode permet d'afficher ou masquer l'indicateur de série lorsque la série ou le menu en partie change : visible
+-- dès le double kill, jamais sous le menu en partie (le titre « MENU » est juste sous le timer).
+local function applyStreakVisible()
+	if streakRow then
+		streakRow.Visible = streakShown and not HUDRules.roundTimerOverMenu(HUDState.get())
+	end
+end
+
+-- Cette méthode permet de placer une branche du réticule à `start` px du centre (son bout intérieur) lorsque les
+-- branches arrivent ou se ferment.
+local function armPosition(dir: Vector2, start: number): UDim2
+	local d = start + STREAK_ARM_LENGTH / 2
+	return UDim2.fromOffset(dir.X * d, dir.Y * d)
+end
+
+-- Cette méthode permet de marquer un palier annoncé à la voix, sans changer de taille : branches qui se ferment sur le
+-- cercle, croix du hitmarker sur le crâne, tout en rouge d'impact ; retour à l'os après l'annonce, sauf si un palier plus
+-- récent a pris la main.
+local function pulseStreak()
+	streakPulse += 1
+	local token = streakPulse
+	streakSkull.ImageColor3 = C.HitRed
+	streakRing.Color = C.HitRed
+	streakCount.TextColor3 = C.HitRed
+	for _, arm in streakArms do
+		arm.frame.Position = armPosition(arm.dir, STREAK_ARM_OPEN)
+		arm.frame.BackgroundTransparency = 1
+		arm.stroke.Transparency = 1
+		UIKit.tween(arm.frame, STREAK_CLOSE, {
+			Position = armPosition(arm.dir, STREAK_ARM_CLOSED),
+			BackgroundTransparency = 0,
+		})
+		UIKit.tween(arm.stroke, STREAK_CLOSE, { Transparency = 0.35 })
+	end
+	for _, line in streakCross do
+		line.BackgroundTransparency = 0
+	end
+	task.delay(STREAK_CROSS_HOLD, function()
+		if token ~= streakPulse then
+			return
+		end
+		for _, line in streakCross do
+			UIKit.tween(line, Motion.Hit, { BackgroundTransparency = 1 })
+		end
+	end)
+	task.delay(STREAK_RED_HOLD, function()
+		if token ~= streakPulse then
+			return
+		end
+		UIKit.tween(streakSkull, Motion.Color, { ImageColor3 = C.Bone })
+		UIKit.tween(streakRing, Motion.Color, { Color = C.Bone })
+		UIKit.tween(streakCount, Motion.Color, { TextColor3 = C.Bone })
+		for _, arm in streakArms do
+			UIKit.tween(arm.frame, Motion.Exit, { BackgroundTransparency = 1 })
+			UIKit.tween(arm.stroke, Motion.Exit, { Transparency = 1 })
+		end
+	end)
+end
 
 -- Cette méthode permet de construire le timer et le rang en haut au centre (chiffres os droits sur un fondu sombre,
 -- sans panneau) lorsque le HUD est initialisé ; le tout dans un calque qui passe au-dessus du menu en partie (#220).
@@ -185,6 +411,7 @@ local function buildTimer(root: Frame)
 		Size = UDim2.fromOffset(84, 20),
 		Parent = block,
 	})
+	buildStreak(anchor)
 end
 
 -- Cette méthode permet de passer le timer en alerte (rouge d'impact + clignotement) ou de l'en sortir lorsque le seuil
@@ -610,6 +837,7 @@ local function applyTimerLayer()
 		timerLayer.Parent = parent
 	end
 	timerOverMenuGui.Enabled = overMenu and gui.Enabled
+	applyStreakVisible()
 end
 
 -- ── API publique ───────────────────────────────────────────────────────────────
@@ -645,6 +873,10 @@ function RoundHUD.init()
 
 	buildRespawnOverlay(root)
 	buildTimer(root)
+	-- Crâne de la série chargé d'avance : une image chargée à sa première apparition manquait au premier palier (#364)
+	task.spawn(function()
+		pcall(ContentProvider.PreloadAsync, ContentProvider, { streakSkull })
+	end)
 	buildLeaderboard(root)
 	buildResultBanner(root)
 	hudStateConn = HUDState.onChanged(applyTimerLayer)
@@ -688,6 +920,22 @@ function RoundHUD.hide()
 	end
 	if deathGrade then
 		deathGrade.Enabled = false
+	end
+end
+
+-- Cette méthode permet de montrer la série de kills du joueur local (KillAnnouncer) lorsqu'elle change : crâne et nombre
+-- dès le double kill (KillStreakRules.view), pulsation rouge à un palier annoncé, masqué à la mort et hors partie.
+function RoundHUD.setStreak(streak: number)
+	if not streakRow then
+		return
+	end
+	local view = KillStreakRules.view(streak)
+	streakShown = view.visible
+	streakCount.Text = view.count
+	streakCountShadow.Text = view.count
+	applyStreakVisible()
+	if view.visible and view.tier then
+		pulseStreak()
 	end
 end
 

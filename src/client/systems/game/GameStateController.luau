@@ -594,6 +594,8 @@ function GameStateController.init(player: Player, setupCharacter: (char: Model) 
 		MainMenu.setPage("home")
 	end)
 	RoundHUD.init()
+	-- Série de kills montrée sous le timer (#364), comptée par l'annonceur
+	KillAnnouncer.onStreak(RoundHUD.setStreak)
 	LocalSettings.onChanged(applyDeathTip)
 	BeginnerState.onChanged(applyDeathTip)
 	KillFeed.init()

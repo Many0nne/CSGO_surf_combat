@@ -51,4 +51,34 @@ return function(T, Loader)
 			T.expectEqual(announcement, nil)
 		end)
 	end)
+
+	T.describe("KillStreakRules.view", function()
+		T.it("masque l'indicateur à 0 et 1 kill, l'affiche dès le double kill", function()
+			T.expectEqual(KillStreakRules.view(0).visible, false)
+			T.expectEqual(KillStreakRules.view(1).visible, false)
+			T.expectEqual(KillStreakRules.view(2).visible, true)
+			T.expectEqual(KillStreakRules.view(23).visible, true)
+		end)
+
+		T.it("affiche le nombre de kills seul, sans mot", function()
+			T.expectEqual(KillStreakRules.view(3).count, "3")
+			T.expectEqual(KillStreakRules.view(12).count, "12")
+		end)
+
+		T.it("marque les paliers annoncés à la voix, et eux seuls", function()
+			for _, n in { 2, 3, 4, 5, 10, 15 } do
+				T.expectEqual(KillStreakRules.view(n).tier, true)
+			end
+			for _, n in { 0, 1, 6, 9, 11, 14, 16 } do
+				T.expectEqual(KillStreakRules.view(n).tier, false)
+			end
+		end)
+
+		T.it("revient masqué après une mort (série remise à 0)", function()
+			local streak = select(1, KillStreakRules.onKill(0, false))
+			streak = select(1, KillStreakRules.onKill(streak, false))
+			T.expectEqual(KillStreakRules.view(streak).visible, true)
+			T.expectEqual(KillStreakRules.view(0).visible, false)
+		end)
+	end)
 end
