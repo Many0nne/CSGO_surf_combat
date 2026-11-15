@@ -680,6 +680,122 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("InventoryStore.transact : changements pendant l'écriture (#396)", function()
+		-- Cette méthode permet de construire l'opération d'un achat refusé faute de solde lorsqu'un test simule un refus.
+		local function tooExpensive(record)
+			local w, reason = Wallet.debit(record.wallet, 10_000)
+			if not w then
+				return nil, reason
+			end
+			record.wallet = w
+			return record, nil
+		end
+
+		T.it("un item obtenu pendant une transaction refusée est quand même écrit ensuite", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 10)
+			ds.latency = 1
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			sched.advance(1)
+			local state = server.transact(alice, tooExpensive)
+			T.expect(server.Inventory.grant(alice, "weapon.m9bayonet"), "don accepté pendant l'écriture")
+			server.Wallet.add(alice, 5)
+			sched.advance(2)
+			T.expectEqual(state.status, "rejected")
+			sched.advance(30)
+			T.expect(table.find(ds.data["1"].items, "weapon.m9bayonet") ~= nil, "item écrit")
+			T.expectEqual(storedBalance(ds, 1), 15, "gain écrit")
+		end)
+
+		T.it("transaction réussie : items de la session réunis à ceux écrits, objet acheté possédé", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 500)
+			ds.latency = 1
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			sched.advance(1)
+			local state = server.transact(alice, function(record)
+				local w = Wallet.debit(record.wallet, 100)
+				if not w then
+					return nil, "insufficient"
+				end
+				record.wallet = w
+				table.insert(record.items, "skin.awp.couchant")
+				return record, nil
+			end)
+			T.expect(server.Inventory.grant(alice, "weapon.m9bayonet"), "don accepté pendant l'écriture")
+			sched.advance(2)
+			T.expectEqual(state.status, "ok")
+			local owned = server.Inventory.owned(alice)
+			T.expect(owned["weapon.m9bayonet"], "item donné pendant l'écriture gardé")
+			T.expect(owned["skin.awp.couchant"], "objet acheté possédé")
+			sched.advance(30)
+			T.expect(table.find(ds.data["1"].items, "weapon.m9bayonet") ~= nil)
+			T.expect(table.find(ds.data["1"].items, "skin.awp.couchant") ~= nil)
+		end)
+
+		T.it("une opération en erreur est un refus immédiat, pas une panne du DataStore", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 100)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			local state = server.transact(alice, function(_record)
+				error("bug simulé")
+			end)
+			T.expect(state.done, "sans attente de nouvel essai")
+			T.expectEqual(state.status, "rejected")
+			T.expectEqual(state.result, "error")
+			T.expectEqual(ds.writes, 0)
+			T.expect(hasWarning(server, "bug simulé"))
+			T.expect(not hasWarning(server, "sauvegarde impossible"))
+		end)
+
+		T.it("spend : un refus autre que le solde (portefeuille invalide) rend `failed`", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 100)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			local state = server.transact(alice, function(record)
+				record.wallet.earned = -1
+				return record, nil
+			end)
+			T.expectEqual(state.status, "rejected")
+			T.expectEqual(state.result, "invalid")
+			T.expectEqual(storedBalance(ds, 1), 100)
+		end)
+
+		T.it("Studio sans accès aux API : une transaction s'applique au solde de session, sans écriture", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			ds.failures = 3
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			sched.advance(10)
+			alice.attributes.DebugCredits = 300
+			server.Wallet.applyDebug(alice)
+			local state = server.transact(alice, function(record)
+				local w = Wallet.debit(record.wallet, 120)
+				if not w then
+					return nil, "insufficient"
+				end
+				record.wallet = w
+				table.insert(record.items, "skin.awp.couchant")
+				return record, "achat"
+			end)
+			T.expectEqual(state.status, "ok")
+			T.expectEqual(state.result, "achat")
+			T.expectEqual(server.Wallet.balance(alice), 180)
+			T.expect(server.Inventory.owned(alice)["skin.awp.couchant"])
+			T.expectEqual(server.spend(alice, 500).status, "insufficient")
+			T.expectEqual(ds.writes, 0)
+		end)
+	end)
+
 	T.describe("WalletStore : DebugCredits (Studio)", function()
 		T.it("ajoute puis retire, sans descendre sous 0", function()
 			local sched = makeScheduler()

@@ -302,8 +302,7 @@ local function acquire(profile: Profile)
 end
 
 -- Cette méthode permet de rendre le tour d'écriture d'un profil lorsqu'une écriture se termine : à la transaction
--- suivante s'il y en a une (elle écrit aussi ce qui reste), sinon une sauvegarde de ce qui a changé entre-temps est
--- programmée (tout de suite à l'arrêt, après SAVE_RETRY_DELAY après un échec, sinon espacée d'EQUIP_SAVE_SPACING).
+-- suivante s'il y en a une, sinon ce qui a changé entre-temps est programmé (arrêt : tout de suite, échec : plus tard).
 local function release(player: Player, profile: Profile)
 	local waiter = table.remove(profile.waiters, 1)
 	if waiter then
@@ -381,11 +380,60 @@ function saveProfile(player: Player, profile: Profile)
 	release(player, profile)
 end
 
--- Cette méthode permet d'appliquer une opération à l'enregistrement stocké d'un joueur, dans une seule UpdateAsync
--- immédiate (débit, achat : portefeuille et objets ensemble), après les écritures déjà en cours de ce joueur ; renvoie
--- l'issue (TransactStatus) et le résultat de l'opération, une fois l'écriture terminée. Contrat : docs/architecture.md.
+-- Cette méthode permet de réunir aux items de la session ceux d'un enregistrement écrit lorsqu'une transaction aboutit,
+-- et de republier l'inventaire s'il a grandi (objet acheté, item écrit entre-temps par un autre serveur).
+local function adoptItems(player: Player, profile: Profile, raw: any)
+	local union = table.clone(profile.stored)
+	for _, id in InventoryRules.sanitizeStored(raw, math.huge) do
+		table.insert(union, id)
+	end
+	local merged = InventoryRules.sanitizeStored(union, math.huge)
+	if #merged ~= #profile.stored then
+		profile.stored = merged
+		refresh(player, profile)
+	end
+end
+
+-- Cette méthode permet de lire un enregistrement sans le cache du serveur lorsqu'une écriture incertaine est vérifiée ;
+-- renvoie la réussite et la valeur.
+local function getFresh(ds: DataStore, key: string): (boolean, any)
+	local okOptions, options = pcall(function()
+		local fresh = Instance.new("DataStoreGetOptions")
+		fresh.UseCache = false
+		return fresh
+	end)
+	return pcall(function()
+		return ds:GetAsync(key, if okOptions then options else nil)
+	end)
+end
+
+-- Cette méthode permet d'appliquer une transaction au solde de session de Studio (sans accès aux API) : même fusion
+-- pure, en mémoire, jamais écrite.
+local function transactSession(player: Player, profile: Profile, op: InventoryRules.Operation): (TransactStatus, any)
+	profile.seq += 1
+	local change = { session = profile.session, batches = {}, upTo = profile.seq }
+	local record = InventoryRules.payload(profile.stored, nil, profile.wallet)
+	local okOp, written, status, result = pcall(InventoryRules.mergeForSave, record, profile.stored, nil, change, op)
+	if not okOp then
+		warn("[InventoryStore] opération en erreur pour", player.Name, ":", written)
+		return "rejected", "error"
+	end
+	if status ~= "applied" or not written then
+		return "rejected", result
+	end
+	profile.wallet = WalletRules.read(written.wallet)
+	adoptItems(player, profile, written.items)
+	publishWallet(player, profile)
+	return "ok", result
+end
+
+-- Cette méthode permet d'appliquer une opération pure à l'enregistrement stocké d'un joueur (portefeuille et objets) en
+-- une UpdateAsync immédiate, après ses autres écritures ; rend l'issue et le résultat (contrat : docs/architecture.md).
 function InventoryStore.transact(player: Player, op: InventoryRules.Operation): (TransactStatus, any)
 	local profile = profiles[player]
+	if profile and profile.loaded and profile.sessionOnly then
+		return transactSession(player, profile, op)
+	end
 	local ds = getStore()
 	if not (ds and profile and profile.loaded and profile.canSave) then
 		return "loading", nil
@@ -397,7 +445,7 @@ function InventoryStore.transact(player: Player, op: InventoryRules.Operation): 
 		release(player, p)
 		return "loading", nil
 	end
-	local wasDirty = p.dirty
+	local wasDirty, lastSaveAt = p.dirty, p.lastSaveAt
 	p.dirty = false
 	p.lastSaveAt = os.clock()
 	savesInFlight += 1
@@ -407,20 +455,28 @@ function InventoryStore.transact(player: Player, op: InventoryRules.Operation): 
 	local status: InventoryRules.MergeStatus = "refused"
 	local result: any = nil
 	local seen: any = nil
+	local opError: any = nil
+	-- Une erreur de l'opération (bug) est un refus, pas une panne du DataStore : pas de nouvel essai
+	local function guarded(record: InventoryRules.Record): (InventoryRules.Record?, any)
+		local okOp, nextRecord, value = pcall(op, record)
+		if okOp then
+			return nextRecord, value
+		end
+		opError = nextRecord
+		return nil, "error"
+	end
 	local key = tostring(player.UserId)
 	local ok, written = withRetry(function()
 		return ds:UpdateAsync(key, function(old)
 			local record
-			record, status, result = InventoryRules.mergeForSave(old, stored, chosen, change, op)
+			record, status, result = InventoryRules.mergeForSave(old, stored, chosen, change, guarded)
 			seen = old
 			return record
 		end)
 	end)
 	if not ok then
 		-- Tous les essais signalés en échec : l'un d'eux a pu passer (réponse perdue). La marque de l'opération le dit.
-		local readOk, data = pcall(function()
-			return ds:GetAsync(key)
-		end)
+		local readOk, data = getFresh(ds :: DataStore, key)
 		local wallet = WalletRules.read(if readOk and type(data) == "table" then data.wallet else nil)
 		if readOk and WalletRules.appliedSeq(wallet, p.session) >= change.upTo then
 			ok, written, status, result = true, data, "replayed", nil
@@ -429,22 +485,22 @@ function InventoryStore.transact(player: Player, op: InventoryRules.Operation): 
 	savesInFlight -= 1
 	local outcome: TransactStatus
 	if ok and status == "refused" then
-		p.dirty = wasDirty
+		p.dirty = p.dirty or wasDirty
 		noteRefused(player, p)
 		outcome = "loading"
 	elseif ok and status == "rejected" then
-		-- Rien d'écrit : l'état stocké relu remplace la copie locale, le reste de la session reste à écrire
+		-- Rien d'écrit : l'état stocké relu remplace la copie locale ; ce qui a changé pendant l'attente reste à écrire
 		adoptWallet(p, if type(seen) == "table" then seen.wallet else nil)
-		p.dirty = wasDirty or #p.batches > 0
+		p.dirty = p.dirty or wasDirty or #p.batches > 0 or p.gains > 0
+		p.lastSaveAt = lastSaveAt
+		if opError ~= nil then
+			warn("[InventoryStore] opération en erreur pour", player.Name, ":", opError)
+		end
 		outcome = "rejected"
 	elseif ok then
 		p.failures = 0
 		adoptWallet(p, written and written.wallet)
-		local items = InventoryRules.sanitizeStored(written and written.items, math.huge)
-		if #items ~= #p.stored then
-			p.stored = items
-			refresh(player, p)
-		end
+		adoptItems(player, p, written and written.items)
 		outcome = "ok"
 	else
 		noteFailure(player, p)
@@ -552,9 +608,8 @@ function InventoryStore.canChangeCredits(player: Player): boolean
 	return walletReady(profiles[player])
 end
 
--- Cette méthode permet de créditer des gains à un joueur lorsqu'il en gagne (WalletStore.add) : ajoutés à `earned` par
--- la prochaine écriture (lot numéroté, GAINS_SAVE_DELAY s plus tard), écrêtés au plafond ; false si le montant est
--- invalide ou si le solde ne peut pas changer.
+-- Cette méthode permet de créditer des gains (WalletStore.add), écrits en lot numéroté GAINS_SAVE_DELAY s plus tard et
+-- écrêtés au plafond ; false si le montant est invalide ou si le solde ne peut pas changer.
 function InventoryStore.addCredits(player: Player, amount: number): boolean
 	local profile = profiles[player]
 	if not (WalletRules.isAmount(amount) and walletReady(profile)) then
@@ -586,29 +641,6 @@ function InventoryStore.startSessionWallet(player: Player)
 		profile.wallet = WalletRules.empty()
 		publishWallet(player, profile)
 	end
-end
-
--- Cette méthode permet de débiter le solde de session de Studio lorsqu'une dépense arrive sans accès aux API (pas
--- d'écriture) ; renvoie l'issue comme `transact` ("ok", "rejected" avec le motif, "loading" hors solde de session).
-function InventoryStore.debitSession(player: Player, amount: number): (TransactStatus, any)
-	local profile = profiles[player]
-	if not (profile and profile.sessionOnly) then
-		return "loading", nil
-	end
-	local wallet, reason = WalletRules.debit(profile.wallet, amount)
-	if not wallet then
-		return "rejected", reason
-	end
-	profile.wallet = wallet
-	publishWallet(player, profile)
-	return "ok", nil
-end
-
--- Cette méthode permet de savoir si les crédits d'un joueur passent par le solde de session de Studio (jamais écrit)
--- lorsqu'une dépense arrive.
-function InventoryStore.isSessionWallet(player: Player): boolean
-	local profile = profiles[player]
-	return profile ~= nil and profile.sessionOnly
 end
 
 -- Cette méthode permet de savoir si un item obtenu serait gardé lorsqu'une ouverture de caisse (#332) va le tirer :

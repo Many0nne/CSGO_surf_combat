@@ -279,9 +279,8 @@ local function isWritable(data: any): boolean
 		and WalletRules.isWritable(data.wallet)
 end
 
--- Cette méthode permet de décider des ids, du droit d'écrire, de l'équipement et du portefeuille relus lorsque le
--- chargement DataStore se termine : échec ou format inconnu/plus récent → sauvegarde coupée (portefeuille de départ,
--- à ne pas publier) ; aucune donnée ou schéma 1 sans `wallet` → écriture permise, portefeuille de départ.
+-- Cette méthode permet de décider des ids, du droit d'écrire, de l'équipement et du portefeuille relus au chargement :
+-- échec ou format inconnu/plus récent → sauvegarde coupée ; rien ou schéma 1 sans `wallet` → portefeuille de départ.
 function InventoryRules.loadOutcome(ok: boolean, data: any): ({ string }, boolean, Equipped, WalletRules.Wallet)
 	if not ok then
 		return {}, false, {}, WalletRules.empty()
@@ -319,9 +318,8 @@ local function deepCopy(value: any): any
 	return copy
 end
 
--- Cette méthode permet de garder d'un enregistrement rendu par une opération ce qu'elle a le droit de changer : ids
--- ajoutés (jamais retirés), portefeuille valide (compteurs, jour, reçus ; marques de lots : celles de la fusion) ; nil
--- si le portefeuille rendu n'est pas valide (négatif, fractionnaire, au-delà du plafond).
+-- Cette méthode permet de garder d'un enregistrement rendu par une opération ce qu'elle peut changer : ids ajoutés et
+-- portefeuille (marques de lots de la fusion) ; nil si ce portefeuille n'est pas valide (négatif, au-delà du plafond).
 local function adoptOperation(merged: Record, proposed: any): Record?
 	if type(proposed) ~= "table" or proposed.wallet == nil or not WalletRules.isWritable(proposed.wallet) then
 		return nil
@@ -342,12 +340,8 @@ local function adoptOperation(merged: Record, proposed: any): Record?
 	}
 end
 
--- Cette méthode permet de calculer la valeur écrite par UpdateAsync lorsqu'un inventaire est sauvegardé ou qu'une
--- transaction s'écrit : ids réunis sans plafond (un inventaire ne fait que grandir), équipement enregistré remplacé
--- emplacement par emplacement par la session, lots de gains de la session ajoutés au portefeuille (un lot déjà
--- appliqué n'est pas recompté), puis opération `op` appliquée au résultat (refus possible). Renvoie l'enregistrement à
--- écrire (nil : rien à écrire), l'issue et le résultat de l'opération. `op` demande `wallet`, dont `upTo` est le numéro
--- de l'opération. Pure : Roblox peut l'appeler plusieurs fois.
+-- Cette méthode permet de calculer la valeur écrite par UpdateAsync : ids réunis, équipement de la session, lots de gains
+-- pas encore comptés, puis opération `op` (refus possible) ; pure, rend l'enregistrement (nil : rien), l'issue, le résultat.
 function InventoryRules.mergeForSave(
 	old: any,
 	stored: { string },

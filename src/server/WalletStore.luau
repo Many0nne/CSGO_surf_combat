@@ -46,31 +46,23 @@ function WalletStore.spend(player: Player, amount: number): SpendStatus
 	if not WalletRules.isAmount(amount) then
 		return "invalid"
 	end
-	if not InventoryStore.canChangeCredits(player) then
-		return "loading"
-	end
-	local status
-	if InventoryStore.isSessionWallet(player) then
-		status = InventoryStore.debitSession(player, amount)
-	else
-		status = InventoryStore.transact(player, function(record)
-			local wallet, reason = WalletRules.debit(record.wallet, amount)
-			if not wallet then
-				return nil, reason
-			end
-			record.wallet = wallet
-			return record, nil
-		end)
-	end
+	local status, reason = InventoryStore.transact(player, function(record)
+		local wallet, why = WalletRules.debit(record.wallet, amount)
+		if not wallet then
+			return nil, why
+		end
+		record.wallet = wallet
+		return record, nil
+	end)
 	if status == "rejected" then
-		return "insufficient"
+		-- Seul un solde stocké trop bas est la faute du joueur ; un autre refus est un bug serveur
+		return if reason == "insufficient" then "insufficient" else "failed"
 	end
 	return status
 end
 
--- Cette méthode permet, dans Studio, d'appliquer l'attribut `DebugCredits` d'un joueur lorsqu'il est posé (contexte
--- serveur) : nombre entier ajouté au solde (négatif : retiré, jusqu'à 0), puis attribut remis à nil. Sans accès aux
--- API, le solde devient un solde de session.
+-- Cette méthode permet, dans Studio, d'ajouter au solde l'attribut `DebugCredits` posé en contexte serveur (négatif :
+-- retiré, jusqu'à 0), puis de le remettre à nil ; sans accès aux API, le solde devient un solde de session.
 function WalletStore.applyDebug(player: Player)
 	local value = player:GetAttribute(DEBUG_ATTRIBUTE)
 	if value == nil then
@@ -88,10 +80,10 @@ function WalletStore.applyDebug(player: Player)
 		warn("[DebugCredits] solde pas encore chargé pour", player.Name)
 		return
 	end
-	local result: any
-	if value >= 0 then
+	local result: any = "rien à changer"
+	if value > 0 then
 		result = WalletStore.add(player, value)
-	else
+	elseif value < 0 and before > 0 then
 		result = WalletStore.spend(player, math.min(-value, before))
 	end
 	print("[DebugCredits]", player.Name, value, result, before, "→", WalletStore.balance(player))

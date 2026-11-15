@@ -76,9 +76,8 @@ function WalletRules.empty(): Wallet
 	}
 end
 
--- Cette méthode permet de savoir si un portefeuille relu est d'un format que cette version sait réécrire : absent (pas
--- encore de portefeuille), ou table dont les deux compteurs sont des soldes valides et dont la somme tient sous le
--- plafond, les champs facultatifs étant du bon type.
+-- Cette méthode permet de savoir si un portefeuille relu est réécrivable : absent, ou deux compteurs valides dont la
+-- somme tient sous le plafond, champs facultatifs du bon type.
 function WalletRules.isWritable(raw: any): boolean
 	if raw == nil then
 		return true
@@ -160,10 +159,8 @@ function WalletRules.appliedSeq(wallet: Wallet, session: string): number
 	return 0
 end
 
--- Cette méthode permet d'ajouter les lots de gains d'une session à un portefeuille lorsque l'UpdateAsync de l'inventaire
--- fusionne : seuls les lots plus récents que la marque de la session comptent (un lot déjà appliqué n'est pas recompté),
--- `earned` est écrêté pour que le solde reste sous le plafond, et la marque avance jusqu'à `upTo` (dernier numéro
--- envoyé, lot vide d'une transaction compris). Pure : renvoie une copie.
+-- Cette méthode permet d'ajouter à `earned` (écrêté au plafond) les lots d'une session plus récents que sa marque, puis
+-- d'avancer la marque jusqu'à `upTo`, lorsque l'UpdateAsync de l'inventaire fusionne ; pure, renvoie une copie.
 function WalletRules.applyBatches(wallet: Wallet, session: string, batches: { Batch }, upTo: number): Wallet
 	local result = WalletRules.read(wallet)
 	local applied = WalletRules.appliedSeq(result, session)
