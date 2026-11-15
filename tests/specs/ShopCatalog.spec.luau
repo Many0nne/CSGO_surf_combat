@@ -285,7 +285,7 @@ return function(T, Loader)
 		end)
 
 		T.it("écrit le prix avec la monnaie", function()
-			T.expectEqual(Shop.priceLabel(Shop.crate("crate.awp.serie1")), "500 CRÉDITS")
+			T.expectEqual(Shop.priceLabel(Shop.crate("crate.awp.serie1")), "500")
 		end)
 	end)
 end

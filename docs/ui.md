@@ -740,8 +740,9 @@ l'étiquette BIENTÔT tant que l'achat n'existe pas.
   revoir plus tard). Ouverture réservée à l'admin et à Studio (remote `OpenCrate`, `CrateService`, `docs/anticheat.md`),
   OUVRIR remplace ACHETER pour eux (attribut informatif `Role`, le serveur revérifie), ACHETER reste BIENTÔT pour les
   autres. Tout est dans `ShopCatalog`. L'étiquette de la vitrine (3,4 studs) tient « AWP · SÉRIE 1 » + « 500 CRÉDITS »
-  (vérifié en Studio) ; sous-titre de la vue d'ensemble « UNE PAR ARME ET PAR SÉRIE ». Pas de solde affiché tant que la
-  monnaie n'est pas décidée.
+  (vérifié en Studio) ; sous-titre de la vue d'ensemble « UNE PAR ARME ET PAR SÉRIE ». Depuis #391, le prix est le jeton
+  du crédit suivi du montant : sur l'étiquette, le jeton (32 px) remplace le mot CRÉDITS, qui ne tiendrait plus ; dans la
+  vue détail, jeton (34 px), montant puis CRÉDITS. Le solde est en haut à droite de la barre du menu (voir « Crédits »).
 - **Modèle de la caisse (validé le 14/11/2026, #332)** : caisse d'armes en bois (piste B de
   `docs/ui/shop/planche_caisses.png`) : planches, cadre et écharpe en Z, coins et moraillons en acier, poignées en
   corde, bande peinte de la collection sur l'avant et le dessus du couvercle, numéro au pochoir. Elle reprend le bois des
@@ -878,6 +879,26 @@ détail (caisse et tableau refaits).
   n'est gagné) ; `DebugCrateOpeningTime = t` fige l'ouverture au temps `t` (poses à capturer), nil la relâche. La vidéo
   se fait en temps réel avec `tools/anim/record_window.py` (`docs/animations.md`). Le message
   `ContentId: rbxassetid://86578020001310 failed … do_not_fallback_to_baseline` (texture des faisceaux) existait avant.
+
+## Crédits (#391)
+
+Monnaie du jeu (règles et sauvegarde : `docs/architecture.md`, « Crédits »). Pas encore de gain ni d'achat.
+
+- **Jeton** (choisi par l'utilisateur le 15/11/2026, sans référence précise) : pièce en laiton, le métal des douilles,
+  frappée d'un réticule en creux (cercle, quatre branches, point central), tranche plus claire en haut à gauche, liseré
+  sombre pour rester lisible sur l'os des étiquettes du shop comme sur le fond sombre du menu. En couleur, pas teinté :
+  le laiton fait la monnaie. Branches et cercle de 9 px sur 128 : à 7, le réticule s'empâtait à 18 px.
+  `uv run tools/ui/make_credit_icon.py assets/ui/credits/jeton_credit.png --preview <planche.png>` (planche : l'icône
+  de 18 à 128 px sur fond sombre et sur os), Decal 103980310535300, image `WalletRules.ICON`, posé par
+  `UIKit.creditIcon` (ombre noire décalée comme le tir à la tête).
+- Pistes écartées (même question) : douille seule (se lit « munitions »), plaque d'identité (mal lue en petit), « C »
+  barré (générique).
+- **Solde** : en haut à droite de la barre du menu, à hauteur des onglets, sur toutes les pages (dans `MenuTabs`, donc
+  au-dessus du shop) : jeton 26 px puis montant en os à ombre (Oswald gras 24 px), chiffres groupés par trois
+  (`WalletRules.format`), « — » tant que le solde n'est pas chargé. Rien dans le HUD en partie (on n'y gagne rien).
+- **Prix du shop** : voir « Shop : salle de présentation ».
+
+![Planche du jeton](ui/credits/planche_jeton.png)
 
 ## Reste à faire
 

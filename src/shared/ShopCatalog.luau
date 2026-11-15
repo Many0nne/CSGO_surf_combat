@@ -2,8 +2,13 @@
 -- leur prix et leur contenu par rareté, tirage d'une ouverture, et rangement des caisses dans la vitrine de la vue
 -- d'ensemble. Règles pures, testées (tests/specs/ShopCatalog.spec.luau).
 --
--- Provisoire : prix, monnaie (CRÉDITS), raretés et chances sont des valeurs d'attente (points ouverts de #347 et
--- #332). L'achat n'existe pas encore : le prix affiché ne fait jamais foi côté serveur.
+-- Provisoire : prix, raretés et chances sont des valeurs d'attente (points ouverts de #347 et #332). Les prix sont en
+-- crédits, la monnaie du jeu (#391, WalletRules), mais l'achat n'existe pas encore : le prix affiché ne fait jamais foi
+-- côté serveur.
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local WalletRules = require(ReplicatedStorage.Shared.WalletRules)
+
 local ShopCatalog = {}
 
 export type Rgb = { number }
@@ -22,7 +27,7 @@ export type Crate = {
 export type Row = { rarity: Rarity, name: string, weapons: { string }, skins: { string }, luminance: number }
 export type Slot = { index: number, row: number, column: number }
 
-ShopCatalog.CURRENCY = "CRÉDITS"
+ShopCatalog.CURRENCY = WalletRules.CURRENCY
 
 -- Raretés, de la plus courante à la plus rare ; chances en pour cent (total 100)
 ShopCatalog.RARITIES = {
@@ -222,9 +227,10 @@ function ShopCatalog.cycle(index: number, step: number, count: number): number
 	return (index - 1 + step) % count + 1
 end
 
--- Cette méthode permet d'écrire un prix (« 500 CRÉDITS ») lorsqu'une étiquette de la vitrine l'affiche.
+-- Cette méthode permet d'écrire le montant d'un prix (« 500 », « 1 500 ») lorsque la vitrine ou la vue détail
+-- l'affiche après le jeton du crédit.
 function ShopCatalog.priceLabel(crate: Crate): string
-	return string.format("%d %s", crate.price, ShopCatalog.CURRENCY)
+	return WalletRules.format(crate.price)
 end
 
 return ShopCatalog

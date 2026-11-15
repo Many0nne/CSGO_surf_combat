@@ -19,6 +19,7 @@ local SpawnManager = require(script.SpawnManager)
 local SpawnProtection = require(script.SpawnProtection)
 local RoundManager = require(script.RoundManager)
 local StatsStore = require(script.StatsStore)
+local WalletStore = require(script.WalletStore)
 local SettingsStore = require(script.SettingsStore)
 local InventoryStore = require(script.InventoryStore)
 local CrateService = require(script.CrateService)
@@ -93,6 +94,8 @@ openCrateRmt.Parent = ReplicatedStorage
 -- Journal anti-triche (#170) : avant les remotes, qui passent tous par CheatLog.admit
 CheatLog.init()
 StatsStore.init()
+-- Crédits, la monnaie du jeu (#391) : pas encore de gain ni d'achat
+WalletStore.init()
 SettingsStore.init(getSettingsRmt, saveSettingsRmt)
 -- Inventaire (#267) : StarterPack vidé, Tools donnés selon l'équipement (#280), armes non possédées refusées par le
 -- Validator
@@ -733,6 +736,12 @@ local function setupPlayer(player: Player)
 	InventoryStore.setup(player)
 	task.spawn(InventoryStore.load, player)
 	task.spawn(StatsStore.load, player)
+	task.spawn(WalletStore.load, player)
+	if RunService:IsStudio() then
+		player:GetAttributeChangedSignal("DebugCredits"):Connect(function()
+			WalletStore.applyDebug(player)
+		end)
+	end
 	task.spawn(SettingsStore.load, player)
 	RoundManager.addParticipant(Participants.fromPlayer(player))
 	player.CharacterAdded:Connect(function(char)

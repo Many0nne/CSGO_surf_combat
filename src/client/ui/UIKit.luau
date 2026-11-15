@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
+local WalletRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WalletRules"))
 local WeaponSkins = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WeaponSkins"))
 local HUDRules = require(script.Parent.HUDRules)
 
@@ -97,6 +98,39 @@ function UIKit.headshotIcon(parent: GuiObject, size: number, shadowOffset: numbe
 			Name = if shadow then "IconShadow" else "Icon",
 			Image = UIKit.HEADSHOT_IMAGE,
 			ImageColor3 = if shadow then C.Black else C.Accent,
+			ImageTransparency = if shadow then 0.35 else 0,
+			BackgroundTransparency = 1,
+			Position = if shadow then UDim2.fromOffset(shadowOffset, shadowOffset) else UDim2.new(),
+			Size = UDim2.fromScale(1, 1),
+			ZIndex = if shadow then 1 else 2,
+			Parent = holder,
+		})
+	end
+	holder.Parent = parent
+	return holder
+end
+
+-- Cette méthode permet de poser le jeton du crédit (doublé d'une ombre noire décalée si `shadowOffset` > 0) lorsqu'un
+-- solde ou un prix est affiché ; renvoie son cadre, à la taille du jeton.
+function UIKit.creditIcon(parent: Instance, size: number, shadowOffset: number, props: { [string]: any }?): Frame
+	local holder = UIKit.frame({
+		Name = "Credit",
+		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(size, size),
+	})
+	if props then
+		for key, value in props do
+			(holder :: any)[key] = value
+		end
+	end
+	for _, shadow in { true, false } do
+		if shadow and shadowOffset <= 0 then
+			continue
+		end
+		UIKit.create("ImageLabel", {
+			Name = if shadow then "IconShadow" else "Icon",
+			Image = WalletRules.ICON,
+			ImageColor3 = if shadow then C.Black else C.White,
 			ImageTransparency = if shadow then 0.35 else 0,
 			BackgroundTransparency = 1,
 			Position = if shadow then UDim2.fromOffset(shadowOffset, shadowOffset) else UDim2.new(),
