@@ -5,6 +5,7 @@ local RunService = game:GetService("RunService")
 local AnimationSoundSystem = require(script.Parent.AnimationSoundSystem)
 local CasingEjection = require(script.Parent.CasingEjection)
 local EquipRules = require(script.Parent.EquipRules)
+local TrackStop = require(script.Parent.TrackStop)
 local SoundChannels = require(script.Parent.Parent.settings.SoundChannels)
 local LocalInventory = require(script.Parent.Parent.inventory.LocalInventory)
 local InventoryRules = require(ReplicatedStorage.Shared.InventoryRules)
@@ -42,11 +43,7 @@ local SWAY_SPEED = 18
 local SWAY_DAMPING = 1
 local IDLE_ANIMATION = "Idle"
 
-local function stopTrack(track: AnimationTrack?, fadeTime: number?)
-	if track then
-		track:Stop(fadeTime)
-	end
-end
+local stopTrack = TrackStop.stop
 
 local function setModelVisibility(viewmodelName: string, visible: boolean)
 	local parts = partsCache[viewmodelName]

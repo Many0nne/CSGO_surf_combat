@@ -331,6 +331,14 @@ Repris du retour d'expérience de la M9 (`docs/notes/retex-viewmodel-m9.md`).
   pose de repos, donc rien à fondre). Les autres armes n'ont pas le champ et gardent le défaut de 0,1 s : l'AWP (Shoot,
   Reload, Inspect) est inchangée. Si un coup à 0 paraît saccadé, monter `AttackFadeTime` à 0,03-0,05 s plutôt que
   d'avancer le défaut global.
+- **Fondu de fin naturel (#368) :** une piste non bouclée arrivée à sa fin ne disparaît pas tout de suite : elle
+  s'efface en ~0,3 s (`IsPlaying` faux, `WeightCurrent` qui descend), et pendant ce fondu Roblox **ignore `Stop(0)` et
+  `AdjustWeight(0, 0)`**. Un coup de couteau lancé juste après l'equip se mélangeait donc au reste de l'Equip (même
+  priorité Action) : premier saut de la main de 154 px au lieu de 302 px, puis le coup « se dépliait ». Seule parade
+  trouvée : relancer la piste sur sa dernière image puis l'arrêter dans le même appel (`Play(0)`, `TimePosition =
+  Length`, `Stop(0)`), fait par `TrackStop.stop` dès que le fondu demandé est 0. Mesure : sonde côté client (contexte
+  `Client`, `PostSimulation`) qui relève la position écran de `RightHand` et `GetPlayingAnimationTracks()` image par
+  image, coup lancé dès la fin de l'equip puis après 3 s : les deux doivent donner les mêmes écarts.
 - **Verrou de tir et cadence (#221) :** `ShootAnimTime` (état `FIRING` de `WeaponSystem`, qui refuse tout clic) ne
   dépasse jamais `FireDelay`, seule cadence connue du serveur : sinon le client tire moins vite que la cadence de l'arme.
   Une piste de tir plus longue que la cadence (AWP : Shoot dure 1,63 s, cadence 60/41 = 1,46 s) est coupée par le tir
