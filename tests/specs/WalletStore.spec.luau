@@ -1551,6 +1551,21 @@ return function(T, Loader)
 			T.expectEqual(pack ~= nil, Packs.isReady())
 		end)
 
+		T.it(
+			"chargement en échec (sauvegarde coupée) : prompt refusé `loading`, pas de pack payé pour rien",
+			function()
+				local sched = makeScheduler()
+				local ds = makeDataStore(sched)
+				ds.failures = 3
+				local server = makeServer(sched, ds)
+				local alice = server.join(1)
+				sched.advance(40)
+				local reply, pack = server.Receipts.promptFor(alice, PACK.id)
+				T.expectEqual(reply.reason, "loading")
+				T.expectEqual(pack, nil)
+			end
+		)
+
 		T.it("solde près du plafond : prompt refusé `full` (le reçu resterait en attente)", function()
 			local sched = makeScheduler()
 			local ds = makeDataStore(sched)

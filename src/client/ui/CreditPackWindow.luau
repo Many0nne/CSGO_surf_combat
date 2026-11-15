@@ -39,6 +39,7 @@ local REFUSALS = {
 	unknown = "PACK INCONNU",
 	unavailable = "PACKS PAS ENCORE EN VENTE",
 	full = "SOLDE AU MAXIMUM",
+	loading = "SAUVEGARDE INDISPONIBLE  ·  RÉESSAIE PLUS TARD",
 	failed = "ACHAT IMPOSSIBLE  ·  RÉESSAIE PLUS TARD",
 }
 

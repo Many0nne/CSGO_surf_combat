@@ -127,6 +127,11 @@ function ReceiptService.promptFor(player: Player, packId: string): (Reply, Credi
 	if PaidRandomPolicy.isRestricted(player) then
 		return { ok = false, reason = "region" }, nil
 	end
+	-- Chargement fini mais solde pas modifiable (lecture en échec, format refusé) : chaque reçu attendrait la prochaine
+	-- partie du joueur, ne pas lui faire payer un pack qu'il ne recevrait pas dans cette session
+	if InventoryStore.isLoaded(player) and not WalletStore.canChange(player) then
+		return { ok = false, reason = "loading" }, nil
+	end
 	-- Ids provisoires : produit inexistant, le prompt échouerait (Studio l'accepte, ses achats sont simulés)
 	if not (CreditPacks.isReady() or RunService:IsStudio()) then
 		return { ok = false, reason = "unavailable" }, nil

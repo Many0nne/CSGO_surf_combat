@@ -58,7 +58,8 @@ local function fetch(player: Player): boolean
 		return game:GetService("PolicyService"):GetPolicyInfoForPlayerAsync(player)
 	end)
 	local restricted, known = PaidRandomPolicy.fromResponse(ok, info)
-	if known then
+	if known or not player.Parent then
+		-- Joueur parti pendant l'appel : PlayerRemoving a déjà vidé `failing`, ne pas y réinscrire le Player (fuite)
 		failing[player] = nil
 	elseif not failing[player] then
 		-- Signalé au premier échec d'une série seulement : les nouveaux essais toutes les RETRY_AFTER s se taisent
