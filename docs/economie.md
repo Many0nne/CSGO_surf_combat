@@ -50,6 +50,11 @@ Règles du jeu :
   qu'il soit crédité deux fois, il faudrait que 100 autres reçus du même joueur soient écrits entre l'écriture du
   premier et son rejeu, alors que chacun de ces achats déclenche lui-même le rejeu. 100 PurchaseId font ~4 Ko, loin de
   la limite de 4 Mo d'une clé. Inchangée par #395, donc pas de relèvement de `InventoryRules.SCHEMA_VERSION`.
+- Studio : le prompt de Roblox ne se clique pas depuis le MCP, et un `require` depuis le MCP charge une autre instance
+  du module. Pour un reçu simulé passé par le vrai traitement : attribut Player `DebugReceipt` = `"pack.500|test-1"`
+  (contexte serveur), puis la console (`[Receipts]` et `[DebugReceipt] … → PurchaseGranted`). Rejouer la même valeur
+  montre le reçu déjà traité. Sans « Enable Studio Access to API Services », poser d'abord `DebugCredits` (solde de
+  session), sinon le reçu reste `NotProcessedYet` (profil pas sauvegardable).
 - Tests : `tests/specs/ReceiptRules.spec.luau` (opération, décision), `tests/specs/WalletStore.spec.luau` « Reçus Robux »
   (même reçu rejoué, écriture en échec puis rejouée, écriture passée signalée en échec, joueur absent ou parti, produit
   inconnu, reçu à la connexion, chargement en échec, deux serveurs, joueur restreint).

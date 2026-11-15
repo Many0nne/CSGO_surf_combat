@@ -32,6 +32,8 @@ local LOAD_WAIT = 30 -- s d'attente au plus de la fin du chargement de l'inventa
 local LOAD_POLL = 0.5 -- s entre deux regards pendant cette attente
 local WRITE_ROUNDS = 3 -- transactions au plus pour un reçu dont l'écriture échoue (trois essais DataStore chacune)
 local ROUND_GAP = 5 -- s entre deux de ces transactions
+-- Studio seulement : attribut Player « idDuPack|PurchaseId » (contexte serveur), reçu simulé passé par processReceipt
+local DEBUG_RECEIPT = "DebugReceipt"
 
 export type Reply = { ok: boolean, reason: string? }
 
@@ -138,11 +140,40 @@ function ReceiptService.promptFor(player: Player, packId: string): (Reply, Credi
 	return { ok = true }, pack
 end
 
+-- Cette méthode permet, dans Studio, de faire passer un reçu simulé par le même traitement que ProcessReceipt lorsque
+-- l'attribut `DebugReceipt` du joueur vaut « idDuPack|PurchaseId » (contexte serveur) ; remis à nil, décision affichée.
+local function watchDebugReceipt(player: Player)
+	player:GetAttributeChangedSignal(DEBUG_RECEIPT):Connect(function()
+		local value = player:GetAttribute(DEBUG_RECEIPT)
+		if type(value) ~= "string" then
+			return
+		end
+		player:SetAttribute(DEBUG_RECEIPT, nil)
+		local packId, purchaseId = string.match(value, "^([^|]+)|(.+)$")
+		local pack = CreditPacks.byId(packId)
+		local info = {
+			PlayerId = player.UserId,
+			ProductId = if pack then pack.productId else -1,
+			PurchaseId = purchaseId,
+		}
+		task.spawn(function()
+			local decision = ReceiptService.processReceipt(info)
+			print("[DebugReceipt]", value, "→", decision.Name)
+		end)
+	end)
+end
+
 -- Cette méthode permet de poser le callback ProcessReceipt (une seule fois dans le jeu) et de brancher le remote du
 -- prompt d'achat lorsque le serveur démarre ; le prompt est ouvert par le serveur après la garde commune.
 function ReceiptService.init(buyPackRemote: RemoteFunction)
 	local MarketplaceService = game:GetService("MarketplaceService")
 	MarketplaceService.ProcessReceipt = ReceiptService.processReceipt
+	if RunService:IsStudio() then
+		Players.PlayerAdded:Connect(watchDebugReceipt)
+		for _, player in Players:GetPlayers() do
+			watchDebugReceipt(player)
+		end
+	end
 	buyPackRemote.OnServerInvoke = function(player: Player, packId: any): Reply
 		if not CheatLog.admit(player, buyPackRemote.Name, packId) then
 			return { ok = false, reason = "rate" }
