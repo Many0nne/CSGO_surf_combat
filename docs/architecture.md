@@ -103,6 +103,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/client/systems/weapon/MeleeHitDetection.luau`: raycast melee et signalement de la touche au serveur (type d'attaque et instant du coup `hitTime`, #214 ; les dégâts sont calculés côté serveur).
 - `src/client/systems/weapon/ScopeSystem.luau`: gestion du scope (FOV, affichage de la lunette, sensibilité caméra) pour les armes à lunette.
 - `src/client/systems/weapon/ViewmodelSystem.luau`: gestion du viewmodel, des animations et des sons des armes en vue FPS.
+- `src/client/systems/weapon/TrackStop.luau`: arrêt des pistes du viewmodel ; sans fondu, coupe aussi le fondu de fin naturel d'une piste terminée, que Roblox laisse filer malgré `Stop(0)` (#368), testé (`tests/specs/TrackStop.spec.luau`).
 - `src/client/systems/weapon/WeaponSystem.luau`: logique client des armes, munitions, recharge et vitesse liée à l'arme.
 - `src/client/systems/weapon/WeaponThirdPersonView.luau`: rendu client des armes 3e personne de tous les personnages (décalage procédural du grip pour tir/recharge/switch, modèle 3P masqué pour soi en 1re personne) et tenue du haut du corps des personnages armés (Transform des Motor6D posé en `PreSimulation`, après l'Animator, #107).
 - `src/client/ui/FeedbackScreen.luau`: écran Feedback (message de 10 à 500 caractères envoyé au serveur, ENVOYER se tire).
