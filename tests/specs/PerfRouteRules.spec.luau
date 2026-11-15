@@ -165,5 +165,136 @@ return function(T, Loader)
 			T.expect(string.find(line, "^%[Perf%] RUN Dizzy fini 10/10s | FPS 60 p99 21.0ms max 48.2ms") ~= nil, line)
 			T.expect(string.find(line, "1 réapparitions | mém 1500 %-> 1510 Mo$") ~= nil, line)
 		end)
+
+		T.it("mesure sans valeur signalée en fin de ligne", function()
+			local stats = {
+				name = "Dizzy",
+				status = "fini",
+				ticks = 64,
+				total = 64,
+				fps = 15,
+				p99Ms = 70,
+				maxMs = 90,
+				hitches = 3,
+				checks = 1,
+				driftMean = 0,
+				driftMax = 0,
+				recalages = 0,
+				respawns = 0,
+				memStartMb = 1,
+				memEndMb = 1,
+				invalid = Rules.invalidReason(true, 8),
+			}
+			T.expect(string.find(Rules.runLine(stats), "Mo | INVALIDE : la fenêtre a perdu le focus$") ~= nil)
+		end)
+	end)
+
+	T.describe("PerfRouteRules.invalidReason / repeats", function()
+		T.it("focus perdu ou rien de rendu : mesure sans valeur", function()
+			T.expectEqual(Rules.invalidReason(false, 8.2), nil)
+			T.expect(string.find(Rules.invalidReason(true, 8.2), "focus") ~= nil)
+			T.expect(string.find(Rules.invalidReason(false, 0), "GPU nul") ~= nil)
+		end)
+
+		T.it("nombre de rejeux d'une série lu après le nom de la piste", function()
+			T.expectEqual(Rules.repeats(""), 1)
+			T.expectEqual(Rules.repeats("2"), 1)
+			T.expectEqual(Rules.repeats("x5"), 5)
+			T.expectEqual(Rules.repeats("x5 "), 5)
+			T.expectEqual(Rules.repeats("x0"), 1)
+			T.expectEqual(Rules.repeats("x999"), Rules.SERIES_MAX)
+			T.expectEqual(Rules.repeats("x5 bis"), 5)
+			T.expectEqual(Rules.repeats("x5bis"), 1)
+		end)
+	end)
+
+	T.describe("PerfRouteRules.keepSlowest / slowLine", function()
+		T.it("garde les plus lentes, rédigées dans l'ordre de la piste", function()
+			local list = {}
+			for i, ms in { 20, 80, 30, 60, 25, 90 } do
+				Rules.keepSlowest(list, { t = i, ms = ms, x = i, y = 0, z = -i }, 3)
+			end
+			T.expectEqual(#list, 3)
+			T.expectEqual(list[1].ms, 60)
+			T.expectEqual(list[3].ms, 90)
+			T.expectEqual(
+				Rules.slowLine("Dizzy", list),
+				"[Perf] RUN Dizzy frames les plus lentes : t=2.0s 80ms (2, 0, -2) ; t=4.0s 60ms (4, 0, -4) ; t=6.0s 90ms (6, 0, -6)"
+			)
+		end)
+	end)
+
+	T.describe("PerfRouteRules.renderLine / scriptsLine", function()
+		T.it("rendu : moyennes, pires valeurs, réglage et fenêtre", function()
+			local line = Rules.renderLine("Dizzy", {
+				frames = 8200,
+				cpuMeanMs = 5.24,
+				cpuMaxMs = 9.1,
+				gpuMeanMs = 10.3,
+				gpuMaxMs = 15,
+				drawMean = 24.4,
+				drawMax = 31,
+				shadowDrawMean = 40,
+				shadowDrawMax = 98,
+				triMeanK = 34.2,
+				quality = "10/10",
+				width = 1291,
+				height = 607,
+			})
+			T.expectEqual(
+				line,
+				"[Perf] RUN Dizzy rendu : CPU moy 5.2 max 9.1ms | GPU moy 10.3 max 15.0ms | draw moy 24 max 31, ombres moy 40"
+					.. " max 98 | tri moy 34k | qualité 10/10 1291x607 | 8200 frames"
+			)
+		end)
+
+		T.it("scripts : total, repères appelés seulement", function()
+			local line = Rules.scriptsLine("Dizzy", {
+				{ label = "mouvement", msPerFrame = 0.15, callsPerFrame = 1, maxMs = 1.2 },
+				{ label = "caméra", msPerFrame = 0.05, callsPerFrame = 1, maxMs = 0.3 },
+				{ label = "menu 3D", msPerFrame = 0, callsPerFrame = 0, maxMs = 0 },
+			})
+			T.expectEqual(
+				line,
+				"[Perf] RUN Dizzy scripts : total 0.200ms/frame | mouvement 0.150ms×1.0 (max 1.20), caméra 0.050ms×1.0 (max 0.30)"
+			)
+		end)
+	end)
+
+	T.describe("PerfRouteRules.seriesLine", function()
+		-- Cette méthode permet de construire le résumé d'un rejeu lorsqu'un test n'en fixe que le rythme et un repère.
+		local function run(valid, fps, p99, mouvement)
+			return {
+				valid = valid,
+				fps = fps,
+				p99Ms = p99,
+				maxMs = p99 * 2,
+				cpuMeanMs = 5,
+				gpuMeanMs = 10,
+				scripts = { mouvement = mouvement, ["caméra"] = 0.05, ["menu 3D"] = 0 },
+			}
+		end
+
+		T.it("étendue de chaque valeur sur les rejeux valides", function()
+			local line = Rules.seriesLine("Dizzy", {
+				run(true, 60, 21, 0.15),
+				run(false, 15, 70, 0.9),
+				run(true, 59, 26.3, 0.19),
+			})
+			T.expect(
+				string.find(line, "série : 3 rejeux finis, 2 valides | FPS 59 à 60 | p99 21.0 à 26.3 ms", 1, true),
+				line
+			)
+			T.expect(
+				string.find(line, "scripts total 0.200 à 0.240 ms/frame : mouvement 0.150 à 0.190, caméra", 1, true),
+				line
+			)
+			T.expect(string.find(line, "menu 3D", 1, true) == nil, line)
+		end)
+
+		T.it("moins de deux rejeux valides : pas d'étendue", function()
+			local line = Rules.seriesLine("Dizzy", { run(true, 60, 21, 0.15), run(false, 15, 70, 0.9) })
+			T.expect(string.find(line, "pas assez de rejeux valides", 1, true), line)
+		end)
 	end)
 end

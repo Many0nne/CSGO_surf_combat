@@ -11,7 +11,8 @@
 | La mémoire grimpe-t-elle au fil des spawns et des rounds ? | relevés `[Perf] MEM` (console F9, client et serveur) |
 | Combien la map coûte-t-elle (pièces, ombres, transparences) ? | `lune run tools/perf/audit_map.luau` (sans Studio) |
 | Combien coûte le serveur (bots, round) ? Quelle frame serveur est lente ? | sonde serveur `PerfServer` (lignes `[Perf] SRV`, console F9 > Server) |
-| Comment mesurer en mouvement (surf, bhop, combat), à parcours identique d'une version à l'autre ? | parcours rejoué (`PerfRecord` puis `PerfRun`, ligne `[Perf] RUN`) |
+| Comment mesurer en mouvement (surf, bhop, combat), à parcours identique d'une version à l'autre ? | parcours rejoué (`PerfRecord` puis `PerfRun`, lignes `[Perf] RUN`) |
+| Un écart entre deux versions est-il réel, ou du bruit ? | série de rejeux (`PerfRun = "Dizzy x5"`, ligne `[Perf] RUN … série`) |
 
 Pour comparer deux postes : ouvrir l'overlay sur chacun et faire le même parcours dans le jeu publié, puis relever les
 lignes `[Perf] BILAN` de la console F9 (onglet Log, filtre `[Perf]`). Le réglage graphique est dans la ligne : à
@@ -215,20 +216,90 @@ Piège : le journal de Studio coupe une ligne vers 950 caractères (la console d
 - Studio (MCP, contexte `Server`) : `game.Players:GetPlayers()[1]:SetAttribute("PerfRun", "Dizzy")`. Le joueur est
   amené en partie s'il est au menu (chemin du bouton JOUER), replacé au départ, puis la piste joue. Pour relancer,
   changer la valeur (`"Dizzy 2"`) : seul le premier mot compte. `nil` interrompt.
+- **Série** (#383) : `"Dizzy x5"` enchaîne 5 rejeux (20 au plus, 3 s de pause entre deux) et écrit à la fin une ligne
+  `[Perf] RUN Dizzy série` : l'étendue de chaque valeur sur les rejeux valides. C'est la mesure du bruit, à refaire
+  sur chaque version comparée. `nil` ou une nouvelle valeur interrompt la série et écrit l'étendue des rejeux finis.
+  Pour relancer la même série, changer la suite (`"Dizzy x5 bis"`).
 - Client publié : F9 > Server, `game.Players.<pseudo>:SetAttribute("PerfRun", "Dizzy")`, puis ne plus toucher
   clavier ni souris (ils sont ignorés jusqu'à la fin) et garder la fenêtre au premier plan.
 - Pendant le rejeu, l'overlay F3 est ouvert (lignes `[Perf] BILAN`) ; la sonde serveur se règle à part.
 
-**Lire le bilan.** À la fin (ou à l'interruption) :
+**Lire le bilan** (#383). À la fin (ou à l'interruption), quatre lignes sur le run entier :
 
 ```
-[Perf] RUN Dizzy fini 150/150s | FPS 59 p99 21.0ms max 48.2ms, 0 frames > 50ms | écart moy 0.12 max 0.50 studs
-sur 150 contrôles, 0 recalages, 1 réapparitions | mém 1500 -> 1510 Mo
+[Perf] RUN Dizzy fini 137/137s | FPS 51 p99 33.6ms max 55.7ms, 5 frames > 50ms | écart moy 0.27 max 8.47 studs
+sur 136 contrôles, 2 recalages, 0 réapparitions | mém 2150 -> 2258 Mo
+[Perf] RUN Dizzy rendu : CPU moy 16.7 max 52.5ms | GPU moy 17.7 max 54.0ms | draw moy 32 max 109, ombres moy 80
+max 180 | tri moy 52k | qualité 10/10 1291x607 | 6594 frames
+[Perf] RUN Dizzy scripts : total 1.133ms/frame | mouvement 0.359ms×1.0 (max 17.66), autres joueurs 0.310ms×1.0
+(max 3.26), tenue 3P 0.170ms×2.0 (max 0.83), armes 3P 0.127ms×1.0 (max 0.76), …
+[Perf] RUN Dizzy frames les plus lentes : t=4.1s 51ms (2242, 101, -260) ; t=19.9s 50ms (1853, 53, -250) ; …
 ```
 
-Rythme sur les frames du rejeu, frames de plus de 50 ms, fidélité à la piste (écart aux points de contrôle,
-recalages, réapparitions) et mémoire totale du client. Comparer deux versions sur la même piste ; beaucoup de
-recalages veulent dire que le rejeu ne suit plus la piste, et la charge mesurée n'est plus la même.
+- **Première ligne** : rythme sur les frames du rejeu, frames de plus de 50 ms, fidélité à la piste (écart aux points
+  de contrôle, recalages, réapparitions) et mémoire totale du client. Beaucoup de recalages veulent dire que le rejeu
+  ne suit plus la piste, et la charge mesurée n'est plus la même. Elle se termine par `| INVALIDE : …` si la fenêtre
+  a perdu le focus pendant le run, ou si rien n'a été rendu (GPU nul : fenêtre en arrière-plan dès le départ) : ne
+  rien conclure d'un tel run.
+- **`rendu`** : CPU et GPU de rendu, draw calls (scène, passe d'ombres) et triangles relevés à chaque frame, moyenne et
+  pire valeur ; réglage graphique et taille de la fenêtre, à tenir égaux d'une mesure à l'autre.
+- **`scripts`** : coût de chaque repère `PerfMarkers` sur le run (ms par frame × appels par frame, pire appel), et leur
+  total. **C'est la ligne qui compare deux versions dans Studio** : FPS, CPU et GPU y changent seuls (état lent,
+  bilan #370).
+- **`frames les plus lentes`** : les 8 pires frames, avec l'instant de la piste et la position du joueur (`(0, 0, 0)` :
+  pas de personnage, le joueur est mort). Une frame lente au même instant d'un rejeu à l'autre vient du jeu ; ailleurs
+  à chaque fois, c'est du bruit (Studio, bots).
+
+Une série (`"Dizzy x5"`) ajoute l'étendue de chaque valeur sur ses rejeux valides :
+
+```
+[Perf] RUN Dizzy série : 5 rejeux finis, 5 valides | FPS 45 à 51 | p99 28.9 à 33.6 ms | max 52.1 à 398.3 ms | CPU 16.7
+à 19.1 ms | GPU 17.7 à 19.3 ms | scripts total 1.063 à 1.152 ms/frame : mouvement 0.328 à 0.359, autres joueurs 0.294
+à 0.318, tenue 3P 0.170 à 0.181, armes 3P 0.112 à 0.129, viewmodel 0.052 à 0.059, …
+```
+
+**Comparer deux versions.** Une série de 5 sur chacune, mêmes bots (`DebugBots`, `DebugBotsPassive`), même qualité,
+même fenêtre. Un écart ne compte que si les deux étendues ne se recouvrent pas.
+
+**Bruit mesuré le 2026-11-15** (Studio, Dizzy, 7 bots passifs, qualité 10, fenêtre 1291×607, série de 5 rejeux de
+la branche de #383 partie de `main` à 99e0d52, Studio dans son état lent du début à la fin) :
+
+| Valeur | Étendue sur 5 rejeux | Écart qui ne compte pas |
+|---|---|---|
+| Scripts, total | 1,063 à 1,152 ms par frame | moins de 0,1 ms (8 %) |
+| `mouvement` | 0,328 à 0,359 ms | moins de 0,03 ms |
+| `autres joueurs` | 0,294 à 0,318 ms | moins de 0,03 ms |
+| `tenue 3P` | 0,170 à 0,181 ms | moins de 0,015 ms |
+| `armes 3P` | 0,112 à 0,129 ms | moins de 0,02 ms |
+| Draw calls scène / ombres (moyenne) | 32 à 33 / 78 à 84 | moins de 2 / moins de 6 |
+| Triangles (moyenne) | 52 à 56k | moins de 4k |
+| FPS médian, CPU et GPU de rendu | 45 à 51, 16,7 à 19,1 ms, 17,7 à 19,3 ms | ne comparent rien dans Studio (état lent) |
+| p99 | 28,9 à 33,6 ms | moins de 5 ms |
+| Frame la plus lente | 52 à 398 ms | ne compare rien (398 ms : une réapparition) |
+
+- Les frames les plus lentes ne tombent pas au même endroit d'un rejeu à l'autre, sauf vers t=20 s (2 rejeux sur 5,
+  45 à 72 ms) : dans Studio, elles viennent surtout du bruit. À refaire dans le client publié avant de chercher une
+  cause dans le jeu.
+- Le pire appel d'un repère varie beaucoup (`mouvement` : 1,7 à 17,7 ms) : un seul appel long suffit. À lire sur
+  plusieurs rejeux, pas sur un.
+- Avec `DebugBotsPassive`, les bots se battent entre eux (45 kills entre bots en 137 s) : leurs tirs, leurs morts et
+  leurs réapparitions sont dans la charge mesurée. Seuls manquent les tirs reçus par le joueur et sa mort.
+- Le joueur meurt quand même dans 2 rejeux sur 5 (une réapparition, cause non identifiée), et l'écart maximal prend
+  toujours l'une de deux valeurs (8,47 ou 41,79 studs, comme dans #381) : la piste diverge au même endroit, de deux
+  façons. Les points de contrôle rattrapent (1 à 3 recalages par rejeu).
+
+**Protocole dans le client publié** (jamais lancé à ce jour : c'est là que la fluidité se juge). Jeu publié à jour,
+en partie sur Dizzy, qualité 10 fixée à la main, plein écran 1080p :
+
+1. F9 > Server : `workspace:SetAttribute("DebugBotsPassive", true)` puis `workspace:SetAttribute("PerfServer", true)`.
+2. F9 > Server : `game.Players.<pseudo>:SetAttribute("PerfRun", "Dizzy x3")`. Fermer la console, ne plus toucher
+   clavier ni souris, garder la fenêtre au premier plan pendant 7 min 30.
+3. F9 > Log, filtre `[Perf] RUN` : relever les lignes des 3 rejeux et la ligne `série` (ou le fichier
+   `%LOCALAPPDATA%\Roblox\logs\*_Player_*_last.log`). Onglet Server, filtre `[Perf] SRV` pour le serveur.
+4. Attendu, d'après le bilan #88 (immobile) : 59 FPS, p99 vers 19 ms, GPU vers 8 ms, CPU de rendu vers 2 ms. Un p99
+   ou un GPU nettement au-dessus en mouvement désigne ce que la mesure immobile ne voyait pas ; les frames les plus
+   lentes qui reviennent au même instant dans les 3 rejeux disent où.
+5. Qualité 1 à la main, puis `"Dizzy x3 bis"` (la valeur doit changer pour relancer) : même relevé.
 
 **Limites :**
 

@@ -6,21 +6,27 @@
 -- serveur au début de la piste (remote PerfRouteTeleport), puis chaque tick du mouvement reçoit les entrées
 -- enregistrées : touches et appuis (InputModule, clavier ignoré), angles de la caméra (souris ignorée), arme tenue,
 -- tirs (Tool:Activate). À chaque point de contrôle, l'écart avec la piste est mesuré ; au-delà de DRIFT_MAX, ou après
--- une réapparition, le joueur est replacé. Overlay F3 ouvert pendant le rejeu (lignes BILAN), puis une ligne
--- `[Perf] RUN` résume le rythme, la fidélité à la piste et la mémoire.
+-- une réapparition, le joueur est replacé. Overlay F3 ouvert pendant le rejeu (lignes BILAN), puis des lignes
+-- `[Perf] RUN` résument le run entier (#383) : rythme, fidélité à la piste et mémoire ; rendu (CPU, GPU, draw calls) ;
+-- coût de chaque repère de scripts ; frames les plus lentes, situées sur la piste. Une fenêtre qui perd le focus rend
+-- la mesure INVALIDE. `PerfRun = "Dizzy x5"` enchaîne 5 rejeux et écrit l'étendue de chaque valeur (le bruit).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Stats = game:GetService("Stats")
+local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local NetworkProtocol = require(Shared:WaitForChild("NetworkProtocol"))
+local PerfMarkers = require(Shared:WaitForChild("PerfMarkers"))
 local PerfRules = require(Shared:WaitForChild("PerfRules"))
 local FrameProbeRules = require(Shared:WaitForChild("FrameProbeRules"))
 local Rules = require(Shared:WaitForChild("PerfRouteRules"))
+local PerfOverlay = require(script.Parent.PerfOverlay)
 
 local ATTRIBUTE = "PerfRun"
+local SERIES_PAUSE = 3 -- s entre deux rejeux d'une série (dernier BILAN de l'overlay écrit, overlay refermé)
 local OVERLAY_ATTRIBUTE = "PerfOverlay"
 local SPAWN_TIMEOUT = 15 -- s pour arriver en partie
 local TELEPORT_RESEND = 1 -- s avant de redemander une téléportation restée sans réponse
@@ -57,6 +63,18 @@ local lastTickAt = 0
 local stats: Rules.RunStats
 local driftSum = 0
 local missingTools: { [string]: boolean } = {}
+-- Mesure du run entier (#383)
+local markerStart: PerfMarkers.Totals = {}
+local focusLost = false
+local focusConn: RBXScriptConnection? = nil
+local cpuSum, cpuMax, gpuSum, gpuMax = 0, 0, 0, 0
+local drawSum, drawMax, shadowSum, shadowMax, triSum = 0, 0, 0, 0, 0
+local slow: { Rules.SlowFrame } = {}
+-- Série de rejeux (`PerfRun = "Dizzy x5"`)
+local seriesLeft = 0 -- rejeux encore à lancer après celui en cours
+local seriesRuns: { Rules.RunSummary } = {}
+local seriesToken = 0 -- change à chaque écriture de l'attribut : un rejeu suivant déjà programmé est abandonné
+local start: (name: string) -> ()
 
 local NO_KEYS: { [string]: boolean } = {}
 
@@ -65,8 +83,79 @@ local function log(text: string)
 	print("[PerfRun] " .. text)
 end
 
--- Cette méthode permet de rendre clavier, souris et mouvement au joueur et d'écrire le bilan lorsque le rejeu
--- s'arrête (fin de piste, interruption ou échec).
+-- Cette méthode permet d'écrire l'étendue des valeurs des rejeux finis lorsque la série se termine ou s'interrompt
+-- (rien pour un rejeu seul).
+local function endSeries()
+	seriesLeft = 0
+	if #seriesRuns > 1 then
+		print(Rules.seriesLine(routeName, seriesRuns))
+	end
+	seriesRuns = {}
+end
+
+-- Cette méthode permet d'écrire les lignes de bilan du run entier (rythme et fidélité, rendu, scripts, frames les plus
+-- lentes) et de garder son résumé pour la série lorsque le rejeu s'arrête après le début de la mesure.
+local function report(status: string)
+	local frames = #dts
+	local summary = if frames > 0
+		then FrameProbeRules.summarize(table.clone(dts))
+		else { fps = 0, p99Ms = 0, maxMs = 0 }
+	local hitches = 0
+	for _, dt in dts do
+		if dt * 1000 > Rules.HITCH_MS then
+			hitches += 1
+		end
+	end
+	local per = math.max(frames, 1)
+	local cam = workspace.CurrentCamera
+	local viewport = if cam then cam.ViewportSize else Vector2.zero
+	local render: Rules.RenderStats = {
+		frames = frames,
+		cpuMeanMs = cpuSum / per,
+		cpuMaxMs = cpuMax,
+		gpuMeanMs = gpuSum / per,
+		gpuMaxMs = gpuMax,
+		drawMean = drawSum / per,
+		drawMax = drawMax,
+		shadowDrawMean = shadowSum / per,
+		shadowDrawMax = shadowMax,
+		triMeanK = triSum / per / 1000,
+		quality = PerfOverlay.qualityText(),
+		width = math.floor(viewport.X),
+		height = math.floor(viewport.Y),
+	}
+	local markers = PerfRules.markerReport(PerfMarkers.since(markerStart), frames)
+	stats.status = status
+	stats.fps, stats.p99Ms, stats.maxMs, stats.hitches = summary.fps, summary.p99Ms, summary.maxMs, hitches
+	stats.driftMean = if stats.checks > 0 then driftSum / stats.checks else 0
+	stats.memEndMb = Stats:GetTotalMemoryUsageMb()
+	stats.invalid = Rules.invalidReason(focusLost, render.gpuMeanMs)
+	print(Rules.runLine(stats))
+	print(Rules.renderLine(routeName, render))
+	print(Rules.scriptsLine(routeName, markers))
+	if #slow > 0 then
+		print(Rules.slowLine(routeName, slow))
+	end
+	-- Seul un rejeu allé au bout de la piste se compare aux autres
+	if status == "fini" then
+		local scripts = {}
+		for _, m in markers do
+			scripts[m.label] = m.msPerFrame
+		end
+		table.insert(seriesRuns, {
+			valid = stats.invalid == nil,
+			fps = stats.fps,
+			p99Ms = stats.p99Ms,
+			maxMs = stats.maxMs,
+			cpuMeanMs = render.cpuMeanMs,
+			gpuMeanMs = render.gpuMeanMs,
+			scripts = scripts,
+		})
+	end
+end
+
+-- Cette méthode permet de rendre clavier, souris et mouvement au joueur, d'écrire le bilan, puis de lancer le rejeu
+-- suivant de la série ou de la clore lorsque le rejeu s'arrête (fin de piste, interruption ou échec).
 local function finish(status: string)
 	if not running then
 		return
@@ -80,25 +169,29 @@ local function finish(status: string)
 		renderConn:Disconnect()
 		renderConn = nil
 	end
-	if not measuring then
+	if focusConn then
+		focusConn:Disconnect()
+		focusConn = nil
+	end
+	if measuring then
+		report(status)
+		-- Overlay fermé : il écrit son dernier BILAN (à la frame suivante, signaux différés)
+		deps.player:SetAttribute(OVERLAY_ATTRIBUTE, false)
+		measuring = false
+	else
 		log("arrêt avant le début de la mesure : " .. status)
-		return
 	end
-	local summary = if #dts > 0 then FrameProbeRules.summarize(table.clone(dts)) else { fps = 0, p99Ms = 0, maxMs = 0 }
-	local hitches = 0
-	for _, dt in dts do
-		if dt * 1000 > Rules.HITCH_MS then
-			hitches += 1
-		end
+	if status == "fini" and seriesLeft > 0 then
+		seriesLeft -= 1
+		local token, name = seriesToken, routeName
+		task.delay(SERIES_PAUSE, function()
+			if token == seriesToken and not running then
+				start(name)
+			end
+		end)
+	else
+		endSeries()
 	end
-	stats.status = status
-	stats.fps, stats.p99Ms, stats.maxMs, stats.hitches = summary.fps, summary.p99Ms, summary.maxMs, hitches
-	stats.driftMean = if stats.checks > 0 then driftSum / stats.checks else 0
-	stats.memEndMb = Stats:GetTotalMemoryUsageMb()
-	-- Overlay fermé : il écrit son dernier BILAN (à la frame suivante, signaux différés)
-	deps.player:SetAttribute(OVERLAY_ATTRIBUTE, false)
-	print(Rules.runLine(stats))
-	measuring = false
 end
 
 -- Cette méthode permet de demander au serveur de replacer le joueur sur un point de contrôle lorsque le rejeu
@@ -121,7 +214,14 @@ end
 local function startMeasure()
 	measuring = true
 	dts = {}
+	cpuSum, cpuMax, gpuSum, gpuMax = 0, 0, 0, 0
+	drawSum, drawMax, shadowSum, shadowMax, triSum = 0, 0, 0, 0, 0
+	slow = {}
+	focusLost = false
 	stats.memStartMb = Stats:GetTotalMemoryUsageMb()
+	-- Chronométrage des repères actif dès maintenant : l'overlay ne s'ouvre qu'à la frame suivante (signal différé)
+	PerfMarkers.timing = true
+	markerStart = PerfMarkers.mark()
 	deps.player:SetAttribute(OVERLAY_ATTRIBUTE, true)
 	log(string.format("départ : %s, %.0f s", routeName, Rules.duration(route)))
 end
@@ -284,19 +384,49 @@ local function reachRound(): boolean
 	return true
 end
 
--- Cette méthode permet de lancer le rejeu d'une piste lorsque l'attribut PerfRun reçoit son nom.
-local function start(name: string)
+-- Cette méthode permet de relever le rendu d'une frame mesurée (CPU, GPU, draw calls, triangles) et de la garder si
+-- elle compte parmi les plus lentes, avec l'instant de la piste et la position du joueur.
+local function sampleFrame(dt: number)
+	table.insert(dts, dt)
+	local cpu, gpu = Stats.RenderCPUFrameTime * 1000, Stats.RenderGPUFrameTime * 1000
+	local draw, shadow = Stats.SceneDrawcallCount, Stats.ShadowsDrawcallCount
+	cpuSum += cpu
+	gpuSum += gpu
+	drawSum += draw
+	shadowSum += shadow
+	triSum += Stats.SceneTriangleCount
+	cpuMax, gpuMax = math.max(cpuMax, cpu), math.max(gpuMax, gpu)
+	drawMax, shadowMax = math.max(drawMax, draw), math.max(shadowMax, shadow)
+	local ms = dt * 1000
+	if #slow < Rules.SLOW_KEPT or ms > slow[1].ms then
+		local char = deps.player.Character
+		local root = char and char:FindFirstChild("HumanoidRootPart")
+		local p = if root and root:IsA("BasePart") then root.Position else Vector3.zero
+		Rules.keepSlowest(slow, { t = (index - 1) / 64, ms = ms, x = p.X, y = p.Y, z = p.Z }, Rules.SLOW_KEPT)
+	end
+end
+
+-- Cette méthode permet d'écrire le refus d'un rejeu et de clore la série lorsque la piste, la partie ou le crochet de
+-- tick manquent.
+local function refuse(why: string)
+	log("refusé : " .. why)
+	endSeries()
+end
+
+-- Cette méthode permet de lancer le rejeu d'une piste lorsque l'attribut PerfRun reçoit son nom, ou que le rejeu
+-- précédent d'une série est fini.
+function start(name: string)
 	local loaded, why = loadRoute(name)
 	if not loaded then
-		log("refusé : " .. tostring(why))
+		refuse(tostring(why))
 		return
 	end
 	if not reachRound() then
-		log("refusé : pas en partie après " .. SPAWN_TIMEOUT .. " s")
+		refuse("pas en partie après " .. SPAWN_TIMEOUT .. " s")
 		return
 	end
 	if not deps.movement.setTickHook(onTick) then
-		log("refusé : un enregistrement de parcours est en cours")
+		refuse("un enregistrement de parcours est en cours")
 		return
 	end
 	route, routeName = loaded :: Rules.Route, name
@@ -324,26 +454,51 @@ local function start(name: string)
 	lastTickAt = os.clock()
 	renderConn = RunService.RenderStepped:Connect(function(dt: number)
 		if measuring then
-			table.insert(dts, dt)
+			sampleFrame(dt)
 		end
 		if os.clock() - lastTickAt > STALL_TIMEOUT then
 			finish("plus de personnage depuis " .. STALL_TIMEOUT .. " s")
 		end
 	end)
-	log(string.format("piste %s chargée : %.0f s, %d ticks", name, Rules.duration(route), #route.ticks))
+	-- Fenêtre sans le focus : Studio ne rend presque plus rien, la mesure ne vaut rien (comme le banc F4)
+	focusConn = UserInputService.WindowFocusReleased:Connect(function()
+		if measuring then
+			focusLost = true
+		end
+	end)
+	log(
+		string.format(
+			"piste %s chargée : %.0f s, %d ticks%s",
+			name,
+			Rules.duration(route),
+			#route.ticks,
+			if seriesLeft > 0 or #seriesRuns > 0
+				then string.format(" (rejeu %d/%d)", #seriesRuns + 1, #seriesRuns + 1 + seriesLeft)
+				else ""
+		)
+	)
 end
 
--- Cette méthode permet de lancer ou d'interrompre le rejeu lorsque l'attribut PerfRun change.
+-- Cette méthode permet de lancer ou d'interrompre le rejeu lorsque l'attribut PerfRun change : nom de la piste, puis
+-- « xN » pour une série de N rejeux (toute autre suite ne sert qu'à relancer).
 local function onAttribute()
 	local value = deps.player:GetAttribute(ATTRIBUTE)
-	local name = if type(value) == "string" then string.match(value, "^%s*(%S+)") else nil
-	if not name then
-		finish("interrompu")
-		return
+	local name: string?, rest: string? = nil, nil
+	if type(value) == "string" then
+		name, rest = string.match(value, "^%s*(%S+)%s*(.*)$")
 	end
+	-- Série en cours abandonnée : son bilan est écrit par finish, ou ici si elle attendait le rejeu suivant
+	seriesToken += 1
+	seriesLeft = 0
 	if running then
 		finish("interrompu")
+	else
+		endSeries()
 	end
+	if not name then
+		return
+	end
+	seriesLeft = Rules.repeats(rest or "") - 1
 	task.spawn(start, name)
 end
 

@@ -150,6 +150,26 @@ return function(T, Loader)
 			Markers.timing = false
 			T.expectEqual(totals.double.calls, 2)
 		end)
+
+		T.it("mark / since : cumul d'une mesure longue, intact malgré les collect de l'overlay", function()
+			local fn = Markers.wrap("long", function() end)
+			Markers.timing = true
+			fn()
+			local start = Markers.mark()
+			fn()
+			Markers.collect()
+			fn()
+			Markers.record("long", 0.25)
+			local run = Markers.since(start)
+			Markers.timing = false
+			T.expectEqual(run.long.calls, 3)
+			T.expectNear(run.long.max, 0.25, 1e-9)
+			T.expect(run.long.time >= 0.25 and run.long.time < 0.3)
+			-- collect n'a rien perdu : les deux appels tombés après lui
+			T.expectEqual(Markers.collect().long.calls, 2)
+			-- Un nouveau mark repart d'un pire appel nul
+			T.expectEqual(Markers.since(Markers.mark()).long.max, 0)
+		end)
 	end)
 	T.describe("PerfRules.benchSummary / benchPhaseValid / formatBenchLine", function()
 		T.it("moyenne GPU et CPU, centiles des frames", function()

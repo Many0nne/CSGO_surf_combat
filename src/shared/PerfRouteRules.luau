@@ -378,17 +378,250 @@ export type RunStats = {
 	respawns: number,
 	memStartMb: number,
 	memEndMb: number,
+	invalid: string?, -- raison pour laquelle la mesure ne vaut rien (fenêtre sans le focus), nil si elle vaut
+}
+
+-- Rendu d'un rejeu, relevé à chaque frame (Stats) : ce qui se compare d'une version à l'autre avec les scripts
+export type RenderStats = {
+	frames: number,
+	cpuMeanMs: number,
+	cpuMaxMs: number,
+	gpuMeanMs: number,
+	gpuMaxMs: number,
+	drawMean: number, -- draw calls de la scène
+	drawMax: number,
+	shadowDrawMean: number, -- draw calls de la passe d'ombres
+	shadowDrawMax: number,
+	triMeanK: number, -- milliers de triangles de la scène
+	quality: string, -- réglage graphique (« auto » ou n/10)
+	width: number,
+	height: number,
+}
+
+-- Coût d'un repère de scripts ramené à une frame (PerfRules.MarkerLine)
+export type ScriptLine = { label: string, msPerFrame: number, callsPerFrame: number, maxMs: number }
+
+-- Frame parmi les plus lentes d'un rejeu : instant de la piste (s), durée (ms) et position du joueur
+export type SlowFrame = { t: number, ms: number, x: number, y: number, z: number }
+
+-- Résumé d'un rejeu fini, gardé pour le bilan d'une série
+export type RunSummary = {
+	valid: boolean,
+	fps: number,
+	p99Ms: number,
+	maxMs: number,
+	cpuMeanMs: number,
+	gpuMeanMs: number,
+	scripts: { [string]: number }, -- ms par frame de chaque repère
 }
 
 -- Frame lente comptée dans le bilan du rejeu (ms) : trois frames à 60 FPS
 PerfRouteRules.HITCH_MS = 50
+-- Frames les plus lentes situées dans le bilan (instant de la piste, position)
+PerfRouteRules.SLOW_KEPT = 8
+-- Repères de scripts cités dans le bilan
+PerfRouteRules.SCRIPTS_KEPT = 10
+-- Rejeux enchaînés au plus par une série (`PerfRun = "Dizzy x5"`)
+PerfRouteRules.SERIES_MAX = 20
+
+-- Cette méthode permet de lire le nombre de rejeux demandés après le nom de la piste (« x5 ») lorsque l'attribut
+-- PerfRun change ; 1 sans ce suffixe. Ce qui suit (« x5 bis ») ne sert qu'à relancer la même série.
+function PerfRouteRules.repeats(rest: string): number
+	local n = tonumber(string.match(rest .. " ", "^x(%d+)%s"))
+	if not n then
+		return 1
+	end
+	return math.clamp(n, 1, PerfRouteRules.SERIES_MAX)
+end
+
+-- Cette méthode permet de dire pourquoi la mesure d'un rejeu ne vaut rien lorsqu'il s'arrête : fenêtre qui a perdu le
+-- focus, ou rien de rendu (GPU nul : fenêtre en arrière-plan dès le départ) ; nil si elle vaut.
+function PerfRouteRules.invalidReason(focusLost: boolean, gpuMeanMs: number): string?
+	if focusLost then
+		return "la fenêtre a perdu le focus"
+	end
+	if gpuMeanMs <= 0 then
+		return "rien de rendu (GPU nul, fenêtre en arrière-plan)"
+	end
+	return nil
+end
+
+-- Cette méthode permet de garder une frame parmi les `limit` plus lentes lorsque le rejeu en relève une ; la liste
+-- reste triée de la moins lente à la plus lente (la première est le seuil d'entrée).
+function PerfRouteRules.keepSlowest(list: { SlowFrame }, frame: SlowFrame, limit: number)
+	if #list >= limit and frame.ms <= list[1].ms then
+		return
+	end
+	table.insert(list, frame)
+	table.sort(list, function(a, b)
+		return a.ms < b.ms
+	end)
+	while #list > limit do
+		table.remove(list, 1)
+	end
+end
+
+-- Cette méthode permet de rédiger la ligne du rendu d'un rejeu lorsqu'il s'arrête (moyenne et pire valeur sur toutes
+-- ses frames, réglage graphique et taille de la fenêtre).
+function PerfRouteRules.renderLine(name: string, r: RenderStats): string
+	return string.format(
+		"[Perf] RUN %s rendu : CPU moy %.1f max %.1fms | GPU moy %.1f max %.1fms | draw moy %.0f max %.0f, ombres moy %.0f"
+			.. " max %.0f | tri moy %.0fk | qualité %s %dx%d | %d frames",
+		name,
+		r.cpuMeanMs,
+		r.cpuMaxMs,
+		r.gpuMeanMs,
+		r.gpuMaxMs,
+		r.drawMean,
+		r.drawMax,
+		r.shadowDrawMean,
+		r.shadowDrawMax,
+		r.triMeanK,
+		r.quality,
+		r.width,
+		r.height,
+		r.frames
+	)
+end
+
+-- Cette méthode permet de rédiger la ligne des scripts d'un rejeu lorsqu'il s'arrête : total par frame, puis chaque
+-- repère appelé (ms par frame × appels par frame, pire appel), du plus cher au moins cher.
+function PerfRouteRules.scriptsLine(name: string, markers: { ScriptLine }): string
+	local total = 0
+	local parts = {}
+	for _, m in markers do
+		total += m.msPerFrame
+		if m.callsPerFrame > 0 and #parts < PerfRouteRules.SCRIPTS_KEPT then
+			table.insert(
+				parts,
+				string.format("%s %.3fms×%.1f (max %.2f)", m.label, m.msPerFrame, m.callsPerFrame, m.maxMs)
+			)
+		end
+	end
+	return string.format("[Perf] RUN %s scripts : total %.3fms/frame | %s", name, total, table.concat(parts, ", "))
+end
+
+-- Cette méthode permet de rédiger la ligne des frames les plus lentes d'un rejeu lorsqu'il s'arrête, dans l'ordre de
+-- la piste : une frame lente au même instant d'un rejeu à l'autre vient du jeu, ailleurs à chaque fois du bruit.
+function PerfRouteRules.slowLine(name: string, frames: { SlowFrame }): string
+	local sorted = table.clone(frames)
+	table.sort(sorted, function(a, b)
+		return a.t < b.t
+	end)
+	local parts = {}
+	for _, f in sorted do
+		table.insert(parts, string.format("t=%.1fs %.0fms (%.0f, %.0f, %.0f)", f.t, f.ms, f.x, f.y, f.z))
+	end
+	return string.format("[Perf] RUN %s frames les plus lentes : %s", name, table.concat(parts, " ; "))
+end
+
+-- Cette méthode permet de rédiger l'étendue (min à max) d'une valeur sur les rejeux d'une série.
+local function range(values: { number }, format: string): string
+	local low, high = math.huge, -math.huge
+	for _, v in values do
+		low, high = math.min(low, v), math.max(high, v)
+	end
+	return string.format(format .. " à " .. format, low, high)
+end
+
+-- Cette méthode permet de rédiger le bilan d'une série de rejeux de la même version lorsqu'elle se termine : étendue
+-- de chaque valeur sur les rejeux valides. Un écart entre deux versions plus petit que cette étendue est du bruit.
+function PerfRouteRules.seriesLine(name: string, runs: { RunSummary }): string
+	local valid = {}
+	for _, r in runs do
+		if r.valid then
+			table.insert(valid, r)
+		end
+	end
+	local head = string.format("[Perf] RUN %s série : %d rejeux finis, %d valides", name, #runs, #valid)
+	if #valid < 2 then
+		return head .. " | pas assez de rejeux valides pour une étendue"
+	end
+	-- Cette méthode permet de relever une valeur sur chaque rejeu valide lorsque son étendue est rédigée.
+	local function column(read: (RunSummary) -> number): { number }
+		local out = {}
+		for i, r in valid do
+			out[i] = read(r)
+		end
+		return out
+	end
+	local labels: { string } = {}
+	local worst: { [string]: number } = {}
+	for _, r in valid do
+		for label, ms in r.scripts do
+			if worst[label] == nil then
+				table.insert(labels, label)
+			end
+			worst[label] = math.max(worst[label] or 0, ms)
+		end
+	end
+	table.sort(labels, function(a, b)
+		if worst[a] ~= worst[b] then
+			return worst[a] > worst[b]
+		end
+		return a < b
+	end)
+	local scripts = {}
+	for i, label in labels do
+		if i > PerfRouteRules.SCRIPTS_KEPT or worst[label] <= 0 then
+			break
+		end
+		local values = column(function(r)
+			return r.scripts[label] or 0
+		end)
+		table.insert(scripts, label .. " " .. range(values, "%.3f"))
+	end
+	local totals = column(function(r)
+		local sum = 0
+		for _, ms in r.scripts do
+			sum += ms
+		end
+		return sum
+	end)
+	return string.format(
+		"%s | FPS %s | p99 %s ms | max %s ms | CPU %s ms | GPU %s ms | scripts total %s ms/frame : %s",
+		head,
+		range(
+			column(function(r)
+				return r.fps
+			end),
+			"%.0f"
+		),
+		range(
+			column(function(r)
+				return r.p99Ms
+			end),
+			"%.1f"
+		),
+		range(
+			column(function(r)
+				return r.maxMs
+			end),
+			"%.1f"
+		),
+		range(
+			column(function(r)
+				return r.cpuMeanMs
+			end),
+			"%.1f"
+		),
+		range(
+			column(function(r)
+				return r.gpuMeanMs
+			end),
+			"%.1f"
+		),
+		range(totals, "%.3f"),
+		table.concat(scripts, ", ")
+	)
+end
 
 -- Cette méthode permet de rédiger la ligne de bilan d'un rejeu lorsqu'il s'arrête : rythme, frames lentes, fidélité à
--- la piste (écart aux points de contrôle, recalages, réapparitions) et mémoire.
+-- la piste (écart aux points de contrôle, recalages, réapparitions), mémoire, et la raison si la mesure ne vaut rien.
 function PerfRouteRules.runLine(s: RunStats): string
 	return string.format(
 		"[Perf] RUN %s %s %.0f/%.0fs | FPS %.0f p99 %.1fms max %.1fms, %d frames > %dms | écart moy %.2f max %.2f studs"
-			.. " sur %d contrôles, %d recalages, %d réapparitions | mém %.0f -> %.0f Mo",
+			.. " sur %d contrôles, %d recalages, %d réapparitions | mém %.0f -> %.0f Mo%s",
 		s.name,
 		s.status,
 		s.ticks / 64,
@@ -404,7 +637,8 @@ function PerfRouteRules.runLine(s: RunStats): string
 		s.recalages,
 		s.respawns,
 		s.memStartMb,
-		s.memEndMb
+		s.memEndMb,
+		if s.invalid then " | INVALIDE : " .. s.invalid else ""
 	)
 end
 
