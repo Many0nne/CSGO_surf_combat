@@ -230,9 +230,8 @@ function ShopCatalog.cycle(index: number, step: number, count: number): number
 	return (index - 1 + step) % count + 1
 end
 
--- Cette méthode permet de lire les crédits rendus pour un doublon d'une rareté de la caisse lorsque le serveur règle un
--- achat ou que la vue détail l'affiche (#393) : part `refund` du prix, arrondie à l'entier inférieur, jamais plus que le
--- prix ; 0 pour une rareté inconnue.
+-- Cette méthode permet de lire les crédits rendus pour un doublon d'une rareté (part `refund` du prix, arrondie en
+-- dessous ; 0 si inconnue) lorsque le serveur règle un achat ou que la vue détail l'affiche (#393).
 function ShopCatalog.refund(crate: Crate, rarityId: string): number
 	for _, rarity in ShopCatalog.RARITIES do
 		if rarity.id == rarityId then
@@ -243,10 +242,9 @@ function ShopCatalog.refund(crate: Crate, rarityId: string): number
 	return 0
 end
 
--- Cette méthode permet de convertir les chances des lignes d'une caisse en dixièmes de pour cent dont la somme fait
--- exactement 1000 (100 %) lorsque la vue détail les affiche (#393, règle Roblox des objets aléatoires payants) : mêmes
--- proportions que le tirage (`draw`, raretés sans skin exclues), arrondi au plus fort reste (à égalité, la ligne la plus
--- courante d'abord). Renvoie une valeur par ligne, dans l'ordre de `rows` ; une liste vide si le total est nul.
+-- Mêmes proportions que `draw` ; arrondi au plus fort reste, à égalité la ligne la plus courante ; vide si total nul.
+-- Cette méthode permet de convertir les chances en dixièmes de pour cent de somme exacte 1000 lorsque la vue détail les
+-- affiche (#393, règle Roblox des objets aléatoires payants).
 function ShopCatalog.chances(rows: { Row }): { number }
 	local total = 0
 	for _, row in rows do
@@ -288,9 +286,8 @@ function ShopCatalog.chanceLabel(tenths: number): string
 	return string.format("%d,%d %%", tenths // 10, tenths % 10)
 end
 
--- Cette méthode permet de savoir si un joueur possède déjà tous les skins d'une caisse lorsque la vue détail choisit
--- ACHETER ou TOUT OBTENU et que le serveur reçoit un achat (#393) ; `owned` : items possédés (InventoryRules.Owned).
--- Une caisse sans skin connu n'est pas « tout obtenue » (le tirage la refuse comme vide).
+-- Cette méthode permet de savoir si un joueur possède tous les skins d'une caisse (false pour une caisse vide) lorsque
+-- la vue détail choisit ACHETER ou TOUT OBTENU et que le serveur reçoit un achat (#393).
 function ShopCatalog.allOwned(crate: Crate, items: { any }, owned: { [string]: boolean }): boolean
 	local rows = ShopCatalog.contents(crate, items)
 	if #rows == 0 then

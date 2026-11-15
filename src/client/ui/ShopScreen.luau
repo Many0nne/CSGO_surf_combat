@@ -87,7 +87,8 @@ local reveal: Frame
 local revealHeading: { TextLabel }
 local revealTitle: { TextLabel }
 local revealRarity: { TextLabel }
-local requesting = false
+local requesting: string? = nil -- remote de la demande en vol (achat ou ouverture de test)
+local navigation: { MenuShot.Choice } = {} -- « ‹ SHOP » et flèches de la caisse voisine, figés pendant une demande
 local statusToken = 0
 local DEBUG_ATTRIBUTE = "DebugCrateOpening" -- Studio seulement, voir debugOpening
 local BUY_TEXT = "ACHETER"
@@ -103,7 +104,8 @@ local REFUSALS = {
 	empty = "CAISSE VIDE",
 	owned = "TOUT OBTENU",
 	insufficient = "CRÉDITS INSUFFISANTS",
-	failed = "ACHAT IMPOSSIBLE  ·  RIEN N'EST DÉBITÉ",
+	-- Pas « rien n'est débité » : une écriture passée dont la vérification échoue est aussi `failed` (InventoryStore)
+	failed = "ACHAT IMPOSSIBLE  ·  RÉESSAIE PLUS TARD",
 }
 local paintActions: () -> ()
 
@@ -344,28 +346,35 @@ local function ownsWholeCrate(): boolean
 	return ShopCatalog.allOwned(crate, InventoryRules.ITEMS, owned)
 end
 
--- Cette méthode permet de peindre ACHETER (actif, « ACHAT… » pendant une demande, inactif « TOUT OBTENU ») et de montrer
--- l'ouverture de test selon le droit, lorsque la vue détail s'affiche, qu'une demande part ou revient, ou que
--- l'inventaire ou le rôle changent.
+-- Cette méthode permet de peindre ACHETER (actif, « ACHAT… » pendant un achat, inactif « TOUT OBTENU »), l'ouverture de
+-- test et la navigation (figée pendant une demande) lorsque la vue détail s'affiche, qu'une demande part ou revient.
 paintActions = function()
 	if not buyButton then
 		return
 	end
 	local complete = ownsWholeCrate()
-	buyChoice.setEnabled(not (requesting or complete))
-	setChoiceText(buyChoice, if requesting then BUYING_TEXT else BUY_TEXT)
-	buyStroke.Color = if complete or requesting then C.Muted else C.Bone
-	buyOwned.Visible = complete and not requesting
+	local busy = requesting ~= nil
+	local buying = requesting == NetworkProtocol.Names.BUY_CRATE
+	buyChoice.setEnabled(not (busy or complete))
+	setChoiceText(buyChoice, if buying then BUYING_TEXT else BUY_TEXT)
+	buyStroke.Color = if complete or busy then C.Muted else C.Bone
+	buyOwned.Visible = complete and not buying
 	testRow.Visible = canOpen()
-	openChoice.setEnabled(not requesting)
+	openChoice.setEnabled(not busy)
+	-- Pendant une demande, la caisse affichée reste celle qui est payée : l'ouverture se joue sur son socle
+	for _, choice in navigation do
+		choice.setEnabled(not busy)
+	end
 end
 
--- Cette méthode permet d'afficher un refus ou un échec sous ACHETER pendant 3 s lorsque le serveur refuse l'achat ou
--- l'ouverture de test.
-local function showStatus(text: string)
+-- Cette méthode permet d'afficher un message sous ACHETER pendant 3 s (refus ou échec en rouge d'impact, `ok` en ambre)
+-- lorsque le serveur répond sans que l'ouverture puisse se jouer.
+local function showStatus(text: string, ok: boolean?)
 	statusToken += 1
 	local token = statusToken
 	status.Text = text
+	status.BackgroundColor3 = if ok then C.Accent else C.HitRed
+	status.TextColor3 = if ok then C.Ground else C.Bone
 	status.Visible = true
 	task.delay(3, function()
 		if token == statusToken then
@@ -374,17 +383,22 @@ local function showStatus(text: string)
 	end)
 end
 
--- Cette méthode permet d'afficher la révélation (skin obtenu, arme, rareté dans sa couleur ; « DOUBLON · +N CRÉDITS »
--- en ambre si l'achat a remboursé un doublon, #393) lorsque l'ouverture montre l'arme habillée.
-local function showReveal(crate: ShopCatalog.Crate, skinId: string, refund: number?)
-	local duplicate = refund ~= nil and refund > 0
-	setText(
-		revealHeading,
-		if duplicate
-			then string.format("DOUBLON  ·  +%s %s", WalletRules.format(refund), ShopCatalog.CURRENCY)
-			else "OBTENU"
-	)
-	revealHeading[1].TextColor3 = if duplicate then C.Accent else C.TextSoft
+-- Cette méthode permet d'écrire la ligne au-dessus du skin révélé lorsque l'ouverture le montre : « OBTENU », ou pour un
+-- skin déjà possédé « DOUBLON », suivi des crédits rendus par un achat (« DOUBLON · +200 CRÉDITS », #393).
+local function revealHeadline(added: boolean, refund: number): string
+	if added then
+		return "OBTENU"
+	elseif refund > 0 then
+		return string.format("DOUBLON  ·  +%s %s", WalletRules.format(refund), ShopCatalog.CURRENCY)
+	end
+	return "DOUBLON"
+end
+
+-- Cette méthode permet d'afficher la révélation (ligne d'en-tête, skin, rareté dans sa couleur) lorsque l'ouverture
+-- montre l'arme habillée ; un doublon s'écrit en ambre.
+local function showReveal(crate: ShopCatalog.Crate, skinId: string, added: boolean, refund: number)
+	setText(revealHeading, revealHeadline(added, refund))
+	revealHeading[1].TextColor3 = if added then C.TextSoft else C.Accent
 	for _, row in ShopCatalog.contents(crate, InventoryRules.ITEMS) do
 		if table.find(row.skins, skinId) then
 			setText(revealTitle, table.concat(row.weapons, " · ") .. "  " .. row.name)
@@ -407,15 +421,14 @@ local function endOpening()
 	paintDetail()
 end
 
--- Cette méthode permet de demander au serveur la caisse courante (`remoteName` : achat ou ouverture de test), puis de
--- jouer l'ouverture avec le skin tiré (colonne masquée pendant la charge) lorsque le joueur clique ACHETER ou
--- l'ouverture de test ; une seule demande à la fois (pas de second clic), un refus s'affiche sous ACHETER.
+-- Cette méthode permet de demander la caisse courante au serveur (`remoteName` : achat ou ouverture de test), puis de
+-- jouer l'ouverture du skin reçu lorsque le joueur clique ; une demande à la fois, navigation figée jusqu'à la réponse.
 local function requestCrate(remoteName: string)
 	local crate = ShopCatalog.CRATES[current]
 	if requesting or not crate or ShopScene.isOpening() then
 		return
 	end
-	requesting = true
+	requesting = remoteName
 	paintActions()
 	task.spawn(function()
 		local remote = ReplicatedStorage:FindFirstChild(remoteName)
@@ -425,7 +438,7 @@ local function requestCrate(remoteName: string)
 				return remote:InvokeServer(crate.id)
 			end)
 		end
-		requesting = false
+		requesting = nil
 		paintActions()
 		if not (ok and type(result) == "table") then
 			showStatus("ÉCHEC")
@@ -435,17 +448,19 @@ local function requestCrate(remoteName: string)
 			showStatus(REFUSALS[result.reason] or "ÉCHEC")
 			return
 		end
-		if not gui.Enabled or ShopCatalog.CRATES[current] ~= crate then
-			return -- le joueur a quitté le shop ou changé de caisse pendant la requête : le skin est quand même gagné
+		if not gui.Enabled then
+			return -- shop fermé (onglet changé) pendant la demande : le skin est gagné, le solde et l'inventaire suivent
 		end
-		local refund = if type(result.refund) == "number" then result.refund else nil
+		local added = result.added ~= false
+		local refund = if type(result.refund) == "number" then result.refund else 0
 		detail.Visible = false
 		local started = ShopScene.playOpening(result.skinId, result.rarity, function()
-			showReveal(crate, result.skinId, refund)
+			showReveal(crate, result.skinId, added, refund)
 		end, endOpening)
 		if not started then
+			-- Le serveur a déjà donné le skin (ou remboursé) : le dire, même sans la scène
 			detail.Visible = true
-			showStatus("ÉCHEC")
+			showStatus(revealHeadline(added, refund), true)
 		end
 	end)
 end
@@ -573,6 +588,7 @@ local function buildDetail(column: Frame)
 		parent = detail,
 		action = openOverview,
 	})
+	table.insert(navigation, back)
 	title = label(detail, {
 		Name = "Title",
 		FontFace = F.Display,
@@ -684,7 +700,7 @@ local function buildDetail(column: Frame)
 	buildTestAndStatus(detail)
 	-- Caisse voisine : ‹ CAISSE n / N ›
 	local function arrow(glyph: string, order: number, step: number)
-		MenuShot.textChoice({
+		local choice = MenuShot.textChoice({
 			text = glyph,
 			font = F.Display,
 			size = 22,
@@ -695,6 +711,7 @@ local function buildDetail(column: Frame)
 				openCrate(ShopCatalog.cycle(current, step, #ShopCatalog.CRATES))
 			end,
 		})
+		table.insert(navigation, choice)
 	end
 	arrow("‹", 2, -1)
 	position = UIKit.text({
@@ -739,7 +756,7 @@ local function debugOpening()
 	detail.Visible = false
 	local started = ShopScene.playOpening(skinId, rarityId, function()
 		if crate then
-			showReveal(crate, skinId, refund)
+			showReveal(crate, skinId, refund == nil, refund or 0)
 		end
 	end, endOpening)
 	if not started then

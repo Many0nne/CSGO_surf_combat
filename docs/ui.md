@@ -888,13 +888,17 @@ Règles serveur : `docs/architecture.md`, « Achat d'une caisse ». Dans la vue 
   « 2,5 % » s'il le faut), puis jeton 18 px et crédits rendus pour un doublon de cette rareté. Visible avant l'achat
   (règle Roblox des objets aléatoires payants).
 - **ACHETER** : contour os, survol en rouge d'impact, comme l'ancien OUVRIR. Pendant la demande : « ACHAT… », contour
-  atténué, pas de second clic. Tout le contenu possédé : contour atténué, étiquette « TOUT OBTENU » à cheval sur le coin
-  (la place de l'ancienne BIENTÔT). Le solde insuffisant n'est pas anticipé : le serveur répond, le message s'affiche.
+  atténué, pas de second clic, « ‹ SHOP » et les flèches de la caisse voisine figés (l'ouverture se joue sur le socle de
+  la caisse payée). Tout le contenu possédé : contour atténué, étiquette « TOUT OBTENU » à cheval sur le coin (la place
+  de l'ancienne BIENTÔT). Le solde insuffisant n'est pas anticipé : le serveur répond, le message s'affiche.
 - **Refus et échecs** : étiquette rouge d'impact à texte os sous ACHETER, 3 s (« CRÉDITS INSUFFISANTS », « ACHAT
-  IMPOSSIBLE · RIEN N'EST DÉBITÉ », « TOUT OBTENU », « INVENTAIRE EN CHARGEMENT »…). Sous les actions, elle ne cache
-  plus les flèches de la caisse voisine (l'ancienne étiquette d'OUVRIR se posait à droite du bouton).
-- **Révélation d'un doublon** : la ligne « OBTENU » devient « DOUBLON · +N CRÉDITS » en ambre ; skin et rareté
-  inchangés. La scène d'ouverture est celle de #332.
+  IMPOSSIBLE · RÉESSAIE PLUS TARD », « TOUT OBTENU », « INVENTAIRE EN CHARGEMENT »…). Sous les actions, elle ne cache
+  plus les flèches de la caisse voisine (l'ancienne étiquette d'OUVRIR se posait à droite du bouton). Pas de « rien
+  n'est débité » : une écriture passée dont la vérification échoue rend aussi `failed` (limite de `transact`). Achat
+  passé mais scène impossible : même étiquette en ambre (« OBTENU », « DOUBLON · +200 CRÉDITS »).
+- **Révélation d'un doublon** (`added` = false) : la ligne « OBTENU » devient « DOUBLON · +N CRÉDITS » en ambre (achat),
+  « DOUBLON » seul pour l'ouverture de test ; skin et rareté inchangés. La scène d'ouverture est celle de #332.
+- Shop fermé (autre onglet) pendant l'achat : pas de révélation, le skin et le solde suivent quand même.
 - **Ouverture de test** (admin et Studio) : « OUVERTURE DE TEST · GRATUITE », texte os atténué 16 px sous ACHETER ;
   OUVRIR ne remplace plus ACHETER. Pour tester l'achat avec le compte propriétaire (admin, donc TOUT OBTENU), poser
   `DebugInventory = "default"` (contexte serveur) ; `DebugCredits` donne des crédits.

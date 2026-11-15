@@ -33,9 +33,14 @@ local function debit(wallet: WalletRules.Wallet, purchase: Purchase): (WalletRul
 	return WalletRules.debit(wallet, purchase.price)
 end
 
--- Cette méthode permet de construire l'opération pure d'un achat lorsque CrateService la passe à
--- `InventoryStore.transact` : débit, puis skin ajouté ou remboursement crédité dans `earned` ; refus `insufficient` (ou
--- `invalid`) selon le solde stocké. Résultat : `Applied`.
+-- Cette méthode permet de lire les crédits rendus pour un doublon lorsque l'opération ou la réponse en a besoin : bornés
+-- au prix, le solde reste ainsi sous celui d'avant l'achat, donc sous le plafond.
+local function refundOf(purchase: Purchase): number
+	return math.clamp(purchase.refund, 0, purchase.price)
+end
+
+-- Cette méthode permet de construire l'opération pure de `InventoryStore.transact` lorsqu'un achat est réglé : débit, puis
+-- skin ajouté ou doublon remboursé dans `earned` ; refus selon le solde stocké. Résultat : `Applied`.
 function CratePurchaseRules.operation(purchase: Purchase): (record: any) -> (any, any)
 	return function(record)
 		local wallet, why = debit(record.wallet, purchase)
@@ -44,8 +49,7 @@ function CratePurchaseRules.operation(purchase: Purchase): (record: any) -> (any
 		end
 		local duplicate = table.find(record.items, purchase.skinId) ~= nil
 		if duplicate then
-			-- Remboursement ≤ prix : le solde reste sous celui d'avant l'achat, donc sous le plafond
-			wallet.earned += math.clamp(purchase.refund, 0, purchase.price)
+			wallet.earned += refundOf(purchase)
 		else
 			table.insert(record.items, purchase.skinId)
 		end
@@ -54,10 +58,9 @@ function CratePurchaseRules.operation(purchase: Purchase): (record: any) -> (any
 	end
 end
 
+-- Rejeu (`ok` sans résultat : achat écrit par un essai signalé en échec) : le doublon se déduit de ce que la session
+-- possédait avant l'achat (`ownedBefore`) ; seul cas faux, le même skin donné par un autre serveur pendant l'écriture.
 -- Cette méthode permet de traduire l'issue de la transaction en réponse au client lorsque l'écriture est terminée.
--- `ok` sans résultat (achat déjà écrit par un essai signalé en échec, réponse perdue) : l'achat est passé, le doublon se
--- déduit de ce que la session possédait avant l'achat (`ownedBefore`), seul cas ambigu : le même skin donné par un autre
--- serveur pendant cette écriture, répondu alors comme ajouté (le solde publié reste le bon).
 function CratePurchaseRules.reply(
 	status: string,
 	result: any,
@@ -72,7 +75,7 @@ function CratePurchaseRules.reply(
 			skinId = purchase.skinId,
 			rarity = rarityId,
 			added = not duplicate,
-			refund = if duplicate then math.clamp(purchase.refund, 0, purchase.price) else 0,
+			refund = if duplicate then refundOf(purchase) else 0,
 		}
 	elseif status == "rejected" then
 		-- Seul un solde stocké trop bas est le fait du joueur ; un autre refus (opération invalide) est un bug serveur
@@ -80,6 +83,7 @@ function CratePurchaseRules.reply(
 	elseif status == "loading" then
 		return { ok = false, reason = "loading" }
 	end
+	-- `failed` : rien d'appliqué, sauf la limite documentée de `transact` (écriture passée dont la vérification échoue)
 	return { ok = false, reason = "failed" }
 end
 

@@ -72,7 +72,7 @@ function CrateService.open(player: Player, crateId: string): Result
 	return { ok = true, skinId = skinId, rarity = row.rarity.id, added = added }
 end
 
--- Cette méthode permet de régler un achat dont le tour est pris (cf. `buy`) : refus avant tirage, tirage, transaction.
+-- Cette méthode permet de régler un achat lorsque son tour est pris (cf. `buy`) : refus avant tirage, tirage, transaction.
 local function purchase(player: Player, crateId: string): Result
 	local crate = ShopCatalog.crate(crateId)
 	if not crate then
