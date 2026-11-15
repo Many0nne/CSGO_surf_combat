@@ -14,7 +14,9 @@
 -- Réponses : { ok = true, skinId, rarity (id de rareté), added, refund? } ou { ok = false, reason } avec reason = "rate"
 -- (garde commune), "busy" (achat déjà en vol), "forbidden" (ouverture de test), "unknown" (caisse inconnue), "loading"
 -- (inventaire pas chargé ou non sauvegardable : rien de tiré), "owned" (tout le contenu déjà possédé), "empty" (caisse
--- sans skin connu), "insufficient" (solde stocké insuffisant), "failed" (écriture en échec : rien débité ni donné).
+-- sans skin connu), "insufficient" (solde stocké insuffisant), "failed" (écriture en échec : rien débité ni donné, sauf
+-- la limite documentée de `InventoryStore.transact`, écriture passée dont la vérification échoue ; ne jamais rembourser
+-- ni rejouer sur ce seul motif).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")

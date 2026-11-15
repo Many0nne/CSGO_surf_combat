@@ -294,10 +294,9 @@ function ShopCatalog.allOwned(crate: Crate, items: { any }, owned: { [string]: b
 		return false
 	end
 	for _, row in rows do
-		for _, skinId in row.skins do
-			if not owned[skinId] then
-				return false
-			end
+		-- Le skin que `draw` donne pour cette rareté
+		if not owned[row.skins[1]] then
+			return false
 		end
 	end
 	return true

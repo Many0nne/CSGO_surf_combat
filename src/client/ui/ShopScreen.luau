@@ -89,6 +89,9 @@ local revealTitle: { TextLabel }
 local revealRarity: { TextLabel }
 local requesting: string? = nil -- remote de la demande en vol (achat ou ouverture de test)
 local navigation: { MenuShot.Choice } = {} -- « ‹ SHOP » et flèches de la caisse voisine, figés pendant une demande
+-- Numéro de la vue affichée, augmenté à chaque changement (caisse, vitrine, shop fermé) : une réponse arrivée après un
+-- changement n'est plus jouée
+local view = 0
 local statusToken = 0
 local DEBUG_ATTRIBUTE = "DebugCrateOpening" -- Studio seulement, voir debugOpening
 local BUY_TEXT = "ACHETER"
@@ -262,6 +265,7 @@ local function openCrate(index: number)
 		return
 	end
 	current = index
+	view += 1
 	overview.Visible = false
 	detail.Visible = true
 	paintDetail()
@@ -271,6 +275,7 @@ end
 -- Cette méthode permet de revenir à la vitrine (toutes les caisses) lorsque le joueur clique « ‹ SHOP » ou que l'écran
 -- s'ouvre.
 local function openOverview()
+	view += 1
 	overview.Visible = true
 	detail.Visible = false
 	back.reset()
@@ -429,6 +434,7 @@ local function requestCrate(remoteName: string)
 		return
 	end
 	requesting = remoteName
+	local seen = view
 	paintActions()
 	task.spawn(function()
 		local remote = ReplicatedStorage:FindFirstChild(remoteName)
@@ -448,8 +454,10 @@ local function requestCrate(remoteName: string)
 			showStatus(REFUSALS[result.reason] or "ÉCHEC")
 			return
 		end
-		if not gui.Enabled then
-			return -- shop fermé (onglet changé) pendant la demande : le skin est gagné, le solde et l'inventaire suivent
+		if not gui.Enabled or view ~= seen then
+			-- Shop fermé ou rouvert pendant la demande : le skin est gagné, le solde et l'inventaire suivent ; ni scène ni
+			-- message sur une autre vue que celle de la caisse payée
+			return
 		end
 		local added = result.added ~= false
 		local refund = if type(result.refund) == "number" then result.refund else 0
@@ -821,6 +829,7 @@ function ShopScreen.hide()
 		return
 	end
 	gui.Enabled = false
+	view += 1
 	ShopScene.stop()
 end
 
