@@ -38,8 +38,8 @@ local MAX_SAVE_FAILURES = 5 -- échecs d'affilée (de 3 essais chacun) avant d'a
 -- s minimum entre deux écritures d'un même profil après un changement d'équipement : Roblox limite les écritures d'une
 -- clé (une toutes les 6 s), des clics rapprochés sont réunis en une seule écriture
 local EQUIP_SAVE_SPACING = 6
--- s entre un gain de crédits et son écriture (#396) : les gains rapprochés (une manche) partent ensemble ; au moins
--- EQUIP_SAVE_SPACING, l'espacement entre deux écritures est donc toujours tenu
+-- s entre un gain de crédits et son écriture (#396) : les gains rapprochés (une manche) partent ensemble. Une
+-- transaction ou un don écrivent tout de suite, sans attendre cet espacement (Roblox met alors l'écriture en file)
 local GAINS_SAVE_DELAY = 6
 
 -- owned : items possédés, recalculés à chaque changement (setup, chargement, déblocage, debug) et lus à chaque tir.
@@ -306,10 +306,13 @@ end
 -- Cette méthode permet de rendre le tour d'écriture d'un profil lorsqu'une écriture se termine : à la transaction
 -- suivante s'il y en a une, sinon ce qui a changé entre-temps est programmé (arrêt : tout de suite, échec : plus tard).
 local function release(player: Player, profile: Profile)
-	local waiter = table.remove(profile.waiters, 1)
-	if waiter then
-		task.spawn(waiter)
-		return
+	while #profile.waiters > 0 do
+		local waiter = table.remove(profile.waiters, 1) :: thread
+		-- Une attente annulée (task.cancel) laisse un thread mort : passer au suivant plutôt que bloquer la file
+		if coroutine.status(waiter) == "suspended" then
+			task.spawn(waiter)
+			return
+		end
 	end
 	profile.saving = false
 	if not (profile.dirty and profile.canSave) or profile.failures >= MAX_SAVE_FAILURES then
@@ -339,18 +342,30 @@ local function noteFailure(player: Player, profile: Profile)
 end
 
 -- Cette méthode permet de couper la sauvegarde d'un profil lorsqu'une écriture trouve un format stocké que cette
--- version ne sait pas réécrire (écrit entre-temps par un serveur plus récent).
+-- version ne sait pas réécrire (serveur plus récent) : solde retiré de l'affichage, gains non écrits signalés.
 local function noteRefused(player: Player, profile: Profile)
 	profile.canSave = false
-	warn("[InventoryStore] format enregistré inconnu pour", player.Name, "— inventaire et crédits non sauvegardés")
+	local unsaved = profile.gains
+	for _, batch in profile.batches do
+		unsaved += batch.earned
+	end
+	warn(
+		"[InventoryStore] format enregistré inconnu pour",
+		player.Name,
+		"— inventaire et crédits non sauvegardés, gains perdus :",
+		unsaved
+	)
+	if profiles[player] == profile and player.Parent then
+		player:SetAttribute(WalletRules.ATTRIBUTE, nil)
+	end
 end
 
 -- Cette méthode permet de réunir aux items de la session ceux d'un enregistrement écrit lorsqu'une transaction aboutit,
 -- et de republier l'inventaire s'il a grandi (objet acheté, item écrit entre-temps par un autre serveur).
 local function adoptItems(player: Player, profile: Profile, raw: any)
 	local union = table.clone(profile.stored)
-	for _, id in InventoryRules.sanitizeStored(raw, math.huge) do
-		table.insert(union, id)
+	if type(raw) == "table" then
+		table.move(raw, 1, #raw, #union + 1, union)
 	end
 	local merged = InventoryRules.sanitizeStored(union, math.huge)
 	if #merged ~= #profile.stored then
@@ -424,6 +439,7 @@ local function runWrite(
 	end
 	if ok and status == "refused" then
 		profile.dirty = profile.dirty or wasDirty
+		profile.lastSaveAt = lastSaveAt
 		noteRefused(player, profile)
 		return "loading", nil
 	elseif ok and status == "rejected" then
