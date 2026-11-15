@@ -46,6 +46,10 @@ return function(T, Loader)
 			T.expect(not fresh.isReady(), "un id provisoire restant")
 		end)
 
+		T.it("config livrée : vrais Developer Products, packs proposés hors de Studio", function()
+			T.expect(Packs.isReady(), "un pack garde un id provisoire")
+		end)
+
 		T.it("prix affiché en Robux", function()
 			T.expectEqual(Packs.priceLabel(Packs.PACKS[1]), "99 R$")
 		end)

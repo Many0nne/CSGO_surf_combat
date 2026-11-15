@@ -7,11 +7,12 @@ Règles d'argent réel du jeu (#395). Stockage des crédits, contrat de `Invento
 
 - Config : `src/shared/CreditPacks.luau` (`PACKS` : id du pack, `productId`, crédits, prix affiché, nom du produit).
   Valeurs : 500 crédits à 99 R$, 1 100 à 199 R$, 3 000 à 499 R$.
-- **Ids provisoires** (3 950 001 à 3 950 003) tant que les produits n'existent pas : les créer sur le dashboard Creator
-  (expérience > Monetization > Developer Products), puis coller leurs ids dans `CreditPacks.PACKS`. Le prix réel est
-  celui du dashboard ; `robux` n'est que l'affichage, à garder égal.
-- Tant qu'un pack garde un id provisoire (`CreditPacks.isReady`), « + CRÉDITS » est masqué et le prompt refusé
-  (`unavailable`) hors de Studio : une publication faite avant de coller les ids ne montre pas un achat qui échoue.
+- **Developer Products créés** (dashboard Creator, expérience > Monetization > Developer Products) : 500 crédits
+  `3732001755`, 1 100 crédits `3732001894`, 3 000 crédits `3732001987`. Le prix réel est celui du dashboard ; `robux`
+  n'est que l'affichage, à garder égal (un changement de prix se fait aux deux endroits).
+- Nouveau pack : créer d'abord le produit sur le dashboard, puis l'ajouter à `CreditPacks.PACKS`. Un pack qui garde un
+  id provisoire (3 950 001 à 3 950 003, `CreditPacks.isReady`) masque « + CRÉDITS » et fait refuser le prompt
+  (`unavailable`) hors de Studio ; un test vérifie que la config livrée n'en a plus.
 - Prompt refusé (`full`) si le pack ferait dépasser `WalletRules.MAX_BALANCE` : ses crédits seraient écrêtés.
 - Ne jamais retirer de la config un produit déjà vendu : ses reçus en attente ne seraient plus jamais accordés.
 - Crédits achetés : compteur `purchased` du portefeuille, hors plafond du jour (#394).
