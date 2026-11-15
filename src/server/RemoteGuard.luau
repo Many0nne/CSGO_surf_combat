@@ -12,6 +12,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local InventoryRules = require(ReplicatedStorage.Shared.InventoryRules)
 local MathRules = require(ReplicatedStorage.Shared.MathRules)
 local NetworkProtocol = require(ReplicatedStorage.Shared.NetworkProtocol)
+local TrainingRules = require(ReplicatedStorage.Shared.TrainingRules)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 
 local RemoteGuard = {}
@@ -212,6 +213,12 @@ RemoteGuard.RULES = {
 	-- Point de contrôle d'un parcours rejoué (#379) ; droit de mesurer vérifié ensuite (PerfRules.canUse)
 	[N.PERF_ROUTE_TELEPORT] = { rate = 2, burst = 4, args = { RemoteGuard.vector3() } },
 	[N.LEAVE_ROUND] = { rate = 1, burst = 3, args = {} },
+	-- Rejoindre ou quitter l'entraînement (#345) : un clic ; demande en double répondue « busy » (TrainingService)
+	[N.TRAINING] = {
+		rate = 0.5,
+		burst = 3,
+		args = { RemoteGuard.enum({ TrainingRules.JOIN, TrainingRules.LEAVE }) },
+	},
 	[N.SEND_FEEDBACK] = { rate = 0.5, burst = 3, args = { RemoteGuard.string(RemoteGuard.FEEDBACK_MAX_BYTES) } },
 	[N.SAVE_SETTINGS] = { rate = 2, burst = 5, args = { RemoteGuard.table() } },
 	[N.GET_SETTINGS] = { rate = 0.2, burst = 3, args = {} },

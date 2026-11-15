@@ -1,6 +1,8 @@
 -- Écran Apprendre (MenuPage, #285) : onglet APPRENDRE du menu principal. Bloc centré sur un voile, titre, démo rejouée
 -- dans le moteur (DemoPlayer : touches, souris et vitesse synchronisées, légende du geste), sélecteur s'il y a plusieurs
--- démos, RETOUR en bas au centre. Le lecteur (copie de la map comprise) n'existe que tant que l'écran est affiché.
+-- démos, RETOUR en bas au centre, puis S'ENTRAÎNER (#345 : téléporte vers le serveur d'entraînement partagé, où la démo
+-- tourne dans un coin pendant que le joueur pratique). Le lecteur (copie de la map comprise) n'existe que tant que
+-- l'écran est affiché.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
@@ -124,8 +126,9 @@ local function render()
 	addDemos(InfosContext.compose())
 end
 
--- Cette méthode permet de construire l'écran et sa zone de contenu lorsque le client démarre.
-function LearnScreen.init(onClose: () -> ())
+-- Cette méthode permet de construire l'écran et sa zone de contenu lorsque le client démarre ; `train` pose l'action
+-- d'entraînement (#345 : S'ENTRAÎNER, ou QUITTER L'ENTRAÎNEMENT sur un serveur d'entraînement) après RETOUR.
+function LearnScreen.init(onClose: () -> (), train: { label: string, action: () -> () }?)
 	page = MenuPage.new("LearnScreen", 2, "APPRENDRE")
 	content = UIKit.create("ScrollingFrame", {
 		Name = "Content",
@@ -147,6 +150,9 @@ function LearnScreen.init(onClose: () -> ())
 	})
 	-- Les textes ne citent que les touches de mouvement et de saut (KeyBindings, non réglables) : composés à l'ouverture
 	page.action("RETOUR", onClose).setSelected(true)
+	if train then
+		page.action(train.label, train.action)
+	end
 end
 
 -- Cette méthode permet d'ouvrir l'écran et de lancer la démo lorsque le joueur touche l'onglet APPRENDRE.

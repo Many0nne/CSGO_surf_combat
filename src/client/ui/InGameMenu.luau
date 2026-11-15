@@ -44,6 +44,10 @@ export type Deps = {
 	getState: () -> string, -- état client (GameStateController)
 	onLeave: () -> (), -- MENU PRINCIPAL : retrait du round et retour au menu
 	onMainMenuKey: () -> (), -- touche du menu au menu principal (Réglages de l'accueil)
+	leaveLabel: string?, -- libellé de l'action qui quitte la partie (défaut MENU PRINCIPAL ; entraînement, #345)
+	-- Choix de plus sous RÉGLAGES, à libellé changeant (entraînement, #345 : MASQUER / AFFICHER LA DÉMO) ; le menu reste
+	-- ouvert après le clic
+	toggle: { label: () -> string, action: () -> () }?,
 }
 
 local deps: Deps?
@@ -52,6 +56,7 @@ local backdropGui: ScreenGui
 local backdrop: Frame
 local resumeChoice
 local view: View = "closed"
+local refreshToggle: () -> () = function() end -- relit le libellé du choix de plus (Deps.toggle)
 -- Souris voulue par le jeu (FPSCamera, mort, réapparition) pendant que le menu la tient libre, rendue à la fermeture
 local wantedBehavior = Enum.MouseBehavior.LockCenter
 local wantedIcon = false
@@ -120,6 +125,7 @@ local function setView(newView: View)
 		applyOverlay(isOpen)
 	end
 	if newView == "main" then
+		refreshToggle()
 		built.show()
 		resumeChoice.setSelected(true)
 	else
@@ -175,7 +181,11 @@ local function onInputBegan(inp: InputObject, gameProcessed: boolean)
 end
 
 -- Cette méthode permet de construire la colonne de choix (et le rappel de la touche) lorsque l'écran est construit.
-local function buildChoices(built: MenuPage.Page)
+local function buildChoices(
+	built: MenuPage.Page,
+	leaveLabel: string,
+	toggle: { label: () -> string, action: () -> () }?
+)
 	local column = UIKit.frame({
 		Name = "Choices",
 		BackgroundTransparency = 1,
@@ -209,18 +219,40 @@ local function buildChoices(built: MenuPage.Page)
 			choose("settings")
 		end,
 	})
+	if toggle then
+		local toggleChoice = built.choice({
+			text = toggle.label(),
+			size = CHOICE_SIZE,
+			layoutOrder = 3,
+			parent = column,
+			action = function()
+				toggle.action()
+				refreshToggle()
+			end,
+		})
+		-- Cette méthode permet de réécrire le libellé du choix de plus (texte et ombre) lorsque le menu s'ouvre ou qu'il
+		-- vient d'être cliqué.
+		refreshToggle = function()
+			local text = toggle.label()
+			for _, child in toggleChoice.button:GetChildren() do
+				if child:IsA("TextLabel") then
+					child.Text = text
+				end
+			end
+		end
+	end
 	-- Écart avant l'action qui quitte la partie
 	UIKit.frame({
 		Name = "Gap",
 		BackgroundTransparency = 1,
-		LayoutOrder = 3,
+		LayoutOrder = 4,
 		Size = UDim2.fromOffset(1, LEAVE_GAP - CHOICE_GAP * 2),
 		Parent = column,
 	})
 	built.choice({
-		text = "MENU PRINCIPAL",
+		text = leaveLabel,
 		size = CHOICE_SIZE,
-		layoutOrder = 4,
+		layoutOrder = 5,
 		parent = column,
 		action = function()
 			choose("leave")
@@ -262,7 +294,7 @@ function InGameMenu.init(newDeps: Deps)
 	})
 	local built = MenuPage.new("InGameMenu", 3, TITLE)
 	page = built
-	buildChoices(built)
+	buildChoices(built, newDeps.leaveLabel or "MENU PRINCIPAL", newDeps.toggle)
 
 	UserInputService.InputBegan:Connect(onInputBegan)
 	if RunService:IsStudio() then

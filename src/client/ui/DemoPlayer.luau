@@ -145,7 +145,8 @@ end
 
 -- Cette méthode permet de construire le lecteur dans `parent` lorsque l'écran Apprendre s'affiche ; rien n'est copié de
 -- la map avant le premier `play`, qui copie alors le décor autour des trajectoires de tous les clips `clipIds`.
-function DemoPlayer.new(parent: GuiObject, layoutOrder: number, clipIds: { string }): Demo
+-- `compact` (coin de l'entraînement, #345) : nom du geste seul, sans sa phrase, illisible en petit.
+function DemoPlayer.new(parent: GuiObject, layoutOrder: number, clipIds: { string }, compact: boolean?): Demo
 	local frame = UIKit.frame({
 		Name = "Demo",
 		Size = UDim2.fromOffset(DemoPlayer.Size.X, DemoPlayer.Size.Y),
@@ -182,7 +183,7 @@ function DemoPlayer.new(parent: GuiObject, layoutOrder: number, clipIds: { strin
 	})
 
 	-- Légende : nom du geste en ambre, geste en une ligne
-	fadeBand(frame, "TopBand", true, 86, 0.75)
+	fadeBand(frame, "TopBand", true, if compact then 44 else 86, 0.75)
 	local topic, topicShadow = UIKit.accentLabel(frame, {
 		Name = "Topic",
 		Position = UDim2.fromOffset(MARGIN, 10),
@@ -202,6 +203,8 @@ function DemoPlayer.new(parent: GuiObject, layoutOrder: number, clipIds: { strin
 		ZIndex = 6,
 	}, 1)
 	captionShadow.ZIndex = 5
+	caption.Visible = not compact
+	captionShadow.Visible = not compact
 
 	-- Message au centre (chargement, clip absent)
 	local message, messageShadow = UIKit.shadowedText(frame, {

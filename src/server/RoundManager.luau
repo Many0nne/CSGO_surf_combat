@@ -112,16 +112,23 @@ local function endRound()
 	end)
 end
 
-function RoundManager.startRound(duration: number)
+-- Cette méthode permet de démarrer une manche lorsque le premier joueur demande à apparaître ; sans durée, la manche ne
+-- finit jamais (serveur d'entraînement, #345) : pas de timer, de bannière de fin ni de stats de manche.
+function RoundManager.startRound(duration: number?)
 	if state == "active" then
 		return
 	end
 	state = "active"
-	timeLeft = duration
+	timeLeft = duration or 0
 	-- base de comparaison du round, avant l'apparition de son premier personnage (cf. docs/performance.md)
-	MemoryTracker.snapshot(string.format("début de round (%d s)", duration))
+	MemoryTracker.snapshot(
+		if duration then string.format("début de round (%d s)", duration) else "début de manche sans fin"
+	)
 	broadcastState()
 	broadcastScores()
+	if not duration then
+		return
+	end
 
 	local lastBroadcastSecond = math.ceil(timeLeft)
 

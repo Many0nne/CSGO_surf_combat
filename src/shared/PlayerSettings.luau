@@ -43,6 +43,8 @@ export type Settings = {
 	hudScale: number,
 	-- Conseils de l'écran de mort des débutants (#291) ; activés par défaut (DEFAULT_DEATH_TIPS), absent = activés
 	deathTips: boolean,
+	-- Démo du coin sur le serveur d'entraînement (#345) ; affichée par défaut (DEFAULT_TRAINING_DEMO), absent = affichée
+	trainingDemo: boolean,
 	-- une touche par emplacement de la barre d'armes, dans l'ordre des emplacements
 	slotKeys: { string },
 }
@@ -84,6 +86,9 @@ PlayerSettings.MUSIC_GAME_VOLUME = { min = 0, max = 100, default = 35 }
 PlayerSettings.HUD_SCALE = { min = 50, max = 100, default = 100 }
 -- Conseils de l'écran de mort des débutants (#291) : activés par défaut, y compris pour un réglage sauvegardé avant eux
 PlayerSettings.DEFAULT_DEATH_TIPS = true
+-- Démo du coin sur le serveur d'entraînement (#345) : affichée par défaut ; masquée par le menu en partie ou les Réglages,
+-- le choix est retenu d'une arrivée sur l'entraînement à l'autre
+PlayerSettings.DEFAULT_TRAINING_DEMO = true
 -- Touche du menu en partie (#157 : reprendre, réglages, retour au menu principal), nom d'Enum.KeyCode ; au menu
 -- principal elle ouvre les Réglages. Seule source de cette touche : InGameMenu, l'écran Infos et la liste des réservées.
 PlayerSettings.MENU_KEY = "P"
@@ -161,6 +166,7 @@ function PlayerSettings.defaults(): Settings
 		volumeMusicGame = PlayerSettings.MUSIC_GAME_VOLUME.default,
 		hudScale = PlayerSettings.HUD_SCALE.default,
 		deathTips = PlayerSettings.DEFAULT_DEATH_TIPS,
+		trainingDemo = PlayerSettings.DEFAULT_TRAINING_DEMO,
 		slotKeys = table.clone(PlayerSettings.DEFAULT_SLOT_KEYS),
 	}
 end
@@ -266,6 +272,9 @@ function PlayerSettings.sanitize(raw: any): Settings
 	settings.hudScale = clampPixels(raw.hudScale, PlayerSettings.HUD_SCALE)
 	if type(raw.deathTips) == "boolean" then
 		settings.deathTips = raw.deathTips
+	end
+	if type(raw.trainingDemo) == "boolean" then
+		settings.trainingDemo = raw.trainingDemo
 	end
 	settings.slotKeys = sanitizeKeys(raw.slotKeys)
 	return settings

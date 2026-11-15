@@ -33,6 +33,10 @@ local ServerPerf = require(script.ServerPerf)
 local CheatLog = require(script.CheatLog)
 local ShotRelayRules = require(script.ShotRelayRules)
 local AimStats = require(script.AimStats)
+local TrainingService = require(script.TrainingService)
+
+-- Serveur d'entraînement (#345, serveur réservé de la même place) : ni bots, ni armes, ni stats, manche sans fin
+local training = TrainingService.isTraining()
 
 -- Spawn contrôlé : on gère LoadCharacter nous-mêmes
 Players.CharacterAutoLoads = false
@@ -76,6 +80,8 @@ characterSyncRmt.Name = N.CHARACTER_SYNC
 characterSyncRmt.Parent = ReplicatedStorage
 -- Fiable : renvoie un client dont la position est refusée à sa dernière position acceptée (#172)
 local movementCorrectionRmt = makeRemote(N.MOVEMENT_CORRECTION)
+-- Rejoindre ou quitter l'entraînement (#345) : demande du client, réponse du serveur
+local trainingRmt = makeRemote(N.TRAINING)
 
 -- ── Initialisation des sous-systèmes ──────────────────────────────────────
 
@@ -86,8 +92,11 @@ SettingsStore.init(getSettingsRmt, saveSettingsRmt)
 -- Inventaire (#267) : StarterPack vidé, Tools donnés selon l'équipement (#280), armes non possédées refusées par le
 -- Validator
 InventoryStore.init(equipItemRmt, SpawnManager.isSpawning)
+InventoryStore.setToolsEnabled(not training)
 Validator.setOwnership(InventoryStore.ownsTool)
 FeedbackService.init(sendFeedbackRmt, feedbackAckRmt)
+-- Mode publié aux clients (attribut de ReplicatedStorage) et téléportations vers ou depuis l'entraînement
+TrainingService.init(trainingRmt)
 
 RoundManager.init({
 	roundState = roundStateRmt,
@@ -375,6 +384,10 @@ local function onDeathCounted(participant: Participants.Participant, killer: Par
 		-- Un bot qui vient de tuer se replace (#141)
 		BotManager.notifyKill(killer)
 	end
+	-- Entraînement (#345) : une chute ne compte pas dans les stats
+	if training then
+		return
+	end
 	-- Une mort infligée par un bot ne compte que dans le round (décision 6 de #133)
 	local player = participant.player
 	if player and ParticipantRules.countsInStats(participant.isBot, killer and killer.isBot) then
@@ -455,9 +468,15 @@ SpawnManager.init(spawnRmt, {
 	beforeSpawn = function(player)
 		-- Démarrer le round si idle (1er joueur à cliquer Play)
 		if RoundManager.getState() == "idle" then
-			-- attribut Workspace RoundDuration : rounds courts pour suivre la mémoire sur plusieurs rounds (#95)
+			-- attribut Workspace RoundDuration : rounds courts pour suivre la mémoire sur plusieurs rounds (#95) ;
+			-- entraînement (#345) : manche sans fin, qui garde la réapparition après une chute
 			RoundManager.startRound(
-				PerfRules.roundDuration(GameConfig.ROUND_DURATION, workspace:GetAttribute("RoundDuration"))
+				if training
+					then nil
+					else PerfRules.roundDuration(
+						GameConfig.ROUND_DURATION,
+						workspace:GetAttribute("RoundDuration")
+					)
 			)
 		end
 		-- Au classement dès l'apparition, retour du menu en partie compris (#157)
@@ -664,26 +683,30 @@ end)
 
 -- ── Bots (#133) : personnages serveur, sans client ────────────────────────
 
-BotManager.init({
-	onCharacter = onParticipantCharacter,
-	place = SpawnManager.place,
-	relay = CharacterSync.relayBot,
-	-- Touches d'un bot (#143) : même validation (arme en main, portée, cadence) et mêmes dégâts qu'un joueur
-	hitscan = function(bot, targetCharacter, hitPart)
-		local damage, isHeadshot = Validator.authorizeHitscan(bot, targetCharacter, hitPart, os.clock())
-		return if damage then applyHit(bot, targetCharacter, damage, isHeadshot) else nil
-	end,
-	melee = function(bot, targetCharacter)
-		local damage = Validator.authorizeMelee(bot, targetCharacter, "primary", os.clock())
-		return if damage then applyHit(bot, targetCharacter, damage, false) else nil
-	end,
-	-- Tirs d'un bot entendus par les joueurs (#156), touchés ou manqués : même relais que ceux d'un joueur
-	shotFired = function(bot, origin, direction)
-		return relayShot(bot, origin, direction)
-	end,
-	forget = forgetCombatState,
-	roundManager = RoundManager,
-})
+-- Pas de bots sur un serveur d'entraînement (#345) : BotManager n'est pas démarré (aucun bot, ni population automatique,
+-- ni plan de navigation)
+if not training then
+	BotManager.init({
+		onCharacter = onParticipantCharacter,
+		place = SpawnManager.place,
+		relay = CharacterSync.relayBot,
+		-- Touches d'un bot (#143) : même validation (arme en main, portée, cadence) et mêmes dégâts qu'un joueur
+		hitscan = function(bot, targetCharacter, hitPart)
+			local damage, isHeadshot = Validator.authorizeHitscan(bot, targetCharacter, hitPart, os.clock())
+			return if damage then applyHit(bot, targetCharacter, damage, isHeadshot) else nil
+		end,
+		melee = function(bot, targetCharacter)
+			local damage = Validator.authorizeMelee(bot, targetCharacter, "primary", os.clock())
+			return if damage then applyHit(bot, targetCharacter, damage, false) else nil
+		end,
+		-- Tirs d'un bot entendus par les joueurs (#156), touchés ou manqués : même relais que ceux d'un joueur
+		shotFired = function(bot, origin, direction)
+			return relayShot(bot, origin, direction)
+		end,
+		forget = forgetCombatState,
+		roundManager = RoundManager,
+	})
+end
 
 -- ── Helper de playtest debug (#30) : Studio uniquement ─────────────────────
 
@@ -691,8 +714,9 @@ if RunService:IsStudio() then
 	DebugPlaytest.init({
 		roundManager = RoundManager,
 		validator = Validator,
-		-- Bots retirés pendant un run, pour un test déterministe (#144)
-		setBotsPaused = BotManager.setPaused,
+		-- Bots retirés pendant un run, pour un test déterministe (#144) ; entraînement (#345) : aucun bot à retirer, et la
+		-- reprise de la population en ajouterait
+		setBotsPaused = if training then function(_paused: boolean) end else BotManager.setPaused,
 	})
 end
 
