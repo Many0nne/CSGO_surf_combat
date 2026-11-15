@@ -292,6 +292,24 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   Débutant (#291, conseils non coupés) : sous « RÉAPPARITION », une ligne de conseil en texte courant (Oswald regular,
   18 px, os), son thème en ambre (« SURF : », « BHOP : », « AIR STRAFE : »), plus large que le bloc (680 px) ; le
   bloc remonte d'autant et le fondu de bord s'agrandit (780x270 au lieu de 520x230). Rien de plus pour les autres.
+- **Série de kills (#364)** : sous le timer et le rang (`RoundHUD.setStreak`, cadre `Streak` de `TimerAnchor`, même
+  échelle du HUD), un crâne dans un cercle de visée et le nombre de kills depuis la dernière mort, **sans mot** (choix
+  de l'utilisateur : ni « SÉRIE » ni « TRIPLE KILL », la voix de l'annonceur dit déjà le palier). Crâne blanc à
+  orbites, nez et dents ajourés (`tools/ui/make_skull_icon.py`, `assets/ui/hud/crane_serie.png`, Decal
+  124978015444007) teint en os par `ImageColor3`, 22 px dans un cercle de 40 px (`UIStroke` 2 px sur un cadre arrondi),
+  tous deux à ombre noire de 2 px ; chiffre Oswald gras 30 px à ombre de 3 px. Masqué sous le double kill
+  (`KillStreakRules.view`, `MIN_SHOWN` 2, testée). **Palier annoncé à la voix (2, 3, 4, 5, 10, 15), et lui seul**
+  (choix de l'utilisateur : en accord avec les sons, rien aux autres kills) : sans changer de taille, quatre branches
+  de réticule arrivent de l'extérieur et se ferment en mordant le cercle (0,18 s), la croix du hitmarker s'allume
+  autour du crâne (0,6 s puis `Motion.Hit`), tout passe en rouge d'impact 1,2 s, puis retour à l'os et branches
+  effacées. Pistes rejetées : pulsation de taille (`UIScale` 1,45 → 1, premier rendu, l'utilisateur préférait ajouter des
+  éléments) ; croix posée sur le crâne (7 à 15 px du centre) : elle cachait les orbites, elle va de 12 à 23 px et dépasse
+  le cercle. Image préchargée à l'init (`ContentProvider:PreloadAsync`) : chargée à sa première apparition, elle
+  manquait au premier palier. Série comptée par `KillAnnouncer` (`onStreak`), remise à 0 à la mort et hors partie.
+  Masqué sous le menu en partie (le titre « MENU » est juste dessous).
+  Test sans tuer de bot : en contexte `Server`, `ReplicatedStorage.PlayerDied:FireAllClients({ victimId = -1,
+  victimName = "Cible", victimIsBot = true, killerId = <UserId>, killerName = "x", killerIsBot = false, weapon = "AWP",
+  headshot = false })` compte un kill du joueur (une ligne de kill feed en plus).
 - `src/client/ui/KillFeed.luau` (#102) : en haut à droite, sans fond, une ligne par mort (tueur et victime en os, arme
   en ambre plus petite), 4 lignes, 5 s chacune ; les lignes du joueur sont sur une bande rouge d'impact droite qui
   s'efface vers la gauche, comme sa ligne au classement. Affiché vivant ou mort (`HUDRules.killFeedVisible`), pas au

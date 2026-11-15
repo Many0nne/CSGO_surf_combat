@@ -34,4 +34,23 @@ function KillStreakRules.onKill(streak: number, headshot: boolean): (number, Ann
 	return count, if headshot then "Headshot" else nil
 end
 
+-- Indicateur du HUD (#364) : crâne et nombre de kills, sans mot, affiché à partir du double kill
+KillStreakRules.MIN_SHOWN = 2
+
+export type View = {
+	visible: boolean, -- série d'au moins MIN_SHOWN kills
+	count: string, -- nombre affiché à côté du crâne
+	tier: boolean, -- palier annoncé à la voix : l'icône pulse en rouge d'impact
+}
+
+-- Cette méthode permet de composer l'indicateur de série du HUD lorsque la série change : visible dès le double kill,
+-- nombre de kills en chiffres, palier marqué quand ce nombre est un palier annoncé (KillStreakRules.TIERS).
+function KillStreakRules.view(streak: number): View
+	return {
+		visible = streak >= KillStreakRules.MIN_SHOWN,
+		count = tostring(streak),
+		tier = KillStreakRules.TIERS[streak] ~= nil,
+	}
+end
+
 return KillStreakRules
