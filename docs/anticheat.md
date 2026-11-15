@@ -361,8 +361,8 @@ et `recordAttack` de `Validator.luau`), remise à zéro à l'apparition (`Valida
 sans effet.
 
 **Munitions et durée d'equip (fait, #175).** Avant #175, le chargeur et l'equip n'étaient suivis que par le client
-(`WeaponSystem`) : un client modifié ne rechargeait jamais (pas de pause de 3,7 s tous les 5 tirs) et tirait dès la
-sortie de l'arme (AWP : 1,58 s gagnées). Désormais, pour les joueurs, `Validator.authorizeHitscan` et
+(`WeaponSystem`) : un client modifié ne rechargeait jamais (pas de pause de 3,7 s, aujourd'hui 3,667 s, tous les 5 tirs) et tirait dès la
+sortie de l'arme (AWP : 1,58 s gagnées, aujourd'hui 1,267 s). Désormais, pour les joueurs, `Validator.authorizeHitscan` et
 `Validator.authorizeMelee` appliquent, après cible, arme et cadence (un refus ne relance donc pas la cadence), deux
 contrôles de plus. Règles pures dans `src/server/ShotRules.luau` (`checkEquip`, `checkMagazine`, `startReload`,
 `cancelReload`, `settleReload`), état (instants, compteurs) dans `Validator`, mêmes modes et même journal que T1.
