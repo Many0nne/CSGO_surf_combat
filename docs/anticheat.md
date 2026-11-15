@@ -47,7 +47,7 @@ Impact : ce que gagne le tricheur et ce que subissent les autres. Coût : serveu
 
 | # | Menace | Impact aujourd'hui | Coût de la parade | Priorité |
 |---|---|---|---|---|
-| T1 | Tir sans viser, à travers les murs, hitbox agrandie (« silent aim ») | **Critique** : un tir accepté par cible à 250 studs, 1 par 1,46 s, tête choisie (460 dégâts) | Faible serveur, moyen en complexité | P1 |
+| T1 | Tir sans viser, à travers les murs, hitbox agrandie (« silent aim ») | **Critique** : un tir accepté par cible à 250 studs, 1 par 1,455 s, tête choisie (460 dégâts) | Faible serveur, moyen en complexité | P1 |
 | D1 | Vitesse et téléportation | Fermé (#172, #212) : 450 studs/s soutenus au plus, saut borné à 337,5 studs après un silence, refus corrigé | Faible | Fait |
 | M1 | Coup de couteau dans toutes les directions (« kill aura ») | Détecté (#176, journal seul) : coup hors du cap ou à travers un mur journalisé ; **élevé** tant qu'il n'est pas en `block` | Faible | P2 |
 | R1 | Remotes sans débit ni garde (respawn, feedback) | Fermé (#170, #171) : garde commune, délai de réapparition et feedback limité en mémoire | Faible | Fait |
@@ -68,7 +68,7 @@ le tir était parti. **Fait (#174)** : la parade ci-dessous, détails dans « To
 
 **Risque.** Un client modifié envoie `HitscanDamage(n'importe quel ennemi, sa Head)` sans le regarder ni le voir :
 l'AWP fait 115 × 4 = 460 dégâts à la tête (`Damage` de l'AWP dans `src/shared/WeaponConfig.luau`, `HitZones.Multipliers` dans `src/shared/HitZones.luau`), donc
-un mort par tir (100 PV, valeur par défaut du Humanoid), toutes les 1,46 s, sur tous les participants à moins de 250 studs, à travers les murs. Agrandir
+un mort par tir (100 PV, valeur par défaut du Humanoid), toutes les 1,455 s, sur tous les participants à moins de 250 studs, à travers les murs. Agrandir
 localement les hitbox des autres (« hitbox expander ») marche aussi : le serveur ne regarde pas la géométrie.
 
 **Parade.** Le client envoie aussi ce qu'il a tiré, et le serveur vérifie que ce tir pouvait toucher :
@@ -423,7 +423,7 @@ contrôles de plus. Règles pures dans `src/server/ShotRules.luau` (`checkEquip`
 - **Début du rechargement borné.** Un `Reload` ne compte qu'à partir de la fin de l'equip et de la cadence du dernier
   tir accepté de l'arme (`max(arrivée, equip + EquipTime - 0,2, dernier tir + FireDelay - 0,2)`, dernier tir = touche
   acceptée ou, depuis #215, tir compté même manqué : `Magazine.lastShotAt`) : le client ne peut pas recharger avant, un
-  client modifié qui recharge dès son tir ne gagne pas `FireDelay` (1,46 s) sur la pause.
+  client modifié qui recharge dès son tir ne gagne pas `FireDelay` (1,455 s) sur la pause.
 
 ### Tirs comptés et touches rattachées (#215, #216)
 

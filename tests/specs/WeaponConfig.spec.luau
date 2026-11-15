@@ -52,6 +52,7 @@ return function(T, Loader)
 			local PRIMARY, SECONDARY = WeaponConfig.AttackKind.PRIMARY, WeaponConfig.AttackKind.SECONDARY
 			for _, name in { "M9Bayonet", "KaBar" } do
 				local cfg = WeaponConfig.Weapons[name]
+				-- Cette méthode permet de lire les deux délais (clic gauche, clic droit) d'un coup lorsqu'on les compare.
 				local function cooldowns(kind, hit): { number }
 					return { WeaponConfig.meleeCooldowns(cfg, kind, hit) }
 				end

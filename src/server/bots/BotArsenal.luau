@@ -193,20 +193,17 @@ function BotArsenal.fire(self: BotArsenal, now: number, eye: Vector3, direction:
 	if not cfg or not self:isReady(now) then
 		return nil
 	end
-	if cfg.IsMelee then
-		-- Le coup du bot touche toujours (portée vérifiée avant) : cadence d'un coup qui touche, comme le Validator (#404)
-		local _, hitDelay = WeaponConfig.getMeleeAttack(cfg, WeaponConfig.AttackKind.PRIMARY)
-		self.readyAt = now + (hitDelay or cfg.FireDelay or 0)
-	else
-		self.readyAt = now + (cfg.FireDelay or 0)
-	end
 	-- Premier tir ou coup du bot : sa protection d'apparition tombe (#288), même si le relais écarte le tir
 	SpawnProtection.drop(self.char)
 	if cfg.IsMelee then
+		-- Le coup du bot touche toujours (portée vérifiée avant) : cadence d'un coup qui touche, comme le Validator (#404)
+		local _, hitDelay = WeaponConfig.getMeleeAttack(cfg, WeaponConfig.AttackKind.PRIMARY)
+		self.readyAt = now + (hitDelay or 0)
 		WeaponThirdPerson.setAction(self.char, "Shoot")
 		self.onHit(target, nil)
 		return nil
 	end
+	self.readyAt = now + (cfg.FireDelay or 0)
 	self.ammo -= 1
 	-- Son du tir chez les joueurs (#156), avant la touche : comme chez un joueur, le tir s'entend avant ses dégâts ;
 	-- le relais joue aussi le recul 3P (#215). Sans relais branché, ou tir écarté par le relais (le rayon part quand

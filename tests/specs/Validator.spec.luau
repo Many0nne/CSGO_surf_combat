@@ -630,7 +630,8 @@ return function(T, Loader)
 			local a = makePlayer(Vector3.zero)
 			local b = makePlayer(Vector3.new(5, 0, 0))
 			equip(a, "M9Bayonet", nil, 10)
-			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 10.2), nil)
+			-- Refus juste avant la borne d'equip : s'il relançait la cadence (0,5 s), le coup suivant serait refusé
+			T.expectEqual(Validator.authorizeMelee(a, b.Character, "primary", 10 + KNIFE_EQUIP - 0.25), nil)
 			T.expectEqual(world.reports[1].check, "equip")
 			T.expectEqual(world.reports[1].category, "Melee")
 			T.expectEqual(

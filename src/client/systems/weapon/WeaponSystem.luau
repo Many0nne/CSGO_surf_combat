@@ -160,10 +160,10 @@ local function inspectCurrent()
 	ViewmodelSystem.playAnimation(animation)
 end
 
--- Cette méthode permet de fixer les prochains clics gauche et droit possibles après une attaque de mêlée lancée à
--- `startedAt`, sans jamais raccourcir un délai déjà posé (coup qui touche : délai plus long, comme CS:GO, #404).
-local function applyMeleeCooldowns(s, cfg, attackKind: string, startedAt: number, hit: boolean)
-	local primary, secondary = WeaponConfig.meleeCooldowns(cfg, attackKind, hit)
+-- Cette méthode permet d'allonger les prochains clics gauche et droit possibles lorsqu'un coup lancé à `startedAt`
+-- rencontre quelque chose (cadence d'un coup qui touche, comme CS:GO, #404), sans jamais raccourcir un délai posé.
+local function applyHitCooldowns(s, cfg, attackKind: string, startedAt: number)
+	local primary, secondary = WeaponConfig.meleeCooldowns(cfg, attackKind, true)
 	s.nextFireTime = math.max(s.nextFireTime, startedAt + primary)
 	s.nextSecondaryTime = math.max(s.nextSecondaryTime, startedAt + secondary)
 end
@@ -172,17 +172,17 @@ end
 -- l'impact (un coup qui touche allonge la cadence), et lockTime fixe la durée de l'état FIRING.
 local function startMeleeAttack(tool, cfg, s, animation: string, attackKind: string, lockTime: number)
 	local now = tick()
+	local primaryDelay, secondaryDelay = WeaponConfig.meleeCooldowns(cfg, attackKind, false)
 	s.lastFire = now
-	s.nextFireTime = now
-	s.nextSecondaryTime = now
-	applyMeleeCooldowns(s, cfg, attackKind, now, false)
+	s.nextFireTime = now + primaryDelay
+	s.nextSecondaryTime = now + secondaryDelay
 	weaponState = "FIRING"
 	replicateAction("Shoot")
 	local markerOverrides: { [string]: string | () -> string } = {
 		["Stab Sound"] = function()
-			local sound = MeleeHitDetection.resolveHit(cfg, ViewmodelSystem.getActiveViewmodel(), attackKind)
-			if sound ~= MeleeHitDetection.MISS_SOUND and toolState[tool] == s then
-				applyMeleeCooldowns(s, cfg, attackKind, now, true)
+			local sound, contact = MeleeHitDetection.resolveHit(cfg, ViewmodelSystem.getActiveViewmodel(), attackKind)
+			if contact then
+				applyHitCooldowns(s, cfg, attackKind, now)
 			end
 			return sound
 		end,

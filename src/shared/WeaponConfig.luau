@@ -193,12 +193,17 @@ end
 -- prochain clic droit lorsque le client lance un coup (hit faux) puis apprend qu'il a touché (hit vrai), comme CS:GO.
 function WeaponConfig.meleeCooldowns(cfg: any, attackKind: any, hit: boolean): (number, number)
 	local secondary = cfg.SecondaryAttack
-	if attackKind == WeaponConfig.AttackKind.SECONDARY and secondary then
-		local delay = if hit then secondary.HitFireDelay or secondary.FireDelay else secondary.FireDelay
+	local isSecondary = attackKind == WeaponConfig.AttackKind.SECONDARY and secondary ~= nil
+	local delay = if isSecondary then secondary.FireDelay else cfg.FireDelay
+	if hit then
+		-- Même délai que celui du serveur, qui ne voit que les coups qui touchent
+		local _, hitDelay = WeaponConfig.getMeleeAttack(cfg, attackKind)
+		delay = hitDelay or delay
+	end
+	if isSecondary then
 		return delay, delay
 	end
-	local primary = if hit then cfg.HitFireDelay or cfg.FireDelay else cfg.FireDelay
-	return primary, math.max(primary, cfg.SecondaryDelay or primary)
+	return delay, math.max(delay, cfg.SecondaryDelay or delay)
 end
 
 return WeaponConfig

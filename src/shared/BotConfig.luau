@@ -126,7 +126,7 @@ return {
 	-- reprend sa trajectoire. Difficulté unique : REACTION_TIME, COMBAT_AIM_TIME, COMBAT_TURN_RATE et AIM_SPREAD*
 	REACTION_TIME       = 0.55,   -- avant de pouvoir tirer, depuis qu'il voit la cible ou la fin de sa grâce (s)
 	COMBAT_AIM_TIME     = 0.3,    -- visée avant le tir, une fois réagi (s)
-	COMBAT_COOLDOWN     = 1.5,    -- après un tir, regard rendu à la course (au moins la cadence de l'AWP, 1,46 s)
+	COMBAT_COOLDOWN     = 1.5,    -- après un tir, regard rendu à la course (au moins la cadence de l'AWP, 1,455 s)
 	COMBAT_TURN_RATE    = 720,    -- rotation du regard vers la cible (°/s)
 	FIRE_YAW_TOLERANCE  = 2,      -- tire seulement si son cap est à moins de tant de la cible (°)
 	AIM_SPREAD          = 2,      -- dispersion d'un tir sur une cible immobile (demi-angle du cône, °)

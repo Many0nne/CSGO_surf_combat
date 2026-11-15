@@ -171,7 +171,8 @@ se déduit jamais de la longueur d'une piste, et une piste ne s'étire ni ne s'a
   pour cette durée (`m_flDeployDuration`, `m_flDisallowAttackAfterReloadStartDuration`), CS:GO ne l'écrivant nulle part
   ailleurs que dans le modèle. Dépôt `SteamDatabase/GameTracking-CSGO` (CS:GO : dernier commit avant CS2, `64b7772`).
 - **Rechargement :** CS:GO n'autorise aucun tir avant la fin de la séquence (`DefaultReload`), le verrou reste donc
-  `ReloadTime` = durée de la piste.
+  `ReloadTime` (AWP : 3,667 s), la durée du rechargement CS:GO. La piste Reload de l'AWP, construite pour l'ancien
+  `ReloadTime` (3,7 s), dure ~0,03 s de plus : le premier tir coupe cette fin.
 
 ## Vidéos de référence
 
@@ -382,7 +383,7 @@ Repris du retour d'expérience de la M9 (`docs/notes/retex-viewmodel-m9.md`).
   image, coup lancé dès la fin de l'equip puis après 3 s : les deux doivent donner les mêmes écarts.
 - **Verrou de tir et cadence (#221) :** `ShootAnimTime` (état `FIRING` de `WeaponSystem`, qui refuse tout clic) ne
   dépasse jamais `FireDelay`, seule cadence connue du serveur : sinon le client tire moins vite que la cadence de l'arme.
-  Une piste de tir plus longue que la cadence (AWP : Shoot dure 1,63 s, cadence 60/41 = 1,46 s) est coupée par le tir
+  Une piste de tir plus longue que la cadence (AWP : Shoot dure 1,63 s, cadence 1,455 s) est coupée par le tir
   suivant, comme les slashs de la M9 : `playAnimation` arrête la piste en cours et relance Shoot avec le fondu par défaut
   (0,1 s). Les 0,17 s coupées sont la fin du réarmement, proche de la pose de repos : rendu de la coupure à juger à
   l'œil en jeu (non vérifié par capture, #221). Le son `Bolt` de la piste part avant la coupure (`DebugPlaytest` AWP :
