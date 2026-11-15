@@ -74,6 +74,31 @@ return function(T, Loader)
 			end
 		end)
 
+		T.it("garde l'os plein jusqu'à 4 kills, hachure dès 5, passe au rouge (hachuré) dès 10", function()
+			for _, n in { 2, 3, 4 } do
+				T.expectEqual(KillStreakRules.view(n).hatched, false)
+				T.expectEqual(KillStreakRules.view(n).red, false)
+			end
+			for _, n in { 5, 9 } do
+				T.expectEqual(KillStreakRules.view(n).hatched, true)
+				T.expectEqual(KillStreakRules.view(n).red, false)
+			end
+			for _, n in { 10, 15, 23 } do
+				T.expectEqual(KillStreakRules.view(n).hatched, true)
+				T.expectEqual(KillStreakRules.view(n).red, true)
+			end
+		end)
+
+		T.it(
+			"pose une tache de sang dès 5 kills, plus grande à 10 puis à 15, et la garde jusqu'à la mort",
+			function()
+				local expected = { [2] = 0, [4] = 0, [5] = 1, [9] = 1, [10] = 2, [14] = 2, [15] = 3, [30] = 3, [0] = 0 }
+				for n, blood in expected do
+					T.expectEqual(KillStreakRules.view(n).blood, blood)
+				end
+			end
+		)
+
 		T.it("revient masqué après une mort (série remise à 0)", function()
 			local streak = select(1, KillStreakRules.onKill(0, false))
 			streak = select(1, KillStreakRules.onKill(streak, false))

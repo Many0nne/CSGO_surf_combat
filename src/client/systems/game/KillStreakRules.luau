@@ -37,19 +37,37 @@ end
 -- Indicateur du HUD (#364) : crâne et nombre de kills, sans mot, affiché à partir du double kill
 KillStreakRules.MIN_SHOWN = 2
 
+-- Aspect selon la série : crâne hachuré dès HATCHED_FROM kills, nombre en rouge d'impact dès RED_FROM ; tache de sang
+-- derrière le crâne, plus grande à chaque seuil de BLOOD_FROM (le crâne reste os pour se lire sur le sang)
+KillStreakRules.HATCHED_FROM = 5
+KillStreakRules.RED_FROM = 10
+KillStreakRules.BLOOD_FROM = { 5, 10, 15 }
+
 export type View = {
 	visible: boolean, -- série d'au moins MIN_SHOWN kills
 	count: string, -- nombre affiché à côté du crâne
-	tier: boolean, -- palier annoncé à la voix : l'icône pulse en rouge d'impact
+	tier: boolean, -- palier annoncé à la voix : la croix du hitmarker s'allume et la couleur flashe
+	hatched: boolean, -- crâne hachuré
+	red: boolean, -- nombre en rouge d'impact au repos (le flash d'un palier le passe alors à l'os)
+	blood: number, -- tache de sang derrière le crâne : 0 (aucune), 1, 2 ou 3
 }
 
 -- Cette méthode permet de composer l'indicateur de série du HUD lorsque la série change : visible dès le double kill,
--- nombre de kills en chiffres, palier marqué quand ce nombre est un palier annoncé (KillStreakRules.TIERS).
+-- nombre de kills en chiffres, palier annoncé (KillStreakRules.TIERS), hachures, rouge et sang selon la longueur.
 function KillStreakRules.view(streak: number): View
+	local blood = 0
+	for i, from in KillStreakRules.BLOOD_FROM do
+		if streak >= from then
+			blood = i
+		end
+	end
 	return {
 		visible = streak >= KillStreakRules.MIN_SHOWN,
 		count = tostring(streak),
 		tier = KillStreakRules.TIERS[streak] ~= nil,
+		hatched = streak >= KillStreakRules.HATCHED_FROM,
+		red = streak >= KillStreakRules.RED_FROM,
+		blood = blood,
 	}
 end
 
