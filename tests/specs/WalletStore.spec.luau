@@ -127,11 +127,28 @@ return function(T, Loader)
 		local studio = options ~= nil and options.studio == true
 		local closing = nil
 		local warnings = {}
+		local logs = {}
 		local removing = makeSignal()
 		local opened = {}
 		-- Tirage des caisses (#393) : valeur dans [0, 100) rendue par le faux `Random` de CrateService
 		local rolls = { value = 0 }
+		-- Joueurs présents sur ce serveur (Players:GetPlayerByUserId, reçus Robux de #395)
+		local present = {}
+		-- Réponse du faux PolicyService (#395) : `restricted` par UserId, `fail` fait échouer l'appel ; `calls` compte
+		local policy = { restricted = {}, fail = false, calls = 0, latency = 0 }
 		local services = {
+			PolicyService = {
+				GetPolicyInfoForPlayerAsync = function(_, player)
+					policy.calls += 1
+					if policy.latency > 0 then
+						sched.task.wait(policy.latency)
+					end
+					if policy.fail then
+						error("PolicyService indisponible (simulé)")
+					end
+					return { ArePaidRandomItemsRestricted = policy.restricted[player.UserId] == true }
+				end,
+			},
 			HttpService = {
 				GenerateGUID = function()
 					guids += 1
@@ -144,7 +161,13 @@ return function(T, Loader)
 					return ds
 				end,
 			},
-			Players = { PlayerRemoving = removing, PlayerAdded = makeSignal() },
+			Players = {
+				PlayerRemoving = removing,
+				PlayerAdded = makeSignal(),
+				GetPlayerByUserId = function(_, userId: number)
+					return present[userId]
+				end,
+			},
 			RunService = {
 				IsStudio = function()
 					return studio
@@ -166,7 +189,13 @@ return function(T, Loader)
 				end
 				table.insert(warnings, table.concat(parts, " "))
 			end,
-			print = function() end,
+			print = function(...)
+				local parts = {}
+				for _, v in { ... } do
+					table.insert(parts, tostring(v))
+				end
+				table.insert(logs, table.concat(parts, " "))
+			end,
 			Random = {
 				new = function()
 					return {
@@ -189,13 +218,17 @@ return function(T, Loader)
 		}
 		local server = {
 			warnings = warnings,
+			logs = logs,
 			opened = opened,
 			rolls = rolls,
+			policy = policy,
 			Inventory = loader:require("src/server/InventoryStore"),
 			Wallet = loader:require("src/server/WalletStore"),
 			-- Chargé ici, hors coroutine : la lecture d'un module par Lune cède la main à son propre ordonnanceur, qu'une
 			-- coroutine reprise par l'horloge simulée n'attend pas
 			Crates = loader:require("src/server/CrateService"),
+			Receipts = loader:require("src/server/ReceiptService"),
+			Policy = loader:require("src/server/PaidRandomPolicy"),
 		}
 		server.Inventory.init({ Name = "EquipItem", OnServerEvent = makeSignal() }, function()
 			return false
@@ -223,9 +256,24 @@ return function(T, Loader)
 			function player.GetAttributeChangedSignal(_self, _name: string)
 				return makeSignal()
 			end
+			present[userId] = player
 			server.Inventory.setup(player)
 			sched.task.spawn(server.Inventory.load, player)
 			return player
+		end
+		-- Cette méthode permet de faire traiter un reçu Robux (#395) dans sa propre coroutine (il attend le chargement et
+		-- l'écriture) lorsqu'un test le demande ; renvoie un état rempli à la fin (`done`, `verdict`, `why`).
+		function server.receipt(userId: number, productId: number, purchaseId: string)
+			local state = { done = false, verdict = nil, why = nil }
+			sched.task.spawn(function()
+				state.verdict, state.why, state.extra = server.Receipts.handle({
+					PlayerId = userId,
+					ProductId = productId,
+					PurchaseId = purchaseId,
+				})
+				state.done = true
+			end)
+			return state
 		end
 		-- Cette méthode permet de lancer une dépense dans sa propre coroutine (elle attend l'écriture) lorsqu'un test la
 		-- demande ; renvoie un état rempli à la fin (`done`, `status`).
@@ -266,6 +314,7 @@ return function(T, Loader)
 		-- Cette méthode permet de faire partir un joueur lorsqu'un test simule sa déconnexion.
 		function server.leave(player)
 			player.Parent = nil
+			present[player.UserId] = nil
 			for _, handler in removing.handlers do
 				sched.task.spawn(handler, player)
 			end
@@ -1268,6 +1317,365 @@ return function(T, Loader)
 			one.Wallet.add(onOne, 1)
 			sched.advance(10)
 			T.expectEqual(onOne.attributes.DailyCredits, DAY .. ":250")
+		end)
+	end)
+
+	local Packs = Loader.new({}):require("src/shared/CreditPacks")
+	local PACK = Packs.PACKS[1] -- 500 crédits
+
+	-- Cette méthode permet de savoir si un PurchaseId est inscrit dans le portefeuille stocké lorsqu'un test le vérifie.
+	local function storedReceipt(ds, userId: number, purchaseId: string): boolean
+		local w = storedWallet(ds, userId)
+		return w ~= nil and table.find(w.receipts, purchaseId) ~= nil
+	end
+
+	T.describe("Reçus Robux (#395, ReceiptService.handle)", function()
+		T.it("accordé : crédits dans `purchased` et PurchaseId inscrits dans la même écriture", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 40)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			ds.latency = 1
+			local receipt = server.receipt(1, PACK.productId, "achat-1")
+			T.expect(not receipt.done, "attend l'écriture")
+			sched.advance(1)
+			T.expectEqual(receipt.verdict, "granted")
+			T.expectEqual(ds.writes, 1, "une seule écriture")
+			T.expectEqual(storedWallet(ds, 1).purchased, 500)
+			T.expectEqual(storedWallet(ds, 1).earned, 40)
+			T.expect(storedReceipt(ds, 1, "achat-1"), "PurchaseId écrit avec les crédits")
+			T.expectEqual(alice.attributes.Credits, 540)
+		end)
+
+		T.it("même reçu rejoué : accordé sans rien ajouter ni écrire", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			local server = makeServer(sched, ds)
+			server.join(1)
+			T.expectEqual(server.receipt(1, PACK.productId, "achat-1").verdict, "granted")
+			local again = server.receipt(1, PACK.productId, "achat-1")
+			T.expectEqual(again.verdict, "granted")
+			T.expect(string.find(again.why, "déjà traité", 1, true) ~= nil)
+			T.expectEqual(storedWallet(ds, 1).purchased, 500, "crédité une seule fois")
+			T.expectEqual(ds.writes, 1)
+		end)
+
+		T.it("écriture passée mais signalée en échec : accordé, crédité une seule fois", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			local server = makeServer(sched, ds)
+			server.join(1)
+			ds.commitThenFail = 1
+			local receipt = server.receipt(1, PACK.productId, "achat-1")
+			sched.advance(10)
+			T.expectEqual(receipt.verdict, "granted")
+			T.expectEqual(storedWallet(ds, 1).purchased, 500)
+			T.expectEqual(#storedWallet(ds, 1).receipts, 1)
+		end)
+
+		T.it("écriture en échec : NotProcessedYet, rien ajouté ; rejoué plus tard : accordé une fois", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 0)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			-- Trois transactions de trois essais, plus la lecture de vérification de chacune
+			ds.failures = 12
+			local receipt = server.receipt(1, PACK.productId, "achat-1")
+			sched.advance(40)
+			T.expect(receipt.done)
+			T.expectEqual(receipt.verdict, "retry")
+			T.expectEqual(storedWallet(ds, 1).purchased, 0)
+			T.expect(not storedReceipt(ds, 1, "achat-1"))
+			T.expectEqual(alice.attributes.Credits, 0)
+			-- Roblox rejoue le reçu (nouvel achat, reconnexion)
+			local replay = server.receipt(1, PACK.productId, "achat-1")
+			sched.advance(10)
+			T.expectEqual(replay.verdict, "granted")
+			T.expectEqual(storedWallet(ds, 1).purchased, 500)
+		end)
+
+		T.it("une écriture en échec puis réussie au tour suivant : accordé, crédité une fois", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			local server = makeServer(sched, ds)
+			server.join(1)
+			ds.failures = 4 -- la première transaction échoue (trois essais et la vérification)
+			local receipt = server.receipt(1, PACK.productId, "achat-1")
+			sched.advance(30)
+			T.expectEqual(receipt.verdict, "granted")
+			T.expectEqual(storedWallet(ds, 1).purchased, 500)
+		end)
+
+		T.it("joueur absent du serveur : NotProcessedYet, rien écrit", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			local server = makeServer(sched, ds)
+			local receipt = server.receipt(2, PACK.productId, "achat-1")
+			T.expectEqual(receipt.verdict, "retry")
+			T.expect(string.find(receipt.why, "absent", 1, true) ~= nil)
+			T.expectEqual(ds.writes, 0)
+		end)
+
+		T.it("joueur parti pendant le chargement : NotProcessedYet", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			ds.latency = 5
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			local receipt = server.receipt(1, PACK.productId, "achat-1")
+			sched.advance(1)
+			server.leave(alice)
+			sched.advance(20)
+			T.expectEqual(receipt.verdict, "retry")
+			T.expect(not storedReceipt(ds, 1, "achat-1"))
+		end)
+
+		T.it("produit inconnu ou PurchaseId invalide : NotProcessedYet, rien écrit", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			local server = makeServer(sched, ds)
+			server.join(1)
+			local unknown = server.receipt(1, 1, "achat-1")
+			T.expectEqual(unknown.verdict, "retry")
+			T.expect(string.find(unknown.why, "produit inconnu", 1, true) ~= nil)
+			T.expectEqual(server.receipt(1, PACK.productId, "").verdict, "retry")
+			T.expectEqual(ds.writes, 0)
+		end)
+
+		T.it("reçu à la connexion : attend la fin du chargement, puis accordé", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			ds.latency = 3
+			local server = makeServer(sched, ds)
+			server.join(1)
+			local receipt = server.receipt(1, PACK.productId, "achat-1")
+			sched.advance(2)
+			T.expect(not receipt.done, "chargement pas fini")
+			sched.advance(10)
+			T.expectEqual(receipt.verdict, "granted")
+			T.expectEqual(storedWallet(ds, 1).purchased, 500)
+		end)
+
+		T.it("chargement en échec (sauvegarde coupée) : NotProcessedYet, rien écrit", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			ds.failures = 3
+			local server = makeServer(sched, ds)
+			server.join(1)
+			local receipt = server.receipt(1, PACK.productId, "achat-1")
+			sched.advance(40)
+			T.expectEqual(receipt.verdict, "retry")
+			T.expectEqual(ds.writes, 0)
+		end)
+
+		T.it(
+			"deux serveurs traitent le même reçu en même temps : crédité une seule fois, accordé des deux côtés",
+			function()
+				local sched = makeScheduler()
+				local ds = makeDataStore(sched)
+				local serverA = makeServer(sched, ds)
+				local serverB = makeServer(sched, ds)
+				serverA.join(1)
+				serverB.join(1)
+				ds.latency = 1
+				local onA = serverA.receipt(1, PACK.productId, "achat-1")
+				local onB = serverB.receipt(1, PACK.productId, "achat-1")
+				sched.advance(5)
+				T.expectEqual(onA.verdict, "granted")
+				T.expectEqual(onB.verdict, "granted")
+				T.expectEqual(storedWallet(ds, 1).purchased, 500)
+				T.expectEqual(#storedWallet(ds, 1).receipts, 1)
+			end
+		)
+
+		T.it("deux reçus différents sur deux serveurs : les deux crédités", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			local serverA = makeServer(sched, ds)
+			local serverB = makeServer(sched, ds)
+			serverA.join(1)
+			serverB.join(1)
+			ds.latency = 1
+			serverA.receipt(1, PACK.productId, "achat-1")
+			serverB.receipt(1, Packs.PACKS[3].productId, "achat-2")
+			sched.advance(5)
+			T.expectEqual(storedWallet(ds, 1).purchased, 3500)
+		end)
+
+		T.it(
+			"joueur restreint : prompt refusé, reçu arrivé quand même accordé et signalé, caisse refusée",
+			function()
+				local sched = makeScheduler()
+				local ds = makeDataStore(sched)
+				seed(ds, 1, 600)
+				local server = makeServer(sched, ds)
+				server.policy.restricted[1] = true
+				local alice = server.join(1)
+				local reply, pack = server.Receipts.promptFor(alice, PACK.id)
+				T.expectEqual(reply.reason, "region")
+				T.expectEqual(pack, nil, "pas de prompt")
+				T.expectEqual(alice.attributes.PaidRandomRestricted, true, "attribut publié")
+				local receipt = server.receipt(1, PACK.productId, "achat-store")
+				T.expectEqual(receipt.verdict, "granted", "Robux jamais remboursés : crédits accordés")
+				T.expect(string.find(receipt.extra, "restreint", 1, true) ~= nil, "signalé dans le journal")
+				local writes = ds.writes
+				local buy = server.buy(alice, AWP1, ROLL_IMPACT)
+				T.expectEqual(buy.reply.ok, false)
+				T.expectEqual(buy.reply.reason, "region")
+				T.expectEqual(ds.writes, writes, "rien d'écrit")
+				T.expectEqual(storedBalance(ds, 1), 1100, "ni débit ni skin")
+			end
+		)
+
+		T.it("joueur non restreint (Studio) : prompt accepté pour un pack connu, refusé pour un inconnu", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			local server = makeServer(sched, ds, { studio = true })
+			local alice = server.join(1)
+			local reply, pack = server.Receipts.promptFor(alice, PACK.id)
+			T.expectEqual(reply.ok, true)
+			T.expectEqual(pack and pack.productId, PACK.productId)
+			T.expectEqual(alice.attributes.PaidRandomRestricted, false)
+			T.expectEqual(server.Receipts.promptFor(alice, "pack.inconnu").reason, "unknown")
+		end)
+
+		T.it("hors Studio avec des ids provisoires : prompt refusé `unavailable`", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			local reply, pack = server.Receipts.promptFor(alice, PACK.id)
+			T.expectEqual(reply.reason, if Packs.isReady() then nil else "unavailable")
+			T.expectEqual(pack ~= nil, Packs.isReady())
+		end)
+
+		T.it(
+			"chargement en échec (sauvegarde coupée) : prompt refusé `loading`, pas de pack payé pour rien",
+			function()
+				local sched = makeScheduler()
+				local ds = makeDataStore(sched)
+				ds.failures = 3
+				local server = makeServer(sched, ds)
+				local alice = server.join(1)
+				sched.advance(40)
+				local reply, pack = server.Receipts.promptFor(alice, PACK.id)
+				T.expectEqual(reply.reason, "loading")
+				T.expectEqual(pack, nil)
+			end
+		)
+
+		T.it("solde près du plafond : prompt refusé `full` (le reçu resterait en attente)", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, Wallet.MAX_BALANCE - 100)
+			local server = makeServer(sched, ds, { studio = true })
+			local alice = server.join(1)
+			T.expectEqual(server.Receipts.promptFor(alice, PACK.id).reason, "full")
+		end)
+
+		T.it("PolicyService en échec à l'arrivée : redemandé d'office, sans nouvel appel du client", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			server.policy.fail = true
+			server.Receipts.promptFor(alice, PACK.id)
+			T.expectEqual(alice.attributes.PaidRandomRestricted, true)
+			server.policy.fail = false
+			sched.advance(31)
+			T.expectEqual(alice.attributes.PaidRandomRestricted, false, "attribut rendu sans action du joueur")
+			sched.advance(100)
+			T.expectEqual(server.policy.calls, 2, "plus redemandé une fois lu")
+		end)
+
+		T.it("PolicyService en échec : restreint, réponse gardée 30 s puis redemandée", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 1000)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			server.policy.fail = true
+			T.expectEqual(server.buy(alice, AWP1, ROLL_IMPACT).reply.reason, "region")
+			T.expect(hasWarning(server, "PolicyService"), "échec signalé")
+			server.policy.fail = false
+			T.expectEqual(server.buy(alice, AWP1, ROLL_IMPACT).reply.reason, "region", "pas redemandé tout de suite")
+			T.expectEqual(server.policy.calls, 1)
+			sched.advance(31)
+			T.expectEqual(server.buy(alice, AWP1, ROLL_IMPACT).reply.ok, true)
+			-- Réponse lue : gardée pour la session, plus redemandée
+			sched.advance(100)
+			server.buy(alice, AWP1, 10)
+			T.expectEqual(server.policy.calls, 2)
+		end)
+
+		T.it("demandes simultanées à PolicyService : un seul appel, la même réponse pour tous", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			server.policy.latency = 1
+			local answers = {}
+			for i = 1, 3 do
+				sched.task.spawn(function()
+					answers[i] = server.Policy.isRestricted(alice)
+				end)
+			end
+			T.expectEqual(#answers, 0, "tous attendent la réponse")
+			sched.advance(1)
+			T.expectEqual(server.policy.calls, 1)
+			T.expectEqual(answers[1], false)
+			T.expectEqual(answers[2], false)
+			T.expectEqual(answers[3], false)
+		end)
+
+		T.it(
+			"PolicyService en échec : le reçu n'est pas noté « restreint », un seul avertissement par série",
+			function()
+				local sched = makeScheduler()
+				local ds = makeDataStore(sched)
+				local server = makeServer(sched, ds)
+				local alice = server.join(1)
+				server.policy.fail = true
+				server.Receipts.promptFor(alice, PACK.id)
+				sched.advance(95) -- trois nouveaux essais en échec
+				local receipt = server.receipt(1, PACK.productId, "achat-1")
+				T.expectEqual(receipt.verdict, "granted")
+				T.expect(string.find(receipt.extra, "restreint", 1, true) == nil, "échec ≠ restreint par Roblox")
+				local count = 0
+				for _, line in server.warnings do
+					if string.find(line, "PolicyService", 1, true) then
+						count += 1
+					end
+				end
+				T.expectEqual(count, 1)
+				T.expect(server.policy.calls >= 4, "redemandé toutes les 30 s")
+			end
+		)
+
+		T.it("reçu d'un joueur dont la restriction n'est pas connue : n'attend pas PolicyService", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			local server = makeServer(sched, ds)
+			server.join(1)
+			server.policy.latency = 10
+			local receipt = server.receipt(1, PACK.productId, "achat-1")
+			T.expect(receipt.done, "accordé sans attendre")
+			T.expectEqual(receipt.verdict, "granted")
+			T.expectEqual(server.policy.calls, 0)
+		end)
+
+		T.it("doublon d'une caisse payée en crédits achetés : remboursé dans `purchased`", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 0, 600, { "skin.awp.impact" })
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			local buy = server.buy(alice, AWP1, ROLL_IMPACT)
+			T.expectEqual(buy.reply.refund, 200)
+			T.expectEqual(storedWallet(ds, 1).purchased, 300)
+			T.expectEqual(storedWallet(ds, 1).earned, 0)
 		end)
 	end)
 end

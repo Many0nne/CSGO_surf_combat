@@ -128,6 +128,7 @@ return function(T, Loader)
 					N.EQUIP_ITEM,
 					N.OPEN_CRATE,
 					N.BUY_CRATE,
+					N.BUY_CREDIT_PACK,
 				}
 			do
 				T.expect(RemoteGuard.RULES[name] ~= nil, "règle manquante : " .. name)
@@ -166,6 +167,13 @@ return function(T, Loader)
 			T.expectEqual(honest(N.BUY_CRATE, 42), "malformed", "id non textuel")
 			T.expectEqual(honest(N.BUY_CRATE), "malformed", "id absent")
 			T.expectEqual(honest(N.BUY_CRATE, string.rep("a", 200)), "malformed", "id trop long")
+		end)
+
+		T.it("accepte la demande d'un pack de crédits et refuse un id de forme impossible (#395)", function()
+			T.expectEqual(honest(N.BUY_CREDIT_PACK, "pack.500"), "ok")
+			T.expectEqual(honest(N.BUY_CREDIT_PACK, 3950001), "malformed", "id de produit au lieu de l'id du pack")
+			T.expectEqual(honest(N.BUY_CREDIT_PACK), "malformed", "id absent")
+			T.expectEqual(honest(N.BUY_CREDIT_PACK, string.rep("a", 200)), "malformed", "id trop long")
 		end)
 
 		T.it("refuse un équipement d'une forme impossible (#280)", function()

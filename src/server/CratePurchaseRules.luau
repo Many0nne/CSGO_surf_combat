@@ -4,10 +4,11 @@
 --
 -- Le skin est tiré et le remboursement calculé **avant** la transaction : l'opération est pure (Roblox peut l'appeler
 -- plusieurs fois), elle ne fait que lire l'enregistrement stocké. Elle débite le prix (achetés puis gagnés,
--- `WalletRules.debit`), puis ajoute le skin s'il n'est pas dans les items stockés, sinon crédite le remboursement dans
--- `earned`, hors plafond du jour (`dayEarned` n'est pas touché). Solde stocké insuffisant : refus, rien d'écrit.
--- #395 (joueur restreint par `PolicyService`) : seul `earned` pourra payer ; il suffira de remplacer `debit` ci-dessous
--- par un débit de `earned` seul, choisi par un champ de `Purchase`, sans toucher au reste.
+-- `WalletRules.debit`), puis ajoute le skin s'il n'est pas dans les items stockés, sinon rembourse le doublon dans le
+-- compteur d'où le prix est venu (#395) : `purchased` à hauteur de ce qui en a été débité pour cet achat, le reste dans
+-- `earned`, hors plafond du jour (`dayEarned` n'est pas touché). Un remboursement ne convertit donc jamais des crédits
+-- achetés en crédits gagnés. Solde stocké insuffisant : refus, rien d'écrit. Un joueur restreint (objets aléatoires
+-- payants, #395) n'arrive pas jusqu'ici : CrateService le refuse avant (`region`).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local WalletRules = require(ReplicatedStorage.Shared.WalletRules)
@@ -28,11 +29,6 @@ export type Reply = {
 	refund: number?,
 }
 
--- Cette méthode permet de débiter le prix d'un achat lorsque l'opération s'applique (point de réglage de #395).
-local function debit(wallet: WalletRules.Wallet, purchase: Purchase): (WalletRules.Wallet?, string?)
-	return WalletRules.debit(wallet, purchase.price)
-end
-
 -- Cette méthode permet de lire les crédits rendus pour un doublon lorsque l'opération ou la réponse en a besoin : bornés
 -- au prix, le solde reste ainsi sous celui d'avant l'achat, donc sous le plafond.
 local function refundOf(purchase: Purchase): number
@@ -40,16 +36,21 @@ local function refundOf(purchase: Purchase): number
 end
 
 -- Cette méthode permet de construire l'opération pure de `InventoryStore.transact` lorsqu'un achat est réglé : débit, puis
--- skin ajouté ou doublon remboursé dans `earned` ; refus selon le solde stocké. Résultat : `Applied`.
+-- skin ajouté ou doublon remboursé dans le compteur débité ; refus selon le solde stocké. Résultat : `Applied`.
 function CratePurchaseRules.operation(purchase: Purchase): (record: any) -> (any, any)
 	return function(record)
-		local wallet, why = debit(record.wallet, purchase)
+		local before = WalletRules.read(record.wallet)
+		local wallet, why = WalletRules.debit(before, purchase.price)
 		if not wallet then
 			return nil, why
 		end
 		local duplicate = table.find(record.items, purchase.skinId) ~= nil
 		if duplicate then
-			wallet.earned += refundOf(purchase)
+			local refund = refundOf(purchase)
+			-- Achetés d'abord, à hauteur de ce que cet achat en a pris : un joueur ne change pas de l'achat en gain
+			local backToPurchased = math.min(refund, before.purchased - wallet.purchased)
+			wallet.purchased += backToPurchased
+			wallet.earned += refund - backToPurchased
 		else
 			table.insert(record.items, purchase.skinId)
 		end

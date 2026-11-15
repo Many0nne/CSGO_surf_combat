@@ -189,6 +189,7 @@ local targets: { BoardTarget } = {} -- armes du tableau de la caisse montrée
 local focus = 0 -- arme en gros plan (rang dans `targets`), 0 = plan détail
 local hoverState: Rules.HoverState = { candidate = 0, since = 0, focused = 0 }
 local onWeaponFocus: ((number?) -> ())?
+local interactive = true -- survol et clic de la salle (coupés sous la fenêtre des packs, #395)
 
 -- Cette méthode permet de poser une pièce ancrée sans collision dans un repère (centre local, taille) lorsque la salle
 -- ou un prop est construit ; `shape` Cylinder couché sur l'axe Y du repère si `upright`.
@@ -935,7 +936,7 @@ end
 -- Cette méthode permet de trouver la caisse en vente sous la souris (rayon depuis la caméra) lorsque la vue d'ensemble
 -- est affichée ; 0 si aucune.
 local function crateUnderMouse(camera: Camera): number
-	if mode ~= "overview" or not stage then
+	if mode ~= "overview" or not stage or not interactive then
 		return 0
 	end
 	local mouse = UserInputService:GetMouseLocation()
@@ -956,7 +957,7 @@ end
 -- Cette méthode permet de trouver l'arme du tableau sous la souris (rayon sur les zones de survol) lorsque la vue
 -- détail est affichée ; 0 si aucune.
 local function weaponUnderMouse(camera: Camera): number
-	if mode ~= "detail" or #targets == 0 then
+	if mode ~= "detail" or #targets == 0 or not interactive then
 		return 0
 	end
 	local mouse = UserInputService:GetMouseLocation()
@@ -1133,6 +1134,12 @@ end
 -- l'interface doit masquer ses commandes.
 function ShopScene.isOpening(): boolean
 	return opening ~= nil
+end
+
+-- Cette méthode permet de couper ou rendre le survol et le clic des caisses et des armes lorsqu'une fenêtre passe
+-- devant la salle (packs de crédits, #395) : sans cela, les caisses s'éclairent et s'ouvrent sous la fenêtre.
+function ShopScene.setInteractive(enabled: boolean)
+	interactive = enabled
 end
 
 -- Cette méthode permet de lancer l'ouverture de la caisse du socle (#332) avec le skin tiré par le serveur (`skinId`,

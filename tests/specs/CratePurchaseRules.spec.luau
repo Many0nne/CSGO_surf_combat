@@ -36,10 +36,28 @@ return function(T, Loader)
 			T.expectEqual(applied.duplicate, true)
 		end)
 
-		T.it("doublon payé en crédits achetés : le remboursement va dans `earned`", function()
+		T.it("doublon payé en crédits achetés : remboursé dans `purchased` (#395)", function()
 			local rec = Rules.operation(ORDER)(record(0, 500, { "skin.awp.impact" }))
-			T.expectEqual(rec.wallet.purchased, 0)
-			T.expectEqual(rec.wallet.earned, 200)
+			T.expectEqual(rec.wallet.purchased, 200)
+			T.expectEqual(rec.wallet.earned, 0, "aucun achat converti en gain")
+			T.expectEqual(rec.wallet.dayEarned, 120, "hors plafond du jour")
+		end)
+
+		T.it(
+			"doublon payé en partie en achetés : `purchased` à hauteur du débit, le reste dans `earned`",
+			function()
+				-- 150 achetés + 350 gagnés débités ; remboursement 200 : 150 rendus aux achetés, 50 aux gagnés
+				local rec = Rules.operation(ORDER)(record(400, 150, { "skin.awp.impact" }))
+				T.expectEqual(rec.wallet.purchased, 150)
+				T.expectEqual(rec.wallet.earned, 50 + 50)
+			end
+		)
+
+		T.it("doublon payé en achetés au-delà du remboursement : tout rendu aux achetés", function()
+			-- 500 achetés débités sur 900 ; remboursement 200 rendu aux achetés, gagnés intacts
+			local rec = Rules.operation(ORDER)(record(70, 900, { "skin.awp.impact" }))
+			T.expectEqual(rec.wallet.purchased, 600)
+			T.expectEqual(rec.wallet.earned, 70)
 		end)
 
 		T.it("solde stocké insuffisant : refus `insufficient`, rien de proposé", function()

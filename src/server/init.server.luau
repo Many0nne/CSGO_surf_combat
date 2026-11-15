@@ -24,6 +24,8 @@ local CreditGains = require(script.CreditGains)
 local SettingsStore = require(script.SettingsStore)
 local InventoryStore = require(script.InventoryStore)
 local CrateService = require(script.CrateService)
+local PaidRandomPolicy = require(script.PaidRandomPolicy)
+local ReceiptService = require(script.ReceiptService)
 local Roles = require(script.Roles)
 local Validator = require(script.Validator)
 local Participants = require(script.Participants)
@@ -93,6 +95,10 @@ openCrateRmt.Parent = ReplicatedStorage
 local buyCrateRmt = Instance.new("RemoteFunction")
 buyCrateRmt.Name = N.BUY_CRATE
 buyCrateRmt.Parent = ReplicatedStorage
+-- Pack de crédits en Robux (#395) : RemoteFunction, le serveur ouvre le prompt Roblox (refusé à un joueur restreint)
+local buyCreditPackRmt = Instance.new("RemoteFunction")
+buyCreditPackRmt.Name = N.BUY_CREDIT_PACK
+buyCreditPackRmt.Parent = ReplicatedStorage
 
 -- ── Initialisation des sous-systèmes ──────────────────────────────────────
 
@@ -106,7 +112,11 @@ SettingsStore.init(getSettingsRmt, saveSettingsRmt)
 -- et victoire dans onRoundEnd)
 InventoryStore.init(equipItemRmt, SpawnManager.isSpawning)
 Validator.setOwnership(InventoryStore.ownsTool)
+-- Objets aléatoires payants (#395) : restriction de PolicyService demandée à l'arrivée de chaque joueur, mise en cache
+PaidRandomPolicy.init()
 CrateService.init(openCrateRmt, buyCrateRmt)
+-- Packs de crédits en Robux (#395) : seul callback ProcessReceipt du jeu, prompt d'achat ouvert par le serveur
+ReceiptService.init(buyCreditPackRmt)
 FeedbackService.init(sendFeedbackRmt, feedbackAckRmt)
 -- Mode publié aux clients (attribut de ReplicatedStorage) et téléportations vers ou depuis l'entraînement
 TrainingService.init(trainingRmt)
