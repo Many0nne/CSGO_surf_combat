@@ -19,6 +19,7 @@ local scopeSensMult = CameraConfig.SCOPE_SENS_MULT
 local scopeFov: number? = nil -- FOV du niveau de zoom, nil hors lunette
 local currentSens = baseSens
 local activeFovTween: Tween? = nil
+local scripted = false -- angles posés par le rejeu d'un parcours (#379), souris ignorée
 
 local function hideCharacterPart(obj: Instance)
 	if obj:IsA("BasePart") then
@@ -47,10 +48,12 @@ function FPSCamera.init(hrp: BasePart, char: Model)
 				return
 			end
 
-			-- Rotation : toujours a la frequence d'affichage (souris fluide).
-			local delta = UserInputService:GetMouseDelta()
-			yaw = yaw + delta.X * currentSens
-			pitch = math.clamp(pitch - delta.Y * currentSens, CameraConfig.PITCH_MIN, CameraConfig.PITCH_MAX)
+			-- Rotation : toujours a la frequence d'affichage (souris fluide), sauf pendant un parcours rejoué (#379)
+			if not scripted then
+				local delta = UserInputService:GetMouseDelta()
+				yaw = yaw + delta.X * currentSens
+				pitch = math.clamp(pitch - delta.Y * currentSens, CameraConfig.PITCH_MIN, CameraConfig.PITCH_MAX)
+			end
 
 			-- Position : celle que le MovementController vient de poser dans cette même frame (il tourne juste avant,
 			-- sur le dt du rendu), donc sans interpolation ni retard.
@@ -86,6 +89,12 @@ end
 function FPSCamera.setAngles(newYaw: number, newPitch: number)
 	yaw = newYaw
 	pitch = math.clamp(newPitch, CameraConfig.PITCH_MIN, CameraConfig.PITCH_MAX)
+end
+
+-- Cette méthode permet d'ignorer la souris (angles posés seulement par setAngles) ou de la rendre lorsque le rejeu d'un
+-- parcours démarre ou s'arrête (#379).
+function FPSCamera.setScripted(on: boolean)
+	scripted = on
 end
 
 -- Cette méthode permet de recalculer la sensibilité appliquée lorsque la sensi de base, le multiplicateur lunette

@@ -25,6 +25,37 @@ local MovementController = {}
 
 local lastVelocity = Vector3.zero -- vitesse du dernier pas, lue par la sonde de saccades (debug/FrameProbe)
 local stepCount, simulatedTime = 0, 0 -- pas simulés et temps simulé depuis le démarrage (sonde de saccades)
+-- Appelé au début de chaque tick, avant toute lecture des entrées : enregistreur et rejeu de parcours (#379). Reçoit
+-- la racine, posée à la position simulée.
+type TickHook = (hrp: BasePart) -> ()
+local tickHook: TickHook? = nil
+local activeMotor: CharacterMotor.CharacterMotor? = nil -- moteur du personnage courant (setVelocity)
+local correctionCount = 0 -- corrections du serveur appliquées depuis le démarrage (rejeu : téléportation arrivée)
+
+-- Cette méthode permet de compter les corrections du serveur appliquées lorsque le rejeu d'un parcours attend la
+-- téléportation qu'il a demandée (#379).
+function MovementController.getCorrectionCount(): number
+	return correctionCount
+end
+
+-- Cette méthode permet de brancher (ou de retirer, nil) l'outil de parcours appelé au début de chaque tick lorsqu'un
+-- enregistrement ou un rejeu démarre (#379) ; renvoie false si un autre outil est déjà branché.
+function MovementController.setTickHook(hook: TickHook?): boolean
+	if hook and tickHook then
+		return false
+	end
+	tickHook = hook
+	return true
+end
+
+-- Cette méthode permet d'imposer la vitesse du personnage avant le tick en cours lorsque le rejeu d'un parcours le
+-- replace sur un point de contrôle (#379) ; sans effet sur la physique elle-même.
+function MovementController.setVelocity(velocity: Vector3)
+	if activeMotor then
+		activeMotor.velocity = velocity
+		lastVelocity = velocity
+	end
+end
 
 -- Cette méthode permet de lire la vitesse simulée au dernier pas lorsqu'un outil de debug la compare
 -- au déplacement réellement rendu.
@@ -48,6 +79,7 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 	-- Physique et collisions communes avec les bots (#139) ; la racine est écrite à chaque tick (échelles, boosts et
 	-- accroupi lisent hrp.Position)
 	local motor = CharacterMotor.new(char, hrp, true)
+	activeMotor = motor
 	local hitboxLogged = false
 	-- Animations 3e personne : jouées sur l'Animator du personnage local, donc répliquées aux autres clients.
 	local charAnimator = CharacterAnimator.new(hum)
@@ -72,11 +104,15 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 		motor.velocity = Vector3.zero
 		motor:setAirborne()
 		lastVelocity = Vector3.zero
+		correctionCount += 1
 	end)
 
 	-- Cette méthode permet d'avancer le personnage d'un tick fixe de durée dt lorsque la boucle de rendu a accumulé
 	-- assez de temps (0, 1 ou plusieurs ticks par frame selon le FPS : cf. StepTiming).
 	local function step(dt: number)
+		if tickHook then
+			tickHook(hrp)
+		end
 		ladderRegrab = math.max(0, ladderRegrab - dt)
 
 		-- 1. Détection sol

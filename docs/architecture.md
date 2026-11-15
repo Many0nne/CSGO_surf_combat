@@ -48,6 +48,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `tools/export_mesh_fbx.py`: exporte les meshes d'un `.blend` en FBX avec l'orientation attendue dans Roblox.
 - `tools/clips/write_clip.luau`: écrit un clip de démo (#285) extrait de Studio dans `src/client/ui/DemoClips/<Nom>.luau` : valide, coupe au besoin, accepte une copie de la sortie de Studio (lignes `[ClipData …]`), cf. `docs/ui.md` « Refaire un clip ».
 - `tools/rbxm/verify_place.luau`: relit la place construite par Rojo et vérifie viewmodels, Tools, ids d'assets et noms d'armes.
+- `tools/perf/write_route.luau`: écrit un parcours de mesure enregistré (valeur lue par le MCP, copie de la console ou dossier des journaux Roblox) dans `src/client/debug/routes/<Nom>.luau`, coupe en option, cf. `docs/performance.md` « Parcours rejoué ».
 - `tools/perf/audit_map.luau`: audit statique d'une map `.rbxm` (pièces, ombres, transparences, collisions et requêtes par dossier, lumières), cf. `docs/performance.md`.
 - `rokit.toml`: versions des outils (Rojo, StyLua, Selene, luau-lsp, Lune) gérées par Rokit.
 - `CSGO.rbxlx`: artefact de build produit par `rojo build`.
@@ -63,6 +64,9 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/client/debug/FrameProbe.luau`: sonde de saccades (Studio uniquement, attribut joueur `FrameProbe`) : mesure chaque frame et signale les frames anormales, cf. `docs/performance.md`.
 - `src/client/debug/PerfOverlay.luau`: overlay de performance (touche F3, Studio ou créateur du jeu publié) : frames, coût du rendu, mémoire, réseau, coût de nos boucles, bilan console toutes les 10 s ; active aussi les relevés mémoire client, cf. `docs/performance.md`.
 - `src/client/debug/PerfBench.luau`: banc de rendu (touche F4 ou attribut `PerfBench`, mêmes droits que l'overlay) : coupe les leviers de rendu un par un et écrit une ligne `[Perf] BANC` par phase ; règles de résumé dans `PerfRules`.
+- `src/client/debug/PerfRecorder.luau`: enregistreur des parcours de mesure (#379, attribut joueur `PerfRecord` puis F7, mêmes droits que l'overlay) : entrées de chaque tick du mouvement, angles, tirs, arme, un point de contrôle par seconde ; copie dans la console, cf. `docs/performance.md` « Parcours rejoué ».
+- `src/client/debug/PerfReplay.luau`: rejeu d'un parcours de `debug/routes` (attribut joueur `PerfRun`) : entrées réinjectées à chaque tick (clavier et souris ignorés), replacement par le serveur sur écart ou réapparition, ligne `[Perf] RUN` à la fin.
+- `src/client/debug/routes/<Nom>.luau`: pistes enregistrées, écrites par `tools/perf/write_route.luau`.
 - `src/client/debug/Noclip.luau`: outil de debug pour activer/désactiver le noclip.
 - `src/client/init.client.luau`: point d'entrée client, initialise les modules côté client.
 - `src/client/input/InputModule.luau`: gestion des entrées utilisateur (actions tenues et appuis), liaisons lues dans `KeyBindings`.
@@ -198,6 +202,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/shared/DebugPlaytestRules.luau`: règles pures du helper de playtest (choix de l'outil, marqueurs et dégâts attendus, visée, rapport PASS/FAIL).
 - `src/shared/PerfMarkers.luau`: repères `PerfMarkers.wrap(nom, callback)` posés sur les boucles par frame (mouvement, caméra, viewmodel, armes, armes 3P, menu, timer de round) : nommés dans le MicroProfiler, chronométrés pour l'overlay.
 - `src/shared/PerfRules.luau`: règles pures de l'environnement de performance (droit d'accès, écarts mémoire, coût des repères), testées (`tests/specs/PerfRules.spec.luau`).
+- `src/shared/PerfRouteRules.luau`: format des parcours rejoués (#379 : entrées par tick, points de contrôle, découpe dans la console, coupe, écart, ligne `[Perf] RUN`), testé (`tests/specs/PerfRouteRules.spec.luau`).
 - `src/shared/MemoryTracker.luau`: relevés mémoire `[Perf] MEM` (client : démarrage, spawn, fin de round ; serveur : démarrage, fin de round, départ d'un joueur). Catégories lues seulement si `Stats.MemoryTrackingEnabled` (désactivé dans le client publié).
 - `src/server/ServerPerf.luau`: sonde de coût du serveur (attribut Workspace `PerfServer`) : chronomètre les repères `PerfMarkers` du serveur (dont `srv bots`) et écrit `[Perf] SRV` toutes les 10 s, cf. `docs/performance.md`.
 - `src/shared/FrameProbeRules.luau`: règles pures de la sonde de saccades (classement HITCH/STUTTER/ROTATION/TELEPORT, cause probable, bilan), testées (`tests/specs/FrameProbeRules.spec.luau`).

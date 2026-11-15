@@ -44,6 +44,15 @@ return function(T, Loader)
 			script = scriptStub,
 			-- Aucune boucle ni attente ne démarre : le test pilote add / removeAt lui-même
 			task = { spawn = function() end, wait = function() end, delay = function() end },
+			-- Attribut DebugBotsPassive, écouté aussi hors Studio (#379) : jamais posé ici
+			workspace = {
+				GetAttribute = function()
+					return nil
+				end,
+				GetAttributeChangedSignal = function()
+					return { Connect = function() end }
+				end,
+			},
 			require = function(target)
 				-- rawget : un nœud de chemin du Loader répond à n'importe quelle clé
 				local stub = if type(target) == "table" then rawget(target, "__stub") else nil

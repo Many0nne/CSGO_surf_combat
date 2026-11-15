@@ -477,12 +477,14 @@ function BotManager.init(dependencies: Deps)
 			task.wait(BotConfig.POPULATION_INTERVAL)
 		end
 	end)
+	-- Bots passifs aussi dans le jeu publié, pour enregistrer un parcours de mesure (#379) sans mourir : un attribut de
+	-- workspace ne se règle que côté serveur (console F9 > Server du créateur), aucun client ne peut l'activer
+	workspace:GetAttributeChangedSignal(BotConfig.DEBUG_PASSIVE_ATTRIBUTE):Connect(applyDebugPassive)
+	applyDebugPassive()
 	if RunService:IsStudio() then
 		workspace:GetAttributeChangedSignal(BotConfig.DEBUG_ATTRIBUTE):Connect(applyDebugCommand)
 		workspace:GetAttributeChangedSignal(BotConfig.DEBUG_FREEZE_ATTRIBUTE):Connect(applyDebugFreeze)
-		workspace:GetAttributeChangedSignal(BotConfig.DEBUG_PASSIVE_ATTRIBUTE):Connect(applyDebugPassive)
 		workspace:GetAttributeChangedSignal(BotConfig.DEBUG_GOTO_ATTRIBUTE):Connect(applyDebugGoto)
-		applyDebugPassive()
 		applyDebugFreeze() -- no-op sans bot ; ceux créés ensuite naissent figés (debugFrozen dans add)
 		applyDebugCommand()
 	end

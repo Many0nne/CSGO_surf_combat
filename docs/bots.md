@@ -252,6 +252,8 @@ Règles pures dans `BotPopulationRules`, appliquées par `BotManager` (`adjustPo
 - `workspace:SetAttribute("DebugBotsPassive", true)` : les bots se déplacent normalement mais ne tirent jamais sur un
   humain (`holdFire` de `BotCombatRules.canFire`, lu à chaque tir) ; les humains ne sont plus des cibles (`BotBrain._perceive`), ils combattent les autres bots ; une cible humaine déjà choisie reste sans tir (`holdFire`) jusqu'à ce qu'elle soit perdue. `false` ou
   `nil` rétablit le tir. S'applique aux bots présents et ajoutés ensuite. Pour observer les déplacements sans être tué.
+  Seule commande de bots active aussi dans le jeu publié (console F9 > Server du créateur ; un attribut de workspace
+  ne se règle que côté serveur) : enregistrer un parcours de mesure sans mourir (#379, `docs/performance.md`).
 - `workspace:SetAttribute("DebugBotsGoto", Vector3.new(x, y, z))` : tous les bots vont au point de passage le plus
   proche (corniches de Dizzy : `(1730, 70.5, -350)` côté T, `(2268, 70.5, -170)` côté CT, plateformes
   `(1895, 70.5, -412)` et `(2110, 70.5, -115)`). Ordre prioritaire (`BotNavigator.pinDestination`) : enquête et repli

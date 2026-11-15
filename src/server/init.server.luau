@@ -432,6 +432,20 @@ CharacterSync.init(
 	{ height = KillZone.height, kill = KillZone.kill }
 )
 
+-- Rejeu d'un parcours de mesure (#379, debug/PerfReplay) : replace le joueur sur un point de contrôle de la piste.
+-- Seulement dans Studio ou pour le créateur du jeu publié (mêmes droits que l'overlay F3) ; les autres sont ignorés.
+local perfRouteTeleportRmt = makeRemote(N.PERF_ROUTE_TELEPORT)
+perfRouteTeleportRmt.OnServerEvent:Connect(function(player, pos)
+	if not CheatLog.admit(player, perfRouteTeleportRmt.Name, pos) then
+		return
+	end
+	local ownedByUser = game.CreatorType == Enum.CreatorType.User
+	if not PerfRules.canUse(RunService:IsStudio(), player.UserId, game.CreatorId, ownedByUser) then
+		return
+	end
+	CharacterSync.teleport(player, pos)
+end)
+
 -- Une seule map est jouée (GameConfig.ACTIVE_MAP) : les autres sont retirées avant les premières apparitions
 MapSelection.activate(workspace:FindFirstChild("Maps"), GameConfig.ACTIVE_MAP)
 

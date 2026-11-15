@@ -11,6 +11,7 @@
 | La mémoire grimpe-t-elle au fil des spawns et des rounds ? | relevés `[Perf] MEM` (console F9, client et serveur) |
 | Combien la map coûte-t-elle (pièces, ombres, transparences) ? | `lune run tools/perf/audit_map.luau` (sans Studio) |
 | Combien coûte le serveur (bots, round) ? Quelle frame serveur est lente ? | sonde serveur `PerfServer` (lignes `[Perf] SRV`, console F9 > Server) |
+| Comment mesurer en mouvement (surf, bhop, combat), à parcours identique d'une version à l'autre ? | parcours rejoué (`PerfRecord` puis `PerfRun`, ligne `[Perf] RUN`) |
 
 Pour comparer deux postes : ouvrir l'overlay sur chacun et faire le même parcours dans le jeu publié, puis relever les
 lignes `[Perf] BILAN` de la console F9 (onglet Log, filtre `[Perf]`). Le réglage graphique est dans la ligne : à
@@ -147,6 +148,103 @@ Conditions : **en jeu**, pas au menu (si le streaming était réactivé, la map 
 immobile, la fenêtre au premier plan du début à la fin. Une phase pendant laquelle la fenêtre a perdu le focus est
 marquée `INVALIDE` : dans Studio, quitter la fenêtre pour écrire ailleurs suffit à fausser le banc (GPU à 0, 15 FPS).
 Les écarts de moins de 2 ms entre phases sont du bruit, d'où la référence de contrôle en fin de banc.
+
+## Parcours rejoué (#379)
+
+Les mesures pilotées par le MCP se faisaient joueur immobile : la simulation de touches du MCP n'atteint pas le jeu.
+Un parcours joué une fois à la main est enregistré, puis rejoué tel quel autant de fois que voulu, dans Studio ou dans
+le client publié. Mêmes droits que l'overlay F3 (Studio, ou créateur du jeu publié).
+
+**Principe.** Le mouvement ne lit ses commandes qu'à deux endroits : `InputModule` (touches, saut, accroupi, marche,
+rechargement) et les angles de `FPSCamera`. Depuis le tick fixe (#96), les mêmes entrées par tick donnent la même
+trajectoire, quel que soit le FPS. L'enregistreur note donc les entrées de chaque tick (1/64 s), pas des positions ; le
+rejeu les réinjecte au début de chaque tick (`MovementController.setTickHook`), clavier et souris ignorés
+(`InputModule.setVirtual`, `FPSCamera.setScripted`). La physique n'est pas touchée.
+
+- Fichiers : `src/client/debug/PerfRecorder.luau`, `src/client/debug/PerfReplay.luau`, règles et format testés dans
+  `src/shared/PerfRouteRules.luau`, pistes dans `src/client/debug/routes/<Nom>.luau`, extraction par
+  `tools/perf/write_route.luau`.
+- Une piste contient aussi un **point de contrôle par seconde** (position, vitesse), un à chaque réapparition
+  (vitesse nulle : au premier tick du nouveau personnage, `getVelocity` rend encore celle du mort) et un à chaque saut
+  de position de plus de `TELEPORT_JUMP` (16 studs) en un tick. Au rejeu, l'écart avec le point de contrôle est
+  mesuré ; au-delà de `DRIFT_MAX` (4 studs), le joueur est replacé.
+- Fidélité mesurée (15/11/2026, rejeu dans Studio, bots passifs) :
+  - piste `Dizzy` actuelle (137 s, jouée dans le client publié avec `DebugBotsPassive`, aucune mort, jusqu'à
+    176 studs/s) : écart moyen 0,45 puis 0,16 stud, 1 recalage sur deux rejeux ; 60 FPS, p99 26,3 puis 26,1 ms ;
+  - première prise (232 s, bots qui tirent, 6 morts) : 18 recalages, écart moyen 11 studs. Les morts de la prise, les
+    réapparitions mal marquées par l'ancien enregistreur et les pertes de vitesse d'un seul côté (contact avec un bot,
+    tir reçu) font dériver. Entre deux de ces discontinuités, l'écart restait pourtant sous 0,05 stud.
+  - Avec des bots qui tirent au rejeu, les morts du rejeu s'ajoutent (13 réapparitions sur un run de 232 s).
+  Enregistrer donc avec `DebugBotsPassive`, et rejouer bots passifs pour comparer des versions entre elles.
+- Replacement : le client demande au serveur (`PerfRouteTeleport`), qui pose la racine et repart la piste anti-triche
+  de là, sans violation (`CharacterSync.teleport`, cf. `docs/anticheat.md`, D1). Le client attend la correction, puis
+  reprend avec la vitesse du point de contrôle.
+- Mort pendant le rejeu : à la réapparition, le rejeu reprend au point de contrôle suivant.
+
+**Enregistrer** (dans le client publié de préférence : en playtest Studio, la souris traîne et le parcours est
+pénible à jouer ; armer par F9 > Server, puis récupérer `%LOCALAPPDATA%\Roblox\logs\*_Player_*_last.log` sur le poste
+qui a joué) :
+
+1. Playtest lancé, partie lancée, bots à volonté (`workspace:SetAttribute("DebugBots", 5)`, Studio seulement). Pour
+   ne pas mourir pendant la prise : `workspace:SetAttribute("DebugBotsPassive", true)` (Studio et jeu publié).
+2. `game.Players:GetPlayers()[1]:SetAttribute("PerfRecord", "dizzy")` (contexte `Server` ou `Client`). Un bandeau
+   « PARCOURS dizzy PRÊT · F7 ENREGISTRER » s'affiche.
+3. F7, jouer le parcours (2 à 3 min : surf, bhop, combats, changements d'arme ; 5 min au plus), F7. La console écrit
+   `[PerfRecord] STOP dizzy : … s, … ticks` et recopie la piste en lignes `[PerfRoute dizzy …]`.
+4. Extraire, playtest arrêté ou non :
+   `lune run tools/perf/write_route.luau "$LOCALAPPDATA/Roblox/logs" Dizzy [début_s] [fin_s]` (le dossier des
+   journaux Roblox : la dernière prise complète de `dizzy` y est recollée), ou un fichier contenant la valeur de
+   `Player.PerfRoutes.dizzy` (MCP, contexte `Client`) ou une copie de la console. L'outil écrit
+   `src/client/debug/routes/Dizzy.luau`. La coupe recule le début au point de contrôle précédent.
+
+Piège : c'est la prise **la plus récente** qui est recollée, même très courte (un double appui sur F7 fait une prise
+de 1 s qui remplace la vraie). Pour en choisir une autre, ne garder que ses lignes, repérées par leur numéro de prise
+(`[PerfRoute dizzy <numéro> i/n]`), dans un fichier passé à l'outil : `grep -a '\[PerfRoute dizzy <numéro> ' <journal>`.
+
+F7 sert aussi à l'enregistreur des démos (`DebugClipRecorder`) : n'armer que l'un des deux.
+
+Piège : le moteur marque F7 comme traitée (`gameProcessedEvent = true`) alors qu'aucune action du jeu n'y est liée
+(constaté le 15/11/2026 dans un playtest Studio ; F3, F4 et les lettres arrivent non traitées). Un raccourci de debug ne
+filtre donc pas sur `gameProcessed` : il écarte seulement la saisie de texte (`UserInputService:GetFocusedTextBox()`).
+
+Piège : le journal de Studio coupe une ligne vers 950 caractères (la console de Studio la garde entière). Les lignes
+`[PerfRoute …]` font donc 800 caractères de piste au plus (`PerfRouteRules.LOG_CHUNK`).
+
+**Rejouer :**
+
+- Studio (MCP, contexte `Server`) : `game.Players:GetPlayers()[1]:SetAttribute("PerfRun", "Dizzy")`. Le joueur est
+  amené en partie s'il est au menu (chemin du bouton JOUER), replacé au départ, puis la piste joue. Pour relancer,
+  changer la valeur (`"Dizzy 2"`) : seul le premier mot compte. `nil` interrompt.
+- Client publié : F9 > Server, `game.Players.<pseudo>:SetAttribute("PerfRun", "Dizzy")`, puis ne plus toucher
+  clavier ni souris (ils sont ignorés jusqu'à la fin) et garder la fenêtre au premier plan.
+- Pendant le rejeu, l'overlay F3 est ouvert (lignes `[Perf] BILAN`) ; la sonde serveur se règle à part.
+
+**Lire le bilan.** À la fin (ou à l'interruption) :
+
+```
+[Perf] RUN Dizzy fini 150/150s | FPS 59 p99 21.0ms max 48.2ms, 0 frames > 50ms | écart moy 0.12 max 0.50 studs
+sur 150 contrôles, 0 recalages, 1 réapparitions | mém 1500 -> 1510 Mo
+```
+
+Rythme sur les frames du rejeu, frames de plus de 50 ms, fidélité à la piste (écart aux points de contrôle,
+recalages, réapparitions) et mémoire totale du client. Comparer deux versions sur la même piste ; beaucoup de
+recalages veulent dire que le rejeu ne suit plus la piste, et la charge mesurée n'est plus la même.
+
+**Limites :**
+
+- Les bots ne sont pas déterministes : les combats, les morts et donc les réapparitions changent d'un rejeu à
+  l'autre. Comparer plusieurs rejeux, pas un seul.
+- Le buffer de saut (`CoyoteJump`) compte en temps réel (`tick()`), pas en ticks : un saut tamponné juste avant
+  l'atterrissage peut différer au rejeu. Les points de contrôle rattrapent l'écart.
+- Les angles de caméra changent à chaque tick (64 Hz), pas à chaque frame : au-delà de 64 FPS, la vue tourne par
+  à-coups. Les alertes `ROTATION` de `FrameProbe` ne valent rien pendant un rejeu.
+- Non rejoués : lunette et attaque secondaire (clic droit, lu par `WeaponSystem` directement). Le tir principal passe
+  par `Tool:Activate()`, comme `DebugPlaytest`.
+
+**Vérification du 2026-11-15** (Studio, Dizzy, piste synthétique de 8 s : marche, sauts, virage de 30 °/s, tirs et
+changement d'arme) : deux rejeux donnent les mêmes positions au dix-millième de stud aux 8 relevés (une par seconde),
+avec des frames différentes (p99 126 puis 69 ms, fenêtre sans le focus) et le second parti d'une réapparition. Un
+point de contrôle volontairement faux déclenche un recalage (écart 55 studs) sans violation au journal anti-triche.
 
 ## Repères de scripts (`PerfMarkers`)
 
@@ -328,7 +426,8 @@ pour le rendu : mesurer Studio au premier plan, ou dans le client publié.
 ## Bilan #370 : passe du 2026-11-15 (Studio, Dizzy, 7 bots, qualité 10, fenêtre 1291×607)
 
 Passe d'optimisation sans dégradation visuelle. Tout est mesuré dans Studio, piloté par le MCP, joueur immobile après
-un run `DebugPlaytest` (la simulation de touches n'atteint pas le jeu : surf et combat du joueur non mesurés).
+un run `DebugPlaytest` (la simulation de touches n'atteint pas le jeu : surf et combat du joueur non mesurés ; depuis
+#379, voir « Parcours rejoué »).
 **Rien n'est mesuré dans le client publié** : protocole en fin de section.
 
 ### Mesures de départ (main, 410f334)

@@ -658,7 +658,10 @@ cible rend le kill aura (M1) praticable sur toute la map.
    déplacement refusé (seau vidé), sans correction. À utiliser si des joueurs honnêtes sont corrigés en surf.
 3. Apparitions : la piste (et le seau, plein) repart de la racine posée par
    `SpawnManager` à chaque nouveau personnage ; tout futur téléport de gameplay devra passer par le serveur et
-   réinitialiser la piste.
+   réinitialiser la piste. Outil prêt : `CharacterSync.teleport(player, pos)` pose la racine, repart la piste de là
+   (seau plein, noclip et vol remis à zéro) et envoie une correction numérotée sans violation ; les paquets partis de
+   l'ancienne position sont ignorés. Seul appelant (#379) : le rejeu des parcours de mesure, par le remote
+   `PerfRouteTeleport`, refusé sauf dans Studio ou pour le créateur du jeu publié (`PerfRules.canUse`).
 4. Option non faite : borne d'accélération plutôt que de vitesse (la vitesse ne peut croître que de `AIR_ACCEL`/gravité
    × dt), plus serrée mais délicate avec les rampes ; à n'envisager qu'après mesure.
 
