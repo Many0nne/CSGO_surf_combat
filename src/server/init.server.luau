@@ -21,6 +21,7 @@ local RoundManager = require(script.RoundManager)
 local StatsStore = require(script.StatsStore)
 local SettingsStore = require(script.SettingsStore)
 local InventoryStore = require(script.InventoryStore)
+local CrateService = require(script.CrateService)
 local Roles = require(script.Roles)
 local Validator = require(script.Validator)
 local Participants = require(script.Participants)
@@ -82,6 +83,10 @@ characterSyncRmt.Parent = ReplicatedStorage
 local movementCorrectionRmt = makeRemote(N.MOVEMENT_CORRECTION)
 -- Rejoindre ou quitter l'entraînement (#345) : demande du client, réponse du serveur
 local trainingRmt = makeRemote(N.TRAINING)
+-- Ouverture d'une caisse du shop (#332) : RemoteFunction, le client attend le skin tiré par le serveur
+local openCrateRmt = Instance.new("RemoteFunction")
+openCrateRmt.Name = N.OPEN_CRATE
+openCrateRmt.Parent = ReplicatedStorage
 
 -- ── Initialisation des sous-systèmes ──────────────────────────────────────
 
@@ -93,6 +98,7 @@ SettingsStore.init(getSettingsRmt, saveSettingsRmt)
 -- Validator
 InventoryStore.init(equipItemRmt, SpawnManager.isSpawning)
 Validator.setOwnership(InventoryStore.ownsTool)
+CrateService.init(openCrateRmt)
 FeedbackService.init(sendFeedbackRmt, feedbackAckRmt)
 -- Mode publié aux clients (attribut de ReplicatedStorage) et téléportations vers ou depuis l'entraînement
 TrainingService.init(trainingRmt)

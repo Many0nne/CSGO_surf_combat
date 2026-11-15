@@ -12,7 +12,21 @@ return function(T, Loader)
 			T.expectEqual(total, 100)
 		end)
 
-		T.it("chaque caisse a un id unique, un prix positif et un skin connu par rareté (AWP et M9)", function()
+		T.it(
+			"quatre caisses dans l'ordre de la vitrine : AWP série 1, M9 série 1, AWP série 2, M9 série 2",
+			function()
+				local ids = {}
+				for _, crate in Shop.CRATES do
+					table.insert(ids, crate.id)
+				end
+				T.expectEqual(
+					table.concat(ids, ","),
+					"crate.awp.serie1,crate.m9.serie1,crate.awp.serie2,crate.m9.serie2"
+				)
+			end
+		)
+
+		T.it("chaque caisse a un id unique, un prix positif et un seul skin connu de son arme par rareté", function()
 			local seen = {}
 			for _, crate in Shop.CRATES do
 				T.expectEqual(seen[crate.id], nil)
@@ -21,50 +35,136 @@ return function(T, Loader)
 				local rows = Shop.contents(crate, Inventory.ITEMS)
 				T.expectEqual(#rows, #Shop.RARITIES)
 				for _, row in rows do
-					T.expectEqual(#row.skins, 2)
-					for _, id in row.skins do
-						T.expectEqual(Inventory.item(id) ~= nil, true)
-					end
+					T.expectEqual(#row.skins, 1)
+					local item = Inventory.item(row.skins[1])
+					T.expectEqual(item ~= nil, true)
+					T.expectEqual(item.weapon, crate.weapon)
 				end
 			end
 		end)
 
-		T.it("une apparence ne sort que d'une seule caisse", function()
+		T.it("une apparence ne sort que d'une seule caisse par arme", function()
 			local owner = {}
 			for _, crate in Shop.CRATES do
 				for _, appearance in crate.contents do
-					T.expectEqual(owner[appearance], nil)
-					owner[appearance] = crate.id
+					local key = crate.weapon .. "/" .. appearance
+					T.expectEqual(owner[key], nil)
+					owner[key] = crate.id
 				end
 			end
 		end)
 
 		T.it("trouve une caisse par son id", function()
-			T.expectEqual(Shop.crate("crate.serie1").name, "SÉRIE 1")
+			T.expectEqual(Shop.crate("crate.awp.serie1").name, "AWP · SÉRIE 1")
+			T.expectEqual(Shop.crate("crate.m9.serie2").weapon, "weapon.m9bayonet")
 			T.expectEqual(Shop.crate("crate.inconnue"), nil)
 		end)
 	end)
 
 	T.describe("ShopCatalog.contents", function()
-		T.it("liste les raretés de la plus courante à la plus rare, armes nommées court", function()
-			local rows = Shop.contents(Shop.crate("crate.serie1"), Inventory.ITEMS)
-			T.expectEqual(rows[1].rarity.label, "COMMUN")
-			T.expectEqual(rows[1].name, "COUCHANT")
-			T.expectEqual(table.concat(rows[1].weapons, " · "), "AWP · M9")
-			T.expectEqual(rows[3].rarity.label, "EXCEPTIONNEL")
-			T.expectEqual(rows[3].name, "RELEVÉ")
-		end)
+		T.it(
+			"liste les raretés de la plus courante à la plus rare, avec le seul skin de l'arme de la caisse",
+			function()
+				local rows = Shop.contents(Shop.crate("crate.awp.serie1"), Inventory.ITEMS)
+				T.expectEqual(rows[1].rarity.label, "COMMUN")
+				T.expectEqual(rows[1].name, "COUCHANT")
+				T.expectEqual(table.concat(rows[1].weapons, " · "), "AWP")
+				T.expectEqual(table.concat(rows[1].skins, ","), "skin.awp.couchant")
+				T.expectEqual(rows[3].rarity.label, "EXCEPTIONNEL")
+				T.expectEqual(rows[3].name, "RELEVÉ")
+				local knife = Shop.contents(Shop.crate("crate.m9.serie1"), Inventory.ITEMS)
+				T.expectEqual(table.concat(knife[1].weapons, " · "), "M9")
+				T.expectEqual(table.concat(knife[1].skins, ","), "skin.m9bayonet.couchant")
+			end
+		)
 
 		T.it("omet une rareté dont le skin n'existe pas", function()
-			local crate = { id = "x", name = "X", stripe = { 0, 0, 0 }, price = 1, contents = { common = "absent" } }
+			local crate = {
+				id = "x",
+				name = "X",
+				weapon = "weapon.awp",
+				stripe = { 0, 0, 0 },
+				price = 1,
+				contents = { common = "absent" },
+			}
 			T.expectEqual(#Shop.contents(crate, Inventory.ITEMS), 0)
 		end)
 
 		T.it("compose la ligne sous le nom", function()
 			T.expectEqual(
-				Shop.subtitle(Shop.crate("crate.serie1"), Inventory.ITEMS),
+				Shop.subtitle(Shop.crate("crate.awp.serie1"), Inventory.ITEMS),
 				"CAISSE  ·  COUCHANT / IMPACT / RELEVÉ"
 			)
+		end)
+	end)
+
+	T.describe("ShopCatalog.draw (#332)", function()
+		local crate = Shop.crate("crate.awp.serie1")
+
+		T.it("répartit un roll de [0, 100) en 70 / 25 / 5 sur commun, rare, exceptionnel", function()
+			local function rarityAt(roll)
+				local row, skinId = Shop.draw(crate, Inventory.ITEMS, roll)
+				return row.rarity.id .. ":" .. skinId
+			end
+			T.expectEqual(rarityAt(0), "common:skin.awp.couchant")
+			T.expectEqual(rarityAt(69.99), "common:skin.awp.couchant")
+			T.expectEqual(rarityAt(70), "rare:skin.awp.impact")
+			T.expectEqual(rarityAt(94.99), "rare:skin.awp.impact")
+			T.expectEqual(rarityAt(95), "exceptional:skin.awp.releve")
+			T.expectEqual(rarityAt(99.999), "exceptional:skin.awp.releve")
+		end)
+
+		T.it("ramène un roll hors bornes ou invalide dans [0, 100)", function()
+			T.expectEqual(Shop.draw(crate, Inventory.ITEMS, -5).rarity.id, "common")
+			T.expectEqual(Shop.draw(crate, Inventory.ITEMS, 100).rarity.id, "exceptional")
+			T.expectEqual(Shop.draw(crate, Inventory.ITEMS, 1e9).rarity.id, "exceptional")
+			T.expectEqual(Shop.draw(crate, Inventory.ITEMS, 0 / 0).rarity.id, "common")
+		end)
+
+		T.it("tire le skin de l'arme de la caisse (M9)", function()
+			local _, skinId = Shop.draw(Shop.crate("crate.m9.serie2"), Inventory.ITEMS, 80)
+			T.expectEqual(skinId, "skin.m9bayonet.strate")
+		end)
+
+		T.it("suit les chances affichées sur un balayage régulier du roll", function()
+			local counts = { common = 0, rare = 0, exceptional = 0 }
+			for i = 0, 999 do
+				local row = Shop.draw(crate, Inventory.ITEMS, i / 10)
+				counts[row.rarity.id] += 1
+			end
+			T.expectEqual(counts.common, 700)
+			T.expectEqual(counts.rare, 250)
+			T.expectEqual(counts.exceptional, 50)
+		end)
+
+		T.it("exclut une rareté sans skin et renormalise les chances restantes", function()
+			-- Rare absente : commun 70 / (70 + 5), exceptionnel 5 / 75
+			local partial = {
+				id = "x",
+				name = "X",
+				weapon = "weapon.awp",
+				stripe = { 0, 0, 0 },
+				price = 1,
+				contents = { common = "couchant", rare = "absent", exceptional = "releve" },
+			}
+			T.expectEqual(Shop.draw(partial, Inventory.ITEMS, 0).rarity.id, "common")
+			T.expectEqual(Shop.draw(partial, Inventory.ITEMS, 93.2).rarity.id, "common")
+			T.expectEqual(Shop.draw(partial, Inventory.ITEMS, 93.4).rarity.id, "exceptional")
+			T.expectEqual(Shop.draw(partial, Inventory.ITEMS, 99.99).rarity.id, "exceptional")
+		end)
+
+		T.it("ne tire rien d'une caisse sans aucun skin connu", function()
+			local empty = {
+				id = "x",
+				name = "X",
+				weapon = "weapon.awp",
+				stripe = { 0, 0, 0 },
+				price = 1,
+				contents = { common = "absent" },
+			}
+			local row, skinId = Shop.draw(empty, Inventory.ITEMS, 10)
+			T.expectEqual(row, nil)
+			T.expectEqual(skinId, nil)
 		end)
 	end)
 
@@ -119,7 +219,12 @@ return function(T, Loader)
 		end)
 
 		T.it("les caisses en vente mettent leur skin le plus sombre au milieu (Couchant, Recuit)", function()
-			local expected = { ["crate.serie1"] = "COUCHANT", ["crate.serie2"] = "RECUIT" }
+			local expected = {
+				["crate.awp.serie1"] = "COUCHANT",
+				["crate.m9.serie1"] = "COUCHANT",
+				["crate.awp.serie2"] = "RECUIT",
+				["crate.m9.serie2"] = "RECUIT",
+			}
 			for id, name in expected do
 				local rows = Shop.contents(Shop.crate(id), Inventory.ITEMS)
 				local middle
@@ -134,6 +239,15 @@ return function(T, Loader)
 	end)
 
 	T.describe("ShopCatalog.slots", function()
+		T.it("range les quatre caisses : trois en haut, une centrée en bas", function()
+			local slots = Shop.slots(#Shop.CRATES)
+			T.expectEqual(#slots, 4)
+			T.expectEqual(slots[1].column, -1)
+			T.expectEqual(slots[3].column, 1)
+			T.expectEqual(slots[4].row, 2)
+			T.expectEqual(slots[4].column, 0)
+		end)
+
 		T.it("range deux caisses au centre de la rangée du haut", function()
 			local slots = Shop.slots(2)
 			T.expectEqual(#slots, 2)
@@ -171,7 +285,7 @@ return function(T, Loader)
 		end)
 
 		T.it("écrit le prix avec la monnaie", function()
-			T.expectEqual(Shop.priceLabel(Shop.crate("crate.serie1")), "500 CRÉDITS")
+			T.expectEqual(Shop.priceLabel(Shop.crate("crate.awp.serie1")), "500 CRÉDITS")
 		end)
 	end)
 end

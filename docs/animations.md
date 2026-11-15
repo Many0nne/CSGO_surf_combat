@@ -187,6 +187,19 @@ animation »), puis le couteau suivant. Caméra fixe, ciel dégagé derrière l'
 | 6:58 | Ghost Knife (Danger Zone) | |
 | 7:14 | hache, 7:26 marteau, 7:32 clé à molette (Danger Zone) | outils de mêlée, hors couteaux |
 
+### `references/anim/apex-packs-toutes-raretes.mp4` (Apex Legends, 74,5 s, 30 i/s, référence de l'ouverture des caisses #332)
+
+Téléchargée de YouTube (`WbxJ3bmp-7c`, `uvx yt-dlp`). De gros textes orange incrustés cachent souvent la moitié droite :
+mesurer sur les images où la scène est dégagée. Usage et décisions : `docs/ui.md` « Ouverture d'une caisse ».
+
+| Instant | Repères |
+|---|---|
+| 28,0-31,0 | ouverture 1, charge : calme 0,2 s, arcs électriques, bouffées de lumière 28,8 / 29,2 / 29,5-29,8 (rayons) / 29,9 / 30,4 / 30,9, étincelles 30,0 et 30,5, la caméra avance ×2,5 en 0,8 s |
+| 31,0-31,4 | explosion, le dessus du pack part (31,2-31,4) |
+| 33,23-34,30 | colonne de lumière en une image (33,23), silhouette 33,33, révélations 33,67 et 34,30 |
+| 37,2-42,4 | ouverture 2 : colonne dorée 40,67, silhouette 41,0-41,4, révélation 41,50 (0,83 s après la colonne) |
+| 44-64 | ouvertures 3 et 4 (variantes du robot : saut, propulseur), surtout cachées par les textes |
+
 ## Les outils
 
 Depuis la racine du worktree. `uv` installe tout seul les dépendances des scripts Python (Pillow, ffmpeg), rien à
@@ -214,6 +227,12 @@ CAPTURE_PORT=34990 uv run tools/anim/capture_server.py <dossier_captures> <frame
 # i/s = cadence des captures (30 pour une référence à 30 i/s rendue image pour image), titre = piste et variante.
 uv run tools/anim/side_by_side.py <reference.mp4> <debut_video> <ralenti> <dossier_captures> <Nom> <x0,y0,x1,y1> <sortie.mp4> [i/s] [titre]
 # Plusieurs pistes et variantes bout à bout (une seule vidéo à valider) : ffmpeg -f concat -safe 0 -i liste.txt -c copy <sortie.mp4>
+
+# Animation jouée par le jeu, qu'on ne peut pas rendre image par image (particules, lumières : ouverture de caisse
+# #332) : enregistrer la fenêtre Studio en temps réel pendant un playtest, puis déclencher l'animation. Studio doit
+# être visible à l'écran (capture de l'écran, ~20 i/s ; PrintWindow plafonnait à 11 i/s). Sortie à la moitié de la
+# résolution, au format de side_by_side.py (<Nom>_0000.png…), départ détecté au premier mouvement de l'image.
+uv run tools/anim/record_window.py <dossier_captures> <Nom> <duree_s> [i/s=30] [seuil=2.0]
 
 # Étape 4 : publier (clé dans la variable d'environnement utilisateur ROBLOX_OPEN_CLOUD_KEY)
 bash tools/anim/publish.sh assets/m9_viewmodel/export M9_ <Nom>

@@ -168,7 +168,8 @@ RemoteGuard.FEEDBACK_MAX_BYTES = 1000
 --   de couteau (#215 : plus par tir), un Reload par chargeur ; CharacterSync : 20 Hz, paquets regroupés après une coupure réseau ;
 --   RequestSpawn : clic du menu ; LeaveRound : clic MENU PRINCIPAL du menu en partie ;
 --   SendFeedback : clic ENVOYER ; SaveSettings : 1 envoi par seconde au plus (LocalSettings) ; GetSettings : une
---   demande au démarrage du client ; EquipItem : un clic sur une arme ou un skin de l'accueil (#280).
+--   demande au démarrage du client ; EquipItem : un clic sur une arme ou un skin de l'accueil (#280) ; OpenCrate : un
+--   clic sur OUVRIR, l'animation d'ouverture dure plusieurs secondes (#332).
 -- Une arme plus rapide (automatique) demandera de relever HitscanDamage, ShotFired et WeaponAction.
 local N = NetworkProtocol.Names
 RemoteGuard.RULES = {
@@ -219,6 +220,8 @@ RemoteGuard.RULES = {
 		burst = 3,
 		args = { RemoteGuard.enum({ TrainingRules.JOIN, TrainingRules.LEAVE }) },
 	},
+	-- Id de la caisse à ouvrir (#332) ; existence et droit (admin ou Studio) vérifiés ensuite par CrateService
+	[N.OPEN_CRATE] = { rate = 1, burst = 3, args = { RemoteGuard.string(InventoryRules.MAX_ID_LENGTH) } },
 	[N.SEND_FEEDBACK] = { rate = 0.5, burst = 3, args = { RemoteGuard.string(RemoteGuard.FEEDBACK_MAX_BYTES) } },
 	[N.SAVE_SETTINGS] = { rate = 2, burst = 5, args = { RemoteGuard.table() } },
 	[N.GET_SETTINGS] = { rate = 0.2, burst = 3, args = {} },
