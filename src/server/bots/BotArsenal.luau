@@ -197,8 +197,7 @@ function BotArsenal.fire(self: BotArsenal, now: number, eye: Vector3, direction:
 	SpawnProtection.drop(self.char)
 	if cfg.IsMelee then
 		-- Le coup du bot touche toujours (portée vérifiée avant) : cadence d'un coup qui touche, comme le Validator (#404)
-		local _, hitDelay = WeaponConfig.getMeleeAttack(cfg, WeaponConfig.AttackKind.PRIMARY)
-		self.readyAt = now + (hitDelay or cfg.FireDelay or 0)
+		self.readyAt = now + WeaponConfig.meleeCooldowns(cfg, WeaponConfig.AttackKind.PRIMARY, true)
 		WeaponThirdPerson.setAction(self.char, "Shoot")
 		self.onHit(target, nil)
 		return nil
