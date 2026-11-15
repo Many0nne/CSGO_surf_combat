@@ -905,8 +905,8 @@ Règles serveur : `docs/architecture.md`, « Achat d'une caisse ». Dans la vue 
 
 ## Crédits (#391)
 
-Monnaie du jeu (règles et sauvegarde : `docs/architecture.md`, « Crédits »). Achat des caisses : « Achat d'une caisse
-(#393) » ; pas encore de gain en jouant (#394).
+Monnaie du jeu (règles et sauvegarde : `docs/architecture.md`, « Crédits » et « Gains en jouant »). Achat des
+caisses : « Achat d'une caisse (#393) ».
 
 - **Jeton** (choisi par l'utilisateur le 15/11/2026, sans référence précise) : pièce en laiton, le métal des douilles,
   frappée d'un réticule en creux (cercle, quatre branches, point central), tranche plus claire en haut à gauche, liseré
@@ -919,7 +919,15 @@ Monnaie du jeu (règles et sauvegarde : `docs/architecture.md`, « Crédits »).
   barré (générique).
 - **Solde** : en haut à droite de la barre du menu, à hauteur des onglets, sur toutes les pages (dans `MenuTabs`, donc
   au-dessus du shop) : jeton 26 px puis montant en os à ombre (Oswald gras 24 px), chiffres groupés par trois
-  (`WalletRules.format`), « — » tant que le solde n'est pas chargé. Rien dans le HUD en partie (on n'y gagne rien).
+  (`WalletRules.format`), « — » tant que le solde n'est pas chargé. Rien dans le HUD en partie (#394 : les gains se
+  lisent à la fin de la manche, pas pendant).
+- **Gains du jour (#394)** : sur la page SHOP seulement, sous le solde, alignés à droite : « GAINS DU JOUR » en libellé
+  ambré, puis « N / 250 » en os à ombre (Oswald gras 18 px), « — / 250 » tant que ce n'est pas chargé. Hors de la
+  colonne du shop (vue d'ensemble et vue détail), que l'achat de caisse (#393) remplit.
+- **Fin de manche (#394)** : sous la dernière ligne du classement de l'écran de fin, centrés : jeton 26 px, « +N
+  CRÉDITS » en os à ombre (Oswald gras 26 px), puis « PLAFOND DU JOUR ATTEINT » en libellé ambré si les gains du jour
+  ont atteint 250 (seul s'il n'y a rien gagné). Rien si la manche n'a rien rapporté sous le plafond, ou si le solde ne
+  peut pas changer (Studio sans accès aux API).
 - **Prix du shop** : voir « Shop : salle de présentation ».
 
 ![Planche du jeton](ui/credits/planche_jeton.png)

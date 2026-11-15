@@ -24,6 +24,7 @@ local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
 local StarterPack = game:GetService("StarterPack")
 
+local EconomyRules = require(ReplicatedStorage.Shared.EconomyRules)
 local InventoryRules = require(ReplicatedStorage.Shared.InventoryRules)
 local WalletRules = require(ReplicatedStorage.Shared.WalletRules)
 local CheatLog = require(ServerScriptService.Server.CheatLog)
@@ -46,8 +47,9 @@ local GAINS_SAVE_DELAY = 6
 -- equipped : choix relu puis modifié (#280, nil tant que rien n'est choisi ni relu) ; chosen : emplacements choisis dans
 -- cette session, seuls écrits (un autre serveur garde les siens) ; resolved : équipement appliqué, recalculé avec owned.
 -- Portefeuille (#396) : wallet, dernier état stocké connu ; session/seq, id de cette session et dernier numéro de lot
--- donné ; batches, lots de gains envoyés et pas encore confirmés (renvoyés tels quels) ; gains, gagnés depuis le dernier
--- lot ; sessionOnly, solde de session de Studio (DebugCredits sans accès aux API), jamais écrit ; loadFailed, la
+-- donné ; batches, lots de gains envoyés et pas encore confirmés (renvoyés tels quels) ; gains, crédits hors plafond
+-- du jour depuis le dernier lot ; playGains, gains en jouant (#394) depuis le dernier lot, tous du jour UTC playDay ;
+-- sessionOnly, solde de session de Studio (DebugCredits sans accès aux API), jamais écrit ; loadFailed, la
 -- lecture DataStore a échoué (seul cas où ce solde de session est permis).
 -- saving : une écriture du profil est en cours ; waiters : transactions en attente de leur tour (FIFO).
 type Profile = {
@@ -68,6 +70,8 @@ type Profile = {
 	seq: number,
 	batches: { WalletRules.Batch },
 	gains: number,
+	playGains: number,
+	playDay: number,
 	sessionOnly: boolean,
 	loadFailed: boolean,
 }
@@ -225,21 +229,47 @@ local function walletReady(profile: Profile?): boolean
 	return profile ~= nil and profile.loaded and (profile.canSave or profile.sessionOnly)
 end
 
+-- Cette méthode permet de calculer les gains pas encore confirmés d'un profil (lots envoyés, gains en attente, hors
+-- plafond et en jouant) lorsque le solde est lu ou qu'une sauvegarde coupée les signale perdus.
+local function pendingGains(profile: Profile): number
+	local pending = profile.gains + profile.playGains
+	for _, batch in profile.batches do
+		pending += batch.earned + (batch.capped or 0)
+	end
+	return pending
+end
+
 -- Cette méthode permet de calculer le solde d'un profil (stocké connu, plus lots pas encore confirmés et gains pas
 -- encore mis en lot) lorsqu'un système serveur ou l'attribut du Player le lit.
 local function walletBalance(profile: Profile): number
-	local pending = profile.gains
-	for _, batch in profile.batches do
-		pending += batch.earned
-	end
-	return WalletRules.clamp(WalletRules.balance(profile.wallet) + pending)
+	return WalletRules.clamp(WalletRules.balance(profile.wallet) + pendingGains(profile))
 end
 
--- Cette méthode permet de poser l'attribut informatif `Credits` (gagnés + achetés) lorsque le solde change ou est
--- relu ; rien tant que le solde n'est pas connu, pour que le menu affiche « — » plutôt qu'un 0 trompeur.
+-- Cette méthode permet de calculer les gains en jouant d'un jour UTC (#394) vus par cette session (stockés, lots pas
+-- confirmés, gains en attente) lorsqu'un gain est plafonné ou publié ; la fusion de l'écriture fait foi.
+local function dayEarnedView(profile: Profile, day: number): number
+	local total = if profile.wallet.day == day then profile.wallet.dayEarned else 0
+	for _, batch in profile.batches do
+		if batch.day == day then
+			total += batch.capped or 0
+		end
+	end
+	if profile.playDay == day then
+		total += profile.playGains
+	end
+	return total
+end
+
+-- Cette méthode permet de poser les attributs informatifs `Credits` et `DailyCredits` (#394) lorsque le solde change ou
+-- est relu ; rien tant qu'il n'est pas connu, pour que le menu affiche « — » plutôt qu'un 0 trompeur.
 local function publishWallet(player: Player, profile: Profile)
 	if walletReady(profile) and profiles[player] == profile and player.Parent then
 		player:SetAttribute(WalletRules.ATTRIBUTE, walletBalance(profile))
+		local today = EconomyRules.day(os.time())
+		player:SetAttribute(
+			EconomyRules.DAILY_ATTRIBUTE,
+			EconomyRules.encodeDaily(today, dayEarnedView(profile, today))
+		)
 	end
 end
 
@@ -257,14 +287,27 @@ local function adoptWallet(profile: Profile, raw: any)
 	profile.batches = remaining
 end
 
+-- Cette méthode permet de mettre les gains en attente dans un nouveau lot numéroté lorsqu'une écriture part, ou qu'un
+-- gain en jouant d'un autre jour UTC arrive (un lot ne porte des gains plafonnés que d'un seul jour, #394).
+local function closeBatch(profile: Profile)
+	if profile.gains <= 0 and profile.playGains <= 0 then
+		return
+	end
+	profile.seq += 1
+	local batch: WalletRules.Batch = { seq = profile.seq, earned = profile.gains }
+	if profile.playGains > 0 then
+		batch.capped = profile.playGains
+		batch.day = profile.playDay
+	end
+	table.insert(profile.batches, batch)
+	profile.gains = 0
+	profile.playGains = 0
+end
+
 -- Cette méthode permet de préparer la part portefeuille d'une écriture lorsqu'elle part : les gains en attente forment
 -- un nouveau lot, une transaction reçoit son propre numéro (`upTo`) ; les lots partent tous jusqu'à confirmation.
 local function walletChange(profile: Profile, forOperation: boolean): InventoryRules.WalletChange
-	if profile.gains > 0 then
-		profile.seq += 1
-		table.insert(profile.batches, { seq = profile.seq, earned = profile.gains })
-		profile.gains = 0
-	end
+	closeBatch(profile)
 	if forOperation then
 		profile.seq += 1
 	end
@@ -345,10 +388,7 @@ end
 -- version ne sait pas réécrire (serveur plus récent) : solde retiré de l'affichage, gains non écrits signalés.
 local function noteRefused(player: Player, profile: Profile)
 	profile.canSave = false
-	local unsaved = profile.gains
-	for _, batch in profile.batches do
-		unsaved += batch.earned
-	end
+	local unsaved = pendingGains(profile)
 	warn(
 		"[InventoryStore] format enregistré inconnu pour",
 		player.Name,
@@ -357,6 +397,7 @@ local function noteRefused(player: Player, profile: Profile)
 	)
 	if profiles[player] == profile and player.Parent then
 		player:SetAttribute(WalletRules.ATTRIBUTE, nil)
+		player:SetAttribute(EconomyRules.DAILY_ATTRIBUTE, nil)
 	end
 end
 
@@ -445,7 +486,7 @@ local function runWrite(
 	elseif ok and status == "rejected" then
 		-- Rien d'écrit : l'état stocké relu remplace la copie locale ; ce qui a changé pendant l'attente reste à écrire
 		adoptWallet(profile, if type(seen) == "table" then seen.wallet else nil)
-		profile.dirty = profile.dirty or wasDirty or #profile.batches > 0 or profile.gains > 0
+		profile.dirty = profile.dirty or wasDirty or #profile.batches > 0 or profile.gains > 0 or profile.playGains > 0
 		profile.lastSaveAt = lastSaveAt
 		if opError ~= nil then
 			warn("[InventoryStore] opération en erreur pour", player.Name, ":", opError)
@@ -566,6 +607,8 @@ function InventoryStore.setup(player: Player)
 		seq = 0,
 		batches = {},
 		gains = 0,
+		playGains = 0,
+		playDay = 0,
 		sessionOnly = false,
 		loadFailed = false,
 	}
@@ -657,6 +700,40 @@ function InventoryStore.addCredits(player: Player, amount: number): boolean
 	end
 	publishWallet(player, p)
 	return true
+end
+
+-- Cette méthode permet de créditer un gain en jouant du jour UTC `day` (#394), écrêté au plafond du jour vu par la
+-- session et écrit en lot, lorsqu'un kill ou une fin de manche rapporte ; nil si le solde ne peut pas changer.
+function InventoryStore.addPlayCredits(player: Player, amount: number, day: number): number?
+	local profile = profiles[player]
+	if not walletReady(profile) then
+		return nil
+	end
+	local p = profile :: Profile
+	if not (WalletRules.isAmount(amount) and EconomyRules.isDay(day)) then
+		return 0
+	end
+	local room = WalletRules.MAX_BALANCE - walletBalance(p)
+	local gain = math.min(EconomyRules.capDay(amount, dayEarnedView(p, day)), math.max(room, 0))
+	if gain <= 0 then
+		return 0
+	end
+	if p.sessionOnly then
+		-- Solde de session de Studio (DebugCredits) : même plafond du jour, en mémoire
+		gain = WalletRules.countDaily(p.wallet, gain, day)
+		p.wallet.earned += gain
+	else
+		if p.playGains > 0 and p.playDay ~= day then
+			-- Minuit UTC passé depuis les gains en attente : ils partent dans leur propre lot, daté de leur jour
+			closeBatch(p)
+		end
+		p.playDay = day
+		p.playGains += gain
+		p.dirty = true
+		queueSave(player, p, GAINS_SAVE_DELAY)
+	end
+	publishWallet(player, p)
+	return gain
 end
 
 -- Cette méthode permet, dans Studio sans accès aux API (lecture en échec, pas format refusé), de passer le portefeuille

@@ -1,6 +1,6 @@
 -- HUD de round, direction « Ligne de mire » : timer et rang en haut, classement (Tab maintenu), écran de réapparition
 -- (scène désaturée, compte à rebours en bas au centre, conseil d'un débutant dessous, #291) et écran de fin de round
--- (voile central, nom du vainqueur, podium et ligne du joueur).
+-- (voile central, nom du vainqueur, podium et ligne du joueur, crédits gagnés dans la manche, #394).
 local ContentProvider = game:GetService("ContentProvider")
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
@@ -9,10 +9,13 @@ local UserInputService = game:GetService("UserInputService")
 
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
 local ParticipantRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ParticipantRules"))
+local EconomyRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("EconomyRules"))
+local WalletRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WalletRules"))
 local UIKit = require(script.Parent.UIKit)
 local HUDRules = require(script.Parent.HUDRules)
 local HUDState = require(script.Parent.HUDState)
 local KillStreakRules = require(script.Parent.Parent.systems.game.KillStreakRules)
+local LocalWallet = require(script.Parent.Parent.systems.inventory.LocalWallet)
 
 local C = UITheme.Colors
 local F = UITheme.Fonts
@@ -87,7 +90,17 @@ local RESULT_RULE_WIDTH = 420
 local RESULT_VEIL_TRANSPARENCY = 0.2
 local RESULT_BOARD_TOP = 184
 local RESULT_ME_GAP = 14
-local RESULT_HEIGHT = RESULT_BOARD_TOP + LB_ROW * (HUDRules.PODIUM_SIZE + 2) + RESULT_ME_GAP
+-- Crédits gagnés dans la manche (#394), sous la dernière ligne du classement : jeton, « +N CRÉDITS » en os, puis
+-- « PLAFOND DU JOUR ATTEINT » en ambre le cas échéant (attributs RoundCredits et DailyCredits, EconomyRules.roundBanner)
+local RESULT_CREDITS_GAP = 18
+local RESULT_CREDITS_HEIGHT = 32
+local RESULT_CREDITS_ICON = 26
+local RESULT_CREDITS_SIZE = 26
+local RESULT_HEIGHT = RESULT_BOARD_TOP
+	+ LB_ROW * (HUDRules.PODIUM_SIZE + 2)
+	+ RESULT_ME_GAP
+	+ RESULT_CREDITS_GAP
+	+ RESULT_CREDITS_HEIGHT
 
 local gui: ScreenGui
 local hudRoot: Frame
@@ -143,12 +156,18 @@ local resultName: TextLabel
 local resultNameShadow: TextLabel
 local resultLabel: TextLabel
 local resultRows: Frame
+local resultCredits: Frame
+local resultCreditsIcon: Frame
+local resultCreditsAmountBox: Frame
+local resultCreditsAmount: { TextLabel }
+local resultCreditsCap: Frame
 local resultShown = false -- écran de fin en cours : Tab maintenu le remplace par le classement, sans superposition
 local training = false -- serveur d'entraînement (#345) : ni timer, ni rang, ni classement
 
 local hudStateConn: (() -> ())? -- désabonnement de HUDState
 local tabConn: RBXScriptConnection?
 local tabEndConn: RBXScriptConnection?
+local creditConns: { RBXScriptConnection } = {} -- attributs des crédits de la manche (#394)
 local respawnTask: thread?
 
 -- ── Timer et rang ──────────────────────────────────────────────────────────────
@@ -850,6 +869,79 @@ local function buildResultBanner(root: Frame)
 		Size = UDim2.new(1, 0, 1, -LB_ROW),
 		Parent = board,
 	})
+	-- Crédits de la manche (#394) : placés par showResult sous la dernière ligne
+	resultCredits = UIKit.frame({
+		Name = "Credits",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, RESULT_CREDITS_HEIGHT),
+		Visible = false,
+		Parent = resultContent,
+	})
+	UIKit.create("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		HorizontalAlignment = Enum.HorizontalAlignment.Center,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, 10),
+		Parent = resultCredits,
+	})
+	resultCreditsIcon = UIKit.creditIcon(resultCredits, RESULT_CREDITS_ICON, 2, { LayoutOrder = 1 })
+	resultCreditsAmountBox = UIKit.frame({
+		Name = "Amount",
+		BackgroundTransparency = 1,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, RESULT_CREDITS_SIZE + 4),
+		LayoutOrder = 2,
+		Parent = resultCredits,
+	})
+	local amountText, amountShadow = shadowedText(resultCreditsAmountBox, {
+		Name = "Value",
+		FontFace = F.Display,
+		TextSize = RESULT_CREDITS_SIZE,
+		TextColor3 = C.Bone,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromScale(0, 1),
+		ZIndex = 2,
+	}, 2)
+	resultCreditsAmount = { amountText, amountShadow }
+	-- Texte et ombre dans un cadre : posés directement dans la liste, ils seraient rangés côte à côte
+	resultCreditsCap = UIKit.frame({
+		Name = "Cap",
+		BackgroundTransparency = 1,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 20),
+		LayoutOrder = 3,
+		Parent = resultCredits,
+	})
+	UIKit.accentLabel(resultCreditsCap, {
+		Name = "Value",
+		Text = "PLAFOND DU JOUR ATTEINT",
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromScale(0, 1),
+	})
+end
+
+-- Cette méthode permet d'afficher les crédits gagnés dans la manche (« +N CRÉDITS », « PLAFOND DU JOUR ATTEINT ») lorsque
+-- l'écran de fin s'affiche ou que le serveur publie ces gains (attributs arrivés après RoundResult) ; rien sinon.
+local function paintCredits()
+	if not resultCredits then
+		return
+	end
+	local player = Players.LocalPlayer
+	local view = EconomyRules.roundBanner(player:GetAttribute(EconomyRules.ROUND_ATTRIBUTE), LocalWallet.dailyEarned())
+	resultCredits.Visible = view ~= nil
+	if not view then
+		return
+	end
+	local text = if view.amount
+		then string.format("+%s %s", WalletRules.format(view.amount), WalletRules.CURRENCY)
+		else ""
+	for _, label in resultCreditsAmount do
+		label.Text = text
+	end
+	resultCreditsAmountBox.Visible = view.amount ~= nil
+	resultCreditsIcon.Visible = view.amount ~= nil
+	resultCreditsCap.Visible = view.capReached
 end
 
 -- Cette méthode permet de poser le timer au-dessus du menu en partie, ou de le rendre au HUD, lorsque l'état du HUD
@@ -910,6 +1002,17 @@ function RoundHUD.init()
 	end)
 	buildLeaderboard(root)
 	buildResultBanner(root)
+	-- Gains de la manche publiés par le serveur après RoundResult (#394) : l'écran de fin se met à jour à leur arrivée
+	for _, name in { EconomyRules.ROUND_ATTRIBUTE, EconomyRules.DAILY_ATTRIBUTE } do
+		table.insert(
+			creditConns,
+			Players.LocalPlayer:GetAttributeChangedSignal(name):Connect(function()
+				if resultShown then
+					paintCredits()
+				end
+			end)
+		)
+	end
 	hudStateConn = HUDState.onChanged(applyTimerLayer)
 	applyTimerLayer()
 
@@ -1223,9 +1326,13 @@ function RoundHUD.showResult(data: any)
 	for i, row in view.podium do
 		scoreRow(resultRows, row.rank, row.score, row.isMe, (i - 1) * LB_ROW, view.hasWinner)
 	end
+	local boardBottom = RESULT_BOARD_TOP + LB_ROW + #view.podium * LB_ROW
 	if view.me then
 		scoreRow(resultRows, view.me.rank, view.me.score, true, #view.podium * LB_ROW + RESULT_ME_GAP, false)
+		boardBottom += RESULT_ME_GAP + LB_ROW
 	end
+	resultCredits.Position = UDim2.fromOffset(0, boardBottom + RESULT_CREDITS_GAP)
+	paintCredits()
 
 	resultShown = true
 	resultRoot.Visible = not tabHeld
@@ -1254,6 +1361,10 @@ function RoundHUD.destroy()
 		hudStateConn()
 		hudStateConn = nil
 	end
+	for _, conn in creditConns do
+		conn:Disconnect()
+	end
+	table.clear(creditConns)
 	if deathGrade then
 		deathGrade:Destroy()
 	end

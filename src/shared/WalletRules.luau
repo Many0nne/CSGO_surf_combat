@@ -9,12 +9,21 @@
 -- le même joueur additionnent leurs gains ; un lot renvoyé après une écriture passée mais signalée en échec n'est pas
 -- compté deux fois (`writes` : dernier lot appliqué des sessions les plus récentes). Un débit, lui, se décide sur le
 -- solde stocké, dans l'écriture même (`debit`, achetés d'abord) : un solde stocké n'est jamais négatif.
--- Champs posés pour la suite, sans logique ici : gains du jour (`day` = jour UTC, `dayEarned`, plafond du jour de
--- #394) et reçus Robux traités (`receipts`, PurchaseId de #395, liste bornée).
+-- Gains en jouant (#394) : un lot porte aussi ses gains plafonnés (`capped`, datés de leur jour UTC `day`), que la
+-- fusion réapplique au plafond du jour (`day` et `dayEarned` du portefeuille, EconomyRules.DAILY_CAP) : deux serveurs en
+-- même temps ne le dépassent pas. Reçus Robux traités (`receipts`, PurchaseId de #395, liste bornée) : posés pour
+-- la suite, sans logique ici.
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local EconomyRules = require(ReplicatedStorage.Shared.EconomyRules)
+
 local WalletRules = {}
 
--- Lot de gains envoyé par une session : numéro croissant dans la session, crédits gagnés (positif ou nul)
-export type Batch = { seq: number, earned: number }
+-- Lot de gains envoyé par une session : numéro croissant dans la session, crédits hors plafond du jour (`earned`,
+-- positif ou nul : doublons remboursés, debug) et, depuis #394, gains en jouant soumis au plafond du jour (`capped`,
+-- tous du jour UTC `day` : une session ferme son lot quand le jour change). Les deux derniers sont facultatifs : un lot
+-- `{ seq, earned }` d'avant #394 reste valide. Les lots ne sont jamais stockés (seulement les marques `writes`).
+export type Batch = { seq: number, earned: number, capped: number?, day: number? }
 export type WriteMark = { session: string, seq: number }
 export type Wallet = {
 	earned: number,
@@ -159,15 +168,40 @@ function WalletRules.appliedSeq(wallet: Wallet, session: string): number
 	return 0
 end
 
--- Cette méthode permet d'ajouter à `earned` (écrêté au plafond) les lots d'une session plus récents que sa marque, puis
--- d'avancer la marque jusqu'à `upTo`, lorsque l'UpdateAsync de l'inventaire fusionne ; pure, renvoie une copie.
+-- Cette méthode permet de compter un gain en jouant du jour `day` dans le portefeuille (modifié sur place) lorsqu'il est
+-- crédité ; renvoie la part permise par le plafond du jour (jour plus récent : remise à zéro ; jour passé : rien).
+function WalletRules.countDaily(wallet: Wallet, amount: number, day: number): number
+	if amount <= 0 or not EconomyRules.isDay(day) then
+		return 0
+	end
+	if day > wallet.day then
+		wallet.day = day
+		wallet.dayEarned = 0
+	elseif day < wallet.day then
+		-- Un autre serveur a déjà écrit un jour plus récent : les gains de ce jour-là n'y sont plus, impossible de savoir
+		-- ce qui restait sous son plafond. Rien de crédité (cas rare : deux serveurs à minuit), le plafond tient toujours.
+		return 0
+	end
+	local allowed = EconomyRules.capDay(amount, wallet.dayEarned)
+	wallet.dayEarned += allowed
+	return allowed
+end
+
+-- Cette méthode permet d'ajouter à `earned` les lots d'une session plus récents que sa marque (gains en jouant réduits
+-- par `countDaily`), puis d'avancer la marque à `upTo`, lorsque l'UpdateAsync fusionne ; pure, renvoie une copie.
 function WalletRules.applyBatches(wallet: Wallet, session: string, batches: { Batch }, upTo: number): Wallet
 	local result = WalletRules.read(wallet)
 	local applied = WalletRules.appliedSeq(result, session)
 	local gained = 0
 	for _, batch in batches do
-		if batch.seq > applied and batch.earned > 0 then
-			gained += batch.earned
+		if batch.seq > applied then
+			if batch.earned > 0 then
+				gained += batch.earned
+			end
+			local capped = batch.capped
+			if capped and capped > 0 and batch.day then
+				gained += WalletRules.countDaily(result, capped, batch.day)
+			end
 		end
 	end
 	local room = WalletRules.MAX_BALANCE - WalletRules.balance(result)

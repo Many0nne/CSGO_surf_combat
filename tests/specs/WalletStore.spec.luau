@@ -1179,4 +1179,95 @@ return function(T, Loader)
 			T.expectEqual(ds.writes, 0, "jamais écrit")
 		end)
 	end)
+
+	T.describe("WalletStore : gains en jouant et plafond du jour (#394)", function()
+		local DAY = 20407
+
+		-- Cette méthode permet de fixer l'heure UTC (os.time) vue par le serveur lorsqu'un test simule un jour donné.
+		local function at(sched, day: number, seconds: number?)
+			sched.os.time = function()
+				return day * 86400 + (seconds or 3600)
+			end
+		end
+
+		T.it("plafonne au jour vu par la session, publie les gains du jour et les écrit", function()
+			local sched = makeScheduler()
+			at(sched, DAY)
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 100)
+			ds.data["1"].wallet.day = DAY
+			ds.data["1"].wallet.dayEarned = 230
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			T.expectEqual(alice.attributes.DailyCredits, DAY .. ":230")
+			T.expectEqual(server.Wallet.addPlayGain(alice, 15, DAY), 15)
+			T.expectEqual(server.Wallet.addPlayGain(alice, 15, DAY), 5, "plafond du jour")
+			T.expectEqual(server.Wallet.addPlayGain(alice, 15, DAY), 0)
+			T.expectEqual(alice.attributes.DailyCredits, DAY .. ":250")
+			T.expectEqual(alice.attributes.Credits, 120)
+			sched.advance(10)
+			local stored = storedWallet(ds, 1)
+			T.expectEqual(stored.earned, 120)
+			T.expectEqual(stored.dayEarned, 250)
+			T.expectEqual(stored.day, DAY)
+		end)
+
+		T.it("pas chargé ou sauvegarde coupée : nil, rien de crédité", function()
+			local sched = makeScheduler()
+			at(sched, DAY)
+			local ds = makeDataStore(sched)
+			ds.failures = 3
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			sched.advance(10)
+			T.expectEqual(server.Wallet.addPlayGain(alice, 15, DAY), nil)
+			T.expectEqual(alice.attributes.DailyCredits, nil)
+			server.leave(alice)
+			sched.advance(600)
+			T.expectEqual(ds.writes, 0)
+		end)
+
+		T.it("minuit UTC entre deux gains : deux lots, chacun compté dans son jour", function()
+			local sched = makeScheduler()
+			at(sched, DAY, 86398)
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 0)
+			ds.data["1"].wallet.day = DAY
+			ds.data["1"].wallet.dayEarned = 240
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			T.expectEqual(server.Wallet.addPlayGain(alice, 15, DAY), 10)
+			at(sched, DAY + 1, 2)
+			T.expectEqual(server.Wallet.addPlayGain(alice, 15, DAY + 1), 15, "nouveau jour : compteur à zéro")
+			T.expectEqual(alice.attributes.DailyCredits, (DAY + 1) .. ":15")
+			sched.advance(10)
+			local stored = storedWallet(ds, 1)
+			T.expectEqual(stored.earned, 25)
+			T.expectEqual(stored.day, DAY + 1)
+			T.expectEqual(stored.dayEarned, 15)
+		end)
+
+		T.it("deux serveurs en même temps : le plafond du jour stocké n'est pas dépassé", function()
+			local sched = makeScheduler()
+			at(sched, DAY)
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 0)
+			ds.data["1"].wallet.day = DAY
+			ds.data["1"].wallet.dayEarned = 200
+			local one = makeServer(sched, ds)
+			local two = makeServer(sched, ds)
+			local onOne = one.join(1)
+			local onTwo = two.join(1)
+			T.expectEqual(one.Wallet.addPlayGain(onOne, 40, DAY), 40)
+			T.expectEqual(two.Wallet.addPlayGain(onTwo, 40, DAY), 40, "chacun ne voit que ses gains")
+			sched.advance(10)
+			local stored = storedWallet(ds, 1)
+			T.expectEqual(stored.dayEarned, 250)
+			T.expectEqual(stored.earned, 50, "40 + 10 seulement")
+			-- Chaque serveur recale sa copie sur le stocké après son écriture
+			one.Wallet.add(onOne, 1)
+			sched.advance(10)
+			T.expectEqual(onOne.attributes.DailyCredits, DAY .. ":250")
+		end)
+	end)
 end

@@ -20,6 +20,7 @@ local SpawnProtection = require(script.SpawnProtection)
 local RoundManager = require(script.RoundManager)
 local StatsStore = require(script.StatsStore)
 local WalletStore = require(script.WalletStore)
+local CreditGains = require(script.CreditGains)
 local SettingsStore = require(script.SettingsStore)
 local InventoryStore = require(script.InventoryStore)
 local CrateService = require(script.CrateService)
@@ -101,7 +102,8 @@ StatsStore.init()
 SettingsStore.init(getSettingsRmt, saveSettingsRmt)
 -- Inventaire (#267) : StarterPack vidé, Tools donnés selon l'équipement (#280), armes non possédées refusées par le
 -- Validator. Crédits (#391, #396) : portefeuille dans le même enregistrement, API WalletStore ; achat des caisses (#393)
--- par CrateService
+-- par CrateService ; gains en jouant (#394) par CreditGains, branché plus bas (kills dans onDeathCounted, manche jouée
+-- et victoire dans onRoundEnd)
 InventoryStore.init(equipItemRmt, SpawnManager.isSpawning)
 Validator.setOwnership(InventoryStore.ownsTool)
 CrateService.init(openCrateRmt, buyCrateRmt)
@@ -114,14 +116,32 @@ RoundManager.init({
 	scoreUpdate = scoreUpdateRmt,
 	roundResult = roundResultRmt,
 	playerDied = playerDiedRmt,
-	-- Stats persistantes (#296) : une manche jouée pour chaque joueur en jeu à la fin, gagnée pour le vainqueur (par id)
+	-- Stats persistantes (#296) : une manche jouée pour chaque joueur en jeu à la fin, gagnée pour le vainqueur (par id) ;
+	-- crédits (#394) : manche jouée et victoire, gains de la manche publiés pour le bandeau de fin
 	onRoundEnd = function(participants, winner)
+		-- À part : une erreur des crédits ne prive pas les joueurs de leurs stats de manche (sans attente, il s'exécute
+		-- tout de suite, avant la destruction des personnages)
+		task.spawn(CreditGains.onRoundEnd, participants, winner)
 		for _, participant in participants do
 			if participant.player then
 				StatsStore.recordRoundEnd(participant.player, winner ~= nil and winner.id == participant.id)
 			end
 		end
 	end,
+})
+
+-- Gains de crédits en jouant (#394) : rien en entraînement ni hors manche active ; lignes [CreditGains] dans Studio
+CreditGains.init({
+	training = training,
+	roundActive = RoundManager.isActive,
+	credit = WalletStore.addPlayGain,
+	now = os.time,
+	clock = os.clock,
+	log = if RunService:IsStudio()
+		then function(message: string)
+			print("[CreditGains] " .. message)
+		end
+		else nil,
 })
 
 -- ── Gestion du cycle de vie des personnages ────────────────────────────────
@@ -399,6 +419,8 @@ local function onDeathCounted(participant: Participants.Participant, killer: Par
 	if training then
 		return
 	end
+	-- Crédits du kill (#394), tout de suite ; un bot tué rapporte aussi (BOT_KILL), un bot tueur rien
+	CreditGains.onKill(killer, participant)
 	-- Une mort infligée par un bot ne compte que dans le round (décision 6 de #133)
 	local player = participant.player
 	if player and ParticipantRules.countsInStats(participant.isBot, killer and killer.isBot) then
@@ -423,6 +445,8 @@ local function onParticipantCharacter(participant: Participants.Participant, cha
 		if player then
 			-- En premier : une demande d'apparition est refusée pendant RESPAWN_DELAY (#171), même si la suite échoue
 			SpawnManager.noteDeath(player)
+			-- Fin du temps en vie de la manche (#394), avant le corps
+			CreditGains.onDespawn(player, char)
 		end
 		local killer = RoundManager.onCharacterDied(participant, respawn)
 		onDeathCounted(participant, killer)
@@ -438,6 +462,12 @@ end
 local function onCharacterAdded(player: Player, char: Model)
 	-- Sac rempli des seuls Tools possédés (#267), à chaque apparition : le StarterPack est vide
 	task.spawn(InventoryStore.syncTools, player)
+	-- Temps en vie dans la manche (#394, manche jouée sans kill) : de l'apparition à la mort (onParticipantCharacter) ou
+	-- à la disparition du personnage (retour au menu, fin de manche)
+	CreditGains.onSpawn(player, char)
+	char.Destroying:Connect(function()
+		CreditGains.onDespawn(player, char)
+	end)
 	onParticipantCharacter(Participants.fromPlayer(player), char, function()
 		-- Jamais par-dessus un personnage vivant ni un spawn en vol (#171)
 		SpawnManager.respawn(player)
@@ -770,6 +800,7 @@ Players.PlayerRemoving:Connect(function(player)
 	forgetCombatState(participant)
 	RoundManager.removeParticipant(participant)
 	Participants.remove(participant)
+	CreditGains.forget(player)
 	-- départ d'un joueur : ses Instances et connexions doivent avoir disparu au relevé (cf. docs/performance.md)
 	task.delay(5, MemoryTracker.snapshot, "départ de " .. player.Name)
 end)
