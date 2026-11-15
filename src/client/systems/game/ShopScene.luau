@@ -805,8 +805,12 @@ local function dressCrate(index: number)
 	podium = podiumFolder
 	local boardFolder = Instance.new("Folder")
 	boardFolder.Name = "Board"
-	for j, row in ShopCatalog.contents(def, InventoryRules.ITEMS) do
-		local x = BOARD_COLUMNS[j]
+	-- Colonne de chaque ligne du contenu : les skins sombres au milieu, sous la suspension (#366) ; `row` des cibles
+	-- garde le rang dans le contenu, celui des lignes de l'interface
+	local contents = ShopCatalog.contents(def, InventoryRules.ITEMS)
+	local columns = ShopCatalog.columns(contents, #BOARD_COLUMNS)
+	for j, row in contents do
+		local x = BOARD_COLUMNS[columns[j]]
 		if x then
 			local c = row.rarity.color
 			local color = Color3.fromRGB(c[1], c[2], c[3])

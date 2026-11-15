@@ -11,7 +11,8 @@ export type Rarity = { id: string, label: string, chance: number, color: Rgb }
 -- `contents` : nom d'apparence des skins (`appearance` de InventoryRules.ITEMS) par id de rareté ; une apparence
 -- désigne la paire AWP + M9 de la série
 export type Crate = { id: string, name: string, stripe: Rgb, price: number, contents: { [string]: string } }
-export type Row = { rarity: Rarity, name: string, weapons: { string }, skins: { string } }
+-- `luminance` : moyenne de celles des skins de la ligne (1 pour un skin non mesuré)
+export type Row = { rarity: Rarity, name: string, weapons: { string }, skins: { string }, luminance: number }
 export type Slot = { index: number, row: number, column: number }
 
 ShopCatalog.CURRENCY = "CRÉDITS"
@@ -65,19 +66,61 @@ function ShopCatalog.contents(crate: Crate, items: { any }): { Row }
 	local rows = {}
 	for _, rarity in ShopCatalog.RARITIES do
 		local appearance = crate.contents[rarity.id]
-		local row: Row = { rarity = rarity, name = "", weapons = {}, skins = {} }
+		local row: Row = { rarity = rarity, name = "", weapons = {}, skins = {}, luminance = 1 }
+		local total = 0
 		for _, item in items do
 			if item.type == "skin" and appearance and item.appearance == appearance then
 				row.name = item.name or string.upper(appearance)
 				table.insert(row.weapons, WEAPON_LABELS[item.weapon] or string.upper(tostring(item.weapon)))
 				table.insert(row.skins, item.id)
+				total += item.luminance or 1
 			end
 		end
 		if #row.skins > 0 then
+			row.luminance = total / #row.skins
 			table.insert(rows, row)
 		end
 	end
 	return rows
+end
+
+-- Cette méthode permet de placer les lignes du contenu dans les `count` colonnes du tableau lorsque la vue détail
+-- l'habille (#366) : les skins les plus sombres au plus près du milieu (sous la suspension, les métaux sombres ne
+-- prennent que la lumière venue de près) ; entre colonnes à même distance du milieu, l'ordre du contenu, de gauche à
+-- droite. Renvoie la colonne (1 à `count`) de chaque ligne, par rang dans `rows` ; les lignes en trop n'en ont pas.
+function ShopCatalog.columns(rows: { Row }, count: number): { number }
+	local middle = (count + 1) / 2
+	local order = {}
+	for i = 1, #rows do
+		table.insert(order, i)
+	end
+	table.sort(order, function(a, b)
+		if rows[a].luminance ~= rows[b].luminance then
+			return rows[a].luminance < rows[b].luminance
+		end
+		return a < b
+	end)
+	-- Colonnes par distance au milieu (milieu, puis la paire voisine…), chaque groupe gauche avant droite
+	local columns = {}
+	local taken = 0
+	for distance = 0, middle - 1, 0.5 do
+		local group = {}
+		for column = 1, count do
+			if math.abs(column - middle) == distance then
+				table.insert(group, column)
+			end
+		end
+		local chosen = {}
+		for k = 1, math.min(#group, #order - taken) do
+			table.insert(chosen, order[taken + k])
+		end
+		taken += #chosen
+		table.sort(chosen)
+		for k, i in chosen do
+			columns[i] = group[k]
+		end
+	end
+	return columns
 end
 
 -- Cette méthode permet de composer la ligne sous le nom d'une caisse (« CAISSE · COUCHANT / IMPACT / RELEVÉ ») lorsque

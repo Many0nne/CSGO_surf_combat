@@ -698,6 +698,12 @@ l'étiquette BIENTÔT tant que l'achat n'existe pas.
     prennent que la lumière venue presque de face : sans elle, l'arme restait presque noire en gros plan (vérifié en
     retirant sa carte de métal : canon et lunette reprenaient leurs couleurs). Choix de l'utilisateur : toujours
     allumée (0,9), elle aplatissait la tache de la suspension et effaçait les ombres des AWP en vue large.
+  - **Placement des skins au tableau (#366)** : les plus sombres au milieu, sous la suspension
+    (`ShopCatalog.columns`, luminance mesurée par skin dans `InventoryRules.ITEMS`), les autres à gauche puis à droite
+    dans l'ordre du contenu ; série 1 : IMPACT, COUCHANT, RELEVÉ ; série 2 : STRATE, RECUIT, SILLAGE. La colonne de
+    l'interface reste dans l'ordre des raretés : une arme du tableau garde le rang de sa ligne (`BoardTarget.row`). Les
+    métaux sombres des colonnes de côté, éclairés en rasant, ne prenaient presque pas la lumière ; élargir le faisceau
+    ou tripler `Lighting.Ambient` ne les éclaircissait pas.
   - **Appoint de face** sur la caisse : cône de 35°, portée 11. À 50° et portée 30, il éclairait aussi tout le
     tableau et effaçait la tache de la suspension ; l'appoint du plafond (80°) a été retiré pour la même raison.
   - **Rack du fond**, lumière froide d'en haut vers le milieu du rack : plus basse et plus rasante, elle brûlait le bord
