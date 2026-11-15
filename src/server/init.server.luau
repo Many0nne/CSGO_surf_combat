@@ -92,7 +92,6 @@ SettingsStore.init(getSettingsRmt, saveSettingsRmt)
 -- Inventaire (#267) : StarterPack vidé, Tools donnés selon l'équipement (#280), armes non possédées refusées par le
 -- Validator
 InventoryStore.init(equipItemRmt, SpawnManager.isSpawning)
-InventoryStore.setToolsEnabled(not training)
 Validator.setOwnership(InventoryStore.ownsTool)
 FeedbackService.init(sendFeedbackRmt, feedbackAckRmt)
 -- Mode publié aux clients (attribut de ReplicatedStorage) et téléportations vers ou depuis l'entraînement

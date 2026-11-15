@@ -1,10 +1,8 @@
 -- Mode entraînement (#345) : reconnaît un serveur d'entraînement (serveur réservé de la même place), et téléporte les
--- joueurs qui le demandent (remote Training) vers un serveur d'entraînement partagé, ou de là vers un serveur public.
--- Partagé : un seul code d'accès commun à tous les serveurs du jeu (MemoryStore), pour que les joueurs s'entraînent
--- ensemble au lieu d'ouvrir un serveur chacun ; remplacé par un neuf quand son serveur est plein (TrainingRules).
--- Ce qui change dans un serveur d'entraînement (pas de bots, d'armes, de stats, manche sans fin) est branché par
+-- joueurs qui le demandent (remote Training) vers leur propre serveur d'entraînement, ou de là vers un serveur public.
+-- Un serveur par joueur (#388) : seul, il garde ses armes sans que personne puisse l'attaquer ; un serveur réservé vide
+-- s'éteint seul. Ce qui change dans un serveur d'entraînement (pas de bots ni de stats, manche sans fin) est branché par
 -- init.server selon TrainingService.isTraining().
-local MemoryStoreService = game:GetService("MemoryStoreService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -32,8 +30,8 @@ local pending: { [Player]: Pending } = {}
 -- Délai (s) au bout duquel une téléportation lancée sans suite ne bloque plus une nouvelle demande
 local PENDING_TIMEOUT = 30
 
--- Cette méthode permet de savoir si ce serveur est un serveur d'entraînement lorsqu'un système s'y adapte (bots, armes,
--- stats, manche) ; fixé au démarrage du serveur.
+-- Cette méthode permet de savoir si ce serveur est un serveur d'entraînement lorsqu'un système s'y adapte (bots, stats,
+-- manche) ; fixé au démarrage du serveur.
 function TrainingService.isTraining(): boolean
 	return training
 end
@@ -45,8 +43,8 @@ local function reply(player: Player, status: TrainingRules.Status)
 	end
 end
 
--- Cette méthode permet de réserver un serveur d'entraînement neuf lorsqu'aucun code partagé n'est utilisable ; nil si la
--- réservation échoue.
+-- Cette méthode permet de réserver le serveur d'entraînement d'un joueur lorsqu'il veut s'entraîner, ou qu'une
+-- téléportation vers le précédent a échoué ; nil si la réservation échoue.
 local function reserve(): string?
 	local ok, code = pcall(TeleportService.ReserveServer, TeleportService, game.PlaceId)
 	if not ok or type(code) ~= "string" then
@@ -54,41 +52,6 @@ local function reserve(): string?
 		return nil
 	end
 	return code
-end
-
--- Cette méthode permet d'écrire le code partagé par une transformation (keepCode ou rotateCode) lorsqu'il est créé ou
--- remplacé ; renvoie le code retenu, ou `fallback` si la MemoryStore ne répond pas (le joueur part seul sur ce code).
-local function writeShared(transform: (any) -> string, fallback: string): string
-	local ok, result = pcall(function()
-		local map = MemoryStoreService:GetSortedMap(TrainingRules.MAP)
-		return map:UpdateAsync(TrainingRules.KEY, transform, TrainingRules.CODE_TTL)
-	end)
-	if ok and type(result) == "string" then
-		return result
-	end
-	warn("[TrainingService] code partagé non écrit :", result)
-	return fallback
-end
-
--- Cette méthode permet de trouver le code du serveur d'entraînement partagé lorsqu'un joueur veut s'entraîner : celui de
--- la MemoryStore (durée de vie prolongée), sinon un serveur neuf réservé et partagé ; nil si rien n'est possible.
-local function sharedCode(): string?
-	local ok, stored = pcall(function()
-		local map = MemoryStoreService:GetSortedMap(TrainingRules.MAP)
-		return map:GetAsync(TrainingRules.KEY)
-	end)
-	if ok and type(stored) == "string" and stored ~= "" then
-		return writeShared(function(current)
-			return TrainingRules.keepCode(current, stored)
-		end, stored)
-	end
-	local fresh = reserve()
-	if not fresh then
-		return nil
-	end
-	return writeShared(function(current)
-		return TrainingRules.keepCode(current, fresh)
-	end, fresh)
 end
 
 -- Cette méthode permet de lancer la téléportation d'un joueur lorsque sa demande est acceptée ou retentée : vers le
@@ -132,7 +95,7 @@ local function onRequest(player: Player, raw: any)
 	local entry: Pending = { request = request, code = nil, try = 1 }
 	pending[player] = entry
 	if request == TrainingRules.JOIN then
-		local code = sharedCode()
+		local code = reserve()
 		if not code then
 			pending[player] = nil
 			reply(player, "failed")
@@ -153,14 +116,11 @@ local function onTeleportFailed(player: Player, result: Enum.TeleportResult, mes
 	warn(
 		string.format("[TrainingService] échec de téléportation de %s : %s (%s)", player.Name, result.Name, message)
 	)
-	local failedCode = entry.code
-	if failedCode and TrainingRules.retriesWithFreshCode(result.Name, entry.try) then
+	if entry.code and TrainingRules.retriesWithFreshCode(result.Name, entry.try) then
 		local fresh = reserve()
 		if fresh then
 			entry.try += 1
-			entry.code = writeShared(function(current)
-				return TrainingRules.rotateCode(current, failedCode, fresh)
-			end, fresh)
+			entry.code = fresh
 			teleport(player, entry)
 			return
 		end
@@ -174,7 +134,7 @@ end
 function TrainingService.init(trainingRemote: RemoteEvent)
 	remote = trainingRemote
 	if training then
-		print("[TrainingService] serveur d'entraînement : ni bots, ni armes, ni stats")
+		print("[TrainingService] serveur d'entraînement : ni bots, ni stats")
 	end
 	remote.OnServerEvent:Connect(onRequest)
 	TeleportService.TeleportInitFailed:Connect(onTeleportFailed)

@@ -1,4 +1,4 @@
--- Mode entraînement (#345) : serveur reconnu, code d'accès partagé, échecs retentés, décision d'une demande, messages.
+-- Mode entraînement (#345) : serveur reconnu, échecs retentés, décision d'une demande, messages.
 return function(T, Loader)
 	local Rules = Loader.new():require("src/shared/TrainingRules")
 
@@ -16,26 +16,6 @@ return function(T, Loader)
 			T.expectEqual(Rules.isTrainingServer("", 0, true, true), true)
 			T.expectEqual(Rules.isTrainingServer("", 0, true, "oui"), false, "pas un booléen")
 			T.expectEqual(Rules.isTrainingServer("", 0, false, true), false, "jeu publié")
-		end)
-	end)
-
-	T.describe("TrainingRules.keepCode", function()
-		T.it("garde le code déjà partagé, sinon prend le candidat", function()
-			T.expectEqual(Rules.keepCode("ancien", "neuf"), "ancien")
-			T.expectEqual(Rules.keepCode(nil, "neuf"), "neuf")
-			T.expectEqual(Rules.keepCode("", "neuf"), "neuf")
-			T.expectEqual(Rules.keepCode(12, "neuf"), "neuf", "valeur abîmée")
-		end)
-	end)
-
-	T.describe("TrainingRules.rotateCode", function()
-		T.it("remplace le code qui a échoué", function()
-			T.expectEqual(Rules.rotateCode("plein", "plein", "neuf"), "neuf")
-			T.expectEqual(Rules.rotateCode(nil, "plein", "neuf"), "neuf", "entrée expirée")
-		end)
-
-		T.it("garde un code déjà remplacé par un autre serveur", function()
-			T.expectEqual(Rules.rotateCode("autre", "plein", "neuf"), "autre")
 		end)
 	end)
 
