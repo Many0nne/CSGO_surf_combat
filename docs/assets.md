@@ -408,7 +408,7 @@ le chiffre du Zodiac (vrai tueur), les drames de guerre et les broderies osages 
   reprend la grammaire (carré à coins arrondis, côtes répétées), avec des symboles et des noms dessinés pour le jeu.
 - **Un autre film ne s'ajoute qu'après une recherche de DA** (planche de références validée) : l'utilisateur ne veut pas
   de films choisis à la hâte, dont la DA ne lui plairait pas.
-- **Caisses complétées par la série 1** : les skins hommage (EXCEPTIONNEL) sont complétés par des skins de la série 1
+- **Caisses complétées par la série 1** : les skins hommage sont complétés par des skins de la série 1
   pour atteindre 6. Un skin repris garde sa rareté d'origine (`rarityOf` lit la première caisse qui le contient ; le test
   du shop l'exige). Chaque nouvel hommage prend la place d'un skin repris : LOGOGRAMME celle de MAQUIS, SPHINX celle de
   RELEVÉ (#436).

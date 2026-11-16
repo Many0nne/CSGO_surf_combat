@@ -2,7 +2,7 @@
 -- contenu (plusieurs skins par rareté), tirage d'une ouverture, et rangement des caisses dans la vitrine de la vue
 -- d'ensemble. Règles pures, testées (tests/specs/ShopCatalog.spec.luau).
 --
--- Provisoire : prix, raretés, chances et remboursements sont des valeurs d'attente (points ouverts de #347, #332 et
+-- Provisoire : prix, chances et remboursements sont des valeurs d'attente (points ouverts de #347, #332 et
 -- #393). Les prix sont en crédits, la monnaie du jeu (#391, WalletRules) ; l'achat (#393, CrateService) relit le prix et
 -- le remboursement d'un doublon dans ce module côté serveur : ce que le client affiche ne fait jamais foi.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -32,19 +32,22 @@ export type Slot = { index: number, row: number, column: number }
 
 ShopCatalog.CURRENCY = WalletRules.CURRENCY
 
--- Raretés, de la plus courante à la plus rare ; chances en pour cent (total 100). Remboursement d'un doublon (#393) en
--- part du prix, pour qu'une caisse d'un autre prix suive sans nouvelle table : 20 / 40 / 70 % (100, 200, 350 crédits
--- pour une caisse à 500)
+-- Raretés, de la plus courante à la plus rare (pyramide à la CS:GO, #430) ; chances en pour cent (total 100) : 80 / 16 /
+-- 3,2 / 0,8. Remboursement d'un doublon (#393) en part du prix, pour qu'une caisse d'un autre prix suive sans nouvelle
+-- table : 20 / 40 / 70 / 100 % (100, 200, 350, 500 crédits pour une caisse à 500)
 ShopCatalog.RARITIES = {
-	{ id = "common", label = "COMMUN", chance = 70, color = { 150, 160, 172 }, refund = 20 },
-	{ id = "rare", label = "RARE", chance = 25, color = { 70, 120, 230 }, refund = 40 },
-	{ id = "exceptional", label = "EXCEPTIONNEL", chance = 5, color = { 170, 70, 220 }, refund = 70 },
+	{ id = "common", label = "COMMUN", chance = 80, color = { 150, 160, 172 }, refund = 20 },
+	{ id = "rare", label = "RARE", chance = 16, color = { 70, 120, 230 }, refund = 40 },
+	{ id = "exceptional", label = "EXCEPTIONNEL", chance = 3.2, color = { 170, 70, 220 }, refund = 70 },
+	{ id = "legendary", label = "LÉGENDAIRE", chance = 0.8, color = { 235, 75, 75 }, refund = 100 },
 } :: { Rarity }
 
 -- Caisses en vente, dans l'ordre de la vitrine : une par arme et par série, de 6 à 8 skins (#424), une ouverture donne
--- un seul skin de l'arme (#332). Raretés reprises des anciennes caisses par série (TREMPE et MUE, hors caisse, en
--- COMMUN), à revoir. Ajouter une série = une caisse par arme ici (ses skins dans InventoryRules). Une série peut
--- reprendre des skins d'une autre pour atteindre 6 skins (FILM, #433), à la même rareté partout (`rarityOf`)
+-- un seul skin de l'arme (#332). Un skin a la même rareté dans toutes les caisses qui le contiennent (#430, `rarityOf`) :
+-- AWP, COMMUN maquis, logogramme ; RARE mue, orage, circuit ; EXCEPTIONNEL remorqueur, balise, pan ; LÉGENDAIRE trempe,
+-- ciselure. M9, COMMUN artdeco, hote ; RARE patrouille, releve, sphinx ; EXCEPTIONNEL email, recuit ; LÉGENDAIRE
+-- couchant. Ajouter une série = une caisse par arme ici (ses skins dans InventoryRules). Une rareté sans skin dans une
+-- caisse (LÉGENDAIRE d'AWP · FILM) est écartée du tirage, les autres chances étant renormalisées (`draw`)
 ShopCatalog.CRATES = {
 	{
 		id = "crate.awp.serie1",
@@ -53,9 +56,10 @@ ShopCatalog.CRATES = {
 		stripe = { 226, 58, 40 },
 		price = 500,
 		contents = {
-			common = { "balise", "maquis", "trempe", "mue" },
-			rare = { "pan", "circuit" },
-			exceptional = { "orage", "ciselure" },
+			common = { "maquis" },
+			rare = { "mue", "orage", "circuit" },
+			exceptional = { "balise", "pan" },
+			legendary = { "trempe", "ciselure" },
 		},
 	},
 	{
@@ -65,13 +69,13 @@ ShopCatalog.CRATES = {
 		stripe = { 40, 150, 160 },
 		price = 500,
 		contents = {
-			common = { "couchant", "recuit" },
-			rare = { "patrouille", "artdeco" },
-			exceptional = { "releve", "email" },
+			common = { "artdeco" },
+			rare = { "patrouille", "releve" },
+			exceptional = { "email", "recuit" },
+			legendary = { "couchant" },
 		},
 	},
-	-- Série FILM (#433) : des skins hommage par arme (EXCEPTIONNEL), complétés de skins de la série 1 (même rareté) ;
-	-- chaque nouvel hommage prend la place d'un skin de la série 1 (#436 : LOGOGRAMME pour MAQUIS, SPHINX pour RELEVÉ)
+	-- Série FILM (#433) : des skins hommage par arme, complétés de skins de la série 1 (même rareté partout)
 	{
 		id = "crate.awp.film",
 		name = "AWP · FILM",
@@ -79,9 +83,9 @@ ShopCatalog.CRATES = {
 		stripe = { 110, 230, 130 }, -- vert phosphore de l'écran de REMORQUEUR
 		price = 500,
 		contents = {
-			common = { "balise", "mue" },
-			rare = { "circuit", "pan" },
-			exceptional = { "remorqueur", "logogramme" },
+			common = { "logogramme" },
+			rare = { "mue", "circuit" },
+			exceptional = { "remorqueur", "balise", "pan" },
 		},
 	},
 	{
@@ -91,9 +95,10 @@ ShopCatalog.CRATES = {
 		stripe = { 200, 182, 140 }, -- os de HÔTE
 		price = 500,
 		contents = {
-			common = { "couchant", "recuit" },
-			rare = { "patrouille", "artdeco" },
-			exceptional = { "hote", "sphinx" },
+			common = { "hote", "artdeco" },
+			rare = { "patrouille", "sphinx" },
+			exceptional = { "recuit" },
+			legendary = { "couchant" },
 		},
 	},
 } :: { Crate }
@@ -196,7 +201,7 @@ function ShopCatalog.draw(crate: Crate, items: { any }, roll: number): (Row?, st
 	local cumulative = 0
 	for i, row in rows do
 		cumulative += weight[i]
-		if target < cumulative then
+		if target + 1e-9 < cumulative then
 			return row, row.skin
 		end
 	end

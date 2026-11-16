@@ -51,7 +51,7 @@ local THUMB_X = 12 -- vignette de l'arme habillée, après la barre de rareté
 -- Vignette large : une AWP de profil est cinq fois plus longue que haute, à 88 px elle ne faisait que 15 px de haut
 local THUMB_SIZE = Vector2.new(128, 30)
 local NAME_X = THUMB_X + THUMB_SIZE.X + 10
-local RARITY_X = 270 -- colonne des raretés et chances (« EXCEPTIONNEL  2,5 % » tient avant le remboursement)
+local RARITY_X = 270 -- colonne des raretés et chances (« EXCEPTIONNEL  1,1 % » et « LÉGENDAIRE  0,4 % » tiennent avant le remboursement)
 local COLUMN_WIDTH = 470
 local MAX_ROWS = 8 -- place réservée au contenu
 local REFUND_ICON = 18 -- jeton devant le remboursement d'un doublon, à droite de la ligne

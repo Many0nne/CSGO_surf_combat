@@ -10,15 +10,16 @@ return function(T, Loader)
 				local common = R.revealTime("common") - R.COLUMN
 				local rare = R.revealTime("rare") - R.COLUMN
 				local exceptional = R.revealTime("exceptional") - R.COLUMN
+				local legendary = R.revealTime("legendary") - R.COLUMN
 				T.expect(common > R.RISE_TIME, "la silhouette a fini de monter avant la révélation")
-				T.expect(common < rare and rare < exceptional, "suspense croissant")
+				T.expect(common < rare and rare < exceptional and exceptional < legendary, "suspense croissant")
 				T.expectNear(R.revealTime(nil) - R.COLUMN, R.RISE_TIME + R.DEFAULT_HOLD)
 			end
 		)
 
 		T.it("ordre des phases : charge, tension, temps d'arrêt, explosion, couvercle, colonne", function()
 			T.expect(R.CRACKLE_START < R.PULSES[1].at, "crépitements avant la première bouffée")
-			T.expect(R.TIER_AT[#R.TIER_AT] < R.TENSION_START, "couleur finale avant la tension")
+			T.expect(R.TIER_AT[#R.TIER_AT] <= R.BURST - R.PAUSE, "couleur finale au plus tard au temps d'arrêt")
 			T.expect(R.TENSION_START < R.BURST - R.PAUSE, "la tension monte avant le temps d'arrêt")
 			T.expect(R.BURST < R.LID_START and R.LID_START < R.COLUMN, "couvercle après l'explosion")
 			T.expect(R.LID_START + R.LID_TIME <= R.COLUMN + R.COLUMN_GROW, "couvercle parti quand la colonne a grandi")
@@ -184,6 +185,7 @@ return function(T, Loader)
 			T.expectEqual(#R.TIERS, #Shop.RARITIES)
 			for i, rarity in Shop.RARITIES do
 				T.expectEqual(R.TIERS[i], rarity.id)
+				T.expect(R.HOLD[rarity.id] ~= nil, "tenue de " .. rarity.id)
 			end
 			T.expectEqual(R.tierOf("unknown"), 1)
 		end)
@@ -207,6 +209,8 @@ return function(T, Loader)
 			end
 			T.expectEqual(R.sample(R.tierTime(2), "exceptional").tier, 2)
 			T.expectEqual(R.sample(R.tierTime(3), "exceptional").tier, 3)
+			T.expectEqual(R.sample(R.tierTime(4), "legendary").tier, 4)
+			T.expectEqual(R.sample(R.tierTime(4), "exceptional").tier, 3)
 			T.expectEqual(R.sample(R.tierTime(3), "rare").tier, 2)
 		end)
 
@@ -224,7 +228,15 @@ return function(T, Loader)
 
 		T.it("tension, explosion, colonne et silhouette sont dans la couleur finale", function()
 			for target, id in R.TIERS do
-				for _, t in { R.TENSION_START, R.BURST, R.COLUMN, R.COLUMN + R.RISE_TIME, R.revealTime(id) } do
+				for _, t in
+					{
+						math.max(R.TENSION_START, R.TIER_AT[#R.TIER_AT]),
+						R.BURST,
+						R.COLUMN,
+						R.COLUMN + R.RISE_TIME,
+						R.revealTime(id),
+					}
+				do
 					T.expectEqual(R.sample(t, id).tier, target)
 				end
 			end
