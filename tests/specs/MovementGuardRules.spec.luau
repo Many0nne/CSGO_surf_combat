@@ -1,6 +1,7 @@
 return function(T, Loader)
 	local Rules = Loader.new():require("src/shared/MovementGuardRules")
 	local Config = Loader.new():require("src/shared/MovementConfig")
+	local StepTiming = Loader.new():require("src/shared/StepTiming")
 
 	local V = Vector3.new
 	local INTERVAL = 1 / Config.NET_SYNC_RATE
@@ -107,6 +108,38 @@ return function(T, Loader)
 		end
 		table.sort(list, function(a, b)
 			return a.t < b.t
+		end)
+		return list
+	end
+
+	-- Cette méthode permet de simuler l'envoi du vrai client (60 FPS, StepTiming.advance, CharacterSync.send) lorsqu'un
+	-- test reproduit une saccade (hitch à hitchAt) ou un retard (lag à lagAt) (#382) ; path reçoit le temps simulé.
+	local function clientPackets(path: (number) -> Vector3, duration: number, opts)
+		local list = {}
+		local clock, simulated, pending, sendAccumulator = 0, 0, 0, 0
+		local hitched = false
+		while clock < duration do
+			local dt = 1 / 60
+			if opts.hitch and not hitched and clock >= opts.hitchAt then
+				dt, hitched = opts.hitch, true
+			end
+			clock += dt
+			local ticks
+			ticks, pending = StepTiming.advance(pending, dt)
+			simulated += ticks * StepTiming.TICK
+			sendAccumulator += dt
+			if sendAccumulator >= INTERVAL then
+				sendAccumulator = math.min(sendAccumulator - INTERVAL, INTERVAL / 2)
+				local arrival = clock + 0.05
+				if opts.lag and clock >= opts.lagAt and clock < opts.lagAt + opts.lag then
+					arrival = opts.lagAt + opts.lag + 0.05
+				end
+				table.insert(list, { t = arrival, sentAt = clock, pos = path(simulated) })
+			end
+		end
+		-- Une rafale retenue arrive dans l'ordre d'envoi
+		table.sort(list, function(a, b)
+			return a.t < b.t or (a.t == b.t and a.sentAt < b.sentAt)
 		end)
 		return list
 	end
@@ -432,6 +465,122 @@ return function(T, Loader)
 			T.expect(#verdicts < 20, "pas un signalement par paquet : " .. #verdicts)
 		end)
 
+		-- Chute du haut d'une tour de 300 studs (comme plus haut), en temps simulé par le client
+		local tower = box(V(-30, 0, -10), V(0, 300, 10))
+		local function towerFall(t: number): Vector3
+			local x = -15 + 30 * t
+			return V(x, if x <= 0 then 300 + STAND else math.max(STAND, freeFall(300 + STAND, 0, t - 0.5)), 0)
+		end
+
+		T.it("une saccade du client de 0,5 à 1,2 s en pleine chute n'est pas signalée (#382)", function()
+			local geometry = geometryOf({ FLOOR, tower })
+			for _, hitch in { 0.5, 0.6, 0.8, 1.0, 1.2 } do
+				for _, hitchAt in { 0.7, 1.0, 1.5, 2.5 } do
+					local list = clientPackets(towerFall, 6, { hitch = hitch, hitchAt = hitchAt })
+					local verdicts = replay(list, geometry, towerFall(0))
+					T.expectEqual(
+						#verdicts,
+						0,
+						string.format("saccade de %.1f s à %.1f s : %s", hitch, hitchAt, describe(verdicts))
+					)
+				end
+			end
+		end)
+
+		T.it(
+			"rejoue le faux positif des résumés : la même saccade signalée sans trous pardonnés (#382)",
+			function()
+				-- Ancienne règle (temps d'arrivée seul) : résumés du 15/11/2026, « vol : 0.8 à 2.1 studs au-dessus de la
+				-- trajectoire balistique », 1 à 54 par session, ping de 5 ou 85 ms
+				local geometry = geometryOf({ FLOOR, tower })
+				local saved = Rules.FLIGHT_LOST_MAX
+				Rules.FLIGHT_LOST_MAX = 0
+				local ok, err = pcall(function()
+					local list = clientPackets(towerFall, 6, { hitch = 0.5, hitchAt = 1.5 })
+					local verdicts = replay(list, geometry, towerFall(0))
+					T.expectEqual(#verdicts, 1, describe(verdicts))
+					local excess = tonumber(string.match(verdicts[1].detail, "vol : ([%d%.]+) studs"))
+					T.expect(
+						excess and excess > 0 and excess < 3,
+						"petit dépassement, comme en jeu : " .. describe(verdicts)
+					)
+				end)
+				Rules.FLIGHT_LOST_MAX = saved
+				assert(ok, err)
+			end
+		)
+
+		T.it("un pic de latence ou un gel du serveur de 0,6 s en pleine chute n'est pas signalé (#382)", function()
+			local geometry = geometryOf({ FLOOR, tower })
+			for _, lagAt in { 1.0, 1.5, 2.5 } do
+				for _, lag in { 0.3, 0.6, 0.9 } do
+					local list = clientPackets(towerFall, 6, { lag = lag, lagAt = lagAt })
+					local verdicts = replay(list, geometry, towerFall(0))
+					T.expectEqual(
+						#verdicts,
+						0,
+						string.format("retard de %.1f s à %.1f s : %s", lag, lagAt, describe(verdicts))
+					)
+				end
+			end
+		end)
+
+		T.it("une saccade plus longue que les trous pardonnés est signalée, avec ses mesures au détail", function()
+			local geometry = geometryOf({ FLOOR, tower })
+			local list = clientPackets(towerFall, 6, { hitch = 2, hitchAt = 1.0 })
+			local verdicts = replay(list, geometry, towerFall(0))
+			T.expectEqual(#verdicts, 1, describe(verdicts))
+			T.expect(
+				string.find(verdicts[1].detail, "trous pardonnés 1.00 s", 1, true) ~= nil,
+				"détail : " .. verdicts[1].detail
+			)
+		end)
+
+		T.it(
+			"trous pardonnés remis à zéro à l'atterrissage, pas par une correction en l'air (budget non rendu)",
+			function()
+				local guard = Rules.newGuard(0, V(0, 100, 0))
+				Rules.observe(guard.flight, 0.05, 100, false)
+				Rules.observe(guard.flight, 3, 60, false) -- trou de près de 3 s : budget épuisé
+				T.expectEqual(guard.flight.lost, Rules.FLIGHT_LOST_MAX)
+				Rules.restart(guard.flight, 4, 60) -- refus en l'air
+				T.expectEqual(guard.flight.lost, Rules.FLIGHT_LOST_MAX, "un refus ne rend pas de budget")
+				T.expectEqual(guard.flight.airAt, 0.05, "même vol : heure du décollage gardée")
+				Rules.observe(guard.flight, 5, STAND, true) -- atterrissage
+				T.expectEqual(guard.flight.lost, 0)
+				-- Correction au sol : un nouveau vol commence là
+				Rules.restart(guard.flight, 6, STAND)
+				T.expectEqual(guard.flight.airAt, 6)
+				-- Un boost touché en l'air ne rend pas le budget non plus
+				local boost = box(V(-5, 40, -5), V(5, 50, 5))
+				boost.vy = 100
+				guard.flight.lost = Rules.FLIGHT_LOST_MAX
+				Rules.judge(guard, V(0, 45, 0), V(0, 46, 0), 6.05, geometryOf({}, {}, { boost }))
+				T.expectEqual(guard.flight.lost, Rules.FLIGHT_LOST_MAX, "boost en l'air : budget gardé")
+				-- Trou pardonné sur le paquet même du boost : compté, pas rendu (relu en relecture croisée)
+				Rules.restart(guard.flight, 7, 46)
+				guard.flight.lost = Rules.FLIGHT_LOST_MAX / 2
+				Rules.judge(guard, V(0, 46, 0), V(0, 45, 0), 8, geometryOf({}, {}, { boost }))
+				T.expectEqual(guard.flight.lost, Rules.FLIGHT_LOST_MAX, "le trou de 1 s épuise le budget restant")
+			end
+		)
+
+		T.it("un tricheur qui plane en n'envoyant qu'un paquet par seconde est signalé en moins de 4 s", function()
+			local function path(t: number): Vector3
+				return V(10 * t, if t < 1 then STAND + 40 * t else STAND + 40, 0)
+			end
+			local list = {}
+			for _, packet in packets(path, 1) do
+				table.insert(list, packet)
+			end
+			for second = 2, 8 do
+				table.insert(list, { t = second + 0.05, pos = path(second) })
+			end
+			local verdicts = replay(list, geometryOf({ FLOOR }), V(0, STAND, 0))
+			T.expect(#verdicts > 0, "le vol à 1 paquet/s doit être signalé")
+			T.expect(verdicts[1].t < 1 + 4, describe(verdicts))
+		end)
+
 		T.it("une descente lente (parachute) depuis un toit est signalée", function()
 			local roof = box(V(-30, 0, -10), V(0, 100, 10))
 			local function path(t: number): Vector3
@@ -451,12 +600,13 @@ return function(T, Loader)
 				local ok, err = pcall(function()
 					local wall = box(V(19.5, 0, -10), V(20.5, 100, 10))
 					local geometry = geometryOf({ FLOOR, wall })
-					-- Plane à 40 studs depuis 1,5 s (enveloppe partie de là à l'arrêt), puis un paquet de plus et la traversée
+					-- Plane à 40 studs depuis 2,5 s (enveloppe partie de là à l'arrêt ; silence au-delà des trous pardonnés,
+					-- FLIGHT_LOST_MAX), puis un paquet de plus et la traversée
 					local guard = Rules.newGuard(0, V(18, 42.5, 0))
 					guard.fresh = false
 					Rules.restart(guard.flight, 0, 42.5)
-					Rules.judge(guard, V(18, 42.5, 0), V(19, 42.5, 0), 1.45, geometry)
-					local last = Rules.judge(guard, V(19, 42.5, 0), V(21, 42.5, 0), 1.5, geometry)
+					Rules.judge(guard, V(18, 42.5, 0), V(19, 42.5, 0), 2.45, geometry)
+					local last = Rules.judge(guard, V(19, 42.5, 0), V(21, 42.5, 0), 2.5, geometry)
 					T.expect(last ~= nil, "le paquet qui traverse doit être signalé")
 					T.expectEqual(last.rule, "flight")
 					T.expectEqual(last.enforce, true)

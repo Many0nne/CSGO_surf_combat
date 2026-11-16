@@ -37,6 +37,8 @@ local moveListener: ((Player, Model, Vector3, Vector3) -> ())? = nil
 local CORRECTION_RESEND = 1
 -- Période (s) de la boucle du vide (joueurs silencieux tombés dans le vide).
 local VOID_PERIOD = 0.25
+-- Attribut Workspace de mesure en Studio : remplace MovementGuardRules.FLIGHT_LOST_MAX (#382, voir init)
+local DEBUG_FLIGHT_LOST_MAX = "DebugFlightLostMax"
 
 -- Mort par chute fournie par KillZone : hauteur de mort de la map jouée, et mise à mort.
 export type FallHooks = { height: () -> number?, kill: (Model) -> () }
@@ -445,6 +447,21 @@ function CharacterSync.init(
 		tracks[player] = nil
 		correctionSeqs[player] = nil
 	end)
+	-- Mesure en Studio seulement (#382) : l'attribut Workspace DebugFlightLostMax remplace FLIGHT_LOST_MAX (0 =
+	-- ancienne règle, temps d'arrivée seul), nil le remet ; un require depuis le MCP chargerait une autre instance
+	if RunService:IsStudio() then
+		local default = MovementGuardRules.FLIGHT_LOST_MAX
+		-- Cette méthode permet d'appliquer l'attribut de mesure lorsqu'il change, ou au démarrage s'il est déjà posé.
+		local function applyDebugLostMax()
+			local value = workspace:GetAttribute(DEBUG_FLIGHT_LOST_MAX)
+			MovementGuardRules.FLIGHT_LOST_MAX = if type(value) == "number" then math.max(0, value) else default
+			print(string.format("[CharacterSync] FLIGHT_LOST_MAX = %.2f s", MovementGuardRules.FLIGHT_LOST_MAX))
+		end
+		workspace:GetAttributeChangedSignal(DEBUG_FLIGHT_LOST_MAX):Connect(applyDebugLostMax)
+		if workspace:GetAttribute(DEBUG_FLIGHT_LOST_MAX) ~= nil then
+			applyDebugLostMax()
+		end
+	end
 end
 
 -- Cette méthode permet d'écouter les déplacements des joueurs lorsque l'activité des gains en jouant (#401) les compte :
