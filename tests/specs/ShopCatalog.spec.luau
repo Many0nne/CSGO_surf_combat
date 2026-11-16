@@ -148,6 +148,21 @@ return function(T, Loader)
 			T.expectEqual(names(Shop.contents(crate, Inventory.ITEMS)), "BALISE")
 		end)
 
+		T.it("nomme une arme hors table comme le pochoir (#455)", function()
+			local crate = {
+				id = "crate.ak.neon",
+				name = "AK · NEON",
+				weapon = "weapon.ak47",
+				stripe = { 0, 0, 0 },
+				price = 1,
+				contents = { common = { "neon" } },
+			}
+			local items = { { id = "skin.ak.neon", type = "skin", appearance = "neon", weapon = "weapon.ak47" } }
+			local rows = Shop.contents(crate, items)
+			T.expectEqual(rows[1].weapon, "AK47")
+			T.expectEqual(Shop.stencil(crate), "NN-" .. rows[1].weapon)
+		end)
+
 		T.it("compose la ligne sous le nom", function()
 			T.expectEqual(
 				Shop.subtitle(Shop.crate("crate.awp.serie1"), Inventory.ITEMS),

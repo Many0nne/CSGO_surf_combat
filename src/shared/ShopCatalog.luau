@@ -113,6 +113,12 @@ ShopCatalog.ROWS = 2
 -- Nom court d'une arme sur la révélation (« AWP  ORAGE »)
 local WEAPON_LABELS = { ["weapon.awp"] = "AWP", ["weapon.m9bayonet"] = "M9" }
 
+-- Cette méthode permet de donner le nom court d'une arme lorsque la révélation ou le pochoir l'affiche : la table
+-- WEAPON_LABELS, sinon l'id en majuscules sans le préfixe `weapon.` (« weapon.ak47 » → « AK47 »).
+local function weaponLabel(weapon: string): string
+	return WEAPON_LABELS[weapon] or string.upper(string.match(weapon, "^weapon%.(.+)$") or weapon)
+end
+
 -- Cette méthode permet de trouver une caisse par son id lorsqu'un écran ou un remote la désigne ; nil si inconnue.
 function ShopCatalog.crate(id: string): Crate?
 	for _, crate in ShopCatalog.CRATES do
@@ -143,7 +149,7 @@ function ShopCatalog.contents(crate: Crate, items: { any }): { Row }
 						rarity = rarity,
 						name = item.name or string.upper(appearance),
 						skin = item.id,
-						weapon = WEAPON_LABELS[crate.weapon] or string.upper(crate.weapon),
+						weapon = weaponLabel(crate.weapon),
 						viewmodel = viewmodel,
 					})
 					break
@@ -363,9 +369,7 @@ function ShopCatalog.stencil(crate: { id: string?, weapon: string?, series: stri
 		end
 	end
 	local weapon = crate and crate.weapon
-	local label: string? = if weapon
-		then WEAPON_LABELS[weapon] or string.upper(string.match(weapon, "^weapon%.(.+)$") or weapon)
-		else nil
+	local label: string? = if weapon then weaponLabel(weapon) else nil
 	if code and label then
 		return code .. "-" .. label
 	end
