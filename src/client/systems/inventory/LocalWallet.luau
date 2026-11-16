@@ -20,6 +20,41 @@ function LocalWallet.dailyEarned(): number?
 	return EconomyRules.decodeDaily(player:GetAttribute(EconomyRules.DAILY_ATTRIBUTE), today)
 end
 
+local DAY_MARGIN = 1 -- s après minuit UTC avant de prévenir les écrans (le jour a bien changé côté serveur)
+
+local dayListeners: { [() -> ()]: boolean } = {}
+local dayTimerRunning = false
+
+-- Cette méthode permet de prévenir les écrans abonnés au gain du jour lorsque minuit UTC est passé (une seule
+-- minuterie partagée, relancée sur l'heure serveur à chaque jour, jamais de boucle par frame).
+local function runDayTimer()
+	if dayTimerRunning then
+		return
+	end
+	dayTimerRunning = true
+	task.spawn(function()
+		while true do
+			task.wait(EconomyRules.secondsUntilNextDay(workspace:GetServerTimeNow()) + DAY_MARGIN)
+			for listener in table.clone(dayListeners) do
+				listener()
+			end
+		end
+	end)
+end
+
+-- Cette méthode permet d'appeler `callback` maintenant, à chaque changement de l'attribut des gains du jour et à
+-- chaque changement de jour UTC lorsqu'un écran affiche `dailyEarned` ; renvoie une fonction de désabonnement.
+function LocalWallet.observeDaily(callback: () -> ()): () -> ()
+	callback()
+	local conn = player:GetAttributeChangedSignal(EconomyRules.DAILY_ATTRIBUTE):Connect(callback)
+	dayListeners[callback] = true
+	runDayTimer()
+	return function()
+		conn:Disconnect()
+		dayListeners[callback] = nil
+	end
+end
+
 -- Cette méthode permet de lire le solde du joueur lorsqu'un écran l'affiche ; nil tant qu'il n'est pas chargé.
 function LocalWallet.balance(): number?
 	return WalletRules.decode(player:GetAttribute(WalletRules.ATTRIBUTE))

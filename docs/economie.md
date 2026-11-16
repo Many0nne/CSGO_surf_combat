@@ -162,3 +162,8 @@ exactement 100 % (plus fort reste), visibles avant ACHETER. Caisses actuelles : 
 donc aucun arrondi. Piège : avec des chances qui ne tombent pas juste au dixième, le plus fort reste décale un
 affichage d'au plus 0,1 point, et une chance sous 0,05 % s'afficherait « 0 % » ; Roblox demande alors plus de
 décimales (quatre de plus que le premier chiffre non nul) ou la mention « Probabilities are rounded… ».
+
+**Gain du jour affiché** (#446) : tout écran qui montre `LocalWallet.dailyEarned()` (« GAINS DU JOUR » du shop, bandeau
+« PLAFOND DU JOUR ATTEINT » du `RoundHUD`) passe par `LocalWallet.observeDaily` : repeint à l'attribut `DailyCredits` et au
+changement de jour UTC (une minuterie partagée sur l'heure serveur). Piège : lire `dailyEarned()` seulement à ses propres
+événements laissait un affichage périmé à cheval sur minuit. Ne pas ajouter de minuterie par écran.
