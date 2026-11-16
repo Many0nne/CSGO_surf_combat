@@ -324,11 +324,20 @@ end
 -- désordre), majore la vitesse actuelle. Renvoie (honnête, dépassement en studs). Après un vol, l'enveloppe
 -- repart de ce point à l'arrêt : un joueur qui plane encore n'est signalé qu'une fois cette nouvelle marge épuisée,
 -- pas à chaque paquet.
-function MovementGuardRules.observe(flight: Flight, now: number, y: number, supported: boolean): (boolean, number)
+function MovementGuardRules.observe(
+	flight: Flight,
+	now: number,
+	y: number,
+	supported: boolean,
+	keepBudget: boolean?
+): (boolean, number)
 	advanceClock(flight, now)
 	if supported then
 		flight.anchored = false
-		flight.lost = 0
+		-- Budget des trous pardonnés rendu à l'atterrissage, pas à un boost touché en l'air (keepBudget)
+		if not keepBudget then
+			flight.lost = 0
+		end
 		flight.lastHigh = -math.huge
 		flight.lastAt, flight.lastY = now, y
 		return true, 0
@@ -407,12 +416,8 @@ function MovementGuardRules.judge(
 	elseif supported then
 		flight.boostVy = 0
 	end
-	local lost = flight.lost
-	local honest, excess = MovementGuardRules.observe(flight, now, pos.Y, supported or boostVy > 0)
 	-- Un boost touché en l'air relance l'enveloppe, pas le budget des trous pardonnés : seul un vrai support le rend
-	if boostVy > 0 and not supported then
-		flight.lost = lost
-	end
+	local honest, excess = MovementGuardRules.observe(flight, now, pos.Y, supported or boostVy > 0, not supported)
 	-- Un paquet n'est signalé qu'une fois : le vol s'il est bloquant (sinon le paquet serait appliqué), puis le noclip
 	-- (journal seul), puis le vol en journal seul
 	if not honest and (MovementGuardRules.ENFORCE_FLIGHT or not noclip) then

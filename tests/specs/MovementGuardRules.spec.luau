@@ -557,6 +557,11 @@ return function(T, Loader)
 				guard.flight.lost = Rules.FLIGHT_LOST_MAX
 				Rules.judge(guard, V(0, 45, 0), V(0, 46, 0), 6.05, geometryOf({}, {}, { boost }))
 				T.expectEqual(guard.flight.lost, Rules.FLIGHT_LOST_MAX, "boost en l'air : budget gardé")
+				-- Trou pardonné sur le paquet même du boost : compté, pas rendu (relu en relecture croisée)
+				Rules.restart(guard.flight, 7, 46)
+				guard.flight.lost = Rules.FLIGHT_LOST_MAX / 2
+				Rules.judge(guard, V(0, 46, 0), V(0, 45, 0), 8, geometryOf({}, {}, { boost }))
+				T.expectEqual(guard.flight.lost, Rules.FLIGHT_LOST_MAX, "le trou de 1 s épuise le budget restant")
 			end
 		)
 
