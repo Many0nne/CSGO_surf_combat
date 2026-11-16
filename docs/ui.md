@@ -757,9 +757,10 @@ l'étiquette BIENTÔT jusqu'à #393 (voir « Achat d'une caisse »).
   EXCEPTIONNEL 5 %, chacune partagée à parts égales entre ses skins (AWP : BALISE, MAQUIS, TREMPE, MUE à 17,5 %, PAN !,
   CIRCUIT à 12,5 %, ORAGE, CISELURE à 2,5 % ; M9 : COUCHANT, RECUIT à 35 %, PATROUILLE, ART DÉCO à 12,5 %, RELEVÉ, ÉMAIL
   à 2,5 %). Raretés reprises des anciennes caisses par série, à revoir par l'utilisateur. Série FILM (#433, voir
-  `docs/assets.md`) : « AWP · FILM » (bande vert phosphore) et « M9 · FILM » (bande os) après la série 1, un skin
-  hommage chacune (REMORQUEUR seul EXCEPTIONNEL à 5 % ; HÔTE avec RELEVÉ à 2,5 %), complétées par des skins de la
-  série 1 à leur rareté d'origine. Le pochoir « S1-0332 » du couvercle est dans le mesh : toutes les caisses le portent. Doublons possibles : le
+  `docs/assets.md`) : « AWP · FILM » (bande vert phosphore) et « M9 · FILM » (bande os) après la série 1, deux skins
+  hommage chacune en EXCEPTIONNEL à 2,5 % (AWP : REMORQUEUR et LOGOGRAMME ; M9 : HÔTE et SPHINX, #436), complétées par
+  des skins de la série 1 à leur rareté d'origine (AWP : BALISE, MUE, CIRCUIT, PAN ! ; M9 : COUCHANT, RECUIT,
+  PATROUILLE, ART DÉCO). Le pochoir « S1-0332 » du couvercle est dans le mesh : toutes les caisses le portent. Doublons possibles : le
   tirage suit les chances affichées même si le skin est déjà possédé ; un achat rembourse alors une part du prix
   (#393), l'ouverture de test ne donne rien de plus. Tout est dans `ShopCatalog`. L'étiquette de la vitrine (3,4 studs) tient « AWP · SÉRIE 1 » + « 500 CRÉDITS »
   (vérifié en Studio) ; sous-titre de la vue d'ensemble « UNE PAR ARME ET PAR SÉRIE ». Depuis #391, le prix est le jeton

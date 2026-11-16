@@ -70,7 +70,8 @@ ShopCatalog.CRATES = {
 			exceptional = { "releve", "email" },
 		},
 	},
-	-- Série FILM (#433) : un skin hommage par arme, complétée de skins de la série 1 (même rareté)
+	-- Série FILM (#433) : des skins hommage par arme (EXCEPTIONNEL), complétés de skins de la série 1 (même rareté) ;
+	-- chaque nouvel hommage prend la place d'un skin de la série 1 (#436 : LOGOGRAMME pour MAQUIS, SPHINX pour RELEVÉ)
 	{
 		id = "crate.awp.film",
 		name = "AWP · FILM",
@@ -78,9 +79,9 @@ ShopCatalog.CRATES = {
 		stripe = { 110, 230, 130 }, -- vert phosphore de l'écran de REMORQUEUR
 		price = 500,
 		contents = {
-			common = { "balise", "maquis", "mue" },
+			common = { "balise", "mue" },
 			rare = { "circuit", "pan" },
-			exceptional = { "remorqueur" },
+			exceptional = { "remorqueur", "logogramme" },
 		},
 	},
 	{
@@ -92,7 +93,7 @@ ShopCatalog.CRATES = {
 		contents = {
 			common = { "couchant", "recuit" },
 			rare = { "patrouille", "artdeco" },
-			exceptional = { "hote", "releve" },
+			exceptional = { "hote", "sphinx" },
 		},
 	},
 } :: { Crate }
