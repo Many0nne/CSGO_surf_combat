@@ -428,12 +428,25 @@ return function(T, Loader)
 	end)
 
 	T.describe("ShopCatalog : pochoir du couvercle (#434)", function()
-		T.it("série et arme lues dans le catalogue : quatre caisses, quatre pochoirs", function()
-			local texts = {}
+		T.it("série et arme lues dans le catalogue", function()
+			T.expectEqual(Shop.stencil(Shop.crate("crate.awp.serie1")), "S1-AWP")
+			T.expectEqual(Shop.stencil(Shop.crate("crate.m9.serie1")), "S1-M9")
+			T.expectEqual(Shop.stencil(Shop.crate("crate.awp.film")), "FM-AWP")
+			T.expectEqual(Shop.stencil(Shop.crate("crate.m9.film")), "FM-M9")
+		end)
+
+		T.it("chaque caisse du catalogue a un pochoir à elle", function()
+			local seen = {}
 			for _, crate in Shop.CRATES do
-				table.insert(texts, Shop.stencil(crate))
+				local text = Shop.stencil(crate)
+				T.expect(text ~= "" and not seen[text], crate.id .. " : pochoir vide ou déjà pris (" .. text .. ")")
+				seen[text] = true
 			end
-			T.expectEqual(table.concat(texts, ","), "S1-AWP,S1-M9,FM-AWP,FM-M9")
+		end)
+
+		T.it("id de série avec séparateurs : le code garde la série", function()
+			T.expectEqual(Shop.stencil({ id = "crate.awp.serie-2", weapon = "weapon.awp" }), "S2-AWP")
+			T.expectEqual(Shop.stencil({ id = "crate.awp.dragon_lore", weapon = "weapon.awp" }), "DE-AWP")
 		end)
 
 		T.it("nouvelle série ou nouvelle arme : texte dérivé sans table à compléter", function()

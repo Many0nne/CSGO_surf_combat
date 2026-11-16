@@ -770,7 +770,7 @@ l'étiquette BIENTÔT jusqu'à #393 (voir « Achat d'une caisse »).
   EXCEPTIONNEL ÉMAIL, RECUIT ; LÉGENDAIRE COUCHANT. Série FILM (#433, voir `docs/assets.md`) : « AWP · FILM » (bande
   vert phosphore) et « M9 · FILM » (bande os) après la série 1, des skins hommage (REMORQUEUR, LOGOGRAMME ; HÔTE, SPHINX,
   #436) complétés de skins de la série 1. Ouverture : 4e palier de couleur LÉGENDAIRE (paliers sur les bouffées de
-  2,25 / 2,85 / 3,6 s, avant la tension) et tenue de la silhouette de 1,1 s, la plus longue. Le pochoir « S1-0332 » du couvercle est dans le mesh : toutes les caisses le portent. Doublons possibles : le
+  2,25 / 2,85 / 3,6 s, avant la tension) et tenue de la silhouette de 1,1 s, la plus longue. Le pochoir du couvercle est posé par le jeu, propre à chaque caisse (« S1-AWP », « FM-M9 », #434, `docs/assets.md`). Doublons possibles : le
   tirage suit les chances affichées même si le skin est déjà possédé ; un achat rembourse alors une part du prix
   (#393), l'ouverture de test ne donne rien de plus. Tout est dans `ShopCatalog`. L'étiquette de la vitrine (3,4 studs) tient « AWP · SÉRIE 1 » + « 500 CRÉDITS »
   (vérifié en Studio) ; sous-titre de la vue d'ensemble « UNE PAR ARME ET PAR SÉRIE ». Depuis #391, le prix est le jeton

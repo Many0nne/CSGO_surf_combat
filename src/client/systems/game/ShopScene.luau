@@ -249,7 +249,11 @@ local function crate(parent: Instance, frame: Frame, stripe: Color3?, width: num
 		text.BackgroundTransparency = 1
 		text.Size = UDim2.fromScale(1, 1)
 		text.FontFace = UITheme.Fonts.Display
-		text.TextSize = STENCIL_TEXT
+		-- Taille du pochoir d'origine, réduite pour un texte trop long (arme sans nom court) au lieu d'être coupé
+		text.TextScaled = true
+		local maxSize = Instance.new("UITextSizeConstraint")
+		maxSize.MaxTextSize = STENCIL_TEXT
+		maxSize.Parent = text
 		text.TextColor3 = STENCIL_INK
 		text.Text = stencil
 		text.Parent = gui

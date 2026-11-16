@@ -342,14 +342,20 @@ function ShopCatalog.priceLabel(crate: Crate): string
 end
 
 -- Cette méthode permet de composer le pochoir peint sur le couvercle d'une caisse (« S1-AWP », « FM-M9 ») lorsque la
--- salle du shop la pose (#434) : code de la série lu dans le dernier segment de l'id (`serie<n>` → `S<n>`, sinon
--- première et dernière lettre : `film` → `FM`), puis nom court de l'arme ; repli sur l'un des deux, ou "" sans rien.
+-- salle du shop la pose (#434) : code de la série lu après `crate.<arme>.` dans l'id (`serie<n>` → `S<n>`, sinon
+-- première et dernière lettre ou chiffre : `film` → `FM`), puis nom court de l'arme ; repli sur l'un des deux, ou "".
+-- Deux séries d'une arme au même code (film, foam) : le test d'unicité du catalogue le signale.
 function ShopCatalog.stencil(crate: { id: string?, weapon: string? }?): string
-	local series = crate and crate.id and string.match(crate.id, "^crate%.[^.]+%.(%w+)$")
+	local series = crate and crate.id and string.match(crate.id, "^crate%.[^.]+%.(.+)$")
 	local code: string? = nil
 	if series then
-		local number = string.match(series, "^serie(%d+)$")
-		code = if number then "S" .. number else string.upper(string.sub(series, 1, 1) .. string.sub(series, -1))
+		local letters = string.gsub(string.lower(series), "[^%w]", "")
+		local number = string.match(letters, "^serie(%d+)$")
+		if number then
+			code = "S" .. number
+		elseif letters ~= "" then
+			code = string.upper(string.sub(letters, 1, 1) .. string.sub(letters, -1))
+		end
 	end
 	local weapon = crate and crate.weapon
 	local label: string? = if weapon
