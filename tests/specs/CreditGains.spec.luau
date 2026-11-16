@@ -1,5 +1,6 @@
 -- CreditGains (#394) avec un portefeuille et des horloges simulés : kills crédités tout de suite (joueur +5, bot +1),
--- manche jouée (kill ou 120 s en vie) et victoire en fin de manche, plafond de manche puis du jour, rien en
+-- manche jouée (kill, ou 120 s en vie avec une activité réelle : portée ou touche, #401) et victoire en fin de
+-- manche, plafond de manche puis du jour, rien en
 -- entraînement, hors manche active ou si le solde ne peut pas changer, attribut RoundCredits du bandeau.
 return function(T, Loader)
 	local DAY = 20407
@@ -52,6 +53,23 @@ return function(T, Loader)
 		env.Gains = Gains
 		env.Economy = Economy
 		return env
+	end
+
+	-- Cette méthode permet de construire une position (seuls X, Y, Z sont lus) lorsqu'un test simule un déplacement.
+	local function pos(x: number, z: number, y: number?)
+		return { X = x, Y = y or 0, Z = z }
+	end
+
+	-- Cette méthode permet de simuler un joueur qui s'éloigne de `distance` studs en ligne droite depuis `startX` (pas
+	-- de 10 studs, comme des positions acceptées par CharacterSync) lorsqu'un test a besoin d'une activité réelle.
+	local function walk(env, player, character, distance: number, startX: number?)
+		local x = startX or 0
+		local target = x + distance
+		while x < target do
+			local step = math.min(10, target - x)
+			env.Gains.onMove(player, character, pos(x, 0), pos(x + step, 0))
+			x += step
+		end
 	end
 
 	local nextId = 0
@@ -124,6 +142,8 @@ return function(T, Loader)
 			local a, b = participant(alice), participant(bob)
 			env.Gains.onSpawn(alice)
 			env.Gains.onSpawn(bob)
+			walk(env, alice, nil, env.Economy.PLAYED_MIN_REACH)
+			walk(env, bob, nil, env.Economy.PLAYED_MIN_REACH)
 			env.clock = 70
 			env.Gains.onDespawn(alice) -- mort à 70 s
 			env.Gains.onDespawn(bob)
@@ -145,6 +165,7 @@ return function(T, Loader)
 			env.Gains.onSpawn(alice, second) -- réapparition, le premier corps est encore là
 			env.clock = 20
 			env.Gains.onDespawn(alice, first) -- corps détruit après coup : ignoré
+			env.Gains.onHit(alice)
 			env.clock = 125
 			env.Gains.onRoundEnd({ participant(alice) }, nil)
 			T.expectEqual(env.credited.alice, 15, "10 + 115 s en vie")
@@ -227,6 +248,170 @@ return function(T, Loader)
 			local bot = participant(nil)
 			env.Gains.onRoundEnd({ bot }, bot)
 			T.expectEqual(next(env.credited), nil)
+		end)
+	end)
+
+	T.describe("CreditGains : activité réelle (#401)", function()
+		T.it("AFK sans kill, 300 s en vie, immobile ou qui tourne sur place : pas crédité", function()
+			local env = setup()
+			local alice = makePlayer("alice")
+			local char = {}
+			env.Gains.onSpawn(alice, char)
+			-- Tourne sur place : positions acceptées identiques (seul le cap change)
+			for _ = 1, 100 do
+				env.Gains.onMove(alice, char, pos(5, 5), pos(5, 5))
+			end
+			-- Saute sur place : la hauteur ne compte pas
+			env.Gains.onMove(alice, char, pos(5, 5), pos(5, 5, 8))
+			env.clock = 300
+			env.Gains.onRoundEnd({ participant(alice) }, nil)
+			T.expectEqual(env.credited.alice, nil)
+			T.expectEqual(alice.attributes.RoundCredits, 0)
+		end)
+
+		T.it("actif sans kill : éloigné de son point d'apparition ou touche, crédité", function()
+			local env = setup()
+			local alice, bob = makePlayer("alice"), makePlayer("bob")
+			local a, b = participant(alice), participant(bob)
+			env.Gains.onSpawn(alice)
+			env.Gains.onSpawn(bob)
+			walk(env, alice, nil, env.Economy.PLAYED_MIN_REACH)
+			env.Gains.onHit(bob)
+			env.clock = 130
+			env.Gains.onRoundEnd({ a, b }, nil)
+			T.expectEqual(env.credited.alice, 15, "portée")
+			T.expectEqual(env.credited.bob, 15, "touche")
+		end)
+
+		T.it("avec un kill : crédité comme avant, sans activité ni temps en vie", function()
+			local env = setup()
+			local alice = makePlayer("alice")
+			local a = participant(alice)
+			env.Gains.onSpawn(alice)
+			env.Gains.onKill(a, participant(nil))
+			env.clock = 10
+			env.Gains.onRoundEnd({ a }, nil)
+			T.expectEqual(env.credited.alice, 16, "1 (bot) + 15")
+		end)
+
+		T.it("portée juste sous le seuil : pas crédité", function()
+			local env = setup()
+			local alice = makePlayer("alice")
+			env.Gains.onSpawn(alice)
+			walk(env, alice, nil, env.Economy.PLAYED_MIN_REACH - 1)
+			env.clock = 300
+			env.Gains.onRoundEnd({ participant(alice) }, nil)
+			T.expectEqual(env.credited.alice, nil)
+		end)
+
+		T.it("hors vie ou hors manche active : activité ignorée", function()
+			local env = setup()
+			local alice = makePlayer("alice")
+			local first, second = {}, {}
+			-- Avant toute apparition (menu) : rien
+			walk(env, alice, nil, 5000)
+			env.Gains.onHit(alice)
+			env.Gains.onSpawn(alice, first)
+			env.clock = 60
+			env.Gains.onDespawn(alice, first)
+			-- Mort : plus en vie, rien n'est compté
+			walk(env, alice, first, 5000)
+			env.Gains.onHit(alice)
+			env.Gains.onSpawn(alice, second)
+			-- Paquet tardif de l'ancien personnage : ignoré
+			walk(env, alice, first, 5000)
+			env.clock = 130
+			-- Bannière de fin : manche plus active
+			env.active = false
+			walk(env, alice, second, 5000)
+			env.Gains.onHit(alice)
+			env.active = true
+			env.Gains.onRoundEnd({ participant(alice) }, nil)
+			T.expectEqual(env.credited.alice, nil, "130 s en vie, aucune activité comptée")
+		end)
+
+		T.it("aller-retour sur place, longtemps : la portée reste celle de l'aller, pas crédité", function()
+			local env = setup()
+			local alice = makePlayer("alice")
+			env.Gains.onSpawn(alice)
+			for _ = 1, 1000 do
+				env.Gains.onMove(alice, nil, pos(0, 0), pos(5, 0))
+				env.Gains.onMove(alice, nil, pos(5, 0), pos(0, 0))
+			end
+			env.clock = 300
+			env.Gains.onRoundEnd({ participant(alice) }, nil)
+			T.expectEqual(env.credited.alice, nil, "10 000 studs de chemin, 5 studs de portée")
+		end)
+
+		T.it("portée mesurée depuis le point d'apparition de chaque vie, additionnée sur les vies", function()
+			local env = setup()
+			local alice, bob = makePlayer("alice"), makePlayer("bob")
+			local a, b = participant(alice), participant(bob)
+			local first, second = {}, {}
+			-- Chaque vie d'Alice s'éloigne d'un peu moins de la moitié du seuil : somme sous le seuil
+			local half = env.Economy.PLAYED_MIN_REACH // 2 - 10
+			-- Alice : vie 1 près de x = 0, vie 2 apparue à x = 5000 (le saut entre les deux ne compte pas)
+			env.Gains.onSpawn(alice, first)
+			env.Gains.onSpawn(bob)
+			walk(env, alice, first, half)
+			env.clock = 60
+			env.Gains.onDespawn(alice, first)
+			env.Gains.onSpawn(alice, second)
+			walk(env, alice, second, half, 5000)
+			-- Bob : une seule vie qui s'éloigne assez, puis revient à son point d'apparition
+			walk(env, bob, nil, env.Economy.PLAYED_MIN_REACH)
+			env.Gains.onMove(bob, nil, pos(env.Economy.PLAYED_MIN_REACH, 0), pos(0, 0))
+			env.clock = 130
+			env.Gains.onRoundEnd({ a, b }, nil)
+			T.expectEqual(env.credited.alice, nil, "deux vies sous la moitié du seuil")
+			T.expectEqual(env.credited.bob, 15, "revenir au départ ne retire rien")
+		end)
+
+		T.it("joueur actif tué souvent : portée de ses vies additionnée, crédité", function()
+			local env = setup()
+			local alice = makePlayer("alice")
+			local reach = env.Economy.PLAYED_MIN_REACH
+			-- 4 vies de 40 s, chacune s'éloigne d'un peu plus du quart du seuil
+			for life = 1, 4 do
+				local char = {}
+				env.Gains.onSpawn(alice, char)
+				walk(env, alice, char, math.ceil(reach / 4) + 1, life * 10000)
+				env.clock += 40
+				env.Gains.onDespawn(alice, char)
+			end
+			env.Gains.onRoundEnd({ participant(alice) }, nil)
+			T.expectEqual(env.credited.alice, 15, "160 s en vie, portée cumulée au-dessus du seuil")
+		end)
+
+		T.it(
+			"pas signalé ou téléportation (sans pas transmis) : n'éloigne pas, même via le paquet suivant",
+			function()
+				local env = setup()
+				local alice = makePlayer("alice")
+				env.Gains.onSpawn(alice)
+				walk(env, alice, nil, 50)
+				-- Noclip de 50 à 2000 signalé (journal seul) : pas transmis par CharacterSync ; le paquet propre suivant
+				-- part de 2000
+				env.Gains.onMove(alice, nil, pos(2000, 0), pos(2001, 0))
+				env.clock = 300
+				env.Gains.onRoundEnd({ participant(alice) }, nil)
+				T.expectEqual(env.credited.alice, nil, "portée 51 studs")
+			end
+		)
+
+		T.it("l'activité repart de zéro à chaque manche", function()
+			local env = setup()
+			local alice = makePlayer("alice")
+			local a = participant(alice)
+			env.Gains.onSpawn(alice)
+			env.Gains.onHit(alice)
+			env.clock = 130
+			env.Gains.onRoundEnd({ a }, nil)
+			T.expectEqual(env.credited.alice, 15)
+			env.Gains.onSpawn(alice)
+			env.clock = 300
+			env.Gains.onRoundEnd({ a }, nil)
+			T.expectEqual(env.credited.alice, 15, "seconde manche AFK : rien de plus")
 		end)
 	end)
 end

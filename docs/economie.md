@@ -3,6 +3,54 @@
 Règles d'argent réel du jeu (#395). Stockage des crédits, contrat de `InventoryStore.transact` et achat d'une caisse :
 `docs/architecture.md` (« Crédits », « Achat d'une caisse »). Interface : `docs/ui.md` (« Packs de crédits »).
 
+## Manche jouée : activité réelle (#401)
+
+Barème et plafonds des gains en jouant (#394) : `docs/architecture.md` (« Gains en jouant »). Une manche jouée
+rapporte +15. Avant #401, 120 s en vie suffisaient sans kill : un joueur immobile que les bots ne tuaient pas
+atteignait le plafond du jour (250) en ~17 manches sans jouer.
+
+- Règle (`EconomyRules.played`) : au moins un kill, **ou** `PLAYED_ALIVE_SECONDS` (120 s) cumulées en vie dans la
+  manche **et** une activité réelle (`EconomyRules.isActive`) : une portée d'au moins `PLAYED_MIN_REACH` studs, ou
+  `PLAYED_MIN_HITS` (1) touche. Avec un kill, rien ne change.
+- Tout est mesuré par le serveur, jamais déclaré par le client (`CreditGains.onMove`, `onHit`) :
+  - **portée** : plus grand écart horizontal au point d'apparition de chaque vie, additionné sur les vies de la
+    manche (un joueur actif souvent tué la cumule).
+    L'écart est la **somme des seuls pas propres** (vecteurs `to - from` reçus de `CharacterSync.setMoveListener`,
+    paquet accepté **sans signalement** : seau de distance, noclip, vol, y compris en journal seul), pas une
+    différence de positions absolues : un pas signalé, une téléportation (`CharacterSync.teleport`) ou le saut entre
+    deux vies ne sont jamais ajoutés, même par le paquet propre qui suit. Pas une distance de chemin non plus : un
+    aller-retour de quelques studs répété (script, tremblement sur une pente) ne la fait pas monter. Hauteur ignorée
+    (chute, saut sur place) ;
+  - **touche** : tir ou coup de mêlée validé par le `Validator` **et** qui a fait des dégâts (`applyHit` non nil : pas
+    un corps, pas une cible sous ForceField). Un tir dans le vide ne compte pas : sinon un seul tir en l'air par
+    manche suffirait à un AFK ;
+  - seulement pendant une vie dans une manche active, avec le personnage de cette vie : rien au menu, mort, pendant la
+    bannière de fin, ni pour un paquet tardif d'un ancien personnage.
+- Limite connue : un script qui déplace le personnage loin de son point d'apparition passe. Le plafond du jour borne
+  ce cas.
+- Studio : la ligne `[CreditGains] fin de manche …` donne kills, temps en vie, portée (studs) et touches.
+- Tests : `tests/specs/EconomyRules.spec.luau` (règle, seuil, écart horizontal), `tests/specs/CreditGains.spec.luau`
+  (« activité réelle » : AFK immobile ou qui tourne sur place non crédité, aller-retour non crédité, actif par portée
+  ou touche crédité, kill comme avant, origine reprise à chaque vie et portée additionnée, pas signalé non compté, hors vie et hors manche
+  ignorés).
+
+Mesures (Studio, map jouée, `[CreditGains]`) :
+
+| Scénario (150 s en vie, aucun kill ni touche) | Portée | Avant #401 | Après #401 |
+|---|---|---|---|
+| Surf : piste enregistrée `Dizzy` rejouée (`PerfRun`, 137 s, bots passifs) | 538 studs | +15 | +15 |
+| Immobile (rejeu interrompu, bots passifs) | 0 stud | +15 | +0 |
+
+- Mesure du 16/11/2026, Studio, map `Dizzy`, manche de 150 s (`RoundDuration`). « Avant » se déduit de la même ligne
+  `[CreditGains]` (150 s en vie suffisaient) : la règle de `main` n'a pas été rejouée à part.
+- La portée d'un surf reste modeste : la map fait ~560 × 600 studs, et un surf revient souvent près de son départ.
+  Pendant ce rejeu honnête, l'anti-vol (journal seul) a signalé une vingtaine de paquets : ces pas sont exclus,
+  la portée réelle est un peu plus grande. D'où **`PLAYED_MIN_REACH` = 150** : ~3,5 fois sous le surf mesuré, loin
+  au-dessus de l'immobile (0 : sans paquet de position différent, rien ne s'ajoute, tourner sur place ne change que
+  le cap).
+- Un joueur qui campe à moins de 150 studs de son apparition sans toucher personne pendant toute la manche ne gagne
+  plus la manche jouée : cas assumé, il n'est pas distinguable d'un AFK par ces mesures.
+
 ## Packs de crédits (Developer Products)
 
 - Config : `src/shared/CreditPacks.luau` (`PACKS` : id du pack, `productId`, crédits, prix affiché, nom du produit).

@@ -9,14 +9,29 @@ return function(T, Loader)
 			T.expectEqual(Economy.killGain(true), 1)
 		end)
 
-		T.it("manche jouée : au moins un kill ou 120 s en vie", function()
-			T.expect(Economy.played(1, 0))
-			T.expect(Economy.played(0, 120))
-			T.expect(not Economy.played(0, 119.9), "AFK écarté")
-			T.expectEqual(Economy.roundGain(0, 30, false), 0)
-			T.expectEqual(Economy.roundGain(0, 150, false), 15)
-			T.expectEqual(Economy.roundGain(3, 10, true), 40, "manche jouée + victoire")
-			T.expectEqual(Economy.roundGain(0, 0, true), 0, "pas jouée : rien, même désignée vainqueur")
+		T.it("manche jouée : au moins un kill, ou 120 s en vie avec une activité réelle", function()
+			local idle = { reach = 0, hits = 0 }
+			local moving = { reach = Economy.PLAYED_MIN_REACH, hits = 0 }
+			local hitting = { reach = 0, hits = 1 }
+			T.expect(Economy.played(1, 0, idle), "kill : jouée comme avant, même sans activité")
+			T.expect(Economy.played(0, 120, moving), "s'est éloigné de son point d'apparition")
+			T.expect(Economy.played(0, 120, hitting), "a touché")
+			T.expect(not Economy.played(0, 119.9, moving), "pas assez en vie")
+			T.expect(not Economy.played(0, 600, idle), "AFK que personne ne tue : écarté (#401)")
+			T.expect(
+				not Economy.played(0, 600, { reach = Economy.PLAYED_MIN_REACH - 1, hits = 0 }),
+				"juste sous le seuil de portée"
+			)
+			T.expectEqual(Economy.roundGain(0, 30, moving, false), 0)
+			T.expectEqual(Economy.roundGain(0, 150, moving, false), 15)
+			T.expectEqual(Economy.roundGain(0, 150, idle, false), 0, "AFK : rien")
+			T.expectEqual(Economy.roundGain(3, 10, idle, true), 40, "manche jouée + victoire")
+			T.expectEqual(Economy.roundGain(0, 0, idle, true), 0, "pas jouée : rien, même désignée vainqueur")
+		end)
+
+		T.it("longueur d'un écart horizontal", function()
+			T.expectEqual(Economy.horizontalLength(3, 4), 5)
+			T.expectEqual(Economy.horizontalLength(0, 0), 0)
 		end)
 
 		T.it("pas de gain en entraînement ni hors manche active", function()
@@ -45,7 +60,7 @@ return function(T, Loader)
 				earned += Economy.capRound(Economy.killGain(false), earned)
 			end
 			T.expectEqual(earned, 60)
-			earned += Economy.capRound(Economy.roundGain(12, 300, true), earned)
+			earned += Economy.capRound(Economy.roundGain(12, 300, { reach = 0, hits = 0 }, true), earned)
 			T.expectEqual(earned, 60)
 		end)
 	end)

@@ -495,6 +495,8 @@ CharacterSync.init(
 	KillZone.check,
 	{ height = KillZone.height, kill = KillZone.kill }
 )
+-- Activité réelle de la manche (#401) : portée d'un joueur sur ses positions acceptées sans signalement
+CharacterSync.setMoveListener(CreditGains.onMove)
 
 -- Rejeu d'un parcours de mesure (#379, debug/PerfReplay) : replace le joueur sur un point de contrôle de la piste.
 -- Seulement dans Studio ou pour le créateur du jeu publié (mêmes droits que l'overlay F3) ; les autres sont ignorés.
@@ -613,7 +615,13 @@ local function onHitVerdict(
 		-- Touche acceptée, même sans ShotFired ni WeaponAction avant elle : la protection d'apparition tombe (#288).
 		-- Personnage actuel : le rembobinage (PositionHistory.MAX_REWIND, 0,4 s) est bien plus court que RESPAWN_DELAY
 		SpawnProtection.drop(player.Character)
-		return applyHit(Participants.fromPlayer(player), targetCharacter, damage, isHeadshot)
+		local outcome = applyHit(Participants.fromPlayer(player), targetCharacter, damage, isHeadshot)
+		-- Activité réelle de la manche (#401) : seulement une touche qui a fait des dégâts (pas un corps, pas un
+		-- ForceField)
+		if outcome then
+			CreditGains.onHit(player)
+		end
+		return outcome
 	end
 	return nil
 end

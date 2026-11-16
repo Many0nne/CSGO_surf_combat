@@ -4,7 +4,9 @@
 -- par le portefeuille (WalletStore.addPlayGain, réappliqué à l'écriture).
 -- Pas de gain : serveur d'entraînement, kill hors manche active, solde qui ne peut pas changer (pas chargé, sauvegarde
 -- coupée : Studio sans accès aux API). Temps en vie : compté de l'apparition dans une manche active jusqu'à la mort,
--- au retour au menu ou à la fin de la manche (`onSpawn`, `onDespawn`).
+-- au retour au menu ou à la fin de la manche (`onSpawn`, `onDespawn`). Activité réelle (#401, manche sans kill) :
+-- portée (`onMove` : plus grand écart horizontal au point d'apparition, en cumulant les seuls pas acceptés sans
+-- signalement par CharacterSync) et touches qui ont fait des dégâts (`onHit`), comptées seulement pendant une vie.
 -- Attribut informatif `RoundCredits` du Player (gains de la manche, posé en fin de manche, effacé à chaque apparition),
 -- lu par le bandeau de fin de manche (RoundHUD) avec `DailyCredits` (InventoryStore). Aucun remote.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -24,8 +26,21 @@ export type Deps = {
 	log: ((string) -> ())?,
 }
 -- Manche d'un joueur : kills (comptés même au plafond, pour « manche jouée »), crédits gagnés, secondes en vie
--- cumulées, début de la vie en cours (nil : pas en vie dans la manche) et son personnage
-type RoundState = { kills: number, earned: number, alive: number, aliveSince: number?, character: Instance? }
+-- cumulées, début de la vie en cours (nil : pas en vie dans la manche) et son personnage, activité réelle (#401 :
+-- écart horizontal au point d'apparition de la vie en cours, somme des seuls pas propres, et sa plus grande longueur
+-- dans cette vie ; portée des vies terminées de la manche, additionnées ; touches qui ont fait des dégâts)
+type RoundState = {
+	kills: number,
+	earned: number,
+	alive: number,
+	aliveSince: number?,
+	character: Instance?,
+	offsetX: number,
+	offsetZ: number,
+	lifeReach: number,
+	reach: number,
+	hits: number,
+}
 
 local CreditGains = {}
 
@@ -41,7 +56,18 @@ end
 
 -- Cette méthode permet de créer une manche vide lorsqu'un joueur y gagne ou y apparaît pour la première fois.
 local function newRound(): RoundState
-	return { kills = 0, earned = 0, alive = 0, aliveSince = nil, character = nil }
+	return {
+		kills = 0,
+		earned = 0,
+		alive = 0,
+		aliveSince = nil,
+		character = nil,
+		offsetX = 0,
+		offsetZ = 0,
+		lifeReach = 0,
+		reach = 0,
+		hits = 0,
+	}
 end
 
 -- Cette méthode permet de lire (ou créer) la manche d'un joueur lorsqu'un gain ou une apparition la touche.
@@ -91,6 +117,9 @@ local function endLife(d: Deps, state: RoundState)
 		state.aliveSince = nil
 	end
 	state.character = nil
+	-- Portée de la vie close ajoutée à la manche : un joueur actif tué souvent la cumule sur ses vies
+	state.reach += state.lifeReach
+	state.offsetX, state.offsetZ, state.lifeReach = 0, 0, 0
 end
 
 -- Cette méthode permet de démarrer le temps en vie d'un joueur et d'effacer les gains de sa manche précédente lorsque
@@ -109,15 +138,61 @@ function CreditGains.onSpawn(player: Player, character: Instance?)
 	state.character = character
 end
 
+-- Cette méthode permet de savoir si un personnage est celui de la vie en cours lorsqu'un événement le concerne (nil
+-- d'un côté ou de l'autre : pas de distinction possible, accepté).
+local function isCurrentCharacter(state: RoundState, character: Instance?): boolean
+	return character == nil or state.character == nil or character == state.character
+end
+
 -- Cette méthode permet d'arrêter le temps en vie d'un joueur lorsque son personnage meurt ou disparaît ; un autre
 -- personnage que celui de la vie en cours (corps détruit en retard) est ignoré.
 function CreditGains.onDespawn(player: Player, character: Instance?)
 	local d = deps
 	local state = rounds[player]
-	if not d or not state or (character ~= nil and state.character ~= nil and character ~= state.character) then
+	if not d or not state or not isCurrentCharacter(state, character) then
 		return
 	end
 	endLife(d, state)
+end
+
+-- Cette méthode permet de lire la manche d'un joueur lorsque son activité est comptée : nil s'il n'est pas en vie dans
+-- une manche active avec ce personnage (bannière de fin, corps d'une vie passée, personnage d'avant un retour au menu).
+local function livingRound(d: Deps, player: Player, character: Instance?): RoundState?
+	local state = rounds[player]
+	if not state or state.aliveSince == nil or not d.roundActive() or not isCurrentCharacter(state, character) then
+		return nil
+	end
+	return state
+end
+
+-- Cette méthode permet d'ajouter un pas à l'écart au point d'apparition, et de relever la portée de la vie, lorsque
+-- CharacterSync accepte une position du joueur sans la signaler (`from` = position acceptée précédente). Seuls ces pas
+-- sont cumulés : un déplacement refusé, signalé (noclip, vol en journal seul) ou téléporté n'éloigne jamais.
+function CreditGains.onMove(player: Player, character: Instance?, from: Vector3, to: Vector3)
+	local d = deps
+	if not d then
+		return
+	end
+	local state = livingRound(d, player, character)
+	if not state then
+		return
+	end
+	state.offsetX += to.X - from.X
+	state.offsetZ += to.Z - from.Z
+	state.lifeReach = math.max(state.lifeReach, EconomyRules.horizontalLength(state.offsetX, state.offsetZ))
+end
+
+-- Cette méthode permet de compter une touche à l'activité de la manche lorsqu'un tir ou un coup de mêlée du joueur,
+-- validé par le serveur, a fait des dégâts.
+function CreditGains.onHit(player: Player)
+	local d = deps
+	if not d then
+		return
+	end
+	local state = livingRound(d, player, nil)
+	if state then
+		state.hits += 1
+	end
 end
 
 -- Cette méthode permet de créditer manche jouée et victoire des joueurs en jeu et de publier leurs gains (`RoundCredits`)
@@ -139,7 +214,8 @@ function CreditGains.onRoundEnd(participants: { Participant }, winner: Participa
 			local alive = state.alive + (if state.aliveSince then math.max(d.clock() - state.aliveSince, 0) else 0)
 			local won = winner ~= nil and winner.id == participant.id
 			-- Même pour 0 : le portefeuille répond nil si le solde ne peut pas changer
-			local credited = credit(d, player, state, EconomyRules.roundGain(state.kills, alive, won))
+			local activity = { reach = state.reach + state.lifeReach, hits = state.hits }
+			local credited = credit(d, player, state, EconomyRules.roundGain(state.kills, alive, activity, won))
 			-- Solde qui ne peut pas changer : rien à montrer (pas de « +0 » trompeur)
 			if credited ~= nil then
 				player:SetAttribute(EconomyRules.ROUND_ATTRIBUTE, state.earned)
@@ -147,10 +223,12 @@ function CreditGains.onRoundEnd(participants: { Participant }, winner: Participa
 			if d.log then
 				d.log(
 					string.format(
-						"fin de manche %s : kills %d, en vie %.0f s, victoire %s, +%s, manche %d, jour %s",
+						"fin de manche %s : kills %d, en vie %.0f s, portée %.0f studs, touches %d, victoire %s, +%s, manche %d, jour %s",
 						player.Name,
 						state.kills,
 						alive,
+						activity.reach,
+						state.hits,
 						tostring(won),
 						tostring(credited),
 						state.earned,
