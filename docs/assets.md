@@ -401,9 +401,9 @@ que soit le découpage UV) ou projetés depuis la vue de profil (livrée, texte)
 4. **Publier** : `uv run tools/skins/publish_skin.py assets/skins/<skin> <skin>` (Decals, puis id de l'image par Asset
    Delivery, ~5 s par carte, reprise possible), puis `uv run tools/skins/make_rbx.py assets/skins/<skin>`.
 5. **Catalogue** : une ligne par arme dans `InventoryRules.ITEMS` (`appearance` = nom du fichier `.model.json`). Le test
-   du catalogue vérifie que le fichier existe. Champ `luminance` (obligatoire, testé) : valeur affichée par
-   `uv run --with numpy --with pillow tools/skins/luminance.py` (moyenne des cartes de couleur) ; le tableau du shop
-   place les skins les plus sombres sous sa lampe (`ShopCatalog.columns`, #366).
+   du catalogue vérifie que le fichier existe. Puis ranger le skin dans la caisse de son arme, à sa rareté
+   (`ShopCatalog.CRATES`, `contents`) : le test du shop exige que tout skin soit dans une caisse, et une caisse de 6 à
+   8 skins (#424).
 6. **Juger en jeu** (Studio, écran d'équipement) : l'éclairage du jeu change beaucoup le rendu des métaux.
 
 Pour un aperçu sans code (avant d'avoir le catalogue) : `tools/skins/apply_skin_lua.py <ids.json | origine>` écrit le

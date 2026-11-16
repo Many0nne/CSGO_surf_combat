@@ -27,8 +27,7 @@ local InventoryRules = {}
 export type ItemType = "weapon" | "skin"
 export type Slot = "sniper" | "knife"
 -- Un skin porte aussi son nom affiché (`name`) et le nom de ses SurfaceAppearance (`appearance` : dossier
--- ReplicatedStorage.Skins.<viewmodel de l'arme>.<appearance>, cf. WeaponSkins), et sa luminance (`luminance`, 0 à 1 :
--- moyenne de ses cartes de couleur, mesurée par tools/skins/luminance.py ; le shop met les plus sombres sous sa lampe)
+-- ReplicatedStorage.Skins.<viewmodel de l'arme>.<appearance>, cf. WeaponSkins)
 export type Item = {
 	id: string,
 	type: ItemType,
@@ -37,7 +36,6 @@ export type Item = {
 	weapon: string?,
 	name: string?,
 	appearance: string?,
-	luminance: number?,
 }
 -- Items possédés : ensemble d'ids du catalogue
 export type Owned = { [string]: boolean }
@@ -91,7 +89,6 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.awp",
 		name = "BALISE",
 		appearance = "balise",
-		luminance = 0.146,
 	},
 	{
 		id = "skin.awp.trempe",
@@ -99,7 +96,6 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.awp",
 		name = "TREMPE",
 		appearance = "trempe",
-		luminance = 0.131,
 	},
 	{
 		id = "skin.awp.ciselure",
@@ -107,7 +103,6 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.awp",
 		name = "CISELURE",
 		appearance = "ciselure",
-		luminance = 0.062,
 	},
 	{
 		id = "skin.awp.pan",
@@ -115,7 +110,6 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.awp",
 		name = "PAN !",
 		appearance = "pan",
-		luminance = 0.082,
 	},
 	{
 		id = "skin.awp.orage",
@@ -123,7 +117,6 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.awp",
 		name = "ORAGE",
 		appearance = "orage",
-		luminance = 0.108,
 	},
 	{
 		id = "skin.awp.circuit",
@@ -131,7 +124,6 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.awp",
 		name = "CIRCUIT",
 		appearance = "circuit",
-		luminance = 0.021,
 	},
 	{
 		id = "skin.awp.maquis",
@@ -139,7 +131,6 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.awp",
 		name = "MAQUIS",
 		appearance = "maquis",
-		luminance = 0.050,
 	},
 	{
 		id = "skin.awp.mue",
@@ -147,7 +138,6 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.awp",
 		name = "MUE",
 		appearance = "mue",
-		luminance = 0.044,
 	},
 	-- Skins M9 : COUCHANT, RELEVÉ, RECUIT (#268, #337, motifs calculés) ; ÉMAIL, PATROUILLE, ART DÉCO dessinés pour la
 	-- M9 (#420, assets/m9/skins/) à la place d'IMPACT, STRATE et SILLAGE
@@ -157,7 +147,6 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.m9bayonet",
 		name = "COUCHANT",
 		appearance = "couchant",
-		luminance = 0.095,
 	},
 	{
 		id = "skin.m9bayonet.releve",
@@ -165,7 +154,6 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.m9bayonet",
 		name = "RELEVÉ",
 		appearance = "releve",
-		luminance = 0.194,
 	},
 	{
 		id = "skin.m9bayonet.recuit",
@@ -173,7 +161,6 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.m9bayonet",
 		name = "RECUIT",
 		appearance = "recuit",
-		luminance = 0.135,
 	},
 	{
 		id = "skin.m9bayonet.email",
@@ -181,7 +168,6 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.m9bayonet",
 		name = "ÉMAIL",
 		appearance = "email",
-		luminance = 0.197,
 	},
 	{
 		id = "skin.m9bayonet.patrouille",
@@ -189,7 +175,6 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.m9bayonet",
 		name = "PATROUILLE",
 		appearance = "patrouille",
-		luminance = 0.156,
 	},
 	{
 		id = "skin.m9bayonet.artdeco",
@@ -197,7 +182,6 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.m9bayonet",
 		name = "ART DÉCO",
 		appearance = "artdeco",
-		luminance = 0.162,
 	},
 } :: { Item }
 

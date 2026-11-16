@@ -1,8 +1,8 @@
 -- Scène 3D du shop (#347, docs/ui.md « Shop ») : salle de présentation dédiée, hors de la map, construite d'après les
 -- cotes de la planche validée (tools/shop/board.py, scène B, en studs). Deux plans de caméra : la vue d'ensemble, face
--- à la vitrine du mur de droite (une caisse par série, étiquette avec nom et prix, survol en rouge d'impact), et la vue
--- détail, la caisse choisie sur son socle, son contenu sur le tableau du mur du fond sous la suspension (vraies armes
--- habillées de leurs skins). La caméra glisse de l'une à l'autre. Tout est local au client ; pendant le shop, la scène
+-- à la vitrine du mur de droite (une caisse par arme, étiquette avec nom et prix, survol en rouge d'impact), et la vue
+-- détail, la caisse choisie seule sur son socle, sous la suspension (#424 : son contenu est dans la colonne de
+-- l'interface, plus au mur). La caméra glisse de l'une à l'autre. Tout est local au client ; pendant le shop, la scène
 -- de l'accueil est suspendue (MenuScene.setPaused) et l'ambiance du jeu est assombrie (salle fermée).
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
@@ -31,16 +31,6 @@ local ORIGIN = Vector3.new(0, 600, 12000)
 local VERTICAL_FOV = 40 -- comme l'accueil
 local ASPECT_REF = 16 / 9
 local GLIDE_TIME = 0.9 -- s du glissement entre la vitrine et le socle
--- Gros plan sur une arme du tableau (#358) : survol retenu après HOVER_DELAY (un passage ne fait rien), l'arme couvre
--- FOCUS_FILL de la largeur de l'écran, centrée à FOCUS_SCREEN_X (à droite : la colonne de l'interface reste à gauche)
-local FOCUS_GLIDE_TIME = 0.5
-local HOVER_DELAY = 0.2
-local FOCUS_FILL = 0.45
-local FOCUS_SCREEN_X = 0.66
--- Zone de survol d'une arme : sa rangée du tableau (bande de rareté comprise), à peine plus longue que l'arme ; plus
--- longue, en gros plan elle sortait de l'écran et la souris ne pouvait plus la quitter par la droite
-local HOVER_HEIGHT = 3.2
-local HOVER_MARGIN = 0.2
 -- Ambiance de la salle fermée (Lighting.Ambient pendant le shop) : celle du crépuscule baignait toute la pièce et
 -- écrasait les lampes (planche : DIZZY_AMBIENT = 0,12)
 local ROOM_AMBIENT = Color3.fromRGB(24, 23, 29)
@@ -48,40 +38,24 @@ local ROOM_AMBIENT = Color3.fromRGB(24, 23, 29)
 -- cône et peut projeter des ombres. Les intensités sont absolues (plus de gain commun : sous le Voxel, chaque lampe
 -- s'étalait sur toute la pièce et toutes étaient baissées à 0,6 fois la planche)
 local LIGHT_RANGE = 30
--- Suspension au-dessus du tableau, devant le mur (repère : centre de la suspension au sol, mêmes hauteurs que sur la
--- planche + LAMP_LIFT) : elle éclaire les armes, l'intérêt de la vue. Au-dessus de la caisse, son cône passait devant
--- le tableau dans l'axe de la caméra
-local LAMP_LIFT = 1.5 -- plus haut, la cloche passait sous les onglets du menu
+-- Suspension à l'aplomb de la caisse du socle (#424 : plus de tableau au mur, la caisse est le seul sujet ; repère :
+-- centre de la suspension au sol, mêmes hauteurs que sur la planche + LAMP_LIFT). Assez basse pour rester sous les
+-- onglets du menu dans la vue détail, assez haute pour sortir du cadre de l'ouverture : à -1, l'ampoule restait en
+-- haut de l'image pendant l'ouverture et son éclat passait sous les onglets
+local LAMP_LIFT = 0.7
 local CEILING_Y = 17.75 -- dessous du plafond, dans la salle
--- Lampe de la suspension, à l'ampoule et à ombres : demi-sphère penchée vers le mur (sa tache en arc couvre tout le
--- tableau, la cloche coupe la lumière au-dessus) ; les AWP y projettent leur vraie ombre. À 130°, les armes des
--- colonnes de côté étaient au bord du cône et restaient sombres
-local SUSPENSION_ANGLE = 180
+-- Lampe de la suspension, à l'ampoule et à ombres, tournée vers le bas : sa tache couvre la caisse et le haut du socle
+local SUSPENSION_ANGLE = 70
 local SUSPENSION_BRIGHTNESS = 5
-local SUSPENSION_RANGE = 20
--- Appoint du gros plan (#358) : lampe de face sur le tableau, allumée en fondu quand la caméra s'approche d'une arme.
--- Les skins métalliques (AWP Couchant) reflètent la pièce sombre et ne prennent que la lumière venue presque de face ;
--- toujours allumée, elle aplatissait la tache de la suspension et effaçait les ombres des AWP en vue large
-local FOCUS_LIGHT_BRIGHTNESS = 1.2
-local FOCUS_LIGHT_RATE = 6 -- vitesse du fondu (Rules.damp), environ le temps du glissement
+local SUSPENSION_RANGE = 14
 -- Faisceau : Future ne dessine pas la lumière dans l'air, on simule le cône sous l'ampoule par un dégradé blanc teinté
 -- (tools/shop/make_light_textures.py ; des calques translucides empilés laissaient des traits). Deux rubans Beam
 -- tournés vers la caméra, un halo et un cœur pas plus larges que la cloche en haut, texture du profil en travers
--- (largeur en haut, en bas, transparence au départ de l'ampoule), court : il s'efface au-dessus de la rangée d'AWP,
--- sans passer devant les armes. Ombre simulée sous les couteaux seulement (`fakeShadow` de WEAPON_ROWS) : leur vraie
--- ombre, avec une lampe rasante 5,6 studs plus haut, tombait en tache floue un stud sous la lame
+-- (largeur en haut, en bas, transparence au départ de l'ampoule), court : il s'efface au-dessus de la caisse
 local BEAM_TEXTURE = "rbxassetid://86578020001310" -- beam_profile.png (Decal 123228552734348)
-local SHADOW_TEXTURE = "rbxassetid://86395832963926" -- weapon_shadow.png (Decal 115998334428092)
 local BEAM_COLOR = Color3.fromRGB(255, 222, 176)
 local BEAM_LENGTH = 1.6 -- depuis l'ampoule
 local BEAM_LAYERS = { { 2.0, 3.6, 0.5 }, { 1.2, 2.2, 0.6 } }
-local BOARD_FACE = 0.1 -- face avant du contreplaqué, en profondeur dans le repère du tableau
-local WEAPON_DEPTH = 0.35 -- axe des armes, même repère
--- Ombre : descente par stud sous l'ampoule, hauteur, plus son flou par stud de descente. Plus basse (0,08) et plus
--- sombre, elle faisait en gros plan une tache détachée sous l'arme
-local SHADOW_DROP = 0.035
-local SHADOW_HEIGHT, SHADOW_BLUR = 0.4, 0.5
-local SHADOW_TRANSPARENCY = 0.6
 
 -- Couleurs de la planche
 local BONE = UITheme.Colors.Bone
@@ -122,24 +96,18 @@ local SLOT = 4.3
 local TAG_SIZE = Vector2.new(3.4, 0.62)
 local TAG_PIXELS = 100 -- pixels par stud du texte des étiquettes
 
--- Tableau du contenu : panneau de contreplaqué (largeur, hauteur), armes posées de profil, longueur en studs ; les AWP
--- projettent leur ombre (lampe de la suspension), les couteaux en reçoivent une simulée (`fakeShadow`)
-local BOARD_SIZE = Vector2.new(15.5, 7.6)
-local BOARD_COLUMNS = { -4.9, 0, 4.9 }
-local WEAPON_ROWS = {
-	{ viewmodel = "AWP", item = "weapon.awp", y = 1.9, length = 4.4, fakeShadow = false },
-	{ viewmodel = "M9Bayonet", item = "weapon.m9bayonet", y = -1.4, length = 2.7, fakeShadow = true },
+-- Arme révélée par une ouverture : viewmodel et longueur de profil (studs), par id d'arme
+local REVEAL_WEAPONS = {
+	["weapon.awp"] = { viewmodel = "AWP", length = 4.4 },
+	["weapon.m9bayonet"] = { viewmodel = "M9Bayonet", length = 2.7 },
 }
 
 type Frame = CFrame
 type SaleCrate = { model: Model, tag: BasePart, name: TextLabel, price: TextLabel }
--- Arme du tableau : zone de survol invisible, ligne du contenu (rang dans ShopCatalog.contents), centre et longueur
-type BoardTarget = { hitbox: BasePart, row: number, center: CFrame, length: number }
 
 local room = CFrame.new(ORIGIN)
 local vitrineFrame = room * CFrame.new(14.2, 0, 7.3) * CFrame.Angles(0, math.rad(-90), 0)
-local boardFrame = room * CFrame.new(-3, 6.6, -8.3)
-local lampFrame = room * CFrame.new(-3, LAMP_LIFT, -6.7) -- devant le tableau, à l'aplomb de son milieu
+local lampFrame = room * CFrame.new(0, LAMP_LIFT, 0) -- à l'aplomb de la caisse du socle
 local podiumFrame = room * CFrame.new(0, 1.34, 0) * CFrame.Angles(0, math.rad(-14), 0) -- caisse sur le socle
 -- Ouverture (#332) : la caméra avance vers la caisse (×1,8, la référence Apex avance de ×2,5) ; décalée, pas tournée,
 -- pour poser la caisse et l'arme au tiers droit (colonne de l'interface à gauche), de la caisse à l'arme au-dessus
@@ -149,18 +117,16 @@ local CAMERAS = {
 	opening = CFrame.lookAt(room * Vector3.new(-2.4, 4.9, 13), room * Vector3.new(-2.4, 3.3, 0)),
 }
 local OPENING_SHAKE = 0.04 -- secousse de la caméra à pleine charge, en studs
--- Part de l'éclairage de la salle gardée pendant l'ouverture : salle éclairée, le tableau et ses armes concurrençaient
--- l'arme révélée (la référence se joue sur fond sombre, la lumière vient de l'objet)
+-- Part de l'éclairage de la salle gardée pendant l'ouverture : salle éclairée, le décor concurrençait l'arme révélée
+-- (la référence se joue sur fond sombre, la lumière vient de l'objet)
 local OPENING_ROOM_LIGHT = 0.15
 local roomLights: { [SpotLight]: number } = {} -- intensité d'origine des lampes de la salle, pendant l'ouverture
 
 local stage: Folder?
 local podium: Folder? -- caisse du socle, refaite à chaque caisse montrée
-local board: Folder? -- armes du tableau, refaites à chaque caisse montrée
 local sale: { SaleCrate } = {}
 local vitrineLights: { SpotLight } = {} -- allumées dans la vue d'ensemble seulement
 local detailLights: { SpotLight } = {} -- allumées dans la vue détail seulement
-local focusLight: SpotLight? -- appoint du gros plan, intensité en fondu
 local running = false
 local connection: RBXScriptConnection?
 local inputConnection: RBXScriptConnection?
@@ -185,11 +151,7 @@ local aimX, aimY = 0, 0
 local savedAmbient: Color3?
 local savedFov = 70
 local onCrateClicked: ((number) -> ())?
-local targets: { BoardTarget } = {} -- armes du tableau de la caisse montrée
-local focus = 0 -- arme en gros plan (rang dans `targets`), 0 = plan détail
-local hoverState: Rules.HoverState = { candidate = 0, since = 0, focused = 0 }
-local onWeaponFocus: ((number?) -> ())?
-local interactive = true -- survol et clic de la salle (coupés sous la fenêtre des packs, #395)
+local interactive = true -- survol et clic de la vitrine (coupés sous la fenêtre des packs, #395)
 
 -- Cette méthode permet de poser une pièce ancrée sans collision dans un repère (centre local, taille) lorsque la salle
 -- ou un prop est construit ; `shape` Cylinder couché sur l'axe Y du repère si `upright`.
@@ -387,37 +349,6 @@ local function lightBeam(parent: Instance)
 	holder.Parent = parent
 end
 
--- Cette méthode permet de poser l'ombre simulée d'un couteau du tableau (centre `x`, `y` et longueur dans le repère du
--- tableau) lorsque la caisse montrée change : à l'aplomb de l'arme, plus basse et plus floue loin sous l'ampoule.
-local function weaponShadow(parent: Instance, x: number, y: number, length: number)
-	local bulb = boardFrame:PointToObjectSpace(lampFrame * Vector3.new(0, 9.3, 0))
-	local shift = SHADOW_DROP * math.max(bulb.Y - y, 0)
-	local shadow = Instance.new("Part")
-	shadow.Name = "WeaponShadow"
-	shadow.Anchored = true
-	shadow.CanCollide = false
-	shadow.CanQuery = false
-	shadow.CanTouch = false
-	shadow.CastShadow = false
-	shadow.Transparency = 1
-	shadow.Size = Vector3.new(length, SHADOW_HEIGHT + SHADOW_BLUR * shift, 0.005)
-	shadow.CFrame = boardFrame * CFrame.new(x, y - shift, BOARD_FACE + 0.02)
-	local gui = Instance.new("SurfaceGui")
-	gui.Face = Enum.NormalId.Back -- vers la pièce
-	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-	gui.PixelsPerStud = 40
-	gui.LightInfluence = 0
-	gui.Parent = shadow
-	local image = Instance.new("ImageLabel")
-	image.BackgroundTransparency = 1
-	image.Size = UDim2.fromScale(1, 1)
-	image.Image = SHADOW_TEXTURE
-	image.ImageColor3 = Color3.new(0, 0, 0)
-	image.ImageTransparency = SHADOW_TRANSPARENCY
-	image.Parent = gui
-	shadow.Parent = parent
-end
-
 -- Cette méthode permet de construire la pièce (sol, murs en tôle, plafond, poutres), le socle et la suspension lorsque
 -- le shop s'ouvre pour la première fois. Salle fermée : murs et plafond prolongés derrière la caméra de la vue détail.
 local function buildRoom(parent: Instance)
@@ -487,7 +418,7 @@ local function buildRoom(parent: Instance)
 		box(parent, room, Vector3.new(sx * 4, 0.03, 0), Vector3.new(0.14, 0.04, 7), GLOW, Enum.Material.Neon)
 		box(parent, room, Vector3.new(0, 0.03, sx * 3.5), Vector3.new(8.14, 0.04, 0.14), GLOW, Enum.Material.Neon)
 	end
-	-- racks de stock : contre le mur du fond à droite du tableau, et contre le mur de gauche (pénombre sous l'interface)
+	-- racks de stock : contre le mur du fond à droite, et contre le mur de gauche (pénombre sous l'interface)
 	local backRack = room * CFrame.new(9.8, 0, -6.9)
 	rack(parent, backRack, 8.4)
 	fillRack(
@@ -504,25 +435,7 @@ local function buildRoom(parent: Instance)
 		{ { 226, 58, 40 }, { 90, 120, 200 }, { 40, 150, 160 }, { 190, 140, 60 }, { 150, 70, 170 }, { 226, 58, 40 } },
 		1.3
 	)
-	-- tableau du contenu : contreplaqué et clous
-	box(
-		parent,
-		boardFrame,
-		Vector3.zero,
-		Vector3.new(BOARD_SIZE.X, BOARD_SIZE.Y, 0.2),
-		Color3.fromRGB(206, 170, 118),
-		Enum.Material.WoodPlanks
-	)
-	for i = -15, 15 do
-		box(
-			parent,
-			boardFrame,
-			Vector3.new(i * 0.5, 3.8, 0.12),
-			Vector3.new(0.05, 0.05, 0.05),
-			Color3.fromRGB(90, 70, 50)
-		)
-	end
-	-- suspension industrielle au-dessus du tableau : câble (jusqu'au plafond), douille, cloche émaillée, ampoule
+	-- suspension industrielle au-dessus de la caisse : câble (jusqu'au plafond), douille, cloche émaillée, ampoule
 	local enamel = Color3.fromRGB(52, 58, 54)
 	local cyl = Enum.PartType.Cylinder
 	local cableTop = CEILING_Y - LAMP_LIFT
@@ -559,8 +472,8 @@ local function buildRoom(parent: Instance)
 	bulb.CastShadow = false -- la lampe à ombres est en son centre : sinon l'ampoule masquerait toute sa lumière
 end
 
--- Cette méthode permet d'éclairer la salle comme la planche (suspension, tableau, rack de droite, appoint de face) et de
--- poser les deux lampes de la vitrine, allumées dans la vue d'ensemble seulement, lorsque la salle se construit.
+-- Cette méthode permet d'éclairer la salle (suspension sur la caisse, rack de droite, appoint de face) et de poser les
+-- deux lampes de la vitrine, allumées dans la vue d'ensemble seulement, lorsque la salle se construit.
 local function buildLights(parent: Instance)
 	local function at(v: Vector3): Vector3
 		return room * v
@@ -568,12 +481,12 @@ local function buildLights(parent: Instance)
 	local function dir(v: Vector3): Vector3
 		return room:VectorToWorldSpace(v.Unit)
 	end
-	-- Suspension, à l'ampoule, tournée vers les armes du tableau
+	-- Suspension, à l'ampoule, tournée vers la caisse
 	local bulb = lampFrame * Vector3.new(0, 9.3, 0)
 	spot(
 		parent,
 		bulb,
-		dir(Vector3.new(0, -1, -0.8)),
+		dir(Vector3.new(0, -1, 0)),
 		SUSPENSION_ANGLE,
 		SUSPENSION_BRIGHTNESS,
 		Color3.fromRGB(255, 228, 190),
@@ -581,17 +494,6 @@ local function buildLights(parent: Instance)
 		true
 	)
 	lightBeam(parent)
-	-- Appoint du gros plan, de face et un peu au-dessus du milieu du tableau : éteint (intensité 0) hors gros plan
-	local focusFrom = Vector3.new(-3, 7.5, 3)
-	focusLight = spot(
-		parent,
-		at(focusFrom),
-		dir(Vector3.new(-3, 6.6, -8.3) - focusFrom),
-		70,
-		0,
-		Color3.fromRGB(255, 228, 190),
-		16
-	)
 	-- Rack du fond, lumière froide d'en haut vers le milieu du rack (plus bas et plus rasante, elle brûlait le bord d'un
 	-- plateau d'acier) ; éteinte face à la vitrine, où ce rack passe sous le texte
 	local coldFrom = Vector3.new(8.5, 10, 3)
@@ -605,8 +507,8 @@ local function buildLights(parent: Instance)
 		20
 	)
 	table.insert(detailLights, cold)
-	-- Appoint de face sur la caisse du socle, cône serré et portée courte : plus ouvert, il éclairait aussi tout le
-	-- tableau et effaçait la tache de la suspension (pour la même raison, plus d'appoint au plafond)
+	-- Appoint de face sur la caisse du socle, cône serré et portée courte : plus ouvert, il éclairait aussi le mur du
+	-- fond et effaçait la tache de la suspension (pour la même raison, plus d'appoint au plafond)
 	for _, sx in { -1, 1 } do
 		local from = Vector3.new(sx * 6.5, 4.3, 3.5)
 		spot(parent, at(from), dir(Vector3.new(0, 2.5, 0) - from), 35, 1.4, Color3.fromRGB(255, 220, 170), 11)
@@ -752,9 +654,9 @@ local function buildVitrine(parent: Instance)
 end
 
 -- Cette méthode permet de construire une arme de profil (pièces de son viewmodel, bras exclus, habillées du skin) de
--- `length` studs, centrée en `at` et tournée comme le tableau, projetant son ombre si `castShadow`, lorsque le tableau
--- montre le contenu d'une caisse ou qu'une ouverture révèle un skin ; nil si le viewmodel manque.
-local function boardWeapon(
+-- `length` studs, centrée en `at`, projetant son ombre si `castShadow`, lorsqu'une ouverture révèle un skin ; nil si le
+-- viewmodel manque.
+local function revealWeapon(
 	parent: Instance,
 	viewmodelName: string,
 	skinId: string,
@@ -790,7 +692,7 @@ local function boardWeapon(
 		return nil
 	end
 	WeaponSkins.apply(model, viewmodelName, skinId)
-	-- Profil : axe le plus long le long du tableau, axe le plus mince face à la pièce (comme UIKit.weaponSilhouette)
+	-- Profil : axe le plus long à l'horizontale de `at`, axe le plus mince face à lui (comme UIKit.weaponSilhouette)
 	local frame, size = model:GetBoundingBox()
 	local axes = {
 		{ length = size.X, dir = frame.RightVector },
@@ -809,44 +711,15 @@ local function boardWeapon(
 	return model
 end
 
--- Cette méthode permet d'oublier le survol en cours (aucune arme candidate ni retenue) lorsque la vue change.
-local function resetHover()
-	hoverState.candidate, hoverState.since, hoverState.focused = 0, 0, 0
-end
-
--- Cette méthode permet de rapprocher la caméra d'une arme du tableau (0 : retour au plan détail) en glissant depuis
--- l'image courante, et de prévenir l'interface, lorsque l'arme retenue change ; `instant` sans glissement.
-local function setFocus(index: number, instant: boolean?)
-	if index == focus then
-		return
-	end
-	focus = index
-	if running and not instant then
-		glideFrom = workspace.CurrentCamera.CFrame
-		glideStart = os.clock()
-		glideTime = FOCUS_GLIDE_TIME
-	end
-	if onWeaponFocus then
-		local target = targets[index]
-		onWeaponFocus(if target then target.row else nil)
-	end
-end
-
--- Cette méthode permet de montrer une caisse dans la vue détail (sa caisse sur le socle, ses armes et la rareté de
--- chacune au tableau, une zone de survol par arme) lorsque le joueur la choisit.
+-- Cette méthode permet de montrer une caisse dans la vue détail (sa caisse seule sur le socle, sous la suspension)
+-- lorsque le joueur la choisit ; son contenu est dans la colonne de l'interface (#424).
 local function dressCrate(index: number)
 	local def = ShopCatalog.CRATES[index]
 	if not (def and stage) then
 		return
 	end
-	setFocus(0)
-	resetHover()
-	table.clear(targets)
 	if podium then
 		podium:Destroy()
-	end
-	if board then
-		board:Destroy()
 	end
 	local podiumFolder = Instance.new("Folder")
 	podiumFolder.Name = "Podium"
@@ -854,61 +727,6 @@ local function dressCrate(index: number)
 	podiumCrate = crate(podiumFolder, podiumFrame, stripe)
 	podiumFolder.Parent = stage
 	podium = podiumFolder
-	local boardFolder = Instance.new("Folder")
-	boardFolder.Name = "Board"
-	-- Colonne de chaque ligne du contenu : les skins sombres au milieu, sous la suspension (#366) ; `row` des cibles
-	-- garde le rang dans le contenu, celui des lignes de l'interface
-	local contents = ShopCatalog.contents(def, InventoryRules.ITEMS)
-	local columns = ShopCatalog.columns(contents, #BOARD_COLUMNS)
-	for j, row in contents do
-		local x = BOARD_COLUMNS[columns[j]]
-		if x then
-			local c = row.rarity.color
-			local color = Color3.fromRGB(c[1], c[2], c[3])
-			for _, weapon in WEAPON_ROWS do
-				-- Une caisse ne donne que l'arme de sa rangée (#332) : l'autre rangée reste vide
-				if weapon.item ~= def.weapon then
-					continue
-				end
-				for _, skinId in row.skins do
-					local item = InventoryRules.item(skinId)
-					local center = boardFrame * CFrame.new(x, weapon.y, WEAPON_DEPTH)
-					if
-						item
-						and item.weapon == weapon.item
-						and boardWeapon(
-							boardFolder,
-							weapon.viewmodel,
-							skinId,
-							center,
-							weapon.length,
-							not weapon.fakeShadow
-						)
-					then
-						if weapon.fakeShadow then
-							weaponShadow(boardFolder, x, weapon.y, weapon.length)
-						end
-						-- Zone de survol invisible, plus large que l'arme (un profil d'AWP est trop fin à viser)
-						local hitbox = box(
-							boardFolder,
-							boardFrame,
-							Vector3.new(x, weapon.y - 0.4, 0.4),
-							Vector3.new(weapon.length + HOVER_MARGIN, HOVER_HEIGHT, 0.3),
-							BONE
-						)
-						hitbox.Name = "Hover"
-						hitbox.Transparency = 1
-						hitbox.CastShadow = false
-						hitbox.CanQuery = true
-						table.insert(targets, { hitbox = hitbox, row = j, center = center, length = weapon.length })
-					end
-				end
-				box(boardFolder, boardFrame, Vector3.new(x, weapon.y - 1.15, 0.13), Vector3.new(3.8, 0.18, 0.06), color)
-			end
-		end
-	end
-	boardFolder.Parent = stage
-	board = boardFolder
 end
 
 -- Cette méthode permet de construire la salle une seule fois (pièce, lumières, vitrine) lorsque le shop s'ouvre pour la
@@ -954,59 +772,16 @@ local function crateUnderMouse(camera: Camera): number
 	return if type(index) == "number" then index else 0
 end
 
--- Cette méthode permet de trouver l'arme du tableau sous la souris (rayon sur les zones de survol) lorsque la vue
--- détail est affichée ; 0 si aucune.
-local function weaponUnderMouse(camera: Camera): number
-	if mode ~= "detail" or #targets == 0 or not interactive then
-		return 0
-	end
-	local mouse = UserInputService:GetMouseLocation()
-	local ray = camera:ViewportPointToRay(mouse.X, mouse.Y)
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Include
-	local hitboxes = {}
-	for _, target in targets do
-		table.insert(hitboxes, target.hitbox)
-	end
-	params.FilterDescendantsInstances = hitboxes
-	local hit = workspace:Raycast(ray.Origin, ray.Direction * 200, params)
-	if hit then
-		for i, target in targets do
-			if target.hitbox == hit.Instance then
-				return i
-			end
-		end
-	end
-	return 0
-end
-
--- Cette méthode permet de donner le plan visé par la caméra (vitrine, socle, ou gros plan de face de l'arme retenue,
--- décalée à droite) lorsqu'une image est rendue ; `aspect` (au moins 16:9, comme le FOV) règle le recul du gros plan.
-local function targetFrame(aspect: number): CFrame
-	if mode == "opening" then
-		return CAMERAS.opening
-	end
-	local target = if mode == "detail" then targets[focus] else nil
-	if not target then
-		return CAMERAS[mode]
-	end
-	local distance, offset = Rules.closeUp(target.length, VERTICAL_FOV, aspect, FOCUS_FILL, FOCUS_SCREEN_X)
-	-- face au tableau (+Z du repère vers la pièce), décalée à gauche de l'arme
-	return target.center * CFrame.new(-offset, 0, distance)
-end
-
 -- Cette méthode permet de placer la caméra (glissement entre les plans, léger suivi du curseur, FOV adapté au format) et
--- de suivre le survol (étiquettes de la vitrine, gros plan d'une arme du tableau) lorsqu'une image est rendue.
+-- de suivre le survol des étiquettes de la vitrine lorsqu'une image est rendue.
 local function update(dt: number)
 	local camera = workspace.CurrentCamera
 	local viewport = camera.ViewportSize
 	local mouse = UserInputService:GetMouseLocation()
-	local aspect = ASPECT_REF
 	if viewport.X > 0 and viewport.Y > 0 then
 		aimX = Rules.damp(aimX, (mouse.X / viewport.X - 0.5) * 2, dt, 4)
 		aimY = Rules.damp(aimY, (mouse.Y / viewport.Y - 0.5) * 2, dt, 4)
 		camera.FieldOfView = Rules.fitFov(VERTICAL_FOV, ASPECT_REF, viewport.X / viewport.Y)
-		aspect = math.max(ASPECT_REF, viewport.X / viewport.Y)
 	end
 	local t = math.clamp((os.clock() - glideStart) / glideTime, 0, 1)
 	local eased = t * t * (3 - 2 * t)
@@ -1038,21 +813,13 @@ local function update(dt: number)
 		end
 	end
 	camera.CameraType = Enum.CameraType.Scriptable
-	camera.CFrame = glideFrom:Lerp(targetFrame(aspect), eased)
+	camera.CFrame = glideFrom:Lerp(CAMERAS[mode], eased)
 		* CFrame.Angles(math.rad(angles.camPitch), math.rad(angles.camYaw), 0)
 		* shake
-	if focusLight then
-		local target = if mode == "detail" and focus > 0 then FOCUS_LIGHT_BRIGHTNESS else 0
-		focusLight.Brightness = Rules.damp(focusLight.Brightness, target, dt, FOCUS_LIGHT_RATE)
-	end
 	local index = crateUnderMouse(camera)
 	if index ~= hovered then
 		hovered = index
 		paintTags()
-	end
-	-- Pas de décision pendant un glissement : l'arme passe sous la souris ou la quitte sans que le joueur bouge
-	if mode == "detail" and t >= 1 then
-		setFocus(Rules.settleHover(hoverState, weaponUnderMouse(camera), os.clock(), HOVER_DELAY))
 	end
 end
 
@@ -1061,8 +828,6 @@ local function glideTo(newMode: "overview" | "detail")
 	if newMode == mode then
 		return
 	end
-	setFocus(0, true)
-	resetHover()
 	glideFrom = if running then workspace.CurrentCamera.CFrame else CAMERAS[newMode]
 	glideStart = if running then os.clock() else -math.huge
 	glideTime = GLIDE_TIME
@@ -1098,13 +863,7 @@ function ShopScene.onCrateClicked(callback: (number) -> ())
 	onCrateClicked = callback
 end
 
--- Cette méthode permet d'enregistrer le rappel appelé quand le gros plan change (#358) : rang de la ligne du contenu
--- dont l'arme est en gros plan, nil au retour au plan détail.
-function ShopScene.onWeaponFocus(callback: (number?) -> ())
-	onWeaponFocus = callback
-end
-
--- Cette méthode permet de terminer l'ouverture (effets retirés, caisse et tableau refaits, retour au plan détail) lorsque
+-- Cette méthode permet de terminer l'ouverture (effets retirés, caisse refaite, retour au plan détail) lorsque
 -- le joueur clique après la révélation ou quitte le shop ; `notify` prévient l'interface.
 local function finishOpening(notify: boolean)
 	local current = opening
@@ -1136,7 +895,7 @@ function ShopScene.isOpening(): boolean
 	return opening ~= nil
 end
 
--- Cette méthode permet de couper ou rendre le survol et le clic des caisses et des armes lorsqu'une fenêtre passe
+-- Cette méthode permet de couper ou rendre le survol et le clic des caisses de la vitrine lorsqu'une fenêtre passe
 -- devant la salle (packs de crédits, #395) : sans cela, les caisses s'éclairent et s'ouvrent sous la fenêtre.
 function ShopScene.setInteractive(enabled: boolean)
 	interactive = enabled
@@ -1151,12 +910,7 @@ function ShopScene.playOpening(skinId: string, rarityId: string, onRevealed: () 
 	if opening or not (running and item and crateModel and stage) or mode ~= "detail" then
 		return false
 	end
-	local row
-	for _, weapon in WEAPON_ROWS do
-		if weapon.item == item.weapon then
-			row = weapon
-		end
-	end
+	local row = item.weapon and REVEAL_WEAPONS[item.weapon]
 	if not row then
 		return false
 	end
@@ -1166,15 +920,13 @@ function ShopScene.playOpening(skinId: string, rarityId: string, onRevealed: () 
 		table.insert(colors, Color3.fromRGB(r.color[1], r.color[2], r.color[3]))
 	end
 	local at = podiumFrame * CFrame.new(0, 3.7, 0)
-	local weapon = boardWeapon(stage, row.viewmodel, skinId, at, row.length, true)
+	local weapon = revealWeapon(stage, row.viewmodel, skinId, at, row.length, true)
 	if not weapon then
 		return false
 	end
-	setFocus(0, true)
-	resetHover()
-	-- Lampes de la salle relevées avant les effets (qui ont leurs propres lumières) ; l'appoint du gros plan est déjà à 0
+	-- Lampes de la salle relevées avant les effets (qui ont leurs propres lumières)
 	for _, light in stage:GetDescendants() do
-		if light:IsA("SpotLight") and light ~= focusLight then
+		if light:IsA("SpotLight") then
 			roomLights[light] = light.Brightness
 		end
 	end
@@ -1285,11 +1037,6 @@ function ShopScene.stop()
 	workspace.CurrentCamera.FieldOfView = savedFov
 	hovered = 0
 	paintTags()
-	setFocus(0, true)
-	resetHover()
-	if focusLight then
-		focusLight.Brightness = 0
-	end
 	MenuScene.setPaused(false)
 end
 

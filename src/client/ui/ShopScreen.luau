@@ -1,8 +1,9 @@
 -- Écran Shop (#347, onglet SHOP du menu, docs/ui.md « Shop ») : interface posée sur la salle de présentation
 -- (ShopScene), colonne à gauche sur fond de coin comme l'écran d'équipement. Vue d'ensemble : titre « CAISSES », les
 -- caisses en vente sont dans la vitrine (nom et prix sur leur étiquette), un clic sur une caisse ouvre la vue détail.
--- Vue détail : « ‹ SHOP » (retour à la vitrine), nom de la caisse, contenu par rareté avec ses chances en pour cent
--- (total exactement 100 %) et le remboursement d'un doublon, prix, ACHETER et passage à la caisse voisine.
+-- Vue détail : « ‹ SHOP » (retour à la vitrine), nom de la caisse, contenu (#424 : un skin par ligne, vignette de
+-- l'arme habillée, rareté, chance en pour cent, total exactement 100 %, et remboursement d'un doublon), prix, ACHETER et
+-- passage à la caisse voisine.
 -- ACHETER (#393, remote `BuyCrate`) : le serveur débite, tire et donne le skin (ou rembourse le doublon) en une écriture,
 -- puis la scène joue l'ouverture et la colonne laisse place à la révélation (« OBTENU » ou « DOUBLON · +N CRÉDITS »,
 -- skin et rareté) jusqu'au clic. Pendant l'achat : « ACHAT… », pas de second clic ; tout le contenu possédé : ACHETER
@@ -41,10 +42,16 @@ local SUBTITLE_Y = TITLE_Y + TITLE_SIZE + 10
 local HEADER_Y = SUBTITLE_Y + 34 -- en-têtes CHANCE et SI DOUBLON au-dessus du contenu (#393)
 local HEADER_SIZE = UITheme.TextSize.Min
 local ROWS_Y = HEADER_Y + HEADER_SIZE + 6
-local ROW_STEP = 32
+-- Une ligne par skin (#424) : 8 lignes de 30 px laissent ACHETER et l'ouverture de test au-dessus du bas de l'écran
+local ROW_STEP = 30
 local ROW_TEXT = 20
-local RARITY_X = 210 -- colonne des raretés et chances (« EXCEPTIONNEL  2,5 % » tient avant le remboursement)
-local COLUMN_WIDTH = 440
+local THUMB_X = 12 -- vignette de l'arme habillée, après la barre de rareté
+-- Vignette large : une AWP de profil est cinq fois plus longue que haute, à 88 px elle ne faisait que 15 px de haut
+local THUMB_SIZE = Vector2.new(128, 30)
+local NAME_X = THUMB_X + THUMB_SIZE.X + 10
+local RARITY_X = 270 -- colonne des raretés et chances (« EXCEPTIONNEL  2,5 % » tient avant le remboursement)
+local COLUMN_WIDTH = 470
+local MAX_ROWS = 8 -- place réservée au contenu
 local REFUND_ICON = 18 -- jeton devant le remboursement d'un doublon, à droite de la ligne
 local REFUND_WIDTH = 70
 local BUY_SIZE = Vector2.new(160, 42)
@@ -76,8 +83,6 @@ local price: { TextLabel }
 local position: TextLabel
 local back: MenuShot.Choice
 local current = 1
-local lines: { Frame } = {} -- lignes du contenu de la caisse ouverte, dans l'ordre de ShopCatalog.contents
-local DIMMED = 0.65 -- atténuation des autres lignes quand une arme du tableau est en gros plan (#358)
 -- Achat (#393) et ouverture de test (#332)
 local buyButton: Frame
 local buyStroke: UIStroke
@@ -147,41 +152,8 @@ local function label(parent: GuiObject, props: { [string]: any }, offset: number
 	return { text, shadow }
 end
 
--- Cette méthode permet de mettre en avant la ligne du skin dont l'arme est en gros plan (#358), les autres atténuées,
--- lorsque le gros plan change ; `row` nil rend toutes les lignes (transparence d'origine gardée en attribut).
-local function highlightRow(row: number?)
-	for i, line in lines do
-		local dim = if row and i ~= row then DIMMED else 0
-		for _, item in line:GetDescendants() do
-			if item:IsA("TextLabel") then
-				local base = item:GetAttribute("BaseTransparency")
-				if type(base) ~= "number" then
-					base = item.TextTransparency
-					item:SetAttribute("BaseTransparency", base)
-				end
-				item.TextTransparency = base + (1 - base) * dim
-			elseif item:IsA("Frame") then
-				local base = item:GetAttribute("BaseTransparency")
-				if type(base) ~= "number" then
-					base = item.BackgroundTransparency
-					item:SetAttribute("BaseTransparency", base)
-				end
-				item.BackgroundTransparency = base + (1 - base) * dim
-			elseif item:IsA("ImageLabel") then
-				-- Jeton du remboursement (#393)
-				local base = item:GetAttribute("BaseTransparency")
-				if type(base) ~= "number" then
-					base = item.ImageTransparency
-					item:SetAttribute("BaseTransparency", base)
-				end
-				item.ImageTransparency = base + (1 - base) * dim
-			end
-		end
-	end
-end
-
--- Cette méthode permet de remplir la vue détail pour la caisse courante (nom, contenu par rareté, prix, place dans la
--- liste) lorsque le joueur ouvre une caisse ou passe à la voisine.
+-- Cette méthode permet de remplir la vue détail pour la caisse courante (nom, un skin par ligne avec sa vignette, prix,
+-- place dans la liste) lorsque le joueur ouvre une caisse ou passe à la voisine.
 local function paintDetail()
 	local crate = ShopCatalog.CRATES[current]
 	if not crate then
@@ -192,7 +164,6 @@ local function paintDetail()
 	for _, child in rows:GetChildren() do
 		child:Destroy()
 	end
-	table.clear(lines)
 	local contents = ShopCatalog.contents(crate, InventoryRules.ITEMS)
 	local chances = ShopCatalog.chances(contents)
 	for i, row in contents do
@@ -204,22 +175,31 @@ local function paintDetail()
 			Size = UDim2.fromOffset(COLUMN_WIDTH, ROW_STEP),
 			Parent = rows,
 		})
-		lines[i] = line
 		UIKit.frame({
 			Name = "Bar",
-			Position = UDim2.fromOffset(0, 6),
+			Position = UDim2.fromOffset(0, (ROW_STEP - ROW_TEXT) / 2),
 			Size = UDim2.fromOffset(4, ROW_TEXT),
 			BackgroundColor3 = color,
 			Parent = line,
 		})
+		-- Vignette : l'arme habillée de ce skin, de profil (rendu des cartes de skin de l'écran ARMES)
+		local thumb = UIKit.frame({
+			Name = "Thumb",
+			BackgroundTransparency = 1,
+			Position = UDim2.fromOffset(THUMB_X, (ROW_STEP - THUMB_SIZE.Y) / 2),
+			Size = UDim2.fromOffset(THUMB_SIZE.X, THUMB_SIZE.Y),
+			ZIndex = 2,
+			Parent = line,
+		})
+		UIKit.weaponSilhouette(thumb, row.viewmodel, THUMB_SIZE.X / THUMB_SIZE.Y, true, row.skin).ZIndex = 2
 		label(line, {
 			Name = "Skin",
-			Text = table.concat(row.weapons, " · ") .. "   " .. row.name,
+			Text = row.name,
 			FontFace = F.DisplayText,
 			TextSize = ROW_TEXT,
 			TextColor3 = C.Bone,
-			Position = UDim2.fromOffset(16, 0),
-			Size = UDim2.fromOffset(RARITY_X - 16, ROW_STEP),
+			Position = UDim2.fromOffset(NAME_X, 0),
+			Size = UDim2.fromOffset(RARITY_X - NAME_X, ROW_STEP),
 		}, 2)
 		label(line, {
 			Name = "Rarity",
@@ -429,8 +409,8 @@ local function showReveal(crate: ShopCatalog.Crate, skinId: string, added: boole
 	setText(revealHeading, revealHeadline(added, refund))
 	revealHeading[1].TextColor3 = if added then C.TextSoft else C.Accent
 	for _, row in ShopCatalog.contents(crate, InventoryRules.ITEMS) do
-		if table.find(row.skins, skinId) then
-			setText(revealTitle, table.concat(row.weapons, " · ") .. "  " .. row.name)
+		if row.skin == skinId then
+			setText(revealTitle, row.weapon .. "  " .. row.name)
 			setText(revealRarity, row.rarity.label)
 			for _, item in revealRarity do
 				if item.Name == "Rarity" then
@@ -661,7 +641,7 @@ local function buildDetail(column: Frame)
 		Name = "Contents",
 		BackgroundTransparency = 1,
 		Position = UDim2.fromOffset(EDGE, ROWS_Y),
-		Size = UDim2.fromOffset(COLUMN_WIDTH, 3 * ROW_STEP),
+		Size = UDim2.fromOffset(COLUMN_WIDTH, MAX_ROWS * ROW_STEP),
 		Parent = detail,
 	})
 	filet = UIKit.frame({
@@ -898,7 +878,6 @@ function ShopScreen.init()
 	MenuPage.followTopbar(root, shopColumn)
 	CreditPackWindow.init(closePacks)
 	ShopScene.onCrateClicked(openCrate)
-	ShopScene.onWeaponFocus(highlightRow)
 	paintActions()
 	Players.LocalPlayer:GetAttributeChangedSignal("Role"):Connect(paintActions)
 	-- Skin obtenu (achat, ouverture de test, autre serveur) : TOUT OBTENU peut changer

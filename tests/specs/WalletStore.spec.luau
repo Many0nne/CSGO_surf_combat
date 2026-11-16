@@ -1065,7 +1065,7 @@ return function(T, Loader)
 			local onB = serverB.join(1)
 			ds.latency = 1
 			local buyA = serverA.buy(onA, AWP1, 10)
-			local buyB = serverB.buy(onB, "crate.awp.serie2", 10)
+			local buyB = serverB.buy(onB, "crate.m9.serie1", 10)
 			sched.advance(5)
 			T.expect(buyA.done and buyB.done)
 			local passed = (if buyA.reply.ok then 1 else 0) + (if buyB.reply.ok then 1 else 0)
@@ -1153,7 +1153,16 @@ return function(T, Loader)
 		T.it("tout le contenu déjà possédé : refus `owned` avant tout tirage, rien d'écrit", function()
 			local sched = makeScheduler()
 			local ds = makeDataStore(sched)
-			seed(ds, 1, 600, 0, { "skin.awp.balise", "skin.awp.pan", "skin.awp.orage" })
+			seed(ds, 1, 600, 0, {
+				"skin.awp.balise",
+				"skin.awp.maquis",
+				"skin.awp.trempe",
+				"skin.awp.mue",
+				"skin.awp.pan",
+				"skin.awp.circuit",
+				"skin.awp.orage",
+				"skin.awp.ciselure",
+			})
 			local server = makeServer(sched, ds)
 			local alice = server.join(1)
 			local buy = server.buy(alice, AWP1, ROLL_IMPACT)

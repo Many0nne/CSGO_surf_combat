@@ -163,7 +163,7 @@ return function(T, Loader)
 		end)
 
 		T.it("accepte l'achat d'une caisse et refuse un id de forme impossible (#393)", function()
-			T.expectEqual(honest(N.BUY_CRATE, "crate.m9.serie2"), "ok")
+			T.expectEqual(honest(N.BUY_CRATE, "crate.m9.serie1"), "ok")
 			T.expectEqual(honest(N.BUY_CRATE, 42), "malformed", "id non textuel")
 			T.expectEqual(honest(N.BUY_CRATE), "malformed", "id absent")
 			T.expectEqual(honest(N.BUY_CRATE, string.rep("a", 200)), "malformed", "id trop long")
