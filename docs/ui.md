@@ -42,7 +42,7 @@ avaient chacun leur écriture du même état. Un nouvel écran suit ces règles 
 - **Rouge d'impact = « à moi » ou survolé** : arme équipée, ligne du joueur au classement et au kill feed, survol d'un
   choix. Jamais pour dire quelle page est ouverte.
 - **Touche nommée dans un menu = boîte os à texte sombre** (`UIKit.tag`, `UIKit.keyHint` : aide de l'équipement,
-  Infos > COMMANDES, menu en partie). Dans le HUD, les touches restent des keycaps en relief (`KeyDisplay`, #229).
+  Infos > COMMANDES, menu en partie). Dans le HUD, les touches sont un mini-clavier 3D (`KeyDisplay`, #406).
 - **Action principale d'un écran** (RETOUR, ENVOYER, REPRENDRE) : texte os vif, les autres en os atténué (`page.action`,
   `page.choice`), l'action principale en dernier (à droite).
 - **Aucun texte sous 16 px** (`UITheme.TextSize.Min`), libellés ambrés compris (`UIKit.accentLabel`) : à 12 ou 14 px ils
@@ -249,19 +249,27 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
 - `src/client/ui/KeyDisplay.luau` (#197) : réglage « Affichage des touches » (Réglages > GRAPHISMES, `PlayerSettings.keyDisplay`,
   trois valeurs `off` (défaut) / `simple` / `full`, validées par `sanitize`). Grille façon clavier en bas au centre (`BOTTOM_MARGIN`
   40 px, `scaledRoot`, entre le compteur de vitesse à gauche et la barre d'armes à droite) : touches de `KEY_SIZE` 40 px, `KEY_GAP` 4.
-  **DA (#229, choix de l'utilisateur) : keycaps en relief comme un vrai clavier** (référence : photo d'un clavier blanc à
-  touches roses, vu de face et un peu au-dessus), dans les couleurs du HUD. Chaque touche (`buildKey`) : ombre portée noire
-  décalée de 3 px, rebord plus sombre visible sur les côtés (`CAP_SIDE` 4 px) et sous le dessus (face avant, `CAP_FRONT` 9 px),
-  dessus bombé (dégradé `UIGradient` vertical multiplié à la couleur, pas de `CanvasGroup`), coins arrondis. Couleurs : touches
-  os à libellé sombre (`CAP_KEY`), « modificateurs » Espace, Ctrl, Maj, M1, M2 en ambre (`CAP_MOD`, à la place du rose de la
-  référence) ; enfoncée, la touche descend de `CAP_PRESS` 5 px (le haut descend, le bas reste posé, la face avant raccourcit) et
-  passe au rouge d'impact à libellé os (`CAP_DOWN`). Placement mesuré en jeu (fenêtre 1291x607) : plus de 100 px d'écart avec le
-  compteur et les munitions ; en 16:9, 12 px de marge côté munitions avec le mode `full`.
+  **DA (#406, choix de l'utilisateur) : mini-clavier en vraie 3D, vu de face et plongeant.** `KeyDisplay.buildKeyboard` monte
+  une petite scène dans un `ViewportFrame` (un stud = un pas de grille, caméra à champ de 2° très éloignée, donc quasi
+  orthographique, plongée de 58°) : plaque `C.Scrim` translucide sous les touches (elle détache le clavier d'un sol clair),
+  keycaps évasés en pièces (jupe assombrie, dessus plus clair et en retrait ; coins arrondis par deux pavés croisés et quatre
+  cylindres debout), éclairés par la lumière du `ViewportFrame` (dessus clair, face avant plus sombre). Couleurs : touches os à
+  libellé sombre (`CAP_KEY`), « modificateurs » Espace, Ctrl, Maj, M1, M2 en ambre (`CAP_MOD`) ; enfoncée, la touche descend
+  dans la plaque (`CAP_PRESS`, moins que l'épaisseur de la plaque) et passe au rouge d'impact à libellé os (`CAP_DOWN`).
+  **Piège : un `ViewportFrame` ne rend ni `SurfaceGui` ni texte.** Les libellés sont des `TextLabel` droits posés au-dessus,
+  à la projection du centre du dessus de chaque touche (calcul de la caméra : champ vertical, rapport largeur / hauteur), et
+  ils suivent la touche enfoncée. Emprise à l'écran : `HUDRules.keyDisplayFootprint` (point de vue `KEY_DISPLAY_VIEW`, partagé
+  avec la scène), testée ; la taille des touches est celle de #229 (échelle 1), plaque en plus.
+  Pistes rejetées (#406, en jeu) : clavier tourné en isométrique (vu de côté, lacet de 15 à 28°) : « ça rend pas bien », le bloc
+  de droite remonte et penche ; variantes 2D proposées et non retenues : bloc extrudé oblique (épaisseur en bas à droite),
+  profil bas à tranche avant seule. Avant #406 (#229) : keycaps 2D en relief façon vrai clavier (ombre portée, rebord sur les
+  quatre côtés, dessus bombé en dégradé), jugés « vus du dessus avec tous les bords ».
+  Placement mesuré en jeu (fenêtre 1291x607) : plus de 100 px d'écart avec le compteur et les munitions.
   **Écran étroit (#247, choix de l'utilisateur) :** la grille garde sa taille et remonte au-dessus du compteur de munitions
   quand elle l'atteindrait (`HUDRules.keyDisplayBottom` : bord droit de la grille + `KEY_DISPLAY_CLEARANCE` 12 px au-delà du
-  bord gauche de `AMMO_BOX`, en px du repère `scaledRoot`). Seuil en largeur de ce repère : 1 252 px en `full`, 1 120 px en
-  `simple`. Soit, pour une fenêtre de 540 à 1 152 px de haut (échelle de `scaledRoot` non bornée par 0,75 et 1,6), un ratio de 1,74 en `full` (16:9 inchangé,
-  16:10 et 4:3 remontent) et 1,56 en `simple` (16:10 reste, 4:3 remonte) ; hors de ces hauteurs, le seuil suit la largeur. Replacée au redimensionnement (`AbsoluteSize` du `ScreenGui`, lu après la mise à jour de `scaledRoot`).
+  bord gauche de `AMMO_BOX`, en px du repère `scaledRoot`). Seuil en largeur de ce repère : 1 275 px en `full`, 1 143 px en
+  `simple`. Soit, pour une fenêtre de 540 à 1 152 px de haut (échelle de `scaledRoot` non bornée par 0,75 et 1,6), un ratio de 1,77 en `full` (16:9 inchangé,
+  16:10 et 4:3 remontent) et 1,59 en `simple` (16:10 reste, 4:3 remonte) ; hors de ces hauteurs, le seuil suit la largeur. Replacée au redimensionnement (`AbsoluteSize` du `ScreenGui`, lu après la mise à jour de `scaledRoot`).
   Pistes rejetées (#229, captures en jeu) : grille de cases plates (fond `C.Scrim` translucide, case os pleine une fois enfoncée,
   rendu d'origine de #197, « overlay de stream ») ; lettres os à ombre sans cases avec trait rouge sous la touche enfoncée
   (« titrage », comme le timer) ; trait de bande sous chaque touche rempli d'ambre (« jauge », comme le compteur) ; directions en
@@ -407,7 +415,7 @@ un bhop joué par entrées simulées (MCP) ; la prise humaine était déjà prop
   caméra et la map du joueur ne sont pas touchés.
 - Par-dessus : légende (nom du geste en ambre, geste en une ligne, `InfosRules.demoClips`, touches selon le clavier du
   joueur), vitesse au style du compteur (`HUDRules.speedTier` / `speedFill`), touches en keycaps du HUD
-  (`KeyDisplay.buildKeycap`, mode simple : directions et saut, à 80 %), souris (icône et demi-barre du côté où elle tourne).
+  (`KeyDisplay.buildKeyboard`, mode simple : directions et saut, à 80 %), souris (icône et demi-barre du côté où elle tourne).
 - Libération : `LearnScreen` détruit le lecteur (cadre, copie de la map, boucle de rendu) dès qu'on quitte l'écran
   (RETOUR, autre onglet, JOUER). La copie est détruite par lots de 2 000 pièces sur plusieurs images
   (`freeInBatches`, aussi pour une copie interrompue) : d'un coup, l'image de la fermeture montait à 131 ms (bilan F3).

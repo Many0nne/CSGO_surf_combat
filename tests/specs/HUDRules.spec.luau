@@ -134,12 +134,23 @@ return function(T, Loader)
 	end)
 
 	T.describe("HUDRules.keyDisplayGridSize", function()
-		T.it("mesure la grille : 3 colonnes en simple, 6 en full, 3 rangées, rien en off", function()
+		T.it("mesure le clavier projeté : 3 colonnes en simple, 6 en full, 3 rangées, rien en off", function()
+			-- Largeur : (colonnes - écart + 2 x marge de plaque) x 44 px, arrondie, + 2 x 4 px de marge
 			local w, h = HUDRules.keyDisplayGridSize("simple")
-			T.expectEqual(w, 3 * 44 - 4)
-			T.expectEqual(h, 3 * 44 - 4)
-			T.expectEqual((HUDRules.keyDisplayGridSize("full")), 6 * 44 - 4)
-			T.expectEqual((HUDRules.keyDisplayGridSize("off")), 0)
+			T.expectEqual(w, 151)
+			-- Hauteur : profondeur x sin 58° + (touche + plaque) x cos 58°, mêmes unités
+			T.expectEqual(h, 144)
+			T.expectEqual((HUDRules.keyDisplayGridSize("full")), 283)
+			local offW, offH = HUDRules.keyDisplayGridSize("off")
+			T.expectEqual(offW, 0)
+			T.expectEqual(offH, 0)
+		end)
+
+		T.it("garde des touches de la taille d'avant : la largeur suit la grille plate plus la plaque", function()
+			local view = HUDRules.KEY_DISPLAY_VIEW
+			local flat = 6 * 44 - 4
+			local plate = math.ceil(2 * view.plateMargin * 44 * view.scale) + 2 * view.pad
+			T.expectEqual((HUDRules.keyDisplayGridSize("full")) - flat <= plate, true)
 		end)
 	end)
 

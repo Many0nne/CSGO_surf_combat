@@ -1,11 +1,11 @@
--- Affichage des touches (#197, direction « Ligne de mire », DA #229) : grille façon clavier en bas au centre de l'écran,
--- une touche par action (directions et Espace en « simple », plus accroupi et actions de jeu en « full »). Chaque touche
--- est un keycap en relief : dessus os bombé, rebord plus sombre sur les côtés et dessous, ombre portée ; Espace, Ctrl,
--- Maj et la souris en ambre ; enfoncée, la touche s'enfonce et passe au rouge d'impact. Libellés selon la disposition
--- du clavier (LocalSettings.keyText). Affiché selon HUDRules.keyDisplayVisible appliquée à HUDState (#223) : mode actif,
--- HUD de jeu visible (donc ni menu ni mort) et menu en partie fermé. Mode actif : réglage du joueur, ou « full » pour un
--- débutant (HUDRules.keyDisplayMode, BeginnerState, #291). Pas de CanvasGroup (cf. docs/ui.md) : de simples
--- Frame et TextLabel.
+-- Affichage des touches (#197, direction « Ligne de mire », DA #406) : mini-clavier en bas au centre de l'écran, une
+-- touche par action (directions et Espace en « simple », plus accroupi et actions de jeu en « full »). Le clavier est une
+-- vraie petite scène 3D vue de face et plongeante (ViewportFrame, HUDRules.KEY_DISPLAY_VIEW) : keycaps os évasés posés sur une plaque sombre, Espace, Ctrl,
+-- Maj et la souris en ambre ; enfoncée, la touche descend dans la plaque et passe au rouge d'impact. Les libellés sont des
+-- TextLabel droits posés par projection sur le dessus de chaque touche (un ViewportFrame ne rend pas de SurfaceGui).
+-- Libellés selon la disposition du clavier (LocalSettings.keyText). Affiché selon HUDRules.keyDisplayVisible appliquée à
+-- HUDState (#223) : mode actif, HUD de jeu visible (donc ni menu ni mort) et menu en partie fermé. Mode actif : réglage du
+-- joueur, ou « full » pour un débutant (HUDRules.keyDisplayMode, BeginnerState, #291).
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -28,25 +28,29 @@ local TEXT_SIZE = 18
 local TEXT_SIZE_LONG = 13 -- libellés de plus de deux caractères dans une touche simple (CTRL, MAJ)
 local TEXT_SIZE_WIDE = 16 -- libellé de plus de deux caractères dans une touche large (ESPACE)
 
--- Relief du keycap, vu de face et d'un peu au-dessus
-local CAP_SIDE = 4 -- px de rebord visibles à gauche et à droite du dessus
-local CAP_TOP = 2 -- px de rebord au-dessus du dessus
-local CAP_FRONT = 9 -- px de rebord visibles sous le dessus (face avant)
-local CAP_PRESS = 5 -- px dont la touche s'enfonce
-local CAP_CORNER = 5
-local CAP_SHADOW_OFFSET = 3
-local CAP_SHADOW_TRANSPARENCY = 0.45
-local CAP_FACE_SHADE = Color3.fromRGB(205, 205, 205) -- bas du dessus (dégradé multiplié à la couleur)
-local CAP_SIDE_SHADE = Color3.fromRGB(165, 165, 165) -- bas du rebord
+-- Scène du clavier (#406) : un stud = un pas de grille (touche + écart) ; point de vue et emprise dans HUDRules
+local VIEW = HUDRules.KEY_DISPLAY_VIEW
+local STEP = KEY_SIZE + KEY_GAP -- px
+local CAP = KEY_SIZE / STEP -- studs, côté d'une touche
+local CAP_TOP_HEIGHT = 0.06 -- studs, épaisseur du dessus, plus clair, posé sur la jupe
+local CAP_HEIGHT = VIEW.capHeight - CAP_TOP_HEIGHT -- studs, hauteur de la jupe (flancs) du keycap
+local CAP_TOP_INSET = 0.08 -- studs, retrait du dessus sur la jupe (keycap évasé vers le bas)
+local CAP_RADIUS = 0.12 -- studs, arrondi des coins
+local CAP_PRESS = 0.2 -- studs dont la touche s'enfonce (moins que la plaque n'est épaisse)
+local CAP_SKIRT_DARKEN = 0.22 -- jupe : couleur du dessus assombrie d'autant vers le noir
+local PLATE_COLOR = C.Scrim
+local PLATE_TRANSPARENCY = 0.25
+local CAMERA_FOV = 2 -- degrés : champ étroit, caméra lointaine, presque sans perspective
+local LIGHT_DIRECTION = Vector3.new(0.25, -1, -0.5) -- sens de la lumière : dessus clair, face avant plus sombre
+local LIGHT_COLOR = Color3.fromRGB(150, 150, 150)
+local AMBIENT = Color3.fromRGB(140, 140, 140)
 
--- Couleurs d'un keycap : dessus, rebord, libellé
-type CapColors = { face: Color3, side: Color3, legend: Color3 }
+-- Couleurs d'un keycap : dessus, jupe, libellé
+type CapColors = { face: Color3, skirt: Color3, legend: Color3 }
 
-local CAP_SIDE_DARKEN = 0.33 -- rebord : couleur du dessus assombrie d'autant vers le noir
-
--- Cette méthode permet de décrire les couleurs d'un keycap lorsque ses états sont posés : rebord tiré du dessus.
+-- Cette méthode permet de décrire les couleurs d'un keycap lorsque ses états sont posés : jupe tirée du dessus.
 local function capColors(face: Color3, legend: Color3): CapColors
-	return { face = face, side = face:Lerp(C.Black, CAP_SIDE_DARKEN), legend = legend }
+	return { face = face, skirt = face:Lerp(C.Black, CAP_SKIRT_DARKEN), legend = legend }
 end
 
 local CAP_KEY = capColors(C.Bone, C.Scrim)
@@ -56,6 +60,9 @@ local CAP_DOWN = capColors(C.HitRed, C.Bone)
 local CAP_MODIFIERS = { jump = true, crouch = true, walk = true, fire = true, aim = true }
 
 local KeyDisplay = {}
+
+-- Touche construite : libellé et fonction qui peint la touche au repos ou enfoncée
+export type Keycap = { label: TextLabel, paint: (boolean) -> () }
 
 type KeyView = {
 	entry: HUDRules.KeyDisplayEntry,
@@ -114,82 +121,159 @@ local function textSizeOf(entry: HUDRules.KeyDisplayEntry, text: string): number
 	return if entry.width > 1 then TEXT_SIZE_WIDE else TEXT_SIZE_LONG
 end
 
--- Cette méthode permet d'arrondir les coins d'une pièce de keycap lorsqu'elle est construite.
-local function rounded(frame: Frame, radius: number): Frame
-	UIKit.create("UICorner", { CornerRadius = UDim.new(0, radius), Parent = frame })
-	return frame
+-- Cette méthode permet de construire une pièce de la scène du clavier lorsqu'un keycap ou la plaque est construit.
+local function piece(parent: Instance, size: Vector3, cframe: CFrame, shape: Enum.PartType?): Part
+	local part = Instance.new("Part")
+	part.Anchored = true
+	part.CanCollide = false
+	part.CastShadow = false
+	part.Material = Enum.Material.SmoothPlastic
+	part.TopSurface = Enum.SurfaceType.Smooth
+	part.BottomSurface = Enum.SurfaceType.Smooth
+	part.Shape = shape or Enum.PartType.Block
+	part.Size = size
+	part.CFrame = cframe
+	part.Parent = parent
+	return part
 end
 
--- Cette méthode permet de poser un dégradé vertical multiplié à la couleur d'une pièce lorsqu'un keycap est construit :
--- haut à la couleur pleine, bas assombri de `shade`.
-local function shaded(frame: Frame, shade: Color3)
-	UIKit.create("UIGradient", {
-		Rotation = 90,
-		Color = ColorSequence.new(Color3.new(1, 1, 1), shade),
-		Parent = frame,
-	})
-end
-
--- Cette méthode permet de construire un keycap (ombre, rebord, dessus bombé, libellé) lorsque la grille est construite ;
--- renvoie le libellé et la fonction qui peint la touche au repos ou enfoncée.
-local function buildKey(container: Frame, entry: HUDRules.KeyDisplayEntry): (TextLabel, (boolean) -> ())
-	local holder = UIKit.frame({
-		Name = entry.id,
-		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(entry.col * (KEY_SIZE + KEY_GAP), entry.row * (KEY_SIZE + KEY_GAP)),
-		Size = UDim2.fromOffset(entry.width * (KEY_SIZE + KEY_GAP) - KEY_GAP, KEY_SIZE),
-		Parent = container,
-	})
-	local shadow = rounded(
-		UIKit.frame({
-			Name = "Shadow",
-			BackgroundColor3 = C.Black,
-			BackgroundTransparency = CAP_SHADOW_TRANSPARENCY,
-			ZIndex = 1,
-			Parent = holder,
-		}),
-		CAP_CORNER
-	)
-	local body = rounded(UIKit.frame({ Name = "Body", ZIndex = 2, Parent = holder }), CAP_CORNER)
-	shaded(body, CAP_SIDE_SHADE)
-	local face = rounded(
-		UIKit.frame({ Name = "Face", Position = UDim2.fromOffset(CAP_SIDE, CAP_TOP), Parent = body }),
-		CAP_CORNER - 1
-	)
-	shaded(face, CAP_FACE_SHADE)
-	local text = labelOf(entry)
-	local label = UIKit.text({
-		Name = "Label",
-		Text = text,
-		FontFace = F.Display,
-		TextSize = textSizeOf(entry, text),
-		TextXAlignment = Enum.TextXAlignment.Center,
-		Size = UDim2.fromScale(1, 1),
-		Parent = face,
-	})
-	local rest = if CAP_MODIFIERS[entry.id] then CAP_MOD else CAP_KEY
-	return label,
-		-- Cette méthode permet de peindre la touche lorsque son état change : enfoncée, le haut descend, le bas reste posé.
-		function(down: boolean)
-			local colors = if down then CAP_DOWN else rest
-			local sink = if down then CAP_PRESS else 0
-			body.Position = UDim2.fromOffset(0, sink)
-			body.Size = UDim2.new(1, 0, 1, -sink)
-			face.Size = UDim2.new(1, -2 * CAP_SIDE, 1, -CAP_TOP - CAP_FRONT + sink)
-			shadow.Position = UDim2.fromOffset(0, CAP_SHADOW_OFFSET + sink)
-			shadow.Size = UDim2.new(1, 0, 1, -sink)
-			body.BackgroundColor3 = colors.side
-			face.BackgroundColor3 = colors.face
-			label.TextColor3 = colors.legend
+-- Cette méthode permet de construire un pavé aux coins arrondis (deux pavés croisés et quatre cylindres debout) lorsqu'un
+-- keycap ou la plaque est construit ; `center` est le centre du pavé, renvoie ses pièces.
+local function roundedSlab(parent: Instance, center: Vector3, width: number, depth: number, height: number): { Part }
+	local radius = math.min(CAP_RADIUS, width / 2, depth / 2)
+	local parts = {
+		piece(parent, Vector3.new(width, height, depth - 2 * radius), CFrame.new(center)),
+		piece(parent, Vector3.new(width - 2 * radius, height, depth), CFrame.new(center)),
+	}
+	local upright = CFrame.Angles(0, 0, math.pi / 2)
+	for _, sx in { -1, 1 } do
+		for _, sz in { -1, 1 } do
+			local offset = Vector3.new(sx * (width / 2 - radius), 0, sz * (depth / 2 - radius))
+			local post = Vector3.new(height, 2 * radius, 2 * radius)
+			table.insert(parts, piece(parent, post, CFrame.new(center + offset) * upright, Enum.PartType.Cylinder))
 		end
+	end
+	return parts
 end
 
--- Cette méthode permet de construire un keycap du HUD hors de la grille du HUD lorsqu'un autre écran montre des touches
--- (démos de l'écran Apprendre, #285) : même dessin, même libellé ; renvoie le libellé et la fonction qui peint la touche.
-function KeyDisplay.buildKeycap(container: Frame, entry: HUDRules.KeyDisplayEntry): (TextLabel, (boolean) -> ())
-	local label, paintKey = buildKey(container, entry)
-	paintKey(false)
-	return label, paintKey
+-- Cette méthode permet de construire le mini-clavier 3D d'une liste de touches lorsque le HUD ou une démo (écran
+-- Apprendre, aide de première partie, #285) montre des touches : redimensionne `container` à la taille du clavier
+-- projeté (HUDRules.keyDisplayFootprint) et renvoie, dans l'ordre des entrées, le libellé et le peintre de chaque touche.
+function KeyDisplay.buildKeyboard(container: Frame, entries: { HUDRules.KeyDisplayEntry }): { Keycap }
+	local width, height = HUDRules.keyDisplayFootprint(entries)
+	container.Size = UDim2.fromOffset(width, height)
+	if #entries == 0 then
+		return {}
+	end
+	local viewport = UIKit.create("ViewportFrame", {
+		Name = "Keyboard",
+		BackgroundTransparency = 1,
+		Size = UDim2.fromScale(1, 1),
+		Ambient = AMBIENT,
+		LightColor = LIGHT_COLOR,
+		LightDirection = LIGHT_DIRECTION,
+		ZIndex = 1,
+		Parent = container,
+	}) :: ViewportFrame
+	local camera = Instance.new("Camera")
+	camera.FieldOfView = CAMERA_FOV
+	camera.Parent = viewport
+	viewport.CurrentCamera = camera
+
+	-- Emprise des touches (studs) : x vers la droite, z vers le joueur, dessus de la plaque à y = 0
+	local gapStuds = KEY_GAP / STEP
+	local minX, maxX, maxZ = math.huge, -math.huge, 0
+	for _, entry in entries do
+		minX = math.min(minX, entry.col)
+		maxX = math.max(maxX, entry.col + entry.width - gapStuds)
+		maxZ = math.max(maxZ, entry.row + CAP)
+	end
+	local margin, plateHeight = VIEW.plateMargin, VIEW.plateHeight
+	local plateCenter = Vector3.new((minX + maxX) / 2, -plateHeight / 2, maxZ / 2)
+	local plateWidth, plateDepth = maxX - minX + 2 * margin, maxZ + 2 * margin
+	for _, part in roundedSlab(viewport, plateCenter, plateWidth, plateDepth, plateHeight) do
+		part.Color = PLATE_COLOR
+		part.Transparency = PLATE_TRANSPARENCY
+	end
+
+	-- Cadrage : de face et plongeant, la caméra vise le centre du clavier projeté (même emprise que keyDisplayFootprint)
+	local pitch = math.rad(VIEW.pitch)
+	local direction = Vector3.new(0, math.sin(pitch), math.cos(pitch))
+	local up = Vector3.new(0, math.cos(pitch), -math.sin(pitch))
+	local top = VIEW.capHeight
+	local loY = -plateHeight * math.cos(pitch) - (maxZ + margin) * math.sin(pitch) -- bas de la face avant de la plaque
+	local hiY = top * math.cos(pitch) + margin * math.sin(pitch) -- haut du bord arrière, au niveau des touches
+	local target = Vector3.new(plateCenter.X, 0, 0) + up * (loY + hiY) / 2
+	local pxPerStud = STEP * VIEW.scale
+	local tanHalf = math.tan(math.rad(CAMERA_FOV / 2))
+	local distance = (height / pxPerStud) / 2 / tanHalf
+	camera.CFrame = CFrame.lookAt(target + direction * distance, target)
+	local aspect = width / height
+
+	-- Cette méthode permet de projeter un point de la scène en px du clavier lorsqu'un libellé est posé sur sa touche.
+	local function project(point: Vector3): Vector2
+		local local3 = camera.CFrame:PointToObjectSpace(point)
+		local depth = -local3.Z * tanHalf
+		return Vector2.new((local3.X / (depth * aspect) + 1) / 2 * width, (1 - local3.Y / depth) / 2 * height)
+	end
+
+	local keycaps = {}
+	for _, entry in entries do
+		local capWidth = entry.width - gapStuds
+		local center = Vector3.new(entry.col + capWidth / 2, 0, entry.row + CAP / 2)
+		local skirt = roundedSlab(viewport, center + Vector3.new(0, CAP_HEIGHT / 2, 0), capWidth, CAP, CAP_HEIGHT)
+		local face = roundedSlab(
+			viewport,
+			center + Vector3.new(0, CAP_HEIGHT + CAP_TOP_HEIGHT / 2, 0),
+			capWidth - 2 * CAP_TOP_INSET,
+			CAP - 2 * CAP_TOP_INSET,
+			CAP_TOP_HEIGHT
+		)
+		local rests: { [Part]: CFrame } = {}
+		for _, part in skirt do
+			rests[part] = part.CFrame
+		end
+		for _, part in face do
+			rests[part] = part.CFrame
+		end
+		local text = labelOf(entry)
+		local label = UIKit.text({
+			Name = entry.id,
+			Text = text,
+			FontFace = F.Display,
+			TextSize = textSizeOf(entry, text),
+			TextXAlignment = Enum.TextXAlignment.Center,
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Size = UDim2.fromOffset(capWidth * STEP, KEY_SIZE),
+			ZIndex = 2,
+			Parent = container,
+		})
+		local rest = if CAP_MODIFIERS[entry.id] then CAP_MOD else CAP_KEY
+		table.insert(keycaps, {
+			label = label,
+			-- Cette méthode permet de peindre la touche lorsque son état change : enfoncée, elle descend dans la plaque.
+			paint = function(down: boolean)
+				local colors = if down then CAP_DOWN else rest
+				local sink = Vector3.new(0, if down then -CAP_PRESS else 0, 0)
+				for part, cframe in rests do
+					part.CFrame = cframe + sink
+				end
+				for _, part in skirt do
+					part.Color = colors.skirt
+				end
+				for _, part in face do
+					part.Color = colors.face
+				end
+				local at = project(center + Vector3.new(0, top, 0) + sink)
+				label.Position = UDim2.fromOffset(at.X, at.Y)
+				label.TextColor3 = colors.legend
+			end,
+		})
+	end
+	for _, keycap in keycaps do
+		keycap.paint(false)
+	end
+	return keycaps
 end
 
 -- Cette méthode permet de poser la grille en bas au centre lorsque la taille de l'écran ou de la grille change : au-dessus
@@ -205,8 +289,8 @@ local function place()
 	container.Position = UDim2.new(0.5, 0, 1, -bottom)
 end
 
--- Cette méthode permet de reconstruire la grille lorsque le mode d'affichage change : un keycap par entrée du mode,
--- grille centrée en bas de l'écran.
+-- Cette méthode permet de reconstruire la grille lorsque le mode d'affichage change : un mini-clavier 3D des entrées du
+-- mode, centré en bas de l'écran.
 local function build(mode: string)
 	local container = grid
 	if not container then
@@ -216,17 +300,15 @@ local function build(mode: string)
 	views = {}
 	builtMode = mode
 	local entries = HUDRules.keyDisplayEntries(mode)
-	local width, height = HUDRules.keyDisplayGridSize(mode)
-	container.Size = UDim2.fromOffset(width, height)
+	local keycaps = KeyDisplay.buildKeyboard(container, entries)
 	place()
-	for _, entry in entries do
-		local label, paintKey = buildKey(container, entry)
+	for index, entry in entries do
 		local codes = {}
 		for _, name in entry.keys or {} :: { string } do
 			table.insert(codes, (Enum.KeyCode :: any)[name])
 		end
-		local view: KeyView = { entry = entry, codes = codes, label = label, paint = paintKey, down = false }
-		paint(view, false)
+		local keycap = keycaps[index]
+		local view: KeyView = { entry = entry, codes = codes, label = keycap.label, paint = keycap.paint, down = false }
 		table.insert(views, view)
 	end
 end
@@ -300,7 +382,7 @@ function KeyDisplay.init()
 		Enabled = false,
 		ResetOnSpawn = false,
 		IgnoreGuiInset = true,
-		ZIndexBehavior = Enum.ZIndexBehavior.Sibling, -- ombre sous le rebord, dessus et libellé au-dessus de leur parent
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling, -- libellés au-dessus du clavier 3D
 		DisplayOrder = 0,
 		Parent = Players.LocalPlayer:WaitForChild("PlayerGui"),
 	})
@@ -323,7 +405,6 @@ function KeyDisplay.init()
 	end
 	screenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(replace)
 	scaled:GetAttributeChangedSignal("Scale"):Connect(replace)
-
 	LocalSettings.onChanged(update)
 	BeginnerState.onChanged(update)
 	HUDState.onChanged(onHudChanged)
