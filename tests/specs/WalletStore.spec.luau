@@ -1260,8 +1260,9 @@ return function(T, Loader)
 			sched.advance(10)
 			T.expect(buy.done)
 			T.expectEqual(buy.reply.ok, true)
-			T.expectEqual(buy.reply.added, true)
-			T.expectEqual(buy.reply.refund, 0)
+			-- Verdict inconnu sur un rejeu (#400) : jamais « obtenu » affirmé
+			T.expectEqual(buy.reply.replayed, true)
+			T.expectEqual(buy.reply.added, nil)
 			-- Le nouvel essai trouve la marque de l'achat : il réécrit la fusion sans réappliquer l'opération
 			T.expectEqual(storedBalance(ds, 1), 100, "débité une seule fois")
 			T.expectEqual(#ds.data["1"].items, 1)

@@ -112,6 +112,9 @@ local navigation: { MenuShot.Choice } = {} -- « ‹ SHOP » et flèches de la c
 -- Numéro de la vue affichée, augmenté à chaque changement (caisse, vitrine, shop fermé) : une réponse arrivée après un
 -- changement n'est plus jouée
 local view = 0
+-- Dernière réponse d'achat réussie arrivée sans que sa vue soit affichée (menu quitté pendant l'achat) : montrée une
+-- fois au retour sur le shop, puis effacée (#400)
+local pendingPurchase: { crateId: string, result: any }? = nil
 local DEBUG_ATTRIBUTE = "DebugCrateOpening" -- Studio seulement, voir debugOpening
 local BUY_TEXT = "ACHETER"
 local BUYING_TEXT = "ACHAT…"
@@ -481,8 +484,11 @@ end)
 
 -- Cette méthode permet d'écrire la ligne au-dessus du skin révélé lorsque l'ouverture le montre : « OBTENU », ou pour un
 -- skin déjà possédé « DOUBLON », suivi des crédits rendus par un achat (« DOUBLON · +200 CRÉDITS », #393).
-local function revealHeadline(added: boolean, refund: number): string
-	if added then
+local function revealHeadline(added: boolean?, refund: number): string
+	if added == nil then
+		-- Achat rejoué au verdict inconnu (#400) : ni OBTENU ni DOUBLON affirmés
+		return "ACHAT ÉCRIT"
+	elseif added then
 		return "OBTENU"
 	elseif refund > 0 then
 		return string.format("DOUBLON  ·  +%s %s", WalletRules.format(refund), ShopCatalog.CURRENCY)
@@ -492,9 +498,9 @@ end
 
 -- Cette méthode permet d'afficher la révélation (ligne d'en-tête, skin, rareté dans sa couleur) lorsque l'ouverture
 -- montre l'arme habillée ; un doublon s'écrit en ambre.
-local function showReveal(crate: ShopCatalog.Crate, skinId: string, added: boolean, refund: number)
+local function showReveal(crate: ShopCatalog.Crate, skinId: string, added: boolean?, refund: number)
 	setText(revealHeading, revealHeadline(added, refund))
-	revealHeading[1].TextColor3 = if added then C.TextSoft else C.Accent
+	revealHeading[1].TextColor3 = if added == true or added == nil then C.TextSoft else C.Accent
 	for _, row in ShopCatalog.contents(crate, InventoryRules.ITEMS) do
 		if row.skin == skinId then
 			setText(revealTitle, row.weapon .. "  " .. row.name)
@@ -515,6 +521,41 @@ local function endOpening()
 	reveal.Visible = false
 	detail.Visible = true
 	paintDetail()
+end
+
+-- Cette méthode permet de jouer l'ouverture d'une réponse d'achat réussie (scène puis révélation, ou message sous
+-- ACHETER sans la scène) lorsque la vue détail de `crate` est affichée.
+local function presentResult(crate: ShopCatalog.Crate, result: any)
+	-- `replayed` : rejeu au verdict inconnu (#400), en-tête neutre ; sinon `added` (absent : obtenu)
+	local added: boolean? = if result.replayed == true then nil else result.added ~= false
+	local refund = if type(result.refund) == "number" then result.refund else 0
+	detail.Visible = false
+	local started = ShopScene.playOpening(result.skinId, result.rarity, function()
+		showReveal(crate, result.skinId, added, refund)
+	end, endOpening)
+	if not started then
+		-- Le serveur a déjà donné le skin (ou remboursé) : le dire, même sans la scène
+		detail.Visible = true
+		showStatus(revealHeadline(added, refund), true)
+	end
+	paintPackButton()
+end
+
+-- Cette méthode permet de montrer la réponse d'achat gardée lorsque le shop est ouvert (réponse arrivée shop fermé ou
+-- vue changée) : la caisse payée s'ouvre, la réponse est consommée et ne revient pas (#400).
+local function flushPending()
+	local kept = pendingPurchase
+	if not (kept and gui and gui.Enabled) or requesting or ShopScene.isOpening() then
+		return
+	end
+	pendingPurchase = nil
+	for index, crate in ShopCatalog.CRATES do
+		if crate.id == kept.crateId then
+			openCrate(index)
+			presentResult(crate, kept.result)
+			return
+		end
+	end
 end
 
 -- Cette méthode permet de demander la caisse courante au serveur (`remoteName` : achat ou ouverture de test), puis de
@@ -539,9 +580,15 @@ local function requestCrate(remoteName: string)
 		end
 		requesting = nil
 		paintActions()
+		local revealed = ok and type(result) == "table" and result.ok == true and type(result.skinId) == "string"
 		if not gui.Enabled or view ~= seen then
-			-- Shop fermé ou rouvert pendant la demande : un skin gagné l'est quand même, le solde et l'inventaire suivent ;
-			-- ni scène ni message sur une autre vue que celle de la caisse demandée
+			-- Shop fermé ou rouvert pendant la demande : ni scène ni message sur une autre vue que celle de la caisse
+			-- demandée. Un achat réussi est gardé (payé, jamais montré sinon) et s'affiche au retour sur le shop (#400) ;
+			-- un refus ou une ouverture de test ne sont pas rejoués
+			if revealed and remoteName == NetworkProtocol.Names.BUY_CRATE then
+				pendingPurchase = { crateId = crate.id, result = result }
+				flushPending()
+			end
 			return
 		end
 		if not (ok and type(result) == "table") then
@@ -552,18 +599,7 @@ local function requestCrate(remoteName: string)
 			showStatus(PurchaseStatus.text(REFUSALS, result.reason))
 			return
 		end
-		local added = result.added ~= false
-		local refund = if type(result.refund) == "number" then result.refund else 0
-		detail.Visible = false
-		local started = ShopScene.playOpening(result.skinId, result.rarity, function()
-			showReveal(crate, result.skinId, added, refund)
-		end, endOpening)
-		if not started then
-			-- Le serveur a déjà donné le skin (ou remboursé) : le dire, même sans la scène
-			detail.Visible = true
-			showStatus(revealHeadline(added, refund), true)
-		end
-		paintPackButton()
+		presentResult(crate, result)
 	end)
 end
 
@@ -1011,6 +1047,8 @@ function ShopScreen.show()
 	ShopScene.start()
 	openOverview()
 	paintPackButton()
+	-- Achat payé dont la réponse est arrivée shop fermé : sa révélation s'affiche maintenant (#400)
+	flushPending()
 end
 
 -- Cette méthode permet de fermer le shop (salle retirée, scène de l'accueil reprise) lorsque le joueur change d'onglet
