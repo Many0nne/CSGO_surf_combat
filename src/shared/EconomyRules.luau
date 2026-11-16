@@ -11,7 +11,7 @@
 local EconomyRules = {}
 
 -- Barème (valeurs de départ de #394, à ajuster)
-EconomyRules.ROUND_PLAYED = 15 -- manche jouée (au moins un kill, ou PLAYED_ALIVE_SECONDS en vie dans la manche)
+EconomyRules.ROUND_PLAYED = 15 -- manche jouée (au moins un kill, ou PLAYED_ALIVE_SECONDS en vie avec une activité réelle)
 EconomyRules.PLAYER_KILL = 5 -- kill sur un joueur
 EconomyRules.BOT_KILL = 1 -- kill sur un bot
 EconomyRules.ROUND_WON = 25 -- victoire de manche
@@ -20,6 +20,12 @@ EconomyRules.DAILY_CAP = 250 -- plafond par jour UTC, remis à zéro à 00:00 UT
 -- Temps en vie dans la manche (cumulé sur ses vies) qui fait compter une manche sans kill : écarte l'AFK qui ne fait
 -- qu'apparaître
 EconomyRules.PLAYED_ALIVE_SECONDS = 120
+-- Activité réelle exigée en plus du temps en vie pour une manche sans kill (#401), mesurée par le serveur : distance
+-- horizontale (studs) parcourue sur des positions acceptées par CharacterSync, ou actions de combat acceptées (tir
+-- relayé, touche ou coup de mêlée validés). Un joueur immobile ou qui tourne sur place reste à ~0 stud ; un joueur
+-- qui surf parcourt des milliers de studs en 120 s (mesures dans docs/economie.md).
+EconomyRules.PLAYED_MIN_DISTANCE = 500
+EconomyRules.PLAYED_MIN_ACTIONS = 1
 EconomyRules.SECONDS_PER_DAY = 86400
 
 -- Attributs informatifs du Player, posés par le serveur, jamais relus par lui : gains de la dernière manche jouée
@@ -49,16 +55,33 @@ function EconomyRules.killGain(victimIsBot: boolean): number
 	return if victimIsBot then EconomyRules.BOT_KILL else EconomyRules.PLAYER_KILL
 end
 
+-- Activité d'un joueur dans une manche, mesurée par le serveur (#401) : distance horizontale sur positions acceptées
+-- (studs) et actions de combat acceptées
+export type Activity = { distance: number, actions: number }
+
+-- Cette méthode permet de savoir si une activité mesurée par le serveur est réelle lorsqu'une manche sans kill se
+-- termine : PLAYED_MIN_DISTANCE studs parcourus, ou PLAYED_MIN_ACTIONS actions de combat acceptées.
+function EconomyRules.isActive(activity: Activity): boolean
+	return activity.distance >= EconomyRules.PLAYED_MIN_DISTANCE or activity.actions >= EconomyRules.PLAYED_MIN_ACTIONS
+end
+
 -- Cette méthode permet de savoir si une manche compte comme jouée lorsqu'elle se termine : au moins un kill, ou
--- PLAYED_ALIVE_SECONDS cumulées en vie dans la manche.
-function EconomyRules.played(kills: number, aliveSeconds: number): boolean
-	return kills > 0 or aliveSeconds >= EconomyRules.PLAYED_ALIVE_SECONDS
+-- PLAYED_ALIVE_SECONDS cumulées en vie avec une activité réelle (#401 : un AFK que personne ne tue ne compte pas).
+function EconomyRules.played(kills: number, aliveSeconds: number, activity: Activity): boolean
+	return kills > 0 or (aliveSeconds >= EconomyRules.PLAYED_ALIVE_SECONDS and EconomyRules.isActive(activity))
+end
+
+-- Cette méthode permet de calculer la distance horizontale (studs) d'un pas entre deux positions acceptées lorsque
+-- l'activité d'un joueur est mesurée : la hauteur (chute, saut sur place) ne compte pas.
+function EconomyRules.horizontalStep(from: Vector3, to: Vector3): number
+	local dx, dz = to.X - from.X, to.Z - from.Z
+	return math.sqrt(dx * dx + dz * dz)
 end
 
 -- Cette méthode permet de calculer le gain de fin de manche (manche jouée, plus la victoire) avant plafonds ; 0 si la
 -- manche n'est pas jouée (un vainqueur a forcément un kill, donc une manche jouée).
-function EconomyRules.roundGain(kills: number, aliveSeconds: number, won: boolean): number
-	if not EconomyRules.played(kills, aliveSeconds) then
+function EconomyRules.roundGain(kills: number, aliveSeconds: number, activity: Activity, won: boolean): number
+	if not EconomyRules.played(kills, aliveSeconds, activity) then
 		return 0
 	end
 	return EconomyRules.ROUND_PLAYED + (if won then EconomyRules.ROUND_WON else 0)

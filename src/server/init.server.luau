@@ -331,6 +331,10 @@ local function relayShot(
 	if not participant.isBot then
 		BotManager.hearShot(participant, root.Position)
 	end
+	-- Activité réelle de la manche (#401) : un tir accepté compte pour « manche jouée » sans kill
+	if participant.player then
+		CreditGains.onAction(participant.player)
+	end
 	return true
 end
 
@@ -489,10 +493,21 @@ end
 -- Position des joueurs envoyée par leur client, validée et relayée ; mort par chute hors de la map (attribut
 -- KillHeight de la map jouée) testée sur chaque position acceptée, et sur un joueur silencieux tombé dans le vide
 KillZone.init()
+-- Cette méthode permet de traiter une position acceptée par CharacterSync lorsqu'elle est posée : hauteur de mort,
+-- puis distance d'un joueur pour l'activité réelle de sa manche (#401 ; bots : from nil).
+local function onPositionAccepted(char: Model, pos: Vector3, from: Vector3?)
+	KillZone.check(char, pos)
+	if from then
+		local player = Players:GetPlayerFromCharacter(char)
+		if player then
+			CreditGains.onMove(player, char, from, pos)
+		end
+	end
+end
 CharacterSync.init(
 	characterSyncRmt,
 	movementCorrectionRmt,
-	KillZone.check,
+	onPositionAccepted,
 	{ height = KillZone.height, kill = KillZone.kill }
 )
 
@@ -613,6 +628,8 @@ local function onHitVerdict(
 		-- Touche acceptée, même sans ShotFired ni WeaponAction avant elle : la protection d'apparition tombe (#288).
 		-- Personnage actuel : le rembobinage (PositionHistory.MAX_REWIND, 0,4 s) est bien plus court que RESPAWN_DELAY
 		SpawnProtection.drop(player.Character)
+		-- Activité réelle de la manche (#401) : touche ou coup de mêlée acceptés
+		CreditGains.onAction(player)
 		return applyHit(Participants.fromPlayer(player), targetCharacter, damage, isHeadshot)
 	end
 	return nil

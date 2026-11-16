@@ -29,7 +29,7 @@ local CharacterSync = {}
 
 local relayRemote: UnreliableRemoteEvent? = nil
 local correctionRemote: RemoteEvent? = nil
-local acceptedCallback: ((Model, Vector3) -> ())? = nil
+local acceptedCallback: ((Model, Vector3, Vector3?) -> ())? = nil
 
 -- Une correction restée sans réponse (s) est renvoyée : filet si le client ne l'a pas appliquée (personnage pas prêt).
 local CORRECTION_RESEND = 1
@@ -280,7 +280,7 @@ end
 -- accroupi (#213), gardé dans l'historique (non relayé : le rig 3P ne s'accroupit pas).
 local function onClientPosition(
 	remote: UnreliableRemoteEvent,
-	onAccepted: (Model, Vector3) -> (),
+	onAccepted: (Model, Vector3, Vector3?) -> (),
 	player: Player,
 	pos: any,
 	yaw: any,
@@ -332,6 +332,7 @@ local function onClientPosition(
 	if judgeGuard(player, track, pos, now) then
 		return
 	end
+	local from = track.lastPos
 	track.lastPos = pos
 	track.yaw = yaw
 	track.yawAt = now
@@ -344,7 +345,7 @@ local function onClientPosition(
 			remote:FireClient(other, char, pos, yaw, stamp)
 		end
 	end
-	onAccepted(char, pos)
+	onAccepted(char, pos, from)
 end
 
 -- Cette méthode permet de déclarer tombé un joueur silencieux lorsque la boucle du vide le trouve en l'air au-dessus
@@ -389,12 +390,13 @@ local function checkVoid(fall: FallHooks)
 end
 
 -- Cette méthode permet de brancher la réception des positions lorsque le serveur démarre ; onAccepted reçoit chaque
--- position acceptée (hauteur de mort), correction renvoie un client refusé à sa dernière position acceptée, fall donne
--- la hauteur de mort et la mise à mort pour un joueur silencieux tombé dans le vide.
+-- position acceptée et, pour un joueur, la position acceptée précédente du même personnage (hauteur de mort, activité
+-- des gains en jouant #401 ; nil pour un bot), correction renvoie un client refusé à sa dernière position acceptée,
+-- fall donne la hauteur de mort et la mise à mort pour un joueur silencieux tombé dans le vide.
 function CharacterSync.init(
 	remote: UnreliableRemoteEvent,
 	correction: RemoteEvent,
-	onAccepted: (Model, Vector3) -> (),
+	onAccepted: (Model, Vector3, Vector3?) -> (),
 	fall: FallHooks
 )
 	relayRemote = remote

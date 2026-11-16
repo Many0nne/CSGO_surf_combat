@@ -3,6 +3,38 @@
 Règles d'argent réel du jeu (#395). Stockage des crédits, contrat de `InventoryStore.transact` et achat d'une caisse :
 `docs/architecture.md` (« Crédits », « Achat d'une caisse »). Interface : `docs/ui.md` (« Packs de crédits »).
 
+## Manche jouée : activité réelle (#401)
+
+Barème et plafonds des gains en jouant (#394) : `docs/architecture.md` (« Gains en jouant »). Une manche jouée
+rapporte +15. Avant #401, 120 s en vie suffisaient sans kill : un joueur immobile que les bots ne tuaient pas
+atteignait le plafond du jour (250) en ~17 manches sans jouer.
+
+- Règle (`EconomyRules.played`) : au moins un kill, **ou** `PLAYED_ALIVE_SECONDS` (120 s) cumulées en vie dans la
+  manche **et** une activité réelle (`EconomyRules.isActive`) : `PLAYED_MIN_DISTANCE` studs parcourus à
+  l'horizontale, ou `PLAYED_MIN_ACTIONS` (1) action de combat acceptée. Avec un kill, rien ne change.
+- Tout est mesuré par le serveur, jamais déclaré par le client (`CreditGains.onMove`, `onAction`) :
+  - distance : pas entre deux positions **acceptées** par `CharacterSync` du même personnage (le rappel reçoit la
+    position acceptée précédente). Une position refusée (seau de distance, noclip et vol en mode bloquant) n'arrive
+    jamais ; une téléportation du serveur (`CharacterSync.teleport`) repart de son point d'arrivée et un personnage
+    neuf de son point d'apparition : le saut lui-même n'est jamais compté. La hauteur ne compte pas (chute, saut sur
+    place) ;
+  - action : tir relayé (`relayShot` accepté : arme en main, cadence, chargeur), touche ou coup de mêlée validés par le
+    `Validator` (`onHitVerdict` avec dégâts) ;
+  - seulement pendant une vie dans une manche active, avec le personnage de cette vie : rien au menu, mort, pendant la
+    bannière de fin, ni pour un paquet tardif d'un ancien personnage.
+- Seuil de distance mesuré en partie (ci-dessous) : immobile ou en tournant sur place, ~0 stud ; en surf, des
+  milliers de studs en 120 s. `PLAYED_MIN_DISTANCE` est placé loin des deux.
+- Limite connue : un script qui fait tourner le personnage en rond ou tire une fois par manche passe. Le plafond du
+  jour borne ce cas ; une détection plus fine (distance utile, variété des positions) reste possible plus tard.
+- Studio : la ligne `[CreditGains] fin de manche …` donne kills, temps en vie, distance (studs) et actions.
+- Tests : `tests/specs/EconomyRules.spec.luau` (règle, seuil, pas horizontal), `tests/specs/CreditGains.spec.luau`
+  (« activité réelle » : AFK immobile ou qui tourne sur place non crédité, actif par distance ou tir crédité, kill
+  comme avant, hors vie et hors manche ignorés).
+
+Mesures (Studio, map jouée, `[CreditGains]`) :
+
+MESURES_A_COMPLETER
+
 ## Packs de crédits (Developer Products)
 
 - Config : `src/shared/CreditPacks.luau` (`PACKS` : id du pack, `productId`, crédits, prix affiché, nom du produit).
