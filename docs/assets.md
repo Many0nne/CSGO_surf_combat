@@ -383,7 +383,8 @@ marquages sont celles de Windows (`C:/Windows/Fonts`, Bahnschrift, Impact) : gé
 ### Skins dessinés de la M9 (#420)
 
 Même principe que pour l'AWP : un skin est **dessiné pour la M9 seule**, un script par skin dans `assets/m9/skins/`
-(`emaille` pour ÉMAIL, `patrouille`, `artdeco`, et `hote` et `sphinx` de la série FILM, #433 et #436), avec une fonction `paint(kn)`. La M9 n'a pas de source Blender : on
+(`emaille` pour ÉMAIL, `patrouille`, `artdeco`, `hote` et `sphinx` de la série FILM, #433 et #436, et les communs
+`leurre`, `chantier`, `topo` et `ceramique`, #476), avec une fonction `paint(kn)`. La M9 n'a pas de source Blender : on
 part de ses cartes d'origine et de sa cuisson (`fetch_viewmodel.py` puis `bake_maps.py --glb`, étape 1 de « Fabriquer
 un skin » ci-dessous). Outils communs (`common.py`) :
 
@@ -424,6 +425,23 @@ qu'ensuite. Puis publier et cataloguer (étapes 4 et 5 de « Fabriquer un skin �
   descend vers le tranchant sur un rendu `render_views.py`.
 - **Arête de la gouttière à h ≈ 0,02** : le bord bas de la gouttière est une arête du mesh, visible comme un trait sombre ;
   un motif centré dessus (colonne de HÔTE) paraît coupé en deux. Placer un motif linéaire au-dessus ou en dessous.
+- **Communs sobres (#476)** : un ou deux tons et un motif régulier (bandes dazzle, chevrons et pochoir, courbes de niveau,
+  bicolore), pour que les rares et au-delà restent plus riches. Ils sont rangés dans M9 · SÉRIE 1 (le test du shop
+  exige qu'un skin soit dans une caisse), comme les communs de l'AWP.
+- **Rien ne tient le long du dos de la M9** : entre le haut de la gouttière (0,13) et le creux des dents (0,15) il reste
+  0,015 unité ; une bande du dos ne se voit que sur les dents. Le grand biseau (`grind`) ne fait qu'un liseré de
+  profil. Un bicolore se partage en hauteur (CÉRAMIQUE : le tiers côté tranchant, sur une ligne calée entre le tranchant
+  et le dos lissé par-dessus les dents, `maximum_filter1d`).
+- **Projeter des texels sur la toile** donne un semis clairsemé (texels ~3 fois moins denses que la toile) : un
+  `binary_closing` ne comble pas un masque fin comme `grind`. Prendre plutôt une hauteur par colonne, puis lisser.
+- **Courbes de niveau** (TOPO) : à largeur constante, écart au niveau divisé par la pente. Des sommets ronds font une
+  cible ; des courbes allongées brunes sur fond sable font du bois : sommets en ellipses orientées reliés par un col, papier
+  vert pâle et quadrillage bleu marqué.
+- **Texte de la M9 à l'envers en 1P** : le couteau est tenu tranchant en haut, un texte posé droit sur la toile (dos en
+  haut) se lit tête en bas (PATROUILLE, première version de CHANTIER). `kn.text(..., angle=180)`, et la ligne qui doit
+  paraître au-dessus se place côté tranchant (h plus bas). Contrôler en 1P dans le jeu, pas sur la planche.
+- **Rendus `render_views.py` brûlés au blanc** (vue `lame`, même PATROUILLE : lame claire face à la lumière principale) :
+  `--exposure -1`.
 
 ### Série FILM (#433)
 

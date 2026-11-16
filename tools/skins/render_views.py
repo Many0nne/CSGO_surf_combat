@@ -7,7 +7,7 @@ fichiers m9_Handle_*.png acceptés). Une vue = un PNG <sortie>_<vue>.png, fond t
 Usage :
   blender -b assets/sniper/Sniper.blend --factory-startup --python tools/skins/render_views.py -- awp <dossier> <sortie>
   blender -b --factory-startup --python tools/skins/render_views.py -- m9 <dossier> <sortie> --glb <m9.glb>
-Options : --samples N (64), --res LxH (1200x800), --hdri <nom> (studiolights/world : city, courtyard, interior...),
+Options : --samples N (64), --res LxH (1200x800), --exposure E (0, en diaphragmes), --hdri <nom> (studiolights/world : city, courtyard, interior...),
 --views a,b (toutes par défaut).
 """
 
@@ -44,6 +44,8 @@ scene.render.resolution_x, scene.render.resolution_y = RES
 scene.render.resolution_percentage = 100
 # Standard : les couleurs peintes restent telles quelles (AgX désature les rouges vifs en saumon)
 scene.view_settings.view_transform = opt("--view", "Standard")
+# Une lame claire et peu rugueuse sature au blanc sous la lumière principale (vue « lame » de la M9) : baisser d'un cran
+scene.view_settings.exposure = float(opt("--exposure", "0"))
 
 
 # Cette méthode permet de trouver la carte d'un préfixe dans le dossier de textures, sous l'un des noms acceptés.
