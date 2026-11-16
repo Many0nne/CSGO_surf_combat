@@ -11,6 +11,7 @@
 local ServerScriptService = game:GetService("ServerScriptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local TransactOutcome = require(ReplicatedStorage.Shared.TransactOutcome)
 local WalletRules = require(ReplicatedStorage.Shared.WalletRules)
 local InventoryStore = require(ServerScriptService.Server.InventoryStore)
 
@@ -60,11 +61,7 @@ function WalletStore.spend(player: Player, amount: number): SpendStatus
 		record.wallet = wallet
 		return record, nil
 	end)
-	if status == "rejected" then
-		-- Seul un solde stocké trop bas est la faute du joueur ; un autre refus est un bug serveur
-		return if reason == "insufficient" then "insufficient" else "failed"
-	end
-	return status
+	return TransactOutcome.translate(status, reason)
 end
 
 -- Cette méthode permet, dans Studio, d'ajouter au solde l'attribut `DebugCredits` posé en contexte serveur (négatif :

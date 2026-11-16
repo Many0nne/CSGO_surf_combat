@@ -26,6 +26,7 @@ local LocalWallet = require(script.Parent.Parent.systems.inventory.LocalWallet)
 local CreditPackWindow = require(script.Parent.CreditPackWindow)
 local MenuPage = require(script.Parent.MenuPage)
 local MenuShot = require(script.Parent.MenuShot)
+local PurchaseStatus = require(script.Parent.PurchaseStatus)
 local UIKit = require(script.Parent.UIKit)
 
 local C = UITheme.Colors
@@ -111,13 +112,12 @@ local navigation: { MenuShot.Choice } = {} -- « ‹ SHOP » et flèches de la c
 -- Numéro de la vue affichée, augmenté à chaque changement (caisse, vitrine, shop fermé) : une réponse arrivée après un
 -- changement n'est plus jouée
 local view = 0
-local statusToken = 0
 local DEBUG_ATTRIBUTE = "DebugCrateOpening" -- Studio seulement, voir debugOpening
 local BUY_TEXT = "ACHETER"
 local BUYING_TEXT = "ACHAT…"
 local OPEN_TEXT = "OUVERTURE DE TEST  ·  GRATUITE"
 -- Joueur restreint (objets aléatoires payants, #395) : ACHETER inactif avec cette étiquette, refus `region` du serveur
-local REGION_TEXT = "INDISPONIBLE DANS TA RÉGION"
+local REGION_TEXT = PurchaseStatus.REFUSALS.region
 -- Packs de crédits (#395) : bouton sous les gains du jour (MainMenu, en haut à droite), fenêtre CreditPackWindow
 local PACKS_TEXT = "+ CRÉDITS"
 local PACKS_Y = 100 -- sous « GAINS DU JOUR » de la barre du menu (68 à 90)
@@ -127,19 +127,15 @@ local shopVeil: Frame
 local overviewHints: Frame -- aide de la vitrine, hors de la colonne (bas de l'écran)
 local packButton: Frame
 -- Motifs de refus du serveur (CrateService), affichés sous ACHETER
-local REFUSALS = {
-	rate = "PATIENTE",
+local REFUSALS = PurchaseStatus.labels({
 	busy = "ACHAT DÉJÀ EN COURS",
 	loading = "INVENTAIRE EN CHARGEMENT",
 	forbidden = "RÉSERVÉ",
 	unknown = "CAISSE INCONNUE",
 	empty = "CAISSE VIDE",
 	owned = "TOUT OBTENU",
-	region = REGION_TEXT,
 	insufficient = "CRÉDITS INSUFFISANTS",
-	-- Pas « rien n'est débité » : une écriture passée dont la vérification échoue est aussi `failed` (InventoryStore)
-	failed = "ACHAT IMPOSSIBLE  ·  RÉESSAIE PLUS TARD",
-}
+})
 local paintActions: () -> ()
 local paintPackButton: () -> () = function() end
 
@@ -477,21 +473,11 @@ paintActions = function()
 	paintPackButton()
 end
 
--- Cette méthode permet d'afficher un message sous ACHETER pendant 3 s (refus ou échec en rouge d'impact, `ok` en ambre)
--- lorsque le serveur répond sans que l'ouverture puisse se jouer.
-local function showStatus(text: string, ok: boolean?)
-	statusToken += 1
-	local token = statusToken
-	status.Text = text
-	status.BackgroundColor3 = if ok then C.Accent else C.HitRed
-	status.TextColor3 = if ok then C.Ground else C.Bone
-	status.Visible = true
-	task.delay(3, function()
-		if token == statusToken then
-			status.Visible = false
-		end
-	end)
-end
+-- Message sous ACHETER pendant 3 s (refus ou échec en rouge d'impact, `ok` en ambre) lorsque le serveur répond sans que
+-- l'ouverture puisse se jouer.
+local showStatus = PurchaseStatus.presenter(function()
+	return status
+end)
 
 -- Cette méthode permet d'écrire la ligne au-dessus du skin révélé lorsque l'ouverture le montre : « OBTENU », ou pour un
 -- skin déjà possédé « DOUBLON », suivi des crédits rendus par un achat (« DOUBLON · +200 CRÉDITS », #393).
@@ -559,11 +545,11 @@ local function requestCrate(remoteName: string)
 			return
 		end
 		if not (ok and type(result) == "table") then
-			showStatus("ÉCHEC")
+			showStatus(PurchaseStatus.text(REFUSALS, nil))
 			return
 		end
 		if not result.ok then
-			showStatus(REFUSALS[result.reason] or "ÉCHEC")
+			showStatus(PurchaseStatus.text(REFUSALS, result.reason))
 			return
 		end
 		local added = result.added ~= false

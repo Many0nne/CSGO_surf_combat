@@ -16,6 +16,7 @@ local WalletRules = require(Shared:WaitForChild("WalletRules"))
 local LocalWallet = require(script.Parent.Parent.systems.inventory.LocalWallet)
 local MenuPage = require(script.Parent.MenuPage)
 local MenuShot = require(script.Parent.MenuShot)
+local PurchaseStatus = require(script.Parent.PurchaseStatus)
 local UIKit = require(script.Parent.UIKit)
 
 local C = UITheme.Colors
@@ -30,22 +31,17 @@ local PACK_ICON = 56
 local AMOUNT_SIZE = 52
 local PRICE_SIZE = Vector2.new(160, 42)
 local NOTE_Y = PACKS_Y + 290
-local STATUS_TIME = 3 -- s d'affichage d'un message
 local DIM_TRANSPARENCY = 0.35 -- voile plein écran sous le voile central (salle du shop assombrie)
 -- Motifs de refus du serveur (ReceiptService), affichés sous les packs
-local REFUSALS = {
-	rate = "PATIENTE",
-	region = "INDISPONIBLE DANS TA RÉGION",
+local REFUSALS = PurchaseStatus.labels({
 	unknown = "PACK INCONNU",
 	unavailable = "PACKS PAS ENCORE EN VENTE",
 	full = "SOLDE AU MAXIMUM",
 	loading = "SAUVEGARDE INDISPONIBLE  ·  RÉESSAIE PLUS TARD",
-	failed = "ACHAT IMPOSSIBLE  ·  RÉESSAIE PLUS TARD",
-}
+})
 
 local page: MenuPage.Page
 local status: TextLabel
-local statusToken = 0
 -- s au plus pendant lesquels les prix attendent la fin du prompt de Roblox (secours si elle n'arrive jamais)
 local PROMPT_TIMEOUT = 120
 -- Achat en cours, de la demande au serveur à la fin du prompt de Roblox (PromptProductPurchaseFinished) : les prix
@@ -73,21 +69,10 @@ local function endPurchase(id: number)
 	end
 end
 
--- Cette méthode permet d'afficher un message sous les packs pendant STATUS_TIME (refus en rouge d'impact, crédits
--- reçus en ambre) lorsque le serveur répond ou que le solde monte.
-local function showStatus(text: string, ok: boolean?)
-	statusToken += 1
-	local token = statusToken
-	status.Text = text
-	status.BackgroundColor3 = if ok then C.Accent else C.HitRed
-	status.TextColor3 = if ok then C.Ground else C.Bone
-	status.Visible = true
-	task.delay(STATUS_TIME, function()
-		if token == statusToken then
-			status.Visible = false
-		end
-	end)
-end
+-- Message sous les packs (refus en rouge d'impact, crédits reçus en ambre) lorsque le serveur répond ou que le solde monte
+local showStatus = PurchaseStatus.presenter(function()
+	return status
+end)
 
 -- Cette méthode permet de demander au serveur le prompt d'achat d'un pack lorsque le joueur clique sur son prix ; une
 -- demande à la fois, réponse affichée seulement en cas de refus (le prompt de Roblox suffit sinon).
@@ -117,7 +102,7 @@ local function requestPack(pack: CreditPacks.Pack)
 			awaitingCredits = nil
 		end
 		endPurchase(id)
-		showStatus(if ok and type(result) == "table" then REFUSALS[result.reason] or "ÉCHEC" else "ÉCHEC")
+		showStatus(PurchaseStatus.text(REFUSALS, if ok and type(result) == "table" then result.reason else nil))
 	end)
 end
 
