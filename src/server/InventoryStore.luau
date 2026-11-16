@@ -25,7 +25,6 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local StarterPack = game:GetService("StarterPack")
 
 local EconomyRules = require(ReplicatedStorage.Shared.EconomyRules)
-local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local InventoryRules = require(ReplicatedStorage.Shared.InventoryRules)
 local WalletRules = require(ReplicatedStorage.Shared.WalletRules)
 local CheatLog = require(ServerScriptService.Server.CheatLog)
@@ -36,11 +35,16 @@ local DEBUG_ATTRIBUTE = "DebugInventory"
 local BACKPACK_WAIT = 5 -- s d'attente maximale du sac d'un personnage qui vient d'apparaître
 local CLOSE_WAIT = 25 -- s d'attente maximale des sauvegardes en vol à l'arrêt du serveur (budget Roblox : 30 s)
 local SAVE_RETRY_DELAY = 60 -- s avant un nouvel essai d'une sauvegarde en échec (panne passagère du DataStore)
--- Échecs d'affilée (de 3 essais chacun) après lesquels une sauvegarde en échec n'est plus retentée qu'à chaque
--- auto-sauvegarde (GameConfig.AUTO_SAVE_INTERVAL) : elle n'est jamais abandonnée tant qu'il reste quelque chose à écrire
+-- Échecs d'affilée (de 3 essais chacun) après lesquels une sauvegarde en échec n'est plus retentée que toutes les
+-- FAILED_SAVE_INTERVAL s, sans fin tant que le joueur est là (#408) ; un joueur parti est abandonné après autant
+-- d'échecs depuis son départ (une écriture très en retard écraserait l'équipement choisi depuis sur un autre serveur)
 local MAX_SAVE_FAILURES = 5
+-- s entre deux essais d'une sauvegarde après MAX_SAVE_FAILURES échecs (rythme d'une auto-sauvegarde, comme StatsStore)
+local FAILED_SAVE_INTERVAL = 120
 -- s entre deux écritures en échec d'un même profil à l'arrêt du serveur (#408), tant que closeDeadline le permet
 local CLOSE_RETRY_DELAY = 2
+-- s d'attente en plus de CLOSE_WAIT pour une écriture lancée avant closeDeadline et encore en vol (budget : 30 s)
+local CLOSE_IN_FLIGHT_GRACE = 4
 -- s minimum entre deux écritures d'un même profil après un changement d'équipement : Roblox limite les écritures d'une
 -- clé (une toutes les 6 s), des clics rapprochés sont réunis en une seule écriture
 local EQUIP_SAVE_SPACING = 6
@@ -367,6 +371,17 @@ local function acquire(profile: Profile)
 	end
 end
 
+-- Cette méthode permet de choisir le délai avant un nouvel essai d'une sauvegarde en échec (hors arrêt) lorsqu'elle se
+-- termine ; nil : abandonnée (joueur parti, MAX_SAVE_FAILURES échecs depuis son départ).
+local function retryDelay(player: Player, profile: Profile): number?
+	if profile.failures < MAX_SAVE_FAILURES then
+		return SAVE_RETRY_DELAY
+	elseif profiles[player] ~= profile then
+		return nil
+	end
+	return FAILED_SAVE_INTERVAL
+end
+
 -- Cette méthode permet de rendre le tour d'écriture d'un profil lorsqu'une écriture se termine : à la transaction
 -- suivante s'il y en a une, sinon ce qui a changé entre-temps est programmé, jamais dans le thread de l'appelant (une
 -- transaction rend son issue tout de suite) : échec, plus tard (arrêt : CLOSE_RETRY_DELAY s, s'il reste le temps).
@@ -395,18 +410,18 @@ local function release(player: Player, profile: Profile)
 				pendingGains(profile)
 			)
 		end
-	elseif profile.failures >= MAX_SAVE_FAILURES then
-		-- Panne qui dure : un essai par auto-sauvegarde, tant qu'il reste quelque chose à écrire (#408)
-		queueSave(player, profile, GameConfig.AUTO_SAVE_INTERVAL)
-	elseif profile.failures > 0 then
-		queueSave(player, profile, SAVE_RETRY_DELAY)
-	else
+	elseif profile.failures == 0 then
 		queueSave(player, profile)
+	else
+		local delay = retryDelay(player, profile)
+		if delay then
+			queueSave(player, profile, delay)
+		end
 	end
 end
 
 -- Cette méthode permet de signaler une écriture en échec lorsqu'elle a épuisé ses essais : le profil reste à écrire
--- (lots de gains compris), retenté par `release` tant qu'il n'est pas écrit, joueur parti compris.
+-- (lots de gains compris), retenté par `release` tant qu'il n'est pas écrit (joueur parti : cf. retryDelay).
 local function noteFailure(player: Player, profile: Profile)
 	profile.dirty = true
 	profile.failures += 1
@@ -417,7 +432,18 @@ local function noteFailure(player: Player, profile: Profile)
 			"— nouvel essai avant l'arrêt s'il reste le temps"
 		)
 	else
-		local delay = if profile.failures >= MAX_SAVE_FAILURES then GameConfig.AUTO_SAVE_INTERVAL else SAVE_RETRY_DELAY
+		local delay = retryDelay(player, profile)
+		if not delay then
+			warn(
+				"[InventoryStore] sauvegarde abandonnée pour",
+				player.Name,
+				"(parti) après",
+				profile.failures,
+				"échecs — gains perdus :",
+				pendingGains(profile)
+			)
+			return
+		end
 		warn(
 			"[InventoryStore] sauvegarde impossible pour",
 			player.Name,
@@ -516,7 +542,7 @@ local function runWrite(
 			return record
 		end)
 	end)
-	if not ok and op and hasTimeFor(0) then
+	if not ok and op then
 		-- Tous les essais signalés en échec : l'un d'eux a pu passer (réponse perdue). La marque de l'opération le dit.
 		local readOk, data = getFresh(ds, key)
 		local wallet = WalletRules.read(if readOk and type(data) == "table" then data.wallet else nil)
@@ -530,6 +556,8 @@ local function runWrite(
 		noteRefused(player, profile)
 		return "loading", nil
 	elseif ok and status == "rejected" then
+		-- DataStore joignable : les échecs d'avant ne retardent plus la sauvegarde de ce qui reste (#408)
+		profile.failures = 0
 		-- Rien d'écrit : l'état stocké relu remplace la copie locale ; ce qui a changé pendant l'attente reste à écrire
 		adoptWallet(profile, if type(seen) == "table" then seen.wallet else nil)
 		profile.dirty = profile.dirty or wasDirty or #profile.batches > 0 or profile.gains > 0 or profile.playGains > 0
@@ -893,6 +921,8 @@ function InventoryStore.init(equipRemote: RemoteEvent, isSpawning: (Player) -> b
 		local profile = profiles[player]
 		profiles[player] = nil
 		if profile then
+			-- Les échecs du joueur connecté ne comptent pas dans l'abandon de son profil une fois parti (cf. retryDelay)
+			profile.failures = 0
 			saveProfile(player, profile)
 		end
 	end)
@@ -907,8 +937,12 @@ function InventoryStore.init(equipRemote: RemoteEvent, isSpawning: (Player) -> b
 		for player, profile in profiles do
 			task.spawn(saveProfile, player, profile)
 		end
-		-- Nouveaux essais programmés par `release` (échec, changement pendant l'écriture) attendus aussi
-		while (savesInFlight > 0 or next(pendingSaves) ~= nil) and os.clock() < closeDeadline do
+		-- Nouveaux essais programmés par `release` (échec, changement pendant l'écriture) attendus jusqu'à closeDeadline,
+		-- une écriture lancée avant et encore en vol CLOSE_IN_FLIGHT_GRACE s de plus (une transaction attend son issue)
+		while
+			(savesInFlight > 0 and os.clock() < closeDeadline + CLOSE_IN_FLIGHT_GRACE)
+			or (next(pendingSaves) ~= nil and os.clock() < closeDeadline)
+		do
 			task.wait(0.1)
 		end
 	end)

@@ -574,6 +574,24 @@ return function(T, Loader)
 		)
 
 		T.it(
+			"joueur parti, DataStore en panne : abandonné après MAX_SAVE_FAILURES échecs depuis son départ (#408)",
+			function()
+				local sched = makeScheduler()
+				local ds = makeDataStore(sched)
+				local server = makeServer(sched, ds)
+				local alice = server.join(1)
+				server.Wallet.add(alice, 40)
+				ds.failures = math.huge
+				server.leave(alice)
+				sched.advance(1000)
+				T.expect(hasWarning(server, "sauvegarde abandonnée pour"), "abandon signalé")
+				local count = #ds.requests
+				sched.advance(1000)
+				T.expectEqual(#ds.requests, count, "plus aucun essai après l'abandon")
+			end
+		)
+
+		T.it(
 			"lot renvoyé après les écritures de MAX_WRITE_MARKS - 1 autres sessions : compté une fois (#408)",
 			function()
 				T.expect(Wallet.MAX_WRITE_MARKS >= 20 and Wallet.MAX_WRITE_MARKS <= 50, "borne entre 20 et 50")
@@ -641,7 +659,7 @@ return function(T, Loader)
 				server.Wallet.add(alice, 50)
 				server.Wallet.add(bob, 20)
 				ds.failures = math.huge
-				ds.latency = 1
+				ds.latency = 3 -- un essai lancé juste avant closeDeadline finit après : attendu dans la marge
 				local started = #ds.requests
 				local state = server.close()
 				-- Achat ou reçu Robux qui attend son tour derrière la sauvegarde d'arrêt d'alice
@@ -654,13 +672,13 @@ return function(T, Loader)
 				T.expect(pending.done, "transaction répondue")
 				T.expectEqual(pending.status, "failed")
 				T.expect(pending.at < 30, "transaction répondue en " .. tostring(pending.at) .. " s")
-				-- Aucun essai ne part après le budget, et ils sont espacés (2 s au moins entre deux essais d'un même profil :
-				-- 16 requêtes pour 2 joueurs et la transaction en 25 s)
+				-- Aucun essai ne part après closeDeadline (25 s), et ils sont espacés (2 s au moins entre deux essais d'un
+				-- même profil : 11 requêtes pour 2 joueurs et la transaction)
 				local count = #ds.requests - started
 				for i = started + 1, #ds.requests do
 					T.expect(ds.requests[i] < 25, "essai lancé à " .. ds.requests[i] .. " s")
 				end
-				T.expect(count <= 20, count .. " requêtes")
+				T.expect(count <= 14, count .. " requêtes")
 				T.expect(hasWarning(server, "sauvegarde abandonnée à l'arrêt"))
 				print(
 					string.format(
