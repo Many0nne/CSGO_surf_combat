@@ -29,7 +29,9 @@ local CharacterSync = {}
 
 local relayRemote: UnreliableRemoteEvent? = nil
 local correctionRemote: RemoteEvent? = nil
-local acceptedCallback: ((Model, Vector3, Vector3?) -> ())? = nil
+local acceptedCallback: ((Model, Vector3) -> ())? = nil
+-- Déplacement d'un joueur entre deux positions acceptées sans signalement (activité des gains en jouant, #401)
+local moveListener: ((Player, Model, Vector3, Vector3) -> ())? = nil
 
 -- Une correction restée sans réponse (s) est renvoyée : filet si le client ne l'a pas appliquée (personnage pas prêt).
 local CORRECTION_RESEND = 1
@@ -254,24 +256,25 @@ function CharacterSync.teleport(player: Player, pos: Vector3): boolean
 end
 
 -- Cette méthode permet de juger un paquet accepté par le seau avec les règles du noclip et du vol lorsque la map est
--- prête ; renvoie true si le paquet est refusé (mode bloquant), false s'il est accepté (violation au journal seul).
-local function judgeGuard(player: Player, track: Track, pos: Vector3, now: number): boolean
+-- prête ; renvoie true si le paquet est refusé (mode bloquant), false s'il est accepté, puis true s'il a été
+-- signalé (violation au journal seul, position appliquée quand même).
+local function judgeGuard(player: Player, track: Track, pos: Vector3, now: number): (boolean, boolean)
 	local geo = geometry
 	if not geo then
-		return false
+		return false, false
 	end
 	local startedAt = os.clock()
 	local verdict = MovementGuardRules.judge(track.guard, track.lastPos, pos, now, geo)
 	PerfMarkers.record("srv anti-vol", os.clock() - startedAt)
 	if not verdict then
-		return false
+		return false, false
 	end
 	if verdict.enforce then
 		refuse(player, track, verdict.rule, verdict.detail, now)
-		return true
+		return true, true
 	end
 	reportMove(player, verdict.rule, verdict.detail)
-	return false
+	return false, true
 end
 
 -- Cette méthode permet de traiter la position annoncée par un client lorsqu'elle arrive : forme vérifiée, paquet
@@ -280,7 +283,7 @@ end
 -- accroupi (#213), gardé dans l'historique (non relayé : le rig 3P ne s'accroupit pas).
 local function onClientPosition(
 	remote: UnreliableRemoteEvent,
-	onAccepted: (Model, Vector3, Vector3?) -> (),
+	onAccepted: (Model, Vector3) -> (),
 	player: Player,
 	pos: any,
 	yaw: any,
@@ -317,6 +320,7 @@ local function onClientPosition(
 	-- Pas de délai minimal entre deux paquets : des paquets groupés passent, chacun consomme le seau (débit borné par
 	-- la garde commune, RemoteGuard)
 	local silence = now - track.budget.lastAt
+	local flagged = false
 	if not CharacterSyncRules.tryMove(track.budget, track.lastPos, pos, now) then
 		local distance = (pos - track.lastPos).Magnitude
 		local detail = string.format("déplacement de %.1f studs en %.2f s refusé", distance, silence)
@@ -327,9 +331,11 @@ local function onClientPosition(
 		-- Journal seul : violation comptée, déplacement appliqué quand même, seau vidé
 		reportMove(player, "speed", detail)
 		track.budget.stored = 0
+		flagged = true
 	end
 	-- Noclip et vol (#177) : refus et correction en mode bloquant, journal seul sinon
-	if judgeGuard(player, track, pos, now) then
+	local refused, guardFlagged = judgeGuard(player, track, pos, now)
+	if refused then
 		return
 	end
 	local from = track.lastPos
@@ -345,7 +351,13 @@ local function onClientPosition(
 			remote:FireClient(other, char, pos, yaw, stamp)
 		end
 	end
-	onAccepted(char, pos, from)
+	-- Activité (#401) : seulement un déplacement que l'anti-triche n'a pas signalé ; avant la hauteur de mort, qui peut
+	-- tuer le personnage
+	local listener = moveListener
+	if listener and not (flagged or guardFlagged) then
+		listener(player, char, from, pos)
+	end
+	onAccepted(char, pos)
 end
 
 -- Cette méthode permet de déclarer tombé un joueur silencieux lorsque la boucle du vide le trouve en l'air au-dessus
@@ -390,13 +402,12 @@ local function checkVoid(fall: FallHooks)
 end
 
 -- Cette méthode permet de brancher la réception des positions lorsque le serveur démarre ; onAccepted reçoit chaque
--- position acceptée et, pour un joueur, la position acceptée précédente du même personnage (hauteur de mort, activité
--- des gains en jouant #401 ; nil pour un bot), correction renvoie un client refusé à sa dernière position acceptée,
--- fall donne la hauteur de mort et la mise à mort pour un joueur silencieux tombé dans le vide.
+-- position acceptée (hauteur de mort), correction renvoie un client refusé à sa dernière position acceptée, fall donne
+-- la hauteur de mort et la mise à mort pour un joueur silencieux tombé dans le vide.
 function CharacterSync.init(
 	remote: UnreliableRemoteEvent,
 	correction: RemoteEvent,
-	onAccepted: (Model, Vector3, Vector3?) -> (),
+	onAccepted: (Model, Vector3) -> (),
 	fall: FallHooks
 )
 	relayRemote = remote
@@ -434,6 +445,13 @@ function CharacterSync.init(
 		tracks[player] = nil
 		correctionSeqs[player] = nil
 	end)
+end
+
+-- Cette méthode permet d'écouter les déplacements des joueurs lorsque l'activité des gains en jouant (#401) les compte :
+-- personnage, position acceptée précédente et nouvelle, seulement pour un paquet accepté sans signalement (seau,
+-- noclip, vol) ; jamais pour un bot ni une téléportation du serveur.
+function CharacterSync.setMoveListener(listener: (Player, Model, Vector3, Vector3) -> ())
+	moveListener = listener
 end
 
 -- Cette méthode permet de publier la position d'un bot lorsque son mouvement serveur atteint la cadence réseau : racine
