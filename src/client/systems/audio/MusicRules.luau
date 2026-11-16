@@ -22,6 +22,12 @@ MusicRules.FADE_UP = 1.5
 
 export type MusicSettings = { music: boolean, volumeMusicMenu: number, volumeMusicGame: number }
 
+-- Cette méthode permet de savoir si la musique doit baisser lorsqu'une annonce vocale joue (#405) : pas si la voix est
+-- muette, c'est-à-dire si le volume des annonces ou le volume général est à 0.
+function MusicRules.isDucking(settings: { volumeMaster: number, volumeAnnouncer: number }, speaking: boolean): boolean
+	return speaking and settings.volumeMaster > 0 and settings.volumeAnnouncer > 0
+end
+
 -- Cette méthode permet de donner le volume visé de la musique (0 à 1) lorsqu'il est recalculé à chaque frame : 0 si
 -- le réglage est coupé, sinon le curseur du menu ou de la partie selon l'écran, baissé pendant une annonce vocale.
 function MusicRules.targetVolume(settings: MusicSettings, state: string?, announcing: boolean): number

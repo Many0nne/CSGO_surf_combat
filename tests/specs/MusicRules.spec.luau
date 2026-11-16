@@ -31,6 +31,22 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("MusicRules.isDucking (#405)", function()
+		T.it("baisse la musique quand la voix joue et qu'elle est audible", function()
+			T.expectEqual(MusicRules.isDucking({ volumeMaster = 100, volumeAnnouncer = 100 }, true), true)
+			T.expectEqual(MusicRules.isDucking({ volumeMaster = 30, volumeAnnouncer = 1 }, true), true)
+		end)
+
+		T.it("ne baisse pas quand aucune voix ne joue", function()
+			T.expectEqual(MusicRules.isDucking({ volumeMaster = 100, volumeAnnouncer = 100 }, false), false)
+		end)
+
+		T.it("ne baisse pas quand le canal annonces ou le général est à 0 (voix muette)", function()
+			T.expectEqual(MusicRules.isDucking({ volumeMaster = 100, volumeAnnouncer = 0 }, true), false)
+			T.expectEqual(MusicRules.isDucking({ volumeMaster = 0, volumeAnnouncer = 100 }, true), false)
+		end)
+	end)
+
 	T.describe("MusicRules.step", function()
 		T.it("baisse vite et remonte plus lentement, sans dépasser la cible", function()
 			T.expectNear(MusicRules.step(1, 0, MusicRules.FADE_DOWN / 2), 0.5)

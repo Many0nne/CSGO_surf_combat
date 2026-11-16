@@ -34,6 +34,8 @@ export type Settings = {
 	-- Volume (#249) en pourcents entiers : général (tous les sons) et canal armes (en plus du général)
 	volumeMaster: number,
 	volumeWeapons: number,
+	-- Canal annonces (#405) : voix de l'annonceur de kills, en plus du général
+	volumeAnnouncer: number,
 	-- Musique de fond (#286) : désactivée par défaut (DEFAULT_MUSIC), absent = désactivée ; volumes en pourcents
 	-- entiers (en plus du général), l'un dans les écrans du menu, l'autre en partie
 	music: boolean,
@@ -161,6 +163,7 @@ function PlayerSettings.defaults(): Settings
 		crosshairOpacity = PlayerSettings.CROSSHAIR.opacity.default,
 		volumeMaster = PlayerSettings.VOLUME.default,
 		volumeWeapons = PlayerSettings.VOLUME.default,
+		volumeAnnouncer = PlayerSettings.VOLUME.default,
 		music = PlayerSettings.DEFAULT_MUSIC,
 		volumeMusicMenu = PlayerSettings.MUSIC_MENU_VOLUME.default,
 		volumeMusicGame = PlayerSettings.MUSIC_GAME_VOLUME.default,
@@ -264,6 +267,7 @@ function PlayerSettings.sanitize(raw: any): Settings
 	settings.crosshairOpacity = math.round(rawOpacity * 100) / 100
 	settings.volumeMaster = clampPixels(raw.volumeMaster, PlayerSettings.VOLUME)
 	settings.volumeWeapons = clampPixels(raw.volumeWeapons, PlayerSettings.VOLUME)
+	settings.volumeAnnouncer = clampPixels(raw.volumeAnnouncer, PlayerSettings.VOLUME)
 	if type(raw.music) == "boolean" then
 		settings.music = raw.music
 	end

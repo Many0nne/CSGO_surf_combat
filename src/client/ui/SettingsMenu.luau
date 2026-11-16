@@ -756,7 +756,7 @@ local function buildCategories(block: Frame)
 	local bhopDefault = if PlayerSettings.DEFAULT_AUTO_BHOP then 1 else 2
 	addPicker(movement, "Auto-bhop", "autoBhop", bhopOptions, bhopDefault, bhopDefault, function() end, 150)
 
-	-- Volume (#249) en pourcents entiers : général (tous les sons) et armes (en plus du général) ; SoundChannels suit LocalSettings
+	-- Volume (#249) en pourcents entiers : général (tous les sons), armes et annonces (en plus du général) ; SoundChannels suit LocalSettings
 	local audio = addCategory(block, "SON")
 	local volume = PlayerSettings.VOLUME
 	addSlider(
@@ -774,6 +774,18 @@ local function buildCategories(block: Frame)
 		audio,
 		"Volume des armes",
 		"volumeWeapons",
+		volume.min,
+		volume.max,
+		volume.default,
+		0,
+		function() end,
+		true
+	)
+	-- Voix de l'annonceur de kills (#405) : canal à part, en plus du général
+	addSlider(
+		audio,
+		"Volume des annonces",
+		"volumeAnnouncer",
 		volume.min,
 		volume.max,
 		volume.default,

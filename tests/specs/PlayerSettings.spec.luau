@@ -213,6 +213,21 @@ return function(T, Loader)
 			end
 		end)
 
+		T.it("volume des annonces (#405) : 100 % par défaut, gardé, arrondi et borné", function()
+			T.expectEqual(PlayerSettings.sanitize(nil).volumeAnnouncer, 100)
+			for _, raw in { 42, {}, { volumeMaster = 10 } } do
+				T.expectEqual(PlayerSettings.sanitize(raw).volumeAnnouncer, 100)
+			end
+			T.expectEqual(PlayerSettings.defaults().volumeAnnouncer, 100)
+			T.expectEqual(PlayerSettings.sanitize({ volumeAnnouncer = 0 }).volumeAnnouncer, 0, "0 % (muet) est permis")
+			T.expectEqual(PlayerSettings.sanitize({ volumeAnnouncer = 42.6 }).volumeAnnouncer, 43)
+			T.expectEqual(PlayerSettings.sanitize({ volumeAnnouncer = 500 }).volumeAnnouncer, V.max)
+			T.expectEqual(PlayerSettings.sanitize({ volumeAnnouncer = -20 }).volumeAnnouncer, V.min)
+			for _, bad in { 0 / 0, "50", true, {} } do
+				T.expectEqual(PlayerSettings.sanitize({ volumeAnnouncer = bad }).volumeAnnouncer, V.default)
+			end
+		end)
+
 		T.it("garde un volume valide et arrondit au pourcent", function()
 			local s = PlayerSettings.sanitize({ volumeMaster = 35, volumeWeapons = 0 })
 			T.expectEqual(s.volumeMaster, 35)

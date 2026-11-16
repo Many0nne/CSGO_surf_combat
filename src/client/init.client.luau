@@ -125,7 +125,7 @@ end)
 task.delay(HUDRules.HUD_SETTINGS_TIMEOUT, UIKit.showHud)
 -- Textures des skins équipés (#333) : chargées dès l'accueil, pas au premier équipement en partie
 SkinPreloader.init()
--- Canaux de volume (#249) : groupes général et armes, créés avant le premier son
+-- Canaux de volume (#249) : groupes général, armes, musique et annonces, créés avant le premier son
 SoundChannels.init()
 WeaponBar.init()
 AmmoCounter.init()
