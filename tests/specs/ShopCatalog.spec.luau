@@ -379,5 +379,27 @@ return function(T, Loader)
 			empty.contents = {}
 			T.expectEqual(Shop.allOwned(empty, Inventory.ITEMS, owned), false, "caisse vide : refusée comme vide")
 		end)
+
+		T.it("rareté d'un skin lue dans la caisse de son arme, nil hors caisse", function()
+			local function rarityId(id: string): string?
+				local rarity = Shop.rarityOf(Inventory.item(id))
+				return rarity and rarity.id
+			end
+			T.expectEqual(rarityId("skin.awp.balise"), "common")
+			T.expectEqual(rarityId("skin.awp.circuit"), "rare")
+			T.expectEqual(rarityId("skin.m9bayonet.sillage"), "exceptional")
+			T.expectEqual(rarityId("skin.awp.trempe"), nil, "skin hors caisse")
+			T.expectEqual(Shop.rarityOf({ weapon = "weapon.m9bayonet", appearance = "orage" }), nil, "autre arme")
+			T.expectEqual(Shop.rarityOf(Inventory.item("weapon.awp")), nil, "une arme n'a pas de rareté")
+		end)
+
+		T.it("chaque skin d'une caisse a la rareté de sa ligne", function()
+			for _, crate in Shop.CRATES do
+				for _, row in Shop.contents(crate, Inventory.ITEMS) do
+					local rarity = Shop.rarityOf(Inventory.item(row.skins[1]))
+					T.expectEqual(rarity and rarity.id, row.rarity.id, row.skins[1])
+				end
+			end
+		end)
 	end)
 end

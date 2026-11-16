@@ -10,6 +10,7 @@ local UserInputService = game:GetService("UserInputService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local InventoryRules = require(Shared:WaitForChild("InventoryRules"))
 local PlayerSettings = require(Shared:WaitForChild("PlayerSettings"))
+local ShopCatalog = require(Shared:WaitForChild("ShopCatalog"))
 local UITheme = require(Shared:WaitForChild("UITheme"))
 local WeaponConfig = require(Shared:WaitForChild("WeaponConfig"))
 local LocalInventory = require(script.Parent.Parent.systems.inventory.LocalInventory)
@@ -46,6 +47,11 @@ local COLUMNS = 4
 local CARD_SIZE = Vector2.new(172, 92)
 local CARD_GAP = 12
 local CARD_ICON = Vector2.new(136, 40)
+-- Carte d'un skin à rareté : bande de couleur à gauche, libellé en haut, mini-rendu un peu plus bas et plus petit
+local RARITY_STRIPE = 4
+local RARITY_LABEL_Y = 5
+local RARITY_ICON_TOP = 24
+local RARITY_ICON = Vector2.new(126, 37) -- même rapport que CARD_ICON, tient entre le libellé et le nom
 local SECTION_HEIGHT = 28 -- libellé « SKINS · ARME » entre les deux rangées
 local SECTION_GAP = 20 -- écart entre la rangée des armes et ce libellé
 local GRID_WIDTH = COLUMNS * CARD_SIZE.X + (COLUMNS - 1) * CARD_GAP
@@ -71,6 +77,7 @@ local slotTag: TextLabel
 local weaponName: Flow
 local statusTag: TextLabel
 local statusStroke: UIStroke
+local rarityTag: TextLabel
 local category: TextLabel
 local categoryShadow: TextLabel
 local selectedSlot = 1 -- emplacement actif : sa grille est affichée, le personnage tient son arme
@@ -200,6 +207,20 @@ local function skinTitle(skinId: string?): string
 	return Rules.skinLabel(skinId, item and item.name)
 end
 
+-- Cette méthode permet de lire la rareté d'un skin (nil pour le skin d'origine ou un skin hors caisse) lorsqu'une carte
+-- ou la ligne de nom la montre.
+local function skinRarity(skinId: string?): ShopCatalog.Rarity?
+	local item = skinId and InventoryRules.item(skinId)
+	return if item then ShopCatalog.rarityOf(item) else nil
+end
+
+-- Cette méthode permet de choisir le texte d'une étiquette pleine à la couleur d'une rareté (sombre sur couleur claire,
+-- os sur couleur foncée) lorsque la ligne de nom l'affiche.
+local function tagTextColor(color: Color3): Color3
+	local brightness = 0.299 * color.R + 0.587 * color.G + 0.114 * color.B
+	return if brightness > 0.55 then C.Ground else C.Bone
+end
+
 -- Cette méthode permet de mettre à jour le titre, la ligne de nom (« ÉQUIPÉ » plein en rouge d'impact, sinon « CLIC POUR
 -- ÉQUIPER » en contour), le rendu et l'arme du personnage lorsque le survol, l'emplacement ou l'équipement change.
 local function paintHeader()
@@ -212,6 +233,14 @@ local function paintHeader()
 	statusTag.Text = if isEquipped then "ÉQUIPÉ" else "CLIC POUR ÉQUIPER"
 	statusTag.BackgroundTransparency = if isEquipped then 0 else 1
 	statusStroke.Enabled = not isEquipped
+	local rarity = tool and skinRarity(skin)
+	rarityTag.Visible = rarity ~= nil
+	if rarity then
+		local color = Color3.fromRGB(rarity.color[1], rarity.color[2], rarity.color[3])
+		rarityTag.Text = rarity.label
+		rarityTag.BackgroundColor3 = color
+		rarityTag.TextColor3 = tagTextColor(color)
+	end
 	local cfg = tool and WeaponConfig.Weapons[tool]
 	local text = if cfg and cfg.Category then string.upper(cfg.Category) else ""
 	category.Text = text
@@ -271,16 +300,38 @@ local function card(
 	local stroke = UIKit.stroke(button, C.Bone, 1)
 	local restStroke = if equipped then 0.1 else 0.7
 	stroke.Transparency = restStroke
+	local rarity = if textured then skinRarity(item.skin) else nil
+	local iconSize, iconTop = CARD_ICON, 12
+	if rarity then
+		local color = Color3.fromRGB(rarity.color[1], rarity.color[2], rarity.color[3])
+		UIKit.frame({
+			Name = "RarityStripe",
+			BackgroundColor3 = color,
+			Size = UDim2.new(0, RARITY_STRIPE, 1, 0),
+			Parent = button,
+		})
+		UIKit.shadowedText(button, {
+			Name = "Rarity",
+			Text = rarity.label,
+			FontFace = F.DisplayMedium,
+			TextSize = UITheme.TextSize.Min,
+			TextColor3 = color,
+			Position = UDim2.fromOffset(RARITY_STRIPE + 8, RARITY_LABEL_Y),
+			Size = UDim2.fromOffset(CARD_SIZE.X - RARITY_STRIPE - 36, 16),
+			ZIndex = 2,
+		}, 1)
+		iconSize, iconTop = RARITY_ICON, RARITY_ICON_TOP
+	end
 	local icon = UIKit.frame({
 		Name = "Icon",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset((CARD_SIZE.X - CARD_ICON.X) / 2, 12),
-		Size = UDim2.fromOffset(CARD_ICON.X, CARD_ICON.Y),
+		Position = UDim2.fromOffset((CARD_SIZE.X - iconSize.X) / 2, iconTop),
+		Size = UDim2.fromOffset(iconSize.X, iconSize.Y),
 		Parent = button,
 	})
 	-- Carte d'arme : silhouette plate teintée ; carte de skin : l'arme habillée de ce skin, sans teinte
 	local silhouette =
-		UIKit.weaponSilhouette(icon, viewmodelOf(item.tool), CARD_ICON.X / CARD_ICON.Y, textured, item.skin)
+		UIKit.weaponSilhouette(icon, viewmodelOf(item.tool), iconSize.X / iconSize.Y, textured, item.skin)
 	local restColor = if equipped then C.Bone else C.TextSoft
 	local iconRest = if textured then C.White else restColor
 	local iconHover = if textured then C.White else C.Bone
@@ -490,7 +541,9 @@ function EquipmentScreen.build(root: Frame, column: Frame)
 	})
 	local nameRow = flowRow(column, "WeaponName", NAME_Y, NAME_SIZE + 6)
 	weaponName = flowText(nameRow, "Weapon", NAME_SIZE, 2)
-	statusTag = UIKit.tag(nameRow, "Status", 2, C.HitRed, C.Bone)
+	rarityTag = UIKit.tag(nameRow, "Rarity", 2, C.Bone, C.Ground)
+	rarityTag.Visible = false
+	statusTag = UIKit.tag(nameRow, "Status", 3, C.HitRed, C.Bone)
 	statusStroke = UIKit.stroke(statusTag, C.Bone, 1)
 	statusStroke.Transparency = 0.4
 	category, categoryShadow = UIKit.shadowedText(column, {
