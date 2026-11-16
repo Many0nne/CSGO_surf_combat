@@ -1,9 +1,11 @@
 -- Écran d'équipement de l'onglet ARMES (#280, disposition revue en #308 d'après une capture de référence, docs/ui.md) :
 -- tout tient à gauche, le personnage de l'accueil est à droite et tient l'arme montrée. De haut en bas : grand titre
 -- « ÉQUIPEMENT » puis l'emplacement actif et son étiquette, rendu de l'arme montrée, son nom avec « ÉQUIPÉ », onglets
--- des emplacements, grille de cartes (armes possédées, puis skins de l'arme équipée). Survoler une carte la montre,
--- cliquer l'équipe (remote EquipItem, l'écran suit la réponse du serveur). Seuls les items possédés apparaissent.
+-- des emplacements, grille de cartes qui défile à la molette (armes possédées, puis skins de l'arme équipée). Survoler
+-- une carte la montre, cliquer l'équipe (remote EquipItem, l'écran suit la réponse du serveur). Seuls les items
+-- possédés apparaissent.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local InventoryRules = require(Shared:WaitForChild("InventoryRules"))
@@ -36,6 +38,10 @@ local CATEGORY_Y = 272
 local TABS_Y = 318
 local TAB_GAP = 6
 local GRID_Y = 362
+local GRID_BOTTOM = 54 -- la zone défilante s'arrête au-dessus de l'aide en bas (18 + 24 px) : une rangée et demie de skins
+local GRID_PAD = 2 -- retrait des cartes dans la zone défilante : son bord ne coupe pas leur contour au survol
+local SCROLL_BAR = 3
+local SCROLL_GAP = 7 -- écart entre la grille et sa barre de défilement
 local COLUMNS = 4
 local CARD_SIZE = Vector2.new(172, 92)
 local CARD_GAP = 12
@@ -43,6 +49,7 @@ local CARD_ICON = Vector2.new(136, 40)
 local SECTION_HEIGHT = 28 -- libellé « SKINS · ARME » entre les deux rangées
 local SECTION_GAP = 20 -- écart entre la rangée des armes et ce libellé
 local GRID_WIDTH = COLUMNS * CARD_SIZE.X + (COLUMNS - 1) * CARD_GAP
+local SCROLL_STEP = CARD_SIZE.Y + CARD_GAP -- une rangée par cran de molette quand la souris n'est pas sur la grille
 local PREVIEW_POSITION = Vector2.new(330, 76) -- rendu de l'arme montrée, à droite du titre
 local PREVIEW_SIZE = Vector2.new(470, 210)
 local SHOW_PREVIEW = true
@@ -55,6 +62,7 @@ type Hover = { tool: string, skin: string? }
 type Flow = { set: (string) -> (), label: TextLabel }
 
 local tabChoices: { MenuShot.Choice } = {}
+local scroller: ScrollingFrame -- zone défilante de la grille (armes, libellé des skins, skins) ; titres et onglets fixes
 local grid: Frame
 local previewHolder: Frame
 local previews: { [string]: ViewportFrame } = {}
@@ -343,16 +351,12 @@ local function fillRow(count: number, y: number)
 	end
 end
 
--- Cette méthode permet de reconstruire la grille (armes possédées de l'emplacement actif, puis skins possédés de son
--- arme équipée) lorsque l'emplacement actif ou l'équipement change.
-local function rebuildGrid()
-	for _, child in grid:GetChildren() do
-		child:Destroy()
-	end
-	hover = nil -- les cartes survolées disparaissent
+-- Cette méthode permet de poser les cartes (armes possédées de l'emplacement actif, puis skins possédés de son arme
+-- équipée) lorsque la grille se reconstruit ; renvoie la hauteur occupée, pour la zone défilante.
+local function fillGrid(): number
 	local slotName = InventoryRules.SLOTS[selectedSlot]
 	if not slotName then
-		return
+		return 0
 	end
 	local owned = LocalInventory.owned()
 	local current, currentSkin = equippedAt(selectedSlot)
@@ -372,7 +376,7 @@ local function rebuildGrid()
 	end
 	fillRow(#weapons, y)
 	if not (current and current.tool) then
-		return
+		return y + CARD_SIZE.Y
 	end
 	local currentTool: string = current.tool
 	local weaponId = current.id
@@ -399,11 +403,47 @@ local function rebuildGrid()
 		end, true)
 	end
 	fillRow(#skins, rowY)
+	return rowY + CARD_SIZE.Y
+end
+
+-- Cette méthode permet de reconstruire la grille et d'ajuster la hauteur défilable lorsque l'emplacement actif ou
+-- l'équipement change (la position de défilement est gardée : équiper un skin du bas ne remonte pas la liste).
+local function rebuildGrid()
+	for _, child in grid:GetChildren() do
+		child:Destroy()
+	end
+	hover = nil -- les cartes survolées disparaissent
+	local height = fillGrid()
+	grid.Size = UDim2.fromOffset(GRID_WIDTH, height)
+	scroller.CanvasSize = UDim2.fromOffset(0, height + 2 * GRID_PAD)
+end
+
+-- Cette méthode permet de faire défiler la grille d'une rangée par cran de molette lorsque la souris est ailleurs sur
+-- l'accueil ; sur la grille, la zone défilante s'en charge seule.
+local function scrollGrid(direction: number)
+	local mouse = UserInputService:GetMouseLocation()
+	local origin, size = scroller.AbsolutePosition, scroller.AbsoluteSize
+	local inside = mouse.X >= origin.X
+		and mouse.X <= origin.X + size.X
+		and mouse.Y >= origin.Y
+		and mouse.Y <= origin.Y + size.Y
+	local canvas = scroller.AbsoluteCanvasSize.Y
+	local height = scroller.CanvasSize.Y.Offset
+	if inside or direction == 0 or canvas <= 0 or height <= 0 then
+		return
+	end
+	-- CanvasPosition est en pixels écran : le pas suit l'échelle de l'accueil (UIScale), mesuré en Studio
+	local step = SCROLL_STEP * canvas / height
+	local bottom = math.max(0, canvas - scroller.AbsoluteWindowSize.Y)
+	scroller.CanvasPosition = Vector2.new(0, math.clamp(scroller.CanvasPosition.Y - direction * step, 0, bottom))
 end
 
 -- Cette méthode permet de rendre un emplacement actif (sa grille, son arme dans les mains du personnage) lorsque le
--- joueur clique son onglet, tape sa touche ou tourne la molette.
+-- joueur clique son onglet ou tape sa touche ; une autre grille repart du haut.
 local function selectSlot(index: number)
+	if index ~= selectedSlot then
+		scroller.CanvasPosition = Vector2.zero
+	end
 	selectedSlot = index
 	rebuildGrid()
 	paintTabs()
@@ -417,7 +457,7 @@ local function buildHints(root: Frame)
 		AnchorPoint = Vector2.new(0, 1),
 		Position = UDim2.new(0, EDGE, 1, -18),
 	})
-	UIKit.keyHint(row, 1, "MOLETTE", "EMPLACEMENT")
+	UIKit.keyHint(row, 1, "MOLETTE", "DÉFILER")
 	UIKit.keyHint(row, 2, "CLIC", "ÉQUIPER")
 	UIKit.keyHint(row, 3, nil, "ENREGISTRÉ AUSSITÔT")
 end
@@ -485,12 +525,25 @@ function EquipmentScreen.build(root: Frame, column: Frame)
 			end,
 		})
 	end
+	-- Les cartes gardent leur place (EDGE, GRID_Y) : la zone déborde de GRID_PAD autour d'elles, barre à droite
+	scroller = UIKit.create("ScrollingFrame", {
+		Name = "EquipScroll",
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Position = UDim2.fromOffset(EDGE - GRID_PAD, GRID_Y - GRID_PAD),
+		Size = UDim2.new(0, GRID_WIDTH + 2 * GRID_PAD + SCROLL_GAP + SCROLL_BAR, 1, -(GRID_Y - GRID_PAD + GRID_BOTTOM)),
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+		ScrollBarThickness = SCROLL_BAR,
+		ScrollBarImageColor3 = C.Accent,
+		CanvasSize = UDim2.fromOffset(0, 0),
+		Parent = column,
+	})
 	grid = UIKit.frame({
 		Name = "EquipGrid",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(EDGE, GRID_Y),
-		Size = UDim2.fromOffset(GRID_WIDTH, 2 * CARD_SIZE.Y + SECTION_HEIGHT + SECTION_GAP),
-		Parent = column,
+		Position = UDim2.fromOffset(GRID_PAD, GRID_PAD),
+		Size = UDim2.fromOffset(GRID_WIDTH, 0),
+		Parent = scroller,
 	})
 	buildHints(root)
 	selectSlot(selectedSlot)
@@ -500,13 +553,10 @@ function EquipmentScreen.build(root: Frame, column: Frame)
 end
 
 -- Cette méthode permet de changer d'emplacement actif au clavier (touches des emplacements réglées par le joueur, 1 et 2
--- par défaut) ou à la molette (sens réglé, coupée sur AUCUNE) lorsque le joueur est sur l'accueil.
+-- par défaut) ou de faire défiler la grille à la molette (sens naturel, hors réglage) lorsque le joueur est sur l'accueil.
 function EquipmentScreen.onInput(input: InputObject)
 	if input.UserInputType == Enum.UserInputType.MouseWheel then
-		local step = PlayerSettings.wheelStep(LocalSettings.get().wheel, input.Position.Z)
-		if step then
-			selectSlot(Rules.cycleIndex(selectedSlot, step, #InventoryRules.SLOTS))
-		end
+		scrollGrid(math.sign(input.Position.Z))
 	elseif input.UserInputType == Enum.UserInputType.Keyboard then
 		local index = PlayerSettings.slotForKey(LocalSettings.get().slotKeys, input.KeyCode.Name)
 		if index and InventoryRules.SLOTS[index] then
@@ -515,8 +565,8 @@ function EquipmentScreen.onInput(input: InputObject)
 	end
 end
 
--- Cette méthode permet de remettre l'écran à l'arrivée (SNIPER actif, aucun survol) lorsque le joueur quitte l'accueil
--- ou revient au menu.
+-- Cette méthode permet de remettre l'écran à l'arrivée (SNIPER actif, grille en haut, aucun survol) lorsque le joueur
+-- quitte l'accueil ou revient au menu.
 function EquipmentScreen.reset()
 	if not grid then
 		return
@@ -524,6 +574,7 @@ function EquipmentScreen.reset()
 	for _, tab in tabChoices do
 		tab.reset()
 	end
+	scroller.CanvasPosition = Vector2.zero
 	selectSlot(1)
 end
 

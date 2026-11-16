@@ -93,15 +93,6 @@ function MenuSceneRules.inView(
 	return lateral <= math.max(along, 0) * tanHalf + radius
 end
 
--- Cette méthode permet de donner le rang (1 à count) de l'élément suivant ou précédent lorsque le joueur fait défiler
--- (emplacements de l'accueil à la molette, #280) : on revient au début après le dernier.
-function MenuSceneRules.cycleIndex(index: number, step: number, count: number): number
-	if count <= 0 then
-		return 1
-	end
-	return (index - 1 + step) % count + 1
-end
-
 -- Cette méthode permet de donner la rotation (rad) de la taille du personnage à l'instant `t` (s) lorsqu'il respire
 -- en pose : une oscillation lente et faible, nulle à t = 0.
 function MenuSceneRules.breathAngle(t: number): number
