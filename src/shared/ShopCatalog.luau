@@ -1,5 +1,5 @@
--- Catalogue du shop (#347, docs/ui.md « Shop ») : caisses en vente, une par série de skins et par arme (#332), avec
--- leur prix et leur contenu par rareté, tirage d'une ouverture, et rangement des caisses dans la vitrine de la vue
+-- Catalogue du shop (#347, docs/ui.md « Shop ») : caisses en vente, une par arme (#332, #424), avec leur prix et leur
+-- contenu (plusieurs skins par rareté), tirage d'une ouverture, et rangement des caisses dans la vitrine de la vue
 -- d'ensemble. Règles pures, testées (tests/specs/ShopCatalog.spec.luau).
 --
 -- Provisoire : prix, raretés, chances et remboursements sont des valeurs d'attente (points ouverts de #347, #332 et
@@ -12,20 +12,22 @@ local WalletRules = require(ReplicatedStorage.Shared.WalletRules)
 local ShopCatalog = {}
 
 export type Rgb = { number }
--- `refund` : part du prix de la caisse rendue en crédits pour un doublon (#393), en pour cent (entier, 0 à 100)
+-- `chance` : part de la rareté en pour cent, partagée à parts égales entre ses skins dans une caisse (#424) ; `refund` :
+-- part du prix de la caisse rendue en crédits pour un doublon (#393), en pour cent (entier, 0 à 100)
 export type Rarity = { id: string, label: string, chance: number, color: Rgb, refund: number }
 -- `weapon` : id de l'arme dont la caisse donne un skin (`id` d'un item `weapon` de InventoryRules.ITEMS) ; `contents` :
--- nom d'apparence des skins (`appearance` de InventoryRules.ITEMS) par id de rareté, le skin étant celui de cette arme
+-- noms d'apparence des skins (`appearance` de InventoryRules.ITEMS) par id de rareté, le skin étant celui de cette arme
 export type Crate = {
 	id: string,
 	name: string,
 	weapon: string,
 	stripe: Rgb,
 	price: number,
-	contents: { [string]: string },
+	contents: { [string]: { string } },
 }
--- `luminance` : moyenne de celles des skins de la ligne (1 pour un skin non mesuré)
-export type Row = { rarity: Rarity, name: string, weapons: { string }, skins: { string }, luminance: number }
+-- Une ligne du contenu = un skin : sa rareté, son nom affiché, son id d'item, le nom court de son arme (« AWP ») et le
+-- viewmodel de son arme (vignette)
+export type Row = { rarity: Rarity, name: string, skin: string, weapon: string, viewmodel: string }
 export type Slot = { index: number, row: number, column: number }
 
 ShopCatalog.CURRENCY = WalletRules.CURRENCY
@@ -39,8 +41,9 @@ ShopCatalog.RARITIES = {
 	{ id = "exceptional", label = "EXCEPTIONNEL", chance = 5, color = { 170, 70, 220 }, refund = 70 },
 } :: { Rarity }
 
--- Caisses en vente, dans l'ordre de la vitrine : une par arme et par série, une ouverture donne un seul skin de
--- l'arme (#332). Ajouter une série = deux lignes ici (ses skins dans InventoryRules)
+-- Caisses en vente, dans l'ordre de la vitrine : une par arme, de 6 à 8 skins (#424), une ouverture donne un seul skin
+-- de l'arme (#332). Raretés reprises des anciennes caisses par série (TREMPE et MUE, hors caisse, en COMMUN), à revoir.
+-- Ajouter une série = une caisse par arme ici (ses skins dans InventoryRules)
 ShopCatalog.CRATES = {
 	{
 		id = "crate.awp.serie1",
@@ -48,32 +51,23 @@ ShopCatalog.CRATES = {
 		weapon = "weapon.awp",
 		stripe = { 226, 58, 40 },
 		price = 500,
-		-- skins AWP de #417 ; TREMPE et MUE hors caisse en attendant des caisses de six skins
-		contents = { common = "balise", rare = "pan", exceptional = "orage" },
+		contents = {
+			common = { "balise", "maquis", "trempe", "mue" },
+			rare = { "pan", "circuit" },
+			exceptional = { "orage", "ciselure" },
+		},
 	},
 	{
 		id = "crate.m9.serie1",
 		name = "M9 · SÉRIE 1",
 		weapon = "weapon.m9bayonet",
-		stripe = { 226, 58, 40 },
-		price = 500,
-		contents = { common = "couchant", rare = "patrouille", exceptional = "releve" },
-	},
-	{
-		id = "crate.awp.serie2",
-		name = "AWP · SÉRIE 2",
-		weapon = "weapon.awp",
 		stripe = { 40, 150, 160 },
 		price = 500,
-		contents = { common = "maquis", rare = "circuit", exceptional = "ciselure" },
-	},
-	{
-		id = "crate.m9.serie2",
-		name = "M9 · SÉRIE 2",
-		weapon = "weapon.m9bayonet",
-		stripe = { 40, 150, 160 },
-		price = 500,
-		contents = { common = "recuit", rare = "artdeco", exceptional = "email" },
+		contents = {
+			common = { "couchant", "recuit" },
+			rare = { "patrouille", "artdeco" },
+			exceptional = { "releve", "email" },
+		},
 	},
 } :: { Crate }
 
@@ -81,7 +75,7 @@ ShopCatalog.CRATES = {
 ShopCatalog.PER_ROW = 3
 ShopCatalog.ROWS = 2
 
--- Nom court d'une arme dans la liste du contenu (« AWP   COUCHANT »)
+-- Nom court d'une arme sur la révélation (« AWP  ORAGE »)
 local WEAPON_LABELS = { ["weapon.awp"] = "AWP", ["weapon.m9bayonet"] = "M9" }
 
 -- Cette méthode permet de trouver une caisse par son id lorsqu'un écran ou un remote la désigne ; nil si inconnue.
@@ -94,26 +88,32 @@ function ShopCatalog.crate(id: string): Crate?
 	return nil
 end
 
--- Cette méthode permet de lister le contenu d'une caisse par rareté (de la plus courante à la plus rare) lorsque la vue
--- détail l'affiche : nom du skin, arme concernée et id du skin, lus dans le catalogue des items (`items` :
--- InventoryRules.ITEMS), seuls les skins de l'arme de la caisse comptant ; une rareté sans skin connu est omise.
+-- Cette méthode permet de lister le contenu d'une caisse, un skin par ligne, par rareté (de la plus courante à la plus
+-- rare) puis dans l'ordre du catalogue, lorsque la vue détail l'affiche ou que le serveur tire : lus dans le catalogue
+-- des items (`items` : InventoryRules.ITEMS), seuls les skins connus de l'arme de la caisse comptant.
 function ShopCatalog.contents(crate: Crate, items: { any }): { Row }
+	local viewmodel = ""
+	for _, item in items do
+		if item.id == crate.weapon then
+			viewmodel = item.tool or ""
+		end
+	end
 	local rows = {}
 	for _, rarity in ShopCatalog.RARITIES do
-		local appearance = crate.contents[rarity.id]
-		local row: Row = { rarity = rarity, name = "", weapons = {}, skins = {}, luminance = 1 }
-		local total = 0
-		for _, item in items do
-			if item.type == "skin" and appearance and item.appearance == appearance and item.weapon == crate.weapon then
-				row.name = item.name or string.upper(appearance)
-				table.insert(row.weapons, WEAPON_LABELS[item.weapon] or string.upper(tostring(item.weapon)))
-				table.insert(row.skins, item.id)
-				total += item.luminance or 1
+		local appearances: { string } = crate.contents[rarity.id] or {}
+		for _, appearance in appearances do
+			for _, item in items do
+				if item.type == "skin" and item.appearance == appearance and item.weapon == crate.weapon then
+					table.insert(rows, {
+						rarity = rarity,
+						name = item.name or string.upper(appearance),
+						skin = item.id,
+						weapon = WEAPON_LABELS[crate.weapon] or string.upper(crate.weapon),
+						viewmodel = viewmodel,
+					})
+					break
+				end
 			end
-		end
-		if #row.skins > 0 then
-			row.luminance = total / #row.skins
-			table.insert(rows, row)
 		end
 	end
 	return rows
@@ -128,7 +128,7 @@ function ShopCatalog.rarityOf(skin: { weapon: string?, appearance: string? }): R
 	for _, crate in ShopCatalog.CRATES do
 		if crate.weapon == skin.weapon then
 			for _, rarity in ShopCatalog.RARITIES do
-				if crate.contents[rarity.id] == skin.appearance then
+				if table.find(crate.contents[rarity.id] or {}, skin.appearance) then
 					return rarity
 				end
 			end
@@ -137,14 +137,29 @@ function ShopCatalog.rarityOf(skin: { weapon: string?, appearance: string? }): R
 	return nil
 end
 
+-- Cette méthode permet de donner le poids de chaque ligne du contenu (chance de sa rareté partagée entre les skins de
+-- cette rareté présents, négative ramenée à 0) lorsque le tirage ou l'affichage des chances en a besoin.
+local function weights(rows: { Row }): { number }
+	local counts: { [string]: number } = {}
+	for _, row in rows do
+		counts[row.rarity.id] = (counts[row.rarity.id] or 0) + 1
+	end
+	local result = {}
+	for i, row in rows do
+		result[i] = math.max(row.rarity.chance, 0) / counts[row.rarity.id]
+	end
+	return result
+end
+
 -- Cette méthode permet de tirer le skin d'une ouverture de caisse lorsque le serveur la traite : `roll` (nombre dans
--- [0, 100), hors bornes ramené dedans) est placé sur les chances des raretés de la caisse, les raretés sans skin connu
--- étant exclues et les chances renormalisées. Renvoie la ligne tirée et l'id de son skin ; nil si la caisse est vide.
+-- [0, 100), hors bornes ramené dedans) est placé sur les poids des skins (`weights`), les raretés sans skin connu étant
+-- exclues et les chances renormalisées. Renvoie la ligne tirée et l'id de son skin ; nil si la caisse est vide.
 function ShopCatalog.draw(crate: Crate, items: { any }, roll: number): (Row?, string?)
 	local rows = ShopCatalog.contents(crate, items)
+	local weight = weights(rows)
 	local total = 0
-	for _, row in rows do
-		total += row.rarity.chance
+	for _, w in weight do
+		total += w
 	end
 	if #rows == 0 or total <= 0 then
 		return nil, nil
@@ -152,63 +167,20 @@ function ShopCatalog.draw(crate: Crate, items: { any }, roll: number): (Row?, st
 	local clamped = if roll == roll then math.clamp(roll, 0, 100 - 1e-9) else 0
 	local target = clamped / 100 * total
 	local cumulative = 0
-	for _, row in rows do
-		cumulative += row.rarity.chance
+	for i, row in rows do
+		cumulative += weight[i]
 		if target < cumulative then
-			return row, row.skins[1]
+			return row, row.skin
 		end
 	end
 	local last = rows[#rows]
-	return last, last.skins[1]
+	return last, last.skin
 end
 
--- Cette méthode permet de placer les lignes du contenu dans les `count` colonnes du tableau lorsque la vue détail
--- l'habille (#366) : les skins les plus sombres au plus près du milieu (sous la suspension, les métaux sombres ne
--- prennent que la lumière venue de près) ; entre colonnes à même distance du milieu, l'ordre du contenu, de gauche à
--- droite. Renvoie la colonne (1 à `count`) de chaque ligne, par rang dans `rows` ; les lignes en trop n'en ont pas.
-function ShopCatalog.columns(rows: { Row }, count: number): { number }
-	local middle = (count + 1) / 2
-	local order = {}
-	for i = 1, #rows do
-		table.insert(order, i)
-	end
-	table.sort(order, function(a, b)
-		if rows[a].luminance ~= rows[b].luminance then
-			return rows[a].luminance < rows[b].luminance
-		end
-		return a < b
-	end)
-	-- Colonnes par distance au milieu (milieu, puis la paire voisine…), chaque groupe gauche avant droite
-	local columns = {}
-	local taken = 0
-	for distance = 0, middle - 1, 0.5 do
-		local group = {}
-		for column = 1, count do
-			if math.abs(column - middle) == distance then
-				table.insert(group, column)
-			end
-		end
-		local chosen = {}
-		for k = 1, math.min(#group, #order - taken) do
-			table.insert(chosen, order[taken + k])
-		end
-		taken += #chosen
-		table.sort(chosen)
-		for k, i in chosen do
-			columns[i] = group[k]
-		end
-	end
-	return columns
-end
-
--- Cette méthode permet de composer la ligne sous le nom d'une caisse (« CAISSE · COUCHANT / IMPACT / RELEVÉ ») lorsque
+-- Cette méthode permet de composer la ligne sous le nom d'une caisse (« CAISSE · 8 SKINS · UN PAR OUVERTURE ») lorsque
 -- la vue détail l'affiche.
 function ShopCatalog.subtitle(crate: Crate, items: { any }): string
-	local names = {}
-	for _, row in ShopCatalog.contents(crate, items) do
-		table.insert(names, row.name)
-	end
-	return "CAISSE  ·  " .. table.concat(names, " / ")
+	return string.format("CAISSE  ·  %d SKINS  ·  UN PAR OUVERTURE", #ShopCatalog.contents(crate, items))
 end
 
 -- Cette méthode permet de ranger `count` caisses dans la vitrine lorsque la vue d'ensemble se construit : rangée 1 (en
@@ -262,20 +234,21 @@ function ShopCatalog.refund(crate: Crate, rarityId: string): number
 end
 
 -- Mêmes proportions que `draw` ; arrondi au plus fort reste, à égalité la ligne la plus courante ; vide si total nul.
--- Cette méthode permet de convertir les chances en dixièmes de pour cent de somme exacte 1000 lorsque la vue détail les
--- affiche (#393, règle Roblox des objets aléatoires payants).
+-- Cette méthode permet de convertir les chances de chaque skin en dixièmes de pour cent de somme exacte 1000 lorsque la
+-- vue détail les affiche (#393, règle Roblox des objets aléatoires payants).
 function ShopCatalog.chances(rows: { Row }): { number }
+	local weight = weights(rows)
 	local total = 0
-	for _, row in rows do
-		total += math.max(row.rarity.chance, 0)
+	for _, w in weight do
+		total += w
 	end
 	if total <= 0 then
 		return {}
 	end
 	local tenths, remainders, given = {}, {}, 0
-	for i, row in rows do
-		local exact = math.max(row.rarity.chance, 0) / total * 1000
-		tenths[i] = math.floor(exact)
+	for i in rows do
+		local exact = weight[i] / total * 1000
+		tenths[i] = math.floor(exact + 1e-9)
 		remainders[i] = exact - tenths[i]
 		given += tenths[i]
 	end
@@ -284,7 +257,7 @@ function ShopCatalog.chances(rows: { Row }): { number }
 		table.insert(order, i)
 	end
 	table.sort(order, function(a, b)
-		if remainders[a] ~= remainders[b] then
+		if math.abs(remainders[a] - remainders[b]) > 1e-9 then
 			return remainders[a] > remainders[b]
 		end
 		return a < b
@@ -313,8 +286,7 @@ function ShopCatalog.allOwned(crate: Crate, items: { any }, owned: { [string]: b
 		return false
 	end
 	for _, row in rows do
-		-- Le skin que `draw` donne pour cette rareté
-		if not owned[row.skins[1]] then
+		if not owned[row.skin] then
 			return false
 		end
 	end

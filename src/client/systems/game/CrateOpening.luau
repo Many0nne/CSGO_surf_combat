@@ -35,14 +35,14 @@ local EMBER_RATE = 40
 local EMBER_SIZE = Vector3.new(3.4, 0.1, 1.8)
 -- Arme : au fond de la caisse au départ, puis au-dessus du couvercle
 local WEAPON_LOW = 1.0
-local WEAPON_HOVER = 3.3 -- à 3,7, l'arme touchait la rangée d'armes du tableau
+local WEAPON_HOVER = 3.3 -- réglée quand le tableau d'armes était au mur (retiré en #424) : à 3,7, elle le touchait
 -- Intérieur en néon : couleur de la lueur à pleine intensité, assombrie (à 1, le néon saturait en bloc blanc)
 local INTERIOR_NEON = 0.55
 -- Caisse ouverte : le bloc `Interior` (plein jusqu'au couvercle) faisait une dalle de néon ; il disparaît au départ du
 -- couvercle et un fond lumineux, au ras du dessous, montre une caisse creuse éclairée de l'intérieur
 local FLOOR_Y = 0.12
 local FLOOR_SIZE = Vector3.new(3.8, 0.04, 2.2)
--- Lampe de face sur l'arme révélée : sans elle, l'arme se détachait en ombre chinoise sur le tableau
+-- Lampe de face sur l'arme révélée : sans elle, l'arme se détachait en ombre chinoise sur le mur du fond
 local KEY_BRIGHTNESS = 2.5
 local KEY_RANGE = 18
 local KEY_ANGLE = 35
@@ -51,7 +51,7 @@ local KEY_ANGLE = 35
 local INNER_RANGE = 12
 local INNER_BRIGHTNESS = 4
 local FLASH_RANGE = 24
-local FLASH_BRIGHTNESS = 6 -- à 10, l'explosion brûlait tout le tableau en blanc
+local FLASH_BRIGHTNESS = 6 -- à 10, l'explosion brûlait le mur du fond en blanc
 local FLASH_EXPOSURE = 0.3 -- ColorCorrection.Brightness au plus fort de l'éclair
 local COLUMN_HEIGHT = 9
 local COLUMN_LAYERS = { { 2.0, 3.6, 0.35 }, { 1.0, 1.8, 0 } } -- largeur en bas, en haut, transparence de base
