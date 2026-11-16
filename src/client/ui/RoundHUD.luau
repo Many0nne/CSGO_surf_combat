@@ -13,6 +13,7 @@ local EconomyRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChi
 local WalletRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WalletRules"))
 local KeyBindings = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("KeyBindings"))
 local UIKit = require(script.Parent.UIKit)
+local HitShards = require(script.Parent.HitShards)
 local HUDRules = require(script.Parent.HUDRules)
 local HUDState = require(script.Parent.HUDState)
 local KillStreakRules = require(script.Parent.Parent.systems.game.KillStreakRules)
@@ -33,7 +34,7 @@ local TIMER_HEIGHT = 84
 local TIMER_OVER_MENU_ORDER = 4
 -- Série de kills (#364) : crâne éclaté et nombre, sans mot ni cercle, centrés sous le timer (KillStreakRules.view).
 -- Crâne os, hachuré dès 5 kills ; nombre rouge d'impact dès 10. Pas de sang (règles Roblox sur le gore). À un palier
--- annoncé à la voix, sans changer de taille : la croix du hitmarker s'allume autour du crâne, crâne en rouge d'impact et
+-- annoncé à la voix, sans changer de taille : les éclats du hitmarker jaillissent autour du crâne, crâne en rouge d'impact et
 -- nombre en rouge (en os s'il est déjà rouge) le temps de l'annonce (STREAK_FLASH_HOLD).
 -- assets/ui/hud/crane_serie.png et crane_serie_hachures.png (tools/ui/make_skull_icon.py, Decals 80650103001496 et
 -- 77308507647947) ; ci-dessous les ids des images de ces Decals
@@ -42,11 +43,12 @@ local STREAK_SKULL_HATCHED = "rbxassetid://72136449871345"
 local STREAK_TOP = TIMER_TOP + TIMER_HEIGHT + 2
 local STREAK_SKULL_SIZE = 40
 local STREAK_HEIGHT = STREAK_SKULL_SIZE + 4
--- Croix du hitmarker autour du crâne : du centre, début et fin de chaque diagonale (px), et épaisseur. Elle part du bord
--- du crâne : posée dessus, elle cachait les orbites
-local STREAK_CROSS = { 21, 30 }
-local STREAK_CROSS_THICKNESS = 2
-local STREAK_CROSS_HOLD = 0.6
+-- Éclats du hitmarker (HitShards) autour du crâne : distance de la pointe au centre, longueur, écart parcouru (px) et
+-- tenue (s). Ils partent du bord du crâne : posée dessus, l'ancienne croix cachait les orbites
+local STREAK_SHARD_INNER = 21
+local STREAK_SHARD_LENGTH = 12
+local STREAK_SHARD_SPREAD = 4
+local STREAK_SHARD_HOLD = 0.6
 local STREAK_TEXT_SIZE = 30
 local STREAK_GAP = 10
 local STREAK_FLASH_HOLD = 1.2
@@ -109,7 +111,7 @@ local rankShown: { rank: number, total: number }? = nil
 local RANK_TOTAL_SIZE = 18
 local renderRank: () -> ()
 local streakRow: Frame
-local streakCross: { Frame } = {}
+local streakShards: HitShards.Shards
 local streakSkull: ImageLabel
 local streakSkullShadow: ImageLabel
 local streakCount: TextLabel
@@ -194,7 +196,7 @@ local function buildStreak(anchor: Frame)
 		Size = UDim2.fromOffset(STREAK_HEIGHT, STREAK_HEIGHT),
 		Parent = streakRow,
 	})
-	-- Centre du crâne : la croix y est posée en px depuis le centre
+	-- Centre du crâne : les éclats y sont posés en px depuis le centre
 	local center = UIKit.frame({
 		Name = "Center",
 		BackgroundTransparency = 1,
@@ -223,25 +225,8 @@ local function buildStreak(anchor: Frame)
 			streakSkull = skull
 		end
 	end
-	-- Croix du hitmarker autour du crâne, cachée hors palier : contour noir dessous, trait rouge d'impact dessus
-	local diagonal = math.sqrt(0.5)
-	local inner, outer = STREAK_CROSS[1] * diagonal, STREAK_CROSS[2] * diagonal
-	for _, d in { { 1, 1 }, { -1, 1 }, { -1, -1 }, { 1, -1 } } do
-		for _, layer in
-			{
-				{ thickness = STREAK_CROSS_THICKNESS + 2, color = C.Black, z = 4 },
-				{ thickness = STREAK_CROSS_THICKNESS, color = C.HitRed, z = 5 },
-			}
-		do
-			local line =
-				UIKit.line(center, inner * d[1], inner * d[2], outer * d[1], outer * d[2], layer.thickness, layer.color)
-			line.Name = "Cross"
-			line.BackgroundTransparency = 1
-			line.ZIndex = layer.z
-			UIKit.create("UICorner", { CornerRadius = UDim.new(0.5, 0), Parent = line })
-			table.insert(streakCross, line)
-		end
-	end
+	-- Éclats du hitmarker autour du crâne, cachés hors palier
+	streakShards = HitShards.build(center, STREAK_SHARD_INNER, STREAK_SHARD_LENGTH, 4)
 
 	local countBox = UIKit.frame({
 		Name = "CountBox",
@@ -278,7 +263,7 @@ local function paintStreakRest()
 	streakCount.TextColor3 = streakRest
 end
 
--- Cette méthode permet de marquer un palier annoncé à la voix, sans changer de taille : croix du hitmarker autour du
+-- Cette méthode permet de marquer un palier annoncé à la voix, sans changer de taille : éclats du hitmarker autour du
 -- crâne, crâne en rouge d'impact et nombre en rouge (en os s'il est déjà rouge) ; retour au repos après l'annonce, sauf
 -- si un palier plus récent a pris la main.
 local function pulseStreak()
@@ -287,17 +272,7 @@ local function pulseStreak()
 	local token = streakPulse
 	streakSkull.ImageColor3 = C.HitRed
 	streakCount.TextColor3 = if streakRest == C.HitRed then C.Bone else C.HitRed
-	for _, line in streakCross do
-		line.BackgroundTransparency = 0
-	end
-	task.delay(STREAK_CROSS_HOLD, function()
-		if token ~= streakPulse then
-			return
-		end
-		for _, line in streakCross do
-			UIKit.tween(line, Motion.Hit, { BackgroundTransparency = 1 })
-		end
-	end)
+	HitShards.burst(streakShards, C.HitRed, STREAK_SHARD_SPREAD, STREAK_SHARD_HOLD, Motion.Hit)
 	task.delay(STREAK_FLASH_HOLD, function()
 		if token ~= streakPulse then
 			return
