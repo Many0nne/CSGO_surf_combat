@@ -278,7 +278,6 @@ local CRATE_PARTS = {
 	"LidFrame",
 	"LidSteel",
 	"LidStripe",
-	"LidStencil",
 }
 local props = game.ReplicatedStorage:FindFirstChild("Props")
 for _, name in rbxmNames("assets/rbx/Props") do
@@ -298,6 +297,10 @@ else
 		if not (part and part:IsA("MeshPart")) then
 			fail("Props.Crate." .. partName .. " absent ou pas une MeshPart")
 		end
+	end
+	-- Pochoir posé par le jeu, propre à chaque caisse (#434) : un « LidStencil » dans le mesh doublerait le texte
+	if crateModel:FindFirstChild("LidStencil") then
+		fail("Props.Crate.LidStencil présent : le pochoir est posé par ShopScene (#434), pas modelé")
 	end
 end
 

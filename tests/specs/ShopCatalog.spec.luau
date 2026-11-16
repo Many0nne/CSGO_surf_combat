@@ -426,4 +426,27 @@ return function(T, Loader)
 			end
 		end)
 	end)
+
+	T.describe("ShopCatalog : pochoir du couvercle (#434)", function()
+		T.it("série et arme lues dans le catalogue : quatre caisses, quatre pochoirs", function()
+			local texts = {}
+			for _, crate in Shop.CRATES do
+				table.insert(texts, Shop.stencil(crate))
+			end
+			T.expectEqual(table.concat(texts, ","), "S1-AWP,S1-M9,FM-AWP,FM-M9")
+		end)
+
+		T.it("nouvelle série ou nouvelle arme : texte dérivé sans table à compléter", function()
+			T.expectEqual(Shop.stencil({ id = "crate.awp.serie12", weapon = "weapon.awp" }), "S12-AWP")
+			T.expectEqual(Shop.stencil({ id = "crate.ak.neon", weapon = "weapon.ak47" }), "NN-AK47")
+		end)
+
+		T.it("caisse sans série, sans arme ou inconnue : repli sans erreur", function()
+			T.expectEqual(Shop.stencil({ id = "crate.awp", weapon = "weapon.awp" }), "AWP")
+			T.expectEqual(Shop.stencil({ id = "autre", weapon = "weapon.m9bayonet" }), "M9")
+			T.expectEqual(Shop.stencil({ id = "crate.awp.film" }), "FM")
+			T.expectEqual(Shop.stencil({}), "")
+			T.expectEqual(Shop.stencil(nil), "")
+		end)
+	end)
 end
