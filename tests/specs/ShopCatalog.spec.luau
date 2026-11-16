@@ -387,7 +387,7 @@ return function(T, Loader)
 			end
 			T.expectEqual(rarityId("skin.awp.balise"), "common")
 			T.expectEqual(rarityId("skin.awp.circuit"), "rare")
-			T.expectEqual(rarityId("skin.m9bayonet.sillage"), "exceptional")
+			T.expectEqual(rarityId("skin.m9bayonet.email"), "exceptional")
 			T.expectEqual(rarityId("skin.awp.trempe"), nil, "skin hors caisse")
 			T.expectEqual(Shop.rarityOf({ weapon = "weapon.m9bayonet", appearance = "orage" }), nil, "autre arme")
 			T.expectEqual(Shop.rarityOf(Inventory.item("weapon.awp")), nil, "une arme n'a pas de rareté")
