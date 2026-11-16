@@ -3,7 +3,7 @@
 -- du menu. Ses propres pas : décidés ici à chaque tick du mouvement (MovementController → onTick) avec les mêmes règles,
 -- joués sans position et plus bas (FootstepRules.OWN_VOLUME), sans attendre le serveur.
 -- Le son est porté par une Attachment du Terrain posée aux pieds, pas par le personnage (un pas s'entend jusqu'au
--- bout, même si son auteur meurt entre-temps).
+-- bout, même si son auteur meurt entre-temps). Volume réglable : canal « Footsteps » (SoundChannels, réglage volumeFootsteps).
 
 local ContentProvider = game:GetService("ContentProvider")
 local Debris = game:GetService("Debris")
@@ -13,6 +13,7 @@ local SoundService = game:GetService("SoundService")
 
 local FootstepRules = require(ReplicatedStorage.Shared.FootstepRules)
 local NetworkProtocol = require(ReplicatedStorage.Shared.NetworkProtocol)
+local SoundChannels = require(script.Parent.Parent.settings.SoundChannels)
 
 local FootstepSounds = {}
 
@@ -48,7 +49,7 @@ local function makeSound(kind: FootstepRules.Kind, volume: number): Sound
 	sound.SoundId = FootstepRules.SOUND_ID
 	sound.Volume = volume * gain
 	sound.PlaybackSpeed = pitch
-	return sound
+	return SoundChannels.footstep(sound)
 end
 
 -- Cette méthode permet de jouer le pas d'un autre relayé par le serveur lorsqu'il arrive : en 3D aux pieds de son

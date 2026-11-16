@@ -228,6 +228,21 @@ return function(T, Loader)
 			end
 		end)
 
+		T.it("volume des pas (#146) : 100 % par défaut, gardé, arrondi et borné", function()
+			T.expectEqual(PlayerSettings.sanitize(nil).volumeFootsteps, 100)
+			for _, raw in { 42, {}, { volumeMaster = 10 } } do
+				T.expectEqual(PlayerSettings.sanitize(raw).volumeFootsteps, 100)
+			end
+			T.expectEqual(PlayerSettings.defaults().volumeFootsteps, 100)
+			T.expectEqual(PlayerSettings.sanitize({ volumeFootsteps = 0 }).volumeFootsteps, 0, "0 % (muet) est permis")
+			T.expectEqual(PlayerSettings.sanitize({ volumeFootsteps = 42.6 }).volumeFootsteps, 43)
+			T.expectEqual(PlayerSettings.sanitize({ volumeFootsteps = 500 }).volumeFootsteps, V.max)
+			T.expectEqual(PlayerSettings.sanitize({ volumeFootsteps = -20 }).volumeFootsteps, V.min)
+			for _, bad in { 0 / 0, "50", true, {} } do
+				T.expectEqual(PlayerSettings.sanitize({ volumeFootsteps = bad }).volumeFootsteps, V.default)
+			end
+		end)
+
 		T.it("garde un volume valide et arrondit au pourcent", function()
 			local s = PlayerSettings.sanitize({ volumeMaster = 35, volumeWeapons = 0 })
 			T.expectEqual(s.volumeMaster, 35)

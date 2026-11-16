@@ -36,6 +36,8 @@ export type Settings = {
 	volumeWeapons: number,
 	-- Canal annonces (#405) : voix de l'annonceur de kills, en plus du général
 	volumeAnnouncer: number,
+	-- Canal pas : bruits de pas (#146, les siens et ceux des autres), en plus du général
+	volumeFootsteps: number,
 	-- Musique de fond (#286) : désactivée par défaut (DEFAULT_MUSIC), absent = désactivée ; volumes en pourcents
 	-- entiers (en plus du général), l'un dans les écrans du menu, l'autre en partie
 	music: boolean,
@@ -164,6 +166,7 @@ function PlayerSettings.defaults(): Settings
 		volumeMaster = PlayerSettings.VOLUME.default,
 		volumeWeapons = PlayerSettings.VOLUME.default,
 		volumeAnnouncer = PlayerSettings.VOLUME.default,
+		volumeFootsteps = PlayerSettings.VOLUME.default,
 		music = PlayerSettings.DEFAULT_MUSIC,
 		volumeMusicMenu = PlayerSettings.MUSIC_MENU_VOLUME.default,
 		volumeMusicGame = PlayerSettings.MUSIC_GAME_VOLUME.default,
@@ -268,6 +271,7 @@ function PlayerSettings.sanitize(raw: any): Settings
 	settings.volumeMaster = clampPixels(raw.volumeMaster, PlayerSettings.VOLUME)
 	settings.volumeWeapons = clampPixels(raw.volumeWeapons, PlayerSettings.VOLUME)
 	settings.volumeAnnouncer = clampPixels(raw.volumeAnnouncer, PlayerSettings.VOLUME)
+	settings.volumeFootsteps = clampPixels(raw.volumeFootsteps, PlayerSettings.VOLUME)
 	if type(raw.music) == "boolean" then
 		settings.music = raw.music
 	end
