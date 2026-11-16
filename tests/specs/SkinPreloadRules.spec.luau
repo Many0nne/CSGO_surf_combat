@@ -8,17 +8,17 @@ return function(T, Loader)
 		return if toolName == "KaBar" then "M9Bayonet" else toolName
 	end
 
-	local OWNED = "weapon.awp,weapon.kabar,weapon.m9bayonet,skin.awp.circuit,skin.awp.ciselure,skin.m9bayonet.strate"
+	local OWNED = "weapon.awp,weapon.kabar,weapon.m9bayonet,skin.awp.circuit,skin.awp.ciselure,skin.m9bayonet.email"
 
 	T.describe("SkinPreloadRules.skinsOf", function()
 		T.it("liste le skin de chaque emplacement équipé", function()
 			local list =
-				Rules.skinsOf(OWNED, "weapon.awp:skin.awp.circuit,weapon.m9bayonet:skin.m9bayonet.strate", viewmodelOf)
+				Rules.skinsOf(OWNED, "weapon.awp:skin.awp.circuit,weapon.m9bayonet:skin.m9bayonet.email", viewmodelOf)
 			T.expectEqual(#list, 2)
 			T.expectEqual(list[1].viewmodel, "AWP")
 			T.expectEqual(list[1].skin, "skin.awp.circuit")
 			T.expectEqual(list[2].viewmodel, "M9Bayonet")
-			T.expectEqual(list[2].skin, "skin.m9bayonet.strate")
+			T.expectEqual(list[2].skin, "skin.m9bayonet.email")
 		end)
 
 		T.it("ne demande rien pour des armes d'origine ou un attribut absent", function()
@@ -29,12 +29,12 @@ return function(T, Loader)
 
 		T.it("ignore un skin non possédé ou d'une autre arme", function()
 			T.expectEqual(#Rules.skinsOf(OWNED, "weapon.awp:skin.awp.pan", viewmodelOf), 0)
-			T.expectEqual(#Rules.skinsOf(OWNED, "weapon.awp:skin.m9bayonet.strate", viewmodelOf), 0)
+			T.expectEqual(#Rules.skinsOf(OWNED, "weapon.awp:skin.m9bayonet.email", viewmodelOf), 0)
 		end)
 
 		T.it("ne dépasse jamais un skin par emplacement, même avec un attribut trop long", function()
 			local text =
-				"weapon.awp:skin.awp.circuit,weapon.m9bayonet:skin.m9bayonet.strate,weapon.awp:skin.awp.ciselure"
+				"weapon.awp:skin.awp.circuit,weapon.m9bayonet:skin.m9bayonet.email,weapon.awp:skin.awp.ciselure"
 			local list = Rules.skinsOf(OWNED, text, viewmodelOf)
 			T.expectEqual(#list, 2)
 			T.expectEqual(list[1].skin, "skin.awp.circuit")

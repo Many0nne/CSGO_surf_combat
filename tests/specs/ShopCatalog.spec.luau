@@ -123,7 +123,7 @@ return function(T, Loader)
 
 		T.it("tire le skin de l'arme de la caisse (M9)", function()
 			local _, skinId = Shop.draw(Shop.crate("crate.m9.serie2"), Inventory.ITEMS, 80)
-			T.expectEqual(skinId, "skin.m9bayonet.strate")
+			T.expectEqual(skinId, "skin.m9bayonet.artdeco")
 		end)
 
 		T.it("suit les chances affichées sur un balayage régulier du roll", function()

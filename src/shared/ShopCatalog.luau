@@ -57,7 +57,7 @@ ShopCatalog.CRATES = {
 		weapon = "weapon.m9bayonet",
 		stripe = { 226, 58, 40 },
 		price = 500,
-		contents = { common = "couchant", rare = "impact", exceptional = "releve" },
+		contents = { common = "couchant", rare = "patrouille", exceptional = "releve" },
 	},
 	{
 		id = "crate.awp.serie2",
@@ -73,7 +73,7 @@ ShopCatalog.CRATES = {
 		weapon = "weapon.m9bayonet",
 		stripe = { 40, 150, 160 },
 		price = 500,
-		contents = { common = "recuit", rare = "strate", exceptional = "sillage" },
+		contents = { common = "recuit", rare = "artdeco", exceptional = "email" },
 	},
 } :: { Crate }
 
