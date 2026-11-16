@@ -343,7 +343,7 @@ return function(T, Loader)
 			T.expectEqual(env.credited.alice, nil, "10 000 studs de chemin, 5 studs de portée")
 		end)
 
-		T.it("portée mesurée depuis le point d'apparition de chaque vie, la plus grande gardée", function()
+		T.it("portée mesurée depuis le point d'apparition de chaque vie, additionnée sur les vies", function()
 			local env = setup()
 			local alice, bob = makePlayer("alice"), makePlayer("bob")
 			local a, b = participant(alice), participant(bob)
@@ -361,8 +361,24 @@ return function(T, Loader)
 			env.Gains.onMove(bob, nil, pos(env.Economy.PLAYED_MIN_REACH, 0), pos(0, 0))
 			env.clock = 130
 			env.Gains.onRoundEnd({ a, b }, nil)
-			T.expectEqual(env.credited.alice, nil, "100 studs par vie")
+			T.expectEqual(env.credited.alice, nil, "100 + 100 studs")
 			T.expectEqual(env.credited.bob, 15, "revenir au départ ne retire rien")
+		end)
+
+		T.it("joueur actif tué souvent : portée de ses vies additionnée, crédité", function()
+			local env = setup()
+			local alice = makePlayer("alice")
+			local reach = env.Economy.PLAYED_MIN_REACH
+			-- 4 vies de 40 s, chacune s'éloigne d'un peu plus du quart du seuil
+			for life = 1, 4 do
+				local char = {}
+				env.Gains.onSpawn(alice, char)
+				walk(env, alice, char, math.ceil(reach / 4) + 1, life * 10000)
+				env.clock += 40
+				env.Gains.onDespawn(alice, char)
+			end
+			env.Gains.onRoundEnd({ participant(alice) }, nil)
+			T.expectEqual(env.credited.alice, 15, "160 s en vie, portée cumulée au-dessus du seuil")
 		end)
 
 		T.it(

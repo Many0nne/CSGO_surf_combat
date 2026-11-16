@@ -56,7 +56,7 @@ function EconomyRules.killGain(victimIsBot: boolean): number
 end
 
 -- Activité d'un joueur dans une manche, mesurée par le serveur (#401) : portée (studs, plus grand écart horizontal au
--- point d'apparition sur ses vies) et touches qui ont fait des dégâts
+-- point d'apparition de chaque vie, additionné sur ses vies) et touches qui ont fait des dégâts
 export type Activity = { reach: number, hits: number }
 
 -- Cette méthode permet de savoir si une activité mesurée par le serveur est réelle lorsqu'une manche sans kill se

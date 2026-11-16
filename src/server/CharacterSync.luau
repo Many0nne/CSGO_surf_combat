@@ -351,13 +351,13 @@ local function onClientPosition(
 			remote:FireClient(other, char, pos, yaw, stamp)
 		end
 	end
-	-- Activité (#401) : seulement un déplacement que l'anti-triche n'a pas signalé ; avant la hauteur de mort, qui peut
-	-- tuer le personnage
+	onAccepted(char, pos)
+	-- Activité (#401) : seulement un déplacement que l'anti-triche n'a pas signalé ; après la hauteur de mort, qu'une
+	-- erreur de l'économie ne doit jamais sauter
 	local listener = moveListener
 	if listener and not (flagged or guardFlagged) then
 		listener(player, char, from, pos)
 	end
-	onAccepted(char, pos)
 end
 
 -- Cette méthode permet de déclarer tombé un joueur silencieux lorsque la boucle du vide le trouve en l'air au-dessus

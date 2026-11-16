@@ -13,7 +13,8 @@ atteignait le plafond du jour (250) en ~17 manches sans jouer.
   manche **et** une activité réelle (`EconomyRules.isActive`) : une portée d'au moins `PLAYED_MIN_REACH` studs, ou
   `PLAYED_MIN_HITS` (1) touche. Avec un kill, rien ne change.
 - Tout est mesuré par le serveur, jamais déclaré par le client (`CreditGains.onMove`, `onHit`) :
-  - **portée** : plus grand écart horizontal au point d'apparition de la vie, la plus grande des vies de la manche.
+  - **portée** : plus grand écart horizontal au point d'apparition de chaque vie, additionné sur les vies de la
+    manche (un joueur actif souvent tué la cumule).
     L'écart est la **somme des seuls pas propres** (vecteurs `to - from` reçus de `CharacterSync.setMoveListener`,
     paquet accepté **sans signalement** : seau de distance, noclip, vol, y compris en journal seul), pas une
     différence de positions absolues : un pas signalé, une téléportation (`CharacterSync.teleport`) ou le saut entre
@@ -30,7 +31,7 @@ atteignait le plafond du jour (250) en ~17 manches sans jouer.
 - Studio : la ligne `[CreditGains] fin de manche …` donne kills, temps en vie, portée (studs) et touches.
 - Tests : `tests/specs/EconomyRules.spec.luau` (règle, seuil, écart horizontal), `tests/specs/CreditGains.spec.luau`
   (« activité réelle » : AFK immobile ou qui tourne sur place non crédité, aller-retour non crédité, actif par portée
-  ou touche crédité, kill comme avant, origine reprise à chaque vie, pas signalé non compté, hors vie et hors manche
+  ou touche crédité, kill comme avant, origine reprise à chaque vie et portée additionnée, pas signalé non compté, hors vie et hors manche
   ignorés).
 
 Mesures (Studio, map jouée, `[CreditGains]`) :

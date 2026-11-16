@@ -27,8 +27,8 @@ export type Deps = {
 }
 -- Manche d'un joueur : kills (comptés même au plafond, pour « manche jouée »), crédits gagnés, secondes en vie
 -- cumulées, début de la vie en cours (nil : pas en vie dans la manche) et son personnage, activité réelle (#401 :
--- écart horizontal au point d'apparition de la vie en cours, somme des seuls pas propres ; portée en studs, la plus
--- grande sur les vies de la manche ; touches qui ont fait des dégâts)
+-- écart horizontal au point d'apparition de la vie en cours, somme des seuls pas propres, et sa plus grande longueur
+-- dans cette vie ; portée des vies terminées de la manche, additionnées ; touches qui ont fait des dégâts)
 type RoundState = {
 	kills: number,
 	earned: number,
@@ -37,6 +37,7 @@ type RoundState = {
 	character: Instance?,
 	offsetX: number,
 	offsetZ: number,
+	lifeReach: number,
 	reach: number,
 	hits: number,
 }
@@ -63,6 +64,7 @@ local function newRound(): RoundState
 		character = nil,
 		offsetX = 0,
 		offsetZ = 0,
+		lifeReach = 0,
 		reach = 0,
 		hits = 0,
 	}
@@ -115,7 +117,9 @@ local function endLife(d: Deps, state: RoundState)
 		state.aliveSince = nil
 	end
 	state.character = nil
-	state.offsetX, state.offsetZ = 0, 0
+	-- Portée de la vie close ajoutée à la manche : un joueur actif tué souvent la cumule sur ses vies
+	state.reach += state.lifeReach
+	state.offsetX, state.offsetZ, state.lifeReach = 0, 0, 0
 end
 
 -- Cette méthode permet de démarrer le temps en vie d'un joueur et d'effacer les gains de sa manche précédente lorsque
@@ -161,7 +165,7 @@ local function livingRound(d: Deps, player: Player, character: Instance?): Round
 	return state
 end
 
--- Cette méthode permet d'ajouter un pas à l'écart au point d'apparition, et de relever la portée de la manche, lorsque
+-- Cette méthode permet d'ajouter un pas à l'écart au point d'apparition, et de relever la portée de la vie, lorsque
 -- CharacterSync accepte une position du joueur sans la signaler (`from` = position acceptée précédente). Seuls ces pas
 -- sont cumulés : un déplacement refusé, signalé (noclip, vol en journal seul) ou téléporté n'éloigne jamais.
 function CreditGains.onMove(player: Player, character: Instance?, from: Vector3, to: Vector3)
@@ -175,7 +179,7 @@ function CreditGains.onMove(player: Player, character: Instance?, from: Vector3,
 	end
 	state.offsetX += to.X - from.X
 	state.offsetZ += to.Z - from.Z
-	state.reach = math.max(state.reach, EconomyRules.horizontalLength(state.offsetX, state.offsetZ))
+	state.lifeReach = math.max(state.lifeReach, EconomyRules.horizontalLength(state.offsetX, state.offsetZ))
 end
 
 -- Cette méthode permet de compter une touche à l'activité de la manche lorsqu'un tir ou un coup de mêlée du joueur,
@@ -210,7 +214,7 @@ function CreditGains.onRoundEnd(participants: { Participant }, winner: Participa
 			local alive = state.alive + (if state.aliveSince then math.max(d.clock() - state.aliveSince, 0) else 0)
 			local won = winner ~= nil and winner.id == participant.id
 			-- Même pour 0 : le portefeuille répond nil si le solde ne peut pas changer
-			local activity = { reach = state.reach, hits = state.hits }
+			local activity = { reach = state.reach + state.lifeReach, hits = state.hits }
 			local credited = credit(d, player, state, EconomyRules.roundGain(state.kills, alive, activity, won))
 			-- Solde qui ne peut pas changer : rien à montrer (pas de « +0 » trompeur)
 			if credited ~= nil then
@@ -223,7 +227,7 @@ function CreditGains.onRoundEnd(participants: { Participant }, winner: Participa
 						player.Name,
 						state.kills,
 						alive,
-						state.reach,
+						activity.reach,
 						state.hits,
 						tostring(won),
 						tostring(credited),
