@@ -157,10 +157,11 @@ cet achat en a débité, le reste dans `earned`, toujours hors plafond du jour. 
 un achat payé en crédits achetés puis remboursé convertissait des crédits achetés en crédits gagnés (et aurait ouvert
 un chemin « gratuit » payé en Robux si les caisses étaient un jour payées en `earned` seuls).
 
-**Chances affichées** (vue détail du shop, #393, `ShopCatalog.chances`) : en pour cent, une décimale au plus, somme
-exactement 100 % (plus fort reste), visibles avant ACHETER. Caisses actuelles : 70 %, 25 %, 5 %, un skin par rareté,
-donc aucun arrondi. Piège : avec des chances qui ne tombent pas juste au dixième, le plus fort reste décale un
-affichage d'au plus 0,1 point, et une chance sous 0,05 % s'afficherait « 0 % » ; Roblox demande alors plus de
+**Chances affichées** (vue détail du shop, #393, `ShopCatalog.chances`) : en pour cent, deux décimales au plus (centièmes,
+#430), somme exactement 100 % (plus fort reste), visibles avant ACHETER. Caisses actuelles : 80 / 16 / 3,2 / 0,8 % par
+rareté, partagés entre les skins (AWP · SÉRIE 1 : 5,34 / 5,33 / 5,33 % pour trois RARE). Piège : avec des chances qui ne
+tombent pas juste au centième, le plus fort reste décale un affichage d'au plus 0,01 point, et une chance sous 0,005 %
+s'afficherait « 0 % » ; Roblox demande alors plus de
 décimales (quatre de plus que le premier chiffre non nul) ou la mention « Probabilities are rounded… ».
 
 **Gain du jour affiché** (#446) : tout écran qui montre `LocalWallet.dailyEarned()` (« GAINS DU JOUR » du shop, bandeau

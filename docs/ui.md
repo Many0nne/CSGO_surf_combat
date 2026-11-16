@@ -99,10 +99,10 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   d'impact) ; grille de
   cartes sur quatre colonnes : la rangée des armes possédées, puis « SKINS · ARME » et les rangées de skins (silhouette,
   nom, coche et trait rouge d'impact sur l'équipé, contour rouge au survol). **Rareté d'un skin** (choix de
-  l'utilisateur) : bande de 4 px à sa couleur sur le bord gauche de la carte et son nom (COMMUN, RARE, EXCEPTIONNEL) en
+  l'utilisateur) : bande de 4 px à sa couleur sur le bord gauche de la carte et son nom (COMMUN, RARE, EXCEPTIONNEL, LÉGENDAIRE en rouge vif) en
   couleur en haut à gauche, mini-rendu descendu et réduit d'autant ; dans la ligne de nom, étiquette pleine à sa couleur
   entre le nom et « ÉQUIPÉ » (texte sombre sur le gris de COMMUN). Rareté lue dans la caisse de l'arme
-  (`ShopCatalog.rarityOf`) : un skin qu'aucune caisse ne donne (TREMPE, MUE) et le skin d'origine n'en ont pas, et les
+  (`ShopCatalog.rarityOf`) : un skin qu'aucune caisse ne donne et le skin d'origine n'en ont pas, et les
   skins restent dans l'ordre du catalogue (tri par rareté écarté). Les cases restantes d'une rangée sont
   vides et barrées d'une croix : elles tiennent la grille tant qu'il y a une ou deux armes. La grille est une
   `ScrollingFrame` qui descend jusqu'au-dessus de l'aide (une rangée et demie de skins visible, la rangée coupée montre
@@ -761,14 +761,16 @@ l'étiquette BIENTÔT jusqu'à #393 (voir « Achat d'une caisse »).
 - Valeurs d'attente (points ouverts de #347, #332 et #424) : **deux caisses, une par arme, de 6 à 8 skins** (#424 :
   14 skins existent, quatre caisses par série n'en auraient eu que 3 ou 4 chacune), dans l'ordre de la vitrine AWP puis
   M9 (`crate.awp.serie1`, `crate.m9.serie1`, nom « AWP · SÉRIE 1 », bande rouge pour l'AWP, bleu-vert pour le M9), prix
-  500 CRÉDITS par caisse, une ouverture = un seul skin de l'arme de la caisse, raretés COMMUN 70 %, RARE 25 %,
-  EXCEPTIONNEL 5 %, chacune partagée à parts égales entre ses skins (AWP : BALISE, MAQUIS, TREMPE, MUE à 17,5 %, PAN !,
-  CIRCUIT à 12,5 %, ORAGE, CISELURE à 2,5 % ; M9 : COUCHANT, RECUIT à 35 %, PATROUILLE, ART DÉCO à 12,5 %, RELEVÉ, ÉMAIL
-  à 2,5 %). Raretés reprises des anciennes caisses par série, à revoir par l'utilisateur. Série FILM (#433, voir
-  `docs/assets.md`) : « AWP · FILM » (bande vert phosphore) et « M9 · FILM » (bande os) après la série 1, deux skins
-  hommage chacune en EXCEPTIONNEL à 2,5 % (AWP : REMORQUEUR et LOGOGRAMME ; M9 : HÔTE et SPHINX, #436), complétées par
-  des skins de la série 1 à leur rareté d'origine (AWP : BALISE, MUE, CIRCUIT, PAN ! ; M9 : COUCHANT, RECUIT,
-  PATROUILLE, ART DÉCO). Le pochoir « S1-0332 » du couvercle est dans le mesh : toutes les caisses le portent. Doublons possibles : le
+  500 CRÉDITS par caisse, une ouverture = un seul skin de l'arme de la caisse, raretés en pyramide à la CS:GO (#430) :
+  COMMUN 80 %, RARE 16 %, EXCEPTIONNEL 3,2 %, LÉGENDAIRE 0,8 % (rouge vif 235/75/75), chacune partagée à parts égales
+  entre ses skins présents dans la caisse ; une rareté sans skin dans une caisse (LÉGENDAIRE d'AWP · FILM) est écartée
+  du tirage et les autres chances renormalisées. Remboursement d'un doublon 20 / 40 / 70 / 100 % du prix. Rareté fixée
+  par skin, la même dans toutes les caisses : AWP, COMMUN MAQUIS, LOGOGRAMME ; RARE MUE, ORAGE, CIRCUIT ; EXCEPTIONNEL
+  REMORQUEUR, BALISE, PAN ! ; LÉGENDAIRE TREMPE, CISELURE. M9, COMMUN ART DÉCO, HÔTE ; RARE PATROUILLE, RELEVÉ, SPHINX ;
+  EXCEPTIONNEL ÉMAIL, RECUIT ; LÉGENDAIRE COUCHANT. Série FILM (#433, voir `docs/assets.md`) : « AWP · FILM » (bande
+  vert phosphore) et « M9 · FILM » (bande os) après la série 1, des skins hommage (REMORQUEUR, LOGOGRAMME ; HÔTE, SPHINX,
+  #436) complétés de skins de la série 1. Ouverture : 4e palier de couleur LÉGENDAIRE (paliers sur les bouffées de
+  2,25 / 2,85 / 3,6 s, avant la tension) et tenue de la silhouette de 1,1 s, la plus longue. Le pochoir « S1-0332 » du couvercle est dans le mesh : toutes les caisses le portent. Doublons possibles : le
   tirage suit les chances affichées même si le skin est déjà possédé ; un achat rembourse alors une part du prix
   (#393), l'ouverture de test ne donne rien de plus. Tout est dans `ShopCatalog`. L'étiquette de la vitrine (3,4 studs) tient « AWP · SÉRIE 1 » + « 500 CRÉDITS »
   (vérifié en Studio) ; sous-titre de la vue d'ensemble « UNE PAR ARME ET PAR SÉRIE ». Depuis #391, le prix est le jeton
@@ -917,7 +919,7 @@ détail (caisse refaite).
   - Éclair de l'explosion trop fort (PointLight 10) : le tableau (retiré en #424) brûlait en blanc ; 6.
   - Couvercle en 0,6 s : il restait dressé derrière la colonne ; 0,4 s.
 - **Vérifier dans Studio** (debug, Studio seulement, attributs du joueur en contexte Client) : `DebugCrateOpening =
-  "crate:N"` montre la caisse N (shop ouvert), `"skin.awp.releve|exceptional"` joue l'ouverture sans le serveur (rien
+  "crate:N"` montre la caisse N (shop ouvert), `"skin.awp.trempe|legendary"` joue l'ouverture sans le serveur (rien
   n'est gagné), `"skin.awp.impact|rare|200"` la joue comme un doublon remboursé de 200 (révélation DOUBLON, #393) ;
   `DebugCrateOpeningTime = t` fige l'ouverture au temps `t` (poses à capturer), nil la relâche. La vidéo
   se fait en temps réel avec `tools/anim/record_window.py` (`docs/animations.md`). Le message
@@ -932,7 +934,7 @@ Règles serveur : `docs/architecture.md`, « Achat d'une caisse ». Dans la vue 
 
 - **Contenu** : en-têtes os atténués « CHANCE » (au-dessus de la colonne des raretés) et « SI DOUBLON » (calé à
   droite), 16 px. Chaque ligne : skin, rareté et chance en pour cent (`ShopCatalog.chances`, total exactement 100 %,
-  « 2,5 % » s'il le faut), puis jeton 18 px et crédits rendus pour un doublon de cette rareté. Visible avant l'achat
+  « 1,07 % » s'il le faut), puis jeton 18 px et crédits rendus pour un doublon de cette rareté. Visible avant l'achat
   (règle Roblox des objets aléatoires payants).
 - **ACHETER** : contour os, survol en rouge d'impact, comme l'ancien OUVRIR. Pendant la demande : « ACHAT… », contour
   atténué, pas de second clic, « ‹ SHOP » et les flèches de la caisse voisine figés (l'ouverture se joue sur le socle de

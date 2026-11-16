@@ -76,8 +76,9 @@ CrateOpeningRules.COLUMN_FADE = 0.4 -- extinction après la révélation
 CrateOpeningRules.SILHOUETTE_FADE = 0.3 -- apparition de la silhouette dans la colonne
 CrateOpeningRules.REVEAL_FLASH = 0.15
 CrateOpeningRules.RISE_TIME = 1.0 -- montée de la silhouette hors de la caisse (0,12 s : elle « sautait »)
--- Tenue de la silhouette en haut, avant la révélation, par rareté (le suspense croît avec la rareté)
-CrateOpeningRules.HOLD = { common = 0.3, rare = 0.5, exceptional = 0.7 } :: { [string]: number }
+-- Tenue de la silhouette en haut, avant la révélation, par rareté (le suspense croît avec la rareté ; LÉGENDAIRE, #430,
+-- la plus longue)
+CrateOpeningRules.HOLD = { common = 0.3, rare = 0.5, exceptional = 0.7, legendary = 1.1 } :: { [string]: number }
 CrateOpeningRules.DEFAULT_HOLD = 0.5
 -- Rotation de l'arme : de trois quarts au profil, jamais par la tranche (deux tours complets montraient la silhouette
 -- par la tranche, une tache sans forme, à la moitié du suspense)
@@ -85,10 +86,11 @@ CrateOpeningRules.SPIN_FROM = 70
 CrateOpeningRules.SPIN_AFTER = 0.6 -- la rotation finit de ralentir après la révélation
 CrateOpeningRules.SWAY = 8 -- balancement de tenue, en degrés
 -- Paliers de couleur, de la rareté la plus courante à la plus rare (même ordre que ShopCatalog.RARITIES, vérifié par
--- le test). TIER_AT[k] : passage au palier k + 1, sur une bouffée de la charge (la bouffée fait le sursaut) ; la
--- tension et l'explosion confirment la couleur finale
-CrateOpeningRules.TIERS = { "common", "rare", "exceptional" }
-CrateOpeningRules.TIER_AT = { 2.85, 3.6 }
+-- le test). TIER_AT[k] : passage au palier k + 1, sur une bouffée de la charge (la bouffée fait le sursaut) : RARE sur
+-- la bouffée à rayons, EXCEPTIONNEL puis LÉGENDAIRE (#430) sur les deux suivantes, avant la tension ; la tension et
+-- l'explosion confirment la couleur finale
+CrateOpeningRules.TIERS = { "common", "rare", "exceptional", "legendary" }
+CrateOpeningRules.TIER_AT = { 2.25, 2.85, 3.6 }
 
 -- Cette méthode permet de borner une valeur entre 0 et 1 lorsqu'une phase est convertie en progression.
 local function clamp01(x: number): number
