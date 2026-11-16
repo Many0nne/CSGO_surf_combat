@@ -45,9 +45,18 @@ Quand une tâche révèle un piège, une règle ou une piste rejetée qui resser
 3. Besoin d'un avis de l'utilisateur (gameplay, rendu, UI) : lui donner le port Rojo du worktree (`34872+N`), la procédure
    de connexion Studio ci-dessous, et le scénario à suivre (étapes, ce qu'il faut observer). Attendre son retour.
 4. Fonctionnement vérifié (et validé par l'utilisateur si l'étape 3 s'appliquait) : commit, push, `gh pr create --base main`
-   avec `Closes #<n>` dans la description si une issue est liée, puis fermer le thread (settle via `t3_thread_organize`).
-5. Pas de merge sans ordre explicite. Le nettoyage automatique arrête Rojo une fois le thread fermé, et supprime le worktree
-   et la branche locale une fois la PR mergée (à la main : `.\scripts\csgo-worktree.ps1 <branche> -Remove`).
+   avec `Closes #<n>` dans la description si une issue est liée.
+5. Merger soi-même, sans attendre d'ordre (règle propre à ce dépôt, elle remplace le « pas de merge sans ordre explicite »
+   des consignes globales) : une fois la CI verte, `gh pr merge <n> --merge`. Si l'étape 3 s'appliquait, ne merger qu'après
+   le retour positif de l'utilisateur. CI rouge : corriger, ne pas merger. Puis fermer le thread (settle via
+   `t3_thread_organize`).
+6. Le nettoyage automatique arrête Rojo une fois le thread fermé, et supprime le worktree et la branche locale une fois la
+   PR mergée (à la main : `.\scripts\csgo-worktree.ps1 <branche> -Remove`).
+
+L'utilisateur est le client : il juge ce qui se voit en jeu (gameplay, rendu, UI, périmètre d'une feature) et ne relit pas
+le code. Les choix techniques (structure, refactor, tests, outillage, doc) se tranchent sans lui être soumis ; les comptes
+rendus décrivent ce qui change en jeu et comment le tester. Une action destructive (suppression de données, force-push,
+modification hors du dépôt) se confirme toujours avec lui.
 
 ## Périmètre et vérification
 
