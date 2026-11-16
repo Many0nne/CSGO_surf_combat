@@ -48,8 +48,8 @@ ShopCatalog.RARITIES = {
 -- Caisses en vente, dans l'ordre de la vitrine : une par arme et par série, de 6 à 8 skins (#424), une ouverture donne
 -- un seul skin de l'arme (#332). Un skin a la même rareté dans toutes les caisses qui le contiennent (#430, `rarityOf`) :
 -- AWP, COMMUN maquis, epure, tartan, banche, logogramme ; RARE mue, orage, circuit ; EXCEPTIONNEL remorqueur, balise,
--- pan ; LÉGENDAIRE trempe, ciselure. M9, COMMUN artdeco, hote ; RARE patrouille, releve, sphinx ; EXCEPTIONNEL email, recuit ; LÉGENDAIRE
--- couchant. Ajouter une série = une caisse par arme ici (ses skins dans InventoryRules). Une rareté sans skin dans une
+-- pan ; LÉGENDAIRE trempe, ciselure. M9, COMMUN artdeco, leurre, chantier, topo, ceramique, hote ; RARE patrouille,
+-- releve, sphinx ; EXCEPTIONNEL email, recuit ; LÉGENDAIRE couchant. Ajouter une série = une caisse par arme ici (ses skins dans InventoryRules). Une rareté sans skin dans une
 -- caisse (LÉGENDAIRE d'AWP · FILM) est écartée du tirage, les autres chances étant renormalisées (`draw`)
 ShopCatalog.CRATES = {
 	{
@@ -73,10 +73,12 @@ ShopCatalog.CRATES = {
 		weapon = "weapon.m9bayonet",
 		stripe = { 40, 150, 160 },
 		price = 500,
+		-- PATROUILLE et RECUIT ont laissé la place aux communs LEURRE, CHANTIER, TOPO et CÉRAMIQUE (#476, 8 skins au
+		-- plus) ; ils restent dans M9 · FILM, à la même rareté
 		contents = {
-			common = { "artdeco" },
-			rare = { "patrouille", "releve" },
-			exceptional = { "email", "recuit" },
+			common = { "artdeco", "leurre", "chantier", "topo", "ceramique" },
+			rare = { "releve" },
+			exceptional = { "email" },
 			legendary = { "couchant" },
 		},
 	},

@@ -238,6 +238,36 @@ InventoryRules.ITEMS = {
 		name = "SPHINX",
 		appearance = "sphinx",
 	},
+	-- Communs de la série 1 (#476) : motifs sobres dessinés pour la M9 (assets/m9/skins/leurre.py, chantier.py, topo.py,
+	-- ceramique.py)
+	{
+		id = "skin.m9bayonet.leurre",
+		type = "skin",
+		weapon = "weapon.m9bayonet",
+		name = "LEURRE",
+		appearance = "leurre",
+	},
+	{
+		id = "skin.m9bayonet.chantier",
+		type = "skin",
+		weapon = "weapon.m9bayonet",
+		name = "CHANTIER",
+		appearance = "chantier",
+	},
+	{
+		id = "skin.m9bayonet.topo",
+		type = "skin",
+		weapon = "weapon.m9bayonet",
+		name = "TOPO",
+		appearance = "topo",
+	},
+	{
+		id = "skin.m9bayonet.ceramique",
+		type = "skin",
+		weapon = "weapon.m9bayonet",
+		name = "CÉRAMIQUE",
+		appearance = "ceramique",
+	},
 } :: { Item }
 
 -- Inventaire de tout joueur (et des bots), sauvegardé ou non : Ka-Bar et AWP
