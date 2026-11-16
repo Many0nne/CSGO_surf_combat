@@ -784,8 +784,8 @@ en l'air, la part au-delà de `FRAME_SIM_MAX` (= `MAX_TICKS × TICK`, ce qu'une 
 (`ceiling(flight, now, clock)`), la borne haute reste l'heure d'arrivée : l'enveloppe couvre à la fois le temps simulé
 et le temps écoulé. Ce pardon est plafonné à `FLIGHT_LOST_MAX` (1 s) par vol, après quoi le temps compte de
 nouveau en entier. Le budget n'est rendu qu'à l'atterrissage (paquet porté, donc à moins de `SUPPORT_REACH` d'une
-surface, où le vol n'est de toute façon pas jugé), pas par une correction en l'air (`restart`) : un tricheur refusé
-ne regagne rien. Le temps pardonné reste acquis jusqu'à la fin du vol (le client honnête a perdu ce temps pour de
+surface, où le vol n'est de toute façon pas jugé), ni par une correction en l'air (`restart`, qui garde aussi
+l'heure du décollage), ni par un boost touché en l'air : un tricheur refusé ne regagne rien. Le temps pardonné reste acquis jusqu'à la fin du vol (le client honnête a perdu ce temps pour de
 bon) : le gain d'un tricheur est 1 s de chute, pas plus. La règle du vide garde l'heure d'arrivée seule (un joueur silencieux n'a
 pas de paquets à compter).
 

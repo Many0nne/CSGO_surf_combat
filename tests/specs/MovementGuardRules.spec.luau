@@ -545,12 +545,18 @@ return function(T, Loader)
 				T.expectEqual(guard.flight.lost, Rules.FLIGHT_LOST_MAX)
 				Rules.restart(guard.flight, 4, 60) -- refus en l'air
 				T.expectEqual(guard.flight.lost, Rules.FLIGHT_LOST_MAX, "un refus ne rend pas de budget")
-				T.expectEqual(guard.flight.airAt, 4)
+				T.expectEqual(guard.flight.airAt, 0.05, "même vol : heure du décollage gardée")
 				Rules.observe(guard.flight, 5, STAND, true) -- atterrissage
 				T.expectEqual(guard.flight.lost, 0)
-				-- Correction au sol après un vol épuisé : le vol suivant repart avec un budget plein
+				-- Correction au sol : un nouveau vol commence là
 				Rules.restart(guard.flight, 6, STAND)
-				T.expectEqual(guard.flight.lost, 0)
+				T.expectEqual(guard.flight.airAt, 6)
+				-- Un boost touché en l'air ne rend pas le budget non plus
+				local boost = box(V(-5, 40, -5), V(5, 50, 5))
+				boost.vy = 100
+				guard.flight.lost = Rules.FLIGHT_LOST_MAX
+				Rules.judge(guard, V(0, 45, 0), V(0, 46, 0), 6.05, geometryOf({}, {}, { boost }))
+				T.expectEqual(guard.flight.lost, Rules.FLIGHT_LOST_MAX, "boost en l'air : budget gardé")
 			end
 		)
 

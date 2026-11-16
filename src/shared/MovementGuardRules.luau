@@ -228,12 +228,14 @@ end
 -- Cette méthode permet de repartir d'une correction lorsque le serveur renvoie le client à sa dernière position
 -- acceptée (y) : le client y est replacé vitesse nulle puis tombe ; enveloppe ancrée là, avec la vitesse d'un saut
 -- pour couvrir le délai avant que le client n'applique la correction. Les trous pardonnés restent ceux du vol en cours
--- (remis à zéro seulement à l'atterrissage : un refus en l'air ne rend pas de budget).
+-- (remis à zéro seulement à l'atterrissage : un refus en l'air ne rend pas de budget), comme l'heure du décollage.
 function MovementGuardRules.restart(flight: Flight, now: number, y: number)
+	if not flight.anchored then
+		flight.airAt = now
+	end
 	flight.anchored = true
 	flight.anchorAt = now
 	flight.anchorClock = flight.clock
-	flight.airAt = now
 	flight.anchorY = y
 	flight.anchorVy = MovementConfig.JUMP_VELOCITY
 	flight.lastAt = now
@@ -405,7 +407,12 @@ function MovementGuardRules.judge(
 	elseif supported then
 		flight.boostVy = 0
 	end
+	local lost = flight.lost
 	local honest, excess = MovementGuardRules.observe(flight, now, pos.Y, supported or boostVy > 0)
+	-- Un boost touché en l'air relance l'enveloppe, pas le budget des trous pardonnés : seul un vrai support le rend
+	if boostVy > 0 and not supported then
+		flight.lost = lost
+	end
 	-- Un paquet n'est signalé qu'une fois : le vol s'il est bloquant (sinon le paquet serait appliqué), puis le noclip
 	-- (journal seul), puis le vol en journal seul
 	if not honest and (MovementGuardRules.ENFORCE_FLIGHT or not noclip) then
