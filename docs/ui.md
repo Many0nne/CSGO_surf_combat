@@ -102,7 +102,7 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   l'utilisateur) : bande de 4 px à sa couleur sur le bord gauche de la carte et son nom (COMMUN, RARE, EXCEPTIONNEL, LÉGENDAIRE en rouge vif) en
   couleur en haut à gauche, mini-rendu descendu et réduit d'autant ; dans la ligne de nom, étiquette pleine à sa couleur
   entre le nom et « ÉQUIPÉ » (texte sombre sur le gris de COMMUN). Rareté lue dans la caisse de l'arme
-  (`ShopCatalog.rarityOf`) : un skin qu'aucune caisse ne donne (TREMPE, MUE) et le skin d'origine n'en ont pas, et les
+  (`ShopCatalog.rarityOf`) : un skin qu'aucune caisse ne donne et le skin d'origine n'en ont pas, et les
   skins restent dans l'ordre du catalogue (tri par rareté écarté). Les cases restantes d'une rangée sont
   vides et barrées d'une croix : elles tiennent la grille tant qu'il y a une ou deux armes. La grille est une
   `ScrollingFrame` qui descend jusqu'au-dessus de l'aide (une rangée et demie de skins visible, la rangée coupée montre
@@ -769,8 +769,8 @@ l'étiquette BIENTÔT jusqu'à #393 (voir « Achat d'une caisse »).
   REMORQUEUR, BALISE, PAN ! ; LÉGENDAIRE TREMPE, CISELURE. M9, COMMUN ART DÉCO, HÔTE ; RARE PATROUILLE, RELEVÉ, SPHINX ;
   EXCEPTIONNEL ÉMAIL, RECUIT ; LÉGENDAIRE COUCHANT. Série FILM (#433, voir `docs/assets.md`) : « AWP · FILM » (bande
   vert phosphore) et « M9 · FILM » (bande os) après la série 1, des skins hommage (REMORQUEUR, LOGOGRAMME ; HÔTE, SPHINX,
-  #436) complétés de skins de la série 1. Ouverture : 4e palier de couleur LÉGENDAIRE (sur la dernière bouffée, au
-  début du temps d'arrêt) et tenue de la silhouette de 1,1 s, la plus longue. Le pochoir « S1-0332 » du couvercle est dans le mesh : toutes les caisses le portent. Doublons possibles : le
+  #436) complétés de skins de la série 1. Ouverture : 4e palier de couleur LÉGENDAIRE (paliers sur les bouffées de
+  2,25 / 2,85 / 3,6 s, avant la tension) et tenue de la silhouette de 1,1 s, la plus longue. Le pochoir « S1-0332 » du couvercle est dans le mesh : toutes les caisses le portent. Doublons possibles : le
   tirage suit les chances affichées même si le skin est déjà possédé ; un achat rembourse alors une part du prix
   (#393), l'ouverture de test ne donne rien de plus. Tout est dans `ShopCatalog`. L'étiquette de la vitrine (3,4 studs) tient « AWP · SÉRIE 1 » + « 500 CRÉDITS »
   (vérifié en Studio) ; sous-titre de la vue d'ensemble « UNE PAR ARME ET PAR SÉRIE ». Depuis #391, le prix est le jeton

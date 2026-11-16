@@ -86,11 +86,11 @@ CrateOpeningRules.SPIN_FROM = 70
 CrateOpeningRules.SPIN_AFTER = 0.6 -- la rotation finit de ralentir après la révélation
 CrateOpeningRules.SWAY = 8 -- balancement de tenue, en degrés
 -- Paliers de couleur, de la rareté la plus courante à la plus rare (même ordre que ShopCatalog.RARITIES, vérifié par
--- le test). TIER_AT[k] : passage au palier k + 1, sur une bouffée de la charge (la bouffée fait le sursaut) ; le
--- palier LÉGENDAIRE (#430) tombe sur la dernière bouffée, au début du temps d'arrêt ; la tension et l'explosion
--- confirment la couleur finale
+-- le test). TIER_AT[k] : passage au palier k + 1, sur une bouffée de la charge (la bouffée fait le sursaut) : RARE sur
+-- la bouffée à rayons, EXCEPTIONNEL puis LÉGENDAIRE (#430) sur les deux suivantes, avant la tension ; la tension et
+-- l'explosion confirment la couleur finale
 CrateOpeningRules.TIERS = { "common", "rare", "exceptional", "legendary" }
-CrateOpeningRules.TIER_AT = { 2.85, 3.6, 4.35 }
+CrateOpeningRules.TIER_AT = { 2.25, 2.85, 3.6 }
 
 -- Cette méthode permet de borner une valeur entre 0 et 1 lorsqu'une phase est convertie en progression.
 local function clamp01(x: number): number

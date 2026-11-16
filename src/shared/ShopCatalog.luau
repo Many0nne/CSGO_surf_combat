@@ -205,8 +205,13 @@ function ShopCatalog.draw(crate: Crate, items: { any }, roll: number): (Row?, st
 			return row, row.skin
 		end
 	end
-	local last = rows[#rows]
-	return last, last.skin
+	-- Repli (reste d'arrondi flottant) : la dernière ligne qui a un poids, jamais une rareté à chance nulle
+	for i = #rows, 1, -1 do
+		if weight[i] > 0 then
+			return rows[i], rows[i].skin
+		end
+	end
+	return nil, nil
 end
 
 -- Cette méthode permet de composer la ligne sous le nom d'une caisse (« CAISSE · 8 SKINS · UN PAR OUVERTURE ») lorsque
@@ -268,8 +273,8 @@ function ShopCatalog.refund(crate: Crate, rarityId: string): number
 end
 
 -- Mêmes proportions que `draw` ; arrondi au plus fort reste, à égalité la ligne la plus courante ; vide si total nul.
--- Cette méthode permet de convertir les chances de chaque skin en dixièmes de pour cent de somme exacte 1000 lorsque la
--- vue détail les affiche (#393, règle Roblox des objets aléatoires payants).
+-- Cette méthode permet de convertir les chances de chaque skin en centièmes de pour cent de somme exacte 10000 lorsque
+-- la vue détail les affiche (#393, #430 : 16 / 3 = 5,33 %, règle Roblox des objets aléatoires payants).
 function ShopCatalog.chances(rows: { Row }): { number }
 	local weight = weights(rows)
 	local total = 0
@@ -279,12 +284,12 @@ function ShopCatalog.chances(rows: { Row }): { number }
 	if total <= 0 then
 		return {}
 	end
-	local tenths, remainders, given = {}, {}, 0
+	local hundredths, remainders, given = {}, {}, 0
 	for i in rows do
-		local exact = weight[i] / total * 1000
-		tenths[i] = math.floor(exact + 1e-9)
-		remainders[i] = exact - tenths[i]
-		given += tenths[i]
+		local exact = weight[i] / total * 10000
+		hundredths[i] = math.floor(exact + 1e-9)
+		remainders[i] = exact - hundredths[i]
+		given += hundredths[i]
 	end
 	local order = {}
 	for i = 1, #rows do
@@ -296,20 +301,23 @@ function ShopCatalog.chances(rows: { Row }): { number }
 		end
 		return a < b
 	end)
-	for k = 1, 1000 - given do
+	for k = 1, 10000 - given do
 		local i = order[(k - 1) % #order + 1]
-		tenths[i] += 1
+		hundredths[i] += 1
 	end
-	return tenths
+	return hundredths
 end
 
--- Cette méthode permet d'écrire une chance en dixièmes de pour cent (« 70 % », « 2,5 % ») lorsque la vue détail
--- l'affiche.
-function ShopCatalog.chanceLabel(tenths: number): string
-	if tenths % 10 == 0 then
-		return string.format("%d %%", tenths // 10)
+-- Cette méthode permet d'écrire une chance en centièmes de pour cent (« 80 % », « 0,4 % », « 1,07 % ») lorsque la vue
+-- détail l'affiche, sans zéro inutile après la virgule.
+function ShopCatalog.chanceLabel(hundredths: number): string
+	if hundredths % 100 == 0 then
+		return string.format("%d %%", hundredths // 100)
 	end
-	return string.format("%d,%d %%", tenths // 10, tenths % 10)
+	if hundredths % 10 == 0 then
+		return string.format("%d,%d %%", hundredths // 100, hundredths % 100 // 10)
+	end
+	return string.format("%d,%02d %%", hundredths // 100, hundredths % 100)
 end
 
 -- Cette méthode permet de savoir si un joueur possède tous les skins d'une caisse (false pour une caisse vide) lorsque

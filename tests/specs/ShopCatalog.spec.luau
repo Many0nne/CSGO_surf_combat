@@ -66,7 +66,7 @@ return function(T, Loader)
 				local rows = Shop.contents(crate, Inventory.ITEMS)
 				T.expect(#rows >= 6 and #rows <= 8, crate.id .. " : " .. #rows .. " skins")
 				for _, rarity in Shop.RARITIES do
-					local found = rarity.id == "legendary" -- AWP · FILM n'en a pas encore (#430)
+					local found = rarity.id == "legendary" and crate.id == "crate.awp.film" -- pas encore de légendaire (#430)
 					for _, row in rows do
 						found = found or row.rarity.id == rarity.id
 					end
@@ -193,12 +193,12 @@ return function(T, Loader)
 				local rows = Shop.contents(c, Inventory.ITEMS)
 				local tenths = Shop.chances(rows)
 				local counts = {}
-				for i = 0, 999 do
-					local _, skinId = Shop.draw(c, Inventory.ITEMS, i / 10)
+				for i = 0, 9999 do
+					local _, skinId = Shop.draw(c, Inventory.ITEMS, i / 100)
 					counts[skinId] = (counts[skinId] or 0) + 1
 				end
 				for i, row in rows do
-					-- Une chance qui ne tombe pas juste sur un dixième (AWP · FILM : 80,645 %) est arrondie à 1 dixième près
+					-- Une chance qui ne tombe pas juste sur un centième (16 / 3 = 5,333 %) est arrondie à 1 centième près
 					T.expect(math.abs(counts[row.skin] - tenths[i]) <= 1, row.skin)
 				end
 			end
@@ -345,15 +345,15 @@ return function(T, Loader)
 		end)
 
 		T.it(
-			"chances par skin, total exactement 100 % (AWP 80 / 5,4-5,3 / 1,6 / 0,4 ; M9 80 / 8 / 1,6 / 0,8)",
+			"chances par skin, total exactement 100 % (AWP 80 / 5,34-5,33 / 1,6 / 0,4 ; M9 80 / 8 / 1,6 / 0,8)",
 			function()
 				local awp = Shop.chances(Shop.contents(Shop.crate("crate.awp.serie1"), Inventory.ITEMS))
-				T.expectEqual(table.concat(awp, ","), "800,54,53,53,16,16,4,4")
+				T.expectEqual(table.concat(awp, ","), "8000,534,533,533,160,160,40,40")
 				T.expectEqual(Shop.chanceLabel(awp[1]), "80 %")
-				T.expectEqual(Shop.chanceLabel(awp[2]), "5,4 %")
+				T.expectEqual(Shop.chanceLabel(awp[2]), "5,34 %")
 				T.expectEqual(Shop.chanceLabel(awp[8]), "0,4 %")
 				local m9 = Shop.chances(Shop.contents(Shop.crate("crate.m9.serie1"), Inventory.ITEMS))
-				T.expectEqual(table.concat(m9, ","), "800,80,80,16,16,8")
+				T.expectEqual(table.concat(m9, ","), "8000,800,800,160,160,80")
 				T.expectEqual(Shop.chanceLabel(m9[1]), "80 %")
 			end
 		)
@@ -367,17 +367,21 @@ return function(T, Loader)
 					{ 0.3, 0.3, 0.4 },
 					{ 1, 2, 3, 4, 5, 6, 7 },
 					{ 99.99, 0.005, 0.005 },
+					{ 80, 16, 3.2, 0.8 },
 				}
 			do
 				local tenths = Shop.chances(rowsWith(chances))
 				T.expectEqual(#tenths, #chances)
-				T.expectEqual(sum(tenths), 1000, "somme pour " .. table.concat(chances, "/"))
+				T.expectEqual(sum(tenths), 10000, "somme pour " .. table.concat(chances, "/"))
 			end
 			-- Tiers : 333,3 x 3 → le reste va à la première ligne (la plus courante)
-			T.expectEqual(table.concat(Shop.chances(rowsWith({ 1, 1, 1 })), ","), "334,333,333")
-			T.expectEqual(Shop.chanceLabel(334), "33,4 %")
+			T.expectEqual(table.concat(Shop.chances(rowsWith({ 1, 1, 1 })), ","), "3334,3333,3333")
+			T.expectEqual(Shop.chanceLabel(3334), "33,34 %")
+			T.expectEqual(Shop.chanceLabel(107), "1,07 %")
+			T.expectEqual(Shop.chanceLabel(160), "1,6 %")
+			T.expectEqual(Shop.chanceLabel(8000), "80 %")
 			-- Rareté absente (caisse sans skin rare) : proportions renormalisées comme le tirage
-			T.expectEqual(table.concat(Shop.chances(rowsWith({ 70, 5 })), ","), "933,67")
+			T.expectEqual(table.concat(Shop.chances(rowsWith({ 70, 5 })), ","), "9333,667")
 			T.expectEqual(#Shop.chances({}), 0)
 			T.expectEqual(#Shop.chances(rowsWith({ 0, 0 })), 0)
 		end)

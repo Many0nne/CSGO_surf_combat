@@ -19,7 +19,7 @@ return function(T, Loader)
 
 		T.it("ordre des phases : charge, tension, temps d'arrêt, explosion, couvercle, colonne", function()
 			T.expect(R.CRACKLE_START < R.PULSES[1].at, "crépitements avant la première bouffée")
-			T.expect(R.TIER_AT[#R.TIER_AT] <= R.BURST - R.PAUSE, "couleur finale au plus tard au temps d'arrêt")
+			T.expect(R.TIER_AT[#R.TIER_AT] < R.TENSION_START, "couleur finale avant la tension")
 			T.expect(R.TENSION_START < R.BURST - R.PAUSE, "la tension monte avant le temps d'arrêt")
 			T.expect(R.BURST < R.LID_START and R.LID_START < R.COLUMN, "couvercle après l'explosion")
 			T.expect(R.LID_START + R.LID_TIME <= R.COLUMN + R.COLUMN_GROW, "couvercle parti quand la colonne a grandi")
@@ -230,7 +230,7 @@ return function(T, Loader)
 			for target, id in R.TIERS do
 				for _, t in
 					{
-						math.max(R.TENSION_START, R.TIER_AT[#R.TIER_AT]),
+						R.TENSION_START,
 						R.BURST,
 						R.COLUMN,
 						R.COLUMN + R.RISE_TIME,
