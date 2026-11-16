@@ -110,21 +110,6 @@ return function(T, Loader)
 		end)
 	end)
 
-	T.describe("MenuSceneRules.cycleIndex", function()
-		T.it("passe à l'arme suivante et revient au début après la dernière", function()
-			T.expectEqual(Rules.cycleIndex(1, 1, 3), 2)
-			T.expectEqual(Rules.cycleIndex(3, 1, 3), 1)
-		end)
-
-		T.it("revient à la dernière avant la première", function()
-			T.expectEqual(Rules.cycleIndex(1, -1, 3), 3)
-		end)
-
-		T.it("reste sur 1 sans arme", function()
-			T.expectEqual(Rules.cycleIndex(1, 1, 0), 1)
-		end)
-	end)
-
 	T.describe("MenuSceneRules.skinLabel (#280)", function()
 		T.it("nomme le skin d'origine et un skin du catalogue", function()
 			T.expectEqual(Rules.skinLabel(nil), "D'ORIGINE")

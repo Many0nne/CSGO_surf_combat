@@ -97,13 +97,18 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   ou « CLIC POUR ÉQUIPER » en contour quand l'arme survolée ne l'est pas, catégorie de l'arme dessous ; onglets
   « 1 · SNIPER » et « 2 · COUTEAU » (`MenuShot.boxChoice` : actif en boîte ambrée à texte sombre, survol en rouge
   d'impact) ; grille de
-  cartes sur quatre colonnes : une rangée d'armes possédées, puis « SKINS · ARME » et une rangée de skins (silhouette,
+  cartes sur quatre colonnes : la rangée des armes possédées, puis « SKINS · ARME » et les rangées de skins (silhouette,
   nom, coche et trait rouge d'impact sur l'équipé, contour rouge au survol). Les cases restantes d'une rangée sont
-  vides et barrées d'une croix : elles tiennent la grille tant qu'il y a une ou deux armes. Aide en bas à gauche,
-  touches en boîte (« MOLETTE » emplacement, « CLIC » équiper, « ENREGISTRÉ AUSSITÔT »). **Plus de stats d'arme**
+  vides et barrées d'une croix : elles tiennent la grille tant qu'il y a une ou deux armes. La grille est une
+  `ScrollingFrame` qui descend jusqu'au-dessus de l'aide (une rangée et demie de skins visible, la rangée coupée montre
+  qu'il y a une suite, fine barre ambrée) : armes, libellé et skins défilent, titre, nom et onglets restent fixes. La
+  molette la fait défiler (sens naturel, pas le réglage de la barre d'armes), d'une rangée par cran quand la souris est
+  ailleurs sur l'accueil ; elle ne change plus d'emplacement (sinon les skins au-delà de la première rangée étaient
+  inaccessibles). Changer d'emplacement remonte la grille, équiper un skin garde la position. Aide en bas à gauche,
+  touches en boîte (« MOLETTE » défiler, « CLIC » équiper, « ENREGISTRÉ AUSSITÔT »). **Plus de stats d'arme**
   (barres dégâts, cadence, précision retirées en #308 : inutiles tant qu'aucune autre arme n'est prévue).
-  Un clic sur un onglet, sa touche (réglée dans TOUCHES, 1 et 2 par défaut) ou la molette (sens réglé, coupée sur
-  AUCUNE) changent d'emplacement actif (SNIPER à l'arrivée et au retour sur l'accueil). Le personnage tient l'arme de
+  Un clic sur un onglet ou sa touche (réglée dans TOUCHES, 1 et 2 par défaut) change d'emplacement actif (SNIPER à
+  l'arrivée et au retour sur l'accueil). Le personnage tient l'arme de
   la carte survolée, sinon celle de l'emplacement actif ; le nom et le rendu suivent. Un clic équipe : remote
   `EquipItem`, l'écran ne change qu'à la réponse du serveur (attribut `EquippedItems`, les deux attributs posés
   ensemble ne déclenchent qu'une mise à jour, `LocalInventory.onChanged` différé), pas d'affichage optimiste. **Seuls
@@ -483,6 +488,14 @@ Le joueur rejoue lui-même le geste de la démo, la démo sous les yeux.
   `Global`. Le lecteur de démo et les écrans du jeu sont construits pour `Sibling` (enfants au-dessus du parent) : en
   `Global`, les libellés des keycaps et l'icône de la souris du `DemoPlayer` (ZIndex 1) passaient sous la vue (ZIndex 2)
   et disparaissaient, les touches restaient des pavés vides. Poser `ZIndexBehavior = Sibling` sur tout nouveau `ScreenGui`.
+
+- **`ScrollingFrame` sous un `UIScale` (grille de l'équipement) :** `CanvasPosition` est en px écran, pas en unités du
+  canevas : avec `CanvasSize` à 444 et l'échelle 0,84, `AbsoluteCanvasSize` vaut 374 et le défilement s'arrête à
+  `AbsoluteCanvasSize.Y - AbsoluteWindowSize.Y` (115,9, mesuré en Studio), pas à 444 moins la hauteur visible. Un
+  défilement posé par code prend donc son pas en px du canevas multiplié par `AbsoluteCanvasSize.Y / CanvasSize.Y.Offset`.
+  Mesurer dans Studio (`CanvasPosition = Vector2.new(0, 1e4)` puis relire : le moteur ramène à la butée) plutôt que
+  supposer. Les colonnes de l'accueil descendent sous la barre Roblox (`MenuPage.followTopbar`) et raccourcissent
+  d'autant : un élément calé sur leur bas (`UDim2.new(…, 1, -n)`) s'arrête bien au-dessus de l'aide.
 
 - **HUD de jeu visible seulement en partie (#105) :** un `ScreenGui` créé avec `ResetOnSpawn = false` reste affiché après la fin du
   round. Source unique : `HUDRules.gameHudVisible(état)`, appliquée par `applyGameHud` dans

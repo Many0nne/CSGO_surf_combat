@@ -60,11 +60,13 @@ export type Page = {
 
 -- Cette méthode permet de descendre une colonne de gauche de l'accueil (titre du jeu, écran d'équipement) sous la barre
 -- de Roblox lorsque l'échelle de l'écran ou la hauteur de cette barre change (#306) : elle reste en px réels, l'interface non.
+-- La colonne raccourcit d'autant : son bas reste celui de l'écran (la grille défilante de l'équipement s'y cale).
 function MenuPage.followTopbar(root: Frame, column: Frame)
 	local function update()
 		local scale = root:GetAttribute("Scale") or 1
 		local shift = Rules.topbarShift(GuiService.TopbarInset.Max.Y, scale, MenuPage.GameTitleY, TOPBAR_GAP)
 		column.Position = UDim2.fromOffset(0, shift)
+		column.Size = UDim2.new(1, 0, 1, -shift)
 	end
 	update()
 	root:GetAttributeChangedSignal("Scale"):Connect(update)
