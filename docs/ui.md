@@ -921,7 +921,10 @@ détail (caisse refaite).
   n'est gagné), `"skin.awp.impact|rare|200"` la joue comme un doublon remboursé de 200 (révélation DOUBLON, #393) ;
   `DebugCrateOpeningTime = t` fige l'ouverture au temps `t` (poses à capturer), nil la relâche. La vidéo
   se fait en temps réel avec `tools/anim/record_window.py` (`docs/animations.md`). Le message
-  `ContentId: rbxassetid://86578020001310 failed … do_not_fallback_to_baseline` (texture des faisceaux) existait avant.
+  `ContentId: rbxassetid://86578020001310 failed … do_not_fallback_to_baseline` (texture des faisceaux, image publiée le
+  2026-11-14) a été vu dans les premiers jours ; le 2026-11-16, l'image se charge (`PreloadAsync` : `Success`) et le
+  message ne revient plus. Même famille que les TexturePacks pas encore traités de #438 (`docs/architecture.md`) : un
+  asset tout juste publié peut échouer ainsi un temps, cause exacte pour cette image non établie.
 
 ## Achat d'une caisse (#393)
 
