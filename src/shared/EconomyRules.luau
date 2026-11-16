@@ -23,8 +23,8 @@ EconomyRules.PLAYED_ALIVE_SECONDS = 120
 -- Activité réelle exigée en plus du temps en vie pour une manche sans kill (#401), mesurée par le serveur : portée
 -- (studs), plus grand écart horizontal au point d'apparition en cumulant les pas acceptés sans signalement par
 -- CharacterSync (un aller-retour sur place ne l'augmente pas), ou touches qui ont fait des dégâts (tir ou coup de mêlée validés). Un
--- joueur immobile ou qui tourne sur place reste à ~0 stud (mesures dans docs/economie.md).
-EconomyRules.PLAYED_MIN_REACH = 500
+-- joueur immobile reste à 0 stud, un surf de 137 s sans kill fait 538 studs (mesures du 16/11/2026, docs/economie.md).
+EconomyRules.PLAYED_MIN_REACH = 150
 EconomyRules.PLAYED_MIN_HITS = 1
 EconomyRules.SECONDS_PER_DAY = 86400
 

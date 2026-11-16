@@ -36,7 +36,20 @@ atteignait le plafond du jour (250) en ~17 manches sans jouer.
 
 Mesures (Studio, map jouée, `[CreditGains]`) :
 
-MESURES_A_COMPLETER
+| Scénario (150 s en vie, aucun kill ni touche) | Portée | Avant #401 | Après #401 |
+|---|---|---|---|
+| Surf : piste enregistrée `Dizzy` rejouée (`PerfRun`, 137 s, bots passifs) | 538 studs | +15 | +15 |
+| Immobile (rejeu interrompu, bots passifs) | 0 stud | +15 | +0 |
+
+- Mesure du 16/11/2026, Studio, map `Dizzy`, manche de 150 s (`RoundDuration`). « Avant » se déduit de la même ligne
+  `[CreditGains]` (150 s en vie suffisaient) : la règle de `main` n'a pas été rejouée à part.
+- La portée d'un surf reste modeste : la map fait ~560 × 600 studs, et un surf revient souvent près de son départ.
+  Pendant ce rejeu honnête, l'anti-vol (journal seul) a signalé une vingtaine de paquets : ces pas sont exclus,
+  la portée réelle est un peu plus grande. D'où **`PLAYED_MIN_REACH` = 150** : ~3,5 fois sous le surf mesuré, loin
+  au-dessus de l'immobile (0 : sans paquet de position différent, rien ne s'ajoute, tourner sur place ne change que
+  le cap).
+- Un joueur qui campe à moins de 150 studs de son apparition sans toucher personne pendant toute la manche ne gagne
+  plus la manche jouée : cas assumé, il n'est pas distinguable d'un AFK par ces mesures.
 
 ## Packs de crédits (Developer Products)
 

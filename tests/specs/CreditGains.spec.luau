@@ -348,20 +348,22 @@ return function(T, Loader)
 			local alice, bob = makePlayer("alice"), makePlayer("bob")
 			local a, b = participant(alice), participant(bob)
 			local first, second = {}, {}
+			-- Chaque vie d'Alice s'éloigne d'un peu moins de la moitié du seuil : somme sous le seuil
+			local half = env.Economy.PLAYED_MIN_REACH // 2 - 10
 			-- Alice : vie 1 près de x = 0, vie 2 apparue à x = 5000 (le saut entre les deux ne compte pas)
 			env.Gains.onSpawn(alice, first)
 			env.Gains.onSpawn(bob)
-			walk(env, alice, first, 100)
+			walk(env, alice, first, half)
 			env.clock = 60
 			env.Gains.onDespawn(alice, first)
 			env.Gains.onSpawn(alice, second)
-			walk(env, alice, second, 100, 5000)
+			walk(env, alice, second, half, 5000)
 			-- Bob : une seule vie qui s'éloigne assez, puis revient à son point d'apparition
 			walk(env, bob, nil, env.Economy.PLAYED_MIN_REACH)
 			env.Gains.onMove(bob, nil, pos(env.Economy.PLAYED_MIN_REACH, 0), pos(0, 0))
 			env.clock = 130
 			env.Gains.onRoundEnd({ a, b }, nil)
-			T.expectEqual(env.credited.alice, nil, "100 + 100 studs")
+			T.expectEqual(env.credited.alice, nil, "deux vies sous la moitié du seuil")
 			T.expectEqual(env.credited.bob, 15, "revenir au départ ne retire rien")
 		end)
 
