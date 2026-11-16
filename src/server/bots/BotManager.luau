@@ -323,6 +323,16 @@ function BotManager.hearShot(shooter: Participant, position: Vector3)
 	end
 end
 
+-- Cette méthode permet de faire entendre un pas à tous les bots lorsqu'un participant marche ou atterrit (#146,
+-- position de ses pieds) ; trié par chaque bot à la portée des pas (FootstepRules.RANGE).
+function BotManager.hearFootstep(walker: Participant, position: Vector3)
+	for _, bot in bots do
+		if bot.brain then
+			bot.brain:hearFootstep(walker.id, position, not walker.isBot)
+		end
+	end
+end
+
 -- Cette méthode permet de prévenir un bot qu'il vient de tuer lorsqu'une mort est attribuée (il se replace).
 function BotManager.notifyKill(killer: Participant)
 	for _, bot in bots do

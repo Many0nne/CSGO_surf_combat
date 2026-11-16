@@ -9,6 +9,7 @@ local BoostSystem = require(script.Parent.BoostSystem)
 local LadderSystem = require(script.Parent.LadderSystem)
 local WeaponSystem = require(script.Parent.Parent.weapon.WeaponSystem)
 local CharacterSync = require(script.Parent.Parent.network.CharacterSync)
+local FootstepSounds = require(script.Parent.Parent.audio.FootstepSounds)
 local LocalSettings = require(script.Parent.Parent.settings.LocalSettings)
 local InputModule = require(script.Parent.Parent.Parent.input.InputModule)
 local PhysicsUtils = require(ReplicatedStorage.Shared.PhysicsUtils)
@@ -84,6 +85,7 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 	-- Animations 3e personne : jouées sur l'Animator du personnage local, donc répliquées aux autres clients.
 	local charAnimator = CharacterAnimator.new(hum)
 	CrouchSystem.init(hrp, motor.dims)
+	FootstepSounds.reset()
 	BoostSystem.init()
 	LadderSystem.init()
 	local ladderRegrab = 0 -- délai avant de pouvoir reprendre une échelle après en avoir sauté
@@ -220,6 +222,9 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 		if speedometer then
 			speedometer.update(spd)
 		end
+
+		-- 9b. Ses propres pas (#146) : course au sol et atterrissages, rien en l'air, en surf ni sur une échelle
+		FootstepSounds.onTick(dt, isGroundedState, spd)
 
 		-- 10. Animation 3e personne
 		charAnimator:update({

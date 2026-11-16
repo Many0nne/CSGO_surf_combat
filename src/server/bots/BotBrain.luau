@@ -11,6 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local BotBehaviorRules = require(ReplicatedStorage.Shared.BotBehaviorRules)
 local BotCombatRules = require(ReplicatedStorage.Shared.BotCombatRules)
 local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
+local FootstepRules = require(ReplicatedStorage.Shared.FootstepRules)
 local BotArsenal = require(script.Parent.BotArsenal)
 local BotMotion = require(script.Parent.BotMotion)
 local NavPlan = require(script.Parent.NavPlan)
@@ -48,7 +49,7 @@ export type BotBrain = typeof(setmetatable(
 		state: State,
 		memory: { [number]: Memory },
 		freshest: Memory?,
-		heard: { { id: number, position: Vector3, isHuman: boolean } },
+		heard: { { id: number, position: Vector3, isHuman: boolean, radius: number } },
 		lastContact: number,
 		investigated: number,
 		investigateQueue: { number }, -- points voisins encore à fouiller
@@ -163,7 +164,21 @@ end
 -- regard autour de lui (rayon et flou de l'ouïe).
 function BotBrain.hearShot(self: BotBrain, shooterId: number, position: Vector3, isHuman: boolean)
 	if shooterId ~= self.env.id then
-		table.insert(self.heard, { id = shooterId, position = position, isHuman = isHuman })
+		table.insert(
+			self.heard,
+			{ id = shooterId, position = position, isHuman = isHuman, radius = BotConfig.HEARING_RADIUS }
+		)
+	end
+end
+
+-- Cette méthode permet de noter un pas entendu lorsqu'un participant court ou atterrit (#146, position de ses pieds) ;
+-- trié comme un tir, mais à la portée des pas des joueurs (FootstepRules.RANGE).
+function BotBrain.hearFootstep(self: BotBrain, walkerId: number, position: Vector3, isHuman: boolean)
+	if walkerId ~= self.env.id then
+		table.insert(
+			self.heard,
+			{ id = walkerId, position = position, isHuman = isHuman, radius = FootstepRules.RANGE }
+		)
 	end
 end
 
@@ -279,13 +294,7 @@ function BotBrain._perceive(self: BotBrain, now: number)
 	end
 
 	for _, shot in self.heard do
-		local pos = BotBehaviorRules.heardPosition(
-			eye,
-			shot.position,
-			BotConfig.HEARING_RADIUS,
-			BotConfig.HEARING_FUZZ,
-			self.rand
-		)
+		local pos = BotBehaviorRules.heardPosition(eye, shot.position, shot.radius, BotConfig.HEARING_FUZZ, self.rand)
 		if pos then
 			BotBehaviorRules.remember(self.memory, shot.id, pos, now, false, shot.isHuman)
 			self.lastContact = now
