@@ -14,6 +14,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local MapRules = require(ReplicatedStorage.Shared.MapRules)
 local MovementConfig = require(ReplicatedStorage.Shared.MovementConfig)
+local StepTiming = require(ReplicatedStorage.Shared.StepTiming)
 
 local MovementGuardRules = {}
 
@@ -44,6 +45,14 @@ MovementGuardRules.SUPPORT_MIN_NORMAL_Y = 0.05
 MovementGuardRules.FLIGHT_TIME_SLACK = 0.25
 -- Marge de hauteur (studs) au-dessus de l'enveloppe.
 MovementGuardRules.FLIGHT_HEIGHT_TOLERANCE = 3
+-- Temps simulé (s) au plus par une frame du client : au-delà (gel, saccade, fenêtre en arrière-plan), StepTiming
+-- abandonne le retard et le joueur reste en l'air sans tomber. Un trou plus long entre deux paquets (saccade du client,
+-- gel du serveur, pic de latence : les paquets arrivent en retard sur leur position) n'est donc pas du temps de chute
+-- pour l'enveloppe (#382).
+MovementGuardRules.FRAME_SIM_MAX = StepTiming.MAX_TICKS * StepTiming.TICK
+-- Temps (s) de trous pardonné au plus par vol (du décollage à l'atterrissage) : au-delà, le temps compte de nouveau en
+-- entier. Borne ce qu'un tricheur gagne à espacer ses paquets pour planer (#382).
+MovementGuardRules.FLIGHT_LOST_MAX = 1
 -- Un paquet au-dessus de l'enveloppe isolé est pris pour un paquet arrivé en désordre ; un second dans cette fenêtre
 -- (paquets en l'air), même en alternance avec des paquets bas, est un vol.
 MovementGuardRules.SUSPECT_WINDOW = 2
@@ -77,7 +86,15 @@ export type Box = { CFrame: CFrame, Size: Vector3 }
 -- jugé. boostVy : vitesse verticale d'un geyser ou d'un lanceur touché (oubliée dès un paquet porté hors du volume), à prendre au prochain décollage. baseY : hauteur
 -- du premier paquet en l'air, et count : paquets en l'air reçus depuis, pour resserrer l'enveloppe. seen : paquets en l'air
 -- jugés depuis l'apparition, lastHigh : numéro (seen) du dernier paquet au-dessus de l'enveloppe resté isolé.
+-- clock : temps compté depuis la création (heures d'arrivée, trous pardonnés retirés, #382) et anchorClock sa valeur à
+-- l'ancre ; lost : trous pardonnés depuis le décollage ; airAt : heure du décollage ; gap : écart d'arrivée du dernier
+-- paquet (détail du journal).
 export type Flight = {
+	clock: number,
+	anchorClock: number,
+	lost: number,
+	airAt: number,
+	gap: number,
 	anchored: boolean,
 	anchorAt: number,
 	anchorY: number,
@@ -184,6 +201,11 @@ end
 -- porté jusqu'au premier paquet.
 function MovementGuardRules.newFlight(now: number, y: number): Flight
 	return {
+		clock = 0,
+		anchorClock = 0,
+		lost = 0,
+		airAt = now,
+		gap = 0,
 		anchored = false,
 		anchorAt = now,
 		anchorY = y,
@@ -209,6 +231,7 @@ end
 function MovementGuardRules.restart(flight: Flight, now: number, y: number)
 	flight.anchored = true
 	flight.anchorAt = now
+	flight.anchorClock = flight.clock
 	flight.anchorY = y
 	flight.anchorVy = MovementConfig.JUMP_VELOCITY
 	flight.lastAt = now
@@ -251,15 +274,18 @@ function MovementGuardRules.ballistic(vy: number, s: number): number
 end
 
 -- Cette méthode permet de connaître la plus haute position possible d'un joueur honnête à l'instant now lorsqu'il est
--- en l'air : maximum de l'enveloppe sur [τ - FLIGHT_TIME_SLACK, τ + FLIGHT_TIME_SLACK] (courbe concave : sommet borné
--- à l'intervalle), plus FLIGHT_HEIGHT_TOLERANCE. math.huge s'il est porté.
-function MovementGuardRules.ceiling(flight: Flight, now: number): number
+-- en l'air : maximum de l'enveloppe sur [τ' - FLIGHT_TIME_SLACK, τ + FLIGHT_TIME_SLACK] (courbe concave : sommet
+-- borné à l'intervalle), plus FLIGHT_HEIGHT_TOLERANCE. τ = temps écoulé depuis l'ancre ; τ' = le même sans les trous
+-- pardonnés (clock, horloge des paquets), τ sans elle (règle du vide : un joueur silencieux n'a pas de paquets).
+-- math.huge s'il est porté.
+function MovementGuardRules.ceiling(flight: Flight, now: number, clock: number?): number
 	if not flight.anchored then
 		return math.huge
 	end
 	local tau = now - flight.anchorAt
+	local early = if clock then math.min(tau, clock - flight.anchorClock) else tau
 	local slack = MovementGuardRules.FLIGHT_TIME_SLACK
-	local s = math.clamp(flight.anchorVy / GRAVITY, math.max(0, tau - slack), tau + slack)
+	local s = math.clamp(flight.anchorVy / GRAVITY, math.max(0, early - slack), tau + slack)
 	-- Ancre resserrée en descente : un paquet parti jusqu'à REORDER_TIME avant elle peut encore arriver, plus haut de
 	-- la chute faite entre-temps (vitesse de l'ancre plus deux marges de resserrement, l'ancre la majorant) ; pas une
 	-- chute plafonnée, qui laisserait un tricheur osciller de ±15 studs sans être vu
@@ -272,6 +298,21 @@ function MovementGuardRules.ceiling(flight: Flight, now: number): number
 		+ reorder
 end
 
+-- Cette méthode permet d'avancer l'horloge des paquets lorsqu'un paquet arrive : écart d'arrivée depuis le précédent,
+-- moins, en l'air, la part au-delà de FRAME_SIM_MAX (temps que le client n'a pas simulé, ou paquet en retard sur sa
+-- position), dans la limite de FLIGHT_LOST_MAX par vol (#382).
+local function advanceClock(flight: Flight, now: number)
+	local gap = math.max(0, now - flight.lastAt)
+	local forgiven = 0
+	if flight.anchored then
+		local budget = math.max(0, MovementGuardRules.FLIGHT_LOST_MAX - flight.lost)
+		forgiven = math.clamp(gap - MovementGuardRules.FRAME_SIM_MAX, 0, budget)
+		flight.lost += forgiven
+	end
+	flight.clock += gap - forgiven
+	flight.gap = gap
+end
+
 -- Cette méthode permet de juger la hauteur d'un paquet lorsqu'il arrive : porté, l'enveloppe attend le décollage ;
 -- premier paquet en l'air, l'enveloppe part de lui ; ensuite, deux paquets au-dessus de l'enveloppe à moins de
 -- SUSPECT_WINDOW paquets = vol (un seul : paquet arrivé en désordre). Sous l'enveloppe, elle est resserrée : la hauteur
@@ -280,6 +321,7 @@ end
 -- repart de ce point à l'arrêt : un joueur qui plane encore n'est signalé qu'une fois cette nouvelle marge épuisée,
 -- pas à chaque paquet.
 function MovementGuardRules.observe(flight: Flight, now: number, y: number, supported: boolean): (boolean, number)
+	advanceClock(flight, now)
 	if supported then
 		flight.anchored = false
 		flight.lastHigh = -math.huge
@@ -289,12 +331,13 @@ function MovementGuardRules.observe(flight: Flight, now: number, y: number, supp
 	if not flight.anchored then
 		flight.anchored = true
 		flight.anchorAt, flight.anchorY, flight.anchorVy = now, y, takeoffVy(flight, y)
+		flight.anchorClock, flight.airAt, flight.lost = flight.clock, now, 0
 		flight.boostVy = 0
 		flight.lastAt, flight.lastY = now, y
 		flight.baseY, flight.count = y, 0
 		return true, 0
 	end
-	local limit = MovementGuardRules.ceiling(flight, now)
+	local limit = MovementGuardRules.ceiling(flight, now, flight.clock)
 	flight.lastAt, flight.lastY = now, y
 	flight.count += 1
 	flight.seen += 1
@@ -306,7 +349,7 @@ function MovementGuardRules.observe(flight: Flight, now: number, y: number, supp
 			return true, 0
 		end
 		flight.lastHigh = -math.huge
-		flight.anchorAt, flight.anchorY, flight.anchorVy = now, y, 0
+		flight.anchorAt, flight.anchorY, flight.anchorVy, flight.anchorClock = now, y, 0, flight.clock
 		flight.baseY, flight.count = y, 0
 		return false, y - limit
 	end
@@ -318,7 +361,7 @@ function MovementGuardRules.observe(flight: Flight, now: number, y: number, supp
 		-- Vitesse de l'enveloppe actuelle, plafonnée en chute comme celle du joueur
 		local current = math.max(flight.anchorVy - GRAVITY * (now - flight.anchorAt), -MAX_FALL)
 		if vy < current then
-			flight.anchorAt, flight.anchorY, flight.anchorVy = now, y, vy
+			flight.anchorAt, flight.anchorY, flight.anchorVy, flight.anchorClock = now, y, vy, flight.clock
 		end
 	end
 	return true, 0
@@ -366,7 +409,15 @@ function MovementGuardRules.judge(
 		return {
 			rule = "flight",
 			enforce = MovementGuardRules.ENFORCE_FLIGHT,
-			detail = string.format("vol : %.1f studs au-dessus de la trajectoire balistique", excess),
+			-- Durée du vol, écart d'arrivée du paquet et trous pardonnés : de quoi distinguer au journal un tricheur
+			-- d'une saccade ou d'un retard réseau (#382)
+			detail = string.format(
+				"vol : %.1f studs au-dessus de la trajectoire balistique (en l'air %.2f s, paquet après %.2f s, trous pardonnés %.2f s)",
+				excess,
+				now - flight.airAt,
+				flight.gap,
+				flight.lost
+			),
 		}
 	end
 	return noclip

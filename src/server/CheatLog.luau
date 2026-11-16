@@ -99,6 +99,8 @@ export type Record = {
 	counts: { [string]: { [Severity]: number } },
 	-- Par contrôle (« Catégorie:contrôle », ou la catégorie seule sans contrôle nommé), puis par gravité (#297)
 	checks: { [string]: { [Severity]: number } },
+	-- Dernier détail de chaque contrôle (#382) : affiché au résumé, sinon seul celui de la pire violation s'y lit
+	details: { [string]: string },
 	total: number,
 	highCount: number,
 	score: number,
@@ -365,6 +367,7 @@ function CheatLog.report(
 			name = participant.name,
 			counts = {},
 			checks = {},
+			details = {},
 			total = 0,
 			highCount = 0,
 			score = 0,
@@ -407,6 +410,7 @@ function CheatLog.report(
 	end
 	period.checks[key] = (period.checks[key] or 0) + 1
 	period.flagged[participant.id] = true
+	record.details[key] = violation.detail
 	record.total += 1
 	record.score = decayedScore(record, t) + CheatLog.SCORE_WEIGHT[severity]
 	record.scoreAt = t
@@ -600,16 +604,20 @@ function CheatLog.buildEmbed(record: Record): { [string]: any }
 					perCategory.low
 				),
 		}
-		-- Un contrôle par ligne (#297), avec son taux sur les jugés du joueur
+		-- Un contrôle par ligne (#297), avec son taux sur les jugés du joueur, puis son dernier détail (#382), sauf
+		-- pour celui de la pire violation, déjà dans la description
 		local prefix = category .. ":"
+		local worstCheck = record.worst and record.worst.check
 		for _, key in checkKeys do
 			if string.sub(key, 1, #prefix) == prefix then
 				local perCheck = record.checks[key]
 				local count = perCheck.low + perCheck.medium + perCheck.high
-				table.insert(
-					lines,
-					string.sub(key, #prefix + 1) .. " " .. rateText(count, CheatLog.denominatorOf(key), judged)
-				)
+				local line = string.sub(key, #prefix + 1) .. " " .. rateText(count, CheatLog.denominatorOf(key), judged)
+				local detail = record.details and record.details[key]
+				if detail and key ~= worstCheck then
+					line ..= " — " .. detail
+				end
+				table.insert(lines, line)
 			end
 		end
 		table.insert(fields, { name = category, lines = lines, inline = true })

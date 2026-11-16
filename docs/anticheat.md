@@ -763,6 +763,45 @@ par le seau (D1) passe par `MovementGuardRules.judge` (`judgeGuard`, `src/server
    pu revenir s'y poser) ; il reste figé côté serveur à sa dernière position. Une zone découpée dans le temps (hauteur
    possible et distance parcourue à chaque instant) serait plus serrée, sans distinguer non plus ce cas.
 
+**Trous entre paquets (#382).** L'enveloppe se lit en heures d'**arrivée** au serveur. Or une position peut être
+plus ancienne que son heure d'arrivée :
+
+- **saccade du client** : une frame de plus de `StepTiming.MAX_TICKS` ticks (0,203 s) ne simule que 0,203 s, le
+  reste est abandonné (`docs/performance.md`, « Rythme du mouvement ») ; pendant une chute, le joueur reste en l'air
+  le temps de la saccade, puis repart de là ;
+- **gel du serveur ou pic de latence** : les paquets retenus arrivent ensemble, tous plus tard que leur position.
+
+Dans les trois cas, le paquet qui suit le trou est plus haut que l'enveloppe en chute rapide (la marge
+`FLIGHT_TIME_SLACK` couvre 0,25 s de décalage). C'est la cause des résumés au webhook pour le propriétaire du jeu
+(#382, résumés du 15/11/2026 : `Movement:flight` 1 à 54 par session, 0,03 à 0,15 % des positions, « vol : 0.8 à 2.1
+studs au-dessus de la trajectoire balistique », ping médian de 5 ms comme de 85 ms : pas une affaire de latence
+moyenne). Rejoué par le test « rejoue le faux positif des résumés » : une saccade de 0,5 s en chute, signalée avec
+l'ancienne règle.
+
+**Règle (fait, #382).** Une horloge des paquets (`Flight.clock`) avance de l'écart d'arrivée de chaque paquet, moins,
+en l'air, la part au-delà de `FRAME_SIM_MAX` (= `MAX_TICKS × TICK`, ce qu'une frame honnête simule au plus,
+`advanceClock`). La borne basse de l'intervalle de temps de l'enveloppe se prend sur cette horloge
+(`ceiling(flight, now, clock)`), la borne haute reste l'heure d'arrivée : l'enveloppe couvre à la fois le temps simulé
+et le temps écoulé. Ce pardon est plafonné à `FLIGHT_LOST_MAX` (1 s) par vol, du décollage à l'atterrissage, après
+quoi le temps compte de nouveau en entier. La règle du vide garde l'heure d'arrivée seule (un joueur silencieux n'a
+pas de paquets à compter).
+
+- **Ce qu'un tricheur y gagne.** Rien à 20 paquets/s (chaque écart est sous `FRAME_SIM_MAX`). En espaçant ses
+  paquets de plus de 0,2 s, il ralentit sa chute pendant au plus 1 s par vol, en sautillant pour les autres joueurs.
+  Test : « un tricheur qui plane en n'envoyant qu'un paquet par seconde est signalé en moins de 4 s ».
+- **Reste signalé.** Une saccade de plus de ~1,2 s en pleine chute (au-delà du plafond), une fenêtre en arrière-plan
+  en l'air. Le client a bien flotté : c'est une vraie anomalie de trajectoire, en journal seul.
+- **Détail du journal** : « vol : 1.4 studs au-dessus de la trajectoire balistique (en l'air 2.31 s, paquet après
+  0.06 s, trous pardonnés 0.00 s) ». Un « paquet après » long ou des « trous pardonnés » proches de 1 s désignent une
+  saccade ou un retard ; un vol long sans trou, un vrai vol.
+- **Mesurer en Studio** : l'attribut Workspace `DebugFlightLostMax` (nombre, Studio seulement, contexte Server)
+  remplace `FLIGHT_LOST_MAX` ; 0 rejoue l'ancienne règle, nil remet la valeur du code (`CharacterSync.init`).
+  Une saccade du client se provoque en contexte Client par une boucle d'attente active lancée par `task.delay`
+  (l'appel MCP lui-même reste court).
+- **Tests** : « une saccade du client de 0,5 à 1,2 s en pleine chute », « un pic de latence ou un gel du serveur de
+  0,6 s », « une saccade plus longue que les trous pardonnés » (`tests/specs/MovementGuardRules.spec.luau`, client
+  simulé par `clientPackets` avec `StepTiming.advance` et l'envoi de `CharacterSync.send`).
+
 **Modes** (`MovementGuardRules.ENFORCE_NOCLIP`, `ENFORCE_FLIGHT`, `ENFORCE_VOID`) : `ENFORCE_NOCLIP = false` et `ENFORCE_FLIGHT = false` : journal
 seul (violation `Movement` moyenne comptée, position appliquée). `ENFORCE_VOID = true` : un joueur dans ce cas tombait
 de toute façon (false : journal seul, un signalement par `VOID_SILENCE`).
@@ -771,7 +810,9 @@ de toute façon (false : journal seul, un signalement par `VOID_SILENCE`).
 webhook, ou console serveur `[CheatLog] … noclip :` / `vol :`), surtout en surf rapide, sur les échelles et aux
 boosts. Sans faux positif : `ENFORCE_NOCLIP = true` puis `ENFORCE_FLIGHT = true` (une PR chacun). Le refus passe par
 `refuse` (journal, correction, paquets périmés ignorés) ; les tests Lune couvrent les deux modes. Faux positifs
-constatés : vol → relever `FLIGHT_HEIGHT_TOLERANCE` ou `FLIGHT_TIME_SLACK` (gigue), `REFINE_MARGIN` (après une rampe) ;
+constatés : vol → lire d'abord « paquet après » et « trous pardonnés » du détail (saccade ou retard au-delà de
+`FLIGHT_LOST_MAX` : relever ce plafond), sinon relever `FLIGHT_HEIGHT_TOLERANCE` ou `FLIGHT_TIME_SLACK` (gigue),
+`REFINE_MARGIN` (après une rampe) ;
 noclip → relever `NOCLIP_DETOUR_BASE` ou `NOCLIP_DETOUR_RATIO`.
 
 **Limites connues.** Un joueur qui plane à moins de `SUPPORT_REACH` d'une surface (ou le long d'une rampe, d'un bord de
@@ -1205,7 +1246,8 @@ Ce que le code envoie vraiment (`src/server/CheatLog.luau`, `src/server/Webhook.
   total des violations, nombre de fortes comptées pour le kick, jugés (touches, coups, positions), ping médian et
   maximal, pire violation (contrôle, gravité, détail), mention « Expulsé pendant la session » le cas échéant, un champ
   par catégorie (« forte N · moyenne N · faible N », puis une ligne par contrôle avec son taux sur les jugés du
-  joueur), et en pied de page le nom et le **UserId**. C'est la source de référence : un résumé = une session.
+  joueur et, depuis #382, son dernier détail, sauf pour le contrôle de la pire violation déjà en description), et en
+  pied de page le nom et le **UserId**. C'est la source de référence : un résumé = une session.
   Un envoi en échec est réessayé, puis écrit en entier dans la console serveur (repli).
 - **Relevé agrégé du serveur** au webhook dédié `CheatLogWebhookUrl` (console sans lui), toutes les 10 min et à
   l'arrêt (#297) : taux de violations par contrôle,
