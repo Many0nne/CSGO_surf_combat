@@ -98,7 +98,12 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   « 1 · SNIPER » et « 2 · COUTEAU » (`MenuShot.boxChoice` : actif en boîte ambrée à texte sombre, survol en rouge
   d'impact) ; grille de
   cartes sur quatre colonnes : la rangée des armes possédées, puis « SKINS · ARME » et les rangées de skins (silhouette,
-  nom, coche et trait rouge d'impact sur l'équipé, contour rouge au survol). Les cases restantes d'une rangée sont
+  nom, coche et trait rouge d'impact sur l'équipé, contour rouge au survol). **Rareté d'un skin** (choix de
+  l'utilisateur) : bande de 4 px à sa couleur sur le bord gauche de la carte et son nom (COMMUN, RARE, EXCEPTIONNEL) en
+  couleur en haut à gauche, mini-rendu descendu et réduit d'autant ; dans la ligne de nom, étiquette pleine à sa couleur
+  entre le nom et « ÉQUIPÉ » (texte sombre sur le gris de COMMUN). Rareté lue dans la caisse de l'arme
+  (`ShopCatalog.rarityOf`) : un skin qu'aucune caisse ne donne (TREMPE, MUE) et le skin d'origine n'en ont pas, et les
+  skins restent dans l'ordre du catalogue (tri par rareté écarté). Les cases restantes d'une rangée sont
   vides et barrées d'une croix : elles tiennent la grille tant qu'il y a une ou deux armes. La grille est une
   `ScrollingFrame` qui descend jusqu'au-dessus de l'aide (une rangée et demie de skins visible, la rangée coupée montre
   qu'il y a une suite, fine barre ambrée) : armes, libellé et skins défilent, titre, nom et onglets restent fixes. La

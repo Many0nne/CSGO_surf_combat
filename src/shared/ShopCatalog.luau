@@ -119,6 +119,24 @@ function ShopCatalog.contents(crate: Crate, items: { any }): { Row }
 	return rows
 end
 
+-- Cette méthode permet de lire la rareté d'un skin (item `skin` de InventoryRules.ITEMS) lorsque l'inventaire la montre :
+-- celle de la première caisse de son arme qui le contient ; nil pour un skin qu'aucune caisse ne donne.
+function ShopCatalog.rarityOf(skin: { weapon: string?, appearance: string? }): Rarity?
+	if not (skin.weapon and skin.appearance) then
+		return nil
+	end
+	for _, crate in ShopCatalog.CRATES do
+		if crate.weapon == skin.weapon then
+			for _, rarity in ShopCatalog.RARITIES do
+				if crate.contents[rarity.id] == skin.appearance then
+					return rarity
+				end
+			end
+		end
+	end
+	return nil
+end
+
 -- Cette méthode permet de tirer le skin d'une ouverture de caisse lorsque le serveur la traite : `roll` (nombre dans
 -- [0, 100), hors bornes ramené dedans) est placé sur les chances des raretés de la caisse, les raretés sans skin connu
 -- étant exclues et les chances renormalisées. Renvoie la ligne tirée et l'id de son skin ; nil si la caisse est vide.
