@@ -1,11 +1,13 @@
 -- Hitmarker (#44) : X au centre de l'écran quand le serveur confirme une touche, dessiné en Frames dans le style
 -- du réticule de la lunette (blanc à contour noir). Un tir à la tête l'affiche en rouge (#60), un kill plus grand.
+-- Chaque touche confirmée joue aussi un tick (HitSound, #402).
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local NetworkProtocol = require(Shared:WaitForChild("NetworkProtocol"))
 local UITheme = require(Shared:WaitForChild("UITheme"))
+local HitSound = require(script.Parent.Parent.systems.audio.HitSound)
 local UIKit = require(script.Parent.UIKit)
 
 local HIT_COLOR = UITheme.Colors.White
@@ -65,7 +67,7 @@ local function build()
 end
 
 -- Cette méthode permet d'afficher le marqueur puis de l'estomper lorsqu'une touche est confirmée ;
--- une nouvelle touche relance l'affichage et remplace le fondu en cours. Le son d'un kill à la tête vient de KillAnnouncer.
+-- une nouvelle touche relance l'affichage et remplace le fondu en cours. L'annonce d'un kill à la tête vient de KillAnnouncer.
 function Hitmarker.show(isKill: boolean, isHeadshot: boolean)
 	if not scale then
 		build()
@@ -85,9 +87,11 @@ end
 
 -- Cette méthode permet de brancher le marqueur sur la confirmation du serveur lorsque le client démarre.
 function Hitmarker.init()
+	HitSound.init()
 	NetworkProtocol.getRemote(NetworkProtocol.Names.HIT_CONFIRM).OnClientEvent
 		:Connect(function(isKill: boolean, isHeadshot: boolean)
 			Hitmarker.show(isKill == true, isHeadshot == true)
+			HitSound.play()
 		end)
 end
 
