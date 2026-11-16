@@ -106,5 +106,20 @@ return function(T, Loader)
 			T.expectEqual(same(profile.ZVector, tilted.ZVector), true)
 			T.expectEqual(same(extents, Vector3.new(9.15, 1.83, 0.61)), true)
 		end)
+
+		-- #444 : pièces du Ka-Bar aux mêmes axes, lame le long de -Z de Handle (relevé dans la place), dos de lame en +Y
+		-- (build_knife.py : dos +Z Blender, Roblox = (x, z, -y) Blender, tools/export_mesh_fbx.py) ; boîte 0,32 × 0,75 × 3,73
+		T.it(
+			"Ka-Bar : pointe (-Z de Handle) à droite, dos (+Y) en haut, même pose que ses vignettes d'avant",
+			function()
+				local size = Vector3.new(0.32, 0.75, 3.73)
+				local old, oldExtents = WeaponProfile.frame(tilted, size, nil)
+				local profile, extents = WeaponProfile.frame(tilted, size, WeaponProfile.REFERENCES.KaBar)
+				T.expectEqual(same(profile.XVector, -tilted.ZVector), true)
+				T.expectEqual(same(profile.YVector, tilted.YVector), true)
+				T.expectEqual(same(profile.XVector, old.XVector) and same(profile.ZVector, old.ZVector), true)
+				T.expectEqual(same(extents, oldExtents), true)
+			end
+		)
 	end)
 end
