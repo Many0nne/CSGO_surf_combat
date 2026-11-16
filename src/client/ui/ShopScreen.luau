@@ -118,6 +118,7 @@ local pendingPurchase: { crateId: string, result: any }? = nil
 local DEBUG_ATTRIBUTE = "DebugCrateOpening" -- Studio seulement, voir debugOpening
 local BUY_TEXT = "ACHETER"
 local BUYING_TEXT = "ACHAT…"
+local REPLAYED_TEXT = "ACHAT ÉCRIT" -- en-tête d'un achat rejoué au verdict inconnu (#400)
 local OPEN_TEXT = "OUVERTURE DE TEST  ·  GRATUITE"
 -- Joueur restreint (objets aléatoires payants, #395) : ACHETER inactif avec cette étiquette, refus `region` du serveur
 local REGION_TEXT = PurchaseStatus.REFUSALS.region
@@ -487,7 +488,7 @@ end)
 local function revealHeadline(added: boolean?, refund: number): string
 	if added == nil then
 		-- Achat rejoué au verdict inconnu (#400) : ni OBTENU ni DOUBLON affirmés
-		return "ACHAT ÉCRIT"
+		return REPLAYED_TEXT
 	elseif added then
 		return "OBTENU"
 	elseif refund > 0 then
