@@ -53,6 +53,16 @@ return function(T, Loader)
 				PlayerSettings.sanitize({ scopeMultiplier = "2" }).scopeMultiplier,
 				CameraConfig.SCOPE_SENS_MULT
 			)
+			T.expectEqual(PlayerSettings.sanitize({}).gamepadSensitivity, CameraConfig.GAMEPAD_SENS)
+			T.expectEqual(PlayerSettings.sanitize({ gamepadSensitivity = 1.6 }).gamepadSensitivity, 1.6)
+			T.expectEqual(
+				PlayerSettings.sanitize({ gamepadSensitivity = 99 }).gamepadSensitivity,
+				CameraConfig.GAMEPAD_SENS_MAX
+			)
+			T.expectEqual(
+				PlayerSettings.sanitize({ gamepadSensitivity = "1" }).gamepadSensitivity,
+				CameraConfig.GAMEPAD_SENS
+			)
 			T.expectEqual(PlayerSettings.sanitize({ shadows = "oui" }).shadows, nil)
 			T.expectEqual(PlayerSettings.sanitize({ wheel = "haut" }).wheel, "previous")
 			for _, bad in { "oui", 1, {} } do

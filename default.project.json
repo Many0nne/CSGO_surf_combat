@@ -37,6 +37,9 @@
     },
 
     "StarterPlayer": {
+      "$properties": {
+        "DevTouchMovementMode": "Scriptable"
+      },
       "StarterCharacterScripts": {
         "$path": "src/character"
       },

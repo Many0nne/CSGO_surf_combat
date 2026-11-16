@@ -10,6 +10,7 @@ export type Entry = {
 	id: string,
 	keys: { string }?,
 	mouse: number?,
+	pad: string?,
 	label: string?,
 	col: number,
 	row: number,

@@ -13,6 +13,8 @@ local UserInputService = game:GetService("UserInputService")
 
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local UITheme = require(ReplicatedStorage.Shared.UITheme)
+local InputDevice = require(script.Parent.Parent.input.InputDevice)
+local InputModule = require(script.Parent.Parent.input.InputModule)
 local BeginnerState = require(script.Parent.Parent.systems.game.BeginnerState)
 local LocalSettings = require(script.Parent.Parent.systems.settings.LocalSettings)
 local HUDRules = require(script.Parent.HUDRules)
@@ -58,6 +60,13 @@ local CAP_KEY = capColors(C.Bone, C.Scrim)
 local CAP_MOD = capColors(C.Accent, C.Scrim)
 local CAP_DOWN = capColors(C.HitRed, C.Bone)
 local CAP_MODIFIERS = { jump = true, crouch = true, walk = true, fire = true, aim = true }
+-- Libellés A, B, X, Y aux couleurs de la manette (#276), foncées pour rester lisibles sur l'os et l'ambre
+local PAD_TINTS = {
+	ButtonA = Color3.fromRGB(20, 110, 40),
+	ButtonB = Color3.fromRGB(150, 25, 25),
+	ButtonX = Color3.fromRGB(25, 70, 160),
+	ButtonY = Color3.fromRGB(130, 95, 0),
+}
 
 local KeyDisplay = {}
 
@@ -67,6 +76,7 @@ export type Keycap = { label: TextLabel, paint: (boolean) -> () }
 type KeyView = {
 	entry: HUDRules.KeyDisplayEntry,
 	codes: { Enum.KeyCode }, -- touches du clavier de l'entrée, résolues une fois à la construction
+	pad: Enum.KeyCode?, -- bouton de manette de l'entrée (#276), nil pour une direction
 	label: TextLabel,
 	paint: (boolean) -> (),
 	down: boolean,
@@ -78,9 +88,28 @@ local root: Frame? -- racine mise à l'échelle (UIKit.scaledRoot), repère des 
 local views: { KeyView } = {}
 local builtMode: string? -- mode dont la grille est construite
 
+-- Cette méthode permet de savoir si une touche est enfoncée à la manette ou au tactile (#276) lorsque la grille est
+-- rafraîchie : directions selon le stick (InputModule.getMoveAxes), actions tenues, sinon bouton de la manette.
+local function isDownPad(view: KeyView): boolean
+	local id = view.entry.id
+	if id == "forward" or id == "back" or id == "left" or id == "right" then
+		local fwd, rgt = InputModule.getMoveAxes()
+		local axis = if id == "forward" or id == "back" then fwd else rgt
+		local sign = if id == "forward" or id == "right" then 1 else -1
+		return axis * sign > 0.3
+	end
+	if InputModule.isHeld(id) then
+		return true
+	end
+	return view.pad ~= nil and UserInputService:IsGamepadButtonDown(Enum.UserInputType.Gamepad1, view.pad)
+end
+
 -- Cette méthode permet de savoir si une touche ou un bouton de souris est enfoncé lorsque la grille est rafraîchie ;
 -- `typing` : un champ de texte (chat) a le focus et capte le clavier, le jeu ne reçoit pas ces touches.
 local function isDown(view: KeyView, typing: boolean): boolean
+	if InputDevice.get() ~= "keyboard" then
+		return isDownPad(view)
+	end
 	local mouse = view.entry.mouse
 	if mouse then
 		local button = (Enum.UserInputType :: any)["MouseButton" .. mouse]
@@ -101,11 +130,18 @@ end
 local function paint(view: KeyView, down: boolean)
 	view.down = down
 	view.paint(down)
+	local pad = view.entry.pad
+	if not down and pad and InputDevice.get() == "gamepad" and (PAD_TINTS :: any)[pad] then
+		view.label.TextColor3 = (PAD_TINTS :: any)[pad]
+	end
 end
 
 -- Cette méthode permet de donner le libellé d'une touche lorsque la grille est construite : libellé fixe (ESPACE, CTRL,
 -- M1), sinon celui de la touche sur la disposition du clavier du joueur (AZERTY : Z Q S D).
 local function labelOf(entry: HUDRules.KeyDisplayEntry): string
+	if InputDevice.get() == "gamepad" then
+		return HUDRules.gamepadLabel(entry)
+	end
 	if entry.label then
 		return entry.label
 	end
@@ -308,8 +344,16 @@ local function build(mode: string)
 			table.insert(codes, (Enum.KeyCode :: any)[name])
 		end
 		local keycap = keycaps[index]
-		local view: KeyView = { entry = entry, codes = codes, label = keycap.label, paint = keycap.paint, down = false }
+		local view: KeyView = {
+			entry = entry,
+			codes = codes,
+			pad = if entry.pad then (Enum.KeyCode :: any)[entry.pad] else nil,
+			label = keycap.label,
+			paint = keycap.paint,
+			down = false,
+		}
 		table.insert(views, view)
+		paint(view, false)
 	end
 end
 
@@ -408,6 +452,13 @@ function KeyDisplay.init()
 	LocalSettings.onChanged(update)
 	BeginnerState.onChanged(update)
 	HUDState.onChanged(onHudChanged)
+	-- Clavier ↔ manette (#276) : libellés et teintes suivent le dernier appareil utilisé
+	InputDevice.onChanged(function()
+		refreshLabels()
+		for _, view in views do
+			paint(view, view.down)
+		end
+	end)
 	RunService.Heartbeat:Connect(PerfMarkers.wrap("touches", poll))
 	update()
 end

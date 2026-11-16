@@ -14,6 +14,8 @@ export type KeyDisplayMode = "off" | "simple" | "full"
 export type Settings = {
 	sensitivity: number,
 	scopeMultiplier: number,
+	-- Visée au stick droit de la manette (#276) : multiplicateur de CameraConfig.GAMEPAD_TURN_RATE
+	gamepadSensitivity: number,
 	-- nil : ombres de la place (Lighting.GlobalShadows d'origine), le joueur n'a rien choisi
 	shadows: boolean?,
 	wheel: WheelMode,
@@ -149,6 +151,7 @@ function PlayerSettings.defaults(): Settings
 	return {
 		sensitivity = CameraConfig.DEFAULT_SENS,
 		scopeMultiplier = CameraConfig.SCOPE_SENS_MULT,
+		gamepadSensitivity = CameraConfig.GAMEPAD_SENS,
 		shadows = nil,
 		wheel = PlayerSettings.DEFAULT_WHEEL,
 		simpleAim = false,
@@ -232,6 +235,12 @@ function PlayerSettings.sanitize(raw: any): Settings
 		CameraConfig.SCOPE_SENS_MIN,
 		CameraConfig.SCOPE_SENS_MAX,
 		CameraConfig.SCOPE_SENS_MULT
+	)
+	settings.gamepadSensitivity = clampNumber(
+		raw.gamepadSensitivity,
+		CameraConfig.GAMEPAD_SENS_MIN,
+		CameraConfig.GAMEPAD_SENS_MAX,
+		CameraConfig.GAMEPAD_SENS
 	)
 	if type(raw.shadows) == "boolean" then
 		settings.shadows = raw.shadows

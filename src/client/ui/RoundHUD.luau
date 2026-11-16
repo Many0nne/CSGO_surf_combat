@@ -11,6 +11,7 @@ local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("U
 local ParticipantRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ParticipantRules"))
 local EconomyRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("EconomyRules"))
 local WalletRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WalletRules"))
+local KeyBindings = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("KeyBindings"))
 local UIKit = require(script.Parent.UIKit)
 local HUDRules = require(script.Parent.HUDRules)
 local HUDState = require(script.Parent.HUDState)
@@ -149,10 +150,13 @@ local resultCreditsAmountBox: Frame
 local resultCreditsAmount: { TextLabel }
 local resultCreditsCap: Frame
 local resultShown = false -- écran de fin en cours : Tab maintenu le remplace par le classement, sans superposition
+local touchScoreboardHeld = false -- bouton tactile SCORES tenu (#276)
 local training = false -- serveur d'entraînement (#345) : ni timer, ni rang, ni classement
 
 local hudStateConn: (() -> ())? -- désabonnement de HUDState
 local tabConn: RBXScriptConnection?
+-- Bouton du classement à la manette (#276), tenu comme Tab
+local PAD_SCOREBOARD = (Enum.KeyCode :: any)[KeyBindings.GAMEPAD_BUTTONS.scoreboard]
 local tabEndConn: RBXScriptConnection?
 local creditConns: { RBXScriptConnection } = {} -- attributs des crédits de la manche (#394)
 local dailyUnobserve: (() -> ())? = nil -- désabonnement des gains du jour (LocalWallet.observeDaily, #446)
@@ -976,22 +980,45 @@ function RoundHUD.init()
 	applyTimerLayer()
 
 	-- Pendant l'écran de fin, Tab maintenu le remplace par le classement complet, rendu au relâchement (#295)
+	-- Manette : croix bas (#276, Select est pris par Roblox)
 	tabConn = UserInputService.InputBegan:Connect(function(input, _processed)
-		if input.KeyCode == Enum.KeyCode.Tab and not training then
-			if resultShown then
-				resultRoot.Visible = false
-			end
-			openLeaderboard()
+		if input.KeyCode == Enum.KeyCode.Tab or input.KeyCode == PAD_SCOREBOARD then
+			RoundHUD.setLeaderboardHeld(true)
 		end
 	end)
 	tabEndConn = UserInputService.InputEnded:Connect(function(input)
-		if input.KeyCode == Enum.KeyCode.Tab then
-			leaderboard.Visible = false
-			if resultShown then
-				resultRoot.Visible = true
-			end
+		if input.KeyCode == Enum.KeyCode.Tab or input.KeyCode == PAD_SCOREBOARD then
+			RoundHUD.setLeaderboardHeld(false)
 		end
 	end)
+end
+
+-- Cette méthode permet d'afficher le classement tant que Tab, la croix bas ou le bouton tactile SCORES est tenu
+-- (`held` vrai), à la place de l'écran de fin s'il est affiché (#295), et de le retirer au relâchement.
+function RoundHUD.setLeaderboardHeld(held: boolean)
+	if not resultRoot then
+		return
+	end
+	if held then
+		if training then
+			return
+		end
+		if resultShown then
+			resultRoot.Visible = false
+		end
+		openLeaderboard()
+	else
+		leaderboard.Visible = false
+		if resultShown then
+			resultRoot.Visible = true
+		end
+	end
+end
+
+-- Cette méthode permet de tenir ou relâcher le classement depuis le bouton tactile SCORES (#276).
+function RoundHUD.setTouchScoreboard(held: boolean)
+	touchScoreboardHeld = held
+	RoundHUD.setLeaderboardHeld(held)
 end
 
 function RoundHUD.show()
@@ -1272,6 +1299,8 @@ function RoundHUD.showResult(data: any)
 	end
 	local view = HUDRules.readRoundResult(data, Players.LocalPlayer.UserId)
 	local tabHeld = UserInputService:IsKeyDown(Enum.KeyCode.Tab)
+		or UserInputService:IsGamepadButtonDown(Enum.UserInputType.Gamepad1, PAD_SCOREBOARD)
+		or touchScoreboardHeld
 	leaderboard.Visible = tabHeld
 	resultName.Text = view.title
 	resultNameShadow.Text = view.title

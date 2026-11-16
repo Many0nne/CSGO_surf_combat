@@ -223,10 +223,12 @@ end
 -- `keys` : noms d'Enum.KeyCode (une des touches suffit à l'allumer) et `mouse` : bouton de souris (1 ou 2), tirés de
 -- KeyBindings (#224, mêmes liaisons qu'InputModule) ; `label` : libellé fixe, sinon celui de la disposition du clavier.
 -- `full` : l'entrée n'apparaît qu'en mode « full » ; le mode « simple » garde les directions et le saut.
+-- `pad` : bouton de manette de l'action (KeyBindings.GAMEPAD ou GAMEPAD_BUTTONS, #276), nil pour une direction (stick).
 export type KeyDisplayEntry = {
 	id: string,
 	keys: { string }?,
 	mouse: number?,
+	pad: string?,
 	label: string?,
 	col: number,
 	row: number,
@@ -250,6 +252,32 @@ local KEY_DISPLAY_LAYOUT = {
 	{ id = "walk",    label = "MAJ",      col = 5, row = 2, width = 1, full = true },
 } :: { { id: string, label: string?, col: number, row: number, width: number, full: boolean } }
 
+-- Flèches du stick gauche à la place des directions quand l'affichage suit la manette (#276)
+local STICK_ARROWS = { forward = "▲", left = "◀", back = "▼", right = "▶" }
+
+-- Cette méthode permet de trouver le bouton de manette d'une action de l'affichage des touches lorsque la grille est
+-- listée : bouton d'action (KeyBindings.GAMEPAD), sinon tir ou visée (GAMEPAD_BUTTONS) ; nil pour une direction.
+local function padOf(id: string): string?
+	local buttons = (KeyBindings.GAMEPAD :: any)[id]
+	if buttons then
+		return buttons[1]
+	end
+	if id == "fire" or id == "aim" then
+		return (KeyBindings.GAMEPAD_BUTTONS :: any)[id]
+	end
+	return nil
+end
+
+-- Cette méthode permet de donner le libellé d'une touche quand l'affichage suit la manette (#276) : flèche du stick pour
+-- une direction, sinon le bouton (A, B, LT, L3…).
+function HUDRules.gamepadLabel(entry: KeyDisplayEntry): string
+	local arrow = (STICK_ARROWS :: any)[entry.id]
+	if arrow then
+		return arrow
+	end
+	return if entry.pad then KeyBindings.gamepadText(entry.pad) else ""
+end
+
 -- Cette méthode permet de lister les touches à afficher lorsque le mode d'affichage des touches est appliqué : aucune en
 -- « off », directions et saut en « simple », toutes (accroupi, marche lente, tir, visée, recharge, inspection) en « full » ;
 -- les touches et boutons de chaque entrée viennent de KeyBindings.
@@ -264,6 +292,7 @@ function HUDRules.keyDisplayEntries(mode: string): { KeyDisplayEntry }
 				id = slot.id,
 				keys = (KeyBindings.KEYS :: any)[slot.id],
 				mouse = (KeyBindings.MOUSE :: any)[slot.id],
+				pad = padOf(slot.id),
 				label = slot.label,
 				col = slot.col,
 				row = slot.row,

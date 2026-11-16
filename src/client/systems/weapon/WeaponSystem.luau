@@ -1,7 +1,6 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 
 local WeaponSystem = {}
 
@@ -14,10 +13,6 @@ local FPSCamera = require(script.Parent.Parent.Parent.camera.FPSCamera)
 local InputModule = require(script.Parent.Parent.Parent.input.InputModule)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
-local KeyBindings = require(ReplicatedStorage.Shared.KeyBindings)
-
--- Bouton de la lunette et de l'attaque secondaire (KeyBindings.MOUSE.aim, #224 : même liaison que l'affichage des touches)
-local AIM_INPUT = (Enum.UserInputType :: any)["MouseButton" .. KeyBindings.MOUSE.aim]
 
 -- Per-tool runtime state (stored on the client)
 local toolState = {} -- [tool] = { ammo, reserve, magazine, lastFire }
@@ -38,8 +33,8 @@ end
 
 local currentTool = nil :: Tool?
 local currentCfg = nil
-local scopeConn = nil :: RBXScriptConnection?
-local secondaryConn = nil :: RBXScriptConnection?
+local scopeConn = nil :: { Disconnect: (any) -> () }?
+local secondaryConn = nil :: { Disconnect: (any) -> () }?
 
 -- Weapon action state machine
 -- Transitions : IDLE ↔ SCOPED, IDLE → EQUIPPING → IDLE,
@@ -306,26 +301,20 @@ local function onToolEquipped(tool, char)
 	disconnectInputs()
 
 	if cfg and cfg.HasScope then
-		scopeConn = UserInputService.InputBegan:Connect(function(input, gp)
-			if gp then
+		-- Clic droit, L2 ou bouton tactile (InputModule.onAim, #276)
+		scopeConn = InputModule.onAim(function()
+			if not canAct() then
 				return
 			end
-			if input.UserInputType == AIM_INPUT then
-				if not canAct() then
-					return
-				end
-				-- Lunette après le verrou d'equip : la fin de la piste Equip est coupée, comme par un tir (#404)
-				ViewmodelSystem.cutEquip()
-				weaponState = ScopeSystem.toggle(cfg)
-			end
+			-- Lunette après le verrou d'equip : la fin de la piste Equip est coupée, comme par un tir (#404)
+			ViewmodelSystem.cutEquip()
+			weaponState = ScopeSystem.toggle(cfg)
 		end)
 	end
 
 	if cfg and cfg.SecondaryAttack then
-		secondaryConn = UserInputService.InputBegan:Connect(function(input, gp)
-			if not gp and input.UserInputType == AIM_INPUT then
-				onSecondaryAttack(tool, cfg)
-			end
+		secondaryConn = InputModule.onAim(function()
+			onSecondaryAttack(tool, cfg)
 		end)
 	end
 

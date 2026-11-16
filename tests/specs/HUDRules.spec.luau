@@ -87,6 +87,24 @@ return function(T, Loader)
 			end
 		end)
 
+		T.it("libelle chaque touche à la manette (#276) : flèches du stick, puis boutons", function()
+			local labels = {}
+			for _, entry in HUDRules.keyDisplayEntries("full") do
+				local label = HUDRules.gamepadLabel(entry)
+				T.expectEqual(label ~= "", true, entry.id)
+				labels[entry.id] = label
+			end
+			T.expectEqual(labels.forward, "▲")
+			T.expectEqual(labels.right, "▶")
+			T.expectEqual(labels.jump, "A")
+			T.expectEqual(labels.crouch, "B")
+			T.expectEqual(labels.reload, "X")
+			T.expectEqual(labels.inspect, "Y")
+			T.expectEqual(labels.walk, "L3")
+			T.expectEqual(labels.fire, "RT")
+			T.expectEqual(labels.aim, "LT")
+		end)
+
 		T.it("tire chaque action affichée des liaisons d'InputModule (KeyBindings, #224)", function()
 			local keyMap = KeyBindings.keyMap()
 			for _, entry in HUDRules.keyDisplayEntries("full") do

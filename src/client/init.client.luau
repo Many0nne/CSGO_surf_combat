@@ -27,6 +27,7 @@ local WeaponBar = require(script.ui.WeaponBar)
 local AmmoCounter = require(script.ui.AmmoCounter)
 local Crosshair = require(script.ui.Crosshair)
 local KeyDisplay = require(script.ui.KeyDisplay)
+local TouchControls = require(script.ui.TouchControls)
 local Hitmarker = require(script.ui.Hitmarker)
 local GameStateController = require(script.systems.game.GameStateController)
 local KillAnnouncer = require(script.systems.game.KillAnnouncer)
@@ -132,6 +133,8 @@ WeaponBar.init()
 AmmoCounter.init()
 Crosshair.init()
 KeyDisplay.init()
+-- Commandes tactiles (#276) : seulement sur un appareil tactile
+TouchControls.init()
 
 -- Réglages créés dès le démarrage : accessibles depuis le menu, avant tout spawn
 SettingsMenu.init(FPSCamera)
