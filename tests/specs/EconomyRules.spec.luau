@@ -78,6 +78,22 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("EconomyRules : minuit UTC", function()
+		T.it("secondes jusqu'au prochain minuit UTC", function()
+			local day = Economy.SECONDS_PER_DAY
+			T.expectEqual(Economy.secondsUntilNextDay(0), day, "à minuit pile : un jour entier")
+			T.expectEqual(Economy.secondsUntilNextDay(day * 5 + 3600), day - 3600)
+			T.expectEqual(Economy.secondsUntilNextDay(day * 5 - 1), 1, "une seconde avant minuit")
+			T.expectEqual(Economy.secondsUntilNextDay(day * 5 + 0.5), day - 0.5, "heure fractionnaire du serveur")
+		end)
+
+		T.it("à l'échéance, le jour a changé", function()
+			local now = 1_700_000_000 + 0.25
+			local later = now + Economy.secondsUntilNextDay(now)
+			T.expectEqual(Economy.day(later), Economy.day(now) + 1)
+		end)
+	end)
+
 	T.describe("EconomyRules : attributs", function()
 		T.it("gains du jour : relus pour le jour du client, 0 après minuit, nil si absent", function()
 			local value = Economy.encodeDaily(20407, 140)
