@@ -942,7 +942,13 @@ Règles serveur : `docs/architecture.md`, « Achat d'une caisse ». Dans la vue 
   passé mais scène impossible : même étiquette en ambre (« OBTENU », « DOUBLON · +200 CRÉDITS »).
 - **Révélation d'un doublon** (`added` = false) : la ligne « OBTENU » devient « DOUBLON · +N CRÉDITS » en ambre (achat),
   « DOUBLON » seul pour l'ouverture de test ; skin et rareté inchangés. La scène d'ouverture est celle de #332.
-- Shop fermé (autre onglet) pendant l'achat : pas de révélation, le skin et le solde suivent quand même.
+- Shop fermé (autre onglet) pendant l'achat (#400) : la réponse **réussie** est gardée (`pendingPurchase`) et jouée une
+  seule fois au retour sur le shop (caisse payée ouverte, scène, révélation ou « DOUBLON · +N »), puis effacée. Un refus
+  ou une ouverture de test ne sont pas gardés. Les onglets ne sont pas figés (`MainMenu` hors de ce périmètre).
+- **Achat rejoué** (réponse perdue, écrit par un essai signalé en échec) : le serveur ne sait pas qui a ajouté le skin
+  s'il n'était pas possédé avant (autre serveur). Réponse `replayed = true` sans `added` : en-tête neutre « ACHAT
+  ÉCRIT », ni OBTENU ni DOUBLON ; skin et rareté s'affichent. Possédé avant l'achat : doublon certain, « DOUBLON ·
+  +N ». Relire l'enregistrement ne départage pas : le skin y est dans les deux cas.
 - **Joueur restreint** (objets aléatoires payants, #395, `docs/economie.md`) : ACHETER en contour atténué, étiquette os
   atténué « INDISPONIBLE DANS TA RÉGION » à cheval sur le coin gauche du bouton (plus longue que lui, elle déborderait à
   gauche de l'écran depuis le coin droit) ; le contenu et ses chances restent visibles. Restriction pas encore connue :
