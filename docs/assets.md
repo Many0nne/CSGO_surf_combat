@@ -291,7 +291,7 @@ tout le catalogue.
 
 Un skin AWP est **dessiné pour l'AWP seule**, pièce par pièce (pas un motif réappliquable sur une autre arme) : un script
 par skin dans `assets/awp/skins/` (`balise`, `trempe`, `ciselure`, `pan`, `orage`, `circuit`, `maquis`, `mue`, et
-`remorqueur` de la série FILM, #433), avec
+`remorqueur` et `logogramme` de la série FILM, #433 et #436), avec
 une fonction `paint(maps, cv)`. Il part des cartes d'origine de `make_textures.py` (granité, moletage, vis, crasse) et
 les repeint. Outils communs (`common.py`) :
 
@@ -346,7 +346,7 @@ marquages sont celles de Windows (`C:/Windows/Fonts`, Bahnschrift, Impact) : gé
 ### Skins dessinés de la M9 (#420)
 
 Même principe que pour l'AWP : un skin est **dessiné pour la M9 seule**, un script par skin dans `assets/m9/skins/`
-(`emaille` pour ÉMAIL, `patrouille`, `artdeco`, et `hote` de la série FILM, #433), avec une fonction `paint(kn)`. La M9 n'a pas de source Blender : on
+(`emaille` pour ÉMAIL, `patrouille`, `artdeco`, et `hote` et `sphinx` de la série FILM, #433 et #436), avec une fonction `paint(kn)`. La M9 n'a pas de source Blender : on
 part de ses cartes d'origine et de sa cuisson (`fetch_viewmodel.py` puis `bake_maps.py --glb`, étape 1 de « Fabriquer
 un skin » ci-dessous). Outils communs (`common.py`) :
 
@@ -395,14 +395,35 @@ Une caisse par arme sur le thème du cinéma, ouverte par un **hommage** au film
 HÔTE (M9, la biomécanique de Giger : colonne vertébrale couleur os sur laque noir bleuté). Planche de références : à
 refaire au besoin depuis Typeset in the Future (« Alien ») et Monster Legacy (galerie Alien 1979), non versionnée.
 
+Deuxième vague (#436), choisie dans le top de films de l'utilisateur : LOGOGRAMME (AWP, *Arrival* : roche graphite
+striée de fibres verticales comme la paroi du vaisseau, trois anneaux d'encre inventés, chargeur orange combinaison) et
+SPHINX (M9, *Le Silence des agneaux* par son papillon : aile antérieure brun-noir sur la lame, aile postérieure ocre à
+bandes noires le long du tranchant, thorax et sa tache en crâne au talon, abdomen annelé sur le manche). Références :
+concept art du vaisseau (blog de Meinert Hansen), vfxblog (« The language of Arrival »), Acherontia atropos du Muséum de
+Toulouse sur Wikimedia Commons. Pistes proposées et écartées : AQABA (*Lawrence d'Arabie*, poignard d'or ciselé), reportée ;
+le chiffre du Zodiac (vrai tueur), les drames de guerre et les broderies osages (artisanat vivant), refusés d'office.
+
 - **Hommage, pas de reprise** (décision utilisateur) : les caisses sont payantes et Roblox retire les contenus qui reprennent
   une licence. Ni nom du film, ni logo de la compagnie, ni pictogramme de Cobb ou tête de la créature recopiés : on
   reprend la grammaire (carré à coins arrondis, côtes répétées), avec des symboles et des noms dessinés pour le jeu.
 - **Un autre film ne s'ajoute qu'après une recherche de DA** (planche de références validée) : l'utilisateur ne veut pas
   de films choisis à la hâte, dont la DA ne lui plairait pas.
-- **Caisses complétées par la série 1** : chaque caisse FILM n'a qu'un skin hommage, complété par des skins de la série 1
+- **Caisses complétées par la série 1** : les skins hommage (EXCEPTIONNEL) sont complétés par des skins de la série 1
   pour atteindre 6. Un skin repris garde sa rareté d'origine (`rarityOf` lit la première caisse qui le contient ; le test
-  du shop l'exige). La M9 n'ayant que 6 skins, HÔTE partage l'EXCEPTIONNEL avec RELEVÉ.
+  du shop l'exige). Chaque nouvel hommage prend la place d'un skin repris : LOGOGRAMME celle de MAQUIS, SPHINX celle de
+  RELEVÉ (#436).
+- **Logogramme qui se lit comme une lettre** : un renflement en bas de l'anneau, vrilles pendantes, faisait un « Q ».
+  Les renflements se placent de côté (`RINGS` de `logogramme.py`).
+- **Encre noire sur roche mate** : à rugosité 0,5 l'encre prenait le reflet du ciel et virait au blanc de trois quarts ;
+  encre mate (0,95). Roche non métallique à 0,2 : presque noire en 1P dans le jeu (anneaux invisibles) ; à 0,3 elle
+  paraît gris clair sur la planche mais juste en jeu. Un motif à voir en 1P va sur l'avant de la crosse (px ~2590) :
+  le garde-main et l'arrière de la crosse sont hors champ.
+- **Brun sombre de la M9 (SPHINX)** : posé en non-métal, l'aile et le thorax prenaient un voile gris d'acier terne ;
+  en métal (« candy »), rugosité ~0,5 : à 0,45 le reflet de l'HDRI les faisait virer au cuivre.
+- **Pommeau de la M9 trop petit pour un motif** : il ne fait que 0,095 unité le long de l'axe (t 1,5 à 1,595). Un motif
+  figuratif (crâne de SPHINX) va sur le talon de lame (t -0,16 à 0,3), visible en 1P.
+- **Crâne figuratif** : un crâne complet (nez, dents) faisait drapeau pirate ; la tache du papillon (calotte, deux
+  orbites, bords flous) suffit.
 - **Texte d'écran aligné à gauche sur les deux flancs** : `Canvas.text(anchor="lm")` aligne le flanc droit à droite du
   point donné, hors de l'écran. En chasse fixe (Consolas), compléter les lignes à la même longueur et les centrer.
 - **Écran peint** : une dalle brillante (rugosité 0,18) reflétait le ciel et noyait le texte de trois quarts ; 0,4 et

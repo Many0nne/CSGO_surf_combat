@@ -147,6 +147,15 @@ InventoryRules.ITEMS = {
 		name = "REMORQUEUR",
 		appearance = "remorqueur",
 	},
+	-- Série FILM (#436) : hommage au film de 2016 (vaisseau-pierre, écriture circulaire), logogrammes inventés
+	-- (assets/awp/skins/logogramme.py)
+	{
+		id = "skin.awp.logogramme",
+		type = "skin",
+		weapon = "weapon.awp",
+		name = "LOGOGRAMME",
+		appearance = "logogramme",
+	},
 	-- Skins M9 : COUCHANT, RELEVÉ, RECUIT (#268, #337, motifs calculés) ; ÉMAIL, PATROUILLE, ART DÉCO dessinés pour la
 	-- M9 (#420, assets/m9/skins/) à la place d'IMPACT, STRATE et SILLAGE
 	{
@@ -198,6 +207,14 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.m9bayonet",
 		name = "HÔTE",
 		appearance = "hote",
+	},
+	-- Série FILM (#436) : hommage au film de 1991 par son papillon, le sphinx tête-de-mort (assets/m9/skins/sphinx.py)
+	{
+		id = "skin.m9bayonet.sphinx",
+		type = "skin",
+		weapon = "weapon.m9bayonet",
+		name = "SPHINX",
+		appearance = "sphinx",
 	},
 } :: { Item }
 
