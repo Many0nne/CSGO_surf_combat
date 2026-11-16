@@ -82,8 +82,9 @@ CheatLog.MAX_FIELD_VALUE = 1000
 CheatLog.MAX_DESCRIPTION = 3800
 -- Limite de l'embed entier (titre, description, champs, pied : 6000 chez Discord, marge comprise).
 CheatLog.MAX_EMBED_TOTAL = 5800
--- Longueur (caractères) du dernier détail d'un contrôle dans son champ du résumé (#382).
-CheatLog.FIELD_DETAIL_CHARS = 100
+-- Longueur (caractères) du dernier détail d'un contrôle dans son champ du résumé (#382) : le détail du vol entier
+-- (~120 caractères, trous pardonnés compris) y tient.
+CheatLog.FIELD_DETAIL_CHARS = 140
 
 local SEVERITY_RANK: { [string]: number } = { low = 1, medium = 2, high = 3 }
 local SEVERITY_LABEL: { [string]: string } = { low = "faible", medium = "moyenne", high = "forte" }
@@ -618,7 +619,7 @@ function CheatLog.buildEmbed(record: Record): { [string]: any }
 		-- Un contrôle par ligne (#297), avec son taux sur les jugés du joueur ; puis le dernier détail de chaque
 		-- contrôle (#382), après tous les taux : un champ trop long perd ses détails, jamais ses taux
 		local prefix = category .. ":"
-		local worstDetail = record.worst and record.worst.detail
+		local worst = record.worst
 		local detailLines = {}
 		for _, key in checkKeys do
 			if string.sub(key, 1, #prefix) == prefix then
@@ -627,7 +628,7 @@ function CheatLog.buildEmbed(record: Record): { [string]: any }
 				local name = string.sub(key, #prefix + 1)
 				table.insert(lines, name .. " " .. rateText(count, CheatLog.denominatorOf(key), judged))
 				local detail = record.details and record.details[key]
-				if detail and detail ~= worstDetail then
+				if detail and not (worst and worst.check == key and worst.detail == detail) then
 					table.insert(detailLines, "↳ " .. name .. " : " .. clipChars(detail, CheatLog.FIELD_DETAIL_CHARS))
 				end
 			end

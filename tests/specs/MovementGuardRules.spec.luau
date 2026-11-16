@@ -537,15 +537,20 @@ return function(T, Loader)
 		end)
 
 		T.it(
-			"une correction commence un nouveau vol : trous pardonnés et heure du décollage remis à zéro",
+			"trous pardonnés remis à zéro à l'atterrissage, pas par une correction en l'air (budget non rendu)",
 			function()
 				local guard = Rules.newGuard(0, V(0, 100, 0))
 				Rules.observe(guard.flight, 0.05, 100, false)
 				Rules.observe(guard.flight, 3, 60, false) -- trou de près de 3 s : budget épuisé
 				T.expectEqual(guard.flight.lost, Rules.FLIGHT_LOST_MAX)
-				Rules.restart(guard.flight, 10, 50)
+				Rules.restart(guard.flight, 4, 60) -- refus en l'air
+				T.expectEqual(guard.flight.lost, Rules.FLIGHT_LOST_MAX, "un refus ne rend pas de budget")
+				T.expectEqual(guard.flight.airAt, 4)
+				Rules.observe(guard.flight, 5, STAND, true) -- atterrissage
 				T.expectEqual(guard.flight.lost, 0)
-				T.expectEqual(guard.flight.airAt, 10)
+				-- Correction au sol après un vol épuisé : le vol suivant repart avec un budget plein
+				Rules.restart(guard.flight, 6, STAND)
+				T.expectEqual(guard.flight.lost, 0)
 			end
 		)
 

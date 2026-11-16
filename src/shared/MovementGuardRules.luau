@@ -227,13 +227,13 @@ end
 
 -- Cette méthode permet de repartir d'une correction lorsque le serveur renvoie le client à sa dernière position
 -- acceptée (y) : le client y est replacé vitesse nulle puis tombe ; enveloppe ancrée là, avec la vitesse d'un saut
--- pour couvrir le délai avant que le client n'applique la correction. Un nouveau vol commence : trous pardonnés à zéro.
+-- pour couvrir le délai avant que le client n'applique la correction. Les trous pardonnés restent ceux du vol en cours
+-- (remis à zéro seulement à l'atterrissage : un refus en l'air ne rend pas de budget).
 function MovementGuardRules.restart(flight: Flight, now: number, y: number)
 	flight.anchored = true
 	flight.anchorAt = now
 	flight.anchorClock = flight.clock
 	flight.airAt = now
-	flight.lost = 0
 	flight.anchorY = y
 	flight.anchorVy = MovementConfig.JUMP_VELOCITY
 	flight.lastAt = now
@@ -326,6 +326,7 @@ function MovementGuardRules.observe(flight: Flight, now: number, y: number, supp
 	advanceClock(flight, now)
 	if supported then
 		flight.anchored = false
+		flight.lost = 0
 		flight.lastHigh = -math.huge
 		flight.lastAt, flight.lastY = now, y
 		return true, 0
@@ -333,7 +334,7 @@ function MovementGuardRules.observe(flight: Flight, now: number, y: number, supp
 	if not flight.anchored then
 		flight.anchored = true
 		flight.anchorAt, flight.anchorY, flight.anchorVy = now, y, takeoffVy(flight, y)
-		flight.anchorClock, flight.airAt, flight.lost = flight.clock, now, 0
+		flight.anchorClock, flight.airAt = flight.clock, now
 		flight.boostVy = 0
 		flight.lastAt, flight.lastY = now, y
 		flight.baseY, flight.count = y, 0

@@ -782,9 +782,11 @@ l'ancienne règle.
 en l'air, la part au-delà de `FRAME_SIM_MAX` (= `MAX_TICKS × TICK`, ce qu'une frame honnête simule au plus,
 `advanceClock`). La borne basse de l'intervalle de temps de l'enveloppe se prend sur cette horloge
 (`ceiling(flight, now, clock)`), la borne haute reste l'heure d'arrivée : l'enveloppe couvre à la fois le temps simulé
-et le temps écoulé. Ce pardon est plafonné à `FLIGHT_LOST_MAX` (1 s) par vol, du décollage (ou d'une correction,
-`restart`) à l'atterrissage, après quoi le temps compte de nouveau en entier. Un nouveau budget demande d'avoir été
-porté, donc à moins de `SUPPORT_REACH` d'une surface, où le vol n'est de toute façon pas jugé. La règle du vide garde l'heure d'arrivée seule (un joueur silencieux n'a
+et le temps écoulé. Ce pardon est plafonné à `FLIGHT_LOST_MAX` (1 s) par vol, après quoi le temps compte de
+nouveau en entier. Le budget n'est rendu qu'à l'atterrissage (paquet porté, donc à moins de `SUPPORT_REACH` d'une
+surface, où le vol n'est de toute façon pas jugé), pas par une correction en l'air (`restart`) : un tricheur refusé
+ne regagne rien. Le temps pardonné reste acquis jusqu'à la fin du vol (le client honnête a perdu ce temps pour de
+bon) : le gain d'un tricheur est 1 s de chute, pas plus. La règle du vide garde l'heure d'arrivée seule (un joueur silencieux n'a
 pas de paquets à compter).
 
 - **Ce qu'un tricheur y gagne.** Rien à 20 paquets/s (chaque écart est sous `FRAME_SIM_MAX`). En espaçant ses
@@ -1255,7 +1257,7 @@ Ce que le code envoie vraiment (`src/server/CheatLog.luau`, `src/server/Webhook.
   maximal, pire violation (contrôle, gravité, détail), mention « Expulsé pendant la session » le cas échéant, un champ
   par catégorie (« forte N · moyenne N · faible N », puis une ligne par contrôle avec son taux sur les jugés du
   joueur ; depuis #382, après ces taux, le dernier détail de chaque contrôle, « ↳ contrôle : détail », coupé à
-  `FIELD_DETAIL_CHARS` (100) caractères, sauf s'il est celui de la pire violation déjà en description : un champ trop
+  `FIELD_DETAIL_CHARS` (140) caractères, sauf s'il est celui de la pire violation déjà en description : un champ trop
   long perd ses détails, jamais ses taux), et en pied de page le nom et le **UserId**. C'est la source de référence : un résumé = une session.
   Un envoi en échec est réessayé, puis écrit en entier dans la console serveur (repli).
 - **Relevé agrégé du serveur** au webhook dédié `CheatLogWebhookUrl` (console sans lui), toutes les 10 min et à
