@@ -16,7 +16,9 @@ export type Rgb = { number }
 -- part du prix de la caisse rendue en crédits pour un doublon (#393), en pour cent (entier, 0 à 100)
 export type Rarity = { id: string, label: string, chance: number, color: Rgb, refund: number }
 -- `weapon` : id de l'arme dont la caisse donne un skin (`id` d'un item `weapon` de InventoryRules.ITEMS) ; `contents` :
--- noms d'apparence des skins (`appearance` de InventoryRules.ITEMS) par id de rareté, le skin étant celui de cette arme
+-- noms d'apparence des skins (`appearance` de InventoryRules.ITEMS) par id de rareté, le skin étant celui de cette arme ;
+-- `series` (facultatif, #454) : code de série du pochoir (« FO » pour une série `foam` qui donnerait « FM » comme `film`),
+-- prioritaire sur le code tiré de l'id, pour lever une collision sans renommer un id déjà en inventaire
 export type Crate = {
 	id: string,
 	name: string,
@@ -24,6 +26,7 @@ export type Crate = {
 	stripe: Rgb,
 	price: number,
 	contents: { [string]: { string } },
+	series: string?,
 }
 -- Une ligne du contenu = un skin : sa rareté, son nom affiché, son id d'item, le nom court de son arme (« AWP ») et le
 -- viewmodel de son arme (vignette)
@@ -342,11 +345,15 @@ function ShopCatalog.priceLabel(crate: Crate): string
 end
 
 -- Cette méthode permet de composer le pochoir du couvercle d'une caisse (« S1-AWP », « FM-M9 », #434) lorsque le shop la
--- pose : série de l'id (`serie<n>` → `S<n>`, sinon 1re et dernière lettre), arme ; repli sur l'un des deux, ou "".
-function ShopCatalog.stencil(crate: { id: string?, weapon: string? }?): string
+-- pose : série (`series` de la caisse, sinon tirée de l'id : `serie<n>` → `S<n>`, sinon 1re et dernière lettre), arme ;
+-- repli sur l'un des deux, ou "".
+function ShopCatalog.stencil(crate: { id: string?, weapon: string?, series: string? }?): string
 	local series = crate and crate.id and string.match(crate.id, "^crate%.[^.]+%.(.+)$")
 	local code: string? = nil
-	if series then
+	local explicit = crate and crate.series
+	if explicit and explicit ~= "" then
+		code = string.upper(explicit)
+	elseif series then
 		local letters = string.gsub(string.lower(series), "[^%w]", "")
 		local number = string.match(letters, "^serie(%d+)$")
 		if number then

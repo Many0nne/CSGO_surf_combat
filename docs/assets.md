@@ -164,7 +164,9 @@ projection cubique (4 studs par unité). Couleurs et matières sont posées par 
 de la vitrine et du socle une pièce invisible `LidStencil` (préfixe `Lid` : elle s'ouvre avec le couvercle) portant une
 `SurfaceGui` à droite de la bande, en Oswald Bold couleur encre (24, 22, 20), éclairée comme le bois. Le texte vient de
 `ShopCatalog.stencil` (testé) : code de série tiré de ce qui suit `crate.<arme>.` dans l'id, séparateurs retirés (`serie<n>` → `S<n>`, sinon
-première et dernière lettre, `film` → `FM` ; un test vérifie que les caisses du catalogue ont des pochoirs distincts), un tiret, puis le nom court de l'arme (`WEAPON_LABELS`, sinon l'id sans `weapon.` en
+première et dernière lettre, `film` → `FM`), ou le champ facultatif `series` de la caisse, prioritaire (#454). Un test vérifie que
+les caisses du catalogue ont des pochoirs distincts : en cas de collision (`foam` → `FM` comme `film`), donner un `series`
+(« FO ») à la nouvelle caisse, jamais renommer un id déjà vendu (serveur, inventaires). Puis un tiret, puis le nom court de l'arme (`WEAPON_LABELS`, sinon l'id sans `weapon.` en
 capitales). Une nouvelle caisse `crate.<arme>.<série>` reçoit donc son pochoir sans toucher au rendu. Sans série, le
 pochoir est l'arme seule ; caisses de stock (racks, rangées vides) : pas de pochoir. Ne pas remettre de texte dans le
 mesh : il serait le même sur toutes les caisses (l'ancien « S1-0332 » se lisait « série 1 » même sur les FILM).
