@@ -19,6 +19,7 @@ local PerfMarkers = require(Shared:WaitForChild("PerfMarkers"))
 local ShopCatalog = require(Shared:WaitForChild("ShopCatalog"))
 local UITheme = require(Shared:WaitForChild("UITheme"))
 local WalletRules = require(Shared:WaitForChild("WalletRules"))
+local WeaponProfile = require(Shared:WaitForChild("WeaponProfile"))
 local WeaponSkins = require(Shared:WaitForChild("WeaponSkins"))
 local CrateOpening = require(script.Parent.CrateOpening)
 local MenuScene = require(script.Parent.MenuScene)
@@ -727,21 +728,12 @@ local function revealWeapon(
 		return nil
 	end
 	WeaponSkins.apply(model, viewmodelName, skinId)
-	-- Profil : axe le plus long à l'horizontale de `at`, axe le plus mince face à lui (comme UIKit.weaponSilhouette)
-	local frame, size = model:GetBoundingBox()
-	local axes = {
-		{ length = size.X, dir = frame.RightVector },
-		{ length = size.Y, dir = frame.UpVector },
-		{ length = size.Z, dir = frame.LookVector },
-	}
-	table.sort(axes, function(a, b)
-		return a.length > b.length
-	end)
-	local profile = CFrame.fromMatrix(frame.Position, axes[1].dir, axes[2].dir)
+	-- Profil commun avec les vignettes (WeaponProfile, #429) : pointe vers le +X de `at`, face montrée vers son +Z
+	local profile, frame, extents = WeaponProfile.of(model, viewmodelName)
 	-- Pivot au centre de la boîte : celui d'un Model créé par script est à l'origine, ScaleTo y emmènerait l'arme
 	model.WorldPivot = frame
 	model:PivotTo(at * profile:Inverse() * frame)
-	model:ScaleTo(length / axes[1].length)
+	model:ScaleTo(length / extents.X)
 	model.Parent = parent
 	return model
 end
