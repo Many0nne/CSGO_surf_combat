@@ -14,6 +14,7 @@ local IS_STUDIO = RunService:IsStudio()
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local CrateOpeningRules = require(Shared:WaitForChild("CrateOpeningRules"))
+local CrateStencil = require(Shared:WaitForChild("CrateStencil"))
 local InventoryRules = require(Shared:WaitForChild("InventoryRules"))
 local PerfMarkers = require(Shared:WaitForChild("PerfMarkers"))
 local ShopCatalog = require(Shared:WaitForChild("ShopCatalog"))
@@ -109,11 +110,11 @@ local CRATE_LOOK: { [string]: { any } } = {
 	LidStripe = { Color3.fromRGB(226, 58, 40), Enum.Material.SmoothPlastic },
 }
 -- Pochoir du couvercle (#434) : texte propre à la caisse (ShopCatalog.stencil), peint par une SurfaceGui sur une pièce
--- invisible « LidStencil » (préfixe Lid : il s'ouvre avec le couvercle) ; place, hauteur des capitales (0,136 stud) et
--- encre de l'ancien pochoir « S1-0332 » modelé dans le mesh, à droite de la bande sur la face avant ; remonté de
--- 0,046 stud : le moraillon du couvercle (LidSteel, haut à 1,64) cachait le bas des lettres centrales
-local STENCIL_AT = Vector3.new(1.0, 1.72, 1.208) -- centre, par rapport au pivot de la caisse
-local STENCIL_SIZE = Vector3.new(1.2, 0.3, 0.01) -- zone libre entre la bande et le montant du cadre
+-- invisible « LidStencil » (préfixe Lid : il s'ouvre avec le couvercle) ; hauteur des capitales et encre de l'ancien
+-- pochoir « S1-0332 » modelé dans le mesh. Place et taille : CrateStencil (#456), source unique relue par le générateur
+-- de la caisse et par verify_place
+local STENCIL_AT = Vector3.new(table.unpack(CrateStencil.AT)) -- centre, par rapport au pivot de la caisse
+local STENCIL_SIZE = Vector3.new(table.unpack(CrateStencil.SIZE))
 local STENCIL_INK = Color3.fromRGB(24, 22, 20)
 local STENCIL_PIXELS = 200 -- pixels par stud
 local STENCIL_TEXT = 52 -- px : capitales d'Oswald à la hauteur de l'ancien pochoir (comparé dans Studio, même cadrage)

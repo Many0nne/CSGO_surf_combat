@@ -5,7 +5,7 @@
 # (ShopScene), la bande « LidStripe » prend la couleur de la collection.
 #   blender -b --factory-startup --python tools/shop/crate_model.py -- <sortie.fbx> [rendu.png]
 # Puis : bash tools/publish_asset.sh <sortie.fbx> Model Crate, insert_asset dans Studio (docs/assets.md, « Caisse »).
-import bmesh, bpy, math, os, runpy, sys
+import bmesh, bpy, math, os, re, runpy, sys
 from mathutils import Matrix, Vector
 
 ARGS = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
@@ -103,9 +103,56 @@ for sx in (-1, 1):  # poignées en corde et leurs attaches
 
 # ---- marquage : bande de la collection (avant et dessus du couvercle) ---------------------------------------------
 # Le pochoir (« S1-AWP », à droite de la bande sur la face avant) n'est plus modelé ici : le jeu le pose, propre à chaque
-# caisse (#434, ShopScene STENCIL_AT et ShopCatalog.stencil).
+# caisse (#434, ShopCatalog.stencil), à la place donnée par src/shared/CrateStencil.luau, contrôlée plus bas (#456).
 box("LidStripe", -0.65, -D / 2 - 0.004, 1.675, 1.9, 0.01, 0.3, 0)
 box("LidStripe", 0, 0, 2.005, 0.7, D - 0.2, 0.01, 0)
+
+
+# Cette méthode permet de lire un tableau de nombres (`AT = { 1.0, 1.72, 1.208 }`) de src/shared/CrateStencil.luau
+# lorsque le générateur contrôle la place du pochoir ; arrêt si la ligne a changé de forme.
+def stencil_const(source, name):
+    m = re.search(r"^CrateStencil\." + name + r" = (\{[^}\n]*\}|[-\d.]+)", source, re.M)
+    if not m:
+        sys.exit(f"CrateStencil.{name} introuvable dans src/shared/CrateStencil.luau (format attendu : `= {{ a, b, c }}`)")
+    values = [float(v) for v in m.group(1).strip("{} ").split(",")]
+    return values if m.group(1).startswith("{") else values[0]
+
+
+# Cette méthode permet de vérifier, avant l'export, que le pochoir posé par le jeu (CrateStencil) repose sur la face
+# avant des planches du couvercle sans qu'une pièce (bande, cornière, moraillon, cadre) passe devant ses lettres.
+def check_stencil():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src", "shared", "CrateStencil.luau")
+    source = open(path, encoding="utf-8").read()
+    at, size = stencil_const(source, "AT"), stencil_const(source, "SIZE")
+    ink, max_gap = stencil_const(source, "INK_HEIGHT"), stencil_const(source, "MAX_GAP")
+    x0, x1 = at[0] - size[0] / 2, at[0] + size[0] / 2
+    y0, y1 = at[1] - ink / 2, at[1] + ink / 2
+    back = at[2] - size[2] / 2
+    errors, support = [], None
+    for group, objects in PIECES.items():
+        for ob in objects:
+            # boîte englobante dans le repère Roblox (x, z Blender, -y Blender), modificateurs non comptés (biseaux)
+            pts = [ob.matrix_world @ Vector(c) for c in ob.bound_box]
+            lo = Vector((min(p.x for p in pts), min(p.z for p in pts), min(-p.y for p in pts)))
+            hi = Vector((max(p.x for p in pts), max(p.z for p in pts), max(-p.y for p in pts)))
+            covers = lo.x < x1 and hi.x > x0 and lo.y < y1 and hi.y > y0
+            if not covers:
+                continue
+            if hi.z > back + 1e-4:
+                errors.append(f"{group} passe devant les lettres (x {lo.x:.3f}..{hi.x:.3f}, y {lo.y:.3f}..{hi.y:.3f}, "
+                              f"avant à {hi.z:.3f}, dos du pochoir à {back:.3f})")
+            elif group == "LidPlanks" and lo.x <= x0 and hi.x >= x1 and lo.y <= y0 and hi.y >= y1:
+                support = max(support or -1e9, hi.z)
+    if support is None:
+        errors.append("aucune planche du couvercle (LidPlanks) derrière tout le pochoir")
+    elif back - support > max_gap:
+        errors.append(f"pochoir flottant : {back - support:.3f} stud devant les planches (max {max_gap})")
+    if errors:
+        sys.exit("Pochoir (src/shared/CrateStencil.luau) incompatible avec la caisse :\n  " + "\n  ".join(errors))
+    print(f"pochoir : x {x0:.3f}..{x1:.3f}, lettres y {y0:.3f}..{y1:.3f}, {back - support:.3f} stud devant les planches")
+
+
+check_stencil()
 
 
 # Cette méthode permet de fusionner les objets d'un groupe en un seul mesh (modificateurs appliqués) et de lui donner

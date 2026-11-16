@@ -18,6 +18,8 @@ local SpawnCheck = require("../map/SpawnCheck")
 local placePath = process.args[1] or "CSGO.rbxlx"
 -- module sans dépendance : chargé tel quel (source unique des noms de dossiers de map)
 local MapGeometry = luau.load(fs.readFile("src/shared/MapGeometry.luau"), { debugName = "MapGeometry" })()
+-- place du pochoir de la caisse (#456), comparée aux pièces de Props.Crate
+local CrateStencil = luau.load(fs.readFile("src/shared/CrateStencil.luau"), { debugName = "CrateStencil" })()
 local game = roblox.deserializePlace(fs.readFile(placePath))
 local errors = 0
 
@@ -333,6 +335,31 @@ else
 	-- Pochoir posé par le jeu, propre à chaque caisse (#434) : un « LidStencil » dans le mesh doublerait le texte
 	if crateModel:FindFirstChild("LidStencil") then
 		fail("Props.Crate.LidStencil présent : le pochoir est posé par ShopScene (#434), pas modelé")
+	end
+	-- Place du pochoir (CrateStencil, #456) face aux boîtes des pièces, dans le repère du pivot : une caisse régénérée
+	-- avec d'autres cotes ne doit pas l'enfoncer dans le bois, le laisser flotter ni le glisser sous la bande
+	-- Lune n'a pas GetPivot : le pivot est stocké dans WorldPivotData
+	local pivot = crateModel.WorldPivotData
+	local boxes = {}
+	for _, part in crateModel:GetChildren() do
+		if part:IsA("BasePart") then
+			local rel = pivot:ToObjectSpace(part.CFrame)
+			local lo, hi = { math.huge, math.huge, math.huge }, { -math.huge, -math.huge, -math.huge }
+			for _, sx in { -0.5, 0.5 } do
+				for _, sy in { -0.5, 0.5 } do
+					for _, sz in { -0.5, 0.5 } do
+						local p = rel * roblox.Vector3.new(part.Size.X * sx, part.Size.Y * sy, part.Size.Z * sz)
+						for axis, value in { p.X, p.Y, p.Z } do
+							lo[axis], hi[axis] = math.min(lo[axis], value), math.max(hi[axis], value)
+						end
+					end
+				end
+			end
+			boxes[part.Name] = { min = lo, max = hi }
+		end
+	end
+	for _, problem in CrateStencil.problems(boxes) do
+		fail("Props.Crate : " .. problem .. " (src/shared/CrateStencil.luau)")
 	end
 end
 
