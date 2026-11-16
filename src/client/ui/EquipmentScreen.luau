@@ -43,6 +43,7 @@ local GRID_BOTTOM = 54 -- la zone défilante s'arrête au-dessus de l'aide en ba
 local GRID_PAD = 2 -- retrait des cartes dans la zone défilante : son bord ne coupe pas leur contour au survol
 local SCROLL_BAR = 3
 local SCROLL_GAP = 7 -- écart entre la grille et sa barre de défilement
+local STATS_GAP = 12 -- écart minimal entre la grille et la fiche de statistiques (à côté ou au-dessus)
 local COLUMNS = 4
 local CARD_SIZE = Vector2.new(172, 92)
 local CARD_GAP = 12
@@ -501,6 +502,21 @@ local function selectSlot(index: number)
 	paintHeader()
 end
 
+-- Cette méthode permet d'arrêter la grille au-dessus de la fiche de statistiques lorsque la fenêtre est trop étroite
+-- pour les mettre côte à côte (16:10, 4:3) ; en 16:9 la grille descend jusqu'à l'aide.
+local function avoidStats(stats: GuiObject, reserved: number)
+	local function update()
+		local scale = scroller.AbsoluteSize.X / scroller.Size.X.Offset -- échelle de l'accueil (UIScale)
+		local right = scroller.AbsolutePosition.X + scroller.AbsoluteSize.X
+		local overlaps = stats.AbsolutePosition.X < right + STATS_GAP * scale
+		local bottom = if overlaps then math.max(GRID_BOTTOM, reserved + STATS_GAP) else GRID_BOTTOM
+		scroller.Size = UDim2.new(scroller.Size.X, UDim.new(1, -(GRID_Y - GRID_PAD + bottom)))
+	end
+	stats:GetPropertyChangedSignal("AbsolutePosition"):Connect(update)
+	scroller:GetPropertyChangedSignal("AbsolutePosition"):Connect(update)
+	update()
+end
+
 -- Cette méthode permet de construire l'aide en bas à gauche (touche en boîte, action en texte) lorsque l'écran est
 -- construit.
 local function buildHints(root: Frame)
@@ -514,8 +530,9 @@ local function buildHints(root: Frame)
 end
 
 -- Cette méthode permet de construire l'écran (titre, rendu, nom, onglets et grille dans `column` à gauche, aide en bas
--- à gauche) lorsque l'accueil est construit ; il suit ensuite chaque changement d'inventaire.
-function EquipmentScreen.build(root: Frame, column: Frame)
+-- à gauche) lorsque l'accueil est construit ; il suit ensuite chaque changement d'inventaire. La grille évite `stats`
+-- (fiche de statistiques, `reserved` px au-dessus du bas) quand elles ne tiennent pas côte à côte.
+function EquipmentScreen.build(root: Frame, column: Frame, stats: GuiObject, reserved: number)
 	-- Sous la colonne, créée avant lui : à ZIndex égal il passerait devant et voilerait la grille
 	UIKit.cornerScrim(root, "BottomLeft", SCRIM_SIZE, SCRIM_SHOWN).ZIndex = 0
 	-- La colonne de gauche descend avec le titre du jeu sous la barre de Roblox (#306)
@@ -598,6 +615,7 @@ function EquipmentScreen.build(root: Frame, column: Frame)
 		Size = UDim2.fromOffset(GRID_WIDTH, 0),
 		Parent = scroller,
 	})
+	avoidStats(stats, reserved)
 	buildHints(root)
 	selectSlot(selectedSlot)
 	LocalInventory.onChanged(function()

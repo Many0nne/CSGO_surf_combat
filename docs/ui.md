@@ -119,7 +119,9 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   ensemble ne déclenchent qu'une mise à jour, `LocalInventory.onChanged` différé), pas d'affichage optimiste. **Seuls
   les items possédés apparaissent**, jamais grisés ni verrouillés. Piège : le fond de coin (`cornerScrim`
   « BottomLeft ») est créé après la colonne de gauche ; à ZIndex égal il passait devant et voilait la grille, il est
-  donc en ZIndex 0. Non traité : en 4:3, la grille passe sur le personnage.
+  donc en ZIndex 0. Non traité : en 4:3, la grille passe sur le personnage. La grille s'arrête au-dessus de la fiche de
+  statistiques quand la fenêtre est trop étroite pour les mettre côte à côte (16:10, 4:3 ; `avoidStats`, comparaison
+  des positions absolues) ; en 16:9 elle descend jusqu'à l'aide.
   Pistes rejetées : liste en texte seul qui s'ouvre au clic sur un emplacement (premier rendu de #280, refusé :
   « quand il faut deviner quelque chose en UX c'est une mauvaise chose ») ; armes puis skins en deux temps avec retour
   « ‹ ARMES » ; emplacements à gauche et liste à droite du personnage (#280, remplacé en #308). **Libellés ambrés :
@@ -133,7 +135,8 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
 - **Fiche de statistiques (#301, `src/client/ui/StatsCard.luau`)** : sur l'accueil (pas d'onglet en plus, choix de
   l'utilisateur), en bas à droite sous les pieds du personnage (#308 : la grille d'équipement occupe la gauche, la
   fiche prend la place des stats d'arme de la référence), sur un fond de coin (`cornerScrim` « BottomRight »). Cinq
-  colonnes séparées par des filets comme les onglets : chiffre os à ombre (Oswald 28 px), libellé ambré dessous (KILLS,
+  colonnes de 74 px séparées par des filets comme les onglets (~460 px en tout : à 84 px, la fiche mordait sur la
+  4e colonne de la grille d'équipement, même en 16:9) : chiffre os à ombre (Oswald 28 px), libellé ambré dessous (KILLS,
   MORTS, K/M, ROUNDS, VICTOIRES). Lue dans l'attribut informatif `PlayerStats` du Player (`StatsRules.ATTRIBUTE`, posé
   par `StatsStore` une fois le stocké lu puis à chaque kill, mort et fin de manche ; jamais relu par le serveur, pas de
   remote). Attribut absent (chargement en cours, ou en échec : Studio sans accès aux API) : « — » partout
