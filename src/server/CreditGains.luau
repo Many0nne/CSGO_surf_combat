@@ -5,8 +5,8 @@
 -- Pas de gain : serveur d'entraînement, kill hors manche active, solde qui ne peut pas changer (pas chargé, sauvegarde
 -- coupée : Studio sans accès aux API). Temps en vie : compté de l'apparition dans une manche active jusqu'à la mort,
 -- au retour au menu ou à la fin de la manche (`onSpawn`, `onDespawn`). Activité réelle (#401, manche sans kill) :
--- portée sur les positions acceptées par CharacterSync (`onMove`, plus grand écart horizontal au point d'apparition)
--- et touches qui ont fait des dégâts (`onHit`), comptées seulement pendant une vie de la manche.
+-- portée (`onMove` : plus grand écart horizontal au point d'apparition, en cumulant les seuls pas acceptés sans
+-- signalement par CharacterSync) et touches qui ont fait des dégâts (`onHit`), comptées seulement pendant une vie.
 -- Attribut informatif `RoundCredits` du Player (gains de la manche, posé en fin de manche, effacé à chaque apparition),
 -- lu par le bandeau de fin de manche (RoundHUD) avec `DailyCredits` (InventoryStore). Aucun remote.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -27,15 +27,16 @@ export type Deps = {
 }
 -- Manche d'un joueur : kills (comptés même au plafond, pour « manche jouée »), crédits gagnés, secondes en vie
 -- cumulées, début de la vie en cours (nil : pas en vie dans la manche) et son personnage, activité réelle (#401 :
--- point d'apparition de la vie en cours, nil avant sa première position acceptée ; portée en studs, la plus grande
--- sur les vies de la manche ; touches qui ont fait des dégâts)
+-- écart horizontal au point d'apparition de la vie en cours, somme des seuls pas propres ; portée en studs, la plus
+-- grande sur les vies de la manche ; touches qui ont fait des dégâts)
 type RoundState = {
 	kills: number,
 	earned: number,
 	alive: number,
 	aliveSince: number?,
 	character: Instance?,
-	origin: Vector3?,
+	offsetX: number,
+	offsetZ: number,
 	reach: number,
 	hits: number,
 }
@@ -54,7 +55,17 @@ end
 
 -- Cette méthode permet de créer une manche vide lorsqu'un joueur y gagne ou y apparaît pour la première fois.
 local function newRound(): RoundState
-	return { kills = 0, earned = 0, alive = 0, aliveSince = nil, character = nil, origin = nil, reach = 0, hits = 0 }
+	return {
+		kills = 0,
+		earned = 0,
+		alive = 0,
+		aliveSince = nil,
+		character = nil,
+		offsetX = 0,
+		offsetZ = 0,
+		reach = 0,
+		hits = 0,
+	}
 end
 
 -- Cette méthode permet de lire (ou créer) la manche d'un joueur lorsqu'un gain ou une apparition la touche.
@@ -104,7 +115,7 @@ local function endLife(d: Deps, state: RoundState)
 		state.aliveSince = nil
 	end
 	state.character = nil
-	state.origin = nil
+	state.offsetX, state.offsetZ = 0, 0
 end
 
 -- Cette méthode permet de démarrer le temps en vie d'un joueur et d'effacer les gains de sa manche précédente lorsque
@@ -123,12 +134,18 @@ function CreditGains.onSpawn(player: Player, character: Instance?)
 	state.character = character
 end
 
+-- Cette méthode permet de savoir si un personnage est celui de la vie en cours lorsqu'un événement le concerne (nil
+-- d'un côté ou de l'autre : pas de distinction possible, accepté).
+local function isCurrentCharacter(state: RoundState, character: Instance?): boolean
+	return character == nil or state.character == nil or character == state.character
+end
+
 -- Cette méthode permet d'arrêter le temps en vie d'un joueur lorsque son personnage meurt ou disparaît ; un autre
 -- personnage que celui de la vie en cours (corps détruit en retard) est ignoré.
 function CreditGains.onDespawn(player: Player, character: Instance?)
 	local d = deps
 	local state = rounds[player]
-	if not d or not state or (character ~= nil and state.character ~= nil and character ~= state.character) then
+	if not d or not state or not isCurrentCharacter(state, character) then
 		return
 	end
 	endLife(d, state)
@@ -138,18 +155,15 @@ end
 -- une manche active avec ce personnage (bannière de fin, corps d'une vie passée, personnage d'avant un retour au menu).
 local function livingRound(d: Deps, player: Player, character: Instance?): RoundState?
 	local state = rounds[player]
-	if not state or state.aliveSince == nil or not d.roundActive() then
-		return nil
-	end
-	if character ~= nil and state.character ~= nil and character ~= state.character then
+	if not state or state.aliveSince == nil or not d.roundActive() or not isCurrentCharacter(state, character) then
 		return nil
 	end
 	return state
 end
 
--- Cette méthode permet de mettre à jour la portée de la manche lorsque CharacterSync accepte une position du joueur
--- sans la signaler ; `from` = position acceptée précédente du même personnage, la première de la vie (point
--- d'apparition) sert d'origine. Une position refusée ou signalée par l'anti-triche n'arrive jamais ici.
+-- Cette méthode permet d'ajouter un pas à l'écart au point d'apparition, et de relever la portée de la manche, lorsque
+-- CharacterSync accepte une position du joueur sans la signaler (`from` = position acceptée précédente). Seuls ces pas
+-- sont cumulés : un déplacement refusé, signalé (noclip, vol en journal seul) ou téléporté n'éloigne jamais.
 function CreditGains.onMove(player: Player, character: Instance?, from: Vector3, to: Vector3)
 	local d = deps
 	if not d then
@@ -159,9 +173,9 @@ function CreditGains.onMove(player: Player, character: Instance?, from: Vector3,
 	if not state then
 		return
 	end
-	local origin = state.origin or from
-	state.origin = origin
-	state.reach = math.max(state.reach, EconomyRules.horizontalDistance(origin, to))
+	state.offsetX += to.X - from.X
+	state.offsetZ += to.Z - from.Z
+	state.reach = math.max(state.reach, EconomyRules.horizontalLength(state.offsetX, state.offsetZ))
 end
 
 -- Cette méthode permet de compter une touche à l'activité de la manche lorsqu'un tir ou un coup de mêlée du joueur,

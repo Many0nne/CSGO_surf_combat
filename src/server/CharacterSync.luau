@@ -449,7 +449,7 @@ end
 
 -- Cette méthode permet d'écouter les déplacements des joueurs lorsque l'activité des gains en jouant (#401) les compte :
 -- personnage, position acceptée précédente et nouvelle, seulement pour un paquet accepté sans signalement (seau,
--- noclip, vol) ; jamais pour un bot ni une téléportation du serveur.
+-- noclip, vol) ; jamais pour un bot, ni pour le saut d'une téléportation du serveur (le paquet suivant en repart).
 function CharacterSync.setMoveListener(listener: (Player, Model, Vector3, Vector3) -> ())
 	moveListener = listener
 end

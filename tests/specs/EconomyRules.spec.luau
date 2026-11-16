@@ -29,9 +29,9 @@ return function(T, Loader)
 			T.expectEqual(Economy.roundGain(0, 0, idle, true), 0, "pas jouée : rien, même désignée vainqueur")
 		end)
 
-		T.it("écart entre deux positions : horizontal seulement", function()
-			T.expectEqual(Economy.horizontalDistance({ X = 0, Y = 0, Z = 0 }, { X = 3, Y = 50, Z = 4 }), 5)
-			T.expectEqual(Economy.horizontalDistance({ X = 1, Y = 0, Z = 1 }, { X = 1, Y = -20, Z = 1 }), 0, "chute")
+		T.it("longueur d'un écart horizontal", function()
+			T.expectEqual(Economy.horizontalLength(3, 4), 5)
+			T.expectEqual(Economy.horizontalLength(0, 0), 0)
 		end)
 
 		T.it("pas de gain en entraînement ni hors manche active", function()

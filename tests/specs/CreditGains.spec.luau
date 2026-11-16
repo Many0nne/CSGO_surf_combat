@@ -365,6 +365,22 @@ return function(T, Loader)
 			T.expectEqual(env.credited.bob, 15, "revenir au départ ne retire rien")
 		end)
 
+		T.it(
+			"pas signalé ou téléportation (sans pas transmis) : n'éloigne pas, même via le paquet suivant",
+			function()
+				local env = setup()
+				local alice = makePlayer("alice")
+				env.Gains.onSpawn(alice)
+				walk(env, alice, nil, 50)
+				-- Noclip de 50 à 2000 signalé (journal seul) : pas transmis par CharacterSync ; le paquet propre suivant
+				-- part de 2000
+				env.Gains.onMove(alice, nil, pos(2000, 0), pos(2001, 0))
+				env.clock = 300
+				env.Gains.onRoundEnd({ participant(alice) }, nil)
+				T.expectEqual(env.credited.alice, nil, "portée 51 studs")
+			end
+		)
+
 		T.it("l'activité repart de zéro à chaque manche", function()
 			local env = setup()
 			local alice = makePlayer("alice")

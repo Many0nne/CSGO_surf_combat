@@ -13,13 +13,13 @@ atteignait le plafond du jour (250) en ~17 manches sans jouer.
   manche **et** une activité réelle (`EconomyRules.isActive`) : une portée d'au moins `PLAYED_MIN_REACH` studs, ou
   `PLAYED_MIN_HITS` (1) touche. Avec un kill, rien ne change.
 - Tout est mesuré par le serveur, jamais déclaré par le client (`CreditGains.onMove`, `onHit`) :
-  - **portée** : plus grand écart horizontal entre le point d'apparition de la vie (première position acceptée du
-    personnage) et ses positions suivantes, la plus grande des vies de la manche. Pas une distance cumulée : un
-    aller-retour de quelques studs répété (script, tremblement sur une pente) ne la fait pas monter. Positions reçues
-    de `CharacterSync.setMoveListener` : seulement un paquet accepté **sans signalement** (seau de distance, noclip,
-    vol, y compris en journal seul) ; une position refusée ou signalée n'est jamais comptée. Hauteur ignorée (chute,
-    saut sur place). Le saut entre deux vies ne compte pas (origine reprise à chaque vie). Seule exception :
-    `CharacterSync.teleport` (rejeu de parcours #379, Studio ou créateur) éloigne le joueur de son origine ;
+  - **portée** : plus grand écart horizontal au point d'apparition de la vie, la plus grande des vies de la manche.
+    L'écart est la **somme des seuls pas propres** (vecteurs `to - from` reçus de `CharacterSync.setMoveListener`,
+    paquet accepté **sans signalement** : seau de distance, noclip, vol, y compris en journal seul), pas une
+    différence de positions absolues : un pas signalé, une téléportation (`CharacterSync.teleport`) ou le saut entre
+    deux vies ne sont jamais ajoutés, même par le paquet propre qui suit. Pas une distance de chemin non plus : un
+    aller-retour de quelques studs répété (script, tremblement sur une pente) ne la fait pas monter. Hauteur ignorée
+    (chute, saut sur place) ;
   - **touche** : tir ou coup de mêlée validé par le `Validator` **et** qui a fait des dégâts (`applyHit` non nil : pas
     un corps, pas une cible sous ForceField). Un tir dans le vide ne compte pas : sinon un seul tir en l'air par
     manche suffirait à un AFK ;
@@ -30,7 +30,8 @@ atteignait le plafond du jour (250) en ~17 manches sans jouer.
 - Studio : la ligne `[CreditGains] fin de manche …` donne kills, temps en vie, portée (studs) et touches.
 - Tests : `tests/specs/EconomyRules.spec.luau` (règle, seuil, écart horizontal), `tests/specs/CreditGains.spec.luau`
   (« activité réelle » : AFK immobile ou qui tourne sur place non crédité, aller-retour non crédité, actif par portée
-  ou touche crédité, kill comme avant, origine reprise à chaque vie, hors vie et hors manche ignorés).
+  ou touche crédité, kill comme avant, origine reprise à chaque vie, pas signalé non compté, hors vie et hors manche
+  ignorés).
 
 Mesures (Studio, map jouée, `[CreditGains]`) :
 

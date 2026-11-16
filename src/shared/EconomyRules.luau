@@ -21,8 +21,8 @@ EconomyRules.DAILY_CAP = 250 -- plafond par jour UTC, remis à zéro à 00:00 UT
 -- qu'apparaître
 EconomyRules.PLAYED_ALIVE_SECONDS = 120
 -- Activité réelle exigée en plus du temps en vie pour une manche sans kill (#401), mesurée par le serveur : portée
--- (studs), plus grand écart horizontal entre le point d'apparition et une position acceptée par CharacterSync (un
--- aller-retour sur place ne l'augmente pas), ou touches qui ont fait des dégâts (tir ou coup de mêlée validés). Un
+-- (studs), plus grand écart horizontal au point d'apparition en cumulant les pas acceptés sans signalement par
+-- CharacterSync (un aller-retour sur place ne l'augmente pas), ou touches qui ont fait des dégâts (tir ou coup de mêlée validés). Un
 -- joueur immobile ou qui tourne sur place reste à ~0 stud (mesures dans docs/economie.md).
 EconomyRules.PLAYED_MIN_REACH = 500
 EconomyRules.PLAYED_MIN_HITS = 1
@@ -71,10 +71,9 @@ function EconomyRules.played(kills: number, aliveSeconds: number, activity: Acti
 	return kills > 0 or (aliveSeconds >= EconomyRules.PLAYED_ALIVE_SECONDS and EconomyRules.isActive(activity))
 end
 
--- Cette méthode permet de calculer l'écart horizontal (studs) entre deux positions lorsque la portée d'un joueur est
--- mesurée : la hauteur (chute, saut sur place) ne compte pas.
-function EconomyRules.horizontalDistance(from: Vector3, to: Vector3): number
-	local dx, dz = to.X - from.X, to.Z - from.Z
+-- Cette méthode permet de calculer la longueur (studs) d'un écart horizontal (dx, dz) lorsque la portée d'un joueur
+-- est mesurée : la hauteur (chute, saut sur place) n'y entre pas.
+function EconomyRules.horizontalLength(dx: number, dz: number): number
 	return math.sqrt(dx * dx + dz * dz)
 end
 
