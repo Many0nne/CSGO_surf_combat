@@ -21,10 +21,12 @@ local CratePurchaseRules = {}
 export type Purchase = { price: number, skinId: string, refund: number }
 -- Résultat de l'opération : le skin était-il déjà dans les items stockés (doublon remboursé)
 export type Applied = { duplicate: boolean }
--- Réponse au client : { ok = true, skinId, rarity, added, refund } ou { ok = false, reason }
+-- Réponse au client : { ok = true, skinId, rarity, added, refund }, { ok = true, skinId, rarity, replayed = true }
+-- (rejeu au verdict inconnu) ou { ok = false, reason }
 export type Reply = {
 	ok: boolean,
 	reason: string?,
+	replayed: boolean?,
 	skinId: string?,
 	rarity: string?,
 	added: boolean?,
@@ -61,8 +63,10 @@ function CratePurchaseRules.operation(purchase: Purchase): (record: any) -> (any
 	end
 end
 
--- Rejeu (`ok` sans résultat : achat écrit par un essai signalé en échec) : le doublon se déduit de ce que la session
--- possédait avant l'achat (`ownedBefore`) ; seul cas faux, le même skin donné par un autre serveur pendant l'écriture.
+-- Rejeu (`ok` sans résultat : achat écrit par un essai signalé en échec) : l'enregistrement relu ne dit pas qui a ajouté
+-- le skin. Possédé avant l'achat (`ownedBefore`) : doublon certain (les items ne font que grandir). Sinon le verdict est
+-- inconnu (un autre serveur a pu donner le même skin pendant l'écriture) : `replayed`, sans `added` ni `refund` (#400),
+-- le client écrit un en-tête neutre.
 -- Cette méthode permet de traduire l'issue de la transaction en réponse au client lorsque l'écriture est terminée.
 function CratePurchaseRules.reply(
 	status: string,
@@ -72,6 +76,9 @@ function CratePurchaseRules.reply(
 	ownedBefore: boolean
 ): Reply
 	if status == "ok" then
+		if type(result) ~= "table" and not ownedBefore then
+			return { ok = true, skinId = purchase.skinId, rarity = rarityId, replayed = true }
+		end
 		local duplicate = if type(result) == "table" then result.duplicate == true else ownedBefore
 		return {
 			ok = true,

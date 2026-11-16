@@ -105,11 +105,18 @@ return function(T, Loader)
 				T.expectEqual(owned.ok, true)
 				T.expectEqual(owned.added, false)
 				T.expectEqual(owned.refund, 200)
-				local fresh = Rules.reply("ok", nil, ORDER, "rare", false)
-				T.expectEqual(fresh.added, true)
-				T.expectEqual(fresh.refund, 0)
 			end
 		)
+
+		T.it("rejeu d'un skin pas possédé avant : jamais « obtenu », verdict neutre (#400)", function()
+			-- Un autre serveur a pu donner le skin pendant l'écriture : doublon possible, non vérifiable
+			local fresh = Rules.reply("ok", nil, ORDER, "rare", false)
+			T.expectEqual(fresh.ok, true)
+			T.expectEqual(fresh.skinId, "skin.awp.pan")
+			T.expectEqual(fresh.replayed, true)
+			T.expectEqual(fresh.added, nil, "ne pas affirmer OBTENU")
+			T.expectEqual(fresh.refund, nil)
+		end)
 
 		T.it("refus et échecs", function()
 			T.expectEqual(Rules.reply("rejected", "insufficient", ORDER, "rare", false).reason, "insufficient")
