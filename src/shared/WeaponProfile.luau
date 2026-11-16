@@ -18,10 +18,8 @@ WeaponProfile.REFERENCES = {
 
 local warned: { [string]: boolean } = {} -- viewmodels déjà signalés sans pièce de référence (un avertissement chacun)
 
--- Cette méthode permet de donner le repère de profil (centre de la boîte) et l'étendue de l'arme le long de ses axes
--- (X longueur, Y hauteur, Z épaisseur) lorsqu'un rendu pose une arme de boîte `box`, `size` ; avec `reference`, la boîte
--- doit suivre les axes de la pièce de référence. Sans référence : axe le plus long en X, moyen en Y, plus mince en Z,
--- sens de X fixé par Y × Z (repère direct), ce que montraient les vignettes avant #429.
+-- Cette méthode permet de donner le repère de profil et l'étendue (X longueur, Y hauteur, Z épaisseur) d'une arme de boîte
+-- `box`, `size` lorsqu'un rendu la pose ; sans référence : axes triés par longueur, X = Y × Z (vignettes d'avant #429).
 function WeaponProfile.frame(box: CFrame, size: Vector3, reference: Reference?): (CFrame, Vector3)
 	if reference then
 		local face = reference.tip:Cross(reference.up)
@@ -44,9 +42,8 @@ function WeaponProfile.frame(box: CFrame, size: Vector3, reference: Reference?):
 		Vector3.new(axes[1].length, axes[2].length, axes[3].length)
 end
 
--- Cette méthode permet de mesurer une arme reconstruite (pièces du viewmodel `viewmodelName` dans `model`) et de
--- donner son repère de profil, sa boîte et son étendue lorsqu'un rendu la pose ; la boîte suit la pièce de référence
--- de l'arme (PrimaryPart prêtée le temps de la mesure, puis rendue avec le pivot), sinon les axes que Roblox lui donne.
+-- Cette méthode permet de donner le repère de profil, la boîte et l'étendue d'une arme reconstruite lorsqu'un rendu la
+-- pose ; la boîte suit la pièce de référence (PrimaryPart prêtée puis rendue, pivot compris), sinon la première pièce.
 function WeaponProfile.of(model: Model, viewmodelName: string): (CFrame, CFrame, Vector3)
 	local reference = WeaponProfile.REFERENCES[viewmodelName]
 	local part = reference and model:FindFirstChild(reference.part)

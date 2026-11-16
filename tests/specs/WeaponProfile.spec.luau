@@ -6,9 +6,8 @@ return function(T, Loader)
 		return (a - b).Magnitude < 1e-4
 	end
 
-	-- Cette méthode permet de vérifier qu'un repère est direct (X × Y = Z) lorsqu'un rendu le prend tel quel : la vignette
-	-- place sa caméra sur son +Z, l'aperçu le ramène sur un repère de la salle ; #429 venait d'un repère indirect d'un
-	-- côté et direct de l'autre.
+	-- Cette méthode permet de vérifier qu'un repère est direct (X × Y = Z) lorsqu'un rendu le prend tel quel (#429 : repère
+	-- indirect pour la vignette, direct pour l'aperçu).
 	local function direct(profile: CFrame): boolean
 		return same(profile.XVector:Cross(profile.YVector), profile.ZVector)
 	end
