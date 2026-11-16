@@ -548,9 +548,9 @@ local function flushPending()
 	if not (kept and gui and gui.Enabled) or requesting or ShopScene.isOpening() then
 		return
 	end
-	pendingPurchase = nil
 	for index, crate in ShopCatalog.CRATES do
 		if crate.id == kept.crateId then
+			pendingPurchase = nil
 			openCrate(index)
 			presentResult(crate, kept.result)
 			return
