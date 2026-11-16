@@ -5,6 +5,7 @@ local TweenService = game:GetService("TweenService")
 
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
 local WalletRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WalletRules"))
+local WeaponProfile = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WeaponProfile"))
 local WeaponSkins = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WeaponSkins"))
 local HUDRules = require(script.Parent.HUDRules)
 
@@ -277,20 +278,12 @@ function UIKit.weaponSilhouette(
 	if #model:GetChildren() == 0 then
 		return viewport
 	end
-	-- Vue de profil : axe le plus long à l'horizontale, regard le long de l'axe le plus mince
-	local frame, size = model:GetBoundingBox()
-	local axes = {
-		{ length = size.X, dir = frame.RightVector },
-		{ length = size.Y, dir = frame.UpVector },
-		{ length = size.Z, dir = frame.LookVector },
-	}
-	table.sort(axes, function(a, b)
-		return a.length > b.length
-	end)
-	local halfHeight = math.max(axes[1].length / 2 / aspect, axes[2].length / 2) * 1.08
-	local distance = halfHeight / math.tan(math.rad(fov / 2)) + axes[3].length
+	-- Vue de profil, pointe à droite, même face que l'aperçu du shop (WeaponProfile, #429) : caméra sur le +Z du profil
+	local profile, _, extents = WeaponProfile.of(model, viewmodelName)
+	local halfHeight = math.max(extents.X / 2 / aspect, extents.Y / 2) * 1.08
+	local distance = halfHeight / math.tan(math.rad(fov / 2)) + extents.Z
 	local camera = UIKit.create("Camera", { FieldOfView = fov, Parent = viewport })
-	camera.CFrame = CFrame.lookAt(frame.Position + axes[3].dir * distance, frame.Position, axes[2].dir)
+	camera.CFrame = profile * CFrame.new(0, 0, distance)
 	viewport.CurrentCamera = camera
 	return viewport
 end

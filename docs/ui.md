@@ -858,6 +858,15 @@ restent au-dessus du bas de l'écran. Sous-titre « CAISSE · 8 SKINS · UN PAR 
   #358) : tournée, la perspective repoussait le bout de l'arme au bord de l'image. Un tour complet automatique montrait
   l'arme par la tranche : balancement plutôt que rotation. Les skins métalliques ne prennent que la lumière venue de
   face : sans la lampe de face, l'AWP Couchant restait presque noire en gros plan (#358).
+- **Sens de l'arme (#429, choix de l'utilisateur le 16/11/2026) : pointe ou bouche à droite partout**, même face dans
+  les vignettes, les cartes de l'écran ARMES, la barre d'armes, l'aperçu et la révélation. Tous passent par
+  `WeaponProfile` (repère X pointe, Y haut, Z face montrée), avec une référence par viewmodel (`REFERENCES` : pièce,
+  direction de la pointe et du haut dans son repère). Piège : la boîte d'un `Model` créé par script prend les axes de
+  sa **première pièce** (pas ceux du monde), et trier ses axes par longueur ne dit rien du sens : la vignette (caméra
+  posée par `lookAt`) et l'aperçu (`CFrame.fromMatrix` sur l'axe long) tournaient l'arme de 180° l'une par rapport à
+  l'autre dès que les axes triés formaient un repère indirect, ce qui était le cas du M9 **et** de l'AWP (vignettes AWP
+  bouche à gauche jusqu'à #429, l'issue disait le contraire : mesurer avant de croire). Une arme ajoutée au shop doit
+  avoir sa référence ; le Ka-Bar n'en a pas (vignettes inchangées).
 
 Cotes (studs) et placement : `tools/shop/board.py` (scène B, vues d'ensemble V2, V2n, V6 ; `sheet.py <sortie> ensemble
 <dossier>` pour la planche), rendu par `tools/map/render_dizzy.py` (commandes en tête
