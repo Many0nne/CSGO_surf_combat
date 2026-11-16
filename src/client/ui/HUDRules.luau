@@ -297,15 +297,38 @@ HUDRules.KEY_DISPLAY_GAP = 4
 HUDRules.KEY_DISPLAY_BOTTOM = 40
 HUDRules.KEY_DISPLAY_CLEARANCE = 12
 
--- Cette méthode permet de mesurer la grille de l'affichage des touches (largeur, hauteur en px) lorsque le mode change.
-function HUDRules.keyDisplayGridSize(mode: string): (number, number)
+-- Mini-clavier 3D de l'affichage des touches (#406), vu de face et plongeant, caméra quasi orthographique ; dans sa
+-- scène, un stud vaut un pas de grille (touche + écart). `pitch` : plongée (degrés) ; `scale` : px à l'écran par px de
+-- grille ; `plateMargin`, `plateHeight` : plaque sous les touches (studs) ; `capHeight` : hauteur d'une touche au repos
+-- (studs) ; `pad` : marge autour du clavier projeté (px).
+HUDRules.KEY_DISPLAY_VIEW =
+	table.freeze({ pitch = 58, scale = 1, plateMargin = 0.16, plateHeight = 0.24, capHeight = 0.4, pad = 4 })
+
+-- Cette méthode permet de mesurer le mini-clavier 3D d'une liste de touches projeté à l'écran (largeur, hauteur en px)
+-- lorsqu'il est construit : plaque comprise, vue plongeante de KEY_DISPLAY_VIEW.
+function HUDRules.keyDisplayFootprint(entries: { KeyDisplayEntry }): (number, number)
+	if #entries == 0 then
+		return 0, 0
+	end
 	local columns, rows = 0, 0
-	for _, entry in HUDRules.keyDisplayEntries(mode) do
+	for _, entry in entries do
 		columns = math.max(columns, entry.col + entry.width)
 		rows = math.max(rows, entry.row + 1)
 	end
+	local view = HUDRules.KEY_DISPLAY_VIEW
 	local step = HUDRules.KEY_DISPLAY_KEY + HUDRules.KEY_DISPLAY_GAP
-	return math.max(columns * step - HUDRules.KEY_DISPLAY_GAP, 0), math.max(rows * step - HUDRules.KEY_DISPLAY_GAP, 0)
+	local gap = HUDRules.KEY_DISPLAY_GAP / step
+	local pxPerStud = step * view.scale
+	local pitch = math.rad(view.pitch)
+	local width = columns - gap + 2 * view.plateMargin
+	local depth = rows - gap + 2 * view.plateMargin
+	local height = depth * math.sin(pitch) + (view.capHeight + view.plateHeight) * math.cos(pitch)
+	return math.ceil(width * pxPerStud) + 2 * view.pad, math.ceil(height * pxPerStud) + 2 * view.pad
+end
+
+-- Cette méthode permet de mesurer l'affichage des touches d'un mode (largeur, hauteur en px) lorsque le mode change.
+function HUDRules.keyDisplayGridSize(mode: string): (number, number)
+	return HUDRules.keyDisplayFootprint(HUDRules.keyDisplayEntries(mode))
 end
 
 -- Cette méthode permet de placer l'affichage des touches (grille centrée en bas) lorsque la largeur de l'écran ou celle de

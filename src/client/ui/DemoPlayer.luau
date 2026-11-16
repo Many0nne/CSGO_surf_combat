@@ -268,21 +268,19 @@ function DemoPlayer.new(parent: GuiObject, layoutOrder: number, clipIds: { strin
 	local bandFill =
 		UIKit.frame({ Name = "Fill", Size = UDim2.fromScale(0, 1), BackgroundColor3 = C.Accent, Parent = band })
 
-	-- Touches : mêmes keycaps que l'affichage des touches du HUD (mode simple : directions et saut)
-	local gridWidth, gridHeight = HUDRules.keyDisplayGridSize("simple")
+	-- Touches : même mini-clavier que l'affichage des touches du HUD (mode simple : directions et saut)
 	local keys = UIKit.frame({
 		Name = "Keys",
 		BackgroundTransparency = 1,
 		AnchorPoint = Vector2.new(0.5, 1),
 		Position = UDim2.new(0.5, 0, 1, -MARGIN),
-		Size = UDim2.fromOffset(gridWidth, gridHeight),
 		Parent = hands,
 	})
 	UIKit.create("UIScale", { Scale = KEYS_SCALE, Parent = keys })
 	local caps: { { id: string, paint: (boolean) -> (), down: boolean } } = {}
-	for _, entry in HUDRules.keyDisplayEntries("simple") do
-		local _, paintKey = KeyDisplay.buildKeycap(keys, entry)
-		table.insert(caps, { id = entry.id, paint = paintKey, down = false })
+	local entries = HUDRules.keyDisplayEntries("simple")
+	for index, keycap in KeyDisplay.buildKeyboard(keys, entries) do
+		table.insert(caps, { id = entries[index].id, paint = keycap.paint, down = false })
 	end
 
 	-- Souris : icône au centre, demi-barre remplie du côté où elle tourne, d'autant plus qu'elle tourne vite
