@@ -308,19 +308,17 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   « SÉRIE » ni « TRIPLE KILL », la voix de l'annonceur dit déjà le palier). Crâne éclaté de trois quarts, vectorisé par
   l'utilisateur (`assets/ui/hud/crane_serie.svg`, source versionnée), 40 px, teint en os par `ImageColor3`, à ombre
   noire de 2 px ; chiffre Oswald gras 30 px à ombre de 3 px. Masqué sous le double kill (`KillStreakRules.view`,
-  `MIN_SHOWN` 2, testée). **Selon la série** (testé) : os plein de 2 à 4 kills ; hachuré dès 5 ; tache de sang derrière
-  le crâne dès 5, plus grande à 10 puis à 15 (SVG en couleur de l'utilisateur, `sang_serie_<1|2|3>.svg`, 64 px, soit 1,6
-  fois le crâne, gardée jusqu'à la mort) ; nombre en rouge d'impact dès 10. Le crâne reste os sur le sang (choix de
-  l'utilisateur) : rouge, il y disparaissait, même détouré de noir à 40 px. **Palier annoncé à la voix (2, 3, 4, 5, 10,
-  15), et lui seul** (en accord avec les sons, rien aux autres kills) : sans changer de taille, la croix du hitmarker
-  s'allume autour du crâne (21 à 30 px du centre, 0,6 s puis `Motion.Hit`), le crâne passe en rouge d'impact 1,2 s
-  (sauf sur le sang, où la tache nouvelle éclot : `UIScale` 0,4 → 1, `Back`), le nombre aussi (en os s'il est déjà
-  rouge), puis retour au repos.
+  `MIN_SHOWN` 2, testée). **Selon la série** (testé) : os plein de 2 à 4 kills ; hachuré dès 5 ; nombre en rouge d'impact dès
+  10. **Pas de sang** : les taches de sang derrière le crâne (dès 5, plus grandes à 10 et 15) ont été retirées le
+  16/11/2026, contraires aux règles Roblox sur le gore (test `KillStreakRules.spec`). Ne pas en remettre, ni ailleurs
+  dans l'interface. **Palier annoncé à la voix (2, 3, 4, 5, 10, 15), et lui seul** (en accord avec les sons, rien aux
+  autres kills) : sans changer de taille, la croix du hitmarker s'allume autour du crâne (21 à 30 px du centre, 0,6 s
+  puis `Motion.Hit`), le crâne passe en rouge d'impact 1,2 s, le nombre aussi (en os s'il est déjà rouge), puis retour
+  au repos.
   Images : `tools/ui/make_skull_icon.py` (crâne plein et hachuré depuis le SVG : les hachures de la référence, découpées
   dans le SVG, sont rebouchées par une fermeture en travers des bandes, puis le tracé en escalier est lissé ;
-  `crane_serie.png` et `crane_serie_hachures.png`, Decals 80650103001496 et 77308507647947),
-  `tools/ui/make_blood_splats.py` (resvg : dégradés et filtres que PIL ne rend pas ; Decals 101612824947936,
-  127305380479289 et 130052758414545). Pistes rejetées : pulsation de taille (`UIScale` 1,45 → 1, l'utilisateur
+  `crane_serie.png` et `crane_serie_hachures.png`, Decals 80650103001496 et 77308507647947). Pistes rejetées : taches
+  de sang (règles Roblox, voir plus haut) ; pulsation de taille (`UIScale` 1,45 → 1, l'utilisateur
   préférait ajouter des éléments) ; croix posée sur le crâne (elle cachait les orbites) ; cercle de visée et quatre
   branches de réticule qui s'y fermaient (retirés avec le crâne détaillé) ; crâne redessiné à la main en polygones
   PIL (trop loin de la référence : partir du SVG fourni). Hachures fines peu visibles à 40 px, gardées en l'état

@@ -31,26 +31,16 @@ local TIMER_HEIGHT = 84
 -- Menu en partie ouvert (#220) : le timer passe au-dessus de son voile (2) et de sa page (3), la partie continue
 local TIMER_OVER_MENU_ORDER = 4
 -- Série de kills (#364) : crâne éclaté et nombre, sans mot ni cercle, centrés sous le timer (KillStreakRules.view).
--- Crâne os, hachuré dès 5 kills, sur une tache de sang dès 5 (plus grande à 10 puis 15) ; nombre rouge d'impact dès 10.
--- Le crâne reste os au repos pour se lire sur le sang. À un palier annoncé à la voix, sans changer de taille : la croix
--- du hitmarker s'allume autour du crâne, crâne en rouge d'impact et nombre en rouge (en os s'il est déjà rouge) le temps
--- de l'annonce (STREAK_FLASH_HOLD), et une nouvelle tache de sang éclot.
+-- Crâne os, hachuré dès 5 kills ; nombre rouge d'impact dès 10. Pas de sang (règles Roblox sur le gore). À un palier
+-- annoncé à la voix, sans changer de taille : la croix du hitmarker s'allume autour du crâne, crâne en rouge d'impact et
+-- nombre en rouge (en os s'il est déjà rouge) le temps de l'annonce (STREAK_FLASH_HOLD).
 -- assets/ui/hud/crane_serie.png et crane_serie_hachures.png (tools/ui/make_skull_icon.py, Decals 80650103001496 et
--- 77308507647947), sang_serie_<1|2|3>.png (tools/ui/make_blood_splats.py, Decals 101612824947936, 127305380479289 et
--- 130052758414545) ; ci-dessous les ids des images de ces Decals
+-- 77308507647947) ; ci-dessous les ids des images de ces Decals
 local STREAK_SKULL = "rbxassetid://99336092680581"
 local STREAK_SKULL_HATCHED = "rbxassetid://72136449871345"
-local STREAK_BLOOD = {
-	"rbxassetid://100157208120295",
-	"rbxassetid://71830836929202",
-	"rbxassetid://105641732929847",
-}
 local STREAK_TOP = TIMER_TOP + TIMER_HEIGHT + 2
 local STREAK_SKULL_SIZE = 40
 local STREAK_HEIGHT = STREAK_SKULL_SIZE + 4
-local STREAK_BLOOD_SIZE = 64 -- 1,6 fois le crâne : la tache déborde autour
-local STREAK_BLOOD_POP = TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
-local STREAK_BLOOD_POP_FROM = 0.4 -- échelle de départ d'une tache qui éclot
 -- Croix du hitmarker autour du crâne : du centre, début et fin de chaque diagonale (px), et épaisseur. Elle part du bord
 -- du crâne : posée dessus, elle cachait les orbites
 local STREAK_CROSS = { 21, 30 }
@@ -124,9 +114,6 @@ local streakSkullShadow: ImageLabel
 local streakCount: TextLabel
 local streakCountShadow: TextLabel
 local streakShown = false -- série d'au moins KillStreakRules.MIN_SHOWN kills (masquée en plus sous le menu en partie)
-local streakBlood: ImageLabel
-local streakBloodScale: UIScale
-local streakBloodTier = 0 -- tache affichée (0 : aucune), pour ne faire éclore que la nouvelle
 local streakRest: Color3 = C.Bone -- couleur de repos du nombre (rouge d'impact dès 10 kills ; le crâne reste os)
 local streakPulse = 0 -- jeton du dernier flash : un retour au repos ne s'applique qu'à lui
 local streakFlashing = false -- flash d'un palier en cours : la couleur de repos attend sa fin
@@ -210,18 +197,6 @@ local function buildStreak(anchor: Frame)
 		Size = UDim2.fromOffset(0, 0),
 		Parent = skullBox,
 	})
-	-- Tache de sang sous le crâne et son ombre, en couleur (pas de teinte), cachée sous 5 kills
-	streakBlood = UIKit.create("ImageLabel", {
-		Name = "Blood",
-		Image = STREAK_BLOOD[1],
-		BackgroundTransparency = 1,
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Size = UDim2.fromOffset(STREAK_BLOOD_SIZE, STREAK_BLOOD_SIZE),
-		ZIndex = 0,
-		Visible = false,
-		Parent = center,
-	})
-	streakBloodScale = UIKit.create("UIScale", { Parent = streakBlood })
 	-- Crâne doublé d'une ombre noire décalée de 2 px, comme le texte du HUD sur la scène
 	for _, layer in { { name = "Shadow", offset = 2, z = 1 }, { name = "", offset = 0, z = 2 } } do
 		local shadow = layer.name == "Shadow"
@@ -298,31 +273,14 @@ local function paintStreakRest()
 	streakCount.TextColor3 = streakRest
 end
 
--- Cette méthode permet d'afficher la tache de sang du niveau demandé lorsque la série change : une tache nouvelle éclot
--- (échelle qui rebondit jusqu'à 1), aucune tache sous 5 kills.
-local function setStreakBlood(tier: number)
-	if tier == streakBloodTier then
-		return
-	end
-	streakBloodTier = tier
-	streakBlood.Visible = tier > 0
-	if tier == 0 then
-		return
-	end
-	streakBlood.Image = STREAK_BLOOD[tier]
-	streakBloodScale.Scale = STREAK_BLOOD_POP_FROM
-	UIKit.tween(streakBloodScale, STREAK_BLOOD_POP, { Scale = 1 })
-end
-
 -- Cette méthode permet de marquer un palier annoncé à la voix, sans changer de taille : croix du hitmarker autour du
--- crâne, crâne en rouge d'impact (sauf sur une tache de sang, où il disparaîtrait : la tache qui éclot marque alors le
--- palier) et nombre en rouge (en os s'il est déjà rouge) ; retour au repos après l'annonce, sauf si un palier plus
--- récent a pris la main.
+-- crâne, crâne en rouge d'impact et nombre en rouge (en os s'il est déjà rouge) ; retour au repos après l'annonce, sauf
+-- si un palier plus récent a pris la main.
 local function pulseStreak()
 	streakPulse += 1
 	streakFlashing = true
 	local token = streakPulse
-	streakSkull.ImageColor3 = if streakBloodTier > 0 then C.Bone else C.HitRed
+	streakSkull.ImageColor3 = C.HitRed
 	streakCount.TextColor3 = if streakRest == C.HitRed then C.Bone else C.HitRed
 	for _, line in streakCross do
 		line.BackgroundTransparency = 0
@@ -994,11 +952,7 @@ function RoundHUD.init()
 	buildTimer(root)
 	-- Crânes de la série chargés d'avance : une image chargée à sa première apparition manquait au premier palier (#364)
 	task.spawn(function()
-		pcall(
-			ContentProvider.PreloadAsync,
-			ContentProvider,
-			{ STREAK_SKULL, STREAK_SKULL_HATCHED, table.unpack(STREAK_BLOOD) }
-		)
+		pcall(ContentProvider.PreloadAsync, ContentProvider, { STREAK_SKULL, STREAK_SKULL_HATCHED })
 	end)
 	buildLeaderboard(root)
 	buildResultBanner(root)
@@ -1070,7 +1024,7 @@ function RoundHUD.setTraining(enabled: boolean)
 end
 
 -- Cette méthode permet de montrer la série de kills du joueur local (KillAnnouncer) lorsqu'elle change : crâne et nombre
--- dès le double kill (KillStreakRules.view), hachuré et sur une tache de sang dès 5, nombre rouge dès 10, flash à un
+-- dès le double kill (KillStreakRules.view), hachuré dès 5, nombre rouge dès 10, flash à un
 -- palier annoncé, masqué à la mort et hors partie.
 function RoundHUD.setStreak(streak: number)
 	if not streakRow then
@@ -1084,7 +1038,6 @@ function RoundHUD.setStreak(streak: number)
 	streakSkull.Image = image
 	streakSkullShadow.Image = image
 	streakRest = if view.red then C.HitRed else C.Bone
-	setStreakBlood(view.blood)
 	applyStreakVisible()
 	if view.visible and view.tier then
 		pulseStreak()
