@@ -3,7 +3,7 @@
 # Vue d'ensemble (toutes les caisses, #347) : python -I tools/shop/sheet.py <dossier de sortie> ensemble <dossier des vues>
 # (vues V2, V2n, V6 et B de board.py ; écrit planche_ensemble.png).
 # Polices Windows (Arial Narrow à la place d'Oswald) : l'esquisse sert à juger la place du texte, pas sa forme.
-import os, sys
+import os, re, sys
 from PIL import Image, ImageDraw, ImageFont
 
 OUT = sys.argv[1]
@@ -11,6 +11,22 @@ FONT = "C:/Windows/Fonts/ARIALNB.TTF"  # à la place d'Oswald gras (même famill
 FONT_R = "C:/Windows/Fonts/ARIALN.TTF"
 BONE, AMBER, RED, MUTED = (243, 233, 220), (242, 169, 0), (226, 58, 40), (150, 146, 140)
 SCRIM = (10, 12, 22)
+CATALOG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src", "shared", "ShopCatalog.luau")
+# Noms d'exemple de l'esquisse, un par rareté (de la plus courante à la plus rare) : seuls libellés, chances et couleurs
+# viennent du catalogue.
+SAMPLES = ("AWP · M9  COUCHANT", "AWP · M9  IMPACT", "AWP · M9  RELEVÉ", "AWP · M9  TREMPE")
+
+
+# Cette méthode permet de lire les raretés (libellé, chance, couleur) dans ShopCatalog.RARITIES lorsque l'esquisse écrit
+# les chances, pour qu'elle suive le catalogue sans copie en dur (#451).
+def rarities():
+    src = open(CATALOG, encoding="utf-8").read()
+    block = src[src.index("ShopCatalog.RARITIES = {") :].split("} :: { Rarity }", 1)[0]
+    pat = r'label = "([^"]+)", chance = ([\d.]+), color = \{ (\d+), (\d+), (\d+) \}'
+    found = [(lab, float(c), (int(r), int(g), int(b))) for lab, c, r, g, b in re.findall(pat, block)]
+    if not found:
+        raise SystemExit(f"Aucune rareté lue dans {CATALOG}")
+    return found
 
 
 # Cette méthode permet de dessiner la colonne d'interface du shop sur un rendu (fond de coin, titre, contenu, prix).
@@ -31,7 +47,8 @@ def overlay(path, title, sub, buy=True):
     d.text((x, 100), title, font=f(68), fill=BONE)
     d.text((x, 185), sub, font=f(22), fill=AMBER)
     y = 250
-    for name, rar, col in (("AWP · M9  COUCHANT", "COMMUN 70 %", (150, 160, 172)), ("AWP · M9  IMPACT", "RARE 25 %", (70, 120, 230)), ("AWP · M9  RELEVÉ", "EXCEPTIONNEL 5 %", (170, 70, 220))):
+    for name, (label, chance, col) in zip(SAMPLES, rarities()):
+        rar = f"{label} {chance:g} %".replace(".", ",")
         d.rectangle([x, y + 6, x + 6, y + 30], fill=col)
         d.text((x + 18, y), name, font=f(26, False), fill=BONE)
         d.text((x + 300, y + 3), rar, font=f(22), fill=col)
