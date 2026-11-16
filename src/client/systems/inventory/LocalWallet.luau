@@ -27,8 +27,8 @@ local dayListeners: { [{}]: () -> () } = {}
 local dayTimerRunning = false
 
 -- Cette méthode permet de prévenir les écrans abonnés au gain du jour lorsque minuit UTC est passé (une seule
--- minuterie partagée, relancée sur l'heure serveur à chaque jour, jamais de boucle par frame) ; elle s'arrête quand
--- plus personne n'est abonné, et un abonné qui échoue n'empêche ni les autres ni les jours suivants.
+-- minuterie partagée, relancée sur l'heure serveur à chaque jour, jamais de boucle par frame) ; sans abonné, le fil
+-- s'arrête à son prochain réveil, et un abonné qui échoue n'empêche ni les autres ni les jours suivants.
 local function runDayTimer()
 	if dayTimerRunning then
 		return
@@ -52,7 +52,11 @@ function LocalWallet.observeDaily(callback: () -> ()): () -> ()
 	local conn = player:GetAttributeChangedSignal(EconomyRules.DAILY_ATTRIBUTE):Connect(callback)
 	dayListeners[token] = callback
 	runDayTimer()
-	callback()
+	-- Premier appel protégé : une erreur est relancée à part, sans perdre le désabonnement
+	local ok, err = pcall(callback)
+	if not ok then
+		task.spawn(error, err)
+	end
 	return function()
 		conn:Disconnect()
 		dayListeners[token] = nil

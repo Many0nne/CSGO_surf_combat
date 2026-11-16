@@ -19,8 +19,13 @@ return function(T, Loader)
 				signals[name] = signals[name] or {}
 				return {
 					Connect = function(_, fn)
-						table.insert(signals[name], fn)
-						return { Disconnect = function() end }
+						local conn = { fn = fn, live = true }
+						table.insert(signals[name], conn)
+						return {
+							Disconnect = function()
+								conn.live = false
+							end,
+						}
 					end,
 				}
 			end,
@@ -49,6 +54,15 @@ return function(T, Loader)
 			:require("src/client/systems/inventory/LocalWallet")
 		return {
 			wallet = wallet,
+			-- Change un attribut du joueur et prévient les connexions actives de son signal
+			setAttribute = function(name: string, value: any)
+				attributes[name] = value
+				for _, conn in signals[name] or {} do
+					if conn.live then
+						conn.fn()
+					end
+				end
+			end,
 			advance = function(seconds: number)
 				now += seconds
 				local due = {}
@@ -156,6 +170,32 @@ return function(T, Loader)
 			T.expectEqual(count, 2)
 			w.advance(86400)
 			T.expectEqual(count, 3)
+		end)
+
+		T.it("repeint aussi au changement de l'attribut, plus après désabonnement", function()
+			local w = world(DAY .. ":100")
+			local seen = {}
+			local unobserve = w.wallet.observeDaily(function()
+				table.insert(seen, w.wallet.dailyEarned())
+			end)
+			w.setAttribute("DailyCredits", DAY .. ":250")
+			T.expectEqual(seen[2], 250)
+			unobserve()
+			w.setAttribute("DailyCredits", DAY .. ":0")
+			T.expectEqual(#seen, 2)
+		end)
+
+		T.it("une erreur au premier appel ne perd pas le désabonnement", function()
+			local w = world(DAY .. ":250")
+			local count = 0
+			local unobserve = w.wallet.observeDaily(function()
+				count += 1
+				error("premier paint cassé")
+			end)
+			T.expectEqual(type(unobserve), "function")
+			unobserve()
+			w.setAttribute("DailyCredits", DAY .. ":0")
+			T.expectEqual(count, 1)
 		end)
 
 		T.it("gain du jour nil tant que l'attribut n'est pas chargé", function()
