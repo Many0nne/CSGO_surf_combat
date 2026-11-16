@@ -133,6 +133,15 @@ InventoryRules.ITEMS = {
 		appearance = "sillage",
 		luminance = 0.308,
 	},
+	-- Skins dessinés pour la nouvelle AWP (#417, assets/awp/skins)
+	{
+		id = "skin.awp.balise",
+		type = "skin",
+		weapon = "weapon.awp",
+		name = "BALISE",
+		appearance = "balise",
+		luminance = 0.146,
+	},
 	{
 		id = "skin.m9bayonet.couchant",
 		type = "skin",

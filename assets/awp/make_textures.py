@@ -235,4 +235,5 @@ def main():
 		print(f"[textures] {prefix} : {len(m.p)} texels")
 
 
-main()
+if __name__ == "__main__":  # importé par assets/awp/skins (skins dessinés sur ces cartes d'origine)
+	main()
