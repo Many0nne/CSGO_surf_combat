@@ -23,8 +23,10 @@ export type MergeStatus = "merged" | "applied" | "refused"
 StatsRules.SCHEMA_VERSION = 1
 -- Champs comptés, dans l'ordre d'affichage
 StatsRules.FIELDS = { "kills", "deaths", "roundsPlayed", "roundsWon" } :: { Field }
--- Sessions dont le dernier lot appliqué est retenu (les plus récentes) : de quoi reconnaître un lot renvoyé
-StatsRules.MAX_WRITE_MARKS = 10
+-- Sessions dont le dernier lot appliqué est retenu (les plus récentes) : de quoi reconnaître un lot renvoyé, même si
+-- d'autres sessions écrivent la même clé entre-temps (#408). Borne appliquée à l'écriture, pas un champ : la changer
+-- ne demande pas de relever le schéma (un serveur d'avant #408 ramène juste la liste à 10 à son écriture)
+StatsRules.MAX_WRITE_MARKS = 32
 
 -- Cette méthode permet de créer des statistiques à zéro lorsqu'un profil ou un écart de session démarre.
 function StatsRules.zero(): Stats

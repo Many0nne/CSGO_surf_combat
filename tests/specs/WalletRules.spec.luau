@@ -130,6 +130,7 @@ return function(T, Loader)
 		end)
 
 		T.it("ne retient que les dernières sessions, sans modifier l'entrée", function()
+			T.expect(Wallet.MAX_WRITE_MARKS >= 20 and Wallet.MAX_WRITE_MARKS <= 50, "borne entre 20 et 50 (#408)")
 			local w = wallet(0)
 			for i = 1, Wallet.MAX_WRITE_MARKS + 3 do
 				w = Wallet.applyBatches(w, "s" .. i, { { seq = 1, earned = 1 } }, 1)
