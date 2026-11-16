@@ -214,7 +214,8 @@ return function(T, Loader)
 		end)
 
 		T.it("volume des annonces (#405) : 100 % par défaut, gardé, arrondi et borné", function()
-			for _, raw in { nil, 42, {}, { volumeMaster = 10 } } do
+			T.expectEqual(PlayerSettings.sanitize(nil).volumeAnnouncer, 100)
+			for _, raw in { 42, {}, { volumeMaster = 10 } } do
 				T.expectEqual(PlayerSettings.sanitize(raw).volumeAnnouncer, 100)
 			end
 			T.expectEqual(PlayerSettings.defaults().volumeAnnouncer, 100)
