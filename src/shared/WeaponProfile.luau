@@ -44,17 +44,22 @@ end
 
 -- Cette méthode permet de mesurer une arme reconstruite (pièces du viewmodel `viewmodelName` dans `model`) et de
 -- donner son repère de profil, sa boîte et son étendue lorsqu'un rendu la pose ; la boîte suit la pièce de référence
--- de l'arme (PrimaryPart prêtée le temps de la mesure), sinon les axes que Roblox lui donne.
+-- de l'arme (PrimaryPart prêtée le temps de la mesure, puis rendue), sinon les axes que Roblox lui donne.
 function WeaponProfile.of(model: Model, viewmodelName: string): (CFrame, CFrame, Vector3)
 	local reference = WeaponProfile.REFERENCES[viewmodelName]
 	local part = reference and model:FindFirstChild(reference.part)
 	local measured = if part and part:IsA("BasePart") then reference else nil
+	if reference and not measured then
+		-- pièce renommée ou retirée du viewmodel : le sens de l'arme redevient celui de sa première pièce
+		warn(`[WeaponProfile] {viewmodelName} : pièce de référence {reference.part} absente, sens non garanti`)
+	end
+	local primary = model.PrimaryPart
 	if measured then
 		model.PrimaryPart = part :: BasePart
 	end
 	local box, size = model:GetBoundingBox()
 	if measured then
-		model.PrimaryPart = nil
+		model.PrimaryPart = primary
 	end
 	local profile, extents = WeaponProfile.frame(box, size, measured)
 	return profile, box, extents

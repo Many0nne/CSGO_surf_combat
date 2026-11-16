@@ -554,7 +554,10 @@ la config (`IsMelee`), pas par le nom de l'arme ; seuls quelques endroits nommen
    (couteau des bots, pris dans l'inventaire par défaut : Ka-Bar depuis #267). L'accueil du menu prend tout seul les
    Tools possédés de `ReplicatedStorage.Tools` (`MenuScene`, attribut `WeaponName`) et tient un couteau le long du corps (`MenuPoses.Melee`, tenue M2, avec la prise du jeu). Une nouvelle arme à
    distance demande sa tenue de menu (`MenuPoses`, tenue M1 de `tools/anim/poses3p/poses.js`).
-7. `rojo build` + `tools/rbxm/verify_place.luau` (signale un Tool sans entrée de config), puis le helper de playtest sur
+7. **Profil (vignettes, shop)** : une arme vendue au shop a une entrée dans `WeaponProfile.REFERENCES` (pièce dont les
+   axes suivent l'arme, direction de la pointe et du haut dans son repère, mesurées dans Studio), exigée par le test
+   `WeaponProfile` ; sans elle, vignette et aperçu peuvent montrer l'arme tournée de 180° (#429, `docs/ui.md`).
+8. `rojo build` + `tools/rbxm/verify_place.luau` (signale un Tool sans entrée de config), puis le helper de playtest sur
    le nouveau Tool.
 
 ### Retour d'expérience : le Ka-Bar (3 MeshParts)
