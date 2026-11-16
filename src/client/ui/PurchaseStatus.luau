@@ -14,6 +14,7 @@ local FALLBACK = "ÉCHEC"
 PurchaseStatus.REFUSALS = {
 	rate = "PATIENTE",
 	region = "INDISPONIBLE DANS TA RÉGION",
+	-- Pas « rien n'est débité » : une écriture passée dont la vérification échoue est aussi `failed` (InventoryStore)
 	failed = "ACHAT IMPOSSIBLE  ·  RÉESSAIE PLUS TARD",
 }
 

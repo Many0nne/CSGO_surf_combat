@@ -69,7 +69,8 @@ local function endPurchase(id: number)
 	end
 end
 
--- Message sous les packs (refus en rouge d'impact, crédits reçus en ambre) lorsque le serveur répond ou que le solde monte
+-- Cette méthode permet d'afficher un message sous les packs (refus en rouge d'impact, crédits reçus en ambre) lorsque le
+-- serveur répond ou que le solde monte.
 local showStatus = PurchaseStatus.presenter(function()
 	return status
 end)

@@ -10,9 +10,10 @@
 -- achetés en crédits gagnés. Solde stocké insuffisant : refus, rien d'écrit. Un joueur restreint (objets aléatoires
 -- payants, #395) n'arrive pas jusqu'ici : CrateService le refuse avant (`region`).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 
-local TransactOutcome = require(ReplicatedStorage.Shared.TransactOutcome)
 local WalletRules = require(ReplicatedStorage.Shared.WalletRules)
+local TransactOutcome = require(ServerScriptService.Server.TransactOutcome)
 
 local CratePurchaseRules = {}
 

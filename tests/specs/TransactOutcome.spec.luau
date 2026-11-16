@@ -1,6 +1,6 @@
 -- Traduction de l'issue de `InventoryStore.transact` en motif d'achat (#410) : ok, refus (solde ou autre), chargement, échec.
 return function(T, Loader)
-	local Outcome = Loader.new({}):require("src/shared/TransactOutcome")
+	local Outcome = Loader.new({}):require("src/server/TransactOutcome")
 
 	T.describe("TransactOutcome.translate", function()
 		T.it("ok : écrit", function()

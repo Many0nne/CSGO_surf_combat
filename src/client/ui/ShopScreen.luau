@@ -473,8 +473,8 @@ paintActions = function()
 	paintPackButton()
 end
 
--- Message sous ACHETER pendant 3 s (refus ou échec en rouge d'impact, `ok` en ambre) lorsque le serveur répond sans que
--- l'ouverture puisse se jouer.
+-- Cette méthode permet d'afficher un message sous ACHETER (refus ou échec en rouge d'impact, `ok` en ambre) lorsque le
+-- serveur répond sans que l'ouverture puisse se jouer.
 local showStatus = PurchaseStatus.presenter(function()
 	return status
 end)

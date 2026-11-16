@@ -11,9 +11,9 @@
 local ServerScriptService = game:GetService("ServerScriptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local TransactOutcome = require(ReplicatedStorage.Shared.TransactOutcome)
 local WalletRules = require(ReplicatedStorage.Shared.WalletRules)
 local InventoryStore = require(ServerScriptService.Server.InventoryStore)
+local TransactOutcome = require(ServerScriptService.Server.TransactOutcome)
 
 local DEBUG_ATTRIBUTE = "DebugCredits"
 
