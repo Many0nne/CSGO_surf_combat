@@ -31,6 +31,9 @@ Protocol.Names = {
 	-- Correction de position (#172), RemoteEvent fiable serveur → client (personnage, dernière position acceptée,
 	-- numéro) : le client s'y replace, vitesse nulle, et joint le numéro à ses paquets CharacterSync suivants
 	MOVEMENT_CORRECTION = "MovementCorrection",
+	-- Bruits de pas (#146), UnreliableRemoteEvent serveur → clients sauf l'auteur (personnage, position des pieds,
+	-- "step" | "land") : pas détectés sur les positions acceptées des joueurs et des bots, cf. server/FootstepService
+	FOOTSTEP = "Footstep",
 	-- Arme 3e personne (#5) : client → serveur, action visuelle ("Shoot" | "Reload") ; "Shoot" n'est plus suivi que
 	-- pour le couteau (le tir d'une arme à distance passe par ShotFired, #215)
 	WEAPON_ACTION = "WeaponAction",

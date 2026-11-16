@@ -11,6 +11,7 @@ local ViewmodelSystem = require(script.systems.weapon.ViewmodelSystem)
 local WeaponSystem = require(script.systems.weapon.WeaponSystem)
 local WeaponThirdPersonView = require(script.systems.weapon.WeaponThirdPersonView)
 local RemoteShotSounds = require(script.systems.weapon.RemoteShotSounds)
+local FootstepSounds = require(script.systems.audio.FootstepSounds)
 local ShotEffects = require(script.systems.weapon.ShotEffects)
 local CasingEjection = require(script.systems.weapon.CasingEjection)
 local FPSCamera = require(script.camera.FPSCamera)
@@ -141,6 +142,8 @@ Hitmarker.init()
 GameStateController.init(player, setupCharacter, stopCharacter)
 -- Tirs des autres joueurs et des bots entendus en 3D (#156), hors écrans du menu
 RemoteShotSounds.init(GameStateController.getState)
+-- Pas des autres joueurs et des bots entendus en 3D (#146), hors écrans du menu
+FootstepSounds.init(GameStateController.getState)
 -- Flamme de bouche et rayon de leurs tirs, sur leur arme 3P (#54), hors écrans du menu
 ShotEffects.init(GameStateController.getState)
 -- Musique de fond (#286) : coupée par défaut ; un volume au menu, un en partie, baissée pendant les annonces vocales

@@ -153,6 +153,9 @@ réglages dans `BotConfig` (section « Comportement »). Il commande le suivi de
 - **Ouïe** : `BotManager.hearShot` (appelé par `relayShot` d'`init.server` pour un tir au fusil d'un joueur accepté par
   le serveur, remote `ShotFired`, #156 ; et par `BotBrain` pour les tirs des bots). Un coup de couteau ne s'entend pas,
   ni un tir écarté du relais (cadence, equip, chargeur : cf. `docs/anticheat.md` « Relais des tirs »). À moins de `HEARING_RADIUS` (200), position faussée d'au plus `HEARING_FUZZ` (20 %) de la distance.
+  Pas (#146) : `BotManager.hearFootstep` (appelé par `FootstepService` pour chaque pas ou atterrissage d'un joueur
+  ou d'un bot), même tri à la portée des pas des joueurs (`FootstepRules.RANGE`, 140) ; compté dans « tirs entendus »
+  du bilan `[Bots]`.
 - **Mémoire** : dernière position vue ou entendue par cible, oubliée après `MEMORY_TIME`.
 - **États** (`nextState`) : combattre (cible vue) > se replacer (après un kill, ou touché sous `REPLACE_HEALTH` en
   combat) > enquêter (contact pas encore fouillé : dernière position, puis `INVESTIGATE_POINTS` points voisins) >

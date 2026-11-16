@@ -33,6 +33,7 @@ local FeedbackService = require(script.FeedbackService)
 local DebugPlaytest = require(script.DebugPlaytest)
 local KillZone = require(script.KillZone)
 local CharacterSync = require(script.CharacterSync)
+local FootstepService = require(script.FootstepService)
 local BotManager = require(script.bots.BotManager)
 local ServerPerf = require(script.ServerPerf)
 local CheatLog = require(script.CheatLog)
@@ -85,6 +86,10 @@ characterSyncRmt.Name = N.CHARACTER_SYNC
 characterSyncRmt.Parent = ReplicatedStorage
 -- Fiable : renvoie un client dont la position est refusée à sa dernière position acceptée (#172)
 local movementCorrectionRmt = makeRemote(N.MOVEMENT_CORRECTION)
+-- Non fiable : bruits de pas relayés aux autres clients (#146), un pas perdu ne se rejoue pas
+local footstepRmt = Instance.new("UnreliableRemoteEvent")
+footstepRmt.Name = N.FOOTSTEP
+footstepRmt.Parent = ReplicatedStorage
 -- Rejoindre ou quitter l'entraînement (#345) : demande du client, réponse du serveur
 local trainingRmt = makeRemote(N.TRAINING)
 -- Ouverture d'une caisse du shop (#332) : RemoteFunction, le client attend le skin tiré par le serveur
@@ -489,12 +494,18 @@ end
 -- Position des joueurs envoyée par leur client, validée et relayée ; mort par chute hors de la map (attribut
 -- KillHeight de la map jouée) testée sur chaque position acceptée, et sur un joueur silencieux tombé dans le vide
 KillZone.init()
-CharacterSync.init(
-	characterSyncRmt,
-	movementCorrectionRmt,
-	KillZone.check,
-	{ height = KillZone.height, kill = KillZone.kill }
-)
+-- Bruits de pas (#146) : détectés sur chaque position acceptée (joueurs et bots), relayés aux autres clients et
+-- entendus par les bots
+FootstepService.init(footstepRmt, function(char, feetPos)
+	local participant = Participants.fromCharacter(char)
+	if participant then
+		BotManager.hearFootstep(participant, feetPos)
+	end
+end)
+CharacterSync.init(characterSyncRmt, movementCorrectionRmt, function(char: Model, pos: Vector3)
+	KillZone.check(char, pos)
+	FootstepService.observe(char, pos)
+end, { height = KillZone.height, kill = KillZone.kill })
 -- Activité réelle de la manche (#401) : portée d'un joueur sur ses positions acceptées sans signalement
 CharacterSync.setMoveListener(CreditGains.onMove)
 
