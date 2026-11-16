@@ -139,6 +139,14 @@ InventoryRules.ITEMS = {
 		name = "MUE",
 		appearance = "mue",
 	},
+	-- Série FILM (#433) : hommage au film de science-fiction de 1979, sans reprise directe (assets/awp/skins/remorqueur.py)
+	{
+		id = "skin.awp.remorqueur",
+		type = "skin",
+		weapon = "weapon.awp",
+		name = "REMORQUEUR",
+		appearance = "remorqueur",
+	},
 	-- Skins M9 : COUCHANT, RELEVÉ, RECUIT (#268, #337, motifs calculés) ; ÉMAIL, PATROUILLE, ART DÉCO dessinés pour la
 	-- M9 (#420, assets/m9/skins/) à la place d'IMPACT, STRATE et SILLAGE
 	{
@@ -182,6 +190,14 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.m9bayonet",
 		name = "ART DÉCO",
 		appearance = "artdeco",
+	},
+	-- Série FILM (#433) : biomécanique de Giger, sans reprise directe (assets/m9/skins/hote.py)
+	{
+		id = "skin.m9bayonet.hote",
+		type = "skin",
+		weapon = "weapon.m9bayonet",
+		name = "HÔTE",
+		appearance = "hote",
 	},
 } :: { Item }
 

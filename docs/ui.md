@@ -737,7 +737,9 @@ propre décor, pas une grille de cartes neutres), sans capture précise.
 
 **Vue d'ensemble (validée le 14/11/2026, `docs/ui/shop/planche_vue_ensemble.png`) :** toutes les caisses en vente
 dans une **vitrine** à deux étages contre le mur de droite de la salle, hors du champ de la vue détail (la planche B
-reste intacte). Trois caisses par étage, l'étage à hauteur d'œil d'abord ; un étage vide est garni de caisses sans
+reste intacte). Au plus trois caisses par étage, réparties à parts égales entre les étages occupés, l'étage à hauteur
+d'œil servi d'abord (quatre caisses : 2 + 2, une série par étage, #433 ; à 3 + 1 la caisse M9 · FILM restait seule en
+bas, séparée de sa série) ; un étage vide est garni de caisses sans
 marque (stock, pas en vente, pas d'étiquette : à deux caisses, la vitrine vide faisait magasin en rupture). Chaque
 caisse en vente porte une étiquette os clipsée sur le longeron (nom et prix, « 500 CRÉDITS ») ; survol = étiquette en
 rouge d'impact à texte os. Deux lampes chaudes au plafond éclairent la vitrine, éteintes dans la vue détail (la gauche
@@ -754,7 +756,10 @@ l'étiquette BIENTÔT jusqu'à #393 (voir « Achat d'une caisse »).
   500 CRÉDITS par caisse, une ouverture = un seul skin de l'arme de la caisse, raretés COMMUN 70 %, RARE 25 %,
   EXCEPTIONNEL 5 %, chacune partagée à parts égales entre ses skins (AWP : BALISE, MAQUIS, TREMPE, MUE à 17,5 %, PAN !,
   CIRCUIT à 12,5 %, ORAGE, CISELURE à 2,5 % ; M9 : COUCHANT, RECUIT à 35 %, PATROUILLE, ART DÉCO à 12,5 %, RELEVÉ, ÉMAIL
-  à 2,5 %). Raretés reprises des anciennes caisses par série, à revoir par l'utilisateur. Doublons possibles : le
+  à 2,5 %). Raretés reprises des anciennes caisses par série, à revoir par l'utilisateur. Série FILM (#433, voir
+  `docs/assets.md`) : « AWP · FILM » (bande vert phosphore) et « M9 · FILM » (bande os) après la série 1, un skin
+  hommage chacune (REMORQUEUR seul EXCEPTIONNEL à 5 % ; HÔTE avec RELEVÉ à 2,5 %), complétées par des skins de la
+  série 1 à leur rareté d'origine. Le pochoir « S1-0332 » du couvercle est dans le mesh : toutes les caisses le portent. Doublons possibles : le
   tirage suit les chances affichées même si le skin est déjà possédé ; un achat rembourse alors une part du prix
   (#393), l'ouverture de test ne donne rien de plus. Tout est dans `ShopCatalog`. L'étiquette de la vitrine (3,4 studs) tient « AWP · SÉRIE 1 » + « 500 CRÉDITS »
   (vérifié en Studio) ; sous-titre de la vue d'ensemble « UNE PAR ARME ET PAR SÉRIE ». Depuis #391, le prix est le jeton

@@ -290,7 +290,8 @@ tout le catalogue.
 ### Skins dessinés de l'AWP (#417)
 
 Un skin AWP est **dessiné pour l'AWP seule**, pièce par pièce (pas un motif réappliquable sur une autre arme) : un script
-par skin dans `assets/awp/skins/` (`balise`, `trempe`, `ciselure`, `pan`, `orage`, `circuit`, `maquis`, `mue`), avec
+par skin dans `assets/awp/skins/` (`balise`, `trempe`, `ciselure`, `pan`, `orage`, `circuit`, `maquis`, `mue`, et
+`remorqueur` de la série FILM, #433), avec
 une fonction `paint(maps, cv)`. Il part des cartes d'origine de `make_textures.py` (granité, moletage, vis, crasse) et
 les repeint. Outils communs (`common.py`) :
 
@@ -345,7 +346,7 @@ marquages sont celles de Windows (`C:/Windows/Fonts`, Bahnschrift, Impact) : gé
 ### Skins dessinés de la M9 (#420)
 
 Même principe que pour l'AWP : un skin est **dessiné pour la M9 seule**, un script par skin dans `assets/m9/skins/`
-(`emaille` pour ÉMAIL, `patrouille`, `artdeco`), avec une fonction `paint(kn)`. La M9 n'a pas de source Blender : on
+(`emaille` pour ÉMAIL, `patrouille`, `artdeco`, et `hote` de la série FILM, #433), avec une fonction `paint(kn)`. La M9 n'a pas de source Blender : on
 part de ses cartes d'origine et de sa cuisson (`fetch_viewmodel.py` puis `bake_maps.py --glb`, étape 1 de « Fabriquer
 un skin » ci-dessous). Outils communs (`common.py`) :
 
@@ -381,6 +382,31 @@ qu'ensuite. Puis publier et cataloguer (étapes 4 et 5 de « Fabriquer un skin �
   bords d'anneaux à 0,32 / 0,55 / 0,85 / 1 du rayon.
 - **Émail trop lisse** (rugosité 0,1) : reflet blanc du ciel sur toute la pointe dans la vue rapprochée ; 0,2 suffit.
 - **Fil d'argent sur ivoire** : invisible en couleur (même clarté) ; découper l'ivoire par des fentes noires.
+- **`--flat` ne montre pas tout le bas de la lame** : sur HÔTE, les côtes vers le tranchant manquaient dans la vue à plat
+  alors que les cartes les portaient (même couleur que celles du haut, vérifié texel par texel). Juger un motif qui
+  descend vers le tranchant sur un rendu `render_views.py`.
+- **Arête de la gouttière à h ≈ 0,02** : le bord bas de la gouttière est une arête du mesh, visible comme un trait sombre ;
+  un motif centré dessus (colonne de HÔTE) paraît coupé en deux. Placer un motif linéaire au-dessus ou en dessous.
+
+### Série FILM (#433)
+
+Une caisse par arme sur le thème du cinéma, ouverte par un **hommage** au film de science-fiction de 1979 : REMORQUEUR
+(AWP, le vaisseau industriel de Ron Cobb : coque crème en plaques rivetées, pictogrammes à coins arrondis, écran vert) et
+HÔTE (M9, la biomécanique de Giger : colonne vertébrale couleur os sur laque noir bleuté). Planche de références : à
+refaire au besoin depuis Typeset in the Future (« Alien ») et Monster Legacy (galerie Alien 1979), non versionnée.
+
+- **Hommage, pas de reprise** (décision utilisateur) : les caisses sont payantes et Roblox retire les contenus qui reprennent
+  une licence. Ni nom du film, ni logo de la compagnie, ni pictogramme de Cobb ou tête de la créature recopiés : on
+  reprend la grammaire (carré à coins arrondis, côtes répétées), avec des symboles et des noms dessinés pour le jeu.
+- **Un autre film ne s'ajoute qu'après une recherche de DA** (planche de références validée) : l'utilisateur ne veut pas
+  de films choisis à la hâte, dont la DA ne lui plairait pas.
+- **Caisses complétées par la série 1** : chaque caisse FILM n'a qu'un skin hommage, complété par des skins de la série 1
+  pour atteindre 6. Un skin repris garde sa rareté d'origine (`rarityOf` lit la première caisse qui le contient ; le test
+  du shop l'exige). La M9 n'ayant que 6 skins, HÔTE partage l'EXCEPTIONNEL avec RELEVÉ.
+- **Texte d'écran aligné à gauche sur les deux flancs** : `Canvas.text(anchor="lm")` aligne le flanc droit à droite du
+  point donné, hors de l'écran. En chasse fixe (Consolas), compléter les lignes à la même longueur et les centrer.
+- **Écran peint** : une dalle brillante (rugosité 0,18) reflétait le ciel et noyait le texte de trois quarts ; 0,4 et
+  relief du granité retiré sous le cadre.
 
 ### Fabriquer un skin (motifs calculés : COUCHANT, RELEVÉ, RECUIT)
 
@@ -403,7 +429,7 @@ que soit le découpage UV) ou projetés depuis la vue de profil (livrée, texte)
 5. **Catalogue** : une ligne par arme dans `InventoryRules.ITEMS` (`appearance` = nom du fichier `.model.json`). Le test
    du catalogue vérifie que le fichier existe. Puis ranger le skin dans la caisse de son arme, à sa rareté
    (`ShopCatalog.CRATES`, `contents`) : le test du shop exige que tout skin soit dans une caisse, et une caisse de 6 à
-   8 skins (#424).
+   8 skins (#424). Un skin peut être dans plusieurs caisses, toujours à la même rareté (série FILM, #433).
 6. **Juger en jeu** (Studio, écran d'équipement) : l'éclairage du jeu change beaucoup le rendu des métaux.
 
 Pour un aperçu sans code (avant d'avoir le catalogue) : `tools/skins/apply_skin_lua.py <ids.json | origine>` écrit le
