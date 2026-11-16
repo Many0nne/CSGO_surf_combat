@@ -110,8 +110,9 @@ local CRATE_LOOK: { [string]: { any } } = {
 }
 -- Pochoir du couvercle (#434) : texte propre à la caisse (ShopCatalog.stencil), peint par une SurfaceGui sur une pièce
 -- invisible « LidStencil » (préfixe Lid : il s'ouvre avec le couvercle) ; place, hauteur des capitales (0,136 stud) et
--- encre de l'ancien pochoir « S1-0332 » modelé dans le mesh, à droite de la bande sur la face avant
-local STENCIL_AT = Vector3.new(1.0, 1.674, 1.208) -- centre, par rapport au pivot de la caisse
+-- encre de l'ancien pochoir « S1-0332 » modelé dans le mesh, à droite de la bande sur la face avant ; remonté de
+-- 0,046 stud : le moraillon du couvercle (LidSteel, haut à 1,64) cachait le bas des lettres centrales
+local STENCIL_AT = Vector3.new(1.0, 1.72, 1.208) -- centre, par rapport au pivot de la caisse
 local STENCIL_SIZE = Vector3.new(1.2, 0.3, 0.01) -- zone libre entre la bande et le montant du cadre
 local STENCIL_INK = Color3.fromRGB(24, 22, 20)
 local STENCIL_PIXELS = 200 -- pixels par stud
@@ -703,7 +704,8 @@ local function buildVitrine(parent: Instance)
 		model:SetAttribute("ShopCrate", slot.index)
 		for _, part in model:GetDescendants() do
 			if part:IsA("BasePart") then
-				part.CanQuery = true -- survol et clic par rayon depuis la souris
+				-- survol et clic par rayon depuis la souris ; pas la plaque invisible du pochoir, juste devant le bois
+				part.CanQuery = part.Name ~= "LidStencil"
 			end
 		end
 		local name, price = tagText(tag, def)

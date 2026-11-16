@@ -343,7 +343,7 @@ end
 
 -- Cette méthode permet de composer le pochoir peint sur le couvercle d'une caisse (« S1-AWP », « FM-M9 ») lorsque la
 -- salle du shop la pose (#434) : code de la série lu après `crate.<arme>.` dans l'id (`serie<n>` → `S<n>`, sinon
--- première et dernière lettre ou chiffre : `film` → `FM`), puis nom court de l'arme ; repli sur l'un des deux, ou "".
+-- première et dernière lettre ou chiffre, séparateurs retirés : `film` → `FM`), puis nom court de l'arme ; repli sur l'un des deux, ou "".
 -- Deux séries d'une arme au même code (film, foam) : le test d'unicité du catalogue le signale.
 function ShopCatalog.stencil(crate: { id: string?, weapon: string? }?): string
 	local series = crate and crate.id and string.match(crate.id, "^crate%.[^.]+%.(.+)$")
