@@ -577,6 +577,27 @@ return function(T, Loader)
 		)
 
 		T.it(
+			"gain arrivé pendant une écriture qui échoue : le nouvel essai attend quand même 60 s (#408)",
+			function()
+				local sched = makeScheduler()
+				local ds = makeDataStore(sched)
+				local server = makeServer(sched, ds)
+				local alice = server.join(1)
+				server.Wallet.add(alice, 10)
+				ds.failures = 3
+				ds.latency = 1
+				local started = #ds.requests
+				-- Écriture à 6 s : essais à 6, 9 et 14 s, échec à 15 s ; gain à 8 s, pendant l'écriture
+				sched.advance(8)
+				server.Wallet.add(alice, 5)
+				sched.advance(62)
+				T.expectEqual(#ds.requests - started, 3, "pas de nouvel essai 6 s après l'échec")
+				sched.advance(20)
+				T.expectEqual(storedBalance(ds, 1), 15, "écrit 60 s après l'échec")
+			end
+		)
+
+		T.it(
 			"joueur parti, DataStore en panne : abandonné après MAX_SAVE_FAILURES échecs depuis son départ (#408)",
 			function()
 				local sched = makeScheduler()

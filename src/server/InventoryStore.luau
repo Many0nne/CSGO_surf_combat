@@ -360,6 +360,9 @@ local function queueSave(player: Player, profile: Profile, delay: number?)
 	local wait = delay or math.max(0, profile.lastSaveAt + EQUIP_SAVE_SPACING - os.clock())
 	if profile.failures > 0 and not closing then
 		wait = math.max(wait, retryDelay(player, profile) or 0)
+	elseif closing and not hasTimeFor(wait) then
+		-- Arrêt : un changement (gain de fin de manche) qui partirait après closeDeadline part tout de suite
+		wait = 0
 	end
 	local due = os.clock() + wait
 	local current = pendingSaves[profile]
@@ -426,6 +429,8 @@ local function release(player: Player, profile: Profile)
 	else
 		local delay = retryDelay(player, profile)
 		if delay then
+			-- Une écriture programmée pendant celle qui vient d'échouer (gain, équipement) ne raccourcit pas le délai
+			pendingSaves[profile] = nil
 			queueSave(player, profile, delay)
 		else
 			warnAbandoned(player, profile, "joueur parti, " .. profile.failures .. " échecs")
@@ -835,7 +840,12 @@ function InventoryStore.grant(player: Player, id: string): boolean
 	profile.stored = stored
 	profile.dirty = true
 	refresh(player, profile)
-	task.spawn(saveProfile, player, profile)
+	if profile.failures > 0 then
+		-- Panne en cours : écrit avec le prochain essai, sans en lancer un de plus (#408)
+		queueSave(player, profile)
+	else
+		task.spawn(saveProfile, player, profile)
+	end
 	return true
 end
 
