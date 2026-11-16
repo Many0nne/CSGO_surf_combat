@@ -35,7 +35,7 @@ local function update(dt: number, getState: () -> string?, isAnnouncing: () -> b
 	local settings = LocalSettings.get()
 	local target = 0
 	if sound.SoundId ~= "" then
-		target = MusicRules.targetVolume(settings, getState(), isAnnouncing())
+		target = MusicRules.targetVolume(settings, getState(), MusicRules.isDucking(settings, isAnnouncing()))
 	end
 	volume = MusicRules.step(volume, target, dt)
 	sound.Volume = MusicRules.BASE_VOLUME * volume

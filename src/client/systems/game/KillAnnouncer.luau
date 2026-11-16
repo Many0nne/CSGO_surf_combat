@@ -5,7 +5,6 @@
 local SoundService = game:GetService("SoundService")
 
 local KillStreakRules = require(script.Parent.KillStreakRules)
-local LocalSettings = require(script.Parent.Parent.settings.LocalSettings)
 local SoundChannels = require(script.Parent.Parent.settings.SoundChannels)
 
 local SOUND_IDS: { [KillStreakRules.Announcement]: string } = {
@@ -74,11 +73,8 @@ function KillAnnouncer.onStreak(listener: (number) -> ())
 end
 
 -- Cette méthode permet de savoir si une annonce vocale est en train de jouer lorsque la musique de fond (#286) doit
--- baisser le temps de la voix ; faux quand le canal annonces est à 0 (voix muette, la musique ne baisse pas, #405).
+-- baisser le temps de la voix (MusicRules.isDucking écarte le cas d'une voix muette, #405).
 function KillAnnouncer.isSpeaking(): boolean
-	if LocalSettings.get().volumeAnnouncer <= 0 then
-		return false
-	end
 	return playing ~= nil and playing.IsPlaying
 end
 
