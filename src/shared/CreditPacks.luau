@@ -63,9 +63,19 @@ function CreditPacks.byProduct(productId: any): Pack?
 	return nil
 end
 
--- Cette méthode permet d'écrire le prix d'un pack (« 99 R$ ») lorsque la fenêtre des packs l'affiche.
-function CreditPacks.priceLabel(pack: Pack): string
-	return string.format("%d R$", pack.robux)
+-- Cette méthode permet de choisir le prix à afficher lorsque la fenêtre des packs a (ou non) lu `PriceInRobux` du produit
+-- (`GetProductInfo`) : le prix lu s'il est un entier positif, sinon celui de la config (échec, réponse pas encore arrivée).
+function CreditPacks.displayRobux(pack: Pack, fetched: any): number
+	if type(fetched) == "number" and fetched > 0 and fetched == math.floor(fetched) and fetched < math.huge then
+		return fetched
+	end
+	return pack.robux
+end
+
+-- Cette méthode permet d'écrire le prix d'un pack (« 99 R$ ») lorsque la fenêtre des packs l'affiche ; `fetched` est le
+-- prix lu sur le produit s'il est connu (repli sur la config sinon).
+function CreditPacks.priceLabel(pack: Pack, fetched: any?): string
+	return string.format("%d R$", CreditPacks.displayRobux(pack, fetched))
 end
 
 return CreditPacks

@@ -61,6 +61,13 @@ Mesures (Studio, map jouée, `[CreditGains]`) :
 - Nouveau pack : créer d'abord le produit sur le dashboard, puis l'ajouter à `CreditPacks.PACKS`. Un pack qui garde un
   id provisoire (3 950 001 à 3 950 003, `CreditPacks.isReady`) masque « + CRÉDITS » et fait refuser le prompt
   (`unavailable`) hors de Studio ; un test vérifie que la config livrée n'en a plus.
+- **Affichage (#409)** : le client lit `PriceInRobux` par `GetProductInfo` (pcall, en différé, un appel réussi par
+  produit gardé en cache) ; en attendant ou en cas d'échec, `robux` de la config (`CreditPacks.displayRobux`). Les crédits
+  accordés restent ceux de la config. Le prompt Robux ouvert plus de `PROMPT_TIMEOUT` (120 s) garde les prix inactifs
+  jusqu'à `PromptProductPurchaseFinished` : le délai de secours ne rend les prix que si le serveur n'a jamais confirmé
+  l'ouverture du prompt (`PurchaseGuard`). Limite : un prompt jamais confirmé puis terminé très tard, pour le même
+  produit qu'un achat relancé depuis, termine ce dernier avant l'heure (la fin n'a pas d'id d'achat).
+  « GAINS DU JOUR » (MainMenu) est aussi repeint par une minuterie calée sur le prochain minuit UTC.
 - Prompt refusé (`full`) si le pack ferait dépasser `WalletRules.MAX_BALANCE` : ses crédits seraient écrêtés.
 - Ne jamais retirer de la config un produit déjà vendu : ses reçus en attente ne seraient plus jamais accordés.
 - Crédits achetés : compteur `purchased` du portefeuille, hors plafond du jour (#394).

@@ -53,5 +53,16 @@ return function(T, Loader)
 		T.it("prix affiché en Robux", function()
 			T.expectEqual(Packs.priceLabel(Packs.PACKS[1]), "99 R$")
 		end)
+
+		T.it("prix lu sur le produit quand il est valide, sinon repli sur la config", function()
+			local pack = Packs.PACKS[1]
+			T.expectEqual(Packs.priceLabel(pack, 120), "120 R$")
+			T.expectEqual(Packs.displayRobux(pack, 120), 120)
+			for _, bad in { 0, -5, 99.5, math.huge, "120", true, {} } do
+				T.expectEqual(Packs.displayRobux(pack, bad), 99, "repli pour " .. tostring(bad))
+			end
+			T.expectEqual(Packs.displayRobux(pack, nil), 99, "pas encore lu")
+			T.expectEqual(Packs.priceLabel(pack, nil), "99 R$")
+		end)
 	end)
 end
