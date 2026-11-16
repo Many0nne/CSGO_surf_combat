@@ -776,7 +776,7 @@ l'étiquette BIENTÔT jusqu'à #393 (voir « Achat d'une caisse »).
   COMMUN 80 %, RARE 16 %, EXCEPTIONNEL 3,2 %, LÉGENDAIRE 0,8 % (rouge vif 235/75/75), chacune partagée à parts égales
   entre ses skins présents dans la caisse ; une rareté sans skin dans une caisse (LÉGENDAIRE d'AWP · FILM) est écartée
   du tirage et les autres chances renormalisées. Remboursement d'un doublon 20 / 40 / 70 / 100 % du prix. Rareté fixée
-  par skin, la même dans toutes les caisses : AWP, COMMUN MAQUIS, LOGOGRAMME ; RARE MUE, ORAGE, CIRCUIT ; EXCEPTIONNEL
+  par skin, la même dans toutes les caisses : AWP, COMMUN MAQUIS, ÉPURE, TARTAN, BANCHE, LOGOGRAMME ; RARE MUE, ORAGE, CIRCUIT ; EXCEPTIONNEL
   REMORQUEUR, BALISE, PAN ! ; LÉGENDAIRE TREMPE, CISELURE. M9, COMMUN ART DÉCO, HÔTE ; RARE PATROUILLE, RELEVÉ, SPHINX ;
   EXCEPTIONNEL ÉMAIL, RECUIT ; LÉGENDAIRE COUCHANT. Série FILM (#433, voir `docs/assets.md`) : « AWP · FILM » (bande
   vert phosphore) et « M9 · FILM » (bande os) après la série 1, des skins hommage (REMORQUEUR, LOGOGRAMME ; HÔTE, SPHINX,

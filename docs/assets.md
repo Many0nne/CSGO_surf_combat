@@ -316,7 +316,7 @@ tout le catalogue.
 
 Un skin AWP est **dessiné pour l'AWP seule**, pièce par pièce (pas un motif réappliquable sur une autre arme) : un script
 par skin dans `assets/awp/skins/` (`balise`, `trempe`, `ciselure`, `pan`, `orage`, `circuit`, `maquis`, `mue`, et
-`remorqueur` et `logogramme` de la série FILM, #433 et #436), avec
+`remorqueur` et `logogramme` de la série FILM, #433 et #436, et les communs `epure`, `tartan`, `banche`), avec
 une fonction `paint(maps, cv)`. Il part des cartes d'origine de `make_textures.py` (granité, moletage, vis, crasse) et
 les repeint. Outils communs (`common.py`) :
 
@@ -364,6 +364,18 @@ marquages sont celles de Windows (`C:/Windows/Fonts`, Bahnschrift, Impact) : gé
 - **Une base métallique sombre tombe au noir en jeu** (salle du playtest) : à 0,10-0,16 de couleur de reflet, écailles
   de MUE, carbone de CIRCUIT et émeraude d'ORAGE ne se voyaient plus. Viser au moins ~0,2 sur le canal dominant (MUE
   0,32, ORAGE 0,38, CISELURE 0,28) et une rugosité de 0,2 à 0,4 ; la planche Cycles paraît alors trop claire, c'est voulu.
+- **Un non-métal sombre tombe aussi au noir en jeu** (TARTAN) : un tissu à 0,25 sur le canal dominant, juste sur la planche
+  Cycles, était presque noir en 1P ; il faut ~0,4 (vert 0,42, bleu 0,42, noir des séparations 0,07). À l'inverse, un
+  béton à 0,56 paraît presque blanc dans Cycles mais gris moyen en jeu (BANCHE : 0,36 donnait un gris foncé). Pour un
+  aplat clair ou sombre non métallique, juger en jeu, pas sur la planche.
+- **Petits pores sombres = saleté en 1P** : un semis de pores à 0,7 de teinte (bullage du béton) se lisait comme des
+  points noirs ; à 0,88 il reste une matière.
+- **Communs (ÉPURE, TARTAN, BANCHE)** : un skin commun reste sobre et graphique (plan technique à cotes, tissu écossais
+  au sett inventé, béton de coffrage à trous de banche en grille), tout en motifs réguliers calés sur `JOINT` (pas de
+  quadrillage, carreau ou panneau rogné au joint). Ce qui doit se voir en 1P va sur l'avant de la crosse (cote, plaque
+  de laiton, pochoir « C35/45 ») ; le reste (cartouche) sur l'arrière, pour l'écran d'équipement.
+- **Republier un skin corrigé** : `publish_skin.py` saute les cartes déjà dans `ids.json` (reprise). Supprimer
+  `ids.json` avant de republier des cartes modifiées, sinon le jeu garde les anciennes images.
 - **Essayer tous les skins en jeu sans relancer de partie** : en playtest, AWP en main, cloner depuis le contexte Client
   les `SurfaceAppearance` de `ReplicatedStorage.Skins.AWP.<skin>` sur les pièces de `workspace.CurrentCamera.AWP` (ce
   que fait `WeaponSkins.apply`), puis `screen_capture`. Un skin jamais chargé reste gris 1 à 3 s : recapturer.

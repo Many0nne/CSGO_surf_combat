@@ -156,6 +156,28 @@ InventoryRules.ITEMS = {
 		name = "LOGOGRAMME",
 		appearance = "logogramme",
 	},
+	-- Communs de la série 1 : motifs réguliers dessinés pour l'AWP (assets/awp/skins/epure.py, tartan.py, banche.py)
+	{
+		id = "skin.awp.epure",
+		type = "skin",
+		weapon = "weapon.awp",
+		name = "ÉPURE",
+		appearance = "epure",
+	},
+	{
+		id = "skin.awp.tartan",
+		type = "skin",
+		weapon = "weapon.awp",
+		name = "TARTAN",
+		appearance = "tartan",
+	},
+	{
+		id = "skin.awp.banche",
+		type = "skin",
+		weapon = "weapon.awp",
+		name = "BANCHE",
+		appearance = "banche",
+	},
 	-- Skins M9 : COUCHANT, RELEVÉ, RECUIT (#268, #337, motifs calculés) ; ÉMAIL, PATROUILLE, ART DÉCO dessinés pour la
 	-- M9 (#420, assets/m9/skins/) à la place d'IMPACT, STRATE et SILLAGE
 	{
