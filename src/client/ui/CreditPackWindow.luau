@@ -46,6 +46,7 @@ local status: TextLabel
 -- s après lesquels les prix sont rendus si le serveur n'a jamais confirmé l'ouverture du prompt (secours) ; un prompt
 -- connu comme ouvert garde les prix inactifs jusqu'à sa fin (PurchaseGuard), pour qu'aucun second prompt ne s'ouvre dessus
 local PROMPT_TIMEOUT = 120
+local PROMPT_FINAL_TIMEOUT = 1800 -- s : au-delà, même un prompt connu ouvert rend les prix (fin jamais signalée)
 -- Achat en cours, de la demande au serveur à la fin du prompt de Roblox (PromptProductPurchaseFinished) : les prix
 -- restent inactifs, fenêtre fermée et rouverte comprise. Numéroté : une fin ou un délai d'un achat passé est ignoré
 local guard = PurchaseGuard.new()
@@ -77,8 +78,8 @@ local function paintPrice(pack: CreditPacks.Pack)
 	end
 end
 
--- Cette méthode permet de lire le prix d'un pack sur son Developer Product lorsque la fenêtre est construite ou ouverte
--- sans prix encore lu ; en différé, sans jamais bloquer ni afficher d'erreur : échec ou attente = prix de la config.
+-- Cette méthode permet de lire le prix d'un pack sur son Developer Product lorsque la fenêtre est construite ;
+-- une seule tentative par produit, en différé, sans jamais bloquer ni afficher d'erreur : échec ou attente = config.
 local function fetchPrice(pack: CreditPacks.Pack)
 	local productId = pack.productId
 	if fetchedPrices[productId] or fetching[productId] then
@@ -124,6 +125,10 @@ local function requestPack(pack: CreditPacks.Pack)
 	setPricesEnabled(false)
 	task.delay(PROMPT_TIMEOUT, function()
 		endPurchase(PurchaseGuard.timedOut(guard, id))
+	end)
+	-- Dernier recours : un prompt ouvert dont Roblox n'a jamais signalé la fin ne bloque pas les prix toute la session
+	task.delay(PROMPT_FINAL_TIMEOUT, function()
+		endPurchase(PurchaseGuard.timedOut(guard, id, true))
 	end)
 	task.spawn(function()
 		local remote = ReplicatedStorage:FindFirstChild(NetworkProtocol.Names.BUY_CREDIT_PACK)
@@ -235,8 +240,12 @@ local function buildPack(parent: Frame, pack: CreditPacks.Pack, order: number)
 	table.insert(priceChoices, choice)
 	local labels: { TextLabel } = {}
 	priceLabels[pack.productId] = labels
-	table.insert(labels, choice.button:FindFirstChild("Label") :: TextLabel)
-	table.insert(labels, choice.button:FindFirstChild("LabelShadow") :: TextLabel)
+	for _, name in { "Label", "LabelShadow" } do
+		local label = choice.button:FindFirstChild(name)
+		if label and label:IsA("TextLabel") then
+			table.insert(labels, label)
+		end
+	end
 	paintPrice(pack)
 	fetchPrice(pack)
 end
@@ -321,10 +330,6 @@ function CreditPackWindow.show()
 	lastBalance = LocalWallet.balance()
 	-- Un achat lancé avant la fermeture garde les prix inactifs jusqu'à la fin de son prompt (ou PROMPT_TIMEOUT)
 	setPricesEnabled(not guard.active)
-	-- Un échec de lecture des prix est retenté à l'ouverture (un produit déjà lu n'est jamais relu)
-	for _, pack in CreditPacks.PACKS do
-		fetchPrice(pack)
-	end
 	page.show()
 end
 

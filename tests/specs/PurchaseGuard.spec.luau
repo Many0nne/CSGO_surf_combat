@@ -21,6 +21,16 @@ return function(T, Loader)
 			T.expectEqual(Guard.start(s, 10), 2)
 		end)
 
+		T.it("dernier délai : termine même un prompt ouvert dont la fin n'est jamais arrivée", function()
+			local s = Guard.new()
+			local id = Guard.start(s, 10) :: number
+			Guard.promptOpened(s, id)
+			T.expect(not Guard.timedOut(s, id))
+			T.expect(Guard.timedOut(s, id, true), "dernier recours")
+			T.expectEqual(Guard.start(s, 10), 2)
+			T.expect(not Guard.timedOut(s, id, true), "ancien dernier délai sans effet sur l'achat suivant")
+		end)
+
 		T.it("délai sans réponse du serveur : l'achat se termine (secours)", function()
 			local s = Guard.new()
 			local id = Guard.start(s, 10) :: number

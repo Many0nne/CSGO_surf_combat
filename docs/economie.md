@@ -65,7 +65,7 @@ Mesures (Studio, map jouée, `[CreditGains]`) :
   produit gardé en cache) ; en attendant ou en cas d'échec, `robux` de la config (`CreditPacks.displayRobux`). Les crédits
   accordés restent ceux de la config. Le prompt Robux ouvert plus de `PROMPT_TIMEOUT` (120 s) garde les prix inactifs
   jusqu'à `PromptProductPurchaseFinished` : le délai de secours ne rend les prix que si le serveur n'a jamais confirmé
-  l'ouverture du prompt (`PurchaseGuard`). Limite : un prompt jamais confirmé puis terminé très tard, pour le même
+  l'ouverture du prompt (`PurchaseGuard`), ou après `PROMPT_FINAL_TIMEOUT` (30 min) si Roblox n'a jamais signalé sa fin. Limite : un prompt jamais confirmé puis terminé très tard, pour le même
   produit qu'un achat relancé depuis, termine ce dernier avant l'heure (la fin n'a pas d'id d'achat).
   « GAINS DU JOUR » (MainMenu) est aussi repeint par une minuterie calée sur le prochain minuit UTC.
 - Prompt refusé (`full`) si le pack ferait dépasser `WalletRules.MAX_BALANCE` : ses crédits seraient écrêtés.

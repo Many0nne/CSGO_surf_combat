@@ -51,10 +51,12 @@ end
 
 -- Cette méthode permet de terminer l'achat `id` lorsque le délai de secours passe ; renvoie vrai seulement si l'achat est
 -- toujours le courant et que son prompt n'est pas connu comme ouvert (sinon la fin du prompt le terminera).
-function PurchaseGuard.timedOut(state: State, id: number): boolean
-	if id ~= state.current or not state.active or state.promptOpen then
+-- `final` (dernier délai, très long) le termine même prompt ouvert, si Roblox n'a jamais signalé sa fin.
+function PurchaseGuard.timedOut(state: State, id: number, final: boolean?): boolean
+	if id ~= state.current or not state.active or (state.promptOpen and not final) then
 		return false
 	end
+	state.promptOpen = false
 	state.active = false
 	return true
 end
