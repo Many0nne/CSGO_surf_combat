@@ -67,11 +67,11 @@ return function(T, Loader)
 			function()
 				local rows = Shop.contents(Shop.crate("crate.awp.serie1"), Inventory.ITEMS)
 				T.expectEqual(rows[1].rarity.label, "COMMUN")
-				T.expectEqual(rows[1].name, "COUCHANT")
+				T.expectEqual(rows[1].name, "BALISE")
 				T.expectEqual(table.concat(rows[1].weapons, " · "), "AWP")
-				T.expectEqual(table.concat(rows[1].skins, ","), "skin.awp.couchant")
+				T.expectEqual(table.concat(rows[1].skins, ","), "skin.awp.balise")
 				T.expectEqual(rows[3].rarity.label, "EXCEPTIONNEL")
-				T.expectEqual(rows[3].name, "RELEVÉ")
+				T.expectEqual(rows[3].name, "ORAGE")
 				local knife = Shop.contents(Shop.crate("crate.m9.serie1"), Inventory.ITEMS)
 				T.expectEqual(table.concat(knife[1].weapons, " · "), "M9")
 				T.expectEqual(table.concat(knife[1].skins, ","), "skin.m9bayonet.couchant")
@@ -93,7 +93,7 @@ return function(T, Loader)
 		T.it("compose la ligne sous le nom", function()
 			T.expectEqual(
 				Shop.subtitle(Shop.crate("crate.awp.serie1"), Inventory.ITEMS),
-				"CAISSE  ·  COUCHANT / IMPACT / RELEVÉ"
+				"CAISSE  ·  BALISE / PAN ! / ORAGE"
 			)
 		end)
 	end)
@@ -106,12 +106,12 @@ return function(T, Loader)
 				local row, skinId = Shop.draw(crate, Inventory.ITEMS, roll)
 				return row.rarity.id .. ":" .. skinId
 			end
-			T.expectEqual(rarityAt(0), "common:skin.awp.couchant")
-			T.expectEqual(rarityAt(69.99), "common:skin.awp.couchant")
-			T.expectEqual(rarityAt(70), "rare:skin.awp.impact")
-			T.expectEqual(rarityAt(94.99), "rare:skin.awp.impact")
-			T.expectEqual(rarityAt(95), "exceptional:skin.awp.releve")
-			T.expectEqual(rarityAt(99.999), "exceptional:skin.awp.releve")
+			T.expectEqual(rarityAt(0), "common:skin.awp.balise")
+			T.expectEqual(rarityAt(69.99), "common:skin.awp.balise")
+			T.expectEqual(rarityAt(70), "rare:skin.awp.pan")
+			T.expectEqual(rarityAt(94.99), "rare:skin.awp.pan")
+			T.expectEqual(rarityAt(95), "exceptional:skin.awp.orage")
+			T.expectEqual(rarityAt(99.999), "exceptional:skin.awp.orage")
 		end)
 
 		T.it("ramène un roll hors bornes ou invalide dans [0, 100)", function()
@@ -145,7 +145,7 @@ return function(T, Loader)
 				weapon = "weapon.awp",
 				stripe = { 0, 0, 0 },
 				price = 1,
-				contents = { common = "couchant", rare = "absent", exceptional = "releve" },
+				contents = { common = "balise", rare = "absent", exceptional = "orage" },
 			}
 			T.expectEqual(Shop.draw(partial, Inventory.ITEMS, 0).rarity.id, "common")
 			T.expectEqual(Shop.draw(partial, Inventory.ITEMS, 93.2).rarity.id, "common")
@@ -218,24 +218,27 @@ return function(T, Loader)
 			T.expectEqual(columns[1], nil)
 		end)
 
-		T.it("les caisses en vente mettent leur skin le plus sombre au milieu (Couchant, Recuit)", function()
-			local expected = {
-				["crate.awp.serie1"] = "COUCHANT",
-				["crate.m9.serie1"] = "COUCHANT",
-				["crate.awp.serie2"] = "RECUIT",
-				["crate.m9.serie2"] = "RECUIT",
-			}
-			for id, name in expected do
-				local rows = Shop.contents(Shop.crate(id), Inventory.ITEMS)
-				local middle
-				for i, column in Shop.columns(rows, 3) do
-					if column == 2 then
-						middle = rows[i].name
+		T.it(
+			"les caisses en vente mettent leur skin le plus sombre au milieu (Orage et Circuit, Couchant et Recuit)",
+			function()
+				local expected = {
+					["crate.awp.serie1"] = "ORAGE",
+					["crate.m9.serie1"] = "COUCHANT",
+					["crate.awp.serie2"] = "CIRCUIT",
+					["crate.m9.serie2"] = "RECUIT",
+				}
+				for id, name in expected do
+					local rows = Shop.contents(Shop.crate(id), Inventory.ITEMS)
+					local middle
+					for i, column in Shop.columns(rows, 3) do
+						if column == 2 then
+							middle = rows[i].name
+						end
 					end
+					T.expectEqual(middle, name)
 				end
-				T.expectEqual(middle, name)
 			end
-		end)
+		)
 	end)
 
 	T.describe("ShopCatalog.slots", function()
@@ -367,9 +370,9 @@ return function(T, Loader)
 
 		T.it("tout obtenu seulement si tous les skins de la caisse sont possédés", function()
 			local crate = Shop.crate("crate.awp.serie1")
-			local owned = { ["skin.awp.couchant"] = true, ["skin.awp.impact"] = true }
+			local owned = { ["skin.awp.balise"] = true, ["skin.awp.pan"] = true }
 			T.expectEqual(Shop.allOwned(crate, Inventory.ITEMS, owned), false)
-			owned["skin.awp.releve"] = true
+			owned["skin.awp.orage"] = true
 			T.expectEqual(Shop.allOwned(crate, Inventory.ITEMS, owned), true)
 			T.expectEqual(Shop.allOwned(Shop.crate("crate.m9.serie1"), Inventory.ITEMS, owned), false, "autre arme")
 			local empty = table.clone(crate)

@@ -121,6 +121,17 @@ class Canvas:
 		b = ndimage.map_coordinates(right, [v, u], order=1, mode="constant")
 		return np.where(m.n[:, 1] > 0.35, b, a)
 
+	def sample_at(self, name, x, z, right, blur=0.0):
+		"""Cette méthode permet de lire une couche (0 à 1) en des points (x, z) du modèle donnés, sur le flanc droit là où
+		right est vrai (couleur d'une écaille lue en son centre, par exemple)."""
+		left, rgt = (np.asarray(i, np.float64) / 255 for i in self.layer(name))
+		if blur:
+			left, rgt = ndimage.gaussian_filter(left, blur * SS), ndimage.gaussian_filter(rgt, blur * SS)
+		u, v = (mt_px(x) - PX0) * SS, (mt_py(z) - PY0) * SS
+		a = ndimage.map_coordinates(left, [v, u], order=1, mode="constant")
+		b = ndimage.map_coordinates(rgt, [v, u], order=1, mode="constant")
+		return np.where(right, b, a)
+
 	def preview(self, path):
 		"""Cette méthode permet d'écrire les couches du flanc gauche superposées en couleurs, pour régler le dessin."""
 		rgb = np.zeros((self.h, self.w, 3))

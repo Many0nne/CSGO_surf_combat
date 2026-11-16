@@ -15,20 +15,20 @@ return function(T, Loader)
 		return { schemaVersion = 2, items = items, wallet = w }
 	end
 
-	local ORDER = { price = 500, skinId = "skin.awp.impact", refund = 200 }
+	local ORDER = { price = 500, skinId = "skin.awp.pan", refund = 200 }
 
 	T.describe("CratePurchaseRules.operation", function()
 		T.it("skin neuf : débité (achetés d'abord), skin ajouté, pas de remboursement", function()
-			local rec, applied = Rules.operation(ORDER)(record(400, 300, { "skin.awp.couchant" }))
+			local rec, applied = Rules.operation(ORDER)(record(400, 300, { "skin.awp.balise" }))
 			T.expect(rec ~= nil)
 			T.expectEqual(rec.wallet.purchased, 0)
 			T.expectEqual(rec.wallet.earned, 200)
-			T.expect(table.find(rec.items, "skin.awp.impact") ~= nil, "skin ajouté")
+			T.expect(table.find(rec.items, "skin.awp.pan") ~= nil, "skin ajouté")
 			T.expectEqual(applied.duplicate, false)
 		end)
 
 		T.it("doublon : débité puis remboursé dans `earned`, items inchangés, plafond du jour intact", function()
-			local rec, applied = Rules.operation(ORDER)(record(600, 0, { "skin.awp.impact" }))
+			local rec, applied = Rules.operation(ORDER)(record(600, 0, { "skin.awp.pan" }))
 			T.expectEqual(rec.wallet.earned, 600 - 500 + 200)
 			T.expectEqual(#rec.items, 1)
 			T.expectEqual(rec.wallet.dayEarned, 120, "hors plafond du jour")
@@ -37,7 +37,7 @@ return function(T, Loader)
 		end)
 
 		T.it("doublon payé en crédits achetés : remboursé dans `purchased` (#395)", function()
-			local rec = Rules.operation(ORDER)(record(0, 500, { "skin.awp.impact" }))
+			local rec = Rules.operation(ORDER)(record(0, 500, { "skin.awp.pan" }))
 			T.expectEqual(rec.wallet.purchased, 200)
 			T.expectEqual(rec.wallet.earned, 0, "aucun achat converti en gain")
 			T.expectEqual(rec.wallet.dayEarned, 120, "hors plafond du jour")
@@ -47,7 +47,7 @@ return function(T, Loader)
 			"doublon payé en partie en achetés : `purchased` à hauteur du débit, le reste dans `earned`",
 			function()
 				-- 150 achetés + 350 gagnés débités ; remboursement 200 : 150 rendus aux achetés, 50 aux gagnés
-				local rec = Rules.operation(ORDER)(record(400, 150, { "skin.awp.impact" }))
+				local rec = Rules.operation(ORDER)(record(400, 150, { "skin.awp.pan" }))
 				T.expectEqual(rec.wallet.purchased, 150)
 				T.expectEqual(rec.wallet.earned, 50 + 50)
 			end
@@ -55,7 +55,7 @@ return function(T, Loader)
 
 		T.it("doublon payé en achetés au-delà du remboursement : tout rendu aux achetés", function()
 			-- 500 achetés débités sur 900 ; remboursement 200 rendu aux achetés, gagnés intacts
-			local rec = Rules.operation(ORDER)(record(70, 900, { "skin.awp.impact" }))
+			local rec = Rules.operation(ORDER)(record(70, 900, { "skin.awp.pan" }))
 			T.expectEqual(rec.wallet.purchased, 600)
 			T.expectEqual(rec.wallet.earned, 70)
 		end)
@@ -89,7 +89,7 @@ return function(T, Loader)
 		T.it("achat écrit : skin, rareté, ajouté ou doublon avec son remboursement", function()
 			local new = Rules.reply("ok", { duplicate = false }, ORDER, "rare", false)
 			T.expectEqual(new.ok, true)
-			T.expectEqual(new.skinId, "skin.awp.impact")
+			T.expectEqual(new.skinId, "skin.awp.pan")
 			T.expectEqual(new.rarity, "rare")
 			T.expectEqual(new.added, true)
 			T.expectEqual(new.refund, 0)

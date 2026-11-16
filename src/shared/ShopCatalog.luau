@@ -48,7 +48,8 @@ ShopCatalog.CRATES = {
 		weapon = "weapon.awp",
 		stripe = { 226, 58, 40 },
 		price = 500,
-		contents = { common = "couchant", rare = "impact", exceptional = "releve" },
+		-- skins AWP de #417 ; TREMPE et MUE hors caisse en attendant des caisses de six skins
+		contents = { common = "balise", rare = "pan", exceptional = "orage" },
 	},
 	{
 		id = "crate.m9.serie1",
@@ -64,7 +65,7 @@ ShopCatalog.CRATES = {
 		weapon = "weapon.awp",
 		stripe = { 40, 150, 160 },
 		price = 500,
-		contents = { common = "recuit", rare = "strate", exceptional = "sillage" },
+		contents = { common = "maquis", rare = "circuit", exceptional = "ciselure" },
 	},
 	{
 		id = "crate.m9.serie2",
