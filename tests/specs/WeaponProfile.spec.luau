@@ -58,22 +58,30 @@ return function(T, Loader)
 		end)
 
 		for name, reference in WeaponProfile.REFERENCES do
-			T.it("référence de " .. name .. " : axes unitaires et perpendiculaires, repère direct", function()
-				T.expectEqual(math.abs(reference.tip.Magnitude - 1) < 1e-6, true)
-				T.expectEqual(math.abs(reference.up.Magnitude - 1) < 1e-6, true)
-				T.expectEqual(math.abs(reference.tip:Dot(reference.up)) < 1e-6, true)
-				T.expectEqual(direct((WeaponProfile.frame(tilted, Vector3.new(2, 3, 4), reference))), true)
-			end)
+			T.it(
+				"référence de "
+					.. name
+					.. " : axes de la pièce (±1 sur un seul axe), perpendiculaires, repère direct",
+				function()
+					-- l'étendue se lit composante par composante dans la taille de la boîte : un axe en biais la fausserait
+					for _, v in { reference.tip, reference.up } do
+						T.expectEqual(math.abs(v.X) + math.abs(v.Y) + math.abs(v.Z), 1)
+						T.expectEqual(math.max(math.abs(v.X), math.abs(v.Y), math.abs(v.Z)), 1)
+					end
+					T.expectEqual(reference.tip:Dot(reference.up), 0)
+					T.expectEqual(direct((WeaponProfile.frame(tilted, Vector3.new(2, 3, 4), reference))), true)
+				end
+			)
 		end
 
-		T.it("toute arme vendue au shop a sa référence (sinon son sens dépend de sa première pièce)", function()
-			local loader = Loader.new()
+		T.it("toute arme vendue au shop a sa référence, par le viewmodel des lignes du contenu", function()
+			local loader = Loader.new({})
 			local ShopCatalog = loader:require("src/shared/ShopCatalog")
 			local InventoryRules = loader:require("src/shared/InventoryRules")
 			for _, crate in ShopCatalog.CRATES do
-				local weapon = InventoryRules.item(crate.weapon)
-				local tool = weapon and weapon.tool
-				T.expectEqual(tool ~= nil and WeaponProfile.REFERENCES[tool] ~= nil, true)
+				for _, row in ShopCatalog.contents(crate, InventoryRules.ITEMS) do
+					T.expectEqual(WeaponProfile.REFERENCES[row.viewmodel] ~= nil, true)
+				end
 			end
 		end)
 
