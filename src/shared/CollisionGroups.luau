@@ -4,19 +4,26 @@
 -- `Default`. Les requêtes du mouvement (sol, murs, marches, tête, accroupi) prennent ce groupe
 -- (`RaycastParams.CollisionGroup`) et ignorent donc tous les personnages ; les tirs et le couteau gardent `Default` et
 -- les touchent toujours.
+-- Les corps (ragdolls locaux, #452) vont dans `Corpses` : ils tombent sur la map et leurs membres se cognent entre eux,
+-- mais ni les personnages ni les requêtes du mouvement ne les heurtent (une pièce `CanCollide` reste visible des
+-- raycasts malgré `CanQuery = false`, seul le groupe l'écarte).
 
 local CollisionGroups = {}
 
 CollisionGroups.CHARACTERS = "Characters"
+CollisionGroups.CORPSES = "Corpses"
 
--- Cette méthode permet d'enregistrer le groupe des personnages, non collidable avec lui-même, lorsque le serveur démarre
--- (avant d'y ranger une pièce) ; sans effet s'il l'est déjà. Les groupes sont répliqués aux clients.
+-- Cette méthode permet d'enregistrer les groupes des personnages (non collidable avec lui-même) et des corps (qui ne
+-- heurtent pas les personnages) lorsque le serveur démarre ; sans effet s'ils le sont déjà. Répliqués aux clients.
 function CollisionGroups.register()
 	local PhysicsService = game:GetService("PhysicsService")
-	if not PhysicsService:IsCollisionGroupRegistered(CollisionGroups.CHARACTERS) then
-		PhysicsService:RegisterCollisionGroup(CollisionGroups.CHARACTERS)
+	for _, group in { CollisionGroups.CHARACTERS, CollisionGroups.CORPSES } do
+		if not PhysicsService:IsCollisionGroupRegistered(group) then
+			PhysicsService:RegisterCollisionGroup(group)
+		end
 	end
 	PhysicsService:CollisionGroupSetCollidable(CollisionGroups.CHARACTERS, CollisionGroups.CHARACTERS, false)
+	PhysicsService:CollisionGroupSetCollidable(CollisionGroups.CORPSES, CollisionGroups.CHARACTERS, false)
 end
 
 -- Cette méthode permet de ranger une instance dans le groupe des personnages lorsqu'elle est une pièce (les autres

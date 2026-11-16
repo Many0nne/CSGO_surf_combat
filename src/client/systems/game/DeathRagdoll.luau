@@ -3,7 +3,10 @@
 -- qu'après CORPSE_HANDOFF_DELAY (init.server) pour laisser le temps au clone. Physique purement locale : les positions
 -- des joueurs sont pilotées par les clients (CharacterSync), le serveur n'a rien à simuler.
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+
+local CollisionGroups = require(ReplicatedStorage.Shared.CollisionGroups)
 
 local DeathRules = require(script.Parent.DeathRules)
 local CharacterSync = require(script.Parent.Parent.network.CharacterSync)
@@ -127,8 +130,8 @@ local function rigClone(clone: Model): ({ BasePart }, { Decal })
 			-- Ni raycast (mouvement, tirs) ni contact : le corps est un décor local
 			inst.CanQuery = false
 			inst.CanTouch = false
-			-- Le corps reprend le groupe par défaut : dans celui des personnages (#312), ses membres se traverseraient
-			inst.CollisionGroup = "Default"
+			-- Groupe des corps (#452) : heurte la map et ses propres membres, pas les vivants ni leur mouvement
+			inst.CollisionGroup = CollisionGroups.CORPSES
 			local isBody = inst.Parent == clone
 			inst.CanCollide = isBody
 			inst.Massless = not isBody
