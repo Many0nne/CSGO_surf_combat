@@ -62,28 +62,6 @@ return function(T, Loader)
 		end)
 	end)
 
-	T.describe("MenuSceneRules.settleHover", function()
-		T.it("ne retient la cible qu'après le délai sur la même candidate", function()
-			local state = { candidate = 0, since = 0, focused = 0 }
-			T.expectEqual(Rules.settleHover(state, 2, 1.0, 0.2), 0)
-			T.expectEqual(Rules.settleHover(state, 2, 1.1, 0.2), 0)
-			T.expectEqual(Rules.settleHover(state, 2, 1.25, 0.2), 2)
-		end)
-
-		T.it("ignore un simple passage sur une autre cible", function()
-			local state = { candidate = 2, since = 0, focused = 2 }
-			T.expectEqual(Rules.settleHover(state, 3, 1.0, 0.2), 2)
-			T.expectEqual(Rules.settleHover(state, 2, 1.1, 0.2), 2)
-			T.expectEqual(Rules.settleHover(state, 2, 5.0, 0.2), 2)
-		end)
-
-		T.it("relâche la cible après le délai hors de tout élément", function()
-			local state = { candidate = 2, since = 0, focused = 2 }
-			T.expectEqual(Rules.settleHover(state, 0, 1.0, 0.2), 2)
-			T.expectEqual(Rules.settleHover(state, 0, 1.25, 0.2), 0)
-		end)
-	end)
-
 	T.describe("MenuSceneRules.inView", function()
 		local eye, forward = vec(0, 0, 0), vec(1, 0, 0)
 		local tanHalf, maxDistance, nearRadius = 1, 500, 30

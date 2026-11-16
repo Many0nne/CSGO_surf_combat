@@ -722,17 +722,17 @@ propre décor, pas une grille de cartes neutres), sans capture précise.
 - **La caisse choisie** sur un socle (deux palettes, plateau d'acier larmé à liseré ambre), au tiers droit de l'image ;
   un liseré ambré lumineux au sol l'entoure (plateau de jeu télévisé). À teinter plus orangé que l'ambre de l'interface :
   en lumière émise, `C.Accent` sort jaune vif.
-- **Le contenu au mur**, derrière la caisse : panneau de contreplaqué, une ligne d'AWP et une ligne de M9 aux couleurs
-  des skins, une bande de rareté sous chaque arme. Depuis #332, une caisse ne donne que l'arme de son type : le tableau
-  n'affiche que la rangée de cette arme (AWP en haut, M9 en bas), l'autre reste vide.
+- **Plus de contenu au mur (#424, choix de l'utilisateur le 16/11/2026)** : la caisse est seule dans la scène, le
+  contenu est dans la colonne de l'interface (voir « Contenu d'une caisse (#424) »). Avant, un panneau de contreplaqué
+  derrière la caisse portait une arme habillée par rareté : trois colonnes, donc trois skins par caisse au plus.
 - **Le stock** : deux racks de caisses (montants sombres, longerons ambrés), un à droite contre le mur du fond (coupé
   par le cadre, il suggère qu'il y en a d'autres), un à gauche contre le mur latéral, dans la pénombre derrière le
   texte : sans lui la gauche faisait vide.
-- **Lumière** : une suspension industrielle (cloche sombre émaillée os dedans, ampoule visible), d'abord au-dessus de
-  la caisse sur la planche, passée au-dessus du tableau dans Roblox (voir « Faisceau » plus bas) ; le rack de droite
-  en lumière plus froide, de face ; ambiance très basse, la gauche reste sombre pour l'interface.
+- **Lumière** : une suspension industrielle (cloche sombre émaillée os dedans, ampoule visible) au-dessus de la caisse,
+  comme sur la planche (au-dessus du tableau de #347 à #424) ; le rack de droite en lumière plus froide, de face ;
+  ambiance très basse, la gauche reste sombre pour l'interface.
 - **Interface** : colonne de gauche sur fond de coin (cadre de l'écran d'équipement, objet à droite) : nom de la caisse,
-  contenu avec rareté et chance, prix, ACHETER, caisse suivante. Esquisse en Arial Narrow pour juger la place, pas le
+  contenu (un skin par ligne avec sa vignette, rareté et chance), prix, ACHETER, caisse suivante. Esquisse en Arial Narrow pour juger la place, pas le
   style ; prix et monnaie non décidés (#347). Les coins clairs des caisses du rack de gauche passent derrière le texte :
   fond de coin ou flou à prévoir.
 - Caméra : FOV vertical 40° comme l'accueil, à hauteur d'œil (5,2 studs), sujet au tiers droit.
@@ -750,10 +750,13 @@ l'étiquette BIENTÔT jusqu'à #393 (voir « Achat d'une caisse »).
 
 ![Vue d'ensemble validée](ui/shop/vue_ensemble_ui.png)
 
-- Valeurs d'attente (points ouverts de #347 et #332) : **quatre caisses**, dans l'ordre de la vitrine AWP série 1, M9
-  série 1, AWP série 2, M9 série 2 (`crate.awp.serie1`, `crate.m9.serie1`, `crate.awp.serie2`, `crate.m9.serie2`, nom « AWP ·
-  SÉRIE 1 »), prix 500 CRÉDITS par caisse, une ouverture = un seul skin de l'arme de la caisse, raretés COMMUN 70 %, RARE
-  25 %, EXCEPTIONNEL 5 % (série 1 : COUCHANT, IMPACT, RELEVÉ ; série 2 : RECUIT, STRATE, SILLAGE). Doublons possibles : le
+- Valeurs d'attente (points ouverts de #347, #332 et #424) : **deux caisses, une par arme, de 6 à 8 skins** (#424 :
+  14 skins existent, quatre caisses par série n'en auraient eu que 3 ou 4 chacune), dans l'ordre de la vitrine AWP puis
+  M9 (`crate.awp.serie1`, `crate.m9.serie1`, nom « AWP · SÉRIE 1 », bande rouge pour l'AWP, bleu-vert pour le M9), prix
+  500 CRÉDITS par caisse, une ouverture = un seul skin de l'arme de la caisse, raretés COMMUN 70 %, RARE 25 %,
+  EXCEPTIONNEL 5 %, chacune partagée à parts égales entre ses skins (AWP : BALISE, MAQUIS, TREMPE, MUE à 17,5 %, PAN !,
+  CIRCUIT à 12,5 %, ORAGE, CISELURE à 2,5 % ; M9 : COUCHANT, RECUIT à 35 %, PATROUILLE, ART DÉCO à 12,5 %, RELEVÉ, ÉMAIL
+  à 2,5 %). Raretés reprises des anciennes caisses par série, à revoir par l'utilisateur. Doublons possibles : le
   tirage suit les chances affichées même si le skin est déjà possédé ; un achat rembourse alors une part du prix
   (#393), l'ouverture de test ne donne rien de plus. Tout est dans `ShopCatalog`. L'étiquette de la vitrine (3,4 studs) tient « AWP · SÉRIE 1 » + « 500 CRÉDITS »
   (vérifié en Studio) ; sous-titre de la vue d'ensemble « UNE PAR ARME ET PAR SÉRIE ». Depuis #391, le prix est le jeton
@@ -773,24 +776,16 @@ l'étiquette BIENTÔT jusqu'à #393 (voir « Achat d'une caisse »).
   `ShopScene` (le gain commun de 0,6 du Voxel a disparu). `Lighting.Ambient` assombri pendant le shop change peu de
   chose : ce sont les lampes qui comptent. Fond de la colonne : dégradé horizontal sur toute la hauteur (comme la
   planche), le fond de coin de l'équipement ne fonçait que le bas.
-  - **Suspension** : lampe à l'ampoule, à ombres (`SUSPENSION_*`), demi-sphère (180°, portée 20) penchée vers le mur :
-    sa tache s'ouvre en arc sous la cloche et couvre tout le tableau. À 90°, seule l'arme du milieu était éclairée ; à
-    130°, les armes des colonnes de côté étaient au bord du cône et restaient sombres (retour de l'utilisateur). La
-    cloche coupe la lumière au-dessus d'elle ; l'ampoule ne projette pas d'ombre (`CastShadow` coupé), sinon elle
-    masquerait la lampe placée en son centre.
-  - **Appoint du gros plan** (`FOCUS_LIGHT_*`) : lampe de face sur le tableau, allumée en fondu (1,2) pendant le
-    glissement vers une arme, éteinte au retour. Les skins métalliques (AWP Couchant) reflètent la pièce sombre et ne
-    prennent que la lumière venue presque de face : sans elle, l'arme restait presque noire en gros plan (vérifié en
-    retirant sa carte de métal : canon et lunette reprenaient leurs couleurs). Choix de l'utilisateur : toujours
-    allumée (0,9), elle aplatissait la tache de la suspension et effaçait les ombres des AWP en vue large.
-  - **Placement des skins au tableau (#366)** : les plus sombres au milieu, sous la suspension
-    (`ShopCatalog.columns`, luminance mesurée par skin dans `InventoryRules.ITEMS`), les autres à gauche puis à droite
-    dans l'ordre du contenu ; série 1 : IMPACT, COUCHANT, RELEVÉ ; série 2 : STRATE, RECUIT, SILLAGE. La colonne de
-    l'interface reste dans l'ordre des raretés : une arme du tableau garde le rang de sa ligne (`BoardTarget.row`). Les
-    métaux sombres des colonnes de côté, éclairés en rasant, ne prenaient presque pas la lumière ; élargir le faisceau
-    ou tripler `Lighting.Ambient` ne les éclaircissait pas.
+  - **Suspension (#424)** : à l'aplomb de la caisse, lampe à l'ampoule, à ombres (`SUSPENSION_*`), tournée vers le bas
+    (70°, portée 14). Hauteur (`LAMP_LIFT` 0,7) : à -1, l'ampoule restait en haut de l'image de l'ouverture et son
+    éclat passait sous les onglets du menu ; plus haut, la cloche passe sous les onglets dans la vue détail. La cloche
+    coupe la lumière au-dessus d'elle ; l'ampoule ne projette pas d'ombre (`CastShadow` coupé), sinon elle masquerait
+    la lampe placée en son centre.
   - **Appoint de face** sur la caisse : cône de 35°, portée 11. À 50° et portée 30, il éclairait aussi tout le
-    tableau et effaçait la tache de la suspension ; l'appoint du plafond (80°) a été retiré pour la même raison.
+    mur du fond et effaçait la tache de la suspension ; l'appoint du plafond (80°) a été retiré pour la même raison.
+  - Historique du tableau (#358, #366, retiré en #424) : suspension en demi-sphère penchée vers le mur pour éclairer
+    trois colonnes d'armes, appoint de face allumé pendant le gros plan (les skins métalliques ne prennent que la
+    lumière venue de face), skins les plus sombres placés au milieu sous la lampe d'après leur luminance mesurée.
   - **Rack du fond**, lumière froide d'en haut vers le milieu du rack : plus basse et plus rasante, elle brûlait le bord
     d'un plateau d'acier larmé. Éteinte face à la vitrine (elle passerait sous le texte).
   - **Vitrine** : deux lampes à ombres (60°, portée 22) : l'étage du haut ombre celui du bas et une flaque éclaire le
@@ -800,12 +795,9 @@ l'étiquette BIENTÔT jusqu'à #393 (voir « Achat d'une caisse »).
     dans le shop (salle retirée du workspace en partie).
 - **Ce qui reste simulé :** le **cône sous l'ampoule** (`lightBeam`, deux rubans `Beam`, halo et cœur, `FaceCamera`,
   `LightEmission` 1, texturés par `beam_profile.png`, pas plus large que la cloche en haut, effacé au-dessus de la
-  rangée d'AWP) : Future ne dessine pas la lumière dans l'air, et sans lui on ne voit pas que la lumière part de la
-  lampe. L'**ombre des couteaux** (`weapon_shadow.png` teintée en noir, `weaponShadow`, `fakeShadow` dans `WEAPON_ROWS`) :
-  leur vraie ombre, avec la lampe 5,6 studs plus haut et 1,5 stud devant le panneau, tombe en tache floue un stud
-  sous la lame (déjà rejeté par l'utilisateur, voir plus bas). Les AWP, plus près de la lampe, projettent leur vraie
-  ombre, attachée sous l'arme. Piège : le viewmodel du M9 a `CastShadow` coupé ; `boardWeapon` le fixe pour chaque
-  rangée.
+  caisse) : Future ne dessine pas la lumière dans l'air, et sans lui on ne voit pas que la lumière part de la
+  lampe. Piège toujours valable : le viewmodel du M9 a `CastShadow` coupé ; `revealWeapon` le fixe pour l'arme
+  révélée. (L'ombre simulée des couteaux du tableau, `weapon_shadow.png`, est partie avec lui en #424.)
 - **Retiré avec le passage à Future :** la trace sur le contreplaqué (`wall_wash.png`, un `SurfaceGui` derrière les
   armes) : la vraie tache de la suspension la remplace, et l'image non éclairée par le moteur ressortait devant les
   armes. L'image reste dans `tools/shop/make_light_textures.py` et en Decal, inutilisée.
@@ -819,10 +811,9 @@ l'étiquette BIENTÔT jusqu'à #393 (voir « Achat d'une caisse »).
   plus haut que la cloche, impossible pour une lampe tournée vers le bas) ; **une trace forte** : l'image n'est pas
   éclairée par le moteur, plus claire que les armes devant elle, le fond ressortait et les armes semblaient collées
   par-dessus.
-- Piste écartée : **suspension au-dessus de la caisse avec un cône jusqu'au sol** (et flaque autour du socle). Dans
-  l'axe de la caméra, la lampe est devant les colonnes du milieu et de droite du tableau : tout cône qui en descend
-  voile les armes. (Sous le Voxel, la caisse sous la lampe ne prenait en plus presque pas sa lumière ; non réessayé en
-  Future.)
+- Écartée tant que le tableau existait, reprise en #424 : **suspension au-dessus de la caisse**. Dans l'axe de la
+  caméra, la lampe était devant les colonnes du milieu et de droite du tableau : tout cône qui en descendait voilait
+  les armes. Sans tableau, la raison tombe ; en Future, la caisse prend bien sa lumière (vérifié en Studio).
 - Piège : **des rubans ou disques sans texture empilés font des traits**, même à 8 rubans et 18 disques à 95 % de
   transparence (rejeté par l'utilisateur). Même règle que pour les fonds d'interface : une image de dégradé.
 - Sur un `Beam`, la largeur de la texture suit la largeur du ruban et sa hauteur suit la longueur (haut de l'image sur
@@ -830,17 +821,31 @@ l'étiquette BIENTÔT jusqu'à #393 (voir « Achat d'une caisse »).
 - Piste écartée : vitrine contre le mur de gauche (à la place du rack de la planche B). Vue de face, elle remplissait
   l'image sans place pour le titre, et la vue détail perdait sa gauche sombre.
 
-**Gros plan sur une arme du tableau (#358) :** dans la vue détail, la souris posée 0,2 s sur une arme (zone invisible :
-sa rangée, bande de rareté comprise) fait glisser la caméra (0,5 s) face à elle, l'arme sur 45 % de la largeur, centrée
-à 66 % (à droite de la colonne). La ligne du skin reste en avant, les autres atténuées. Le gros plan tient tant que la
-souris reste sur la zone ; il se défait en la quittant (0,2 s aussi), et passer sur l'arme voisine change de cible.
-Aucune décision pendant un glissement : sinon l'arme passe sous la souris ou la quitte sans que le joueur bouge.
+**Contenu d'une caisse (#424, choix de l'utilisateur le 16/11/2026) :** une caisse contient de 6 à 8 skins ; le
+tableau au mur n'en montrait que trois (une colonne par rareté). Le contenu passe dans la colonne de la vue détail :
+une ligne par skin, dans l'ordre des raretés puis du catalogue (`ShopCatalog.contents`) : barre de rareté, vignette de
+l'arme habillée (`UIKit.weaponSilhouette` texturée, rendu des cartes de skin de l'écran ARMES, 128 × 30 px), nom,
+rareté et chance du skin, remboursement d'un doublon. Lignes de 30 px : à 8 lignes, ACHETER et l'ouverture de test
+restent au-dessus du bas de l'écran. Sous-titre « CAISSE · 8 SKINS · UN PAR OUVERTURE ».
 
-- Piège : **décaler la caméra, pas la tourner**, pour poser l'objet à droite (`MenuSceneRules.closeUp`). Tournée de 15°
-  à 4 studs, la perspective repoussait le bout de l'arme à 97 % de la largeur et la zone de survol sortait de l'écran :
-  impossible de quitter le gros plan par la droite.
-- Zone de survol à peine plus longue que l'arme (+0,2 stud) : la zone du gros plan occupe à l'écran la même part que
-  l'arme, une marge de 0,4 la faisait déborder.
+- Vignette à 88 px de large : une AWP de profil, cinq fois plus longue que haute, n'y faisait que 15 px de haut et ses
+  couleurs ne se lisaient pas ; 128 px.
+- **Aperçu d'un skin (choix de l'utilisateur le 16/11/2026)** : survoler une ligne 0,2 s montre l'arme habillée en
+  grand, au-dessus de la caisse, dans la salle (`ShopScene.preview`) : la caméra glisse (0,5 s) face à elle, l'arme sur
+  45 % de la largeur, centrée à 66 % (à droite de la colonne), lampe de face allumée en fondu. La ligne montrée reste
+  en avant, les autres atténuées. Un clic retient l'aperçu (fond os léger sur la ligne), un second clic le relâche ;
+  aperçu retenu, glisser dans la salle tourne l'arme (0,5° par pixel, inclinaison de 35° au plus). Sans glissement
+  depuis 2 s, l'arme se balance lentement de ±30° autour du profil. Aide en bas à droite : « SURVOL · VOIR UN SKIN »,
+  « CLIC · LE GARDER », « GLISSER · LE TOURNER ». L'aperçu se retire au changement de caisse ou de vue et dès une
+  demande d'achat (l'ouverture part du plan détail).
+- Pistes écartées pour l'aperçu : un grand aperçu 2D dans l'interface (`ViewportFrame`, comme l'écran ARMES) éclaire
+  mal les métaux, le skin y paraît plus terne qu'en jeu ; un mode d'inspection plein écran, plus long à faire et hors
+  du décor du shop.
+- Pièges de l'aperçu : à 3,6 studs au-dessus du socle, le couvercle de la caisse, éclairé de près, prenait le tiers bas
+  du gros plan (4,8). **Décaler la caméra, pas la tourner**, pour poser l'arme à droite (`MenuSceneRules.closeUp`,
+  #358) : tournée, la perspective repoussait le bout de l'arme au bord de l'image. Un tour complet automatique montrait
+  l'arme par la tranche : balancement plutôt que rotation. Les skins métalliques ne prennent que la lumière venue de
+  face : sans la lampe de face, l'AWP Couchant restait presque noire en gros plan (#358).
 
 Cotes (studs) et placement : `tools/shop/board.py` (scène B, vues d'ensemble V2, V2n, V6 ; `sheet.py <sortie> ensemble
 <dossier>` pour la planche), rendu par `tools/map/render_dizzy.py` (commandes en tête
@@ -861,7 +866,7 @@ lumière bleutée baignait toute la salle et écrasait les lampes. Rendu éclair
 à droite). Dans la vue détail, ACHETER (ou l'ouverture de test) demande le tirage au serveur (`CrateService`), puis la scène joue l'ouverture sur
 le socle ; la colonne de l'interface disparaît, puis la révélation affiche « OBTENU », l'arme et le skin, la rareté dans
 sa couleur et « CLIC · CONTINUER ». Un clic pendant l'ouverture saute à la révélation ; après, il ramène à la vue
-détail (caisse et tableau refaits).
+détail (caisse refaite).
 
 - **Référence** : les ouvertures de packs d'Apex Legends (`references/anim/apex-packs-toutes-raretes.mp4`, repères dans
   `docs/animations.md`). Chronologie, temps relevés et retours de l'utilisateur en tête de `CrateOpeningRules` (règles
@@ -878,7 +883,7 @@ détail (caisse et tableau refaits).
   pendant la charge, caisse qui tremble) ; une fin trop sèche face à la charge (colonne en une image, silhouette qui
   jaillit en 0,12 s).
 - **Pièges** :
-  - Salle éclairée = le tableau et ses armes concurrencent l'arme révélée : les lampes de la salle descendent à 15 %
+  - Salle éclairée = le décor (le tableau et ses armes, jusqu'à #424) concurrence l'arme révélée : les lampes de la salle descendent à 15 %
     pendant l'ouverture (la lumière vient de la caisse, comme chez Apex). Arme révélée à contre-jour : lampe de face
     allumée à la révélation.
   - La pièce `Interior` du modèle est un bloc plein jusqu'au couvercle : en néon, la caisse ouverte faisait une dalle de
@@ -888,7 +893,7 @@ détail (caisse et tableau refaits).
   - Le néon sature en blanc : intérieur assombri (×0,55), silhouette et nappes de la fente dans la couleur presque pure,
     sinon la montée de couleur ne se voit pas.
   - Deux tours complets de l'arme montraient la silhouette par la tranche (une tache) : elle tourne de -70° au profil.
-  - Éclair de l'explosion trop fort (PointLight 10) : le tableau brûlait en blanc ; 6.
+  - Éclair de l'explosion trop fort (PointLight 10) : le tableau (retiré en #424) brûlait en blanc ; 6.
   - Couvercle en 0,6 s : il restait dressé derrière la colonne ; 0,4 s.
 - **Vérifier dans Studio** (debug, Studio seulement, attributs du joueur en contexte Client) : `DebugCrateOpening =
   "crate:N"` montre la caisse N (shop ouvert), `"skin.awp.releve|exceptional"` joue l'ouverture sans le serveur (rien

@@ -127,6 +127,7 @@ return function(T, Loader)
 		end)
 
 		T.it("ne retient que les MAX_WRITE_MARKS sessions les plus récentes", function()
+			T.expect(Rules.MAX_WRITE_MARKS >= 20 and Rules.MAX_WRITE_MARKS <= 50, "borne entre 20 et 50 (#408)")
 			local record = nil
 			for i = 1, Rules.MAX_WRITE_MARKS + 3 do
 				record = Rules.mergeForSave(record, batch("s" .. i, 1, { kills = 1 }))

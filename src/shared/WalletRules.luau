@@ -44,8 +44,10 @@ WalletRules.ICON = "rbxassetid://133766247138455"
 WalletRules.STARTING_BALANCE = 0
 -- Plafond du solde : au-delà, un gain est écrêté (garde-fou contre un montant aberrant, loin de tout gain prévu)
 WalletRules.MAX_BALANCE = 999_999_999
--- Sessions dont le dernier lot appliqué est retenu (les plus récentes) : de quoi reconnaître un lot renvoyé
-WalletRules.MAX_WRITE_MARKS = 10
+-- Sessions dont le dernier lot appliqué est retenu (les plus récentes) : de quoi reconnaître un lot renvoyé, même si
+-- d'autres sessions écrivent la même clé entre-temps (#408). Borne appliquée à l'écriture, pas un champ : la changer
+-- ne demande pas de relever le schéma (un serveur d'avant #408 ramène juste la liste à 10 à son écriture)
+WalletRules.MAX_WRITE_MARKS = 32
 -- Reçus Robux retenus (les plus récents, #395) et longueur maximale d'un PurchaseId relu
 WalletRules.MAX_RECEIPTS = 100
 WalletRules.MAX_RECEIPT_LENGTH = 64

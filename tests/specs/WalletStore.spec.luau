@@ -73,9 +73,11 @@ return function(T, Loader)
 	-- `latency` endort chaque requête, `failures` fait échouer les N prochaines, `commitThenFail` fait échouer les N
 	-- prochaines écritures après les avoir faites (réponse perdue).
 	local function makeDataStore(sched)
-		local ds = { data = {}, writes = 0, latency = 0, failures = 0, commitThenFail = 0 }
-		-- Cette méthode permet d'attendre la latence simulée et d'échouer si une panne est programmée.
+		local ds = { data = {}, writes = 0, latency = 0, failures = 0, commitThenFail = 0, requests = {} }
+		-- Cette méthode permet d'attendre la latence simulée et d'échouer si une panne est programmée (heure de départ
+		-- de chaque requête notée dans `requests`).
 		local function request()
+			table.insert(ds.requests, sched.now)
 			if ds.latency > 0 then
 				sched.task.wait(ds.latency)
 			end
@@ -292,6 +294,7 @@ return function(T, Loader)
 			sched.task.spawn(function()
 				state.status, state.result = server.Inventory.transact(player, op)
 				state.done = true
+				state.at = sched.now
 			end)
 			return state
 		end
@@ -325,6 +328,7 @@ return function(T, Loader)
 			sched.task.spawn(function()
 				closing()
 				state.done = true
+				state.at = sched.now
 			end)
 			return state
 		end
@@ -547,6 +551,121 @@ return function(T, Loader)
 			T.expectEqual(storedBalance(ds, 1), 80)
 		end)
 
+		T.it(
+			"six écritures en échec d'affilée : retenté toutes les 120 s (FAILED_SAVE_INTERVAL), gains écrits à la reprise (#408)",
+			function()
+				local sched = makeScheduler()
+				local ds = makeDataStore(sched)
+				local server = makeServer(sched, ds)
+				local alice = server.join(1)
+				server.Wallet.add(alice, 60)
+				ds.failures = 18 -- six écritures de trois essais
+				-- Échecs à 12, 78, 144, 210 et 276 s (un nouvel essai 60 s après chacun), puis un essai toutes les 120 s
+				sched.advance(300)
+				-- Un gain pendant la panne n'avance pas le nouvel essai (prévu à 396 s)
+				server.Wallet.add(alice, 20)
+				sched.advance(90)
+				T.expectEqual(ds.failures, 3, "après 5 échecs : pas de nouvel essai avant 120 s")
+				sched.advance(120)
+				T.expectEqual(ds.failures, 0, "sixième écriture tentée malgré les 5 échecs")
+				T.expectEqual(ds.writes, 0)
+				T.expectEqual(server.Wallet.balance(alice), 80, "gains gardés en mémoire")
+				sched.advance(130)
+				T.expectEqual(storedBalance(ds, 1), 80, "gains écrits à la reprise")
+				T.expectEqual(ds.writes, 1)
+			end
+		)
+
+		T.it(
+			"gain arrivé pendant une écriture qui échoue : le nouvel essai attend quand même 60 s (#408)",
+			function()
+				local sched = makeScheduler()
+				local ds = makeDataStore(sched)
+				local server = makeServer(sched, ds)
+				local alice = server.join(1)
+				server.Wallet.add(alice, 10)
+				ds.failures = 3
+				ds.latency = 1
+				local started = #ds.requests
+				-- Écriture à 6 s : essais à 6, 9 et 14 s, échec à 15 s ; gain à 8 s, pendant l'écriture
+				sched.advance(8)
+				server.Wallet.add(alice, 5)
+				sched.advance(62)
+				T.expectEqual(#ds.requests - started, 3, "pas de nouvel essai 6 s après l'échec")
+				sched.advance(20)
+				T.expectEqual(storedBalance(ds, 1), 15, "écrit 60 s après l'échec")
+			end
+		)
+
+		T.it(
+			"objet donné pendant une panne : écrit avec le prochain essai, sans en lancer un de plus (#408)",
+			function()
+				local sched = makeScheduler()
+				local ds = makeDataStore(sched)
+				local server = makeServer(sched, ds)
+				local alice = server.join(1)
+				server.Wallet.add(alice, 10)
+				ds.failures = 3
+				-- Écriture à 6 s, échec à 12 s, nouvel essai prévu à 72 s
+				sched.advance(20)
+				local started = #ds.requests
+				T.expect(server.Inventory.grant(alice, "weapon.m9bayonet"), "don accepté")
+				sched.advance(40)
+				T.expectEqual(#ds.requests, started, "pas d'essai lancé par le don")
+				sched.advance(20)
+				local record = ds.data["1"]
+				T.expect(
+					record ~= nil and table.find(record.items, "weapon.m9bayonet") ~= nil,
+					"objet écrit au nouvel essai"
+				)
+				T.expectEqual(storedBalance(ds, 1), 10)
+			end
+		)
+
+		T.it(
+			"joueur parti, DataStore en panne : abandonné après MAX_SAVE_FAILURES échecs depuis son départ (#408)",
+			function()
+				local sched = makeScheduler()
+				local ds = makeDataStore(sched)
+				local server = makeServer(sched, ds)
+				local alice = server.join(1)
+				server.Wallet.add(alice, 40)
+				ds.failures = math.huge
+				server.leave(alice)
+				sched.advance(1000)
+				T.expect(hasWarning(server, "sauvegarde abandonnée pour"), "abandon signalé")
+				local count = #ds.requests
+				sched.advance(1000)
+				T.expectEqual(#ds.requests, count, "plus aucun essai après l'abandon")
+			end
+		)
+
+		T.it(
+			"lot renvoyé après les écritures de MAX_WRITE_MARKS - 1 autres sessions : compté une fois (#408)",
+			function()
+				T.expect(Wallet.MAX_WRITE_MARKS >= 20 and Wallet.MAX_WRITE_MARKS <= 50, "borne entre 20 et 50")
+				local sched = makeScheduler()
+				local ds = makeDataStore(sched)
+				local server = makeServer(sched, ds)
+				local alice = server.join(1)
+				server.Wallet.add(alice, 100)
+				ds.commitThenFail = 1
+				-- Écrit à 6 s mais signalé en échec ; nouvel essai à 8 s
+				sched.advance(7)
+				local stored = storedWallet(ds, 1)
+				T.expectEqual(stored.earned, 100)
+				-- Entre-temps, d'autres sessions (autres serveurs) écrivent la même clé
+				for i = 1, Wallet.MAX_WRITE_MARKS - 1 do
+					table.insert(stored.writes, { session = "autre" .. i, seq = 1 })
+					stored.earned += 1
+				end
+				sched.advance(20)
+				T.expectEqual(storedBalance(ds, 1), 100 + Wallet.MAX_WRITE_MARKS - 1, "lot renvoyé pas recompté")
+				T.expectEqual(#storedWallet(ds, 1).writes, Wallet.MAX_WRITE_MARKS)
+				T.expectEqual(server.Wallet.balance(alice), 100 + Wallet.MAX_WRITE_MARKS - 1)
+			end
+		)
+
 		T.it("un lot écrit mais signalé en échec n'est pas compté deux fois", function()
 			local sched = makeScheduler()
 			local ds = makeDataStore(sched)
@@ -577,6 +696,41 @@ return function(T, Loader)
 			T.expect(state.done)
 			T.expectEqual(storedBalance(ds, 2), 70, "écrit à l'arrêt")
 		end)
+
+		T.it(
+			"arrêt avec le DataStore en panne : essais espacés, fini avant 30 s, transaction répondue (#408)",
+			function()
+				local sched = makeScheduler()
+				local ds = makeDataStore(sched)
+				local server = makeServer(sched, ds)
+				local alice = server.join(1)
+				local bob = server.join(2)
+				server.Wallet.add(alice, 50)
+				server.Wallet.add(bob, 20)
+				ds.failures = math.huge
+				ds.latency = 3 -- un essai lancé juste avant closeDeadline finit après : attendu dans la marge
+				local started = #ds.requests
+				local state = server.close()
+				-- Achat ou reçu Robux qui attend son tour derrière la sauvegarde d'arrêt d'alice
+				local pending = server.transact(alice, function(record)
+					return record, "fait"
+				end)
+				sched.advance(120)
+				T.expect(state.done, "arrêt terminé")
+				T.expect(state.at < 30, "arrêt fini en " .. tostring(state.at) .. " s")
+				T.expect(pending.done, "transaction répondue")
+				T.expectEqual(pending.status, "failed")
+				T.expect(pending.at < 30, "transaction répondue en " .. tostring(pending.at) .. " s")
+				-- Aucun essai ne part après closeDeadline (25 s), et ils sont espacés : 6 s entre deux écritures en échec
+				-- d'un même profil, soit 10 requêtes pour 2 joueurs et la transaction (bob retenté à 21 s, pas à 15 s)
+				local count = #ds.requests - started
+				for i = started + 1, #ds.requests do
+					T.expect(ds.requests[i] < 25, "essai lancé à " .. ds.requests[i] .. " s")
+				end
+				T.expectEqual(count, 10, "requêtes à l'arrêt")
+				T.expect(hasWarning(server, "arrêt du serveur"), "abandon signalé")
+			end
+		)
 	end)
 
 	T.describe("WalletStore : dépenses", function()
@@ -1065,7 +1219,7 @@ return function(T, Loader)
 			local onB = serverB.join(1)
 			ds.latency = 1
 			local buyA = serverA.buy(onA, AWP1, 10)
-			local buyB = serverB.buy(onB, "crate.awp.serie2", 10)
+			local buyB = serverB.buy(onB, "crate.m9.serie1", 10)
 			sched.advance(5)
 			T.expect(buyA.done and buyB.done)
 			local passed = (if buyA.reply.ok then 1 else 0) + (if buyB.reply.ok then 1 else 0)
@@ -1153,7 +1307,16 @@ return function(T, Loader)
 		T.it("tout le contenu déjà possédé : refus `owned` avant tout tirage, rien d'écrit", function()
 			local sched = makeScheduler()
 			local ds = makeDataStore(sched)
-			seed(ds, 1, 600, 0, { "skin.awp.balise", "skin.awp.pan", "skin.awp.orage" })
+			seed(ds, 1, 600, 0, {
+				"skin.awp.balise",
+				"skin.awp.maquis",
+				"skin.awp.trempe",
+				"skin.awp.mue",
+				"skin.awp.pan",
+				"skin.awp.circuit",
+				"skin.awp.orage",
+				"skin.awp.ciselure",
+			})
 			local server = makeServer(sched, ds)
 			local alice = server.join(1)
 			local buy = server.buy(alice, AWP1, ROLL_IMPACT)
