@@ -771,7 +771,7 @@ plus ancienne que son heure d'arrivée :
   le temps de la saccade, puis repart de là ;
 - **gel du serveur ou pic de latence** : les paquets retenus arrivent ensemble, tous plus tard que leur position.
 
-Dans les trois cas, le paquet qui suit le trou est plus haut que l'enveloppe en chute rapide (la marge
+Dans ces cas, le paquet qui suit le trou est plus haut que l'enveloppe en chute rapide (la marge
 `FLIGHT_TIME_SLACK` couvre 0,25 s de décalage). C'est la cause des résumés au webhook pour le propriétaire du jeu
 (#382, résumés du 15/11/2026 : `Movement:flight` 1 à 54 par session, 0,03 à 0,15 % des positions, « vol : 0.8 à 2.1
 studs au-dessus de la trajectoire balistique », ping médian de 5 ms comme de 85 ms : pas une affaire de latence
@@ -782,8 +782,9 @@ l'ancienne règle.
 en l'air, la part au-delà de `FRAME_SIM_MAX` (= `MAX_TICKS × TICK`, ce qu'une frame honnête simule au plus,
 `advanceClock`). La borne basse de l'intervalle de temps de l'enveloppe se prend sur cette horloge
 (`ceiling(flight, now, clock)`), la borne haute reste l'heure d'arrivée : l'enveloppe couvre à la fois le temps simulé
-et le temps écoulé. Ce pardon est plafonné à `FLIGHT_LOST_MAX` (1 s) par vol, du décollage à l'atterrissage, après
-quoi le temps compte de nouveau en entier. La règle du vide garde l'heure d'arrivée seule (un joueur silencieux n'a
+et le temps écoulé. Ce pardon est plafonné à `FLIGHT_LOST_MAX` (1 s) par vol, du décollage (ou d'une correction,
+`restart`) à l'atterrissage, après quoi le temps compte de nouveau en entier. Un nouveau budget demande d'avoir été
+porté, donc à moins de `SUPPORT_REACH` d'une surface, où le vol n'est de toute façon pas jugé. La règle du vide garde l'heure d'arrivée seule (un joueur silencieux n'a
 pas de paquets à compter).
 
 - **Ce qu'un tricheur y gagne.** Rien à 20 paquets/s (chaque écart est sous `FRAME_SIM_MAX`). En espaçant ses
@@ -1253,8 +1254,9 @@ Ce que le code envoie vraiment (`src/server/CheatLog.luau`, `src/server/Webhook.
   total des violations, nombre de fortes comptées pour le kick, jugés (touches, coups, positions), ping médian et
   maximal, pire violation (contrôle, gravité, détail), mention « Expulsé pendant la session » le cas échéant, un champ
   par catégorie (« forte N · moyenne N · faible N », puis une ligne par contrôle avec son taux sur les jugés du
-  joueur et, depuis #382, son dernier détail, sauf pour le contrôle de la pire violation déjà en description), et en
-  pied de page le nom et le **UserId**. C'est la source de référence : un résumé = une session.
+  joueur ; depuis #382, après ces taux, le dernier détail de chaque contrôle, « ↳ contrôle : détail », coupé à
+  `FIELD_DETAIL_CHARS` (100) caractères, sauf s'il est celui de la pire violation déjà en description : un champ trop
+  long perd ses détails, jamais ses taux), et en pied de page le nom et le **UserId**. C'est la source de référence : un résumé = une session.
   Un envoi en échec est réessayé, puis écrit en entier dans la console serveur (repli).
 - **Relevé agrégé du serveur** au webhook dédié `CheatLogWebhookUrl` (console sans lui), toutes les 10 min et à
   l'arrêt (#297) : taux de violations par contrôle,

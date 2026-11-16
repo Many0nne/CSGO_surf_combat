@@ -451,11 +451,16 @@ function CharacterSync.init(
 	-- ancienne règle, temps d'arrivée seul), nil le remet ; un require depuis le MCP chargerait une autre instance
 	if RunService:IsStudio() then
 		local default = MovementGuardRules.FLIGHT_LOST_MAX
-		workspace:GetAttributeChangedSignal(DEBUG_FLIGHT_LOST_MAX):Connect(function()
+		-- Cette méthode permet d'appliquer l'attribut de mesure lorsqu'il change, ou au démarrage s'il est déjà posé.
+		local function applyDebugLostMax()
 			local value = workspace:GetAttribute(DEBUG_FLIGHT_LOST_MAX)
 			MovementGuardRules.FLIGHT_LOST_MAX = if type(value) == "number" then math.max(0, value) else default
 			print(string.format("[CharacterSync] FLIGHT_LOST_MAX = %.2f s", MovementGuardRules.FLIGHT_LOST_MAX))
-		end)
+		end
+		workspace:GetAttributeChangedSignal(DEBUG_FLIGHT_LOST_MAX):Connect(applyDebugLostMax)
+		if workspace:GetAttribute(DEBUG_FLIGHT_LOST_MAX) ~= nil then
+			applyDebugLostMax()
+		end
 	end
 end
 

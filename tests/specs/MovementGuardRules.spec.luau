@@ -112,10 +112,8 @@ return function(T, Loader)
 		return list
 	end
 
-	-- Cette méthode permet de simuler l'envoi des positions par le vrai client lorsqu'un test reproduit une saccade ou
-	-- un retard (#382) : frames à 60 FPS dont une de `hitch` s à `hitchAt`, physique en ticks fixes (StepTiming.advance :
-	-- au-delà de MAX_TICKS par frame, le retard est abandonné), envoi comme CharacterSync.send ; les paquets envoyés
-	-- pendant [lagAt, lagAt + lag] n'arrivent qu'à sa fin (pic de latence, gel du serveur). path reçoit le temps simulé.
+	-- Cette méthode permet de simuler l'envoi du vrai client (60 FPS, StepTiming.advance, CharacterSync.send) lorsqu'un
+	-- test reproduit une saccade (hitch à hitchAt) ou un retard (lag à lagAt) (#382) ; path reçoit le temps simulé.
 	local function clientPackets(path: (number) -> Vector3, duration: number, opts)
 		local list = {}
 		local clock, simulated, pending, sendAccumulator = 0, 0, 0, 0
@@ -537,6 +535,19 @@ return function(T, Loader)
 				"détail : " .. verdicts[1].detail
 			)
 		end)
+
+		T.it(
+			"une correction commence un nouveau vol : trous pardonnés et heure du décollage remis à zéro",
+			function()
+				local guard = Rules.newGuard(0, V(0, 100, 0))
+				Rules.observe(guard.flight, 0.05, 100, false)
+				Rules.observe(guard.flight, 3, 60, false) -- trou de près de 3 s : budget épuisé
+				T.expectEqual(guard.flight.lost, Rules.FLIGHT_LOST_MAX)
+				Rules.restart(guard.flight, 10, 50)
+				T.expectEqual(guard.flight.lost, 0)
+				T.expectEqual(guard.flight.airAt, 10)
+			end
+		)
 
 		T.it("un tricheur qui plane en n'envoyant qu'un paquet par seconde est signalé en moins de 4 s", function()
 			local function path(t: number): Vector3

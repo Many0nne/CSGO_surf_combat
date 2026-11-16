@@ -227,11 +227,13 @@ end
 
 -- Cette méthode permet de repartir d'une correction lorsque le serveur renvoie le client à sa dernière position
 -- acceptée (y) : le client y est replacé vitesse nulle puis tombe ; enveloppe ancrée là, avec la vitesse d'un saut
--- pour couvrir le délai avant que le client n'applique la correction.
+-- pour couvrir le délai avant que le client n'applique la correction. Un nouveau vol commence : trous pardonnés à zéro.
 function MovementGuardRules.restart(flight: Flight, now: number, y: number)
 	flight.anchored = true
 	flight.anchorAt = now
 	flight.anchorClock = flight.clock
+	flight.airAt = now
+	flight.lost = 0
 	flight.anchorY = y
 	flight.anchorVy = MovementConfig.JUMP_VELOCITY
 	flight.lastAt = now
@@ -283,7 +285,8 @@ function MovementGuardRules.ceiling(flight: Flight, now: number, clock: number?)
 		return math.huge
 	end
 	local tau = now - flight.anchorAt
-	local early = if clock then math.min(tau, clock - flight.anchorClock) else tau
+	-- L'horloge des paquets n'avance jamais plus vite que l'heure d'arrivée : early ≤ tau
+	local early = if clock then clock - flight.anchorClock else tau
 	local slack = MovementGuardRules.FLIGHT_TIME_SLACK
 	local s = math.clamp(flight.anchorVy / GRAVITY, math.max(0, early - slack), tau + slack)
 	-- Ancre resserrée en descente : un paquet parti jusqu'à REORDER_TIME avant elle peut encore arriver, plus haut de
@@ -298,9 +301,8 @@ function MovementGuardRules.ceiling(flight: Flight, now: number, clock: number?)
 		+ reorder
 end
 
--- Cette méthode permet d'avancer l'horloge des paquets lorsqu'un paquet arrive : écart d'arrivée depuis le précédent,
--- moins, en l'air, la part au-delà de FRAME_SIM_MAX (temps que le client n'a pas simulé, ou paquet en retard sur sa
--- position), dans la limite de FLIGHT_LOST_MAX par vol (#382).
+-- Cette méthode permet d'avancer l'horloge des paquets lorsqu'un paquet arrive : écart d'arrivée, moins en l'air sa
+-- part au-delà de FRAME_SIM_MAX (saccade, retard), dans la limite de FLIGHT_LOST_MAX par vol (#382).
 local function advanceClock(flight: Flight, now: number)
 	local gap = math.max(0, now - flight.lastAt)
 	local forgiven = 0
