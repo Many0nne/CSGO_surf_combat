@@ -160,7 +160,7 @@ projection cubique (4 studs par unité). Couleurs et matières sont posées par 
 `.rbxm` ne porte que la géométrie ; `verify_place.luau` vérifie que les neuf pièces existent, et qu'il n'y a pas de
 `LidStencil` dans le mesh.
 
-**Pochoir du couvercle (#434)** : rien n'est écrit dans le mesh. `ShopScene` (`crate`, `STENCIL_*`) ajoute à chaque caisse
+**Pochoir du couvercle (#434)** : rien n'est écrit dans le mesh. `ShopScene` (`crate`, à la place donnée par `src/shared/CrateStencil.luau`) ajoute à chaque caisse
 de la vitrine et du socle une pièce invisible `LidStencil` (préfixe `Lid` : elle s'ouvre avec le couvercle) portant une
 `SurfaceGui` à droite de la bande, en Oswald Bold couleur encre (24, 22, 20), éclairée comme le bois. Le texte vient de
 `ShopCatalog.stencil` (testé) : code de série tiré de ce qui suit `crate.<arme>.` dans l'id, séparateurs retirés (`serie<n>` → `S<n>`, sinon
@@ -170,6 +170,13 @@ les caisses du catalogue ont des pochoirs distincts : en cas de collision (`foam
 capitales). Une nouvelle caisse `crate.<arme>.<série>` reçoit donc son pochoir sans toucher au rendu. Sans série, le
 pochoir est l'arme seule ; caisses de stock (racks, rangées vides) : pas de pochoir. Ne pas remettre de texte dans le
 mesh : il serait le même sur toutes les caisses (l'ancien « S1-0332 » se lisait « série 1 » même sur les FILM).
+
+**Place du pochoir (#456)** : `CrateStencil` (`AT`, `SIZE`, `INK_HEIGHT`) est la seule source des cotes, et deux contrôles
+la relient au mesh. `crate_model.py` relit ces lignes (garder la forme `CrateStencil.AT = { a, b, c }`) et refuse
+d'exporter si une pièce passe devant les lettres (bande, cornière, moraillon, cadre) ou si le pochoir flotte à plus de
+`MAX_GAP` devant les planches. `verify_place.luau` compare les mêmes cotes aux boîtes des pièces de `Crate.rbxm`
+(face avant de `LidPlanks`, bord droit de `LidStripe`) ; en Lune, le pivot se lit dans `WorldPivotData` (pas de
+`GetPivot`). Caisse redessinée : régénérer, puis déplacer le pochoir dans `CrateStencil` si le générateur s'arrête.
 
 1. `blender -b --factory-startup --python tools/shop/crate_model.py -- <sortie.fbx> [aperçu.png]`
 2. `bash tools/publish_asset.sh <sortie.fbx> Model Crate` (id du Model).
