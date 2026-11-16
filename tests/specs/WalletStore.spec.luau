@@ -598,6 +598,31 @@ return function(T, Loader)
 		)
 
 		T.it(
+			"objet donné pendant une panne : écrit avec le prochain essai, sans en lancer un de plus (#408)",
+			function()
+				local sched = makeScheduler()
+				local ds = makeDataStore(sched)
+				local server = makeServer(sched, ds)
+				local alice = server.join(1)
+				server.Wallet.add(alice, 10)
+				ds.failures = 3
+				-- Écriture à 6 s, échec à 12 s, nouvel essai prévu à 72 s
+				sched.advance(20)
+				local started = #ds.requests
+				T.expect(server.Inventory.grant(alice, "weapon.m9bayonet"), "don accepté")
+				sched.advance(40)
+				T.expectEqual(#ds.requests, started, "pas d'essai lancé par le don")
+				sched.advance(20)
+				local record = ds.data["1"]
+				T.expect(
+					record ~= nil and table.find(record.items, "weapon.m9bayonet") ~= nil,
+					"objet écrit au nouvel essai"
+				)
+				T.expectEqual(storedBalance(ds, 1), 10)
+			end
+		)
+
+		T.it(
 			"joueur parti, DataStore en panne : abandonné après MAX_SAVE_FAILURES échecs depuis son départ (#408)",
 			function()
 				local sched = makeScheduler()
