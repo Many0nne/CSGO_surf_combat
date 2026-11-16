@@ -798,6 +798,13 @@ pas de paquets à compter).
   remplace `FLIGHT_LOST_MAX` ; 0 rejoue l'ancienne règle, nil remet la valeur du code (`CharacterSync.init`).
   Une saccade du client se provoque en contexte Client par une boucle d'attente active lancée par `task.delay`
   (l'appel MCP lui-même reste court).
+- **Mesure en Studio (#382, 16/11/2026).** Joueur apparu par `DebugPlaytest` AWP (PASS 9/9), bots coupés,
+  téléporté 150 studs au-dessus du sol par `PerfRouteTeleport`, saccade client de 0,6 s 0,9 s plus tard (boucle
+  d'attente active en contexte Client, `task.spawn`), 5 essais par règle, relevé agrégé à la demande entre les séries.
+  Ancienne règle (`DebugFlightLostMax` = 0) : `Movement:flight : 5 / 662 positions (0.76 %)`, un signalement par
+  essai, 18,3 à 20,7 studs. Nouvelle règle : `0 / 531 positions`, aucune ligne `[CheatLog]`. Témoin, saccade de
+  2 s : toujours signalé (« vol : 56.7 studs … trous pardonnés 1.00 s »). Dans Studio, client et serveur gèlent
+  ensemble : le cas « saccade » et le cas « gel du serveur » se confondent, les deux sont couverts.
 - **Tests** : « une saccade du client de 0,5 à 1,2 s en pleine chute », « un pic de latence ou un gel du serveur de
   0,6 s », « une saccade plus longue que les trous pardonnés » (`tests/specs/MovementGuardRules.spec.luau`, client
   simulé par `clientPackets` avec `StepTiming.advance` et l'envoi de `CharacterSync.send`).
