@@ -53,6 +53,11 @@ Quand une tâche révèle un piège, une règle ou une piste rejetée qui resser
 6. Le nettoyage automatique arrête Rojo une fois le thread fermé, et supprime le worktree et la branche locale une fois la
    PR mergée (à la main : `.\scripts\csgo-worktree.ps1 <branche> -Remove`).
 
+Rubrique « Trouvé » du compte rendu : chaque point qui mérite une tâche à part (bug, amélioration, dette, outillage)
+devient une issue, créée sans demander et labellisée selon « Labels des issues ». Chercher d'abord une issue ouverte qui
+le couvre (`gh issue list --search "<mots-clés>"`) et la compléter plutôt que d'en créer une en double. Le compte rendu
+donne le numéro de chaque issue ; seules les remarques mineures, sans suite à donner, restent de simples mentions.
+
 L'utilisateur est le client : il juge ce qui se voit en jeu (gameplay, rendu, UI, périmètre d'une feature) et ne relit pas
 le code. Les choix techniques (structure, refactor, tests, outillage, doc) se tranchent sans lui être soumis ; les comptes
 rendus décrivent ce qui change en jeu et comment le tester. Une action destructive (suppression de données, force-push,
