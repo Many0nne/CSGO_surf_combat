@@ -5,90 +5,90 @@
       "name": "Barrel",
       "className": "SurfaceAppearance",
       "properties": {
-        "ColorMapContent": "rbxassetid://93872877997315",
-        "MetalnessMapContent": "rbxassetid://132393048664105",
-        "NormalMapContent": "rbxassetid://113458259584058",
-        "RoughnessMapContent": "rbxassetid://102392754511313"
+        "ColorMapContent": "rbxassetid://98994972030956",
+        "MetalnessMapContent": "rbxassetid://127630940559233",
+        "NormalMapContent": "rbxassetid://87246824075652",
+        "RoughnessMapContent": "rbxassetid://94440512239545"
       }
     },
     {
       "name": "Bolt",
       "className": "SurfaceAppearance",
       "properties": {
-        "ColorMapContent": "rbxassetid://83575075922271",
-        "MetalnessMapContent": "rbxassetid://132506448702060",
-        "NormalMapContent": "rbxassetid://136104245776660",
-        "RoughnessMapContent": "rbxassetid://84254231030202"
+        "ColorMapContent": "rbxassetid://129177734586275",
+        "MetalnessMapContent": "rbxassetid://134145875691125",
+        "NormalMapContent": "rbxassetid://88240231958492",
+        "RoughnessMapContent": "rbxassetid://80432867166340"
       }
     },
     {
       "name": "Fittings",
       "className": "SurfaceAppearance",
       "properties": {
-        "ColorMapContent": "rbxassetid://93872877997315",
-        "MetalnessMapContent": "rbxassetid://132393048664105",
-        "NormalMapContent": "rbxassetid://113458259584058",
-        "RoughnessMapContent": "rbxassetid://102392754511313"
+        "ColorMapContent": "rbxassetid://98994972030956",
+        "MetalnessMapContent": "rbxassetid://127630940559233",
+        "NormalMapContent": "rbxassetid://87246824075652",
+        "RoughnessMapContent": "rbxassetid://94440512239545"
       }
     },
     {
       "name": "Handguard",
       "className": "SurfaceAppearance",
       "properties": {
-        "ColorMapContent": "rbxassetid://123908211326393",
-        "MetalnessMapContent": "rbxassetid://117565117970524",
-        "NormalMapContent": "rbxassetid://125361692925950",
-        "RoughnessMapContent": "rbxassetid://96567028867672"
+        "ColorMapContent": "rbxassetid://93436902842999",
+        "MetalnessMapContent": "rbxassetid://78269380110014",
+        "NormalMapContent": "rbxassetid://86858024866452",
+        "RoughnessMapContent": "rbxassetid://113234434093637"
       }
     },
     {
       "name": "Handle",
       "className": "SurfaceAppearance",
       "properties": {
-        "ColorMapContent": "rbxassetid://83575075922271",
-        "MetalnessMapContent": "rbxassetid://132506448702060",
-        "NormalMapContent": "rbxassetid://136104245776660",
-        "RoughnessMapContent": "rbxassetid://84254231030202"
+        "ColorMapContent": "rbxassetid://129177734586275",
+        "MetalnessMapContent": "rbxassetid://134145875691125",
+        "NormalMapContent": "rbxassetid://88240231958492",
+        "RoughnessMapContent": "rbxassetid://80432867166340"
       }
     },
     {
       "name": "Magazine",
       "className": "SurfaceAppearance",
       "properties": {
-        "ColorMapContent": "rbxassetid://83575075922271",
-        "MetalnessMapContent": "rbxassetid://132506448702060",
-        "NormalMapContent": "rbxassetid://136104245776660",
-        "RoughnessMapContent": "rbxassetid://84254231030202"
+        "ColorMapContent": "rbxassetid://129177734586275",
+        "MetalnessMapContent": "rbxassetid://134145875691125",
+        "NormalMapContent": "rbxassetid://88240231958492",
+        "RoughnessMapContent": "rbxassetid://80432867166340"
       }
     },
     {
       "name": "Scope",
       "className": "SurfaceAppearance",
       "properties": {
-        "ColorMapContent": "rbxassetid://135020404838794",
-        "MetalnessMapContent": "rbxassetid://124213727747010",
-        "NormalMapContent": "rbxassetid://105083647786121",
-        "RoughnessMapContent": "rbxassetid://108873590930038"
+        "ColorMapContent": "rbxassetid://131406781328570",
+        "MetalnessMapContent": "rbxassetid://81461902424178",
+        "NormalMapContent": "rbxassetid://106041816995813",
+        "RoughnessMapContent": "rbxassetid://104753658111499"
       }
     },
     {
       "name": "Stock",
       "className": "SurfaceAppearance",
       "properties": {
-        "ColorMapContent": "rbxassetid://123908211326393",
-        "MetalnessMapContent": "rbxassetid://117565117970524",
-        "NormalMapContent": "rbxassetid://125361692925950",
-        "RoughnessMapContent": "rbxassetid://96567028867672"
+        "ColorMapContent": "rbxassetid://93436902842999",
+        "MetalnessMapContent": "rbxassetid://78269380110014",
+        "NormalMapContent": "rbxassetid://86858024866452",
+        "RoughnessMapContent": "rbxassetid://113234434093637"
       }
     },
     {
       "name": "Trigger",
       "className": "SurfaceAppearance",
       "properties": {
-        "ColorMapContent": "rbxassetid://83575075922271",
-        "MetalnessMapContent": "rbxassetid://132506448702060",
-        "NormalMapContent": "rbxassetid://136104245776660",
-        "RoughnessMapContent": "rbxassetid://84254231030202"
+        "ColorMapContent": "rbxassetid://129177734586275",
+        "MetalnessMapContent": "rbxassetid://134145875691125",
+        "NormalMapContent": "rbxassetid://88240231958492",
+        "RoughnessMapContent": "rbxassetid://80432867166340"
       }
     }
   ]

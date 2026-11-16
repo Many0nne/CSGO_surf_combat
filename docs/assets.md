@@ -324,6 +324,12 @@ marquages sont celles de Windows (`C:/Windows/Fonts`, Bahnschrift, Impact) : gé
   relevés vers l'arrière, une couleur par écaille lue au centre (MUE).
 - **Rendu en jeu plus sombre et plus chaud** que la planche Cycles : sous le crépuscule de la map, l'orange de BALISE vire
   au rouge et le blanc au gris lavande.
+- **Une base métallique sombre tombe au noir en jeu** (salle du playtest) : à 0,10-0,16 de couleur de reflet, écailles
+  de MUE, carbone de CIRCUIT et émeraude d'ORAGE ne se voyaient plus. Viser au moins ~0,2 sur le canal dominant (MUE
+  0,32, ORAGE 0,38, CISELURE 0,28) et une rugosité de 0,2 à 0,4 ; la planche Cycles paraît alors trop claire, c'est voulu.
+- **Essayer tous les skins en jeu sans relancer de partie** : en playtest, AWP en main, cloner depuis le contexte Client
+  les `SurfaceAppearance` de `ReplicatedStorage.Skins.AWP.<skin>` sur les pièces de `workspace.CurrentCamera.AWP` (ce
+  que fait `WeaponSkins.apply`), puis `screen_capture`. Un skin jamais chargé reste gris 1 à 3 s : recapturer.
 
 ### Fabriquer un skin (motifs calculés, skins M9)
 

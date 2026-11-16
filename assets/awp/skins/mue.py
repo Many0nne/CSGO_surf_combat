@@ -9,7 +9,7 @@ import numpy as np
 from common import X, outline, zone
 from common import paint as ink
 
-DORSAL = np.array((0.10, 0.14, 0.11))  # posé en métal : reflet sombre sans voile gris
+DORSAL = np.array((0.22, 0.32, 0.25))  # posé en métal : reflet sombre sans voile gris
 CRIMSON = np.array((0.46, 0.05, 0.035))
 RIM = np.array((0.80, 0.34, 0.05))
 BELLY = np.array((0.66, 0.58, 0.42))
@@ -71,7 +71,7 @@ def scales(m, sel, seed, cyl=None, cv=None):
 		col = col * (1 - belly[:, None]) + np.outer(belly * tint, BELLY)
 		metal = 1 - belly
 	m.color[sel] = col * shade[:, None]
-	m.rough[sel] = 0.26 + 0.24 * (1 - groove)
+	m.rough[sel] = 0.36 + 0.2 * (1 - groove)
 	m.metal[sel] = metal
 
 

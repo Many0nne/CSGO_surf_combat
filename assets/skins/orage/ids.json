@@ -1,28 +1,28 @@
 {
  "AWP": {
   "METAL_A": {
-   "Color": "rbxassetid://127127802344973",
-   "Metal": "rbxassetid://113285093846439",
-   "Normal": "rbxassetid://99836084736618",
-   "Rough": "rbxassetid://101253816550552"
+   "Color": "rbxassetid://95590038534422",
+   "Metal": "rbxassetid://98765975971133",
+   "Normal": "rbxassetid://88321922705216",
+   "Rough": "rbxassetid://131834175434252"
   },
   "METAL_B": {
-   "Color": "rbxassetid://97870746177018",
-   "Metal": "rbxassetid://93759054703707",
-   "Normal": "rbxassetid://122027600089686",
-   "Rough": "rbxassetid://75620898195399"
+   "Color": "rbxassetid://138505549187636",
+   "Metal": "rbxassetid://90175586150723",
+   "Normal": "rbxassetid://102494318470167",
+   "Rough": "rbxassetid://93096362412066"
   },
   "SCOPE": {
-   "Color": "rbxassetid://73868128766819",
-   "Metal": "rbxassetid://103168916114284",
-   "Normal": "rbxassetid://134077758385405",
-   "Rough": "rbxassetid://139680181009662"
+   "Color": "rbxassetid://90205639173283",
+   "Metal": "rbxassetid://128672775662628",
+   "Normal": "rbxassetid://135318393734207",
+   "Rough": "rbxassetid://129624857462453"
   },
   "WOOD": {
-   "Color": "rbxassetid://96169852814947",
-   "Metal": "rbxassetid://135196225301631",
-   "Normal": "rbxassetid://96452087090332",
-   "Rough": "rbxassetid://111202496957846"
+   "Color": "rbxassetid://77783394400148",
+   "Metal": "rbxassetid://133905283433965",
+   "Normal": "rbxassetid://136395508422599",
+   "Rough": "rbxassetid://89348674744558"
   }
  }
 }

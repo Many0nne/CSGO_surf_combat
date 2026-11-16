@@ -10,7 +10,7 @@ import numpy as np
 from common import X, band, fbm, outline
 from common import paint as ink
 
-BLUED = (0.105, 0.115, 0.14)  # acier bleui (métal : teinte du reflet)
+BLUED = (0.20, 0.22, 0.28)  # acier bleui (métal : teinte du reflet)
 GOLD = (0.86, 0.66, 0.32)
 GROOVE = -0.0011  # profondeur de la gravure (unités monde)
 

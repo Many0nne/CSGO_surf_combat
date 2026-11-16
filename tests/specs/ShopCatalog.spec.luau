@@ -219,10 +219,10 @@ return function(T, Loader)
 		end)
 
 		T.it(
-			"les caisses en vente mettent leur skin le plus sombre au milieu (Orage et Circuit, Couchant et Recuit)",
+			"les caisses en vente mettent leur skin le plus sombre au milieu (Pan ! et Circuit, Couchant et Recuit)",
 			function()
 				local expected = {
-					["crate.awp.serie1"] = "ORAGE",
+					["crate.awp.serie1"] = "PAN !",
 					["crate.m9.serie1"] = "COUCHANT",
 					["crate.awp.serie2"] = "CIRCUIT",
 					["crate.m9.serie2"] = "RECUIT",

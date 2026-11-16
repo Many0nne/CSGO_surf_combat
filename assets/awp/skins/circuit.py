@@ -10,7 +10,7 @@ from common import paint as ink
 
 NEON = (0.98, 0.10, 0.62)
 HALO = (0.55, 0.02, 0.32)
-MATTE = (0.075, 0.075, 0.08)  # noir satiné, posé en métal (pas de voile gris)
+MATTE = (0.13, 0.13, 0.14)  # noir satiné, posé en métal (pas de voile gris)
 
 # pistes en pixels de la photo de profil (build_awp.py) ; chaque coude fait 45°
 TRACES = [
@@ -58,10 +58,10 @@ def carbon(m, cell=0.035):
 	warp = ((iu + iv) // 2) % 2 == 0  # sens de la mèche visible : chaîne ou trame
 	f = np.where(warp, v - iv, u - iu)  # position à travers la mèche
 	tow = np.sin(f * np.pi)  # bombé de la mèche
-	shade = np.where(warp, 0.16, 0.10) * (0.7 + 0.3 * tow)
+	shade = np.where(warp, 0.28, 0.18) * (0.7 + 0.3 * tow)
 	m.color[:] = np.outer(shade, (1.0, 1.0, 1.08)) * (0.6 + 0.4 * np.clip(m.ao, 0, 1))[:, None]
 	# en métal sombre (docs/assets.md, pièges) : un non-métal sombre prend un voile gris sous les reflets
-	m.rough[:] = 0.34 - 0.08 * tow
+	m.rough[:] = 0.4 - 0.08 * tow
 	m.metal[:] = 1.0
 	m.height[:] = 0.0004 * tow
 

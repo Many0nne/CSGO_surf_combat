@@ -10,7 +10,7 @@ import numpy as np
 from common import X
 from common import paint as ink
 
-CANDY = (0.02, 0.19, 0.11)
+CANDY = (0.04, 0.38, 0.23)
 GLOW = (0.10, 0.85, 0.75)
 CORE = (0.88, 1.0, 0.96)
 
@@ -55,7 +55,7 @@ def draw(cv):
 	strike(cv, rng, (3545, 410), (3240, 610), 5, branches=2)  # depuis la plaque de couche
 
 
-def candy(m, sel, rough=0.1):
+def candy(m, sel, rough=0.18):
 	"""Cette méthode permet de poser la peinture candy (métal 1, teinte saturée sombre, vernis brillant, creux plus sombres)."""
 	ink(m, sel, CANDY, rough, 1.0)
 

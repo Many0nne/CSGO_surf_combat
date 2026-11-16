@@ -107,7 +107,7 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.awp",
 		name = "CISELURE",
 		appearance = "ciselure",
-		luminance = 0.046,
+		luminance = 0.062,
 	},
 	{
 		id = "skin.awp.pan",
@@ -123,7 +123,7 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.awp",
 		name = "ORAGE",
 		appearance = "orage",
-		luminance = 0.071,
+		luminance = 0.106,
 	},
 	{
 		id = "skin.awp.circuit",
@@ -131,7 +131,7 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.awp",
 		name = "CIRCUIT",
 		appearance = "circuit",
-		luminance = 0.013,
+		luminance = 0.021,
 	},
 	{
 		id = "skin.awp.maquis",
@@ -147,7 +147,7 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.awp",
 		name = "MUE",
 		appearance = "mue",
-		luminance = 0.017,
+		luminance = 0.044,
 	},
 	-- Skins M9 (#268, #337), anciennes paires des skins AWP retirés en #417
 	{
