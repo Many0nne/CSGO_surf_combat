@@ -73,9 +73,11 @@ return function(T, Loader)
 	-- `latency` endort chaque requête, `failures` fait échouer les N prochaines, `commitThenFail` fait échouer les N
 	-- prochaines écritures après les avoir faites (réponse perdue).
 	local function makeDataStore(sched)
-		local ds = { data = {}, writes = 0, latency = 0, failures = 0, commitThenFail = 0 }
-		-- Cette méthode permet d'attendre la latence simulée et d'échouer si une panne est programmée.
+		local ds = { data = {}, writes = 0, latency = 0, failures = 0, commitThenFail = 0, requests = {} }
+		-- Cette méthode permet d'attendre la latence simulée et d'échouer si une panne est programmée (heure de départ
+		-- de chaque requête notée dans `requests`).
 		local function request()
+			table.insert(ds.requests, sched.now)
 			if ds.latency > 0 then
 				sched.task.wait(ds.latency)
 			end
@@ -292,6 +294,7 @@ return function(T, Loader)
 			sched.task.spawn(function()
 				state.status, state.result = server.Inventory.transact(player, op)
 				state.done = true
+				state.at = sched.now
 			end)
 			return state
 		end
@@ -325,6 +328,7 @@ return function(T, Loader)
 			sched.task.spawn(function()
 				closing()
 				state.done = true
+				state.at = sched.now
 			end)
 			return state
 		end
@@ -547,6 +551,54 @@ return function(T, Loader)
 			T.expectEqual(storedBalance(ds, 1), 80)
 		end)
 
+		T.it(
+			"six écritures en échec d'affilée : retenté à chaque auto-sauvegarde, gains écrits à la reprise (#408)",
+			function()
+				local sched = makeScheduler()
+				local ds = makeDataStore(sched)
+				local server = makeServer(sched, ds)
+				local alice = server.join(1)
+				server.Wallet.add(alice, 80)
+				ds.failures = 18 -- six écritures de trois essais
+				-- Échecs à 12, 78, 144, 210 et 276 s (un nouvel essai 60 s après chacun), puis un essai par auto-sauvegarde
+				sched.advance(390)
+				T.expectEqual(ds.failures, 3, "après 5 échecs : pas de nouvel essai avant l'auto-sauvegarde")
+				sched.advance(120)
+				T.expectEqual(ds.failures, 0, "sixième écriture tentée malgré les 5 échecs")
+				T.expectEqual(ds.writes, 0)
+				T.expectEqual(server.Wallet.balance(alice), 80, "gains gardés en mémoire")
+				sched.advance(130)
+				T.expectEqual(storedBalance(ds, 1), 80, "gains écrits à la reprise")
+				T.expectEqual(ds.writes, 1)
+			end
+		)
+
+		T.it(
+			"lot renvoyé après les écritures de MAX_WRITE_MARKS - 1 autres sessions : compté une fois (#408)",
+			function()
+				T.expect(Wallet.MAX_WRITE_MARKS >= 20 and Wallet.MAX_WRITE_MARKS <= 50, "borne entre 20 et 50")
+				local sched = makeScheduler()
+				local ds = makeDataStore(sched)
+				local server = makeServer(sched, ds)
+				local alice = server.join(1)
+				server.Wallet.add(alice, 100)
+				ds.commitThenFail = 1
+				-- Écrit à 6 s mais signalé en échec ; nouvel essai à 8 s
+				sched.advance(7)
+				local stored = storedWallet(ds, 1)
+				T.expectEqual(stored.earned, 100)
+				-- Entre-temps, d'autres sessions (autres serveurs) écrivent la même clé
+				for i = 1, Wallet.MAX_WRITE_MARKS - 1 do
+					table.insert(stored.writes, { session = "autre" .. i, seq = 1 })
+					stored.earned += 1
+				end
+				sched.advance(20)
+				T.expectEqual(storedBalance(ds, 1), 100 + Wallet.MAX_WRITE_MARKS - 1, "lot renvoyé pas recompté")
+				T.expectEqual(#storedWallet(ds, 1).writes, Wallet.MAX_WRITE_MARKS)
+				T.expectEqual(server.Wallet.balance(alice), 100 + Wallet.MAX_WRITE_MARKS - 1)
+			end
+		)
+
 		T.it("un lot écrit mais signalé en échec n'est pas compté deux fois", function()
 			local sched = makeScheduler()
 			local ds = makeDataStore(sched)
@@ -577,6 +629,49 @@ return function(T, Loader)
 			T.expect(state.done)
 			T.expectEqual(storedBalance(ds, 2), 70, "écrit à l'arrêt")
 		end)
+
+		T.it(
+			"arrêt avec le DataStore en panne : essais espacés, fini avant 30 s, transaction répondue (#408)",
+			function()
+				local sched = makeScheduler()
+				local ds = makeDataStore(sched)
+				local server = makeServer(sched, ds)
+				local alice = server.join(1)
+				local bob = server.join(2)
+				server.Wallet.add(alice, 50)
+				server.Wallet.add(bob, 20)
+				ds.failures = math.huge
+				ds.latency = 1
+				local started = #ds.requests
+				local state = server.close()
+				-- Achat ou reçu Robux qui attend son tour derrière la sauvegarde d'arrêt d'alice
+				local pending = server.transact(alice, function(record)
+					return record, "fait"
+				end)
+				sched.advance(120)
+				T.expect(state.done, "arrêt terminé")
+				T.expect(state.at < 30, "arrêt fini en " .. tostring(state.at) .. " s")
+				T.expect(pending.done, "transaction répondue")
+				T.expectEqual(pending.status, "failed")
+				T.expect(pending.at < 30, "transaction répondue en " .. tostring(pending.at) .. " s")
+				-- Aucun essai ne part après le budget, et ils sont espacés (2 s au moins entre deux essais d'un même profil :
+				-- 16 requêtes pour 2 joueurs et la transaction en 25 s)
+				local count = #ds.requests - started
+				for i = started + 1, #ds.requests do
+					T.expect(ds.requests[i] < 25, "essai lancé à " .. ds.requests[i] .. " s")
+				end
+				T.expect(count <= 20, count .. " requêtes")
+				T.expect(hasWarning(server, "sauvegarde abandonnée à l'arrêt"))
+				print(
+					string.format(
+						"    [#408] arrêt en panne : fini à %.1f s, transaction à %.1f s, %d requêtes",
+						state.at,
+						pending.at,
+						count
+					)
+				)
+			end
+		)
 	end)
 
 	T.describe("WalletStore : dépenses", function()
