@@ -106,6 +106,32 @@ else
 	end
 end
 
+-- Pièces de référence du profil des armes (#429, #444) : module chargé avec le Vector3 de Lune
+local WeaponProfile = luau.load(fs.readFile("src/shared/WeaponProfile.luau"), {
+	debugName = "WeaponProfile",
+	environment = { Vector3 = roblox.Vector3 },
+})()
+
+-- Cette méthode permet de vérifier qu'un viewmodel a sa pièce de référence de profil lorsqu'un rendu le pose à plat :
+-- MeshPart visible enfant direct (seules celles-là sont clonées par UIKit et ShopScene), sinon le sens n'est plus garanti.
+local function checkReference(vm)
+	local reference = WeaponProfile.REFERENCES[vm.Name]
+	if not reference then
+		fail("viewmodel " .. vm.Name .. " sans référence dans WeaponProfile.REFERENCES (sens de l'arme non garanti)")
+		return
+	end
+	local part = vm:FindFirstChild(reference.part)
+	if not (part and part:IsA("MeshPart") and part.Transparency < 1) then
+		fail(
+			string.format(
+				"viewmodel %s : pièce de référence %s absente, pas une MeshPart ou invisible (WeaponProfile.REFERENCES)",
+				vm.Name,
+				reference.part
+			)
+		)
+	end
+end
+
 local viewModels = game.ReplicatedStorage:FindFirstChild("ViewModels")
 if not viewModels then
 	fail("ReplicatedStorage.ViewModels absent")
@@ -119,6 +145,12 @@ else
 			if not vm.PrimaryPart then
 				fail("viewmodel " .. name .. " sans PrimaryPart")
 			end
+			checkReference(vm)
+		end
+	end
+	for name in WeaponProfile.REFERENCES do
+		if not viewModels:FindFirstChild(name) then
+			fail("WeaponProfile.REFERENCES." .. name .. " sans viewmodel " .. name)
 		end
 	end
 end

@@ -867,8 +867,12 @@ restent au-dessus du bas de l'écran. Sous-titre « CAISSE · 8 SKINS · UN PAR 
   sa **première pièce** (pas ceux du monde), et trier ses axes par longueur ne dit rien du sens : la vignette (caméra
   posée par `lookAt`) et l'aperçu (`CFrame.fromMatrix` sur l'axe long) tournaient l'arme de 180° l'une par rapport à
   l'autre dès que les axes triés formaient un repère indirect, ce qui était le cas du M9 **et** de l'AWP (vignettes AWP
-  bouche à gauche jusqu'à #429, l'issue disait le contraire : mesurer avant de croire). Une arme ajoutée au shop doit
-  avoir sa référence ; le Ka-Bar n'en a pas (vignettes inchangées).
+  bouche à gauche jusqu'à #429, l'issue disait le contraire : mesurer avant de croire). **Chaque viewmodel doit avoir
+  sa référence** (#444) : `tools/rbxm/verify_place.luau` fait échouer la CI si un viewmodel n'en a pas, ou si sa pièce
+  n'est pas une MeshPart visible enfant direct (seules celles-là sont clonées par les rendus). Ajouter une arme =
+  ajouter sa ligne. Sans Studio, la référence se déduit du script Blender de l'arme : dans les meshes exportés par
+  `tools/export_mesh_fbx.py`, Roblox = (x, z, -y) Blender (Ka-Bar : pointe +Y et dos +Z dans `build_knife.py`, donc
+  pointe -Z et haut +Y de Handle), à recouper avec la position des pièces relevée dans la place (`rojo build`, Lune).
 
 Cotes (studs) et placement : `tools/shop/board.py` (scène B, vues d'ensemble V2, V2n, V6 ; `sheet.py <sortie> ensemble
 <dossier>` pour la planche), rendu par `tools/map/render_dizzy.py` (commandes en tête

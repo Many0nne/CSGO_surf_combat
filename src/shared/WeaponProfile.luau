@@ -8,11 +8,13 @@ local WeaponProfile = {}
 -- Référence par viewmodel : pièce dont les axes suivent ceux de l'arme, et, dans le repère de cette pièce, direction
 -- de la pointe (ou de la bouche) et du haut (lunette, dos de lame). Vecteurs d'axe unitaires, perpendiculaires.
 -- Choix de l'utilisateur (#429) : pointe à droite partout. Le M9 garde la face de ses vignettes d'avant ; l'AWP garde
--- celle de l'aperçu (marquages des skins lisibles), ses vignettes ont changé de flanc. Une arme montrée par le shop
--- doit avoir sa référence : sans elle, le sens dépend des axes de la première pièce clonée.
+-- celle de l'aperçu (marquages des skins lisibles), ses vignettes ont changé de flanc. Le Ka-Bar (#444) garde la pose
+-- de ses vignettes d'avant, dos de lame en haut. Chaque viewmodel doit avoir sa référence, MeshPart visible enfant
+-- direct (contrôlé par tools/rbxm/verify_place.luau) : sans elle, le sens dépend des axes de la première pièce clonée.
 export type Reference = { part: string, tip: Vector3, up: Vector3 }
 WeaponProfile.REFERENCES = {
 	AWP = { part = "Barrel", tip = Vector3.new(1, 0, 0), up = Vector3.new(0, 1, 0) },
+	KaBar = { part = "Handle", tip = Vector3.new(0, 0, -1), up = Vector3.new(0, 1, 0) },
 	M9Bayonet = { part = "Handle", tip = Vector3.new(0, 0, 1), up = Vector3.new(1, 0, 0) },
 } :: { [string]: Reference }
 
