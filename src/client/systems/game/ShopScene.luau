@@ -116,7 +116,7 @@ local STENCIL_AT = Vector3.new(1.0, 1.72, 1.208) -- centre, par rapport au pivot
 local STENCIL_SIZE = Vector3.new(1.2, 0.3, 0.01) -- zone libre entre la bande et le montant du cadre
 local STENCIL_INK = Color3.fromRGB(24, 22, 20)
 local STENCIL_PIXELS = 200 -- pixels par stud
-local STENCIL_TEXT = 38 -- px : 0,19 stud de corps, soit des capitales d'Oswald de 0,136 stud
+local STENCIL_TEXT = 52 -- px : capitales d'Oswald à la hauteur de l'ancien pochoir (comparé dans Studio, même cadrage)
 
 -- Vitrine (repère local : x le long de la vitrine, y en haut, z vers la pièce)
 local VITRINE_W, VITRINE_H, VITRINE_D = 13.2, 8.4, 3.0
