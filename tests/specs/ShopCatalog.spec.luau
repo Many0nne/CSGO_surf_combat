@@ -439,7 +439,10 @@ return function(T, Loader)
 			local seen = {}
 			for _, crate in Shop.CRATES do
 				local text = Shop.stencil(crate)
-				T.expect(text ~= "" and not seen[text], crate.id .. " : pochoir vide ou déjà pris (" .. text .. ")")
+				T.expect(
+					text ~= "" and not seen[text],
+					crate.id .. " : pochoir vide ou déjà pris (" .. text .. "), lui donner un champ `series` (#454)"
+				)
 				seen[text] = true
 			end
 		end)
@@ -452,6 +455,27 @@ return function(T, Loader)
 		T.it("nouvelle série ou nouvelle arme : texte dérivé sans table à compléter", function()
 			T.expectEqual(Shop.stencil({ id = "crate.awp.serie12", weapon = "weapon.awp" }), "S12-AWP")
 			T.expectEqual(Shop.stencil({ id = "crate.ak.neon", weapon = "weapon.ak47" }), "NN-AK47")
+		end)
+
+		T.it("code de série explicite prioritaire sur l'id (#454)", function()
+			-- `foam` donnerait « FM » comme `film` : le champ lève la collision sans renommer l'id
+			T.expectEqual(Shop.stencil({ id = "crate.awp.foam", weapon = "weapon.awp", series = "FO" }), "FO-AWP")
+			T.expectEqual(Shop.stencil({ id = "crate.awp.foam", weapon = "weapon.awp" }), "FM-AWP")
+			T.expectEqual(Shop.stencil({ id = "crate.awp.serie", weapon = "weapon.awp", series = "s0" }), "S0-AWP")
+			T.expectEqual(Shop.stencil({ id = "crate.awp", weapon = "weapon.awp", series = "X1" }), "X1-AWP")
+			T.expectEqual(Shop.stencil({ id = "crate.awp.film", weapon = "weapon.awp", series = "" }), "FM-AWP")
+			T.expectEqual(Shop.stencil({ series = "FO" }), "FO")
+		end)
+
+		T.it("code de série explicite du catalogue : capitales et chiffres, court", function()
+			for _, crate in Shop.CRATES do
+				if crate.series ~= nil then
+					T.expect(
+						string.match(crate.series, "^[%u%d]+$") ~= nil and #crate.series <= 4,
+						crate.id .. " : series attendu en capitales ou chiffres, 4 au plus (" .. crate.series .. ")"
+					)
+				end
+			end
 		end)
 
 		T.it("caisse sans série, sans arme ou inconnue : repli sans erreur", function()
