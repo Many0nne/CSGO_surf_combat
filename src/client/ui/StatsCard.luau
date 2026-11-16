@@ -20,14 +20,18 @@ local StatsCard = {}
 -- En bas à droite depuis #308, sous les pieds du personnage (la grille d'équipement occupe la gauche)
 local BOTTOM = 28
 local RIGHT = 28
-local COLUMN_WIDTH = 84
-local COLUMN_GAP = 18
+-- Fiche resserrée (~460 px) pour tenir à droite de la grille d'équipement en 16:9 (grille jusqu'à x≈764 sur 1280)
+local COLUMN_WIDTH = 74
+local COLUMN_GAP = 11
 local VALUE_SIZE = 28
 local LABEL_Y = 32
 local HEIGHT = 52
 -- Fond de coin sous la fiche (sol clair possible selon la map)
 local SCRIM_SIZE = Vector2.new(640, 150)
 local SCRIM_TRANSPARENCY = 0.45
+-- Hauteur réservée au-dessus du bas de l'écran (marge + fiche) : la grille d'équipement s'arrête au-dessus quand la
+-- fenêtre est trop étroite pour les mettre côte à côte (16:10, 4:3)
+StatsCard.Reserved = BOTTOM + HEIGHT
 -- Colonnes, de gauche à droite : nom de l'instance, libellé, et texte lu dans la vue (HUDRules.StatsView)
 type Column = { name: string, label: string, text: (HUDRules.StatsView) -> string }
 local COLUMNS: { Column } = {
@@ -115,8 +119,8 @@ local function buildColumn(parent: GuiObject, index: number, spec: Column)
 end
 
 -- Cette méthode permet de construire la fiche en bas à droite de l'accueil lorsque le menu est initialisé, puis de la
--- tenir à jour à chaque changement de l'attribut `PlayerStats`.
-function StatsCard.build(parent: GuiObject)
+-- tenir à jour à chaque changement de l'attribut `PlayerStats` ; renvoie la fiche, pour que la grille l'évite.
+function StatsCard.build(parent: GuiObject): Frame
 	UIKit.cornerScrim(parent, "BottomRight", SCRIM_SIZE, SCRIM_TRANSPARENCY)
 	local card = UIKit.frame({
 		Name = "StatsCard",
@@ -151,6 +155,7 @@ function StatsCard.build(parent: GuiObject)
 	end
 	refresh()
 	Players.LocalPlayer:GetAttributeChangedSignal(StatsRules.ATTRIBUTE):Connect(refresh)
+	return card
 end
 
 return StatsCard

@@ -311,8 +311,8 @@ local function buildContent(root: Frame)
 	-- Colonne de gauche, décalée d'un bloc sous la barre de Roblox dans les petites fenêtres (#306)
 	local column =
 		UIKit.frame({ Name = "LeftColumn", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = content })
-	StatsCard.build(content)
-	EquipmentScreen.build(content, column)
+	local statsCard = StatsCard.build(content)
+	EquipmentScreen.build(content, column, statsCard, StatsCard.Reserved)
 	MenuPage.followTopbar(root, column)
 end
 
