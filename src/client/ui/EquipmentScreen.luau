@@ -633,6 +633,10 @@ function EquipmentScreen.onInput(input: InputObject)
 		if index and InventoryRules.SLOTS[index] then
 			selectSlot(index)
 		end
+	elseif input.KeyCode == Enum.KeyCode.ButtonR1 or input.KeyCode == Enum.KeyCode.ButtonL1 then
+		-- Manette (#276) : R1 / L1 passent à l'emplacement suivant / précédent, comme la barre d'armes en partie
+		local step = if input.KeyCode == Enum.KeyCode.ButtonR1 then 1 else -1
+		selectSlot((selectedSlot - 1 + step) % #InventoryRules.SLOTS + 1)
 	end
 end
 

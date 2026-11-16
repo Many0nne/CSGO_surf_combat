@@ -339,6 +339,13 @@ local function onInputChanged(input: InputObject, processed: boolean)
 	end
 end
 
+-- Cette méthode permet de passer à l'arme suivante depuis le bouton tactile ARME (#276) lorsque la barre est affichée.
+function WeaponBar.cycleNext()
+	if acceptsInput(false) then
+		cycle(1)
+	end
+end
+
 -- Cette méthode permet de masquer la barre hors partie lorsque le HUD de jeu change de visibilité ; elle ne se masque pas
 -- seule à la fin d'un round, car le serveur détruit le personnage sans déclencher CharacterRemoving.
 function WeaponBar.setVisible(show: boolean)

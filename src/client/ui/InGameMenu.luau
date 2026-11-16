@@ -12,7 +12,9 @@ local UserInputService = game:GetService("UserInputService")
 
 local PlayerSettings = require(ReplicatedStorage.Shared.PlayerSettings)
 local UITheme = require(ReplicatedStorage.Shared.UITheme)
+local GamepadCursor = require(script.Parent.Parent.input.GamepadCursor)
 local InputModule = require(script.Parent.Parent.input.InputModule)
+local KeyBindings = require(ReplicatedStorage.Shared.KeyBindings)
 local LocalSettings = require(script.Parent.Parent.systems.settings.LocalSettings)
 local HUDState = require(script.Parent.HUDState)
 local InGameMenuRules = require(script.Parent.InGameMenuRules)
@@ -28,6 +30,9 @@ type View = InGameMenuRules.View
 local InGameMenu = {}
 
 local MENU_KEY = Enum.KeyCode[PlayerSettings.MENU_KEY]
+-- Manette (#276) : bouton du menu (croix haut, Start est pris par Roblox) et retour (B, comme Échap)
+local PAD_MENU = (Enum.KeyCode :: any)[KeyBindings.GAMEPAD_BUTTONS.menu]
+local PAD_BACK = (Enum.KeyCode :: any)[KeyBindings.GAMEPAD_BUTTONS.back]
 local TITLE = "MENU"
 -- Colonne de choix centrée sous le titre (px à 720 de haut), MENU PRINCIPAL écarté des deux autres
 local COLUMN_TOP = MenuPage.ContentTop
@@ -101,6 +106,7 @@ end
 local function applyOverlay(isOpen: boolean)
 	InputModule.setSuspended(isOpen)
 	HUDState.setMenuOpen(isOpen)
+	GamepadCursor.request("inGameMenu", isOpen)
 	backdropGui.Enabled = isOpen
 	if isOpen then
 		holdMouse()
@@ -159,16 +165,29 @@ local function onInputBegan(inp: InputObject, gameProcessed: boolean)
 	if SettingsMenu.handleCaptureInput(inp) then
 		return
 	end
-	-- Échap ferme, même si Roblox traite aussi la touche (son menu s'ouvre par-dessus)
-	if inp.KeyCode == Enum.KeyCode.Escape then
+	-- Échap ferme, même si Roblox traite aussi la touche (son menu s'ouvre par-dessus) ; B de la manette aussi, mais
+	-- seulement menu ouvert (en partie, B sert à s'accroupir)
+	local back = inp.KeyCode == PAD_BACK and (InGameMenuRules.isOpen(view) or SettingsMenu.isOpen())
+	if inp.KeyCode == Enum.KeyCode.Escape or back then
 		if InGameMenuRules.isOpen(view) then
 			setView("closed")
 		else
 			SettingsMenu.close()
 		end
+		-- Le B du curseur virtuel l'éteint aussi : le rallumer si un menu reste ouvert
+		task.defer(GamepadCursor.refresh)
 		return
 	end
-	if gameProcessed or inp.KeyCode ~= MENU_KEY or not deps then
+	if gameProcessed or (inp.KeyCode ~= MENU_KEY and inp.KeyCode ~= PAD_MENU) then
+		return
+	end
+	InGameMenu.pressMenuKey()
+end
+
+-- Cette méthode permet d'appliquer la touche du menu (P, croix haut de la manette, bouton MENU tactile) selon l'état du
+-- jeu : ouvre ou ferme le menu en partie, ou les Réglages au menu principal.
+function InGameMenu.pressMenuKey()
+	if not deps then
 		return
 	end
 	local gameState = deps.getState()

@@ -64,6 +64,7 @@ local fpsCamRef: {
 	getSensitivity: () -> number,
 	setScopeMultiplier: (number) -> (),
 	getScopeMultiplier: () -> number,
+	setGamepadSensitivity: (number) -> (),
 }?
 local categories: { Category } = {}
 -- Marque l'onglet de la catégorie affichée (MenuPage.tabs), une fois les onglets posés
@@ -749,6 +750,23 @@ local function buildCategories(block: Frame)
 			fpsCamRef.setScopeMultiplier(v)
 		end
 	end)
+
+	-- Visée au stick droit (#276) : multiplicateur de la vitesse de rotation (CameraConfig.GAMEPAD_TURN_RATE)
+	local gamepad = addCategory(block, "MANETTE")
+	addSlider(
+		gamepad,
+		"Sensibilité",
+		"gamepadSensitivity",
+		CameraConfig.GAMEPAD_SENS_MIN,
+		CameraConfig.GAMEPAD_SENS_MAX,
+		CameraConfig.GAMEPAD_SENS,
+		2,
+		function(v)
+			if fpsCamRef then
+				fpsCamRef.setGamepadSensitivity(v)
+			end
+		end
+	)
 
 	-- Auto-bhop (#255) : saut automatique tant qu'Espace est maintenu, activé par défaut ; BhopSystem suit LocalSettings
 	local bhopOptions = { { label = "ACTIVÉ", value = true }, { label = "COUPÉ", value = false } }

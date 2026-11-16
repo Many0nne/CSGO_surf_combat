@@ -3,6 +3,7 @@ local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
+local GamepadRules = require(ReplicatedStorage.Shared.GamepadRules)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local ScopeSensitivity = require(ReplicatedStorage.Shared.ScopeSensitivity)
 
@@ -20,6 +21,23 @@ local scopeFov: number? = nil -- FOV du niveau de zoom, nil hors lunette
 local currentSens = baseSens
 local activeFovTween: Tween? = nil
 local scripted = false -- angles posés par le rejeu d'un parcours (#379), souris ignorée
+-- Visée à la manette (#276) : position du stick droit, multiplicateur réglable et facteur du zoom de la lunette
+local lookStick = Vector2.zero
+local gamepadSens = CameraConfig.GAMEPAD_SENS
+local zoomFactor = 1
+-- Glisser au doigt accumulé depuis la dernière image (px)
+local touchDelta = Vector2.zero
+
+UserInputService.InputChanged:Connect(function(input)
+	if input.KeyCode == Enum.KeyCode.Thumbstick2 then
+		lookStick = Vector2.new(input.Position.X, input.Position.Y)
+	end
+end)
+UserInputService.InputEnded:Connect(function(input)
+	if input.KeyCode == Enum.KeyCode.Thumbstick2 then
+		lookStick = Vector2.zero
+	end
+end)
 
 local function hideCharacterPart(obj: Instance)
 	if obj:IsA("BasePart") then
@@ -43,17 +61,25 @@ function FPSCamera.init(hrp: BasePart, char: Model)
 	RunService:BindToRenderStep(
 		boundStepName,
 		Enum.RenderPriority.Camera.Value,
-		PerfMarkers.wrap("caméra", function()
+		PerfMarkers.wrap("caméra", function(dt: number)
 			if not hrpRef or not hrpRef.Parent then
 				return
 			end
 
-			-- Rotation : toujours a la frequence d'affichage (souris fluide), sauf pendant un parcours rejoué (#379)
+			-- Rotation : toujours a la frequence d'affichage (souris fluide), sauf pendant un parcours rejoué (#379).
+			-- Souris et doigt en pixels, stick droit en vitesse (degrés/s), réduite par le zoom de la lunette.
 			if not scripted then
-				local delta = UserInputService:GetMouseDelta()
-				yaw = yaw + delta.X * currentSens
-				pitch = math.clamp(pitch - delta.Y * currentSens, CameraConfig.PITCH_MIN, CameraConfig.PITCH_MAX)
+				local delta = UserInputService:GetMouseDelta() + touchDelta * CameraConfig.TOUCH_LOOK_MULT
+				local rx, ry = GamepadRules.lookRate(lookStick.X, lookStick.Y)
+				local stickStep = CameraConfig.GAMEPAD_TURN_RATE * gamepadSens * zoomFactor * dt
+				yaw = yaw + delta.X * currentSens + rx * stickStep
+				pitch = math.clamp(
+					pitch - delta.Y * currentSens + ry * stickStep,
+					CameraConfig.PITCH_MIN,
+					CameraConfig.PITCH_MAX
+				)
 			end
+			touchDelta = Vector2.zero
 
 			-- Position : celle que le MovementController vient de poser dans cette même frame (il tourne juste avant,
 			-- sur le dt du rendu), donc sans interpolation ni retard.
@@ -101,6 +127,18 @@ end
 -- ou le niveau de zoom change.
 local function refreshSens()
 	currentSens = ScopeSensitivity.effective(baseSens, scopeFov, CameraConfig.DEFAULT_FOV, scopeSensMult)
+	zoomFactor = ScopeSensitivity.effective(1, scopeFov, CameraConfig.DEFAULT_FOV, scopeSensMult)
+end
+
+-- Cette méthode permet de régler la sensibilité de la visée au stick droit (#276) lorsque le réglage change.
+function FPSCamera.setGamepadSensitivity(s: number)
+	gamepadSens = s
+end
+
+-- Cette méthode permet d'ajouter un glisser au doigt (px) à la rotation de la prochaine image lorsque le joueur vise au
+-- tactile (#276).
+function FPSCamera.addTouchLook(delta: Vector2)
+	touchDelta += delta
 end
 
 function FPSCamera.setSensitivity(s: number)
