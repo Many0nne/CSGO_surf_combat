@@ -1,6 +1,7 @@
--- Canaux de volume (#249) : un SoundGroup général (« Master », tous les sons du jeu) et deux canaux enfants du général,
--- « Weapons » (tirs, rechargement, sons d'animation d'arme : volume effectif d'une arme = général × armes) et « Music »
--- (musique de fond, #286 : suit le général ; ses volumes menu et partie sont appliqués par MusicPlayer). Les valeurs
+-- Canaux de volume (#249) : un SoundGroup général (« Master », tous les sons du jeu) et trois canaux enfants du général,
+-- « Weapons » (tirs, rechargement, sons d'animation d'arme : volume effectif d'une arme = général × armes), « Music »
+-- (musique de fond, #286 : suit le général ; ses volumes menu et partie sont appliqués par MusicPlayer) et « Announcer »
+-- (voix des annonces de kills, #405 : volume effectif = général × annonces × volume de base). Les valeurs
 -- viennent des réglages (LocalSettings) et s'appliquent en direct. Règle : tout nouveau son d'arme passe par
 -- SoundChannels.weapon(sound) avant d'être joué ; les autres sons sont rattachés au général automatiquement.
 local SoundService = game:GetService("SoundService")
@@ -12,6 +13,7 @@ local SoundChannels = {}
 local master: SoundGroup
 local weapons: SoundGroup
 local music: SoundGroup
+local announcer: SoundGroup
 local started = false
 
 -- Cette méthode permet de rattacher au canal général un son créé sans groupe lorsqu'il apparaît dans le jeu (filet de
@@ -28,6 +30,7 @@ end
 local function apply(settings)
 	master.Volume = settings.volumeMaster / 100
 	weapons.Volume = settings.volumeWeapons / 100
+	announcer.Volume = settings.volumeAnnouncer / 100
 end
 
 -- Cette méthode permet de rattacher un son d'arme au canal armes lorsqu'il va être joué (viewmodel, 3P, tirs des autres) ;
@@ -47,6 +50,15 @@ function SoundChannels.music(sound: Sound): Sound
 	return sound
 end
 
+-- Cette méthode permet de rattacher la voix de l'annonceur de kills au canal annonces lorsqu'une annonce va être jouée ;
+-- renvoie le son.
+function SoundChannels.announcer(sound: Sound): Sound
+	if started then
+		sound.SoundGroup = announcer
+	end
+	return sound
+end
+
 -- Cette méthode permet de créer les groupes, d'y rattacher les sons existants et futurs, et de suivre les réglages
 -- lorsque le client démarre.
 function SoundChannels.init()
@@ -62,6 +74,9 @@ function SoundChannels.init()
 	music = Instance.new("SoundGroup")
 	music.Name = "Music"
 	music.Parent = master
+	announcer = Instance.new("SoundGroup")
+	announcer.Name = "Announcer"
+	announcer.Parent = master
 	started = true
 
 	for _, instance in game:GetDescendants() do

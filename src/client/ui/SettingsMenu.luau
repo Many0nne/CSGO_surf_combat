@@ -781,6 +781,18 @@ local function buildCategories(block: Frame)
 		function() end,
 		true
 	)
+	-- Voix de l'annonceur de kills (#405) : canal à part, en plus du général
+	addSlider(
+		audio,
+		"Volume des annonces",
+		"volumeAnnouncer",
+		volume.min,
+		volume.max,
+		volume.default,
+		0,
+		function() end,
+		true
+	)
 	-- Musique de fond (#286) : coupée par défaut, un volume au menu et un en partie (en plus du général) ; MusicPlayer
 	-- suit LocalSettings
 	local musicOptions = { { label = "ACTIVÉE", value = true }, { label = "COUPÉE", value = false } }
