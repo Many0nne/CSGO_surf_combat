@@ -81,5 +81,28 @@ return function(T, Loader)
 				end
 			)
 		end
+
+		-- Mesuré dans Studio (#429) : boîte d'une arme reconstruite = axes de sa première pièce (Handle du M9, Barrel de
+		-- l'AWP) ; pointe du M9 vers +Z de Handle, vue sur sa face +Y, dos +X ; bouche de l'AWP vers +X de Barrel
+		T.it(
+			"M9 : pointe (+Z de Handle) à droite, même face (+Y) et même haut (+X) que ses vignettes d'avant",
+			function()
+				local size = Vector3.new(0.93, 0.37, 3.72)
+				local old = WeaponProfile.frame(tilted, size, nil)
+				local profile = WeaponProfile.frame(tilted, size, WeaponProfile.REFERENCES.M9Bayonet)
+				T.expectEqual(same(profile.XVector, tilted.ZVector), true)
+				T.expectEqual(same(profile.ZVector, tilted.YVector), true)
+				T.expectEqual(same(profile.XVector, old.XVector) and same(profile.ZVector, old.ZVector), true)
+			end
+		)
+
+		T.it("AWP : bouche (+X de Barrel) à droite, lunette en haut, face +Z (celle de l'aperçu d'avant)", function()
+			local profile, extents =
+				WeaponProfile.frame(tilted, Vector3.new(9.15, 1.83, 0.61), WeaponProfile.REFERENCES.AWP)
+			T.expectEqual(same(profile.XVector, tilted.XVector), true)
+			T.expectEqual(same(profile.YVector, tilted.YVector), true)
+			T.expectEqual(same(profile.ZVector, tilted.ZVector), true)
+			T.expectEqual(same(extents, Vector3.new(9.15, 1.83, 0.61)), true)
+		end)
 	end)
 end

@@ -1,13 +1,15 @@
 -- Pose de profil d'une arme (#429) : repère commun aux rendus qui montrent une arme à plat, vignettes et cartes
 -- (UIKit.weaponSilhouette) comme aperçu et révélation du shop (ShopScene). Repère rendu : X vers la pointe (à droite
 -- de l'image), Y vers le haut de l'arme, Z vers celui qui regarde (face montrée). Avant, chaque rendu orientait l'arme
--- par les axes de sa boîte sans fixer le sens : le M9 était vu pointe à droite dans les vignettes, pointe à gauche
--- (l'autre face) dans l'aperçu.
+-- par les axes de sa boîte sans fixer le sens : l'aperçu tournait l'arme de 180° par rapport à la vignette (M9 pointe
+-- à droite en vignette, à gauche en aperçu ; AWP l'inverse), mesuré dans Studio.
 local WeaponProfile = {}
 
 -- Référence par viewmodel : pièce dont les axes suivent ceux de l'arme, et, dans le repère de cette pièce, direction
 -- de la pointe (ou de la bouche) et du haut (lunette, dos de lame). Vecteurs d'axe unitaires, perpendiculaires.
--- Choix de l'utilisateur : pointe à droite, face montrée par les vignettes d'avant #429.
+-- Choix de l'utilisateur (#429) : pointe à droite partout. Le M9 garde la face de ses vignettes d'avant ; l'AWP garde
+-- celle de l'aperçu (marquages des skins lisibles), ses vignettes ont changé de flanc. Une arme montrée par le shop
+-- doit avoir sa référence : sans elle, le sens dépend des axes de la première pièce clonée.
 export type Reference = { part: string, tip: Vector3, up: Vector3 }
 WeaponProfile.REFERENCES = {
 	AWP = { part = "Barrel", tip = Vector3.new(1, 0, 0), up = Vector3.new(0, 1, 0) },
