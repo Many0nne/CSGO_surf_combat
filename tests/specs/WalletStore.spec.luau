@@ -552,17 +552,20 @@ return function(T, Loader)
 		end)
 
 		T.it(
-			"six écritures en échec d'affilée : retenté à chaque auto-sauvegarde, gains écrits à la reprise (#408)",
+			"six écritures en échec d'affilée : retenté toutes les 120 s (FAILED_SAVE_INTERVAL), gains écrits à la reprise (#408)",
 			function()
 				local sched = makeScheduler()
 				local ds = makeDataStore(sched)
 				local server = makeServer(sched, ds)
 				local alice = server.join(1)
-				server.Wallet.add(alice, 80)
+				server.Wallet.add(alice, 60)
 				ds.failures = 18 -- six écritures de trois essais
-				-- Échecs à 12, 78, 144, 210 et 276 s (un nouvel essai 60 s après chacun), puis un essai par auto-sauvegarde
-				sched.advance(390)
-				T.expectEqual(ds.failures, 3, "après 5 échecs : pas de nouvel essai avant l'auto-sauvegarde")
+				-- Échecs à 12, 78, 144, 210 et 276 s (un nouvel essai 60 s après chacun), puis un essai toutes les 120 s
+				sched.advance(300)
+				-- Un gain pendant la panne n'avance pas le nouvel essai (prévu à 396 s)
+				server.Wallet.add(alice, 20)
+				sched.advance(90)
+				T.expectEqual(ds.failures, 3, "après 5 échecs : pas de nouvel essai avant 120 s")
 				sched.advance(120)
 				T.expectEqual(ds.failures, 0, "sixième écriture tentée malgré les 5 échecs")
 				T.expectEqual(ds.writes, 0)
@@ -672,22 +675,14 @@ return function(T, Loader)
 				T.expect(pending.done, "transaction répondue")
 				T.expectEqual(pending.status, "failed")
 				T.expect(pending.at < 30, "transaction répondue en " .. tostring(pending.at) .. " s")
-				-- Aucun essai ne part après closeDeadline (25 s), et ils sont espacés (2 s au moins entre deux essais d'un
-				-- même profil : 11 requêtes pour 2 joueurs et la transaction)
+				-- Aucun essai ne part après closeDeadline (25 s), et ils sont espacés : 6 s entre deux écritures en échec
+				-- d'un même profil, soit 10 requêtes pour 2 joueurs et la transaction (bob retenté à 21 s, pas à 15 s)
 				local count = #ds.requests - started
 				for i = started + 1, #ds.requests do
 					T.expect(ds.requests[i] < 25, "essai lancé à " .. ds.requests[i] .. " s")
 				end
-				T.expect(count <= 14, count .. " requêtes")
-				T.expect(hasWarning(server, "sauvegarde abandonnée à l'arrêt"))
-				print(
-					string.format(
-						"    [#408] arrêt en panne : fini à %.1f s, transaction à %.1f s, %d requêtes",
-						state.at,
-						pending.at,
-						count
-					)
-				)
+				T.expectEqual(count, 10, "requêtes à l'arrêt")
+				T.expect(hasWarning(server, "arrêt du serveur"), "abandon signalé")
 			end
 		)
 	end)

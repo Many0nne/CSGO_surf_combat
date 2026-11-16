@@ -41,8 +41,9 @@ local SAVE_RETRY_DELAY = 60 -- s avant un nouvel essai d'une sauvegarde en éche
 local MAX_SAVE_FAILURES = 5
 -- s entre deux essais d'une sauvegarde après MAX_SAVE_FAILURES échecs (rythme d'une auto-sauvegarde, comme StatsStore)
 local FAILED_SAVE_INTERVAL = 120
--- s entre deux écritures en échec d'un même profil à l'arrêt du serveur (#408), tant que closeDeadline le permet
-local CLOSE_RETRY_DELAY = 2
+-- s entre deux écritures en échec d'un même profil à l'arrêt du serveur (#408), tant que closeDeadline le permet : une
+-- écriture par clé toutes les 6 s chez Roblox, au-delà elles s'accumulent dans sa file
+local CLOSE_RETRY_DELAY = 6
 -- s d'attente en plus de CLOSE_WAIT pour une écriture lancée avant closeDeadline et encore en vol (budget : 30 s)
 local CLOSE_IN_FLIGHT_GRACE = 4
 -- s minimum entre deux écritures d'un même profil après un changement d'équipement : Roblox limite les écritures d'une
@@ -341,10 +342,25 @@ end
 
 local saveProfile: (Player, Profile) -> ()
 
+-- Cette méthode permet de choisir le délai avant un nouvel essai d'une sauvegarde en échec (hors arrêt) lorsqu'elle se
+-- termine ou qu'un changement arrive pendant la panne ; nil : abandonnée (joueur parti, MAX_SAVE_FAILURES échecs).
+local function retryDelay(player: Player, profile: Profile): number?
+	if profile.failures < MAX_SAVE_FAILURES then
+		return SAVE_RETRY_DELAY
+	elseif profiles[player] ~= profile then
+		return nil
+	end
+	return FAILED_SAVE_INTERVAL
+end
+
 -- Cette méthode permet de programmer une seule écriture d'un profil (espacée d'EQUIP_SAVE_SPACING, ou après `delay`),
 -- l'échéance la plus proche l'emportant, lorsqu'un changement ne peut pas partir tout de suite ; BindToClose l'avance.
+-- Pendant une panne (échecs d'affilée), un changement (gain, équipement) n'avance pas le nouvel essai (#408).
 local function queueSave(player: Player, profile: Profile, delay: number?)
 	local wait = delay or math.max(0, profile.lastSaveAt + EQUIP_SAVE_SPACING - os.clock())
+	if profile.failures > 0 and not closing then
+		wait = math.max(wait, retryDelay(player, profile) or 0)
+	end
 	local due = os.clock() + wait
 	local current = pendingSaves[profile]
 	if current and current.due <= due then
@@ -371,15 +387,15 @@ local function acquire(profile: Profile)
 	end
 end
 
--- Cette méthode permet de choisir le délai avant un nouvel essai d'une sauvegarde en échec (hors arrêt) lorsqu'elle se
--- termine ; nil : abandonnée (joueur parti, MAX_SAVE_FAILURES échecs depuis son départ).
-local function retryDelay(player: Player, profile: Profile): number?
-	if profile.failures < MAX_SAVE_FAILURES then
-		return SAVE_RETRY_DELAY
-	elseif profiles[player] ~= profile then
-		return nil
-	end
-	return FAILED_SAVE_INTERVAL
+-- Cette méthode permet de signaler l'abandon de la sauvegarde d'un profil lorsqu'elle ne sera plus retentée (arrêt du
+-- serveur sans temps restant, joueur parti après trop d'échecs) : inventaire, équipement et gains non écrits.
+local function warnAbandoned(player: Player, profile: Profile, reason: string)
+	warn(
+		"[InventoryStore] sauvegarde abandonnée pour",
+		player.Name,
+		"(" .. reason .. ") — items et équipement de la session non écrits, gains perdus :",
+		pendingGains(profile)
+	)
 end
 
 -- Cette méthode permet de rendre le tour d'écriture d'un profil lorsqu'une écriture se termine : à la transaction
@@ -403,12 +419,7 @@ local function release(player: Player, profile: Profile)
 		if hasTimeFor(delay) then
 			queueSave(player, profile, delay)
 		else
-			warn(
-				"[InventoryStore] sauvegarde abandonnée à l'arrêt pour",
-				player.Name,
-				"— gains perdus :",
-				pendingGains(profile)
-			)
+			warnAbandoned(player, profile, "arrêt du serveur")
 		end
 	elseif profile.failures == 0 then
 		queueSave(player, profile)
@@ -416,44 +427,18 @@ local function release(player: Player, profile: Profile)
 		local delay = retryDelay(player, profile)
 		if delay then
 			queueSave(player, profile, delay)
+		else
+			warnAbandoned(player, profile, "joueur parti, " .. profile.failures .. " échecs")
 		end
 	end
 end
 
 -- Cette méthode permet de signaler une écriture en échec lorsqu'elle a épuisé ses essais : le profil reste à écrire
--- (lots de gains compris), retenté par `release` tant qu'il n'est pas écrit (joueur parti : cf. retryDelay).
+-- (lots de gains compris), retenté ou abandonné par `release` (cf. retryDelay).
 local function noteFailure(player: Player, profile: Profile)
 	profile.dirty = true
 	profile.failures += 1
-	if closing then
-		warn(
-			"[InventoryStore] sauvegarde impossible pour",
-			player.Name,
-			"— nouvel essai avant l'arrêt s'il reste le temps"
-		)
-	else
-		local delay = retryDelay(player, profile)
-		if not delay then
-			warn(
-				"[InventoryStore] sauvegarde abandonnée pour",
-				player.Name,
-				"(parti) après",
-				profile.failures,
-				"échecs — gains perdus :",
-				pendingGains(profile)
-			)
-			return
-		end
-		warn(
-			"[InventoryStore] sauvegarde impossible pour",
-			player.Name,
-			"après",
-			profile.failures,
-			"échecs — nouvel essai dans",
-			delay,
-			"s"
-		)
-	end
+	warn("[InventoryStore] sauvegarde impossible pour", player.Name, "après", profile.failures, "échec(s)")
 end
 
 -- Cette méthode permet de couper la sauvegarde d'un profil lorsqu'une écriture trouve un format stocké que cette
@@ -542,7 +527,7 @@ local function runWrite(
 			return record
 		end)
 	end)
-	if not ok and op then
+	if not ok and op and hasTimeFor(0) then
 		-- Tous les essais signalés en échec : l'un d'eux a pu passer (réponse perdue). La marque de l'opération le dit.
 		local readOk, data = getFresh(ds, key)
 		local wallet = WalletRules.read(if readOk and type(data) == "table" then data.wallet else nil)
