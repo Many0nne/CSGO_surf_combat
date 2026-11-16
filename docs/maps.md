@@ -443,7 +443,8 @@ Rojo gère `Workspace.Maps` : un objet posé à la main dans une map est supprim
 - `Maps.Map.Ladders` : volumes invisibles (aucune collision ni requête), `LookVector` = normale sortante du mur. Dans
   le volume (marge `CHAR_RADIUS`), `MovementController` remplace la physique par `LadderRules.climbVelocity` : avancer
   monte (regard baissé : descend), reculer descend, de côté on glisse le long, saut = poussée hors du mur
-  (`LADDER_*` de `MovementConfig`). Le volume doit dépasser le haut du mur d'environ une hauteur de corps, sinon on
+  à toute hauteur (front montant d'Espace lu directement, pas `CoyoteJump` qui n'autorise un saut qu'au sol ou en
+  fenêtre coyote, #293) (`LADDER_*` de `MovementConfig`). Le volume doit dépasser le haut du mur d'environ une hauteur de corps, sinon on
   reste coincé sous l'acrotère ; aucun mur d'air ne doit avancer devant le mur à la hauteur de la grimpe.
 - `Maps.Map.GroundSpawns` : points d'apparition (parties, la racine est posée 5 studs au-dessus du centre du point),
   seuls utilisés depuis #288 (lancement depuis le soleil retiré). Le générateur met la face basse du point au niveau
