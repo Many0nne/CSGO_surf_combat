@@ -293,8 +293,8 @@ return function(T, Loader)
 			T.expectEqual(tools(Rules.weaponsForSlot(Rules.resolve(nil, false), "knife")), "KaBar")
 			T.expectEqual(tools(Rules.weaponsForSlot(Rules.resolve(nil, true), "knife")), "KaBar,M9Bayonet")
 			T.expectEqual(tools(Rules.weaponsForSlot(Rules.resolve(nil, true), "sniper")), "AWP")
-			-- Skins (#268, #337) : l'admin a les six de l'AWP, un joueur sans sauvegarde aucun
-			T.expectEqual(#Rules.skinsFor(Rules.resolve(nil, true), "weapon.awp"), 6)
+			-- Skins (#268, #337, #417) : l'admin a tous ceux de l'AWP, un joueur sans sauvegarde aucun
+			T.expectEqual(#Rules.skinsFor(Rules.resolve(nil, true), "weapon.awp"), 8)
 			T.expectEqual(#Rules.skinsFor(Rules.resolve(nil, false), "weapon.awp"), 0)
 		end)
 
@@ -459,10 +459,10 @@ return function(T, Loader)
 	T.describe("InventoryRules.skinOfTool (#268)", function()
 		T.it("donne le skin équipé de l'arme d'un Tool, nil pour d'origine ou une arme hors équipement", function()
 			local resolved = {
-				sniper = { weapon = "weapon.awp", skin = "skin.awp.couchant" },
+				sniper = { weapon = "weapon.awp", skin = "skin.awp.balise" },
 				knife = { weapon = "weapon.kabar" },
 			}
-			T.expectEqual(Rules.skinOfTool(resolved, "AWP"), "skin.awp.couchant")
+			T.expectEqual(Rules.skinOfTool(resolved, "AWP"), "skin.awp.balise")
 			T.expectEqual(Rules.skinOfTool(resolved, "KaBar"), nil)
 			T.expectEqual(Rules.skinOfTool(resolved, "M9Bayonet"), nil)
 			T.expectEqual(Rules.skinOfTool(resolved, "Inconnu"), nil)
@@ -601,19 +601,19 @@ return function(T, Loader)
 		T.it("transaction : débit et objet dans la même écriture, gains de la session comptés avant", function()
 			local change = { session = "a", batches = { { seq = 1, earned = 20 } }, upTo = 2 }
 			local written, status, result =
-				Rules.mergeForSave(record(90, 0), {}, nil, change, buy(100, "skin.awp.couchant"))
+				Rules.mergeForSave(record(90, 0), {}, nil, change, buy(100, "skin.awp.balise"))
 			assert(written)
 			T.expectEqual(status, "applied")
 			T.expectEqual(result, "achat")
 			T.expectEqual(Wallet.balance(written.wallet), 10)
-			T.expect(table.find(written.items, "skin.awp.couchant") ~= nil, "objet donné")
+			T.expect(table.find(written.items, "skin.awp.balise") ~= nil, "objet donné")
 			T.expectEqual(Wallet.appliedSeq(written.wallet, "a"), 2, "marque de l'opération")
 		end)
 
 		T.it("transaction refusée (solde stocké insuffisant) : rien à écrire", function()
 			local old = record(50)
 			local change = { session = "a", batches = {}, upTo = 1 }
-			local written, status, result = Rules.mergeForSave(old, {}, nil, change, buy(80, "skin.awp.couchant"))
+			local written, status, result = Rules.mergeForSave(old, {}, nil, change, buy(80, "skin.awp.balise"))
 			T.expectEqual(written, nil)
 			T.expectEqual(status, "rejected")
 			T.expectEqual(result, "insufficient")

@@ -14,7 +14,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Pièces de chaque matériau de l'AWP (même table que les cartes d'origine) ; la M9 n'a qu'une pièce, Handle
-AWP_PARTS = json.load(open(os.path.join(ROOT, "assets", "sniper", "texture_ids.json")))["_parts"]
+AWP_PARTS = json.load(open(os.path.join(ROOT, "assets", "awp", "texture_ids.json")))["_parts"]
 PROPS = {"Color": "ColorMapContent", "Rough": "RoughnessMapContent", "Metal": "MetalnessMapContent", "Normal": "NormalMapContent"}
 
 

@@ -186,8 +186,9 @@ l'export). Trois objets, un par matériau (lame, ferrures, cuir), donc trois Mes
 
 ## AWP : modèle procédural (#403)
 
-Source : `assets/awp/` (remplace `assets/sniper/Sniper.blend`, fusil générique à crosse en bois ; les outils de skins
-lisent encore l'ancienne source jusqu'à leur passage sur le nouveau dépliage). Tout se refait sans interface :
+Source : `assets/awp/` (remplace `assets/sniper/Sniper.blend`, fusil générique à crosse en bois, qui ne sert plus qu'aux
+anciens outils de `tools/skins/make_skins.py`). Skins de l'AWP : « Skins dessinés de l'AWP » ci-dessous. Tout se refait
+sans interface :
 
 ```bash
 blender -b --factory-startup --python assets/awp/build_awp.py -- <abs>/assets/awp/AWP.blend   # formes, UV, matériaux
@@ -282,11 +283,66 @@ grand rendu et cartes de l'écran d'équipement (`UIKit.weaponSilhouette`). Tous
 l'arme clonée. Le skin d'origine reprend les `SurfaceAppearance` du viewmodel. Le viewmodel 1re personne est cloné une
 fois par session (cache) : seules ses `SurfaceAppearance` changent quand le skin change.
 
-Sources versionnées : `assets/skins/<skin>/<Viewmodel>/<PREFIXE>_<Carte>.png` (LFS, une paire AWP + M9 par dossier) et
+Sources versionnées : `assets/skins/<skin>/<Viewmodel>/<PREFIXE>_<Carte>.png` (LFS, un dossier par arme) et
 `assets/skins/<skin>/ids.json` (ids des images publiées). Pas de skin par défaut : ils viendront des caisses, l'admin a
 tout le catalogue.
 
-### Fabriquer un skin
+### Skins dessinés de l'AWP (#417)
+
+Un skin AWP est **dessiné pour l'AWP seule**, pièce par pièce (pas un motif réappliquable sur une autre arme) : un script
+par skin dans `assets/awp/skins/` (`balise`, `trempe`, `ciselure`, `pan`, `orage`, `circuit`, `maquis`, `mue`), avec
+une fonction `paint(maps, cv)`. Il part des cartes d'origine de `make_textures.py` (granité, moletage, vis, crasse) et
+les repeint. Outils communs (`common.py`) :
+
+- **Toile de profil** (`Canvas`) : on dessine avec PIL en coordonnées de la photo de profil (`px`, `py` de
+  `build_awp.py`), une couche par encre (masque 0 à 1), puis `cv.sample(couche, m)` la lit sur chaque texel par sa
+  position (x, z). Une paire de toiles (flanc gauche, flanc droit) : `cv.text` retourne le texte sur le flanc droit pour
+  qu'il reste lisible des deux côtés. `cv.sample_at` lit la toile en des points donnés (couleur d'une écaille en son centre).
+- **Contours de l'arme** : `outline("STOCK")` relit un contour de `build_awp.py` sans bpy ; `band` trace un filet
+  intérieur qui suit le contour et le tour des trous (pontet, trou de pouce), `zone` donne la distance au bord pour
+  limiter un motif à l'intérieur ; `halftone` pose une trame de points.
+- **Encre** : `paint(m, opacité, couleur, rugosité, métal)` ; `chip` écaille la peinture sur les arêtes.
+
+```bash
+blender -b assets/awp/AWP.blend --factory-startup --python tools/skins/bake_maps.py -- <cuisson>   # une fois
+uv run assets/awp/skins/paint.py <cuisson> <skin> <sortie> [--canvas <apercu.png>]
+blender -b assets/awp/AWP.blend --factory-startup --python tools/skins/render_views.py -- awp <sortie> <sortie>
+uv run --with pillow tools/skins/compose_board.py <planche.jpg> 2 "Profil gauche|<sortie>_profil.png" …
+```
+
+Puis copier les PNG dans `assets/skins/<skin>/AWP/`, publier et cataloguer (étapes 4 et 5 ci-dessous). Les polices des
+marquages sont celles de Windows (`C:/Windows/Fonts`, Bahnschrift, Impact) : génération sur le poste, pas en CI.
+
+- **La vue « profil » de `render_views.py` est le flanc gauche, celui qu'on voit en 1P** (caméra du côté -Y).
+- **Comparer à la référence CS avant de montrer** : une première version de TREMPE (rose et violet) ressemblait au Fade,
+  une d'ORAGE (violet à éclairs blancs) à Lightning Strike ; la palette a été changée pour rester original.
+- **Raccord au joint garde-main / crosse** (`JOINT`, px 2430, retour utilisateur sur CIRCUIT, MUE et ORAGE) : le châssis
+  est en deux pièces, et un motif qui atteint le joint doit le **traverser à la même hauteur** ou s'arrêter nettement
+  avant, jamais s'arrêter dessus ni repartir décalé de l'autre côté. Défauts constatés : pistes terminées par une
+  pastille au bord du garde-main et reprises plus bas sur la crosse, losanges rognés par une marge de 6 px de chaque
+  côté du joint (zones calculées pièce par pièce), éclair qui finit dans le joint. Remèdes : tracer d'un seul trait à
+  travers le joint, limiter un motif avec `zone(cv, chassis(), …)` (garde-main et crosse réunis), caler une chaîne
+  pour qu'une jointure de motifs tombe sur `JOINT`, faire passer un éclair par un point imposé à mi-hauteur
+  (`strike(…, via=…)`). Contrôler un zoom du joint sur les deux profils avant de montrer.
+- **Rendus de planche** : passer à `paint.py` et `render_views.py` des chemins en barres obliques (`cygpath -m`). Avec
+  des barres inverses, `"$W\$S"` donne le texte `$S` en bash, et tous les skins s'écrivent dans le même dossier : la
+  planche montre alors d'anciens rendus.
+- **Un filet de contour commence sur le congé** : les 7 premiers px photo (~0,02 unité) d'un filet `band(…, 0, d1)`
+  tombent sur l'arrondi du bord ; un contour de BD lisible demande `d1` ≈ 22.
+- **Un non-métal sombre prend un voile gris** (carbone de CIRCUIT, noir mat) : le poser en métal 1 avec une couleur sombre,
+  comme une candy.
+- **Écailles** : un Voronoï 3D donne des galets (crocodile) ; des écailles de serpent sont un quinconce de losanges
+  relevés vers l'arrière, une couleur par écaille lue au centre (MUE).
+- **Rendu en jeu plus sombre et plus chaud** que la planche Cycles : sous le crépuscule de la map, l'orange de BALISE vire
+  au rouge et le blanc au gris lavande.
+- **Une base métallique sombre tombe au noir en jeu** (salle du playtest) : à 0,10-0,16 de couleur de reflet, écailles
+  de MUE, carbone de CIRCUIT et émeraude d'ORAGE ne se voyaient plus. Viser au moins ~0,2 sur le canal dominant (MUE
+  0,32, ORAGE 0,38, CISELURE 0,28) et une rugosité de 0,2 à 0,4 ; la planche Cycles paraît alors trop claire, c'est voulu.
+- **Essayer tous les skins en jeu sans relancer de partie** : en playtest, AWP en main, cloner depuis le contexte Client
+  les `SurfaceAppearance` de `ReplicatedStorage.Skins.AWP.<skin>` sur les pièces de `workspace.CurrentCamera.AWP` (ce
+  que fait `WeaponSkins.apply`), puis `screen_capture`. Un skin jamais chargé reste gris 1 à 3 s : recapturer.
+
+### Fabriquer un skin (motifs calculés, skins M9)
 
 Tout est généré par script : motifs calculés sur la position 3D de chaque texel (continus d'une pièce à l'autre, quel
 que soit le découpage UV) ou projetés depuis la vue de profil (livrée, texte), détail des cartes d'origine gardé.
@@ -294,11 +350,11 @@ que soit le découpage UV) ou projetés depuis la vue de profil (livrée, texte)
 1. **Cartes utilitaires** (une fois par arme, hors du dépôt) : position, normale, occlusion, arêtes et objet de chaque
    texel, à la résolution des textures. La M9 vient du jeu (`fetch_viewmodel.py`, section « Aperçus three.js »).
    ```bash
-   blender -b assets/sniper/Sniper.blend --factory-startup --python tools/skins/bake_maps.py -- <sortie>/awp
    blender -b --factory-startup --python tools/skins/bake_maps.py -- <sortie>/m9 --glb <m9.glb>
    ```
 2. **Cartes PBR** : `uv run --with numpy --with pillow --with scipy tools/skins/make_skins.py <bake> <m9_orig> <sortie>
-   [skin…]` (une fonction par skin et par arme dans le script : couchant, impact, releve, recuit, strate, sillage).
+   [skin…]` (une fonction par skin et par arme dans le script : couchant, impact, releve, recuit, strate, sillage ; les
+   fonctions AWP visaient l'ancien modèle `assets/sniper`, leurs skins AWP ont été retirés en #417).
 3. **Planche** : `tools/skins/render_views.py` (Cycles, HDRI de Blender, une vue par PNG, ~12 s par vue à 32
    échantillons) puis `tools/skins/compose_board.py`. Se comparer aux références `references/skins/` avant de montrer.
 4. **Publier** : `uv run tools/skins/publish_skin.py assets/skins/<skin> <skin>` (Decals, puis id de l'image par Asset

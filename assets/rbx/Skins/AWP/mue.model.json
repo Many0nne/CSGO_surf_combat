@@ -1,0 +1,95 @@
+{
+  "className": "Folder",
+  "children": [
+    {
+      "name": "Barrel",
+      "className": "SurfaceAppearance",
+      "properties": {
+        "ColorMapContent": "rbxassetid://115528462541360",
+        "MetalnessMapContent": "rbxassetid://130494398623229",
+        "NormalMapContent": "rbxassetid://119517227430566",
+        "RoughnessMapContent": "rbxassetid://87908807348245"
+      }
+    },
+    {
+      "name": "Bolt",
+      "className": "SurfaceAppearance",
+      "properties": {
+        "ColorMapContent": "rbxassetid://101560580955630",
+        "MetalnessMapContent": "rbxassetid://82751185262414",
+        "NormalMapContent": "rbxassetid://72582401372965",
+        "RoughnessMapContent": "rbxassetid://137215425687734"
+      }
+    },
+    {
+      "name": "Fittings",
+      "className": "SurfaceAppearance",
+      "properties": {
+        "ColorMapContent": "rbxassetid://115528462541360",
+        "MetalnessMapContent": "rbxassetid://130494398623229",
+        "NormalMapContent": "rbxassetid://119517227430566",
+        "RoughnessMapContent": "rbxassetid://87908807348245"
+      }
+    },
+    {
+      "name": "Handguard",
+      "className": "SurfaceAppearance",
+      "properties": {
+        "ColorMapContent": "rbxassetid://108793582083977",
+        "MetalnessMapContent": "rbxassetid://119071588823845",
+        "NormalMapContent": "rbxassetid://102208535927224",
+        "RoughnessMapContent": "rbxassetid://106264718314784"
+      }
+    },
+    {
+      "name": "Handle",
+      "className": "SurfaceAppearance",
+      "properties": {
+        "ColorMapContent": "rbxassetid://101560580955630",
+        "MetalnessMapContent": "rbxassetid://82751185262414",
+        "NormalMapContent": "rbxassetid://72582401372965",
+        "RoughnessMapContent": "rbxassetid://137215425687734"
+      }
+    },
+    {
+      "name": "Magazine",
+      "className": "SurfaceAppearance",
+      "properties": {
+        "ColorMapContent": "rbxassetid://101560580955630",
+        "MetalnessMapContent": "rbxassetid://82751185262414",
+        "NormalMapContent": "rbxassetid://72582401372965",
+        "RoughnessMapContent": "rbxassetid://137215425687734"
+      }
+    },
+    {
+      "name": "Scope",
+      "className": "SurfaceAppearance",
+      "properties": {
+        "ColorMapContent": "rbxassetid://84083291462301",
+        "MetalnessMapContent": "rbxassetid://105189332582747",
+        "NormalMapContent": "rbxassetid://86167868109103",
+        "RoughnessMapContent": "rbxassetid://122472697363471"
+      }
+    },
+    {
+      "name": "Stock",
+      "className": "SurfaceAppearance",
+      "properties": {
+        "ColorMapContent": "rbxassetid://108793582083977",
+        "MetalnessMapContent": "rbxassetid://119071588823845",
+        "NormalMapContent": "rbxassetid://102208535927224",
+        "RoughnessMapContent": "rbxassetid://106264718314784"
+      }
+    },
+    {
+      "name": "Trigger",
+      "className": "SurfaceAppearance",
+      "properties": {
+        "ColorMapContent": "rbxassetid://101560580955630",
+        "MetalnessMapContent": "rbxassetid://82751185262414",
+        "NormalMapContent": "rbxassetid://72582401372965",
+        "RoughnessMapContent": "rbxassetid://137215425687734"
+      }
+    }
+  ]
+}
