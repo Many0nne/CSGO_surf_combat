@@ -830,9 +830,22 @@ restent au-dessus du bas de l'écran. Sous-titre « CAISSE · 8 SKINS · UN PAR 
 
 - Vignette à 88 px de large : une AWP de profil, cinq fois plus longue que haute, n'y faisait que 15 px de haut et ses
   couleurs ne se lisaient pas ; 128 px.
-- Le gros plan sur une arme du tableau (#358, survol 0,2 s, caméra décalée face à l'arme) est parti avec le tableau.
-  Piège qui resservira pour un gros plan : **décaler la caméra, pas la tourner**, pour poser l'objet à droite de
-  l'écran (tournée, la perspective repoussait le bout de l'arme au bord de l'image).
+- **Aperçu d'un skin (choix de l'utilisateur le 16/11/2026)** : survoler une ligne 0,2 s montre l'arme habillée en
+  grand, au-dessus de la caisse, dans la salle (`ShopScene.preview`) : la caméra glisse (0,5 s) face à elle, l'arme sur
+  45 % de la largeur, centrée à 66 % (à droite de la colonne), lampe de face allumée en fondu. La ligne montrée reste
+  en avant, les autres atténuées. Un clic retient l'aperçu (fond os léger sur la ligne), un second clic le relâche ;
+  aperçu retenu, glisser dans la salle tourne l'arme (0,5° par pixel, inclinaison de 35° au plus). Sans glissement
+  depuis 2 s, l'arme se balance lentement de ±30° autour du profil. Aide en bas à droite : « SURVOL · VOIR UN SKIN »,
+  « CLIC · LE GARDER », « GLISSER · LE TOURNER ». L'aperçu se retire au changement de caisse ou de vue et dès une
+  demande d'achat (l'ouverture part du plan détail).
+- Pistes écartées pour l'aperçu : un grand aperçu 2D dans l'interface (`ViewportFrame`, comme l'écran ARMES) éclaire
+  mal les métaux, le skin y paraît plus terne qu'en jeu ; un mode d'inspection plein écran, plus long à faire et hors
+  du décor du shop.
+- Pièges de l'aperçu : à 3,6 studs au-dessus du socle, le couvercle de la caisse, éclairé de près, prenait le tiers bas
+  du gros plan (4,8). **Décaler la caméra, pas la tourner**, pour poser l'arme à droite (`MenuSceneRules.closeUp`,
+  #358) : tournée, la perspective repoussait le bout de l'arme au bord de l'image. Un tour complet automatique montrait
+  l'arme par la tranche : balancement plutôt que rotation. Les skins métalliques ne prennent que la lumière venue de
+  face : sans la lampe de face, l'AWP Couchant restait presque noire en gros plan (#358).
 
 Cotes (studs) et placement : `tools/shop/board.py` (scène B, vues d'ensemble V2, V2n, V6 ; `sheet.py <sortie> ensemble
 <dossier>` pour la planche), rendu par `tools/map/render_dizzy.py` (commandes en tête

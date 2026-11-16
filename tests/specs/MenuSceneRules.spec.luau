@@ -43,6 +43,25 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("MenuSceneRules.closeUp", function()
+		T.it("recule pour que l'objet couvre la fraction voulue de la largeur", function()
+			-- 40° vertical en 16:9 : demi-largeur de 0,647 par stud de distance
+			local distance, offset = Rules.closeUp(4.4, 40, 16 / 9, 0.5, 0.5)
+			T.expectEqual(near(distance, 4.4 / 0.647, 0.01), true)
+			T.expectEqual(near(offset, 0), true)
+		end)
+
+		T.it("décale la caméra à gauche pour poser l'objet à droite de l'écran", function()
+			-- 0,68 : 36 % de la demi-largeur à droite du centre, soit 0,36 x 4,4 studs (l'objet couvre la moitié)
+			local _, offset = Rules.closeUp(4.4, 40, 16 / 9, 0.5, 0.68)
+			T.expectEqual(near(offset, 0.36 * 4.4, 0.01), true)
+		end)
+
+		T.it("rapproche la caméra d'un objet plus court", function()
+			T.expectEqual(Rules.closeUp(2.7, 40, 16 / 9, 0.5, 0.68) < Rules.closeUp(4.4, 40, 16 / 9, 0.5, 0.68), true)
+		end)
+	end)
+
 	T.describe("MenuSceneRules.inView", function()
 		local eye, forward = vec(0, 0, 0), vec(1, 0, 0)
 		local tanHalf, maxDistance, nearRadius = 1, 500, 30

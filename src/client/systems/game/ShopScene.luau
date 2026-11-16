@@ -31,6 +31,26 @@ local ORIGIN = Vector3.new(0, 600, 12000)
 local VERTICAL_FOV = 40 -- comme l'accueil
 local ASPECT_REF = 16 / 9
 local GLIDE_TIME = 0.9 -- s du glissement entre la vitrine et le socle
+-- Aperçu d'un skin (#424, ligne survolée ou retenue dans la colonne) : l'arme habillée flotte au-dessus de la caisse,
+-- la caméra s'avance (sans tourner) pour qu'elle couvre PREVIEW_FILL de la largeur, centrée à PREVIEW_SCREEN_X (la
+-- colonne de l'interface reste à gauche). Balancement lent de part et d'autre du profil, tant que le joueur ne la
+-- tourne pas à la souris ; un tour complet montrait l'arme par la tranche, une ligne sans intérêt
+-- Centre de l'arme au-dessus du dessus du socle : à 3,6, le couvercle de la caisse, éclairé de près, prenait le tiers
+-- bas du gros plan ; plus haut, elle sort du cadre
+local PREVIEW_HEIGHT = 4.8
+local PREVIEW_GLIDE_TIME = 0.5
+local PREVIEW_FILL = 0.45
+local PREVIEW_SCREEN_X = 0.66
+local PREVIEW_SWAY = math.rad(30)
+local PREVIEW_SWAY_PERIOD = 8 -- s par aller-retour
+local PREVIEW_SETTLE_RATE = 2 -- retour au balancement après un glissement (Rules.damp)
+local DRAG_RATE = math.rad(0.5) -- par pixel de souris
+local DRAG_PITCH = math.rad(35) -- inclinaison au plus, vers la caméra ou à l'opposé
+local DRAG_IDLE = 2 -- s sans glisser avant que le balancement reprenne
+-- Lampe de face pendant l'aperçu : les skins métalliques reflètent la pièce sombre et ne prennent que la lumière venue
+-- presque de face (#358 : sans elle, l'AWP Couchant restait presque noire en gros plan)
+local PREVIEW_LIGHT_BRIGHTNESS = 1.2
+local PREVIEW_LIGHT_RATE = 6 -- vitesse du fondu (Rules.damp), environ le temps du glissement
 -- Ambiance de la salle fermée (Lighting.Ambient pendant le shop) : celle du crépuscule baignait toute la pièce et
 -- écrasait les lampes (planche : DIZZY_AMBIENT = 0,12)
 local ROOM_AMBIENT = Color3.fromRGB(24, 23, 29)
@@ -109,6 +129,7 @@ local room = CFrame.new(ORIGIN)
 local vitrineFrame = room * CFrame.new(14.2, 0, 7.3) * CFrame.Angles(0, math.rad(-90), 0)
 local lampFrame = room * CFrame.new(0, LAMP_LIFT, 0) -- à l'aplomb de la caisse du socle
 local podiumFrame = room * CFrame.new(0, 1.34, 0) * CFrame.Angles(0, math.rad(-14), 0) -- caisse sur le socle
+local previewCenter = room * CFrame.new(0, 1.34 + PREVIEW_HEIGHT, 0) -- arme de l'aperçu, de profil face à la caméra
 -- Ouverture (#332) : la caméra avance vers la caisse (×1,8, la référence Apex avance de ×2,5) ; décalée, pas tournée,
 -- pour poser la caisse et l'arme au tiers droit (colonne de l'interface à gauche), de la caisse à l'arme au-dessus
 local CAMERAS = {
@@ -152,6 +173,16 @@ local savedAmbient: Color3?
 local savedFov = 70
 local onCrateClicked: ((number) -> ())?
 local interactive = true -- survol et clic de la vitrine (coupés sous la fenêtre des packs, #395)
+-- Aperçu d'un skin (#424) : arme montrée, pivot d'origine (profil), longueur ; orientation et glissement à la souris
+type Preview = { skin: string, model: Model, base: CFrame, length: number }
+local preview: Preview?
+local previewLight: SpotLight?
+local yaw, pitch = 0, 0
+local swayClock = 0
+local dragging = false
+local dragFrom = Vector2.zero
+local lastDrag = -math.huge
+local dragConnections: { RBXScriptConnection } = {}
 
 -- Cette méthode permet de poser une pièce ancrée sans collision dans un repère (centre local, taille) lorsque la salle
 -- ou un prop est construit ; `shape` Cylinder couché sur l'axe Y du repère si `upright`.
@@ -494,6 +525,10 @@ local function buildLights(parent: Instance)
 		true
 	)
 	lightBeam(parent)
+	-- Lampe de face de l'aperçu d'un skin, un peu au-dessus de l'arme : éteinte (intensité 0) hors aperçu
+	local previewFrom = previewCenter * Vector3.new(0, 1.5, 6)
+	previewLight =
+		spot(parent, previewFrom, previewCenter.Position - previewFrom, 40, 0, Color3.fromRGB(255, 228, 190), 14)
 	-- Rack du fond, lumière froide d'en haut vers le milieu du rack (plus bas et plus rasante, elle brûlait le bord d'un
 	-- plateau d'acier) ; éteinte face à la vitrine, où ce rack passe sous le texte
 	local coldFrom = Vector3.new(8.5, 10, 3)
@@ -711,6 +746,60 @@ local function revealWeapon(
 	return model
 end
 
+-- Cette méthode permet de changer le skin montré en aperçu (#424, nil : aucun) lorsque l'interface le demande ou que la
+-- vue change : l'arme habillée remplace la précédente au-dessus de la caisse, la caméra glisse vers elle ou en revient.
+local function setPreview(skinId: string?)
+	local shown = preview
+	if (if shown then shown.skin else nil) == skinId then
+		return
+	end
+	if shown then
+		shown.model:Destroy()
+		preview = nil
+	end
+	local item = if skinId and stage and mode == "detail" and not opening then InventoryRules.item(skinId) else nil
+	local weapon = if item and item.weapon then REVEAL_WEAPONS[item.weapon] else nil
+	if skinId and weapon and stage then
+		local model = revealWeapon(stage, weapon.viewmodel, skinId, previewCenter, weapon.length, true)
+		if model then
+			model.Name = "SkinPreview"
+			preview = { skin = skinId, model = model, base = model:GetPivot(), length = weapon.length }
+			-- D'un skin à l'autre, l'arme garde son orientation ; un nouvel aperçu repart du profil
+			if not shown then
+				yaw, pitch, swayClock = 0, 0, 0
+			end
+		end
+	end
+	if running and (shown ~= nil) ~= (preview ~= nil) then
+		glideFrom = workspace.CurrentCamera.CFrame
+		glideStart = os.clock()
+		glideTime = PREVIEW_GLIDE_TIME
+	end
+	if not preview then
+		dragging = false
+	end
+end
+
+-- Cette méthode permet de tourner l'arme de l'aperçu (balancement lent, ou orientation donnée à la souris) et d'allumer
+-- en fondu sa lampe de face lorsqu'une image est rendue.
+local function updatePreview(dt: number)
+	local shown = preview
+	if shown then
+		if not dragging and os.clock() - lastDrag > DRAG_IDLE then
+			swayClock += dt
+			local sway = PREVIEW_SWAY * math.sin(swayClock * 2 * math.pi / PREVIEW_SWAY_PERIOD)
+			yaw = Rules.damp(yaw, sway, dt, PREVIEW_SETTLE_RATE)
+			pitch = Rules.damp(pitch, 0, dt, PREVIEW_SETTLE_RATE)
+		end
+		local center = CFrame.new(previewCenter.Position)
+		shown.model:PivotTo(center * CFrame.Angles(pitch, yaw, 0) * center:Inverse() * shown.base)
+	end
+	if previewLight then
+		local target = if shown and mode == "detail" then PREVIEW_LIGHT_BRIGHTNESS else 0
+		previewLight.Brightness = Rules.damp(previewLight.Brightness, target, dt, PREVIEW_LIGHT_RATE)
+	end
+end
+
 -- Cette méthode permet de montrer une caisse dans la vue détail (sa caisse seule sur le socle, sous la suspension)
 -- lorsque le joueur la choisit ; son contenu est dans la colonne de l'interface (#424).
 local function dressCrate(index: number)
@@ -718,6 +807,7 @@ local function dressCrate(index: number)
 	if not (def and stage) then
 		return
 	end
+	setPreview(nil)
 	if podium then
 		podium:Destroy()
 	end
@@ -772,17 +862,31 @@ local function crateUnderMouse(camera: Camera): number
 	return if type(index) == "number" then index else 0
 end
 
--- Cette méthode permet de placer la caméra (glissement entre les plans, léger suivi du curseur, FOV adapté au format) et
--- de suivre le survol des étiquettes de la vitrine lorsqu'une image est rendue.
+-- Cette méthode permet de donner le plan visé par la caméra (vitrine, socle, ouverture, ou gros plan de face de l'arme
+-- de l'aperçu, décalée à droite) lorsqu'une image est rendue ; `aspect` (au moins 16:9) règle le recul du gros plan.
+local function targetFrame(aspect: number): CFrame
+	local shown = preview
+	if mode == "detail" and shown then
+		local distance, offset = Rules.closeUp(shown.length, VERTICAL_FOV, aspect, PREVIEW_FILL, PREVIEW_SCREEN_X)
+		return previewCenter * CFrame.new(-offset, 0, distance)
+	end
+	return CAMERAS[mode]
+end
+
+-- Cette méthode permet de placer la caméra (glissement entre les plans, léger suivi du curseur, FOV adapté au format),
+-- de tourner l'aperçu d'un skin et de suivre le survol des étiquettes de la vitrine lorsqu'une image est rendue.
 local function update(dt: number)
 	local camera = workspace.CurrentCamera
 	local viewport = camera.ViewportSize
 	local mouse = UserInputService:GetMouseLocation()
+	local aspect = ASPECT_REF
 	if viewport.X > 0 and viewport.Y > 0 then
 		aimX = Rules.damp(aimX, (mouse.X / viewport.X - 0.5) * 2, dt, 4)
 		aimY = Rules.damp(aimY, (mouse.Y / viewport.Y - 0.5) * 2, dt, 4)
 		camera.FieldOfView = Rules.fitFov(VERTICAL_FOV, ASPECT_REF, viewport.X / viewport.Y)
+		aspect = math.max(ASPECT_REF, viewport.X / viewport.Y)
 	end
+	updatePreview(dt)
 	local t = math.clamp((os.clock() - glideStart) / glideTime, 0, 1)
 	local eased = t * t * (3 - 2 * t)
 	local angles = Rules.aimAngles(aimX, aimY)
@@ -813,7 +917,7 @@ local function update(dt: number)
 		end
 	end
 	camera.CameraType = Enum.CameraType.Scriptable
-	camera.CFrame = glideFrom:Lerp(CAMERAS[mode], eased)
+	camera.CFrame = glideFrom:Lerp(targetFrame(aspect), eased)
 		* CFrame.Angles(math.rad(angles.camPitch), math.rad(angles.camYaw), 0)
 		* shake
 	local index = crateUnderMouse(camera)
@@ -828,6 +932,7 @@ local function glideTo(newMode: "overview" | "detail")
 	if newMode == mode then
 		return
 	end
+	setPreview(nil)
 	glideFrom = if running then workspace.CurrentCamera.CFrame else CAMERAS[newMode]
 	glideStart = if running then os.clock() else -math.huge
 	glideTime = GLIDE_TIME
@@ -861,6 +966,12 @@ end
 -- Cette méthode permet d'enregistrer le rappel appelé quand le joueur clique une caisse de la vitrine.
 function ShopScene.onCrateClicked(callback: (number) -> ())
 	onCrateClicked = callback
+end
+
+-- Cette méthode permet de montrer en grand, au-dessus de la caisse, l'arme habillée du skin `skinId` (#424, nil : retour
+-- au plan détail) lorsque le joueur survole ou retient une ligne du contenu ; sans effet hors vue détail.
+function ShopScene.preview(skinId: string?)
+	setPreview(skinId)
 end
 
 -- Cette méthode permet de terminer l'ouverture (effets retirés, caisse refaite, retour au plan détail) lorsque
@@ -914,6 +1025,11 @@ function ShopScene.playOpening(skinId: string, rarityId: string, onRevealed: () 
 	if not row then
 		return false
 	end
+	-- L'ouverture se joue depuis le plan détail, sans l'arme de l'aperçu ni sa lampe de face
+	setPreview(nil)
+	if previewLight then
+		previewLight.Brightness = 0
+	end
 	-- Palette de la montée de couleur : une couleur par rareté, dans l'ordre des paliers (CrateOpeningRules.TIERS)
 	local colors = {}
 	for _, r in ShopCatalog.RARITIES do
@@ -926,7 +1042,7 @@ function ShopScene.playOpening(skinId: string, rarityId: string, onRevealed: () 
 	end
 	-- Lampes de la salle relevées avant les effets (qui ont leurs propres lumières)
 	for _, light in stage:GetDescendants() do
-		if light:IsA("SpotLight") then
+		if light:IsA("SpotLight") and light ~= previewLight then
 			roomLights[light] = light.Brightness
 		end
 	end
@@ -1007,8 +1123,37 @@ function ShopScene.start()
 		end
 		if hovered > 0 and onCrateClicked then
 			onCrateClicked(hovered)
+		elseif preview and mode == "detail" and interactive then
+			-- Aperçu retenu : glisser dans la salle tourne l'arme
+			dragging = true
+			dragFrom = UserInputService:GetMouseLocation()
+			lastDrag = os.clock()
 		end
 	end)
+	table.insert(
+		dragConnections,
+		UserInputService.InputChanged:Connect(function(input: InputObject)
+			if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+				local at = UserInputService:GetMouseLocation()
+				local delta = at - dragFrom
+				dragFrom = at
+				yaw += delta.X * DRAG_RATE
+				pitch = math.clamp(pitch + delta.Y * DRAG_RATE, -DRAG_PITCH, DRAG_PITCH)
+				lastDrag = os.clock()
+			end
+		end)
+	)
+	table.insert(
+		dragConnections,
+		UserInputService.InputEnded:Connect(function(input: InputObject)
+			if dragging and input.UserInputType == Enum.UserInputType.MouseButton1 then
+				dragging = false
+				-- Ramené à un demi-tour près : le balancement reprend sans dérouler les tours faits à la souris
+				yaw = (yaw + math.pi) % (2 * math.pi) - math.pi
+				lastDrag = os.clock()
+			end
+		end)
+	)
 end
 
 -- Cette méthode permet d'arrêter le shop (salle retirée du workspace mais gardée, ambiance et FOV rendus, scène de
@@ -1026,6 +1171,14 @@ function ShopScene.stop()
 	if inputConnection then
 		inputConnection:Disconnect()
 		inputConnection = nil
+	end
+	for _, drag in dragConnections do
+		drag:Disconnect()
+	end
+	table.clear(dragConnections)
+	setPreview(nil)
+	if previewLight then
+		previewLight.Brightness = 0
 	end
 	if stage then
 		stage.Parent = nil

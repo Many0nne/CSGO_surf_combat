@@ -3,7 +3,8 @@
 -- caisses en vente sont dans la vitrine (nom et prix sur leur étiquette), un clic sur une caisse ouvre la vue détail.
 -- Vue détail : « ‹ SHOP » (retour à la vitrine), nom de la caisse, contenu (#424 : un skin par ligne, vignette de
 -- l'arme habillée, rareté, chance en pour cent, total exactement 100 %, et remboursement d'un doublon), prix, ACHETER et
--- passage à la caisse voisine.
+-- passage à la caisse voisine. Aperçu d'un skin (#424) : survoler une ligne montre l'arme habillée en grand au-dessus
+-- de la caisse (ShopScene.preview), un clic la retient (glisser dans la salle la tourne), un second clic la relâche.
 -- ACHETER (#393, remote `BuyCrate`) : le serveur débite, tire et donne le skin (ou rembourse le doublon) en une écriture,
 -- puis la scène joue l'ouverture et la colonne laisse place à la révélation (« OBTENU » ou « DOUBLON · +N CRÉDITS »,
 -- skin et rareté) jusqu'au clic. Pendant l'achat : « ACHAT… », pas de second clic ; tout le contenu possédé : ACHETER
@@ -83,6 +84,16 @@ local price: { TextLabel }
 local position: TextLabel
 local back: MenuShot.Choice
 local current = 1
+-- Aperçu d'un skin (#424) : lignes du contenu et leur skin, ligne survolée, ligne retenue par un clic. Le survol n'agit
+-- qu'après HOVER_DELAY : en allant de la liste à ACHETER, la souris traverse des lignes sans les montrer
+local lines: { Frame } = {}
+local lineSkins: { string } = {}
+local hoveredRow: number? = nil
+local lockedRow: number? = nil
+local hoverToken = 0
+local HOVER_DELAY = 0.2
+local DIMMED = 0.6 -- atténuation des autres lignes pendant un aperçu
+local LOCKED_FILL = 0.9 -- fond os de la ligne retenue (transparence)
 -- Achat (#393) et ouverture de test (#332)
 local buyButton: Frame
 local buyStroke: UIStroke
@@ -152,6 +163,69 @@ local function label(parent: GuiObject, props: { [string]: any }, offset: number
 	return { text, shadow }
 end
 
+-- Cette méthode permet de mettre en avant la ligne du skin montré en aperçu, les autres atténuées, lorsque l'aperçu
+-- change ; `row` nil rend toutes les lignes (transparence d'origine gardée en attribut).
+local function highlightRow(row: number?)
+	for i, line in lines do
+		local dim = if row and i ~= row then DIMMED else 0
+		for _, item in line:GetDescendants() do
+			local property = if item:IsA("TextLabel")
+				then "TextTransparency"
+				elseif item:IsA("ImageLabel") or item:IsA("ViewportFrame") then "ImageTransparency"
+				elseif item:IsA("Frame") then "BackgroundTransparency"
+				else nil
+			if property then
+				local base = item:GetAttribute("BaseTransparency")
+				if type(base) ~= "number" then
+					base = (item :: any)[property]
+					item:SetAttribute("BaseTransparency", base)
+				end
+				(item :: any)[property] = base + (1 - base) * dim
+			end
+		end
+		line.BackgroundTransparency = if i == lockedRow then LOCKED_FILL else 1
+	end
+end
+
+-- Cette méthode permet de montrer le skin de la ligne survolée, sinon celui de la ligne retenue (aucun : plan détail),
+-- lorsque le survol ou la ligne retenue change.
+local function showPreview()
+	local row = hoveredRow or lockedRow
+	ShopScene.preview(if row then lineSkins[row] else nil)
+	highlightRow(row)
+end
+
+-- Cette méthode permet de suivre la ligne survolée (nil : aucune) lorsque la souris entre dans une ligne ou en sort ;
+-- l'aperçu ne suit qu'après HOVER_DELAY sur la même ligne.
+local function setHovered(row: number?)
+	hoveredRow = row
+	hoverToken += 1
+	local token = hoverToken
+	task.delay(HOVER_DELAY, function()
+		if token == hoverToken then
+			showPreview()
+		end
+	end)
+end
+
+-- Cette méthode permet de retenir l'aperçu d'une ligne (ou de le relâcher si elle l'était déjà) lorsque le joueur la
+-- clique ; l'aperçu suit tout de suite.
+local function toggleLock(row: number)
+	lockedRow = if lockedRow == row then nil else row
+	hoveredRow = nil
+	hoverToken += 1
+	showPreview()
+end
+
+-- Cette méthode permet de retirer l'aperçu (ni ligne survolée ni retenue) lorsque la caisse, la vue ou l'écran change,
+-- ou qu'une ouverture va se jouer.
+local function clearPreview()
+	hoveredRow, lockedRow = nil, nil
+	hoverToken += 1
+	ShopScene.preview(nil)
+	highlightRow(nil)
+end
+
 -- Cette méthode permet de remplir la vue détail pour la caisse courante (nom, un skin par ligne avec sa vignette, prix,
 -- place dans la liste) lorsque le joueur ouvre une caisse ou passe à la voisine.
 local function paintDetail()
@@ -159,22 +233,48 @@ local function paintDetail()
 	if not crate then
 		return
 	end
+	clearPreview()
 	setText(title, crate.name)
 	setText(subtitle, ShopCatalog.subtitle(crate, InventoryRules.ITEMS))
 	for _, child in rows:GetChildren() do
 		child:Destroy()
 	end
+	table.clear(lines)
+	table.clear(lineSkins)
 	local contents = ShopCatalog.contents(crate, InventoryRules.ITEMS)
 	local chances = ShopCatalog.chances(contents)
 	for i, row in contents do
 		local color = rgb(row.rarity.color)
 		local line = UIKit.frame({
 			Name = "Row" .. i,
+			BackgroundColor3 = C.Bone,
 			BackgroundTransparency = 1,
 			Position = UDim2.fromOffset(0, (i - 1) * ROW_STEP),
 			Size = UDim2.fromOffset(COLUMN_WIDTH, ROW_STEP),
 			Parent = rows,
 		})
+		lines[i] = line
+		lineSkins[i] = row.skin
+		-- Zone de survol et de clic de la ligne entière (aperçu du skin)
+		local hit = UIKit.button({
+			Name = "Hit",
+			Text = "",
+			BackgroundTransparency = 1,
+			Size = UDim2.fromScale(1, 1),
+			ZIndex = 4,
+			Parent = line,
+		})
+		hit.MouseEnter:Connect(function()
+			setHovered(i)
+		end)
+		hit.MouseLeave:Connect(function()
+			if hoveredRow == i then
+				setHovered(nil)
+			end
+		end)
+		hit.Activated:Connect(function()
+			toggleLock(i)
+		end)
 		UIKit.frame({
 			Name = "Bar",
 			Position = UDim2.fromOffset(0, (ROW_STEP - ROW_TEXT) / 2),
@@ -271,6 +371,7 @@ end
 -- s'ouvre.
 local function openOverview()
 	view += 1
+	clearPreview()
 	overview.Visible = true
 	detail.Visible = false
 	back.reset()
@@ -439,6 +540,8 @@ local function requestCrate(remoteName: string)
 	end
 	requesting = remoteName
 	local seen = view
+	-- L'ouverture se joue depuis le plan détail : l'aperçu se retire dès la demande
+	clearPreview()
 	paintActions()
 	task.spawn(function()
 		local remote = ReplicatedStorage:FindFirstChild(remoteName)
@@ -579,6 +682,23 @@ local function buildReveal(column: Frame, root: Frame)
 	UIKit.keyHint(hints, 1, "CLIC", "CONTINUER")
 	reveal:GetPropertyChangedSignal("Visible"):Connect(function()
 		hints.Visible = reveal.Visible
+	end)
+end
+
+-- Cette méthode permet de construire l'aide de l'aperçu des skins (#424) en bas à droite (la colonne tient la gauche),
+-- visible avec la vue détail, lorsque l'écran est construit.
+local function buildPreviewHints(parent: Frame)
+	local hints = UIKit.hintRow(parent, {
+		Name = "PreviewHints",
+		AnchorPoint = Vector2.new(1, 1),
+		Position = UDim2.new(1, -EDGE, 1, -18),
+		Visible = false,
+	})
+	UIKit.keyHint(hints, 1, "SURVOL", "VOIR UN SKIN")
+	UIKit.keyHint(hints, 2, "CLIC", "LE GARDER")
+	UIKit.keyHint(hints, 3, "GLISSER", "LE TOURNER")
+	detail:GetPropertyChangedSignal("Visible"):Connect(function()
+		hints.Visible = detail.Visible
 	end)
 end
 
@@ -769,6 +889,7 @@ local function debugOpening()
 		return
 	end
 	local crate = ShopCatalog.CRATES[current]
+	clearPreview()
 	detail.Visible = false
 	local started = ShopScene.playOpening(skinId, rarityId, function()
 		if crate then
@@ -873,6 +994,8 @@ function ShopScreen.init()
 		UIKit.frame({ Name = "Column", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = root })
 	buildOverview(shopColumn, root)
 	buildDetail(shopColumn)
+	-- Dans la colonne : masquée avec elle sous la fenêtre des packs
+	buildPreviewHints(shopColumn)
 	buildReveal(shopColumn, root)
 	buildPackButton(root)
 	MenuPage.followTopbar(root, shopColumn)
@@ -912,6 +1035,7 @@ function ShopScreen.hide()
 	end
 	gui.Enabled = false
 	view += 1
+	clearPreview()
 	closePacks()
 	ShopScene.stop()
 end
