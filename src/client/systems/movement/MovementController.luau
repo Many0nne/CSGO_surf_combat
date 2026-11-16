@@ -131,7 +131,7 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 		local _, isGroundedState, isAirborneState = motor:updateState(gnd, crouchInfo.isCrouching)
 
 		-- 4. Saut (coyote + buffer + normal) — consomme isJumpPressed() en interne
-		local shouldJump = CoyoteJump.update(gnd.onGround, dt)
+		local shouldJump, jumpPressed = CoyoteJump.update(gnd.onGround, dt)
 
 		-- 5. Direction souhaitée depuis le yaw de la caméra FPS
 		local wishdir = InputModule.getWishDir(camera and camera.getCameraYaw() or 0)
@@ -151,7 +151,7 @@ function MovementController.init(char: Model, hrp: BasePart, hum: Humanoid, spee
 		local onLadder = false
 		local ladderNormal = if ladderRegrab <= 0 then LadderSystem.find(hrp.Position) else nil
 		if ladderNormal then
-			if shouldJump then
+			if LadderRules.jumpsOff(jumpPressed, shouldJump) then
 				motor.velocity = LadderRules.jumpOffVelocity(ladderNormal, Config.LADDER_JUMP_OFF)
 				ladderRegrab = Config.LADDER_REGRAB
 				onLadder = true

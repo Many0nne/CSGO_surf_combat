@@ -47,6 +47,21 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("LadderRules.jumpsOff", function()
+		T.it("décroche sur un appui d'Espace hors du sol et hors fenêtre coyote (#293)", function()
+			-- à mi-hauteur : CoyoteJump ne rend pas de saut (pas au sol, coyote écoulé), seul l'appui compte
+			T.expectEqual(LadderRules.jumpsOff(true, false), true)
+		end)
+
+		T.it("décroche au pied par le saut normal ou le buffer", function()
+			T.expectEqual(LadderRules.jumpsOff(false, true), true)
+		end)
+
+		T.it("ne décroche pas sans appui (Espace maintenu sans nouveau front)", function()
+			T.expectEqual(LadderRules.jumpsOff(false, false), false)
+		end)
+	end)
+
 	T.describe("LadderRules.jumpOffVelocity", function()
 		T.it("pousse le long de la normale, à l'horizontale", function()
 			T.expectEqual(LadderRules.jumpOffVelocity(Vector3.new(0, 0.2, 1), 30), Vector3.new(0, 0, 30))

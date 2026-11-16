@@ -10,8 +10,9 @@ local CoyoteJump = {}
 
 -- Appelé une fois par tick depuis MovementController.
 -- Consomme isJumpPressed() en interne — ne pas l'appeler ailleurs ce tick.
--- Retourne true si un saut doit se déclencher (normal / coyote / buffer).
-function CoyoteJump.update(onGround: boolean, dt: number): boolean
+-- Retourne true si un saut doit se déclencher (normal / coyote / buffer), puis l'appui d'Espace de ce tick (front
+-- montant, quel que soit l'état) pour les règles qui n'en dépendent pas (saut depuis une échelle).
+function CoyoteJump.update(onGround: boolean, dt: number): (boolean, boolean)
 	local prevOnGround = wasOnGround
 	local prevDidTriggerJump = didTriggerJump
 	didTriggerJump = false
@@ -38,7 +39,7 @@ function CoyoteJump.update(onGround: boolean, dt: number): boolean
 		didTriggerJump = true
 		coyoteTimer = 0
 	end
-	return shouldJump
+	return shouldJump, jumpPressed
 end
 
 return CoyoteJump

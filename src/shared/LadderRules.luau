@@ -36,6 +36,12 @@ function LadderRules.climbVelocity(wishDir3D: Vector3, normal: Vector3, speed: n
 	return velocity
 end
 
+-- Cette méthode permet de décider d'un saut depuis l'échelle lorsque le joueur est dans son volume : tout nouvel appui
+-- d'Espace décroche, à n'importe quelle hauteur (le sol et la fenêtre coyote ne comptent pas), plus le saut normal au pied.
+function LadderRules.jumpsOff(jumpPressed: boolean, groundJump: boolean): boolean
+	return jumpPressed or groundJump
+end
+
 -- Cette méthode permet de calculer la vitesse d'un saut depuis l'échelle lorsque le joueur saute dans son volume :
 -- poussée le long de la normale sortante, sans élan vertical (comme Source).
 function LadderRules.jumpOffVelocity(normal: Vector3, push: number): Vector3
