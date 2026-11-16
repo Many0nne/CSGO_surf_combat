@@ -342,7 +342,47 @@ marquages sont celles de Windows (`C:/Windows/Fonts`, Bahnschrift, Impact) : gé
   les `SurfaceAppearance` de `ReplicatedStorage.Skins.AWP.<skin>` sur les pièces de `workspace.CurrentCamera.AWP` (ce
   que fait `WeaponSkins.apply`), puis `screen_capture`. Un skin jamais chargé reste gris 1 à 3 s : recapturer.
 
-### Fabriquer un skin (motifs calculés, skins M9)
+### Skins dessinés de la M9 (#420)
+
+Même principe que pour l'AWP : un skin est **dessiné pour la M9 seule**, un script par skin dans `assets/m9/skins/`
+(`emaille` pour ÉMAIL, `patrouille`, `artdeco`), avec une fonction `paint(kn)`. La M9 n'a pas de source Blender : on
+part de ses cartes d'origine et de sa cuisson (`fetch_viewmodel.py` puis `bake_maps.py --glb`, étape 1 de « Fabriquer
+un skin » ci-dessous). Outils communs (`common.py`) :
+
+- **`Knife`** : les cartes d'origine en cours de peinture, les zones de `make_skins.Knife` (lame, biseau, garde, manche,
+  pommeau) et une **toile de profil dans le repère du couteau** (t le long de l'axe, pointe à gauche ; h vers le dos, le
+  tranchant en bas), 640 px par unité. `sil` est la lame vue de profil (trou et dents compris), `dist` la distance à son
+  bord en unités : un filet qui suit le contour se trace par `(dist > d0) & (dist < d1)`, et passe tout seul autour du
+  trou et des dents. `edges_at(t)` donne la hauteur du tranchant et du dos à une abscisse.
+- **Dessin** : `line`, `poly`, `disc`, `text` (retourné sur la face droite pour rester lisible) en coordonnées (t, h),
+  ou `put` d'un masque calculé sur `grid()` ; `sample` lit une couche sur les texels. **Encre** : `paint`, `tint_grip`
+  (teinte du manche en gardant son quadrillage), `edge` (fil repoli).
+
+```bash
+uv run assets/m9/skins/paint.py <cuisson> <cartes_origine> <skin> assets/skins/<id>/M9Bayonet [--flat <profil.png>]
+blender -b --factory-startup --python tools/skins/render_views.py -- m9 <dossier> <sortie> --glb <m9.glb> --samples 32
+```
+
+`--flat` écrit la couleur peinte vue de profil en quelques secondes : régler le dessin dessus, ne rendre la planche
+qu'ensuite. Puis publier et cataloguer (étapes 4 et 5 de « Fabriquer un skin »).
+
+- **Repères mesurés** : tranchant à h ≈ -0,21 et dos à ≈ 0,22 au talon, fond des dents ≈ 0,15, gouttière t -1,03 à
+  -0,16 et h 0,02 à 0,13, trou vers t -1,25, ricasso t -0,15 à 0,25, pointe à t ≈ -2,1.
+- **Un motif ordonné, pas un tracé au hasard** : SIDÉRITE (figures de Widmanstätten, lamelles croisées tirées au hasard)
+  et FÊLURE (fissures kintsugi en marche aléatoire) ont été rejetés (« des griffures dans tous les sens »). ÉMAIL
+  (écailles régulières cloisonnées) a plu tout de suite. Une bande ivoire large le long du tranchant d'ART DÉCO a été
+  refusée aussi : préférer des lignes fines qui fuient vers la pointe.
+- **Éviter les symboles connotés** : un éventail de rayons alternés depuis un demi-soleil (ART DÉCO, première version)
+  rappelait le drapeau du Soleil levant ; remplacé par des arcs concentriques. Un point d'impact central sur une lame
+  cassée rappelait IMPACT et faisait araignée.
+- **Ne pas nommer un module de skin comme un module de la bibliothèque standard** : `email.py` masquait `email` et
+  cassait `uv` ; d'où `emaille.py`.
+- **Crête d'écaille fine** : à anneaux égaux, l'anneau extérieur (le plus visible) dominait et le champ virait au blanc ;
+  bords d'anneaux à 0,32 / 0,55 / 0,85 / 1 du rayon.
+- **Émail trop lisse** (rugosité 0,1) : reflet blanc du ciel sur toute la pointe dans la vue rapprochée ; 0,2 suffit.
+- **Fil d'argent sur ivoire** : invisible en couleur (même clarté) ; découper l'ivoire par des fentes noires.
+
+### Fabriquer un skin (motifs calculés : COUCHANT, RELEVÉ, RECUIT)
 
 Tout est généré par script : motifs calculés sur la position 3D de chaque texel (continus d'une pièce à l'autre, quel
 que soit le découpage UV) ou projetés depuis la vue de profil (livrée, texte), détail des cartes d'origine gardé.
@@ -353,8 +393,9 @@ que soit le découpage UV) ou projetés depuis la vue de profil (livrée, texte)
    blender -b --factory-startup --python tools/skins/bake_maps.py -- <sortie>/m9 --glb <m9.glb>
    ```
 2. **Cartes PBR** : `uv run --with numpy --with pillow --with scipy tools/skins/make_skins.py <bake> <m9_orig> <sortie>
-   [skin…]` (une fonction par skin et par arme dans le script : couchant, impact, releve, recuit, strate, sillage ; les
-   fonctions AWP visaient l'ancien modèle `assets/sniper`, leurs skins AWP ont été retirés en #417).
+   [skin…]` (une fonction par skin et par arme dans le script : couchant, releve, recuit ; les fonctions AWP visaient
+   l'ancien modèle `assets/sniper`, leurs skins AWP ont été retirés en #417 ; impact, strate et sillage, retirés en
+   #420, sont remplacés par les skins dessinés de la M9 ci-dessus).
 3. **Planche** : `tools/skins/render_views.py` (Cycles, HDRI de Blender, une vue par PNG, ~12 s par vue à 32
    échantillons) puis `tools/skins/compose_board.py`. Se comparer aux références `references/skins/` avant de montrer.
 4. **Publier** : `uv run tools/skins/publish_skin.py assets/skins/<skin> <skin>` (Decals, puis id de l'image par Asset

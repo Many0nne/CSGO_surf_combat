@@ -149,7 +149,8 @@ InventoryRules.ITEMS = {
 		appearance = "mue",
 		luminance = 0.044,
 	},
-	-- Skins M9 (#268, #337), anciennes paires des skins AWP retirés en #417
+	-- Skins M9 : COUCHANT, RELEVÉ, RECUIT (#268, #337, motifs calculés) ; ÉMAIL, PATROUILLE, ART DÉCO dessinés pour la
+	-- M9 (#420, assets/m9/skins/) à la place d'IMPACT, STRATE et SILLAGE
 	{
 		id = "skin.m9bayonet.couchant",
 		type = "skin",
@@ -157,14 +158,6 @@ InventoryRules.ITEMS = {
 		name = "COUCHANT",
 		appearance = "couchant",
 		luminance = 0.095,
-	},
-	{
-		id = "skin.m9bayonet.impact",
-		type = "skin",
-		weapon = "weapon.m9bayonet",
-		name = "IMPACT",
-		appearance = "impact",
-		luminance = 0.240,
 	},
 	{
 		id = "skin.m9bayonet.releve",
@@ -183,20 +176,28 @@ InventoryRules.ITEMS = {
 		luminance = 0.135,
 	},
 	{
-		id = "skin.m9bayonet.strate",
+		id = "skin.m9bayonet.email",
 		type = "skin",
 		weapon = "weapon.m9bayonet",
-		name = "STRATE",
-		appearance = "strate",
-		luminance = 0.249,
+		name = "ÉMAIL",
+		appearance = "email",
+		luminance = 0.197,
 	},
 	{
-		id = "skin.m9bayonet.sillage",
+		id = "skin.m9bayonet.patrouille",
 		type = "skin",
 		weapon = "weapon.m9bayonet",
-		name = "SILLAGE",
-		appearance = "sillage",
-		luminance = 0.292,
+		name = "PATROUILLE",
+		appearance = "patrouille",
+		luminance = 0.156,
+	},
+	{
+		id = "skin.m9bayonet.artdeco",
+		type = "skin",
+		weapon = "weapon.m9bayonet",
+		name = "ART DÉCO",
+		appearance = "artdeco",
+		luminance = 0.162,
 	},
 } :: { Item }
 
