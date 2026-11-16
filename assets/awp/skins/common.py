@@ -73,14 +73,16 @@ class Canvas:
 			else:
 				d.ellipse(box, fill=value)
 
-	def text(self, name, s, c, height, fnt, angle=0.0, value=255, anchor="mm"):
+	def text(self, name, s, c, height, fnt, angle=0.0, value=255, anchor="mm", stroke=0):
 		"""Cette méthode permet d'écrire un texte lisible sur chaque flanc, centré en c (px photo), de hauteur de capitale height.
-		Sur le flanc droit (vu depuis +Y, l'arme retournée), le tampon est retourné en miroir autour de son centre."""
+		Sur le flanc droit (vu depuis +Y, l'arme retournée), le tampon est retourné en miroir autour de son centre.
+		stroke > 0 (px photo) : le texte est épaissi d'un contour (pour une couche de contour sous le texte)."""
 		f = fnt(int(height * SS * 1.38))
-		bb = f.getbbox(s, anchor="ls")
+		sw = int(stroke * SS)
+		bb = f.getbbox(s, anchor="ls", stroke_width=sw)
 		tw, th = bb[2] - bb[0] + 8, bb[3] - bb[1] + 8
 		stamp = Image.new("L", (tw, th), 0)
-		ImageDraw.Draw(stamp).text((4 - bb[0], 4 - bb[1]), s, font=f, fill=value, anchor="ls")
+		ImageDraw.Draw(stamp).text((4 - bb[0], 4 - bb[1]), s, font=f, fill=value, anchor="ls", stroke_width=sw, stroke_fill=value)
 		(cx, cy), = self.xy([c])
 		for side, img in enumerate(self.layer(name)):
 			st = stamp.transpose(Image.FLIP_LEFT_RIGHT) if side else stamp
@@ -98,6 +100,12 @@ class Canvas:
 		band = Image.fromarray(((t < ratio) * 255).astype(np.uint8))
 		for img in self.layer(name):
 			img.paste(255, (0, 0), Image.fromarray(np.minimum(np.array(mask), np.array(band))))
+
+	def clip(self, name, keep):
+		"""Cette méthode permet d'effacer une couche hors d'une zone (tableau booléen à la taille de la toile)."""
+		k = Image.fromarray((~keep * 255).astype(np.uint8))
+		for img in self.layer(name):
+			img.paste(0, (0, 0), k)
 
 	def sample(self, name, m, blur=0.6):
 		"""Cette méthode permet de lire une couche (0 à 1) sur les texels d'un matériau : flanc gauche si la normale regarde
@@ -121,6 +129,62 @@ class Canvas:
 			a = np.asarray(left, np.float64)[..., None] / 255
 			rgb = rgb * (1 - a) + col * a
 		Image.fromarray((rgb * 255).astype(np.uint8)).resize((self.w // SS, self.h // SS)).save(path)
+
+
+def outline(name):
+	"""Cette méthode permet de relire un contour de build_awp.py (STOCK, HANDGUARD, THUMBHOLE…) en points de la photo,
+	sans importer bpy : les appels P(px, py, r) et les couples (px, py) de son affectation sont lus dans le source."""
+	import ast
+
+	src = open(os.path.join(os.path.dirname(mt.__file__), "build_awp.py"), encoding="utf-8").read()
+	for node in ast.parse(src).body:
+		if isinstance(node, ast.Assign) and getattr(node.targets[0], "id", None) == name:
+			pts = []
+			for e in node.value.elts:
+				args = e.args if isinstance(e, ast.Call) else e.elts
+				pts.append((ast.literal_eval(args[0]), ast.literal_eval(args[1])))
+			return pts
+	raise KeyError(name)
+
+
+def band(cv, name, outer, holes, d0, d1, value=255):
+	"""Cette méthode permet de tracer un filet intérieur qui suit un contour (et le tour de ses trous) entre les
+	distances d0 et d1 du bord, en px photo ; renvoie aussi la distance au bord (px photo) pour limiter un motif."""
+	mask = Image.new("L", (cv.w, cv.h), 0)
+	d = ImageDraw.Draw(mask)
+	d.polygon(cv.xy(outer), fill=255)
+	for h in holes:
+		d.polygon(cv.xy(h), fill=0)
+	dist = ndimage.distance_transform_edt(np.asarray(mask) > 0) / SS
+	sel = Image.fromarray((((dist > 0) & (dist >= d0) & (dist < d1)) * value).astype(np.uint8))  # jamais hors du contour
+	for img in cv.layer(name):
+		img.paste(value, (0, 0), sel)
+	return dist
+
+
+def halftone(cv, name, keep, spacing, r0, r1, y0, y1, angle=45.0):
+	"""Cette méthode permet de poser une trame de points (style BD) dans une zone, rayon des points passant de r0 en
+	py = y0 à r1 en py = y1 (px photo), grille tournée de angle degrés."""
+	yy, xx = np.mgrid[0 : cv.h, 0 : cv.w].astype(np.float32) / SS
+	a = np.radians(angle)
+	u = (xx * np.cos(a) + yy * np.sin(a)) / spacing
+	v = (-xx * np.sin(a) + yy * np.cos(a)) / spacing
+	d = np.hypot(u - np.round(u), v - np.round(v)) * spacing
+	t = np.clip((yy + PY0 - y0) / (y1 - y0), 0, 1)
+	dots = (d < r0 + (r1 - r0) * t) & keep
+	sel = Image.fromarray((dots * 255).astype(np.uint8))
+	for img in cv.layer(name):
+		img.paste(255, (0, 0), sel)
+
+
+def zone(cv, outer, holes=()):
+	"""Cette méthode permet d'obtenir la distance au bord (px photo, 0 dehors) d'un contour moins ses trous, sans rien tracer."""
+	mask = Image.new("L", (cv.w, cv.h), 0)
+	d = ImageDraw.Draw(mask)
+	d.polygon(cv.xy(outer), fill=255)
+	for h in holes:
+		d.polygon(cv.xy(h), fill=0)
+	return ndimage.distance_transform_edt(np.asarray(mask) > 0) / SS
 
 
 def mt_px(x):
