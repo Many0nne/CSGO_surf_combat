@@ -22,12 +22,22 @@ return function(T, Loader)
 			T.expectEqual(total, 100)
 		end)
 
-		T.it("deux caisses dans l'ordre de la vitrine : AWP puis M9", function()
+		T.it("caisses dans l'ordre de la vitrine : série 1 puis FILM (#433), AWP puis M9", function()
 			local ids = {}
 			for _, crate in Shop.CRATES do
 				table.insert(ids, crate.id)
 			end
-			T.expectEqual(table.concat(ids, ","), "crate.awp.serie1,crate.m9.serie1")
+			T.expectEqual(table.concat(ids, ","), "crate.awp.serie1,crate.m9.serie1,crate.awp.film,crate.m9.film")
+		end)
+
+		T.it("une caisse FILM par arme, dont le skin hommage est seul ou partagé en EXCEPTIONNEL (#433)", function()
+			local function exceptional(id)
+				return table.concat(Shop.crate(id).contents.exceptional, ",")
+			end
+			T.expectEqual(exceptional("crate.awp.film"), "remorqueur")
+			T.expectEqual(exceptional("crate.m9.film"), "hote,releve")
+			T.expectEqual(#Shop.contents(Shop.crate("crate.awp.film"), Inventory.ITEMS), 6)
+			T.expectEqual(#Shop.contents(Shop.crate("crate.m9.film"), Inventory.ITEMS), 6)
 		end)
 
 		T.it("chaque caisse a un id unique, un prix positif et de 6 à 8 skins connus de son arme (#424)", function()
@@ -53,21 +63,28 @@ return function(T, Loader)
 			end
 		end)
 
-		T.it("chaque apparence listée existe et ne sort que d'une seule caisse et d'une seule rareté", function()
-			local owner = {}
-			for _, crate in Shop.CRATES do
-				local listed = 0
-				for _, appearances in crate.contents do
-					for _, appearance in appearances do
-						local key = crate.weapon .. "/" .. appearance
-						T.expectEqual(owner[key], nil, key)
-						owner[key] = crate.id
-						listed += 1
+		-- Une série peut reprendre les skins d'une autre (#433) : partout à la même rareté, sinon rarityOf (première
+		-- caisse) contredirait la caisse qui l'affiche
+		T.it(
+			"chaque apparence listée existe, une fois par caisse, et a la même rareté dans toutes ses caisses",
+			function()
+				local rarityByKey = {}
+				for _, crate in Shop.CRATES do
+					local listed, inCrate = 0, {}
+					for rarityId, appearances in crate.contents do
+						for _, appearance in appearances do
+							local key = crate.weapon .. "/" .. appearance
+							T.expectEqual(inCrate[key], nil, crate.id .. " : " .. key .. " en double")
+							inCrate[key] = true
+							T.expectEqual(rarityByKey[key] or rarityId, rarityId, key)
+							rarityByKey[key] = rarityId
+							listed += 1
+						end
 					end
+					T.expectEqual(#Shop.contents(crate, Inventory.ITEMS), listed, crate.id .. " : apparence inconnue")
 				end
-				T.expectEqual(#Shop.contents(crate, Inventory.ITEMS), listed, crate.id .. " : apparence inconnue")
 			end
-		end)
+		)
 
 		T.it("tous les skins du jeu sont dans une caisse", function()
 			for _, item in Inventory.ITEMS do
@@ -199,20 +216,32 @@ return function(T, Loader)
 	end)
 
 	T.describe("ShopCatalog.slots", function()
-		T.it("range les deux caisses au centre de la rangée du haut", function()
-			local slots = Shop.slots(#Shop.CRATES)
+		T.it("range deux caisses au centre de la rangée du haut", function()
+			local slots = Shop.slots(2)
 			T.expectEqual(#slots, 2)
 			T.expectEqual(slots[1].row, 1)
 			T.expectEqual(slots[1].column, -0.5)
 			T.expectEqual(slots[2].column, 0.5)
 		end)
 
-		T.it("remplit la rangée du haut avant celle du bas", function()
-			local slots = Shop.slots(4)
-			T.expectEqual(slots[3].row, 1)
-			T.expectEqual(slots[3].column, 1)
-			T.expectEqual(slots[4].row, 2)
-			T.expectEqual(slots[4].column, 0)
+		T.it("répartit à parts égales entre les rangées, celle du haut servie d'abord (#433)", function()
+			local function layout(n)
+				local per = {}
+				for _, s in Shop.slots(n) do
+					per[s.row] = (per[s.row] or 0) + 1
+				end
+				return table.concat(per, "+")
+			end
+			T.expectEqual(layout(3), "3")
+			T.expectEqual(layout(4), "2+2")
+			T.expectEqual(layout(5), "3+2")
+			T.expectEqual(layout(6), "3+3")
+			local slots = Shop.slots(4) -- série 1 en haut, FILM en bas, chacune centrée
+			T.expectEqual(slots[2].row, 1)
+			T.expectEqual(slots[2].column, 0.5)
+			T.expectEqual(slots[3].row, 2)
+			T.expectEqual(slots[3].column, -0.5)
+			T.expectEqual(slots[4].index, 4)
 		end)
 
 		T.it("ne range pas au-delà de la capacité", function()

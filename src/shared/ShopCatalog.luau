@@ -41,9 +41,10 @@ ShopCatalog.RARITIES = {
 	{ id = "exceptional", label = "EXCEPTIONNEL", chance = 5, color = { 170, 70, 220 }, refund = 70 },
 } :: { Rarity }
 
--- Caisses en vente, dans l'ordre de la vitrine : une par arme, de 6 à 8 skins (#424), une ouverture donne un seul skin
--- de l'arme (#332). Raretés reprises des anciennes caisses par série (TREMPE et MUE, hors caisse, en COMMUN), à revoir.
--- Ajouter une série = une caisse par arme ici (ses skins dans InventoryRules)
+-- Caisses en vente, dans l'ordre de la vitrine : une par arme et par série, de 6 à 8 skins (#424), une ouverture donne
+-- un seul skin de l'arme (#332). Raretés reprises des anciennes caisses par série (TREMPE et MUE, hors caisse, en
+-- COMMUN), à revoir. Ajouter une série = une caisse par arme ici (ses skins dans InventoryRules). Une série peut
+-- reprendre des skins d'une autre pour atteindre 6 skins (FILM, #433), à la même rareté partout (`rarityOf`)
 ShopCatalog.CRATES = {
 	{
 		id = "crate.awp.serie1",
@@ -67,6 +68,31 @@ ShopCatalog.CRATES = {
 			common = { "couchant", "recuit" },
 			rare = { "patrouille", "artdeco" },
 			exceptional = { "releve", "email" },
+		},
+	},
+	-- Série FILM (#433) : un skin hommage par arme, complétée de skins de la série 1 (même rareté)
+	{
+		id = "crate.awp.film",
+		name = "AWP · FILM",
+		weapon = "weapon.awp",
+		stripe = { 110, 230, 130 }, -- vert phosphore de l'écran de REMORQUEUR
+		price = 500,
+		contents = {
+			common = { "balise", "maquis", "mue" },
+			rare = { "circuit", "pan" },
+			exceptional = { "remorqueur" },
+		},
+	},
+	{
+		id = "crate.m9.film",
+		name = "M9 · FILM",
+		weapon = "weapon.m9bayonet",
+		stripe = { 200, 182, 140 }, -- os de HÔTE
+		price = 500,
+		contents = {
+			common = { "couchant", "recuit" },
+			rare = { "patrouille", "artdeco" },
+			exceptional = { "hote", "releve" },
 		},
 	},
 } :: { Crate }
@@ -183,19 +209,21 @@ function ShopCatalog.subtitle(crate: Crate, items: { any }): string
 	return string.format("CAISSE  ·  %d SKINS  ·  UN PAR OUVERTURE", #ShopCatalog.contents(crate, items))
 end
 
--- Cette méthode permet de ranger `count` caisses dans la vitrine lorsque la vue d'ensemble se construit : rangée 1 (en
--- haut) d'abord, au plus PER_ROW par rangée ; `column` est la place dans la rangée, centrée (-1, 0, 1 pour trois
--- caisses, -0,5 et 0,5 pour deux). Au-delà de PER_ROW x ROWS, les caisses ne sont pas rangées.
+-- Cette méthode permet de ranger `count` caisses dans la vitrine lorsque la vue d'ensemble se construit : réparties à
+-- parts égales entre les rangées nécessaires, rangée 1 (en haut) servie d'abord (4 caisses : 2 + 2, une série par
+-- rangée, #433 ; 5 : 3 + 2) ; `column` est la place dans la rangée, centrée (-1, 0, 1 pour trois caisses, -0,5 et 0,5
+-- pour deux). Au-delà de PER_ROW x ROWS, les caisses ne sont pas rangées.
 function ShopCatalog.slots(count: number): { Slot }
 	local slots = {}
-	local capacity = ShopCatalog.PER_ROW * ShopCatalog.ROWS
-	local placed = math.min(count, capacity)
-	for row = 1, ShopCatalog.ROWS do
-		local first = (row - 1) * ShopCatalog.PER_ROW + 1
-		local inRow = math.clamp(placed - first + 1, 0, ShopCatalog.PER_ROW)
+	local placed = math.clamp(count, 0, ShopCatalog.PER_ROW * ShopCatalog.ROWS)
+	local rows = math.ceil(placed / ShopCatalog.PER_ROW)
+	local first = 1
+	for row = 1, rows do
+		local inRow = math.ceil((placed - first + 1) / (rows - row + 1))
 		for k = 1, inRow do
 			table.insert(slots, { index = first + k - 1, row = row, column = (k - 1) - (inRow - 1) / 2 })
 		end
+		first += inRow
 	end
 	return slots
 end
