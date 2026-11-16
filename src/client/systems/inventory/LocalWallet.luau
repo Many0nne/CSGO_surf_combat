@@ -22,36 +22,40 @@ end
 
 local DAY_MARGIN = 1 -- s après minuit UTC avant de prévenir les écrans (le jour a bien changé côté serveur)
 
-local dayListeners: { [() -> ()]: boolean } = {}
+-- Abonnés au changement de jour : un jeton par abonnement (la même fonction peut s'abonner deux fois)
+local dayListeners: { [{}]: () -> () } = {}
 local dayTimerRunning = false
 
 -- Cette méthode permet de prévenir les écrans abonnés au gain du jour lorsque minuit UTC est passé (une seule
--- minuterie partagée, relancée sur l'heure serveur à chaque jour, jamais de boucle par frame).
+-- minuterie partagée, relancée sur l'heure serveur à chaque jour, jamais de boucle par frame) ; elle s'arrête quand
+-- plus personne n'est abonné, et un abonné qui échoue n'empêche ni les autres ni les jours suivants.
 local function runDayTimer()
 	if dayTimerRunning then
 		return
 	end
 	dayTimerRunning = true
 	task.spawn(function()
-		while true do
+		while next(dayListeners) ~= nil do
 			task.wait(EconomyRules.secondsUntilNextDay(workspace:GetServerTimeNow()) + DAY_MARGIN)
-			for listener in table.clone(dayListeners) do
-				listener()
+			for _, listener in table.clone(dayListeners) do
+				task.spawn(listener)
 			end
 		end
+		dayTimerRunning = false
 	end)
 end
 
 -- Cette méthode permet d'appeler `callback` maintenant, à chaque changement de l'attribut des gains du jour et à
 -- chaque changement de jour UTC lorsqu'un écran affiche `dailyEarned` ; renvoie une fonction de désabonnement.
 function LocalWallet.observeDaily(callback: () -> ()): () -> ()
-	callback()
+	local token = {}
 	local conn = player:GetAttributeChangedSignal(EconomyRules.DAILY_ATTRIBUTE):Connect(callback)
-	dayListeners[callback] = true
+	dayListeners[token] = callback
 	runDayTimer()
+	callback()
 	return function()
 		conn:Disconnect()
-		dayListeners[callback] = nil
+		dayListeners[token] = nil
 	end
 end
 

@@ -26,8 +26,11 @@ return function(T, Loader)
 			end,
 		}
 		local fakeTask = {
-			spawn = function(fn)
-				coroutine.wrap(fn)()
+			-- Comme task.spawn : une erreur dans le fil lancé ne remonte pas à l'appelant
+			spawn = function(fn, ...)
+				coroutine.wrap(function(...)
+					pcall(fn, ...)
+				end)(...)
 			end,
 			wait = function(seconds)
 				table.insert(waiters, { wake = now + seconds, thread = coroutine.running() })
@@ -103,6 +106,56 @@ return function(T, Loader)
 			unobserve()
 			w.advance(61)
 			T.expectEqual(count, 1)
+		end)
+
+		T.it("un abonné qui échoue n'empêche ni les autres ni les jours suivants", function()
+			local w = world(DAY .. ":250")
+			local good = 0
+			local first = true
+			w.wallet.observeDaily(function()
+				if not first then
+					error("abonné cassé")
+				end
+				first = false
+			end)
+			w.wallet.observeDaily(function()
+				good += 1
+			end)
+			w.advance(61)
+			w.advance(86400)
+			T.expectEqual(good, 3)
+		end)
+
+		T.it("la même fonction abonnée deux fois : un désabonnement ne coupe pas l'autre", function()
+			local w = world(DAY .. ":250")
+			local count = 0
+			local function paint()
+				count += 1
+			end
+			local unobserveA = w.wallet.observeDaily(paint)
+			w.wallet.observeDaily(paint)
+			T.expectEqual(count, 2)
+			unobserveA()
+			w.advance(61)
+			T.expectEqual(count, 3)
+		end)
+
+		T.it("la minuterie s'arrête sans abonné et repart à l'abonnement suivant", function()
+			local w = world(DAY .. ":250")
+			local count = 0
+			local unobserve = w.wallet.observeDaily(function()
+				count += 1
+			end)
+			unobserve()
+			w.advance(61) -- le fil se réveille, ne trouve personne et s'arrête
+			w.advance(86400)
+			T.expectEqual(count, 1)
+			w.wallet.observeDaily(function()
+				count += 1
+			end)
+			T.expectEqual(count, 2)
+			w.advance(86400)
+			T.expectEqual(count, 3)
 		end)
 
 		T.it("gain du jour nil tant que l'attribut n'est pas chargé", function()
