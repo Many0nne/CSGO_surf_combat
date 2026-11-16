@@ -89,15 +89,12 @@ return function(T, Loader)
 			end
 		end)
 
-		T.it(
-			"pose une tache de sang dès 5 kills, plus grande à 10 puis à 15, et la garde jusqu'à la mort",
-			function()
-				local expected = { [2] = 0, [4] = 0, [5] = 1, [9] = 1, [10] = 2, [14] = 2, [15] = 3, [30] = 3, [0] = 0 }
-				for n, blood in expected do
-					T.expectEqual(KillStreakRules.view(n).blood, blood)
-				end
+		T.it("n'affiche jamais de sang (règles Roblox sur le gore)", function()
+			for _, n in { 0, 2, 5, 10, 15, 30 } do
+				T.expectEqual((KillStreakRules.view(n) :: any).blood, nil)
 			end
-		)
+			T.expectEqual((KillStreakRules :: any).BLOOD_FROM, nil)
+		end)
 
 		T.it("revient masqué après une mort (série remise à 0)", function()
 			local streak = select(1, KillStreakRules.onKill(0, false))
