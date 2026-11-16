@@ -10,8 +10,10 @@
 -- achetés en crédits gagnés. Solde stocké insuffisant : refus, rien d'écrit. Un joueur restreint (objets aléatoires
 -- payants, #395) n'arrive pas jusqu'ici : CrateService le refuse avant (`region`).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 
 local WalletRules = require(ReplicatedStorage.Shared.WalletRules)
+local TransactOutcome = require(ServerScriptService.Server.TransactOutcome)
 
 local CratePurchaseRules = {}
 
@@ -78,14 +80,9 @@ function CratePurchaseRules.reply(
 			added = not duplicate,
 			refund = if duplicate then refundOf(purchase) else 0,
 		}
-	elseif status == "rejected" then
-		-- Seul un solde stocké trop bas est le fait du joueur ; un autre refus (opération invalide) est un bug serveur
-		return { ok = false, reason = if result == "insufficient" then "insufficient" else "failed" }
-	elseif status == "loading" then
-		return { ok = false, reason = "loading" }
 	end
-	-- `failed` : rien d'appliqué, sauf la limite documentée de `transact` (écriture passée dont la vérification échoue)
-	return { ok = false, reason = "failed" }
+	-- Refus, chargement ou échec : traduits par TransactOutcome (même table que WalletStore.spend)
+	return { ok = false, reason = TransactOutcome.translate(status, result) }
 end
 
 return CratePurchaseRules
