@@ -155,6 +155,7 @@ local hudStateConn: (() -> ())? -- désabonnement de HUDState
 local tabConn: RBXScriptConnection?
 local tabEndConn: RBXScriptConnection?
 local creditConns: { RBXScriptConnection } = {} -- attributs des crédits de la manche (#394)
+local dailyUnobserve: (() -> ())? = nil -- désabonnement des gains du jour (LocalWallet.observeDaily, #446)
 local respawnTask: thread?
 
 -- ── Timer et rang ──────────────────────────────────────────────────────────────
@@ -957,16 +958,20 @@ function RoundHUD.init()
 	buildLeaderboard(root)
 	buildResultBanner(root)
 	-- Gains de la manche publiés par le serveur après RoundResult (#394) : l'écran de fin se met à jour à leur arrivée
-	for _, name in { EconomyRules.ROUND_ATTRIBUTE, EconomyRules.DAILY_ATTRIBUTE } do
-		table.insert(
-			creditConns,
-			Players.LocalPlayer:GetAttributeChangedSignal(name):Connect(function()
-				if resultShown then
-					paintCredits()
-				end
-			end)
-		)
-	end
+	table.insert(
+		creditConns,
+		Players.LocalPlayer:GetAttributeChangedSignal(EconomyRules.ROUND_ATTRIBUTE):Connect(function()
+			if resultShown then
+				paintCredits()
+			end
+		end)
+	)
+	-- Gains du jour (attribut ou minuit UTC passé pendant l'écran de fin) : le bandeau « PLAFOND DU JOUR ATTEINT » suit
+	dailyUnobserve = LocalWallet.observeDaily(function()
+		if resultShown then
+			paintCredits()
+		end
+	end)
 	hudStateConn = HUDState.onChanged(applyTimerLayer)
 	applyTimerLayer()
 
@@ -1318,6 +1323,10 @@ function RoundHUD.destroy()
 		conn:Disconnect()
 	end
 	table.clear(creditConns)
+	if dailyUnobserve then
+		dailyUnobserve()
+		dailyUnobserve = nil
+	end
 	if deathGrade then
 		deathGrade:Destroy()
 	end

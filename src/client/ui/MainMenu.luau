@@ -41,7 +41,6 @@ local BALANCE_SIZE = 24
 -- Gains du jour (#394), sous le solde, sur la page SHOP seulement : « GAINS DU JOUR » en ambre, « N / 250 » en os
 local DAILY_Y = TABS_Y + 50
 local DAILY_SIZE = 18
-local DAILY_REPAINT_MARGIN = 1 -- s après minuit UTC avant de repeindre les gains du jour (le jour a bien changé)
 -- Onglets, de gauche à droite ; ARMES est l'accueil (le personnage et son arme), JOUER l'appel à l'action, APPRENDRE
 -- juste avant (#285 : on apprend le geste, puis on joue), SHOP à côté d'ARMES (#347 : les caisses donnent les skins)
 local TABS = {
@@ -287,22 +286,14 @@ local function buildDaily(root: Frame)
 		Size = UDim2.fromScale(0, 1),
 		ZIndex = 2,
 	}, 2)
-	local player = Players.LocalPlayer
-	-- Cette méthode permet de réécrire « N / 250 » lorsque l'attribut change ou que le shop s'ouvre (minuit UTC passé).
+	-- Cette méthode permet de réécrire « N / 250 » lorsque l'attribut change, que le jour UTC change (LocalWallet) ou
+	-- que le shop s'ouvre.
 	paintDaily = function()
 		local value = EconomyRules.dailyLabel(LocalWallet.dailyEarned())
 		text.Text = value
 		shadow.Text = value
 	end
-	paintDaily()
-	player:GetAttributeChangedSignal(EconomyRules.DAILY_ATTRIBUTE):Connect(paintDaily)
-	-- Shop resté ouvert à cheval sur minuit UTC : l'attribut ne change pas, une minuterie repeint au changement de jour
-	task.spawn(function()
-		while true do
-			task.wait(EconomyRules.secondsUntilNextDay(workspace:GetServerTimeNow()) + DAILY_REPAINT_MARGIN)
-			paintDaily()
-		end
-	end)
+	LocalWallet.observeDaily(paintDaily)
 end
 
 -- Cette méthode permet de poser le titre du jeu avec les onglets, au-dessus des écrans secondaires (#308 : il reste

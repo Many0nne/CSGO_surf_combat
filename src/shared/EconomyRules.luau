@@ -45,8 +45,8 @@ function EconomyRules.day(unixTime: number): number
 	return unixTime // EconomyRules.SECONDS_PER_DAY
 end
 
--- Cette méthode permet de donner les secondes jusqu'au prochain minuit UTC lorsque le shop programme le repaint des gains
--- du jour ; toujours entre 0 (exclu) et SECONDS_PER_DAY (à minuit pile, le prochain est dans un jour entier).
+-- Cette méthode permet de donner les secondes jusqu'au prochain minuit UTC lorsque LocalWallet.observeDaily programme le
+-- repaint des gains du jour ; toujours entre 0 (exclu) et SECONDS_PER_DAY (à minuit pile, le prochain est dans un jour entier).
 function EconomyRules.secondsUntilNextDay(unixTime: number): number
 	return EconomyRules.SECONDS_PER_DAY - unixTime % EconomyRules.SECONDS_PER_DAY
 end
