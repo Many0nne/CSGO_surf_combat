@@ -47,8 +47,8 @@ ShopCatalog.RARITIES = {
 
 -- Caisses en vente, dans l'ordre de la vitrine : une par arme et par série, de 6 à 8 skins (#424), une ouverture donne
 -- un seul skin de l'arme (#332). Un skin a la même rareté dans toutes les caisses qui le contiennent (#430, `rarityOf`) :
--- AWP, COMMUN maquis, logogramme ; RARE mue, orage, circuit ; EXCEPTIONNEL remorqueur, balise, pan ; LÉGENDAIRE trempe,
--- ciselure. M9, COMMUN artdeco, hote ; RARE patrouille, releve, sphinx ; EXCEPTIONNEL email, recuit ; LÉGENDAIRE
+-- AWP, COMMUN maquis, epure, tartan, banche, logogramme ; RARE mue, orage, circuit ; EXCEPTIONNEL remorqueur, balise,
+-- pan ; LÉGENDAIRE trempe, ciselure. M9, COMMUN artdeco, hote ; RARE patrouille, releve, sphinx ; EXCEPTIONNEL email, recuit ; LÉGENDAIRE
 -- couchant. Ajouter une série = une caisse par arme ici (ses skins dans InventoryRules). Une rareté sans skin dans une
 -- caisse (LÉGENDAIRE d'AWP · FILM) est écartée du tirage, les autres chances étant renormalisées (`draw`)
 ShopCatalog.CRATES = {
@@ -58,10 +58,12 @@ ShopCatalog.CRATES = {
 		weapon = "weapon.awp",
 		stripe = { 226, 58, 40 },
 		price = 500,
+		-- MUE, CIRCUIT et PAN ! ont laissé la place aux communs ÉPURE, TARTAN et BANCHE (8 skins au plus) ; ils restent
+		-- dans AWP · FILM, à la même rareté
 		contents = {
-			common = { "maquis" },
-			rare = { "mue", "orage", "circuit" },
-			exceptional = { "balise", "pan" },
+			common = { "maquis", "epure", "tartan", "banche" },
+			rare = { "orage" },
+			exceptional = { "balise" },
 			legendary = { "trempe", "ciselure" },
 		},
 	},
