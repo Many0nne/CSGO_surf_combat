@@ -323,8 +323,8 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   10. **Pas de sang** : les taches de sang derrière le crâne (dès 5, plus grandes à 10 et 15) ont été retirées le
   16/11/2026, contraires aux règles Roblox sur le gore (test `KillStreakRules.spec`). Ne pas en remettre, ni ailleurs
   dans l'interface. **Palier annoncé à la voix (2, 3, 4, 5, 10, 15), et lui seul** (en accord avec les sons, rien aux
-  autres kills) : sans changer de taille, la croix du hitmarker s'allume autour du crâne (21 à 30 px du centre, 0,6 s
-  puis `Motion.Hit`), le crâne passe en rouge d'impact 1,2 s, le nombre aussi (en os s'il est déjà rouge), puis retour
+  autres kills) : sans changer de taille, les éclats du hitmarker (`HitShards`) jaillissent en rouge d'impact autour du crâne
+  (pointes à 21 px du centre, 12 px de long, tenus 0,6 s puis `Motion.Hit`), le crâne passe en rouge d'impact 1,2 s, le nombre aussi (en os s'il est déjà rouge), puis retour
   au repos.
   Images : `tools/ui/make_skull_icon.py` (crâne plein et hachuré depuis le SVG : les hachures de la référence, découpées
   dans le SVG, sont rebouchées par une fermeture en travers des bandes, puis le tracé en escalier est lissé ;
@@ -340,6 +340,14 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   Test sans tuer de bot : en contexte `Server`, `ReplicatedStorage.PlayerDied:FireAllClients({ victimId = -1,
   victimName = "Cible", victimIsBot = true, killerId = <UserId>, killerName = "x", killerIsBot = false, weapon = "AWP",
   headshot = false })` compte un kill du joueur (une ligne de kill feed en plus).
+- **Hitmarker (#467, `src/client/ui/Hitmarker.luau`, dessin dans `HitShards.luau`)** : quatre éclats d'impact sur les
+  diagonales (le réticule en croix de la lunette reste dégagé), pointe vers le centre, base cassée vers l'extérieur ;
+  os à ombre noire de 1 px, comme le texte du HUD. À chaque touche confirmée, ils jaillissent de 4 px vers l'extérieur
+  en s'estompant (`Motion.Hit`) ; tir à la tête en rouge d'impact ; kill : 1,35 fois plus grands, 7 px parcourus,
+  tenus 0,2 s puis fondu de 0,35 s. Pointes à 5 px du centre, éclats de 15 px (repère 720 px) : rien au centre, pour
+  la visée. Image `assets/ui/hud/eclat_hitmarker.png` (`tools/ui/make_hit_shard.py`, Decal 71617191362660), teinte
+  par `ImageColor3`, préchargée à l'init. Même dessin autour du crâne de la série de kills. Remplace le X blanc à
+  contour noir de #44, générique.
 - `src/client/ui/KillFeed.luau` (#102) : en haut à droite, sans fond, une ligne par mort (tueur et victime en os, arme
   en ambre plus petite), 4 lignes, 5 s chacune ; les lignes du joueur sont sur une bande rouge d'impact droite qui
   s'efface vers la gauche, comme sa ligne au classement. Affiché vivant ou mort (`HUDRules.killFeedVisible`), pas au
