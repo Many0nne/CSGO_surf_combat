@@ -426,4 +426,40 @@ return function(T, Loader)
 			end
 		end)
 	end)
+
+	T.describe("ShopCatalog : pochoir du couvercle (#434)", function()
+		T.it("série et arme lues dans le catalogue", function()
+			T.expectEqual(Shop.stencil(Shop.crate("crate.awp.serie1")), "S1-AWP")
+			T.expectEqual(Shop.stencil(Shop.crate("crate.m9.serie1")), "S1-M9")
+			T.expectEqual(Shop.stencil(Shop.crate("crate.awp.film")), "FM-AWP")
+			T.expectEqual(Shop.stencil(Shop.crate("crate.m9.film")), "FM-M9")
+		end)
+
+		T.it("chaque caisse du catalogue a un pochoir à elle", function()
+			local seen = {}
+			for _, crate in Shop.CRATES do
+				local text = Shop.stencil(crate)
+				T.expect(text ~= "" and not seen[text], crate.id .. " : pochoir vide ou déjà pris (" .. text .. ")")
+				seen[text] = true
+			end
+		end)
+
+		T.it("id de série avec séparateurs : le code garde la série", function()
+			T.expectEqual(Shop.stencil({ id = "crate.awp.serie-2", weapon = "weapon.awp" }), "S2-AWP")
+			T.expectEqual(Shop.stencil({ id = "crate.awp.dragon_lore", weapon = "weapon.awp" }), "DE-AWP")
+		end)
+
+		T.it("nouvelle série ou nouvelle arme : texte dérivé sans table à compléter", function()
+			T.expectEqual(Shop.stencil({ id = "crate.awp.serie12", weapon = "weapon.awp" }), "S12-AWP")
+			T.expectEqual(Shop.stencil({ id = "crate.ak.neon", weapon = "weapon.ak47" }), "NN-AK47")
+		end)
+
+		T.it("caisse sans série, sans arme ou inconnue : repli sans erreur", function()
+			T.expectEqual(Shop.stencil({ id = "crate.awp", weapon = "weapon.awp" }), "AWP")
+			T.expectEqual(Shop.stencil({ id = "autre", weapon = "weapon.m9bayonet" }), "M9")
+			T.expectEqual(Shop.stencil({ id = "crate.awp.film" }), "FM")
+			T.expectEqual(Shop.stencil({}), "")
+			T.expectEqual(Shop.stencil(nil), "")
+		end)
+	end)
 end

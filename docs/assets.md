@@ -155,9 +155,19 @@ bash tools/anim/publish.sh <dossier> <prefixe> <Nom1> [Nom2 ...] # plusieurs ani
 
 Source : `tools/shop/crate_model.py` (Blender sans interface). Une MeshPart par matière : `Interior`, `BodyPlanks`,
 `BodyFrame`, `BodySteel`, `Rope`, et pour le couvercle (à ouvrir d'un bloc) `LidPlanks`, `LidFrame`, `LidSteel`,
-`LidStripe` (bande de la collection), `LidStencil`. Origine au centre du dessous, avant vers -Y Blender (+Z Roblox), UV en
+`LidStripe` (bande de la collection). Origine au centre du dessous, avant vers -Y Blender (+Z Roblox), UV en
 projection cubique (4 studs par unité). Couleurs et matières sont posées par le jeu (`ShopScene`, `CRATE_LOOK`), le
-`.rbxm` ne porte que la géométrie ; `verify_place.luau` vérifie que les dix pièces existent.
+`.rbxm` ne porte que la géométrie ; `verify_place.luau` vérifie que les neuf pièces existent, et qu'il n'y a pas de
+`LidStencil` dans le mesh.
+
+**Pochoir du couvercle (#434)** : rien n'est écrit dans le mesh. `ShopScene` (`crate`, `STENCIL_*`) ajoute à chaque caisse
+de la vitrine et du socle une pièce invisible `LidStencil` (préfixe `Lid` : elle s'ouvre avec le couvercle) portant une
+`SurfaceGui` à droite de la bande, en Oswald Bold couleur encre (24, 22, 20), éclairée comme le bois. Le texte vient de
+`ShopCatalog.stencil` (testé) : code de série tiré de ce qui suit `crate.<arme>.` dans l'id, séparateurs retirés (`serie<n>` → `S<n>`, sinon
+première et dernière lettre, `film` → `FM` ; un test vérifie que les caisses du catalogue ont des pochoirs distincts), un tiret, puis le nom court de l'arme (`WEAPON_LABELS`, sinon l'id sans `weapon.` en
+capitales). Une nouvelle caisse `crate.<arme>.<série>` reçoit donc son pochoir sans toucher au rendu. Sans série, le
+pochoir est l'arme seule ; caisses de stock (racks, rangées vides) : pas de pochoir. Ne pas remettre de texte dans le
+mesh : il serait le même sur toutes les caisses (l'ancien « S1-0332 » se lisait « série 1 » même sur les FILM).
 
 1. `blender -b --factory-startup --python tools/shop/crate_model.py -- <sortie.fbx> [aperçu.png]`
 2. `bash tools/publish_asset.sh <sortie.fbx> Model Crate` (id du Model).
@@ -165,6 +175,12 @@ projection cubique (4 studs par unité). Couleurs et matières sont posées par 
    L'insertion ajoute un `PackageLink` : le supprimer. Le pivot du Model arrive déjà au centre du dessous.
 4. `lune run tools/rbxm/receive.luau Props`, puis `studio_export.luau` avec `ONLY = "Props"` ; détruire ensuite la caisse
    insérée à la main (Rojo la recrée depuis `assets/rbx/Props/Crate.rbxm`, sinon elle est en double).
+
+Retirer une pièce sans changer le reste de la géométrie (#434) ne demande ni publication ni Studio. Lune ne relit pas le
+`.rbxm` binaire (`MeshPart.Tags should be SharedString`), mais il relit la place XML de `rojo build` : y prendre
+`ReplicatedStorage.Props.Crate`, détruire la pièce, puis `roblox.serializeModel({ crate })` vers `Crate.rbxm`. Comparer
+ensuite toutes les propriétés des pièces restantes avant et après (même `MeshContent`, tailles, pivots), Studio
+déconnecté de ce serveur Rojo.
 
 ## Modèle d'arme procédural dans Blender (couteau Ka-Bar)
 

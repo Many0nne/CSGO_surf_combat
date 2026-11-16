@@ -60,21 +60,6 @@ def ring(group, x, y, z, R, r):
     return keep(group, bpy.context.active_object)
 
 
-# Cette méthode permet d'écrire un pochoir extrudé sur la face avant (-y) dans un groupe.
-def stencil(group, text, x, y, z, size):
-    cu = bpy.data.curves.new("t", "FONT")
-    cu.body = text
-    cu.font = bpy.data.fonts.load("C:/Windows/Fonts/ARIALNB.TTF")
-    cu.size = size
-    cu.extrude = 0.004
-    cu.align_x, cu.align_y = "CENTER", "CENTER"
-    ob = bpy.data.objects.new("t", cu)
-    bpy.context.collection.objects.link(ob)
-    ob.location = (x, y, z)
-    ob.rotation_euler = (math.radians(90), 0, 0)
-    return keep(group, ob)
-
-
 # ---- corps : intérieur sombre, trois rangées de planches, cadre, patins -------------------------------------------
 box("Interior", 0, 0, 1.0, W - 0.16, D - 0.16, 1.9, 0)
 ROWS = [(0.08, 0.5), (0.53, 0.95), (0.98, 1.4), (1.47, 1.88)]  # trois rangées de corps, une de couvercle
@@ -116,10 +101,11 @@ for sx in (-1, 1):  # poignées en corde et leurs attaches
     for y in (-0.3, 0.3):
         box("BodySteel", sx * (W / 2 + 0.1), y, 1.18, 0.05, 0.14, 0.12, 0.01)
 
-# ---- marquage : bande de la collection (avant et dessus du couvercle), numéro au pochoir --------------------------
+# ---- marquage : bande de la collection (avant et dessus du couvercle) ---------------------------------------------
+# Le pochoir (« S1-AWP », à droite de la bande sur la face avant) n'est plus modelé ici : le jeu le pose, propre à chaque
+# caisse (#434, ShopScene STENCIL_AT et ShopCatalog.stencil).
 box("LidStripe", -0.65, -D / 2 - 0.004, 1.675, 1.9, 0.01, 0.3, 0)
 box("LidStripe", 0, 0, 2.005, 0.7, D - 0.2, 0.01, 0)
-stencil("LidStencil", "S1-0332", 1.0, -D / 2 - 0.006, 1.675, 0.26)
 
 
 # Cette méthode permet de fusionner les objets d'un groupe en un seul mesh (modificateurs appliqués) et de lui donner
@@ -168,7 +154,6 @@ PREVIEW = {
     "LidSteel": (62, 64, 68),
     "Rope": (176, 156, 116),
     "LidStripe": (226, 58, 40),
-    "LidStencil": (24, 22, 20),
 }
 
 

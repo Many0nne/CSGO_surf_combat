@@ -341,4 +341,28 @@ function ShopCatalog.priceLabel(crate: Crate): string
 	return WalletRules.format(crate.price)
 end
 
+-- Cette méthode permet de composer le pochoir du couvercle d'une caisse (« S1-AWP », « FM-M9 », #434) lorsque le shop la
+-- pose : série de l'id (`serie<n>` → `S<n>`, sinon 1re et dernière lettre), arme ; repli sur l'un des deux, ou "".
+function ShopCatalog.stencil(crate: { id: string?, weapon: string? }?): string
+	local series = crate and crate.id and string.match(crate.id, "^crate%.[^.]+%.(.+)$")
+	local code: string? = nil
+	if series then
+		local letters = string.gsub(string.lower(series), "[^%w]", "")
+		local number = string.match(letters, "^serie(%d+)$")
+		if number then
+			code = "S" .. number
+		elseif letters ~= "" then
+			code = string.upper(string.sub(letters, 1, 1) .. string.sub(letters, -1))
+		end
+	end
+	local weapon = crate and crate.weapon
+	local label: string? = if weapon
+		then WEAPON_LABELS[weapon] or string.upper(string.match(weapon, "^weapon%.(.+)$") or weapon)
+		else nil
+	if code and label then
+		return code .. "-" .. label
+	end
+	return code or label or ""
+end
+
 return ShopCatalog

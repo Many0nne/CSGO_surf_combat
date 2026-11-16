@@ -107,8 +107,16 @@ local CRATE_LOOK: { [string]: { any } } = {
 	LidSteel = CRATE_STEEL,
 	Rope = { Color3.fromRGB(176, 156, 116), Enum.Material.Fabric },
 	LidStripe = { Color3.fromRGB(226, 58, 40), Enum.Material.SmoothPlastic },
-	LidStencil = { Color3.fromRGB(24, 22, 20), Enum.Material.SmoothPlastic },
 }
+-- Pochoir du couvercle (#434) : texte propre à la caisse (ShopCatalog.stencil), peint par une SurfaceGui sur une pièce
+-- invisible « LidStencil » (préfixe Lid : il s'ouvre avec le couvercle) ; place, hauteur des capitales (0,136 stud) et
+-- encre de l'ancien pochoir « S1-0332 » modelé dans le mesh, à droite de la bande sur la face avant ; remonté de
+-- 0,046 stud : le moraillon du couvercle (LidSteel, haut à 1,64) cachait le bas des lettres centrales
+local STENCIL_AT = Vector3.new(1.0, 1.72, 1.208) -- centre, par rapport au pivot de la caisse
+local STENCIL_SIZE = Vector3.new(1.2, 0.3, 0.01) -- zone libre entre la bande et le montant du cadre
+local STENCIL_INK = Color3.fromRGB(24, 22, 20)
+local STENCIL_PIXELS = 200 -- pixels par stud
+local STENCIL_TEXT = 52 -- px : capitales d'Oswald à la hauteur de l'ancien pochoir (comparé dans Studio, même cadrage)
 
 -- Vitrine (repère local : x le long de la vitrine, y en haut, z vers la pièce)
 local VITRINE_W, VITRINE_H, VITRINE_D = 13.2, 8.4, 3.0
@@ -221,10 +229,37 @@ end
 
 -- Cette méthode permet de poser une caisse d'armes (modèle `Props.Crate`, origine au centre du dessous, face avant vers
 -- +z) aux couleurs d'une collection lorsque la vitrine, un rack ou le socle se construit ; `width` l'étire en largeur,
--- sans `stripe` la caisse n'a pas de bande (stock sans marque).
-local function crate(parent: Instance, frame: Frame, stripe: Color3?, width: number?): Model
+-- sans `stripe` la caisse n'a pas de bande (stock sans marque), sans `stencil` pas de pochoir.
+local function crate(parent: Instance, frame: Frame, stripe: Color3?, width: number?, stencil: string?): Model
 	local model = CRATE:Clone()
 	local pivot = CRATE:GetPivot()
+	if stencil and stencil ~= "" then
+		local plate = Instance.new("Part")
+		plate.Name = "LidStencil"
+		plate.Transparency = 1
+		plate.CastShadow = false
+		plate.Size = STENCIL_SIZE
+		plate.CFrame = pivot * CFrame.new(STENCIL_AT)
+		local gui = Instance.new("SurfaceGui")
+		gui.Face = Enum.NormalId.Back -- +z : face avant de la caisse
+		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+		gui.PixelsPerStud = STENCIL_PIXELS
+		gui.LightInfluence = 1 -- peinture : éclairée comme le bois
+		gui.Parent = plate
+		local text = Instance.new("TextLabel")
+		text.BackgroundTransparency = 1
+		text.Size = UDim2.fromScale(1, 1)
+		text.FontFace = UITheme.Fonts.Display
+		-- Taille du pochoir d'origine, réduite pour un texte trop long (arme sans nom court) au lieu d'être coupé
+		text.TextScaled = true
+		local maxSize = Instance.new("UITextSizeConstraint")
+		maxSize.MaxTextSize = STENCIL_TEXT
+		maxSize.Parent = text
+		text.TextColor3 = STENCIL_INK
+		text.Text = stencil
+		text.Parent = gui
+		plate.Parent = model
+	end
 	local k = (width or CRATE_WIDTH) / CRATE_WIDTH
 	for _, part in model:GetChildren() do
 		if part:IsA("BasePart") then
@@ -654,7 +689,8 @@ local function buildVitrine(parent: Instance)
 			parent,
 			f * CFrame.new(x, level + 0.08, -0.1) * CFrame.Angles(0, math.rad(twist), 0),
 			stripe,
-			SHELF_CRATE_WIDTH
+			SHELF_CRATE_WIDTH,
+			ShopCatalog.stencil(def)
 		)
 		local tag = box(
 			model,
@@ -668,7 +704,8 @@ local function buildVitrine(parent: Instance)
 		model:SetAttribute("ShopCrate", slot.index)
 		for _, part in model:GetDescendants() do
 			if part:IsA("BasePart") then
-				part.CanQuery = true -- survol et clic par rayon depuis la souris
+				-- survol et clic par rayon depuis la souris ; pas la plaque invisible du pochoir, juste devant le bois
+				part.CanQuery = part.Name ~= "LidStencil"
 			end
 		end
 		local name, price = tagText(tag, def)
@@ -806,7 +843,7 @@ local function dressCrate(index: number)
 	local podiumFolder = Instance.new("Folder")
 	podiumFolder.Name = "Podium"
 	local stripe = Color3.fromRGB(def.stripe[1], def.stripe[2], def.stripe[3])
-	podiumCrate = crate(podiumFolder, podiumFrame, stripe)
+	podiumCrate = crate(podiumFolder, podiumFrame, stripe, nil, ShopCatalog.stencil(def))
 	podiumFolder.Parent = stage
 	podium = podiumFolder
 end
