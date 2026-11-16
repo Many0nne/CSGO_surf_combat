@@ -48,7 +48,13 @@ end
 -- `services` remplace des services Roblox par des mocks (ex. Players), `globals` ajoute des globales Roblox simulées
 -- (ex. un faux `task` dont le test déclenche lui-même les délais).
 function Loader.new(services: { [string]: any }?, globals: { [string]: any }?)
-	local self = setmetatable({ cache = {}, services = services or {}, globals = globals or {} }, Loader)
+	-- `mainThread` : thread de la spec qui crée le Loader, le seul autorisé à appeler `require` (cf. Loader:require)
+	local self = setmetatable({
+		cache = {},
+		services = services or {},
+		globals = globals or {},
+		mainThread = coroutine.running(),
+	}, Loader)
 	self.game = {
 		GetService = function(_, name: string)
 			if self.services[name] then
@@ -76,6 +82,14 @@ end
 -- Cette méthode permet d'exécuter un module de src/ avec un environnement Roblox simulé lorsqu'il est requis ;
 -- le résultat est mis en cache par contexte, comme le require de Roblox.
 function Loader:require(target: any)
+	-- Un chargement depuis une coroutine reprise par une horloge simulée ne rend jamais la main (la lecture du
+	-- fichier cède à l'ordonnanceur de Lune) : on échoue tout de suite plutôt que de figer la suite sans message.
+	if coroutine.running() ~= self.mainThread then
+		error(
+			"Loader:require appelé hors du thread principal des tests : charger le module avant de lancer la coroutine",
+			2
+		)
+	end
 	if type(target) == "string" then
 		target = pathNode(target)
 	end
