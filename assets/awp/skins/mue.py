@@ -6,7 +6,7 @@ ventre. Plaque de couche, busc et culasse d'origine.
 
 import numpy as np
 
-from common import X, outline, zone
+from common import JOINT, X, chassis, outline, zone
 from common import paint as ink
 
 DORSAL = np.array((0.22, 0.32, 0.25))  # posé en métal : reflet sombre sans voile gris
@@ -77,7 +77,8 @@ def scales(m, sel, seed, cyl=None, cv=None):
 
 def diamonds(cv):
 	"""Cette méthode permet de tracer la chaîne de grands losanges jointifs le long des flancs du châssis."""
-	path = [(1720, 428), (2420, 432), (2880, 448), (3150, 478), (3560, 505)]
+	# un sommet de la chaîne tombe pile sur le joint garde-main / crosse : deux losanges entiers s'y touchent par la pointe
+	path = [(1720, 428), (JOINT, 432), (2880, 448), (3150, 478), (3560, 505)]
 	for (x0, y0), (x1, y1) in zip(path, path[1:]):
 		n = max(1, round((x1 - x0) / 120))
 		for k in range(n):
@@ -87,7 +88,7 @@ def diamonds(cv):
 			cv.poly("rim", [(cx - hw, cy), (cx, cy - hh), (cx + hw, cy), (cx, cy + hh)])
 			cv.poly("crimson", [(cx - hw * 0.62, cy), (cx, cy - hh * 0.62), (cx + hw * 0.62, cy), (cx, cy + hh * 0.62)])
 	holes = [outline("GUARD_HOLE"), outline("THUMBHOLE")]
-	keep = (zone(cv, outline("STOCK"), holes) > 6) | (zone(cv, outline("HANDGUARD")) > 6)
+	keep = zone(cv, chassis(), holes) > 6  # châssis entier : pas de marge rognée de part et d'autre du joint
 	cv.clip("rim", keep)
 	cv.clip("crimson", keep)
 

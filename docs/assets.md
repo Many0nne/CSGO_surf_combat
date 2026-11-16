@@ -316,6 +316,17 @@ marquages sont celles de Windows (`C:/Windows/Fonts`, Bahnschrift, Impact) : gé
 - **La vue « profil » de `render_views.py` est le flanc gauche, celui qu'on voit en 1P** (caméra du côté -Y).
 - **Comparer à la référence CS avant de montrer** : une première version de TREMPE (rose et violet) ressemblait au Fade,
   une d'ORAGE (violet à éclairs blancs) à Lightning Strike ; la palette a été changée pour rester original.
+- **Raccord au joint garde-main / crosse** (`JOINT`, px 2430, retour utilisateur sur CIRCUIT, MUE et ORAGE) : le châssis
+  est en deux pièces, et un motif qui atteint le joint doit le **traverser à la même hauteur** ou s'arrêter nettement
+  avant, jamais s'arrêter dessus ni repartir décalé de l'autre côté. Défauts constatés : pistes terminées par une
+  pastille au bord du garde-main et reprises plus bas sur la crosse, losanges rognés par une marge de 6 px de chaque
+  côté du joint (zones calculées pièce par pièce), éclair qui finit dans le joint. Remèdes : tracer d'un seul trait à
+  travers le joint, limiter un motif avec `zone(cv, chassis(), …)` (garde-main et crosse réunis), caler une chaîne
+  pour qu'une jointure de motifs tombe sur `JOINT`, faire passer un éclair par un point imposé à mi-hauteur
+  (`strike(…, via=…)`). Contrôler un zoom du joint sur les deux profils avant de montrer.
+- **Rendus de planche** : passer à `paint.py` et `render_views.py` des chemins en barres obliques (`cygpath -m`). Avec
+  des barres inverses, `"$W\$S"` donne le texte `$S` en bash, et tous les skins s'écrivent dans le même dossier : la
+  planche montre alors d'anciens rendus.
 - **Un filet de contour commence sur le congé** : les 7 premiers px photo (~0,02 unité) d'un filet `band(…, 0, d1)`
   tombent sur l'arrondi du bord ; un contour de BD lisible demande `d1` ≈ 22.
 - **Un non-métal sombre prend un voile gris** (carbone de CIRCUIT, noir mat) : le poser en métal 1 avec une couleur sombre,

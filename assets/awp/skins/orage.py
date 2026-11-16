@@ -7,7 +7,7 @@ import math
 
 import numpy as np
 
-from common import X
+from common import JOINT, X
 from common import paint as ink
 
 CANDY = (0.04, 0.38, 0.23)
@@ -30,9 +30,14 @@ def bolt(rng, a, b, rough=0.2, depth=6):
 	return pts
 
 
-def strike(cv, rng, a, b, width, branches=3):
-	"""Cette méthode permet de tracer un éclair et ses branches (cœur et halo), branches de plus en plus fines."""
-	main = bolt(rng, a, b)
+def strike(cv, rng, a, b, width, branches=3, via=None):
+	"""Cette méthode permet de tracer un éclair et ses branches (cœur et halo), branches de plus en plus fines ; via
+	force un point de passage (mi-hauteur d'un joint entre deux pièces) et renvoie le tracé principal."""
+	if via is None:
+		main = bolt(rng, a, b)
+	else:  # deux demi-éclairs : autant de points et de tirages qu'un seul, les éclairs suivants ne changent pas
+		main = bolt(rng, a, via, rough=0.14, depth=5) + bolt(rng, via, b, rough=0.14, depth=5)[1:]
+		rng.normal()
 	cv.line("glow", main, width * 5)
 	cv.line("core", main, width)
 	for _ in range(branches):
@@ -45,13 +50,16 @@ def strike(cv, rng, a, b, width, branches=3):
 		br = bolt(rng, p, q, depth=5)
 		cv.line("glow", br, width * 3)
 		cv.line("core", br, max(2.0, width * 0.5))
+	return main
 
 
 def draw(cv):
-	"""Cette méthode permet de placer les trois éclairs sur la toile de profil."""
+	"""Cette méthode permet de placer les trois éclairs sur la toile de profil ; celui du garde-main traverse le joint
+	et se branche sur le grand éclair de la crosse (jamais un éclair qui s'arrête net sur le joint)."""
 	rng = np.random.default_rng(17)
-	strike(cv, rng, (2600, 372), (3000, 715), 6, branches=4)  # en travers de la crosse
-	strike(cv, rng, (1715, 400), (2420, 470), 5, branches=3)  # le long du garde-main
+	big = strike(cv, rng, (2600, 372), (3000, 715), 6, branches=4)  # en travers de la crosse
+	join = min(big, key=lambda p: abs(p[0] - 2690) + 10 * max(0.0, p[1] - 495))  # sur la crosse, au-dessus du pontet
+	strike(cv, rng, (1715, 400), join, 5, branches=3, via=(JOINT, 450))  # le long du garde-main, jusqu'au grand éclair
 	strike(cv, rng, (3545, 410), (3240, 610), 5, branches=2)  # depuis la plaque de couche
 
 

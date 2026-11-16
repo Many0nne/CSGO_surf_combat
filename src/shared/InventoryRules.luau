@@ -123,7 +123,7 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.awp",
 		name = "ORAGE",
 		appearance = "orage",
-		luminance = 0.106,
+		luminance = 0.108,
 	},
 	{
 		id = "skin.awp.circuit",

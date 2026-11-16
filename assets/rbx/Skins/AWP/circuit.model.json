@@ -35,10 +35,10 @@
       "name": "Handguard",
       "className": "SurfaceAppearance",
       "properties": {
-        "ColorMapContent": "rbxassetid://79017603397552",
-        "MetalnessMapContent": "rbxassetid://78964260464812",
+        "ColorMapContent": "rbxassetid://126887406983920",
+        "MetalnessMapContent": "rbxassetid://81986689603495",
         "NormalMapContent": "rbxassetid://114926027741537",
-        "RoughnessMapContent": "rbxassetid://123741505263200"
+        "RoughnessMapContent": "rbxassetid://84419898026564"
       }
     },
     {
@@ -75,10 +75,10 @@
       "name": "Stock",
       "className": "SurfaceAppearance",
       "properties": {
-        "ColorMapContent": "rbxassetid://79017603397552",
-        "MetalnessMapContent": "rbxassetid://78964260464812",
+        "ColorMapContent": "rbxassetid://126887406983920",
+        "MetalnessMapContent": "rbxassetid://81986689603495",
         "NormalMapContent": "rbxassetid://114926027741537",
-        "RoughnessMapContent": "rbxassetid://123741505263200"
+        "RoughnessMapContent": "rbxassetid://84419898026564"
       }
     },
     {

@@ -158,6 +158,17 @@ def outline(name):
 	raise KeyError(name)
 
 
+JOINT = 2430  # px photo du joint garde-main / crosse : un motif qui l'atteint le traverse à la même hauteur
+
+
+def chassis():
+	"""Cette méthode permet d'obtenir le contour du châssis entier (garde-main et crosse réunis, sans le joint) en px photo,
+	pour limiter un motif qui court d'une pièce à l'autre sans le rogner au joint."""
+	hg, st = outline("HANDGUARD"), outline("STOCK")
+	assert hg[1] == st[0] and hg[2] == st[-1], "garde-main et crosse ne partagent plus le joint"
+	return hg[:1] + st + hg[3:]
+
+
 def band(cv, name, outer, holes, d0, d1, value=255):
 	"""Cette méthode permet de tracer un filet intérieur qui suit un contour (et le tour de ses trous) entre les
 	distances d0 et d1 du bord, en px photo ; renvoie aussi la distance au bord (px photo) pour limiter un motif."""
