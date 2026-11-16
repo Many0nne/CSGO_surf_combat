@@ -188,7 +188,7 @@ return function(T, Loader)
 			T.expectEqual(skinId, "skin.m9bayonet.patrouille")
 		end)
 
-		T.it("suit les chances affichées (à un dixième près) sur un balayage régulier du roll", function()
+		T.it("suit les chances affichées (à un centième près) sur un balayage régulier du roll", function()
 			for _, c in Shop.CRATES do
 				local rows = Shop.contents(c, Inventory.ITEMS)
 				local tenths = Shop.chances(rows)

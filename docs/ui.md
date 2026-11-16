@@ -934,7 +934,7 @@ Règles serveur : `docs/architecture.md`, « Achat d'une caisse ». Dans la vue 
 
 - **Contenu** : en-têtes os atténués « CHANCE » (au-dessus de la colonne des raretés) et « SI DOUBLON » (calé à
   droite), 16 px. Chaque ligne : skin, rareté et chance en pour cent (`ShopCatalog.chances`, total exactement 100 %,
-  « 2,5 % » s'il le faut), puis jeton 18 px et crédits rendus pour un doublon de cette rareté. Visible avant l'achat
+  « 1,07 % » s'il le faut), puis jeton 18 px et crédits rendus pour un doublon de cette rareté. Visible avant l'achat
   (règle Roblox des objets aléatoires payants).
 - **ACHETER** : contour os, survol en rouge d'impact, comme l'ancien OUVRIR. Pendant la demande : « ACHAT… », contour
   atténué, pas de second clic, « ‹ SHOP » et les flèches de la caisse voisine figés (l'ouverture se joue sur le socle de
