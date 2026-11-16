@@ -1,5 +1,6 @@
 -- Groupes de collision (#312) : le groupe des personnages est enregistré une fois et ne collisionne pas avec lui-même ;
 -- toutes les pièces d'un personnage y sont rangées, y compris celles ajoutées après l'apparition (arme 3P, accessoires).
+-- Le groupe des corps (#452) ne heurte pas les personnages.
 return function(T, Loader)
 	-- Cette méthode permet de simuler PhysicsService lorsqu'un test enregistre le groupe : groupes enregistrés et paires
 	-- non collidables notés pour les assertions.
@@ -59,13 +60,24 @@ return function(T, Loader)
 	end
 
 	T.describe("CollisionGroups", function()
-		T.it("enregistre le groupe des personnages une seule fois, non collidable avec lui-même", function()
+		T.it("enregistre les groupes une seule fois, personnages non collidables entre eux", function()
 			local physics = fakePhysics()
 			local CollisionGroups = Loader.new({ PhysicsService = physics }):require("src/shared/CollisionGroups")
 			CollisionGroups.register()
 			CollisionGroups.register()
-			T.expectEqual(physics.registerCalls, 1)
+			T.expectEqual(physics.registerCalls, 2)
 			T.expectEqual(physics.collidable["Characters|Characters"], false)
+		end)
+
+		-- #452 : un corps (ragdoll) ne bloque ni ne pousse les vivants, mais tombe sur la map et garde ses membres solides.
+		T.it("rend les corps traversables par les personnages, solides entre eux et avec la map", function()
+			local physics = fakePhysics()
+			local CollisionGroups = Loader.new({ PhysicsService = physics }):require("src/shared/CollisionGroups")
+			CollisionGroups.register()
+			T.expectEqual(physics.groups[CollisionGroups.CORPSES], true)
+			T.expectEqual(physics.collidable["Corpses|Characters"], false)
+			T.expectEqual(physics.collidable["Corpses|Corpses"], nil)
+			T.expectEqual(physics.collidable["Corpses|Default"], nil)
 		end)
 
 		T.it("range les pièces présentes et ajoutées ensuite, pas les autres instances", function()
