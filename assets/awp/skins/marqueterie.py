@@ -18,7 +18,7 @@ WENGE = (0.075, 0.048, 0.034)  # fond du panneau, faces sans dessin et cadre (m�
 BLACK = (0.03, 0.025, 0.022)
 BRASS = (0.78, 0.60, 0.32)  # bagues de la lunette, comme les filets de laiton d'un meuble
 FRAME = 9.0  # cadre sombre sur le congé (distance au bord, px photo)
-NACRE_LUM, NACRE_TINT = 0.55, 2.0  # nacre de la lune : luminance gardée, reflets colorés amplifiés
+NACRE_LUM, NACRE_TINT = 0.80, 1.3  # nacre de la lune : un peu baissée, reflets colorés à peine accentués
 
 
 def frame(cv):
