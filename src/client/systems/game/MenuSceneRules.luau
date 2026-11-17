@@ -84,6 +84,34 @@ function MenuSceneRules.breathAngle(t: number): number
 	return MenuSceneRules.BREATH_ANGLE * math.sin(2 * math.pi * t / MenuSceneRules.BREATH_PERIOD)
 end
 
+-- Cette méthode permet de tourner l'aperçu d'un skin lorsque le joueur le glisse (souris ou doigt, #469) : `dx`, `dy`
+-- en pixels, `rate` en rad/px ; le tangage reste borné à ±`maxPitch`. Renvoie le nouveau lacet et le nouveau tangage.
+function MenuSceneRules.dragSpin(
+	yaw: number,
+	pitch: number,
+	dx: number,
+	dy: number,
+	rate: number,
+	maxPitch: number
+): (number, number)
+	return yaw + dx * rate, math.clamp(pitch + dy * rate, -maxPitch, maxPitch)
+end
+
+-- Cette méthode permet de tourner l'aperçu d'un skin lorsque le stick droit est incliné (#469) : `rx`, `ry` sont la
+-- vitesse relative (-1 à 1, zone morte et courbe déjà appliquées par GamepadRules.lookRate, y vers le haut), `turnRate`
+-- la vitesse à fond en rad/s. Stick à droite = glisser à droite ; en haut = glisser vers le haut (tangage borné).
+function MenuSceneRules.stickSpin(
+	yaw: number,
+	pitch: number,
+	rx: number,
+	ry: number,
+	dt: number,
+	turnRate: number,
+	maxPitch: number
+): (number, number)
+	return yaw + rx * turnRate * dt, math.clamp(pitch - ry * turnRate * dt, -maxPitch, maxPitch)
+end
+
 -- Cette méthode permet de nommer un skin dans l'écran d'équipement (#280) lorsqu'il est affiché : « D'ORIGINE » sans
 -- skin, son nom du catalogue (#268) s'il en a un, sinon la fin de son id en majuscules (« skin.awp.dragon_lore » →
 -- « DRAGON LORE »).
