@@ -10,6 +10,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
 local InventoryRules = require(ReplicatedStorage.Shared.InventoryRules)
+local Locale = require(ReplicatedStorage.Shared.Locale)
 local PlayerSettings = require(ReplicatedStorage.Shared.PlayerSettings)
 local UITheme = require(ReplicatedStorage.Shared.UITheme)
 local LocalInventory = require(script.Parent.Parent.systems.inventory.LocalInventory)
@@ -361,7 +362,7 @@ local function addPicker(
 
 	local function apply(index: number)
 		current = (index - 1) % #options + 1
-		value.Text = if options[current].icon then "" else options[current].label
+		Locale.apply(value, if options[current].icon then "" else options[current].label)
 		for i, icon in icons do
 			icon.Visible = i == current
 		end
@@ -402,11 +403,12 @@ local function addPicker(
 	})
 end
 
--- Cette méthode permet de remplacer le texte d'un choix et de son ombre lorsque la touche affichée change.
+-- Cette méthode permet de remplacer le texte d'un choix et de son ombre lorsque la touche affichée change ; le texte
+-- (« APPUIE… », nom de touche) est traduit et suit la langue.
 local function setChoiceText(choice: MenuShot.Choice, text: string)
 	for _, child in choice.button:GetChildren() do
 		if child:IsA("TextLabel") then
-			child.Text = text
+			Locale.apply(child, text)
 		end
 	end
 end
@@ -421,10 +423,13 @@ local function endCapture()
 	end
 end
 
--- Cette méthode permet de nommer la ligne d'un emplacement de la barre (« Arme 1 · AWP ») lorsqu'elle est créée ou que
--- l'inventaire change.
+-- Gabarit français (clé de traduction) de la ligne d'un emplacement de la barre : « Arme 1 · AWP »
+local KEY_ROW_TEMPLATE = "Arme {slot} · {name}"
+
+-- Cette méthode permet de nommer en français la ligne d'un emplacement de la barre (« Arme 1 · AWP ») lorsqu'elle est
+-- créée ; son texte affiché est ensuite posé traduit par `relabel`.
 local function keyRowName(slot: number, weaponLabel: string): string
-	return string.format("Arme %d · %s", slot, weaponLabel)
+	return Locale.translate("fr", KEY_ROW_TEMPLATE, { slot = slot, name = weaponLabel })
 end
 
 -- Cette méthode permet d'ajouter la ligne d'un emplacement de la barre d'armes (nom de l'arme, touche à cliquer) lorsque
@@ -485,7 +490,7 @@ local function addKeyBinding(category: Category, slot: number, weaponLabel: stri
 		end
 		hintToken += 1
 		local token = hintToken
-		hint.Text = if reason == "reserved" then "RÉSERVÉE AU JEU" else "TOUCHE NON PROPOSÉE"
+		Locale.apply(hint, if reason == "reserved" then "RÉSERVÉE AU JEU" else "TOUCHE NON PROPOSÉE")
 		task.delay(KEY_HINT_TIME, function()
 			if token == hintToken then
 				hint.Text = ""
@@ -604,8 +609,9 @@ local function buildKeysCategory(block: Frame)
 			if not name and capture and capture.slot == slot then
 				endCapture()
 			end
-			entry.label.Text = keyRowName(slot, if name then HUDRules.weaponLabel(name) else "")
-			entry.row.Name = entry.label.Text
+			local weapon = if name then HUDRules.weaponLabel(name) else ""
+			Locale.apply(entry.label, KEY_ROW_TEMPLATE, { slot = slot, name = weapon })
+			entry.row.Name = keyRowName(slot, weapon)
 		end
 	end
 	relabel()
@@ -727,6 +733,44 @@ end
 -- Cette méthode permet de construire les catégories et leurs réglages lorsque l'écran est initialisé ; une catégorie
 -- sans réglage n'est pas créée.
 local function buildCategories(block: Frame)
+	-- GÉNÉRAL (#518) : en tête, ouvert par défaut, réglages qui ne sont ni des contrôles, ni du son, ni de l'affichage
+	-- (choix de l'utilisateur : la langue n'avait rien à faire dans GRAPHISMES, les aides non plus)
+	local general = addCategory(block, "GÉNÉRAL")
+	-- Langue du jeu (#518) : français ou anglais, chaque nom écrit dans sa langue ; sans choix, celle du compte Roblox
+	-- (LocalSettings). Gardée par RÉTABLIR : rétablir l'affichage ne doit pas changer la langue sous les yeux du joueur
+	local languageOptions = {}
+	for i, language in Locale.LANGUAGES do
+		languageOptions[i] = { label = Locale.NAMES[language], value = language }
+	end
+	local languageIndex = table.find(Locale.LANGUAGES, Locale.get()) or 1
+	addPicker(general, "Langue", "language", languageOptions, languageIndex, languageIndex, function() end, 150, true)
+	-- La langue affichée peut changer sans le joueur (langue du compte au démarrage, réglages chargés) : la ligne la suit
+	local languageRow = general.list[#general.list]
+	Locale.onChanged(function(language)
+		local wasSyncing = syncing
+		syncing = true
+		languageRow.sync({ language = language } :: any)
+		syncing = wasSyncing
+	end)
+	-- Conseils de l'écran de mort des débutants (#291) ; GameStateController suit LocalSettings
+	local tipOptions = { { label = "ACTIVÉS", value = true }, { label = "COUPÉS", value = false } }
+	local tipDefault = if PlayerSettings.DEFAULT_DEATH_TIPS then 1 else 2
+	addPicker(general, "Conseils", "deathTips", tipOptions, tipDefault, tipDefault, function() end, 150)
+	-- Démo du coin sur le serveur d'entraînement (#345), aussi basculée par le menu en partie ; TrainingClient suit
+	-- LocalSettings
+	local demoOptions = { { label = "AFFICHÉE", value = true }, { label = "MASQUÉE", value = false } }
+	local demoDefault = if PlayerSettings.DEFAULT_TRAINING_DEMO then 1 else 2
+	addPicker(
+		general,
+		"Démo d'entraînement",
+		"trainingDemo",
+		demoOptions,
+		demoDefault,
+		demoDefault,
+		function() end,
+		150
+	)
+
 	local mouse = addCategory(block, "SOURIS")
 	addSlider(
 		mouse,
@@ -869,24 +913,6 @@ local function buildCategories(block: Frame)
 		{ label = "COMPLET", value = "full" },
 	}
 	addPicker(graphics, "Affichage des touches", "keyDisplay", keyDisplayOptions, 1, 1, function() end, 150)
-	-- Conseils de l'écran de mort des débutants (#291), à côté de l'autre aide affichée ; GameStateController suit LocalSettings
-	local tipOptions = { { label = "ACTIVÉS", value = true }, { label = "COUPÉS", value = false } }
-	local tipDefault = if PlayerSettings.DEFAULT_DEATH_TIPS then 1 else 2
-	addPicker(graphics, "Conseils", "deathTips", tipOptions, tipDefault, tipDefault, function() end, 150)
-	-- Démo du coin sur le serveur d'entraînement (#345), aussi basculée par le menu en partie ; TrainingClient suit
-	-- LocalSettings
-	local demoOptions = { { label = "AFFICHÉE", value = true }, { label = "MASQUÉE", value = false } }
-	local demoDefault = if PlayerSettings.DEFAULT_TRAINING_DEMO then 1 else 2
-	addPicker(
-		graphics,
-		"Démo d'entraînement",
-		"trainingDemo",
-		demoOptions,
-		demoDefault,
-		demoDefault,
-		function() end,
-		150
-	)
 	-- Échelle du HUD (#250) en pourcents entiers : éléments de bord du HUD ; init.client la relaie à UIKit.setHudScale
 	local hudScale = PlayerSettings.HUD_SCALE
 	addSlider(

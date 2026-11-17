@@ -185,10 +185,9 @@ return function(T, Loader)
 		end)
 
 		T.it("compose la ligne sous le nom", function()
-			T.expectEqual(
-				Shop.subtitle(Shop.crate("crate.awp.serie1"), Inventory.ITEMS),
-				"CAISSE  ·  10 SKINS  ·  UN PAR OUVERTURE"
-			)
+			local template, args = Shop.subtitle(Shop.crate("crate.awp.serie1"), Inventory.ITEMS)
+			T.expectEqual(template, "CAISSE  ·  {n} SKINS  ·  UN PAR OUVERTURE")
+			T.expectEqual(args.n, 10)
 		end)
 	end)
 

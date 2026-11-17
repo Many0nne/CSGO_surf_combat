@@ -1,9 +1,11 @@
 -- Réglages du joueur côté client (#100) : copie locale des réglages sauvegardés par le serveur (server/SettingsStore).
 -- Au démarrage, les valeurs par défaut s'appliquent, puis les réglages sauvegardés dès que le serveur les renvoie.
 -- Chaque changement prévient les modules abonnés (écran Réglages, barre d'armes) et part au serveur après SEND_DELAY.
+local LocalizationService = game:GetService("LocalizationService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
+local Locale = require(ReplicatedStorage.Shared.Locale)
 local NetworkProtocol = require(ReplicatedStorage.Shared.NetworkProtocol)
 local PlayerSettings = require(ReplicatedStorage.Shared.PlayerSettings)
 
@@ -35,6 +37,12 @@ local function send()
 	end
 	dirty = false
 	saveRemote:FireServer(current)
+end
+
+-- Cette méthode permet d'afficher la langue choisie (ou, sans choix, celle du compte Roblox, #518) lorsque les réglages
+-- changent ou arrivent ; sans effet si elle ne change pas.
+local function applyLanguage()
+	Locale.setLanguage(Locale.resolve(current.language, LocalizationService.RobloxLocaleId))
 end
 
 -- Cette méthode permet de renvoyer les réglages en cours lorsqu'un module doit les lire.
@@ -76,6 +84,7 @@ function LocalSettings.update(patch: { [string]: any })
 		return
 	end
 	dirty = true
+	applyLanguage()
 	notify(listeners)
 	if not sendScheduled then
 		sendScheduled = true
@@ -101,6 +110,7 @@ end
 -- Cette méthode permet de demander ses réglages au serveur lorsque le client démarre ; si le joueur a déjà changé un
 -- réglage entre-temps, ses choix locaux l'emportent et repartent au serveur.
 function LocalSettings.init()
+	applyLanguage()
 	task.spawn(function()
 		saveRemote = ReplicatedStorage:WaitForChild(NetworkProtocol.Names.SAVE_SETTINGS, 15) :: RemoteEvent?
 		local getRemote = ReplicatedStorage:WaitForChild(NetworkProtocol.Names.GET_SETTINGS, 15) :: RemoteFunction?
@@ -114,6 +124,7 @@ function LocalSettings.init()
 			current = PlayerSettings.sanitize(raw)
 		end
 		loaded = true
+		applyLanguage()
 		notify(loadedListeners)
 		loadedListeners = {}
 		notify(listeners)

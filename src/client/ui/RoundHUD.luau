@@ -8,6 +8,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
+local Locale = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Locale"))
 local ParticipantRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ParticipantRules"))
 local EconomyRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("EconomyRules"))
 local WalletRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WalletRules"))
@@ -110,6 +111,9 @@ local rankShadow: TextLabel
 local rankShown: { rank: number, total: number }? = nil
 local RANK_TOTAL_SIZE = 18
 local renderRank: () -> ()
+-- Derniers scores et dernier conseil reçus : réaffichés quand la langue change (textes composés, pas liés par Locale.bind)
+local lastScores: { [number]: any }? = nil
+local lastTip: { topic: string, text: string, args: { [string]: any }? }? = nil
 local streakRow: Frame
 local streakShards: HitShards.Shards
 local streakSkull: ImageLabel
@@ -668,11 +672,11 @@ end
 -- Cette méthode permet d'écrire le titre, le nom et le détail de l'écran de mort lorsqu'ils changent (titre et nom
 -- doublés de leur ombre).
 local function setRespawnLines(title: string, killer: string, detail: string, headshot: boolean?)
-	respawnTitle.Text = title
-	respawnTitleShadow.Text = title
+	Locale.apply(respawnTitle, title)
+	Locale.apply(respawnTitleShadow, title)
 	respawnKiller.Text = killer
 	respawnKillerShadow.Text = killer
-	respawnDetail.Text = detail
+	Locale.apply(respawnDetail, detail)
 	respawnHeadshot.Visible = headshot == true
 end
 
@@ -871,11 +875,11 @@ local function paintCredits()
 	if not view then
 		return
 	end
-	local text = if view.amount
-		then string.format("+%s %s", WalletRules.format(view.amount), WalletRules.CURRENCY)
-		else ""
+	local amount = view.amount
 	for _, label in resultCreditsAmount do
-		label.Text = text
+		Locale.bind(label, function()
+			return if amount then "+" .. WalletRules.format(amount) .. " " .. Locale.t(WalletRules.CURRENCY) else ""
+		end)
 	end
 	resultCreditsAmountBox.Visible = view.amount ~= nil
 	resultCreditsIcon.Visible = view.amount ~= nil
@@ -1070,15 +1074,20 @@ end
 
 type Score = HUDRules.Score
 
+-- Cette méthode permet de colorer un morceau de texte riche lorsqu'une ligne est composée (préfixe BOT, thème du conseil).
+local function paint(color: Color3, text: string): string
+	return string.format('<font color="#%s">%s</font>', color:ToHex(), text)
+end
+
 -- Cette méthode permet de composer le nom d'une ligne du classement lorsqu'il est reconstruit : « (toi) » pour le joueur
 -- local, préfixe BOT atténué pour un bot (décision 5 de #133) ; le nom est échappé pour le RichText.
 local function scoreName(score: Score, isMe: boolean): string
 	local name = HUDRules.escapeRichText(score.name)
 	if isMe then
-		return name .. "  (toi)"
+		return name .. "  " .. Locale.t("(toi)")
 	end
 	if score.isBot then
-		return string.format('<font color="#%s">%s</font> %s', C.Muted:ToHex(), ParticipantRules.BOT_PREFIX, name)
+		return paint(C.Muted, ParticipantRules.BOT_PREFIX) .. " " .. name
 	end
 	return name
 end
@@ -1145,7 +1154,15 @@ function renderRank()
 		local size = if type(scale) == "number"
 			then HUDRules.flooredTextSize(RANK_TOTAL_SIZE, scale)
 			else RANK_TOTAL_SIZE
-		text = string.format('%d<font size="%d" transparency="0.4">/%d</font>', rankShown.rank, size, rankShown.total)
+		-- Balise écrite en morceaux : ce n'est pas un texte à traduire (cf. LocaleScan)
+		text = rankShown.rank
+			.. "<font"
+			.. ' size="'
+			.. size
+			.. '"'
+			.. ' transparency="0.4">/'
+			.. rankShown.total
+			.. "</font>"
 	end
 	rankLabel.Text = text
 	rankShadow.Text = text
@@ -1155,6 +1172,7 @@ function RoundHUD.updateScores(scores: { [number]: Score })
 	if not leaderboardList then
 		return
 	end
+	lastScores = scores
 	for _, child in leaderboardList:GetChildren() do
 		child:Destroy()
 	end
@@ -1181,7 +1199,7 @@ function RoundHUD.showRespawning(delaySeconds: number)
 		scrim.ImageTransparency = 1
 		UIKit.tween(scrim, Motion.Enter, { ImageTransparency = RESPAWN_SCRIM_TRANSPARENCY })
 	end
-	respawnLabel.Text = "RÉAPPARITION"
+	Locale.apply(respawnLabel, "RÉAPPARITION")
 	setRespawnLines("ÉLIMINÉ", "", "")
 	UIKit.reveal(respawnPanel, 0, 16)
 	deathGrade.Enabled = true
@@ -1197,7 +1215,7 @@ function RoundHUD.showRespawning(delaySeconds: number)
 		while respawnRoot.Visible do
 			local remaining = HUDRules.secondsLeft(endTime, os.clock())
 			if remaining <= 0 then
-				respawnLabel.Text = "RÉAPPARITION…"
+				Locale.apply(respawnLabel, "RÉAPPARITION…")
 				break
 			end
 			if remaining ~= shown then
@@ -1223,19 +1241,27 @@ function RoundHUD.setDeathInfo(killer: string?, weapon: string?, headshot: boole
 	end
 end
 
+-- Cette méthode permet de traduire un conseil (gabarit français de InfosRules et ses touches) lorsqu'il s'affiche : les
+-- touches nommées en français (« ESPACE ») sont traduites aussi, une lettre reste telle quelle (cf. InfosContext.text).
+local function tipText(fr: string, args: { [string]: any }?): string
+	local translated: { [string]: any } = {}
+	for name, value in args or ({} :: { [string]: any }) do
+		translated[name] = if type(value) == "string" then Locale.t(value) else value
+	end
+	return Locale.t(fr, translated)
+end
+
 -- Cette méthode permet d'afficher ou de retirer le conseil de l'écran de mort lorsque le joueur meurt ou que son état
 -- débutant, ses réglages ou ses touches changent (#291) : le bloc remonte de la hauteur du conseil, le fondu s'agrandit.
-function RoundHUD.setTip(tip: { topic: string, text: string }?)
+function RoundHUD.setTip(tip: { topic: string, text: string, args: { [string]: any }? }?)
 	if not respawnTip then
 		return
 	end
+	lastTip = tip
 	local text = if tip
-		then string.format(
-			'<font color="#%s">%s :</font> %s',
-			C.Accent:ToHex(),
-			HUDRules.escapeRichText(tip.topic),
-			HUDRules.escapeRichText(tip.text)
-		)
+		then paint(C.Accent, Locale.t("{topic} :", { topic = HUDRules.escapeRichText(Locale.t(tip.topic)) }))
+			.. " "
+			.. HUDRules.escapeRichText(tipText(tip.text, tip.args))
 		else ""
 	-- Réglage sans rapport changé (curseur glissé) : rien à redessiner
 	if text == respawnTip.Text and respawnTip.Visible == (tip ~= nil) then
@@ -1277,10 +1303,10 @@ function RoundHUD.showResult(data: any)
 		or UserInputService:IsGamepadButtonDown(Enum.UserInputType.Gamepad1, PAD_SCOREBOARD)
 		or touchScoreboardHeld
 	leaderboard.Visible = tabHeld
-	resultName.Text = view.title
-	resultNameShadow.Text = view.title
+	Locale.apply(resultName, view.title)
+	Locale.apply(resultNameShadow, view.title)
 	resultMeBand.Visible = view.meWins
-	resultLabel.Text = view.subtitle
+	Locale.apply(resultLabel, view.subtitle)
 
 	for _, child in resultRows:GetChildren() do
 		child:Destroy()
@@ -1309,6 +1335,17 @@ function RoundHUD.hideResult()
 		resultRoot.Visible = false
 	end
 end
+
+-- Langue changée : classement et conseil, composés en RichText, sont recomposés dans la nouvelle langue
+Locale.onChanged(function()
+	if lastScores then
+		RoundHUD.updateScores(lastScores)
+	end
+	if lastTip and respawnTip and respawnTip.Visible then
+		respawnTip.Text = ""
+		RoundHUD.setTip(lastTip)
+	end
+end)
 
 function RoundHUD.destroy()
 	if tabConn then

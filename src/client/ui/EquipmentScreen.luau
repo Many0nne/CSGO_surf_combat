@@ -9,6 +9,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local InventoryRules = require(Shared:WaitForChild("InventoryRules"))
+local Locale = require(Shared:WaitForChild("Locale"))
 local PlayerSettings = require(Shared:WaitForChild("PlayerSettings"))
 local ShopCatalog = require(Shared:WaitForChild("ShopCatalog"))
 local UITheme = require(Shared:WaitForChild("UITheme"))
@@ -66,7 +67,7 @@ local SCRIM_SHOWN = 0.2
 
 type Hover = { tool: string, skin: string? }
 -- Texte à largeur automatique doublé de son ombre, pour une ligne qui enchaîne texte et étiquette
-type Flow = { set: (string) -> (), label: TextLabel }
+type Flow = { set: (string, { [string]: any }?) -> (), bind: (() -> string) -> (), label: TextLabel }
 
 local tabChoices: { MenuShot.Choice } = {}
 local scroller: ScrollingFrame -- zone défilante de la grille (armes, libellé des skins, skins) ; titres et onglets fixes
@@ -165,9 +166,15 @@ local function flowText(row: GuiObject, name: string, size: number, shadowOffset
 	local label = UIKit.text(props)
 	return {
 		label = label,
-		set = function(text: string)
-			label.Text = text
-			shadow.Text = text
+		-- Texte français (+ paramètres) traduit, qui suit la langue
+		set = function(fr: string, args: { [string]: any }?)
+			Locale.apply(label, fr, args)
+			Locale.apply(shadow, fr, args)
+		end,
+		-- Texte calculé par `produce` (déjà traduit), recalculé au changement de langue
+		bind = function(produce: () -> string)
+			Locale.bind(label, produce)
+			Locale.bind(shadow, produce)
 		end,
 	}
 end
@@ -227,25 +234,31 @@ end
 local function paintHeader()
 	local slotName = InventoryRules.SLOTS[selectedSlot]
 	slotTitle.set(if slotName then slotLabel(slotName) else "")
-	slotTag.Text = string.format("EMPLACEMENT %d", selectedSlot)
+	Locale.apply(slotTag, "EMPLACEMENT {n}", { n = selectedSlot })
 	local tool, skin, isEquipped = shown()
-	weaponName.set(if tool then string.format("%s  /  %s", weaponTitle(tool), skinTitle(skin)) else "")
+	if tool then
+		weaponName.bind(function()
+			return string.format("%s  /  %s", Locale.t(weaponTitle(tool)), Locale.t(skinTitle(skin)))
+		end)
+	else
+		weaponName.set("")
+	end
 	statusTag.Visible = tool ~= nil
-	statusTag.Text = if isEquipped then "ÉQUIPÉ" else "CLIC POUR ÉQUIPER"
+	Locale.apply(statusTag, if isEquipped then "ÉQUIPÉ" else "CLIC POUR ÉQUIPER")
 	statusTag.BackgroundTransparency = if isEquipped then 0 else 1
 	statusStroke.Enabled = not isEquipped
 	local rarity = tool and skinRarity(skin)
 	rarityTag.Visible = rarity ~= nil
 	if rarity then
 		local color = Color3.fromRGB(rarity.color[1], rarity.color[2], rarity.color[3])
-		rarityTag.Text = rarity.label
+		Locale.apply(rarityTag, rarity.label)
 		rarityTag.BackgroundColor3 = color
 		rarityTag.TextColor3 = tagTextColor(color)
 	end
 	local cfg = tool and WeaponConfig.Weapons[tool]
 	local text = if cfg and cfg.Category then string.upper(cfg.Category) else ""
-	category.Text = text
-	categoryShadow.Text = text
+	Locale.apply(category, text)
+	Locale.apply(categoryShadow, text)
 	showPreview(tool, skin)
 	if tool then
 		MenuScene.holdTool(tool, skin)
@@ -435,7 +448,8 @@ local function fillGrid(): number
 	y += CARD_SIZE.Y + SECTION_GAP
 	UIKit.accentLabel(grid, {
 		Name = "SkinsTitle",
-		Text = "SKINS  ·  " .. weaponTitle(currentTool),
+		Text = "SKINS  ·  {weapon}",
+		TextArgs = { weapon = weaponTitle(currentTool) },
 		Position = UDim2.fromOffset(0, y),
 		Size = UDim2.fromOffset(GRID_WIDTH, 18),
 	})

@@ -17,6 +17,7 @@ local CrateOpeningRules = require(Shared:WaitForChild("CrateOpeningRules"))
 local CrateStencil = require(Shared:WaitForChild("CrateStencil"))
 local GamepadRules = require(Shared:WaitForChild("GamepadRules"))
 local InventoryRules = require(Shared:WaitForChild("InventoryRules"))
+local Locale = require(Shared:WaitForChild("Locale"))
 local PerfMarkers = require(Shared:WaitForChild("PerfMarkers"))
 local ShopCatalog = require(Shared:WaitForChild("ShopCatalog"))
 local UITheme = require(Shared:WaitForChild("UITheme"))
@@ -635,6 +636,8 @@ local function tagText(tag: BasePart, crateDef: ShopCatalog.Crate): (TextLabel, 
 		return t
 	end
 	local name = label(crateDef.name, UITheme.Fonts.Display, 36, 1, row)
+	-- Nom de la caisse (« AWP · SÉRIE 1 ») : traduit, et suit un changement de langue shop ouvert
+	Locale.apply(name, crateDef.name)
 	-- Prix : jeton collé au montant, dans son propre cadre (l'écart de 22 px sépare le nom du prix)
 	local priceGroup = Instance.new("Frame")
 	priceGroup.Name = "Price"

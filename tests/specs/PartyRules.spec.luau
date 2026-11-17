@@ -187,25 +187,26 @@ return function(T, Loader)
 			end
 		)
 
-		T.it("écrit qui lance selon le groupe et l'hôte", function()
-			T.expectEqual(Rules.statusLine(1, true, "launch", "lobby", "Moi"), "INVITE TES AMIS OU LANCE SEUL")
-			T.expectEqual(
-				Rules.statusLine(2, true, "launch", "lobby", "Moi"),
-				"TU ES L'HÔTE · LANCER FAIT ENTRER TOUT LE LOBBY"
-			)
-			T.expectEqual(
-				Rules.statusLine(2, false, "waitHost", "lobby", "Ana"),
-				"EN ATTENTE DE L'HÔTE · ANA LANCE LA PARTIE"
-			)
-			T.expectEqual(
-				Rules.statusLine(2, false, "launch", "game", "Ana"),
-				"ANA EST EN PARTIE · LANCE POUR LE REJOINDRE"
-			)
-			T.expectEqual(Rules.statusLine(2, false, "launch", "menu", "Ana"), "ANA EST AU MENU · TU PEUX LANCER SEUL")
-			T.expectEqual(
-				Rules.statusLine(2, false, "launch", nil, nil),
-				"TON HÔTE EST AU MENU · TU PEUX LANCER SEUL"
-			)
+		T.it("écrit qui lance selon le groupe et l'hôte (gabarit français + paramètres)", function()
+			local text, args = Rules.statusLine(1, true, "launch", "lobby", "Moi")
+			T.expectEqual(text, "INVITE TES AMIS OU LANCE SEUL")
+			T.expectEqual(args, nil)
+			text = Rules.statusLine(2, true, "launch", "lobby", "Moi")
+			T.expectEqual(text, "TU ES L'HÔTE · LANCER FAIT ENTRER TOUT LE LOBBY")
+			text, args = Rules.statusLine(2, false, "waitHost", "lobby", "Ana")
+			T.expectEqual(text, "EN ATTENTE DE L'HÔTE · {name} LANCE LA PARTIE")
+			T.expectEqual(args.name, "ANA")
+			text, args = Rules.statusLine(2, false, "launch", "game", "Ana")
+			T.expectEqual(text, "{name} EST EN PARTIE · LANCE POUR LE REJOINDRE")
+			T.expectEqual(args.name, "ANA")
+			text, args = Rules.statusLine(2, false, "launch", "menu", "Ana")
+			T.expectEqual(text, "{name} EST AU MENU · TU PEUX LANCER SEUL")
+			T.expectEqual(args.name, "ANA")
+			text, args = Rules.statusLine(2, false, "launch", nil, nil)
+			T.expectEqual(text, "TON HÔTE EST AU MENU · TU PEUX LANCER SEUL")
+			T.expectEqual(args, nil)
+			text = Rules.statusLine(2, false, "waitHost", "lobby", nil)
+			T.expectEqual(text, "EN ATTENTE DE L'HÔTE · TON HÔTE LANCE LA PARTIE")
 		end)
 	end)
 

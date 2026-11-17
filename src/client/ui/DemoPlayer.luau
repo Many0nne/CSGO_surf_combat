@@ -9,10 +9,12 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local CameraConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("CameraConfig"))
+local Locale = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Locale"))
 local PerfMarkers = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("PerfMarkers"))
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
 local DemoClipRules = require(script.Parent.DemoClipRules)
 local HUDRules = require(script.Parent.HUDRules)
+local InfosContext = require(script.Parent.InfosContext)
 local KeyDisplay = require(script.Parent.KeyDisplay)
 local UIKit = require(script.Parent.UIKit)
 
@@ -39,7 +41,9 @@ local SKY_HORIZON = Color3.fromRGB(196, 186, 168)
 
 export type Demo = {
 	frame: Frame,
-	play: (id: string, title: string, caption: string) -> (),
+	-- `title` et `caption` : textes français (la légende est un gabarit `{nom}` rempli par `captionArgs`), traduits à
+	-- l'affichage
+	play: (id: string, title: string, caption: string, captionArgs: { [string]: any }?) -> (),
 	destroy: () -> (),
 }
 
@@ -343,9 +347,9 @@ function DemoPlayer.new(parent: GuiObject, layoutOrder: number, clipIds: { strin
 
 	-- Cette méthode permet d'afficher un message au centre du cadre (chargement, clip absent) lorsque rien n'est rejoué ;
 	-- nil le retire et montre les mains.
-	local function setMessage(text: string?)
-		message.Text = text or ""
-		messageShadow.Text = text or ""
+	local function setMessage(text: string?, args: { [string]: any }?)
+		Locale.apply(message, text or "", args)
+		Locale.apply(messageShadow, text or "", args)
 		hands.Visible = text == nil
 		progress.Visible = text == nil
 	end
@@ -415,7 +419,7 @@ function DemoPlayer.new(parent: GuiObject, layoutOrder: number, clipIds: { strin
 		local maps = workspace:FindFirstChild("Maps")
 		local map = maps and maps:FindFirstChild(clips[1].map)
 		if not map then
-			setMessage("MAP " .. clips[1].map .. " ABSENTE")
+			setMessage("MAP {name} ABSENTE", { name = clips[1].map })
 			return
 		end
 		building = true
@@ -498,11 +502,11 @@ function DemoPlayer.new(parent: GuiObject, layoutOrder: number, clipIds: { strin
 
 	-- Cette méthode permet de lancer la lecture en boucle d'un clip lorsque le joueur le choisit dans le sélecteur ; la
 	-- première lecture copie d'abord le décor, puis rejoue le clip choisi entre-temps.
-	local function play(id: string, title: string, text: string)
-		topic.Text = title
-		topicShadow.Text = title
-		caption.Text = text
-		captionShadow.Text = text
+	local function play(id: string, title: string, text: string, textArgs: { [string]: any }?)
+		Locale.apply(topic, title)
+		Locale.apply(topicShadow, title)
+		InfosContext.apply(caption, text, textArgs)
+		InfosContext.apply(captionShadow, text, textArgs)
 		local chosen = loadClip(id)
 		clip = chosen
 		elapsed = 0

@@ -5,6 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
 local KeyBindings = require(ReplicatedStorage.Shared.KeyBindings)
+local Locale = require(ReplicatedStorage.Shared.Locale)
 
 export type WheelMode = "previous" | "next" | "off"
 
@@ -53,6 +54,8 @@ export type Settings = {
 	trainingDemo: boolean,
 	-- une touche par emplacement de la barre d'armes, dans l'ordre des emplacements
 	slotKeys: { string },
+	-- Langue du jeu (#518) : nil tant que le joueur n'a rien choisi (langue de son compte Roblox, cf. Locale.resolve)
+	language: Locale.Language?,
 }
 
 local PlayerSettings = {}
@@ -177,6 +180,7 @@ function PlayerSettings.defaults(): Settings
 		deathTips = PlayerSettings.DEFAULT_DEATH_TIPS,
 		trainingDemo = PlayerSettings.DEFAULT_TRAINING_DEMO,
 		slotKeys = table.clone(PlayerSettings.DEFAULT_SLOT_KEYS),
+		language = nil,
 	}
 end
 
@@ -294,6 +298,9 @@ function PlayerSettings.sanitize(raw: any): Settings
 		settings.trainingDemo = raw.trainingDemo
 	end
 	settings.slotKeys = sanitizeKeys(raw.slotKeys)
+	if Locale.isLanguage(raw.language) then
+		settings.language = raw.language
+	end
 	return settings
 end
 

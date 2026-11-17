@@ -89,7 +89,7 @@ end
 
 -- Cette méthode permet de créer une ligne « touche en boîte os → action » sur un filet lorsque l'onglet affiché est
 -- COMMANDES (#308 : même écriture des touches que l'aide de l'écran d'équipement).
-local function addKeyRow(key: string, action: string, order: number): { TextLabel }
+local function addKeyRow(key: string, keyArgs: { [string]: any }?, action: string, order: number): { TextLabel }
 	local row = UIKit.frame({
 		Name = "Key" .. order,
 		Size = UDim2.new(1, 0, 0, 40),
@@ -107,7 +107,8 @@ local function addKeyRow(key: string, action: string, order: number): { TextLabe
 		Parent = row,
 	})
 	local keyLbl = UIKit.tag(row, "KeyTag", 1, C.Bone, C.Ground)
-	keyLbl.Text = key
+	-- Libellé de touche français (CLIC GAUCHE, ESPACE…) ou lettre du clavier du joueur, traduit à l'affichage
+	InfosContext.apply(keyLbl, key, keyArgs)
 	keyLbl.AnchorPoint = Vector2.new(0, 0.5)
 	keyLbl.Position = UDim2.fromScale(0, 0.5)
 	local actionLbl = UIKit.text({
@@ -134,7 +135,7 @@ local function renderSection(index: number)
 	local section = SECTIONS[index]
 	if section.keys then
 		for i, row in InfosRules.commandRows(InfosContext.compose()) do
-			fadeIn(addKeyRow(row.key, row.action, i), i * Motion.Stagger)
+			fadeIn(addKeyRow(row.key, row.keyArgs, row.action, i), i * Motion.Stagger)
 		end
 	else
 		for i, line in section.lines or {} do

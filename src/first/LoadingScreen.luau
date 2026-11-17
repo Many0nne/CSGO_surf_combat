@@ -5,6 +5,7 @@
 --     téléportation (affiché par Roblox pendant le transfert), puis remontré à l'arrivée sans animation ;
 --   - arrivée sur l'entraînement : les volets de Transition, fermés par l'apparition demandée, prennent le relais.
 -- Dans ReplicatedFirst : il ne dépend que de LoadingRules (ReplicatedStorage n'est pas encore là au lancement).
+local LocalizationService = game:GetService("LocalizationService")
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local TweenService = game:GetService("TweenService")
@@ -59,6 +60,15 @@ local function make(className: string, props: { [string]: any }): any
 	return inst
 end
 
+-- Cette méthode permet de traduire un libellé français de l'écran lorsqu'il s'affiche, dans la langue du compte Roblox
+-- (les réglages du joueur ne sont pas encore connus, cf. LoadingRules.translate).
+local function localized(text: string): string
+	local ok, localeId = pcall(function()
+		return LocalizationService.RobloxLocaleId
+	end)
+	return LoadingRules.translate(text, if ok then localeId else nil)
+end
+
 -- Cette méthode permet de construire un écran complet, volets fermés et texte visible, lorsqu'il faut l'afficher ou le
 -- confier à Roblox pour une téléportation ; le ScreenGui rendu n'a pas de parent.
 local function build(text: string): Parts
@@ -83,7 +93,7 @@ local function build(text: string): Parts
 	local bottom = panel("BottomPanel", BOTTOM_CLOSED)
 	local label = make("TextLabel", {
 		Name = "Label",
-		Text = text,
+		Text = localized(text),
 		FontFace = Font.new(LoadingRules.FONT_FAMILY, Enum.FontWeight.Bold),
 		TextSize = LABEL_SIZE,
 		TextColor3 = LoadingRules.TEXT_COLOR,
@@ -159,7 +169,7 @@ function LoadingScreen.showNow(text: string)
 	local p = ensure()
 	generation += 1
 	covering = true
-	p.label.Text = text
+	p.label.Text = localized(text)
 	p.top.Position = TOP_CLOSED
 	p.bottom.Position = BOTTOM_CLOSED
 	setInk(p, 0)
@@ -171,7 +181,7 @@ end
 -- fermé, seul le libellé change. Passé `timeout` s sans être rouvert, l'écran se rouvre seul.
 function LoadingScreen.cover(text: string, timeout: number?)
 	local p = ensure()
-	p.label.Text = text
+	p.label.Text = localized(text)
 	if covering then
 		return
 	end

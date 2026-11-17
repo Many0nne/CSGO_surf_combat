@@ -13,6 +13,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local UITheme = require(ReplicatedStorage.Shared.UITheme)
+local Locale = require(ReplicatedStorage.Shared.Locale)
 local InputDevice = require(script.Parent.Parent.input.InputDevice)
 local InputModule = require(script.Parent.Parent.input.InputModule)
 local BeginnerState = require(script.Parent.Parent.systems.game.BeginnerState)
@@ -143,7 +144,7 @@ local function labelOf(entry: HUDRules.KeyDisplayEntry): string
 		return HUDRules.gamepadLabel(entry)
 	end
 	if entry.label then
-		return entry.label
+		return Locale.t(entry.label)
 	end
 	return LocalSettings.keyText(entry.keys and entry.keys[1] or "")
 end
@@ -459,6 +460,7 @@ function KeyDisplay.init()
 			paint(view, view.down)
 		end
 	end)
+	Locale.onChanged(refreshLabels) -- ESPACE / SPACE : libellés fixes relus à chaque changement de langue
 	RunService.Heartbeat:Connect(PerfMarkers.wrap("touches", poll))
 	update()
 end

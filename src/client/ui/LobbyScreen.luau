@@ -9,6 +9,7 @@ local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local FriendRules = require(Shared:WaitForChild("FriendRules"))
+local Locale = require(Shared:WaitForChild("Locale"))
 local PartyRules = require(Shared:WaitForChild("PartyRules"))
 local UITheme = require(Shared:WaitForChild("UITheme"))
 local FriendsProvider = require(script.Parent.Parent.systems.game.FriendsProvider)
@@ -150,10 +151,11 @@ local function clearRows(list: Instance)
 	end
 end
 
--- Cette méthode permet de réécrire un texte doublé de son ombre lorsqu'une ligne d'état change.
-local function setShadowed(label: TextLabel, shadow: TextLabel, text: string)
-	label.Text = text
-	shadow.Text = text
+-- Cette méthode permet de réécrire un texte doublé de son ombre lorsqu'une ligne d'état change : `fr` est le gabarit
+-- français (traduit, avec ses paramètres `args`), qui suit ensuite la langue.
+local function setShadowed(label: TextLabel, shadow: TextLabel, fr: string, args: { [string]: any }?)
+	Locale.apply(label, fr, args)
+	Locale.apply(shadow, fr, args)
 end
 
 -- Cette méthode permet d'écrire la ligne « qui lance » et l'état de LANCER et QUITTER LE GROUPE lorsque le groupe
@@ -166,9 +168,9 @@ local function paintLaunch(members: { PartyClient.Member })
 		end
 	end
 	local state = PartyClient.launchState()
-	local text =
+	local text, args =
 		PartyRules.statusLine(#members, host ~= nil and host.isLocal, state, host and host.presence, host and host.name)
-	setShadowed(statusText, statusShadow, text)
+	setShadowed(statusText, statusShadow, text, args)
 	launchChoice.setEnabled(state == "launch" and not launching)
 	leaveChoice.button.Visible = #members > 1
 end
@@ -222,7 +224,7 @@ local function paintGroup(): { [number]: boolean }
 		})
 		name.Size = UDim2.fromScale(0, 1)
 		if member.isHost then
-			UIKit.tag(line, "Host", 2, C.Accent, C.Ground).Text = "HÔTE"
+			Locale.apply(UIKit.tag(line, "Host", 2, C.Accent, C.Ground), "HÔTE")
 		end
 		rowText(row, {
 			Name = "Presence",
@@ -237,7 +239,11 @@ local function paintGroup(): { [number]: boolean }
 		})
 	end
 	local count = #members
-	setShadowed(groupHeader, groupHeaderShadow, if count > 1 then "GROUPE · " .. count else "GROUPE")
+	if count > 1 then
+		setShadowed(groupHeader, groupHeaderShadow, "GROUPE · {n}", { n = count })
+	else
+		setShadowed(groupHeader, groupHeaderShadow, "GROUPE")
+	end
 	return ids
 end
 
@@ -282,12 +288,12 @@ local function paintFriends(partyIds: { [number]: boolean })
 	clearRows(friendsList)
 	reasonsLabel.Text = ""
 	if not friends then
-		friendsNote.Text = if friendsFailed then "LISTE D'AMIS INDISPONIBLE" else "CHARGEMENT DES AMIS…"
+		Locale.apply(friendsNote, if friendsFailed then "LISTE D'AMIS INDISPONIBLE" else "CHARGEMENT DES AMIS…")
 		friendsNote.Visible = true
 		return
 	end
 	local list = friends :: { FriendRules.Friend }
-	friendsNote.Text = "AUCUN AMI À AFFICHER"
+	Locale.apply(friendsNote, "AUCUN AMI À AFFICHER")
 	friendsNote.Visible = #list == 0
 	local ctx: FriendRules.Context = {
 		studio = RunService:IsStudio(),
@@ -335,7 +341,14 @@ local function paintFriends(partyIds: { [number]: boolean })
 			choice.setEnabled(enabled)
 		end
 	end
-	reasonsLabel.Text = table.concat(FriendRules.reasons(list, ctx), "\n")
+	local reasons = FriendRules.reasons(list, ctx)
+	Locale.bind(reasonsLabel, function()
+		local lines = {}
+		for _, reason in reasons do
+			table.insert(lines, Locale.t(reason))
+		end
+		return table.concat(lines, "\n")
+	end)
 end
 
 -- Cette méthode permet de tout redessiner (groupe, puis amis qui en dépendent) lorsque le lobby s'ouvre, que le groupe

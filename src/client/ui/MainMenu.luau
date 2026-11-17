@@ -11,6 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Locale = require(Shared:WaitForChild("Locale"))
 local UITheme = require(Shared:WaitForChild("UITheme"))
 local WalletRules = require(Shared:WaitForChild("WalletRules"))
 local EconomyRules = require(Shared:WaitForChild("EconomyRules"))
@@ -402,15 +403,16 @@ function MainMenu.setPage(page: Page)
 end
 
 -- Cette méthode permet d'afficher un message sous les onglets pendant NOTICE_TIME lorsque l'orchestrateur doit
--- expliquer un retour au menu (apparition impossible, #219) ; un nouveau message remplace le précédent.
-function MainMenu.showNotice(text: string)
+-- expliquer un retour au menu (apparition impossible, #219) ; un nouveau message remplace le précédent. `text` est le
+-- gabarit français (`{nom}` + `args`), traduit dans la langue du joueur (#518).
+function MainMenu.showNotice(text: string, args: { [string]: any }?)
 	if not notice then
 		return
 	end
 	noticeGeneration += 1
 	local generation = noticeGeneration
-	notice.Text = text
-	noticeShadow.Text = text
+	Locale.apply(notice, text, args)
+	Locale.apply(noticeShadow, text, args)
 	notice.Visible = true
 	noticeShadow.Visible = true
 	task.delay(NOTICE_TIME, function()

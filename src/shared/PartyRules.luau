@@ -208,28 +208,38 @@ end
 
 -- Cette méthode permet d'écrire la ligne « qui lance » du lobby lorsque le groupe change : seul, hôte, membre qui attend
 -- l'hôte, ou membre dont l'hôte est en partie ou au menu (il lance seul). `hostName` : nom de l'hôte (nil s'il est
--- inconnu).
+-- inconnu). Renvoie le gabarit français et ses paramètres (`{name}`), traduits à l'affichage par l'écran.
 function PartyRules.statusLine(
 	count: number,
 	isHost: boolean,
 	state: LaunchState,
 	hostPresence: Presence?,
 	hostName: string?
-): string
+): (string, { [string]: any }?)
 	if count <= 1 then
-		return "INVITE TES AMIS OU LANCE SEUL"
+		return "INVITE TES AMIS OU LANCE SEUL", nil
 	end
 	if isHost then
-		return "TU ES L'HÔTE · LANCER FAIT ENTRER TOUT LE LOBBY"
+		return "TU ES L'HÔTE · LANCER FAIT ENTRER TOUT LE LOBBY", nil
 	end
-	local name = if hostName then string.upper(hostName) else "TON HÔTE"
+	-- Nom de l'hôte inconnu : gabarits « TON HÔTE » à part (un nom de joueur ne doit pas passer par la traduction)
+	local args = if hostName then { name = string.upper(hostName) } else nil
 	if state == "waitHost" then
-		return "EN ATTENTE DE L'HÔTE · " .. name .. " LANCE LA PARTIE"
+		if not args then
+			return "EN ATTENTE DE L'HÔTE · TON HÔTE LANCE LA PARTIE", nil
+		end
+		return "EN ATTENTE DE L'HÔTE · {name} LANCE LA PARTIE", args
 	end
 	if hostPresence == "game" then
-		return name .. " EST EN PARTIE · LANCE POUR LE REJOINDRE"
+		if not args then
+			return "TON HÔTE EST EN PARTIE · LANCE POUR LE REJOINDRE", nil
+		end
+		return "{name} EST EN PARTIE · LANCE POUR LE REJOINDRE", args
 	end
-	return name .. " EST AU MENU · TU PEUX LANCER SEUL"
+	if not args then
+		return "TON HÔTE EST AU MENU · TU PEUX LANCER SEUL", nil
+	end
+	return "{name} EST AU MENU · TU PEUX LANCER SEUL", args
 end
 
 -- Cette méthode permet d'appliquer LANCER lorsqu'un joueur du lobby le choisit : il passe en partie, et s'il est l'hôte

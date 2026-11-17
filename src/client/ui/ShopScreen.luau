@@ -18,6 +18,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local AnalyticsRules = require(Shared:WaitForChild("AnalyticsRules"))
 local CreditPacks = require(Shared:WaitForChild("CreditPacks"))
 local InventoryRules = require(Shared:WaitForChild("InventoryRules"))
+local Locale = require(Shared:WaitForChild("Locale"))
 local NetworkProtocol = require(Shared:WaitForChild("NetworkProtocol"))
 local ShopCatalog = require(Shared:WaitForChild("ShopCatalog"))
 local UITheme = require(Shared:WaitForChild("UITheme"))
@@ -155,10 +156,19 @@ local REFUSALS = PurchaseStatus.labels({
 local paintActions: () -> ()
 local paintPackButton: () -> () = function() end
 
--- Cette méthode permet de changer un texte et son ombre ensemble lorsqu'un libellé de l'écran change.
-local function setText(pair: { TextLabel }, text: string)
+-- Cette méthode permet de changer un texte et son ombre ensemble lorsqu'un libellé de l'écran change : `text` est le
+-- français (gabarit `{nom}` + `args`), traduit et suivi lors d'un changement de langue.
+local function setText(pair: { TextLabel }, text: string, args: { [string]: any }?)
 	for _, label in pair do
-		label.Text = text
+		Locale.apply(label, text, args)
+	end
+end
+
+-- Cette méthode permet de poser un texte calculé (traduction d'un morceau + valeur) sur un texte et son ombre lorsqu'il
+-- doit suivre un changement de langue.
+local function bindText(pair: { TextLabel }, produce: () -> string)
+	for _, label in pair do
+		Locale.bind(label, produce)
 	end
 end
 
@@ -313,15 +323,18 @@ local function paintDetail()
 			Position = UDim2.fromOffset(NAME_X, 0),
 			Size = UDim2.fromOffset(RARITY_X - NAME_X, ROW_STEP),
 		}, 2)
-		label(line, {
+		local rarityLabel = label(line, {
 			Name = "Rarity",
-			Text = string.format("%s  %s", row.rarity.label, ShopCatalog.chanceLabel(chances[i] or 0)),
 			FontFace = F.Display,
 			TextSize = 18,
 			TextColor3 = color,
 			Position = UDim2.fromOffset(RARITY_X, 0),
 			Size = UDim2.fromOffset(COLUMN_WIDTH - RARITY_X - REFUND_WIDTH, ROW_STEP),
 		}, 1)
+		-- Rareté (traduite) puis chance : recalculée au changement de langue
+		bindText(rarityLabel, function()
+			return Locale.t(row.rarity.label) .. "  " .. ShopCatalog.chanceLabel(chances[i] or 0)
+		end)
 		-- Remboursement d'un doublon (#393) : jeton puis montant, calé à droite de la ligne
 		local refund = UIKit.frame({
 			Name = "Refund",
@@ -365,7 +378,7 @@ local function paintDetail()
 	status.Position = UDim2.fromOffset(EDGE, actionsY + BUY_SIZE.Y + STATUS_GAP)
 	testRow.Position = UDim2.fromOffset(EDGE, actionsY + BUY_SIZE.Y + TEST_GAP)
 	setText(price, ShopCatalog.priceLabel(crate))
-	position.Text = string.format("CAISSE  %d / %d", current, #ShopCatalog.CRATES)
+	Locale.apply(position, "CAISSE  {n} / {total}", { n = current, total = #ShopCatalog.CRATES })
 	paintActions()
 end
 
@@ -423,7 +436,7 @@ local function buildOverview(column: Frame, root: Frame)
 		Size = UDim2.fromOffset(COLUMN_WIDTH, 18),
 	})
 	countLabel = { text, shadow }
-	setText(countLabel, string.format("%d EN VENTE  ·  UNE PAR ARME ET PAR SÉRIE", #ShopCatalog.CRATES))
+	setText(countLabel, "{n} EN VENTE  ·  UNE PAR ARME ET PAR SÉRIE", { n = #ShopCatalog.CRATES })
 	-- L'aide n'est pas dans la colonne (qui descend sous la barre de Roblox) : elle tient le bas de l'écran
 	local hints = UIKit.hintRow(root, {
 		Name = "OverviewHints",
@@ -442,7 +455,7 @@ local function setChoiceText(choice: MenuShot.Choice, text: string)
 	for _, name in { "Label", "LabelShadow" } do
 		local item = choice.button:FindFirstChild(name, true)
 		if item and item:IsA("TextLabel") then
-			item.Text = text
+			Locale.apply(item, text)
 		end
 	end
 end
@@ -480,7 +493,7 @@ paintActions = function()
 	setChoiceText(buyChoice, if buying then BUYING_TEXT else BUY_TEXT)
 	buyStroke.Color = if complete or busy or region then C.Muted else C.Bone
 	-- Même étiquette pour les deux états ; celle de la région, plus longue que le bouton, part de son coin gauche
-	buyOwned.Text = if region then REGION_TEXT else "TOUT OBTENU"
+	Locale.apply(buyOwned, if region then REGION_TEXT else "TOUT OBTENU")
 	buyOwned.AnchorPoint = if region then Vector2.new(0, 0.5) else Vector2.new(1, 0.5)
 	buyOwned.Position = if region then UDim2.fromOffset(-12, 0) else UDim2.new(1, 12, 0, 0)
 	buyOwned.Visible = (complete or region) and not buying
@@ -501,16 +514,17 @@ end)
 
 -- Cette méthode permet d'écrire la ligne au-dessus du skin révélé lorsque l'ouverture le montre : « OBTENU », ou pour un
 -- skin déjà possédé « DOUBLON », suivi des crédits rendus par un achat (« DOUBLON · +200 CRÉDITS », #393).
-local function revealHeadline(added: boolean?, refund: number): string
+-- Renvoie le texte français (gabarit `{amount}` + paramètres), traduit par l'appelant.
+local function revealHeadline(added: boolean?, refund: number): (string, { [string]: any }?)
 	if added == nil then
 		-- Achat rejoué au verdict inconnu (#400) : ni OBTENU ni DOUBLON affirmés
-		return REPLAYED_TEXT
+		return REPLAYED_TEXT, nil
 	elseif added then
-		return "OBTENU"
+		return "OBTENU", nil
 	elseif refund > 0 then
-		return string.format("DOUBLON  ·  +%s %s", WalletRules.format(refund), ShopCatalog.CURRENCY)
+		return "DOUBLON  ·  +{amount} CRÉDITS", { amount = WalletRules.format(refund) }
 	end
-	return "DOUBLON"
+	return "DOUBLON", nil
 end
 
 -- Cette méthode permet d'afficher la révélation (ligne d'en-tête, skin, rareté dans sa couleur) lorsque l'ouverture
@@ -553,7 +567,8 @@ local function presentResult(crate: ShopCatalog.Crate, result: any)
 	if not started then
 		-- Le serveur a déjà donné le skin (ou remboursé) : le dire, même sans la scène
 		detail.Visible = true
-		showStatus(revealHeadline(added, refund), true)
+		local headline, headlineArgs = revealHeadline(added, refund)
+		showStatus(headline, true, headlineArgs)
 	end
 	paintPackButton()
 end
@@ -645,7 +660,7 @@ local function buildBuy(parent: Frame)
 	})
 	-- Même étiquette que BIENTÔT avant l'achat (#347) : os atténué à texte sombre, à cheval sur le coin du bouton
 	buyOwned = UIKit.tag(buyButton, "Owned", 0, C.Muted, C.Ground)
-	buyOwned.Text = "TOUT OBTENU"
+	Locale.apply(buyOwned, "TOUT OBTENU")
 	buyOwned.AnchorPoint = Vector2.new(1, 0.5)
 	buyOwned.Position = UDim2.new(1, 12, 0, 0)
 	buyOwned.ZIndex = 3

@@ -3,6 +3,8 @@
 -- Les touches viennent de KeyBindings via les entrées de HUDRules.keyDisplayEntries (une seule liste d'actions) et des
 -- réglages du joueur ; le libellé de chaque touche est celui de `keyText` (LocalSettings.keyText, disposition du clavier).
 -- Testées sous Lune (tests/specs/InfosRules.spec.luau).
+-- Les textes sont rendus en français, sous forme de gabarits `{nom}` accompagnés de leurs arguments (touches) : l'écran
+-- les traduit à l'affichage (InfosContext.text / InfosContext.apply, #518), les règles ne connaissent pas la langue.
 local InfosRules = {}
 
 -- Entrée de HUDRules.keyDisplayEntries (seuls les champs lus ici)
@@ -30,7 +32,9 @@ export type Context = {
 	autoBhop: boolean?,
 }
 
-export type KeyRow = { key: string, action: string }
+-- Ligne « touche → action » : `key` et `action` sont des textes français (`key` : gabarit `{nom}` + `keyArgs` pour un
+-- bouton de souris numéroté ; une lettre de touche reste telle quelle à la traduction)
+export type KeyRow = { key: string, keyArgs: { [string]: any }?, action: string }
 
 -- Description de chaque action affichée (les quatre directions tiennent sur une ligne « Se déplacer »)
 local ACTION_TEXT = {
@@ -77,15 +81,20 @@ local function jumpLabel(ctx: { entries: { Entry }, keyText: (keyName: string) -
 end
 
 -- Cette méthode permet de donner le libellé d'une entrée d'action lorsqu'une ligne de COMMANDES est composée : bouton de
--- souris, libellé fixe (ESPACE, CTRL, MAJ), sinon la touche telle qu'imprimée sur le clavier du joueur.
-local function entryLabel(ctx: Context, entry: Entry): string
+-- souris, libellé fixe (ESPACE, CTRL, MAJ), sinon la touche telle qu'imprimée sur le clavier du joueur ; le deuxième
+-- résultat donne les arguments d'un libellé à gabarit (« SOURIS {n} »).
+local function entryLabel(ctx: Context, entry: Entry): (string, { [string]: any }?)
 	if entry.mouse then
-		return MOUSE_LABELS[entry.mouse] or ("SOURIS " .. entry.mouse)
+		local known = MOUSE_LABELS[entry.mouse]
+		if known then
+			return known, nil
+		end
+		return "SOURIS {n}", { n = entry.mouse }
 	end
 	if entry.label then
-		return entry.label
+		return entry.label, nil
 	end
-	return actionKey(ctx, entry.id)
+	return actionKey(ctx, entry.id), nil
 end
 
 -- Cette méthode permet de composer les touches des armes lorsque la ligne « changer d'arme » est affichée : « 1 – 9 »
@@ -120,7 +129,8 @@ function InfosRules.commandRows(ctx: Context): { KeyRow }
 	for _, id in ACTION_ORDER do
 		local entry = entryOf(ctx.entries, id)
 		if entry then
-			table.insert(rows, { key = entryLabel(ctx, entry), action = ACTION_TEXT[id] })
+			local key, keyArgs = entryLabel(ctx, entry)
+			table.insert(rows, { key = key, keyArgs = keyArgs, action = ACTION_TEXT[id] })
 		end
 	end
 
@@ -134,8 +144,8 @@ function InfosRules.commandRows(ctx: Context): { KeyRow }
 end
 
 -- Démo rejouée de l'écran Apprendre (#285) : `id` nomme le module de données (ui/DemoClips), `title` le sélecteur,
--- `caption` le geste en une ligne, posé sur le clip
-export type DemoClip = { id: string, title: string, caption: string }
+-- `caption` le geste en une ligne, posé sur le clip (gabarit français `{nom}` rempli par `captionArgs`, les touches)
+export type DemoClip = { id: string, title: string, caption: string, captionArgs: { [string]: any } }
 
 -- Cette méthode permet de composer les démos de l'écran Apprendre et leurs légendes lorsqu'il s'ouvre,
 -- touches telles qu'imprimées sur le clavier du joueur ; plusieurs démos donnent un sélecteur, une seule n'en a pas.
@@ -143,26 +153,18 @@ export type DemoClip = { id: string, title: string, caption: string }
 -- jouée avec l'auto-bhop (saut tenu) ; sans auto-bhop, la légende dit d'appuyer à chaque atterrissage.
 function InfosRules.demoClips(ctx: Context): { DemoClip }
 	local left, right, forward = actionKey(ctx, "left"), actionKey(ctx, "right"), actionKey(ctx, "forward")
-	local jump = if ctx.autoBhop == false
-		then string.format("Appuie sur %s à chaque atterrissage (démo en auto-bhop)", jumpLabel(ctx))
-		else string.format("Garde %s (auto-bhop)", jumpLabel(ctx))
+	local caption = if ctx.autoBhop == false
+		then "Appuie sur {jump} à chaque atterrissage (démo en auto-bhop), puis en l'air {left} en tournant la souris à gauche, {right} à droite, sans {forward}."
+		else "Garde {jump} (auto-bhop), puis en l'air {left} en tournant la souris à gauche, {right} à droite, sans {forward}."
 	return {
 		{
 			id = "bhop",
 			title = "BHOP",
-			caption = string.format(
-				"%s, puis en l'air %s en tournant la souris à gauche, %s à droite, sans %s.",
-				jump,
-				left,
-				right,
-				forward
-			),
+			caption = caption,
+			captionArgs = { jump = jumpLabel(ctx), left = left, right = right, forward = forward },
 		},
 	}
 end
-
--- Renvoi des conseils de l'écran de mort vers la démo de l'écran Apprendre (#285)
-InfosRules.DEMO_POINTER = " Démo : APPRENDRE."
 
 -- Contexte des conseils de l'écran de mort (#291) : entrées d'actions, libellé d'une touche, auto-bhop réglé (le conseil
 -- de bhop en dépend)
@@ -172,29 +174,31 @@ export type TipContext = {
 	autoBhop: boolean,
 }
 
--- Conseil de l'écran de mort : thème (affiché en ambre) et phrase
-export type Tip = { topic: string, text: string }
+-- Conseil de l'écran de mort : thème (affiché en ambre) et phrase, en français : `text` est un gabarit `{nom}` rempli
+-- par `args` (les touches), traduit à l'affichage
+export type Tip = { topic: string, text: string, args: { [string]: any } }
 
 -- Cette méthode permet de composer les conseils de l'écran de mort d'un débutant (#291) lorsqu'un conseil est choisi :
 -- surf, bhop (selon l'auto-bhop) et air strafe, touches telles qu'imprimées sur le clavier du joueur. Bhop et air strafe
--- renvoient à leur démo (#285, onglet APPRENDRE du menu) : DEMO_POINTER, sur la même ligne.
+-- renvoient à leur démo (#285, onglet APPRENDRE du menu) : « Démo : APPRENDRE. » en fin de phrase.
 function InfosRules.deathTips(ctx: TipContext): { Tip }
 	local left, right, forward = actionKey(ctx, "left"), actionKey(ctx, "right"), actionKey(ctx, "forward")
 	local jump = jumpLabel(ctx)
 	local bhop = if ctx.autoBhop ~= false
-		then string.format("garde %s enfoncé, tu ressautes dès que tu touches le sol.", jump)
-		else string.format("appuie sur %s à chaque fois que tu touches le sol.", jump)
-	bhop ..= InfosRules.DEMO_POINTER
+		then "garde {jump} enfoncé, tu ressautes dès que tu touches le sol. Démo : APPRENDRE."
+		else "appuie sur {jump} à chaque fois que tu touches le sol. Démo : APPRENDRE."
+	local args = { jump = jump, left = left, right = right, forward = forward }
 	return {
 		{
 			topic = "SURF",
-			text = string.format("maintiens %s ou %s contre la rampe, ne touche jamais à %s.", left, right, forward),
+			text = "maintiens {left} ou {right} contre la rampe, ne touche jamais à {forward}.",
+			args = args,
 		},
-		{ topic = "BHOP", text = bhop },
+		{ topic = "BHOP", text = bhop, args = args },
 		{
 			topic = "AIR STRAFE",
-			text = string.format("en l'air, tiens %s en tournant la souris à gauche, %s à droite.", left, right)
-				.. InfosRules.DEMO_POINTER,
+			text = "en l'air, tiens {left} en tournant la souris à gauche, {right} à droite. Démo : APPRENDRE.",
+			args = args,
 		},
 	}
 end
