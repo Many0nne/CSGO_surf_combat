@@ -43,6 +43,7 @@ local CheatLog = require(script.CheatLog)
 local ShotRelayRules = require(script.ShotRelayRules)
 local AimStats = require(script.AimStats)
 local TrainingService = require(script.TrainingService)
+local PartyService = require(script.PartyService)
 local HighlightService = require(script.HighlightService)
 local Analytics = require(script.analytics.Analytics)
 
@@ -97,6 +98,8 @@ footstepRmt.Name = N.FOOTSTEP
 footstepRmt.Parent = ReplicatedStorage
 -- Rejoindre ou quitter l'entraînement (#345) : demande du client, réponse du serveur
 local trainingRmt = makeRemote(N.TRAINING)
+-- Lobby entre amis (#523) : demandes du lobby, LANCER de l'hôte relayé aux membres, réponses de REJOINDRE
+local partyRmt = makeRemote(N.PARTY)
 -- Ouverture d'une caisse du shop (#332) : RemoteFunction, le client attend le skin tiré par le serveur
 local openCrateRmt = Instance.new("RemoteFunction")
 openCrateRmt.Name = N.OPEN_CRATE
@@ -165,6 +168,13 @@ ReceiptService.init(buyCreditPackRmt, {
 FeedbackService.init(sendFeedbackRmt, feedbackAckRmt)
 -- Mode publié aux clients (attribut de ReplicatedStorage) et téléportations vers ou depuis l'entraînement
 TrainingService.init(trainingRmt)
+-- Groupes du lobby (#523) : publiés dans les attributs des joueurs, arrivée d'un invité reliée au groupe de son ami
+PartyService.init(partyRmt, function(player: Player): boolean
+	-- En partie pour de bon : personnage dans le jeu (vivant ou corps pas encore retiré) ou apparition en vol ; un
+	-- personnage détruit (fin de manche) peut rester référencé par Player.Character
+	local char = player.Character
+	return (char ~= nil and char.Parent ~= nil) or SpawnManager.isSpawning(player)
+end)
 
 RoundManager.init({
 	roundState = roundStateRmt,
@@ -665,6 +675,8 @@ SpawnManager.init(spawnRmt, {
 		end
 		-- Au classement dès l'apparition, retour du menu en partie compris (#157)
 		RoundManager.addParticipant(Participants.fromPlayer(player))
+		-- En partie pour son groupe (#523) : un membre du lobby n'attend plus cet hôte
+		PartyService.noteInGame(player)
 	end,
 })
 
@@ -684,6 +696,8 @@ leaveRoundRmt.OnServerEvent:Connect(function(player)
 	forgetCombatState(participant)
 	SpawnManager.withdraw(player)
 	Analytics.leftRound(player)
+	-- Revenu au menu pour son groupe (#523)
+	PartyService.noteMenu(player)
 end)
 
 -- ── Combat : validation et attribution des dégâts ─────────────────────────

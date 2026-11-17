@@ -26,7 +26,7 @@ function MenuShot.reset()
 	busy = false
 end
 
--- Cette méthode permet de savoir si une action exclusive (JOUER) est partie lorsqu'un nouveau clic arrive.
+-- Cette méthode permet de savoir si une action exclusive est partie lorsqu'un nouveau clic arrive (aucune depuis #523).
 function MenuShot.isBusy(): boolean
 	return busy
 end
@@ -57,7 +57,8 @@ local function bindChoice(button: GuiButton, props: ChoiceProps, paint: (boolean
 		if not enabled or busy then
 			return
 		end
-		-- JOUER bloque les autres choix jusqu'à MenuShot.reset (retour au menu ou MainMenu.hide)
+		-- Action exclusive : bloque les autres choix jusqu'à MenuShot.reset (retour au menu ou MainMenu.hide). Plus aucun
+		-- choix ne la demande : JOUER ouvre le lobby (#523), et les onglets sont ignorés hors du menu (GameStateController)
 		if props.locks then
 			busy = true
 		end
@@ -83,7 +84,7 @@ end
 
 -- Cette méthode permet de créer un choix en texte à ombre décalée (onglets, flèches, actions des écrans secondaires)
 -- lorsqu'un écran est construit : rouge d'impact au survol, `selectedColor` pour l'élément actif. Le bouton prend la
--- taille de son texte ; `locks` rend l'action exclusive (JOUER : plus aucun choix jusqu'au retour au menu).
+-- taille de son texte. `locks` n'est pas transmis (depuis #308) : aucun choix en texte n'est exclusif.
 function MenuShot.textChoice(props: {
 	text: string,
 	font: Font,

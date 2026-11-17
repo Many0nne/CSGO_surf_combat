@@ -386,7 +386,7 @@ local function card(
 		end
 	end)
 	button.Activated:Connect(function()
-		if not MenuShot.isBusy() then -- JOUER bloque les choix jusqu'au retour au menu
+		if not MenuShot.isBusy() then -- action exclusive en cours (aucune depuis #523 ; le serveur refuse EquipItem en partie)
 			action()
 		end
 	end)

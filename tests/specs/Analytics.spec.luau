@@ -456,6 +456,8 @@ return function(T, Loader)
 
 		T.it("traduit les pages du menu et reconnaît les écrans du menu et du shop", function()
 			T.expectEqual(Rules.menuScreen("shop"), S.SHOP)
+			T.expectEqual(Rules.menuScreen("lobby"), S.LOBBY, "lobby de JOUER (#523)")
+			T.expect(Rules.isMenu(S.LOBBY), "le lobby est un écran du menu")
 			T.expectEqual(Rules.menuScreen("inconnue"), S.HOME)
 			T.expect(Rules.isMenu(S.CREDIT_PACKS), "packs : écran du menu")
 			T.expect(not Rules.isMenu(S.PLAYING), "partie : pas le menu")

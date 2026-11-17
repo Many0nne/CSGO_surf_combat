@@ -30,7 +30,7 @@ même tâche : une issue par correction, une fois les premières données collec
 ## Écrans signalés par le client
 
 `loading` (écran de chargement), `playing` (en partie : arrivée, vivant, mort ou bannière, précisé par le serveur),
-`menu_home`, `menu_shop`, `menu_infos`, `menu_learn`, `menu_settings`, `menu_feedback`, `shop_detail` (détail d'une
+`menu_home`, `menu_shop`, `menu_infos`, `menu_learn`, `menu_settings`, `menu_feedback`, `menu_lobby` (lobby, #523), `shop_detail` (détail d'une
 caisse), `crate_opening` (animation d'ouverture), `credit_packs` (fenêtre des packs Robux). Composés dans
 `init.client` (`LoadingScreen.isCovering`, `GameStateController.getState`, `ShopScreen.analyticsScreen`,
 `MainMenu.getPage`). Un écran tenu moins de 0,5 s peut ne pas être vu.
@@ -52,7 +52,7 @@ statistiques (ni kill ni mort comptés, aucune manche finie ; une mort par un bo
 |---|---|---|
 | 1 | Chargement terminé | premier écran autre que `loading` (`Analytics.screen`) |
 | 2 | Menu affiché | premier écran du menu |
-| 3 | Clic sur JOUER | passage d'un écran du menu à `playing` (l'enchaînement des manches reste en `playing`) |
+| 3 | Clic sur JOUER | passage d'un écran du menu à `playing` (l'enchaînement des manches reste en `playing`) ; depuis #523, JOUER ouvre le lobby (`menu_lobby`) : l'étape compte l'entrée en partie par LANCER |
 | 4 | Premier spawn | personnage gardé (`onCharacterAdded`, `Analytics.spawned`) |
 | 5 | Premier tir | `ShotFired` relayé, ou coup de couteau (`WeaponAction` Shoot) |
 | 6 | Premier dégât infligé | touche qui fait baisser des PV (`onHitVerdict`) |

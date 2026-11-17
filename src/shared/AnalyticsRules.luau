@@ -18,6 +18,7 @@ AnalyticsRules.Screen = {
 	LEARN = "menu_learn",
 	SETTINGS = "menu_settings",
 	FEEDBACK = "menu_feedback",
+	LOBBY = "menu_lobby", -- lobby ouvert par JOUER (#523)
 	SHOP_DETAIL = "shop_detail",
 	CRATE_OPENING = "crate_opening",
 	CREDIT_PACKS = "credit_packs",
@@ -34,6 +35,7 @@ AnalyticsRules.SCREENS = {
 	S.LEARN,
 	S.SETTINGS,
 	S.FEEDBACK,
+	S.LOBBY,
 	S.SHOP_DETAIL,
 	S.CRATE_OPENING,
 	S.CREDIT_PACKS,
@@ -55,6 +57,7 @@ local MENU_PAGES = {
 	learn = S.LEARN,
 	settings = S.SETTINGS,
 	feedback = S.FEEDBACK,
+	lobby = S.LOBBY,
 }
 
 -- Période (s) de relevé de l'écran par le client : un écran tenu moins longtemps peut ne pas être vu. Garder sous le

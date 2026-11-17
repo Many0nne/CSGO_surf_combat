@@ -13,6 +13,7 @@ local LearnScreen = require(script.Parent.Parent.Parent.ui.LearnScreen)
 local ShopScreen = require(script.Parent.Parent.Parent.ui.ShopScreen)
 local RoundHUD = require(script.Parent.Parent.Parent.ui.RoundHUD)
 local FeedbackScreen = require(script.Parent.Parent.Parent.ui.FeedbackScreen)
+local LobbyScreen = require(script.Parent.Parent.Parent.ui.LobbyScreen)
 local SettingsMenu = require(script.Parent.Parent.Parent.ui.SettingsMenu)
 local InGameMenu = require(script.Parent.Parent.Parent.ui.InGameMenu)
 local InGameMenuRules = require(script.Parent.Parent.Parent.ui.InGameMenuRules)
@@ -33,6 +34,7 @@ local BeginnerRules = require(script.Parent.BeginnerRules)
 local InfosRules = require(script.Parent.Parent.Parent.ui.InfosRules)
 local LocalSettings = require(script.Parent.Parent.settings.LocalSettings)
 local TrainingClient = require(script.Parent.TrainingClient)
+local PartyClient = require(script.Parent.PartyClient)
 local HighlightPlayer = require(script.Parent.Parent.highlight.HighlightPlayer)
 local HighlightClipRules = require(Shared:WaitForChild("HighlightClipRules"))
 
@@ -174,6 +176,10 @@ local function setState(newState: State)
 
 	if newState == "MENU" then
 		SettingsMenu.close()
+		-- Retour de partie : le menu repart de l'accueil. Le serveur est prévenu que le joueur n'est plus en partie pour son
+		-- groupe (#523) : LeaveRound ne part pas sur tous les chemins (manche finie pendant l'écran de mort)
+		LobbyScreen.hide(true)
+		PartyClient.close()
 		MainMenu.show()
 		InfosScreen.hide()
 		RoundHUD.hide()
@@ -192,12 +198,15 @@ local function setState(newState: State)
 			if state == "SPAWNING" then
 				-- Le shop garde sa salle sous les volets : la caméra ne saute pas à l'accueil pendant qu'ils se ferment
 				ShopScreen.hide()
+				-- Entrée dans la manche (LANCER) : le serveur sait déjà que le joueur quitte le lobby
+				LobbyScreen.hide(true)
 				MainMenu.hide()
 				InfosScreen.hide()
 			end
 		end)
 	elseif newState == "IN_ROUND" then
 		ShopScreen.hide()
+		LobbyScreen.hide(true)
 		MainMenu.hide()
 		InfosScreen.hide()
 		LearnScreen.hide()
@@ -506,8 +515,9 @@ end
 
 -- ── API ────────────────────────────────────────────────────────────────────
 
--- Cette méthode permet de lancer le spawn en round comme le bouton Play lorsqu'on est au menu ou sur Infos ;
--- renvoie false si l'état ne le permet pas (aussi utilisée par le helper de playtest Studio, #30).
+-- Cette méthode permet de lancer le spawn en round lorsqu'on est au menu ou sur Infos (LANCER du lobby, LANCER de l'hôte
+-- reçu par un membre, arrivée sur l'entraînement) ; renvoie false si l'état ne le permet pas (aussi utilisée par le
+-- helper de playtest Studio, #30, qui passe donc à côté du lobby).
 function GameStateController.requestPlay(): boolean
 	if state ~= "MENU" and state ~= "INFOS" then
 		return false
@@ -555,6 +565,60 @@ local function openSettingsPage()
 	end
 end
 
+-- Cette méthode permet de revenir à l'accueil du menu lorsque le joueur change d'onglet depuis un écran ouvert (onglet
+-- ARMES, ou avant d'ouvrir un autre écran) : tout écran secondaire se ferme, le lobby prévient le serveur qu'il le quitte.
+local function goHome()
+	if state == "INFOS" then
+		setState("MENU")
+	end
+	FeedbackScreen.hide()
+	LearnScreen.hide()
+	ShopScreen.hide()
+	LobbyScreen.hide()
+	SettingsMenu.close()
+	MainMenu.setPage("home")
+end
+
+-- Cette méthode permet d'ouvrir le lobby (#523) lorsque le joueur clique JOUER, ou qu'il vient d'entrer dans le groupe
+-- d'un ami ; sur un serveur d'entraînement (seul par serveur, #388), JOUER entre directement en partie.
+local function openLobby()
+	if TrainingClient.isTraining() then
+		GameStateController.requestPlay()
+		return
+	end
+	if state ~= "MENU" and state ~= "INFOS" then
+		return
+	end
+	if MainMenu.getPage() ~= "home" then
+		goHome()
+	end
+	MainMenu.setPage("lobby")
+	LobbyScreen.show()
+end
+
+-- Cette méthode permet de faire entrer le joueur dans la manche lorsque son hôte lance (#523) : seulement s'il attend
+-- dans le lobby ; ailleurs (autre page, déjà en partie), le serveur est prévenu qu'il n'y est plus.
+local function onPartyGo()
+	if state == "MENU" and LobbyScreen.isOpen() then
+		if GameStateController.requestPlay() then
+			LobbyScreen.lock()
+		end
+	elseif not LobbyScreen.isOpen() then
+		PartyClient.close()
+	end
+end
+
+-- Cette méthode permet de n'exécuter un choix du menu (onglet, RETOUR du lobby) que lorsque le client est au menu : les
+-- volets de LANCER mettent un instant à couvrir l'écran, un onglet cliqué entre-temps écraserait SPAWNING (le
+-- personnage serait ignoré, le joueur resterait derrière les volets).
+local function fromMenu(action: () -> ()): () -> ()
+	return function()
+		if atMenu() then
+			action()
+		end
+	end
+end
+
 -- ── Init ───────────────────────────────────────────────────────────────────
 
 function GameStateController.init(player: Player, setupCharacter: (char: Model) -> (), stopCharacter: () -> ())
@@ -572,31 +636,26 @@ function GameStateController.init(player: Player, setupCharacter: (char: Model) 
 	FeedbackScreen.init(function() -- fermer Feedback
 		MainMenu.setPage("home")
 	end)
-	MainMenu.init(function() -- Play
-		GameStateController.requestPlay()
-	end, function() -- Infos
-		setState("INFOS")
-	end, function() -- Feedback
-		MainMenu.setPage("feedback")
-		FeedbackScreen.show()
-	end, function() -- Réglages
-		openSettingsPage()
-	end, function() -- Accueil (onglet ARMES, ou changement d'onglet depuis un écran ouvert)
-		if state == "INFOS" then
-			setState("MENU")
-		end
-		FeedbackScreen.hide()
-		LearnScreen.hide()
-		ShopScreen.hide()
-		SettingsMenu.close()
-		MainMenu.setPage("home")
-	end, function() -- Apprendre (#285)
-		MainMenu.setPage("learn")
-		LearnScreen.show()
-	end, function() -- Shop (#347)
-		MainMenu.setPage("shop")
-		ShopScreen.show()
-	end)
+	MainMenu.init(
+		fromMenu(openLobby),
+		fromMenu(function() -- Infos ; JOUER ouvre le lobby (#523)
+			setState("INFOS")
+		end),
+		fromMenu(function() -- Feedback
+			MainMenu.setPage("feedback")
+			FeedbackScreen.show()
+		end),
+		fromMenu(openSettingsPage),
+		fromMenu(goHome),
+		fromMenu(function() -- Apprendre (#285)
+			MainMenu.setPage("learn")
+			LearnScreen.show()
+		end),
+		fromMenu(function() -- Shop (#347)
+			MainMenu.setPage("shop")
+			ShopScreen.show()
+		end)
+	)
 	-- Menu en partie (#157) ; au menu principal, sa touche ouvre ou ferme les Réglages de l'accueil
 	InGameMenu.init({
 		getState = function()
@@ -625,6 +684,13 @@ function GameStateController.init(player: Player, setupCharacter: (char: Model) 
 		setState("MENU")
 	end)
 	ShopScreen.init()
+	-- Lobby entre amis (#523) : LANCER entre dans la manche comme JOUER le faisait, mêmes règles d'apparition
+	LobbyScreen.init({
+		onBack = fromMenu(goHome),
+		onLaunch = GameStateController.requestPlay,
+		onNotice = MainMenu.showNotice,
+	})
+	PartyClient.init(onPartyGo, openLobby, MainMenu.showNotice)
 	LearnScreen.init(function() -- fermer Apprendre
 		LearnScreen.hide()
 		MainMenu.setPage("home")
