@@ -82,10 +82,11 @@ ShopCatalog.CRATES = {
 -- Réserve : skins finis qu'aucune caisse en vente ne donne encore, par arme puis par rareté. Ils gardent leur rareté
 -- (`rarityOf`, pour qui les possède déjà : les caisses FILM, #433, ont été vendues avant d'être retirées), et forment
 -- une caisse dès qu'une arme en a assez pour la composition complète. Série FILM (#433, #436) : REMORQUEUR, LOGOGRAMME,
--- HÔTE et SPHINX ; CISELURE et TOPO ont cédé leur place dans la série 1 à TREMPE et aux autres communs
+-- HÔTE et SPHINX ; CISELURE et TOPO ont cédé leur place dans la série 1 à TREMPE et aux autres communs. Série 2 de l'AWP
+-- (#482) : les communs PARQUET, CANNAGE et TÔLE LARMÉE, qui complètent les communs avec LOGOGRAMME
 ShopCatalog.RESERVE = {
 	["weapon.awp"] = {
-		common = { "logogramme" },
+		common = { "logogramme", "parquet", "cannage", "tole" },
 		exceptional = { "remorqueur" },
 		legendary = { "ciselure" },
 	},

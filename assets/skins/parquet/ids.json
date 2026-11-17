@@ -1,0 +1,28 @@
+{
+ "AWP": {
+  "METAL_A": {
+   "Color": "rbxassetid://87218570323826",
+   "Metal": "rbxassetid://103767144012638",
+   "Normal": "rbxassetid://71488325568557",
+   "Rough": "rbxassetid://71863222124211"
+  },
+  "METAL_B": {
+   "Color": "rbxassetid://84294412246224",
+   "Metal": "rbxassetid://94713736282191",
+   "Normal": "rbxassetid://116883231887538",
+   "Rough": "rbxassetid://110776639733894"
+  },
+  "SCOPE": {
+   "Color": "rbxassetid://87400529420401",
+   "Metal": "rbxassetid://89719205716030",
+   "Normal": "rbxassetid://128528366459076",
+   "Rough": "rbxassetid://92996780499854"
+  },
+  "WOOD": {
+   "Color": "rbxassetid://136985851781936",
+   "Metal": "rbxassetid://114018655453672",
+   "Normal": "rbxassetid://106643145714185",
+   "Rough": "rbxassetid://134215976796569"
+  }
+ }
+}
