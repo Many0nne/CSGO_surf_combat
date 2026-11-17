@@ -5,6 +5,7 @@ local roblox = require("@lune/roblox")
 
 -- Racines Rojo : service -> enfant -> dossier source (cf. default.project.json)
 local ROOTS = {
+	ReplicatedFirst = "src/first",
 	ReplicatedStorage = { Shared = "src/shared" },
 	ServerScriptService = { Server = "src/server" },
 	StarterPlayer = { StarterPlayerScripts = { Client = "src/client" } },

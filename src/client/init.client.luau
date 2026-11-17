@@ -1,4 +1,5 @@
 local Players = game:GetService("Players")
+local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
 
@@ -30,6 +31,9 @@ local KeyDisplay = require(script.ui.KeyDisplay)
 local TouchControls = require(script.ui.TouchControls)
 local Hitmarker = require(script.ui.Hitmarker)
 local GameStateController = require(script.systems.game.GameStateController)
+local MenuScene = require(script.systems.game.MenuScene)
+local Transition = require(script.ui.Transition)
+local LoadingScreen = require(ReplicatedFirst:WaitForChild("LoadingScreen"))
 local KillAnnouncer = require(script.systems.game.KillAnnouncer)
 local DebugPlaytest = require(script.debug.DebugPlaytest)
 local FrameProbe = require(script.debug.FrameProbe)
@@ -143,6 +147,13 @@ Hitmarker.init()
 -- GameStateController orchestre les transitions d'état, le spawn et tous les UIs.
 -- Il appelle setupCharacter au bon moment (après LoadCharacter côté serveur).
 GameStateController.init(player, setupCharacter, stopCharacter)
+-- Écran de chargement du lancement (#480, ReplicatedFirst) : levé quand la scène du menu est construite et chargée, ou
+-- dès que le joueur a quitté le menu (arrivée sur l'entraînement : la scène du menu n'est jamais finie). Volets de
+-- Transition encore fermés (apparition en cours) : ils prennent le relais d'un coup ; sinon l'écran s'ouvre sur le jeu
+LoadingScreen.setReadiness(function()
+	local state = GameStateController.getState()
+	return MenuScene.isReady() or (state ~= "MENU" and state ~= "INFOS")
+end, Transition.isClosed)
 -- Tirs des autres joueurs et des bots entendus en 3D (#156), hors écrans du menu
 RemoteShotSounds.init(GameStateController.getState)
 -- Pas des autres joueurs et des bots entendus en 3D (#146), hors écrans du menu

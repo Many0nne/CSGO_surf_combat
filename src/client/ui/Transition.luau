@@ -1,10 +1,13 @@
 -- Volets « DÉPLOIEMENT » entre le menu et le jeu : se ferment au tir sur JOUER,
--- se rouvrent quand le personnage apparaît (ou après un délai de sécurité).
+-- se rouvrent quand le personnage apparaît (ou après un délai de sécurité). Sous l'écran de chargement (#480, arrivée
+-- sur l'entraînement), ils se ferment d'un coup : l'écran, identique, leur passe le relais sans rien montrer.
 local Players = game:GetService("Players")
+local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
 local UIKit = require(script.Parent.UIKit)
+local LoadingScreen = require(ReplicatedFirst:WaitForChild("LoadingScreen"))
 
 local C = UITheme.Colors
 local Motion = UITheme.Motion
@@ -84,18 +87,29 @@ function Transition.close(onClosed: (() -> ())?)
 	label.TextTransparency = 1
 	labelScale.Scale = 1.6
 
-	UIKit.tween(topPanel, Motion.Shutter, { Position = UDim2.fromScale(0, 0) })
-	local tween = UIKit.tween(bottomPanel, Motion.Shutter, { Position = UDim2.fromScale(0, 0.5) })
-	tween.Completed:Connect(function()
-		if myGeneration ~= generation then
-			return
-		end
-		UIKit.tween(label, Motion.Pop, { TextTransparency = 0 })
-		UIKit.tween(labelScale, Motion.Pop, { Scale = 1 })
+	if LoadingScreen.isCovering() then
+		-- Caché par l'écran de chargement : fermé d'un coup, prêt quand il se retire (LoadingScreen.uncover instantané)
+		topPanel.Position = UDim2.fromScale(0, 0)
+		bottomPanel.Position = UDim2.fromScale(0, 0.5)
+		label.TextTransparency = 0
+		labelScale.Scale = 1
 		if onClosed then
 			onClosed()
 		end
-	end)
+	else
+		UIKit.tween(topPanel, Motion.Shutter, { Position = UDim2.fromScale(0, 0) })
+		local tween = UIKit.tween(bottomPanel, Motion.Shutter, { Position = UDim2.fromScale(0, 0.5) })
+		tween.Completed:Connect(function()
+			if myGeneration ~= generation then
+				return
+			end
+			UIKit.tween(label, Motion.Pop, { TextTransparency = 0 })
+			UIKit.tween(labelScale, Motion.Pop, { Scale = 1 })
+			if onClosed then
+				onClosed()
+			end
+		end)
+	end
 
 	task.delay(SAFETY_OPEN_DELAY, function()
 		if myGeneration == generation and closed then

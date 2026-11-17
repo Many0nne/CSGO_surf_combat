@@ -74,7 +74,15 @@ local VEIL = NumberSequence.new({
 	NumberSequenceKeypoint.new(1, 1),
 })
 
+-- Voile de la salle (#480) : noir à l'ouverture du shop, sous l'interface, le temps que l'éclairage Future de la salle
+-- s'installe (ombres, lampes), puis fondu ; la salle « s'allume » au lieu d'apparaître à moitié éclairée. Non mesuré :
+-- durées à ajuster à l'œil
+local ROOM_VEIL_HOLD = 0.3 -- s noir après l'ouverture
+local ROOM_VEIL_FADE = TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
 local gui: ScreenGui
+local roomVeil: Frame
+local roomVeilShow = 0 -- numéro de la dernière ouverture, pour ignorer le fondu d'une ouverture déjà refermée
 local overview: Frame
 local detail: Frame
 local rows: ScrollingFrame
@@ -1019,6 +1027,15 @@ function ShopScreen.init()
 		Enabled = false,
 		Parent = Players.LocalPlayer:WaitForChild("PlayerGui"),
 	})
+	-- Plein écran, hors de la racine mise à l'échelle, et sous elle (ZIndex 0) : couvre la salle, pas l'interface
+	roomVeil = UIKit.frame({
+		Name = "RoomVeil",
+		BackgroundColor3 = C.Ground,
+		Size = UDim2.fromScale(1, 1),
+		ZIndex = 0,
+		Visible = false,
+		Parent = gui,
+	})
 	local root = UIKit.scaledRoot(gui)
 	shopVeil = UIKit.frame({
 		Name = "Veil",
@@ -1060,6 +1077,21 @@ function ShopScreen.show()
 	end
 	gui.Enabled = true
 	reveal.Visible = false
+	roomVeilShow += 1
+	local myShow = roomVeilShow
+	roomVeil.BackgroundTransparency = 0
+	roomVeil.Visible = true
+	task.delay(ROOM_VEIL_HOLD, function()
+		if myShow ~= roomVeilShow then
+			return
+		end
+		local fade = UIKit.tween(roomVeil, ROOM_VEIL_FADE, { BackgroundTransparency = 1 })
+		fade.Completed:Connect(function()
+			if myShow == roomVeilShow then
+				roomVeil.Visible = false
+			end
+		end)
+	end)
 	ShopScene.start()
 	openOverview()
 	paintPackButton()
@@ -1075,6 +1107,8 @@ function ShopScreen.hide()
 	end
 	gui.Enabled = false
 	view += 1
+	roomVeilShow += 1
+	roomVeil.Visible = false
 	clearPreview()
 	closePacks()
 	ShopScene.stop()
