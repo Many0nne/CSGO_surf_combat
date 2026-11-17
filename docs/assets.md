@@ -505,8 +505,10 @@ qu'ensuite. Puis publier et cataloguer (étapes 4 et 5 de « Fabriquer un skin �
   cible ; des courbes allongées brunes sur fond sable font du bois : sommets en ellipses orientées reliés par un col, papier
   vert pâle et quadrillage bleu marqué.
 - **Texte de la M9 à l'envers en 1P** : le couteau est tenu tranchant en haut, un texte posé droit sur la toile (dos en
-  haut) se lit tête en bas (PATROUILLE, première version de CHANTIER). `kn.text(..., angle=180)`, et la ligne qui doit
-  paraître au-dessus se place côté tranchant (h plus bas). Contrôler en 1P dans le jeu, pas sur la planche.
+  haut) se lit tête en bas (premières versions de PATROUILLE et de CHANTIER, corrigées en #478 et #476). `kn.text(...,
+  angle=180)`, et la ligne qui doit paraître au-dessus se place côté tranchant (h plus bas). Retourner une pile de lignes
+  la fait monter vers le dos : au talon, rien d'écrit au-dessus de h ≈ 0,10, les dents mordent le texte. Une vue
+  `--flat` tournée de 180° (PIL `rotate(180)`) montre le sens de lecture en 1P ; contrôler ensuite dans le jeu.
 - **Guilloché (GUILLOCHÉ)** : sillons espacés d'au moins ~6 texels (0,028 unité, la texture fait ~210 texels par
   unité sur la lame) et tracés en profil cosinus, pas en traits fins : plus serrés, ils crénellent. Émail translucide
   en métal (« candy ») assombri au fond du sillon. Le médaillon du talon en argent clair et brillant brûlait au blanc
