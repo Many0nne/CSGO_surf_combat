@@ -32,6 +32,23 @@ def sample(kn, g, rgb):
 	).astype(np.float32)
 
 
+LUMA = np.array([0.2126, 0.7152, 0.0722], np.float32)
+
+
+def print_blade(kn, col, rough=0.7, frame=0.012, frame_col=(0.04, 0.03, 0.03), frame_metal=0.0, dark_gain=1.0):
+	"""Cette méthode permet d'imprimer l'illustration sur la lame : sombres en métal teinté (voile gris sinon en jeu,
+	cf. VELOURS), éclaircis de dark_gain (le métal sombre noircit en jeu), clairs en non-métal de rugosité rough, cadre
+	le long du contour du plat (trou et dents compris, pas sur le biseau, large en 1P) ; renvoie la luminance."""
+	lum = col @ LUMA
+	dark = np.clip((0.30 - lum) / 0.15, 0, 1)
+	col = col * (1 + (dark_gain - 1) * dark)[..., None]
+	kn.paint(kn.blade, col, rough - 0.1 * dark, dark, detail=0.08, ao=0.35)
+	kn.put("cadre", (kn.dist > 0) & (kn.dist < frame))
+	k = kn.sample("cadre", blur=0.6) * kn.flat
+	kn.paint(k, frame_col, 0.35, frame_metal, detail=0.2)
+	return lum
+
+
 def source(name):
 	"""Cette méthode permet d'obtenir le chemin de l'illustration source d'un skin (`art/<skin>.png`)."""
 	return os.path.join(os.path.dirname(os.path.abspath(__file__)), "art", f"{name}.png")
