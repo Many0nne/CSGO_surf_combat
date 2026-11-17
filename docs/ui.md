@@ -869,6 +869,10 @@ caisse. Sous-titre « CAISSE · 10 SKINS · UN PAR OUVERTURE ».
   depuis 2 s, l'arme se balance lentement de ±30° autour du profil. Aide en bas à droite : « SURVOL · VOIR UN SKIN »,
   « CLIC · LE GARDER », « GLISSER · LE TOURNER ». L'aperçu se retire au changement de caisse ou de vue et dès une
   demande d'achat (l'ouverture part du plan détail).
+- **Rotation au doigt et à la manette (#469)** : même glisser au doigt (position du toucher, un seul toucher suivi, même
+  0,5° par pixel ; un toucher sans glissement ne tourne rien et `processed` laisse les boutons à l'interface) et stick
+  droit (`Thumbstick2`, zone morte et courbe de `GamepadRules.lookRate`, un tour en 1,5 s à fond). Règles pures dans
+  `MenuSceneRules.dragSpin` / `stickSpin` (spec Lune). Hors du shop, `FPSCamera` est arrêtée : le stick ne fait rien d'autre.
 - Pistes écartées pour l'aperçu : un grand aperçu 2D dans l'interface (`ViewportFrame`, comme l'écran ARMES) éclaire
   mal les métaux, le skin y paraît plus terne qu'en jeu ; un mode d'inspection plein écran, plus long à faire et hors
   du décor du shop.

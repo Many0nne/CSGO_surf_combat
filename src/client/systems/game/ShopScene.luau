@@ -15,6 +15,7 @@ local IS_STUDIO = RunService:IsStudio()
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local CrateOpeningRules = require(Shared:WaitForChild("CrateOpeningRules"))
 local CrateStencil = require(Shared:WaitForChild("CrateStencil"))
+local GamepadRules = require(Shared:WaitForChild("GamepadRules"))
 local InventoryRules = require(Shared:WaitForChild("InventoryRules"))
 local PerfMarkers = require(Shared:WaitForChild("PerfMarkers"))
 local ShopCatalog = require(Shared:WaitForChild("ShopCatalog"))
@@ -48,6 +49,7 @@ local PREVIEW_SWAY_PERIOD = 8 -- s par aller-retour
 local PREVIEW_SETTLE_RATE = 2 -- retour au balancement après un glissement (Rules.damp)
 local DRAG_RATE = math.rad(0.5) -- par pixel de souris
 local DRAG_PITCH = math.rad(35) -- inclinaison au plus, vers la caméra ou à l'opposé
+local STICK_TURN_RATE = 2 * math.pi / 1.5 -- rad/s du stick droit à fond (#469) : un tour complet en 1,5 s
 local DRAG_IDLE = 2 -- s sans glisser avant que le balancement reprenne
 -- Lampe de face pendant l'aperçu : les skins métalliques reflètent la pièce sombre et ne prennent que la lumière venue
 -- presque de face (#358 : sans elle, l'AWP Couchant restait presque noire en gros plan)
@@ -191,6 +193,8 @@ local yaw, pitch = 0, 0
 local swayClock = 0
 local dragging = false
 local dragFrom = Vector2.zero
+local dragInput: InputObject? -- toucher qui tient le glisser en cours (nil : souris)
+local stickPos = Vector2.zero -- stick droit (#469), x à droite, y vers le haut
 local lastDrag = -math.huge
 local dragConnections: { RBXScriptConnection } = {}
 
@@ -807,6 +811,7 @@ local function setPreview(skinId: string?)
 	end
 	if not preview then
 		dragging = false
+		dragInput = nil
 	end
 end
 
@@ -815,6 +820,14 @@ end
 local function updatePreview(dt: number)
 	local shown = preview
 	if shown then
+		-- Stick droit : tourne l'arme en détail, la main reste au stick tant qu'il est incliné (pas de balancement)
+		if mode == "detail" and interactive and not dragging then
+			local rx, ry = GamepadRules.lookRate(stickPos.X, stickPos.Y)
+			if rx ~= 0 or ry ~= 0 then
+				yaw, pitch = Rules.stickSpin(yaw, pitch, rx, ry, dt, STICK_TURN_RATE, DRAG_PITCH)
+				lastDrag = os.clock()
+			end
+		end
 		if not dragging and os.clock() - lastDrag > DRAG_IDLE then
 			swayClock += dt
 			local sway = PREVIEW_SWAY * math.sin(swayClock * 2 * math.pi / PREVIEW_SWAY_PERIOD)
@@ -1144,7 +1157,8 @@ function ShopScene.start()
 	end
 	connection = RunService.RenderStepped:Connect(PerfMarkers.wrap("shop 3D", update))
 	inputConnection = UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
-		if processed or input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+		local isTouch = input.UserInputType == Enum.UserInputType.Touch
+		if processed or (input.UserInputType ~= Enum.UserInputType.MouseButton1 and not isTouch) then
 			return
 		end
 		if opening then
@@ -1156,28 +1170,54 @@ function ShopScene.start()
 		elseif preview and mode == "detail" and interactive then
 			-- Aperçu retenu : glisser dans la salle tourne l'arme
 			dragging = true
-			dragFrom = UserInputService:GetMouseLocation()
+			-- Doigt : position du toucher (pas de curseur) ; on ne suit que ce toucher jusqu'à son relâchement
+			dragInput = if isTouch then input else nil
+			dragFrom = if isTouch
+				then Vector2.new(input.Position.X, input.Position.Y)
+				else UserInputService:GetMouseLocation()
 			lastDrag = os.clock()
 		end
 	end)
 	table.insert(
 		dragConnections,
 		UserInputService.InputChanged:Connect(function(input: InputObject)
-			if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-				local at = UserInputService:GetMouseLocation()
-				local delta = at - dragFrom
-				dragFrom = at
-				yaw += delta.X * DRAG_RATE
-				pitch = math.clamp(pitch + delta.Y * DRAG_RATE, -DRAG_PITCH, DRAG_PITCH)
-				lastDrag = os.clock()
+			if input.KeyCode == Enum.KeyCode.Thumbstick2 then
+				stickPos = Vector2.new(input.Position.X, input.Position.Y)
+				return
 			end
+			if not dragging then
+				return
+			end
+			local at: Vector2
+			if dragInput then
+				if input ~= dragInput then
+					return
+				end
+				at = Vector2.new(input.Position.X, input.Position.Y)
+			elseif input.UserInputType == Enum.UserInputType.MouseMovement then
+				at = UserInputService:GetMouseLocation()
+			else
+				return
+			end
+			local delta = at - dragFrom
+			dragFrom = at
+			yaw, pitch = Rules.dragSpin(yaw, pitch, delta.X, delta.Y, DRAG_RATE, DRAG_PITCH)
+			lastDrag = os.clock()
 		end)
 	)
 	table.insert(
 		dragConnections,
 		UserInputService.InputEnded:Connect(function(input: InputObject)
-			if dragging and input.UserInputType == Enum.UserInputType.MouseButton1 then
+			if input.KeyCode == Enum.KeyCode.Thumbstick2 then
+				stickPos = Vector2.zero
+				return
+			end
+			local ends = if dragInput
+				then input == dragInput
+				else input.UserInputType == Enum.UserInputType.MouseButton1
+			if dragging and ends then
 				dragging = false
+				dragInput = nil
 				-- Ramené à un demi-tour près : le balancement reprend sans dérouler les tours faits à la souris
 				yaw = (yaw + math.pi) % (2 * math.pi) - math.pi
 				lastDrag = os.clock()
@@ -1206,6 +1246,9 @@ function ShopScene.stop()
 		drag:Disconnect()
 	end
 	table.clear(dragConnections)
+	dragging = false
+	dragInput = nil
+	stickPos = Vector2.zero
 	setPreview(nil)
 	if previewLight then
 		previewLight.Brightness = 0
