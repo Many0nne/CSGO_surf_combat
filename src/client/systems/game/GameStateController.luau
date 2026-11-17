@@ -477,6 +477,9 @@ local function listenToRemotes()
 		-- durée (HighlightClipRules.resultDuration), comptée avant la réception : une demande un peu en avance reçoit
 		-- "result" et est renvoyée (SpawnRequestRules.RESULT_RETRY) ; la première acceptée démarre la manche (beforeSpawn).
 		local clip = HighlightClipRules.readClip(data and data.clip)
+		if data and data.clip ~= nil and not clip then
+			warn("[Highlight] clip reçu illisible : ignoré")
+		end
 		-- Cette méthode permet d'enchaîner sur la manche suivante lorsque la bannière (et le clip) est finie.
 		local function afterResult()
 			if SpawnRequestRules.afterResult(state) == "SPAWNING" then

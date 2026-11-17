@@ -74,6 +74,13 @@ type Session = {
 }
 
 local current: Session? = nil
+
+-- Cette méthode permet d'écrire une ligne préfixée dans la sortie de Studio lorsque la lecture avance (rien en jeu publié).
+local function log(text: string)
+	if RunService:IsStudio() then
+		print("[Highlight] " .. text)
+	end
+end
 local sample = table.create(6, 0) -- ligne interpolée de la caméra (réutilisée chaque image)
 local actorSample = table.create(4, 0)
 
@@ -328,6 +335,7 @@ local function finish(session: Session)
 	if current == session then
 		current = nil
 	end
+	log(string.format("lecture finie à %.2f s sur %.2f s", session.elapsed, session.clip.duration))
 	cleanup(session)
 	task.spawn(session.onDone)
 end
@@ -470,6 +478,7 @@ function HighlightPlayer.play(clip: HighlightClipRules.Clip, onDone: () -> ())
 	local player = Players.LocalPlayer
 	local playerGui = player and player:FindFirstChildOfClass("PlayerGui")
 	if not pov or #pov < 2 or not camera or not playerGui then
+		log("clip illisible : lecture sautée")
 		task.spawn(onDone)
 		return
 	end
@@ -528,6 +537,21 @@ function HighlightPlayer.play(clip: HighlightClipRules.Clip, onDone: () -> ())
 		camera.CameraType = Enum.CameraType.Scriptable
 		camera.FieldOfView = CameraConfig.DEFAULT_FOV
 		buildViewmodel(session, camera)
+		local built = 0
+		for _ in session.actors do
+			built += 1
+		end
+		log(
+			string.format(
+				"lecture : %s, %.1f s, %d/%d figurant(s), viewmodel %s, POV %s",
+				clip.killerName,
+				clip.duration,
+				built,
+				#clip.actors,
+				if session.viewmodel then session.viewmodel.Name else "aucun",
+				if clip.degraded then "serveur" else "du client"
+			)
+		)
 		render(session, 0)
 		RunService:BindToRenderStep(
 			BIND_NAME,
