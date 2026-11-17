@@ -14,6 +14,12 @@ officielle) ; annonces du DevForum citées au fil du texte.
   exporter en JPG de qualité 90 à 95).
 - **Nombre :** jusqu'à 10 images ou vidéos sur la page du jeu ; **2 à 5 miniatures actives** pour la personnalisation de
   l'accueil (voir plus bas). Vidéos : 3 envois par mois, refus compris ; pas affichées sur Xbox, PlayStation ni VR.
+- **Vidéo :** gratuite, placée **en premier** sur la page du jeu une fois acceptée, et peut aussi apparaître sur l'accueil.
+  **30 s au plus** (ancienne page d'aide et [fil du DevForum de 2024](https://devforum.roblox.com/t/what-is-the-maximum-length-for-video-thumbnails/3073873) ;
+  la documentation actuelle ne donne ni durée, ni format, ni poids : à confirmer dans la fenêtre d'envoi). Elle doit
+  montrer du **vrai gameplay** : angles de caméra variés, retouche légère (luminosité, contraste) et logo permis ;
+  interface du jeu permise ; texte ajouté « avec parcimonie, pour décrire le gameplay ». **Son :** ni voix off, ni
+  chat vocal, ni musique à paroles ; seule la musique du catalogue audio de Roblox est autorisée.
 - **Obligatoire depuis le 19/10/2026 :** un jeu sans miniature personnalisée n'est plus recommandé sur l'accueil
   ([annonce](https://devforum.roblox.com/t/homepage-recommendation-eligibility-now-requires-a-custom-thumbnail/4945086)).
 - **La 1re miniature est la plus vue :** depuis le 16/03/2026, la recherche affiche la **première miniature 16:9** de la
@@ -134,6 +140,76 @@ libérer Studio.
 |---|---|
 | Mises en scène sur les rampes de Dizzy (surf en vue subjective, lunette à FOV 10, inspection des deux skins, surfeur de dos), retravaillées par ChatGPT | « Pas très proche des miniatures de référence » ; zoom sur l'ennemi et plan avec l'adversaire seul inutiles ; la rampe gêne sur les inspections ; sa tôle est laide et on croit que le joueur tombe ou vole. Gardés : mer de nuages et soleil, inspections des armes |
 | Décor dédié : deux rampes isolées au-dessus des nuages, vers le soleil (vue d'ensemble, tir en vol, couteau, inspections sans rampe) | « Trop focus sur le surf » : on ne comprend pas le surf sur une miniature. Passage au kit et à ChatGPT en entier |
+
+## Vidéo de la page (#525)
+
+Objectif : qu'un joueur qui ne connaît pas le surf comprenne le jeu avant de cliquer. La vidéo passe avant les
+miniatures sur la page du jeu, et la plupart des gens la voient sans le son.
+
+**Décisions de l'utilisateur (17/11/2026) :** vrai gameplay monté, pas d'animation (c'est aussi ce qu'exige la
+modération) ; **16:9 seulement** (le vertical reste aux vidéos TikTok) ; **aucun texte ajouté** ; **musique du
+catalogue Roblox** sous les sons du jeu. Répartition comme pour TikTok : l'utilisateur tourne les plans d'après la liste
+ci-dessous, Claude monte, l'utilisateur publie.
+
+**Expliquer sans texte :** c'est l'interface du jeu qui parle (elle est autorisée). Le compteur de vitesse change de
+palier (`RUN`, `FAST`, `SURF`, `MACH`, `HUDRules.SPEED_TIERS`) et l'affichage des touches montre A et D enfoncées
+pendant le surf et l'air strafe. Les deux doivent donc rester visibles dans les plans de mouvement.
+
+### Découpage (30 s)
+
+Le meilleur moment ouvre la vidéo ; chaque plan dure 2 à 5 s, coupé sur l'action (un saut, un tir).
+
+| Temps | Plan | Ce qu'on doit comprendre |
+|---|---|---|
+| 0–3 s | P01 tir en vol | Accroche : on tue en plein saut, au sniper, au-dessus du vide |
+| 3–8 s | P02 surf | On glisse sur une rampe et on prend de la vitesse (le compteur passe à `SURF`) |
+| 8–11 s | P03 surfeur vu de loin | Ce qu'est le surf vu de l'extérieur (plan facultatif, remplacé par P05 s'il manque) |
+| 11–15 s | P04 bhop | Les sauts enchaînés font gagner de la vitesse (le compteur monte) |
+| 15–18 s | P05 air strafe | On tourne en l'air sans perdre de vitesse |
+| 18–21 s | P06 duel à la lunette | Combat : visée, tir, l'adversaire tombe (fil des éliminations) |
+| 21–23 s | P07 couteau | Le couteau au corps à corps |
+| 23–27 s | P08 + P09 inspections | Les skins : AWP CISELURE, puis M9 CUIR DE CORDOUE |
+| 27–30 s | P10 sortie | Grand saut vers le soleil couchant au-dessus de la mer de nuages |
+
+### Liste de plans à tourner
+
+**Réglages, une fois pour toutes :**
+
+- Roblox en plein écran 1920×1080 ; graphismes réglés à la main au maximum (Échap > Paramètres > Mode graphique :
+  Manuel, curseur à fond). Chat Roblox fermé, pas de liste des joueurs ouverte.
+- OBS : 1920×1080, **60 i/s**, haute qualité (CQP/CRF 16 à 20 ou débit ≥ 40 Mb/s), son du jeu seul (ni micro, ni
+  Discord, ni notifications Windows).
+- En jeu : affichage des touches en « simple », champ de vision et viseur par défaut. AWP **CISELURE** et M9 **CUIR DE
+  CORDOUE** équipés. Jouer avec le compte propriétaire du jeu : il est admin d'office (`Roles`) et possède tout le
+  catalogue.
+- Une partie normale sur Dizzy, avec des bots ou d'autres joueurs comme adversaires.
+- Un fichier par prise, nommé `P<numéro>-<nom>-<prise>.mp4` (ex. `P01-tir-en-vol-3.mp4`). Plusieurs prises par plan :
+  le tri se fait au montage, inutile de couper soi-même. Dépôt : `worktrees/.rushes/525/` dans le dépôt principal, à
+  la main, ou un lien de partage.
+
+| Plan | À filmer | Visible à l'écran | Prises |
+|---|---|---|---|
+| P01 tir en vol | Sauter d'une rampe ou d'un toit au-dessus du vide, ouvrir la lunette et tuer un adversaire en l'air ou sur une rampe. Le plan le plus dur : enregistrer 5 à 10 min de tentatives d'affilée | Soleil ou ciel dans le champ, rayon de la balle, élimination dans le fil | 5+ réussies si possible |
+| P02 surf | Arriver sur une rampe, la descendre jusqu'au bout et décoller ; idéalement face au soleil | Compteur de vitesse qui passe à `SURF` ou `MACH`, touches A ou D tenues | 3 |
+| P03 surfeur vu de loin (facultatif) | Caméra libre de Roblox (Maj+P, réservée aux développeurs du jeu) : filmer de côté un bot ou un 2e compte qui surfe une rampe. Si la caméra libre ne marche pas avec la caméra du jeu, abandonner le plan et le signaler | Le personnage entier, la rampe entière, la glissade | 2 |
+| P04 bhop | Sur un sol plat et dégagé, enchaîner 8 à 10 sauts sans s'arrêter en faisant de l'air strafe | Compteur qui monte de `RUN` à `FAST` ou au-delà, touches A et D en alternance | 3 |
+| P05 air strafe | Saut long (sortie de rampe ou d'un toit à l'autre) avec un virage net en l'air | Le décor qui tourne, touches A ou D, vitesse conservée | 3 |
+| P06 duel à la lunette | Visée à la lunette d'un adversaire qui bouge, tir, élimination | Lunette, tir, élimination dans le fil | 3 |
+| P07 couteau | Rattraper un adversaire et l'éliminer au M9 CUIR DE CORDOUE | La lame pendant le coup | 2 |
+| P08 inspection AWP | Au calme, face au soleil, touche F avec l'AWP CISELURE | Animation d'inspection complète, skin bien éclairé | 2 |
+| P09 inspection M9 | Idem avec la M9 CUIR DE CORDOUE | Idem | 2 |
+| P10 sortie | Du point le plus haut de la map, grand saut vers le soleil couchant, regard vers la mer de nuages | Ciel, soleil, nuages ; personne d'autre | 2 |
+
+### Montage et export
+
+- Musique : un titre instrumental du catalogue audio de Roblox (Creator Store > Audio > Music), 2 ou 3 candidats proposés
+  au moment du montage. Sons du jeu gardés par-dessus (tirs, sauts).
+- Coupes sur l'action, pas de transition, pas d'effet ajouté. Recadrage léger permis (≤ 5 %) pour sortir les boutons de
+  Roblox des bords ; luminosité et contraste seulement.
+- Export : MP4 H.264, 1920×1080, 60 i/s, AAC, **30 s au plus**. Fichier final versionné : `assets/promo/video/`
+  (MP4 suivi par Git LFS).
+- Envoi : Creator Hub > le jeu > Configure > Places > la place de départ > **Videos** (menu de gauche). Une vidéo
+  refusée consomme un des 3 envois du mois.
 
 ## Mise en ligne et personnalisation (test A/B)
 
