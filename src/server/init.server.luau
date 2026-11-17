@@ -228,6 +228,12 @@ local function trackWeapon3P(participant: Participants.Participant, char: Model)
 			Validator.noteEquip(participant, tool, os.clock())
 		end
 		onToolEquipped(char, tool)
+		if Participants.characterOf(participant) == char then
+			-- Changement d'arme rejoué dans le clip de la partie (#499), skin compris
+			local player = participant.player
+			local skinId = if player then InventoryRules.skinOfTool(InventoryStore.equipped(player), tool.Name) else nil
+			HighlightService.noteEquip(participant, tool.Name, skinId)
+		end
 	end
 	for _, child in char:GetChildren() do
 		if child:IsA("Tool") then
@@ -245,6 +251,10 @@ local function trackWeapon3P(participant: Participants.Participant, char: Model)
 		end
 		if tracksEquip() then
 			Validator.noteUnequip(participant, child, os.clock())
+		end
+		if Participants.characterOf(participant) == char and not char:FindFirstChildOfClass("Tool") then
+			-- Mains vides pour le clip de la partie, sauf si l'arme suivante est déjà sortie
+			HighlightService.noteEquip(participant, nil, nil)
 		end
 		if equippedTools[char] == child then
 			equippedTools[char] = nil

@@ -3,7 +3,8 @@
 -- de l'apparence gardée par le serveur, ReplicatedStorage.HighlightActors) suivent les positions enregistrées, avec
 -- leur arme 3P (tenue posée par WeaponThirdPersonView, tag conservé) et leur animation de déplacement
 -- (CharacterAnimator). La caméra est scriptée sur la prise du tireur (HighlightClipRules : POV recalé par le serveur),
--- avec le viewmodel de son arme et de son skin, ses tirs (piste Shoot et ses sons) ; les tirs des figurants sont
+-- avec le viewmodel de son arme et de son skin (changements d'arme rejoués avec la piste Equip), ses tirs (piste Shoot
+-- et ses sons) ; les tirs des figurants sont
 -- entendus en 3D, les victimes tombent en ragdoll (DeathRagdoll). Tout est détruit à la fin (figurants, viewmodel,
 -- sons, corps, interface, liaison de rendu).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -57,6 +58,15 @@ type Actor = {
 	velocity: Vector3, -- vitesse sur sa piste à la dernière image (élan donné à son ragdoll)
 }
 
+-- Viewmodel d'une arme du tireur (préparé au début du clip, caché tant qu'elle n'est pas en main)
+type Held = {
+	model: Model,
+	weapon: string, -- fiche WeaponConfig
+	offset: CFrame,
+	parts: { BasePart },
+	tracks: { [string]: AnimationTrack },
+}
+
 type Session = {
 	clip: HighlightClipRules.Clip,
 	pov: { HighlightClipRules.Row },
@@ -64,9 +74,10 @@ type Session = {
 	folder: Folder,
 	gui: ScreenGui,
 	fade: Frame,
-	viewmodel: Model?,
-	offset: CFrame,
-	tracks: { [string]: AnimationTrack },
+	equips: { HighlightClipRules.Equip },
+	nextEquip: number,
+	held: { [string]: Held }, -- par outil et skin
+	viewmodel: Held?, -- arme en main (nil : mains vides)
 	conns: { RBXScriptConnection },
 	sounds: { Instance },
 	elapsed: number,
@@ -95,19 +106,32 @@ local function toolTemplate(toolName: string?): Tool?
 	return if tool and tool:IsA("Tool") then tool else nil
 end
 
--- Cette méthode permet de préparer le viewmodel de l'arme du tireur (skin compris) devant la caméra lorsque le clip
--- démarre : clone du modèle de ReplicatedStorage.ViewModels, sans ombre, pistes chargées (Idle en boucle).
-local function buildViewmodel(session: Session, camera: Camera)
-	local clip = session.clip
-	local tool = toolTemplate(clip.tool)
+-- Cette méthode permet de nommer le viewmodel d'une arme du tireur (outil et skin) lorsqu'il est préparé ou sorti.
+local function heldKey(equip: HighlightClipRules.Equip): string
+	return (equip.tool or "") .. "|" .. (equip.skinId or "")
+end
+
+-- Cette méthode permet de montrer ou cacher un viewmodel du tireur lorsqu'il sort ou range l'arme (caché par le
+-- modificateur de transparence, comme ViewmodelSystem : les pistes restent chargées).
+local function setHeldVisible(held: Held, visible: boolean)
+	local modifier = if visible then 0 else 1
+	for _, part in held.parts do
+		part.LocalTransparencyModifier = modifier
+	end
+end
+
+-- Cette méthode permet de préparer, caché devant la caméra, le viewmodel d'une arme du tireur (skin compris) lorsque
+-- le clip démarre : clone du modèle de ReplicatedStorage.ViewModels, sans ombre, pistes chargées ; nil sans modèle.
+local function buildViewmodel(camera: Camera, equip: HighlightClipRules.Equip): Held?
+	local tool = toolTemplate(equip.tool)
 	local viewmodelName = tool and tool:GetAttribute("ViewmodelName")
-	if type(viewmodelName) ~= "string" or viewmodelName == "" then
-		return
+	if not tool or type(viewmodelName) ~= "string" or viewmodelName == "" then
+		return nil
 	end
 	local container = ReplicatedStorage:FindFirstChild("ViewModels")
 	local template = container and container:FindFirstChild(viewmodelName)
 	if not (template and template:IsA("Model")) then
-		return
+		return nil
 	end
 	local model = template:Clone()
 	if not model.PrimaryPart then
@@ -118,11 +142,13 @@ local function buildViewmodel(session: Session, camera: Camera)
 	end
 	if not model.PrimaryPart then
 		model:Destroy()
-		return
+		return nil
 	end
+	local parts = {}
 	for _, inst in model:GetDescendants() do
 		if inst:IsA("BasePart") then
 			inst.CastShadow = false
+			table.insert(parts, inst)
 		end
 	end
 	local humanoid = model:FindFirstChildWhichIsA("Humanoid")
@@ -130,28 +156,72 @@ local function buildViewmodel(session: Session, camera: Camera)
 		humanoid.EvaluateStateMachine = false
 		humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
 	end
-	if clip.skinId then
-		WeaponSkins.apply(model, viewmodelName, clip.skinId)
+	if equip.skinId then
+		WeaponSkins.apply(model, viewmodelName, equip.skinId)
 	end
-	local offset = tool and tool:GetAttribute("ViewmodelOffset")
-	session.offset = if typeof(offset) == "CFrame" then offset else CFrame.new()
-	model:PivotTo(camera.CFrame * session.offset)
+	local offset = tool:GetAttribute("ViewmodelOffset")
+	local weapon = tool:GetAttribute("WeaponName")
+	local held: Held = {
+		model = model,
+		weapon = if type(weapon) == "string" then weapon else tool.Name,
+		offset = if typeof(offset) == "CFrame" then offset else CFrame.new(),
+		parts = parts,
+		tracks = {},
+	}
+	setHeldVisible(held, false)
+	model:PivotTo(camera.CFrame * held.offset)
 	model.Parent = camera
-	session.viewmodel = model
 	local animator = AnimationSoundSystem.getAnimator(model)
 	local folder = model:FindFirstChild("Animations") or model:FindFirstChild("AnimSaves")
 	if animator and folder then
 		for _, anim in folder:GetChildren() do
 			if anim:IsA("Animation") then
-				session.tracks[anim.Name] = animator:LoadAnimation(anim)
+				held.tracks[anim.Name] = animator:LoadAnimation(anim)
 			end
 		end
 	end
-	local idle = session.tracks.Idle
+	local idle = held.tracks.Idle
 	if idle then
 		idle.Looped = true
 		idle.Priority = Enum.AnimationPriority.Idle
+	end
+	return held
+end
+
+-- Cette méthode permet de mettre une arme en main du tireur lorsque le clip y arrive : l'arme précédente est rangée
+-- (pistes coupées, cachée), la nouvelle montrée avec sa boucle Idle et, pour un changement en cours de clip (`animate`),
+-- sa piste Equip et ses sons, comme en jeu (ViewmodelSystem) ; mains vides si l'arme n'a pas de viewmodel.
+local function equipHeld(session: Session, equip: HighlightClipRules.Equip, animate: boolean)
+	local held = session.held[heldKey(equip)]
+	if held == session.viewmodel then
+		return
+	end
+	local previous = session.viewmodel
+	if previous then
+		for _, track in previous.tracks do
+			track:Stop(0)
+		end
+		setHeldVisible(previous, false)
+	end
+	session.viewmodel = held
+	session.swing = 0
+	if not held then
+		return
+	end
+	setHeldVisible(held, true)
+	local idle = held.tracks.Idle
+	if idle then
 		idle:Play(0)
+	end
+	local equipTrack = held.tracks.Equip
+	if animate and equipTrack then
+		equipTrack.Looped = false
+		equipTrack:Play(0)
+		local cfg = WeaponConfig.Weapons[held.weapon]
+		local sounds = cfg and cfg.AnimationSounds and cfg.AnimationSounds.Equip or {}
+		for _, conn in AnimationSoundSystem.connectSoundMarkers(equipTrack, held.model, sounds) do
+			table.insert(session.conns, conn)
+		end
 	end
 end
 
@@ -159,17 +229,18 @@ end
 -- piste Shoot et ses sons à marqueurs (WeaponConfig.AnimationSounds), comme en jeu ; un coup de couteau qui tue sonne
 -- « Shoot_human », sinon « Shoot_void ».
 local function playOwnShot(session: Session, lethal: boolean)
-	local model = session.viewmodel
-	if not model then
+	local held = session.viewmodel
+	if not held then
 		return
 	end
-	local cfg = WeaponConfig.Weapons[session.clip.weapon]
+	local model = held.model
+	local cfg = WeaponConfig.Weapons[held.weapon]
 	local name = "Shoot"
 	if cfg and cfg.IsMelee and cfg.ShootAnimations and #cfg.ShootAnimations > 0 then
 		session.swing = session.swing % #cfg.ShootAnimations + 1
 		name = cfg.ShootAnimations[session.swing]
 	end
-	local track = session.tracks[name]
+	local track = held.tracks[name]
 	if not track then
 		return
 	end
@@ -337,14 +408,14 @@ local function cleanup(session: Session)
 		sound:Destroy()
 	end
 	table.clear(session.sounds)
-	for _, track in session.tracks do
-		track:Stop(0)
+	for _, held in session.held do
+		for _, track in held.tracks do
+			track:Stop(0)
+		end
+		held.model:Destroy()
 	end
-	table.clear(session.tracks)
-	if session.viewmodel then
-		session.viewmodel:Destroy()
-		session.viewmodel = nil
-	end
+	table.clear(session.held)
+	session.viewmodel = nil
 	session.folder:Destroy()
 	session.gui:Destroy()
 	DeathRagdoll.clear()
@@ -381,8 +452,13 @@ local function render(session: Session, dt: number)
 			* CFrame.Angles(0, math.rad(-sample[5]), 0)
 			* CFrame.Angles(math.rad(sample[6]), 0, 0)
 	end
-	if session.viewmodel then
-		session.viewmodel:PivotTo(camera.CFrame * session.offset)
+	while session.nextEquip <= #session.equips and session.equips[session.nextEquip].t <= t do
+		equipHeld(session, session.equips[session.nextEquip], session.nextEquip > 1)
+		session.nextEquip += 1
+	end
+	local held = session.viewmodel
+	if held then
+		held.model:PivotTo(camera.CFrame * held.offset)
 	end
 	placeActors(session, t, dt)
 	while session.nextShot <= #clip.shots and clip.shots[session.nextShot].t <= t do
@@ -398,7 +474,8 @@ local function render(session: Session, dt: number)
 			end
 			playOwnShot(session, lethal)
 			if dir then
-				ShotEffects.playReplay(session.viewmodel, camera.CFrame.Position, dir, { session.folder, camera })
+				local model = if session.viewmodel then session.viewmodel.model else nil
+				ShotEffects.playReplay(model, camera.CFrame.Position, dir, { session.folder, camera })
 			end
 		else
 			local actor = session.actors[shot.id]
@@ -422,7 +499,8 @@ local function render(session: Session, dt: number)
 			placeAtLastRow(actor, kill.t)
 		end
 		if actor and actor.visible then
-			DeathRagdoll.spawn(actor.model, kill.direction, clip.weapon, kill.headshot, actor.velocity)
+			local weapon = if type(kill.weapon) == "string" then kill.weapon else clip.weapon
+			DeathRagdoll.spawn(actor.model, kill.direction, weapon, kill.headshot, actor.velocity)
 			setVisible(actor, false)
 			actor.downAt = kill.t
 		end
@@ -542,9 +620,10 @@ function HighlightPlayer.play(clip: HighlightClipRules.Clip, onDone: () -> ())
 		folder = folder,
 		gui = gui,
 		fade = fade,
+		equips = HighlightClipRules.equipTimeline(clip),
+		nextEquip = 1,
+		held = {},
 		viewmodel = nil,
-		offset = CFrame.new(),
-		tracks = {},
 		conns = {},
 		sounds = {},
 		elapsed = 0,
@@ -584,19 +663,31 @@ function HighlightPlayer.play(clip: HighlightClipRules.Clip, onDone: () -> ())
 		end
 		camera.CameraType = Enum.CameraType.Scriptable
 		camera.FieldOfView = CameraConfig.DEFAULT_FOV
-		buildViewmodel(session, camera)
+		-- Toutes les armes du clip préparées d'avance : un changement d'arme ne clone rien pendant la lecture
+		local weapons = {}
+		for _, equip in session.equips do
+			local key = heldKey(equip)
+			if equip.tool and not session.held[key] then
+				local held = buildViewmodel(camera, equip)
+				if held then
+					session.held[key] = held
+					table.insert(weapons, held.model.Name)
+				end
+			end
+		end
 		local built = 0
 		for _ in session.actors do
 			built += 1
 		end
 		log(
 			string.format(
-				"lecture : %s, %.1f s, %d/%d figurant(s), viewmodel %s, POV %s",
+				"lecture : %s, %.1f s, %d/%d figurant(s), viewmodel(s) %s, %d changement(s) d'arme, POV %s",
 				clip.killerName,
 				clip.duration,
 				built,
 				#clip.actors,
-				if session.viewmodel then session.viewmodel.Name else "aucun",
+				if #weapons > 0 then table.concat(weapons, ", ") else "aucun",
+				#session.equips - 1,
 				if clip.degraded then "serveur" else "du client"
 			)
 		)

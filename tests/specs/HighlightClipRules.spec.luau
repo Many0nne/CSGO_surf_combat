@@ -185,6 +185,62 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("HighlightClipRules changements d'arme", function()
+		T.it("arme en main au début, puis chaque changement de la fenêtre", function()
+			local ring = R.newEquipRing()
+			R.pushEquip(ring, 1, "AWP", "skinA")
+			R.pushEquip(ring, 5, nil)
+			R.pushEquip(ring, 5.05, "Knife")
+			R.pushEquip(ring, 7, nil)
+			R.pushEquip(ring, 8, "AWP", "skinA")
+			R.pushEquip(ring, 20, "Glock")
+			local list = R.equipsIn(ring, 3, 10)
+			T.expectEqual(#list, 4)
+			T.expectEqual(list[1].t, 3)
+			T.expectEqual(list[1].tool, "AWP")
+			T.expectEqual(list[1].skinId, "skinA")
+			-- Rangement suivi d'une sortie immédiate : passage direct au couteau
+			T.expectEqual(list[2].tool, "Knife")
+			T.expectEqual(list[3].tool, nil)
+			T.expectEqual(list[4].t, 8)
+		end)
+
+		T.it("sans arme connue au début, la liste commence au premier changement", function()
+			local ring = R.newEquipRing()
+			R.pushEquip(ring, 4, "AWP")
+			local list = R.equipsIn(ring, 3, 10)
+			T.expectEqual(#list, 1)
+			T.expectEqual(list[1].t, 4)
+		end)
+
+		T.it("une entrée qui ne change rien est écartée", function()
+			local ring = R.newEquipRing()
+			R.pushEquip(ring, 1, "AWP")
+			R.pushEquip(ring, 4, "AWP")
+			T.expectEqual(#R.equipsIn(ring, 3, 10), 1)
+		end)
+
+		T.it("lecture : arme du clip au début si la liste n'y commence pas, entrées abîmées ignorées", function()
+			local clip = {
+				duration = 6,
+				tool = "AWP",
+				skinId = "s",
+				equips = { { t = 2, tool = "Knife" }, { t = "x" }, { t = 99, tool = "Glock" }, { t = 1, tool = 3 } },
+			}
+			local list = R.equipTimeline(clip :: any)
+			T.expectEqual(#list, 2)
+			T.expectEqual(list[1].t, 0)
+			T.expectEqual(list[1].tool, "AWP")
+			T.expectEqual(list[1].skinId, "s")
+			T.expectEqual(list[2].tool, "Knife")
+			local old = R.equipTimeline({ duration = 6, tool = "AWP" } :: any)
+			T.expectEqual(#old, 1)
+			local held = R.equipTimeline({ duration = 6, tool = "AWP", equips = { { t = 0, tool = "Knife" } } } :: any)
+			T.expectEqual(#held, 1)
+			T.expectEqual(held[1].tool, "Knife")
+		end)
+	end)
+
 	T.describe("HighlightClipRules angles", function()
 		T.it("lookOf et anglesOf sont réciproques (convention FPSCamera)", function()
 			local look = R.lookOf(0, 0)
