@@ -464,7 +464,7 @@ marquages sont celles de Windows (`C:/Windows/Fonts`, Bahnschrift, Impact) : gé
 Même principe que pour l'AWP : un skin est **dessiné pour la M9 seule**, un script par skin dans `assets/m9/skins/`
 (`emaille` pour ÉMAIL, `patrouille`, `artdeco`, `hote` et `sphinx` de la série FILM, #433 et #436, et les communs
 `leurre`, `chantier`, `topo` et `ceramique`, #476, le rare `guilloche`, et ceux de la série 2, les communs `piedpoule`
-et `tomette`, les rares `azulejo` et `nacre`, #495, et les exceptionnels illustrés `chinoiserie` et `tapisserie`, #505),
+et `tomette`, les rares `azulejo` et `nacre`, #495, et les exceptionnels illustrés `chinoiserie` et `tapisserie`, #505, et le légendaire `cordoue`, #515),
 avec une fonction `paint(kn)`. La M9 n'a pas de source Blender : on
 part de ses cartes d'origine et de sa cuisson (`fetch_viewmodel.py` puis `bake_maps.py --glb`, étape 1 de « Fabriquer
 un skin » ci-dessous). Outils communs (`common.py`) :
@@ -556,6 +556,15 @@ qu'ensuite. Puis publier et cataloguer (étapes 4 et 5 de « Fabriquer un skin �
     (`kn.flat`).
   - **Fond sombre en métal teinté** : le bleu nuit de TAPISSERIE virait au noir en 1P ; éclaircir les sombres
     (`dark_gain` de `print_blade`, 1,6) avant de les poser en métal.
+- **Légendaire illustré de la M9 (#515, CUIR DE CORDOUE)** : même méthode, brief écrit comme celui de MARQUETERIE
+  (technique d'artisan réelle, palette fermée, « panneau à une ouverture et neuf encoches », aucun mot d'arme). La marche
+  au-dessus des exceptionnels se fait sur le manche (cuir gaufré en losanges calculé autour de l'axe, un nombre entier
+  de losanges par tour sinon une couture apparaît dessous) et sur la garde (or piqué au poinçon), sans seconde
+  illustration. Le modèle d'image a redessiné la silhouette : trou décalé d'environ 20 px, pointe plus fine,
+  recouvrement 0,908 avec la seule échelle et le seul décalage. `illustration.load(..., deform=True)` ajoute un recalage
+  souple (`art_fit.refine` : « demons » sur les distances signées des deux silhouettes, déplacement lissé) qui a amené le
+  trou, la pointe et les dents en place sans déformer le paon (0,978). Les skins déjà publiés gardent le recalage rigide
+  (`deform` vaut faux par défaut).
 
 ### Série FILM (#433)
 

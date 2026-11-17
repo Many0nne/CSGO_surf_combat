@@ -14,11 +14,11 @@ import art_fit  # tools/skins, mis dans le chemin par common
 from gabarit import Gabarit
 
 
-def load(kn, path):
-	"""Cette méthode permet de charger une illustration et de la recaler sur le gabarit de la lame ; renvoie le gabarit,
-	l'image recalée (H x W x 3, 0 à 1) et le recouvrement obtenu."""
+def load(kn, path, deform=False):
+	"""Cette méthode permet de charger une illustration et de la recaler sur le gabarit de la lame (déformée en douceur
+	si deform, cf. `art_fit.refine`) ; renvoie le gabarit, l'image recalée (H x W x 3, 0 à 1) et le recouvrement."""
 	g = Gabarit(kn)
-	rgb, score = art_fit.load(path, g.mask())
+	rgb, score = art_fit.load(path, g.mask(), deform)
 	return g, rgb, score
 
 
