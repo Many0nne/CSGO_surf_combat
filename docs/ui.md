@@ -514,8 +514,10 @@ règles du groupe : `docs/architecture.md` « Lobby entre amis ».
   présence à droite (DANS LE LOBBY, EN PARTIE, AU MENU, medium 16 px). Amis : nom, statut (SUR CE SERVEUR et DANS LE JEU
   en os, EN LIGNE atténué, HORS LIGNE gris, DANS TON GROUPE en ambre), action à droite en texte (INVITER ou REJOINDRE,
   survol rouge d'impact, atténuée si impossible). Les raisons d'une action impossible sont écrites une fois sous la
-  liste (gris, 16 px), pas sur chaque ligne. Pas d'avatars : rien d'autre dans le menu n'en montre, et les faux amis
-  de Studio ont des ids fictifs.
+  liste (gris, 16 px), pas sur chaque ligne. Photo de profil Roblox (tête de l'avatar, 32 px, adresse
+  `rbxthumb://type=AvatarHeadShot`, sans appel bloquant) à gauche de chaque nom, demandée par l'utilisateur ; fond
+  sombre tant qu'elle charge. Les faux amis de Studio ont des ids fictifs : leur photo est celle du compte qui porte cet
+  id, s'il existe (sans importance, Studio seulement).
 - **Actions en bas au centre** : RETOUR, QUITTER LE GROUPE (à plusieurs seulement), LANCER (action principale, os vif ;
   atténué pendant l'attente de l'hôte).
 - Messages (invitation refusée, REJOINDRE impossible, ami absent à l'arrivée) : sous les onglets (`MainMenu.showNotice`),

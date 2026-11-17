@@ -30,6 +30,9 @@ local GROUP_WIDTH = 300
 local FRIENDS_X = 340
 local FRIENDS_WIDTH = MenuPage.BlockWidth - FRIENDS_X
 local ROW_HEIGHT = 46 -- comme les lignes des Réglages
+local AVATAR_SIZE = 32 -- photo de profil Roblox, à gauche de chaque nom
+local AVATAR_GAP = 10
+local FRIEND_NAME_X = AVATAR_SIZE + AVATAR_GAP
 local NAME_SIZE = 20
 local INFO_SIZE = UITheme.TextSize.Min
 local ACTION_SIZE = 18
@@ -96,6 +99,25 @@ local function rowText(parent: Instance, props: { [string]: any }): TextLabel
 		merged[key] = value
 	end
 	return UIKit.text(merged)
+end
+
+-- Cette méthode permet de poser la photo de profil Roblox d'un joueur (tête de l'avatar) lorsqu'une ligne du groupe ou
+-- des amis se construit ; l'image arrive de Roblox sans appel bloquant (fond sombre tant qu'elle charge, ou pour un
+-- joueur de test de Studio, sans avatar).
+local function avatar(parent: Instance, userId: number, props: { [string]: any }): ImageLabel
+	local merged: { [string]: any } = {
+		Name = "Avatar",
+		Image = string.format("rbxthumb://type=AvatarHeadShot&id=%d&w=48&h=48", userId),
+		BackgroundColor3 = C.Scrim,
+		BackgroundTransparency = 0.4,
+		BorderSizePixel = 0,
+		Size = UDim2.fromOffset(AVATAR_SIZE, AVATAR_SIZE),
+		Parent = parent,
+	}
+	for key, value in props do
+		merged[key] = value
+	end
+	return UIKit.create("ImageLabel", merged)
 end
 
 -- Cette méthode permet de créer une ligne vide (hauteur fixe, filet os en bas) lorsqu'une liste se dessine.
@@ -187,6 +209,7 @@ local function paintGroup(): { [number]: boolean }
 			Padding = UDim.new(0, 8),
 			Parent = line,
 		})
+		avatar(line, member.id, { LayoutOrder = 0 })
 		local name = rowText(line, {
 			Name = "Name",
 			Text = member.name,
@@ -274,13 +297,15 @@ local function paintFriends(partyIds: { [number]: boolean })
 	}
 	for index, friend in list do
 		local row = makeRow(friendsList, index, FRIENDS_WIDTH - 12)
+		avatar(row, friend.id, { AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.fromScale(0, 0.5) })
 		rowText(row, {
 			Name = "Name",
 			Text = friend.name,
 			FontFace = F.DisplayText,
 			TextSize = NAME_SIZE,
 			TextColor3 = C.Bone,
-			Size = UDim2.new(0, 170, 1, 0),
+			Position = UDim2.fromOffset(FRIEND_NAME_X, 0),
+			Size = UDim2.new(0, 190 - FRIEND_NAME_X, 1, 0),
 		})
 		rowText(row, {
 			Name = "Status",
@@ -288,8 +313,8 @@ local function paintFriends(partyIds: { [number]: boolean })
 			FontFace = F.DisplayMedium,
 			TextSize = INFO_SIZE,
 			TextColor3 = if partyIds[friend.id] then C.Accent else STATUS_COLORS[friend.status],
-			Position = UDim2.fromOffset(180, 0),
-			Size = UDim2.new(0, 130, 1, 0),
+			Position = UDim2.fromOffset(200, 0),
+			Size = UDim2.new(0, 120, 1, 0),
 		})
 		local action, enabled = FriendRules.action(friend, ctx)
 		if action then
