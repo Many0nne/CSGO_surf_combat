@@ -58,7 +58,7 @@ if __name__ == "__main__":
 		if not os.path.isdir(vdir):
 			continue
 		for name in sorted(os.listdir(vdir)):
-			m = re.match(r"(.+)_(Color|Rough|Metal|Normal)\.png$", name)
+			m = re.match(r"(.+)_(Color|Rough|Metal|Normal|Emissive)\.png$", name)
 			if not m:
 				continue
 			prefix, kind = m.groups()
