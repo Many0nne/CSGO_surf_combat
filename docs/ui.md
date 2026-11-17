@@ -769,18 +769,20 @@ l'étiquette BIENTÔT jusqu'à #393 (voir « Achat d'une caisse »).
 
 ![Vue d'ensemble validée](ui/shop/vue_ensemble_ui.png)
 
-- Valeurs d'attente (points ouverts de #347, #332 et #424) : **deux caisses, une par arme, de 6 à 8 skins** (#424 :
-  14 skins existent, quatre caisses par série n'en auraient eu que 3 ou 4 chacune), dans l'ordre de la vitrine AWP puis
-  M9 (`crate.awp.serie1`, `crate.m9.serie1`, nom « AWP · SÉRIE 1 », bande rouge pour l'AWP, bleu-vert pour le M9), prix
+- **Composition d'une caisse (choix de l'utilisateur, 17/11/2026) : 4 COMMUNS, 3 RARES, 2 EXCEPTIONNELS, 1 LÉGENDAIRE**
+  (`perCrate` de `ShopCatalog.RARITIES`), et un skin n'est que dans une caisse. Une caisse qu'on ne peut pas remplir
+  n'est pas en vente : ses skins attendent dans `ShopCatalog.RESERVE` (rareté gardée pour qui les possède déjà) jusqu'à
+  ce qu'une arme en ait assez. En vente : deux caisses, une par arme, dans l'ordre de la vitrine AWP puis M9
+  (`crate.awp.serie1`, `crate.m9.serie1`, nom « AWP · SÉRIE 1 », bande rouge pour l'AWP, bleu-vert pour le M9), prix
   500 CRÉDITS par caisse, une ouverture = un seul skin de l'arme de la caisse, raretés en pyramide à la CS:GO (#430) :
   COMMUN 80 %, RARE 16 %, EXCEPTIONNEL 3,2 %, LÉGENDAIRE 0,8 % (rouge vif 235/75/75), chacune partagée à parts égales
-  entre ses skins présents dans la caisse ; une rareté sans skin dans une caisse (LÉGENDAIRE d'AWP · FILM) est écartée
-  du tirage et les autres chances renormalisées. Remboursement d'un doublon 20 / 40 / 70 / 100 % du prix. Rareté fixée
-  par skin, la même dans toutes les caisses : AWP, COMMUN MAQUIS, ÉPURE, TARTAN, BANCHE, LOGOGRAMME ; RARE MUE, ORAGE, CIRCUIT ; EXCEPTIONNEL
-  REMORQUEUR, BALISE, PAN ! ; LÉGENDAIRE TREMPE, CISELURE. M9, COMMUN ART DÉCO, HÔTE ; RARE PATROUILLE, RELEVÉ, SPHINX ;
-  EXCEPTIONNEL ÉMAIL, RECUIT ; LÉGENDAIRE COUCHANT. Série FILM (#433, voir `docs/assets.md`) : « AWP · FILM » (bande
-  vert phosphore) et « M9 · FILM » (bande os) après la série 1, des skins hommage (REMORQUEUR, LOGOGRAMME ; HÔTE, SPHINX,
-  #436) complétés de skins de la série 1. Ouverture : 4e palier de couleur LÉGENDAIRE (paliers sur les bouffées de
+  entre ses skins (20 / 5,33 / 1,6 / 0,8 % par skin). Remboursement d'un doublon 20 / 40 / 70 / 100 % du prix. AWP :
+  COMMUN MAQUIS, ÉPURE, TARTAN, BANCHE ; RARE MUE, ORAGE, CIRCUIT ; EXCEPTIONNEL BALISE, PAN ! ; LÉGENDAIRE TREMPE. M9 :
+  COMMUN ART DÉCO, LEURRE, CHANTIER, CÉRAMIQUE ; RARE PATROUILLE, RELEVÉ, GUILLOCHÉ ; EXCEPTIONNEL ÉMAIL, RECUIT ;
+  LÉGENDAIRE COUCHANT. Réserve : AWP LOGOGRAMME (commun), REMORQUEUR (exceptionnel), CISELURE (légendaire) ; M9 TOPO,
+  HÔTE (communs), SPHINX (rare). Les caisses FILM (#433, « AWP · FILM » bande vert phosphore, « M9 · FILM » bande os)
+  ont été vendues de #433 au 17/11/2026, complétées de skins de la série 1 : retirées, faute de skins hommage pour
+  remplir la composition. Ouverture : 4e palier de couleur LÉGENDAIRE (paliers sur les bouffées de
   2,25 / 2,85 / 3,6 s, avant la tension) et tenue de la silhouette de 1,1 s, la plus longue. Le pochoir du couvercle est posé par le jeu, propre à chaque caisse (« S1-AWP », « FM-M9 », #434, `docs/assets.md`). Doublons possibles : le
   tirage suit les chances affichées même si le skin est déjà possédé ; un achat rembourse alors une part du prix
   (#393), l'ouverture de test ne donne rien de plus. Tout est dans `ShopCatalog`. L'étiquette de la vitrine (3,4 studs) tient « AWP · SÉRIE 1 » + « 500 CRÉDITS »
@@ -846,12 +848,15 @@ l'étiquette BIENTÔT jusqu'à #393 (voir « Achat d'une caisse »).
 - Piste écartée : vitrine contre le mur de gauche (à la place du rack de la planche B). Vue de face, elle remplissait
   l'image sans place pour le titre, et la vue détail perdait sa gauche sombre.
 
-**Contenu d'une caisse (#424, choix de l'utilisateur le 16/11/2026) :** une caisse contient de 6 à 8 skins ; le
+**Contenu d'une caisse (#424, choix de l'utilisateur le 16/11/2026) :** une caisse contient 10 skins (4 / 3 / 2 / 1
+depuis le 17/11/2026) ; le
 tableau au mur n'en montrait que trois (une colonne par rareté). Le contenu passe dans la colonne de la vue détail :
 une ligne par skin, dans l'ordre des raretés puis du catalogue (`ShopCatalog.contents`) : barre de rareté, vignette de
 l'arme habillée (`UIKit.weaponSilhouette` texturée, rendu des cartes de skin de l'écran ARMES, 128 × 30 px), nom,
-rareté et chance du skin, remboursement d'un doublon. Lignes de 30 px : à 8 lignes, ACHETER et l'ouverture de test
-restent au-dessus du bas de l'écran. Sous-titre « CAISSE · 8 SKINS · UN PAR OUVERTURE ».
+rareté et chance du skin, remboursement d'un doublon. Lignes de 30 px : au plus 8 lignes visibles (`MAX_ROWS`), pour
+qu'ACHETER et l'ouverture de test restent au-dessus du bas de l'écran ; au-delà la liste défile (`ScrollingFrame`,
+barre de 3 px en couleur d'accent juste à droite de la colonne, hors des montants remboursés), remise en haut à chaque
+caisse. Sous-titre « CAISSE · 10 SKINS · UN PAR OUVERTURE ».
 
 - Vignette à 88 px de large : une AWP de profil, cinq fois plus longue que haute, n'y faisait que 15 px de haut et ses
   couleurs ne se lisaient pas ; 128 px.

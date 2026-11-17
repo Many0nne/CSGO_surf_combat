@@ -13,8 +13,9 @@ local ShopCatalog = {}
 
 export type Rgb = { number }
 -- `chance` : part de la rareté en pour cent, partagée à parts égales entre ses skins dans une caisse (#424) ; `refund` :
--- part du prix de la caisse rendue en crédits pour un doublon (#393), en pour cent (entier, 0 à 100)
-export type Rarity = { id: string, label: string, chance: number, color: Rgb, refund: number }
+-- part du prix de la caisse rendue en crédits pour un doublon (#393), en pour cent (entier, 0 à 100) ; `perCrate` :
+-- nombre exact de skins de cette rareté dans une caisse en vente (4 / 3 / 2 / 1)
+export type Rarity = { id: string, label: string, chance: number, color: Rgb, refund: number, perCrate: number? }
 -- `weapon` : id de l'arme dont la caisse donne un skin (`id` d'un item `weapon` de InventoryRules.ITEMS) ; `contents` :
 -- noms d'apparence des skins (`appearance` de InventoryRules.ITEMS) par id de rareté, le skin étant celui de cette arme ;
 -- `series` (facultatif, #454) : code de série du pochoir (« FO » pour une série `foam` qui donnerait « FM » comme `film`),
@@ -39,18 +40,16 @@ ShopCatalog.CURRENCY = WalletRules.CURRENCY
 -- 3,2 / 0,8. Remboursement d'un doublon (#393) en part du prix, pour qu'une caisse d'un autre prix suive sans nouvelle
 -- table : 20 / 40 / 70 / 100 % (100, 200, 350, 500 crédits pour une caisse à 500)
 ShopCatalog.RARITIES = {
-	{ id = "common", label = "COMMUN", chance = 80, color = { 150, 160, 172 }, refund = 20 },
-	{ id = "rare", label = "RARE", chance = 16, color = { 70, 120, 230 }, refund = 40 },
-	{ id = "exceptional", label = "EXCEPTIONNEL", chance = 3.2, color = { 170, 70, 220 }, refund = 70 },
-	{ id = "legendary", label = "LÉGENDAIRE", chance = 0.8, color = { 235, 75, 75 }, refund = 100 },
+	{ id = "common", label = "COMMUN", chance = 80, color = { 150, 160, 172 }, refund = 20, perCrate = 4 },
+	{ id = "rare", label = "RARE", chance = 16, color = { 70, 120, 230 }, refund = 40, perCrate = 3 },
+	{ id = "exceptional", label = "EXCEPTIONNEL", chance = 3.2, color = { 170, 70, 220 }, refund = 70, perCrate = 2 },
+	{ id = "legendary", label = "LÉGENDAIRE", chance = 0.8, color = { 235, 75, 75 }, refund = 100, perCrate = 1 },
 } :: { Rarity }
 
--- Caisses en vente, dans l'ordre de la vitrine : une par arme et par série, de 6 à 8 skins (#424), une ouverture donne
--- un seul skin de l'arme (#332). Un skin a la même rareté dans toutes les caisses qui le contiennent (#430, `rarityOf`) :
--- AWP, COMMUN maquis, epure, tartan, banche, logogramme ; RARE mue, orage, circuit ; EXCEPTIONNEL remorqueur, balise,
--- pan ; LÉGENDAIRE trempe, ciselure. M9, COMMUN artdeco, leurre, chantier, topo, ceramique, hote ; RARE patrouille,
--- releve, sphinx ; EXCEPTIONNEL email, recuit ; LÉGENDAIRE couchant. Ajouter une série = une caisse par arme ici (ses skins dans InventoryRules). Une rareté sans skin dans une
--- caisse (LÉGENDAIRE d'AWP · FILM) est écartée du tirage, les autres chances étant renormalisées (`draw`)
+-- Caisses en vente, dans l'ordre de la vitrine : une par arme et par série, une ouverture donne un seul skin de l'arme
+-- (#332). Composition fixe (choix de l'utilisateur, 17/11/2026) : 4 communs, 3 rares, 2 exceptionnels, 1 légendaire
+-- (`perCrate` de RARITIES), et un skin n'est que dans une caisse. Une caisse qu'on ne peut pas remplir n'est pas en vente :
+-- ses skins attendent dans RESERVE. Ajouter une série = une caisse par arme ici, ses skins dans InventoryRules
 ShopCatalog.CRATES = {
 	{
 		id = "crate.awp.serie1",
@@ -58,13 +57,11 @@ ShopCatalog.CRATES = {
 		weapon = "weapon.awp",
 		stripe = { 226, 58, 40 },
 		price = 500,
-		-- MUE, CIRCUIT et PAN ! ont laissé la place aux communs ÉPURE, TARTAN et BANCHE (8 skins au plus) ; ils restent
-		-- dans AWP · FILM, à la même rareté
 		contents = {
 			common = { "maquis", "epure", "tartan", "banche" },
-			rare = { "orage" },
-			exceptional = { "balise" },
-			legendary = { "trempe", "ciselure" },
+			rare = { "mue", "orage", "circuit" },
+			exceptional = { "balise", "pan" },
+			legendary = { "trempe" },
 		},
 	},
 	{
@@ -73,42 +70,30 @@ ShopCatalog.CRATES = {
 		weapon = "weapon.m9bayonet",
 		stripe = { 40, 150, 160 },
 		price = 500,
-		-- PATROUILLE et RECUIT ont laissé la place aux communs LEURRE, CHANTIER, TOPO et CÉRAMIQUE (#476, 8 skins au
-		-- plus) ; ils restent dans M9 · FILM, à la même rareté
 		contents = {
-			common = { "artdeco", "leurre", "chantier", "topo", "ceramique" },
-			rare = { "releve" },
-			exceptional = { "email" },
-			legendary = { "couchant" },
-		},
-	},
-	-- Série FILM (#433) : des skins hommage par arme, complétés de skins de la série 1 (même rareté partout)
-	{
-		id = "crate.awp.film",
-		name = "AWP · FILM",
-		weapon = "weapon.awp",
-		stripe = { 110, 230, 130 }, -- vert phosphore de l'écran de REMORQUEUR
-		price = 500,
-		contents = {
-			common = { "logogramme" },
-			rare = { "mue", "circuit" },
-			exceptional = { "remorqueur", "balise", "pan" },
-		},
-	},
-	{
-		id = "crate.m9.film",
-		name = "M9 · FILM",
-		weapon = "weapon.m9bayonet",
-		stripe = { 200, 182, 140 }, -- os de HÔTE
-		price = 500,
-		contents = {
-			common = { "hote", "artdeco" },
-			rare = { "patrouille", "sphinx" },
-			exceptional = { "recuit" },
+			common = { "artdeco", "leurre", "chantier", "ceramique" },
+			rare = { "patrouille", "releve", "guilloche" },
+			exceptional = { "email", "recuit" },
 			legendary = { "couchant" },
 		},
 	},
 } :: { Crate }
+
+-- Réserve : skins finis qu'aucune caisse en vente ne donne encore, par arme puis par rareté. Ils gardent leur rareté
+-- (`rarityOf`, pour qui les possède déjà : les caisses FILM, #433, ont été vendues avant d'être retirées), et forment
+-- une caisse dès qu'une arme en a assez pour la composition complète. Série FILM (#433, #436) : REMORQUEUR, LOGOGRAMME,
+-- HÔTE et SPHINX ; CISELURE et TOPO ont cédé leur place dans la série 1 à TREMPE et aux autres communs
+ShopCatalog.RESERVE = {
+	["weapon.awp"] = {
+		common = { "logogramme" },
+		exceptional = { "remorqueur" },
+		legendary = { "ciselure" },
+	},
+	["weapon.m9bayonet"] = {
+		common = { "topo", "hote" },
+		rare = { "sphinx" },
+	},
+} :: { [string]: { [string]: { string } } }
 
 -- Vitrine : deux étages de trois caisses ; l'étage à hauteur d'œil (rangée 1, en haut) se remplit d'abord
 ShopCatalog.PER_ROW = 3
@@ -165,17 +150,22 @@ function ShopCatalog.contents(crate: Crate, items: { any }): { Row }
 end
 
 -- Cette méthode permet de lire la rareté d'un skin (item `skin` de InventoryRules.ITEMS) lorsque l'inventaire la montre :
--- celle de la première caisse de son arme qui le contient ; nil pour un skin qu'aucune caisse ne donne.
+-- celle de la caisse de son arme qui le contient, sinon celle de la réserve ; nil pour un skin ni en caisse ni en réserve.
 function ShopCatalog.rarityOf(skin: { weapon: string?, appearance: string? }): Rarity?
 	if not (skin.weapon and skin.appearance) then
 		return nil
 	end
+	local sources = {}
 	for _, crate in ShopCatalog.CRATES do
 		if crate.weapon == skin.weapon then
-			for _, rarity in ShopCatalog.RARITIES do
-				if table.find(crate.contents[rarity.id] or {}, skin.appearance) then
-					return rarity
-				end
+			table.insert(sources, crate.contents)
+		end
+	end
+	table.insert(sources, ShopCatalog.RESERVE[skin.weapon] or {})
+	for _, contents in sources do
+		for _, rarity in ShopCatalog.RARITIES do
+			if table.find(contents[rarity.id] or {}, skin.appearance) then
+				return rarity
 			end
 		end
 	end

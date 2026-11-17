@@ -384,7 +384,7 @@ marquages sont celles de Windows (`C:/Windows/Fonts`, Bahnschrift, Impact) : gé
 
 Même principe que pour l'AWP : un skin est **dessiné pour la M9 seule**, un script par skin dans `assets/m9/skins/`
 (`emaille` pour ÉMAIL, `patrouille`, `artdeco`, `hote` et `sphinx` de la série FILM, #433 et #436, et les communs
-`leurre`, `chantier`, `topo` et `ceramique`, #476), avec une fonction `paint(kn)`. La M9 n'a pas de source Blender : on
+`leurre`, `chantier`, `topo` et `ceramique`, #476, et le rare `guilloche`), avec une fonction `paint(kn)`. La M9 n'a pas de source Blender : on
 part de ses cartes d'origine et de sa cuisson (`fetch_viewmodel.py` puis `bake_maps.py --glb`, étape 1 de « Fabriquer
 un skin » ci-dessous). Outils communs (`common.py`) :
 
@@ -440,6 +440,11 @@ qu'ensuite. Puis publier et cataloguer (étapes 4 et 5 de « Fabriquer un skin �
 - **Texte de la M9 à l'envers en 1P** : le couteau est tenu tranchant en haut, un texte posé droit sur la toile (dos en
   haut) se lit tête en bas (PATROUILLE, première version de CHANTIER). `kn.text(..., angle=180)`, et la ligne qui doit
   paraître au-dessus se place côté tranchant (h plus bas). Contrôler en 1P dans le jeu, pas sur la planche.
+- **Guilloché (GUILLOCHÉ)** : sillons espacés d'au moins ~6 texels (0,028 unité, la texture fait ~210 texels par
+  unité sur la lame) et tracés en profil cosinus, pas en traits fins : plus serrés, ils crénellent. Émail translucide
+  en métal (« candy ») assombri au fond du sillon. Le médaillon du talon en argent clair et brillant brûlait au blanc
+  et sa rosace disparaissait : argent satiné, sillons sombres. Un motif du talon s'arrête après t -0,12 : l'arête de
+  fin de gouttière (t -0,16) y fait une encoche. Émail grenat préféré au bleu nuit, trop proche d'ÉMAIL dans la caisse.
 - **Rendus `render_views.py` brûlés au blanc** (vue `lame`, même PATROUILLE : lame claire face à la lumière principale) :
   `--exposure -1`.
 
@@ -463,7 +468,9 @@ le chiffre du Zodiac (vrai tueur), les drames de guerre et les broderies osages 
   reprend la grammaire (carré à coins arrondis, côtes répétées), avec des symboles et des noms dessinés pour le jeu.
 - **Un autre film ne s'ajoute qu'après une recherche de DA** (planche de références validée) : l'utilisateur ne veut pas
   de films choisis à la hâte, dont la DA ne lui plairait pas.
-- **Caisses complétées par la série 1** : les skins hommage sont complétés par des skins de la série 1
+- **Caisses FILM retirées (17/11/2026)** : avec la composition 4 / 3 / 2 / 1 et un skin par caisse, les quatre skins
+  hommage ne remplissent pas une caisse par arme ; ils attendent dans `ShopCatalog.RESERVE` qu'il y en ait assez.
+  Historique : les skins hommage étaient complétés par des skins de la série 1
   pour atteindre 6. Un skin repris garde sa rareté d'origine (`rarityOf` lit la première caisse qui le contient ; le test
   du shop l'exige). Chaque nouvel hommage prend la place d'un skin repris : LOGOGRAMME celle de MAQUIS, SPHINX celle de
   RELEVÉ (#436).
@@ -504,8 +511,10 @@ que soit le découpage UV) ou projetés depuis la vue de profil (livrée, texte)
    Delivery, ~5 s par carte, reprise possible), puis `uv run tools/skins/make_rbx.py assets/skins/<skin>`.
 5. **Catalogue** : une ligne par arme dans `InventoryRules.ITEMS` (`appearance` = nom du fichier `.model.json`). Le test
    du catalogue vérifie que le fichier existe. Puis ranger le skin dans la caisse de son arme, à sa rareté
-   (`ShopCatalog.CRATES`, `contents`) : le test du shop exige que tout skin soit dans une caisse, et une caisse de 6 à
-   8 skins (#424). Un skin peut être dans plusieurs caisses, toujours à la même rareté (série FILM, #433).
+   (`ShopCatalog.CRATES`, `contents`) ou dans la réserve (`ShopCatalog.RESERVE`) : le test du shop exige que tout skin
+   soit dans l'une ou l'autre, une seule fois, et qu'une caisse en vente ait exactement 4 communs, 3 rares, 2
+   exceptionnels et 1 légendaire (choix de l'utilisateur, 17/11/2026). Pas assez de skins pour une caisse : ils restent
+   en réserve, la caisse n'est pas créée.
 6. **Juger en jeu** (Studio, écran d'équipement) : l'éclairage du jeu change beaucoup le rendu des métaux.
 
 Pour un aperçu sans code (avant d'avoir le catalogue) : `tools/skins/apply_skin_lua.py <ids.json | origine>` écrit le

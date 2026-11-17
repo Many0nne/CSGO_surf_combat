@@ -297,8 +297,8 @@ return function(T, Loader)
 			-- joueur sans sauvegarde aucun
 			T.expectEqual(#Rules.skinsFor(Rules.resolve(nil, true), "weapon.awp"), 13)
 			T.expectEqual(#Rules.skinsFor(Rules.resolve(nil, false), "weapon.awp"), 0)
-			-- M9 (#268, #337, #420, #433, #436, communs LEURRE, CHANTIER, TOPO, CÉRAMIQUE #476)
-			T.expectEqual(#Rules.skinsFor(Rules.resolve(nil, true), "weapon.m9bayonet"), 12)
+			-- M9 (#268, #337, #420, #433, #436, communs LEURRE, CHANTIER, TOPO, CÉRAMIQUE #476, rare GUILLOCHÉ)
+			T.expectEqual(#Rules.skinsFor(Rules.resolve(nil, true), "weapon.m9bayonet"), 13)
 		end)
 
 		T.it("équipe une arme possédée de l'emplacement, sans toucher à l'autre emplacement", function()

@@ -44,7 +44,8 @@ local SUBTITLE_Y = TITLE_Y + TITLE_SIZE + 10
 local HEADER_Y = SUBTITLE_Y + 34 -- en-têtes CHANCE et SI DOUBLON au-dessus du contenu (#393)
 local HEADER_SIZE = UITheme.TextSize.Min
 local ROWS_Y = HEADER_Y + HEADER_SIZE + 6
--- Une ligne par skin (#424) : 8 lignes de 30 px laissent ACHETER et l'ouverture de test au-dessus du bas de l'écran
+-- Une ligne par skin (#424) : 8 lignes de 30 px visibles laissent ACHETER et l'ouverture de test au-dessus du bas de
+-- l'écran ; au-delà (10 skins par caisse), la liste défile
 local ROW_STEP = 30
 local ROW_TEXT = 20
 local THUMB_X = 12 -- vignette de l'arme habillée, après la barre de rareté
@@ -53,7 +54,9 @@ local THUMB_SIZE = Vector2.new(128, 30)
 local NAME_X = THUMB_X + THUMB_SIZE.X + 10
 local RARITY_X = 270 -- colonne des raretés et chances (« EXCEPTIONNEL  1,07 % » tient avant le remboursement)
 local COLUMN_WIDTH = 470
-local MAX_ROWS = 8 -- place réservée au contenu
+local MAX_ROWS = 8 -- lignes visibles du contenu, les suivantes au défilement
+local SCROLL_BAR = 3 -- barre de défilement du contenu, à droite de la colonne (hors des montants remboursés)
+local SCROLL_GAP = 8
 local REFUND_ICON = 18 -- jeton devant le remboursement d'un doublon, à droite de la ligne
 local REFUND_WIDTH = 70
 local BUY_SIZE = Vector2.new(160, 42)
@@ -74,7 +77,7 @@ local VEIL = NumberSequence.new({
 local gui: ScreenGui
 local overview: Frame
 local detail: Frame
-local rows: Frame
+local rows: ScrollingFrame
 local filet: Frame
 local priceRow: Frame
 local actions: Frame
@@ -341,7 +344,11 @@ local function paintDetail()
 			Parent = refund,
 		})
 	end
-	local below = ROWS_Y + #contents * ROW_STEP + 10
+	local visible = math.min(#contents, MAX_ROWS)
+	rows.Size = UDim2.fromOffset(COLUMN_WIDTH + SCROLL_GAP + SCROLL_BAR, visible * ROW_STEP)
+	rows.CanvasSize = UDim2.fromOffset(0, #contents * ROW_STEP)
+	rows.CanvasPosition = Vector2.zero
+	local below = ROWS_Y + visible * ROW_STEP + 10
 	filet.Position = UDim2.fromOffset(EDGE, below)
 	priceRow.Position = UDim2.fromOffset(EDGE, below + 14)
 	local actionsY = below + 14 + PRICE_SIZE + 26
@@ -780,11 +787,19 @@ local function buildDetail(column: Frame)
 		Position = UDim2.fromOffset(EDGE + COLUMN_WIDTH, HEADER_Y),
 		Size = UDim2.fromOffset(120, HEADER_SIZE + 2),
 	}, 1)
-	rows = UIKit.frame({
+	-- Contenu défilant (MAX_ROWS lignes visibles) : barre à droite de la colonne, taille et canevas fixés par paintDetail
+	rows = UIKit.create("ScrollingFrame", {
 		Name = "Contents",
 		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
 		Position = UDim2.fromOffset(EDGE, ROWS_Y),
-		Size = UDim2.fromOffset(COLUMN_WIDTH, MAX_ROWS * ROW_STEP),
+		Size = UDim2.fromOffset(COLUMN_WIDTH + SCROLL_GAP + SCROLL_BAR, MAX_ROWS * ROW_STEP),
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+		ScrollBarThickness = SCROLL_BAR,
+		ScrollBarImageColor3 = C.Accent,
+		VerticalScrollBarInset = Enum.ScrollBarInset.None,
+		CanvasSize = UDim2.fromOffset(0, 0),
+		ZIndex = 2,
 		Parent = detail,
 	})
 	filet = UIKit.frame({

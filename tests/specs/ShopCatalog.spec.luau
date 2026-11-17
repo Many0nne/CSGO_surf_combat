@@ -29,84 +29,78 @@ return function(T, Loader)
 			T.expectEqual(Shop.RARITIES[4].label, "LÉGENDAIRE")
 		end)
 
-		T.it("caisses dans l'ordre de la vitrine : série 1 puis FILM (#433), AWP puis M9", function()
+		T.it("caisses dans l'ordre de la vitrine : AWP puis M9, série 1 (FILM en réserve)", function()
 			local ids = {}
 			for _, crate in Shop.CRATES do
 				table.insert(ids, crate.id)
 			end
-			T.expectEqual(table.concat(ids, ","), "crate.awp.serie1,crate.m9.serie1,crate.awp.film,crate.m9.film")
+			T.expectEqual(table.concat(ids, ","), "crate.awp.serie1,crate.m9.serie1")
 		end)
 
-		T.it("une caisse FILM par arme, de 6 skins, rareté des skins fixée par arme (#433, #430)", function()
-			local function contents(id)
-				local parts = {}
-				for _, rarity in Shop.RARITIES do
-					table.insert(parts, rarity.id .. "=" .. table.concat(Shop.crate(id).contents[rarity.id] or {}, ","))
-				end
-				return table.concat(parts, ";")
+		T.it("composition 4 / 3 / 2 / 1", function()
+			local counts = {}
+			for _, rarity in Shop.RARITIES do
+				table.insert(counts, rarity.perCrate)
 			end
-			T.expectEqual(
-				contents("crate.awp.film"),
-				"common=logogramme;rare=mue,circuit;exceptional=remorqueur,balise,pan;legendary="
-			)
-			T.expectEqual(
-				contents("crate.m9.film"),
-				"common=hote,artdeco;rare=patrouille,sphinx;exceptional=recuit;legendary=couchant"
-			)
-			T.expectEqual(#Shop.contents(Shop.crate("crate.awp.film"), Inventory.ITEMS), 6)
-			T.expectEqual(#Shop.contents(Shop.crate("crate.m9.film"), Inventory.ITEMS), 6)
+			T.expectEqual(table.concat(counts, ","), "4,3,2,1")
 		end)
 
-		T.it("chaque caisse a un id unique, un prix positif et de 6 à 8 skins connus de son arme (#424)", function()
+		T.it("chaque caisse a un id unique, un prix positif et la composition exacte en skins de son arme", function()
 			local seen = {}
 			for _, crate in Shop.CRATES do
 				T.expectEqual(seen[crate.id], nil)
 				seen[crate.id] = true
 				T.expectEqual(crate.price > 0, true)
 				local rows = Shop.contents(crate, Inventory.ITEMS)
-				T.expect(#rows >= 6 and #rows <= 8, crate.id .. " : " .. #rows .. " skins")
-				for _, rarity in Shop.RARITIES do
-					local found = rarity.id == "legendary" and crate.id == "crate.awp.film" -- pas encore de légendaire (#430)
-					for _, row in rows do
-						found = found or row.rarity.id == rarity.id
-					end
-					T.expect(found, crate.id .. " sans skin " .. rarity.id)
-				end
+				local per = {}
 				for _, row in rows do
+					per[row.rarity.id] = (per[row.rarity.id] or 0) + 1
 					local item = Inventory.item(row.skin)
 					T.expectEqual(item ~= nil, true)
 					T.expectEqual(item.weapon, crate.weapon)
 				end
+				for _, rarity in Shop.RARITIES do
+					T.expectEqual(per[rarity.id] or 0, rarity.perCrate, crate.id .. " : " .. rarity.id)
+				end
+				T.expectEqual(#rows, 10, crate.id)
 			end
 		end)
 
-		-- Une série peut reprendre les skins d'une autre (#433) : partout à la même rareté, sinon rarityOf (première
-		-- caisse) contredirait la caisse qui l'affiche
-		T.it(
-			"chaque apparence listée existe, une fois par caisse, et a la même rareté dans toutes ses caisses",
-			function()
-				local rarityByKey = {}
-				for _, crate in Shop.CRATES do
-					local listed, inCrate = 0, {}
-					for rarityId, appearances in crate.contents do
-						for _, appearance in appearances do
-							local key = crate.weapon .. "/" .. appearance
-							T.expectEqual(inCrate[key], nil, crate.id .. " : " .. key .. " en double")
-							inCrate[key] = true
-							T.expectEqual(rarityByKey[key] or rarityId, rarityId, key)
-							rarityByKey[key] = rarityId
-							listed += 1
-						end
-					end
-					T.expectEqual(#Shop.contents(crate, Inventory.ITEMS), listed, crate.id .. " : apparence inconnue")
-				end
+		-- Un skin n'est que dans une caisse ou dans la réserve : sinon une caisse en vente pourrait se remplir de skins
+		-- repris, et rarityOf contredirait la caisse qui l'affiche
+		T.it("chaque apparence listée existe et n'est qu'une fois en caisse ou en réserve", function()
+			local seen = {}
+			local known = {}
+			for _, rarity in Shop.RARITIES do
+				known[rarity.id] = true
 			end
-		)
+			local function visit(where, weapon, contents)
+				local listed = 0
+				for rarityId, appearances in contents do
+					T.expect(known[rarityId] == true, where .. " : rareté " .. rarityId)
+					for _, appearance in appearances do
+						local key = weapon .. "/" .. appearance
+						T.expectEqual(seen[key], nil, where .. " : " .. key .. " déjà ailleurs")
+						seen[key] = where
+						listed += 1
+					end
+				end
+				local probe =
+					{ id = where, name = "", weapon = weapon, stripe = { 0, 0, 0 }, price = 1, contents = contents }
+				T.expectEqual(#Shop.contents(probe, Inventory.ITEMS), listed, where .. " : apparence inconnue")
+			end
+			for _, crate in Shop.CRATES do
+				visit(crate.id, crate.weapon, crate.contents)
+			end
+			for weapon, contents in Shop.RESERVE do
+				visit("réserve " .. weapon, weapon, contents)
+			end
+		end)
 
-		T.it("tous les skins du jeu sont dans une caisse", function()
+		T.it("tous les skins du jeu sont dans une caisse ou en réserve", function()
 			for _, item in Inventory.ITEMS do
 				if item.type == "skin" then
-					T.expect(Shop.rarityOf(item) ~= nil, item.id .. " hors caisse")
+					T.expect(Shop.rarityOf(item) ~= nil, item.id .. " ni en caisse ni en réserve")
 				end
 			end
 		end)
@@ -121,20 +115,23 @@ return function(T, Loader)
 	T.describe("ShopCatalog.contents", function()
 		T.it("un skin par ligne, par rareté puis dans l'ordre du catalogue, avec le viewmodel de l'arme", function()
 			local rows = Shop.contents(Shop.crate("crate.awp.serie1"), Inventory.ITEMS)
-			T.expectEqual(names(rows), "MAQUIS,ÉPURE,TARTAN,BANCHE,ORAGE,BALISE,TREMPE,CISELURE")
+			T.expectEqual(names(rows), "MAQUIS,ÉPURE,TARTAN,BANCHE,MUE,ORAGE,CIRCUIT,BALISE,PAN !,TREMPE")
 			T.expectEqual(rows[1].rarity.label, "COMMUN")
 			T.expectEqual(rows[1].skin, "skin.awp.maquis")
 			T.expectEqual(rows[1].viewmodel, "AWP")
 			T.expectEqual(rows[1].weapon, "AWP")
 			T.expectEqual(rows[4].rarity.label, "COMMUN")
 			T.expectEqual(rows[5].rarity.label, "RARE")
-			T.expectEqual(rows[6].rarity.label, "EXCEPTIONNEL")
-			T.expectEqual(rows[8].rarity.label, "LÉGENDAIRE")
+			T.expectEqual(rows[8].rarity.label, "EXCEPTIONNEL")
+			T.expectEqual(rows[10].rarity.label, "LÉGENDAIRE")
 			local knife = Shop.contents(Shop.crate("crate.m9.serie1"), Inventory.ITEMS)
-			T.expectEqual(names(knife), "ART DÉCO,LEURRE,CHANTIER,TOPO,CÉRAMIQUE,RELEVÉ,ÉMAIL,COUCHANT")
-			T.expectEqual(knife[5].rarity.label, "COMMUN")
-			T.expectEqual(knife[6].rarity.label, "RARE")
-			T.expectEqual(knife[8].skin, "skin.m9bayonet.couchant")
+			T.expectEqual(
+				names(knife),
+				"ART DÉCO,LEURRE,CHANTIER,CÉRAMIQUE,PATROUILLE,RELEVÉ,GUILLOCHÉ,ÉMAIL,RECUIT,COUCHANT"
+			)
+			T.expectEqual(knife[4].rarity.label, "COMMUN")
+			T.expectEqual(knife[5].rarity.label, "RARE")
+			T.expectEqual(knife[10].skin, "skin.m9bayonet.couchant")
 			T.expectEqual(knife[1].viewmodel, "M9Bayonet")
 			T.expectEqual(knife[1].weapon, "M9")
 		end)
@@ -169,7 +166,7 @@ return function(T, Loader)
 		T.it("compose la ligne sous le nom", function()
 			T.expectEqual(
 				Shop.subtitle(Shop.crate("crate.awp.serie1"), Inventory.ITEMS),
-				"CAISSE  ·  8 SKINS  ·  UN PAR OUVERTURE"
+				"CAISSE  ·  10 SKINS  ·  UN PAR OUVERTURE"
 			)
 		end)
 	end)
@@ -177,7 +174,7 @@ return function(T, Loader)
 	T.describe("ShopCatalog.draw (#332, #424)", function()
 		local crate = Shop.crate("crate.awp.serie1")
 
-		T.it("partage la chance d'une rareté entre ses skins (AWP : 4 x 20 / 16 / 3,2 / 2 x 0,4)", function()
+		T.it("partage la chance d'une rareté entre ses skins (4 x 20 / 3 x 5,33 / 2 x 1,6 / 0,8)", function()
 			local function at(roll)
 				local row, skinId = Shop.draw(crate, Inventory.ITEMS, roll)
 				return row.rarity.id .. ":" .. skinId
@@ -187,12 +184,13 @@ return function(T, Loader)
 			T.expectEqual(at(20), "common:skin.awp.epure")
 			T.expectEqual(at(40), "common:skin.awp.tartan")
 			T.expectEqual(at(79.99), "common:skin.awp.banche")
-			T.expectEqual(at(80), "rare:skin.awp.orage")
-			T.expectEqual(at(95.99), "rare:skin.awp.orage")
+			T.expectEqual(at(80), "rare:skin.awp.mue")
+			T.expectEqual(at(85.4), "rare:skin.awp.orage")
+			T.expectEqual(at(95.99), "rare:skin.awp.circuit")
 			T.expectEqual(at(96.1), "exceptional:skin.awp.balise")
+			T.expectEqual(at(97.7), "exceptional:skin.awp.pan")
 			T.expectEqual(at(99.3), "legendary:skin.awp.trempe")
-			T.expectEqual(at(99.7), "legendary:skin.awp.ciselure")
-			T.expectEqual(at(99.999), "legendary:skin.awp.ciselure")
+			T.expectEqual(at(99.999), "legendary:skin.awp.trempe")
 		end)
 
 		T.it("ramène un roll hors bornes ou invalide dans [0, 100)", function()
@@ -204,7 +202,7 @@ return function(T, Loader)
 
 		T.it("tire le skin de l'arme de la caisse (M9)", function()
 			local _, skinId = Shop.draw(Shop.crate("crate.m9.serie1"), Inventory.ITEMS, 81)
-			T.expectEqual(skinId, "skin.m9bayonet.releve")
+			T.expectEqual(skinId, "skin.m9bayonet.patrouille")
 		end)
 
 		T.it("suit les chances affichées (à un centième près) sur un balayage régulier du roll", function()
@@ -237,15 +235,6 @@ return function(T, Loader)
 			T.expectEqual(Shop.draw(partial, Inventory.ITEMS, 96.1).rarity.id, "common")
 			T.expectEqual(Shop.draw(partial, Inventory.ITEMS, 96.2).rarity.id, "exceptional")
 			T.expectEqual(Shop.draw(partial, Inventory.ITEMS, 99.99).rarity.id, "exceptional")
-		end)
-
-		T.it("AWP · FILM n'a pas de légendaire : jamais tiré, chances renormalisées (#430)", function()
-			local film = Shop.crate("crate.awp.film")
-			for i = 0, 999 do
-				local row = Shop.draw(film, Inventory.ITEMS, i / 10)
-				T.expect(row.rarity.id ~= "legendary", "légendaire tiré au roll " .. i / 10)
-			end
-			T.expectEqual(Shop.draw(film, Inventory.ITEMS, 99.999).rarity.id, "exceptional")
 		end)
 
 		T.it("ne tire rien d'une caisse sans aucun skin connu", function()
@@ -363,23 +352,15 @@ return function(T, Loader)
 			end
 		end)
 
-		T.it("chances par skin, total exactement 100 % (AWP 20 / 16 / 3,2 / 0,4 ; M9 16 / 16 / 3,2 / 0,8)", function()
+		T.it("chances par skin, total exactement 100 % (20 / 5,33 / 1,6 / 0,8)", function()
 			local awp = Shop.chances(Shop.contents(Shop.crate("crate.awp.serie1"), Inventory.ITEMS))
-			T.expectEqual(table.concat(awp, ","), "2000,2000,2000,2000,1600,320,40,40")
+			T.expectEqual(table.concat(awp, ","), "2000,2000,2000,2000,534,533,533,160,160,80")
 			T.expectEqual(Shop.chanceLabel(awp[1]), "20 %")
-			T.expectEqual(Shop.chanceLabel(awp[6]), "3,2 %")
-			-- AWP · FILM sans légendaire : 99,2 % renormalisés, partages inexacts complétés au plus fort reste
-			local film = Shop.chances(Shop.contents(Shop.crate("crate.awp.film"), Inventory.ITEMS))
-			local total = 0
-			for _, c in film do
-				total += c
-			end
-			T.expectEqual(total, 10000)
-			T.expect(math.abs(film[4] - film[6]) <= 1, "exceptionnels à un centième près")
-			T.expectEqual(Shop.chanceLabel(awp[8]), "0,4 %")
+			T.expectEqual(Shop.chanceLabel(awp[5]), "5,34 %")
+			T.expectEqual(Shop.chanceLabel(awp[8]), "1,6 %")
+			T.expectEqual(Shop.chanceLabel(awp[10]), "0,8 %")
 			local m9 = Shop.chances(Shop.contents(Shop.crate("crate.m9.serie1"), Inventory.ITEMS))
-			T.expectEqual(table.concat(m9, ","), "1600,1600,1600,1600,1600,1600,320,80")
-			T.expectEqual(Shop.chanceLabel(m9[1]), "16 %")
+			T.expectEqual(table.concat(m9, ","), table.concat(awp, ","))
 		end)
 
 		T.it("arrondi au plus fort reste : la somme fait toujours 100,0 %", function()
@@ -416,9 +397,9 @@ return function(T, Loader)
 			for _, row in Shop.contents(crate, Inventory.ITEMS) do
 				owned[row.skin] = true
 			end
-			owned["skin.awp.ciselure"] = nil
+			owned["skin.awp.trempe"] = nil
 			T.expectEqual(Shop.allOwned(crate, Inventory.ITEMS, owned), false, "un légendaire manquant")
-			owned["skin.awp.ciselure"] = true
+			owned["skin.awp.trempe"] = true
 			T.expectEqual(Shop.allOwned(crate, Inventory.ITEMS, owned), true)
 			T.expectEqual(Shop.allOwned(Shop.crate("crate.m9.serie1"), Inventory.ITEMS, owned), false, "autre arme")
 			local empty = table.clone(crate)
@@ -426,7 +407,7 @@ return function(T, Loader)
 			T.expectEqual(Shop.allOwned(empty, Inventory.ITEMS, owned), false, "caisse vide : refusée comme vide")
 		end)
 
-		T.it("rareté d'un skin lue dans la caisse de son arme, nil hors caisse", function()
+		T.it("rareté d'un skin lue dans la caisse de son arme, sinon dans la réserve", function()
 			local function rarityId(id: string): string?
 				local rarity = Shop.rarityOf(Inventory.item(id))
 				return rarity and rarity.id
@@ -437,6 +418,11 @@ return function(T, Loader)
 			T.expectEqual(rarityId("skin.m9bayonet.couchant"), "legendary")
 			T.expectEqual(rarityId("skin.awp.circuit"), "rare")
 			T.expectEqual(rarityId("skin.m9bayonet.email"), "exceptional")
+			T.expectEqual(rarityId("skin.m9bayonet.guilloche"), "rare")
+			T.expectEqual(rarityId("skin.awp.ciselure"), "legendary", "réserve")
+			T.expectEqual(rarityId("skin.awp.remorqueur"), "exceptional", "réserve")
+			T.expectEqual(rarityId("skin.m9bayonet.sphinx"), "rare", "réserve")
+			T.expectEqual(rarityId("skin.m9bayonet.topo"), "common", "réserve")
 			T.expectEqual(Shop.rarityOf({ weapon = "weapon.m9bayonet", appearance = "orage" }), nil, "autre arme")
 			T.expectEqual(Shop.rarityOf(Inventory.item("weapon.awp")), nil, "une arme n'a pas de rareté")
 		end)
@@ -455,8 +441,8 @@ return function(T, Loader)
 		T.it("série et arme lues dans le catalogue", function()
 			T.expectEqual(Shop.stencil(Shop.crate("crate.awp.serie1")), "S1-AWP")
 			T.expectEqual(Shop.stencil(Shop.crate("crate.m9.serie1")), "S1-M9")
-			T.expectEqual(Shop.stencil(Shop.crate("crate.awp.film")), "FM-AWP")
-			T.expectEqual(Shop.stencil(Shop.crate("crate.m9.film")), "FM-M9")
+			T.expectEqual(Shop.stencil({ id = "crate.awp.film", weapon = "weapon.awp" }), "FM-AWP")
+			T.expectEqual(Shop.stencil({ id = "crate.m9.film", weapon = "weapon.m9bayonet" }), "FM-M9")
 		end)
 
 		T.it("chaque caisse du catalogue a un pochoir à elle", function()
