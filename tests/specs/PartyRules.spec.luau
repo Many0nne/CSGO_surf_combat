@@ -166,6 +166,49 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("PartyRules : lobby quitté et ligne « qui lance »", function()
+		T.it("close remet au menu depuis le lobby", function()
+			local reg = registry({ 1 })
+			Rules.setPresence(reg, 1, "lobby")
+			T.expectEqual(Rules.close(reg, 1, false), true)
+			T.expectEqual(Rules.presenceOf(reg, 1), "menu")
+		end)
+
+		T.it(
+			"close ne sort pas de la partie un joueur qui y entre, mais corrige un « en partie » sans personnage",
+			function()
+				local reg = registry({ 1 })
+				Rules.setPresence(reg, 1, "game")
+				T.expectEqual(Rules.close(reg, 1, true), false, "personnage ou apparition en vol")
+				T.expectEqual(Rules.presenceOf(reg, 1), "game")
+				T.expectEqual(Rules.close(reg, 1, false), true, "manche finie pendant l'écran de mort")
+				T.expectEqual(Rules.presenceOf(reg, 1), "menu")
+				T.expectEqual(Rules.close(reg, 1, false), false, "déjà au menu")
+			end
+		)
+
+		T.it("écrit qui lance selon le groupe et l'hôte", function()
+			T.expectEqual(Rules.statusLine(1, true, "launch", "lobby", "Moi"), "INVITE TES AMIS OU LANCE SEUL")
+			T.expectEqual(
+				Rules.statusLine(2, true, "launch", "lobby", "Moi"),
+				"TU ES L'HÔTE · LANCER FAIT ENTRER TOUT LE LOBBY"
+			)
+			T.expectEqual(
+				Rules.statusLine(2, false, "waitHost", "lobby", "Ana"),
+				"EN ATTENTE DE L'HÔTE · ANA LANCE LA PARTIE"
+			)
+			T.expectEqual(
+				Rules.statusLine(2, false, "launch", "game", "Ana"),
+				"ANA EST EN PARTIE · LANCE POUR LE REJOINDRE"
+			)
+			T.expectEqual(Rules.statusLine(2, false, "launch", "menu", "Ana"), "ANA EST AU MENU · TU PEUX LANCER SEUL")
+			T.expectEqual(
+				Rules.statusLine(2, false, "launch", nil, nil),
+				"TON HÔTE EST AU MENU · TU PEUX LANCER SEUL"
+			)
+		end)
+	end)
+
 	T.describe("PartyRules : demandes et données d'arrivée", function()
 		T.it("lit les demandes connues, l'id seulement pour REJOINDRE", function()
 			T.expectEqual((Rules.readRequest("open", 0)), "open")

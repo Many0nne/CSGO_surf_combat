@@ -193,6 +193,45 @@ function PartyRules.launchState(isHost: boolean, hostPresence: Presence?): Launc
 	return "waitHost"
 end
 
+-- Cette méthode permet d'appliquer « lobby quitté » lorsque le client le signale (autre page du menu, retour au menu) :
+-- au menu depuis le lobby, ou depuis la partie si le joueur n'y est plus (`playing` : personnage ou apparition en vol ;
+-- LANCER de l'hôte reçu hors du lobby, manche finie pendant l'écran de mort). Un « close » arrivé après LANCER ne sort
+-- pas de la partie un joueur qui y entre. Renvoie true si la présence a changé.
+function PartyRules.close(reg: Registry, id: number, playing: boolean): boolean
+	local presence = reg.presence[id]
+	if presence == "lobby" or (presence == "game" and not playing) then
+		reg.presence[id] = "menu"
+		return true
+	end
+	return false
+end
+
+-- Cette méthode permet d'écrire la ligne « qui lance » du lobby lorsque le groupe change : seul, hôte, membre qui attend
+-- l'hôte, ou membre dont l'hôte est en partie ou au menu (il lance seul). `hostName` : nom de l'hôte (nil s'il est
+-- inconnu).
+function PartyRules.statusLine(
+	count: number,
+	isHost: boolean,
+	state: LaunchState,
+	hostPresence: Presence?,
+	hostName: string?
+): string
+	if count <= 1 then
+		return "INVITE TES AMIS OU LANCE SEUL"
+	end
+	if isHost then
+		return "TU ES L'HÔTE · LANCER FAIT ENTRER TOUT LE LOBBY"
+	end
+	local name = if hostName then string.upper(hostName) else "TON HÔTE"
+	if state == "waitHost" then
+		return "EN ATTENTE DE L'HÔTE · " .. name .. " LANCE LA PARTIE"
+	end
+	if hostPresence == "game" then
+		return name .. " EST EN PARTIE · LANCE POUR LE REJOINDRE"
+	end
+	return name .. " EST AU MENU · TU PEUX LANCER SEUL"
+end
+
 -- Cette méthode permet d'appliquer LANCER lorsqu'un joueur du lobby le choisit : il passe en partie, et s'il est l'hôte
 -- et lance depuis le lobby, les membres présents dans le lobby avec lui aussi. Renvoie les autres joueurs à faire
 -- entrer dans la manche (vide pour un membre, qui lance pour lui seul, ou pour un hôte qui n'est pas dans le lobby).

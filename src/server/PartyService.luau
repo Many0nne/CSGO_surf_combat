@@ -161,11 +161,7 @@ local function onRequest(player: Player, rawAction: any, rawTarget: any)
 		PartyRules.setPresence(registry, id, "lobby")
 		publish({ id })
 	elseif action == PartyRules.CLOSE then
-		-- Depuis le lobby, ou « en partie » sans y être (LANCER de l'hôte reçu hors du lobby, manche finie pendant l'écran
-		-- de mort) ; un « close » arrivé après LANCER ne remet pas au menu un joueur qui entre dans la manche
-		local presence = PartyRules.presenceOf(registry, id)
-		if presence == "lobby" or (presence == "game" and not isPlaying(player)) then
-			PartyRules.setPresence(registry, id, "menu")
+		if PartyRules.close(registry, id, isPlaying(player)) then
 			publish({ id })
 		end
 	elseif action == PartyRules.LAUNCH then

@@ -26,7 +26,7 @@ function MenuShot.reset()
 	busy = false
 end
 
--- Cette méthode permet de savoir si une action exclusive (JOUER) est partie lorsqu'un nouveau clic arrive.
+-- Cette méthode permet de savoir si une action exclusive est partie lorsqu'un nouveau clic arrive (aucune depuis #523).
 function MenuShot.isBusy(): boolean
 	return busy
 end

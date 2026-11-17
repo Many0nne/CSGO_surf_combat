@@ -9,6 +9,7 @@ local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local FriendRules = require(Shared:WaitForChild("FriendRules"))
+local PartyRules = require(Shared:WaitForChild("PartyRules"))
 local UITheme = require(Shared:WaitForChild("UITheme"))
 local FriendsProvider = require(script.Parent.Parent.systems.game.FriendsProvider)
 local PartyClient = require(script.Parent.Parent.systems.game.PartyClient)
@@ -143,18 +144,8 @@ local function paintLaunch(members: { PartyClient.Member })
 		end
 	end
 	local state = PartyClient.launchState()
-	local text
-	if #members <= 1 then
-		text = "INVITE TES AMIS OU LANCE SEUL"
-	elseif host and host.isLocal then
-		text = "TU ES L'HÔTE · LANCER FAIT ENTRER TOUT LE LOBBY"
-	elseif state == "waitHost" then
-		text = "EN ATTENTE DE L'HÔTE · " .. string.upper(host and host.name or "?") .. " LANCE LA PARTIE"
-	elseif host and host.presence == "game" then
-		text = string.upper(host.name) .. " EST EN PARTIE · LANCE POUR LE REJOINDRE"
-	else
-		text = string.upper(host and host.name or "TON HÔTE") .. " EST AU MENU · TU PEUX LANCER SEUL"
-	end
+	local text =
+		PartyRules.statusLine(#members, host ~= nil and host.isLocal, state, host and host.presence, host and host.name)
 	setShadowed(statusText, statusShadow, text)
 	launchChoice.setEnabled(state == "launch" and not launching)
 	leaveChoice.button.Visible = #members > 1
