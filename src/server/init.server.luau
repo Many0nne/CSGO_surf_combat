@@ -133,8 +133,10 @@ FeedbackService.init(sendFeedbackRmt, feedbackAckRmt)
 TrainingService.init(trainingRmt)
 -- Groupes du lobby (#523) : publiés dans les attributs des joueurs, arrivée d'un invité reliée au groupe de son ami
 PartyService.init(partyRmt, function(player: Player): boolean
-	-- En partie pour de bon : personnage présent (vivant ou corps pas encore retiré) ou apparition en vol
-	return player.Character ~= nil or SpawnManager.isSpawning(player)
+	-- En partie pour de bon : personnage dans le jeu (vivant ou corps pas encore retiré) ou apparition en vol ; un
+	-- personnage détruit (fin de manche) peut rester référencé par Player.Character
+	local char = player.Character
+	return (char ~= nil and char.Parent ~= nil) or SpawnManager.isSpawning(player)
 end)
 
 RoundManager.init({

@@ -600,7 +600,9 @@ end
 -- dans le lobby ; ailleurs (autre page, déjà en partie), le serveur est prévenu qu'il n'y est plus.
 local function onPartyGo()
 	if state == "MENU" and LobbyScreen.isOpen() then
-		GameStateController.requestPlay()
+		if GameStateController.requestPlay() then
+			LobbyScreen.lock()
+		end
 	elseif not LobbyScreen.isOpen() then
 		PartyClient.close()
 	end
@@ -685,9 +687,7 @@ function GameStateController.init(player: Player, setupCharacter: (char: Model) 
 	-- Lobby entre amis (#523) : LANCER entre dans la manche comme JOUER le faisait, mêmes règles d'apparition
 	LobbyScreen.init({
 		onBack = fromMenu(goHome),
-		onLaunch = function()
-			GameStateController.requestPlay()
-		end,
+		onLaunch = GameStateController.requestPlay,
 		onNotice = MainMenu.showNotice,
 	})
 	PartyClient.init(onPartyGo, openLobby, MainMenu.showNotice)

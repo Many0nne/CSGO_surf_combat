@@ -25,10 +25,28 @@ local function usesDebugFriends(): boolean
 	return RunService:IsStudio() and Players.LocalPlayer:GetAttribute(FriendRules.DEBUG_ATTRIBUTE) == true
 end
 
+-- Joueurs en train de partir (PlayerRemoving arrive alors qu'ils sont encore dans Players:GetPlayers())
+local leaving: { [Player]: boolean } = setmetatable({}, { __mode = "k" }) :: any
+Players.PlayerRemoving:Connect(function(player)
+	leaving[player] = true
+end)
+
+-- Cette méthode permet de lire les joueurs présents sur ce serveur lorsque la liste est construite (sans ceux qui
+-- partent).
+local function playersOnServer(): { Player }
+	local list = {}
+	for _, player in Players:GetPlayers() do
+		if not leaving[player] then
+			table.insert(list, player)
+		end
+	end
+	return list
+end
+
 -- Cette méthode permet de lire les ids des joueurs présents sur ce serveur lorsque la liste est construite.
 local function playersHere(): { [number]: boolean }
 	local here = {}
-	for _, player in Players:GetPlayers() do
+	for _, player in playersOnServer() do
 		here[player.UserId] = true
 	end
 	return here
@@ -68,7 +86,7 @@ function FriendsProvider.fetch(): { FriendRules.Friend }?
 	local localPlayer = Players.LocalPlayer
 	if usesDebugFriends() then
 		local others = {}
-		for _, player in Players:GetPlayers() do
+		for _, player in playersOnServer() do
 			if player ~= localPlayer then
 				table.insert(others, { id = player.UserId, name = player.DisplayName })
 			end

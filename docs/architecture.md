@@ -64,7 +64,10 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
   (`GameFull` → « LE SERVEUR DE TON AMI EST PLEIN », sinon « IMPOSSIBLE DE REJOINDRE TON AMI »), ami parti, pas ami,
   Studio : message sous les onglets, rien de bloqué. Une invitation et REJOINDRE vers un autre serveur ne se vérifient
   que dans le jeu publié. Un seul REJOINDRE à la fois par joueur (posé avant les appels web : deux clics rapprochés ne
-  partent pas en double). Un ami « dans le jeu » est en jeu sur ordinateur, mobile ou Xbox (`LocationType` 4, 1, 5). **Entraînement (#345) :** pas de lobby sur un serveur d'entraînement (un serveur par joueur,
+  partent pas en double). Un ami « dans le jeu » est en jeu sur ordinateur, mobile ou Xbox (`LocationType` 4, 1, 5). Limite : un ami sur un serveur d'entraînement (serveur réservé de la même place) apparaît « dans le jeu », mais
+  REJOINDRE y échoue (« IMPOSSIBLE DE REJOINDRE TON AMI ») : rien ne le distingue dans `GetFriendsOnline`. LANCER ne
+  tire les membres que si l'hôte lance depuis le lobby et que son client entre vraiment dans la manche (`requestPlay`
+  accepté) ; les actions du lobby sont bloquées dès l'entrée dans la manche (`LobbyScreen.lock`), le temps des volets. **Entraînement (#345) :** pas de lobby sur un serveur d'entraînement (un serveur par joueur,
   #388) : JOUER y entre directement en partie, comme avant. **Crédits et stats inchangés :** chacun gagne comme s'il
   jouait seul, aucune récompense d'invitation. Liste d'amis : `FriendRules` (testées) réunit `Players:GetFriendsAsync`
   (100 amis au plus) et `Player:GetFriendsOnline` en un statut par ami (sur ce serveur, dans le jeu, en ligne, hors

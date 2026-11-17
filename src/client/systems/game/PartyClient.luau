@@ -25,6 +25,8 @@ export type Member = {
 local remote: RemoteEvent? = nil
 local listeners: { () -> () } = {}
 local watched: { [Player]: { RBXScriptConnection } } = {}
+-- Joueurs en train de partir : PlayerRemoving arrive alors qu'ils sont encore dans Players:GetPlayers()
+local leaving: { [Player]: boolean } = setmetatable({}, { __mode = "k" }) :: any
 local onGoFn: (() -> ())? = nil
 local onJoinedFn: (() -> ())? = nil
 local onNoticeFn: ((string) -> ())? = nil
@@ -83,7 +85,7 @@ function PartyClient.members(): { Member }
 	local list: { Member } = {}
 	for _, player in Players:GetPlayers() do
 		local playerHost = player:GetAttribute(PartyRules.HOST_ATTRIBUTE)
-		local inParty = playerHost == host or (player == localPlayer)
+		local inParty = not leaving[player] and (playerHost == host or player == localPlayer)
 		if inParty then
 			local order = player:GetAttribute(PartyRules.ORDER_ATTRIBUTE)
 			table.insert(list, {
@@ -171,6 +173,7 @@ function PartyClient.init(onGo: () -> (), onJoined: () -> (), onNotice: (string)
 	end
 	Players.PlayerAdded:Connect(watch)
 	Players.PlayerRemoving:Connect(function(player)
+		leaving[player] = true
 		local connections = watched[player]
 		watched[player] = nil
 		if connections then

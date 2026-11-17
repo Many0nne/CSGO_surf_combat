@@ -193,17 +193,18 @@ function PartyRules.launchState(isHost: boolean, hostPresence: Presence?): Launc
 	return "waitHost"
 end
 
--- Cette méthode permet d'appliquer LANCER lorsqu'un joueur du lobby le choisit : il passe en partie, et s'il est l'hôte,
--- les membres présents dans le lobby avec lui aussi. Renvoie les autres joueurs à faire entrer dans la manche (vide
--- pour un membre, qui lance pour lui seul).
+-- Cette méthode permet d'appliquer LANCER lorsqu'un joueur du lobby le choisit : il passe en partie, et s'il est l'hôte
+-- et lance depuis le lobby, les membres présents dans le lobby avec lui aussi. Renvoie les autres joueurs à faire
+-- entrer dans la manche (vide pour un membre, qui lance pour lui seul, ou pour un hôte qui n'est pas dans le lobby).
 function PartyRules.launch(reg: Registry, id: number): { number }
 	local host = reg.hostOf[id]
 	if not host then
 		return {}
 	end
+	local fromLobby = reg.presence[id] == "lobby"
 	reg.presence[id] = "game"
 	local pulled = {}
-	if host ~= id then
+	if host ~= id or not fromLobby then
 		return pulled
 	end
 	for _, member in reg.parties[host] do

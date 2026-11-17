@@ -65,8 +65,10 @@ local friendsNote: TextLabel
 local reasonsLabel: TextLabel
 local leaveChoice: MenuShot.Choice
 local launchChoice: MenuShot.Choice
-local callbacks: { onBack: () -> (), onLaunch: () -> (), onNotice: (string) -> () }
+local callbacks: { onBack: () -> (), onLaunch: () -> boolean, onNotice: (string) -> () }
 local open = false
+-- Entrée dans la manche en cours (LANCER, ou LANCER de l'hôte reçu) : plus aucune action du lobby jusqu'à sa réouverture,
+-- les volets mettent un instant à couvrir l'écran
 local launching = false
 -- Liste d'amis chargée (nil : pas encore, ou en échec si `failed`), heure du chargement et numéro du dernier lancé
 local friends: { FriendRules.Friend }? = nil
@@ -76,6 +78,7 @@ local fetchGeneration = 0
 -- Ce qui a servi à dessiner la liste d'amis (liste, groupe, droits) : elle n'est refaite que si cela change, pas à chaque
 -- changement de présence d'un joueur du serveur
 local friendsKey: string? = nil
+local groupKey: string? = nil
 local canInvite: boolean? = nil
 local canInviteAsked = false
 
@@ -161,10 +164,24 @@ end
 -- change.
 local function paintGroup(): { [number]: boolean }
 	local members = PartyClient.members()
-	clearRows(groupList)
 	local ids: { [number]: boolean } = {}
-	for index, member in members do
+	local parts = {}
+	for _, member in members do
 		ids[member.id] = true
+		table.insert(
+			parts,
+			string.format("%d:%s:%s:%s", member.id, member.presence, tostring(member.isHost), member.name)
+		)
+	end
+	paintLaunch(members)
+	-- Lignes refaites seulement si le groupe change (pas à chaque changement de présence d'un autre joueur du serveur)
+	local key = table.concat(parts, ";")
+	if key == groupKey then
+		return ids
+	end
+	groupKey = key
+	clearRows(groupList)
+	for index, member in members do
 		local row = makeRow(groupList, index, GROUP_WIDTH)
 		local line = UIKit.frame({
 			Name = "Line",
@@ -207,12 +224,14 @@ local function paintGroup(): { [number]: boolean }
 	end
 	local count = #members
 	setShadowed(groupHeader, groupHeaderShadow, if count > 1 then "GROUPE · " .. count else "GROUPE")
-	paintLaunch(members)
 	return ids
 end
 
 -- Cette méthode permet de lancer l'action d'une ligne d'ami lorsque le joueur clique INVITER ou REJOINDRE.
 local function act(friend: FriendRules.Friend, action: FriendRules.Action)
+	if launching then
+		return
+	end
 	if action == "follow" then
 		PartyClient.follow(friend.id, friend.status == "game")
 		return
@@ -339,7 +358,7 @@ end
 
 -- Cette méthode permet de construire l'écran lorsque le client démarre : `onBack` (RETOUR), `onLaunch` (LANCER,
 -- entrée dans la manche) et `onNotice` (message sous les onglets du menu).
-function LobbyScreen.init(handlers: { onBack: () -> (), onLaunch: () -> (), onNotice: (string) -> () })
+function LobbyScreen.init(handlers: { onBack: () -> (), onLaunch: () -> boolean, onNotice: (string) -> () })
 	callbacks = handlers
 	page = MenuPage.new("LobbyScreen", 2, "LOBBY")
 	local block = page.block
@@ -410,16 +429,19 @@ function LobbyScreen.init(handlers: { onBack: () -> (), onLaunch: () -> (), onNo
 		callbacks.onBack()
 	end)
 	leaveChoice = page.action("QUITTER LE GROUPE", function()
-		PartyClient.leave()
+		if not launching then
+			PartyClient.leave()
+		end
 	end)
 	launchChoice = page.action("LANCER", function()
 		if launching or PartyClient.launchState() ~= "launch" then
 			return
 		end
-		launching = true
-		launchChoice.setEnabled(false)
-		PartyClient.launch()
-		callbacks.onLaunch()
+		-- Entrée dans la manche d'abord : le serveur ne tire les membres du lobby que si le lanceur y entre vraiment
+		if callbacks.onLaunch() then
+			LobbyScreen.lock()
+			PartyClient.launch()
+		end
 	end)
 	launchChoice.setSelected(true)
 
@@ -433,7 +455,10 @@ function LobbyScreen.init(handlers: { onBack: () -> (), onLaunch: () -> (), onNo
 		end
 	end
 	Players.PlayerAdded:Connect(onPlayersChanged)
-	Players.PlayerRemoving:Connect(onPlayersChanged)
+	Players.PlayerRemoving:Connect(function()
+		-- Après les autres abonnés : le joueur qui part est alors marqué comme partant (FriendsProvider)
+		task.defer(onPlayersChanged)
+	end)
 	Players.LocalPlayer:GetAttributeChangedSignal(FriendRules.DEBUG_ATTRIBUTE):Connect(function()
 		if open then
 			refreshFriends()
@@ -451,6 +476,7 @@ function LobbyScreen.show()
 	launching = false
 	-- Lignes refaites à l'ouverture : un survol resté en rouge à la fermeture disparaît
 	friendsKey = nil
+	groupKey = nil
 	PartyClient.open()
 	if os.clock() - friendsAt >= REFRESH_AFTER then
 		refreshFriends()
@@ -469,6 +495,15 @@ function LobbyScreen.hide(silent: boolean?)
 	page.hide()
 	if not silent then
 		PartyClient.close()
+	end
+end
+
+-- Cette méthode permet de bloquer les actions du lobby lorsque le joueur entre dans la manche (LANCER, ou LANCER de
+-- l'hôte reçu) : les volets mettent un instant à couvrir l'écran ; levé à la prochaine ouverture.
+function LobbyScreen.lock()
+	launching = true
+	if launchChoice then
+		launchChoice.setEnabled(false)
 	end
 end
 
