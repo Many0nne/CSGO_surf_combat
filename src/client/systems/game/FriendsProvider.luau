@@ -12,6 +12,11 @@ local PartyRules = require(Shared:WaitForChild("PartyRules"))
 
 local FriendsProvider = {}
 
+-- Dernières entrées lues (GetFriendsAsync, GetFriendsOnline) : le statut « sur ce serveur » se recalcule sans rappeler
+-- Roblox quand un joueur arrive ou part (FriendsProvider.remerge)
+local lastAll: { any }? = nil
+local lastOnline: { any } = {}
+
 -- Résultat d'une invitation : prompt de Roblox ouvert, refusé par Roblox, impossible dans Studio, ou en échec
 export type InviteResult = "prompted" | "refused" | "studio" | "failed"
 
@@ -40,6 +45,9 @@ local function readAll(userId: number): { any }?
 	local all = {}
 	while #all < FriendRules.MAX_FRIENDS do
 		for _, entry in pages:GetCurrentPage() do
+			if #all >= FriendRules.MAX_FRIENDS then
+				break
+			end
 			table.insert(all, entry)
 		end
 		if pages.IsFinished then
@@ -77,7 +85,21 @@ function FriendsProvider.fetch(): { FriendRules.Friend }?
 		warn("[FriendsProvider] amis en ligne illisibles :", online)
 		online = {}
 	end
+	lastAll, lastOnline = all, online
 	return FriendRules.merge(all, online, game.PlaceId, game.JobId, playersHere())
+end
+
+-- Cette méthode permet de recalculer les statuts de la dernière liste lue lorsqu'un joueur arrive sur le serveur ou en
+-- part (statut « sur ce serveur »), sans appel web ; faux amis de Studio relus (ils suivent les joueurs du serveur). nil
+-- si aucune liste n'a encore été lue.
+function FriendsProvider.remerge(): { FriendRules.Friend }?
+	if usesDebugFriends() then
+		return FriendsProvider.fetch()
+	end
+	if not lastAll then
+		return nil
+	end
+	return FriendRules.merge(lastAll, lastOnline, game.PlaceId, game.JobId, playersHere())
 end
 
 -- Cette méthode permet de demander à Roblox si le joueur peut inviter lorsque le lobby s'ouvre (appel bloquant) ; nil

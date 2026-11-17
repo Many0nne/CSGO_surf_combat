@@ -36,8 +36,6 @@ local REASONS_HEIGHT = 44 -- deux lignes de raisons sous la liste d'amis
 local FRIENDS_HEIGHT = MenuPage.ContentBottom - LIST_Y - REASONS_HEIGHT
 -- Délai (s) après lequel la liste d'amis est rechargée à la réouverture du lobby (GetFriendsOnline a un cache de 30 s)
 local REFRESH_AFTER = 30
--- Délai (s) mini entre deux rechargements dus à une arrivée ou un départ sur le serveur (statut « sur ce serveur »)
-local PLAYERS_REFRESH_SPACING = 5
 
 local PRESENCE_LABELS = {
 	lobby = "DANS LE LOBBY",
@@ -75,8 +73,9 @@ local friends: { FriendRules.Friend }? = nil
 local friendsFailed = false
 local friendsAt = -math.huge
 local fetchGeneration = 0
-local lastPlayersRefresh = -math.huge
-local playersRefreshQueued = false
+-- Ce qui a servi à dessiner la liste d'amis (liste, groupe, droits) : elle n'est refaite que si cela change, pas à chaque
+-- changement de présence d'un joueur du serveur
+local friendsKey: string? = nil
 local canInvite: boolean? = nil
 local canInviteAsked = false
 
@@ -230,6 +229,23 @@ end
 -- Cette méthode permet de dessiner la liste d'amis (statut, action, raisons des actions impossibles) lorsqu'elle est
 -- chargée ou que le groupe change.
 local function paintFriends(partyIds: { [number]: boolean })
+	local ids = {}
+	for id in partyIds do
+		table.insert(ids, id)
+	end
+	table.sort(ids)
+	local key = string.format(
+		"%s|%s|%s|%s|%s",
+		tostring(friends),
+		table.concat(ids, ","),
+		tostring(canInvite),
+		tostring(#Players:GetPlayers() >= Players.MaxPlayers),
+		tostring(friendsFailed)
+	)
+	if key == friendsKey then
+		return
+	end
+	friendsKey = key
 	clearRows(friendsList)
 	reasonsLabel.Text = ""
 	if not friends then
@@ -296,8 +312,8 @@ local function paint()
 	paintFriends(paintGroup())
 end
 
--- Cette méthode permet de recharger la liste d'amis à part (appels web) lorsque le lobby s'ouvre et qu'elle date, ou
--- qu'un joueur arrive ou part ; seul le dernier chargement lancé est retenu.
+-- Cette méthode permet de recharger la liste d'amis à part (appels web) lorsque le lobby s'ouvre et qu'elle date ; seul
+-- le dernier chargement lancé est retenu.
 local function refreshFriends()
 	fetchGeneration += 1
 	local generation = fetchGeneration
@@ -408,26 +424,13 @@ function LobbyScreen.init(handlers: { onBack: () -> (), onLaunch: () -> (), onNo
 	launchChoice.setSelected(true)
 
 	PartyClient.onChanged(paint)
-	-- Cette méthode permet de recharger la liste d'amis lorsqu'un joueur arrive ou part pendant que le lobby est ouvert
-	-- (statut « sur ce serveur ») : au plus un rechargement par PLAYERS_REFRESH_SPACING, le dernier changement reporté.
+	-- Cette méthode permet de recalculer le statut « sur ce serveur » des amis lorsqu'un joueur arrive ou part pendant
+	-- que le lobby est ouvert, sur la dernière liste lue (sans rappeler Roblox).
 	local function onPlayersChanged()
-		if not open or playersRefreshQueued then
-			return
+		if open and friends then
+			friends = FriendsProvider.remerge() or friends
+			paint()
 		end
-		local wait = PLAYERS_REFRESH_SPACING - (os.clock() - lastPlayersRefresh)
-		if wait <= 0 then
-			lastPlayersRefresh = os.clock()
-			refreshFriends()
-			return
-		end
-		playersRefreshQueued = true
-		task.delay(wait, function()
-			playersRefreshQueued = false
-			if open then
-				lastPlayersRefresh = os.clock()
-				refreshFriends()
-			end
-		end)
 	end
 	Players.PlayerAdded:Connect(onPlayersChanged)
 	Players.PlayerRemoving:Connect(onPlayersChanged)
@@ -446,6 +449,8 @@ function LobbyScreen.show()
 	end
 	open = true
 	launching = false
+	-- Lignes refaites à l'ouverture : un survol resté en rouge à la fermeture disparaît
+	friendsKey = nil
 	PartyClient.open()
 	if os.clock() - friendsAt >= REFRESH_AFTER then
 		refreshFriends()

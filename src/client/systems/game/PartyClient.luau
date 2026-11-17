@@ -201,7 +201,8 @@ function PartyClient.init(onGo: () -> (), onJoined: () -> (), onNotice: (string)
 				if message == "teleporting" then
 					followCovering = true
 					LoadingScreen.cover(LoadingRules.FOLLOW_LABEL, LoadingRules.COVER_TIMEOUT)
-				elseif followCovering then
+				elseif followCovering and message ~= "busy" then
+					-- Issue de la demande (pas « busy », réponse à un second clic pendant le départ)
 					followCovering = false
 					LoadingScreen.uncover()
 				end
