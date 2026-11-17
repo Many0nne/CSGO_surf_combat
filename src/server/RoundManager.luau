@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local HighlightClipRules = require(ReplicatedStorage.Shared.HighlightClipRules)
 local MemoryTracker = require(ReplicatedStorage.Shared.MemoryTracker)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local ScoreRules = require(ReplicatedStorage.Shared.ScoreRules)
@@ -36,6 +37,11 @@ local timerConn: RBXScriptConnection?
 -- Appelé à chaque fin de manche avec les participants en jeu et le vainqueur (nil sans vainqueur : aucun kill, égalité
 -- parfaite en tête ou aucun participant), branché par init
 local roundEndHandler: ((participants: { Participant }, winner: Participant?) -> ())? = nil
+-- Kill compté (tueur crédité), avec le dernier coup de la victime : notation du clip de la partie (#499), branché par init
+local killHandler: ((victim: Participant, killer: Participant, hit: LastHit) -> ())? = nil
+-- Clip de la partie (#499) : clip retenu pris à la fin de la manche (nil sans kill valide), oubli au retour à idle
+export type Highlight = { take: () -> any, reset: () -> () }
+local highlight: Highlight? = nil
 
 -- ── helpers ────────────────────────────────────────────────────────────────
 
@@ -84,7 +90,17 @@ local function endRound()
 	-- `scores`. Avant la destruction des personnages, qui sortirait les vivants de `inPlay`.
 	local participants, inPlayScores = inPlay()
 	local outcome, winnerId = ScoreRules.outcome(inPlayScores)
-	roundResultRmt:FireAllClients({ outcome = outcome, winnerId = winnerId, scores = inPlayScores })
+	-- Clip de la partie (#499), diffusé une fois avec le résultat ; une erreur ne bloque pas la fin de manche
+	local clip = nil
+	if highlight then
+		local ok, taken = pcall(highlight.take)
+		if ok then
+			clip = taken
+		else
+			warn("[RoundManager] clip de la partie indisponible : " .. tostring(taken))
+		end
+	end
+	roundResultRmt:FireAllClients({ outcome = outcome, winnerId = winnerId, scores = inPlayScores, clip = clip })
 	-- Stats persistantes (#296)
 	if roundEndHandler then
 		-- À part : une erreur du handler ne bloque pas la fin de manche (personnages détruits, retour à idle)
@@ -100,12 +116,15 @@ local function endRound()
 		end
 	end
 
-	-- Même durée que la bannière des clients : une seule source, GameConfig
-	task.delay(GameConfig.RESULT_DURATION, function()
+	-- Même durée que la bannière et le clip des clients : une seule source, HighlightClipRules.resultDuration
+	task.delay(HighlightClipRules.resultDuration(clip and clip.duration), function()
 		state = "idle"
 		scores = {}
 		lastAttacker = {}
 		withdrawn = {}
+		if highlight then
+			highlight.reset()
+		end
 		broadcastState()
 		-- personnages détruits depuis RESULT_DURATION : ce qui reste d'un round à l'autre est candidat à une fuite
 		MemoryTracker.snapshot("fin de round")
@@ -229,6 +248,10 @@ local function recordDeath(victim: Participant): Participant?
 
 	broadcastScores()
 	announceDeath(victim, hit, killer)
+	-- Après l'annonce : une erreur de la notation ne prive pas les clients du kill feed
+	if killer and hit and killHandler then
+		task.spawn(killHandler, victim, killer, hit)
+	end
 	return killer
 end
 
@@ -274,6 +297,9 @@ function RoundManager.removeParticipant(participant: Participant)
 		end
 		state = "idle"
 		scores = {}
+		if highlight then
+			highlight.reset()
+		end
 	end
 end
 
@@ -328,12 +354,16 @@ function RoundManager.init(remotes: {
 	roundResult: RemoteEvent,
 	playerDied: RemoteEvent,
 	onRoundEnd: ((participants: { Participant }, winner: Participant?) -> ())?,
+	onKill: ((victim: Participant, killer: Participant, hit: LastHit) -> ())?,
+	highlight: Highlight?,
 })
 	roundStateRmt = remotes.roundState
 	scoreUpdateRmt = remotes.scoreUpdate
 	roundResultRmt = remotes.roundResult
 	playerDiedRmt = remotes.playerDied
 	roundEndHandler = remotes.onRoundEnd
+	killHandler = remotes.onKill
+	highlight = remotes.highlight
 end
 
 return RoundManager

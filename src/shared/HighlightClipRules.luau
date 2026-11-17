@@ -102,8 +102,10 @@ export type Track = {
 	latestT: number,
 }
 
-export type ShotRing = { count: number, head: number, times: { number }, dirs: { Vector3 } }
-export type Shot = { t: number, dir: Vector3 }
+-- Tir accepté : instant (horloge serveur), direction, et visé (tir à distance, direction de la caméra) ou non (coup de
+-- couteau : direction de la racine, hors du recalage et de la visée reconstruite).
+export type ShotRing = { count: number, head: number, times: { number }, dirs: { Vector3 }, aimed: { boolean } }
+export type Shot = { t: number, dir: Vector3, aimed: boolean }
 
 -- Clip transmis aux clients à la fin de la partie (temps relatifs au début du clip, en s).
 export type Clip = {
@@ -112,7 +114,7 @@ export type Clip = {
 	killerId: number,
 	killerName: string,
 	weapon: string,
-	viewmodel: string?,
+	tool: string?, -- Tool du tireur (ReplicatedStorage.Tools) : viewmodel et son décalage
 	skinId: string?,
 	degraded: boolean, -- POV reconstruit par le serveur (bot, client absent, recalage refusé)
 	pov: string,
@@ -421,15 +423,23 @@ end
 -- Cette méthode permet de créer le tampon des tirs d'un participant lorsque son premier tir accepté arrive.
 function HighlightClipRules.newShotRing(): ShotRing
 	local n = HighlightClipRules.SHOT_CAPACITY
-	return { count = 0, head = 0, times = table.create(n, 0), dirs = table.create(n, Vector3.zero) }
+	return {
+		count = 0,
+		head = 0,
+		times = table.create(n, 0),
+		dirs = table.create(n, Vector3.zero),
+		aimed = table.create(n, true),
+	}
 end
 
--- Cette méthode permet de retenir un tir accepté (instant, direction) lorsqu'il est relayé ; le plus ancien est écrasé.
-function HighlightClipRules.pushShot(ring: ShotRing, t: number, dir: Vector3)
+-- Cette méthode permet de retenir un tir accepté (instant, direction ; `aimed` faux pour un coup de couteau) lorsqu'il
+-- est relayé ; le plus ancien est écrasé.
+function HighlightClipRules.pushShot(ring: ShotRing, t: number, dir: Vector3, aimed: boolean?)
 	local i = ring.head % HighlightClipRules.SHOT_CAPACITY + 1
 	ring.head = i
 	ring.times[i] = t
 	ring.dirs[i] = dir
+	ring.aimed[i] = aimed ~= false
 	ring.count = math.min(ring.count + 1, HighlightClipRules.SHOT_CAPACITY)
 end
 
@@ -442,7 +452,7 @@ function HighlightClipRules.shotsIn(ring: ShotRing, start: number, stop: number)
 		local i = (oldest + k - 1) % cap + 1
 		local t = ring.times[i]
 		if t >= start and t <= stop then
-			table.insert(shots, { t = t, dir = ring.dirs[i] })
+			table.insert(shots, { t = t, dir = ring.dirs[i], aimed = ring.aimed[i] })
 		end
 	end
 	return shots
@@ -541,6 +551,9 @@ function HighlightClipRules.checkPov(
 		return false, string.format("position : %d échantillons sur %d trop loin du serveur", drifting, measured)
 	end
 	for _, shot in shots do
+		if not shot.aimed then
+			continue
+		end
 		local rel = shot.t - start
 		local bestAngle = math.huge
 		local window = HighlightClipRules.POV_AIM_WINDOW
@@ -600,7 +613,7 @@ function HighlightClipRules.buildPov(
 			local bestWeight, shotYaw, shotPitch = 0, 0, 0
 			for _, shot in shots do
 				local weight = 1 - math.abs(shot.t - (start + rel)) / hold
-				if weight > bestWeight then
+				if shot.aimed and weight > bestWeight then
 					bestWeight = weight
 					shotYaw, shotPitch = HighlightClipRules.anglesOf(shot.dir)
 				end

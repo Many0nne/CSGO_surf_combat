@@ -32,6 +32,8 @@ local correctionRemote: RemoteEvent? = nil
 local acceptedCallback: ((Model, Vector3) -> ())? = nil
 -- Déplacement d'un joueur entre deux positions acceptées sans signalement (activité des gains en jouant, #401)
 local moveListener: ((Player, Model, Vector3, Vector3) -> ())? = nil
+-- Position acceptée de tout personnage (joueurs et bots), horodatée : pistes du clip de la partie (#499)
+local positionListener: ((Model, Vector3, number, number) -> ())? = nil
 
 -- Une correction restée sans réponse (s) est renvoyée : filet si le client ne l'a pas appliquée (personnage pas prêt).
 local CORRECTION_RESEND = 1
@@ -169,6 +171,10 @@ local function recordPosition(char: Model, pos: Vector3, yaw: number, crouching:
 		end)
 	end
 	PositionHistory.record(history, stamp, pos, yaw, crouching)
+	local listener = positionListener
+	if listener then
+		listener(char, pos, yaw, stamp)
+	end
 	PerfMarkers.record("srv historique", os.clock() - startedAt)
 end
 
@@ -469,6 +475,12 @@ end
 -- noclip, vol) ; jamais pour un bot, ni pour le saut d'une téléportation du serveur (le paquet suivant en repart).
 function CharacterSync.setMoveListener(listener: (Player, Model, Vector3, Vector3) -> ())
 	moveListener = listener
+end
+
+-- Cette méthode permet d'écouter chaque position acceptée (joueurs et bots : personnage, position, cap en rad, horloge
+-- serveur) lorsque le clip de la partie (#499) tient ses pistes ; coût compté avec l'historique (« srv historique »).
+function CharacterSync.setPositionListener(listener: (Model, Vector3, number, number) -> ())
+	positionListener = listener
 end
 
 -- Cette méthode permet de publier la position d'un bot lorsque son mouvement serveur atteint la cadence réseau : racine

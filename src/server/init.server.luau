@@ -40,6 +40,7 @@ local CheatLog = require(script.CheatLog)
 local ShotRelayRules = require(script.ShotRelayRules)
 local AimStats = require(script.AimStats)
 local TrainingService = require(script.TrainingService)
+local HighlightService = require(script.HighlightService)
 
 -- Serveur d'entraînement (#345, serveur réservé de la même place) : ni bots, ni armes, ni stats, manche sans fin
 local training = TrainingService.isTraining()
@@ -104,6 +105,8 @@ buyCrateRmt.Parent = ReplicatedStorage
 local buyCreditPackRmt = Instance.new("RemoteFunction")
 buyCreditPackRmt.Name = N.BUY_CREDIT_PACK
 buyCreditPackRmt.Parent = ReplicatedStorage
+-- Clip de la partie (#499) : tampon caméra demandé au tireur d'un kill record, renvoyé une fois (HighlightService)
+local highlightPovRmt = makeRemote(N.HIGHLIGHT_POV)
 
 -- ── Initialisation des sous-systèmes ──────────────────────────────────────
 
@@ -143,6 +146,9 @@ RoundManager.init({
 			end
 		end
 	end,
+	-- Clip de la partie (#499) : chaque kill crédité est noté ; clip retenu diffusé avec le résultat, oublié à idle
+	onKill = HighlightService.onKill,
+	highlight = { take = HighlightService.take, reset = HighlightService.reset },
 })
 
 -- Gains de crédits en jouant (#394) : rien en entraînement ni hors manche active ; lignes [CreditGains] dans Studio
@@ -283,9 +289,14 @@ weaponActionRmt.OnServerEvent:Connect(function(player, action)
 		return
 	end
 	lastWeaponAction[player] = now
-	-- Coup de couteau (manqué compris) : la protection d'apparition tombe au premier coup (#288)
+	-- Coup de couteau (manqué compris) : la protection d'apparition tombe au premier coup (#288) ; geste du clip de la
+	-- partie (#499), sans visée (direction de la racine)
 	if action == "Shoot" then
 		SpawnProtection.drop(char)
+		local root = char:FindFirstChild("HumanoidRootPart")
+		if root and root:IsA("BasePart") then
+			HighlightService.noteShot(Participants.fromPlayer(player), root.CFrame.LookVector, nil, false)
+		end
 	end
 	-- Pose 3P seulement : l'ouïe des bots (#141) part des tirs acceptés par le serveur (relayShot, ShotFired, #156)
 	WeaponThirdPerson.setAction(char, action)
@@ -336,6 +347,8 @@ local function relayShot(
 	if not participant.isBot then
 		BotManager.hearShot(participant, root.Position)
 	end
+	-- Clip de la partie (#499) : tirs acceptés, visée du POV et sons du rejeu
+	HighlightService.noteShot(participant, direction, shotTime)
 	return true
 end
 
@@ -454,8 +467,12 @@ local function onParticipantCharacter(participant: Participants.Participant, cha
 	CollisionGroups.assignCharacter(char)
 	forgetCombatState(participant)
 	trackWeapon3P(participant, char)
+	-- Piste du clip de la partie (#499) : positions relayées par CharacterSync rattachées au participant
+	HighlightService.track(participant, char)
 	local humanoid = char:WaitForChild("Humanoid") :: Humanoid
 	humanoid.Died:Connect(function()
+		-- Avant le kill (série remise à zéro) et avant la destruction du corps (apparence gardée)
+		HighlightService.onDeath(participant, char)
 		local player = participant.player
 		if player then
 			-- En premier : une demande d'apparition est refusée pendant RESPAWN_DELAY (#171), même si la suite échoue
@@ -508,6 +525,8 @@ CharacterSync.init(characterSyncRmt, movementCorrectionRmt, function(char: Model
 end, { height = KillZone.height, kill = KillZone.kill })
 -- Activité réelle de la manche (#401) : portée d'un joueur sur ses positions acceptées sans signalement
 CharacterSync.setMoveListener(CreditGains.onMove)
+-- Pistes du clip de la partie (#499) : toutes les positions acceptées, joueurs et bots
+CharacterSync.setPositionListener(HighlightService.recordPosition)
 
 -- Rejeu d'un parcours de mesure (#379, debug/PerfReplay) : replace le joueur sur un point de contrôle de la piste.
 -- Seulement dans Studio ou pour le créateur du jeu publié (mêmes droits que l'overlay F3) ; les autres sont ignorés.
@@ -724,6 +743,28 @@ Validator.setShotWorld({
 	judged = CheatLog.judged,
 })
 
+-- Clip de la partie (#499) : pistes, tirs et notation des kills ; rien sur un serveur d'entraînement (manche sans fin)
+HighlightService.init({
+	enabled = not training,
+	povRemote = highlightPovRmt,
+	isActive = RoundManager.isActive,
+	-- Cette méthode permet de lire l'outil en main d'un participant lorsqu'un kill est noté (viewmodel du clip).
+	toolOf = function(participant)
+		local char = Participants.characterOf(participant)
+		return char and equippedTools[char]
+	end,
+	-- Cette méthode permet de lire le skin équipé sur l'outil d'un joueur lorsqu'un kill est noté (bots : d'origine).
+	skinOf = function(participant, toolName)
+		local player = participant.player
+		return if player then InventoryRules.skinOfTool(InventoryStore.equipped(player), toolName) else nil
+	end,
+	-- Cette méthode permet de savoir si une racine est en l'air (aucun sol de la map sous les pieds) lorsqu'un kill est
+	-- noté (surf, bhop).
+	isAirborne = function(pos: Vector3): boolean
+		return sightCast(pos, Vector3.new(0, -HighlightService.AIR_PROBE, 0)) == nil
+	end,
+})
+
 hitscanRmt.OnServerEvent:Connect(function(player, targetCharacter, hitPart, origin, direction, hitPos, shotTime)
 	if not CheatLog.admit(player, N.HITSCAN_DAMAGE, targetCharacter, hitPart, origin, direction, hitPos, shotTime) then
 		return
@@ -736,7 +777,9 @@ hitscanRmt.OnServerEvent:Connect(function(player, targetCharacter, hitPart, orig
 	-- Statistiques de visée (#178), après coup et sans effet sur la touche : seulement une touche qui a fait des dégâts
 	-- (pas un corps déjà mort), rattachée à son tir par le Validator (#216), flick mesuré sur sa direction validée
 	if onHitVerdict(player, hitscanRmt, targetCharacter, damage, isHeadshot) then
-		AimStats.noteHit(aimStats, participant, isHeadshot, os.clock(), direction, linkedShotTime)
+		local flick = AimStats.noteHit(aimStats, participant, isHeadshot, os.clock(), direction, linkedShotTime)
+		-- Notation du clip de la partie (#499) : le kill que donne cette touche compte le flick
+		HighlightService.noteFlick(participant, flick)
 		-- Taux de touches orphelines (#246) : un client qui n'envoie jamais ShotFired, violation moyenne (journal seul)
 		local orphanDetail = AimStats.orphanAlert(aimStats, participant)
 		if orphanDetail then
@@ -766,6 +809,12 @@ if not training then
 			return if damage then applyHit(bot, targetCharacter, damage, isHeadshot) else nil
 		end,
 		melee = function(bot, targetCharacter)
+			-- Geste du clip de la partie (#499), sans visée
+			local botChar = Participants.characterOf(bot)
+			local botRoot = botChar and botChar:FindFirstChild("HumanoidRootPart")
+			if botRoot and botRoot:IsA("BasePart") then
+				HighlightService.noteShot(bot, botRoot.CFrame.LookVector, nil, false)
+			end
 			local damage = Validator.authorizeMelee(bot, targetCharacter, "primary", os.clock())
 			return if damage then applyHit(bot, targetCharacter, damage, false) else nil
 		end,

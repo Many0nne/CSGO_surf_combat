@@ -206,7 +206,7 @@ return function(T, Loader)
 		local function serverAt(t)
 			return (R.trackAt(track, t))
 		end
-		local forward = { t = 2, dir = Vector3.new(0, 0, -1) }
+		local forward = { t = 2, dir = Vector3.new(0, 0, -1), aimed = true }
 
 		T.it("accepte une caméra honnête, en avance de la latence", function()
 			local ring = cameraOf(0, 4, 50, 0, 50 * 0.15)
@@ -223,10 +223,17 @@ return function(T, Loader)
 
 		T.it("refuse une caméra qui ne regarde pas le tir accepté (aimbot masqué)", function()
 			local ring = cameraOf(0, 4, 50, 0)
-			local up = { t = 2, dir = Vector3.new(0, 0.5, -1).Unit }
+			local up = { t = 2, dir = Vector3.new(0, 0.5, -1).Unit, aimed = true }
 			local ok, why = R.checkPov(R.cameraRows(ring, 0.5, 3.5), 0.5, serverAt, { up })
 			T.expect(not ok)
 			T.expect(string.find(why, "visée") ~= nil, why)
+		end)
+
+		T.it("ignore la direction d'un coup de couteau (non visé)", function()
+			local ring = cameraOf(0, 4, 50, 0)
+			local swing = { t = 2, dir = Vector3.new(1, 0, 0), aimed = false }
+			local ok, why = R.checkPov(R.cameraRows(ring, 0.5, 3.5), 0.5, serverAt, { swing })
+			T.expect(ok, why)
 		end)
 
 		T.it("refuse un tir hors de la caméra, des temps non croissants, une caméra vide", function()
@@ -253,7 +260,7 @@ return function(T, Loader)
 		end)
 
 		T.it("sans client : position serveur, tangage dégradé tiré vers le tir", function()
-			local shot = { t = 2, dir = Vector3.new(0, -0.5, -1).Unit }
+			local shot = { t = 2, dir = Vector3.new(0, -0.5, -1).Unit, aimed = true }
 			local rows = R.buildPov(1, 61, nil, serverAt, { shot })
 			local atShot = rows[31]
 			T.expectNear(atShot[1], 100, 1e-6)

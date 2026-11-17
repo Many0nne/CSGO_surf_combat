@@ -9,6 +9,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local HighlightClipRules = require(ReplicatedStorage.Shared.HighlightClipRules)
 local InventoryRules = require(ReplicatedStorage.Shared.InventoryRules)
 local MathRules = require(ReplicatedStorage.Shared.MathRules)
 local NetworkProtocol = require(ReplicatedStorage.Shared.NetworkProtocol)
@@ -170,7 +171,8 @@ RemoteGuard.FEEDBACK_MAX_BYTES = 1000
 --   SendFeedback : clic ENVOYER ; SaveSettings : 1 envoi par seconde au plus (LocalSettings) ; GetSettings : une
 --   demande au démarrage du client ; EquipItem : un clic sur une arme ou un skin de l'accueil (#280) ; OpenCrate : un
 --   clic sur OUVRIR, l'animation d'ouverture dure plusieurs secondes (#332) ; BuyCrate : un clic sur ACHETER, suivi de la
---   même animation (#393) ; BuyCreditPack : un clic sur un pack, suivi du prompt Roblox (#395).
+--   même animation (#393) ; BuyCreditPack : un clic sur un pack, suivi du prompt Roblox (#395) ; HighlightPov : une
+--   réponse par kill record de la partie, demandée par le serveur au plus une fois par seconde (#499).
 -- Une arme plus rapide (automatique) demandera de relever HitscanDamage, ShotFired et WeaponAction.
 local N = NetworkProtocol.Names
 RemoteGuard.RULES = {
@@ -227,6 +229,13 @@ RemoteGuard.RULES = {
 	[N.BUY_CRATE] = { rate = 1, burst = 3, args = { RemoteGuard.string(InventoryRules.MAX_ID_LENGTH) } },
 	-- Id du pack de crédits (#395) ; pack connu et joueur non restreint vérifiés ensuite par ReceiptService
 	[N.BUY_CREDIT_PACK] = { rate = 1, burst = 3, args = { RemoteGuard.string(InventoryRules.MAX_ID_LENGTH) } },
+	-- Tampon caméra du clip de la partie (#499) : numéro de la demande, série bornée ; demande en attente vérifiée ensuite
+	-- (HighlightService), contenu décodé et recalé sur l'historique serveur
+	[N.HIGHLIGHT_POV] = {
+		rate = 1,
+		burst = 3,
+		args = { RemoteGuard.number(), RemoteGuard.string(HighlightClipRules.POV_MAX_BYTES) },
+	},
 	[N.SEND_FEEDBACK] = { rate = 0.5, burst = 3, args = { RemoteGuard.string(RemoteGuard.FEEDBACK_MAX_BYTES) } },
 	[N.SAVE_SETTINGS] = { rate = 2, burst = 5, args = { RemoteGuard.table() } },
 	[N.GET_SETTINGS] = { rate = 0.2, burst = 3, args = {} },

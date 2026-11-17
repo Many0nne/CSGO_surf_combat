@@ -18,8 +18,13 @@ Protocol.Names = {
 	ROUND_STATE = "RoundState",
 	SCORE_UPDATE = "ScoreUpdate",
 	-- Fin de manche (#295) : serveur → tous, { outcome = "winner" | "tie" | "none", winnerId, scores } ; `scores` liste les
-	-- participants en jeu (pas ceux restés au menu), chacun avec son id ; le client y résout le nom du vainqueur
+	-- participants en jeu (pas ceux restés au menu), chacun avec son id ; le client y résout le nom du vainqueur ; `clip` :
+	-- meilleure action de la partie (#499, HighlightClipRules.Clip), absente sans kill valide
 	ROUND_RESULT = "RoundResult",
+	-- Clip de la partie (#499), cf. server/HighlightService : serveur → tireur d'un kill record (numéro de la demande,
+	-- début et fin de la fenêtre, horloge serveur), puis client → serveur (même numéro, tampon caméra de la fenêtre en
+	-- série HighlightClipRules.CAMERA_SCALES) ; le clip retenu part ensuite à tous dans RoundResult (`clip`)
+	HIGHLIGHT_POV = "HighlightPov",
 	PLAYER_DIED = "PlayerDied",
 	-- Retour au menu principal depuis le menu en partie (#157) : client → serveur, sans argument ; le serveur retire le
 	-- joueur du round (score de la manche, personnage, réapparition), cf. server/init.server
