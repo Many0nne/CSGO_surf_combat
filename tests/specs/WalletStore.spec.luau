@@ -336,6 +336,8 @@ return function(T, Loader)
 	end
 
 	local Wallet = Loader.new({}):require("src/shared/WalletRules")
+	-- Solde d'un nouveau joueur : les soldes attendus d'un joueur sans enregistrement partent de là
+	local START = Wallet.STARTING_BALANCE
 
 	-- Cette méthode permet de poser un enregistrement de schéma 2 dans le faux DataStore lorsqu'un test part d'un solde.
 	local function seed(ds, userId: number, earned: number, purchased: number?, items: { string }?)
@@ -368,13 +370,13 @@ return function(T, Loader)
 	end
 
 	T.describe("WalletStore : solde", function()
-		T.it("nouveau joueur : 0 publié dans l'attribut, aucune écriture au menu", function()
+		T.it("nouveau joueur : solde de départ publié dans l'attribut, aucune écriture au menu", function()
 			local sched = makeScheduler()
 			local ds = makeDataStore(sched)
 			local server = makeServer(sched, ds)
 			local alice = server.join(1)
-			T.expectEqual(server.Wallet.balance(alice), 0)
-			T.expectEqual(alice.attributes.Credits, 0)
+			T.expectEqual(server.Wallet.balance(alice), START)
+			T.expectEqual(alice.attributes.Credits, START)
 			sched.advance(600)
 			T.expectEqual(ds.writes, 0)
 		end)
@@ -418,7 +420,7 @@ return function(T, Loader)
 				T.expect(not server.Wallet.add(alice, amount), "gain " .. tostring(amount))
 				T.expectEqual(server.spend(alice, amount).status, "invalid", "dépense " .. tostring(amount))
 			end
-			T.expectEqual(server.Wallet.balance(alice), 0)
+			T.expectEqual(server.Wallet.balance(alice), START)
 			T.expectEqual(ds.writes, 0)
 		end)
 
@@ -485,7 +487,7 @@ return function(T, Loader)
 				T.expectEqual(record.schemaVersion, 2)
 				T.expectEqual(table.concat(record.items, ","), "skin.awp.balise,weapon.m9bayonet")
 				T.expectEqual(record.equipped.knife.weapon, "weapon.m9bayonet")
-				T.expectEqual(record.wallet.earned, 25)
+				T.expectEqual(record.wallet.earned, START + 25)
 			end
 		)
 
@@ -513,10 +515,10 @@ return function(T, Loader)
 			server.Wallet.add(alice, 200)
 			sched.advance(1)
 			server.Wallet.add(alice, 50)
-			T.expectEqual(server.Wallet.balance(alice), 250)
+			T.expectEqual(server.Wallet.balance(alice), START + 250)
 			sched.advance(10)
 			T.expectEqual(ds.writes, 1, "une seule écriture pour les deux gains")
-			T.expectEqual(storedWallet(ds, 1).earned, 250)
+			T.expectEqual(storedWallet(ds, 1).earned, START + 250)
 			sched.advance(600)
 			T.expectEqual(ds.writes, 1, "plus rien ensuite")
 		end)
@@ -546,9 +548,9 @@ return function(T, Loader)
 			sched.advance(20)
 			T.expectEqual(ds.writes, 0)
 			T.expect(hasWarning(server, "sauvegarde impossible"))
-			T.expectEqual(server.Wallet.balance(alice), 80, "solde gardé en mémoire")
+			T.expectEqual(server.Wallet.balance(alice), START + 80, "solde gardé en mémoire")
 			sched.advance(120)
-			T.expectEqual(storedBalance(ds, 1), 80)
+			T.expectEqual(storedBalance(ds, 1), START + 80)
 		end)
 
 		T.it(
@@ -569,9 +571,9 @@ return function(T, Loader)
 				sched.advance(120)
 				T.expectEqual(ds.failures, 0, "sixième écriture tentée malgré les 5 échecs")
 				T.expectEqual(ds.writes, 0)
-				T.expectEqual(server.Wallet.balance(alice), 80, "gains gardés en mémoire")
+				T.expectEqual(server.Wallet.balance(alice), START + 80, "gains gardés en mémoire")
 				sched.advance(130)
-				T.expectEqual(storedBalance(ds, 1), 80, "gains écrits à la reprise")
+				T.expectEqual(storedBalance(ds, 1), START + 80, "gains écrits à la reprise")
 				T.expectEqual(ds.writes, 1)
 			end
 		)
@@ -593,7 +595,7 @@ return function(T, Loader)
 				sched.advance(62)
 				T.expectEqual(#ds.requests - started, 3, "pas de nouvel essai 6 s après l'échec")
 				sched.advance(20)
-				T.expectEqual(storedBalance(ds, 1), 15, "écrit 60 s après l'échec")
+				T.expectEqual(storedBalance(ds, 1), START + 15, "écrit 60 s après l'échec")
 			end
 		)
 
@@ -618,7 +620,7 @@ return function(T, Loader)
 					record ~= nil and table.find(record.items, "weapon.m9bayonet") ~= nil,
 					"objet écrit au nouvel essai"
 				)
-				T.expectEqual(storedBalance(ds, 1), 10)
+				T.expectEqual(storedBalance(ds, 1), START + 10)
 			end
 		)
 
@@ -653,16 +655,20 @@ return function(T, Loader)
 				-- Écrit à 6 s mais signalé en échec ; nouvel essai à 8 s
 				sched.advance(7)
 				local stored = storedWallet(ds, 1)
-				T.expectEqual(stored.earned, 100)
+				T.expectEqual(stored.earned, START + 100)
 				-- Entre-temps, d'autres sessions (autres serveurs) écrivent la même clé
 				for i = 1, Wallet.MAX_WRITE_MARKS - 1 do
 					table.insert(stored.writes, { session = "autre" .. i, seq = 1 })
 					stored.earned += 1
 				end
 				sched.advance(20)
-				T.expectEqual(storedBalance(ds, 1), 100 + Wallet.MAX_WRITE_MARKS - 1, "lot renvoyé pas recompté")
+				T.expectEqual(
+					storedBalance(ds, 1),
+					START + 100 + Wallet.MAX_WRITE_MARKS - 1,
+					"lot renvoyé pas recompté"
+				)
 				T.expectEqual(#storedWallet(ds, 1).writes, Wallet.MAX_WRITE_MARKS)
-				T.expectEqual(server.Wallet.balance(alice), 100 + Wallet.MAX_WRITE_MARKS - 1)
+				T.expectEqual(server.Wallet.balance(alice), START + 100 + Wallet.MAX_WRITE_MARKS - 1)
 			end
 		)
 
@@ -674,11 +680,11 @@ return function(T, Loader)
 			server.Wallet.add(alice, 100)
 			ds.commitThenFail = 1
 			sched.advance(20)
-			T.expectEqual(storedBalance(ds, 1), 100)
+			T.expectEqual(storedBalance(ds, 1), START + 100)
 			server.Wallet.add(alice, 1)
 			sched.advance(20)
-			T.expectEqual(storedBalance(ds, 1), 101)
-			T.expectEqual(server.Wallet.balance(alice), 101)
+			T.expectEqual(storedBalance(ds, 1), START + 101)
+			T.expectEqual(server.Wallet.balance(alice), START + 101)
 		end)
 
 		T.it("écrit au départ du joueur et à l'arrêt du serveur", function()
@@ -690,11 +696,11 @@ return function(T, Loader)
 			server.Wallet.add(alice, 30)
 			server.Wallet.add(bob, 70)
 			server.leave(alice)
-			T.expectEqual(storedBalance(ds, 1), 30, "écrit au départ, sans attendre")
+			T.expectEqual(storedBalance(ds, 1), START + 30, "écrit au départ, sans attendre")
 			local state = server.close()
 			sched.advance(1)
 			T.expect(state.done)
-			T.expectEqual(storedBalance(ds, 2), 70, "écrit à l'arrêt")
+			T.expectEqual(storedBalance(ds, 2), START + 70, "écrit à l'arrêt")
 		end)
 
 		T.it(
@@ -1028,9 +1034,9 @@ return function(T, Loader)
 			end)
 			T.expectEqual(state.status, "ok")
 			T.expectEqual(state.result, "achat")
-			T.expectEqual(server.Wallet.balance(alice), 180)
+			T.expectEqual(server.Wallet.balance(alice), START + 180)
 			T.expect(server.Inventory.owned(alice)["skin.awp.balise"])
-			T.expectEqual(server.spend(alice, 500).status, "insufficient")
+			T.expectEqual(server.spend(alice, START + 181).status, "insufficient")
 			T.expectEqual(ds.writes, 0)
 		end)
 		T.it("une erreur après l'écriture rend quand même le tour : les écritures suivantes passent", function()
@@ -1100,11 +1106,11 @@ return function(T, Loader)
 			local alice = server.join(1)
 			alice.attributes.DebugCredits = 1500
 			server.Wallet.applyDebug(alice)
-			T.expectEqual(server.Wallet.balance(alice), 1500)
+			T.expectEqual(server.Wallet.balance(alice), START + 1500)
 			T.expectEqual(alice.attributes.DebugCredits, nil, "attribut remis à nil")
 			sched.advance(10)
-			T.expectEqual(storedBalance(ds, 1), 1500)
-			alice.attributes.DebugCredits = -2000
+			T.expectEqual(storedBalance(ds, 1), START + 1500)
+			alice.attributes.DebugCredits = -(START + 2000)
 			sched.task.spawn(server.Wallet.applyDebug, alice)
 			T.expectEqual(server.Wallet.balance(alice), 0)
 			T.expectEqual(storedBalance(ds, 1), 0)
@@ -1119,11 +1125,11 @@ return function(T, Loader)
 			sched.advance(10)
 			alice.attributes.DebugCredits = 500
 			server.Wallet.applyDebug(alice)
-			T.expectEqual(server.Wallet.balance(alice), 500)
-			T.expectEqual(alice.attributes.Credits, 500)
+			T.expectEqual(server.Wallet.balance(alice), START + 500)
+			T.expectEqual(alice.attributes.Credits, START + 500)
 			alice.attributes.DebugCredits = -200
 			server.Wallet.applyDebug(alice)
-			T.expectEqual(server.Wallet.balance(alice), 300)
+			T.expectEqual(server.Wallet.balance(alice), START + 300)
 			server.leave(alice)
 			sched.advance(600)
 			T.expectEqual(ds.writes, 0)
@@ -1386,10 +1392,10 @@ return function(T, Loader)
 			sched.advance(10)
 			alice.attributes.DebugCredits = 700
 			server.Wallet.applyDebug(alice)
-			T.expectEqual(alice.attributes.Credits, 700)
+			T.expectEqual(alice.attributes.Credits, START + 700)
 			local buy = server.buy(alice, AWP1, ROLL_IMPACT)
 			T.expectEqual(buy.reply.ok, true)
-			T.expectEqual(alice.attributes.Credits, 200)
+			T.expectEqual(alice.attributes.Credits, START + 200)
 			T.expectEqual(server.Inventory.owned(alice)["skin.awp.mue"], true)
 			T.expectEqual(ds.writes, 0, "jamais écrit")
 		end)
