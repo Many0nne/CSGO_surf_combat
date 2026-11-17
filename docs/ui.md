@@ -219,8 +219,7 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   chargeur (couteau) et hors partie (`HUDRules.gameHudVisible`, via `GameStateController.applyGameHud`). Contrairement à
   la barre d'armes, il ne s'estompe pas.
 - Réglage « Auto-bhop » (#255) : catégorie MOUVEMENT de `SettingsMenu` (une seule ligne, ACTIVÉ par défaut), `PlayerSettings.autoBhop`, lu à chaque tick par `MovementController` et passé à `BhopSystem` : sans respawn.
-- Réglage « Conseils » (#291) : catégorie GRAPHISMES de `SettingsMenu`, juste sous « Affichage des touches » (les deux
-  aides affichées à l'écran côte à côte), ACTIVÉS par défaut, suivi par RÉTABLIR ; `PlayerSettings.deathTips` (absent d'un
+- Réglage « Conseils » (#291) : catégorie GÉNÉRAL de `SettingsMenu` (dans GRAPHISMES jusqu'à #518), ACTIVÉS par défaut, suivi par RÉTABLIR ; `PlayerSettings.deathTips` (absent d'un
   réglage sauvegardé = activés). Coupé, l'écran de mort d'un débutant n'affiche plus de conseil ; sans effet pour les autres.
 - `src/client/ui/Crosshair.luau` (#195) : réglage « Visée simplifiée » (Réglages > VISEUR depuis #251, `PlayerSettings.simpleAim`, coupé par
   défaut). Par défaut, quatre traits fins os (longueur 9 px, épaisseur 2, écart 5) sans point central, doublés d'un contour
@@ -480,7 +479,7 @@ Le joueur rejoue lui-même le geste de la démo, la démo sous les yeux.
   de la map n'est pas refaite à chaque réapparition), sous le menu en partie, et est libérée au retour au menu.
 - **Masquable** (un joueur qui sait déjà bhoper n'en a pas besoin) : choix MASQUER LA DÉMO / AFFICHER LA DÉMO du menu en
   partie, entre RÉGLAGES et QUITTER L'ENTRAÎNEMENT (le menu reste ouvert après le clic), et ligne « Démo d'entraînement »
-  de Réglages > GRAPHISMES. Réglage sauvegardé `trainingDemo` (affichée par défaut) : chaque arrivée sur l'entraînement
+  de Réglages > GÉNÉRAL. Réglage sauvegardé `trainingDemo` (affichée par défaut) : chaque arrivée sur l'entraînement
   est une nouvelle session (téléportation), un choix gardé pour la session seulement serait perdu. Masquée, la démo est
   libérée (copie de la map comprise) ; réaffichée, la copie est refaite. Elle attend l'arrivée des réglages sauvegardés
   avant de s'afficher, sinon le défaut la montrait un instant à un joueur qui l'a masquée. Sous la démo, aligné sur son
@@ -1087,7 +1086,10 @@ bloquée puis par sauts). Code : `src/first/` (`ReplicatedFirst`), cf. `docs/arc
 
 ## Langue : français / anglais (#518)
 
-Réglage « Langue » en tête de GRAPHISMES (FRANÇAIS / ENGLISH, chaque nom écrit dans sa langue), gardé par RÉTABLIR.
+Réglage « Langue » en tête de l'onglet GÉNÉRAL (FRANÇAIS / ENGLISH, chaque nom écrit dans sa langue), gardé par
+RÉTABLIR. GÉNÉRAL est le premier onglet, ouvert par défaut : il reçoit les réglages qui ne sont ni des contrôles, ni du
+son, ni de l'affichage (Langue, Conseils, Démo d'entraînement ; choix de l'utilisateur, la langue dans GRAPHISMES
+n'était pas logique).
 Sans choix du joueur (`PlayerSettings.language` nil) : langue du compte Roblox (`LocalizationService.RobloxLocaleId`,
 français si « fr… », anglais sinon). Changer de langue bascule tous les écrans tout de suite, sans relancer.
 

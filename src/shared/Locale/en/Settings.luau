@@ -2,6 +2,7 @@
 -- Écran Réglages (catégories, lignes, valeurs des choix, saisie des touches) et noms des couleurs du viseur.
 return {
 	-- Catégories
+	["GÉNÉRAL"] = "GENERAL",
 	["TOUCHES"] = "KEYS",
 	["MANETTE"] = "GAMEPAD",
 	["MOUVEMENT"] = "MOVEMENT",

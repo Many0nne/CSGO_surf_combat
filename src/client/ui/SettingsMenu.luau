@@ -733,6 +733,44 @@ end
 -- Cette méthode permet de construire les catégories et leurs réglages lorsque l'écran est initialisé ; une catégorie
 -- sans réglage n'est pas créée.
 local function buildCategories(block: Frame)
+	-- GÉNÉRAL (#518) : en tête, ouvert par défaut, réglages qui ne sont ni des contrôles, ni du son, ni de l'affichage
+	-- (choix de l'utilisateur : la langue n'avait rien à faire dans GRAPHISMES, les aides non plus)
+	local general = addCategory(block, "GÉNÉRAL")
+	-- Langue du jeu (#518) : français ou anglais, chaque nom écrit dans sa langue ; sans choix, celle du compte Roblox
+	-- (LocalSettings). Gardée par RÉTABLIR : rétablir l'affichage ne doit pas changer la langue sous les yeux du joueur
+	local languageOptions = {}
+	for i, language in Locale.LANGUAGES do
+		languageOptions[i] = { label = Locale.NAMES[language], value = language }
+	end
+	local languageIndex = table.find(Locale.LANGUAGES, Locale.get()) or 1
+	addPicker(general, "Langue", "language", languageOptions, languageIndex, languageIndex, function() end, 150, true)
+	-- La langue affichée peut changer sans le joueur (langue du compte au démarrage, réglages chargés) : la ligne la suit
+	local languageRow = general.list[#general.list]
+	Locale.onChanged(function(language)
+		local wasSyncing = syncing
+		syncing = true
+		languageRow.sync({ language = language } :: any)
+		syncing = wasSyncing
+	end)
+	-- Conseils de l'écran de mort des débutants (#291) ; GameStateController suit LocalSettings
+	local tipOptions = { { label = "ACTIVÉS", value = true }, { label = "COUPÉS", value = false } }
+	local tipDefault = if PlayerSettings.DEFAULT_DEATH_TIPS then 1 else 2
+	addPicker(general, "Conseils", "deathTips", tipOptions, tipDefault, tipDefault, function() end, 150)
+	-- Démo du coin sur le serveur d'entraînement (#345), aussi basculée par le menu en partie ; TrainingClient suit
+	-- LocalSettings
+	local demoOptions = { { label = "AFFICHÉE", value = true }, { label = "MASQUÉE", value = false } }
+	local demoDefault = if PlayerSettings.DEFAULT_TRAINING_DEMO then 1 else 2
+	addPicker(
+		general,
+		"Démo d'entraînement",
+		"trainingDemo",
+		demoOptions,
+		demoDefault,
+		demoDefault,
+		function() end,
+		150
+	)
+
 	local mouse = addCategory(block, "SOURIS")
 	addSlider(
 		mouse,
@@ -861,22 +899,6 @@ local function buildCategories(block: Frame)
 	buildKeysCategory(block)
 
 	local graphics = addCategory(block, "GRAPHISMES")
-	-- Langue du jeu (#518) : français ou anglais, chaque nom écrit dans sa langue ; sans choix, celle du compte Roblox
-	-- (LocalSettings). Gardée par RÉTABLIR : rétablir l'affichage ne doit pas changer la langue sous les yeux du joueur
-	local languageOptions = {}
-	for i, language in Locale.LANGUAGES do
-		languageOptions[i] = { label = Locale.NAMES[language], value = language }
-	end
-	local languageIndex = table.find(Locale.LANGUAGES, Locale.get()) or 1
-	addPicker(graphics, "Langue", "language", languageOptions, languageIndex, languageIndex, function() end, 150, true)
-	-- La langue affichée peut changer sans le joueur (langue du compte au démarrage, réglages chargés) : la ligne la suit
-	local languageRow = graphics.list[#graphics.list]
-	Locale.onChanged(function(language)
-		local wasSyncing = syncing
-		syncing = true
-		languageRow.sync({ language = language } :: any)
-		syncing = wasSyncing
-	end)
 	-- Ombres du soleil sur ce poste seulement (#88) : la passe d'ombres est le plus gros coût GPU de la map ;
 	-- par défaut, l'état de la place
 	local shadowOptions = { { label = "ACTIVÉES", value = true }, { label = "COUPÉES", value = false } }
@@ -891,24 +913,6 @@ local function buildCategories(block: Frame)
 		{ label = "COMPLET", value = "full" },
 	}
 	addPicker(graphics, "Affichage des touches", "keyDisplay", keyDisplayOptions, 1, 1, function() end, 150)
-	-- Conseils de l'écran de mort des débutants (#291), à côté de l'autre aide affichée ; GameStateController suit LocalSettings
-	local tipOptions = { { label = "ACTIVÉS", value = true }, { label = "COUPÉS", value = false } }
-	local tipDefault = if PlayerSettings.DEFAULT_DEATH_TIPS then 1 else 2
-	addPicker(graphics, "Conseils", "deathTips", tipOptions, tipDefault, tipDefault, function() end, 150)
-	-- Démo du coin sur le serveur d'entraînement (#345), aussi basculée par le menu en partie ; TrainingClient suit
-	-- LocalSettings
-	local demoOptions = { { label = "AFFICHÉE", value = true }, { label = "MASQUÉE", value = false } }
-	local demoDefault = if PlayerSettings.DEFAULT_TRAINING_DEMO then 1 else 2
-	addPicker(
-		graphics,
-		"Démo d'entraînement",
-		"trainingDemo",
-		demoOptions,
-		demoDefault,
-		demoDefault,
-		function() end,
-		150
-	)
 	-- Échelle du HUD (#250) en pourcents entiers : éléments de bord du HUD ; init.client la relaie à UIKit.setHudScale
 	local hudScale = PlayerSettings.HUD_SCALE
 	addSlider(
