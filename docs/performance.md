@@ -337,6 +337,24 @@ Dans le MicroProfiler (Ctrl+F6, puis pause pour figer une frame lente), ces noms
 `RenderStep` (`mouvement`, `caméra` et `viewmodel` sont sous `RenderStep`, `tenue 3P` sous `PreAnimation` et
 `PreSimulation`) : on voit si une frame lente vient de nos scripts ou du moteur (rendu, physique, GC).
 
+## Clip de la partie (#499, mesure du 2026-11-17)
+
+Coût du clip de fin de partie pendant la manche (Studio, Dizzy, `PerfRun "Dizzy"` avec `DebugBots` 5 qui tirent, un
+rejeu par ligne, alternés) :
+
+| Version | FPS | p99 | CPU moy | scripts | dont `clip caméra` | Lua client |
+|---|---|---|---|---|---|---|
+| avant (8f76240) n°1 | 60 | 23,3 ms | 5,9 ms | 0,745 ms/frame | — | 9-12 Mo |
+| après n°1 | 53 | 33,8 ms | 14,4 ms | 0,950 ms/frame | 0,017 ms | 8-12 Mo |
+| après n°2 | 38 | 37,9 ms | 23,9 ms | 1,105 ms/frame | 0,020 ms | 8-12 Mo |
+| avant n°2 (contrôle) | 50 | 35,1 ms | 16,1 ms | 0,956 ms/frame | — | 8-12 Mo |
+
+Les deux versions se recouvrent : l'écart vient de l'état lent de Studio (voir « Bilan #370 »), pas du clip. Indices :
+le contrôle « avant » n°2 est aussi lent que les « après », et des postes inchangés (mouvement 0,26 → 0,45 ms, plan de
+navigation 11 → 22 s) varient autant. Coût propre mesuré : l'enregistreur de caméra (`clip caméra`) 0,02 ms/frame ; le
+figeage d'un record côté serveur 1 à 14 ms, une fois par record (journal `[Highlight]`). Pistes et tirs du serveur
+sont comptés dans le repère `srv historique`. Pendant la lecture (phase de résultat) : non mesuré à l'overlay.
+
 ## Relevés mémoire (fuites)
 
 `src/shared/MemoryTracker.luau` écrit une ligne `[Perf] MEM` à chaque événement du cycle de vie :
