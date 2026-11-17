@@ -1030,6 +1030,29 @@ Achat de crédits en Robux (règles : `docs/economie.md`). Sur la page SHOP seul
 
 ![Planche du jeton](ui/credits/planche_jeton.png)
 
+## Écran de chargement (#480)
+
+Mêmes volets que « DÉPLOIEMENT » (`Transition`) : fond soleil (`SunWhite`), libellé Oswald gras 64 px (`Ground`), et
+dessous un curseur qui va et vient sur un trait (pas de barre ni de pourcentage : la progression de Roblox avance mal,
+bloquée puis par sauts). Code : `src/first/` (`ReplicatedFirst`), cf. `docs/architecture.md`.
+
+- **Lancement (« CHARGEMENT ») :** affiché à la première image à la place de l'écran de Roblox, levé (volets qui
+  s'ouvrent) quand le jeu est chargé et la scène du menu construite et préchargée (`MenuScene.isReady`,
+  `ContentProvider:PreloadAsync` de la copie de la map et du personnage), au moins 0,8 s pour ne pas clignoter, au plus
+  30 s quoi qu'il arrive. Dans un playtest Studio, levé avant 2,5 s.
+- **Téléportation (« ENTRAÎNEMENT » / « RETOUR EN PARTIE ») :** `TrainingClient` confie une copie de l'écran à Roblox
+  (`TeleportService:SetTeleportGui`) avant la demande, ferme les volets quand le serveur répond `teleporting`, les
+  rouvre sur `failed` (ou 30 s sans départ). À l'arrivée, `Loading.client` remontre l'écran fermé avec le libellé lu dans
+  les données de téléportation (`{ training = boolean }`), à la place du gui de Roblox. Ne se vérifie que dans le jeu
+  publié.
+- **Arrivée sur l'entraînement :** le client demande tout de suite l'apparition ; sous l'écran de chargement,
+  `Transition.close` ferme ses volets d'un coup, puis l'écran se retire sans animation (`uncover(true)`) : on passe de
+  « ENTRAÎNEMENT » à « DÉPLOIEMENT » sans rien voir glisser. Piège : la scène du menu n'y est jamais finie (le menu se
+  referme aussitôt), l'écran se lève donc aussi dès que le client a quitté le menu ; sans ça, il restait 30 s.
+- **Shop :** pas de volets, un voile noir (`RoomVeil` de `ShopScreen`) sous l'interface, plein écran : 0,3 s noir puis
+  fondu de 0,45 s, la salle « s'allume » au lieu d'apparaître pendant que l'éclairage Future s'installe. Durées
+  choisies à l'œil, temps d'installation de l'éclairage non mesuré.
+
 ## Reste à faire
 
 - Piste écartée pour l'instant sur le compteur : chiffres en images usées comme le titrage, et inclinaison qui augmente avec la vitesse.

@@ -5,6 +5,7 @@
 -- Le joueur peut la masquer (menu en partie ou Réglages, réglage trainingDemo sauvegardé) : elle est alors libérée aussi.
 -- Aucun jugement du geste : le joueur compare lui-même ses touches, sa souris et sa vitesse (HUD) à celles de la démo.
 local Players = game:GetService("Players")
+local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -13,6 +14,8 @@ local PlayerSettings = require(Shared:WaitForChild("PlayerSettings"))
 local TrainingRules = require(Shared:WaitForChild("TrainingRules"))
 
 local LocalSettings = require(script.Parent.Parent.settings.LocalSettings)
+local LoadingRules = require(ReplicatedFirst:WaitForChild("LoadingRules"))
+local LoadingScreen = require(ReplicatedFirst:WaitForChild("LoadingScreen"))
 
 local UI = script.Parent.Parent.Parent.ui
 local DemoPlayer = require(UI.DemoPlayer)
@@ -36,6 +39,8 @@ local cornerGui: ScreenGui? = nil
 local cornerHolder: Frame? = nil
 local demo: DemoPlayer.Demo? = nil
 local gameState = "MENU" -- dernier état du client (GameStateController)
+-- Libellé de l'écran de chargement de la dernière demande (#480) : vers l'entraînement ou retour en partie
+local teleportLabel = LoadingRules.INITIAL_LABEL
 
 -- Délai (s) d'attente du remote Training au démarrage du client, avant de composer les écrans selon le mode
 local MODE_WAIT = 10
@@ -66,6 +71,12 @@ local function resolveRemote(): RemoteEvent?
 	if found and found:IsA("RemoteEvent") then
 		remote = found
 		found.OnClientEvent:Connect(function(status)
+			-- Écran de chargement (#480) : fermé quand le départ est lancé, rouvert sur le menu si la téléportation échoue
+			if status == "teleporting" then
+				LoadingScreen.cover(teleportLabel, LoadingRules.COVER_TIMEOUT)
+			elseif status == "failed" then
+				LoadingScreen.uncover()
+			end
 			local text = TrainingRules.notice(status)
 			if text then
 				MainMenu.showNotice(text)
@@ -83,7 +94,11 @@ function TrainingClient.request()
 		MainMenu.showNotice(TrainingRules.notice("unavailable") :: string)
 		return
 	end
-	found:FireServer(if TrainingClient.isTraining() then TrainingRules.LEAVE else TrainingRules.JOIN)
+	local joining = not TrainingClient.isTraining()
+	-- Écran montré par Roblox pendant le transfert (#480), le même que celui fermé à l'annonce du départ
+	teleportLabel = LoadingRules.teleportLabel(joining)
+	LoadingScreen.setTeleportGui(teleportLabel)
+	found:FireServer(if joining then TrainingRules.JOIN else TrainingRules.LEAVE)
 end
 
 -- Cette méthode permet de construire le cadre du coin (vide, sans lecteur) lorsque la démo s'affiche pour la première

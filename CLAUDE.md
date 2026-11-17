@@ -145,6 +145,7 @@ par un verrou, `worktrees/.run/studio.lock`. Faire d'abord tout ce qui se passe 
 - `src/shared` -> `ReplicatedStorage/Shared`
 - `src/server` -> `ServerScriptService/Server`
 - `src/client` -> `StarterPlayerScripts/Client`
+- `src/first` -> `ReplicatedFirst` (écran de chargement, cf. `docs/ui.md`)
 - `assets/rbx/ViewModels/<Nom>.rbxm` -> `ReplicatedStorage/ViewModels/<Nom>` (viewmodels FPS, aussi clonés pour l'arme 3P)
 - `assets/rbx/Tools/<Nom>.rbxm` -> `ReplicatedStorage/Tools/<Nom>` (Tools des armes, attribut `ViewmodelName` ; donnés par le serveur selon l'inventaire, `StarterPack` vide, cf. `InventoryStore`)
 - `assets/rbx/Skins/<Viewmodel>/<skin>.model.json` -> `ReplicatedStorage/Skins/<Viewmodel>/<skin>` (SurfaceAppearance des skins d'arme, générées par `tools/skins/make_rbx.py`, cf. `docs/assets.md`)

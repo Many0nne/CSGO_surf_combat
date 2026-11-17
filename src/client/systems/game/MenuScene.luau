@@ -2,6 +2,7 @@
 -- dans le menu, sur une copie de la map jouée. La copie ne garde que les pièces vues par la caméra et se pose loin de la
 -- vraie map : aucun joueur ni bot n'y passe. Caméra fixe qui suit à peine le curseur, flou léger sur le fond,
 -- respiration du personnage. Tout est local au client ; l'éclairage reste celui du jeu.
+local ContentProvider = game:GetService("ContentProvider")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -86,6 +87,8 @@ local currentSkin: string? = nil -- skin montré sur l'arme tenue (#268, nil : d
 local running = false
 local paused = false -- shop ouvert (#347) : sa propre salle tient la caméra
 local building = false
+-- Textures et maillages de la scène chargés (#480) : l'écran de chargement du lancement attend ce moment
+local preloaded = false
 local connection: RBXScriptConnection?
 local blur: DepthOfFieldEffect?
 local baseCFrame = CFrame.new() -- caméra face au personnage, sans lacet
@@ -541,6 +544,13 @@ function MenuScene.start()
 		return
 	end
 	stage.Parent = workspace
+	if not preloaded then
+		-- Chargé sous l'écran du lancement (#480) : la map et le personnage n'apparaissent pas texture par texture
+		task.spawn(function()
+			pcall(ContentProvider.PreloadAsync, ContentProvider, { stage })
+			preloaded = true
+		end)
+	end
 	local effect = Instance.new("DepthOfFieldEffect")
 	effect.Name = "MenuBlur"
 	effect.FocusDistance = focusDistance
@@ -551,6 +561,12 @@ function MenuScene.start()
 	effect.Parent = workspace.CurrentCamera
 	blur = effect
 	connection = RunService.RenderStepped:Connect(PerfMarkers.wrap("menu 3D", update))
+end
+
+-- Cette méthode permet de savoir si la scène est construite et ses textures chargées lorsque l'écran de chargement du
+-- lancement (#480) décide de se lever.
+function MenuScene.isReady(): boolean
+	return stage ~= nil and preloaded
 end
 
 -- Cette méthode permet d'arrêter la scène et de rendre le FOV du jeu (CameraConfig.DEFAULT_FOV) lorsque le menu se
