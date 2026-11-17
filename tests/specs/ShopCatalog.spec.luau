@@ -151,8 +151,12 @@ return function(T, Loader)
 			local knife2 = Shop.contents(Shop.crate("crate.m9.serie2"), Inventory.ITEMS)
 			T.expectEqual(
 				names(knife2),
-				"TOPO,HÔTE,PIED-DE-POULE,TOMETTE,SPHINX,AZULEJO,NACRE,CHINOISERIE,TAPISSERIE,CUIR DE CORDOUE"
+				"TOPO,AZULEJO,PIED-DE-POULE,TOMETTE,SPHINX,HÔTE,NACRE,CHINOISERIE,TAPISSERIE,CUIR DE CORDOUE"
 			)
+			T.expectEqual(knife2[2].rarity.label, "COMMUN")
+			T.expectEqual(knife2[6].rarity.label, "RARE")
+			T.expectEqual(Shop.rarityOf({ weapon = "weapon.m9bayonet", appearance = "hote" }).label, "RARE")
+			T.expectEqual(Shop.rarityOf({ weapon = "weapon.m9bayonet", appearance = "azulejo" }).label, "COMMUN")
 			T.expectEqual(knife2[10].skin, "skin.m9bayonet.cordoue")
 			T.expectEqual(knife2[10].rarity.label, "LÉGENDAIRE")
 		end)

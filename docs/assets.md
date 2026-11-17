@@ -487,7 +487,7 @@ marquages sont celles de Windows (`C:/Windows/Fonts`, Bahnschrift, Impact) : gé
 Même principe que pour l'AWP : un skin est **dessiné pour la M9 seule**, un script par skin dans `assets/m9/skins/`
 (`emaille` pour ÉMAIL, `patrouille`, `artdeco`, `hote` et `sphinx` de la série FILM, #433 et #436, et les communs
 `leurre`, `chantier`, `topo` et `ceramique`, #476, le rare `guilloche`, et ceux de la série 2, les communs `piedpoule`
-et `tomette`, les rares `azulejo` et `nacre`, #495, et les exceptionnels illustrés `chinoiserie` et `tapisserie`, #505, et le légendaire `cordoue`, #515),
+et `tomette`, les rares `azulejo` et `nacre`, #495 (AZULEJO est passé commun et HÔTE rare dans la caisse M9 · SÉRIE 2), et les exceptionnels illustrés `chinoiserie` et `tapisserie`, #505, et le légendaire `cordoue`, #515),
 avec une fonction `paint(kn)`. La M9 n'a pas de source Blender : on
 part de ses cartes d'origine et de sa cuisson (`fetch_viewmodel.py` puis `bake_maps.py --glb`, étape 1 de « Fabriquer
 un skin » ci-dessous). Outils communs (`common.py`) :
@@ -554,7 +554,7 @@ qu'ensuite. Puis publier et cataloguer (étapes 4 et 5 de « Fabriquer un skin �
 - **Rendus `render_views.py` brûlés au blanc** (vue `lame`, même PATROUILLE : lame claire face à la lumière principale) :
   `--exposure -1`.
 - **Série 2 de la M9 (#495, matières d'intérieur comme la série 2 de l'AWP)** : PIED-DE-POULE et TOMETTE (communs),
-  AZULEJO et NACRE (rares). Motifs calculés sur `kn.grid()` puis `kn.put`, valeurs par cellule (nuance d'une tomette,
+  AZULEJO et NACRE (rares au dessin ; dans la caisse, AZULEJO a depuis échangé sa rareté avec HÔTE). Motifs calculés sur `kn.grid()` puis `kn.put`, valeurs par cellule (nuance d'une tomette,
   reflet d'une plaquette) lues par `kn.sample_array(…, order=0)`. Pièges vus en jeu :
   - **Le fil repoli couvre ~0,04 unité au-dessus du tranchant vu de profil** : une frise posée sur le bas de la lame
     disparaît sous l'acier de `kn.edge`. La commencer au-dessus (`FIL` d'`azulejo.py`). Le biseau, incliné, tasse aussi

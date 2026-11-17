@@ -93,7 +93,8 @@ ShopCatalog.CRATES = {
 		},
 	},
 	-- Série 2 de la M9 (#515) : matières d'intérieur (#495, #505) et la FILM (TOPO, HÔTE, SPHINX), légendaire CUIR DE
-	-- CORDOUE ; bande vert jade, distincte du bleu-vert de la série 1, du rouge et de l'ocre de l'AWP
+	-- CORDOUE ; bande vert jade, distincte du bleu-vert de la série 1, du rouge et de l'ocre de l'AWP. HÔTE est rare et
+	-- AZULEJO commun (échange de rareté demandé après la mise en vente)
 	{
 		id = "crate.m9.serie2",
 		name = "M9 · SÉRIE 2",
@@ -101,8 +102,8 @@ ShopCatalog.CRATES = {
 		stripe = { 70, 160, 90 },
 		price = 500,
 		contents = {
-			common = { "topo", "hote", "piedpoule", "tomette" },
-			rare = { "sphinx", "azulejo", "nacre" },
+			common = { "topo", "azulejo", "piedpoule", "tomette" },
+			rare = { "sphinx", "hote", "nacre" },
 			exceptional = { "chinoiserie", "tapisserie" },
 			legendary = { "cordoue" },
 		},
