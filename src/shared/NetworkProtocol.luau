@@ -70,6 +70,9 @@ Protocol.Names = {
 	-- Mode entraînement (#345), cf. server/TrainingService : client → serveur ("join" depuis APPRENDRE, "leave" depuis le
 	-- serveur d'entraînement), puis serveur → client (réponse, TrainingRules.Status) ; le serveur téléporte le joueur
 	TRAINING = "Training",
+	-- Analytics (#527), cf. server/analytics/Analytics : client → serveur, écran courant du joueur (une valeur de
+	-- AnalyticsRules.SCREENS) envoyé à chaque changement ; le serveur en tire les funnels et l'endroit d'un départ
+	ANALYTICS_SCREEN = "AnalyticsScreen",
 }
 
 function Protocol.getRemote(name: string): RemoteEvent

@@ -36,6 +36,13 @@ local ROUND_GAP = 5 -- s entre deux de ces transactions
 local DEBUG_RECEIPT = "DebugReceipt"
 
 export type Reply = { ok: boolean, reason: string? }
+-- Rappels des analytics (#527) : prompt ouvert, crédits d'un reçu écrits (crédits réellement ajoutés)
+export type Observers = {
+	onPrompted: ((player: Player, packId: string) -> ())?,
+	onCredited: ((player: Player, packId: string, credits: number) -> ())?,
+}
+
+local observers: Observers = {}
 
 local ReceiptService = {}
 
@@ -93,13 +100,18 @@ function ReceiptService.handle(info: any): (ReceiptRules.Verdict, string, string
 		extra ..= ", joueur restreint (objets aléatoires payants)"
 	end
 	local verdict, why = "retry", "écriture en échec"
+	local status, result
 	for round = 1, WRITE_ROUNDS do
-		local status, result = InventoryStore.transact(player, ReceiptRules.operation(info.PurchaseId, pack.credits))
+		status, result = InventoryStore.transact(player, ReceiptRules.operation(info.PurchaseId, pack.credits))
 		verdict, why = ReceiptRules.decide(status, result)
 		if status ~= "failed" or round == WRITE_ROUNDS or not player.Parent then
 			break
 		end
 		task.wait(ROUND_GAP)
+	end
+	-- Crédits écrits par ce reçu (pas un reçu rejoué ni une écriture retrouvée sans résultat) : comptés par les analytics
+	if status == "ok" and type(result) == "table" and type(result.credits) == "number" and observers.onCredited then
+		observers.onCredited(player, pack.id, result.credits)
 	end
 	return verdict, why, extra
 end
@@ -170,7 +182,9 @@ end
 
 -- Cette méthode permet de poser le callback ProcessReceipt (une seule fois dans le jeu) et de brancher le remote du
 -- prompt d'achat lorsque le serveur démarre ; le prompt est ouvert par le serveur après la garde commune.
-function ReceiptService.init(buyPackRemote: RemoteFunction)
+-- `hooks` : rappels des analytics (#527), optionnels.
+function ReceiptService.init(buyPackRemote: RemoteFunction, hooks: Observers?)
+	observers = hooks or {}
 	local MarketplaceService = game:GetService("MarketplaceService")
 	MarketplaceService.ProcessReceipt = ReceiptService.processReceipt
 	if RunService:IsStudio() then
@@ -189,6 +203,9 @@ function ReceiptService.init(buyPackRemote: RemoteFunction)
 			if not ok then
 				warn("[Receipts] prompt impossible pour", player.Name, ":", err)
 				return { ok = false, reason = "failed" }
+			end
+			if observers.onPrompted then
+				observers.onPrompted(player, pack.id)
 			end
 		end
 		return reply
