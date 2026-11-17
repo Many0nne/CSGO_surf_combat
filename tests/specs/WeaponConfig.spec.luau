@@ -37,7 +37,7 @@ return function(T, Loader)
 		T.it("reprend l'equip et le rechargement de CS:GO", function()
 			local weapons = WeaponConfig.Weapons
 			T.expectNear(weapons.AWP.EquipTime, 1.267, 1e-9, "AWP : séquence draw de 38 images à 30 i/s")
-			T.expectNear(weapons.AWP.ReloadTime, 3.667, 1e-9, "AWP : séquence reload de 110 images à 30 i/s")
+			T.expectNear(weapons.AWP.ReloadTime, 3.3, 1e-9, "AWP : verrou de rechargement raccourci (CS:GO 3,667 s)")
 			T.expectEqual(weapons.M9Bayonet.EquipTime, 1, "couteaux : hardcoded_knife_deploy_time")
 			T.expectEqual(weapons.KaBar.EquipTime, 1)
 		end)
