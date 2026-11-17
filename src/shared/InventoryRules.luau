@@ -360,6 +360,22 @@ InventoryRules.ITEMS = {
 		name = "NACRE",
 		appearance = "nacre",
 	},
+	-- Exceptionnels de la série 2 (#505) : illustrations peintes sur le gabarit de la lame (assets/m9/skins/gabarit.py,
+	-- chinoiserie.py, tapisserie.py), en réserve tant que la caisse n'a pas son légendaire
+	{
+		id = "skin.m9bayonet.chinoiserie",
+		type = "skin",
+		weapon = "weapon.m9bayonet",
+		name = "CHINOISERIE",
+		appearance = "chinoiserie",
+	},
+	{
+		id = "skin.m9bayonet.tapisserie",
+		type = "skin",
+		weapon = "weapon.m9bayonet",
+		name = "TAPISSERIE",
+		appearance = "tapisserie",
+	},
 } :: { Item }
 
 -- Inventaire de tout joueur (et des bots), sauvegardé ou non : Ka-Bar et AWP

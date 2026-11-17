@@ -99,11 +99,13 @@ ShopCatalog.CRATES = {
 -- une caisse dès qu'une arme en a assez pour la composition complète. Série FILM (#433, #436) : HÔTE et SPHINX ;
 -- CISELURE et TOPO ont cédé leur place dans la série 1 à TREMPE et aux autres communs. Les skins AWP en réserve ont
 -- formé la caisse AWP · SÉRIE 2 (#493). Série 2 de la M9 (#495) : les communs PIED-DE-POULE et TOMETTE avec TOPO et
--- HÔTE, les rares AZULEJO et NACRE avec SPHINX ; restent 2 exceptionnels et 1 légendaire
+-- HÔTE, les rares AZULEJO et NACRE avec SPHINX, les exceptionnels illustrés CHINOISERIE et TAPISSERIE (#505) ; reste
+-- le légendaire
 ShopCatalog.RESERVE = {
 	["weapon.m9bayonet"] = {
 		common = { "topo", "hote", "piedpoule", "tomette" },
 		rare = { "sphinx", "azulejo", "nacre" },
+		exceptional = { "chinoiserie", "tapisserie" },
 	},
 } :: { [string]: { [string]: { string } } }
 

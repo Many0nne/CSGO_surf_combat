@@ -451,7 +451,8 @@ marquages sont celles de Windows (`C:/Windows/Fonts`, Bahnschrift, Impact) : gé
 Même principe que pour l'AWP : un skin est **dessiné pour la M9 seule**, un script par skin dans `assets/m9/skins/`
 (`emaille` pour ÉMAIL, `patrouille`, `artdeco`, `hote` et `sphinx` de la série FILM, #433 et #436, et les communs
 `leurre`, `chantier`, `topo` et `ceramique`, #476, le rare `guilloche`, et ceux de la série 2, les communs `piedpoule`
-et `tomette` et les rares `azulejo` et `nacre`, #495), avec une fonction `paint(kn)`. La M9 n'a pas de source Blender : on
+et `tomette`, les rares `azulejo` et `nacre`, #495, et les exceptionnels illustrés `chinoiserie` et `tapisserie`, #505),
+avec une fonction `paint(kn)`. La M9 n'a pas de source Blender : on
 part de ses cartes d'origine et de sa cuisson (`fetch_viewmodel.py` puis `bake_maps.py --glb`, étape 1 de « Fabriquer
 un skin » ci-dessous). Outils communs (`common.py`) :
 
@@ -528,6 +529,20 @@ qu'ensuite. Puis publier et cataloguer (étapes 4 et 5 de « Fabriquer un skin �
     garde blanc.
   - **Nacre** : des stries droites et contrastées faisaient des rayures de berlingot. Stries ondulées et discrètes, et
     l'irisation portée surtout par une teinte qui glisse le long de la lame et un reflet propre à chaque plaquette.
+- **Exceptionnels illustrés de la M9 (#505, CHINOISERIE et TAPISSERIE)** : même méthode que VELOURS (brief + gabarit,
+  illustration d'un modèle d'image externe). `gabarit.py <cuisson> <cartes_origine> <dossier> [l h]` écrit la lame **telle
+  que vue en 1P** : la face droite, tranchant en haut, soit la toile de profil retournée de haut en bas (pointe à gauche,
+  dents en bas, garde à droite). `illustration.py` recale l'image (`tools/skins/art_fit.py`, commun avec l'AWP) et la lit
+  sans distinction de face : à l'endroit en 1P, en miroir mais à l'endroit sur la face gauche. Vérifié avec une fausse
+  illustration fléchée avant d'envoyer le brief. Le modèle d'image a rendu les deux skins sur une seule image (deux
+  lames empilées) : découper chaque lame, le recalage ne dépend pas de la taille de l'image (recouvrement 0,96 et 0,95).
+  Le sujet principal va entre le trou et la garde (zone vue en 1P), la bande du tranchant reste vide (fil en acier nu).
+  Pièges vus en jeu :
+  - **Un filet le long du contour couvre tout le biseau** : le biseau, fin de profil, est large en 1P ; un filet d'or
+    posé sur toute la lame y faisait une bande orange le long du tranchant. Filet et rehauts sur le plat seulement
+    (`kn.flat`).
+  - **Fond sombre en métal teinté** : le bleu nuit de TAPISSERIE virait au noir en 1P ; éclaircir les sombres
+    (`dark_gain` de `print_blade`, 1,6) avant de les poser en métal.
 
 ### Série FILM (#433)
 

@@ -299,8 +299,8 @@ return function(T, Loader)
 			T.expectEqual(#Rules.skinsFor(Rules.resolve(nil, true), "weapon.awp"), 20)
 			T.expectEqual(#Rules.skinsFor(Rules.resolve(nil, false), "weapon.awp"), 0)
 			-- M9 (#268, #337, #420, #433, #436, communs LEURRE, CHANTIER, TOPO, CÉRAMIQUE #476, rare GUILLOCHÉ, puis
-			-- PIED-DE-POULE, TOMETTE, AZULEJO, NACRE #495)
-			T.expectEqual(#Rules.skinsFor(Rules.resolve(nil, true), "weapon.m9bayonet"), 17)
+			-- PIED-DE-POULE, TOMETTE, AZULEJO, NACRE #495, exceptionnels CHINOISERIE, TAPISSERIE #505)
+			T.expectEqual(#Rules.skinsFor(Rules.resolve(nil, true), "weapon.m9bayonet"), 19)
 		end)
 
 		T.it("équipe une arme possédée de l'emplacement, sans toucher à l'autre emplacement", function()
