@@ -772,15 +772,16 @@ l'étiquette BIENTÔT jusqu'à #393 (voir « Achat d'une caisse »).
 - **Composition d'une caisse (choix de l'utilisateur, 17/11/2026) : 4 COMMUNS, 3 RARES, 2 EXCEPTIONNELS, 1 LÉGENDAIRE**
   (`perCrate` de `ShopCatalog.RARITIES`), et un skin n'est que dans une caisse. Une caisse qu'on ne peut pas remplir
   n'est pas en vente : ses skins attendent dans `ShopCatalog.RESERVE` (rareté gardée pour qui les possède déjà) jusqu'à
-  ce qu'une arme en ait assez. En vente : deux caisses, une par arme, dans l'ordre de la vitrine AWP puis M9
-  (`crate.awp.serie1`, `crate.m9.serie1`, nom « AWP · SÉRIE 1 », bande rouge pour l'AWP, bleu-vert pour le M9), prix
+  ce qu'une arme en ait assez. En vente : trois caisses, une par arme et par série, dans l'ordre de la vitrine série 1
+  (AWP puis M9) puis série 2 (`crate.awp.serie1`, `crate.m9.serie1`, `crate.awp.serie2`, nom « AWP · SÉRIE 1 », bande
+  rouge pour l'AWP série 1, bleu-vert pour le M9, ocre laiton pour l'AWP série 2, #493), prix
   500 CRÉDITS par caisse, une ouverture = un seul skin de l'arme de la caisse, raretés en pyramide à la CS:GO (#430) :
   COMMUN 80 %, RARE 16 %, EXCEPTIONNEL 3,2 %, LÉGENDAIRE 0,8 % (rouge vif 235/75/75), chacune partagée à parts égales
   entre ses skins (20 / 5,33 / 1,6 / 0,8 % par skin). Remboursement d'un doublon 20 / 40 / 70 / 100 % du prix. AWP :
   COMMUN MAQUIS, ÉPURE, TARTAN, BANCHE ; RARE MUE, ORAGE, CIRCUIT ; EXCEPTIONNEL BALISE, PAN ! ; LÉGENDAIRE TREMPE. M9 :
   COMMUN ART DÉCO, LEURRE, CHANTIER, CÉRAMIQUE ; RARE PATROUILLE, RELEVÉ, GUILLOCHÉ ; EXCEPTIONNEL ÉMAIL, RECUIT ;
-  LÉGENDAIRE COUCHANT. Réserve : AWP LOGOGRAMME (commun), REMORQUEUR (exceptionnel), CISELURE (légendaire) ; M9 TOPO,
-  HÔTE (communs), SPHINX (rare). Les caisses FILM (#433, « AWP · FILM » bande vert phosphore, « M9 · FILM » bande os)
+  LÉGENDAIRE COUCHANT. AWP série 2 : COMMUN LOGOGRAMME, PARQUET, CANNAGE, TÔLE LARMÉE ; RARE CAPITON, VITRAIL, LAQUE ;
+  EXCEPTIONNEL REMORQUEUR, VELOURS ; LÉGENDAIRE CISELURE. Réserve : M9 TOPO, HÔTE (communs), SPHINX (rare). Les caisses FILM (#433, « AWP · FILM » bande vert phosphore, « M9 · FILM » bande os)
   ont été vendues de #433 au 17/11/2026, complétées de skins de la série 1 : retirées, faute de skins hommage pour
   remplir la composition. Ouverture : 4e palier de couleur LÉGENDAIRE (paliers sur les bouffées de
   2,25 / 2,85 / 3,6 s, avant la tension) et tenue de la silhouette de 1,1 s, la plus longue. Le pochoir du couvercle est posé par le jeu, propre à chaque caisse (« S1-AWP », « FM-M9 », #434, `docs/assets.md`). Doublons possibles : le

@@ -77,23 +77,30 @@ ShopCatalog.CRATES = {
 			legendary = { "couchant" },
 		},
 	},
+	-- Série 2 de l'AWP (#493) : skins de la série 2 (#482, #487, #492) et de l'ancienne réserve FILM (LOGOGRAMME,
+	-- REMORQUEUR, CISELURE) ; bande ocre laiton, distincte du rouge de la série 1 et du bleu-vert du M9
+	{
+		id = "crate.awp.serie2",
+		name = "AWP · SÉRIE 2",
+		weapon = "weapon.awp",
+		stripe = { 205, 150, 55 },
+		price = 500,
+		contents = {
+			common = { "logogramme", "parquet", "cannage", "tole" },
+			rare = { "capiton", "vitrail", "laque" },
+			exceptional = { "remorqueur", "velours" },
+			legendary = { "ciselure" },
+		},
+	},
 } :: { Crate }
 
 -- Réserve : skins finis qu'aucune caisse en vente ne donne encore, par arme puis par rareté. Ils gardent leur rareté
 -- (`rarityOf`, pour qui les possède déjà : les caisses FILM, #433, ont été vendues avant d'être retirées), et forment
--- une caisse dès qu'une arme en a assez pour la composition complète. Série FILM (#433, #436) : REMORQUEUR, LOGOGRAMME,
--- HÔTE et SPHINX ; CISELURE et TOPO ont cédé leur place dans la série 1 à TREMPE et aux autres communs. Série 2 de l'AWP
--- (#482) : les communs PARQUET, CANNAGE et TÔLE LARMÉE, qui complètent les communs avec LOGOGRAMME ; les rares
--- CAPITON, VITRAIL et LAQUE (#487) ; l'exceptionnel VELOURS (#492), qui complète la composition de la future caisse.
--- Série 2 de la M9 (#495) : les communs PIED-DE-POULE et TOMETTE avec TOPO et HÔTE, les rares AZULEJO et NACRE avec
--- SPHINX ; restent 2 exceptionnels et 1 légendaire
+-- une caisse dès qu'une arme en a assez pour la composition complète. Série FILM (#433, #436) : HÔTE et SPHINX ;
+-- CISELURE et TOPO ont cédé leur place dans la série 1 à TREMPE et aux autres communs. Les skins AWP en réserve ont
+-- formé la caisse AWP · SÉRIE 2 (#493). Série 2 de la M9 (#495) : les communs PIED-DE-POULE et TOMETTE avec TOPO et
+-- HÔTE, les rares AZULEJO et NACRE avec SPHINX ; restent 2 exceptionnels et 1 légendaire
 ShopCatalog.RESERVE = {
-	["weapon.awp"] = {
-		common = { "logogramme", "parquet", "cannage", "tole" },
-		rare = { "capiton", "vitrail", "laque" },
-		exceptional = { "remorqueur", "velours" },
-		legendary = { "ciselure" },
-	},
 	["weapon.m9bayonet"] = {
 		common = { "topo", "hote", "piedpoule", "tomette" },
 		rare = { "sphinx", "azulejo", "nacre" },
