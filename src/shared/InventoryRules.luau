@@ -330,6 +330,36 @@ InventoryRules.ITEMS = {
 		name = "GUILLOCHÉ",
 		appearance = "guilloche",
 	},
+	-- Communs et rares de la série 2 (#495), matières d'intérieur, en réserve tant que la caisse n'est pas complète
+	-- (assets/m9/skins/piedpoule.py, tomette.py, azulejo.py, nacre.py)
+	{
+		id = "skin.m9bayonet.piedpoule",
+		type = "skin",
+		weapon = "weapon.m9bayonet",
+		name = "PIED-DE-POULE",
+		appearance = "piedpoule",
+	},
+	{
+		id = "skin.m9bayonet.tomette",
+		type = "skin",
+		weapon = "weapon.m9bayonet",
+		name = "TOMETTE",
+		appearance = "tomette",
+	},
+	{
+		id = "skin.m9bayonet.azulejo",
+		type = "skin",
+		weapon = "weapon.m9bayonet",
+		name = "AZULEJO",
+		appearance = "azulejo",
+	},
+	{
+		id = "skin.m9bayonet.nacre",
+		type = "skin",
+		weapon = "weapon.m9bayonet",
+		name = "NACRE",
+		appearance = "nacre",
+	},
 } :: { Item }
 
 -- Inventaire de tout joueur (et des bots), sauvegardé ou non : Ka-Bar et AWP
