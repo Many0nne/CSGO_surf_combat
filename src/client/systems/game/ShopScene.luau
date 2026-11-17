@@ -195,6 +195,7 @@ local dragging = false
 local dragFrom = Vector2.zero
 local dragInput: InputObject? -- toucher qui tient le glisser en cours (nil : souris)
 local stickPos = Vector2.zero -- stick droit (#469), x à droite, y vers le haut
+local stickSpun = false -- le stick a tourné l'arme depuis son dernier retour au repos
 local lastDrag = -math.huge
 local dragConnections: { RBXScriptConnection } = {}
 
