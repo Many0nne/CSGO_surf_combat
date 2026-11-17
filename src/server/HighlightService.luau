@@ -1,7 +1,8 @@
 -- Clip de la partie (#499), côté serveur : la meilleure action de la manche est rejouée chez tous à la fin, en 1re
 -- personne du tireur, à partir de données (aucune vidéo, rien d'envoyé en continu).
 -- - Pendant la manche : piste de chaque participant (positions acceptées par CharacterSync, joueurs et bots) et tirs
---   acceptés gardés dans des tampons de taille fixe (HighlightClipRules), sans changer le rembobinage (#173).
+--   acceptés gardés dans des tampons de taille fixe (HighlightClipRules), sans changer le rembobinage (#173) ; armes
+--   sorties et rangées journalisées (changements d'arme du tireur rejoués).
 -- - À chaque kill crédité : notation (HighlightRules). Un kill qui bat le record de la manche est figé POST_ROLL plus
 --   tard : fenêtre des pistes copiée, apparence des personnages gardée (clone sans scripts, même si le joueur part), et
 --   tampon caméra demandé au client du tireur (remote HighlightPov), recalé sur l'historique serveur ; refusé, absent
@@ -55,6 +56,7 @@ HighlightService.AIR_PROBE = 4.5
 local deps: Deps? = nil
 local tracks: { [number]: HighlightClipRules.Track } = {}
 local shots: { [number]: HighlightClipRules.ShotRing } = {}
+local equips: { [number]: HighlightClipRules.EquipRing } = {}
 -- Personnage → id de participant (posé à l'apparition), pour les positions relayées par CharacterSync
 local owners: { [Model]: number } = setmetatable({}, { __mode = "k" }) :: any
 local names: { [number]: string } = {}
@@ -204,6 +206,21 @@ function HighlightService.noteShot(participant: Participant, direction: Vector3,
 	HighlightClipRules.pushShot(ring, t, if direction.Magnitude > 1e-6 then direction.Unit else direction, aimed)
 end
 
+-- Cette méthode permet de retenir l'arme sortie (outil, skin) ou rangée (outil nil) d'un participant lorsque le serveur
+-- la voit arriver dans son personnage ou en partir ; aussi hors manche active (l'arme en main au début du clip).
+function HighlightService.noteEquip(participant: Participant, toolName: string?, skinId: string?)
+	local d = deps
+	if not d or not d.enabled then
+		return
+	end
+	local ring = equips[participant.id]
+	if not ring then
+		ring = HighlightClipRules.newEquipRing()
+		equips[participant.id] = ring
+	end
+	HighlightClipRules.pushEquip(ring, workspace:GetServerTimeNow(), toolName, skinId)
+end
+
 -- Cette méthode permet de retenir si la dernière touche d'un participant suivait un flick (AimStats) lorsqu'elle est
 -- comptée ; lu par le kill qu'elle donne.
 function HighlightService.noteFlick(participant: Participant, flick: boolean)
@@ -330,7 +347,15 @@ local function freeze(myToken: number, chain: { Kill }, killer: Participant)
 			victimId = kill.victimId,
 			headshot = kill.headshot,
 			direction = each and each.direction,
+			weapon = each and each.weapon,
 		})
+	end
+	-- Armes du tireur pendant le clip (temps relatifs), pour rejouer ses changements d'arme
+	local clipEquips = {}
+	if equips[killer.id] then
+		for _, equip in HighlightClipRules.equipsIn(equips[killer.id], start, stop) do
+			table.insert(clipEquips, { t = equip.t - start, tool = equip.tool, skinId = equip.skinId })
+		end
 	end
 
 	local killerTrack = tracks[killer.id]
@@ -383,6 +408,7 @@ local function freeze(myToken: number, chain: { Kill }, killer: Participant)
 			actors = actors,
 			shots = clipShots,
 			kills = clipKills,
+			equips = clipEquips,
 		} :: any
 		clipActors = actorIds
 		log(
@@ -508,6 +534,7 @@ function HighlightService.reset()
 	token += 1
 	table.clear(tracks)
 	table.clear(shots)
+	table.clear(equips)
 	table.clear(kills)
 	table.clear(metas)
 	table.clear(streaks)

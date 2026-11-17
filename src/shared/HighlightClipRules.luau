@@ -39,6 +39,10 @@ HighlightClipRules.TRACK_MAX_GAP = 0.25
 HighlightClipRules.MAX_CLOCK_STEP = 0.5
 -- Tirs acceptés gardés par participant (AWP : un tir par 1,5 s ; couteau : 2,5 par s).
 HighlightClipRules.SHOT_CAPACITY = 32
+-- Changements d'arme gardés par participant (un changement = rangement puis sortie : deux entrées) ; un rangement suivi
+-- d'une sortie dans EQUIP_MERGE (s) n'est pas rejoué (passage direct d'une arme à l'autre, sans image à mains vides).
+HighlightClipRules.EQUIP_CAPACITY = 32
+HighlightClipRules.EQUIP_MERGE = 0.1
 
 -- Cadences du clip transmis : caméra du tireur et figurants.
 HighlightClipRules.POV_HZ = 30
@@ -106,6 +110,16 @@ export type Track = {
 -- couteau : direction de la racine, hors du recalage et de la visée reconstruite).
 export type ShotRing = { count: number, head: number, times: { number }, dirs: { Vector3 }, aimed: { boolean } }
 export type Shot = { t: number, dir: Vector3, aimed: boolean }
+-- Changement d'arme : instant (horloge serveur), outil sorti (ReplicatedStorage.Tools) et son skin, ou false (rangé).
+export type EquipRing = {
+	count: number,
+	head: number,
+	times: { number },
+	tools: { string | false },
+	skins: { string | false },
+}
+-- Arme en main à partir de t : outil et skin (nil : mains vides).
+export type Equip = { t: number, tool: string?, skinId: string? }
 
 -- Clip transmis aux clients à la fin de la partie (temps relatifs au début du clip, en s).
 export type Clip = {
@@ -120,7 +134,10 @@ export type Clip = {
 	pov: string,
 	actors: { { id: number, name: string, track: string } },
 	shots: { { t: number, id: number, dir: Vector3? } }, -- dir : tir visé (rayon de la balle), nil pour le couteau
-	kills: { { t: number, victimId: number, headshot: boolean, direction: Vector3? } },
+	-- weapon : arme du kill (ragdoll) ; absente : celle du clip
+	kills: { { t: number, victimId: number, headshot: boolean, direction: Vector3?, weapon: string? } },
+	-- Armes du tireur : en main au début (t = 0), puis chaque changement ; absent ou vide : `tool` tout le clip
+	equips: { Equip }?,
 }
 
 -- ── Durées ─────────────────────────────────────────────────────────────────
@@ -458,6 +475,72 @@ function HighlightClipRules.shotsIn(ring: ShotRing, start: number, stop: number)
 	return shots
 end
 
+-- ── Changements d'arme ─────────────────────────────────────────────────────
+
+-- Cette méthode permet de créer le journal des armes d'un participant lorsque son premier changement d'arme arrive.
+function HighlightClipRules.newEquipRing(): EquipRing
+	local n = HighlightClipRules.EQUIP_CAPACITY
+	return {
+		count = 0,
+		head = 0,
+		times = table.create(n, 0),
+		tools = table.create(n, false :: string | false),
+		skins = table.create(n, false :: string | false),
+	}
+end
+
+-- Cette méthode permet de retenir une arme sortie (outil, skin) ou rangée (outil nil) à l'instant t lorsque le serveur
+-- la voit arriver dans le personnage ou en partir ; la plus ancienne entrée est écrasée.
+function HighlightClipRules.pushEquip(ring: EquipRing, t: number, tool: string?, skinId: string?)
+	local i = ring.head % HighlightClipRules.EQUIP_CAPACITY + 1
+	ring.head = i
+	ring.times[i] = t
+	ring.tools[i] = tool or false
+	ring.skins[i] = if tool and skinId then skinId else false
+	ring.count = math.min(ring.count + 1, HighlightClipRules.EQUIP_CAPACITY)
+end
+
+-- Cette méthode permet de lister les armes d'un participant sur [start, stop] lorsque le clip est figé : l'arme en main
+-- au début (t = start, absente si le journal ne remonte pas jusque-là), puis chaque changement (temps absolus). Un
+-- rangement suivi d'une sortie dans EQUIP_MERGE est écarté, ainsi qu'une entrée qui ne change rien.
+function HighlightClipRules.equipsIn(ring: EquipRing, start: number, stop: number): { Equip }
+	local cap = HighlightClipRules.EQUIP_CAPACITY
+	local oldest = (ring.head - ring.count) % cap
+	local entries: { Equip } = {}
+	local held: Equip? = nil
+	for k = 1, ring.count do
+		local i = (oldest + k - 1) % cap + 1
+		local t = ring.times[i]
+		local tool, skin = ring.tools[i], ring.skins[i]
+		local entry: Equip = {
+			t = t,
+			tool = if tool then tool else nil,
+			skinId = if skin then skin else nil,
+		}
+		if t <= start then
+			held = entry
+		elseif t <= stop then
+			table.insert(entries, entry)
+		end
+	end
+	local out: { Equip } = {}
+	if held then
+		table.insert(out, { t = start, tool = held.tool, skinId = held.skinId })
+	end
+	for k, entry in entries do
+		local nextEntry = entries[k + 1]
+		if entry.tool == nil and nextEntry and nextEntry.t - entry.t <= HighlightClipRules.EQUIP_MERGE then
+			continue
+		end
+		local last = out[#out]
+		if last and last.tool == entry.tool and last.skinId == entry.skinId then
+			continue
+		end
+		table.insert(out, entry)
+	end
+	return out
+end
+
 -- ── Caméra : angles et recalage ────────────────────────────────────────────
 
 -- Cette méthode permet de donner la direction regardée par une caméra (lacet et tangage en degrés, ceux de FPSCamera)
@@ -695,10 +778,37 @@ function HighlightClipRules.readClip(data: any): Clip?
 		or type(data.actors) ~= "table"
 		or type(data.shots) ~= "table"
 		or type(data.kills) ~= "table"
+		or (data.equips ~= nil and type(data.equips) ~= "table")
 	then
 		return nil
 	end
 	return data :: Clip
+end
+
+-- Cette méthode permet de donner les armes du tireur à rejouer, dans l'ordre, lorsque le clip démarre : arme en main au
+-- début (première entrée à t = 0, sinon `tool` et `skinId` du clip), puis chaque changement lisible du clip ; les
+-- entrées abîmées sont ignorées.
+function HighlightClipRules.equipTimeline(clip: Clip): { Equip }
+	local list: { Equip } = {}
+	for _, entry in (if type(clip.equips) == "table" then clip.equips else {}) :: { any } do
+		if
+			type(entry) == "table"
+			and MathRules.isFinite(entry.t)
+			and entry.t >= 0
+			and entry.t <= clip.duration
+			and (entry.tool == nil or type(entry.tool) == "string")
+			and (entry.skinId == nil or type(entry.skinId) == "string")
+		then
+			table.insert(list, { t = entry.t, tool = entry.tool, skinId = entry.skinId })
+		end
+	end
+	table.sort(list, function(a, b)
+		return a.t < b.t
+	end)
+	if not list[1] or list[1].t > 1e-6 then
+		table.insert(list, 1, { t = 0, tool = clip.tool, skinId = clip.skinId })
+	end
+	return list
 end
 
 return HighlightClipRules
