@@ -25,10 +25,6 @@ return {
 	["Physique inspirée du Source SDK (surf de CS:GO)."] = "Physics inspired by the Source SDK (CS:GO surf).",
 
 	-- À PROPOS
-	["Ce jeu est un projet passion mené en solo par un développeur web qui apprend la 3D et l'animation en chemin."] = "This game is a passion project made solo by a web developer who is learning 3D and animation along the way.",
-	["Le but n'est pas de cloner CS:GO, mais de reprendre ce qui rend le surf génial et de bâtir quelque chose d'original dessus."] = "The goal is not to clone CS:GO, but to keep what makes surfing great and build something original on top of it.",
-	["De nouvelles armes, skins et animations sont prévus, tous créés de zéro avec l'originalité en tête."] = "New weapons, skins and animations are planned, all made from scratch with originality in mind.",
-	["Merci de jouer alors que le jeu est encore brut de décoffrage."] = "Thanks for playing while the game is still rough around the edges.",
 	["Envie de donner ton avis ou de filer un coup de main ? Rejoins le Discord : discord.gg/ZwWrnVG2ar"] = "Want to share your thoughts or lend a hand? Join the Discord: discord.gg/ZwWrnVG2ar",
 
 	-- Démo de l'écran Apprendre
