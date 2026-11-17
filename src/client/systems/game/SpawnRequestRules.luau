@@ -12,8 +12,8 @@ SpawnRequestRules.LOAD_TIMEOUT = 15 -- demande acceptée, personnage pas arrivé
 SpawnRequestRules.GIVE_UP_AFTER = 30 -- borne des envois (+ LOAD_TIMEOUT si acceptée juste avant)
 -- Écart minimal entre deux envois : la garde du serveur (RemoteGuard.RULES.RequestSpawn) en admet 1 par seconde
 SpawnRequestRules.MIN_RESEND = 1.2
--- Bannière de fin (GameConfig.RESULT_DURATION) : renvoi à ce rythme jusqu'au round suivant (JOUER pendant la bannière,
--- ou enchaînement d'une manche à l'autre, #300)
+-- Bannière de fin et clip de la partie (HighlightClipRules.resultDuration, #499) : renvoi à ce rythme jusqu'au round
+-- suivant (JOUER pendant la bannière, ou enchaînement d'une manche à l'autre, #300)
 SpawnRequestRules.RESULT_RETRY = 1.5
 SpawnRequestRules.ALIVE_RETRY = 1.2 -- personnage encore en place côté serveur (corps) : renvoi
 SpawnRequestRules.FAILED_RETRY = 1.5 -- LoadCharacterAsync échoué côté serveur : renvoi

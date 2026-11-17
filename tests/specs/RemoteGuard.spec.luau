@@ -129,6 +129,7 @@ return function(T, Loader)
 					N.OPEN_CRATE,
 					N.BUY_CRATE,
 					N.BUY_CREDIT_PACK,
+					N.HIGHLIGHT_POV,
 				}
 			do
 				T.expect(RemoteGuard.RULES[name] ~= nil, "règle manquante : " .. name)
@@ -174,6 +175,18 @@ return function(T, Loader)
 			T.expectEqual(honest(N.BUY_CREDIT_PACK, 3950001), "malformed", "id de produit au lieu de l'id du pack")
 			T.expectEqual(honest(N.BUY_CREDIT_PACK), "malformed", "id absent")
 			T.expectEqual(honest(N.BUY_CREDIT_PACK, string.rep("a", 200)), "malformed", "id trop long")
+		end)
+
+		T.it("accepte le tampon caméra du clip et refuse une forme impossible (#499)", function()
+			local Rules = Loader.new():require("src/shared/HighlightClipRules")
+			T.expectEqual(honest(N.HIGHLIGHT_POV, 3, "0,1,2,3,4,5,6,0,0"), "ok")
+			T.expectEqual(
+				honest(N.HIGHLIGHT_POV, 3, string.rep("1", Rules.POV_MAX_BYTES + 1)),
+				"malformed",
+				"trop long"
+			)
+			T.expectEqual(honest(N.HIGHLIGHT_POV, "3", ""), "malformed", "numéro non numérique")
+			T.expectEqual(honest(N.HIGHLIGHT_POV, 3, { 1, 2 }), "malformed", "table au lieu de la série")
 		end)
 
 		T.it("refuse un équipement d'une forme impossible (#280)", function()

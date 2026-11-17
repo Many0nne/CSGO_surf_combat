@@ -24,7 +24,8 @@ return function(T, Loader)
 
 	-- Cette méthode permet de monter un RoundManager avec services, remotes, `task` et horloge simulés lorsqu'un test
 	-- démarre ; les délais ne partent qu'à flush, tick fait avancer le timer du round et wait l'horloge (os.clock).
-	local function setup()
+	-- `extra` complète les dépendances de RoundManager.init (clip de la partie, #499).
+	local function setup(extra: { [string]: any }?)
 		local players, owners = {}, {}
 		local now = 0
 		local heartbeat = nil
@@ -82,7 +83,7 @@ return function(T, Loader)
 		}
 		-- Fins de manche signalées aux stats persistantes (#296) : participants en jeu et vainqueur
 		local roundEnds = {}
-		RoundManager.init({
+		local deps: { [string]: any } = {
 			roundState = remotes.roundState,
 			scoreUpdate = remotes.scoreUpdate,
 			roundResult = remotes.roundResult,
@@ -90,7 +91,11 @@ return function(T, Loader)
 			onRoundEnd = function(participants, winner)
 				table.insert(roundEnds, { participants = participants, winner = winner })
 			end,
-		} :: any)
+		}
+		for key, value in extra or {} do
+			deps[key] = value
+		end
+		RoundManager.init(deps :: any)
 
 		local env = {
 			RoundManager = RoundManager,
@@ -99,6 +104,7 @@ return function(T, Loader)
 			roundEnds = roundEnds,
 			delays = delays,
 			GameConfig = loader:require("src/shared/GameConfig"),
+			HighlightClipRules = loader:require("src/shared/HighlightClipRules"),
 		}
 		-- Cette méthode permet d'inscrire un joueur au classement lorsqu'un test en a besoin ; sans position, il est resté
 		-- au menu (pas de personnage).
@@ -665,6 +671,71 @@ return function(T, Loader)
 				T.expectEqual(env.RoundManager.getState(), "idle", "manche " .. round)
 			end
 			T.expectEqual(#env.roundEnds, 3)
+		end)
+	end)
+
+	T.describe("RoundManager : clip de la partie (#499)", function()
+		T.it("signale chaque kill crédité avec le dernier coup, pas une chute", function()
+			local kills = {}
+			local env = setup({
+				onKill = function(victim, killer, hit)
+					table.insert(kills, { victim = victim, killer = killer, hit = hit })
+				end,
+			})
+			local alice = env.addPlayer(1, "Alice", Vector3.zero)
+			local bot = env.addBot("Marcel", Vector3.new(0, 0, 5))
+			env.RoundManager.startRound(60)
+			env.RoundManager.recordDamage(alice, bot, "AWP", true)
+			env.RoundManager.onCharacterDied(bot, function() end)
+			env.RoundManager.onCharacterDied(alice, function() end)
+			T.expectEqual(#kills, 1, "la chute d'Alice n'a pas de tueur")
+			T.expectEqual(kills[1].killer, alice)
+			T.expectEqual(kills[1].victim, bot)
+			T.expectEqual(kills[1].hit.weapon, "AWP")
+			T.expectEqual(kills[1].hit.headshot, true)
+		end)
+
+		T.it("diffuse le clip avec le résultat et rallonge la phase de résultat de sa durée", function()
+			local resets = 0
+			local clip = { duration = 4 }
+			local env = setup({
+				highlight = {
+					take = function()
+						return clip
+					end,
+					reset = function()
+						resets += 1
+					end,
+				},
+			})
+			env.addPlayer(1, "Alice", Vector3.zero)
+			env.RoundManager.startRound(60)
+			table.clear(env.delays)
+			env.tick(61)
+			T.expectEqual(env.remotes.roundResult.last().clip, clip)
+			T.expectEqual(env.delays[1], env.HighlightClipRules.resultDuration(4))
+			T.expect(env.delays[1] > env.GameConfig.RESULT_DURATION)
+			T.expectEqual(resets, 0, "clip gardé pendant le résultat")
+			env.flush()
+			T.expectEqual(env.RoundManager.getState(), "idle")
+			T.expectEqual(resets, 1, "clip oublié au retour à idle")
+		end)
+
+		T.it("sans clip ou si le clip échoue : bannière seule, fin de manche quand même", function()
+			local env = setup({
+				highlight = {
+					take = function()
+						error("panne")
+					end,
+					reset = function() end,
+				},
+			})
+			env.addPlayer(1, "Alice", Vector3.zero)
+			env.RoundManager.startRound(60)
+			table.clear(env.delays)
+			env.tick(61)
+			T.expectEqual(env.remotes.roundResult.last().clip, nil)
+			T.expectEqual(env.delays[1], env.GameConfig.RESULT_DURATION)
 		end)
 	end)
 end

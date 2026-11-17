@@ -43,6 +43,7 @@ local PerfBench = require(script.debug.PerfBench)
 local PerfRecorder = require(script.debug.PerfRecorder)
 local PerfReplay = require(script.debug.PerfReplay)
 local InputModule = require(script.input.InputModule)
+local HighlightRecorder = require(script.systems.highlight.HighlightRecorder)
 
 local player = Players.LocalPlayer
 -- Secondes d'attente au plus du corps entier d'un personnage avant de le prendre en main (#328)
@@ -174,6 +175,10 @@ DebugPlaytest.init({
 	viewmodelSystem = ViewmodelSystem,
 	fpsCamera = FPSCamera,
 })
+
+-- Clip de la partie (#499) : dernières secondes de la caméra gardées en continu (tampon fixe), envoyées seulement à la
+-- demande du serveur pour un kill record.
+HighlightRecorder.init({ player = player, fpsCamera = FPSCamera, movement = MovementController })
 
 -- Enregistreur des démos de l'écran Apprendre (#285) : attribut joueur `DebugClipRecorder` dans Studio, puis F7 (docs/ui.md).
 ClipRecorder.init({ player = player, fpsCamera = FPSCamera, movement = MovementController })

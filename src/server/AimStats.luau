@@ -163,7 +163,8 @@ end
 
 -- Cette méthode permet de compter une touche qui a fait des dégâts lorsqu'elle est appliquée : rattachée au tir
 -- linkedShotTime (décidé par le Validator, #216 ; nil : orpheline, anomalie comptée comme un tir qui touche, #246) ; flick mesuré
--- alors entre le cap figé à ce tir et la direction validée de la touche. Ne renvoie rien : aucun veto.
+-- alors entre le cap figé à ce tir et la direction validée de la touche. Renvoie si la touche suit un flick (notation du
+-- clip de la partie, #499), jamais un veto.
 function AimStats.noteHit(
 	state: State,
 	participant: any,
@@ -171,10 +172,10 @@ function AimStats.noteHit(
 	now: number,
 	direction: Vector3?,
 	linkedShotTime: number?
-)
+): boolean
 	local stats = statsOf(state, participant)
 	if not stats then
-		return
+		return false
 	end
 	stats.hits += 1
 	if isHeadshot then
@@ -187,24 +188,26 @@ function AimStats.noteHit(
 		stats.orphanHits += 1
 		stats.shots += 1
 		stats.hitShots += 1
-		return
+		return false
 	end
 	record.hit = true
 	stats.hitShots += 1
 	local shotYaw: ShotYaw = record.data or {}
 	local yaw, age = shotYaw.yaw, shotYaw.yawAge
 	if not direction or not yaw or not age or age < 0 or age > AimStats.FLICK_MAX_AGE then
-		return
+		return false
 	end
 	local delta = AimStats.yawDelta(yaw, direction)
 	if not delta then
-		return
+		return false
 	end
 	stats.measured += 1
 	stats.peakSpeed = math.max(stats.peakSpeed, delta / math.max(age, AimStats.MIN_SPEED_DT))
 	if delta >= AimStats.FLICK_MIN_ANGLE then
 		stats.flickHits += 1
+		return true
 	end
+	return false
 end
 
 -- Cette méthode permet de lever la violation « touches orphelines » (#246) lorsqu'une touche vient d'être comptée :
