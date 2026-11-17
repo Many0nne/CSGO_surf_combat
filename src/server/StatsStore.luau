@@ -37,6 +37,8 @@ type Profile = {
 	canSave: boolean,
 	saving: boolean,
 	failures: number,
+	-- Aucun enregistrement trouvé au chargement (#527, joueur nouveau pour les analytics) ; nil tant que pas chargé
+	fresh: boolean?,
 }
 
 local store: DataStore? = nil
@@ -219,8 +221,16 @@ function StatsStore.load(player: Player)
 	else
 		profile.stored = stored
 		profile.known = true
+		profile.fresh = data == nil
 		publish(profile)
 	end
+end
+
+-- Cette méthode permet de savoir si un joueur n'avait encore aucune statistique enregistrée lorsque les analytics
+-- décident de son onboarding (#527) : nil si le chargement n'a pas abouti (ou n'est pas fini).
+function StatsStore.isNewcomer(player: Player): boolean?
+	local profile = profiles[player]
+	return if profile then profile.fresh else nil
 end
 
 -- Cette méthode permet de lire les statistiques d'un joueur (stockées plus écarts pas encore écrits) lorsqu'un système

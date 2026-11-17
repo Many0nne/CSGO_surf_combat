@@ -130,6 +130,7 @@ return function(T, Loader)
 					N.BUY_CRATE,
 					N.BUY_CREDIT_PACK,
 					N.HIGHLIGHT_POV,
+					N.ANALYTICS_SCREEN,
 				}
 			do
 				T.expect(RemoteGuard.RULES[name] ~= nil, "règle manquante : " .. name)
@@ -154,6 +155,12 @@ return function(T, Loader)
 			T.expectEqual(honest(N.GET_SETTINGS), "ok")
 			T.expectEqual(honest(N.EQUIP_ITEM, "knife", "weapon.m9bayonet", ""), "ok", "skin d'origine")
 			T.expectEqual(honest(N.EQUIP_ITEM, "sniper", "weapon.awp", "skin.awp.dragon_lore"), "ok")
+			T.expectEqual(honest(N.ANALYTICS_SCREEN, "menu_shop"), "ok", "écran des analytics (#527)")
+		end)
+
+		T.it("refuse un écran des analytics hors de la liste (#527)", function()
+			T.expectEqual(honest(N.ANALYTICS_SCREEN, "partout"), "malformed", "écran inconnu")
+			T.expectEqual(honest(N.ANALYTICS_SCREEN, 3), "malformed", "écran non textuel")
 		end)
 
 		T.it("accepte l'ouverture d'une caisse et refuse un id de forme impossible (#332)", function()

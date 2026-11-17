@@ -893,8 +893,13 @@ end
 local SUSPECT_REFUSALS = { unknown = true, wrong_slot = true, not_owned = true, wrong_skin = true }
 
 -- Cette méthode permet de brancher le remote d'équipement (#280), le départ des joueurs et l'arrêt du serveur lorsque le
--- serveur démarre ; à l'arrêt, il attend les sauvegardes en vol et programmées (CLOSE_WAIT au plus).
-function InventoryStore.init(equipRemote: RemoteEvent, isSpawning: (Player) -> boolean)
+-- serveur démarre ; à l'arrêt, il attend les sauvegardes en vol et programmées (CLOSE_WAIT au plus). `onEquipped`
+-- (analytics, #527) est appelé après chaque équipement accepté, avec l'id du skin (nil : d'origine).
+function InventoryStore.init(
+	equipRemote: RemoteEvent,
+	isSpawning: (Player) -> boolean,
+	onEquipped: ((player: Player, skinId: string?) -> ())?
+)
 	clearStarterPack()
 	spawningCheck = isSpawning
 	equipRemote.OnServerEvent:Connect(function(player: Player, slot: any, weaponId: any, skinId: any)
@@ -902,7 +907,11 @@ function InventoryStore.init(equipRemote: RemoteEvent, isSpawning: (Player) -> b
 		if not CheatLog.admit(player, equipRemote.Name, slot, weaponId, skinId) then
 			return
 		end
-		local ok, reason = InventoryStore.equip(player, slot, weaponId, if skinId == "" then nil else skinId)
+		local skin = if skinId == "" then nil else skinId
+		local ok, reason = InventoryStore.equip(player, slot, weaponId, skin)
+		if ok and onEquipped then
+			onEquipped(player, skin)
+		end
 		if not ok and reason and SUSPECT_REFUSALS[reason] then
 			CheatLog.report(
 				Participants.fromPlayer(player),

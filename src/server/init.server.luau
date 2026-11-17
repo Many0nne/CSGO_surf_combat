@@ -1,3 +1,5 @@
+local AnalyticsService = game:GetService("AnalyticsService")
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -14,6 +16,7 @@ local MemoryTracker = require(Shared:WaitForChild("MemoryTracker"))
 local PerfRules = require(Shared:WaitForChild("PerfRules"))
 local ParticipantRules = require(Shared:WaitForChild("ParticipantRules"))
 local CollisionGroups = require(Shared:WaitForChild("CollisionGroups"))
+local AnalyticsRules = require(Shared:WaitForChild("AnalyticsRules"))
 
 local SpawnManager = require(script.SpawnManager)
 local SpawnProtection = require(script.SpawnProtection)
@@ -42,6 +45,7 @@ local AimStats = require(script.AimStats)
 local TrainingService = require(script.TrainingService)
 local PartyService = require(script.PartyService)
 local HighlightService = require(script.HighlightService)
+local Analytics = require(script.analytics.Analytics)
 
 -- Serveur d'entraînement (#345, serveur réservé de la même place) : ni bots, ni armes, ni stats, manche sans fin
 local training = TrainingService.isTraining()
@@ -110,24 +114,57 @@ buyCreditPackRmt.Name = N.BUY_CREDIT_PACK
 buyCreditPackRmt.Parent = ReplicatedStorage
 -- Clip de la partie (#499) : tampon caméra demandé au tireur d'un kill record, renvoyé une fois (HighlightService)
 local highlightPovRmt = makeRemote(N.HIGHLIGHT_POV)
+-- Analytics (#527) : écran courant du client (menu, shop, en partie), pour les funnels et l'endroit d'un départ
+local analyticsScreenRmt = makeRemote(N.ANALYTICS_SCREEN)
 
 -- ── Initialisation des sous-systèmes ──────────────────────────────────────
 
 -- Journal anti-triche (#170) : avant les remotes, qui passent tous par CheatLog.admit
 CheatLog.init()
+-- Analytics (#527) : avant les sous-systèmes qui l'appellent. Studio : rien n'est envoyé (playtests et DebugPlaytest
+-- hors des tableaux de bord), chaque envoi est écrit en console, préfixé [Analytics]
+Analytics.init({
+	service = if RunService:IsStudio() then nil else AnalyticsService,
+	flow = { source = Enum.AnalyticsEconomyFlowType.Source, sink = Enum.AnalyticsEconomyFlowType.Sink },
+	log = if RunService:IsStudio()
+		then function(message: string)
+			print("[Analytics] " .. message)
+		end
+		else nil,
+	clock = os.clock,
+	guid = function()
+		return HttpService:GenerateGUID(false)
+	end,
+	training = training,
+})
+analyticsScreenRmt.OnServerEvent:Connect(function(player, screen)
+	if not CheatLog.admit(player, N.ANALYTICS_SCREEN, screen) then
+		return
+	end
+	Analytics.screen(player, screen)
+end)
 StatsStore.init()
 SettingsStore.init(getSettingsRmt, saveSettingsRmt)
 -- Inventaire (#267) : StarterPack vidé, Tools donnés selon l'équipement (#280), armes non possédées refusées par le
 -- Validator. Crédits (#391, #396) : portefeuille dans le même enregistrement, API WalletStore ; achat des caisses (#393)
 -- par CrateService ; gains en jouant (#394) par CreditGains, branché plus bas (kills dans onDeathCounted, manche jouée
 -- et victoire dans onRoundEnd)
-InventoryStore.init(equipItemRmt, SpawnManager.isSpawning)
+InventoryStore.init(equipItemRmt, SpawnManager.isSpawning, Analytics.equipped)
 Validator.setOwnership(InventoryStore.ownsTool)
 -- Objets aléatoires payants (#395) : restriction de PolicyService demandée à l'arrivée de chaque joueur, mise en cache
 PaidRandomPolicy.init()
-CrateService.init(openCrateRmt, buyCrateRmt)
+-- Analytics (#527) : chaque achat traité, avec le solde après l'achat
+CrateService.init(openCrateRmt, buyCrateRmt, function(player, crateId, result, price)
+	Analytics.crateBought(player, crateId, result, price, WalletStore.balance(player))
+end)
 -- Packs de crédits en Robux (#395) : seul callback ProcessReceipt du jeu, prompt d'achat ouvert par le serveur
-ReceiptService.init(buyCreditPackRmt)
+ReceiptService.init(buyCreditPackRmt, {
+	onPrompted = Analytics.packPrompted,
+	-- Cette méthode permet de compter les crédits d'un reçu écrit (analytics, #527) avec le solde qui en résulte.
+	onCredited = function(player, packId, credits)
+		Analytics.packCredited(player, packId, credits, WalletStore.balance(player))
+	end,
+})
 FeedbackService.init(sendFeedbackRmt, feedbackAckRmt)
 -- Mode publié aux clients (attribut de ReplicatedStorage) et téléportations vers ou depuis l'entraînement
 TrainingService.init(trainingRmt)
@@ -153,6 +190,7 @@ RoundManager.init({
 		for _, participant in participants do
 			if participant.player then
 				StatsStore.recordRoundEnd(participant.player, winner ~= nil and winner.id == participant.id)
+				Analytics.roundEnd(participant.player)
 			end
 		end
 	end,
@@ -165,7 +203,14 @@ RoundManager.init({
 CreditGains.init({
 	training = training,
 	roundActive = RoundManager.isActive,
-	credit = WalletStore.addPlayGain,
+	-- Cette méthode permet de créditer un gain en jouant et de le compter dans l'économie des analytics (#527).
+	credit = function(player: Player, amount: number, day: number): number?
+		local credited = WalletStore.addPlayGain(player, amount, day)
+		if credited and credited > 0 then
+			Analytics.playGain(player, credited, WalletStore.balance(player))
+		end
+		return credited
+	end,
 	now = os.time,
 	clock = os.clock,
 	log = if RunService:IsStudio()
@@ -313,6 +358,7 @@ weaponActionRmt.OnServerEvent:Connect(function(player, action)
 	-- partie (#499), sans visée (direction de la racine)
 	if action == "Shoot" then
 		SpawnProtection.drop(char)
+		Analytics.shot(player)
 		local root = char:FindFirstChild("HumanoidRootPart")
 		if root and root:IsA("BasePart") then
 			HighlightService.noteShot(Participants.fromPlayer(player), root.CFrame.LookVector, nil, false)
@@ -443,6 +489,7 @@ shotFiredRmt.OnServerEvent:Connect(function(player, origin, direction, shotTime)
 	-- Compté après la décision du relais, qu'il ne change pas : un tir accepté (forme, cadence, chargeur) entre aux
 	-- statistiques
 	if relayShot(participant, origin, direction, shotTime) then
+		Analytics.shot(player)
 		-- Cap figé à l'arrivée du tir, avant sa touche (flick), retrouvée par shotTime (#216)
 		local yaw, yawAt = CharacterSync.lastYaw(player)
 		AimStats.noteShot(aimStats, participant, os.clock(), yaw, yawAt, shotTime)
@@ -456,12 +503,49 @@ local function forgetCombatState(participant: Participants.Participant)
 	ShotRelayRules.forget(shotRelay, participant)
 end
 
+-- Boîte (X, Z) de la map jouée, lue à la première mort comptée : grille des zones de l'événement Mort (#527)
+local mapBounds: AnalyticsRules.Bounds? = nil
+
+-- Cette méthode permet de nommer la zone de la map où se trouve le personnage d'un participant lorsqu'une mort est
+-- comptée (grille AnalyticsRules.zone, boîte englobante de la map jouée, « ? » sans personnage ni map).
+local function deathZone(participant: Participants.Participant): string
+	local char = Participants.characterOf(participant)
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if not (root and root:IsA("BasePart")) then
+		return "?"
+	end
+	if not mapBounds then
+		local maps = workspace:FindFirstChild("Maps")
+		local active = maps and maps:GetAttribute(MapSelection.ACTIVE_ATTRIBUTE)
+		local map = if maps and type(active) == "string" then maps:FindFirstChild(active) else nil
+		if map and map:IsA("Model") then
+			local center, size = map:GetBoundingBox()
+			mapBounds = {
+				minX = center.X - size.X / 2,
+				maxX = center.X + size.X / 2,
+				minZ = center.Z - size.Z / 2,
+				maxZ = center.Z + size.Z / 2,
+			}
+		end
+	end
+	return AnalyticsRules.zone(root.Position.X, root.Position.Z, mapBounds)
+end
+
 -- Cette méthode permet d'appliquer les suites d'une mort (bot tueur replacé, stats persistantes) lorsqu'un personnage
 -- meurt, ou qu'un joueur part par MENU PRINCIPAL juste après un coup reçu (#217).
 local function onDeathCounted(participant: Participants.Participant, killer: Participants.Participant?)
 	if killer then
 		-- Un bot qui vient de tuer se replace (#141)
 		BotManager.notifyKill(killer)
+	end
+	-- Analytics (#527) : première mort, premier kill, série sans kill, zone de la map (rien en entraînement)
+	if participant.player or (killer and killer.player) then
+		Analytics.death(
+			participant.player,
+			if killer then killer.player else nil,
+			AnalyticsRules.deathCause(killer ~= nil, killer ~= nil and killer.isBot),
+			deathZone(participant)
+		)
 	end
 	-- Entraînement (#345) : une chute ne compte pas dans les stats
 	if training then
@@ -517,6 +601,13 @@ local function onCharacterAdded(player: Player, char: Model)
 	-- Temps en vie dans la manche (#394, manche jouée sans kill) : de l'apparition à la mort (onParticipantCharacter) ou
 	-- à la disparition du personnage (retour au menu, fin de manche)
 	CreditGains.onSpawn(player, char)
+	-- Analytics (#527) : apparition comptée si le personnage est gardé (une arrivée pendant la bannière de fin est
+	-- détruite tout de suite par SpawnManager)
+	task.defer(function()
+		if char.Parent and player.Character == char then
+			Analytics.spawned(player)
+		end
+	end)
 	char.Destroying:Connect(function()
 		CreditGains.onDespawn(player, char)
 	end)
@@ -604,6 +695,7 @@ leaveRoundRmt.OnServerEvent:Connect(function(player)
 	end
 	forgetCombatState(participant)
 	SpawnManager.withdraw(player)
+	Analytics.leftRound(player)
 	-- Revenu au menu pour son groupe (#523)
 	PartyService.noteMenu(player)
 end)
@@ -674,6 +766,7 @@ local function onHitVerdict(
 		-- ForceField)
 		if outcome then
 			CreditGains.onHit(player)
+			Analytics.damage(player)
 		end
 		return outcome
 	end
@@ -866,11 +959,16 @@ end
 -- ── Lifecycle joueurs ─────────────────────────────────────────────────────
 
 local function setupPlayer(player: Player)
+	-- Analytics (#527) : visite ouverte en premier (étape Arrivée), ancienneté connue une fois les stats chargées
+	Analytics.playerAdded(player)
 	Roles.setup(player)
 	-- Après les rôles : l'inventaire d'un admin en dépend (#267)
 	InventoryStore.setup(player)
 	task.spawn(InventoryStore.load, player)
-	task.spawn(StatsStore.load, player)
+	task.spawn(function()
+		StatsStore.load(player)
+		Analytics.setNewcomer(player, StatsStore.isNewcomer(player))
+	end)
 	if RunService:IsStudio() then
 		player:GetAttributeChangedSignal("DebugCredits"):Connect(function()
 			WalletStore.applyDebug(player)
@@ -896,6 +994,8 @@ end)
 
 Players.PlayerAdded:Connect(setupPlayer)
 Players.PlayerRemoving:Connect(function(player)
+	-- Analytics (#527) : en premier, l'endroit où était le joueur est encore connu
+	Analytics.playerRemoving(player)
 	lastWeaponAction[player] = nil
 	SpawnManager.forget(player)
 	local participant = Participants.fromPlayer(player)

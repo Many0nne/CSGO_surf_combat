@@ -129,8 +129,13 @@ end
 
 -- Cette méthode permet de brancher les remotes d'ouverture de test et d'achat lorsque le serveur démarre : garde commune
 -- (débit, type de l'id de caisse) puis `CrateService.open` ou `CrateService.buy`. Le thread d'un achat n'est jamais
--- annulé (il porte l'écriture, cf. InventoryStore.transact).
-function CrateService.init(openRemote: RemoteFunction, buyRemote: RemoteFunction)
+-- annulé (il porte l'écriture, cf. InventoryStore.transact). `onBought` (analytics, #527) reçoit chaque achat traité
+-- (réponse et prix de la caisse, nil si elle est inconnue), avant la réponse au client.
+function CrateService.init(
+	openRemote: RemoteFunction,
+	buyRemote: RemoteFunction,
+	onBought: ((player: Player, crateId: string, result: Result, price: number?) -> ())?
+)
 	openRemote.OnServerInvoke = function(player: Player, crateId: any): Result
 		if not CheatLog.admit(player, openRemote.Name, crateId) then
 			return refuse("rate")
@@ -141,7 +146,12 @@ function CrateService.init(openRemote: RemoteFunction, buyRemote: RemoteFunction
 		if not CheatLog.admit(player, buyRemote.Name, crateId) then
 			return refuse("rate")
 		end
-		return CrateService.buy(player, crateId)
+		local result = CrateService.buy(player, crateId)
+		if onBought then
+			local crate = ShopCatalog.crate(crateId)
+			onBought(player, crateId, result, if crate then crate.price else nil)
+		end
+		return result
 	end
 end
 
