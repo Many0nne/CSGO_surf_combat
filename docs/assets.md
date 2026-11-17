@@ -450,7 +450,8 @@ marquages sont celles de Windows (`C:/Windows/Fonts`, Bahnschrift, Impact) : gé
 
 Même principe que pour l'AWP : un skin est **dessiné pour la M9 seule**, un script par skin dans `assets/m9/skins/`
 (`emaille` pour ÉMAIL, `patrouille`, `artdeco`, `hote` et `sphinx` de la série FILM, #433 et #436, et les communs
-`leurre`, `chantier`, `topo` et `ceramique`, #476, et le rare `guilloche`), avec une fonction `paint(kn)`. La M9 n'a pas de source Blender : on
+`leurre`, `chantier`, `topo` et `ceramique`, #476, le rare `guilloche`, et ceux de la série 2, les communs `piedpoule`
+et `tomette` et les rares `azulejo` et `nacre`, #495), avec une fonction `paint(kn)`. La M9 n'a pas de source Blender : on
 part de ses cartes d'origine et de sa cuisson (`fetch_viewmodel.py` puis `bake_maps.py --glb`, étape 1 de « Fabriquer
 un skin » ci-dessous). Outils communs (`common.py`) :
 
@@ -513,6 +514,18 @@ qu'ensuite. Puis publier et cataloguer (étapes 4 et 5 de « Fabriquer un skin �
   fin de gouttière (t -0,16) y fait une encoche. Émail grenat préféré au bleu nuit, trop proche d'ÉMAIL dans la caisse.
 - **Rendus `render_views.py` brûlés au blanc** (vue `lame`, même PATROUILLE : lame claire face à la lumière principale) :
   `--exposure -1`.
+- **Série 2 de la M9 (#495, matières d'intérieur comme la série 2 de l'AWP)** : PIED-DE-POULE et TOMETTE (communs),
+  AZULEJO et NACRE (rares). Motifs calculés sur `kn.grid()` puis `kn.put`, valeurs par cellule (nuance d'une tomette,
+  reflet d'une plaquette) lues par `kn.sample_array(…, order=0)`. Pièges vus en jeu :
+  - **Le fil repoli couvre ~0,04 unité au-dessus du tranchant vu de profil** : une frise posée sur le bas de la lame
+    disparaît sous l'acier de `kn.edge`. La commencer au-dessus (`FIL` d'`azulejo.py`). Le biseau, incliné, tasse aussi
+    la frise en hauteur : une chaîne d'anneaux n'y laissait que des traits verticaux, des losanges pleins tiennent.
+  - **Terre cuite** : (0,55 ; 0,22 ; 0,13), saumon sur la planche Cycles, tournait au rouge sang en jeu, et des
+    hexagones de 0,062 de rayon faisaient peau de serpent. Ton plus clair et orangé (0,72 ; 0,34 ; 0,19), rayon 0,078.
+  - **Émail blanc brillant** (rugosité 0,16) : il renvoie le ciel du crépuscule et vire au gris bleuté en 1P ; 0,3 le
+    garde blanc.
+  - **Nacre** : des stries droites et contrastées faisaient des rayures de berlingot. Stries ondulées et discrètes, et
+    l'irisation portée surtout par une teinte qui glisse le long de la lame et un reflet propre à chaque plaquette.
 
 ### Série FILM (#433)
 
