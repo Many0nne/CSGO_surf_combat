@@ -176,3 +176,22 @@ index e6e4dee..2956f1a 100644
  	self:setState({
  		appStatus = AppStatus.NotConnected,
  	})
+diff --git a/plugin/src/soundPlayer.lua b/plugin/src/soundPlayer.lua
+index 3259272..f088248 100644
+--- a/plugin/src/soundPlayer.lua
++++ b/plugin/src/soundPlayer.lua
+@@ -19,7 +19,14 @@ function SoundPlayer.new(settings)
+ 	}, SoundPlayer)
+ end
+ 
++-- CSGO autoconnect : le seul son du plugin (Assets.Sounds.Notification, rbxassetid://203785492) n'est plus un audio
++-- chargeable et remplit la console de « Asset type does not match requested type » a chaque playtest (#93, #472).
++local CSGO_SOUNDS_DISABLED = true
++
+ function SoundPlayer:play(soundId)
++	if CSGO_SOUNDS_DISABLED then
++		return
++	end
+ 	if self.settings and self.settings:get("playSounds") == false then
+ 		return
+ 	end
