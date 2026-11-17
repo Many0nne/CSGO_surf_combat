@@ -509,7 +509,7 @@ règles du groupe : `docs/architecture.md` « Lobby entre amis ».
   « TU ES L'HÔTE · LANCER FAIT ENTRER TOUT LE LOBBY », « EN ATTENTE DE L'HÔTE · NOM LANCE LA PARTIE », « NOM EST EN
   PARTIE · LANCE POUR LE REJOINDRE », « NOM EST AU MENU · TU PEUX LANCER SEUL ».
 - **Deux colonnes** sous des libellés ambrés : GROUPE (300 px, « GROUPE · N » à plusieurs) à gauche, AMIS (440 px,
-  défilante) à droite. Lignes de 40 px séparées par les filets des Réglages (os à 0,88). Groupe : nom (Oswald regular
+  défilante) à droite. Lignes de 46 px (comme les Réglages) séparées par les filets des Réglages (os à 0,88). Groupe : nom (Oswald regular
   20 px, joueur local en rouge d'impact = « à moi »), étiquette « HÔTE » en boîte ambrée à texte sombre (`UIKit.tag`),
   présence à droite (DANS LE LOBBY, EN PARTIE, AU MENU, medium 16 px). Amis : nom, statut (SUR CE SERVEUR et DANS LE JEU
   en os, EN LIGNE atténué, HORS LIGNE gris, DANS TON GROUPE en ambre), action à droite en texte (INVITER ou REJOINDRE,

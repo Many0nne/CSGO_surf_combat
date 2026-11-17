@@ -29,7 +29,7 @@ local LIST_Y = HEADER_Y + 32
 local GROUP_WIDTH = 300
 local FRIENDS_X = 340
 local FRIENDS_WIDTH = MenuPage.BlockWidth - FRIENDS_X
-local ROW_HEIGHT = 40
+local ROW_HEIGHT = 46 -- comme les lignes des Réglages
 local NAME_SIZE = 20
 local INFO_SIZE = UITheme.TextSize.Min
 local ACTION_SIZE = 18
@@ -469,11 +469,16 @@ function LobbyScreen.show()
 	friendsKey = nil
 	groupKey = nil
 	PartyClient.open()
+	-- Fondu d'entrée d'abord (UIKit.fadeIn) : il remet chaque texte présent à sa transparence relevée à l'ouverture, ce
+	-- qui effaçait l'atténuation des actions impossibles. Lignes refaites après lui (hors du fondu), chargement des amis
+	-- compris (sans appel web, les faux amis de Studio arrivent tout de suite), état de LANCER réappliqué une fois le
+	-- fondu fini
+	page.show()
+	paint()
 	if os.clock() - friendsAt >= REFRESH_AFTER then
 		refreshFriends()
 	end
-	paint()
-	page.show()
+	task.delay(UITheme.Motion.Enter.Time, paint)
 end
 
 -- Cette méthode permet de fermer le lobby lorsque le joueur va sur une autre page du menu ; `silent` lorsque c'est
