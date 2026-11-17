@@ -44,8 +44,16 @@ local cancelReload: (() -> ())? = nil
 -- Jeton d'action : tout equip, rangement ou nouvelle action périme les délais de fin en vol (#159, #183).
 local actionGate = EquipRules.newGate()
 
+-- Cette méthode permet de savoir si le personnage local est vivant lorsqu'une action d'arme est demandée : mort, il
+-- reste en place jusqu'à CORPSE_HANDOFF_DELAY (0,3 s) et l'arme tirerait encore (#503).
+local function isLocalAlive(): boolean
+	local character = Players.LocalPlayer.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	return humanoid ~= nil and humanoid.Health > 0
+end
+
 local function canAct(): boolean
-	return weaponState == "IDLE" or weaponState == "SCOPED"
+	return (weaponState == "IDLE" or weaponState == "SCOPED") and isLocalAlive()
 end
 
 local function ensureAmmoState(tool, cfg)
