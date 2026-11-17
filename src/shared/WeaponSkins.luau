@@ -61,8 +61,9 @@ function WeaponSkins.apply(model: Instance, viewmodelName: string, skinId: strin
 	return count
 end
 
--- Cartes d'une SurfaceAppearance, lues pour les précharger (#333)
-local MAP_PROPERTIES = { "ColorMapContent", "MetalnessMapContent", "NormalMapContent", "RoughnessMapContent" }
+-- Cartes d'une SurfaceAppearance, lues pour les précharger (#333) ; masque de lueur facultatif (#487)
+local MAP_PROPERTIES =
+	{ "ColorMapContent", "MetalnessMapContent", "NormalMapContent", "RoughnessMapContent", "EmissiveMaskContent" }
 
 -- Cette méthode permet de lister sans doublon les ids des cartes d'un dossier de skin (WeaponSkins.folder) lorsqu'on
 -- veut les précharger ; une pièce peut réutiliser les cartes d'une autre, une carte vide est ignorée.

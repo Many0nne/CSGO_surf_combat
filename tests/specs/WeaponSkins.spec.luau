@@ -42,10 +42,15 @@ return function(T, Loader)
 				RoughnessMapContent = "rbxassetid://4",
 			})
 			local bolt = child("SurfaceAppearance", { ColorMapContent = "rbxassetid://5" })
-			local uris = WeaponSkins.mapUris(folder({ barrel, fittings, bolt }))
+			-- masque de lueur (#487) : préchargé comme les autres cartes
+			local glass = child(
+				"SurfaceAppearance",
+				{ ColorMapContent = "rbxassetid://5", EmissiveMaskContent = "rbxassetid://6" }
+			)
+			local uris = WeaponSkins.mapUris(folder({ barrel, fittings, bolt, glass }))
 			T.expectEqual(
 				table.concat(uris, ","),
-				"rbxassetid://1,rbxassetid://2,rbxassetid://3,rbxassetid://4,rbxassetid://5"
+				"rbxassetid://1,rbxassetid://2,rbxassetid://3,rbxassetid://4,rbxassetid://5,rbxassetid://6"
 			)
 		end)
 

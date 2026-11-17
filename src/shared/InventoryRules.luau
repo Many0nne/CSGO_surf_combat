@@ -201,6 +201,29 @@ InventoryRules.ITEMS = {
 		name = "TÔLE LARMÉE",
 		appearance = "tole",
 	},
+	-- Rares de la série 2 (#487), en réserve tant que la caisse n'est pas complète (assets/awp/skins/capiton.py,
+	-- vitrail.py, laque.py)
+	{
+		id = "skin.awp.capiton",
+		type = "skin",
+		weapon = "weapon.awp",
+		name = "CAPITON",
+		appearance = "capiton",
+	},
+	{
+		id = "skin.awp.vitrail",
+		type = "skin",
+		weapon = "weapon.awp",
+		name = "VITRAIL",
+		appearance = "vitrail",
+	},
+	{
+		id = "skin.awp.laque",
+		type = "skin",
+		weapon = "weapon.awp",
+		name = "LAQUE",
+		appearance = "laque",
+	},
 	-- Skins M9 : COUCHANT, RELEVÉ, RECUIT (#268, #337, motifs calculés) ; ÉMAIL, PATROUILLE, ART DÉCO dessinés pour la
 	-- M9 (#420, assets/m9/skins/) à la place d'IMPACT, STRATE et SILLAGE
 	{

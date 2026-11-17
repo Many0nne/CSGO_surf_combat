@@ -317,7 +317,7 @@ tout le catalogue.
 Un skin AWP est **dessiné pour l'AWP seule**, pièce par pièce (pas un motif réappliquable sur une autre arme) : un script
 par skin dans `assets/awp/skins/` (`balise`, `trempe`, `ciselure`, `pan`, `orage`, `circuit`, `maquis`, `mue`, et
 `remorqueur` et `logogramme` de la série FILM, #433 et #436, les communs `epure`, `tartan`, `banche`, et ceux de la
-série 2, `parquet`, `cannage`, `tole`, #482), avec
+série 2, `parquet`, `cannage`, `tole`, #482, et ses rares `capiton`, `vitrail`, `laque`, #487), avec
 une fonction `paint(maps, cv)`. Il part des cartes d'origine de `make_textures.py` (granité, moletage, vis, crasse) et
 les repeint. Outils communs (`common.py`) :
 
@@ -383,7 +383,32 @@ marquages sont celles de Windows (`C:/Windows/Fonts`, Bahnschrift, Impact) : gé
   mailles larges (56 px), un fond de trou brun sombre et surtout les **brins diagonaux en X sur chaque nœud**, qui
   coupent les coins des trous. **Tôle larmée** : à 30 px de pas, les larmes disparaissaient de profil (36 px) ; un rivet
   bombé se fond dans l'aluminium sans un liseré d'ombre à son pied.
-- **Republier un skin corrigé** : `publish_skin.py` saute les cartes déjà dans `ids.json` (reprise). Supprimer
+- **Rares de la série 2 (CAPITON, VITRAIL, LAQUE, #487)** : matières d'intérieur plus précieuses que les communs
+  (cuir capitonné, vitrail serti de plomb, laque à l'or). Le cuir bordeaux et les verres posés en **non-métal** prenaient
+  le reflet du ciel : cuir rose, verres blancs de trois quarts. Le cuir posé en métal (« candy », rugosité 0,55)
+  garde sa teinte. Les verres en métal, justes sur la planche, paraissaient éteints en jeu (ils ne renvoient que le ciel
+  sombre du crépuscule) : verres non métalliques et couleur relevée (luminance moyenne 0,18 → 0,23). Mats (0,42), ils
+  faisaient peinture : le verre se lit par des reflets nets (rugosité 0,10), un relief martelé qui les brise d'un verre
+  à l'autre, et une **lueur** (carte facultative `<PREFIXE>_Emissive.png`, voir ci-dessous).
+- **Lueur d'un skin (carte Emissive, #487)** : un skin peut poser `m.emissive` (0 à 1 par texel) ; `Maps.save` écrit
+  alors `<PREFIXE>_Emissive.png`, `publish_skin.py` la publie et `make_rbx.py` la pose en `EmissiveMaskContent` (Rojo
+  7.7 la synchronise, vérifié dans Studio). La lumière émise prend la couleur de `ColorMapContent`. `WeaponSkins.mapUris`
+  la précharge avec les autres cartes. Rester discret (VITRAIL : 0,3 au pied des plombs, 0,65 au centre d'un verre) :
+  plus fort, le verre fait néon.
+- **Une carte publiée peut ne jamais s'afficher** : approuvée, servie par Asset Delivery et `Success` pour `PreloadAsync`,
+  elle laisse pourtant toute la pièce grise (VITRAIL, #487 : la normale du châssis, et une couleur republiée identique
+  au bit près à la précédente). Attendre n'y change rien. Isoler la carte fautive sur une AWP posée en mode Edit
+  (clone de `ReplicatedStorage.ViewModels.AWP`, une `SurfaceAppearance` neuve par essai, `Content.fromUri`, puis
+  `screen_capture` à caméra fixe), puis retirer sa seule entrée de `ids.json` et la republier ; une carte identique à
+  une version qui s'affiche reprend l'ancien id. Changer les cartes d'une arme déjà en main pendant une partie ne
+  recharge rien : tester en mode Edit ou relancer la partie.
+- **Rojo ne remet pas à zéro une propriété retirée d'un `.model.json`** : un essai qui a posé `EmissiveMaskContent` ou
+  `EmissiveStrength` reste dans Studio après restauration du fichier (lunette et canon de VITRAIL lumineux). Remettre
+  la valeur à la main dans Studio ; le fichier versionné, lui, est propre. Une rosace en anneaux concentriques coupés de rayons faisait cible de fléchettes : des lobes
+  circulaires qui se chevauchent (rosace gothique) se lisent comme une fleur. Des boutons de capiton lustrés brillaient
+  comme des perles : boutons mats. Deux skins d'une même caisse ne doivent pas partager leur couleur dominante
+  (CAPITON foncé en lie-de-vin face au rouge de LAQUE) : comparer les skins de la caisse côte à côte.
+- **Republier un skin corrigé** (si une seule carte change, retirer seulement son entrée, voir plus haut) : `publish_skin.py` saute les cartes déjà dans `ids.json` (reprise). Supprimer
   `ids.json` avant de republier des cartes modifiées, sinon le jeu garde les anciennes images.
 - **Essayer tous les skins en jeu sans relancer de partie** : en playtest, AWP en main, cloner depuis le contexte Client
   les `SurfaceAppearance` de `ReplicatedStorage.Skins.AWP.<skin>` sur les pièces de `workspace.CurrentCamera.AWP` (ce

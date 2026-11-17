@@ -16,6 +16,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 # Pièces de chaque matériau de l'AWP (même table que les cartes d'origine) ; la M9 n'a qu'une pièce, Handle
 AWP_PARTS = json.load(open(os.path.join(ROOT, "assets", "awp", "texture_ids.json")))["_parts"]
 PROPS = {"Color": "ColorMapContent", "Rough": "RoughnessMapContent", "Metal": "MetalnessMapContent", "Normal": "NormalMapContent"}
+# Carte facultative : masque de lueur (#487, VITRAIL), la lumière émise prend la couleur de ColorMapContent
+OPTIONAL = {"Emissive": "EmissiveMaskContent"}
 
 
 # Cette méthode permet de lister les pièces d'un viewmodel qui portent les cartes d'un préfixe de texture.
@@ -30,7 +32,8 @@ if __name__ == "__main__":
 	for viewmodel, prefixes in ids.items():
 		children = []
 		for prefix, maps in sorted(prefixes.items()):
-			props = dict(sorted((PROPS[k], v) for k, v in maps.items() if k in PROPS))  # ordre stable des diffs
+			known = {**PROPS, **OPTIONAL}
+			props = dict(sorted((known[k], v) for k, v in maps.items() if k in known))  # ordre stable des diffs
 			missing = set(PROPS) - set(maps)
 			if missing:
 				raise SystemExit(f"[make_rbx] {skin} {viewmodel} {prefix} : cartes manquantes {sorted(missing)}")

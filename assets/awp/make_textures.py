@@ -89,6 +89,7 @@ class Maps:
 		self.rough = np.zeros(k)
 		self.metal = np.zeros(k)
 		self.height = np.zeros(k)
+		self.emissive = None  # lueur (0 à 1 par texel) : carte Emissive écrite seulement si un skin la pose
 
 	def is_(self, name):
 		"""Cette méthode permet de sélectionner les texels d'une pièce."""
@@ -123,6 +124,8 @@ class Maps:
 			"Metal": self.image(np.clip(self.metal, 0, 1)),
 			"Normal": nrm,
 		}
+		if self.emissive is not None:
+			out["Emissive"] = self.image(np.clip(self.emissive, 0, 1))
 		for kind, img in out.items():
 			arr = np.rint(np.clip(img, 0, 1) * 255).astype(np.uint8)
 			Image.fromarray(arr, "RGB" if arr.ndim == 3 else "L").save(os.path.join(out_dir, f"{prefix}_{kind}.png"))
