@@ -59,6 +59,7 @@ local function ensureAmmoState(tool, cfg)
 	s.lastFire = 0
 	s.nextFireTime = 0
 	s.nextSecondaryTime = 0
+	s.nextScopeTime = 0
 	s.slashIndex = 0
 	toolState[tool] = s
 	return s
@@ -253,6 +254,38 @@ local function onToolActivated(tool)
 	end)
 end
 
+-- Cette méthode permet de passer la lunette au zoom suivant lorsque l'arme peut agir ; le prochain zoom au maintien du
+-- clic droit attend ScopeRepeatDelay (#473), un nouveau clic n'attend pas.
+local function toggleScope(tool, cfg)
+	if not canAct() then
+		return
+	end
+	ensureAmmoState(tool, cfg).nextScopeTime = tick() + (cfg.ScopeRepeatDelay or 0)
+	-- Lunette après le verrou d'equip : la fin de la piste Equip est coupée, comme par un tir (#404)
+	ViewmodelSystem.cutEquip()
+	weaponState = ScopeSystem.toggle(cfg)
+end
+
+-- Cette méthode permet de répéter, à chaque frame, l'attaque, l'attaque secondaire ou le zoom de l'arme en main
+-- lorsque sa touche est tenue (#473) ; chaque action garde ses délais (FireDelay, verrous), comme des clics répétés.
+local function repeatHeldActions()
+	local tool, cfg = currentTool, currentCfg
+	if not tool or not cfg then
+		return
+	end
+	if InputModule.isPointerHeld("fire") then
+		onToolActivated(tool)
+	end
+	if not InputModule.isPointerHeld("aim") then
+		return
+	end
+	if cfg.SecondaryAttack then
+		onSecondaryAttack(tool, cfg)
+	elseif cfg.HasScope and tick() >= ensureAmmoState(tool, cfg).nextScopeTime then
+		toggleScope(tool, cfg)
+	end
+end
+
 -- Cette méthode permet de couper les connexions de saisie de l'arme (lunette, attaque secondaire) lorsqu'elle est
 -- rangée ou rééquipée, pour ne pas les empiler.
 local function disconnectInputs()
@@ -303,12 +336,7 @@ local function onToolEquipped(tool, char)
 	if cfg and cfg.HasScope then
 		-- Clic droit, L2 ou bouton tactile (InputModule.onAim, #276)
 		scopeConn = InputModule.onAim(function()
-			if not canAct() then
-				return
-			end
-			-- Lunette après le verrou d'equip : la fin de la piste Equip est coupée, comme par un tir (#404)
-			ViewmodelSystem.cutEquip()
-			weaponState = ScopeSystem.toggle(cfg)
+			toggleScope(tool, cfg)
 		end)
 	end
 
@@ -416,6 +444,7 @@ function WeaponSystem.init(player)
 		if InputModule.isInspectPressed() then
 			inspectCurrent()
 		end
+		repeatHeldActions()
 	end))
 
 	local backpack = pl:WaitForChild("Backpack", 5)

@@ -39,6 +39,12 @@ for name, action in KeyBindings.gamepadMap() do
 end
 local AIM_MOUSE = (Enum.UserInputType :: any)["MouseButton" .. KeyBindings.MOUSE.aim]
 local AIM_BUTTON = (Enum.KeyCode :: any)[KeyBindings.GAMEPAD_BUTTONS.aim]
+local FIRE_MOUSE = (Enum.UserInputType :: any)["MouseButton" .. KeyBindings.MOUSE.fire]
+local FIRE_BUTTON = (Enum.KeyCode :: any)[KeyBindings.GAMEPAD_BUTTONS.fire]
+-- Tir et visée tenus (#473) : sources qui les tiennent (bouton de souris, de manette, tactile). Le premier tir passe par
+-- Tool.Activated ; ce maintien ne sert qu'à répéter l'action (WeaponSystem), il n'est donc lu que sur les vraies touches
+-- (un Tool:Activate() de DebugPlaytest ou du rejeu ne tient rien).
+local pointerHolders: { [KeyBindings.MouseAction]: { [any]: true } } = { fire = {}, aim = {} }
 
 local jumpPressedEdge = false
 local jumpPressTime = -math.huge
@@ -102,6 +108,9 @@ local function clearAll()
 		held[key] = false
 		table.clear(holders[key :: Action])
 	end
+	for _, sources in pointerHolders do
+		table.clear(sources)
+	end
 	padStick = Vector2.zero
 	touchStick = Vector2.zero
 	jumpPressedEdge = false
@@ -120,10 +129,40 @@ local function fireAim()
 	end
 end
 
+-- Cette méthode permet de tenir ou relâcher le tir ou la visée pour une source (bouton de souris, de manette, tactile)
+-- lorsqu'elle s'enfonce ou remonte ; rien n'est tenu menu ouvert ni pendant un rejeu.
+local function holdPointer(action: KeyBindings.MouseAction, source: any, down: boolean)
+	if down and not (suspended or virtual) then
+		pointerHolders[action][source] = true
+	else
+		pointerHolders[action][source] = nil
+	end
+end
+
+-- Cette méthode permet de nommer la source d'un bouton de souris ou de manette lorsque le tir ou la visée change d'état ;
+-- nil pour une autre entrée.
+local function pointerOf(input: InputObject): (KeyBindings.MouseAction?, any)
+	if input.UserInputType == AIM_MOUSE then
+		return "aim", AIM_MOUSE
+	elseif input.KeyCode == AIM_BUTTON then
+		return "aim", AIM_BUTTON
+	elseif input.UserInputType == FIRE_MOUSE then
+		return "fire", FIRE_MOUSE
+	elseif input.KeyCode == FIRE_BUTTON then
+		return "fire", FIRE_BUTTON
+	end
+	return nil, nil
+end
+
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	if input.UserInputType == AIM_MOUSE or input.KeyCode == AIM_BUTTON then
+	local pointer, source = pointerOf(input)
+	if pointer then
+		-- Un clic capté par l'interface (bouton du HUD, menu) ne tient ni le tir ni la visée
 		if not gameProcessed then
-			fireAim()
+			if pointer == "aim" then
+				fireAim()
+			end
+			holdPointer(pointer, source, true)
 		end
 		return
 	end
@@ -134,6 +173,11 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 UserInputService.InputEnded:Connect(function(input)
+	local pointer, source = pointerOf(input)
+	if pointer then
+		holdPointer(pointer, source, false)
+		return
+	end
 	local action = KEY_MAP[input.KeyCode]
 	if action then
 		release(action, input.KeyCode)
@@ -186,9 +230,19 @@ function InputModule.setTouchMove(position: Vector2)
 	touchStick = if suspended or virtual then Vector2.zero else position
 end
 
--- Cette méthode permet de déclencher la visée (lunette, attaque secondaire) depuis le bouton tactile lorsqu'il est touché.
-function InputModule.pressAim()
-	fireAim()
+-- Cette méthode permet de tenir ou relâcher le tir ou la visée depuis un bouton tactile (#473) lorsque le joueur le
+-- touche ; l'appui de la visée déclenche aussi la lunette ou l'attaque secondaire, comme le clic droit.
+function InputModule.setTouchPointer(action: KeyBindings.MouseAction, down: boolean)
+	if down and action == "aim" then
+		fireAim()
+	end
+	holdPointer(action, "touch", down)
+end
+
+-- Cette méthode permet de savoir si le tir ou la visée est tenu (souris, manette ou tactile) lorsque le système d'arme
+-- répète l'action au maintien (#473).
+function InputModule.isPointerHeld(action: KeyBindings.MouseAction): boolean
+	return next(pointerHolders[action]) ~= nil
 end
 
 -- Cette méthode permet d'écouter l'action de visée (clic droit, L2, bouton tactile) lorsque l'arme en main a une lunette

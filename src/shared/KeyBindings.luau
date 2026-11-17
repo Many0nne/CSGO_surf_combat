@@ -22,7 +22,8 @@ KeyBindings.KEYS = {
 } :: { [Action]: { string } }
 
 -- Action → bouton de souris. `aim` (lunette, attaque secondaire) est lu par WeaponSystem ; `fire` reste le clic gauche
--- de Tool.Activated, fixé par Roblox : il ne sert qu'à l'affichage des touches et ne doit pas changer.
+-- de Tool.Activated, fixé par Roblox : il sert à l'affichage des touches et au maintien du tir (InputModule, #473), et
+-- ne doit pas changer.
 -- stylua: ignore
 KeyBindings.MOUSE = {
 	fire = 1,
@@ -41,7 +42,7 @@ KeyBindings.GAMEPAD = {
 } :: { [Action]: { string } }
 
 -- Boutons de manette des actions hors KeyBindings.KEYS. `fire` (R2) passe par Tool.Activated, fixé par Roblox : il ne
--- sert qu'à l'affichage. Start et Select sont pris par Roblox (son menu, son curseur) : menu et classement sont sur la
+-- sert qu'à l'affichage et au maintien du tir (InputModule, #473). Start et Select sont pris par Roblox (son menu, son curseur) : menu et classement sont sur la
 -- croix directionnelle.
 -- stylua: ignore
 KeyBindings.GAMEPAD_BUTTONS = {
