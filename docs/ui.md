@@ -38,7 +38,7 @@ avaient chacun leur écriture du même état. Un nouvel écran suit ces règles 
   ambrée pleine à texte sombre (`MenuShot.boxChoice`), une seule à la fois. Barre du menu : texte os vif souligné
   d'ambre. **Piste rejetée (#308) : les onglets du menu en boîtes** (onglet ouvert en boîte ambrée, JOUER en boîte
   os) : deux boîtes pleines côte à côte, de tailles et de couleurs différentes, l'utilisateur n'a pas aimé le rendu.
-  JOUER reste en gros texte, sans soulignement (le soulignement veut dire « page ouverte »).
+  JOUER reste en gros texte ; souligné seulement quand le lobby (#523) est ouvert (le soulignement veut dire « page ouverte »).
 - **Rouge d'impact = « à moi » ou survolé** : arme équipée, ligne du joueur au classement et au kill feed, survol d'un
   choix. Jamais pour dire quelle page est ouverte.
 - **Touche nommée dans un menu = boîte os à texte sombre** (`UIKit.tag`, `UIKit.keyHint` : aide de l'équipement,
@@ -129,8 +129,8 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   taille plus que la couleur). Les onglets sont dans leur propre `ScreenGui` (`MenuTabs`, DisplayOrder 4), au-dessus des écrans
   secondaires, avec le titre du jeu (« SURF FFA », « COMBAT DE SURF »), affiché sur toutes les pages (#308). **Onglet
   ouvert en os vif souligné d'ambre** (#308) : avant, JOUER était le seul onglet marqué (plus gros, souligné de
-  rouge) et l'onglet ouvert à peine plus clair, on ne savait pas sur quelle page on était. JOUER reste plus gros,
-  sans soulignement. Sous les onglets, un message ponctuel (`MainMenu.showNotice`, 5 s, rouge d'impact à ombre) explique un
+  rouge) et l'onglet ouvert à peine plus clair, on ne savait pas sur quelle page on était. JOUER reste plus gros ;
+  depuis #523 il ouvre une page (le lobby) et se souligne comme les autres quand elle est ouverte. Sous les onglets, un message ponctuel (`MainMenu.showNotice`, 5 s, rouge d'impact à ombre) explique un
   retour au menu imprévu, par exemple une apparition impossible (#219) ; rendu provisoire, pas encore validé.
 - **Fiche de statistiques (#301, `src/client/ui/StatsCard.luau`)** : sur l'accueil (pas d'onglet en plus, choix de
   l'utilisateur), en bas à droite sous les pieds du personnage (#308 : la grille d'équipement occupe la gauche, la
@@ -191,7 +191,8 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   (testées). MENU PRINCIPAL : arme rangée, remote `LeaveRound` (le serveur retire le joueur du round, cf.
   `docs/architecture.md`), puis état `MENU` sans attendre la réponse.
 - `src/client/ui/MenuShot.luau` : choix en texte à ombre décalée (`textChoice`, l'ombre s'estompe avec le choix
-  désactivé) ; un clic déclenche l'action, sans tir. JOUER (`locks`) bloque ensuite tous les choix jusqu'à `MenuShot.reset`.
+  désactivé) ; un clic déclenche l'action, sans tir. `locks` (exclusif) n'est plus utilisé : il n'était déjà plus transmis
+  par `textChoice` depuis #308, et JOUER ouvre le lobby depuis #523 (LANCER se garde lui-même d'un double clic).
 - `src/client/ui/MenuCursor.luau` : souris système réimposée à chaque image tant que le menu est ouvert.
 - `src/client/systems/game/MenuScene.luau` : accueil sur la map (#253, section dédiée plus bas).
 - `src/client/systems/game/MenuSceneRules.luau` : règles pures testées (`tests/specs/MenuSceneRules.spec.luau`).
@@ -497,6 +498,30 @@ Le joueur rejoue lui-même le geste de la démo, la démo sous les yeux.
 - Coût mesuré (Studio, 2026-11-15) : copie du décor à l'apparition, 17 443 pièces en 2,46 s (contre 0,30 s depuis le
   menu : elle part en même temps que le chargement du personnage, sur plusieurs images). Coût par image non mesuré à
   part ; celui du lecteur d'Apprendre (4 à 5 ms de GPU) en donne l'ordre.
+
+## Lobby (#523)
+
+JOUER ouvre le lobby, même seul (un clic de plus, même chemin pour tous) ; LANCER entre dans la manche. Comportement et
+règles du groupe : `docs/architecture.md` « Lobby entre amis ».
+
+- **Gabarit des écrans secondaires** (`LobbyScreen`, `MenuPage`) : titre « LOBBY », personnage recentré derrière le bloc.
+  À la place des onglets en boîte, une ligne ambrée dit qui lance : « INVITE TES AMIS OU LANCE SEUL » (seul),
+  « TU ES L'HÔTE · LANCER FAIT ENTRER TOUT LE LOBBY », « EN ATTENTE DE L'HÔTE · NOM LANCE LA PARTIE », « NOM EST EN
+  PARTIE · LANCE POUR LE REJOINDRE », « NOM EST AU MENU · TU PEUX LANCER SEUL ».
+- **Deux colonnes** sous des libellés ambrés : GROUPE (300 px, « GROUPE · N » à plusieurs) à gauche, AMIS (440 px,
+  défilante) à droite. Lignes de 40 px séparées par les filets des Réglages (os à 0,88). Groupe : nom (Oswald regular
+  20 px, joueur local en rouge d'impact = « à moi »), étiquette « HÔTE » en boîte ambrée à texte sombre (`UIKit.tag`),
+  présence à droite (DANS LE LOBBY, EN PARTIE, AU MENU, medium 16 px). Amis : nom, statut (SUR CE SERVEUR et DANS LE JEU
+  en os, EN LIGNE atténué, HORS LIGNE gris, DANS TON GROUPE en ambre), action à droite en texte (INVITER ou REJOINDRE,
+  survol rouge d'impact, atténuée si impossible). Les raisons d'une action impossible sont écrites une fois sous la
+  liste (gris, 16 px), pas sur chaque ligne. Pas d'avatars : rien d'autre dans le menu n'en montre, et les faux amis
+  de Studio ont des ids fictifs.
+- **Actions en bas au centre** : RETOUR, QUITTER LE GROUPE (à plusieurs seulement), LANCER (action principale, os vif ;
+  atténué pendant l'attente de l'hôte).
+- Messages (invitation refusée, REJOINDRE impossible, ami absent à l'arrivée) : sous les onglets (`MainMenu.showNotice`),
+  comme ceux de l'entraînement.
+- Studio : `DebugFriends` (cf. `docs/architecture.md`) pour voir la liste remplie ; groupe à 2 avec l'onglet Test,
+  « Clients and Servers », 2 joueurs (`DebugFriends` sur chacun, REJOINDRE l'autre).
 
 ## Règles des écrans secondaires
 

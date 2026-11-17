@@ -40,6 +40,7 @@ local CheatLog = require(script.CheatLog)
 local ShotRelayRules = require(script.ShotRelayRules)
 local AimStats = require(script.AimStats)
 local TrainingService = require(script.TrainingService)
+local PartyService = require(script.PartyService)
 local HighlightService = require(script.HighlightService)
 
 -- Serveur d'entraînement (#345, serveur réservé de la même place) : ni bots, ni armes, ni stats, manche sans fin
@@ -93,6 +94,8 @@ footstepRmt.Name = N.FOOTSTEP
 footstepRmt.Parent = ReplicatedStorage
 -- Rejoindre ou quitter l'entraînement (#345) : demande du client, réponse du serveur
 local trainingRmt = makeRemote(N.TRAINING)
+-- Lobby entre amis (#523) : demandes du lobby, LANCER de l'hôte relayé aux membres, réponses de REJOINDRE
+local partyRmt = makeRemote(N.PARTY)
 -- Ouverture d'une caisse du shop (#332) : RemoteFunction, le client attend le skin tiré par le serveur
 local openCrateRmt = Instance.new("RemoteFunction")
 openCrateRmt.Name = N.OPEN_CRATE
@@ -128,6 +131,8 @@ ReceiptService.init(buyCreditPackRmt)
 FeedbackService.init(sendFeedbackRmt, feedbackAckRmt)
 -- Mode publié aux clients (attribut de ReplicatedStorage) et téléportations vers ou depuis l'entraînement
 TrainingService.init(trainingRmt)
+-- Groupes du lobby (#523) : publiés dans les attributs des joueurs, arrivée d'un invité reliée au groupe de son ami
+PartyService.init(partyRmt)
 
 RoundManager.init({
 	roundState = roundStateRmt,
@@ -574,6 +579,8 @@ SpawnManager.init(spawnRmt, {
 		end
 		-- Au classement dès l'apparition, retour du menu en partie compris (#157)
 		RoundManager.addParticipant(Participants.fromPlayer(player))
+		-- En partie pour son groupe (#523) : un membre du lobby n'attend plus cet hôte
+		PartyService.noteInGame(player)
 	end,
 })
 
@@ -592,6 +599,8 @@ leaveRoundRmt.OnServerEvent:Connect(function(player)
 	end
 	forgetCombatState(participant)
 	SpawnManager.withdraw(player)
+	-- Revenu au menu pour son groupe (#523)
+	PartyService.noteMenu(player)
 end)
 
 -- ── Combat : validation et attribution des dégâts ─────────────────────────

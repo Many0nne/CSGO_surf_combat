@@ -13,6 +13,7 @@ local HighlightClipRules = require(ReplicatedStorage.Shared.HighlightClipRules)
 local InventoryRules = require(ReplicatedStorage.Shared.InventoryRules)
 local MathRules = require(ReplicatedStorage.Shared.MathRules)
 local NetworkProtocol = require(ReplicatedStorage.Shared.NetworkProtocol)
+local PartyRules = require(ReplicatedStorage.Shared.PartyRules)
 local TrainingRules = require(ReplicatedStorage.Shared.TrainingRules)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 
@@ -172,7 +173,8 @@ RemoteGuard.FEEDBACK_MAX_BYTES = 1000
 --   demande au démarrage du client ; EquipItem : un clic sur une arme ou un skin de l'accueil (#280) ; OpenCrate : un
 --   clic sur OUVRIR, l'animation d'ouverture dure plusieurs secondes (#332) ; BuyCrate : un clic sur ACHETER, suivi de la
 --   même animation (#393) ; BuyCreditPack : un clic sur un pack, suivi du prompt Roblox (#395) ; HighlightPov : une
---   réponse par kill record de la partie, demandée par le serveur au plus une fois par seconde (#499).
+--   réponse par kill record de la partie, demandée par le serveur au plus une fois par seconde (#499) ; Party : un clic
+--   (JOUER ou changement d'onglet qui ouvre ou quitte le lobby, LANCER, QUITTER LE GROUPE, REJOINDRE) (#523).
 -- Une arme plus rapide (automatique) demandera de relever HitscanDamage, ShotFired et WeaponAction.
 local N = NetworkProtocol.Names
 RemoteGuard.RULES = {
@@ -235,6 +237,12 @@ RemoteGuard.RULES = {
 		rate = 1,
 		burst = 3,
 		args = { RemoteGuard.number(), RemoteGuard.string(HighlightClipRules.POV_MAX_BYTES) },
+	},
+	-- Lobby entre amis (#523) : action, id de l'ami (0 hors REJOINDRE) ; ami et téléportation vérifiés par PartyService
+	[N.PARTY] = {
+		rate = 3,
+		burst = 8,
+		args = { RemoteGuard.enum(PartyRules.REQUESTS), RemoteGuard.number() },
 	},
 	[N.SEND_FEEDBACK] = { rate = 0.5, burst = 3, args = { RemoteGuard.string(RemoteGuard.FEEDBACK_MAX_BYTES) } },
 	[N.SAVE_SETTINGS] = { rate = 2, burst = 5, args = { RemoteGuard.table() } },

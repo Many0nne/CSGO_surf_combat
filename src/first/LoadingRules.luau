@@ -9,6 +9,8 @@ local LoadingRules = {}
 LoadingRules.INITIAL_LABEL = "CHARGEMENT"
 LoadingRules.JOIN_LABEL = "ENTRAÎNEMENT"
 LoadingRules.LEAVE_LABEL = "RETOUR EN PARTIE"
+-- Départ vers le serveur d'un ami (REJOINDRE du lobby, #523 ; PartyService : { partyHost = id })
+LoadingRules.FOLLOW_LABEL = "REJOINDRE UN AMI"
 
 -- Durée (s) au plus courte de l'écran du lancement : levé plus tôt, il clignoterait (playtest Studio, jeu en cache)
 LoadingRules.MIN_SHOWN = 0.8
@@ -41,8 +43,12 @@ function LoadingRules.teleportLabel(joining: boolean): string
 end
 
 -- Cette méthode permet de choisir le libellé de l'écran à l'arrivée sur un serveur d'après les données de téléportation
--- (TrainingService : { training = boolean }) ; sans données valides (lancement depuis le site), celui du chargement.
+-- (TrainingService : { training = boolean } ; PartyService : { partyHost = id }, #523) ; sans données valides
+-- (lancement depuis le site), celui du chargement.
 function LoadingRules.arrivalLabel(data: any): string
+	if type(data) == "table" and type(data.partyHost) == "number" then
+		return LoadingRules.FOLLOW_LABEL
+	end
 	if type(data) ~= "table" or type(data.training) ~= "boolean" then
 		return LoadingRules.INITIAL_LABEL
 	end
