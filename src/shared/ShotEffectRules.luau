@@ -7,9 +7,15 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local InventoryRules = require(ReplicatedStorage.Shared.InventoryRules)
 local ShotSoundRules = require(ReplicatedStorage.Shared.ShotSoundRules)
 
 local ShotEffectRules = {}
+
+-- Effets de tir qu'un skin peut déclarer (`shotEffect` du catalogue, #520) ; un nom inconnu est ignoré.
+ShotEffectRules.SKIN_EFFECTS = { lightning = true }
+-- Attribut du modèle d'arme (viewmodel, arme 3P) qui porte l'id du skin posé (WeaponSkins.ATTRIBUTE)
+ShotEffectRules.SKIN_ATTRIBUTE = "SkinId"
 
 -- Bouche du canon dans le modèle de l'arme (viewmodel ou 3P) : chemin de l'Attachment, puis nom de son effet.
 -- Une arme à distance sans ce chemin tire sans flamme, et son rayon part de l'origine du tir (l'œil).
@@ -158,6 +164,20 @@ end
 -- toujours) : pas au-delà de MAX_ACTIVE rayons en cours.
 function ShotEffectRules.hasRoom(activeCount: number): boolean
 	return activeCount < ShotEffectRules.MAX_ACTIVE
+end
+
+-- Cette méthode permet de trouver l'effet de tir du skin posé sur une arme lorsqu'un tir en part (#520) : nil pour le
+-- skin d'origine, un id inconnu, un item qui n'est pas un skin ou un effet inconnu.
+function ShotEffectRules.effectOf(skinId: any): string?
+	if type(skinId) ~= "string" or skinId == "" then
+		return nil
+	end
+	local item = InventoryRules.item(skinId)
+	local effect = item and item.type == InventoryRules.Type.SKIN and item.shotEffect
+	if type(effect) == "string" and ShotEffectRules.SKIN_EFFECTS[effect] then
+		return effect
+	end
+	return nil
 end
 
 return ShotEffectRules

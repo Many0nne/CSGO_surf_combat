@@ -27,7 +27,8 @@ local InventoryRules = {}
 export type ItemType = "weapon" | "skin"
 export type Slot = "sniper" | "knife"
 -- Un skin porte aussi son nom affiché (`name`) et le nom de ses SurfaceAppearance (`appearance` : dossier
--- ReplicatedStorage.Skins.<viewmodel de l'arme>.<appearance>, cf. WeaponSkins)
+-- ReplicatedStorage.Skins.<viewmodel de l'arme>.<appearance>, cf. WeaponSkins), et peut déclarer un effet de tir
+-- (`shotEffect`, #520 : "lightning" = éclair à la place du rayon de balle, cf. ShotEffectRules.effectOf)
 export type Item = {
 	id: string,
 	type: ItemType,
@@ -36,6 +37,7 @@ export type Item = {
 	weapon: string?,
 	name: string?,
 	appearance: string?,
+	shotEffect: string?,
 }
 -- Items possédés : ensemble d'ids du catalogue
 export type Owned = { [string]: boolean }
@@ -117,6 +119,7 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.awp",
 		name = "ORAGE",
 		appearance = "orage",
+		shotEffect = "lightning",
 	},
 	{
 		id = "skin.awp.circuit",
