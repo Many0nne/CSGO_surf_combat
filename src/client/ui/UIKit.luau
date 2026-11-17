@@ -7,6 +7,7 @@ local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("U
 local WalletRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WalletRules"))
 local WeaponProfile = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WeaponProfile"))
 local WeaponSkins = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WeaponSkins"))
+local Locale = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Locale"))
 local HUDRules = require(script.Parent.HUDRules)
 
 local C = UITheme.Colors
@@ -14,14 +15,24 @@ local Motion = UITheme.Motion
 
 local UIKit = {}
 
+-- Propriétés texte traduites à la création (#518) : un texte français non vide y suit la langue (Locale.apply)
+local LOCALIZED_PROPS = { Text = true, PlaceholderText = true }
+
 -- Cette méthode permet de créer une Instance avec ses propriétés et ses enfants lorsqu'un écran se construit.
+-- Les textes (`Text`, `PlaceholderText`) sont donnés en français, avec leurs paramètres dans `TextArgs` (#518) : ils
+-- sont traduits et suivent les changements de langue. Ne jamais y passer un texte déjà traduit par Locale.t.
 function UIKit.create(className: string, props: { [string]: any }?, children: { Instance }?): any
 	local inst = Instance.new(className)
 	local parent = nil
 	if props then
+		local args = props.TextArgs
 		for key, value in props do
-			if key == "Parent" then
-				parent = value
+			if key == "Parent" or key == "TextArgs" then
+				if key == "Parent" then
+					parent = value
+				end
+			elseif LOCALIZED_PROPS[key] and type(value) == "string" and value ~= "" then
+				Locale.apply(inst, value, args, key)
 			else
 				(inst :: any)[key] = value
 			end
@@ -211,11 +222,10 @@ end
 -- une touche (#308 : même écriture partout) ; `key` nil : texte seul, atténué (remarque en fin de ligne).
 function UIKit.keyHint(row: GuiObject, order: number, key: string?, action: string)
 	if key then
-		UIKit.tag(row, "Key" .. order, 2 * order - 1, C.Bone, C.Ground).Text = key
+		Locale.apply(UIKit.tag(row, "Key" .. order, 2 * order - 1, C.Bone, C.Ground), key)
 	end
-	UIKit.text({
+	local label = UIKit.text({
 		Name = "Action" .. order,
-		Text = action .. "      ",
 		FontFace = UITheme.Fonts.DisplayMedium,
 		TextSize = UITheme.TextSize.Min,
 		TextColor3 = if key then C.TextSoft else C.Muted,
@@ -224,6 +234,9 @@ function UIKit.keyHint(row: GuiObject, order: number, key: string?, action: stri
 		LayoutOrder = 2 * order,
 		Parent = row,
 	})
+	Locale.bind(label, function()
+		return Locale.t(action) .. "      "
+	end)
 end
 
 -- Cette méthode permet de dessiner la silhouette plate d'une arme, de profil, à partir des MeshParts de son viewmodel

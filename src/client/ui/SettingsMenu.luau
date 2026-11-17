@@ -10,6 +10,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
 local InventoryRules = require(ReplicatedStorage.Shared.InventoryRules)
+local Locale = require(ReplicatedStorage.Shared.Locale)
 local PlayerSettings = require(ReplicatedStorage.Shared.PlayerSettings)
 local UITheme = require(ReplicatedStorage.Shared.UITheme)
 local LocalInventory = require(script.Parent.Parent.systems.inventory.LocalInventory)
@@ -361,7 +362,7 @@ local function addPicker(
 
 	local function apply(index: number)
 		current = (index - 1) % #options + 1
-		value.Text = if options[current].icon then "" else options[current].label
+		Locale.apply(value, if options[current].icon then "" else options[current].label)
 		for i, icon in icons do
 			icon.Visible = i == current
 		end
@@ -855,6 +856,22 @@ local function buildCategories(block: Frame)
 	buildKeysCategory(block)
 
 	local graphics = addCategory(block, "GRAPHISMES")
+	-- Langue du jeu (#518) : français ou anglais, chaque nom écrit dans sa langue ; sans choix, celle du compte Roblox
+	-- (LocalSettings). Gardée par RÉTABLIR : rétablir l'affichage ne doit pas changer la langue sous les yeux du joueur
+	local languageOptions = {}
+	for i, language in Locale.LANGUAGES do
+		languageOptions[i] = { label = Locale.NAMES[language], value = language }
+	end
+	local languageIndex = table.find(Locale.LANGUAGES, Locale.get()) or 1
+	addPicker(graphics, "Langue", "language", languageOptions, languageIndex, languageIndex, function() end, 150, true)
+	-- La langue affichée peut changer sans le joueur (langue du compte au démarrage, réglages chargés) : la ligne la suit
+	local languageRow = graphics.list[#graphics.list]
+	Locale.onChanged(function(language)
+		local wasSyncing = syncing
+		syncing = true
+		languageRow.sync({ language = language } :: any)
+		syncing = wasSyncing
+	end)
 	-- Ombres du soleil sur ce poste seulement (#88) : la passe d'ombres est le plus gros coût GPU de la map ;
 	-- par défaut, l'état de la place
 	local shadowOptions = { { label = "ACTIVÉES", value = true }, { label = "COUPÉES", value = false } }
