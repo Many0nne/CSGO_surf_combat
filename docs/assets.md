@@ -336,7 +336,8 @@ tout le catalogue.
 Un skin AWP est **dessiné pour l'AWP seule**, pièce par pièce (pas un motif réappliquable sur une autre arme) : un script
 par skin dans `assets/awp/skins/` (`balise`, `trempe`, `ciselure`, `pan`, `orage`, `circuit`, `maquis`, `mue`, et
 `remorqueur` et `logogramme` de la série FILM, #433 et #436, les communs `epure`, `tartan`, `banche`, et ceux de la
-série 2, `parquet`, `cannage`, `tole`, #482, et ses rares `capiton`, `vitrail`, `laque`, #487), avec
+série 2, `parquet`, `cannage`, `tole`, #482, ses rares `capiton`, `vitrail`, `laque`, #487, et l'exceptionnel
+illustré `velours`, #492), avec
 une fonction `paint(maps, cv)`. Il part des cartes d'origine de `make_textures.py` (granité, moletage, vis, crasse) et
 les repeint. Outils communs (`common.py`) :
 
@@ -427,6 +428,18 @@ marquages sont celles de Windows (`C:/Windows/Fonts`, Bahnschrift, Impact) : gé
   circulaires qui se chevauchent (rosace gothique) se lisent comme une fleur. Des boutons de capiton lustrés brillaient
   comme des perles : boutons mats. Deux skins d'une même caisse ne doivent pas partager leur couleur dominante
   (CAPITON foncé en lie-de-vin face au rouge de LAQUE) : comparer les skins de la caisse côte à côte.
+- **Skins illustrés (exceptionnels, légendaires ; VELOURS, #492)** : pour un vrai dessin (un sujet, une scène, comme
+  Hyper Beast ou Neo-Noir), ni le code ni l'IA de Studio ne suffisent. Des formes en Bézier écrites à la main donnent
+  du clip-art ; `generate_texture` de Studio (mode Quality) peint un vrai oiseau mais flou, sans contrôle de la
+  composition, coupé au joint, et sur un maillage qu'il re-déplie lui-même. Ce qui marche (méthode retenue par
+  l'utilisateur pour ces skins) : `gabarit.py` écrit la silhouette exacte du châssis (masque, version annotée avec la
+  zone vue en 1P et la marge du cadre) ; on lui livre gabarit et brief (style, sujet entier dans la zone 1P, rien de
+  coupé par les trous, pas de texte ni d'arme dessinée ; modèle : `art/velours.brief.md`), il fait peindre
+  l'illustration par un modèle d'image et la rapporte ; elle va dans `assets/awp/skins/art/<skin>.png` et `illustration.py` la recale
+  (échelle et décalage par axe qui maximisent le recouvrement des silhouettes : 0,94 pour VELOURS, l'écart tient sous
+  le cadre sombre de 9 px), prolonge ses couleurs au-delà de son bord puis la lit par texel. Matière tirée de la
+  luminance : sombres en métal teinté (voile gris sinon), clairs en non-métal, lueur sur les plus clairs. Fidèle en
+  jeu (couleurs saturées gardées) ; la planche Cycles, elle, délave les tons clairs.
 - **Republier un skin corrigé** (si une seule carte change, retirer seulement son entrée, voir plus haut) : `publish_skin.py` saute les cartes déjà dans `ids.json` (reprise). Supprimer
   `ids.json` avant de republier des cartes modifiées, sinon le jeu garde les anciennes images.
 - **Essayer tous les skins en jeu sans relancer de partie** : en playtest, AWP en main, cloner depuis le contexte Client

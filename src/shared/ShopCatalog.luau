@@ -84,12 +84,12 @@ ShopCatalog.CRATES = {
 -- une caisse dès qu'une arme en a assez pour la composition complète. Série FILM (#433, #436) : REMORQUEUR, LOGOGRAMME,
 -- HÔTE et SPHINX ; CISELURE et TOPO ont cédé leur place dans la série 1 à TREMPE et aux autres communs. Série 2 de l'AWP
 -- (#482) : les communs PARQUET, CANNAGE et TÔLE LARMÉE, qui complètent les communs avec LOGOGRAMME ; les rares
--- CAPITON, VITRAIL et LAQUE (#487)
+-- CAPITON, VITRAIL et LAQUE (#487) ; l'exceptionnel VELOURS (#492), qui complète la composition de la future caisse
 ShopCatalog.RESERVE = {
 	["weapon.awp"] = {
 		common = { "logogramme", "parquet", "cannage", "tole" },
 		rare = { "capiton", "vitrail", "laque" },
-		exceptional = { "remorqueur" },
+		exceptional = { "remorqueur", "velours" },
 		legendary = { "ciselure" },
 	},
 	["weapon.m9bayonet"] = {
