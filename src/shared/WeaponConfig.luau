@@ -16,7 +16,7 @@ local AWP_FIRE_DELAY = 1.455
 --   EquipTime : arme inutilisable après la sortie (AWP : séquence draw, 1,267 s, `m_flDeployDuration` de CS2 ;
 --               couteaux : 1 s codé en dur pour tous les couteaux, `hardcoded_knife_deploy_time` de weapon_knife.cpp).
 --   ReloadTime : arme inutilisable pendant tout le rechargement, comme CS:GO (fin de la séquence reload, pas de tir
---                anticipé) ; AWP 3,667 s (`m_flDisallowAttackAfterReloadStartDuration` de CS2).
+--                anticipé) ; AWP 3,3 s (CS2 : 3,667 s, `m_flDisallowAttackAfterReloadStartDuration`, raccourci à la demande).
 
 WeaponConfig.Weapons = {
 	AWP = {
@@ -28,7 +28,7 @@ WeaponConfig.Weapons = {
 		Damage = 115,
 		RPM = 41,
 		FireDelay = AWP_FIRE_DELAY, -- seconds between shots
-		ReloadTime = 3.667, -- 110 images à 30 i/s (CS:GO)
+		ReloadTime = 3.3, -- raccourci de la séquence CS:GO (3,667 s) : le verrou finissait après la fin utile de l'animation
 		Magazine = 5,
 		Reserve = math.huge, -- réserve illimitée (#165) : le rechargement remplit toujours le chargeur
 		Penetration = 250, -- TODO: implement penetration handling

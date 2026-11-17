@@ -182,8 +182,8 @@ se déduit jamais de la longueur d'une piste, et une piste ne s'étire ni ne s'a
   pour cette durée (`m_flDeployDuration`, `m_flDisallowAttackAfterReloadStartDuration`), CS:GO ne l'écrivant nulle part
   ailleurs que dans le modèle. Dépôt `SteamDatabase/GameTracking-CSGO` (CS:GO : dernier commit avant CS2, `64b7772`).
 - **Rechargement :** CS:GO n'autorise aucun tir avant la fin de la séquence (`DefaultReload`), le verrou reste donc
-  `ReloadTime` (AWP : 3,667 s), la durée du rechargement CS:GO. La piste Reload de l'AWP, construite pour l'ancien
-  `ReloadTime` (3,7 s), dure ~0,03 s de plus : le premier tir coupe cette fin.
+  `ReloadTime`. Celui de l'AWP est volontairement de 3,3 s (CS:GO : 3,667 s), car à 3,667 s le verrou finissait trop
+  après la fin utile de l'animation. La piste Reload (~3,7 s) dure donc ~0,4 s de plus : le premier tir coupe cette fin.
 
 ## Vidéos de référence
 
