@@ -2,6 +2,8 @@
 -- s'il y a lieu, victime en os), la plus récente
 -- en haut, HUDRules.KILL_FEED_MAX lignes pendant HUDRules.KILL_FEED_DURATION s. Les lignes où le joueur local est tueur
 -- ou victime sont posées sur une bande rouge d'impact droite, comme sa ligne au classement.
+-- Le feed du HUD est une instance (`init`, `add`, `setVisible`) ; le clip de la partie (#534) en monte une autre dans
+-- son interface (`mount`, `push`, `destroy`), même rendu.
 local ContentProvider = game:GetService("ContentProvider")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -28,10 +30,27 @@ local ICON_GAP = 4
 
 local KillFeed = {}
 
+-- Liste de lignes posée dans une interface ; `root` porte l'attribut Scale de UIKit.scaledRoot (largeur de la bande)
+export type Feed = {
+	root: GuiObject,
+	list: Frame,
+	entries: { HUDRules.KillFeedEntry },
+	alive: boolean,
+}
+
+-- Mort à ajouter à un feed (sans l'instant d'affichage, posé à l'ajout)
+export type FeedLine = {
+	killer: string?,
+	killerIsBot: boolean?,
+	victim: string,
+	victimIsBot: boolean?,
+	weapon: string?,
+	headshot: boolean,
+	mine: boolean,
+}
+
 local gui: ScreenGui? = nil
-local root: Frame? = nil
-local list: Frame? = nil
-local entries: { HUDRules.KillFeedEntry } = {}
+local hud: Feed? = nil
 
 local escape = HUDRules.escapeRichText
 
@@ -131,13 +150,14 @@ end
 
 -- Cette méthode permet de construire une ligne du feed (morceaux à ombre, bande rouge si elle concerne le joueur)
 -- lorsque le feed est redessiné.
-local function buildRow(parent: Frame, entry: HUDRules.KillFeedEntry, index: number)
+local function buildRow(feed: Feed, entry: HUDRules.KillFeedEntry, index: number)
+	local root = feed.root
 	local row = UIKit.frame({
 		Name = "Row" .. index,
 		BackgroundTransparency = 1,
 		Position = UDim2.fromOffset(0, (index - 1) * ROW_HEIGHT),
 		Size = UDim2.new(1, 0, 0, ROW_HEIGHT),
-		Parent = parent,
+		Parent = feed.list,
 	})
 	local band = nil
 	if entry.mine then
@@ -172,7 +192,7 @@ local function buildRow(parent: Frame, entry: HUDRules.KillFeedEntry, index: num
 	if band then
 		-- La largeur de la ligne n'est connue qu'une fois les textes mesurés ; AbsoluteSize compte l'échelle du HUD
 		local function fitBand()
-			local scale = if root then root:GetAttribute("Scale") or 1 else 1
+			local scale = root:GetAttribute("Scale") or 1
 			band.Size = UDim2.fromOffset(line.AbsoluteSize.X / scale + 40, ROW_HEIGHT - 4)
 		end
 		fitBand()
@@ -180,22 +200,70 @@ local function buildRow(parent: Frame, entry: HUDRules.KillFeedEntry, index: num
 	end
 end
 
--- Cette méthode permet de redessiner le feed d'après les lignes encore valides lorsqu'une mort arrive ou qu'une ligne
--- expire.
-local function render()
-	if not list then
+-- Cette méthode permet de redessiner un feed d'après ses lignes encore valides lorsqu'une mort arrive ou qu'une ligne
+-- expire (rien s'il a été détruit).
+local function render(feed: Feed)
+	if not feed.alive then
 		return
 	end
-	entries = HUDRules.pruneKillFeed(entries, os.clock())
-	for _, child in list:GetChildren() do
+	feed.entries = HUDRules.pruneKillFeed(feed.entries, os.clock())
+	for _, child in feed.list:GetChildren() do
 		child:Destroy()
 	end
-	for i, entry in entries do
-		buildRow(list, entry, i)
+	for i, entry in feed.entries do
+		buildRow(feed, entry, i)
 	end
 end
 
--- Cette méthode permet de créer le feed (masqué) lorsque le client démarre.
+-- Cette méthode permet de poser un feed vide dans une interface lorsqu'elle se construit (HUD, clip de la partie) :
+-- liste ancrée en haut à droite à `position`, dans `root` (racine de UIKit.scaledRoot).
+function KillFeed.mount(root: GuiObject, position: UDim2): Feed
+	local list = UIKit.frame({
+		Name = "KillFeedList",
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = position,
+		Size = UDim2.fromOffset(WIDTH, ROW_HEIGHT * HUDRules.KILL_FEED_MAX),
+		Parent = root,
+	}) :: Frame
+	return { root = root, list = list, entries = {}, alive = true }
+end
+
+-- Cette méthode permet d'ajouter une mort à un feed lorsqu'elle arrive ; la ligne disparaît d'elle-même après
+-- KILL_FEED_DURATION.
+function KillFeed.push(feed: Feed, line: FeedLine)
+	local now = os.clock()
+	feed.entries = HUDRules.pushKillFeed(feed.entries, {
+		killer = line.killer,
+		killerIsBot = line.killerIsBot,
+		victim = line.victim,
+		victimIsBot = line.victimIsBot,
+		weapon = line.weapon,
+		headshot = line.headshot,
+		mine = line.mine,
+		at = now,
+	}, now)
+	render(feed)
+	task.delay(HUDRules.KILL_FEED_DURATION + 0.05, render, feed)
+end
+
+-- Cette méthode permet de vider un feed lorsqu'il ne doit plus montrer d'anciennes morts.
+function KillFeed.clear(feed: Feed)
+	if #feed.entries > 0 then
+		feed.entries = {}
+		render(feed)
+	end
+end
+
+-- Cette méthode permet de détruire un feed lorsque son interface disparaît : les rafraîchissements en attente n'y
+-- touchent plus.
+function KillFeed.destroy(feed: Feed)
+	feed.alive = false
+	feed.entries = {}
+	feed.list:Destroy()
+end
+
+-- Cette méthode permet de créer le feed du HUD (masqué) lorsque le client démarre.
 function KillFeed.init()
 	local screen = UIKit.create("ScreenGui", {
 		Name = "KillFeed",
@@ -206,15 +274,7 @@ function KillFeed.init()
 		Parent = Players.LocalPlayer:WaitForChild("PlayerGui"),
 	})
 	local scaled = UIKit.scaledRoot(screen, true)
-	list = UIKit.frame({
-		Name = "List",
-		BackgroundTransparency = 1,
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -MARGIN_RIGHT, 0, MARGIN_TOP),
-		Size = UDim2.fromOffset(WIDTH, ROW_HEIGHT * HUDRules.KILL_FEED_MAX),
-		Parent = scaled,
-	})
-	root = scaled
+	hud = KillFeed.mount(scaled, UDim2.new(1, -MARGIN_RIGHT, 0, MARGIN_TOP))
 	gui = screen
 	-- Icône de tête chargée d'avance : chargée à sa première apparition, elle manquerait à la première ligne (#364)
 	task.spawn(function()
@@ -222,34 +282,22 @@ function KillFeed.init()
 	end)
 end
 
--- Cette méthode permet d'ajouter une mort au feed lorsque PlayerDied arrive ; la ligne disparaît d'elle-même après
--- KILL_FEED_DURATION.
+-- Cette méthode permet d'ajouter une mort au feed du HUD lorsque PlayerDied arrive.
 function KillFeed.add(death: HUDRules.Death)
-	local now = os.clock()
-	entries = HUDRules.pushKillFeed(entries, {
-		killer = death.killer,
-		killerIsBot = death.killerIsBot,
-		victim = death.victim,
-		victimIsBot = death.victimIsBot,
-		weapon = death.weapon,
-		headshot = death.headshot,
-		mine = death.mine,
-		at = now,
-	}, now)
-	render()
-	task.delay(HUDRules.KILL_FEED_DURATION + 0.05, render)
+	if hud then
+		KillFeed.push(hud, death)
+	end
 end
 
--- Cette méthode permet d'afficher ou masquer le feed lorsque l'état client change (HUDRules.killFeedVisible) ; masqué,
--- il est vidé pour ne pas montrer d'anciennes morts à la partie suivante.
+-- Cette méthode permet d'afficher ou masquer le feed du HUD lorsque l'état client change (HUDRules.killFeedVisible) ;
+-- masqué, il est vidé pour ne pas montrer d'anciennes morts à la partie suivante.
 function KillFeed.setVisible(show: boolean)
-	if not gui then
+	if not gui or not hud then
 		return
 	end
 	gui.Enabled = show
-	if not show and #entries > 0 then
-		entries = {}
-		render()
+	if not show then
+		KillFeed.clear(hud)
 	end
 end
 

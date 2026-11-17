@@ -5,7 +5,8 @@
 -- (CharacterAnimator). La caméra est scriptée sur la prise du tireur (HighlightClipRules : POV recalé par le serveur),
 -- avec le viewmodel de son arme et de son skin (changements d'arme rejoués avec la piste Equip), ses tirs (piste Shoot
 -- et ses sons) ; les tirs des figurants sont
--- entendus en 3D, les victimes tombent en ragdoll (DeathRagdoll). Tout est détruit à la fin (figurants, viewmodel,
+-- entendus en 3D, les victimes tombent en ragdoll (DeathRagdoll), chaque kill du tireur s'inscrit au kill feed (#534,
+-- même rendu qu'en partie, sous la bande du haut). Tout est détruit à la fin (figurants, viewmodel,
 -- sons, corps, interface, liaison de rendu).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -24,6 +25,7 @@ local AnimationSoundSystem = require(script.Parent.Parent.weapon.AnimationSoundS
 local DeathRagdoll = require(script.Parent.Parent.game.DeathRagdoll)
 local ShotEffects = require(script.Parent.Parent.weapon.ShotEffects)
 local SoundChannels = require(script.Parent.Parent.settings.SoundChannels)
+local KillFeed = require(script.Parent.Parent.Parent.ui.KillFeed)
 local UIKit = require(script.Parent.Parent.Parent.ui.UIKit)
 
 local C = UITheme.Colors
@@ -43,6 +45,9 @@ local LAST_ROW_WINDOW = 1
 -- Vitesse verticale (studs/s) au-delà de laquelle un figurant est en l'air (saut, surf) pour son animation
 local AIR_SPEED = 2
 local BAR_HEIGHT = 0.1 -- part de l'écran de chaque bande noire du cadre cinéma
+-- Kill feed du clip : à droite comme en partie, juste sous la bande noire du haut (px à l'échelle du HUD)
+local FEED_MARGIN_RIGHT = 20
+local FEED_MARGIN_TOP = 12
 
 type Actor = {
 	id: number,
@@ -74,6 +79,7 @@ type Session = {
 	folder: Folder,
 	gui: ScreenGui,
 	fade: Frame,
+	feed: KillFeed.Feed,
 	equips: { HighlightClipRules.Equip },
 	nextEquip: number,
 	held: { [string]: Held }, -- par outil et skin
@@ -417,6 +423,7 @@ local function cleanup(session: Session)
 	table.clear(session.held)
 	session.viewmodel = nil
 	session.folder:Destroy()
+	KillFeed.destroy(session.feed)
 	session.gui:Destroy()
 	DeathRagdoll.clear()
 end
@@ -492,6 +499,7 @@ local function render(session: Session, dt: number)
 	while session.nextKill <= #clip.kills and clip.kills[session.nextKill].t <= t do
 		local kill = clip.kills[session.nextKill]
 		session.nextKill += 1
+		KillFeed.push(session.feed, HighlightClipRules.killFeedLine(clip, kill))
 		local actor = session.actors[kill.victimId]
 		local wasVisible = actor ~= nil and actor.visible
 		if actor and not actor.visible then
@@ -522,8 +530,8 @@ local function render(session: Session, dt: number)
 end
 
 -- Cette méthode permet de construire l'interface du clip lorsqu'il démarre : bandes noires du cadre cinéma, titre
--- « MEILLEURE ACTION » et nom du tireur, voile de fondu (noir d'abord).
-local function buildGui(clip: HighlightClipRules.Clip): (ScreenGui, Frame)
+-- « MEILLEURE ACTION » et nom du tireur, kill feed vide (à l'échelle du HUD), voile de fondu (noir d'abord).
+local function buildGui(clip: HighlightClipRules.Clip): (ScreenGui, Frame, KillFeed.Feed)
 	local gui = UIKit.create("ScreenGui", {
 		Name = "HighlightClip",
 		IgnoreGuiInset = true,
@@ -565,6 +573,8 @@ local function buildGui(clip: HighlightClipRules.Clip): (ScreenGui, Frame)
 		ZIndex = 3,
 	}, 2)
 	shadow.ZIndex = 2
+	local feed =
+		KillFeed.mount(UIKit.scaledRoot(gui, true), UDim2.new(1, -FEED_MARGIN_RIGHT, BAR_HEIGHT, FEED_MARGIN_TOP))
 	local fade = UIKit.frame({
 		Name = "Fade",
 		Size = UDim2.fromScale(1, 1),
@@ -573,7 +583,7 @@ local function buildGui(clip: HighlightClipRules.Clip): (ScreenGui, Frame)
 		ZIndex = 10,
 		Parent = gui,
 	})
-	return gui, fade
+	return gui, fade, feed
 end
 
 -- Cette méthode permet de savoir si un clip est en cours de lecture lorsque l'état du jeu change.
@@ -608,7 +618,7 @@ function HighlightPlayer.play(clip: HighlightClipRules.Clip, onDone: () -> ())
 		task.spawn(onDone)
 		return
 	end
-	local gui, fade = buildGui(clip)
+	local gui, fade, feed = buildGui(clip)
 	gui.Parent = playerGui
 	local folder = Instance.new("Folder")
 	folder.Name = "HighlightReplay"
@@ -620,6 +630,7 @@ function HighlightPlayer.play(clip: HighlightClipRules.Clip, onDone: () -> ())
 		folder = folder,
 		gui = gui,
 		fade = fade,
+		feed = feed,
 		equips = HighlightClipRules.equipTimeline(clip),
 		nextEquip = 1,
 		held = {},

@@ -345,6 +345,7 @@ local function freeze(myToken: number, chain: { Kill }, killer: Participant)
 		table.insert(clipKills, {
 			t = kill.t - start,
 			victimId = kill.victimId,
+			victimName = names[kill.victimId],
 			headshot = kill.headshot,
 			direction = each and each.direction,
 			weapon = each and each.weapon,
