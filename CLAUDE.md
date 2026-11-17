@@ -19,6 +19,7 @@ Lire le document du domaine avant de travailler dessus, et seulement celui-là.
 | Saccades, performance, overlay F3, fuites mémoire, sonde `FrameProbe` | `docs/performance.md` |
 | Anti-triche : menaces, validations serveur des remotes, plan | `docs/anticheat.md` |
 | Argent réel : packs Robux, `ProcessReceipt`, objets aléatoires payants (`PolicyService`) | `docs/economie.md` |
+| Page du jeu : miniatures, vidéo, mise en ligne et test A/B dans le Creator Hub | `docs/promo.md` |
 | Retours d'expérience datés (historique, le document du domaine prime) | `docs/notes/` |
 
 ## Labels des issues
