@@ -100,6 +100,25 @@ par `ScaleTo` avec le reste de l'arme.
   `FireClient(player, id, "aim", { target = Vector3 })` puis `"attack", { tool = "AWP" }`. Un tir relayé de bot se
   simule par `ShotFired:FireClient(player, botCharacter, "AWP", origine, direction)` (vrai chemin de `ShotEffects`).
 
+## Sons de l'AWP (#52, #488)
+
+Les sons sont des `Sound` du dossier `Sounds` du viewmodel (`assets/rbx/ViewModels/AWP.rbxm`), joués par les marqueurs
+`<Nom> Sound` des animations (`AnimationSoundSystem`). Le tir entendu par les autres joueurs réutilise le son `Shoot`
+(`WeaponConfig.Weapons.AWP.RemoteShotSound`) : changer `Shoot` change les deux.
+
+- **Tir (`Shoot`) :** « AWM/AWP FIRE » du Creator Store (`rbxassetid://6755643387`, son de Magmacow publié par
+  Condecadence), 4,49 s, volume 0,5, validé à l'écoute en jeu (#488). Le critère « plus léger, peu de réverbération »
+  de #52 était faux : l'AWP doit sonner **lourd**. Écartés à l'écoute : le Mosin-Nagant et le Kar98k (trop légers),
+  « Heavy Sniper Fire 1 » (`87139385063956`) et « BARRETT .50CAL FIRE » (`6150717352`).
+- **Chercher un son :** écarter les sons dont la description dit qu'ils viennent d'un autre jeu (CS, CoD, TF2…). Le MCP
+  `search_asset` ne trouve rien avec plusieurs mots séparés par des espaces : chercher un mot (`sniper`, `barrett`,
+  `awp`) avec `assetType = "Audio"` et `audioMaxDuration`.
+- **Essayer un son :** changer `SoundId` de `ReplicatedStorage.ViewModels.AWP.Sounds.Shoot` en mode Edit (MCP), faire
+  écouter, puis exporter (procédure « Mettre à jour un `.rbxm` » ci-dessus). En Play, le viewmodel déjà cloné sous la
+  caméra garde l'ancien id : modifier aussi ses copies côté client (`workspace`, `Sound` nommés `Shoot`).
+- **Export partiel `ViewModels` :** il réécrit aussi les viewmodels non modifiés (`KaBar.rbxm`, `M9Bayonet.rbxm`) avec
+  quelques octets d'écart. Ne commiter que le viewmodel modifié.
+
 ## Douille éjectée (#237)
 
 Code : `CasingEjection` (client), réglages et règles pures dans `CasingRules` (testées). Une arme qui éjecte porte sa
