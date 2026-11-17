@@ -33,14 +33,19 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
   groupe ; `PartyOrder` : rang ; `PartyPresence` : `menu` | `lobby` | `game`), d'où le client dessine le groupe sans
   autre remote (`PartyClient`). Remote `Party` (C→S : `open`/`close` à l'ouverture et à la sortie du lobby, `launch`,
   `leave`, `follow` + id de l'ami, toujours avec un nombre, 0 hors `follow` ; S→C : `go`, `joined`, ou un statut de
-  REJOINDRE, messages `PartyRules.notice`). **Présence :** `lobby` sur `open`, `menu` sur `close` (seulement depuis
-  `lobby` : un `close` arrivé après LANCER ne sort pas un joueur de la partie) et sur `LeaveRound`, `game` sur LANCER et à
+  REJOINDRE, messages `PartyRules.notice`). **Présence :** `lobby` sur `open` ; `menu` sur `LeaveRound` et sur `close`,
+  depuis `lobby`, ou depuis `game` pour un joueur sans personnage ni apparition en vol (un `close` arrivé après LANCER ne
+  sort pas de la partie un joueur qui y entre) ; le client envoie `close` en quittant le lobby et à chaque retour au menu
+  (aussi la manche finie pendant l'écran de mort, sans `LeaveRound`) ; `game` sur LANCER et à
   chaque apparition acceptée (`beforeSpawn` → `PartyService.noteInGame`, donc aussi JOUER seul, manche suivante #300 et
   `DebugPlaytest`). **LANCER :** le client du lanceur entre de lui-même dans la manche (`GameStateController.requestPlay`,
   mêmes règles de `RequestSpawn` qu'avant, rejoindre en cours compris) et envoie `launch` ; si c'est l'hôte, le serveur
   passe en `game` les membres présents dans le lobby et leur envoie `go`, que leur client transforme en `requestPlay`
   (seulement s'il est au menu, lobby ouvert ; sinon il renvoie `close`). Les membres au menu ou ailleurs ne sont pas
-  tirés dans la manche. **Qui lance** (`PartyRules.launchState`, même règle côté client pour l'écran) : l'hôte toujours ;
+  tirés dans la manche. **Piège :** les volets de LANCER mettent un instant à couvrir l'écran ; un onglet cliqué
+  entre-temps repassait en `MENU`/`INFOS` par-dessus `SPAWNING` (personnage ignoré, joueur bloqué derrière les volets).
+  Les rappels du menu passent donc par `fromMenu` (`GameStateController`), ignorés hors `MENU`/`INFOS` : le verrou
+  `locks` de `MenuShot` ne jouait plus ce rôle depuis #308 (jamais transmis par `textChoice`). **Qui lance** (`PartyRules.launchState`, même règle côté client pour l'écran) : l'hôte toujours ;
   un membre attend (« EN ATTENTE DE L'HÔTE », LANCER désactivé) seulement tant que l'hôte est dans le lobby ; hôte au
   menu ou déjà en partie : le membre lance pour lui seul (il rejoint la manche en cours). Le groupe ne donne aucun droit
   en jeu : un membre qui contournerait l'attente n'obtient rien de plus que JOUER seul. **Départs :** déconnexion ou
@@ -58,7 +63,8 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
   écran « REJOINDRE UN AMI » de #480), à l'arrivée même chemin qu'une invitation. Échecs : `TeleportInitFailed`
   (`GameFull` → « LE SERVEUR DE TON AMI EST PLEIN », sinon « IMPOSSIBLE DE REJOINDRE TON AMI »), ami parti, pas ami,
   Studio : message sous les onglets, rien de bloqué. Une invitation et REJOINDRE vers un autre serveur ne se vérifient
-  que dans le jeu publié. **Entraînement (#345) :** pas de lobby sur un serveur d'entraînement (un serveur par joueur,
+  que dans le jeu publié. Un seul REJOINDRE à la fois par joueur (posé avant les appels web : deux clics rapprochés ne
+  partent pas en double). Un ami « dans le jeu » est en jeu sur ordinateur, mobile ou Xbox (`LocationType` 4, 1, 5). **Entraînement (#345) :** pas de lobby sur un serveur d'entraînement (un serveur par joueur,
   #388) : JOUER y entre directement en partie, comme avant. **Crédits et stats inchangés :** chacun gagne comme s'il
   jouait seul, aucune récompense d'invitation. Liste d'amis : `FriendRules` (testées) réunit `Players:GetFriendsAsync`
   (100 amis au plus) et `Player:GetFriendsOnline` en un statut par ami (sur ce serveur, dans le jeu, en ligne, hors

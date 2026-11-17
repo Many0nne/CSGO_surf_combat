@@ -56,6 +56,15 @@ return function(T, Loader)
 			T.expectEqual(table.concat(names, ","), "Cid,amy,Bob,Dan,Zed")
 		end)
 
+		T.it("un ami sur mobile ou Xbox dans ce jeu est « dans le jeu »", function()
+			local mobile = { { VisitorId = 9, UserName = "gus", LocationType = 1, PlaceId = PLACE, GameId = "job-m" } }
+			T.expectEqual(Rules.merge({}, mobile, PLACE, JOB, {})[1].status, "game", "mobile")
+			local xbox = { { VisitorId = 9, UserName = "gus", LocationType = 5, PlaceId = PLACE, GameId = "job-x" } }
+			T.expectEqual(Rules.merge({}, xbox, PLACE, JOB, {})[1].status, "game", "Xbox")
+			local studio = { { VisitorId = 9, UserName = "gus", LocationType = 3, PlaceId = PLACE, GameId = "job-s" } }
+			T.expectEqual(Rules.merge({}, studio, PLACE, JOB, {})[1].status, "online", "Studio")
+		end)
+
 		T.it("prend le nom d'utilisateur sans nom affiché", function()
 			local list = Rules.merge(all, online, PLACE, JOB, {})
 			T.expectEqual(find(list, 2).name, "amy")

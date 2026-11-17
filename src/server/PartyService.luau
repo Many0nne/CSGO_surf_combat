@@ -15,6 +15,10 @@ local PartyService = {}
 
 local registry = PartyRules.new()
 local remote: RemoteEvent
+-- Le joueur a-t-il un personnage ou une apparition en cours (injecté par init.server : SpawnManager)
+local isPlaying: (Player) -> boolean = function(_player: Player): boolean
+	return false
+end
 -- REJOINDRE en cours (téléportation lancée), par joueur : la demande suivante est répondue « busy » jusqu'à son issue
 local pending: { [Player]: { at: number } } = {}
 -- Délai (s) au bout duquel une téléportation lancée sans suite ne bloque plus une nouvelle demande
@@ -70,65 +74,80 @@ end
 
 -- Cette méthode permet de téléporter un joueur vers le serveur de son ami (REJOINDRE, ami dans le jeu sur un autre
 -- serveur) lorsqu'il le demande : serveur de l'ami trouvé par TeleportService, données de téléportation qui le relient
--- au groupe de l'ami à l'arrivée.
-local function followElsewhere(player: Player, friendId: number)
-	local ok, here, err, placeId, jobId = pcall(TeleportService.GetPlayerPlaceInstanceAsync, TeleportService, friendId)
-	if not ok or not here or placeId ~= game.PlaceId or type(jobId) ~= "string" or jobId == "" then
+-- au groupe de l'ami à l'arrivée. Renvoie true si la téléportation est partie (la demande reste en cours jusqu'à son
+-- issue), false si la demande est finie (réponse déjà envoyée).
+local function followElsewhere(player: Player, friendId: number): boolean
+	-- (sur ce serveur, erreur, place, serveur) : le premier dit si l'ami est sur le serveur courant
+	local ok, sameServer, err, placeId, jobId =
+		pcall(TeleportService.GetPlayerPlaceInstanceAsync, TeleportService, friendId)
+	if not ok or placeId ~= game.PlaceId or type(jobId) ~= "string" or jobId == "" then
 		if not ok then
-			warn("[PartyService] serveur de " .. friendId .. " introuvable :", here)
-		elseif err and err ~= "" then
+			warn("[PartyService] serveur de " .. friendId .. " introuvable :", sameServer)
+		elseif type(err) == "string" and err ~= "" then
 			warn("[PartyService] serveur de " .. friendId .. " introuvable :", err)
 		end
 		reply(player, "notFound")
-		return
+		return false
 	end
-	if jobId == game.JobId then
-		-- Revenu sur ce serveur entre-temps
+	if sameServer == true or jobId == game.JobId then
+		-- Arrivé sur ce serveur entre-temps
 		if joinFriend(player, friendId) == "unknown" then
 			reply(player, "notFound")
 		end
-		return
+		return false
 	end
-	local entry = { at = os.clock() }
-	pending[player] = entry
 	local options = Instance.new("TeleportOptions")
 	options.ServerInstanceId = jobId
 	options:SetTeleportData({ partyHost = friendId })
 	local sent, failure = pcall(TeleportService.TeleportAsync, TeleportService, game.PlaceId, { player }, options)
 	if not sent then
 		warn("[PartyService] téléportation de " .. player.Name .. " impossible :", failure)
-		pending[player] = nil
 		reply(player, "failed")
-		return
+		return false
 	end
 	reply(player, "teleporting")
-	task.delay(PENDING_TIMEOUT, function()
-		if pending[player] == entry then
-			pending[player] = nil
-		end
-	end)
+	return true
 end
 
 -- Cette méthode permet de traiter REJOINDRE lorsqu'il arrive : groupe de l'ami s'il est sur ce serveur, sinon son
--- serveur (refusé dans Studio, ou si ce n'est pas un ami).
+-- serveur (refusé dans Studio, ou si ce n'est pas un ami). Une seule demande à la fois par joueur, posée avant les
+-- appels web : deux clics rapprochés ne lancent pas deux téléportations.
 local function follow(player: Player, friendId: number)
 	if pending[player] then
 		reply(player, "busy")
 		return
 	end
+	local entry = { at = os.clock() }
+	pending[player] = entry
+	-- Cette méthode permet de libérer la demande lorsqu'elle est finie sans téléportation en cours.
+	local function done()
+		if pending[player] == entry then
+			pending[player] = nil
+		end
+	end
 	if not areFriends(player, friendId) then
 		reply(player, "notFriend")
+		done()
 		return
 	end
 	if Players:GetPlayerByUserId(friendId) then
-		joinFriend(player, friendId)
+		if joinFriend(player, friendId) == "unknown" then
+			reply(player, "notFound")
+		end
+		done()
 		return
 	end
 	if RunService:IsStudio() then
 		reply(player, "studio")
+		done()
 		return
 	end
-	followElsewhere(player, friendId)
+	if not followElsewhere(player, friendId) then
+		done()
+		return
+	end
+	-- Ni départ ni échec annoncé (cas rare) : la demande suivante n'est pas refusée en « busy » pour toujours
+	task.delay(PENDING_TIMEOUT, done)
 end
 
 -- Cette méthode permet de traiter une demande du remote Party lorsqu'elle arrive (garde commune d'abord).
@@ -142,8 +161,10 @@ local function onRequest(player: Player, rawAction: any, rawTarget: any)
 		PartyRules.setPresence(registry, id, "lobby")
 		publish({ id })
 	elseif action == PartyRules.CLOSE then
-		-- Seulement depuis le lobby : un « close » arrivé après LANCER ne remet pas au menu un joueur en partie
-		if PartyRules.presenceOf(registry, id) == "lobby" then
+		-- Depuis le lobby, ou « en partie » sans y être (LANCER de l'hôte reçu hors du lobby, manche finie pendant l'écran
+		-- de mort) ; un « close » arrivé après LANCER ne remet pas au menu un joueur qui entre dans la manche
+		local presence = PartyRules.presenceOf(registry, id)
+		if presence == "lobby" or (presence == "game" and not isPlaying(player)) then
 			PartyRules.setPresence(registry, id, "menu")
 			publish({ id })
 		end
@@ -214,9 +235,11 @@ function PartyService.noteMenu(player: Player)
 	end
 end
 
--- Cette méthode permet de brancher les demandes des joueurs, leurs arrivées et départs lorsque le serveur démarre.
-function PartyService.init(partyRemote: RemoteEvent)
+-- Cette méthode permet de brancher les demandes des joueurs, leurs arrivées et départs lorsque le serveur démarre ;
+-- `playing(player)` dit si le joueur a un personnage ou une apparition en cours.
+function PartyService.init(partyRemote: RemoteEvent, playing: (Player) -> boolean)
 	remote = partyRemote
+	isPlaying = playing
 	remote.OnServerEvent:Connect(onRequest)
 	TeleportService.TeleportInitFailed:Connect(function(player: Player, result: Enum.TeleportResult, message: string)
 		if not pending[player] then

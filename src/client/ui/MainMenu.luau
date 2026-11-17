@@ -453,8 +453,8 @@ function MainMenu.hide()
 		choice.reset()
 	end
 	EquipmentScreen.reset()
-	-- JOUER garde les clics bloqués (`locks`) jusqu'ici : sans cela, les choix du menu en partie et de ses Réglages
-	-- restaient sans effet (#157)
+	-- Verrou d'une action exclusive levé ici : sans cela, les choix du menu en partie et de ses Réglages restaient sans
+	-- effet (#157). Aucun choix ne le pose plus depuis #523 (JOUER ouvre le lobby)
 	MenuShot.reset()
 	MenuScene.stop()
 end

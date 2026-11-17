@@ -33,10 +33,19 @@ local onNoticeFn: ((string) -> ())? = nil
 local followCovering = false
 
 -- Cette méthode permet de prévenir les abonnés (écran du lobby) lorsque le groupe ou la présence d'un joueur change.
+-- Un changement de groupe pose trois attributs sur chaque membre : une seule notification par image.
+local notifyQueued = false
 local function notify()
-	for _, listener in listeners do
-		task.spawn(listener)
+	if notifyQueued then
+		return
 	end
+	notifyQueued = true
+	task.defer(function()
+		notifyQueued = false
+		for _, listener in listeners do
+			task.spawn(listener)
+		end
+	end)
 end
 
 -- Cette méthode permet de suivre les attributs de groupe d'un joueur du serveur lorsqu'il arrive.

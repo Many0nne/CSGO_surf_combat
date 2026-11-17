@@ -176,8 +176,10 @@ local function setState(newState: State)
 
 	if newState == "MENU" then
 		SettingsMenu.close()
-		-- Retour de partie : le menu repart de l'accueil, le serveur a déjà noté le départ de la partie (LeaveRound)
+		-- Retour de partie : le menu repart de l'accueil. Le serveur est prévenu que le joueur n'est plus en partie pour son
+		-- groupe (#523) : LeaveRound ne part pas sur tous les chemins (manche finie pendant l'écran de mort)
 		LobbyScreen.hide(true)
+		PartyClient.close()
 		MainMenu.show()
 		InfosScreen.hide()
 		RoundHUD.hide()
@@ -604,6 +606,17 @@ local function onPartyGo()
 	end
 end
 
+-- Cette méthode permet de n'exécuter un choix du menu (onglet, RETOUR du lobby) que lorsque le client est au menu : les
+-- volets de LANCER mettent un instant à couvrir l'écran, un onglet cliqué entre-temps écraserait SPAWNING (le
+-- personnage serait ignoré, le joueur resterait derrière les volets).
+local function fromMenu(action: () -> ()): () -> ()
+	return function()
+		if atMenu() then
+			action()
+		end
+	end
+end
+
 -- ── Init ───────────────────────────────────────────────────────────────────
 
 function GameStateController.init(player: Player, setupCharacter: (char: Model) -> (), stopCharacter: () -> ())
@@ -621,24 +634,26 @@ function GameStateController.init(player: Player, setupCharacter: (char: Model) 
 	FeedbackScreen.init(function() -- fermer Feedback
 		MainMenu.setPage("home")
 	end)
-	MainMenu.init(function() -- JOUER : lobby (#523)
-		openLobby()
-	end, function() -- Infos
-		setState("INFOS")
-	end, function() -- Feedback
-		MainMenu.setPage("feedback")
-		FeedbackScreen.show()
-	end, function() -- Réglages
-		openSettingsPage()
-	end, function() -- Accueil (onglet ARMES, ou changement d'onglet depuis un écran ouvert)
-		goHome()
-	end, function() -- Apprendre (#285)
-		MainMenu.setPage("learn")
-		LearnScreen.show()
-	end, function() -- Shop (#347)
-		MainMenu.setPage("shop")
-		ShopScreen.show()
-	end)
+	MainMenu.init(
+		fromMenu(openLobby),
+		fromMenu(function() -- Infos ; JOUER ouvre le lobby (#523)
+			setState("INFOS")
+		end),
+		fromMenu(function() -- Feedback
+			MainMenu.setPage("feedback")
+			FeedbackScreen.show()
+		end),
+		fromMenu(openSettingsPage),
+		fromMenu(goHome),
+		fromMenu(function() -- Apprendre (#285)
+			MainMenu.setPage("learn")
+			LearnScreen.show()
+		end),
+		fromMenu(function() -- Shop (#347)
+			MainMenu.setPage("shop")
+			ShopScreen.show()
+		end)
+	)
 	-- Menu en partie (#157) ; au menu principal, sa touche ouvre ou ferme les Réglages de l'accueil
 	InGameMenu.init({
 		getState = function()
@@ -669,7 +684,7 @@ function GameStateController.init(player: Player, setupCharacter: (char: Model) 
 	ShopScreen.init()
 	-- Lobby entre amis (#523) : LANCER entre dans la manche comme JOUER le faisait, mêmes règles d'apparition
 	LobbyScreen.init({
-		onBack = goHome,
+		onBack = fromMenu(goHome),
 		onLaunch = function()
 			GameStateController.requestPlay()
 		end,

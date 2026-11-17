@@ -239,9 +239,10 @@ RemoteGuard.RULES = {
 		args = { RemoteGuard.number(), RemoteGuard.string(HighlightClipRules.POV_MAX_BYTES) },
 	},
 	-- Lobby entre amis (#523) : action, id de l'ami (0 hors REJOINDRE) ; ami et téléportation vérifiés par PartyService
+	-- Débit large : chaque passage d'onglet par JOUER envoie une ouverture puis une fermeture du lobby
 	[N.PARTY] = {
-		rate = 3,
-		burst = 8,
+		rate = 6,
+		burst = 20,
 		args = { RemoteGuard.enum(PartyRules.REQUESTS), RemoteGuard.number() },
 	},
 	[N.SEND_FEEDBACK] = { rate = 0.5, burst = 3, args = { RemoteGuard.string(RemoteGuard.FEEDBACK_MAX_BYTES) } },

@@ -24,8 +24,10 @@ export type Context = {
 
 -- Nombre d'amis au plus montrés (pages de GetFriendsAsync lues jusque-là)
 FriendRules.MAX_FRIENDS = 100
--- LocationType de GetFriendsOnline : ami dans une expérience (les autres : site, Studio, appli…)
+-- LocationType de GetFriendsOnline d'un ami dans une expérience : sur ordinateur (4), sur mobile (1), sur Xbox (5) ; les
+-- autres (site, Studio, Team Create) ne sont pas en jeu
 FriendRules.IN_GAME_LOCATION = 4
+local IN_GAME_LOCATIONS = { [1] = true, [4] = true, [5] = true }
 -- Studio seulement : attribut du Player (posé en contexte serveur ou client) qui remplace la liste par de faux amis,
 -- joueurs du serveur compris (les API d'amis ne marchent pas avec les joueurs de test)
 FriendRules.DEBUG_ATTRIBUTE = "DebugFriends"
@@ -93,7 +95,7 @@ function FriendRules.merge(
 		if type(id) == "number" then
 			local friend = ensure(id, nameOf(entry.DisplayName, entry.UserName, id))
 			friend.status = "online"
-			if entry.LocationType == FriendRules.IN_GAME_LOCATION and entry.PlaceId == placeId then
+			if IN_GAME_LOCATIONS[entry.LocationType] and entry.PlaceId == placeId then
 				local gameId = entry.GameId
 				if type(gameId) == "string" and gameId ~= "" and gameId ~= jobId then
 					friend.status = "game"

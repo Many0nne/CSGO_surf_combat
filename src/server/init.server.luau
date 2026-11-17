@@ -132,7 +132,10 @@ FeedbackService.init(sendFeedbackRmt, feedbackAckRmt)
 -- Mode publié aux clients (attribut de ReplicatedStorage) et téléportations vers ou depuis l'entraînement
 TrainingService.init(trainingRmt)
 -- Groupes du lobby (#523) : publiés dans les attributs des joueurs, arrivée d'un invité reliée au groupe de son ami
-PartyService.init(partyRmt)
+PartyService.init(partyRmt, function(player: Player): boolean
+	-- En partie pour de bon : personnage présent (vivant ou corps pas encore retiré) ou apparition en vol
+	return player.Character ~= nil or SpawnManager.isSpawning(player)
+end)
 
 RoundManager.init({
 	roundState = roundStateRmt,

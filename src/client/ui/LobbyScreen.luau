@@ -76,6 +76,7 @@ local friendsFailed = false
 local friendsAt = -math.huge
 local fetchGeneration = 0
 local lastPlayersRefresh = -math.huge
+local playersRefreshQueued = false
 local canInvite: boolean? = nil
 local canInviteAsked = false
 
@@ -407,12 +408,26 @@ function LobbyScreen.init(handlers: { onBack: () -> (), onLaunch: () -> (), onNo
 	launchChoice.setSelected(true)
 
 	PartyClient.onChanged(paint)
-	-- Statut « sur ce serveur » : la liste suit les arrivées et départs pendant que le lobby est ouvert
+	-- Cette méthode permet de recharger la liste d'amis lorsqu'un joueur arrive ou part pendant que le lobby est ouvert
+	-- (statut « sur ce serveur ») : au plus un rechargement par PLAYERS_REFRESH_SPACING, le dernier changement reporté.
 	local function onPlayersChanged()
-		if open and os.clock() - lastPlayersRefresh >= PLAYERS_REFRESH_SPACING then
+		if not open or playersRefreshQueued then
+			return
+		end
+		local wait = PLAYERS_REFRESH_SPACING - (os.clock() - lastPlayersRefresh)
+		if wait <= 0 then
 			lastPlayersRefresh = os.clock()
 			refreshFriends()
+			return
 		end
+		playersRefreshQueued = true
+		task.delay(wait, function()
+			playersRefreshQueued = false
+			if open then
+				lastPlayersRefresh = os.clock()
+				refreshFriends()
+			end
+		end)
 	end
 	Players.PlayerAdded:Connect(onPlayersChanged)
 	Players.PlayerRemoving:Connect(onPlayersChanged)
