@@ -86,7 +86,9 @@ par `ScaleTo` avec le reste de l'arme.
   collé à nous) : sinon le Beam, face à la caméra, couvre l'écran. Au plus `MAX_ACTIVE` rayons en même temps (au-delà,
   un tir relayé n'a que sa flamme) ; le tir local a toujours son rayon et compte parmi eux.
 - **Effet de tir d'un skin (#520) :** un skin du catalogue (`InventoryRules.ITEMS`) peut déclarer `shotEffect`
-  (noms connus : `ShotEffectRules.SKIN_EFFECTS`). Le client le lit sur l'attribut `SkinId` que `WeaponSkins.apply` pose
+  (noms connus et interrupteurs : `ShotEffectRules.SKIN_EFFECTS`). **L'éclair est désactivé en jeu** (`lightning =
+  false`) : validé par l'utilisateur, gardé de côté pour plus tard ; ORAGE tire avec le rayon ordinaire et la réserve
+  n'est pas préparée. Passer à `true` pour l'activer. Le client le lit sur l'attribut `SkinId` que `WeaponSkins.apply` pose
   sur le viewmodel et sur l'arme 3P (construite par le serveur, donc répliquée) : rien de plus à envoyer, et les autres
   joueurs le voient. `lightning` (AWP ORAGE) : un éclair (`LightningBolt`, forme et réglages dans `LightningRules`) à la
   place du rayon de balle, tronc brisé resserré au canon et à l'impact, branches et brindilles tirées à chaque tir,

@@ -146,8 +146,19 @@ return function(T, Loader)
 	end)
 
 	T.describe("ShotEffectRules.effectOf (#520)", function()
-		T.it("l'AWP ORAGE tire un éclair", function()
+		T.it("l'AWP ORAGE tire un éclair quand l'effet est activé, le rayon ordinaire sinon", function()
+			local saved = ShotEffectRules.SKIN_EFFECTS.lightning
+			ShotEffectRules.SKIN_EFFECTS.lightning = true
 			T.expectEqual(ShotEffectRules.effectOf("skin.awp.orage"), "lightning")
+			T.expectEqual(ShotEffectRules.isEnabled("lightning"), true)
+			ShotEffectRules.SKIN_EFFECTS.lightning = false
+			T.expectEqual(ShotEffectRules.effectOf("skin.awp.orage"), nil)
+			T.expectEqual(ShotEffectRules.isEnabled("lightning"), false)
+			ShotEffectRules.SKIN_EFFECTS.lightning = saved
+		end)
+
+		T.it("l'éclair est gardé de côté : désactivé en jeu pour l'instant (#520)", function()
+			T.expectEqual(ShotEffectRules.effectOf("skin.awp.orage"), nil)
 		end)
 
 		T.it("les autres skins, le skin d'origine et les ids inconnus gardent le rayon ordinaire", function()

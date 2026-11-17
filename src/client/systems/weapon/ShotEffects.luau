@@ -242,8 +242,10 @@ function ShotEffects.init(stateOf: () -> string?)
 	if connection then
 		return
 	end
-	-- Réserve d'un éclair de skin (#520) remplie en tâche de fond : le premier tir ne crée rien
-	LightningBolt.prewarm()
+	-- Réserve d'un éclair de skin (#520) remplie en tâche de fond, si l'effet est activé : le premier tir ne crée rien
+	if ShotEffectRules.isEnabled("lightning") then
+		LightningBolt.prewarm()
+	end
 	-- Attente hors du fil de démarrage du client (init.client continue sans elle)
 	task.spawn(function()
 		local remote = ReplicatedStorage:WaitForChild(NetworkProtocol.Names.SHOT_FIRED, 15)

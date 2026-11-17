@@ -12,8 +12,10 @@ local ShotSoundRules = require(ReplicatedStorage.Shared.ShotSoundRules)
 
 local ShotEffectRules = {}
 
--- Effets de tir qu'un skin peut déclarer (`shotEffect` du catalogue, #520) ; un nom inconnu est ignoré.
-ShotEffectRules.SKIN_EFFECTS = { lightning = true }
+-- Effets de tir qu'un skin peut déclarer (`shotEffect` du catalogue, #520) et leur interrupteur : un effet à false (ou
+-- un nom inconnu) est ignoré, le skin tire avec le rayon ordinaire. L'éclair (AWP ORAGE) est prêt, validé en jeu, mais
+-- gardé de côté pour l'instant : passer `lightning` à true pour l'activer.
+ShotEffectRules.SKIN_EFFECTS = { lightning = false }
 -- Attribut du modèle d'arme (viewmodel, arme 3P) qui porte l'id du skin posé (WeaponSkins.ATTRIBUTE)
 ShotEffectRules.SKIN_ATTRIBUTE = "SkinId"
 
@@ -174,10 +176,15 @@ function ShotEffectRules.effectOf(skinId: any): string?
 	end
 	local item = InventoryRules.item(skinId)
 	local effect = item and item.type == InventoryRules.Type.SKIN and item.shotEffect
-	if type(effect) == "string" and ShotEffectRules.SKIN_EFFECTS[effect] then
+	if type(effect) == "string" and ShotEffectRules.SKIN_EFFECTS[effect] == true then
 		return effect
 	end
 	return nil
+end
+
+-- Cette méthode permet de savoir si un effet de tir est activé lorsque le client démarre (réserve à préparer ou non).
+function ShotEffectRules.isEnabled(effect: string): boolean
+	return ShotEffectRules.SKIN_EFFECTS[effect] == true
 end
 
 return ShotEffectRules
