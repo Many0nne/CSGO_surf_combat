@@ -3,8 +3,8 @@
 -- « Parcours rejoué »). Mêmes droits que l'overlay F3 : Studio, ou créateur du jeu publié. L'attribut joueur
 -- `PerfRecord` (nom de la piste, ex. "dizzy") l'arme ; F7 lance puis arrête la prise. À chaque tick fixe du mouvement
 -- (MovementController.setTickHook), il note les touches tenues et les appuis (InputModule.snapshot), les angles de la
--- caméra, les tirs (Tool.Activated), le tir et la visée tenus (InputModule.isPointerHeld), l'arme tenue, et un point de contrôle (position, vitesse) par seconde et à chaque
--- réapparition. Il ne fait que lire. À l'arrêt, la piste est rangée dans `Player.PerfRoutes.<nom>` (StringValue
+-- caméra, les tirs (Tool.Activated), le tir et la visée tenus (InputModule.isPointerHeld), l'arme tenue, et un point
+-- de contrôle (position, vitesse) par seconde et à chaque réapparition. Il ne fait que lire. À l'arrêt, la piste est rangée dans `Player.PerfRoutes.<nom>` (StringValue
 -- locale) et recopiée dans la console (lignes `[PerfRoute …]`), puis écrite dans le dépôt par
 -- tools/perf/write_route.luau.
 
@@ -26,7 +26,7 @@ type Deps = {
 	player: Player,
 	fpsCamera: any, -- FPSCamera (getCameraYaw, getCameraPitch)
 	movement: any, -- MovementController (setTickHook, getVelocity)
-	input: any, -- InputModule (snapshot)
+	input: any, -- InputModule (snapshot, isPointerHeld)
 }
 
 local PerfRecorder = {}

@@ -42,8 +42,8 @@ local AIM_BUTTON = (Enum.KeyCode :: any)[KeyBindings.GAMEPAD_BUTTONS.aim]
 local FIRE_MOUSE = (Enum.UserInputType :: any)["MouseButton" .. KeyBindings.MOUSE.fire]
 local FIRE_BUTTON = (Enum.KeyCode :: any)[KeyBindings.GAMEPAD_BUTTONS.fire]
 -- Tir et visée tenus (#473) : sources qui les tiennent (bouton de souris, de manette, tactile). Le premier tir passe par
--- Tool.Activated ; ce maintien ne sert qu'à répéter l'action (WeaponSystem), il n'est donc lu que sur les vraies touches
--- (un Tool:Activate() de DebugPlaytest ou du rejeu ne tient rien).
+-- Tool.Activated ; ce maintien ne sert qu'à répéter l'action (WeaponSystem). Il vient des vraies touches, ou de la
+-- source « virtuelle » posée par applyVirtual pendant un rejeu (#485) ; un Tool:Activate() ne tient rien.
 local pointerHolders: { [KeyBindings.MouseAction]: { [any]: true } } = { fire = {}, aim = {} }
 
 local jumpPressedEdge = false
@@ -130,7 +130,8 @@ local function fireAim()
 end
 
 -- Cette méthode permet de tenir ou relâcher le tir ou la visée pour une source (bouton de souris, de manette, tactile)
--- lorsqu'elle s'enfonce ou remonte ; rien n'est tenu menu ouvert ni pendant un rejeu.
+-- lorsqu'elle s'enfonce ou remonte ; rien n'est tenu menu ouvert, et pendant un rejeu seule la source virtuelle
+-- (applyVirtual) tient le tir et la visée.
 local function holdPointer(action: KeyBindings.MouseAction, source: any, down: boolean)
 	if down and not (suspended or virtual) then
 		pointerHolders[action][source] = true
