@@ -5,6 +5,7 @@
 -- d'équipement (#280, disposition de #308, EquipmentScreen) : tout
 -- à gauche (titre, arme montrée, onglets des emplacements, grille de cartes), le personnage à droite tient l'arme
 -- survolée ou celle de l'emplacement actif. Solde de crédits (#391) en haut à droite, sur toutes les pages du menu.
+-- JOUER ouvre le lobby (#523, LobbyScreen) : page du menu comme les autres, d'où LANCER fait entrer dans la manche.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -25,7 +26,7 @@ local UIKit = require(script.Parent.UIKit)
 local C = UITheme.Colors
 local F = UITheme.Fonts
 
-export type Page = "home" | "shop" | "infos" | "learn" | "settings" | "feedback"
+export type Page = "home" | "shop" | "infos" | "learn" | "settings" | "feedback" | "lobby"
 
 local MainMenu = {}
 
@@ -42,13 +43,14 @@ local BALANCE_SIZE = 24
 local DAILY_Y = TABS_Y + 50
 local DAILY_SIZE = 18
 -- Onglets, de gauche à droite ; ARMES est l'accueil (le personnage et son arme), JOUER l'appel à l'action, APPRENDRE
--- juste avant (#285 : on apprend le geste, puis on joue), SHOP à côté d'ARMES (#347 : les caisses donnent les skins)
+-- juste avant (#285 : on apprend le geste, puis on joue), SHOP à côté d'ARMES (#347 : les caisses donnent les skins).
+-- JOUER ouvre le lobby (#523) : page soulignée comme les autres une fois ouverte
 local TABS = {
 	{ key = "home", text = "ARMES" },
 	{ key = "shop", text = "SHOP" },
 	{ key = "infos", text = "INFOS" },
 	{ key = "learn", text = "APPRENDRE" },
-	{ key = "play", text = "JOUER" },
+	{ key = "lobby", text = "JOUER" },
 	{ key = "settings", text = "RÉGLAGES" },
 	{ key = "feedback", text = "FEEDBACK" },
 }
@@ -109,8 +111,8 @@ local function buildTitle(root: Frame)
 end
 
 -- Cette méthode permet de construire la barre d'onglets lorsque le menu est initialisé : onglets en texte séparés par
--- des filets, l'onglet ouvert en os vif souligné d'ambre (#308), JOUER plus grand, sans soulignement, lance la partie
--- (les volets se ferment aussitôt).
+-- des filets, l'onglet ouvert en os vif souligné d'ambre (#308), JOUER plus grand ; il ouvre le lobby (#523), souligné
+-- comme les autres pages une fois ouvert (sur un serveur d'entraînement, il lance la partie directement).
 local function buildTabs(root: Frame)
 	local bar = UIKit.frame({
 		Name = "Tabs",
@@ -140,7 +142,7 @@ local function buildTabs(root: Frame)
 				Parent = bar,
 			})
 		end
-		local isPlay = tab.key == "play"
+		local isPlay = tab.key == "lobby"
 		local choice = MenuShot.textChoice({
 			text = tab.text,
 			font = if isPlay then F.Display else F.DisplayMedium,
@@ -150,27 +152,20 @@ local function buildTabs(root: Frame)
 			layoutOrder = 2 * i,
 			parent = bar,
 			action = function()
-				if isPlay then
-					fire("play")
-				else
-					goTo(tab.key)
-				end
+				goTo(tab.key)
 			end,
-			locks = isPlay,
 		})
-		if not isPlay then
-			-- Soulignement ambré de l'onglet ouvert (« là où je suis »), montré par MainMenu.setPage
-			underlines[tab.key] = UIKit.frame({
-				Name = "Underline",
-				AnchorPoint = Vector2.new(0, 1),
-				Position = UDim2.new(0, 0, 1, 6),
-				Size = UDim2.new(1, 0, 0, 3),
-				BackgroundColor3 = C.Accent,
-				Visible = false,
-				ZIndex = 3,
-				Parent = choice.button,
-			})
-		end
+		-- Soulignement ambré de l'onglet ouvert (« là où je suis »), montré par MainMenu.setPage
+		underlines[tab.key] = UIKit.frame({
+			Name = "Underline",
+			AnchorPoint = Vector2.new(0, 1),
+			Position = UDim2.new(0, 0, 1, 6),
+			Size = UDim2.new(1, 0, 0, 3),
+			BackgroundColor3 = C.Accent,
+			Visible = false,
+			ZIndex = 3,
+			Parent = choice.button,
+		})
 		tabs[tab.key] = choice
 		table.insert(choices, choice)
 	end
@@ -337,9 +332,9 @@ local function makeGui(name: string, displayOrder: number): ScreenGui
 	})
 end
 
--- Cette méthode permet d'initialiser le menu et d'enregistrer les rappels lorsque le client démarre ;
--- onSettings, onHome, onLearn et onShop sont optionnels (navigation vers Settings, retour à l'accueil, écrans
--- Apprendre et Shop).
+-- Cette méthode permet d'initialiser le menu et d'enregistrer les rappels lorsque le client démarre ; onPlay ouvre le
+-- lobby (#523) ; onSettings, onHome, onLearn et onShop sont optionnels (navigation vers Settings, retour à l'accueil,
+-- écrans Apprendre et Shop).
 function MainMenu.init(
 	onPlay: () -> (),
 	onInfos: () -> (),
@@ -350,7 +345,7 @@ function MainMenu.init(
 	onShop: (() -> ())?
 )
 	callbacks = {
-		play = onPlay,
+		lobby = onPlay,
 		infos = onInfos,
 		learn = onLearn,
 		shop = onShop,
@@ -458,8 +453,8 @@ function MainMenu.hide()
 		choice.reset()
 	end
 	EquipmentScreen.reset()
-	-- JOUER garde les clics bloqués (`locks`) jusqu'ici : sans cela, les choix du menu en partie et de ses Réglages
-	-- restaient sans effet (#157)
+	-- Verrou d'une action exclusive levé ici : sans cela, les choix du menu en partie et de ses Réglages restaient sans
+	-- effet (#157). Aucun choix ne le pose plus depuis #523 (JOUER ouvre le lobby)
 	MenuShot.reset()
 	MenuScene.stop()
 end

@@ -15,6 +15,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+local AnalyticsRules = require(Shared:WaitForChild("AnalyticsRules"))
 local CreditPacks = require(Shared:WaitForChild("CreditPacks"))
 local InventoryRules = require(Shared:WaitForChild("InventoryRules"))
 local NetworkProtocol = require(Shared:WaitForChild("NetworkProtocol"))
@@ -1097,6 +1098,22 @@ function ShopScreen.show()
 	paintPackButton()
 	-- Achat payé dont la réponse est arrivée shop fermé : sa révélation s'affiche maintenant (#400)
 	flushPending()
+end
+
+-- Cette méthode permet de décrire la vue du shop pour les analytics (#527) lorsque le client relève son écran : fenêtre
+-- des packs, ouverture d'une caisse, détail d'une caisse, vue d'ensemble ; nil shop fermé.
+function ShopScreen.analyticsScreen(): string?
+	if not (gui and gui.Enabled) then
+		return nil
+	end
+	if CreditPackWindow.isOpen() then
+		return AnalyticsRules.Screen.CREDIT_PACKS
+	elseif ShopScene.isOpening() then
+		return AnalyticsRules.Screen.CRATE_OPENING
+	elseif detail and detail.Visible then
+		return AnalyticsRules.Screen.SHOP_DETAIL
+	end
+	return AnalyticsRules.Screen.SHOP
 end
 
 -- Cette méthode permet de fermer le shop (salle retirée, scène de l'accueil reprise) lorsque le joueur change d'onglet

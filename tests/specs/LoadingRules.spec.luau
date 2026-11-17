@@ -32,6 +32,11 @@ return function(T, Loader)
 			T.expectEqual(LoadingRules.arrivalLabel({ training = false }), LoadingRules.LEAVE_LABEL)
 		end)
 
+		T.it("nomme l'arrivée sur le serveur d'un ami (REJOINDRE du lobby, #523)", function()
+			T.expectEqual(LoadingRules.arrivalLabel({ partyHost = 42 }), LoadingRules.FOLLOW_LABEL)
+			T.expectEqual(LoadingRules.arrivalLabel({ partyHost = "42" }), LoadingRules.INITIAL_LABEL, "pas un nombre")
+		end)
+
 		T.it("montre le chargement sans données valides (lancement depuis le site)", function()
 			T.expectEqual(LoadingRules.arrivalLabel(nil), LoadingRules.INITIAL_LABEL)
 			T.expectEqual(LoadingRules.arrivalLabel({}), LoadingRules.INITIAL_LABEL)

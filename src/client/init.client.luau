@@ -3,6 +3,7 @@ local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
 
+local AnalyticsRules = require(ReplicatedStorage.Shared.AnalyticsRules)
 local CharacterAppearance = require(ReplicatedStorage.Shared.CharacterAppearance)
 local PlayerSettings = require(ReplicatedStorage.Shared.PlayerSettings)
 
@@ -44,6 +45,9 @@ local PerfRecorder = require(script.debug.PerfRecorder)
 local PerfReplay = require(script.debug.PerfReplay)
 local InputModule = require(script.input.InputModule)
 local HighlightRecorder = require(script.systems.highlight.HighlightRecorder)
+local AnalyticsClient = require(script.systems.analytics.AnalyticsClient)
+local MainMenu = require(script.ui.MainMenu)
+local ShopScreen = require(script.ui.ShopScreen)
 
 local player = Players.LocalPlayer
 -- Secondes d'attente au plus du corps entier d'un personnage avant de le prendre en main (#328)
@@ -155,6 +159,17 @@ LoadingScreen.setReadiness(function()
 	local state = GameStateController.getState()
 	return MenuScene.isReady() or (state ~= "MENU" and state ~= "INFOS")
 end, Transition.isClosed)
+-- Analytics (#527) : écran courant signalé au serveur à chaque changement (chargement, partie, onglet, vue du shop)
+AnalyticsClient.init(function(): string?
+	if LoadingScreen.isCovering() then
+		return AnalyticsRules.Screen.LOADING
+	end
+	local state = GameStateController.getState()
+	if state ~= "MENU" and state ~= "INFOS" then
+		return AnalyticsRules.Screen.PLAYING
+	end
+	return ShopScreen.analyticsScreen() or AnalyticsRules.menuScreen(MainMenu.getPage())
+end)
 -- Tirs des autres joueurs et des bots entendus en 3D (#156), hors écrans du menu
 RemoteShotSounds.init(GameStateController.getState)
 -- Pas des autres joueurs et des bots entendus en 3D (#146), hors écrans du menu

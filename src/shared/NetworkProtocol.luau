@@ -70,6 +70,14 @@ Protocol.Names = {
 	-- Mode entraînement (#345), cf. server/TrainingService : client → serveur ("join" depuis APPRENDRE, "leave" depuis le
 	-- serveur d'entraînement), puis serveur → client (réponse, TrainingRules.Status) ; le serveur téléporte le joueur
 	TRAINING = "Training",
+	-- Analytics (#527), cf. server/analytics/Analytics : client → serveur, écran courant du joueur (une valeur de
+	-- AnalyticsRules.SCREENS) envoyé à chaque changement ; le serveur en tire les funnels et l'endroit d'un départ
+	ANALYTICS_SCREEN = "AnalyticsScreen",
+	-- Lobby entre amis (#523), cf. server/PartyService : client → serveur (PartyRules.REQUESTS : lobby ouvert ou quitté,
+	-- LANCER, QUITTER LE GROUPE, REJOINDRE un ami, avec l'id de l'ami ou 0), puis serveur → client (PartyRules.GO : l'hôte a
+	-- lancé ; PartyRules.JOINED : entré dans le groupe d'un ami ; ou un statut de REJOINDRE). Le groupe de chaque joueur
+	-- est publié dans les attributs du Player (PartyRules.*_ATTRIBUTE)
+	PARTY = "Party",
 }
 
 function Protocol.getRemote(name: string): RemoteEvent

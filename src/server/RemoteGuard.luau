@@ -9,10 +9,12 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local AnalyticsRules = require(ReplicatedStorage.Shared.AnalyticsRules)
 local HighlightClipRules = require(ReplicatedStorage.Shared.HighlightClipRules)
 local InventoryRules = require(ReplicatedStorage.Shared.InventoryRules)
 local MathRules = require(ReplicatedStorage.Shared.MathRules)
 local NetworkProtocol = require(ReplicatedStorage.Shared.NetworkProtocol)
+local PartyRules = require(ReplicatedStorage.Shared.PartyRules)
 local TrainingRules = require(ReplicatedStorage.Shared.TrainingRules)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 
@@ -172,7 +174,9 @@ RemoteGuard.FEEDBACK_MAX_BYTES = 1000
 --   demande au démarrage du client ; EquipItem : un clic sur une arme ou un skin de l'accueil (#280) ; OpenCrate : un
 --   clic sur OUVRIR, l'animation d'ouverture dure plusieurs secondes (#332) ; BuyCrate : un clic sur ACHETER, suivi de la
 --   même animation (#393) ; BuyCreditPack : un clic sur un pack, suivi du prompt Roblox (#395) ; HighlightPov : une
---   réponse par kill record de la partie, demandée par le serveur au plus une fois par seconde (#499).
+--   réponse par kill record de la partie, demandée par le serveur au plus une fois par seconde (#499) ; AnalyticsScreen :
+--   un changement d'écran par relevé du client, 2 par seconde au plus (#527) ; Party : un clic (JOUER ou changement
+--   d'onglet qui ouvre ou quitte le lobby, LANCER, QUITTER LE GROUPE, REJOINDRE) (#523).
 -- Une arme plus rapide (automatique) demandera de relever HitscanDamage, ShotFired et WeaponAction.
 local N = NetworkProtocol.Names
 RemoteGuard.RULES = {
@@ -236,7 +240,16 @@ RemoteGuard.RULES = {
 		burst = 3,
 		args = { RemoteGuard.number(), RemoteGuard.string(HighlightClipRules.POV_MAX_BYTES) },
 	},
+	-- Lobby entre amis (#523) : action, id de l'ami (0 hors REJOINDRE) ; ami et téléportation vérifiés par PartyService
+	-- Débit large : chaque passage d'onglet par JOUER envoie une ouverture puis une fermeture du lobby
+	[N.PARTY] = {
+		rate = 6,
+		burst = 20,
+		args = { RemoteGuard.enum(PartyRules.REQUESTS), RemoteGuard.number() },
+	},
 	[N.SEND_FEEDBACK] = { rate = 0.5, burst = 3, args = { RemoteGuard.string(RemoteGuard.FEEDBACK_MAX_BYTES) } },
+	-- Écran courant pour les analytics (#527) : relevé toutes les AnalyticsRules.POLL_INTERVAL s, envoyé au changement
+	[N.ANALYTICS_SCREEN] = { rate = 3, burst = 6, args = { RemoteGuard.enum(AnalyticsRules.SCREENS) } },
 	[N.SAVE_SETTINGS] = { rate = 2, burst = 5, args = { RemoteGuard.table() } },
 	[N.GET_SETTINGS] = { rate = 0.2, burst = 3, args = {} },
 	-- Emplacement, id de l'arme, id du skin ("" : d'origine) ; possession et cohérence vérifiées par InventoryRules.equip
