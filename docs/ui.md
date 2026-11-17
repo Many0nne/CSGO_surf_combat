@@ -1102,6 +1102,9 @@ français si « fr… », anglais sinon). Changer de langue bascule tous les éc
 - **Piège :** ne jamais passer à `UIKit.create`/`Locale.apply` un texte déjà traduit (`Locale.t`) : la clé devient
   l'anglais et le texte ne revient plus au français. Les règles pures (`*Rules`) renvoient le gabarit français et ses
   args, l'écran traduit (les specs comparent du français).
+- **Piège vu en jeu :** une table à clés faibles d'Instances perd des libellés encore à l'écran (Roblox recycle la
+  référence Lua d'une Instance que plus aucune variable ne tient) : la moitié des textes ne basculait pas. `Locale`
+  garde des références fortes, libérées sur `Destroying`.
 - **Nombres :** en anglais, un texte ou un argument qui n'est qu'un nombre à la française (« 1 100 », « 5,34 % ») est
   réécrit à l'anglaise (« 1,100 », « 5.34% ») par `Locale.number`.
 - **Gardé tel quel :** noms de skins (noms propres, choix de l'utilisateur), noms d'armes, voix de l'annonceur (déjà

@@ -39,4 +39,6 @@ return {
 	["QUITTER L'ENTRAÎNEMENT"] = "LEAVE TRAINING",
 	["MASQUER LA DÉMO"] = "HIDE DEMO",
 	["AFFICHER LA DÉMO"] = "SHOW DEMO",
+	-- Ratio kills/morts de la fiche de l'accueil (StatsCard) : trop court pour le scan
+	["K/M"] = "K/D",
 }

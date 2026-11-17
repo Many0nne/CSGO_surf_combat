@@ -41,10 +41,23 @@ end
 
 local current: Language = Locale.DEFAULT
 local listeners: { (Language) -> () } = {}
--- Textes posés par apply/bind : objet -> { propriété, producteur, dernier texte écrit }. Clés faibles : un libellé
--- détruit disparaît de la table.
+-- Textes posés par apply/bind : objet -> { propriété, producteur, dernier texte écrit }. Références fortes, retirées à
+-- la destruction de l'objet (Destroying) ou quand plus aucune propriété n'est suivie. Piège : pas de clés faibles, Roblox
+-- recycle la référence Lua d'une Instance que plus aucune variable ne tient, l'entrée disparaîtrait avec le libellé
+-- encore à l'écran (vu en jeu : la moitié des textes restait en français).
 type Binding = { prop: string, produce: () -> string, last: string }
-local bindings: { [Instance]: { [string]: Binding } } = setmetatable({}, { __mode = "k" }) :: any
+local bindings: { [Instance]: { [string]: Binding } } = {}
+local destroyConnections: { [Instance]: RBXScriptConnection } = {}
+
+-- Cette méthode permet d'oublier un objet suivi lorsqu'il est détruit ou qu'il n'a plus de texte à suivre.
+local function forget(object: Instance)
+	bindings[object] = nil
+	local connection = destroyConnections[object]
+	if connection then
+		connection:Disconnect()
+		destroyConnections[object] = nil
+	end
+end
 
 -- Cette méthode permet de savoir si une valeur est une langue proposée lorsque des réglages sont lus ou validés.
 function Locale.isLanguage(value: any): boolean
@@ -141,6 +154,14 @@ function Locale.bind(object: Instance, produce: () -> string, prop: string?)
 	if not perObject then
 		perObject = {}
 		bindings[object] = perObject
+		local ok, destroying = pcall(function()
+			return (object :: any).Destroying
+		end)
+		if ok and destroying then
+			destroyConnections[object] = destroying:Connect(function()
+				forget(object)
+			end)
+		end
 	end
 	perObject[property] = { prop = property, produce = produce, last = text }
 end
@@ -181,9 +202,16 @@ function Locale.setLanguage(language: Language)
 				perObject[property] = nil -- réécrit par l'écran entre-temps : il n'est plus traduit d'ici
 				continue
 			end
-			local text = binding.produce();
-			(object :: any)[property] = text
-			binding.last = text
+			local produced, text = pcall(binding.produce)
+			if produced then
+				(object :: any)[property] = text
+				binding.last = text
+			else
+				warn("[Locale] texte non recalculé :", text)
+			end
+		end
+		if next(perObject) == nil then
+			forget(object)
 		end
 	end
 	for _, callback in table.clone(listeners) do
