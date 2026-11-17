@@ -75,9 +75,23 @@ function Locale.get(): Language
 	return current
 end
 
+-- Cette méthode permet d'écrire un nombre mis en forme à la française (« 1 100 », « 5,34 % ») à l'anglaise
+-- (« 1,100 », « 5.34% ») lorsqu'il s'affiche en anglais ; un texte qui n'est pas qu'un nombre est rendu tel quel.
+function Locale.number(language: Language, text: string): string
+	if language ~= "en" or not string.find(text, "%d") or not string.match(text, "^[%d%s,%%+%-]+$") then
+		return text
+	end
+	text = string.gsub(text, "(%d),(%d)", "%1.%2")
+	local count
+	repeat
+		text, count = string.gsub(text, "(%d) (%d%d%d)", "%1,%2")
+	until count == 0
+	return (string.gsub(text, "(%d) %%", "%1%%"))
+end
+
 -- Cette méthode permet de remplacer les paramètres `{nom}` d'un texte par leurs valeurs lorsqu'il est traduit ;
--- un paramètre absent reste tel quel (repérable à l'écran).
-local function fill(text: string, args: { [string]: any }?): string
+-- un paramètre absent reste tel quel (repérable à l'écran), un nombre mis en forme suit la langue.
+local function fill(language: Language, text: string, args: { [string]: any }?): string
 	if not args then
 		return text
 	end
@@ -87,7 +101,7 @@ local function fill(text: string, args: { [string]: any }?): string
 			if value == nil then
 				return nil
 			end
-			return tostring(value)
+			return Locale.number(language, tostring(value))
 		end)
 	)
 end
@@ -95,8 +109,8 @@ end
 -- Cette méthode permet de traduire un texte français dans une langue donnée lorsque la langue n'est pas forcément celle
 -- affichée (serveur, tests) ; un texte sans traduction est rendu tel quel.
 function Locale.translate(language: Language, fr: string, args: { [string]: any }?): string
-	local text = if language == "en" then EN[fr] or fr else fr
-	return fill(text, args)
+	local text = if language == "en" then EN[fr] or Locale.number(language, fr) else fr
+	return fill(language, text, args)
 end
 
 -- Cette méthode permet de traduire un texte français dans la langue affichée lorsqu'un écran calcule un libellé ; un

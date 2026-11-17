@@ -24,11 +24,15 @@ return function(T, Loader)
 		}
 	end
 
-	-- Cette méthode permet de retrouver un conseil par thème lorsqu'un test vérifie son texte.
+	-- Cette méthode permet de retrouver un conseil par thème lorsqu'un test vérifie son texte ; `text` est rendu rempli
+	-- (le gabarit `{nom}` du conseil, avec ses arguments), comme l'écran le montre en français.
 	local function tipOf(tips: { any }, topic: string): any
 		for _, tip in tips do
 			if tip.topic == topic then
-				return tip
+				local filled = string.gsub(tip.text, "{([%w_]+)}", function(name)
+					return tostring(tip.args[name])
+				end)
+				return { topic = tip.topic, text = filled, template = tip.text, args = tip.args }
 			end
 		end
 		return nil
@@ -122,7 +126,7 @@ return function(T, Loader)
 			local tips = InfosRules.deathTips(context({}, true))
 			for _, topic in { "BHOP", "AIR STRAFE" } do
 				local text = tipOf(tips, topic).text
-				T.expectEqual(string.sub(text, -#InfosRules.DEMO_POINTER), InfosRules.DEMO_POINTER, topic)
+				T.expectEqual(string.sub(text, -#" Démo : APPRENDRE."), " Démo : APPRENDRE.", topic)
 			end
 			T.expectEqual(string.find(tipOf(tips, "SURF").text, "APPRENDRE", 1, true), nil)
 		end)

@@ -88,6 +88,8 @@ local function refundWeeklyQuota(userId: number, now: number)
 	end)
 end
 
+-- Les messages envoyés au client (FEEDBACK_ACK) sont des gabarits français (`{nom}` + table d'arguments en 4e valeur) :
+-- le client les traduit à l'affichage dans la langue du joueur (Locale, #518).
 function FeedbackService.init(sendFeedbackRmt: RemoteEvent, feedbackAckRmt: RemoteEvent)
 	sendFeedbackRmt.OnServerEvent:Connect(function(player: Player, text: unknown)
 		-- Garde commune (#170) : débit et type, avant tout accès DataStore
@@ -105,7 +107,8 @@ function FeedbackService.init(sendFeedbackRmt: RemoteEvent, feedbackAckRmt: Remo
 			feedbackAckRmt:FireClient(
 				player,
 				false,
-				"Message entre " .. MIN_LEN .. " et " .. MAX_LEN .. " caractères."
+				"Message entre {min} et {max} caractères.",
+				{ min = MIN_LEN, max = MAX_LEN }
 			)
 			return
 		end
@@ -115,7 +118,7 @@ function FeedbackService.init(sendFeedbackRmt: RemoteEvent, feedbackAckRmt: Remo
 		local last = lastAttempt[player.UserId]
 		if last and (now - last) < COOLDOWN then
 			local remaining = COOLDOWN - (now - last)
-			feedbackAckRmt:FireClient(player, false, "Réessaie dans " .. remaining .. "s.")
+			feedbackAckRmt:FireClient(player, false, "Réessaie dans {n} s.", { n = remaining })
 			return
 		end
 		lastAttempt[player.UserId] = now
@@ -130,7 +133,12 @@ function FeedbackService.init(sendFeedbackRmt: RemoteEvent, feedbackAckRmt: Remo
 		-- Vérification + mise à jour du quota hebdomadaire
 		local quota = consumeWeeklyQuota(player.UserId, now)
 		if quota == "overLimit" then
-			feedbackAckRmt:FireClient(player, false, "Limite de " .. WEEKLY_LIMIT .. " feedbacks par semaine atteinte.")
+			feedbackAckRmt:FireClient(
+				player,
+				false,
+				"Limite de {n} feedbacks par semaine atteinte.",
+				{ n = WEEKLY_LIMIT }
+			)
 			return
 		elseif quota == "failed" then
 			feedbackAckRmt:FireClient(player, false, "Système indisponible, réessaie plus tard.")

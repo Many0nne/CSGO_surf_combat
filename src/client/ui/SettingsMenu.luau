@@ -403,11 +403,12 @@ local function addPicker(
 	})
 end
 
--- Cette méthode permet de remplacer le texte d'un choix et de son ombre lorsque la touche affichée change.
+-- Cette méthode permet de remplacer le texte d'un choix et de son ombre lorsque la touche affichée change ; le texte
+-- (« APPUIE… », nom de touche) est traduit et suit la langue.
 local function setChoiceText(choice: MenuShot.Choice, text: string)
 	for _, child in choice.button:GetChildren() do
 		if child:IsA("TextLabel") then
-			child.Text = text
+			Locale.apply(child, text)
 		end
 	end
 end
@@ -422,10 +423,13 @@ local function endCapture()
 	end
 end
 
--- Cette méthode permet de nommer la ligne d'un emplacement de la barre (« Arme 1 · AWP ») lorsqu'elle est créée ou que
--- l'inventaire change.
+-- Gabarit français (clé de traduction) de la ligne d'un emplacement de la barre : « Arme 1 · AWP »
+local KEY_ROW_TEMPLATE = "Arme {slot} · {name}"
+
+-- Cette méthode permet de nommer en français la ligne d'un emplacement de la barre (« Arme 1 · AWP ») lorsqu'elle est
+-- créée ; son texte affiché est ensuite posé traduit par `relabel`.
 local function keyRowName(slot: number, weaponLabel: string): string
-	return string.format("Arme %d · %s", slot, weaponLabel)
+	return Locale.translate("fr", KEY_ROW_TEMPLATE, { slot = slot, name = weaponLabel })
 end
 
 -- Cette méthode permet d'ajouter la ligne d'un emplacement de la barre d'armes (nom de l'arme, touche à cliquer) lorsque
@@ -486,7 +490,7 @@ local function addKeyBinding(category: Category, slot: number, weaponLabel: stri
 		end
 		hintToken += 1
 		local token = hintToken
-		hint.Text = if reason == "reserved" then "RÉSERVÉE AU JEU" else "TOUCHE NON PROPOSÉE"
+		Locale.apply(hint, if reason == "reserved" then "RÉSERVÉE AU JEU" else "TOUCHE NON PROPOSÉE")
 		task.delay(KEY_HINT_TIME, function()
 			if token == hintToken then
 				hint.Text = ""
@@ -605,8 +609,9 @@ local function buildKeysCategory(block: Frame)
 			if not name and capture and capture.slot == slot then
 				endCapture()
 			end
-			entry.label.Text = keyRowName(slot, if name then HUDRules.weaponLabel(name) else "")
-			entry.row.Name = entry.label.Text
+			local weapon = if name then HUDRules.weaponLabel(name) else ""
+			Locale.apply(entry.label, KEY_ROW_TEMPLATE, { slot = slot, name = weapon })
+			entry.row.Name = keyRowName(slot, weapon)
 		end
 	end
 	relabel()

@@ -257,7 +257,7 @@ local function onBalance(balance: number?)
 	local expected = awaitingCredits
 	if opened and expected and balance and lastBalance and balance - lastBalance == expected then
 		awaitingCredits = nil
-		showStatus(string.format("+%s %s", WalletRules.format(expected), WalletRules.CURRENCY), true)
+		showStatus("+{amount} CRÉDITS", true, { amount = WalletRules.format(expected) })
 	end
 	lastBalance = balance
 end

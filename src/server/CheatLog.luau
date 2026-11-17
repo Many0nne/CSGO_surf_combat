@@ -8,8 +8,11 @@
 -- échantillonné, et relevé agrégé du serveur toutes les REPORT_INTERVAL secondes et à l'arrêt (taux par contrôle).
 -- Les bots sont ignorés. CheatLog.admit branche la garde commune des remotes (RemoteGuard) sur ce journal.
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
+
+local Locale = require(ReplicatedStorage.Shared.Locale)
 
 local CheatTypes = require(ServerScriptService.Server.CheatTypes)
 local Participants = require(ServerScriptService.Server.Participants)
@@ -451,7 +454,13 @@ function CheatLog.report(
 	end
 	record.kicked = true
 	warn(string.format("[CheatLog] %s (%d) expulsé : %d violations fortes", record.name, record.id, record.highCount))
-	player:Kick(CheatLog.KICK_MESSAGE)
+	player:Kick(CheatLog.kickMessage((player :: any).LocaleId))
+end
+
+-- Cette méthode permet de donner le message d'expulsion dans la langue du compte Roblox du joueur (#518 ; son réglage
+-- de langue reste côté client) lorsqu'il est expulsé : français pour un compte français, anglais sinon.
+function CheatLog.kickMessage(localeId: any): string
+	return Locale.translate(Locale.fromLocaleId(localeId), CheatLog.KICK_MESSAGE)
 end
 
 -- Cette méthode permet de joindre à une copie du bilan les dénominateurs et le ping de la session du joueur lorsqu'il

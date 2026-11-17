@@ -10,6 +10,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
+local Locale = require(ReplicatedStorage.Shared.Locale)
 local PlayerSettings = require(ReplicatedStorage.Shared.PlayerSettings)
 local UITheme = require(ReplicatedStorage.Shared.UITheme)
 local GamepadCursor = require(script.Parent.Parent.input.GamepadCursor)
@@ -255,7 +256,7 @@ local function buildChoices(
 			local text = toggle.label()
 			for _, child in toggleChoice.button:GetChildren() do
 				if child:IsA("TextLabel") then
-					child.Text = text
+					Locale.apply(child, text)
 				end
 			end
 		end

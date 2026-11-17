@@ -84,7 +84,7 @@ local function addDemos(ctx: InfosRules.Context)
 			underlines[i].Visible = i == index
 		end
 		local clip = clips[index]
-		player.play(clip.id, clip.title, clip.caption)
+		player.play(clip.id, clip.title, clip.caption, clip.captionArgs)
 	end
 	for i, clip in clips do
 		choices[i] = MenuShot.textChoice({

@@ -11,6 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local NetworkProtocol = require(Shared:WaitForChild("NetworkProtocol"))
 local PlayerSettings = require(Shared:WaitForChild("PlayerSettings"))
+local Locale = require(Shared:WaitForChild("Locale"))
 local TrainingRules = require(Shared:WaitForChild("TrainingRules"))
 
 local LocalSettings = require(script.Parent.Parent.settings.LocalSettings)
@@ -136,7 +137,7 @@ local function ensureCorner(): Frame
 	-- Sans les espaces de fin de keyHint (faits pour enchaîner plusieurs aides) : le texte finit au bord de la démo
 	local action = hints:FindFirstChild("Action1")
 	if action and action:IsA("TextLabel") then
-		action.Text = "MASQUER LA DÉMO"
+		Locale.apply(action, "MASQUER LA DÉMO")
 	end
 	cornerGui, cornerHolder = gui, holder
 	return holder
@@ -159,7 +160,7 @@ local function showCorner()
 	demo = player
 	local first = clips[1]
 	if first then
-		player.play(first.id, first.title, first.caption)
+		player.play(first.id, first.title, first.caption, first.captionArgs)
 	end
 	if cornerGui then
 		cornerGui.Enabled = true

@@ -23,9 +23,11 @@ LocaleScan.FILES = {
 	"src/shared/KeyBindings.luau",
 	"src/shared/PlayerSettings.luau",
 	"src/server/FeedbackService.luau",
+	"src/shared/WeaponConfig.luau",
 }
 -- Sous-chemins ignorés : outils de debug (overlay F3, routes de perf, enregistreurs), jamais vus d'un joueur
-LocaleScan.SKIP = { "src/client/debug/", "src/client/ui/DemoClipRules.luau" }
+-- LoadingRules : table bilingue propre à ReplicatedFirst (tourne avant Locale), vérifiée par LoadingRules.spec
+LocaleScan.SKIP = { "src/client/debug/", "src/client/ui/DemoClipRules.luau", "src/first/LoadingRules.luau" }
 
 -- Textes affichés tels quels dans les deux langues
 LocaleScan.ALLOWED = {

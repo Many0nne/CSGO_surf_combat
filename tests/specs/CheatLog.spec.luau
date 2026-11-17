@@ -189,6 +189,13 @@ return function(T, Loader)
 			T.expectEqual(detail, "val ?? fin")
 		end)
 
+		T.it("le message d'expulsion suit la langue du compte (#518)", function()
+			local C = setup().CheatLog
+			T.expectEqual(C.kickMessage("fr-fr"), C.KICK_MESSAGE)
+			T.expect(C.kickMessage("en-us") ~= C.KICK_MESSAGE, "anglais pour un compte non français")
+			T.expectEqual(C.kickMessage(nil), C.kickMessage("en-us"))
+		end)
+
 		T.it("expulse à la 3e violation forte, une seule fois", function()
 			local env = setup()
 			local C = env.CheatLog
@@ -205,7 +212,7 @@ return function(T, Loader)
 			T.expectEqual(player.kickedWith, nil, "2 fortes")
 			env.clock += C.HIGH_SOURCE_INTERVAL
 			C.report(alice, C.Category.REMOTE_ARGS, C.Severity.HIGH, "NaN")
-			T.expectEqual(player.kickedWith, C.KICK_MESSAGE)
+			T.expectEqual(player.kickedWith, C.kickMessage(nil))
 			T.expectEqual(C.summary(1).kicked, true)
 			player.kickedWith = nil
 			env.clock += C.HIGH_SOURCE_INTERVAL
@@ -241,7 +248,7 @@ return function(T, Loader)
 			-- Sources différentes au même instant : chacune compte
 			C.report(participantOf(player), C.Category.REMOTE_ARGS, C.Severity.HIGH, "x", "MeleeDamage")
 			C.report(participantOf(player), C.Category.REMOTE_ARGS, C.Severity.HIGH, "x", "HitscanDamage")
-			T.expectEqual(player.kickedWith, C.KICK_MESSAGE)
+			T.expectEqual(player.kickedWith, C.kickMessage(nil))
 		end)
 
 		T.it("ignore les bots", function()
@@ -763,7 +770,7 @@ return function(T, Loader)
 			T.expectEqual(C.summary(1).counts.RemoteArgs.high, 1)
 			C.admit(player :: any, env.N.CHARACTER_SYNC, Vector3.new(0 / 0, 0, 0), 0, 0, false)
 			C.admit(player :: any, env.N.SAVE_SETTINGS, "x")
-			T.expectEqual(player.kickedWith, C.KICK_MESSAGE)
+			T.expectEqual(player.kickedWith, C.kickMessage(nil))
 		end)
 
 		T.it("remote sans règle : refusé sans violation (bug du serveur)", function()

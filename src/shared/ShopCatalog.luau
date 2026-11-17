@@ -238,10 +238,10 @@ function ShopCatalog.draw(crate: Crate, items: { any }, roll: number): (Row?, st
 	return nil, nil
 end
 
--- Cette méthode permet de composer la ligne sous le nom d'une caisse (« CAISSE · 8 SKINS · UN PAR OUVERTURE ») lorsque
--- la vue détail l'affiche.
-function ShopCatalog.subtitle(crate: Crate, items: { any }): string
-	return string.format("CAISSE  ·  %d SKINS  ·  UN PAR OUVERTURE", #ShopCatalog.contents(crate, items))
+-- Cette méthode permet de composer la ligne sous le nom d'une caisse lorsque la vue détail l'affiche : renvoie le gabarit
+-- français « CAISSE  ·  {n} SKINS  ·  UN PAR OUVERTURE » et ses paramètres, à traduire à l'affichage (Locale).
+function ShopCatalog.subtitle(crate: Crate, items: { any }): (string, { [string]: any })
+	return "CAISSE  ·  {n} SKINS  ·  UN PAR OUVERTURE", { n = #ShopCatalog.contents(crate, items) }
 end
 
 -- Cette méthode permet de ranger `count` caisses dans la vitrine lorsque la vue d'ensemble se construit : réparties à

@@ -17,6 +17,14 @@ return function(T, Loader)
 		end
 	end
 
+	-- Cette méthode permet de remplir un gabarit français `{nom}` lorsqu'un test lit la légende telle qu'affichée en
+	-- français.
+	local function fill(text: string, args: { [string]: any }): string
+		return (string.gsub(text, "{([%w_]+)}", function(name)
+			return tostring(args[name])
+		end))
+	end
+
 	local AZERTY = { W = "Z", A = "Q", Q = "A", Space = "SPACE" }
 
 	-- Cette méthode permet de composer un contexte de test lorsqu'un cas a besoin de réglages précis.
@@ -131,7 +139,8 @@ return function(T, Loader)
 		end)
 
 		T.it("cite les touches du clavier du joueur dans la légende", function()
-			local caption = InfosRules.demoClips(context(AZERTY))[1].caption
+			local clip = InfosRules.demoClips(context(AZERTY))[1]
+			local caption = fill(clip.caption, clip.captionArgs)
 			T.expect(string.find(caption, "Garde ESPACE (auto-bhop)", 1, true) ~= nil, "saut tenu")
 			T.expect(
 				string.find(caption, "Q en tournant la souris à gauche, D à droite", 1, true) ~= nil,
@@ -141,8 +150,9 @@ return function(T, Loader)
 		end)
 
 		T.it("suit le réglage auto-bhop : garder le saut, ou l'appuyer à chaque atterrissage", function()
-			local on = InfosRules.demoClips(context(AZERTY, { autoBhop = true }))[1].caption
-			local off = InfosRules.demoClips(context(AZERTY, { autoBhop = false }))[1].caption
+			local onClip = InfosRules.demoClips(context(AZERTY, { autoBhop = true }))[1]
+			local offClip = InfosRules.demoClips(context(AZERTY, { autoBhop = false }))[1]
+			local on, off = fill(onClip.caption, onClip.captionArgs), fill(offClip.caption, offClip.captionArgs)
 			T.expect(string.find(on, "Garde ESPACE (auto-bhop)", 1, true) ~= nil, on)
 			T.expect(
 				string.find(off, "Appuie sur ESPACE à chaque atterrissage (démo en auto-bhop)", 1, true) ~= nil,

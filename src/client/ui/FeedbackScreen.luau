@@ -3,6 +3,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Locale = require(Shared:WaitForChild("Locale"))
 local NetworkProtocol = require(Shared:WaitForChild("NetworkProtocol"))
 local UITheme = require(Shared:WaitForChild("UITheme"))
 local MenuPage = require(script.Parent.MenuPage)
@@ -30,9 +31,10 @@ local onCloseCallback: (() -> ())?
 local sending = false
 local openCount = 0
 
--- Cette méthode permet d'afficher un message d'état sous le champ lorsque l'envoi échoue ou réussit.
-local function setStatus(msg: string, color: Color3?)
-	statusLabel.Text = msg
+-- Cette méthode permet d'afficher un message d'état sous le champ lorsque l'envoi échoue ou réussit ; `msg` est le
+-- gabarit français (`{nom}` + `args`), traduit dans la langue du joueur.
+local function setStatus(msg: string, color: Color3?, args: { [string]: any }?)
+	Locale.apply(statusLabel, msg, args)
 	statusLabel.TextColor3 = color or C.Bone
 end
 
@@ -68,7 +70,7 @@ local function send(sendRmt: RemoteEvent)
 	end
 	local text = textBox.Text:match("^%s*(.-)%s*$")
 	if #text < MIN_CHARS then
-		setStatus("Message trop court (min. " .. MIN_CHARS .. " car.).", C.Alert)
+		setStatus("Message trop court (min. {n} car.).", C.Alert, { n = MIN_CHARS })
 		return
 	end
 	sending = true
@@ -171,10 +173,11 @@ function FeedbackScreen.init(onClose: () -> ())
 	end)
 	sendChoice.setSelected(true)
 
-	ackRmt.OnClientEvent:Connect(function(success: boolean, message: string)
+	-- Le serveur envoie un gabarit français et ses arguments (FeedbackService) : traduits ici à l'affichage
+	ackRmt.OnClientEvent:Connect(function(success: boolean, message: string, args: { [string]: any }?)
 		sending = false
 		if success then
-			setStatus(message, C.Success)
+			setStatus(message, C.Success, args)
 			textBox.Text = ""
 			local session = openCount
 			task.delay(CLOSE_DELAY, function()
@@ -183,7 +186,7 @@ function FeedbackScreen.init(onClose: () -> ())
 				end
 			end)
 		else
-			setStatus(message, C.Alert)
+			setStatus(message, C.Alert, args)
 		end
 		refreshCount()
 	end)

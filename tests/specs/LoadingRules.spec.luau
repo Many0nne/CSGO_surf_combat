@@ -45,6 +45,42 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("LoadingRules traduction (#518)", function()
+		T.it("garde le français pour un compte français, l'anglais sinon", function()
+			T.expectEqual(LoadingRules.translate(LoadingRules.INITIAL_LABEL, "fr-fr"), "CHARGEMENT")
+			T.expectEqual(LoadingRules.translate(LoadingRules.INITIAL_LABEL, "FR-CA"), "CHARGEMENT")
+			T.expectEqual(LoadingRules.translate(LoadingRules.INITIAL_LABEL, "en-us"), "LOADING")
+			T.expectEqual(LoadingRules.translate(LoadingRules.INITIAL_LABEL, nil), "LOADING")
+			T.expectEqual(LoadingRules.translate("INCONNU", "en-us"), "INCONNU", "sans traduction : tel quel")
+		end)
+
+		T.it("traduit chaque libellé de l'écran", function()
+			for _, label in
+				{
+					LoadingRules.INITIAL_LABEL,
+					LoadingRules.JOIN_LABEL,
+					LoadingRules.LEAVE_LABEL,
+					LoadingRules.FOLLOW_LABEL,
+				}
+			do
+				T.expectEqual(LoadingRules.EN[label] ~= nil, true, label)
+			end
+		end)
+
+		T.it("dit la même chose que la table Locale (le scan des textes ne voit que celle-ci)", function()
+			local Locale = Loader.new({}, {
+				task = {
+					spawn = function(f, ...)
+						f(...)
+					end,
+				},
+			}):require("src/shared/Locale")
+			for fr, en in LoadingRules.EN do
+				T.expectEqual(Locale.translate("en", fr), en, fr)
+			end
+		end)
+	end)
+
 	T.describe("LoadingRules apparence", function()
 		T.it("suit les volets de Transition (UITheme : SunWhite, Ground, Shutter, Oswald)", function()
 			-- TweenInfo absent de Lune : UITheme n'en fait que des constantes

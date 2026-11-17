@@ -12,6 +12,16 @@ LoadingRules.LEAVE_LABEL = "RETOUR EN PARTIE"
 -- Départ vers le serveur d'un ami (REJOINDRE du lobby, #523 ; PartyService : { partyHost = id })
 LoadingRules.FOLLOW_LABEL = "REJOINDRE UN AMI"
 
+-- Traduction anglaise des libellés (#518). L'écran tourne avant que ReplicatedStorage soit répliqué : il ne peut pas
+-- lire Locale, il garde sa petite table ici (les mêmes textes sont dans Locale/en/Menu : le test de LoadingRules
+-- vérifie que les deux disent la même chose). Les libellés ci-dessus sont les clés françaises.
+LoadingRules.EN = {
+	["CHARGEMENT"] = "LOADING",
+	["ENTRAÎNEMENT"] = "TRAINING",
+	["RETOUR EN PARTIE"] = "BACK TO GAME",
+	["REJOINDRE UN AMI"] = "JOINING A FRIEND",
+} :: { [string]: string }
+
 -- Durée (s) au plus courte de l'écran du lancement : levé plus tôt, il clignoterait (playtest Studio, jeu en cache)
 LoadingRules.MIN_SHOWN = 0.8
 -- Durée (s) au plus longue de l'écran du lancement : passé ce délai il se lève même si le menu n'est pas prêt, pour
@@ -26,6 +36,16 @@ LoadingRules.PANEL_COLOR = Color3.fromRGB(255, 241, 224)
 LoadingRules.TEXT_COLOR = Color3.fromRGB(21, 24, 28)
 LoadingRules.SHUTTER_TIME = 0.45
 LoadingRules.FONT_FAMILY = "rbxasset://fonts/families/Oswald.json"
+
+-- Cette méthode permet de traduire un libellé français de l'écran lorsqu'il s'affiche : anglais sauf si la langue du
+-- compte Roblox (`LocalizationService.RobloxLocaleId`, « fr-fr »…) est le français, même règle que
+-- `Locale.fromLocaleId` ; les réglages du joueur ne sont pas encore connus à ce moment.
+function LoadingRules.translate(label: string, localeId: any): string
+	if type(localeId) == "string" and string.lower(string.sub(localeId, 1, 2)) == "fr" then
+		return label
+	end
+	return LoadingRules.EN[label] or label
+end
 
 -- Cette méthode permet de savoir si l'écran du lancement peut se lever lorsqu'il vérifie l'état du client : jeu chargé
 -- et menu prêt après la durée minimale, ou délai maximal dépassé quoi qu'il arrive.

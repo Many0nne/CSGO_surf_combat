@@ -1085,6 +1085,32 @@ bloquée puis par sauts). Code : `src/first/` (`ReplicatedFirst`), cf. `docs/arc
   fondu de 0,45 s, la salle « s'allume » au lieu d'apparaître pendant que l'éclairage Future s'installe. Durées
   choisies à l'œil, temps d'installation de l'éclairage non mesuré.
 
+## Langue : français / anglais (#518)
+
+Réglage « Langue » en tête de GRAPHISMES (FRANÇAIS / ENGLISH, chaque nom écrit dans sa langue), gardé par RÉTABLIR.
+Sans choix du joueur (`PlayerSettings.language` nil) : langue du compte Roblox (`LocalizationService.RobloxLocaleId`,
+français si « fr… », anglais sinon). Changer de langue bascule tous les écrans tout de suite, sans relancer.
+
+- **Le texte français est la clé.** Le code garde ses libellés en français ; `src/shared/Locale/en/<Domaine>.luau`
+  donne leur anglais (une table par domaine d'écrans). Paramètres en `{nom}` : `Locale.t("ARME {n}", { n = 1 })`,
+  jamais de concaténation ni de `string.format("%s")` dans un texte affiché (l'anglais doit pouvoir réordonner).
+- **Poser un texte :** un `Text` / `PlaceholderText` donné en français à `UIKit.create` (donc `UIKit.text`, `button`,
+  `shadowedText`, `MenuShot`, `MenuPage`) est traduit et suit la langue, paramètres dans la prop `TextArgs`. Après la
+  création : `Locale.apply(label, fr, args)` (suit la langue), `Locale.bind(label, fonction)` pour un texte composé,
+  `Locale.onChanged` pour recomposer une liste ou du RichText. `Locale.t` seul ne suit pas un changement de langue :
+  seulement pour un texte réécrit à chaque image.
+- **Piège :** ne jamais passer à `UIKit.create`/`Locale.apply` un texte déjà traduit (`Locale.t`) : la clé devient
+  l'anglais et le texte ne revient plus au français. Les règles pures (`*Rules`) renvoient le gabarit français et ses
+  args, l'écran traduit (les specs comparent du français).
+- **Nombres :** en anglais, un texte ou un argument qui n'est qu'un nombre à la française (« 1 100 », « 5,34 % ») est
+  réécrit à l'anglaise (« 1,100 », « 5.34% ») par `Locale.number`.
+- **Gardé tel quel :** noms de skins (noms propres, choix de l'utilisateur), noms d'armes, voix de l'annonceur (déjà
+  en anglais, choix de l'utilisateur). L'écran de chargement (`src/first`) tourne avant `Locale` : petite table
+  bilingue dans `LoadingRules`, langue du compte seulement. Message d'expulsion de l'anti-triche : langue du compte.
+- **Garde-fou :** `tests/specs/Locale.spec.luau` échoue si un texte affiché des sources n'a pas de traduction
+  (scan `tests/lib/LocaleScan.luau` : chaîne accentuée, en capitales, ou phrase ; journaux, debug et identifiants
+  écartés). Liste à jour : `lune run tools/locale_scan.luau`. Un faux positif (identifiant) va dans `LocaleScan.ALLOWED`.
+
 ## Reste à faire
 
 - Piste écartée pour l'instant sur le compteur : chiffres en images usées comme le titrage, et inclinaison qui augmente avec la vitesse.
