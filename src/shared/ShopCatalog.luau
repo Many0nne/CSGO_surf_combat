@@ -88,7 +88,7 @@ ShopCatalog.CRATES = {
 		contents = {
 			common = { "logogramme", "parquet", "cannage", "tole" },
 			rare = { "capiton", "vitrail", "laque" },
-			exceptional = { "remorqueur", "velours" },
+			exceptional = { "remorqueur", "marqueterie" },
 			legendary = { "ciselure" },
 		},
 	},

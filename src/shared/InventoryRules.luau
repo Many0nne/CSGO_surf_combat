@@ -224,13 +224,14 @@ InventoryRules.ITEMS = {
 		name = "LAQUE",
 		appearance = "laque",
 	},
-	-- Exceptionnel de la série 2 (#492) : illustration peinte sur le gabarit de l'AWP (assets/awp/skins/velours.py)
+	-- Exceptionnel de la série 2 (#492, refait en #508 : VELOURS devient MARQUETERIE, même id pour qui le possède) :
+	-- illustration peinte sur le gabarit de l'AWP (assets/awp/skins/marqueterie.py)
 	{
 		id = "skin.awp.velours",
 		type = "skin",
 		weapon = "weapon.awp",
-		name = "VELOURS",
-		appearance = "velours",
+		name = "MARQUETERIE",
+		appearance = "marqueterie",
 	},
 	-- Skins M9 : COUCHANT, RELEVÉ, RECUIT (#268, #337, motifs calculés) ; ÉMAIL, PATROUILLE, ART DÉCO dessinés pour la
 	-- M9 (#420, assets/m9/skins/) à la place d'IMPACT, STRATE et SILLAGE

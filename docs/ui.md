@@ -781,7 +781,7 @@ l'étiquette BIENTÔT jusqu'à #393 (voir « Achat d'une caisse »).
   COMMUN MAQUIS, ÉPURE, TARTAN, BANCHE ; RARE MUE, ORAGE, CIRCUIT ; EXCEPTIONNEL BALISE, PAN ! ; LÉGENDAIRE TREMPE. M9 :
   COMMUN ART DÉCO, LEURRE, CHANTIER, CÉRAMIQUE ; RARE PATROUILLE, RELEVÉ, GUILLOCHÉ ; EXCEPTIONNEL ÉMAIL, RECUIT ;
   LÉGENDAIRE COUCHANT. AWP série 2 : COMMUN LOGOGRAMME, PARQUET, CANNAGE, TÔLE LARMÉE ; RARE CAPITON, VITRAIL, LAQUE ;
-  EXCEPTIONNEL REMORQUEUR, VELOURS ; LÉGENDAIRE CISELURE. Réserve : M9 TOPO, HÔTE (communs), SPHINX (rare). Les caisses FILM (#433, « AWP · FILM » bande vert phosphore, « M9 · FILM » bande os)
+  EXCEPTIONNEL REMORQUEUR, MARQUETERIE (ex-VELOURS, #508) ; LÉGENDAIRE CISELURE. Réserve : M9 TOPO, HÔTE (communs), SPHINX (rare). Les caisses FILM (#433, « AWP · FILM » bande vert phosphore, « M9 · FILM » bande os)
   ont été vendues de #433 au 17/11/2026, complétées de skins de la série 1 : retirées, faute de skins hommage pour
   remplir la composition. Ouverture : 4e palier de couleur LÉGENDAIRE (paliers sur les bouffées de
   2,25 / 2,85 / 3,6 s, avant la tension) et tenue de la silhouette de 1,1 s, la plus longue. Le pochoir du couvercle est posé par le jeu, propre à chaque caisse (« S1-AWP », « FM-M9 », #434, `docs/assets.md`). Doublons possibles : le

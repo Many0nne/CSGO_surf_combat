@@ -294,7 +294,7 @@ return function(T, Loader)
 			T.expectEqual(tools(Rules.weaponsForSlot(Rules.resolve(nil, true), "knife")), "KaBar,M9Bayonet")
 			T.expectEqual(tools(Rules.weaponsForSlot(Rules.resolve(nil, true), "sniper")), "AWP")
 			-- Skins (#268, #337, #417, #433, #436, communs ÉPURE, TARTAN, BANCHE, puis PARQUET, CANNAGE,
-			-- TÔLE LARMÉE #482, rares CAPITON, VITRAIL, LAQUE #487, exceptionnel VELOURS #492) : l'admin a tous ceux
+			-- TÔLE LARMÉE #482, rares CAPITON, VITRAIL, LAQUE #487, exceptionnel MARQUETERIE #492, #508) : l'admin a tous ceux
 			-- de l'AWP, un joueur sans sauvegarde aucun
 			T.expectEqual(#Rules.skinsFor(Rules.resolve(nil, true), "weapon.awp"), 20)
 			T.expectEqual(#Rules.skinsFor(Rules.resolve(nil, false), "weapon.awp"), 0)
