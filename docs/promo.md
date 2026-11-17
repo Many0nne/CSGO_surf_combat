@@ -209,6 +209,14 @@ caméra, touches, vitesse) et clip de fin de partie (#499 : pistes de tous les p
 rendu à caler sur 1920×1080) : comparer à une capture d'écran du client publié avant de monter. Un contact avec un
 figurant ne pousse pas le joueur comme le vrai personnage ; le recalage aux points de contrôle corrige l'écart.
 
+**Reporté (17/11/2026) :** l'outil reste réservé au créateur du jeu. Deux suites possibles, pas décidées :
+- **Pour les joueurs** (F8 dans la liste des touches, revoir ses actions) : faisable, mais pas sur leur machine (un jeu
+  Roblox n'écrit aucun fichier local). Stockage en DataStore lié au compte : 500 Mo + 1 Mo par joueur ayant lancé le jeu,
+  4 Mo par clé, 4 Mo écrits par minute et par clé ([limites](https://create.roblox.com/docs/cloud-services/data-stores/error-codes-and-limits)) ;
+  une prise de 20 s est estimée à 50 à 150 Ko (non mesuré), soit environ 5 prises par joueur. La prise doit être bâtie
+  par le serveur à partir de ce qu'il a validé, comme le clip #499, et Roblox ne produit aucun fichier vidéo.
+- **Rejeu et capture en un script** (prise → MP4 via `ffmpeg`, sans manipulation dans Studio).
+
 ### Moments à jouer
 
 **Réglages :** affichage des touches en « simple », champ de vision et viseur par défaut. AWP **CISELURE** et M9
