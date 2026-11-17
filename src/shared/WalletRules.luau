@@ -40,8 +40,9 @@ WalletRules.CURRENCY = "CRÉDITS"
 -- couleur (pas teinté). assets/ui/credits/jeton_credit.png (tools/ui/make_credit_icon.py, Decal 103980310535300 ;
 -- ci-dessous l'id de l'image contenue dans le Decal)
 WalletRules.ICON = "rbxassetid://133766247138455"
--- Solde d'un nouveau joueur (compté dans `earned`)
-WalletRules.STARTING_BALANCE = 0
+-- Solde d'un nouveau joueur (compté dans `earned`) : la moitié d'une caisse (500), pour qu'il ouvre la première dès le
+-- jour 1 en atteignant le plafond du jour (EconomyRules.DAILY_CAP), pas au jour 2 (docs/economie.md, « Solde de départ »)
+WalletRules.STARTING_BALANCE = 250
 -- Plafond du solde : au-delà, un gain est écrêté (garde-fou contre un montant aberrant, loin de tout gain prévu)
 WalletRules.MAX_BALANCE = 999_999_999
 -- Sessions dont le dernier lot appliqué est retenu (les plus récentes) : de quoi reconnaître un lot renvoyé, même si

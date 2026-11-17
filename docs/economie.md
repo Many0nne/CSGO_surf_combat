@@ -3,6 +3,15 @@
 Règles d'argent réel du jeu (#395). Stockage des crédits, contrat de `InventoryStore.transact` et achat d'une caisse :
 `docs/architecture.md` (« Crédits », « Achat d'une caisse »). Interface : `docs/ui.md` (« Packs de crédits »).
 
+## Solde de départ
+
+Un nouveau joueur commence avec 250 crédits (`WalletRules.STARTING_BALANCE`, compté dans `earned`, hors plafond du
+jour). Une caisse coûte 500 et les gains en jouant plafonnent à 250 par jour : à 0, la première caisse n'arrivait qu'au
+jour 2, ce qui nuit à la rétention. Avec 250, elle s'ouvre dès le jour 1, une fois le plafond du jour atteint.
+Piste rejetée : 500 (caisse ouverte dès l'arrivée), car le joueur n'aurait pas d'abord joué avec le couteau de base.
+Seuls les portefeuilles absents (nouveau joueur, enregistrement d'avant #396) ou illisibles reçoivent ce solde : un
+solde déjà enregistré n'est pas modifié.
+
 ## Manche jouée : activité réelle (#401)
 
 Barème et plafonds des gains en jouant (#394) : `docs/architecture.md` (« Gains en jouant »). Une manche jouée
