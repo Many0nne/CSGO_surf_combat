@@ -21,6 +21,7 @@ local WeaponSkins = require(ReplicatedStorage.Shared.WeaponSkins)
 local WeaponThirdPerson = require(ReplicatedStorage.Shared.WeaponThirdPerson)
 local AnimationSoundSystem = require(script.Parent.Parent.weapon.AnimationSoundSystem)
 local DeathRagdoll = require(script.Parent.Parent.game.DeathRagdoll)
+local ShotEffects = require(script.Parent.Parent.weapon.ShotEffects)
 local SoundChannels = require(script.Parent.Parent.settings.SoundChannels)
 local UIKit = require(script.Parent.Parent.Parent.ui.UIKit)
 
@@ -36,6 +37,8 @@ local ACTORS_WAIT = 3 -- s d'attente des figurants publiés par le serveur
 local FADE = 0.3 -- s de fondu au noir à l'entrée et à la sortie
 -- Une victime reste couchée (ragdoll) au moins ce temps (s) avant que sa piste puisse la remontrer (réapparition)
 local DOWN_TIME = 1.5
+-- Recul maximal (s) sur la piste d'une victime morte dans un trou de sa piste, pour y poser son corps
+local LAST_ROW_WINDOW = 1
 -- Vitesse verticale (studs/s) au-delà de laquelle un figurant est en l'air (saut, surf) pour son animation
 local AIR_SPEED = 2
 local BAR_HEIGHT = 0.1 -- part de l'écran de chaque bande noire du cadre cinéma
@@ -51,6 +54,7 @@ type Actor = {
 	visible: boolean,
 	downAt: number?, -- instant (s du clip) de sa mort dans le clip
 	lastPos: Vector3?,
+	velocity: Vector3, -- vitesse sur sa piste à la dernière image (élan donné à son ragdoll)
 }
 
 type Session = {
@@ -255,6 +259,7 @@ local function buildActor(session: Session, source: Instance, entry: { id: numbe
 		decals = decals,
 		animator = if humanoid then CharacterAnimator.new(humanoid) else nil,
 		visible = true,
+		velocity = Vector3.zero,
 	}
 	setVisible(actor, false)
 	return actor
@@ -281,6 +286,7 @@ local function placeActors(session: Session, t: number, dt: number)
 		end
 		local velocity = if actor.lastPos and dt > 0 then (pos - actor.lastPos) / dt else Vector3.zero
 		actor.lastPos = pos
+		actor.velocity = velocity
 		if actor.animator then
 			local airborne = math.abs(velocity.Y) > AIR_SPEED
 			actor.animator:update({
@@ -290,6 +296,25 @@ local function placeActors(session: Session, t: number, dt: number)
 				speed = Vector3.new(velocity.X, 0, velocity.Z).Magnitude,
 				verticalSpeed = velocity.Y,
 			})
+		end
+	end
+end
+
+-- Cette méthode permet de poser un figurant caché sur sa dernière position connue avant t (au plus LAST_ROW_WINDOW s
+-- plus tôt) lorsqu'il meurt dans un trou de sa piste ; il redevient visible, sinon rien ne change.
+local function placeAtLastRow(actor: Actor, t: number)
+	if actor.downAt then
+		return
+	end
+	local hz = HighlightClipRules.ACTOR_HZ
+	local last = math.clamp(math.floor(t * hz) + 1, 1, #actor.rows)
+	for i = last, math.max(1, last - math.ceil(LAST_ROW_WINDOW * hz)), -1 do
+		local row = actor.rows[i]
+		if row then
+			actor.root.CFrame = CFrame.new(row[1], row[2], row[3]) * CFrame.Angles(0, row[4], 0)
+			actor.velocity = Vector3.zero
+			setVisible(actor, true)
+			return
 		end
 	end
 end
@@ -363,6 +388,7 @@ local function render(session: Session, dt: number)
 	while session.nextShot <= #clip.shots and clip.shots[session.nextShot].t <= t do
 		local shot = clip.shots[session.nextShot]
 		session.nextShot += 1
+		local dir = if typeof(shot.dir) == "Vector3" then shot.dir else nil
 		if shot.id == clip.killerId then
 			local lethal = false
 			for _, kill in clip.kills do
@@ -371,10 +397,18 @@ local function render(session: Session, dt: number)
 				end
 			end
 			playOwnShot(session, lethal)
+			if dir then
+				ShotEffects.playReplay(session.viewmodel, camera.CFrame.Position, dir, { session.folder, camera })
+			end
 		else
 			local actor = session.actors[shot.id]
 			if actor and actor.visible then
 				playActorShot(session, actor)
+				if dir then
+					local gun = actor.model:FindFirstChild(WeaponThirdPerson.MODEL_NAME)
+					local eye = actor.root.Position + Vector3.new(0, HighlightClipRules.DEFAULT_EYE, 0)
+					ShotEffects.playReplay(gun, eye, dir, { session.folder, camera }, camera.CFrame.Position)
+				end
 			end
 		end
 	end
@@ -382,11 +416,25 @@ local function render(session: Session, dt: number)
 		local kill = clip.kills[session.nextKill]
 		session.nextKill += 1
 		local actor = session.actors[kill.victimId]
+		local wasVisible = actor ~= nil and actor.visible
+		if actor and not actor.visible then
+			-- Piste trouée à l'instant de la mort : le corps tombe de la dernière position connue juste avant
+			placeAtLastRow(actor, kill.t)
+		end
 		if actor and actor.visible then
-			DeathRagdoll.spawn(actor.model, kill.direction, clip.weapon, kill.headshot)
+			DeathRagdoll.spawn(actor.model, kill.direction, clip.weapon, kill.headshot, actor.velocity)
 			setVisible(actor, false)
 			actor.downAt = kill.t
 		end
+		log(
+			string.format(
+				"kill à %.2f s : victime %d, figurant %s, %s",
+				kill.t,
+				kill.victimId,
+				if actor then "présent" else "absent",
+				if wasVisible then "visible" elseif actor and actor.downAt == kill.t then "repris" else "sans corps"
+			)
+		)
 	end
 	local remaining = clip.duration - t
 	session.fade.BackgroundTransparency = math.clamp(math.min(t, remaining) / FADE, 0, 1)

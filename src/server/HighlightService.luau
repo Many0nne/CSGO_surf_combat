@@ -318,7 +318,8 @@ local function freeze(myToken: number, chain: { Kill }, killer: Participant)
 	local clipShots = {}
 	for id, ring in shots do
 		for _, shot in HighlightClipRules.shotsIn(ring, start, stop) do
-			table.insert(clipShots, { t = shot.t - start, id = id })
+			-- Direction des tirs visés : rayon de la balle rejoué ; coup de couteau (direction de la racine) : aucun rayon
+			table.insert(clipShots, { t = shot.t - start, id = id, dir = if shot.aimed then shot.dir else nil })
 		end
 	end
 	local clipKills = {}

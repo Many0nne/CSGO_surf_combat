@@ -119,7 +119,7 @@ export type Clip = {
 	degraded: boolean, -- POV reconstruit par le serveur (bot, client absent, recalage refusé)
 	pov: string,
 	actors: { { id: number, name: string, track: string } },
-	shots: { { t: number, id: number } },
+	shots: { { t: number, id: number, dir: Vector3? } }, -- dir : tir visé (rayon de la balle), nil pour le couteau
 	kills: { { t: number, victimId: number, headshot: boolean, direction: Vector3? } },
 }
 
