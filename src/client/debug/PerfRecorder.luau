@@ -3,7 +3,7 @@
 -- « Parcours rejoué »). Mêmes droits que l'overlay F3 : Studio, ou créateur du jeu publié. L'attribut joueur
 -- `PerfRecord` (nom de la piste, ex. "dizzy") l'arme ; F7 lance puis arrête la prise. À chaque tick fixe du mouvement
 -- (MovementController.setTickHook), il note les touches tenues et les appuis (InputModule.snapshot), les angles de la
--- caméra, les tirs (Tool.Activated), l'arme tenue, et un point de contrôle (position, vitesse) par seconde et à chaque
+-- caméra, les tirs (Tool.Activated), le tir et la visée tenus (InputModule.isPointerHeld), l'arme tenue, et un point de contrôle (position, vitesse) par seconde et à chaque
 -- réapparition. Il ne fait que lire. À l'arrêt, la piste est rangée dans `Player.PerfRoutes.<nom>` (StringValue
 -- locale) et recopiée dans la console (lignes `[PerfRoute …]`), puis écrite dans le dépôt par
 -- tools/perf/write_route.luau.
@@ -108,6 +108,9 @@ end
 local function onTick(hrp: BasePart)
 	local char = hrp.Parent :: Instance
 	local held, counts = deps.input.snapshot()
+	-- Tir et visée tenus (#485) : WeaponSystem répète le tir au maintien sans Tool.Activated, le rejeu doit les tenir
+	held.fire = deps.input.isPointerHeld("fire")
+	held.aim = deps.input.isPointerHeld("aim")
 	local presses = {
 		jump = counts.jump > lastCounts.jump,
 		reload = counts.reload > lastCounts.reload,

@@ -290,6 +290,10 @@ function InputModule.applyVirtual(state: { [string]: boolean }, presses: { [stri
 	for key in held do
 		held[key] = state[key] == true
 	end
+	-- Tir et visée tenus (#485) : une source « virtuelle » pour que WeaponSystem répète le tir comme au clic tenu
+	for action, sources in pointerHolders do
+		sources.virtual = if state[action] == true then true else nil
+	end
 	if presses.jump then
 		jumpPressedEdge = true
 		jumpPressTime = tick()

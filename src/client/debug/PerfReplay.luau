@@ -325,6 +325,8 @@ local function onTick(hrp: BasePart)
 	deps.fpsCamera.setAngles(t.yaw / 1000, t.pitch / 1000)
 	local held, presses = Rules.split(t.keys)
 	deps.input.applyVirtual(held, presses)
+	-- Le tir tenu passe par la source virtuelle (applyVirtual) ; Activate ne rejoue que les Tool.Activated notés. Un clic
+	-- noté aux deux endroits ne tire pas deux fois : WeaponSystem garde FireDelay entre deux tirs.
 	local tool = if t.fire > 0 then char:FindFirstChildOfClass("Tool") else nil
 	if tool then
 		for _ = 1, t.fire do
