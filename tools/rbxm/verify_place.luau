@@ -394,18 +394,6 @@ for _, name in rbxmNames("assets/rbx/Outfits") do
 			fail("Outfits." .. name .. "." .. partName .. " absent ou pas une SurfaceAppearance")
 		end
 	end
-	-- Bras de la 1re personne (facultatif) : une SurfaceAppearance par pièce des bras
-	local viewmodelArms = outfit:FindFirstChild("Viewmodel")
-	if viewmodelArms then
-		for _, partName in OUTFIT_PARTS do
-			if string.find(partName, "Arm") or string.find(partName, "Hand") then
-				local appearance = viewmodelArms:FindFirstChild(partName)
-				if not (appearance and appearance:IsA("SurfaceAppearance")) then
-					fail("Outfits." .. name .. ".Viewmodel." .. partName .. " absent ou pas une SurfaceAppearance")
-				end
-			end
-		end
-	end
 	local head = outfit:FindFirstChild("Head")
 	if head then
 		if not head:IsA("MeshPart") then

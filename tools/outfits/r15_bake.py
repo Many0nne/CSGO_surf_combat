@@ -58,8 +58,6 @@ PARTS = {
 	"RightFoot": ("1699715627", (1.5882, 0.4765, 1.5882), "RightLeg"),
 }
 GROUPS = ["Torso", "LeftArm", "RightArm", "LeftLeg", "RightLeg"]
-# Bloc principal de chaque pièce chargée (hauteurs min et max, studs), cf. joint_fade
-MAIN = {}
 OFFSETS = {
 	"UpperTorso": 0.3176,
 	"LowerTorso": -1.2706,
@@ -172,27 +170,7 @@ def load_part(name, cache, key):
 		nrm = np.array(fv.smooth_normals(pos.tolist(), list(faces)))
 	nrm /= np.linalg.norm(nrm, axis=1, keepdims=True) + 1e-12
 	tris = np.array(faces, dtype=np.int64).reshape(-1, 3)
-	# Bloc principal : hauteurs où le mesh atteint toute sa largeur ; au-delà, le bout d'articulation qui s'emboîte
-	# dans la pièce voisine (coude, genou, poignet…)
-	full = np.abs(pos[:, 0]) >= size[0] / 2 - 1e-3
-	MAIN[name] = (float(pos[full, 1].min()), float(pos[full, 1].max())) if full.any() else (-size[1] / 2, size[1] / 2)
 	return pos, nrm, np.array(uv, dtype=np.float64), tris
-
-
-# Cette méthode permet d'effacer un dessin près des articulations d'une pièce (1 au milieu, 0 sur les `width` derniers
-# studs du bloc principal et dans le bout d'articulation) lorsqu'une tenue dessine sur un membre : deux pièces voisines
-# s'interpénètrent au pli (coude du viewmodel) et deux dessins différents y montreraient une coupe nette. Seuls les
-# bouts qui portent une articulation sont effacés, et parmi eux ceux demandés (`top`, `bottom`).
-def joint_fade(part, p, width, top=True, bottom=True):
-	lo, hi = MAIN[part]
-	half = PARTS[part][1][1] / 2
-	y = p[:, 1]
-	fade = np.ones_like(y)
-	if top and hi < half - 1e-3:
-		fade *= smoothstep(hi, hi - width, y)
-	if bottom and lo > -half + 1e-3:
-		fade *= smoothstep(lo, lo + width, y)
-	return fade
 
 
 # Cette méthode permet de remplir chaque texel couvert par un triangle (point 3D, normale, repère tangent) lorsqu'on

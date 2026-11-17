@@ -5,8 +5,7 @@ Variante retenue (17/11/2026) : lisse, le relief seul dessine les muscles par le
 encre (mêmes reliefs et traits sombres sur les contours, façon comics), gardée ici pour d'autres tenues.
 
 Jambes et pieds : chrome sans muscles, bombés en largeur seulement (retour du 17/11/2026 : les muscles
-dessinés coupaient net aux genoux). Mains : chrome lisse, sans doigts dessinés (retour du 18/11/2026). Bras : dessin
-effacé près du coude et du poignet, où les pièces s'emboîtent (coupe nette au pli dans le viewmodel).
+dessinés coupaient net aux genoux). Mains : chrome sans doigts dessinés (retour du 18/11/2026).
 
 Coordonnées : espace de la pièce en studs, avant du personnage = -Z, sa gauche = -X (cf. r15_bake.face_coords).
 Demi-tailles : UpperTorso 1,59 × 1,27 × 0,79 ; LowerTorso hauteur 0,32 ; membres 0,79 de côté, bras 0,93, avant-bras
@@ -14,12 +13,9 @@ Demi-tailles : UpperTorso 1,59 × 1,27 × 0,79 ; LowerTorso hauteur 0,32 ; membr
 """
 
 import numpy as np
-from r15_bake import BACK, BOTTOM, FRONT, LEFT, RIGHT, TOP, face_coords, height_of, joint_fade, muscle, outline, pillow, segment
+from r15_bake import BACK, BOTTOM, FRONT, LEFT, RIGHT, TOP, face_coords, height_of, muscle, outline, pillow, segment
 
-# viewmodel : bras de la 1re personne, chrome sans muscles (cuire avec --groups LeftArm,RightArm). Le bras y est si
-# plié que les blocs du bras et de l'avant-bras se croisent bien au-delà du coude : deux dessins s'y coupaient net
-# (retour du 18/11/2026).
-VARIANTS = {"lisse": {"ink": False}, "viewmodel": {"ink": False, "plain": True}}
+VARIANTS = {"lisse": {"ink": False}}
 REJECTED_VARIANTS = {"encre": {"ink": True}}
 
 CHROME = np.array([0.86, 0.88, 0.93])
@@ -28,7 +24,6 @@ RELIEF = 0.085  # hauteur d'une masse musculaire (studs)
 GROOVE = 0.05  # profondeur d'un sillon
 LINE = 0.045  # demi-largeur d'un trait d'encre (studs)
 BULGE = 0.12  # bombé de chaque face (studs)
-JOINT_FADE = 0.45  # longueur (studs) sur laquelle le dessin s'efface avant une articulation
 
 
 # Cette méthode permet de réunir plusieurs masses (la plus haute l'emporte) lorsqu'une face en porte plusieurs.
@@ -96,9 +91,9 @@ def upper_arm(face, u, v, out):
 	outer = face == (RIGHT if out > 0 else LEFT)
 	inner = face == (LEFT if out > 0 else RIGHT)
 	delt = muscle(u, v, 0, 0.62, 0.9, 0.45, 0.6, 0.15)
-	bic = muscle(u, v, 0, -0.05, 0.55, 0.55, 0.5, 0.35)
+	bic = muscle(u, v, 0, -0.28, 0.55, 0.6, 0.5, 0.35)
 	tri = muscle(u, v, 0, -0.1, 0.62, 0.68, 0.4, 0.3)
-	front = (union(delt * 0.85, bic) * RELIEF, union(outline(u, v, 0, -0.05, 0.55, 0.55, LINE, 185, 355), outline(u, v, 0, 0.62, 0.9, 0.45, LINE * 0.8, 210, 330)))
+	front = (union(delt * 0.85, bic) * RELIEF, union(outline(u, v, 0, -0.28, 0.55, 0.6, LINE, 185, 355), outline(u, v, 0, 0.62, 0.9, 0.45, LINE * 0.8, 210, 330)))
 	back = (
 		union(delt * 0.85, tri) * RELIEF - segment(u, v, (0, -0.55), (0, 0.15), 0.08) * GROOVE,
 		union(outline(u, v, 0, -0.1, 0.62, 0.68, LINE, 190, 350), segment(u, v, (0, -0.55), (0, 0.1), LINE * 0.7)),
@@ -115,10 +110,10 @@ def upper_arm(face, u, v, out):
 def lower_arm(face, u, v, out):
 	outer = face == (RIGHT if out > 0 else LEFT)
 	sides = (face == FRONT) | (face == BACK) | (face == LEFT) | (face == RIGHT)
-	mass = muscle(u, v, 0, 0.0, 0.64, 0.55, 0.5, 0.6)
-	brachio = muscle(u, v, 0, 0.15, 0.52, 0.4, 0.5, 0.3)
-	h = np.where(outer, union(mass, brachio), mass) * RELIEF * 0.9
-	ink = outline(u, v, 0, 0.0, 0.64, 0.55, LINE * 0.9, 195, 345)
+	mass = muscle(u, v, 0, 0.3, 0.64, 0.62, 0.5, 0.6)
+	brachio = muscle(u, v, 0, 0.5, 0.52, 0.42, 0.5, 0.3)
+	h = np.where(outer, union(mass, brachio), mass) * RELIEF * 0.9 - segment(u, v, (-0.8, -0.72), (0.8, -0.72), 0.06) * GROOVE
+	ink = union(outline(u, v, 0, 0.3, 0.64, 0.62, LINE * 0.9, 195, 345), segment(u, v, (-0.8, -0.72), (0.8, -0.72), LINE * 0.7))
 	return by_face(u, [(sides, (h, ink))])
 
 
@@ -132,15 +127,13 @@ for _side, _out in (("Left", -1), ("Right", 1)):
 # rugosité) lorsque r15_bake cuit un atlas.
 def surface(part, p, n, variant):
 	face, u, v = face_coords(p, n)
-	painter = None if {**VARIANTS, **REJECTED_VARIANTS}[variant].get("plain") else PAINTERS.get(part)
+	painter = PAINTERS.get(part)
 	if painter:
 		h, ink = painter(face, u, v)
-		if "Arm" in part:
-			# coude et poignet : rien de dessiné là où les pièces s'emboîtent (coupe nette au pli, retour du 18/11/2026)
-			fade = joint_fade(part, p, JOINT_FADE, top="LowerArm" in part)  # épaule gardée (deltoïde)
-			h, ink = h * fade, ink * fade
-		# bras bombés en largeur seulement : même reflet aux deux bouts d'un coude
-		h = h + pillow(part, face, u, v, "Arm" not in part) * BULGE
+		h = h + pillow(part, face, u, v) * BULGE
+	elif "Hand" in part:
+		# mains : chrome bombé, sans doigts dessinés (jugés laids, retour du 18/11/2026)
+		h, ink = pillow(part, face, u, v) * BULGE, np.zeros_like(u)
 	else:
 		h, ink = pillow(part, face, u, v, vertical=False) * BULGE, np.zeros_like(u)
 	ink = np.clip(ink, 0, 1) if {**VARIANTS, **REJECTED_VARIANTS}[variant]["ink"] else np.zeros_like(h)

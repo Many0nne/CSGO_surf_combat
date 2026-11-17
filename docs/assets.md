@@ -785,14 +785,13 @@ de la boîte de la tête → rien).
 - **Studio garde l'échec d'une image tout juste publiée** (`AssetFetchStatus.Failure`), même une fois approuvée : il
   faut une autre id ou relancer Studio. Laisser une minute entre la publication et l'essai.
 - **Le visage du rig est retiré, pas caché**, sous une coque : le clip de fin remet la transparence des Decals à 0.
-- **Les pièces du rig s'emboîtent aux articulations** : le bas du bras et le haut de l'avant-bras (comme genou,
-  poignet) portent un bout plus étroit qui entre dans la pièce voisine. Gris uni, c'est invisible ; avec deux dessins
-  différents, le pli du coude du viewmodel montre une coupe nette (vu en jeu, 18/11/2026). Le dessin s'efface donc près
-  des articulations (`r15_bake.joint_fade`, bloc principal relevé dans chaque mesh) et les membres ne se bombent qu'en
-  largeur, pour que les deux bouts d'un pli aient le même reflet. Pas de doigts dessinés sur les mains (jugés laids).
-  Dans le viewmodel, le bras est si plié que les blocs se croisent bien au-delà de cette zone : les bras de la
-  1re personne prennent une variante sans muscles (`--variant viewmodel --groups LeftArm,RightArm`, cartes publiées
-  dans `maps/viewmodel`, sous-dossier `Viewmodel` de la tenue, lu par `CharacterAppearance.dressArms`).
+- **Coude du viewmodel : faces superposées.** Avec l'AWP, le bras gauche est presque droit : les faces du bras et de
+  l'avant-bras (mêmes largeurs, même pivot) se superposent presque au coude, et deux dessins différents s'y disputent
+  l'affichage (scintillement, coupe en biais ; vu en jeu le 18/11/2026). Gris uni, c'était invisible. `dressArms`
+  amincit donc de 4 % les bras (épaule au coude) d'un viewmodel habillé ; l'avant-bras passe devant, net. Pistes
+  rejetées : effacer le dessin près du coude et donner aux bras de la 1re personne un chrome sans muscles (le chrome ne
+  se lisait plus, refusé), le défaut venant de la superposition et pas du dessin. Pas de doigts dessinés sur les mains
+  (jugés laids).
 
 **Pistes rejetées :** corps humain réaliste (extension MPFB de Blender) calé sur les articulations du rig : jambes
 courtes et épaules de gorille, le rig en blocs place hanches à 40 % et épaules très larges ; passer à un rig aux

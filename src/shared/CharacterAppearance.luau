@@ -21,6 +21,9 @@ local CharacterAppearance = {}
 local OUTFIT_ATTRIBUTE = "Outfit"
 -- Attribut de la tête du rig cachée sous la coque d'une tenue
 local HIDDEN_ATTRIBUTE = "OutfitHidden"
+-- Amincissement (largeur et profondeur) des bras d'un viewmodel habillé, et attribut de leur taille d'origine
+local UPPER_ARM_THIN = 0.96
+local BASE_SIZE_ATTRIBUTE = "OutfitBaseSize"
 -- Pièces des bras d'un viewmodel habillées par la tenue (mêmes noms et meshs que le rig)
 local ARM_PARTS = {
 	LeftUpperArm = true,
@@ -159,18 +162,17 @@ function CharacterAppearance.outfitOf(model: Instance): string?
 end
 
 -- Cette méthode permet de poser sur les bras d'un viewmodel (1re personne) les cartes de la tenue (#521) lorsque l'arme
--- est équipée ; les pièces des bras portent les noms et les meshs du rig (LeftUpperArm…). Une tenue peut leur donner
--- des cartes à part (sous-dossier `Viewmodel` : bras très pliés, où un dessin du corps se coupe au coude). nil : bras
--- d'origine.
+-- est équipée ; les pièces des bras portent les noms et les meshs du rig (LeftUpperArm…). Habillés, les bras (épaule au
+-- coude) s'amincissent de UPPER_ARM_THIN : au coude du viewmodel, presque droit, leurs faces et celles de l'avant-bras
+-- se superposaient presque et les deux dessins s'y disputaient l'affichage. nil : bras d'origine, taille rendue.
 function CharacterAppearance.dressArms(viewmodel: Instance, outfitId: string?)
 	local item = outfitId and InventoryRules.item(outfitId)
 	local folder = ReplicatedStorage:FindFirstChild("Outfits")
-	local outfit = item
+	local source = item
 		and item.type == InventoryRules.Type.OUTFIT
 		and item.appearance
 		and folder
 		and folder:FindFirstChild(item.appearance)
-	local source = outfit and (outfit:FindFirstChild("Viewmodel") or outfit)
 	for _, part in viewmodel:GetDescendants() do
 		if part:IsA("BasePart") and ARM_PARTS[part.Name] then
 			for _, old in part:GetChildren() do
@@ -183,6 +185,15 @@ function CharacterAppearance.dressArms(viewmodel: Instance, outfitId: string?)
 				local copy = sa:Clone()
 				copy:SetAttribute(OUTFIT_ATTRIBUTE, outfitId)
 				copy.Parent = part
+			end
+			if string.find(part.Name, "UpperArm") then
+				local base = part:GetAttribute(BASE_SIZE_ATTRIBUTE)
+				if typeof(base) ~= "Vector3" then
+					base = part.Size
+					part:SetAttribute(BASE_SIZE_ATTRIBUTE, base)
+				end
+				local thin = if source then UPPER_ARM_THIN else 1
+				part.Size = Vector3.new(base.X * thin, base.Y, base.Z * thin)
 			end
 		end
 	end
