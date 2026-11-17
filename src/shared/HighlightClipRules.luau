@@ -12,6 +12,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CameraConfig = require(ReplicatedStorage.Shared.CameraConfig)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local MathRules = require(ReplicatedStorage.Shared.MathRules)
+local ParticipantRules = require(ReplicatedStorage.Shared.ParticipantRules)
 
 local HighlightClipRules = {}
 
@@ -121,6 +122,27 @@ export type EquipRing = {
 -- Arme en main à partir de t : outil et skin (nil : mains vides).
 export type Equip = { t: number, tool: string?, skinId: string? }
 
+-- Kill du tireur dans le clip (t relatif au début du clip, en s)
+export type Kill = {
+	t: number,
+	victimId: number,
+	victimName: string?,
+	headshot: boolean,
+	direction: Vector3?,
+	weapon: string?,
+}
+
+-- Ligne de kill feed d'un kill du clip (mêmes champs que KillFeed.FeedLine, côté client)
+export type FeedLine = {
+	killer: string,
+	killerIsBot: boolean,
+	victim: string,
+	victimIsBot: boolean,
+	weapon: string?,
+	headshot: boolean,
+	mine: boolean,
+}
+
 -- Clip transmis aux clients à la fin de la partie (temps relatifs au début du clip, en s).
 export type Clip = {
 	version: number,
@@ -134,8 +156,8 @@ export type Clip = {
 	pov: string,
 	actors: { { id: number, name: string, track: string } },
 	shots: { { t: number, id: number, dir: Vector3? } }, -- dir : tir visé (rayon de la balle), nil pour le couteau
-	-- weapon : arme du kill (ragdoll) ; absente : celle du clip
-	kills: { { t: number, victimId: number, headshot: boolean, direction: Vector3?, weapon: string? } },
+	-- weapon : arme du kill (ragdoll, kill feed) ; absente : celle du clip. victimName : nom pour le kill feed (#534)
+	kills: { Kill },
 	-- Armes du tireur : en main au début (t = 0), puis chaque changement ; absent ou vide : `tool` tout le clip
 	equips: { Equip }?,
 }
@@ -783,6 +805,31 @@ function HighlightClipRules.readClip(data: any): Clip?
 		return nil
 	end
 	return data :: Clip
+end
+
+-- Cette méthode permet de composer la ligne de kill feed d'un kill du clip lorsque la lecture y arrive (#534) : tireur,
+-- arme du kill (celle du clip sans précision), victime nommée par le kill ou par son figurant (« ? » sinon) ; bots
+-- reconnus à leur id (ParticipantRules.isBotId). La ligne est « à moi » : le clip est vu par les yeux du tireur.
+function HighlightClipRules.killFeedLine(clip: Clip, kill: Kill): FeedLine
+	local victim = if type(kill.victimName) == "string" then kill.victimName else nil
+	if not victim then
+		for _, actor in clip.actors do
+			if type(actor) == "table" and actor.id == kill.victimId and type(actor.name) == "string" then
+				victim = actor.name
+				break
+			end
+		end
+	end
+	local weapon = if type(kill.weapon) == "string" and kill.weapon ~= "" then kill.weapon else clip.weapon
+	return {
+		killer = clip.killerName,
+		killerIsBot = type(clip.killerId) == "number" and ParticipantRules.isBotId(clip.killerId),
+		victim = victim or "?",
+		victimIsBot = type(kill.victimId) == "number" and ParticipantRules.isBotId(kill.victimId),
+		weapon = if weapon ~= "" then weapon else nil,
+		headshot = kill.headshot == true,
+		mine = true,
+	}
 end
 
 -- Cette méthode permet de donner les armes du tireur à rejouer, dans l'ordre, lorsque le clip démarre : arme en main au

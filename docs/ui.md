@@ -351,7 +351,8 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
 - `src/client/ui/KillFeed.luau` (#102) : en haut à droite, sans fond, une ligne par mort (tueur et victime en os, arme
   en ambre plus petite), 4 lignes, 5 s chacune ; les lignes du joueur sont sur une bande rouge d'impact droite qui
   s'efface vers la gauche, comme sa ligne au classement. Affiché vivant ou mort (`HUDRules.killFeedVisible`), pas au
-  menu ni au résultat.
+  menu ni au résultat. Le clip de la partie a son propre feed (#534), même rendu, sous la bande noire du haut : sans
+  lui, un kill dont la victime est hors champ ne se voyait pas ; toutes ses lignes sont « à moi » (vue du tireur).
   **Tir à la tête (#365)** : une icône remplace le mot « TÊTE » après l'arme, dans le kill feed et sur l'écran de mort
   (pas au hitmarker, qui change seulement de couleur : une icône au centre gênerait la visée). Tête de profil tournée
   vers la gauche (vers le tueur), percée à la tempe, éclats projetés à l'arrière dans le sens de la ligne

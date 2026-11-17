@@ -377,4 +377,43 @@ return function(T, Loader)
 			T.expectEqual(R.readClip(clip), nil)
 		end)
 	end)
+
+	T.describe("HighlightClipRules.killFeedLine (#534)", function()
+		local clip = {
+			version = R.VERSION,
+			duration = 4,
+			killerId = 7,
+			killerName = "Tireur",
+			weapon = "AWP",
+			degraded = false,
+			pov = "",
+			actors = { { id = -2, name = "Marcel", track = "" }, { id = 9, name = "Zoe", track = "" } },
+			shots = {},
+			kills = {},
+		}
+
+		T.it("compose tueur, arme du kill, tête et victime nommée par le kill", function()
+			local line =
+				R.killFeedLine(clip, { t = 1, victimId = 9, victimName = "Zoé", headshot = true, weapon = "Deagle" })
+			T.expectEqual(line.killer, "Tireur")
+			T.expectEqual(line.killerIsBot, false)
+			T.expectEqual(line.victim, "Zoé")
+			T.expectEqual(line.victimIsBot, false)
+			T.expectEqual(line.weapon, "Deagle")
+			T.expectEqual(line.headshot, true)
+			T.expectEqual(line.mine, true)
+		end)
+
+		T.it("retombe sur le figurant, l'arme du clip et reconnaît un bot", function()
+			local line = R.killFeedLine(clip, { t = 1, victimId = -2, headshot = false })
+			T.expectEqual(line.victim, "Marcel")
+			T.expectEqual(line.victimIsBot, true)
+			T.expectEqual(line.weapon, "AWP")
+			T.expectEqual(line.headshot, false)
+		end)
+
+		T.it("nomme « ? » une victime inconnue", function()
+			T.expectEqual(R.killFeedLine(clip, { t = 1, victimId = 42, headshot = false }).victim, "?")
+		end)
+	end)
 end
