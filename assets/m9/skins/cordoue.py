@@ -34,7 +34,7 @@ def gilt(col):
 
 def blade(kn):
 	"""Cette méthode permet d'imprimer l'illustration sur la lame : fond d'or et glacis en métal, cernes plus mats."""
-	g, rgb, score = illustration.load(kn, illustration.source("cordoue"))
+	g, rgb, score = illustration.load(kn, illustration.source("cordoue"), deform=True)
 	print(f"[cordoue] illustration recalée sur le gabarit, recouvrement {score:.3f}")
 	col = illustration.sample(kn, g, rgb)
 	lum = illustration.print_blade(kn, col, rough=0.5, frame=0.012, frame_col=GOLD * 0.75, frame_metal=1.0)

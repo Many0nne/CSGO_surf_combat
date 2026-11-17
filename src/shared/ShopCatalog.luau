@@ -92,22 +92,29 @@ ShopCatalog.CRATES = {
 			legendary = { "ciselure" },
 		},
 	},
+	-- Série 2 de la M9 (#515) : matières d'intérieur (#495, #505) et la FILM (TOPO, HÔTE, SPHINX), légendaire CUIR DE
+	-- CORDOUE ; bande vert jade, distincte du bleu-vert de la série 1, du rouge et de l'ocre de l'AWP
+	{
+		id = "crate.m9.serie2",
+		name = "M9 · SÉRIE 2",
+		weapon = "weapon.m9bayonet",
+		stripe = { 70, 160, 90 },
+		price = 500,
+		contents = {
+			common = { "topo", "hote", "piedpoule", "tomette" },
+			rare = { "sphinx", "azulejo", "nacre" },
+			exceptional = { "chinoiserie", "tapisserie" },
+			legendary = { "cordoue" },
+		},
+	},
 } :: { Crate }
 
 -- Réserve : skins finis qu'aucune caisse en vente ne donne encore, par arme puis par rareté. Ils gardent leur rareté
 -- (`rarityOf`, pour qui les possède déjà : les caisses FILM, #433, ont été vendues avant d'être retirées), et forment
 -- une caisse dès qu'une arme en a assez pour la composition complète. Série FILM (#433, #436) : HÔTE et SPHINX ;
 -- CISELURE et TOPO ont cédé leur place dans la série 1 à TREMPE et aux autres communs. Les skins AWP en réserve ont
--- formé la caisse AWP · SÉRIE 2 (#493). Série 2 de la M9 (#495) : les communs PIED-DE-POULE et TOMETTE avec TOPO et
--- HÔTE, les rares AZULEJO et NACRE avec SPHINX, les exceptionnels illustrés CHINOISERIE et TAPISSERIE (#505) ; reste
--- le légendaire
-ShopCatalog.RESERVE = {
-	["weapon.m9bayonet"] = {
-		common = { "topo", "hote", "piedpoule", "tomette" },
-		rare = { "sphinx", "azulejo", "nacre" },
-		exceptional = { "chinoiserie", "tapisserie" },
-	},
-} :: { [string]: { [string]: { string } } }
+-- formé la caisse AWP · SÉRIE 2 (#493), ceux de la M9 la caisse M9 · SÉRIE 2 (#515) : la réserve est vide
+ShopCatalog.RESERVE = {} :: { [string]: { [string]: { string } } }
 
 -- Vitrine : deux étages de trois caisses ; l'étage à hauteur d'œil (rangée 1, en haut) se remplit d'abord
 ShopCatalog.PER_ROW = 3

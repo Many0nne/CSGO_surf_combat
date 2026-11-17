@@ -29,13 +29,19 @@ return function(T, Loader)
 			T.expectEqual(Shop.RARITIES[4].label, "LÉGENDAIRE")
 		end)
 
-		T.it("caisses dans l'ordre de la vitrine : série 1 (AWP puis M9), puis série 2 de l'AWP (#493)", function()
-			local ids = {}
-			for _, crate in Shop.CRATES do
-				table.insert(ids, crate.id)
+		T.it(
+			"caisses dans l'ordre de la vitrine : série 1 (AWP puis M9), puis série 2 (AWP #493, M9 #515)",
+			function()
+				local ids = {}
+				for _, crate in Shop.CRATES do
+					table.insert(ids, crate.id)
+				end
+				T.expectEqual(
+					table.concat(ids, ","),
+					"crate.awp.serie1,crate.m9.serie1,crate.awp.serie2,crate.m9.serie2"
+				)
 			end
-			T.expectEqual(table.concat(ids, ","), "crate.awp.serie1,crate.m9.serie1,crate.awp.serie2")
-		end)
+		)
 
 		T.it("composition 4 / 3 / 2 / 1", function()
 			local counts = {}
@@ -109,6 +115,7 @@ return function(T, Loader)
 			T.expectEqual(Shop.crate("crate.awp.serie1").name, "AWP · SÉRIE 1")
 			T.expectEqual(Shop.crate("crate.m9.serie1").weapon, "weapon.m9bayonet")
 			T.expectEqual(Shop.crate("crate.awp.serie2").name, "AWP · SÉRIE 2")
+			T.expectEqual(Shop.crate("crate.m9.serie2").name, "M9 · SÉRIE 2")
 			T.expectEqual(Shop.crate("crate.inconnue"), nil)
 		end)
 	end)
@@ -141,6 +148,13 @@ return function(T, Loader)
 			)
 			T.expectEqual(serie2[10].rarity.label, "LÉGENDAIRE")
 			T.expectEqual(knife[1].weapon, "M9")
+			local knife2 = Shop.contents(Shop.crate("crate.m9.serie2"), Inventory.ITEMS)
+			T.expectEqual(
+				names(knife2),
+				"TOPO,HÔTE,PIED-DE-POULE,TOMETTE,SPHINX,AZULEJO,NACRE,CHINOISERIE,TAPISSERIE,CUIR DE CORDOUE"
+			)
+			T.expectEqual(knife2[10].skin, "skin.m9bayonet.cordoue")
+			T.expectEqual(knife2[10].rarity.label, "LÉGENDAIRE")
 		end)
 
 		T.it("omet un skin qui n'existe pas", function()

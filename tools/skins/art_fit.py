@@ -60,10 +60,51 @@ def extend(rgb):
 	return rgb[idx[0], idx[1]]
 
 
-def load(path, target):
-	"""Cette méthode permet de charger une illustration, de la recaler sur le masque target (H x W, vrai dans l'arme)
-	et de prolonger ses couleurs ; renvoie l'image (H x W x 3, 0 à 1) et le recouvrement obtenu."""
+def _sdf(mask, clip):
+	"""Cette méthode permet d'obtenir la distance signée au bord d'un masque (positive dedans), bornée à ±clip px."""
+	d = ndimage.distance_transform_edt(mask) - ndimage.distance_transform_edt(~mask)
+	return np.clip(d, -clip, clip)
+
+
+def refine(rgb, target, down=4, sigma=4.0, iters=400):
+	"""Cette méthode permet de déformer en douceur une illustration déjà recalée pour que son contour épouse celui du
+	masque, lorsque le modèle d'image a redessiné la silhouette (trou décalé, pointe plus fine) : recalage « demons »
+	sur les distances signées des deux silhouettes, à basse résolution, déplacement lissé ; renvoie l'image déformée."""
+	h, w = target.shape
+	small = (w // down, h // down)
+	fix_m = np.asarray(Image.fromarray(target.astype(np.uint8) * 255).resize(small, Image.BILINEAR)) > 127
+	mov_m = np.asarray(Image.fromarray(art_mask(rgb * 255).astype(np.uint8) * 255).resize(small, Image.BILINEAR)) > 127
+	fix, mov = _sdf(fix_m, 12.0), _sdf(mov_m, 12.0)
+	gy, gx = np.gradient(fix)
+	yy, xx = np.mgrid[0 : small[1], 0 : small[0]].astype(np.float64)
+	uy, ux = np.zeros_like(fix), np.zeros_like(fix)
+	for _ in range(iters):
+		m = ndimage.map_coordinates(mov, [yy + uy, xx + ux], order=1, mode="nearest")
+		diff = fix - m
+		den = gx * gx + gy * gy + diff * diff + 1e-6
+		ux = ndimage.gaussian_filter(ux + diff * gx / den, sigma)
+		uy = ndimage.gaussian_filter(uy + diff * gy / den, sigma)
+	big_y = ndimage.zoom(uy, (h / small[1], w / small[0]), order=1)[:h, :w] * down
+	big_x = ndimage.zoom(ux, (h / small[1], w / small[0]), order=1)[:h, :w] * down
+	Y, X = np.mgrid[0:h, 0:w].astype(np.float64)
+	coords = [Y + big_y, X + big_x]
+	return np.stack([ndimage.map_coordinates(rgb[..., c], coords, order=1, mode="nearest", cval=1.0) for c in range(3)], -1)
+
+
+def overlap(rgb, target):
+	"""Cette méthode permet de mesurer le recouvrement (IoU) de la silhouette d'une image recalée et du masque."""
+	a = art_mask(rgb * 255)
+	return (a & target).sum() / (a | target).sum()
+
+
+def load(path, target, deform=False):
+	"""Cette méthode permet de charger une illustration, de la recaler sur le masque target (H x W, vrai dans l'arme),
+	de la déformer en douceur si deform (silhouette redessinée par le modèle) et de prolonger ses couleurs ; renvoie
+	l'image (H x W x 3, 0 à 1) et le recouvrement obtenu."""
 	img = Image.open(path).convert("RGB")
 	params, score = fit(img, target)
 	rgb = np.asarray(warp(img, params, target.shape[::-1]), np.float64) / 255
+	if deform:
+		rgb = refine(rgb, target)
+		score = overlap(rgb, target)
 	return extend(rgb), score

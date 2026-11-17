@@ -376,6 +376,15 @@ InventoryRules.ITEMS = {
 		name = "TAPISSERIE",
 		appearance = "tapisserie",
 	},
+	-- Légendaire de la série 2 (#515) : cuir doré de Cordoue, paon et grenades peints sur la lame (cordoue.py), manche
+	-- gainé de cuir gaufré
+	{
+		id = "skin.m9bayonet.cordoue",
+		type = "skin",
+		weapon = "weapon.m9bayonet",
+		name = "CUIR DE CORDOUE",
+		appearance = "cordoue",
+	},
 } :: { Item }
 
 -- Inventaire de tout joueur (et des bots), sauvegardé ou non : Ka-Bar et AWP

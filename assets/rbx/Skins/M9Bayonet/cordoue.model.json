@@ -1,0 +1,15 @@
+{
+  "className": "Folder",
+  "children": [
+    {
+      "name": "Handle",
+      "className": "SurfaceAppearance",
+      "properties": {
+        "ColorMapContent": "rbxassetid://74887689808214",
+        "MetalnessMapContent": "rbxassetid://124684997544971",
+        "NormalMapContent": "rbxassetid://95019203286876",
+        "RoughnessMapContent": "rbxassetid://101407010884571"
+      }
+    }
+  ]
+}
