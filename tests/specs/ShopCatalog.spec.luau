@@ -137,7 +137,7 @@ return function(T, Loader)
 			local serie2 = Shop.contents(Shop.crate("crate.awp.serie2"), Inventory.ITEMS)
 			T.expectEqual(
 				names(serie2),
-				"LOGOGRAMME,PARQUET,CANNAGE,TÔLE LARMÉE,CAPITON,VITRAIL,LAQUE,REMORQUEUR,VELOURS,CISELURE"
+				"LOGOGRAMME,PARQUET,CANNAGE,TÔLE LARMÉE,CAPITON,VITRAIL,LAQUE,REMORQUEUR,MARQUETERIE,CISELURE"
 			)
 			T.expectEqual(serie2[10].rarity.label, "LÉGENDAIRE")
 			T.expectEqual(knife[1].weapon, "M9")
