@@ -18,6 +18,7 @@ local RunService = game:GetService("RunService")
 local NetworkProtocol = require(ReplicatedStorage.Shared.NetworkProtocol)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local ShotEffectRules = require(ReplicatedStorage.Shared.ShotEffectRules)
+local LightningBolt = require(script.Parent.LightningBolt)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 local WeaponThirdPerson = require(ReplicatedStorage.Shared.WeaponThirdPerson)
 
@@ -141,9 +142,16 @@ local function spawnTracer(start: Vector3, finish: Vector3)
 	end
 end
 
+-- Cette méthode permet de lire l'effet de tir du skin posé sur un modèle d'arme lorsqu'un tir en part (#520) ; nil :
+-- rayon de balle ordinaire.
+local function effectOf(weapon: Instance?): string?
+	return weapon and ShotEffectRules.effectOf(weapon:GetAttribute(ShotEffectRules.SKIN_ATTRIBUTE))
+end
+
 -- Cette méthode permet de montrer la flamme et le rayon d'une arme lorsqu'un tir en part : rayon de la bouche du
--- canon (repli : l'origine du tir) jusqu'à endpoint, s'il n'est pas trop court ; camera : arrêté avant elle (autres).
-local function show(muzzle: Attachment?, origin: Vector3, endpoint: Vector3, camera: Vector3?)
+-- canon (repli : l'origine du tir) jusqu'à endpoint, s'il n'est pas trop court ; camera : arrêté avant elle (autres) ;
+-- effect : effet du skin (éclair à la place du rayon, s'il reste de la place).
+local function show(muzzle: Attachment?, origin: Vector3, endpoint: Vector3, camera: Vector3?, effect: string?)
 	if muzzle then
 		flash(muzzle)
 	end
@@ -153,6 +161,9 @@ local function show(muzzle: Attachment?, origin: Vector3, endpoint: Vector3, cam
 		start, finish = ShotEffectRules.clipNearCamera(start, endpoint, camera)
 	end
 	if start and finish then
+		if effect == "lightning" and LightningBolt.spawn(start, finish) then
+			return
+		end
 		spawnTracer(start, finish)
 	end
 end
@@ -160,7 +171,7 @@ end
 -- Cette méthode permet de montrer les effets du tir du joueur local lorsqu'il tire (HitscanSystem) : flamme sur le
 -- viewmodel, rayon de son canon jusqu'au point visé (origin : la caméra, endpoint : impact ou portée maximale).
 function ShotEffects.playLocal(viewmodel: Model?, origin: Vector3, endpoint: Vector3)
-	show(muzzleOf(viewmodel), origin, endpoint)
+	show(muzzleOf(viewmodel), origin, endpoint, nil, effectOf(viewmodel))
 end
 
 -- Cette méthode permet de montrer la flamme et le rayon d'un tir rejoué par le clip de la partie (#499) lorsqu'il y
@@ -186,7 +197,8 @@ function ShotEffects.playReplay(
 	remoteRayParams.FilterDescendantsInstances = ignore
 	local range = WeaponConfig.HITSCAN_RANGE
 	local result = workspace:Raycast(origin, direction.Unit * range, remoteRayParams)
-	show(muzzle, origin, ShotEffectRules.endpoint(origin, direction, result and result.Position, range), camera)
+	local endpoint = ShotEffectRules.endpoint(origin, direction, result and result.Position, range)
+	show(muzzle, origin, endpoint, camera, effectOf(weapon))
 end
 
 -- Cette méthode permet de montrer les effets d'un tir relayé par le serveur lorsqu'il arrive : flamme sur l'arme 3P
@@ -206,7 +218,8 @@ local function onShotFired(shooter: any, weaponName: any, origin: any, direction
 	if not ShotEffectRules.shouldShow(shooter, localPlayer and localPlayer.Character, getState()) then
 		return
 	end
-	local muzzle = muzzleOf(shooter:FindFirstChild(WeaponThirdPerson.MODEL_NAME))
+	local gun = shooter:FindFirstChild(WeaponThirdPerson.MODEL_NAME)
+	local muzzle = muzzleOf(gun)
 	if not ShotEffectRules.hasRoom(#tracers) then
 		if muzzle then
 			flash(muzzle)
@@ -219,7 +232,7 @@ local function onShotFired(shooter: any, weaponName: any, origin: any, direction
 	local result = workspace:Raycast(origin, direction.Unit * range, remoteRayParams)
 	local endpoint = ShotEffectRules.endpoint(origin, direction, result and result.Position, range)
 	local camera = workspace.CurrentCamera
-	show(muzzle, origin, endpoint, camera and camera.CFrame.Position)
+	show(muzzle, origin, endpoint, camera and camera.CFrame.Position, effectOf(gun))
 end
 
 -- Cette méthode permet d'écouter les tirs relayés par le serveur lorsque le client démarre ; stateOf lit l'état du
@@ -228,6 +241,10 @@ function ShotEffects.init(stateOf: () -> string?)
 	getState = stateOf
 	if connection then
 		return
+	end
+	-- Réserve d'un éclair de skin (#520) remplie en tâche de fond, si l'effet est activé : le premier tir ne crée rien
+	if ShotEffectRules.isEnabled("lightning") then
+		LightningBolt.prewarm()
 	end
 	-- Attente hors du fil de démarrage du client (init.client continue sans elle)
 	task.spawn(function()

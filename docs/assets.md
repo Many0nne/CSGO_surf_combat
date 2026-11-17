@@ -85,6 +85,29 @@ par `ScaleTo` avec le reste de l'arme.
   moins de `NEAR_CAMERA` de notre caméra est retirée (`clipNearCamera` : tir qui nous touche, nous frôle, ou tireur
   collé à nous) : sinon le Beam, face à la caméra, couvre l'écran. Au plus `MAX_ACTIVE` rayons en même temps (au-delà,
   un tir relayé n'a que sa flamme) ; le tir local a toujours son rayon et compte parmi eux.
+- **Effet de tir d'un skin (#520) :** un skin du catalogue (`InventoryRules.ITEMS`) peut déclarer `shotEffect`
+  (noms connus et interrupteurs : `ShotEffectRules.SKIN_EFFECTS`). **L'éclair est désactivé en jeu** (`lightning =
+  false`) : validé par l'utilisateur, gardé de côté pour plus tard ; ORAGE tire avec le rayon ordinaire et la réserve
+  n'est pas préparée. Passer à `true` pour l'activer. Le client le lit sur l'attribut `SkinId` que `WeaponSkins.apply` pose
+  sur le viewmodel et sur l'arme 3P (construite par le serveur, donc répliquée) : rien de plus à envoyer, et les autres
+  joueurs le voient. `lightning` (AWP ORAGE) : un éclair (`LightningBolt`, forme et réglages dans `LightningRules`) à la
+  place du rayon de balle, tronc brisé resserré au canon et à l'impact, branches et brindilles tirées à chaque tir,
+  flash puis second flash puis fondu, lueur `PointLight`. Au-delà de `LightningRules.MAX_ACTIVE` éclairs en cours, le
+  tir garde le rayon ordinaire. Purement visuel : trajectoire, dégâts et son inchangés.
+  - **Lueur :** un Beam sans texture a des bords nets ; la lueur vient de couches superposées (`KINDS` : voile large
+    très transparent, halo, cœur fin). Voile du tronc à plus de 0,6 stud : vu en enfilade (tir qui s'éloigne), chaque
+    segment dessine un carré de lumière. Couleurs additives : un cœur blanc vire au jaune pâle sur le décor chaud de
+    Dizzy, d'où un cœur teinté de vert.
+  - **Coût :** chaque Beam coûte au tir (relier, allumer : quelques µs). Mesuré dans Studio (#520) : 2,3 à 4 ms par
+    éclair avec une réserve commune et ~330 Beams, 1 à 2 ms avec une réserve par style (largeur et couleur posées à la
+    création) et ~210 Beams. La réserve d'un éclair complet (`LightningRules.maxCounts`) est remplie au démarrage du
+    client par lots (`LightningBolt.prewarm`), sinon le premier tir coûte ~6 ms. Ajouter du détail = plus de Beams :
+    remesurer.
+  - **Juger le rendu :** l'éclair ne dure que 0,25 s. Pour une capture, charger dans un `execute_luau` client
+    `LightningRules` (le `require` du MCP a son propre exemplaire, le jeu n'est pas touché), y passer
+    `LIFETIME` à 30, et appeler `spawn` d'une copie de `LightningBolt`. En mode Edit, un banc statique (Beams posés à
+    la main d'après `LightningRules.build`) permet la vue de côté que la caméra du jeu interdit en Play ; poser
+    `WorldPosition` d'un Attachment **après** l'avoir rattaché, sinon sa position est décalée de celle du parent.
 - **Nouvelle arme à distance :** garder `Barrel.ShootPart.MuzzleEffect` dans son viewmodel (le copier de l'AWP), sinon
   elle tire sans flamme et son rayon part de l'œil.
 - **Vérifier qu'un tir ne laisse rien :** le rayon crée deux `Attachment` dans `Terrain` (et un `Beam`), tous nommés
