@@ -28,14 +28,17 @@ def engrave(kn):
 		size = 0.034 if i % 10 == 0 else 0.022 if i % 5 == 0 else 0.013
 		kn.line("laser", [(t, base), (t, base + size)], 0.0035)
 		if i % 10 == 0 and i:
-			kn.text("laser", str(i // 10), (t + 0.024, base + 0.052), 0.026, bahn)
-	# Cartouche du talon : matricule et lot
+			# Chiffre côté pointe du trait : une fois le couteau retourné en 1P, il se lit juste après la graduation
+			kn.text("laser", str(i // 10), (t - 0.024, base + 0.052), 0.026, bahn, angle=180)
+	# Cartouche du talon : matricule et lot. En 1P la M9 est tenue tranchant en haut : textes tournés d'un demi-tour,
+	# et lignes rangées du tranchant vers le dos (le matricule, côté tranchant, paraît en haut). Le haut du cartouche
+	# (h > 0,10) est mordu par les dents : rien n'y est écrit
 	box = [(-0.10, -0.12), (0.19, -0.12), (0.19, 0.17), (-0.10, 0.17)]
 	kn.line("laser", box + box[:1], 0.006)
-	kn.text("laser", "PTL-420", (0.045, 0.085), 0.045, bahn)
-	kn.text("laser", "N° 0420-07", (0.045, 0.005), 0.034, bahn)
-	kn.line("laser", [(-0.06, -0.045), (0.15, -0.045)], 0.005)
-	kn.text("laser", "M9 · OD", (0.045, -0.085), 0.03, bahn)
+	kn.text("laser", "PTL-420", (0.045, -0.072), 0.045, bahn, angle=180)
+	kn.text("laser", "N° 0420-07", (0.045, -0.005), 0.034, bahn, angle=180)
+	kn.line("laser", [(-0.06, 0.034), (0.15, 0.034)], 0.005)
+	kn.text("laser", "M9 · OD", (0.045, 0.072), 0.03, bahn, angle=180)
 
 
 def paint(kn):

@@ -5,10 +5,10 @@
       "name": "Handle",
       "className": "SurfaceAppearance",
       "properties": {
-        "ColorMapContent": "rbxassetid://119142796892776",
-        "MetalnessMapContent": "rbxassetid://134654624478383",
-        "NormalMapContent": "rbxassetid://110358624033047",
-        "RoughnessMapContent": "rbxassetid://130263693747397"
+        "ColorMapContent": "rbxassetid://91827745800994",
+        "MetalnessMapContent": "rbxassetid://126156867285830",
+        "NormalMapContent": "rbxassetid://89198381880160",
+        "RoughnessMapContent": "rbxassetid://100380977961852"
       }
     }
   ]
