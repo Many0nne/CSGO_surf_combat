@@ -268,6 +268,14 @@ InventoryRules.ITEMS = {
 		name = "CÉRAMIQUE",
 		appearance = "ceramique",
 	},
+	-- Rare de la série 1 : acier guilloché sous émail, médaillon en rosace (assets/m9/skins/guilloche.py)
+	{
+		id = "skin.m9bayonet.guilloche",
+		type = "skin",
+		weapon = "weapon.m9bayonet",
+		name = "GUILLOCHÉ",
+		appearance = "guilloche",
+	},
 } :: { Item }
 
 -- Inventaire de tout joueur (et des bots), sauvegardé ou non : Ka-Bar et AWP
