@@ -825,8 +825,14 @@ local function updatePreview(dt: number)
 		if mode == "detail" and interactive and not dragging then
 			local rx, ry = GamepadRules.lookRate(stickPos.X, stickPos.Y)
 			if rx ~= 0 or ry ~= 0 then
-				yaw, pitch = Rules.stickSpin(yaw, pitch, rx, ry, dt, STICK_TURN_RATE, DRAG_PITCH)
+				-- dt borné : une image longue (premier affichage) ne fait pas sauter l'arme
+				yaw, pitch = Rules.stickSpin(yaw, pitch, rx, ry, math.min(dt, 0.1), STICK_TURN_RATE, DRAG_PITCH)
 				lastDrag = os.clock()
+				stickSpun = true
+			elseif stickSpun then
+				-- Stick relâché : ramené à un demi-tour près, comme au relâchement de la souris
+				stickSpun = false
+				yaw = (yaw + math.pi) % (2 * math.pi) - math.pi
 			end
 		end
 		if not dragging and os.clock() - lastDrag > DRAG_IDLE then
@@ -1166,9 +1172,10 @@ function ShopScene.start()
 			clickOpening()
 			return
 		end
-		if hovered > 0 and onCrateClicked then
+		-- Le survol suit la souris, pas le doigt : un toucher ne choisit pas de caisse sur ce survol périmé
+		if not isTouch and hovered > 0 and onCrateClicked then
 			onCrateClicked(hovered)
-		elseif preview and mode == "detail" and interactive then
+		elseif not dragging and preview and mode == "detail" and interactive then
 			-- Aperçu retenu : glisser dans la salle tourne l'arme
 			dragging = true
 			-- Doigt : position du toucher (pas de curseur) ; on ne suit que ce toucher jusqu'à son relâchement
