@@ -163,6 +163,32 @@ function ShotEffects.playLocal(viewmodel: Model?, origin: Vector3, endpoint: Vec
 	show(muzzleOf(viewmodel), origin, endpoint)
 end
 
+-- Cette méthode permet de montrer la flamme et le rayon d'un tir rejoué par le clip de la partie (#499) lorsqu'il y
+-- arrive : canon de `weapon` (viewmodel ou arme 3P d'un figurant), rayon jusqu'au point que touche origin + direction
+-- dans la map (`ignore` écarté) ; `camera` : arrêté avant elle (tirs des figurants).
+function ShotEffects.playReplay(
+	weapon: Instance?,
+	origin: Vector3,
+	direction: Vector3,
+	ignore: { Instance },
+	camera: Vector3?
+)
+	if direction.Magnitude < 1e-6 then
+		return
+	end
+	local muzzle = muzzleOf(weapon)
+	if not ShotEffectRules.hasRoom(#tracers) then
+		if muzzle then
+			flash(muzzle)
+		end
+		return
+	end
+	remoteRayParams.FilterDescendantsInstances = ignore
+	local range = WeaponConfig.HITSCAN_RANGE
+	local result = workspace:Raycast(origin, direction.Unit * range, remoteRayParams)
+	show(muzzle, origin, ShotEffectRules.endpoint(origin, direction, result and result.Position, range), camera)
+end
+
 -- Cette méthode permet de montrer les effets d'un tir relayé par le serveur lorsqu'il arrive : flamme sur l'arme 3P
 -- du tireur, et rayon jusqu'au point que touche chez nous son tir (dans la limite des rayons en cours).
 local function onShotFired(shooter: any, weaponName: any, origin: any, direction: any)

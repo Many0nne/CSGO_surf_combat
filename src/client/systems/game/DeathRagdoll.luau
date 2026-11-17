@@ -187,8 +187,9 @@ local function stepFade()
 end
 
 -- Cette méthode permet de remplacer le personnage tué (joueur ou bot) par son ragdoll lorsque PlayerDied arrive ;
--- direction = du tueur vers la victime (nil pour une chute). Sans personnage encore présent, rien n'est créé.
-function DeathRagdoll.spawn(char: Model?, direction: Vector3?, weapon: string?, headshot: boolean)
+-- direction = du tueur vers la victime (nil pour une chute) ; velocity : vitesse de la victime si l'appelant la connaît
+-- (figurant du clip de la partie, #499), sinon lue sur le personnage. Sans personnage encore présent, rien n'est créé.
+function DeathRagdoll.spawn(char: Model?, direction: Vector3?, weapon: string?, headshot: boolean, velocity: Vector3?)
 	if not char or not char.Parent then
 		return
 	end
@@ -214,9 +215,9 @@ function DeathRagdoll.spawn(char: Model?, direction: Vector3?, weapon: string?, 
 	end
 	clone.Name = char.Name .. "_Ragdoll"
 	clone.Parent = corpseFolder()
-	local velocity = DeathRules.ragdollVelocity(velocityAtDeath(char), direction, weapon, headshot)
+	local start = DeathRules.ragdollVelocity(velocity or velocityAtDeath(char), direction, weapon, headshot)
 	for _, part in parts do
-		part.AssemblyLinearVelocity = velocity
+		part.AssemblyLinearVelocity = start
 	end
 	table.insert(corpses, { model = clone, bornAt = os.clock(), parts = parts, decals = decals })
 	if not fadeConn then
