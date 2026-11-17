@@ -16,6 +16,7 @@ local ServerStorage = game:GetService("ServerStorage")
 local HighlightClipRules = require(ReplicatedStorage.Shared.HighlightClipRules)
 local MathRules = require(ReplicatedStorage.Shared.MathRules)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
+local WeaponThirdPerson = require(ReplicatedStorage.Shared.WeaponThirdPerson)
 local CheatLog = require(script.Parent.CheatLog)
 local HighlightRules = require(script.Parent.HighlightRules)
 local Participants = require(script.Parent.Participants)
@@ -92,7 +93,8 @@ local function appearanceFolder(): Folder
 end
 
 -- Cette méthode permet de garder l'apparence d'un participant (clone du personnage sans scripts, outils, bouclier ni
--- sons, humanoïde inerte, racine seule ancrée) lorsqu'il meurt ou qu'un record est figé ; une fois par manche.
+-- sons hors ceux de l'arme 3P, tirés pendant le rejeu ; humanoïde en vie, racine seule ancrée) lorsqu'il meurt ou
+-- qu'un record est figé ; une fois par manche.
 local function keepAppearance(id: number, char: Model?)
 	local folder = appearanceFolder()
 	if not char or folder:FindFirstChild(tostring(id)) then
@@ -105,12 +107,13 @@ local function keepAppearance(id: number, char: Model?)
 	if not ok or not copy then
 		return
 	end
+	local gun = copy:FindFirstChild(WeaponThirdPerson.MODEL_NAME)
 	for _, inst in copy:GetDescendants() do
 		if
 			inst:IsA("LuaSourceContainer")
 			or inst:IsA("Tool")
 			or inst:IsA("ForceField")
-			or inst:IsA("Sound")
+			or (inst:IsA("Sound") and not (gun and inst:IsDescendantOf(gun)))
 			or inst:IsA("BillboardGui")
 		then
 			inst:Destroy()

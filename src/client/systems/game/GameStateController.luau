@@ -33,6 +33,8 @@ local BeginnerRules = require(script.Parent.BeginnerRules)
 local InfosRules = require(script.Parent.Parent.Parent.ui.InfosRules)
 local LocalSettings = require(script.Parent.Parent.settings.LocalSettings)
 local TrainingClient = require(script.Parent.TrainingClient)
+local HighlightPlayer = require(script.Parent.Parent.highlight.HighlightPlayer)
+local HighlightClipRules = require(Shared:WaitForChild("HighlightClipRules"))
 
 -- PlayerDied et Humanoid.Died arrivent dans un ordre quelconque : l'info du tueur reste applicable ce temps-là (s)
 local DEATH_INFO_TTL = 1
@@ -155,6 +157,10 @@ local function setState(newState: State)
 	if newState ~= "DEAD" then
 		-- Réapparition, menu ou fin de round : la caméra revient à FPSCamera ou au menu
 		DeathCamera.stop()
+	end
+	if newState ~= "RESULT" then
+		-- Clip de la partie (#499) : ne survit pas à la phase de résultat (menu, manche suivante)
+		HighlightPlayer.stop()
 	end
 	if newState == "MENU" or newState == "SPAWNING" then
 		-- Corps de la manche finie retirés aussi quand elle s'enchaîne sans passer par le menu (#300)
@@ -452,7 +458,7 @@ local function listenToRemotes()
 		RoundHUD.updateScores(scores)
 	end)
 
-	-- RoundResult : { outcome, winnerId, scores } (#295), lu par HUDRules.readRoundResult
+	-- RoundResult : { outcome, winnerId, scores, clip? } (#295, #499), lu par HUDRules.readRoundResult
 	local roundResultRmt = NetworkProtocol.getRemote(N.ROUND_RESULT)
 	roundResultRmt.OnClientEvent:Connect(function(data: any)
 		-- Hors partie (menu, infos, spawn en cours), ignorer : RESULT bloquerait la promotion vers IN_ROUND (#110)
@@ -466,15 +472,25 @@ local function listenToRemotes()
 		setState("RESULT")
 		RoundHUD.show()
 		RoundHUD.showResult(data)
-		-- Fin de la bannière : enchaînement sur la manche suivante sans repasser par le menu (#300). Le serveur repasse
-		-- idle après le même RESULT_DURATION, compté avant la réception : une demande un peu en avance reçoit "result" et
-		-- est renvoyée (SpawnRequestRules.RESULT_RETRY) ; la première acceptée démarre la manche (beforeSpawn).
+		-- Fin de la bannière, puis clip de la partie s'il y en a un (#499), joué une fois sans pouvoir passer :
+		-- enchaînement sur la manche suivante sans repasser par le menu (#300). Le serveur repasse idle après la même
+		-- durée (HighlightClipRules.resultDuration), comptée avant la réception : une demande un peu en avance reçoit
+		-- "result" et est renvoyée (SpawnRequestRules.RESULT_RETRY) ; la première acceptée démarre la manche (beforeSpawn).
+		local clip = HighlightClipRules.readClip(data and data.clip)
+		-- Cette méthode permet d'enchaîner sur la manche suivante lorsque la bannière (et le clip) est finie.
+		local function afterResult()
+			if SpawnRequestRules.afterResult(state) == "SPAWNING" then
+				startSpawnRequest()
+			end
+		end
 		resultTimer = task.delay(GameConfig.RESULT_DURATION, function()
 			resultTimer = nil
 			RoundHUD.hideResult()
 			RoundHUD.hide()
-			if SpawnRequestRules.afterResult(state) == "SPAWNING" then
-				startSpawnRequest()
+			if clip and state == "RESULT" then
+				HighlightPlayer.play(clip, afterResult)
+			else
+				afterResult()
 			end
 		end)
 	end)
