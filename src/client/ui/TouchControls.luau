@@ -39,8 +39,9 @@ local function toRoot(position: Vector3): Vector2
 end
 
 -- Cette méthode permet d'actionner l'arme en main (tir) lorsque le bouton TIR est touché ; WeaponSystem décide si elle
--- peut tirer (Tool.Activated, comme le clic gauche et R2).
+-- peut tirer (Tool.Activated, comme le clic gauche et R2), puis répète le tir tant que le bouton est tenu (#473).
 local function fire()
+	InputModule.setTouchPointer("fire", true)
 	local character = Players.LocalPlayer.Character
 	local tool = character and character:FindFirstChildOfClass("Tool")
 	if tool then
@@ -212,6 +213,8 @@ local function update()
 		for _, action in { "jump", "crouch" } do
 			InputModule.setTouchAction(action :: any, false)
 		end
+		InputModule.setTouchPointer("fire", false)
+		InputModule.setTouchPointer("aim", false)
 		RoundHUD.setTouchScoreboard(false)
 	end
 	gui.Enabled = show
@@ -237,7 +240,9 @@ function TouchControls.init()
 	buildStick()
 	buildLook()
 	-- Grappe d'actions à droite, à mi-hauteur (la barre d'armes et les munitions occupent le bas à droite)
-	button("TIR", UDim2.new(1, -110, 0.5, 40), 100, fire)
+	button("TIR", UDim2.new(1, -110, 0.5, 40), 100, fire, function()
+		InputModule.setTouchPointer("fire", false)
+	end)
 	button("SAUT", UDim2.new(1, -230, 0.5, 110), 76, function()
 		InputModule.setTouchAction("jump", true)
 	end, function()
@@ -248,7 +253,11 @@ function TouchControls.init()
 	end, function()
 		InputModule.setTouchAction("crouch", false)
 	end)
-	button("VISÉE", UDim2.new(1, -120, 0.5, -70), 60, InputModule.pressAim)
+	button("VISÉE", UDim2.new(1, -120, 0.5, -70), 60, function()
+		InputModule.setTouchPointer("aim", true)
+	end, function()
+		InputModule.setTouchPointer("aim", false)
+	end)
 	button("RECH.", UDim2.new(1, -40, 0.5, -90), 54, function()
 		InputModule.setTouchAction("reload", true)
 	end, function()

@@ -45,6 +45,9 @@ WeaponConfig.Weapons = {
 		ScopeFov1 = 40,
 		ScopeFov2 = 10,
 		ScopeTweenTime = 0.1,
+		-- Clic droit tenu : la lunette passe au zoom suivant toutes les 0,3 s (délai entre deux zooms de CS:GO), en boucle
+		-- (#473) ; des clics successifs ne sont pas bornés par ce délai.
+		ScopeRepeatDelay = 0.3,
 		-- Modèle 3e personne (#5, #107) : échelle du clone du viewmodel, grip (CFrame de la poignée dans le
 		-- repère de la main) et tenue du haut du corps (cf. WeaponThirdPerson.POSES).
 		-- Tenue F1 : main droite sur la poignée pistolet (grip généré par tools/anim/poses3p/export_pose.js) ;
