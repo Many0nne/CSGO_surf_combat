@@ -1,7 +1,7 @@
 {
  "Head": {
   "Head": {
-   "Color": "rbxassetid://127042808116523",
+   "Color": "rbxassetid://110057159762263",
    "Metal": "rbxassetid://116852024242673",
    "Normal": "rbxassetid://126456530855783",
    "Rough": "rbxassetid://109236812604009"
@@ -9,9 +9,9 @@
  },
  "R15": {
   "LeftArm": {
-   "Color": "rbxassetid://109330721455313",
+   "Color": "rbxassetid://101622813961192",
    "Metal": "rbxassetid://116852024242673",
-   "Normal": "rbxassetid://112517238351369",
+   "Normal": "rbxassetid://101516626191436",
    "Rough": "rbxassetid://109236812604009"
   },
   "LeftLeg": {
@@ -21,9 +21,9 @@
    "Rough": "rbxassetid://109236812604009"
   },
   "RightArm": {
-   "Color": "rbxassetid://70590419322112",
+   "Color": "rbxassetid://107208756744624",
    "Metal": "rbxassetid://116852024242673",
-   "Normal": "rbxassetid://112063650108373",
+   "Normal": "rbxassetid://121055959672479",
    "Rough": "rbxassetid://109236812604009"
   },
   "RightLeg": {

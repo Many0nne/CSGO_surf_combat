@@ -761,10 +761,15 @@ Fabrication (MERCURE, `assets/outfits/mercure/`) :
    `insert_asset`, PackageLink retiré), puis `lune run tools/rbxm/receive.luau Outfits` et `studio_export.luau` avec
    `ONLY = "Outfits"` ; détruire ensuite la copie faite à la main (Rojo recrée la sienne depuis le `.rbxm`).
 
-Coque de la tête de MERCURE : cylindre arrondi de 2,06 × 1,78 studs (`assets/outfits/mercure/MercureHead.fbx`, publié
-en Model 138978829357129), carte de couleur cuite dans Blender (bandes du reflet, hauteur du point). La tête du rig,
-cachée dessous, reste la zone de headshot ; la coque dépasse de 0,1 stud vers le haut et n'arrête aucun tir (mesuré :
-rayon au centre de la tête → `Head`, rayon à +0,85 stud → rien).
+Coque de la tête de MERCURE : le mesh de la tête classique de Roblox (`content/avatar/heads/head.mesh` de
+l'installation de Studio, celui du `SpecialMesh` de type Head), à la taille où le rig l'affiche : 1,2 unité × 1,25
+(échelle du `SpecialMesh`) × 1,588 (taille de la pièce) / 1,2, soit 1,98 × 1,99 × 1,98 studs
+(`assets/outfits/mercure/MercureHead.fbx`, publié en Model 92982065353684). Carte de couleur cuite dans Blender
+(bandes du reflet selon la hauteur du point), sur un dépliage cylindrique refait (les UV d'origine de la tête,
+faites pour le visage, envoient l'arrière sur un bord : bandes noires). **Piège :** une première coque dessinée à la main (cylindre arrondi
+2,06 × 1,78) donnait une tête écrasée et élargie, refusée : partir du mesh d'origine. La tête du rig, cachée dessous,
+reste la zone de headshot ; la coque n'arrête aucun tir (mesuré : rayon au centre de la tête → `Head`, rayon au-dessus
+de la boîte de la tête → rien).
 
 **Pièges :**
 
@@ -780,6 +785,14 @@ rayon au centre de la tête → `Head`, rayon à +0,85 stud → rien).
 - **Studio garde l'échec d'une image tout juste publiée** (`AssetFetchStatus.Failure`), même une fois approuvée : il
   faut une autre id ou relancer Studio. Laisser une minute entre la publication et l'essai.
 - **Le visage du rig est retiré, pas caché**, sous une coque : le clip de fin remet la transparence des Decals à 0.
+- **Les pièces du rig s'emboîtent aux articulations** : le bas du bras et le haut de l'avant-bras (comme genou,
+  poignet) portent un bout plus étroit qui entre dans la pièce voisine. Gris uni, c'est invisible ; avec deux dessins
+  différents, le pli du coude du viewmodel montre une coupe nette (vu en jeu, 18/11/2026). Le dessin s'efface donc près
+  des articulations (`r15_bake.joint_fade`, bloc principal relevé dans chaque mesh) et les membres ne se bombent qu'en
+  largeur, pour que les deux bouts d'un pli aient le même reflet. Pas de doigts dessinés sur les mains (jugés laids).
+  Dans le viewmodel, le bras est si plié que les blocs se croisent bien au-delà de cette zone : les bras de la
+  1re personne prennent une variante sans muscles (`--variant viewmodel --groups LeftArm,RightArm`, cartes publiées
+  dans `maps/viewmodel`, sous-dossier `Viewmodel` de la tenue, lu par `CharacterAppearance.dressArms`).
 
 **Pistes rejetées :** corps humain réaliste (extension MPFB de Blender) calé sur les articulations du rig : jambes
 courtes et épaules de gorille, le rig en blocs place hanches à 40 % et épaules très larges ; passer à un rig aux

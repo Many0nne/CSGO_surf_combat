@@ -1,0 +1,16 @@
+{
+ "R15": {
+  "LeftArm": {
+   "Color": "rbxassetid://120437601138105",
+   "Metal": "rbxassetid://116852024242673",
+   "Normal": "rbxassetid://95912752200446",
+   "Rough": "rbxassetid://109236812604009"
+  },
+  "RightArm": {
+   "Color": "rbxassetid://139523139866023",
+   "Metal": "rbxassetid://116852024242673",
+   "Normal": "rbxassetid://86524466609559",
+   "Rough": "rbxassetid://109236812604009"
+  }
+ }
+}

@@ -159,15 +159,18 @@ function CharacterAppearance.outfitOf(model: Instance): string?
 end
 
 -- Cette méthode permet de poser sur les bras d'un viewmodel (1re personne) les cartes de la tenue (#521) lorsque l'arme
--- est équipée ; les pièces des bras portent les noms et les meshs du rig (LeftUpperArm…). nil : bras d'origine.
+-- est équipée ; les pièces des bras portent les noms et les meshs du rig (LeftUpperArm…). Une tenue peut leur donner
+-- des cartes à part (sous-dossier `Viewmodel` : bras très pliés, où un dessin du corps se coupe au coude). nil : bras
+-- d'origine.
 function CharacterAppearance.dressArms(viewmodel: Instance, outfitId: string?)
 	local item = outfitId and InventoryRules.item(outfitId)
 	local folder = ReplicatedStorage:FindFirstChild("Outfits")
-	local source = item
+	local outfit = item
 		and item.type == InventoryRules.Type.OUTFIT
 		and item.appearance
 		and folder
 		and folder:FindFirstChild(item.appearance)
+	local source = outfit and (outfit:FindFirstChild("Viewmodel") or outfit)
 	for _, part in viewmodel:GetDescendants() do
 		if part:IsA("BasePart") and ARM_PARTS[part.Name] then
 			for _, old in part:GetChildren() do
