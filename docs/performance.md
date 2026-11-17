@@ -165,6 +165,12 @@ rejeu les réinjecte au début de chaque tick (`MovementController.setTickHook`)
 - Fichiers : `src/client/debug/PerfRecorder.luau`, `src/client/debug/PerfReplay.luau`, règles et format testés dans
   `src/shared/PerfRouteRules.luau`, pistes dans `src/client/debug/routes/<Nom>.luau`, extraction par
   `tools/perf/write_route.luau`.
+- **Tir et visée tenus (#485)** : depuis #473, maintenir le clic répète le tir par `WeaponSystem` (Heartbeat), sans
+  `Tool.Activated`. L'enregistreur note donc par tick `InputModule.isPointerHeld("fire"/"aim")` dans le masque des
+  touches (bits 1024 et 2048), en plus des `Tool.Activated` (colonne `tirs`). Le rejeu les pose par la source
+  virtuelle (`applyVirtual`) et appelle toujours `tool:Activate()` pour les `Tool.Activated` notés : un clic simple ne
+  tire pas deux fois, `FireDelay` borne `WeaponSystem`. Une piste d'avant #485 n'a pas ces bits : rien n'est tenu, mais
+  ses tirs tenus manquent (seul le premier est noté), à réenregistrer pour mesurer la charge des tirs.
 - Une piste contient aussi un **point de contrôle par seconde** (position, vitesse), un à chaque réapparition
   (vitesse nulle : au premier tick du nouveau personnage, `getVelocity` rend encore celle du mort) et un à chaque saut
   de position de plus de `TELEPORT_JUMP` (16 studs) en un tick. Au rejeu, l'écart avec le point de contrôle est

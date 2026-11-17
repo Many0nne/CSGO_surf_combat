@@ -9,7 +9,8 @@
 --   C x y z vx vy vz lacet tangage arme   point de contrôle, état au début du tick suivant (centièmes de stud,
 --                                         millièmes de degré ; arme = nom du Tool tenu, « - » si aucun)
 --   E arme                                changement d'arme avant le tick suivant
---   touches dlacet dtangage [tirs]        un tick : masque des touches, écarts d'angle avec le tick précédent
+--   touches dlacet dtangage [tirs]        un tick : masque des touches (dont tir tenu 1024 et visée tenue 2048, #485),
+--                                         écarts d'angle avec le tick précédent ; tirs = Tool.Activated du tick
 --   x<n>                                  la ligne de tick précédente répétée n fois de plus
 
 local PerfRouteRules = {}
@@ -34,6 +35,9 @@ PerfRouteRules.KEYS = {
 	jump = 16,
 	crouch = 32,
 	walk = 64,
+	-- Tir et visée tenus (#485) : bits ajoutés sans changer le format, un ancien parcours les lit à zéro (non tenus)
+	fire = 1024,
+	aim = 2048,
 }
 PerfRouteRules.PRESSES = {
 	jump = 128,
