@@ -170,9 +170,24 @@ function ShopCatalog.contents(crate: Crate, items: { any }): { Row }
 	return rows
 end
 
+-- Cette méthode permet de lire une rareté par son id lorsqu'un item la déclare lui-même (tenue de personnage, #521) ;
+-- nil si l'id est inconnu.
+function ShopCatalog.rarity(id: string?): Rarity?
+	for _, rarity in ShopCatalog.RARITIES do
+		if rarity.id == id then
+			return rarity
+		end
+	end
+	return nil
+end
+
 -- Cette méthode permet de lire la rareté d'un skin (item `skin` de InventoryRules.ITEMS) lorsque l'inventaire la montre :
 -- celle de la caisse de son arme qui le contient, sinon celle de la réserve ; nil pour un skin ni en caisse ni en réserve.
-function ShopCatalog.rarityOf(skin: { weapon: string?, appearance: string? }): Rarity?
+-- Une tenue (#521) déclare la sienne (`rarity`).
+function ShopCatalog.rarityOf(skin: { weapon: string?, appearance: string?, rarity: string? }): Rarity?
+	if skin.rarity then
+		return ShopCatalog.rarity(skin.rarity)
+	end
 	if not (skin.weapon and skin.appearance) then
 		return nil
 	end

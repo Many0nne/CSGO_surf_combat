@@ -166,12 +166,16 @@ end
 -- honnête ne soit jamais pris pour un tricheur.
 RemoteGuard.FEEDBACK_MAX_BYTES = 1000
 
+-- Emplacements acceptés par EquipItem : ceux des armes, puis la tenue de personnage (#521)
+local EQUIP_SLOTS = table.clone(InventoryRules.SLOTS) :: { string }
+table.insert(EQUIP_SLOTS, InventoryRules.OUTFIT_SLOT)
+
 -- Débits calibrés pour qu'un client honnête ne les atteigne jamais (rafale réseau comprise), cf. docs/anticheat.md :
 -- - MeleeDamage : couteau 0,4 s mini (2,5/s) ; HitscanDamage et ShotFired : AWP 1,455 s (0,7/s) ; WeaponAction : un Shoot par coup
 --   de couteau (#215 : plus par tir), un Reload par chargeur ; CharacterSync : 20 Hz, paquets regroupés après une coupure réseau ;
 --   RequestSpawn : clic du menu ; LeaveRound : clic MENU PRINCIPAL du menu en partie ;
 --   SendFeedback : clic ENVOYER ; SaveSettings : 1 envoi par seconde au plus (LocalSettings) ; GetSettings : une
---   demande au démarrage du client ; EquipItem : un clic sur une arme ou un skin de l'accueil (#280) ; OpenCrate : un
+--   demande au démarrage du client ; EquipItem : un clic sur une arme, un skin ou une tenue de l'accueil (#280, #521) ; OpenCrate : un
 --   clic sur OUVRIR, l'animation d'ouverture dure plusieurs secondes (#332) ; BuyCrate : un clic sur ACHETER, suivi de la
 --   même animation (#393) ; BuyCreditPack : un clic sur un pack, suivi du prompt Roblox (#395) ; HighlightPov : une
 --   réponse par kill record de la partie, demandée par le serveur au plus une fois par seconde (#499) ; AnalyticsScreen :
@@ -252,12 +256,13 @@ RemoteGuard.RULES = {
 	[N.ANALYTICS_SCREEN] = { rate = 3, burst = 6, args = { RemoteGuard.enum(AnalyticsRules.SCREENS) } },
 	[N.SAVE_SETTINGS] = { rate = 2, burst = 5, args = { RemoteGuard.table() } },
 	[N.GET_SETTINGS] = { rate = 0.2, burst = 3, args = {} },
-	-- Emplacement, id de l'arme, id du skin ("" : d'origine) ; possession et cohérence vérifiées par InventoryRules.equip
+	-- Emplacement (armes, ou tenue #521), id de l'arme ou de la tenue ("" : d'origine), id du skin ("" : d'origine) ;
+	-- possession et cohérence vérifiées par InventoryRules.equip
 	[N.EQUIP_ITEM] = {
 		rate = 3,
 		burst = 8,
 		args = {
-			RemoteGuard.enum(InventoryRules.SLOTS),
+			RemoteGuard.enum(EQUIP_SLOTS),
 			RemoteGuard.string(InventoryRules.MAX_ID_LENGTH),
 			RemoteGuard.string(InventoryRules.MAX_ID_LENGTH),
 		},

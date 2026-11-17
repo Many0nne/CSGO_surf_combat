@@ -3,7 +3,8 @@
 -- « ÉQUIPEMENT » puis l'emplacement actif et son étiquette, rendu de l'arme montrée, son nom avec « ÉQUIPÉ », onglets
 -- des emplacements, grille de cartes qui défile à la molette (armes possédées, puis skins de l'arme équipée). Survoler
 -- une carte la montre, cliquer l'équipe (remote EquipItem, l'écran suit la réponse du serveur). Seuls les items
--- possédés apparaissent.
+-- possédés apparaissent. Dernier onglet, TENUE (#521) : tenues de personnage possédées, en portrait ; le personnage de
+-- l'accueil porte la tenue survolée ou équipée (MenuScene.previewOutfit), la tenue s'achète au shop.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
@@ -61,11 +62,13 @@ local SCROLL_STEP = CARD_SIZE.Y + CARD_GAP -- une rangée par cran de molette qu
 local PREVIEW_POSITION = Vector2.new(330, 76) -- rendu de l'arme montrée, à droite du titre
 local PREVIEW_SIZE = Vector2.new(470, 210)
 local SHOW_PREVIEW = true
-local SLOT_LABELS = { sniper = "SNIPER", knife = "COUTEAU" }
+local SLOT_LABELS = { sniper = "SNIPER", knife = "COUTEAU", outfit = "TENUE" }
+local OUTFIT_TAB = #InventoryRules.SLOTS + 1 -- onglet de la tenue de personnage (#521), après ceux des armes
 local SCRIM_SIZE = Vector2.new(1100, 760) -- fond de coin sous la grille et le titre (décor clair possible)
 local SCRIM_SHOWN = 0.2
 
-type Hover = { tool: string, skin: string? }
+-- Carte survolée : arme et skin, ou tenue (#521, `outfit` nil : tenue d'origine) dans l'onglet TENUE
+type Hover = { tool: string?, skin: string?, outfit: string? }
 -- Texte à largeur automatique doublé de son ombre, pour une ligne qui enchaîne texte et étiquette
 type Flow = { set: (string, { [string]: any }?) -> (), bind: (() -> string) -> (), label: TextLabel }
 
@@ -229,9 +232,69 @@ local function tagTextColor(color: Color3): Color3
 	return if brightness > 0.55 then C.Ground else C.Bone
 end
 
+-- Cette méthode permet de nommer une tenue (nom du catalogue, « D'ORIGINE » sans tenue) lorsqu'une carte ou la ligne de
+-- nom l'affiche.
+local function outfitTitle(outfitId: string?): string
+	local item = outfitId and InventoryRules.item(outfitId)
+	return if item and item.name then item.name else "D'ORIGINE"
+end
+
+-- Cette méthode permet de lire la rareté d'une tenue (nil pour la tenue d'origine) lorsqu'une carte ou la ligne de nom
+-- la montre.
+local function outfitRarity(outfitId: string?): ShopCatalog.Rarity?
+	local item = outfitId and InventoryRules.item(outfitId)
+	return if item then ShopCatalog.rarityOf(item) else nil
+end
+
+-- Cette méthode permet de donner la tenue montrée (carte survolée, sinon tenue équipée) et de dire si elle est équipée,
+-- lorsque l'onglet TENUE met à jour sa ligne de nom et le personnage.
+local function shownOutfit(): (string?, boolean)
+	local equippedOutfit = InventoryRules.outfitOf(LocalInventory.equipped())
+	if hover then
+		return hover.outfit, hover.outfit == equippedOutfit
+	end
+	return equippedOutfit, true
+end
+
+-- Cette méthode permet de poser la ligne de nom (étiquette de rareté, « ÉQUIPÉ » ou « CLIC POUR ÉQUIPER ») selon ce
+-- qui est montré, lorsque l'en-tête d'un onglet d'arme ou de l'onglet TENUE se met à jour.
+local function paintStatus(visible: boolean, isEquipped: boolean, rarity: ShopCatalog.Rarity?)
+	statusTag.Visible = visible
+	Locale.apply(statusTag, if isEquipped then "ÉQUIPÉ" else "CLIC POUR ÉQUIPER")
+	statusTag.BackgroundTransparency = if isEquipped then 0 else 1
+	statusStroke.Enabled = not isEquipped
+	rarityTag.Visible = rarity ~= nil
+	if rarity then
+		local color = Color3.fromRGB(rarity.color[1], rarity.color[2], rarity.color[3])
+		Locale.apply(rarityTag, rarity.label)
+		rarityTag.BackgroundColor3 = color
+		rarityTag.TextColor3 = tagTextColor(color)
+	end
+end
+
+-- Cette méthode permet de mettre à jour l'en-tête de l'onglet TENUE (#521) : nom et rareté de la tenue montrée, pas de
+-- rendu d'arme, et le personnage de l'accueil qui la porte.
+local function paintOutfitHeader()
+	slotTitle.set(slotLabel(InventoryRules.OUTFIT_SLOT))
+	Locale.apply(slotTag, "EMPLACEMENT {n}", { n = OUTFIT_TAB })
+	local outfit, isEquipped = shownOutfit()
+	weaponName.bind(function()
+		return Locale.t(outfitTitle(outfit))
+	end)
+	paintStatus(true, isEquipped, outfitRarity(outfit))
+	Locale.apply(category, "PERSONNAGE")
+	Locale.apply(categoryShadow, "PERSONNAGE")
+	showPreview(nil, nil)
+	MenuScene.previewOutfit(outfit)
+end
+
 -- Cette méthode permet de mettre à jour le titre, la ligne de nom (« ÉQUIPÉ » plein en rouge d'impact, sinon « CLIC POUR
 -- ÉQUIPER » en contour), le rendu et l'arme du personnage lorsque le survol, l'emplacement ou l'équipement change.
 local function paintHeader()
+	if selectedSlot == OUTFIT_TAB then
+		paintOutfitHeader()
+		return
+	end
 	local slotName = InventoryRules.SLOTS[selectedSlot]
 	slotTitle.set(if slotName then slotLabel(slotName) else "")
 	Locale.apply(slotTag, "EMPLACEMENT {n}", { n = selectedSlot })
@@ -243,18 +306,7 @@ local function paintHeader()
 	else
 		weaponName.set("")
 	end
-	statusTag.Visible = tool ~= nil
-	Locale.apply(statusTag, if isEquipped then "ÉQUIPÉ" else "CLIC POUR ÉQUIPER")
-	statusTag.BackgroundTransparency = if isEquipped then 0 else 1
-	statusStroke.Enabled = not isEquipped
-	local rarity = tool and skinRarity(skin)
-	rarityTag.Visible = rarity ~= nil
-	if rarity then
-		local color = Color3.fromRGB(rarity.color[1], rarity.color[2], rarity.color[3])
-		Locale.apply(rarityTag, rarity.label)
-		rarityTag.BackgroundColor3 = color
-		rarityTag.TextColor3 = tagTextColor(color)
-	end
+	paintStatus(tool ~= nil, isEquipped, if tool then skinRarity(skin) else nil)
 	local cfg = tool and WeaponConfig.Weapons[tool]
 	local text = if cfg and cfg.Category then string.upper(cfg.Category) else ""
 	Locale.apply(category, text)
@@ -291,6 +343,7 @@ end
 -- Cette méthode permet de poser une carte de la grille (silhouette, nom, coche et trait rouge d'impact sur l'équipée)
 -- lorsque la grille se construit ; survoler la carte montre l'arme (titre, rendu, personnage), cliquer l'équipe.
 -- `textured` (cartes de skins, #268) : mini-rendu de l'arme habillée de son skin au lieu de la silhouette plate.
+-- `portrait` (cartes de tenues, #521) : buste du personnage habillé de la tenue `item.outfit`.
 local function card(
 	x: number,
 	y: number,
@@ -298,7 +351,8 @@ local function card(
 	item: Hover,
 	equipped: boolean,
 	action: () -> (),
-	textured: boolean?
+	textured: boolean?,
+	portrait: boolean?
 )
 	local button = UIKit.create("TextButton", {
 		Name = "Card" .. text,
@@ -314,7 +368,7 @@ local function card(
 	local stroke = UIKit.stroke(button, C.Bone, 1)
 	local restStroke = if equipped then 0.1 else 0.7
 	stroke.Transparency = restStroke
-	local rarity = if textured then skinRarity(item.skin) else nil
+	local rarity = if portrait then outfitRarity(item.outfit) elseif textured then skinRarity(item.skin) else nil
 	local iconSize, iconTop = CARD_ICON, 12
 	if rarity then
 		local color = Color3.fromRGB(rarity.color[1], rarity.color[2], rarity.color[3])
@@ -343,12 +397,21 @@ local function card(
 		Size = UDim2.fromOffset(iconSize.X, iconSize.Y),
 		Parent = button,
 	})
-	-- Carte d'arme : silhouette plate teintée ; carte de skin : l'arme habillée de ce skin, sans teinte
-	local silhouette =
-		UIKit.weaponSilhouette(icon, viewmodelOf(item.tool), iconSize.X / iconSize.Y, textured, item.skin)
+	-- Carte d'arme : silhouette plate teintée ; carte de skin : l'arme habillée de ce skin, sans teinte ; carte de tenue :
+	-- portrait du personnage habillé
+	local silhouette = if portrait
+		then UIKit.outfitPortrait(icon, item.outfit, iconSize.X / iconSize.Y)
+		else UIKit.weaponSilhouette(
+			icon,
+			viewmodelOf(item.tool or ""),
+			iconSize.X / iconSize.Y,
+			textured,
+			item.skin
+		)
 	local restColor = if equipped then C.Bone else C.TextSoft
-	local iconRest = if textured then C.White else restColor
-	local iconHover = if textured then C.White else C.Bone
+	local plain = textured or portrait
+	local iconRest = if plain then C.White else restColor
+	local iconHover = if plain then C.White else C.Bone
 	silhouette.ImageColor3 = iconRest
 	local label = UIKit.shadowedText(button, {
 		Name = "Name",
@@ -416,9 +479,45 @@ local function fillRow(count: number, y: number)
 	end
 end
 
+-- Cette méthode permet de poser les cartes de l'onglet TENUE (#521) : tenue d'origine puis tenues possédées ; renvoie
+-- la hauteur occupée.
+local function fillOutfits(): number
+	local owned = LocalInventory.owned()
+	local equippedOutfit = InventoryRules.outfitOf(LocalInventory.equipped())
+	local list: { { id: string? } } = { { id = nil } }
+	for _, outfit in InventoryRules.outfits() do
+		if owned[outfit.id] then
+			table.insert(list, { id = outfit.id })
+		end
+	end
+	local step = CARD_SIZE.X + CARD_GAP
+	local y = 0
+	for i, entry in list do
+		local outfitId = entry.id
+		y = ((i - 1) // COLUMNS) * (CARD_SIZE.Y + CARD_GAP)
+		card(
+			((i - 1) % COLUMNS) * step,
+			y,
+			outfitTitle(outfitId),
+			{ outfit = outfitId },
+			outfitId == equippedOutfit,
+			function()
+				LocalInventory.equip(InventoryRules.OUTFIT_SLOT, outfitId or "", nil)
+			end,
+			nil,
+			true
+		)
+	end
+	fillRow(#list, y)
+	return y + CARD_SIZE.Y
+end
+
 -- Cette méthode permet de poser les cartes (armes possédées de l'emplacement actif, puis skins possédés de son arme
 -- équipée) lorsque la grille se reconstruit ; renvoie la hauteur occupée, pour la zone défilante.
 local function fillGrid(): number
+	if selectedSlot == OUTFIT_TAB then
+		return fillOutfits()
+	end
 	local slotName = InventoryRules.SLOTS[selectedSlot]
 	if not slotName then
 		return 0
@@ -511,6 +610,9 @@ local function selectSlot(index: number)
 		scroller.CanvasPosition = Vector2.zero
 	end
 	selectedSlot = index
+	if index ~= OUTFIT_TAB then
+		MenuScene.endOutfitPreview() -- hors de l'onglet TENUE, le personnage porte la tenue équipée
+	end
 	rebuildGrid()
 	paintTabs()
 	paintHeader()
@@ -599,7 +701,9 @@ function EquipmentScreen.build(root: Frame, column: Frame, stats: GuiObject, res
 		Padding = UDim.new(0, TAB_GAP),
 		Parent = tabRow,
 	})
-	for index, slotName in InventoryRules.SLOTS do
+	local tabSlots = table.clone(InventoryRules.SLOTS) :: { string }
+	table.insert(tabSlots, InventoryRules.OUTFIT_SLOT) -- TENUE (#521), après les armes
+	for index, slotName in tabSlots do
 		tabChoices[index] = MenuShot.boxChoice({
 			text = string.format("%d  ·  %s", index, slotLabel(slotName)),
 			layoutOrder = index,
@@ -650,7 +754,7 @@ function EquipmentScreen.onInput(input: InputObject)
 	elseif input.KeyCode == Enum.KeyCode.ButtonR1 or input.KeyCode == Enum.KeyCode.ButtonL1 then
 		-- Manette (#276) : R1 / L1 passent à l'emplacement suivant / précédent, comme la barre d'armes en partie
 		local step = if input.KeyCode == Enum.KeyCode.ButtonR1 then 1 else -1
-		selectSlot((selectedSlot - 1 + step) % #InventoryRules.SLOTS + 1)
+		selectSlot((selectedSlot - 1 + step) % OUTFIT_TAB + 1)
 	end
 end
 

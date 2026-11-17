@@ -659,6 +659,10 @@ MapSelection.activate(workspace:FindFirstChild("Maps"), GameConfig.ACTIVE_MAP)
 -- Règles de la demande (déjà vivant, spawn en vol, bannière de fin, délai depuis la mort) : SpawnRules (#171)
 SpawnManager.init(spawnRmt, {
 	roundState = RoundManager.getState,
+	-- Tenue équipée (#521) : posée sur le personnage à son apparition, vue par tous
+	outfit = function(player)
+		return InventoryRules.outfitOf(InventoryStore.equipped(player))
+	end,
 	beforeSpawn = function(player)
 		-- Démarrer le round si idle (1er joueur à cliquer Play)
 		if RoundManager.getState() == "idle" then

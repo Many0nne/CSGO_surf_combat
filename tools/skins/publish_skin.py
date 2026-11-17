@@ -4,13 +4,15 @@ Chaque PNG de <dossier du skin>/<Viewmodel>/<PREFIXE>_<Carte>.png est publié en
 l'id de l'image contenue dans le Decal est lu par Asset Delivery (l'id du Decal lui-même ne s'affiche pas sur une
 SurfaceAppearance). Résultat dans <dossier du skin>/ids.json :
   { "<Viewmodel>": { "<PREFIXE>": { "Color": "rbxassetid://…", "Rough": …, "Metal": …, "Normal": … } } }
-Reprise : une carte déjà présente dans ids.json n'est pas republiée.
+Reprise : une carte déjà présente dans ids.json n'est pas republiée. Deux fichiers identiques (cartes uniformes d'une
+tenue, #521) ne sont publiés qu'une fois par lancement.
 
 Clé : ROBLOX_OPEN_CLOUD_KEY (scopes asset:read, asset:write et legacy-asset:manage pour Asset Delivery).
 Usage (depuis la racine du worktree) : uv run tools/skins/publish_skin.py <dossier du skin> <nom du skin>
 """
 
 import gzip
+import hashlib
 import json
 import os
 import re
@@ -53,6 +55,7 @@ if __name__ == "__main__":
 		raise SystemExit("[publish_skin] variable d'environnement ROBLOX_OPEN_CLOUD_KEY absente")
 	out_path = os.path.join(skin_dir, "ids.json")
 	ids = json.load(open(out_path)) if os.path.exists(out_path) else {}
+	published = {}  # empreinte d'un fichier publié pendant ce lancement -> id de son image
 	for vm in sorted(os.listdir(skin_dir)):
 		vdir = os.path.join(skin_dir, vm)
 		if not os.path.isdir(vdir):
@@ -64,8 +67,15 @@ if __name__ == "__main__":
 			prefix, kind = m.groups()
 			if ids.get(vm, {}).get(prefix, {}).get(kind):
 				continue
+			path = os.path.join(vdir, name)
+			digest = hashlib.sha256(open(path, "rb").read()).hexdigest()
+			if digest in published:
+				ids.setdefault(vm, {}).setdefault(prefix, {})[kind] = published[digest]
+				json.dump(ids, open(out_path, "w"), indent=1, sort_keys=True)
+				print(f"[publish_skin] {skin} {vm} {prefix} {kind} : même fichier, {published[digest]}", flush=True)
+				continue
 			res = subprocess.run(
-				["bash", "tools/publish_asset.sh", os.path.join(vdir, name), "Decal", f"CSGO_skin_{skin}_{vm}_{prefix}_{kind}"],
+				["bash", "tools/publish_asset.sh", path, "Decal", f"CSGO_skin_{skin}_{vm}_{prefix}_{kind}"],
 				capture_output=True,
 				text=True,
 			)
@@ -74,6 +84,7 @@ if __name__ == "__main__":
 			decal = res.stdout.strip().splitlines()[-1]
 			img = image_id(decal, key)
 			ids.setdefault(vm, {}).setdefault(prefix, {})[kind] = f"rbxassetid://{img}"
+			published[digest] = f"rbxassetid://{img}"
 			json.dump(ids, open(out_path, "w"), indent=1, sort_keys=True)  # une carte republiée garde sa place
 			print(f"[publish_skin] {skin} {vm} {prefix} {kind} : Decal {decal} -> image {img}", flush=True)
 	print(f"[publish_skin] {out_path}")

@@ -3,8 +3,9 @@
 -- via le MCP Studio (`execute_luau`, contexte plugin) ou la barre de commande (celle-ci exige
 -- Game Settings > Security > Allow HTTP Requests). Sérialise chaque viewmodel (ReplicatedStorage.ViewModels.*),
 -- chaque Tool (ReplicatedStorage.Tools.*), chaque map (Workspace.Maps.*) et chaque matière (MaterialService.*,
--- MaterialVariant des maps) et chaque prop (ReplicatedStorage.Props.*, caisse du shop) en .rbxm et les envoie au serveur
--- local, qui les écrit dans assets/rbx/<ViewModels|Tools|Maps|Materials|Props>/<Nom>.rbxm.
+-- MaterialVariant des maps), chaque prop (ReplicatedStorage.Props.*, caisse du shop) et chaque tenue de personnage
+-- (ReplicatedStorage.Outfits.*, #521) en .rbxm et les envoie au serveur local, qui les écrit dans
+-- assets/rbx/<ViewModels|Tools|Maps|Materials|Props|Outfits>/<Nom>.rbxm.
 -- Ne modifie rien dans la place.
 
 local HttpService = game:GetService("HttpService")
@@ -61,6 +62,7 @@ local ok, err = pcall(function()
 		{ "Maps", workspace:FindFirstChild("Maps"), "Model" },
 		{ "Materials", game:GetService("MaterialService"), "MaterialVariant" },
 		{ "Props", game:GetService("ReplicatedStorage"):FindFirstChild("Props"), "Model" },
+		{ "Outfits", game:GetService("ReplicatedStorage"):FindFirstChild("Outfits"), "Folder" },
 	}
 	for _, source in sources do
 		if not ONLY or ONLY == source[1] then

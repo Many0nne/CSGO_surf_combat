@@ -27,6 +27,8 @@ local away: { [Player]: boolean } = {}
 local rejoin: { [Player]: boolean } = {}
 -- État du round, branché par init (hooks.roundState) : une réapparition arrivée pendant la bannière est détruite (#300)
 local roundStateFn: (() -> string)? = nil
+-- Tenue équipée d'un joueur (#521, InventoryStore, branché par init) ; nil : tenue d'origine
+local outfitFn: ((Player) -> string?)? = nil
 -- Gravité d'un refus de RequestSpawn au journal ; "result" n'y va pas (Play cliqué pendant la bannière de fin, ou
 -- enchaînement automatique de la manche suivante, #300). "early" est moyen : notre client n'envoie RequestSpawn que
 -- depuis le menu, où un joueur mort en round ne revient pas, à la fin de la bannière (#300, round alors pas actif),
@@ -180,7 +182,7 @@ function SpawnManager.spawnPlayer(player: Player): boolean
 			char:Destroy()
 			return
 		end
-		CharacterAppearance.apply(char)
+		CharacterAppearance.apply(char, if outfitFn then outfitFn(player) else nil)
 		SpawnManager.place(char)
 	end)
 	-- Rig = StarterCharacter, skin appliqué dans CharacterAdded (#1).
@@ -250,14 +252,16 @@ function SpawnManager.withdraw(player: Player)
 end
 
 -- Cette méthode permet de brancher RequestSpawn lorsque le serveur démarre : garde commune, règles de réapparition
--- (SpawnRules.request, refus au journal), réponse au client (#219), puis beforeSpawn (démarrage du round) et apparition.
+-- (SpawnRules.request, refus au journal), réponse au client (#219), puis beforeSpawn (démarrage du round) et apparition,
+-- le personnage habillé de la tenue que donne `outfit` (#521).
 -- Une demande écartée par la garde commune (débit) reste sans réponse : le client la renvoie après un délai.
 function SpawnManager.init(
 	requestSpawnRemote: RemoteEvent,
-	hooks: { roundState: () -> string, beforeSpawn: (Player) -> () }
+	hooks: { roundState: () -> string, beforeSpawn: (Player) -> (), outfit: ((Player) -> string?)? }
 )
 	replyRemote = requestSpawnRemote
 	roundStateFn = hooks.roundState
+	outfitFn = hooks.outfit
 	requestSpawnRemote.OnServerEvent:Connect(function(player)
 		-- Garde commune (#170) : débit
 		if not CheatLog.admit(player, requestSpawnRemote.Name) then

@@ -7,11 +7,15 @@ local CasingEjection = require(script.Parent.CasingEjection)
 local TrackStop = require(script.Parent.TrackStop)
 local SoundChannels = require(script.Parent.Parent.settings.SoundChannels)
 local LocalInventory = require(script.Parent.Parent.inventory.LocalInventory)
+local CharacterAppearance = require(ReplicatedStorage.Shared.CharacterAppearance)
 local InventoryRules = require(ReplicatedStorage.Shared.InventoryRules)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 local WeaponSkins = require(ReplicatedStorage.Shared.WeaponSkins)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local SpringRules = require(ReplicatedStorage.Shared.SpringRules)
+
+-- Tenue dont les bras d'un viewmodel gardé en cache portent les cartes (#521) ; "" : bras d'origine
+local ARMS_OUTFIT_ATTRIBUTE = "ArmsOutfit"
 
 local ViewmodelSystem = {}
 
@@ -244,6 +248,12 @@ local function equipTool(tool: Tool)
 	local skinId = InventoryRules.skinOfTool(LocalInventory.equipped(), tool.Name)
 	if not WeaponSkins.isApplied(activeViewmodel, viewmodelName, skinId) then
 		WeaponSkins.apply(activeViewmodel, viewmodelName, skinId)
+	end
+	-- Tenue équipée (#521) : les bras prennent les cartes du corps (mêmes pièces, mêmes meshs que le rig)
+	local outfitId = InventoryRules.outfitOf(LocalInventory.equipped())
+	if activeViewmodel:GetAttribute(ARMS_OUTFIT_ATTRIBUTE) ~= (outfitId or "") then
+		CharacterAppearance.dressArms(activeViewmodel, outfitId)
+		activeViewmodel:SetAttribute(ARMS_OUTFIT_ATTRIBUTE, outfitId or "")
 	end
 
 	local offset = tool:GetAttribute("ViewmodelOffset")

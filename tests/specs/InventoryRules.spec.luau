@@ -22,10 +22,13 @@ return function(T, Loader)
 				T.expect(Rules.isValidId(entry.id), "id valide : " .. tostring(entry.id))
 				T.expect(not seen[entry.id], "id unique : " .. entry.id)
 				seen[entry.id] = true
-				T.expect(entry.type == Rules.Type.WEAPON or entry.type == Rules.Type.SKIN, "type de " .. entry.id)
+				T.expect(
+					entry.type == Rules.Type.WEAPON or entry.type == Rules.Type.SKIN or entry.type == Rules.Type.OUTFIT,
+					"type de " .. entry.id
+				)
 				if entry.type == Rules.Type.WEAPON then
 					T.expect(type(entry.tool) == "string" and entry.tool ~= "", "arme avec son Tool : " .. entry.id)
-				else
+				elseif entry.type == Rules.Type.SKIN then
 					local weapon = entry.weapon and Rules.item(entry.weapon)
 					T.expect(
 						weapon ~= nil and weapon.type == Rules.Type.WEAPON,
@@ -48,6 +51,26 @@ return function(T, Loader)
 					T.expect(fs.isFile(path), "fichier de SurfaceAppearance " .. path)
 				end
 			end
+		end)
+
+		T.it("chaque tenue a un nom, une rareté, un prix et son apparence pour Rojo (#521)", function()
+			local fs = require("@lune/fs")
+			local ShopCatalog = Loader.new({}):require("src/shared/ShopCatalog")
+			local outfits = 0
+			for _, entry in Rules.ITEMS do
+				if entry.type == Rules.Type.OUTFIT then
+					outfits += 1
+					T.expect(type(entry.name) == "string" and entry.name ~= "", "nom de la tenue " .. entry.id)
+					T.expect(string.sub(entry.id, 1, 7) == "outfit.", "id en outfit.<nom> : " .. entry.id)
+					T.expect(entry.id ~= Rules.OUTFIT_NONE, "id réservé à la tenue d'origine : " .. entry.id)
+					T.expect(type(entry.price) == "number" and entry.price > 0, "prix de " .. entry.id)
+					T.expect(ShopCatalog.rarity(entry.rarity) ~= nil, "rareté connue de " .. entry.id)
+					local path = string.format("assets/rbx/Outfits/%s.rbxm", tostring(entry.appearance))
+					T.expect(fs.isFile(path), "apparence de la tenue " .. path)
+				end
+			end
+			T.expect(outfits > 0, "au moins une tenue (MERCURE)")
+			T.expectEqual(#Rules.outfits(), outfits)
 		end)
 
 		T.it("aucun skin n'est dans l'inventaire par défaut : ils viendront des caisses (#268)", function()
@@ -458,6 +481,86 @@ return function(T, Loader)
 				Rules.encodeEquipped({ sniper = { weapon = "weapon.awp", skin = "skin.awp.x" } }),
 				"weapon.awp:skin.awp.x,"
 			)
+		end)
+	end)
+
+	T.describe("InventoryRules : tenue de personnage (#521)", function()
+		local MERCURE = "outfit.mercure"
+
+		T.it("rien de choisi : tenue d'origine, et la tenue n'entre pas dans le sac", function()
+			local resolved = Rules.resolveEquipped(nil, Rules.resolve(nil, true))
+			T.expectEqual(Rules.outfitOf(resolved), nil)
+			T.expectEqual(table.concat(Rules.equippedTools(resolved), ","), "AWP,KaBar")
+		end)
+
+		T.it("équiper une tenue possédée (admin), refuser une tenue non possédée ou inconnue", function()
+			local admin = Rules.resolve(nil, true)
+			local equipped = Rules.equip({}, admin, Rules.OUTFIT_SLOT, MERCURE, nil)
+			T.expect(equipped ~= nil, "tenue possédée équipée")
+			local resolved = Rules.resolveEquipped(equipped, admin)
+			T.expectEqual(Rules.outfitOf(resolved), MERCURE)
+			T.expectEqual(table.concat(Rules.equippedTools(resolved), ","), "AWP,KaBar", "armes inchangées")
+			local none, reason = Rules.equip({}, Rules.resolve(nil, false), Rules.OUTFIT_SLOT, MERCURE, nil)
+			T.expectEqual(none, nil)
+			T.expectEqual(reason, "not_owned")
+			local _, unknown = Rules.equip({}, admin, Rules.OUTFIT_SLOT, "weapon.awp", nil)
+			T.expectEqual(unknown, "unknown", "une arme n'est pas une tenue")
+			local _, bad = Rules.equip({}, admin, Rules.OUTFIT_SLOT, 42, nil)
+			T.expectEqual(bad, "unknown")
+		end)
+
+		T.it(
+			"revenir à la tenue d'origine enregistre OUTFIT_NONE, qui l'emporte sur une tenue d'un autre serveur",
+			function()
+				local admin = Rules.resolve(nil, true)
+				local back = Rules.equip({ outfit = { weapon = MERCURE } }, admin, Rules.OUTFIT_SLOT, "", nil)
+				T.expectEqual(back and back.outfit and back.outfit.weapon, Rules.OUTFIT_NONE)
+				T.expectEqual(Rules.outfitOf(Rules.resolveEquipped(back, admin)), nil)
+				local old = { schemaVersion = 2, items = {}, equipped = { outfit = { weapon = MERCURE } } }
+				local record = Rules.mergeForSave(old, {}, { outfit = { weapon = Rules.OUTFIT_NONE } })
+				T.expectEqual(record and record.equipped and record.equipped.outfit.weapon, Rules.OUTFIT_NONE)
+			end
+		)
+
+		T.it("une tenue plus possédée laisse la place à l'origine sans effacer le choix enregistré", function()
+			local equipped = { outfit = { weapon = MERCURE } }
+			T.expectEqual(Rules.outfitOf(Rules.resolveEquipped(equipped, Rules.resolve(nil, false))), nil)
+			T.expectEqual(equipped.outfit.weapon, MERCURE)
+			T.expectEqual(Rules.sanitizeEquipped(equipped).outfit.weapon, MERCURE, "choix gardé à la sauvegarde")
+			T.expectEqual(Rules.sanitizeEquipped({ outfit = { weapon = "Pas Valide" } }).outfit, nil)
+		end)
+
+		T.it("une tenue choisie dans la session est sauvegardée, celle d'un autre serveur gardée sinon", function()
+			local old = { schemaVersion = 2, items = {}, equipped = { outfit = { weapon = MERCURE } } }
+			local kept = Rules.mergeForSave(old, {}, { sniper = { weapon = "weapon.awp" } })
+			T.expectEqual(kept and kept.equipped.outfit.weapon, MERCURE)
+			local chosen = Rules.mergeForSave(nil, {}, { outfit = { weapon = MERCURE } })
+			T.expectEqual(chosen and chosen.equipped.outfit.weapon, MERCURE)
+		end)
+
+		T.it("attribut : la tenue suit les emplacements d'armes, et un ancien attribut sans tenue se relit", function()
+			local admin = Rules.resolve(nil, true)
+			local resolved = Rules.resolveEquipped({ outfit = { weapon = MERCURE } }, admin)
+			local text = Rules.encodeEquipped(resolved)
+			T.expectEqual(text, "weapon.awp,weapon.kabar," .. MERCURE)
+			T.expectEqual(Rules.outfitOf(Rules.decodeEquipped(text, admin)), MERCURE)
+			T.expectEqual(Rules.encodeEquipped(Rules.resolveEquipped(nil, admin)), "weapon.awp,weapon.kabar")
+			T.expectEqual(Rules.outfitOf(Rules.decodeEquipped("weapon.awp,weapon.kabar", admin)), nil)
+			T.expectEqual(Rules.outfitOf(Rules.decodeEquipped(text, Rules.resolve(nil, false))), nil, "non possédée")
+		end)
+	end)
+
+	T.describe("InventoryRules.outfitForName (#521)", function()
+		T.it("un bot garde la même tenue, et les bots se partagent l'origine et les tenues", function()
+			T.expectEqual(Rules.outfitForName("Bot_Vega"), Rules.outfitForName("Bot_Vega"))
+			local seen = {}
+			for i = 1, 60 do
+				seen[Rules.outfitForName("Bot" .. i) or "origine"] = true
+			end
+			T.expect(seen.origine, "certains bots en tenue d'origine")
+			for _, outfit in Rules.outfits() do
+				T.expect(seen[outfit.id], "certains bots en " .. outfit.id)
+			end
 		end)
 	end)
 
