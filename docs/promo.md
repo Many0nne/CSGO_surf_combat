@@ -148,8 +148,10 @@ miniatures sur la page du jeu, et la plupart des gens la voient sans le son.
 
 **Décisions de l'utilisateur (17/11/2026) :** vrai gameplay monté, pas d'animation (c'est aussi ce qu'exige la
 modération) ; **16:9 seulement** (le vertical reste aux vidéos TikTok) ; **aucun texte ajouté** ; **musique du
-catalogue Roblox** sous les sons du jeu. Répartition comme pour TikTok : l'utilisateur tourne les plans d'après la liste
-ci-dessous, Claude monte, l'utilisateur publie.
+catalogue Roblox** sous les sons du jeu. **Pas d'OBS (même jour) :** filmer en jouant fait saccader le jeu sur le poste de
+l'utilisateur et lui fait rater ses mouvements. Il joue donc sans rien filmer, un enregistreur léger note ses meilleures
+actions dans les journaux de Roblox, et Claude les rejoue dans Studio pour les filmer (voir « Tournage par rejeu »).
+Claude monte, l'utilisateur publie.
 
 **Expliquer sans texte :** c'est l'interface du jeu qui parle (elle est autorisée). Le compteur de vitesse change de
 palier (`RUN`, `FAST`, `SURF`, `MACH`, `HUDRules.SPEED_TIERS`) et l'affichage des touches montre A et D enfoncées
@@ -163,7 +165,7 @@ Le meilleur moment ouvre la vidéo ; chaque plan dure 2 à 5 s, coupé sur l'act
 |---|---|---|
 | 0–3 s | P01 tir en vol | Accroche : on tue en plein saut, au sniper, au-dessus du vide |
 | 3–8 s | P02 surf | On glisse sur une rampe et on prend de la vitesse (le compteur passe à `SURF`) |
-| 8–11 s | P03 surfeur vu de loin | Ce qu'est le surf vu de l'extérieur (plan facultatif, remplacé par P05 s'il manque) |
+| 8–11 s | P03 surfeur vu de loin | Ce qu'est le surf vu de l'extérieur (une prise de surf rejouée vue de côté) |
 | 11–15 s | P04 bhop | Les sauts enchaînés font gagner de la vitesse (le compteur monte) |
 | 15–18 s | P05 air strafe | On tourne en l'air sans perdre de vitesse |
 | 18–21 s | P06 duel à la lunette | Combat : visée, tir, l'adversaire tombe (fil des éliminations) |
@@ -171,32 +173,62 @@ Le meilleur moment ouvre la vidéo ; chaque plan dure 2 à 5 s, coupé sur l'act
 | 23–27 s | P08 + P09 inspections | Les skins : AWP CISELURE, puis M9 CUIR DE CORDOUE |
 | 27–30 s | P10 sortie | Grand saut vers le soleil couchant au-dessus de la mer de nuages |
 
-### Liste de plans à tourner
+### Tournage par rejeu (pas d'OBS)
 
-**Réglages, une fois pour toutes :**
+Le jeu sait déjà rejouer à partir de données : parcours de mesure (`PerfRecorder`/`PerfReplay`, entrées de chaque tick,
+même trajectoire au rejeu, cf. `docs/performance.md` « Parcours rejoué »), démos de l'écran Apprendre (`DemoClipRules`,
+caméra, touches, vitesse) et clip de fin de partie (#499 : pistes de tous les personnages, tirs, armes, ragdolls,
+`HighlightPlayer`). La vidéo réunit ces briques :
 
-- Roblox en plein écran 1920×1080 ; graphismes réglés à la main au maximum (Échap > Paramètres > Mode graphique :
-  Manuel, curseur à fond). Chat Roblox fermé, pas de liste des joueurs ouverte.
-- OBS : 1920×1080, **60 i/s**, haute qualité (CQP/CRF 16 à 20 ou débit ≥ 40 Mb/s), son du jeu seul (ni micro, ni
-  Discord, ni notifications Windows).
-- En jeu : affichage des touches en « simple », champ de vision et viseur par défaut. AWP **CISELURE** et M9 **CUIR DE
-  CORDOUE** équipés. Jouer avec le compte propriétaire du jeu : il est admin d'office (`Roles`) et possède tout le
-  catalogue.
-- Une partie normale sur Dizzy, avec des bots ou d'autres joueurs comme adversaires.
-- Un fichier par prise, nommé `P<numéro>-<nom>-<prise>.mp4` (ex. `P01-tir-en-vol-3.mp4`). Plusieurs prises par plan :
-  le tri se fait au montage, inutile de couper soi-même. Dépôt : `worktrees/.rushes/525/` dans le dépôt principal, à
-  la main, ou un lien de partage.
+1. **L'utilisateur joue**, client publié, sans rien filmer. Un enregistreur léger (`VideoRecorder`, mêmes droits que
+   l'overlay F3 : créateur du jeu) garde en mémoire les 20 dernières secondes, sans rien envoyer ni écrire. Après une
+   belle action, une touche (**F8**, libre) écrit ce tampon dans la sortie (lignes `[VideoTake …]`, copiées dans le
+   journal de Roblox), avec un numéro de prise annoncé à l'écran. Contenu par tick : entrées du joueur (format des
+   parcours : touches, angles, tirs, arme, points de contrôle) ; à 30 Hz : position et cap des autres personnages
+   (joueurs et bots), arme en main ; événements : tirs (direction), touches, éliminations (tueur, arme, tête, victime),
+   inspections.
+2. **Transfert :** l'utilisateur dépose `%LOCALAPPDATA%\Roblox\logs\*_Player_*_last.log` dans `worktrees/.rushes/525/`,
+   avec une ligne par prise retenue (numéro et plan visé, ex. `12 = P01`).
+3. **Extraction :** un outil (`tools/promo/write_take.luau`, sur le modèle de `tools/perf/write_route.luau`) sort chaque
+   prise du journal dans un fichier de données (non versionné, `worktrees/.rushes/525/takes/`).
+4. **Rejeu dans Studio** (`VideoReplay`, Studio uniquement) : le joueur rejoue ses entrées par la vraie physique et la
+   vraie caméra (`MovementController.setTickHook`, `InputModule.setVirtual`, `FPSCamera.setScripted`, recalage aux
+   points de contrôle comme `PerfReplay`), donc viewmodel, skin, compteur de vitesse, affichage des touches et sons sont
+   ceux du jeu. Les autres personnages sont des figurants qui suivent leur piste (mécanisme de `HighlightPlayer`), tirs
+   en 3D, ragdolls à leur mort ; le fil des éliminations et les marqueurs de touche sont rejoués depuis les événements
+   (le serveur de Studio ne connaît pas ces kills ; même besoin que #534 pour le clip).
+5. **Angles de caméra :** la prise se rejoue en vue du joueur (cas par défaut) ou depuis une caméra posée
+   (`tools/promo/stage.luau` sait déjà poser une caméra) : le plan P03 « surfeur vu de loin » ne demande plus de caméra
+   libre ni de 2e compte.
+6. **Capture :** l'image vient de Studio sur le poste de Claude, sans personne aux commandes. À mesurer au premier
+   essai : capture en temps réel de la fenêtre (`ffmpeg -f gdigrab`), puis, si elle saccade, rendu image par image
+   (horloge du rejeu avancée de 1/60 s, une capture par image, assemblage `ffmpeg`). Le son du jeu s'enregistre à
+   part, en temps réel (sortie audio du poste, `ffmpeg -f dshow` ou WASAPI), puis se cale sur l'image au montage.
 
-| Plan | À filmer | Visible à l'écran | Prises |
+**Limites connues :** le rendu de Studio diffère du client publié (qualité graphique à régler au maximum, fenêtre de
+rendu à caler sur 1920×1080) : comparer à une capture d'écran du client publié avant de monter. Un contact avec un
+figurant ne pousse pas le joueur comme le vrai personnage ; le recalage aux points de contrôle corrige l'écart.
+
+### Moments à jouer
+
+**Réglages :** affichage des touches en « simple », champ de vision et viseur par défaut. AWP **CISELURE** et M9
+**CUIR DE CORDOUE** équipés. Compte propriétaire du jeu (admin d'office, `Roles`, possède tout le catalogue). Partie
+normale sur Dizzy, contre des bots ou d'autres joueurs. Graphismes et plein écran sans importance : l'image est refaite
+dans Studio.
+
+Jouer normalement et appuyer sur **F8** juste après chaque moment réussi (le tampon couvre les 20 s précédentes) ; noter
+le numéro de prise affiché et le plan visé. Plusieurs prises par plan, le tri se fait au montage.
+
+| Plan | À jouer | Ce qui doit se passer | Prises |
 |---|---|---|---|
-| P01 tir en vol | Sauter d'une rampe ou d'un toit au-dessus du vide, ouvrir la lunette et tuer un adversaire en l'air ou sur une rampe. Le plan le plus dur : enregistrer 5 à 10 min de tentatives d'affilée | Soleil ou ciel dans le champ, rayon de la balle, élimination dans le fil | 5+ réussies si possible |
-| P02 surf | Arriver sur une rampe, la descendre jusqu'au bout et décoller ; idéalement face au soleil | Compteur de vitesse qui passe à `SURF` ou `MACH`, touches A ou D tenues | 3 |
-| P03 surfeur vu de loin (facultatif) | Caméra libre de Roblox (Maj+P, réservée aux développeurs du jeu) : filmer de côté un bot ou un 2e compte qui surfe une rampe. Si la caméra libre ne marche pas avec la caméra du jeu, abandonner le plan et le signaler | Le personnage entier, la rampe entière, la glissade | 2 |
-| P04 bhop | Sur un sol plat et dégagé, enchaîner 8 à 10 sauts sans s'arrêter en faisant de l'air strafe | Compteur qui monte de `RUN` à `FAST` ou au-delà, touches A et D en alternance | 3 |
-| P05 air strafe | Saut long (sortie de rampe ou d'un toit à l'autre) avec un virage net en l'air | Le décor qui tourne, touches A ou D, vitesse conservée | 3 |
-| P06 duel à la lunette | Visée à la lunette d'un adversaire qui bouge, tir, élimination | Lunette, tir, élimination dans le fil | 3 |
-| P07 couteau | Rattraper un adversaire et l'éliminer au M9 CUIR DE CORDOUE | La lame pendant le coup | 2 |
-| P08 inspection AWP | Au calme, face au soleil, touche F avec l'AWP CISELURE | Animation d'inspection complète, skin bien éclairé | 2 |
+| P01 tir en vol | Sauter d'une rampe ou d'un toit au-dessus du vide, ouvrir la lunette et tuer un adversaire en l'air ou sur une rampe | Élimination en plein saut, soleil ou ciel dans le champ | 5+ si possible |
+| P02 surf | Arriver sur une rampe, la descendre jusqu'au bout et décoller, idéalement face au soleil | Compteur de vitesse qui passe à `SURF` ou `MACH`, A ou D tenue | 3 |
+| P03 surfeur vu de loin | Rien de plus à jouer : une prise de surf (P02) est rejouée vue de côté | — | — |
+| P04 bhop | Sur un sol plat et dégagé, enchaîner 8 à 10 sauts sans s'arrêter en faisant de l'air strafe | Compteur qui monte de `RUN` à `FAST` ou au-delà, A et D en alternance | 3 |
+| P05 air strafe | Saut long (sortie de rampe ou d'un toit à l'autre) avec un virage net en l'air | Virage en l'air, vitesse conservée | 3 |
+| P06 duel à la lunette | Visée à la lunette d'un adversaire qui bouge, tir, élimination | Lunette, tir, élimination | 3 |
+| P07 couteau | Rattraper un adversaire et l'éliminer au M9 CUIR DE CORDOUE | Le coup de lame qui tue | 2 |
+| P08 inspection AWP | Au calme, face au soleil, touche F avec l'AWP CISELURE | Inspection complète | 2 |
 | P09 inspection M9 | Idem avec la M9 CUIR DE CORDOUE | Idem | 2 |
 | P10 sortie | Du point le plus haut de la map, grand saut vers le soleil couchant, regard vers la mer de nuages | Ciel, soleil, nuages ; personne d'autre | 2 |
 
