@@ -13,6 +13,8 @@ Ce dossier contient un patch du plugin officiel qui suit le verrou Studio (`scri
   répond, sinon le déconnecte.
 - Une connexion manuelle est respectée : le plugin n'agit qu'au changement suivant de la cible.
 - Serveur de commande arrêté ou fichier cible absent : le plugin se comporte comme l'officiel.
+- Son de notification coupé (`plugin/src/soundPlayer.lua`) : son asset (`rbxassetid://203785492`) n'est plus un audio
+  chargeable et sortait 6 erreurs `Asset type does not match requested type` à chaque playtest (#93, #472).
 - `-AcquireStudio` attend jusqu'à 15 s la connexion et sinon affiche la procédure manuelle (Studio fermé, en Play,
   ou plugin officiel).
 
@@ -30,7 +32,7 @@ Redémarrer Studio. Au premier appel, Studio peut demander d'autoriser l'accès 
 
 - `rojo plugin install` (ou une mise à jour du plugin par Studio) réinstalle l'officiel : relancer `install.ps1`.
 - Montée de version de Rojo dans `rokit.toml` : relancer `install.ps1`. Si le patch ne s'applique plus, cloner le nouveau
-  tag, reporter les modifications dans `plugin/src/App/init.lua` (repérer `CSGO autoconnect`) et régénérer le patch
+  tag, reporter les modifications dans `plugin/src/App/init.lua` et `plugin/src/soundPlayer.lua` (repérer `CSGO autoconnect`) et régénérer le patch
   avec `git diff > autoconnect.patch`.
 - Ne pas garder de copie `.rbxm` du plugin dans le dossier `Plugins` : Studio charge tous les `.rbxm` et deux Rojo
   se disputeraient la session.
