@@ -178,6 +178,29 @@ InventoryRules.ITEMS = {
 		name = "BANCHE",
 		appearance = "banche",
 	},
+	-- Communs de la série 2 (#482), en réserve tant que la caisse n'est pas complète (assets/awp/skins/parquet.py,
+	-- cannage.py, tole.py)
+	{
+		id = "skin.awp.parquet",
+		type = "skin",
+		weapon = "weapon.awp",
+		name = "PARQUET",
+		appearance = "parquet",
+	},
+	{
+		id = "skin.awp.cannage",
+		type = "skin",
+		weapon = "weapon.awp",
+		name = "CANNAGE",
+		appearance = "cannage",
+	},
+	{
+		id = "skin.awp.tole",
+		type = "skin",
+		weapon = "weapon.awp",
+		name = "TÔLE LARMÉE",
+		appearance = "tole",
+	},
 	-- Skins M9 : COUCHANT, RELEVÉ, RECUIT (#268, #337, motifs calculés) ; ÉMAIL, PATROUILLE, ART DÉCO dessinés pour la
 	-- M9 (#420, assets/m9/skins/) à la place d'IMPACT, STRATE et SILLAGE
 	{

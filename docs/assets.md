@@ -316,7 +316,8 @@ tout le catalogue.
 
 Un skin AWP est **dessiné pour l'AWP seule**, pièce par pièce (pas un motif réappliquable sur une autre arme) : un script
 par skin dans `assets/awp/skins/` (`balise`, `trempe`, `ciselure`, `pan`, `orage`, `circuit`, `maquis`, `mue`, et
-`remorqueur` et `logogramme` de la série FILM, #433 et #436, et les communs `epure`, `tartan`, `banche`), avec
+`remorqueur` et `logogramme` de la série FILM, #433 et #436, les communs `epure`, `tartan`, `banche`, et ceux de la
+série 2, `parquet`, `cannage`, `tole`, #482), avec
 une fonction `paint(maps, cv)`. Il part des cartes d'origine de `make_textures.py` (granité, moletage, vis, crasse) et
 les repeint. Outils communs (`common.py`) :
 
@@ -374,6 +375,14 @@ marquages sont celles de Windows (`C:/Windows/Fonts`, Bahnschrift, Impact) : gé
   au sett inventé, béton de coffrage à trous de banche en grille), tout en motifs réguliers calés sur `JOINT` (pas de
   quadrillage, carreau ou panneau rogné au joint). Ce qui doit se voir en 1P va sur l'avant de la crosse (cote, plaque
   de laiton, pochoir « C35/45 ») ; le reste (cartouche) sur l'arrière, pour l'écran d'équipement.
+- **Communs de la série 2 (PARQUET, CANNAGE, TÔLE LARMÉE, #482)** : motif calculé texel par texel en coordonnées de
+  profil (`mt_px`, `mt_py` ; sur les dessus et dessous, `y` à la place de `z`), calé sur `JOINT` et `TOP` (363), donc
+  continu d'une pièce à l'autre. Bâtons rompus : en repère tourné de 45°, des lames 1 x N posées horizontales là où
+  `(i - j) mod 2N < N` et verticales ailleurs pavent le plan, et les rangées de zigzag courent le long de l'arme.
+  **Cannage** : un pas serré (34 px) faisait un panneau perforé, des trous noirs faisaient des pois ; il faut des
+  mailles larges (56 px), un fond de trou brun sombre et surtout les **brins diagonaux en X sur chaque nœud**, qui
+  coupent les coins des trous. **Tôle larmée** : à 30 px de pas, les larmes disparaissaient de profil (36 px) ; un rivet
+  bombé se fond dans l'aluminium sans un liseré d'ombre à son pied.
 - **Republier un skin corrigé** : `publish_skin.py` saute les cartes déjà dans `ids.json` (reprise). Supprimer
   `ids.json` avant de republier des cartes modifiées, sinon le jeu garde les anciennes images.
 - **Essayer tous les skins en jeu sans relancer de partie** : en playtest, AWP en main, cloner depuis le contexte Client
