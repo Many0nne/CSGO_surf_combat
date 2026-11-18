@@ -177,9 +177,9 @@ table.insert(EQUIP_SLOTS, InventoryRules.OUTFIT_SLOT)
 --   SendFeedback : clic ENVOYER ; SaveSettings : 1 envoi par seconde au plus (LocalSettings) ; GetSettings : une
 --   demande au démarrage du client ; EquipItem : un clic sur une arme, un skin ou une tenue de l'accueil (#280, #521) ; OpenCrate : un
 --   clic sur OUVRIR, l'animation d'ouverture dure plusieurs secondes (#332) ; BuyCrate : un clic sur ACHETER, suivi de la
---   même animation (#393) ; BuyOutfit : un clic sur ACHETER au portant des tenues (#543) ; BuyCreditPack : un clic sur un pack, suivi du prompt Roblox (#395) ; HighlightPov : une
---   réponse par kill record de la partie, demandée par le serveur au plus une fois par seconde (#499) ; AnalyticsScreen :
---   un changement d'écran par relevé du client, 2 par seconde au plus (#527) ; Party : un clic (JOUER ou changement
+--   même animation (#393) ; BuyOutfit : un clic sur ACHETER au portant des tenues (#543) ; BuyCreditPack : un clic
+--   sur un pack, suivi du prompt Roblox (#395) ; HighlightPov : une réponse par kill record de la partie, demandée par
+--   le serveur au plus une fois par seconde (#499) ; AnalyticsScreen : un changement d'écran par relevé du client, 2 par seconde au plus (#527) ; Party : un clic (JOUER ou changement
 --   d'onglet qui ouvre ou quitte le lobby, LANCER, QUITTER LE GROUPE, REJOINDRE) (#523).
 -- Une arme plus rapide (automatique) demandera de relever HitscanDamage, ShotFired et WeaponAction.
 local N = NetworkProtocol.Names
