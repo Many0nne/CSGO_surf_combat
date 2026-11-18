@@ -24,9 +24,12 @@ local F = UITheme.Fonts
 
 -- Au-dessus du HUD (0) et du menu principal (onglets : 4) ; masqué quand un menu ou les Réglages sont ouverts (`canShow`)
 local DISPLAY_ORDER = 5
--- Bloc en px de maquette (720 de haut) : bord gauche du compteur de vitesse, bas au-dessus de ses chiffres
+-- Fond sombre de la saisie : sous le HUD (0) pour ne pas assombrir le compteur de vitesse, au rang de la lunette (-1)
+local SCRIM_DISPLAY_ORDER = -1
+-- Bloc en px de maquette (720 de haut) : bord gauche du compteur de vitesse, bas au-dessus de ses chiffres. Retour de
+-- l'utilisateur : à 166, la ligne de saisie était trop collée au compteur ; 40 px de plus
 local LEFT = 44
-local BOTTOM = 166
+local BOTTOM = 206
 local WIDTH = 460
 local TEXT_SIZE = 18
 local SHADOW = 2
@@ -39,9 +42,14 @@ local ROW_HEIGHT = TEXT_SIZE + 6 + SHADOW
 -- Hauteur réservée aux lignes : FEED_VISIBLE rangées et leurs écarts (un message long passe sur deux, la plus ancienne
 -- sort alors par le haut). Mesuré dans Studio : 26 px par rangée, sans l'ombre la rangée du haut était coupée
 local LINES_HEIGHT = ChatRules.FEED_VISIBLE * (ROW_HEIGHT + LINE_GAP) - LINE_GAP
--- Fond sombre sous le bloc saisie ouverte (même image que les coins du HUD)
-local SCRIM_SIZE = Vector2.new(WIDTH + 200, LINES_HEIGHT + INPUT_HEIGHT + 140)
+-- Fond sombre saisie ouverte (même image que les coins du HUD), posé au coin de l'écran jusqu'au-dessus du bloc : calé
+-- sous le bloc, son bord opaque traçait une arête horizontale au milieu de l'écran (capture Studio)
+local SCRIM_SIZE = Vector2.new(LEFT + WIDTH + 200, BOTTOM + LINES_HEIGHT + INPUT_GAP + INPUT_HEIGHT + 80)
 local SCRIM_TRANSPARENCY = 0.25
+-- Au menu : fond sombre plein sous le bloc saisie ouverte (il passe par-dessus la grille de l'équipement), marge autour
+-- Presque plein : à 0,12, les libellés de la grille (« SKINS · AWP ») se lisaient au travers (capture Studio)
+local MENU_PANEL_TRANSPARENCY = 0.03
+local MENU_PANEL_PAD = 14
 -- Entrée appuyée juste après une fermeture (envoi par Entrée) : ne rouvre pas
 local REOPEN_GUARD = 0.25
 -- Envoi par Entrée juste après l'ouverture (même appui vu par le champ) : ignoré
@@ -57,6 +65,8 @@ type Row = { holder: Frame, text: TextLabel, shadow: TextLabel }
 export type Deps = {
 	-- Fil affichable (partie, ou accueil du menu ; pas de chargement, de menu en partie ni de Réglages ouverts)
 	canShow: () -> boolean,
+	-- Au menu : le fil ne paraît que saisie ouverte, sur un fond plein (il croiserait la grille de l'équipement)
+	inMenu: () -> boolean,
 }
 
 local ChatFeed = {}
@@ -65,6 +75,9 @@ local deps: Deps? = nil
 local gui: ScreenGui? = nil
 local blocker: Frame
 local scrim: ImageLabel
+local scrimGui: ScreenGui
+local menuPanel: Frame
+local menuMode = false
 local inputBar: Frame
 local box: TextBox
 local rows: { Row } = {}
@@ -123,16 +136,17 @@ local function makeRow(parent: Frame, index: number): Row
 end
 
 -- Cette méthode permet de redessiner le fil lorsqu'une ligne arrive, que la saisie s'ouvre ou se ferme, ou que le
--- joueur fait défiler : les FEED_VISIBLE lignes au-dessus du défilement, chacune à sa transparence de fondu.
+-- joueur fait défiler : les FEED_VISIBLE lignes au-dessus du défilement, à leur fondu (au menu : saisie ouverte seulement).
 local function render()
 	if not gui then
 		return
 	end
 	local now = os.clock()
 	local last = #entries - scroll
+	local hidden = menuMode and not isOpen
 	for i, row in rows do
 		local entry = entries[last - i + 1]
-		if entry then
+		if entry and not hidden then
 			local fade = ChatRules.lineTransparency(now - entry.at, isOpen)
 			row.holder.Visible = fade < 1
 			local wanted = entry.rich or ""
@@ -196,6 +210,7 @@ local function close()
 	InputModule.setSuspended(false, "chat")
 	inputBar.Visible = false
 	scrim.Visible = false
+	menuPanel.Visible = false
 	blocker.Visible = false
 	if box:IsFocused() then
 		box:ReleaseFocus()
@@ -215,7 +230,9 @@ local function open()
 	InputModule.setSuspended(true, "chat")
 	box.Text = ""
 	inputBar.Visible = true
-	scrim.Visible = true
+	menuMode = deps.inMenu()
+	scrim.Visible = not menuMode
+	menuPanel.Visible = menuMode
 	blocker.Visible = pointerLocked()
 	render()
 	-- Après l'appui en cours : le champ ne doit pas voir l'Entrée qui l'ouvre
@@ -335,6 +352,13 @@ local function step()
 		appearing = visible and not gui.Enabled
 		if gui.Enabled ~= visible then
 			gui.Enabled = visible
+			scrimGui.Enabled = visible
+		end
+		-- Passage menu ↔ partie : le fil se montre ou se cache selon la règle du menu
+		local menu = deps.inMenu()
+		if menu ~= menuMode then
+			menuMode = menu
+			appearing = visible
 		end
 	end
 	local shown = gui.Enabled
@@ -477,9 +501,29 @@ function ChatFeed.init(newDeps: Deps)
 		Size = UDim2.fromOffset(WIDTH, LINES_HEIGHT + INPUT_GAP + INPUT_HEIGHT),
 		Parent = root,
 	})
-	scrim = UIKit.cornerScrim(block, "BottomLeft", SCRIM_SIZE, SCRIM_TRANSPARENCY)
-	scrim.Position += UDim2.fromOffset(-LEFT, 40)
+	-- Fond dans son propre écran, sous le HUD : posé dans celui du fil (au-dessus), il assombrissait le compteur de vitesse
+	scrimGui = UIKit.create("ScreenGui", {
+		Name = "ChatScrim",
+		ResetOnSpawn = false,
+		IgnoreGuiInset = true,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+		DisplayOrder = SCRIM_DISPLAY_ORDER,
+		Enabled = false,
+		Parent = Players.LocalPlayer:WaitForChild("PlayerGui"),
+	})
+	scrim = UIKit.cornerScrim(UIKit.scaledRoot(scrimGui, true), "BottomLeft", SCRIM_SIZE, SCRIM_TRANSPARENCY)
 	scrim.Visible = false
+	-- Sous les lignes et la saisie (ZIndex 0, écrans en Sibling), au menu seulement
+	menuPanel = UIKit.frame({
+		Name = "MenuPanel",
+		BackgroundColor3 = C.Scrim,
+		BackgroundTransparency = MENU_PANEL_TRANSPARENCY,
+		Position = UDim2.fromOffset(-MENU_PANEL_PAD, -MENU_PANEL_PAD),
+		Size = UDim2.new(1, MENU_PANEL_PAD * 2, 1, MENU_PANEL_PAD * 2),
+		ZIndex = 0,
+		Visible = false,
+		Parent = block,
+	})
 	-- Calé au-dessus de la ligne de saisie (replacé quand elle passe sur plusieurs lignes)
 	local lines = UIKit.frame({
 		Name = "Lines",

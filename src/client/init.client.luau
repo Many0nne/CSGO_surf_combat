@@ -185,6 +185,10 @@ ChatFeed.init({
 		end
 		return true
 	end,
+	inMenu = function(): boolean
+		local state = GameStateController.getState()
+		return state == "MENU" or state == "INFOS"
+	end,
 })
 -- Tirs des autres joueurs et des bots entendus en 3D (#156), hors écrans du menu
 RemoteShotSounds.init(GameStateController.getState)
