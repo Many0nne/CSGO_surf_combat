@@ -14,6 +14,8 @@ local serde = require("@lune/serde")
 local process = require("@lune/process")
 local roblox = require("@lune/roblox")
 
+local OutfitMaps = require("./OutfitMaps")
+
 local placePath, template, name, idsPath = table.unpack(process.args)
 assert(placePath and template and name and idsPath, "usage : make_rbxm.luau <place.rbxl> <modèle> <nom> <ids.json>")
 assert(string.match(name, "^[%w_%-]+$"), "nom de tenue invalide : " .. name)
@@ -24,24 +26,14 @@ local source = game:GetService("ReplicatedStorage"):FindFirstChild("Outfits")
 source = source and source:FindFirstChild(template)
 assert(source, "ReplicatedStorage.Outfits." .. template .. " absent de la place")
 
--- Cette méthode permet de donner l'atlas (groupe de r15_bake) d'une pièce du rig lorsqu'on lui pose ses cartes.
-local function groupOf(part: string): string
-	if string.find(part, "Torso") then
-		return "Torso"
-	end
-	local side = if string.sub(part, 1, 4) == "Left" then "Left" else "Right"
-	local limb = if string.find(part, "Arm") or string.find(part, "Hand") then "Arm" else "Leg"
-	return side .. limb
-end
-
 -- Cette méthode permet de poser les quatre cartes d'un atlas publié sur une SurfaceAppearance lorsqu'on habille une
 -- pièce de la nouvelle tenue.
 local function apply(appearance, maps)
 	assert(maps, "cartes absentes de ids.json pour " .. appearance:GetFullName())
-	appearance.ColorMapContent = roblox.Content.fromUri(maps.Color)
-	appearance.NormalMapContent = roblox.Content.fromUri(maps.Normal)
-	appearance.MetalnessMapContent = roblox.Content.fromUri(maps.Metal)
-	appearance.RoughnessMapContent = roblox.Content.fromUri(maps.Rough)
+	for property, kind in OutfitMaps.KINDS do
+		assert(maps[kind], "carte " .. kind .. " absente de ids.json pour " .. appearance:GetFullName())
+		appearance[property] = roblox.Content.fromUri(maps[kind])
+	end
 end
 
 local outfit = source:Clone()
@@ -49,7 +41,7 @@ outfit.Name = name
 local count = 0
 for _, child in outfit:GetChildren() do
 	if child:IsA("SurfaceAppearance") then
-		apply(child, ids.R15[groupOf(child.Name)])
+		apply(child, ids.R15[OutfitMaps.groupOf(child.Name)])
 		count += 1
 	elseif child:IsA("MeshPart") and child.Name == "Head" then
 		local appearance = child:FindFirstChildOfClass("SurfaceAppearance")

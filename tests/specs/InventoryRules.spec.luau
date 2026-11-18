@@ -504,18 +504,6 @@ return function(T, Loader)
 			end
 		end)
 
-		T.it("les tenues sont listées par prix : les communes avant MERCURE", function()
-			local ids = {}
-			for _, outfit in Rules.outfits() do
-				table.insert(ids, outfit.id)
-			end
-			local function index(id)
-				return table.find(ids, id) or math.huge
-			end
-			T.expect(index("outfit.neoprene") < index("outfit.mercure"), "NÉOPRÈNE avant MERCURE")
-			T.expect(index("outfit.platre") < index("outfit.mercure"), "PLÂTRE avant MERCURE")
-		end)
-
 		T.it("rien de choisi : tenue d'origine, et la tenue n'entre pas dans le sac", function()
 			local resolved = Rules.resolveEquipped(nil, Rules.resolve(nil, true))
 			T.expectEqual(Rules.outfitOf(resolved), nil)

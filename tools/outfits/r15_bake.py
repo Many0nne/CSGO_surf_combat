@@ -531,7 +531,7 @@ def export_rig(path, cache, key, head=None):
 
 
 # Cette méthode permet de cuire les variantes demandées d'une tenue (corps, puis coque si la tenue en a une) lorsqu'on
-# lance le script en ligne de commande ; refuse une coque demandée à une tenue qui n'en a pas.
+# lance le script en ligne de commande ; refuse une coque donnée à une tenue sans coque, et l'inverse.
 def main():
 	ap = argparse.ArgumentParser()
 	ap.add_argument("outfit")
@@ -554,7 +554,7 @@ def main():
 		raise SystemExit(f"[r15_bake] {args.outfit} n'a pas de coque (HEAD absent) : --head refusé")
 	if has_head and wants_head and not args.head:
 		# sans elle, les anciennes cartes de la coque resteraient en place, désaccordées du corps
-		print("[r15_bake] ATTENTION : la tenue a une coque (HEAD = True) mais --head manque : coque non cuite")
+		raise SystemExit("[r15_bake] la tenue a une coque (HEAD = True) : --head manque (ou --groups sans Head)")
 	key = os.environ["ROBLOX_OPEN_CLOUD_KEY"]
 	if args.rig_json:
 		export_rig(args.rig_json, args.cache, key, args.head)

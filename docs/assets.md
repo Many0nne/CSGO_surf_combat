@@ -778,8 +778,8 @@ Depuis la racine du worktree, `blender` = `"/c/Program Files/Blender Foundation/
    head.json [--variant <v>] [--groups Torso,Head] [--rig-json rig.json]` : télécharge les meshs du rig (Open Cloud),
    cuit cinq atlas (Torso, LeftArm, RightArm, LeftLeg, RightLeg ; mêmes UV des deux côtés) et la coque, dans
    `<variante>/R15/` et `<variante>/Head/`. Normal map tirée de la pente du relief (convention OpenGL) ; carte uniforme
-   écrite en 8 × 8. Une tenue `HEAD = True` cuite sans `--head` le signale (la coque garderait ses anciennes cartes).
-   Environ une minute par variante en 1024.
+   écrite en 8 × 8. Une tenue `HEAD = True` cuite sans `--head` est refusée (la coque garderait ses anciennes cartes,
+   désaccordées du corps) ; `--groups` sans `Head` pour ne recuire que le corps. Environ une minute par variante en 1024.
 4. **Planche** (Workbench, quelques secondes) : `blender -b --factory-startup --python tools/outfits/render_sheet.py --
    rig.json planche.png "MERCURE=assets/outfits/mercure/maps/lisse" "TITRE=<dossier de variante>" …` : rig au repos de
    face, de trois quarts et de dos, une colonne par variante, même cadrage (`rig.json` : `--rig-json` de l'étape 3).
@@ -805,10 +805,13 @@ bord : bandes noires). La tête du rig, cachée dessous, reste la zone de headsh
 avec MERCURE, NÉOPRÈNE, PLÂTRE et CHITINE : rayon au centre de la tête → `Head`, rayon au-dessus de la boîte de la tête
 → rien).
 
-- **Couture au milieu du visage.** Le dépliage met u = -angle/360 avec la couture devant : les triangles de la bande
-  de 10° au centre du visage vont de u = 0,976 à 0,024 et, cuits, traversaient toute la carte (bandes parasites sur la
-  coque de NÉOPRÈNE et de CHITINE avant l'outillage commun). `load_head` les écarte et la dilatation comble la bande :
-  un décor de coque ne dépend que de la hauteur et de |x| (anneaux, crête, coutures sur x = 0 et z = 0).
+- **Couture au milieu du visage.** Le dépliage met u = -angle/360 avec la couture devant, sans dédoubler les sommets :
+  les triangles de la bande de 10° au centre du visage vont de u = 0,976 à 0,024. Cuits, ils traversaient toute la
+  carte (bandes parasites sur la coque de NÉOPRÈNE et de CHITINE avant l'outillage commun) : `load_head` les écarte.
+  En jeu, ces mêmes triangles lisent toute la rangée de la carte, compressée dans la bande : seul un décor qui ne
+  dépend que de la hauteur (anneaux de PORCELAINE, coque unie de PLÂTRE et de BRONZE) y est juste. Les coutures
+  verticales de la cagoule de NÉOPRÈNE et la crête de CHITINE y apparaissent donc resserrées en traits fins. Correctif :
+  couper la couture dans le mesh (sommets dédoublés en u = 0 et 1), nouveau mesh à publier (#552).
 - **Pas d'avant lisible.** La coque est presque symétrique d'un quart de tour, et seul le sens de `head_mesh.py`
   (Y en haut, avant = -Z, comme l'importeur de Roblox) a servi : dessiner symétrique d'avant en arrière.
 - **Première coque refusée** : un cylindre arrondi dessiné à la main (2,06 × 1,78) donnait une tête écrasée et élargie.

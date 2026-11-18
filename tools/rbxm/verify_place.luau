@@ -14,6 +14,7 @@ local process = require("@lune/process")
 local roblox = require("@lune/roblox")
 local serde = require("@lune/serde")
 
+local OutfitMaps = require("../outfits/OutfitMaps")
 local SpawnCheck = require("../map/SpawnCheck")
 
 local placePath = process.args[1] or "CSGO.rbxlx"
@@ -382,20 +383,17 @@ local OUTFIT_PARTS = {
 	"RightLowerLeg",
 	"RightFoot",
 }
-local OUTFIT_MAPS = { "ColorMapContent", "NormalMapContent", "MetalnessMapContent", "RoughnessMapContent" }
-
-local OUTFIT_KINDS = { ColorMapContent = "Color", NormalMapContent = "Normal", MetalnessMapContent = "Metal", RoughnessMapContent = "Rough" }
 
 -- Cette méthode permet de signaler une carte de tenue sans image, ou différente de l'image publiée de la variante
 -- retenue (`maps`, une entrée de ids.json), lorsqu'on vérifie une SurfaceAppearance (une pièce sans couleur sortirait
 -- grise ; un .rbxm pas refait après une nouvelle cuisson garderait les anciennes cartes).
 local function checkOutfitMaps(appearance: Instance, label: string, maps: { [string]: string }?)
-	for _, property in OUTFIT_MAPS do
+	for property, kind in OutfitMaps.KINDS do
 		local ok, value = pcall(function()
 			return (appearance :: any)[property]
 		end)
 		local uri = if ok then string.match(tostring(value), "rbxassetid://%d+") else nil
-		local want = maps and maps[OUTFIT_KINDS[property]]
+		local want = maps and maps[kind]
 		if not uri then
 			fail(label .. "." .. property .. " sans image")
 		elseif maps and uri ~= want then
@@ -424,14 +422,17 @@ local function retainedIds(name: string): any
 	return serde.decode("json", fs.readFile(found[1]))
 end
 
--- Cette méthode permet de donner l'atlas (groupe de tools/outfits/r15_bake.py) d'une pièce du rig lorsqu'on cherche
--- ses ids publiés.
-local function outfitGroup(part: string): string
-	if string.find(part, "Torso") then
-		return "Torso"
+-- Cette méthode permet de donner les ids publiés d'un atlas de la variante retenue lorsqu'on vérifie une carte ; un
+-- atlas absent de ids.json est une erreur (sa carte ne serait comparée à rien).
+local function expectedMaps(expected: any, name: string, section: string, group: string): { [string]: string }?
+	if not expected then
+		return nil
 	end
-	local side = if string.sub(part, 1, 4) == "Left" then "Left" else "Right"
-	return side .. (if string.find(part, "Arm") or string.find(part, "Hand") then "Arm" else "Leg")
+	local maps = expected[section] and expected[section][group]
+	if not maps then
+		fail("assets/outfits/" .. name .. " : " .. section .. "." .. group .. " absent de ids.json")
+	end
+	return maps
 end
 
 local outfits = game.ReplicatedStorage:FindFirstChild("Outfits")
@@ -447,12 +448,14 @@ for _, name in rbxmNames("assets/rbx/Outfits") do
 		if not (appearance and appearance:IsA("SurfaceAppearance")) then
 			fail("Outfits." .. name .. "." .. partName .. " absent ou pas une SurfaceAppearance")
 		else
-			local maps = expected and expected.R15 and expected.R15[outfitGroup(partName)]
+			local maps = expectedMaps(expected, name, "R15", OutfitMaps.groupOf(partName))
 			checkOutfitMaps(appearance, "Outfits." .. name .. "." .. partName, maps)
 		end
 	end
 	local head = outfit:FindFirstChild("Head")
-	if head then
+	if not head and expected and expected.Head then
+		fail("Outfits." .. name .. " sans coque Head alors que ids.json en publie une (tête du rig nue)")
+	elseif head then
 		if not head:IsA("MeshPart") then
 			fail("Outfits." .. name .. ".Head n'est pas une MeshPart")
 		elseif head.CanCollide or head.CanQuery or head.CanTouch or not head.Massless then
@@ -460,7 +463,7 @@ for _, name in rbxmNames("assets/rbx/Outfits") do
 		end
 		local appearance = head:FindFirstChildOfClass("SurfaceAppearance")
 		if appearance then
-			checkOutfitMaps(appearance, "Outfits." .. name .. ".Head", expected and expected.Head and expected.Head.Head)
+			checkOutfitMaps(appearance, "Outfits." .. name .. ".Head", expectedMaps(expected, name, "Head", "Head"))
 		else
 			fail("Outfits." .. name .. ".Head sans SurfaceAppearance (coque grise)")
 		end

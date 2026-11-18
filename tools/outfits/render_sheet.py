@@ -26,6 +26,8 @@ argv = sys.argv[sys.argv.index("--") + 1 :]
 RIG, OUT = argv[0], argv[1]
 CELL_W = int(argv[argv.index("--width") + 1]) if "--width" in argv else 360
 COLUMNS = [a.split("=", 1) for a in argv[2:] if "=" in a]
+if not COLUMNS:
+	raise SystemExit("[render_sheet] usage : -- <rig.json> <planche.png> \"TITRE=<dossier de variante>\" … [--width 360]")
 VIEWS = [("FACE", 0), ("TROIS QUARTS", -35), ("DOS", 180)]
 STEP_X, STEP_Y = 7.5, 10.0  # écart entre deux personnages (studs)
 
