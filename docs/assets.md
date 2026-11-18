@@ -777,6 +777,10 @@ de la boîte de la tête → rien).
   map (le ciel du couchant, sans le sol sombre) : aucun contraste. MERCURE peint donc son reflet dans la couleur
   (`shade` du module de tenue : ciel clair, ligne d'horizon nette, sol sombre, lus selon la normale en relief, vue de
   face) avec un tiers de métal seulement. Les reflets restent fixes quand on tourne autour : accepté par l'utilisateur.
+  Vérifié le 18/11/2026 sur des sphères : métal PBR (SurfaceAppearance, matériaux Metal et Foil) = ciel très flou,
+  gris rosé ; seule l'ancienne propriété `Reflectance` fait un vrai miroir (ciel, horizon, sol), mais elle est ignorée
+  sous une SurfaceAppearance (plus de muscles) et, sur les faces plates des blocs, chaque face ne reflète qu'une
+  direction (personnage brun foncé uni par face au couchant). Les deux montrés à l'utilisateur : reflet peint gardé.
 - **Faces planes en métal = miroirs uniformes.** Bomber légèrement chaque face (`pillow`) casse l'effet « boîte ».
   Sur les jambes, bomber seulement en largeur : bombées aussi en hauteur, chaque pièce marquait une coupure au genou
   (rejeté par l'utilisateur, avec les muscles dessinés des jambes).
