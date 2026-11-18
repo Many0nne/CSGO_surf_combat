@@ -1,6 +1,10 @@
 -- Règles pures du journal du chat (#541, docs/moderation.md) : entrées en attente, mise en forme d'une ligne et
 -- découpe en messages Discord (un embed par envoi, description bornée). Sans service : testées sous Lune
 -- (tests/specs/ChatLogRules.spec.luau). L'envoi périodique et le webhook sont dans ChatService.
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local ChatRules = require(ReplicatedStorage.Shared.ChatRules)
+
 local ChatLogRules = {}
 
 -- Secondes entre deux envois : quelques messages par minute et par serveur, sous la limite de débit de Discord même
@@ -8,7 +12,8 @@ local ChatLogRules = {}
 ChatLogRules.FLUSH_INTERVAL = 15
 -- Description d'un embed : 4096 caractères chez Discord, marge pour le texte d'en-tête
 ChatLogRules.MAX_DESCRIPTION = 3800
--- Entrées gardées en attente au plus (webhook en panne) : les plus anciennes sont abandonnées, et comptées
+-- Entrées gardées en attente au plus (webhook en panne : elles repartent à l'envoi suivant) ; au-delà, les plus
+-- anciennes sont abandonnées, et comptées
 ChatLogRules.MAX_PENDING = 400
 -- Texte d'un message coupé au-delà (un message accepté en fait au plus ChatRules.MAX_LENGTH)
 ChatLogRules.MAX_TEXT = 300
@@ -18,13 +23,15 @@ ChatLogRules.COLOR = 7506394
 
 export type Kind = "message" | "mute" | "unmute" | "kick"
 export type Entry = {
-	at: number, -- os.time()
+	at: number, -- os.time() à l'envoi du message ou à la commande
 	kind: Kind,
 	userId: number,
 	name: string,
 	text: string?, -- message (texte filtré) ou motif filtré d'un kick
 	targetId: number?,
 	targetName: string?,
+	-- Texte encore en cours de filtrage : l'entrée garde sa place, l'envoi s'arrête devant elle
+	pending: boolean?,
 }
 export type Batch = { entries: { Entry }, dropped: number }
 
@@ -44,23 +51,15 @@ function ChatLogRules.push(batch: Batch, entry: Entry)
 end
 
 -- Cette méthode permet de neutraliser la mise en forme Discord (gras, code, citation…) lorsqu'un texte de joueur est
--- recopié dans le journal : il s'affiche tel quel.
+-- recopié dans le journal : il s'affiche tel quel, sur une ligne.
 function ChatLogRules.escape(text: string): string
-	local flat = string.gsub(text, "[%c]", " ")
-	return (string.gsub(flat, "([\\%*_~`|>#%[%]%(%)<@])", "\\%1"))
+	return (string.gsub(ChatRules.clean(text), "([\\%*_~`|>#%[%]%(%)<@])", "\\%1"))
 end
 
--- Cette méthode permet de couper un texte trop long lorsqu'il entre dans une ligne du journal (sans casser un
--- caractère UTF-8).
+-- Cette méthode permet de couper un texte trop long (sans casser un caractère UTF-8) lorsqu'il entre dans une ligne.
 local function clipText(text: string): string
-	local count = utf8.len(text)
-	if not count then
-		return string.sub(text, 1, ChatLogRules.MAX_TEXT)
-	end
-	if count <= ChatLogRules.MAX_TEXT then
-		return text
-	end
-	return string.sub(text, 1, (utf8.offset(text, ChatLogRules.MAX_TEXT + 1) :: number) - 1) .. "…"
+	local clipped = ChatRules.clip(text, ChatLogRules.MAX_TEXT)
+	return if clipped == text then text else clipped .. "…"
 end
 
 -- Cette méthode permet d'écrire un joueur (nom et UserId) lorsqu'une ligne du journal le cite.
@@ -84,30 +83,30 @@ function ChatLogRules.formatLine(entry: Entry): string
 	return line
 end
 
--- Cette méthode permet de retirer du lot les lignes d'un embed (dans l'ordre d'arrivée) lorsque le moment d'envoyer est
--- venu ; renvoie l'embed et le nombre d'entrées retirées (nil, 0 pour un lot vide), le reste attend l'envoi suivant.
-function ChatLogRules.take(batch: Batch, jobId: string): ({ [string]: any }?, number)
-	if #batch.entries == 0 and batch.dropped == 0 then
-		return nil, 0
-	end
-	local taken = 0
+-- Cette méthode permet de préparer l'embed du prochain envoi lorsque le moment d'envoyer est venu, sans rien retirer :
+-- lignes dans l'ordre, jusqu'à la limite ou une entrée encore filtrée. Renvoie l'embed (nil si rien) et son nombre d'entrées.
+function ChatLogRules.peek(batch: Batch, jobId: string): ({ [string]: any }?, number)
 	local lines: { string } = {}
 	if batch.dropped > 0 then
 		table.insert(lines, string.format("*%d entrée(s) perdue(s) (webhook indisponible)*", batch.dropped))
-		batch.dropped = 0
 	end
 	local size = if #lines > 0 then #lines[1] + 1 else 0
-	while #batch.entries > 0 do
-		local line = ChatLogRules.formatLine(batch.entries[1])
-		-- Une ligne seule plus longue que la limite ne peut pas arriver (texte coupé à MAX_TEXT) ; la première ligne part
-		-- toujours, pour ne pas bloquer le lot
+	local count = 0
+	for _, entry in batch.entries do
+		if entry.pending then
+			break
+		end
+		local line = ChatLogRules.formatLine(entry)
+		-- Une ligne seule ne dépasse jamais la limite (texte coupé à MAX_TEXT) : la première part toujours
 		if #lines > 0 and size + #line + 1 > ChatLogRules.MAX_DESCRIPTION then
 			break
 		end
 		table.insert(lines, line)
 		size += #line + 1
-		taken += 1
-		table.remove(batch.entries, 1)
+		count += 1
+	end
+	if #lines == 0 then
+		return nil, 0
 	end
 	return {
 		title = ChatLogRules.TITLE,
@@ -115,7 +114,16 @@ function ChatLogRules.take(batch: Batch, jobId: string): ({ [string]: any }?, nu
 		color = ChatLogRules.COLOR,
 		footer = { text = "JobId " .. (if jobId == "" then "Studio" else jobId) },
 	},
-		taken
+		count
+end
+
+-- Cette méthode permet de retirer du lot les `count` premières entrées et le compte des pertes lorsque l'envoi préparé
+-- par peek a réussi ; un envoi en échec ne retire rien, tout repart au suivant.
+function ChatLogRules.commit(batch: Batch, count: number)
+	for _ = 1, math.min(count, #batch.entries) do
+		table.remove(batch.entries, 1)
+	end
+	batch.dropped = 0
 end
 
 return ChatLogRules

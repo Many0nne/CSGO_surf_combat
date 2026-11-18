@@ -45,8 +45,13 @@ par `MessageId` (`DECISION_TTL`), le message accepté est journalisé une seule 
   commandes `/mute`, `/unmute`, `/kick` aussi (admin, joueur visé, motif filtré).
 - Envoi par lots toutes les `ChatLogRules.FLUSH_INTERVAL` s (15), un embed par envoi (description bornée à
   `MAX_DESCRIPTION`), pause de 2 s entre deux envois d'un même passage ; dernier envoi à l'arrêt du serveur
-  (`BindToClose`). Au plus `MAX_PENDING` entrées en attente ; au-delà (webhook en panne), les plus anciennes sont
-  abandonnées et leur nombre est signalé dans l'envoi suivant.
+  (`BindToClose`, après au plus 12 s d'attente d'un envoi en cours). Envoi en deux temps (`ChatLogRules.peek` puis
+  `commit`) : un envoi en échec après ses essais ne retire rien, ses entrées repartent au passage suivant. Au plus
+  `MAX_PENDING` entrées en attente ; au-delà (webhook en panne longtemps), les plus anciennes sont abandonnées et leur
+  nombre est signalé dans l'envoi suivant.
+- Ordre et heure : l'entrée d'un message est posée dès sa décision (heure d'envoi) et marquée `pending` le temps du
+  filtrage ; l'envoi s'arrête devant elle, l'ordre des messages est gardé. La longueur et le journal portent sur le
+  texte sans entités de texte riche (`ChatRules.unescape`), comme chez le client.
 - **Webhook :** `StringValue` nommé `ChatLogWebhookUrl` dans `ServerScriptService` de la place publiée, posé à la main,
   jamais versionné (comme `FeedbackWebhookUrl` et `CheatLogWebhookUrl`, `Webhook.luau`). HTTP doit être activé dans les
   réglages du jeu. Sans URL : rien n'est filtré ni envoyé, pas d'erreur. Dans Studio sans URL, chaque lot s'écrit dans

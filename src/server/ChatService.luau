@@ -64,14 +64,17 @@ local function filterForAll(text: string, fromUserId: number): string?
 	return result
 end
 
--- Cette méthode permet de journaliser un message accepté lorsqu'il vient d'être délivré : texte filtré pour tous,
--- auteur et heure (le JobId part dans le pied de l'envoi). Bloquant (filtrage) : lancé dans sa propre tâche.
+-- Cette méthode permet de journaliser un message accepté lorsqu'il vient d'être délivré : entrée posée tout de suite
+-- (ordre et heure d'envoi), texte filtré pour tous écrit ensuite. Bloquant (filtrage) : lancé dans sa propre tâche.
 local function logMessage(userId: number, name: string, raw: string)
 	if not logging() then
 		return
 	end
-	local text = filterForAll(ChatRules.clean(raw), userId) or ChatService.UNFILTERED_PLACEHOLDER
-	ChatLogRules.push(batch, { at = os.time(), kind = "message", userId = userId, name = name, text = text })
+	local entry: ChatLogRules.Entry =
+		{ at = os.time(), kind = "message", userId = userId, name = name, text = nil, pending = true }
+	ChatLogRules.push(batch, entry)
+	entry.text = filterForAll(raw, userId) or ChatService.UNFILTERED_PLACEHOLDER
+	entry.pending = nil
 end
 
 -- Cette méthode permet de décider si un message est diffusé lorsque TextChatService le présente à un destinataire :
@@ -94,14 +97,16 @@ function ChatService.decide(message: TextChatMessage): boolean
 		bucket = ChatRules.newBucket(now, ChatRules.SERVER_BURST)
 		buckets[userId] = bucket
 	end
-	local verdict = ChatRules.admit(bucket, message.Text, now, muted[userId] == true, ChatRules.SERVER_BURST)
+	-- Texte compté et journalisé sans entités de texte riche (« &lt; » compte pour un caractère, comme chez le client)
+	local text = ChatRules.clean(ChatRules.unescape(message.Text))
+	local verdict = ChatRules.admit(bucket, text, now, muted[userId] == true, ChatRules.SERVER_BURST)
 	local accepted = verdict == "ok"
 	decisions[id] = accepted
 	task.delay(DECISION_TTL, function()
 		decisions[id] = nil
 	end)
 	if accepted then
-		task.spawn(logMessage, userId, sender.Name, message.Text)
+		task.spawn(logMessage, userId, sender.Name, text)
 	end
 	return accepted
 end
@@ -213,7 +218,7 @@ function ChatService.runCommand(player: Player, text: string)
 end
 
 -- Cette méthode permet d'envoyer le lot en attente lorsque l'intervalle est écoulé ou que le serveur s'arrête : un
--- embed par envoi, avec une pause entre deux ; un envoi en échec après ses essais est compté comme perdu.
+-- embed par envoi, pause entre deux ; un envoi en échec après ses essais laisse ses entrées pour le passage suivant.
 function ChatService.flush()
 	if flushing then
 		return
@@ -221,24 +226,23 @@ function ChatService.flush()
 	flushing = true
 	local url = Webhook.url(table.unpack(ChatService.WEBHOOK_NAMES))
 	while true do
-		-- Pertes déjà signalées dans cet envoi : remises au compte s'il échoue
-		local droppedBefore = batch.dropped
-		local embed, taken = ChatLogRules.take(batch, game.JobId)
+		local embed, count = ChatLogRules.peek(batch, game.JobId)
 		if not embed then
 			break
 		end
 		if url then
 			local ok, err = Webhook.postWithRetry(url, embed, WEBHOOK_ATTEMPTS, WEBHOOK_RETRY_DELAY)
 			if not ok then
-				warn("[ChatService] journal non envoyé :", err)
-				batch.dropped += droppedBefore + taken
+				warn("[ChatService] journal non envoyé, nouvel essai au prochain passage :", err)
 				break
 			end
+			ChatLogRules.commit(batch, count)
 			if #batch.entries > 0 then
 				task.wait(SPLIT_DELAY)
 			end
 		else
 			print("[ChatLog] " .. embed.footer.text .. "\n" .. embed.description)
+			ChatLogRules.commit(batch, count)
 		end
 	end
 	flushing = false

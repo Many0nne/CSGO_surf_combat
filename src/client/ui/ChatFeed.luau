@@ -46,6 +46,8 @@ local REOPEN_GUARD = 0.25
 local SEND_GUARD = 0.15
 local OPEN_KEYS = { [Enum.KeyCode.Return] = true, [Enum.KeyCode.KeypadEnter] = true }
 local CHANNEL_NAME = "RBXGeneral"
+-- Période (s) de relecture de la visibilité du fil (écran du menu, menu en partie ouvert)
+local VISIBILITY_PERIOD = 0.1
 
 -- `rich` et `raw` : texte de la ligne et de son ombre, composés une fois à l'arrivée
 type Entry = { at: number, name: string?, text: string, mine: boolean, notice: boolean, rich: string?, raw: string? }
@@ -69,6 +71,7 @@ local isOpen = false
 local openedAt = -math.huge
 local closedAt = -math.huge
 local scroll = 0
+local nextVisibilityCheck = 0
 local bucket = ChatRules.newBucket(os.clock())
 local localUserId = Players.LocalPlayer.UserId
 
@@ -308,22 +311,30 @@ local function onNotice(template: unknown, args: unknown)
 end
 
 -- Cette méthode permet de suivre l'état du fil à chaque image lorsque le client tourne : fil masqué (et saisie fermée)
--- hors des écrans où il est disponible, voile des clics selon le pointeur ; redessin seulement pendant un fondu.
+-- hors des écrans où il est disponible (relu 10 fois par seconde), voile des clics, redessin seulement pendant un fondu.
 local function step()
 	if not gui or not deps then
 		return
 	end
-	local shown = deps.canShow()
-	if not shown and isOpen then
-		close()
+	local now = os.clock()
+	local appearing = false
+	if now >= nextVisibilityCheck then
+		nextVisibilityCheck = now + VISIBILITY_PERIOD
+		local visible = deps.canShow()
+		if not visible and isOpen then
+			close()
+		end
+		appearing = visible and not gui.Enabled
+		if gui.Enabled ~= visible then
+			gui.Enabled = visible
+		end
 	end
-	local appearing = shown and not gui.Enabled
-	gui.Enabled = shown
+	local shown = gui.Enabled
 	if isOpen then
 		blocker.Visible = pointerLocked()
 	end
 	local newest = entries[#entries]
-	local fading = newest ~= nil and os.clock() - newest.at <= ChatRules.FADE_DELAY + ChatRules.FADE_TIME + 0.1
+	local fading = newest ~= nil and now - newest.at <= ChatRules.FADE_DELAY + ChatRules.FADE_TIME + 0.1
 	if appearing or (shown and fading and not isOpen) then
 		render()
 	end

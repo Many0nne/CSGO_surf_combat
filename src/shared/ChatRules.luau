@@ -66,16 +66,18 @@ function ChatRules.length(text: string): number
 	return utf8.len(text) or #text
 end
 
--- Cette méthode permet de couper un texte à MAX_LENGTH caractères lorsque le joueur tape dans le champ de saisie.
-function ChatRules.clip(text: string): string
+-- Cette méthode permet de couper un texte à `max` caractères (MAX_LENGTH par défaut) sans casser un caractère UTF-8
+-- lorsque le joueur tape dans le champ de saisie ou qu'une ligne du journal est écrite.
+function ChatRules.clip(text: string, max: number?): string
+	local limit = max or ChatRules.MAX_LENGTH
 	local count = utf8.len(text)
 	if not count then
-		return string.sub(text, 1, ChatRules.MAX_LENGTH)
+		return string.sub(text, 1, limit)
 	end
-	if count <= ChatRules.MAX_LENGTH then
+	if count <= limit then
 		return text
 	end
-	return string.sub(text, 1, (utf8.offset(text, ChatRules.MAX_LENGTH + 1) :: number) - 1)
+	return string.sub(text, 1, (utf8.offset(text, limit + 1) :: number) - 1)
 end
 
 -- Cette méthode permet de créer un seau plein lorsqu'un joueur écrit pour la première fois.

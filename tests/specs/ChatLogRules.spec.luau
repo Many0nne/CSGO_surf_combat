@@ -46,23 +46,52 @@ return function(T, Loader)
 		end)
 	end)
 
-	T.describe("ChatLogRules.take", function()
+	T.describe("ChatLogRules.peek / commit", function()
 		T.it("ne renvoie rien pour un lot vide", function()
-			local embed, taken = ChatLogRules.take(ChatLogRules.newBatch(), "job")
+			local embed, count = ChatLogRules.peek(ChatLogRules.newBatch(), "job")
 			T.expectEqual(embed, nil)
-			T.expectEqual(taken, 0)
+			T.expectEqual(count, 0)
 		end)
 
-		T.it("regroupe les messages dans l'ordre, avec le JobId en pied", function()
+		T.it("regroupe les messages dans l'ordre, avec le JobId en pied, et ne retire qu'au commit", function()
 			local batch = ChatLogRules.newBatch()
 			ChatLogRules.push(batch, message("un"))
 			ChatLogRules.push(batch, message("deux"))
-			local embed, taken = ChatLogRules.take(batch, "abc")
-			T.expectEqual(taken, 2)
-			T.expectEqual(#batch.entries, 0, "lot vidé")
+			local embed, count = ChatLogRules.peek(batch, "abc")
+			T.expectEqual(count, 2)
+			T.expectEqual(#batch.entries, 2, "rien retiré avant l'envoi")
 			T.expect(string.find(embed.description, "un\n", 1, true) ~= nil, "premier message en tête")
 			T.expectEqual(embed.footer.text, "JobId abc")
-			T.expectEqual((ChatLogRules.take(ChatLogRules.newBatch(), "")), nil)
+			ChatLogRules.commit(batch, count)
+			T.expectEqual(#batch.entries, 0, "lot vidé après l'envoi")
+			ChatLogRules.push(batch, message("trois"))
+			T.expectEqual(ChatLogRules.peek(batch, "").footer.text, "JobId Studio")
+		end)
+
+		T.it("un envoi en échec (pas de commit) garde ses entrées pour le suivant", function()
+			local batch = ChatLogRules.newBatch()
+			ChatLogRules.push(batch, message("gardé"))
+			ChatLogRules.peek(batch, "j")
+			local embed, count = ChatLogRules.peek(batch, "j")
+			T.expectEqual(count, 1)
+			T.expect(string.find(embed.description, "gardé", 1, true) ~= nil)
+		end)
+
+		T.it("s'arrête devant une entrée encore en filtrage, sans la dépasser", function()
+			local batch = ChatLogRules.newBatch()
+			ChatLogRules.push(batch, message("avant"))
+			local pending = message("en cours")
+			pending.pending = true
+			ChatLogRules.push(batch, pending)
+			ChatLogRules.push(batch, message("après"))
+			local embed, count = ChatLogRules.peek(batch, "j")
+			T.expectEqual(count, 1, "seulement l'entrée prête avant")
+			T.expect(string.find(embed.description, "après", 1, true) == nil, "ordre gardé")
+			ChatLogRules.commit(batch, count)
+			T.expectEqual((ChatLogRules.peek(batch, "j")), nil, "rien tant que le filtrage court")
+			pending.pending = nil
+			local _, rest = ChatLogRules.peek(batch, "j")
+			T.expectEqual(rest, 2)
 		end)
 
 		T.it("découpe un gros lot en plusieurs envois sous la limite de Discord", function()
@@ -73,12 +102,13 @@ return function(T, Loader)
 			local total = 0
 			local sends = 0
 			while true do
-				local embed, taken = ChatLogRules.take(batch, "j")
+				local embed, count = ChatLogRules.peek(batch, "j")
 				if not embed then
 					break
 				end
 				T.expect(#embed.description <= ChatLogRules.MAX_DESCRIPTION, "description bornée")
-				total += taken
+				ChatLogRules.commit(batch, count)
+				total += count
 				sends += 1
 			end
 			T.expectEqual(total, 100, "aucune entrée perdue")
@@ -93,8 +123,10 @@ return function(T, Loader)
 			T.expectEqual(#batch.entries, ChatLogRules.MAX_PENDING)
 			T.expectEqual(batch.dropped, 3)
 			T.expectEqual(batch.entries[1].text, "m4", "les plus anciennes partent")
-			local embed = ChatLogRules.take(batch, "j")
+			local embed, count = ChatLogRules.peek(batch, "j")
 			T.expect(string.find(embed.description, "3 entrée(s) perdue(s)", 1, true) ~= nil, "perte signalée")
+			T.expectEqual(batch.dropped, 3, "compte gardé tant que l'envoi n'a pas réussi")
+			ChatLogRules.commit(batch, count)
 			T.expectEqual(batch.dropped, 0)
 		end)
 	end)
