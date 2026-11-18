@@ -40,6 +40,13 @@ def stroke(dist, half):
 	return np.clip((half - np.abs(dist)) / AA + 0.5, 0, 1)
 
 
+# Cette méthode permet de peindre une feuille (goutte elliptique de 0,021 × 0,039 stud, bord anticrénelé en studs)
+# centrée en (du, dv) lorsqu'une frise de rinceaux pose ses feuilles aux crêtes.
+def leaf(du, dv):
+	e = np.hypot(du / 0.03, dv / 0.055)
+	return np.clip((0.7 - e) * 0.03 / AA + 0.5, 0, 1)
+
+
 # Cette méthode permet de peindre une frise de rinceaux (tige ondulée, volutes, feuilles) centrée sur `vc` lorsqu'une
 # articulation reçoit sa frise ; un nombre pair d'ondes par face la raccorde d'une face à l'autre.
 def rinceau(u, v, hu, vc, amp):
@@ -65,9 +72,9 @@ def rinceau(u, v, hu, vc, amp):
 		curls = np.maximum(curls, stroke(d, r * 0.28))  # bouton au centre
 	# feuilles : une goutte à chaque crête de la tige, tournée vers l'extérieur
 	crest = np.mod(u + period / 2, period) - period / 2
-	leaf_top = stroke(np.hypot(crest / 0.03, (v - (vc + amp + 0.05)) / 0.055), 1.0 * 0.7)
+	leaf_top = leaf(crest, v - (vc + amp + 0.05))
 	crest2 = np.mod(u, period) - period / 2
-	leaf_bot = stroke(np.hypot(crest2 / 0.03, (v - (vc - amp - 0.05)) / 0.055), 1.0 * 0.7)
+	leaf_bot = leaf(crest2, v - (vc - amp - 0.05))
 	return np.maximum.reduce([stem, curls, leaf_top, leaf_bot])
 
 

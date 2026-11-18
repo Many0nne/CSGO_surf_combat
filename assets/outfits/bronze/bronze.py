@@ -13,7 +13,7 @@ Coordonnées : espace de la pièce en studs, avant du personnage = -Z, sa gauche
 """
 
 import numpy as np
-from r15_bake import TOP, cavity, face_coords, half_sizes, height_of, mercure, muscles, pillow, smoothstep
+from r15_bake import BOTTOM, TOP, cavity, face_coords, half_sizes, height_of, mercure, muscles, pillow, smoothstep
 
 
 MERCURE = mercure()
@@ -95,7 +95,7 @@ def edge_wear(part, face, u, v):
 	hu, hv = half_sizes(part, face)
 	dist = hu - np.abs(u)
 	dist = np.where(face == TOP, np.minimum(dist, hv - np.abs(v)), dist)
-	dist = np.where(face == TOP + 1, 1.0, dist)  # dessous : jamais touché
+	dist = np.where(face == BOTTOM, 1.0, dist)  # dessous : jamais touché
 	return 1 - smoothstep(0.0, 0.14, dist)
 
 

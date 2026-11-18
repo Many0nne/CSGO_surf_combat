@@ -315,10 +315,13 @@ def bake_atlas(outfit, variant, out_dir, size, group, meshes, flat=False):
 		r = rasterize(pos, nrm, uv, tris, size)
 		p, n = r["p"], r["n"]
 		t, b = tangentize(r["t"], n), tangentize(r["b"], n)
-		# Aux articulations, deux pièces ont des faces confondues : chacune y peint comme la pièce propriétaire
-		# (owners), sinon leurs dessins différents scintilleraient en jeu.
+		# Aux articulations, deux pièces ont des faces confondues : chacune y peint comme la pièce propriétaire, fixée
+		# au texel (les points décalés du calcul de la normale gardent la même), sinon leurs dessins scintilleraient.
+		owner = None if flat else owners(name, p, n)
+
+		# Cette méthode permet de lire la surface de la tenue aux points `q` du texel lorsqu'on cuit ses cartes.
 		def surf(q):
-			return outfit.surface(name, q, n, variant) if flat else as_owner(outfit.surface, name, q, (n,), variant)
+			return outfit.surface(name, q, n, variant) if flat else as_owner(outfit.surface, name, q, (n,), variant, owner=owner)
 
 		s = surf(p)
 		h0 = s["height"]
@@ -338,18 +341,19 @@ def bake_atlas(outfit, variant, out_dir, size, group, meshes, flat=False):
 			if flat:
 				s["color"] = outfit.shade(name, p, bumped, s, variant)
 			else:
-				s["color"] = as_owner(outfit.shade, name, p, (bumped, s), variant)
+				s["color"] = as_owner(outfit.shade, name, p, (bumped, s), variant, owner=owner)
 		color[iy, ix] = s["color"]
 		normal[iy, ix] = nt * 0.5 + 0.5
 		metal[iy, ix] = s["metal"]
 		rough[iy, ix] = s["rough"]
 		filled[iy, ix] = True
 	normal[~filled] = (0.5, 0.5, 1.0)
+	passes = size // 8 if flat else 8  # coque : combler aussi la couture du dépliage (triangles écartés)
 	maps = {
-		"Color": dilate(color, filled),
-		"Normal": dilate(normal, filled),
-		"Metal": dilate(metal, filled),
-		"Rough": dilate(rough, filled),
+		"Color": dilate(color, filled, passes),
+		"Normal": dilate(normal, filled, passes),
+		"Metal": dilate(metal, filled, passes),
+		"Rough": dilate(rough, filled, passes),
 	}
 	for kind, img in maps.items():
 		arr = np.clip(img * 255 + 0.5, 0, 255).astype(np.uint8)
@@ -398,21 +402,29 @@ def hidden_triangles(name, pos, tris, margin=0.01):
 	return hidden
 
 
-# Cette méthode permet de trouver, pour chaque point d'une pièce, la pièce qui en « possède » la surface (la première,
-# dans l'ordre de PARTS, dont la boîte au repos le contient) lorsque deux pièces ont là des faces confondues.
-def owners(name, p, margin=0.01):
+# Cette méthode permet de trouver la pièce qui « possède » chaque point (la première de PARTS dont la boîte au repos le
+# contient, face tournée du même côté) lorsque deux pièces ont là des faces confondues (coude, hanche…).
+def owners(name, p, n, margin=0.01):
 	world = p + rest_offset(name)
+	axis = np.argmax(np.abs(n), axis=1)
+	sign = np.sign(n[np.arange(len(n)), axis])
 	owner = np.full(len(p), name, dtype=object)
-	for other, (_, size, _) in reversed(list(PARTS.items())):
-		inside = np.all(np.abs(world - rest_offset(other)) <= np.array(size) / 2 + margin, axis=1)
-		owner = np.where(inside, other, owner)
+	for other, (_, size, _) in PARTS.items():
+		if other == name:
+			break  # seules les pièces qui la précèdent peuvent la posséder : les deux côtés choisissent la même
+		rel = world - rest_offset(other)
+		half = np.array(size) / 2
+		inside = np.all(np.abs(rel) <= half + margin, axis=1)
+		# face collée à l'autre pièce mais tournée vers elle (intérieur du bras contre le torse) : pas partagée
+		facing = rel[np.arange(len(p)), axis] * sign > -half[axis] + margin
+		owner = np.where(inside & facing & (owner == name), other, owner)
 	return owner
 
 
 # Cette méthode permet d'appeler une fonction de la tenue (surface, shade) comme la pièce propriétaire de chaque point
 # (owners) lorsque les deux pièces d'une articulation doivent y peindre le même dessin ; `extra` suit les points.
-def as_owner(fn, name, p, extra, *args):
-	owner = owners(name, p)
+def as_owner(fn, name, p, extra, *args, owner=None):
+	owner = owners(name, p, extra[0]) if owner is None else owner
 	parts = list(dict.fromkeys(owner))
 	if len(p) == 0 or parts == [name]:
 		return fn(name, p, *extra, *args)
