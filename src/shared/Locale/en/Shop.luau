@@ -64,5 +64,7 @@ return {
 	-- Noms des Developer Products (Creator Hub, jamais affichés dans le jeu)
 	["500 crédits"] = "500 credits",
 	["1 100 crédits"] = "1,100 credits",
+	["2 400 crédits"] = "2,400 credits",
+	["5 000 crédits"] = "5,000 credits",
 	["3 000 crédits"] = "3,000 credits",
 }

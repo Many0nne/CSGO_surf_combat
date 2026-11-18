@@ -133,7 +133,8 @@ end
 -- pack connu, joueur non restreint ; renvoie la réponse au client et le pack à proposer.
 function ReceiptService.promptFor(player: Player, packId: string): (Reply, CreditPacks.Pack?)
 	local pack = CreditPacks.byId(packId)
-	if not pack then
+	-- Pack retiré de la vente : ses reçus restent accordés, mais il n'est plus proposé
+	if not pack or pack.retired then
 		return { ok = false, reason = "unknown" }, nil
 	end
 	if PaidRandomPolicy.isRestricted(player) then
