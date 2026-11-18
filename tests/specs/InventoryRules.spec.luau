@@ -550,6 +550,60 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("InventoryRules : tenues rares BRONZE et PORCELAINE (#521)", function()
+		T.it("deux tenues rares à 1 200 crédits, listées avant MERCURE (tri par prix)", function()
+			for _, id in { "outfit.bronze", "outfit.porcelaine" } do
+				local item = Rules.item(id)
+				T.expect(item ~= nil, "tenue au catalogue : " .. id)
+				T.expectEqual(item and item.type, Rules.Type.OUTFIT)
+				T.expectEqual(item and item.rarity, "rare")
+				T.expectEqual(item and item.price, 1200)
+			end
+			local order = {}
+			for _, outfit in Rules.outfits() do
+				table.insert(order, outfit.id)
+			end
+			T.expectEqual(table.concat(order, ","), "outfit.bronze,outfit.porcelaine,outfit.mercure")
+		end)
+
+		T.it("chaque dossier assets/rbx/Outfits correspond à une tenue du catalogue", function()
+			local fs = require("@lune/fs")
+			local appearances = {}
+			for _, outfit in Rules.outfits() do
+				appearances[outfit.appearance] = true
+			end
+			for _, file in fs.readDir("assets/rbx/Outfits") do
+				local name = string.match(file, "^(.+)%.rbxm$")
+				if name then
+					T.expect(appearances[name], "tenue sans item au catalogue : " .. file)
+				end
+			end
+		end)
+
+		T.it("l'admin les équipe, et elles suivent l'attribut comme MERCURE", function()
+			local admin = Rules.resolve(nil, true)
+			for _, id in { "outfit.bronze", "outfit.porcelaine" } do
+				local equipped = Rules.equip({}, admin, Rules.OUTFIT_SLOT, id, nil)
+				local resolved = Rules.resolveEquipped(equipped, admin)
+				T.expectEqual(Rules.outfitOf(resolved), id)
+				T.expectEqual(Rules.outfitOf(Rules.decodeEquipped(Rules.encodeEquipped(resolved), admin)), id)
+			end
+		end)
+
+		T.it("les bots se répartissent à peu près également entre l'origine et chaque tenue", function()
+			local counts = {}
+			local total = 400
+			for i = 1, total do
+				local key = Rules.outfitForName("Bot" .. i) or "origine"
+				counts[key] = (counts[key] or 0) + 1
+			end
+			local share = 1 / (#Rules.outfits() + 1)
+			for key, n in counts do
+				T.expect(math.abs(n / total - share) < 0.1, string.format("%s : %d bots sur %d", key, n, total))
+			end
+		end)
+	end)
+
 	T.describe("InventoryRules.outfitForName (#521)", function()
 		T.it("un bot garde la même tenue, et les bots se partagent l'origine et les tenues", function()
 			T.expectEqual(Rules.outfitForName("Bot_Vega"), Rules.outfitForName("Bot_Vega"))

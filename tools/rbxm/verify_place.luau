@@ -381,6 +381,21 @@ local OUTFIT_PARTS = {
 	"RightLowerLeg",
 	"RightFoot",
 }
+local OUTFIT_MAPS = { "ColorMapContent", "NormalMapContent", "MetalnessMapContent", "RoughnessMapContent" }
+
+-- Cette méthode permet de signaler une carte de tenue sans image lorsqu'on vérifie une SurfaceAppearance (une pièce
+-- sans couleur ou sans normal map sortirait grise ou plate en jeu).
+local function checkOutfitMaps(appearance: Instance, label: string)
+	for _, property in OUTFIT_MAPS do
+		local ok, value = pcall(function()
+			return (appearance :: any)[property]
+		end)
+		if not (ok and string.match(tostring(value), "rbxassetid://%d+")) then
+			fail(label .. "." .. property .. " sans image")
+		end
+	end
+end
+
 local outfits = game.ReplicatedStorage:FindFirstChild("Outfits")
 for _, name in rbxmNames("assets/rbx/Outfits") do
 	local outfit = outfits and outfits:FindFirstChild(name)
@@ -392,6 +407,8 @@ for _, name in rbxmNames("assets/rbx/Outfits") do
 		local appearance = outfit:FindFirstChild(partName)
 		if not (appearance and appearance:IsA("SurfaceAppearance")) then
 			fail("Outfits." .. name .. "." .. partName .. " absent ou pas une SurfaceAppearance")
+		else
+			checkOutfitMaps(appearance, "Outfits." .. name .. "." .. partName)
 		end
 	end
 	local head = outfit:FindFirstChild("Head")
@@ -400,6 +417,12 @@ for _, name in rbxmNames("assets/rbx/Outfits") do
 			fail("Outfits." .. name .. ".Head n'est pas une MeshPart")
 		elseif head.CanCollide or head.CanQuery or head.CanTouch or not head.Massless then
 			fail("Outfits." .. name .. ".Head doit être sans collision, ni requête, ni contact, et sans masse")
+		end
+		local appearance = head:FindFirstChildOfClass("SurfaceAppearance")
+		if appearance then
+			checkOutfitMaps(appearance, "Outfits." .. name .. ".Head")
+		else
+			fail("Outfits." .. name .. ".Head sans SurfaceAppearance (coque grise)")
 		end
 	end
 	print("Outfits." .. name .. " " .. summarize(outfit))

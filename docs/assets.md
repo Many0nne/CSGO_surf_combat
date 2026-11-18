@@ -797,7 +797,45 @@ de la boîte de la tête → rien).
   se lisait plus, refusé), le défaut venant de la superposition et pas du dessin. Pas de doigts dessinés sur les mains
   (jugés laids).
 
-**Pistes rejetées :** corps humain réaliste (extension MPFB de Blender) calé sur les articulations du rig : jambes
+**Tenues suivantes (BRONZE, PORCELAINE, rares) : fabrication sans Studio.**
+
+1. Module `assets/outfits/<nom>/<nom>.py` à 2 ou 3 variantes ; BRONZE et PORCELAINE reprennent la musculature de
+   MERCURE (`MERCURE.PAINTERS`, module chargé par chemin) et leur propre couleur. Coque de tête : celle de MERCURE,
+   exportée une fois en JSON (`blender -b --factory-startup --python tools/outfits/head_mesh.py -- MercureHead.fbx
+   head.json`), cuite avec `r15_bake.py --head head.json` dans `<variante>/Head/`.
+2. Planche : `r15_bake.py --rig-json rig.json` (meshs placés au repos), puis
+   `blender -b --factory-startup --python tools/outfits/render_sheet.py -- rig.json planche.png "TITRE=<dossier>"…`
+   (Workbench, face, trois quarts, dos, quelques secondes). Workbench ne montre pas la normal map : le relief ne s'y lit
+   que peint dans la couleur.
+3. Publication (`publish_skin.py`), puis `rojo build` et `lune run tools/outfits/make_rbxm.luau <place> mercure <nom>
+   <ids.json>` : clone le dossier de MERCURE (cartes et coque avec toutes leurs propriétés) et y pose les nouveaux ids.
+   Studio ne sert plus qu'à vérifier.
+
+BRONZE (variante `patine`) : reflet peint comme MERCURE mais chaud et plus doux, vert-de-gris là où le relief est plus
+bas que ce qui l'entoure (moyenne sur huit directions à 0,26 stud : il remplit les creux entre les masses, ordonné),
+sommet des muscles et arêtes verticales polis (or clair). PORCELAINE (variante `dense`) : vernis blanc, creux à peine
+bleutés, frises de rinceaux en **bandes cobalt pleines à motif réservé en blanc** (lisibles de loin), filets, chaînes de
+quatre-feuilles sur les jambes, anneaux sur la coque.
+
+**Pièges (cuisson) :**
+
+- **Les meshs du rig partagent l'UV de la face avant avec leurs faces cachées** (dessus et biseaux de la jambe, cachés
+  dans la cuisse ; idem coude, poignet, cheville). Cuits après elle, ils l'écrasaient : bas des jambes sans décor.
+  `r15_bake` cuit donc d'abord les triangles cachés dans une pièce voisine au repos. MERCURE a été cuite avant cette
+  correction.
+- **Les pièces d'un membre se recouvrent au repos** (bras et avant-bras sur 0,82 stud, cuisse et jambe sur 0,68), faces
+  confondues : un décor qui change d'une pièce à l'autre y scintille. PORCELAINE peint bras et jambes d'un seul tenant,
+  selon la hauteur au-dessus de la racine (`height_of`) : les deux pièces y peignent le même dessin. Pas de filet
+  horizontal aux articulations, seulement aux extrémités du membre.
+- **Coque de tête de MERCURE : couture au milieu du visage.** Le dépliage met u = -angle/360 avec la couture devant ;
+  la bande de 10° au centre du visage va de u = 0,976 à 0,024, donc lit toute la largeur de la carte. Un décor de coque
+  ne dépend que de la hauteur (anneaux) ; `load_head` écarte ces triangles à la cuisson.
+- **Une variante à traits fins disparaît en jeu** : filets de 0,02 stud illisibles à distance (variante `filets`).
+- **Éclairage peint fixe (lumière venant de l'avant)** : le dos sort noir. Peindre l'éclairage relatif à chaque face
+  (regard de face, comme MERCURE).
+
+**Pistes rejetées :** BRONZE éclairé « diffus + reflet » au lieu du reflet peint (aspect carton, mat), poli en aplats
+sur les muscles (pastilles jaunes) ou mesuré par un laplacien serré (anneaux autour des muscles) ; corps humain réaliste (extension MPFB de Blender) calé sur les articulations du rig : jambes
 courtes et épaules de gorille, le rig en blocs place hanches à 40 % et épaules très larges ; passer à un rig aux
 proportions humaines : refusé (« on reste dans le style rig 15 ») ; traits d'encre façon comics sur les contours
 (variante `encre`, gardée dans le module) : LISSE préférée ; tenues « métiers » (cordiste, jockey…) : pas assez

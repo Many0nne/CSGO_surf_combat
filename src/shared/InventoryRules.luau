@@ -411,6 +411,24 @@ InventoryRules.ITEMS = {
 		rarity = "exceptional",
 		price = 2500,
 	},
+	-- Statue de bronze patiné : vert-de-gris dans les creux, saillies polies (bronze.py, variante patine)
+	{
+		id = "outfit.bronze",
+		type = "outfit",
+		name = "BRONZE",
+		appearance = "bronze",
+		rarity = "rare",
+		price = 1200,
+	},
+	-- Figurine de porcelaine : blanc laiteux, frises de rinceaux et filets bleu de cobalt (porcelaine.py, variante dense)
+	{
+		id = "outfit.porcelaine",
+		type = "outfit",
+		name = "PORCELAINE",
+		appearance = "porcelaine",
+		rarity = "rare",
+		price = 1200,
+	},
 } :: { Item }
 
 -- Inventaire de tout joueur (et des bots), sauvegardé ou non : Ka-Bar et AWP

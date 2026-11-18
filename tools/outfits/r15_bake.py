@@ -19,15 +19,22 @@ Les pièces d'un même groupe se partagent un atlas (leurs UV ne se recouvrent p
 LeftArm, RightArm (bras, avant-bras, main), LeftLeg, RightLeg (cuisse, jambe, pied). Les deux bras ont les mêmes UV,
 d'où un atlas par côté. La tête du rig est une pièce à SpecialMesh, sans UV : elle n'est pas cuite ici.
 
+Coque de tête (option --head) : la coque d'une tenue (MeshPart, cf. docs/assets.md) a ses propres UV. Exportée en JSON
+par tools/outfits/head_mesh.py, elle se cuit comme une pièce de plus, nommée « Head » (espace de la coque en studs,
+centrée), dans <sortie>/<variante>/Head/Head_*.png. Sa normal map reste plate : le JSON vient des axes du FBX.
+
+Planche (option --rig-json) : écrit les meshs des pièces, placés au repos, pour tools/outfits/render_sheet.py.
+
 Meshs : téléchargés par Open Cloud (clé ROBLOX_OPEN_CLOUD_KEY, scope legacy-asset:manage), gardés dans <cache>.
 
 Usage (depuis la racine du worktree) :
   uv run tools/outfits/r15_bake.py assets/outfits/mercure/mercure.py <sortie> [--size 1024] [--cache <dossier>]
-    [--variant <nom>] [--groups LeftArm,RightArm]
+    [--variant <nom>] [--groups LeftArm,RightArm] [--head <coque.json>] [--rig-json <rig.json>]
 """
 
 import argparse
 import importlib.util
+import json
 import os
 import sys
 
@@ -67,7 +74,10 @@ OFFSETS = {
 	"UpperLeg": -2.2565,
 	"LowerLeg": -3.4955,
 	"Foot": -4.5264,
+	"Head": 2.3823,  # haut de l'UpperTorso + demi-hauteur de la tête (1,5882) : centre de la coque
 }
+# Écart latéral du centre des pièces (studs, gauche = -X) : bras contre le torse, jambes côte à côte
+SIDE_X = {"UpperArm": 2.3823, "LowerArm": 2.3823, "Hand": 2.3823, "UpperLeg": 0.7941, "LowerLeg": 0.7941, "Foot": 0.7941}
 
 
 # Cette méthode permet de donner la hauteur d'un point au-dessus de la racine du personnage (rig au repos) lorsqu'une
@@ -215,6 +225,8 @@ def rasterize(pos, nrm, uv, tris, size):
 		out["n"].append(n)
 		out["t"].append(np.repeat(t[None], len(p), axis=0))
 		out["b"].append(np.repeat(-bt[None], len(p), axis=0))  # vers le haut de l'image (OpenGL)
+	if not out["p"]:
+		return {k: np.zeros((0, 3)) if k in ("p", "n", "t", "b") else np.zeros(0, dtype=np.int64) for k in out}
 	return {k: np.concatenate(v) for k, v in out.items()}
 
 
@@ -248,59 +260,128 @@ def dilate(img, filled, passes=8):
 	return img
 
 
-# Cette méthode permet de cuire toutes les cartes d'une variante de tenue (un atlas par groupe) lorsqu'on lance le
-# script sur un module de tenue.
-def bake(outfit, variant, out_dir, size, cache, key, groups=None):
+# Cette méthode permet de cuire l'atlas d'un groupe (pièces qui se le partagent) lorsqu'on cuit une variante ; `meshes`
+# est une liste de (nom de pièce, positions, normales, UV, triangles), `flat` garde une normal map plate.
+def bake_atlas(outfit, variant, out_dir, size, group, meshes, flat=False):
 	os.makedirs(out_dir, exist_ok=True)
 	eps = 0.004
-	for group in groups or GROUPS:
-		color = np.zeros((size, size, 3))
-		normal = np.zeros((size, size, 3))
-		metal = np.zeros((size, size))
-		rough = np.zeros((size, size))
-		filled = np.zeros((size, size), dtype=bool)
-		for name, (_, _, g) in PARTS.items():
-			if g != group:
-				continue
-			pos, nrm, uv, tris = load_part(name, cache, key)
-			r = rasterize(pos, nrm, uv, tris, size)
-			p, n = r["p"], r["n"]
-			t, b = tangentize(r["t"], n), tangentize(r["b"], n)
-			s = outfit.surface(name, p, n, variant)
-			h0 = s["height"]
+	color = np.zeros((size, size, 3))
+	normal = np.zeros((size, size, 3))
+	metal = np.zeros((size, size))
+	rough = np.zeros((size, size))
+	filled = np.zeros((size, size), dtype=bool)
+	for name, pos, nrm, uv, tris in meshes:
+		r = rasterize(pos, nrm, uv, tris, size)
+		p, n = r["p"], r["n"]
+		t, b = tangentize(r["t"], n), tangentize(r["b"], n)
+		s = outfit.surface(name, p, n, variant)
+		h0 = s["height"]
+		if flat:
+			nt = np.tile([0.0, 0.0, 1.0], (len(p), 1))
+		else:
 			ht = outfit.surface(name, p + t * eps, n, variant)["height"]
 			hb = outfit.surface(name, p + b * eps, n, variant)["height"]
 			nt = np.stack([-(ht - h0) / eps, -(hb - h0) / eps, np.ones_like(h0)], axis=1)
 			nt /= np.linalg.norm(nt, axis=1, keepdims=True)
-			iy, ix = r["iy"], r["ix"]
-			if hasattr(outfit, "shade"):
-				# normale en relief dans l'espace de la pièce, pour une tenue qui peint son reflet dans la couleur
-				bumped = nt[:, :1] * t + nt[:, 1:2] * b + nt[:, 2:] * n
-				bumped /= np.linalg.norm(bumped, axis=1, keepdims=True)
-				s["geo_normal"] = n
-				s["color"] = outfit.shade(name, p, bumped, s, variant)
-			color[iy, ix] = s["color"]
-			normal[iy, ix] = nt * 0.5 + 0.5
-			metal[iy, ix] = s["metal"]
-			rough[iy, ix] = s["rough"]
-			filled[iy, ix] = True
-		normal[~filled] = (0.5, 0.5, 1.0)
-		maps = {
-			"Color": dilate(color, filled),
-			"Normal": dilate(normal, filled),
-			"Metal": dilate(metal, filled),
-			"Rough": dilate(rough, filled),
-		}
-		for kind, img in maps.items():
-			arr = np.clip(img * 255 + 0.5, 0, 255).astype(np.uint8)
-			if kind == "Color":
-				arr = np.clip((np.clip(img, 0, 1) ** (1 / 2.2)) * 255 + 0.5, 0, 255).astype(np.uint8)
-			used = arr[filled]  # texels couverts par les pièces (le reste de l'atlas n'est jamais lu)
-			if np.all(used.max(axis=0) - used.min(axis=0) <= 1):
-				arr = np.empty((8, 8) + arr.shape[2:], dtype=np.uint8)  # carte uniforme : 8 × 8 suffit
-				arr[...] = used[0]
-			Image.fromarray(arr).save(os.path.join(out_dir, f"{group}_{kind}.png"))
-		print(f"[r15_bake] {variant} {group} : {int(filled.sum())} texels")
+		iy, ix = r["iy"], r["ix"]
+		if hasattr(outfit, "shade"):
+			# normale en relief dans l'espace de la pièce, pour une tenue qui peint son reflet dans la couleur
+			bumped = nt[:, :1] * t + nt[:, 1:2] * b + nt[:, 2:] * n
+			bumped /= np.linalg.norm(bumped, axis=1, keepdims=True)
+			s["geo_normal"] = n
+			s["color"] = outfit.shade(name, p, bumped, s, variant)
+		color[iy, ix] = s["color"]
+		normal[iy, ix] = nt * 0.5 + 0.5
+		metal[iy, ix] = s["metal"]
+		rough[iy, ix] = s["rough"]
+		filled[iy, ix] = True
+	normal[~filled] = (0.5, 0.5, 1.0)
+	maps = {
+		"Color": dilate(color, filled),
+		"Normal": dilate(normal, filled),
+		"Metal": dilate(metal, filled),
+		"Rough": dilate(rough, filled),
+	}
+	for kind, img in maps.items():
+		arr = np.clip(img * 255 + 0.5, 0, 255).astype(np.uint8)
+		if kind == "Color":
+			arr = np.clip((np.clip(img, 0, 1) ** (1 / 2.2)) * 255 + 0.5, 0, 255).astype(np.uint8)
+		used = arr[filled]  # texels couverts par les pièces (le reste de l'atlas n'est jamais lu)
+		if np.all(used.max(axis=0) - used.min(axis=0) <= 1):
+			arr = np.empty((8, 8) + arr.shape[2:], dtype=np.uint8)  # carte uniforme : 8 × 8 suffit
+			arr[...] = used[0]
+		Image.fromarray(arr).save(os.path.join(out_dir, f"{group}_{kind}.png"))
+	print(f"[r15_bake] {variant} {group} : {int(filled.sum())} texels")
+
+
+# Cette méthode permet de lire la coque de tête exportée par head_mesh.py lorsqu'une tenue a une coque à cuire.
+# Les triangles qui enjambent la couture du dépliage (u de 0,98 à 0,02 : la bande de 10° au milieu du visage de la
+# coque de MERCURE) sont écartés : ils couvriraient toute la largeur de l'atlas. En jeu, cette bande lit toute la
+# largeur de la carte : le décor d'une coque ne doit dépendre que de la hauteur (anneaux), cf. docs/assets.md.
+def load_head(path):
+	with open(path) as f:
+		d = json.load(f)
+	nrm = np.array(d["nrm"], dtype=np.float64)
+	nrm /= np.linalg.norm(nrm, axis=1, keepdims=True) + 1e-12
+	uv = np.array(d["uv"], dtype=np.float64)
+	tris = np.array(d["tris"], dtype=np.int64)
+	tris = tris[np.ptp(uv[tris, 0], axis=1) < 0.5]
+	return np.array(d["pos"], dtype=np.float64), nrm, uv, tris
+
+
+# Cette méthode permet de donner la position d'une pièce au repos (centre, studs depuis la racine) lorsqu'on place le
+# rig pour la planche ou qu'on cherche les faces d'une pièce cachées dans une autre.
+def rest_offset(name):
+	kind = name.removeprefix("Left").removeprefix("Right")
+	side = -1 if name.startswith("Left") else 1
+	return np.array([SIDE_X.get(kind, 0) * side, OFFSETS[kind], 0])
+
+
+# Cette méthode permet de repérer les triangles d'une pièce cachés dans une pièce voisine au repos (dessus de la jambe
+# dans la cuisse, biseaux du coude…) lorsqu'on cuit un atlas : les meshs du rig réutilisent pour eux l'espace UV de la
+# face avant, et s'ils étaient cuits après elle, ils l'écraseraient (dessin coupé ou effacé au bas des jambes).
+def hidden_triangles(name, pos, tris, margin=0.01):
+	centers = pos[tris].mean(axis=1) + rest_offset(name)
+	hidden = np.zeros(len(tris), dtype=bool)
+	for other, (_, size, _) in PARTS.items():
+		if other == name:
+			continue
+		half = np.array(size) / 2 - margin
+		hidden |= np.all(np.abs(centers - rest_offset(other)) < half, axis=1)
+	return hidden
+
+
+# Cette méthode permet de cuire toutes les cartes d'une variante de tenue (un atlas par groupe, puis la coque de tête
+# si elle est donnée) lorsqu'on lance le script sur un module de tenue. Les triangles cachés sont cuits d'abord, pour
+# que les faces visibles qui partagent leurs UV l'emportent.
+def bake(outfit, variant, out_dir, size, cache, key, groups=None, head=None):
+	for group in groups or GROUPS:
+		hidden, visible = [], []
+		for name, (_, _, g) in PARTS.items():
+			if g != group:
+				continue
+			pos, nrm, uv, tris = load_part(name, cache, key)
+			mask = hidden_triangles(name, pos, tris)
+			hidden.append((name, pos, nrm, uv, tris[mask]))
+			visible.append((name, pos, nrm, uv, tris[~mask]))
+		bake_atlas(outfit, variant, os.path.join(out_dir, "R15"), size, group, hidden + visible)
+	if head:
+		bake_atlas(outfit, variant, os.path.join(out_dir, "Head"), size // 2, "Head", [("Head", *load_head(head))], True)
+
+
+# Cette méthode permet d'écrire les meshs des pièces placés au repos (positions en studs depuis la racine, UV,
+# triangles) lorsqu'on prépare une planche de tenues (tools/outfits/render_sheet.py, Blender sans numpy à importer).
+def export_rig(path, cache, key, head=None):
+	rig = {}
+	for name in PARTS:
+		pos, _, uv, tris = load_part(name, cache, key)
+		rig[name] = {"pos": (pos + rest_offset(name)).tolist(), "uv": uv.tolist(), "tris": tris.tolist()}
+	if head:
+		pos, _, uv, tris = load_head(head)
+		rig["Head"] = {"pos": (pos + [0, OFFSETS["Head"], 0]).tolist(), "uv": uv.tolist(), "tris": tris.tolist()}
+	with open(path, "w") as f:
+		json.dump(rig, f)
+	print(f"[r15_bake] rig -> {path}")
 
 
 def main():
@@ -311,15 +392,19 @@ def main():
 	ap.add_argument("--cache", default=os.path.join(os.environ.get("TEMP", "/tmp"), "r15_meshes"))
 	ap.add_argument("--variant", action="append")
 	ap.add_argument("--groups", help="groupes à cuire, séparés par des virgules (défaut : tous)")
+	ap.add_argument("--head", help="coque de tête à cuire aussi (JSON de tools/outfits/head_mesh.py)")
+	ap.add_argument("--rig-json", help="écrit aussi les meshs du rig au repos, pour la planche")
 	args = ap.parse_args()
 	spec = importlib.util.spec_from_file_location("outfit", args.outfit)
 	outfit = importlib.util.module_from_spec(spec)
 	sys.modules["r15_bake"] = sys.modules[__name__]
 	spec.loader.exec_module(outfit)
 	key = os.environ["ROBLOX_OPEN_CLOUD_KEY"]
+	if args.rig_json:
+		export_rig(args.rig_json, args.cache, key, args.head)
 	for variant in args.variant or list(outfit.VARIANTS):
 		groups = args.groups.split(",") if args.groups else None
-		bake(outfit, variant, os.path.join(args.out, variant, "R15"), args.size, args.cache, key, groups)
+		bake(outfit, variant, os.path.join(args.out, variant), args.size, args.cache, key, groups, args.head)
 
 
 if __name__ == "__main__":
