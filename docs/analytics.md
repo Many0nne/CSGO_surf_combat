@@ -23,7 +23,7 @@ même tâche : une issue par correction, une fois les premières données collec
   `DebugPlaytest` restent donc hors des tableaux de bord, et ces lignes servent à vérifier un branchement.
 - **Jamais d'erreur dans le jeu** : chaque point d'entrée est sous `pcall` ; un appel refusé par `AnalyticsService`
   (limite de débit, argument) est signalé une fois par méthode (`[Analytics] LogFunnelStepEvent refusé : …`).
-- **Cardinalité** : aucun identifiant libre ni position brute dans les champs. Valeurs possibles : écrans (11), zones de
+- **Cardinalité** : aucun identifiant libre ni position brute dans les champs. Valeurs possibles : écrans (13), zones de
   la map (16), causes de mort (3), classes de manches (5), ancienneté (3), ids de caisses, de tenues et de packs (quelques-uns).
   Trois champs au plus par événement (`CustomField01..03`).
 

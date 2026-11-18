@@ -5,8 +5,8 @@
 -- Achat (remote `BuyOutfit`, RemoteFunction, tous les joueurs) : un seul achat en vol par joueur (un double clic est
 -- refusé `busy` sans rien faire) ; refus avant toute écriture si la tenue est inconnue ou pas en vente, si le solde ne
 -- peut pas changer (`WalletStore.canChange`) ou si la tenue est déjà possédée (admin compris : il les a toutes). Puis
--- une seule `InventoryStore.transact` qui revérifie la possession et le solde stockés, débite et ajoute la tenue :
--- `OutfitPurchaseRules`. Pas de restriction régionale : achat direct, sans tirage (docs/economie.md).
+-- une seule `InventoryStore.transact` qui revérifie la possession (déjà stockée : réécrite sans débit, `owned`) et le
+-- solde stockés, débite et ajoute la tenue : `OutfitPurchaseRules`. Pas de restriction régionale : achat direct, sans tirage (docs/economie.md).
 --
 -- Réponses : { ok = true, outfitId, rarity, price } ou { ok = false, reason } avec reason = "rate" (garde commune),
 -- "busy" (achat déjà en vol), "unknown" (id inconnu ou pas une tenue), "unavailable" (tenue sans prix), "loading"

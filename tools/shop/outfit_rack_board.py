@@ -33,20 +33,22 @@ RES = (1600, 900)
 FOV = 40  # FOV vertical de la caméra du shop (ShopScene.VERTICAL_FOV)
 
 
-# Cette méthode permet de construire les matrices d'un repère Roblox (translation, lacet, roulis, échelle) lorsqu'on
-# pose une pièce.
+# Cette méthode permet de construire la translation d'un repère Roblox lorsqu'on pose une pièce.
 def T(x, y, z):
     return Matrix.Translation((x, y, z))
 
 
+# Cette méthode permet de construire un lacet (rotation autour de Y, en degrés) lorsqu'on oriente une pièce.
 def Ry(deg):
     return Matrix.Rotation(math.radians(deg), 4, "Y")
 
 
+# Cette méthode permet de construire un roulis (rotation autour de Z, en degrés) lorsqu'on dresse un cylindre.
 def Rz(deg):
     return Matrix.Rotation(math.radians(deg), 4, "Z")
 
 
+# Cette méthode permet de construire une mise à l'échelle lorsqu'une pièce unitaire prend sa taille.
 def S(x, y, z):
     return Matrix.Diagonal((x, y, z, 1.0))
 

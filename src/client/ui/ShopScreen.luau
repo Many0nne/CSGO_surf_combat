@@ -145,13 +145,10 @@ local overviewHints: Frame -- aide de la vitrine, hors de la colonne (bas de l'�
 local packButton: Frame
 -- Motifs de refus du serveur (CrateService), affichés sous ACHETER
 local REFUSALS = PurchaseStatus.labels({
-	busy = "ACHAT DÉJÀ EN COURS",
-	loading = "INVENTAIRE EN CHARGEMENT",
 	forbidden = "RÉSERVÉ",
 	unknown = "CAISSE INCONNUE",
 	empty = "CAISSE VIDE",
 	owned = "TOUT OBTENU",
-	insufficient = "CRÉDITS INSUFFISANTS",
 })
 local paintActions: () -> ()
 local paintPackButton: () -> () = function() end

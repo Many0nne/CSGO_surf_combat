@@ -17,6 +17,7 @@ LABELS = json.load(open(os.path.join(R, "labels.json"), encoding="utf-8"))
 os.makedirs(OUT, exist_ok=True)
 
 
+# Cette méthode permet de charger la police de l'esquisse (gras ou normal) à une taille donnée.
 def f(size, bold=True):
     return ImageFont.truetype(FONT if bold else FONT_R, size)
 

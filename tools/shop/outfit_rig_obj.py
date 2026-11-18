@@ -50,6 +50,7 @@ def write_obj(path, pos, nrm, uv, tris):
 			f.write(f"f {a}/{a}/{a} {b}/{b}/{b} {c}/{c}/{c}\n")
 
 
+# Cette méthode permet d'exporter les 14 pièces et rig.json lorsque le script est lancé (dossier de sortie, cache des meshs).
 def main():
 	ap = argparse.ArgumentParser()
 	ap.add_argument("out")

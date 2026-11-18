@@ -233,13 +233,19 @@ local function session(d: Deps, player: Player, state: State, step: AnalyticsRul
 	funnelStep(d, player, R.SESSION_FUNNEL, state.sessionId, step)
 end
 
+-- Cette méthode permet d'ouvrir une nouvelle visite du shop (funnelSessionId partagé par les funnels Shop et Tenues,
+-- étapes de chacun remises à zéro) lorsque le joueur entre dans le shop ou achète sans visite ouverte.
+local function openShopVisit(d: Deps, state: State)
+	state.shopId = d.guid()
+	state.shopDone = {}
+	state.outfitDone = {}
+end
+
 -- Cette méthode permet d'envoyer une étape de la visite du shop en cours (une fois chacune) lorsqu'elle est atteinte ;
 -- sans visite ouverte (achat sans passer par le shop), une visite est ouverte.
 local function shop(d: Deps, player: Player, state: State, step: AnalyticsRules.Step)
 	if not state.shopId then
-		state.shopId = d.guid()
-		state.shopDone = {}
-		state.outfitDone = {}
+		openShopVisit(d, state)
 	end
 	if state.shopDone[step.step] then
 		return
@@ -252,9 +258,7 @@ end
 -- shop (même funnelSessionId) ; sans visite ouverte (achat sans passer par le shop), une visite est ouverte.
 local function outfitStep(d: Deps, player: Player, state: State, step: AnalyticsRules.Step)
 	if not state.shopId then
-		state.shopId = d.guid()
-		state.shopDone = {}
-		state.outfitDone = {}
+		openShopVisit(d, state)
 	end
 	if state.outfitDone[step.step] then
 		return
@@ -387,9 +391,7 @@ Analytics.screen = guarded("screen", function(d: Deps, player: Player, screen: s
 	end
 	-- Nouvelle visite du shop en y entrant depuis un autre écran ; l'ouverture et les packs restent dans la visite
 	if R.isShop(screen) and not R.isShop(previous) then
-		state.shopId = d.guid()
-		state.shopDone = {}
-		state.outfitDone = {}
+		openShopVisit(d, state)
 		shop(d, player, state, R.Shop.TAB)
 	end
 	if screen == S.SHOP_DETAIL then

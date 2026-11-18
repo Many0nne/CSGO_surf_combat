@@ -5,9 +5,11 @@
 --
 -- Achat direct, sans tirage (ce n'est pas un objet aléatoire payant, docs/economie.md) : le client désigne une tenue, le
 -- serveur relit son prix dans `InventoryRules.ITEMS` (`price`). Toute tenue du catalogue qui a un prix est en vente,
--- aucune n'est écrite ici. L'opération est pure (Roblox peut l'appeler plusieurs fois) : elle refuse une tenue déjà dans
--- les items stockés (`owned`, rien de débité : achetée entre-temps sur un autre serveur) ou un solde stocké insuffisant,
--- sinon elle débite le prix (achetés puis gagnés, `WalletRules.debit`) et ajoute la tenue, dans la même écriture.
+-- aucune n'est écrite ici. L'opération est pure (Roblox peut l'appeler plusieurs fois) : une tenue déjà dans les items
+-- stockés (achetée entre-temps sur un autre serveur) n'est pas débitée, mais l'enregistrement est gardé tel quel (résultat
+-- `owned`) : l'écriture réunit alors les items stockés à ceux de la session, qui apprend qu'elle la possède (sans quoi
+-- l'onglet TENUE refuserait de l'équiper jusqu'à la session suivante). Solde stocké insuffisant : refus, rien d'écrit.
+-- Sinon le prix est débité (achetés puis gagnés, `WalletRules.debit`) et la tenue ajoutée, dans la même écriture.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
@@ -19,16 +21,18 @@ local OutfitPurchaseRules = {}
 
 -- Achat décidé avant la transaction : tenue et prix lus dans le catalogue
 export type Purchase = { outfitId: string, price: number, rarity: string? }
--- Réponse au client : { ok = true, outfitId, rarity, price } ou { ok = false, reason }
+-- Réponse au client : { ok = true, outfitId, rarity, price }, { ok = true, outfitId, rarity, replayed = true } (rejeu :
+-- achetée ou déjà stockée, verdict inconnu, prix non compté) ou { ok = false, reason }
 export type Reply = {
 	ok: boolean,
 	reason: string?,
+	replayed: boolean?,
 	outfitId: string?,
 	rarity: string?,
 	price: number?,
 }
 
--- Motif de refus de l'opération quand la tenue est déjà dans les items stockés
+-- Résultat de l'opération quand la tenue est déjà dans les items stockés (rien de débité)
 OutfitPurchaseRules.OWNED = "owned"
 
 -- Cette méthode permet de lire la commande d'une tenue dans le catalogue lorsque le client en demande l'achat : refus
@@ -44,12 +48,13 @@ function OutfitPurchaseRules.order(outfitId: any): (Purchase?, string?)
 	return { outfitId = item.id, price = item.price :: number, rarity = item.rarity }
 end
 
--- Cette méthode permet de construire l'opération pure de `InventoryStore.transact` lorsqu'un achat est réglé : refus si
--- la tenue est déjà stockée ou si le solde stocké est trop bas, sinon débit et tenue ajoutée. Résultat : l'id ajouté.
+-- Cette méthode permet de construire l'opération pure de `InventoryStore.transact` lorsqu'un achat est réglé : tenue
+-- déjà stockée gardée sans débit (résultat `owned`), refus si le solde stocké est trop bas, sinon débit et tenue ajoutée
+-- (résultat : l'id ajouté).
 function OutfitPurchaseRules.operation(purchase: Purchase): (record: any) -> (any, any)
 	return function(record)
 		if table.find(record.items, purchase.outfitId) ~= nil then
-			return nil, OutfitPurchaseRules.OWNED
+			return record, OutfitPurchaseRules.OWNED
 		end
 		local wallet, why = WalletRules.debit(WalletRules.read(record.wallet), purchase.price)
 		if not wallet then
@@ -62,14 +67,16 @@ function OutfitPurchaseRules.operation(purchase: Purchase): (record: any) -> (an
 end
 
 -- Cette méthode permet de traduire l'issue de la transaction en réponse au client lorsque l'écriture est terminée. Un
--- rejeu (`ok` sans résultat : écrit par un essai signalé en échec) est un achat réussi : l'opération ne s'applique que
--- si la tenue n'était pas stockée, et la marque de la transaction empêche tout second débit.
+-- rejeu (`ok` sans résultat : écrit par un essai signalé en échec, jamais réappliqué) laisse la tenue possédée, mais ne
+-- dit pas si elle a été achetée ou trouvée déjà stockée : `replayed`, sans prix (les analytics ne comptent pas de
+-- dépense incertaine ; le solde publié, lui, est juste).
 function OutfitPurchaseRules.reply(status: string, result: any, purchase: Purchase): Reply
-	if status == "ok" then
-		return { ok = true, outfitId = purchase.outfitId, rarity = purchase.rarity, price = purchase.price }
-	end
-	if status == "rejected" and result == OutfitPurchaseRules.OWNED then
+	if status == "ok" and result == OutfitPurchaseRules.OWNED then
 		return { ok = false, reason = "owned" }
+	elseif status == "ok" and result == nil then
+		return { ok = true, outfitId = purchase.outfitId, rarity = purchase.rarity, replayed = true }
+	elseif status == "ok" then
+		return { ok = true, outfitId = purchase.outfitId, rarity = purchase.rarity, price = purchase.price }
 	end
 	-- Solde, chargement ou échec : traduits par TransactOutcome (même table que WalletStore.spend et les caisses)
 	return { ok = false, reason = TransactOutcome.translate(status, result) }

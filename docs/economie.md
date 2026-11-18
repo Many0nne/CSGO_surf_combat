@@ -161,24 +161,6 @@ du débit, et le remboursement d'un doublon rend déjà les crédits au compteur
   PolicyService ; nil la redemande.
 - `IsPaidItemTradingAllowed` : sans objet, il n'y a pas d'échange entre joueurs. À brancher avec un futur échange.
 
-## Tenues de personnage : achat direct (#543)
-
-Les tenues (#521) se vendent au portant du shop, **sans tirage** : le joueur choisit la tenue qu'il paie, au prix
-affiché (`price` dans `InventoryRules.ITEMS`). Ce n'est donc pas un objet aléatoire payant : pas de chances à
-afficher, pas de blocage pour un joueur restreint (`PaidRandomPolicy` n'est pas consulté), payable en crédits gagnés
-comme achetés (achetés débités d'abord, comme partout).
-
-- Toute tenue du catalogue qui a un prix est en vente (`OutfitPurchaseRules.order`) ; une tenue sans prix est
-  refusée `unavailable` (réservée, par exemple à l'admin). Aucune tenue n'est écrite en dur dans l'achat.
-- Le prix se règle par tenue, dans le catalogue seulement (MERCURE, exceptionnelle : 2 500) : ni le serveur ni le
-  client n'en gardent de copie.
-- Pas de doublon possible, donc pas de remboursement : une tenue déjà possédée est refusée avant l'écriture (session)
-  et dans l'opération (enregistrement stocké, achat sur un autre serveur), sans débit.
-- Code : `src/server/OutfitService.luau`, `src/server/OutfitPurchaseRules.luau` ; détail dans `docs/architecture.md`
-  (« Achat d'une tenue »).
-- Piège : si une tenue devait un jour se gagner au hasard (caisse de tenues), elle redevient un objet aléatoire payant
-  et suit la section ci-dessus (blocage `region`, chances à 100 %).
-
 **Remboursement d'un doublon dans le même compteur** (`CratePurchaseRules`) : d'abord `purchased`, à hauteur de ce que
 cet achat en a débité, le reste dans `earned`, toujours hors plafond du jour. Avant #395, tout allait dans `earned` :
 un achat payé en crédits achetés puis remboursé convertissait des crédits achetés en crédits gagnés (et aurait ouvert
@@ -195,3 +177,22 @@ décimales (quatre de plus que le premier chiffre non nul) ou la mention « Prob
 « PLAFOND DU JOUR ATTEINT » du `RoundHUD`) passe par `LocalWallet.observeDaily` : repeint à l'attribut `DailyCredits` et au
 changement de jour UTC (une minuterie partagée sur l'heure serveur). Piège : lire `dailyEarned()` seulement à ses propres
 événements laissait un affichage périmé à cheval sur minuit. Ne pas ajouter de minuterie par écran.
+
+## Tenues de personnage : achat direct (#543)
+
+Les tenues (#521) se vendent au portant du shop, **sans tirage** : le joueur choisit la tenue qu'il paie, au prix
+affiché (`price` dans `InventoryRules.ITEMS`). Ce n'est donc pas un objet aléatoire payant : pas de chances à
+afficher, pas de blocage pour un joueur restreint (`PaidRandomPolicy` n'est pas consulté), payable en crédits gagnés
+comme achetés (achetés débités d'abord, comme partout).
+
+- Toute tenue du catalogue qui a un prix est en vente (`OutfitPurchaseRules.order`) ; une tenue sans prix est
+  refusée `unavailable` (réservée, par exemple à l'admin). Aucune tenue n'est écrite en dur dans l'achat.
+- Le prix se règle par tenue, dans le catalogue seulement (MERCURE, exceptionnelle : 2 500) : ni le serveur ni le
+  client n'en gardent de copie.
+- Pas de doublon possible, donc pas de remboursement : une tenue déjà possédée est refusée avant l'écriture (session),
+  ou trouvée par l'opération dans l'enregistrement stocké (achetée sur un autre serveur) : rien de débité, mais
+  l'enregistrement est réécrit tel quel pour que la session apprenne qu'elle la possède.
+- Code : `src/server/OutfitService.luau`, `src/server/OutfitPurchaseRules.luau` ; détail dans `docs/architecture.md`
+  (« Achat d'une tenue »).
+- Piège : si une tenue devait un jour se gagner au hasard (caisse de tenues), elle redevient un objet aléatoire payant
+  et suit la section « Objets aléatoires payants » (blocage `region`, chances à 100 %).
