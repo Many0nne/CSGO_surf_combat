@@ -3,6 +3,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
+local InventoryRules = require(ReplicatedStorage.Shared.InventoryRules)
 local MathRules = require(ReplicatedStorage.Shared.MathRules)
 local MovementConfig = require(ReplicatedStorage.Shared.MovementConfig)
 
@@ -59,6 +60,41 @@ function BotRules.pickName(taken: { [string]: boolean }): string
 		n += 1
 	end
 	return "Bot" .. n
+end
+
+-- Cette méthode permet de répartir les tenues du catalogue entre les noms de bots (#547) lorsqu'on habille un bot : un
+-- nom sur deux en origine, les autres pris un à un par la tenue au plus fort poids restant (poids / (portées + 1)).
+function BotRules.outfitTable(): { [string]: string }
+	local outfits = InventoryRules.outfits()
+	local counts: { [string]: number } = {}
+	local legendaries = 0
+	local result: { [string]: string } = {}
+	for i, name in BotConfig.NAMES do
+		if i % 2 == 1 then
+			local best, bestScore, bestWeight = nil, 0, 0
+			for _, outfit in outfits do
+				local weight = BotConfig.OUTFIT_WEIGHTS[outfit.rarity or "common"] or 0
+				local capped = outfit.rarity == "legendary" and legendaries >= BotConfig.OUTFIT_LEGENDARY_MAX
+				local score = weight / ((counts[outfit.id] or 0) + 1)
+				-- À score égal, la plus rare passe (une légendaire seule reste visible), puis l'ordre du catalogue
+				if not capped and score > 0 and (score > bestScore or (score == bestScore and weight < bestWeight)) then
+					best, bestScore, bestWeight = outfit, score, weight
+				end
+			end
+			if best then
+				counts[best.id] = (counts[best.id] or 0) + 1
+				legendaries += if best.rarity == "legendary" then 1 else 0
+				result[name] = best.id
+			end
+		end
+	end
+	return result
+end
+
+-- Cette méthode permet de donner la tenue d'un bot d'après son nom lorsqu'il apparaît (#521, #547), toujours la même
+-- pour un même nom ; nil : tenue d'origine (aussi pour un nom hors de BotConfig.NAMES).
+function BotRules.outfitForName(name: string): string?
+	return BotRules.outfitTable()[name]
 end
 
 -- Bunny hop et air strafe (#151) -----------------------------------------------------------------------------------

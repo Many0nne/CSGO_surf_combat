@@ -859,18 +859,6 @@ function InventoryRules.outfits(): { Item }
 	return list
 end
 
--- Cette méthode permet de choisir la tenue d'un bot (#521) d'après son nom lorsqu'il apparaît : l'origine ou une tenue
--- du catalogue, à chances égales, toujours la même pour un même nom ; nil : tenue d'origine.
-function InventoryRules.outfitForName(name: string): string?
-	local outfits = InventoryRules.outfits()
-	local hash = 0
-	for i = 1, #name do
-		hash = (hash * 31 + string.byte(name, i)) % 1000003
-	end
-	local index = hash % (#outfits + 1)
-	return if index == 0 then nil else outfits[index].id
-end
-
 -- Cette méthode permet de lister les Tools d'un équipement résolu, dans l'ordre des emplacements, lorsque le serveur
 -- remplit le sac.
 function InventoryRules.equippedTools(resolved: Equipped): { string }

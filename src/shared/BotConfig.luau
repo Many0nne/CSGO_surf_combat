@@ -5,6 +5,10 @@
 return {
 	-- Noms tirés d'une liste fixe (décision 5 de #133), affichés « BOT <nom> » dans le kill feed et le classement
 	NAMES = { "Marcel", "Lucie", "Gaston", "Odette", "Raymond", "Simone", "Lucien", "Paulette" },
+	-- Tenues (#521, #547) : un nom sur deux de NAMES en tenue d'origine (le 2e, le 4e…), les autres habillés selon la
+	-- rareté (poids par rareté, la plus courante d'abord), au plus OUTFIT_LEGENDARY_MAX légendaires ; nom hors liste : origine
+	OUTFIT_WEIGHTS      = { common = 4, rare = 3, exceptional = 2, legendary = 1 },
+	OUTFIT_LEGENDARY_MAX = 1,
 	MAX_BOTS            = 7,      -- plafond de bots en jeu (décision 2 de #133, 7 depuis #369)
 	TARGET_POPULATION   = 8,      -- joueurs + bots : les bots comblent les places vides (décision 1 de #133, 8 depuis #369)
 	POPULATION_DUEL_TIME = 4,     -- un bot qui a vu une cible depuis moins de tant (s) est en duel : jamais retiré

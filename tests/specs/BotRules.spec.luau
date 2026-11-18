@@ -7,6 +7,36 @@ return function(T, Loader)
 		T.expectEqual(math.abs(a - b) < 1e-6, true, (msg or "") .. " : " .. tostring(a) .. " ≠ " .. tostring(b))
 	end
 
+	T.describe("BotRules.outfitForName (#521, #547)", function()
+		local Inventory = Loader.new():require("src/shared/InventoryRules")
+
+		T.it("habille un nom sur deux, toujours de la même façon, et laisse en origine un nom hors liste", function()
+			for i, name in Config.NAMES do
+				local outfit = Rules.outfitForName(name)
+				T.expectEqual(outfit, Rules.outfitForName(name), name .. " garde sa tenue")
+				T.expectEqual(outfit == nil, i % 2 == 0, name .. " : origine pour un nom sur deux")
+			end
+			T.expectEqual(Rules.outfitForName("Bot9"), nil)
+		end)
+
+		T.it("suit la rareté : au plus une légendaire, jamais la plus portée", function()
+			local rarity, counts, legendaries, top, topCount = {}, {}, 0, nil, 0
+			for _, outfit in Inventory.outfits() do
+				rarity[outfit.id] = outfit.rarity
+			end
+			for _, id in Rules.outfitTable() do
+				T.expect(rarity[id] ~= nil, id .. " est une tenue du catalogue")
+				counts[id] = (counts[id] or 0) + 1
+				legendaries += if rarity[id] == "legendary" then 1 else 0
+				if counts[id] > topCount then
+					top, topCount = id, counts[id]
+				end
+			end
+			T.expect(legendaries <= Config.OUTFIT_LEGENDARY_MAX, "légendaires : " .. legendaries)
+			T.expect(top == nil or rarity[top] ~= "legendary", "la tenue la plus portée n'est pas légendaire")
+		end)
+	end)
+
 	T.describe("BotRules", function()
 		T.it("suit la convention de cap de la caméra FPS", function()
 			local north = Rules.headingDir(0)
