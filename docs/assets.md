@@ -131,6 +131,22 @@ par `ScaleTo` avec le reste de l'arme.
     modèle sérialisé sur `/?path=assets/rbx/Props/<Nom>.rbxm` et un `/done` au corps autre que `OK` (export « partiel » :
     rien n'est supprimé, le serveur sort en code 1). Le modèle inséré porte un tag `Assistant:<guid>`, sauvé avec lui
     (sans effet, la caisse en a un aussi) : pour retirer la copie insérée à la main, ne pas filtrer sur ce tag.
+  - **BALISE (`balise`, #567, validé le 18/11/2026) :** d'après une planche de concept faite par une IA externe
+    (dossier de brief : vidéos des effets existants, planche des skins AWP, contraintes de lisibilité). Ruban de
+    chantier (Beam texturé `BALISE_TAPE_IMAGE`, chevrons qui défilent) qui se déroule de la bouche à l'impact puis se
+    rétracte vers l'impact (`baliseSpan` : les deux Attachments du rayon déplacés à chaque frame, pas de fondu) ;
+    `BaliseMarks` : boucle zébrée qui tourne au canon (absente à la lunette) et trois chevrons qui s'ouvrent autour de
+    l'impact à l'arrivée du ruban (ParticleEmitters en réserve, une particule chacun). Textures :
+    `assets/effects/balise_textures.py`, publiées en Decal.
+    **Piège : vu par le tireur, tout ce qui suit le rayon est en raccourci** (le canon est presque dans l'axe du
+    regard : le ruban ne couvre qu'une cinquantaine de pixels). Un effet doit exister **au canon et à l'impact** pour
+    le tireur ; c'est ce qui manquait à TREMPE.
+    **Piège : une taille en studs à l'impact est minuscule de loin.** La marque d'impact suit la distance de la caméra
+    (`baliseMarkSize`, angle constant, bornée) ; FOV vertical 90° sur ~760 px de haut : environ 8 px par degré, une
+    marque de 0,05 × distance ne faisait que 24 px. `BALISE_MARK_ANGLE` 0,1.
+    **Piège : couleurs sombres d'une texture (noir) = `LightEmission` 0** sur le Beam et les particules ; avec la lumière
+    additive habituelle des rayons, le noir devient transparent. Le plan de côté de la démo (FOV 40°) grossit la
+    marque deux fois plus qu'en partie : juger sa taille en 1re personne.
   - **ÉCLAIR (`lightning`) :** un éclair (`LightningBolt`, forme et réglages dans `LightningRules`) à la
   place du rayon de balle, tronc brisé resserré au canon et à l'impact, branches et brindilles tirées à chaque tir,
   flash puis second flash puis fondu, lueur `PointLight`. Au-delà de `LightningRules.MAX_ACTIVE` éclairs en cours, le

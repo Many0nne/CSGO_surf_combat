@@ -462,6 +462,17 @@ InventoryRules.ITEMS = {
 		inspiredBy = "skin.awp.pan",
 		description = "L'explosion « PAN ! » de la crosse jaillit devant le canon à chaque tir.",
 	},
+	-- BALISE (#567) : ruban de chantier qui se déroule du canon à la cible (ShotEffectRules BALISE_*, BaliseMarks)
+	{
+		id = "effect.balise",
+		type = "effect",
+		name = "BALISE",
+		appearance = "balise",
+		rarity = "rare",
+		shotEffect = "balise",
+		inspiredBy = "skin.awp.balise",
+		description = "Un ruban de chantier orange et noir se déroule du canon jusqu'à la cible.",
+	},
 	-- TREMPE (style `temper`, ruban d'acier torsadé à écailles) : mis de côté le 18/11/2026, peu lisible du point de vue
 	-- du tireur ; son rendu reste dans ShotEffects / TemperFlakes, désactivé (ShotEffectRules.STYLES), cf. #567
 } :: { Item }
