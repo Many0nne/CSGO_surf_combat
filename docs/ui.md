@@ -1182,6 +1182,44 @@ français si « fr… », anglais sinon). Changer de langue bascule tous les éc
   (scan `tests/lib/LocaleScan.luau` : chaîne accentuée, en capitales, ou phrase ; journaux, debug et identifiants
   écartés). Liste à jour : `lune run tools/locale_scan.luau`. Un faux positif (identifiant) va dans `LocaleScan.ALLOWED`.
 
+## Chat (#541)
+
+`src/client/ui/ChatFeed.luau`, moteur et modération : `docs/moderation.md`. Fenêtre et barre natives de
+`TextChatService` masquées (`ChatWindowConfiguration.Enabled`, `ChatInputBarConfiguration.Enabled` à false).
+
+- **Place :** bloc de 460 px en bas à gauche, bord gauche du compteur de vitesse (44 px), bas 206 px au-dessus du bord :
+  58 px d'air au-dessus des chiffres du compteur (mesuré). À 166 px (18 px d'air), l'utilisateur l'a jugé « trop collé
+  au speedometer ». Ni le kill feed (haut droite) ni la barre d'armes (bas droite) ne sont dans cette zone (captures
+  Studio). Racine de bord (`scaledRoot(gui, true)`) : suit l'échelle du HUD et le plancher de texte.
+- **Lignes :** Oswald regular 18 px, ombre décalée de 2 px (texte posé sur la scène) ; nom en gras os, rouge d'impact
+  pour le joueur local (« à moi »), puis le message en os. Retours locaux (débit, commandes admin) en ambre, sans nom.
+  7 lignes visibles ; chacune reste 8 s puis s'efface en 1,5 s (`ChatRules.FADE_DELAY`, `FADE_TIME`).
+- **Saisie ouverte :** toutes les lignes réapparaissent, fond `cornerScrim` au coin de l'écran, ligne de saisie : « TOUS »
+  ambré (canal) puis le champ (os, texte d'aide atténué), filet os à 0,88 dessous. Molette : remonter le fil
+  (60 lignes gardées). Un texte long passe à la ligne et le champ grandit vers le haut, le fil avec lui (piste
+  écartée : `TextTruncate.AtEnd`, qui cachait la fin du texte et le curseur au-delà de ~45 caractères).
+- **Bulles natives coupées** (`BubbleChatConfiguration`) : une bulle au-dessus d'une tête trahirait la position.
+- **Où :** en partie (vivant ou mort) et sur l'accueil du menu ; masqué pendant le chargement, menu en partie ou
+  Réglages ouverts, et sur les autres écrans du menu (blocs centrés qui occupent la même zone).
+- **Au menu (accueil) :** le fil ne paraît que saisie ouverte, sur un fond plein (`MenuPanel`, `C.Scrim` à 0,03) qui
+  cache le bas de la grille de l'équipement le temps d'écrire ; les messages reçus au menu réapparaissent à
+  l'ouverture. Piste rejetée (capture Studio) : le fil au même endroit qu'en partie, sans fond ; il se mêlait aux cases
+  et à « SKINS · AWP », illisible. À 0,12 de transparence, les libellés de la grille se lisaient encore au travers.
+- **Fond de la saisie dans son propre écran** (`ChatScrim`, `DisplayOrder` -1, sous le HUD) : posé dans l'écran du fil
+  (au-dessus du HUD), il assombrissait le compteur de vitesse ; calé sous le bloc au lieu du coin, son bord opaque
+  traçait une arête horizontale au milieu de l'écran.
+- **Touches :** Entrée ouvre (sauf si un autre champ de texte a le focus), Entrée envoie et ferme, Échap ferme sans
+  envoyer. Saisie ouverte : `InputModule.setSuspended(true, "chat")`, et les autres lecteurs de touches (classement
+  Tab, barre d'armes et molette, équipement du menu) ignorent l'entrée tant qu'un champ a le focus
+  (`UserInputService:GetFocusedTextBox()`, convention déjà suivie par `KeyDisplay` et les enregistreurs).
+- **Souris pendant la saisie (décision de l'utilisateur) :** toujours verrouillée en partie, on regarde encore autour.
+  Un voile invisible actif retient les clics (pas de tir) et le champ reprend le focus ; la molette fait défiler le fil
+  sans libérer la souris. Au menu (souris libre), un clic ailleurs ferme la saisie.
+- **Pièges :** le champ ne doit pas voir l'Entrée qui l'ouvre : `CaptureFocus` est différé (`task.defer`) et un envoi
+  dans les 0,15 s qui suivent l'ouverture est ignoré ; une Entrée dans les 0,25 s après une fermeture ne rouvre pas.
+  Le texte reçu est en texte riche échappé par TextChatService : `ChatRules.unescape`, puis rééchappé pour nos
+  balises (`HUDRules.escapeRichText`).
+
 ## Reste à faire
 
 - Piste écartée pour l'instant sur le compteur : chiffres en images usées comme le titrage, et inclinaison qui augmente avec la vitesse.

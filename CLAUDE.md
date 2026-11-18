@@ -18,6 +18,7 @@ Lire le document du domaine avant de travailler dessus, et seulement celui-là.
 | Bots : plan de navigation, suivi de chemin, debug `DebugBots`/`DebugNav` | `docs/bots.md` |
 | Saccades, performance, overlay F3, fuites mémoire, sonde `FrameProbe` | `docs/performance.md` |
 | Anti-triche : menaces, validations serveur des remotes, plan | `docs/anticheat.md` |
+| Chat : interface, limites serveur, journal des messages (webhook), commandes admin `/mute` `/kick` | `docs/moderation.md` |
 | Argent réel : packs Robux, `ProcessReceipt`, objets aléatoires payants (`PolicyService`) | `docs/economie.md` |
 | Analytics : funnels, économie, départs et blocages (`AnalyticsService`, Creator Hub) | `docs/analytics.md` |
 | Page du jeu : miniatures, vidéo, mise en ligne et test A/B dans le Creator Hub | `docs/promo.md` |

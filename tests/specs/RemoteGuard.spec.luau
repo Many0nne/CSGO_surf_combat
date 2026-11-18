@@ -132,6 +132,7 @@ return function(T, Loader)
 					N.BUY_CREDIT_PACK,
 					N.HIGHLIGHT_POV,
 					N.ANALYTICS_SCREEN,
+					N.CHAT_COMMAND,
 				}
 			do
 				T.expect(RemoteGuard.RULES[name] ~= nil, "règle manquante : " .. name)
@@ -151,6 +152,12 @@ return function(T, Loader)
 			T.expectEqual(honest(N.WEAPON_ACTION, "Reload"), "ok")
 			T.expectEqual(honest(N.REQUEST_SPAWN), "ok")
 			T.expectEqual(honest(N.LEAVE_ROUND), "ok")
+			T.expectEqual(
+				honest(N.CHAT_COMMAND, "/kick " .. string.rep("é", 114)),
+				"ok",
+				"commande de 120 caractères"
+			)
+			T.expectEqual(honest(N.CHAT_COMMAND, 3), "malformed", "commande non textuelle")
 			T.expectEqual(honest(N.SEND_FEEDBACK, string.rep("é", 250)), "ok", "500 octets, la limite du client")
 			T.expectEqual(honest(N.SAVE_SETTINGS, { sensitivity = 0.5 }), "ok")
 			T.expectEqual(honest(N.GET_SETTINGS), "ok")

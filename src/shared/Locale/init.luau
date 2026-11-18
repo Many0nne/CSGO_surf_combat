@@ -30,6 +30,7 @@ Locale.EN_TABLES = {
 	require(LocaleFolder.en.Infos),
 	require(LocaleFolder.en.Lobby),
 	require(LocaleFolder.en.Misc),
+	require(LocaleFolder.en.Chat),
 } :: { { [string]: string } }
 
 local EN: { [string]: string } = {}

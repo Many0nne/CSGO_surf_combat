@@ -48,6 +48,8 @@ local HighlightRecorder = require(script.systems.highlight.HighlightRecorder)
 local AnalyticsClient = require(script.systems.analytics.AnalyticsClient)
 local MainMenu = require(script.ui.MainMenu)
 local ShopScreen = require(script.ui.ShopScreen)
+local InGameMenu = require(script.ui.InGameMenu)
+local ChatFeed = require(script.ui.ChatFeed)
 
 local player = Players.LocalPlayer
 -- Secondes d'attente au plus du corps entier d'un personnage avant de le prendre en main (#328)
@@ -170,6 +172,24 @@ AnalyticsClient.init(function(): string?
 	end
 	return ShopScreen.analyticsScreen() or AnalyticsRules.menuScreen(MainMenu.getPage())
 end)
+-- Chat (#541) : fenêtre native masquée, fil du jeu en bas à gauche, en partie et sur l'accueil du menu (pas pendant le
+-- chargement, ni menu en partie, Réglages ou autre écran du menu ouvert : ils occupent la même zone)
+ChatFeed.init({
+	canShow = function(): boolean
+		if LoadingScreen.isCovering() or InGameMenu.isOpen() or SettingsMenu.isOpen() then
+			return false
+		end
+		local state = GameStateController.getState()
+		if state == "MENU" or state == "INFOS" then
+			return MainMenu.getPage() == "home" and ShopScreen.analyticsScreen() == nil
+		end
+		return true
+	end,
+	inMenu = function(): boolean
+		local state = GameStateController.getState()
+		return state == "MENU" or state == "INFOS"
+	end,
+})
 -- Tirs des autres joueurs et des bots entendus en 3D (#156), hors écrans du menu
 RemoteShotSounds.init(GameStateController.getState)
 -- Pas des autres joueurs et des bots entendus en 3D (#146), hors écrans du menu

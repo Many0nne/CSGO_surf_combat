@@ -107,6 +107,11 @@
         }
       }
     },
+    "TextChatService": {
+      "$properties": {
+        "CreateDefaultCommands": false
+      }
+    },
     "SoundService": {
       "$properties": {
         "RespectFilteringEnabled": true

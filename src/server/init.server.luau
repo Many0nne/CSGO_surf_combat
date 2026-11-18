@@ -34,6 +34,7 @@ local Roles = require(script.Roles)
 local Validator = require(script.Validator)
 local Participants = require(script.Participants)
 local FeedbackService = require(script.FeedbackService)
+local ChatService = require(script.ChatService)
 local DebugPlaytest = require(script.DebugPlaytest)
 local KillZone = require(script.KillZone)
 local CharacterSync = require(script.CharacterSync)
@@ -101,6 +102,9 @@ footstepRmt.Parent = ReplicatedStorage
 local trainingRmt = makeRemote(N.TRAINING)
 -- Lobby entre amis (#523) : demandes du lobby, LANCER de l'hôte relayé aux membres, réponses de REJOINDRE
 local partyRmt = makeRemote(N.PARTY)
+-- Chat (#541) : commande admin, client → serveur, et son retour, serveur → admin
+local chatCommandRmt = makeRemote(N.CHAT_COMMAND)
+local chatNoticeRmt = makeRemote(N.CHAT_NOTICE)
 -- Ouverture d'une caisse du shop (#332) : RemoteFunction, le client attend le skin tiré par le serveur
 local openCrateRmt = Instance.new("RemoteFunction")
 openCrateRmt.Name = N.OPEN_CRATE
@@ -175,6 +179,8 @@ ReceiptService.init(buyCreditPackRmt, {
 	end,
 })
 FeedbackService.init(sendFeedbackRmt, feedbackAckRmt)
+-- Chat (#541) : débit et longueur des messages, sourdine et expulsion par un admin, journal vers un webhook
+ChatService.init(chatNoticeRmt, chatCommandRmt)
 -- Mode publié aux clients (attribut de ReplicatedStorage) et téléportations vers ou depuis l'entraînement
 TrainingService.init(trainingRmt)
 -- Groupes du lobby (#523) : publiés dans les attributs des joueurs, arrivée d'un invité reliée au groupe de son ami
