@@ -166,9 +166,10 @@ end
 -- honnête ne soit jamais pris pour un tricheur.
 RemoteGuard.FEEDBACK_MAX_BYTES = 1000
 
--- Emplacements acceptés par EquipItem : ceux des armes, puis la tenue de personnage (#521)
+-- Emplacements acceptés par EquipItem : ceux des armes, puis la tenue de personnage (#521) et l'effet de tir (#566)
 local EQUIP_SLOTS = table.clone(InventoryRules.SLOTS) :: { string }
 table.insert(EQUIP_SLOTS, InventoryRules.OUTFIT_SLOT)
+table.insert(EQUIP_SLOTS, InventoryRules.EFFECT_SLOT)
 
 -- Débits calibrés pour qu'un client honnête ne les atteigne jamais (rafale réseau comprise), cf. docs/anticheat.md :
 -- - MeleeDamage : couteau 0,4 s mini (2,5/s) ; HitscanDamage et ShotFired : AWP 1,455 s (0,7/s) ; WeaponAction : un Shoot par coup

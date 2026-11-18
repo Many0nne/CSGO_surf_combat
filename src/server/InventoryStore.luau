@@ -917,6 +917,12 @@ function InventoryStore.init(
 				if outfitId then
 					onEquipped(player, nil, outfitId)
 				end
+			elseif slot == InventoryRules.EFFECT_SLOT then
+				-- Effet de tir (#566) : compté comme un item de caisse équipé (étape Skin équipé du funnel du shop)
+				local effectId = InventoryRules.effectOf(InventoryStore.equipped(player))
+				if effectId then
+					onEquipped(player, effectId)
+				end
 			else
 				onEquipped(player, skin)
 			end

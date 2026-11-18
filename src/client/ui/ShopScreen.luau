@@ -309,7 +309,8 @@ local function paintDetail()
 			BackgroundColor3 = color,
 			Parent = line,
 		})
-		-- Vignette : l'arme habillée de ce skin, de profil (rendu des cartes de skin de l'écran ARMES)
+		-- Vignette : l'arme habillée de ce skin, de profil (rendu des cartes de skin de l'écran ARMES) ; un effet de tir
+		-- (#566) montre l'AWP dans le skin qui l'inspire
 		local thumb = UIKit.frame({
 			Name = "Thumb",
 			BackgroundTransparency = 1,
@@ -318,7 +319,11 @@ local function paintDetail()
 			ZIndex = 2,
 			Parent = line,
 		})
-		UIKit.weaponSilhouette(thumb, row.viewmodel, THUMB_SIZE.X / THUMB_SIZE.Y, true, row.skin).ZIndex = 2
+		local rowItem = InventoryRules.item(row.skin)
+		local thumbSkin = if rowItem and rowItem.type == InventoryRules.Type.EFFECT
+			then rowItem.inspiredBy
+			else row.skin
+		UIKit.weaponSilhouette(thumb, row.viewmodel, THUMB_SIZE.X / THUMB_SIZE.Y, true, thumbSkin).ZIndex = 2
 		label(line, {
 			Name = "Skin",
 			Text = row.name,
@@ -416,7 +421,7 @@ local function openOverview()
 	if outfits then
 		setText(countLabel, "{n} EN VENTE  ·  ACHAT DIRECT, SANS TIRAGE", { n = #ShopScene.outfits() })
 	else
-		setText(countLabel, "{n} EN VENTE  ·  UNE PAR ARME ET PAR SÉRIE", { n = #ShopCatalog.CRATES })
+		setText(countLabel, "{n} EN VENTE  ·  SKINS ET EFFETS DE TIR", { n = #ShopCatalog.CRATES })
 	end
 	-- Aide refaite : son action est liée à la langue (UIKit.keyHint), pas à réécrire par-dessus
 	for _, child in overviewHints:GetChildren() do
@@ -837,7 +842,7 @@ local function buildPreviewHints(parent: Frame)
 		Position = UDim2.new(1, -EDGE, 1, -18),
 		Visible = false,
 	})
-	UIKit.keyHint(hints, 1, "SURVOL", "VOIR UN SKIN")
+	UIKit.keyHint(hints, 1, "SURVOL", "VOIR UN APERÇU") -- skin ou effet de tir (#566)
 	UIKit.keyHint(hints, 2, "CLIC", "LE GARDER")
 	UIKit.keyHint(hints, 3, "GLISSER", "LE TOURNER")
 	detail:GetPropertyChangedSignal("Visible"):Connect(function()

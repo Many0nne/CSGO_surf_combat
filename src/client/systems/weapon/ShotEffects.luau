@@ -15,17 +15,23 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+local InventoryRules = require(ReplicatedStorage.Shared.InventoryRules)
 local NetworkProtocol = require(ReplicatedStorage.Shared.NetworkProtocol)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local ShotEffectRules = require(ReplicatedStorage.Shared.ShotEffectRules)
 local LightningBolt = require(script.Parent.LightningBolt)
+local PanBurst = require(script.Parent.PanBurst)
+local TemperFlakes = require(script.Parent.TemperFlakes)
+local ScopeSystem = require(script.Parent.ScopeSystem)
+local LocalInventory = require(script.Parent.Parent.inventory.LocalInventory)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 local WeaponThirdPerson = require(ReplicatedStorage.Shared.WeaponThirdPerson)
 
 local ShotEffects = {}
 
 -- Rayon en cours : ses deux extrémités (le Beam est enfant de la première) et leurs positions, son instant de
--- création (os.clock) et son palier de fondu courant.
+-- création (os.clock), son palier de fondu courant, sa durée de vie, et pour TREMPE (#566) le tirage de ses franges
+-- (nil : couleur fixe).
 type Tracer = {
 	a0: Attachment,
 	a1: Attachment,
@@ -34,6 +40,8 @@ type Tracer = {
 	finish: Vector3,
 	born: number,
 	fade: number,
+	life: number,
+	temperSeed: number?,
 }
 
 local tracers: { Tracer } = {}
@@ -74,8 +82,19 @@ local function flash(muzzle: Attachment)
 	end
 end
 
--- Cette méthode permet d'effacer les rayons en cours lorsqu'une frame passe (masqués si la caméra les traverse), et
--- de détruire ceux dont la vie est finie (ou déjà détruits par Debris) ; la boucle s'arrête quand il n'en reste plus.
+-- Cette méthode permet de composer les couleurs d'un rayon TREMPE (#566) à un instant de sa vie lorsqu'il est créé puis
+-- à chaque frame (ShotEffectRules.temperKeypoints).
+local function temperColor(elapsed: number, seed: number): ColorSequence
+	local keypoints = {}
+	for i, point in ShotEffectRules.temperKeypoints(elapsed, seed) do
+		keypoints[i] = ColorSequenceKeypoint.new(point[1], Color3.fromRGB(point[2], point[3], point[4]))
+	end
+	return ColorSequence.new(keypoints)
+end
+
+-- Cette méthode permet d'effacer les rayons en cours lorsqu'une frame passe (masqués si la caméra les traverse ; les
+-- franges de TREMPE défilent), et de détruire ceux dont la vie est finie (ou déjà détruits par Debris) ; la boucle
+-- s'arrête quand il n'en reste plus.
 local function step()
 	local now = os.clock()
 	local camera = workspace.CurrentCamera
@@ -83,16 +102,19 @@ local function step()
 	for i = #tracers, 1, -1 do
 		local tracer = tracers[i]
 		local elapsed = now - tracer.born
-		if elapsed >= ShotEffectRules.TRACER_LIFETIME or not tracer.a0.Parent then
+		if elapsed >= tracer.life or not tracer.a0.Parent then
 			tracer.a0:Destroy()
 			tracer.a1:Destroy()
 			table.remove(tracers, i)
 		else
 			local hidden = eye ~= nil and ShotEffectRules.isTooClose(tracer.start, tracer.finish, eye)
-			local fade = ShotEffectRules.fadeStep(elapsed, hidden)
+			local fade = ShotEffectRules.fadeStep(elapsed, hidden, tracer.life)
 			if fade ~= tracer.fade then
 				tracer.fade = fade
 				tracer.beam.Transparency = FADE[fade + 1]
+			end
+			if tracer.temperSeed and not hidden then
+				tracer.beam.Color = temperColor(elapsed, tracer.temperSeed)
 			end
 		end
 	end
@@ -104,9 +126,10 @@ end
 
 local timedStep = PerfMarkers.wrap("effets de tir", step)
 
--- Cette méthode permet de créer un rayon entre deux points du monde lorsqu'un tir est montré ; il s'efface ensuite
--- de lui-même (step) et Debris le détruit au plus tard après sa durée de vie et une marge.
-local function spawnTracer(start: Vector3, finish: Vector3)
+-- Cette méthode permet de créer un rayon entre deux points du monde lorsqu'un tir est montré (`style` "temper" : rayon
+-- TREMPE, #566) ; il s'efface ensuite de lui-même (step) et Debris le détruit au plus tard après sa durée de vie et une
+-- marge.
+local function spawnTracer(start: Vector3, finish: Vector3, style: string?)
 	local a0 = Instance.new("Attachment")
 	a0.Name = ShotEffectRules.INSTANCE_NAME
 	a0.WorldPosition = start
@@ -114,27 +137,46 @@ local function spawnTracer(start: Vector3, finish: Vector3)
 	a1.Name = ShotEffectRules.INSTANCE_NAME
 	a1.WorldPosition = finish
 
+	local temperSeed = if style == "temper" then math.random() else nil
+	local width = if temperSeed then ShotEffectRules.TEMPER_WIDTH else ShotEffectRules.TRACER_WIDTH
 	local beam = Instance.new("Beam")
 	beam.Name = ShotEffectRules.INSTANCE_NAME
 	beam.Attachment0 = a0
 	beam.Attachment1 = a1
-	beam.Width0 = ShotEffectRules.TRACER_WIDTH
-	beam.Width1 = ShotEffectRules.TRACER_WIDTH
-	beam.Color = TRACER_COLOR
+	beam.Width0 = width
+	beam.Width1 = width
+	beam.Color = if temperSeed then temperColor(0, temperSeed) else TRACER_COLOR
 	beam.Transparency = FADE[1]
-	beam.LightEmission = 1
+	-- TREMPE : couleurs sombres (bleu, violet) qu'une lumière additive pleine laverait, dégradé découpé en segments
+	beam.LightEmission = if temperSeed then ShotEffectRules.TEMPER_LIGHT_EMISSION else 1
 	beam.LightInfluence = 0
 	beam.FaceCamera = true
-	beam.Segments = 1
+	beam.Segments = if temperSeed then ShotEffectRules.TEMPER_SEGMENTS else 1
+	if temperSeed then
+		-- TREMPE : ruban torsadé (texture répétée qui défile) et écailles d'oxyde semées le long du rayon
+		beam.Texture = ShotEffectRules.TEMPER_RIBBON_IMAGE
+		beam.TextureMode = Enum.TextureMode.Wrap
+		beam.TextureLength = ShotEffectRules.TEMPER_TWIST_LENGTH
+		beam.TextureSpeed = ShotEffectRules.TEMPER_TWIST_SPEED
+		TemperFlakes.spawn(start, finish)
+	end
 	beam.Parent = a0
 
 	a0.Parent = terrain
 	a1.Parent = terrain
-	table.insert(
-		tracers,
-		{ a0 = a0, a1 = a1, beam = beam, start = start, finish = finish, born = os.clock(), fade = 0 }
-	)
-	local maxLife = ShotEffectRules.TRACER_LIFETIME + ShotEffectRules.LIFETIME_MARGIN
+	local life = ShotEffectRules.tracerLifetime(style)
+	table.insert(tracers, {
+		a0 = a0,
+		a1 = a1,
+		beam = beam,
+		start = start,
+		finish = finish,
+		born = os.clock(),
+		fade = 0,
+		life = life,
+		temperSeed = temperSeed,
+	})
+	local maxLife = life + ShotEffectRules.LIFETIME_MARGIN
 	Debris:AddItem(a0, maxLife)
 	Debris:AddItem(a1, maxLife)
 	if not stepConn then
@@ -142,16 +184,40 @@ local function spawnTracer(start: Vector3, finish: Vector3)
 	end
 end
 
--- Cette méthode permet de lire l'effet de tir du skin posé sur un modèle d'arme lorsqu'un tir en part (#520) ; nil :
--- rayon de balle ordinaire.
-local function effectOf(weapon: Instance?): string?
-	return weapon and ShotEffectRules.effectOf(weapon:GetAttribute(ShotEffectRules.SKIN_ATTRIBUTE))
+-- Cette méthode permet de lire le style de tir équipé par le joueur local (#566) lorsqu'il tire ou que l'aperçu le
+-- montre ; nil : rayon de balle ordinaire.
+function ShotEffects.localStyle(): string?
+	return ShotEffectRules.styleOf(InventoryRules.effectOf(LocalInventory.equipped()))
+end
+
+-- Cette méthode permet de lire le style de tir d'un tireur relayé (#566) lorsque son tir arrive : celui du joueur dont
+-- c'est le personnage (ses attributs informatifs), nil pour un bot.
+local function styleOfShooter(shooter: Model): string?
+	local player = Players:GetPlayerFromCharacter(shooter)
+	if not player then
+		return nil
+	end
+	return ShotEffectRules.styleOfPlayer(
+		player:GetAttribute(InventoryRules.EQUIPPED_ATTRIBUTE),
+		player:GetAttribute(InventoryRules.ATTRIBUTE)
+	)
 end
 
 -- Cette méthode permet de montrer la flamme et le rayon d'une arme lorsqu'un tir en part : rayon de la bouche du
 -- canon (repli : l'origine du tir) jusqu'à endpoint, s'il n'est pas trop court ; camera : arrêté avant elle (autres) ;
--- effect : effet du skin (éclair à la place du rayon, s'il reste de la place).
-local function show(muzzle: Attachment?, origin: Vector3, endpoint: Vector3, camera: Vector3?, effect: string?)
+-- style : effet de tir équipé (#566 : éclair à la place du rayon s'il reste de la place, rayon TREMPE, ou explosion
+-- PAN ! en plus du rayon ; `isLocal` : tir du joueur local, explosion réduite et absente à la lunette ; `panAhead`,
+-- `panWidth` : avance et largeur de l'explosion, pour une démonstration).
+local function show(
+	muzzle: Attachment?,
+	origin: Vector3,
+	endpoint: Vector3,
+	camera: Vector3?,
+	style: string?,
+	isLocal: boolean?,
+	panAhead: number?,
+	panWidth: number?
+)
 	if muzzle then
 		flash(muzzle)
 	end
@@ -161,17 +227,38 @@ local function show(muzzle: Attachment?, origin: Vector3, endpoint: Vector3, cam
 		start, finish = ShotEffectRules.clipNearCamera(start, endpoint, camera)
 	end
 	if start and finish then
-		if effect == "lightning" and LightningBolt.spawn(start, finish) then
+		if style == "pan" and not (isLocal and ScopeSystem.getLevel() > 0) then
+			-- Le rayon sort du bord de l'explosion : tracé par-dessus, il barrerait l'onomatopée
+			local center, width = PanBurst.spawn(start, finish, isLocal == true, panAhead, panWidth)
+			if center then
+				start = ShotEffectRules.panTracerStart(start, finish, center, width)
+			end
+		end
+		if style == "lightning" and LightningBolt.spawn(start, finish) then
 			return
 		end
-		spawnTracer(start, finish)
+		spawnTracer(start, finish, style)
 	end
 end
 
 -- Cette méthode permet de montrer les effets du tir du joueur local lorsqu'il tire (HitscanSystem) : flamme sur le
 -- viewmodel, rayon de son canon jusqu'au point visé (origin : la caméra, endpoint : impact ou portée maximale).
 function ShotEffects.playLocal(viewmodel: Model?, origin: Vector3, endpoint: Vector3)
-	show(muzzleOf(viewmodel), origin, endpoint, nil, effectOf(viewmodel))
+	show(muzzleOf(viewmodel), origin, endpoint, nil, ShotEffects.localStyle(), true)
+end
+
+-- Cette méthode permet de montrer un tir de démonstration d'un style (#566) lorsque l'écran d'équipement ou la
+-- révélation d'une caisse d'effets l'affiche : effet (et rayon) de la bouche du canon `start` jusqu'à `endpoint`, sans
+-- flamme (l'arme montrée n'a pas toujours son émetteur) ; l'explosion PAN ! y est placée pour rester dans le cadre
+-- (`panAhead`, `panWidth` ; par défaut PAN_AHEAD_DEMO et la largeur ordinaire, aperçu du menu).
+function ShotEffects.playDemo(start: Vector3, endpoint: Vector3, style: string?, panAhead: number?, panWidth: number?)
+	show(nil, start, endpoint, nil, style, false, panAhead or ShotEffectRules.PAN_AHEAD_DEMO, panWidth)
+end
+
+-- Cette méthode permet de trouver la bouche du canon d'un modèle d'arme (#566) lorsque l'aperçu vise devant elle ;
+-- nil sans canon.
+function ShotEffects.muzzleOf(weapon: Instance?): Attachment?
+	return muzzleOf(weapon)
 end
 
 -- Cette méthode permet de montrer la flamme et le rayon d'un tir rejoué par le clip de la partie (#499) lorsqu'il y
@@ -198,7 +285,8 @@ function ShotEffects.playReplay(
 	local range = WeaponConfig.HITSCAN_RANGE
 	local result = workspace:Raycast(origin, direction.Unit * range, remoteRayParams)
 	local endpoint = ShotEffectRules.endpoint(origin, direction, result and result.Position, range)
-	show(muzzle, origin, endpoint, camera, effectOf(weapon))
+	-- Le clip ne garde pas l'effet de tir de ses tireurs : rayon ordinaire
+	show(muzzle, origin, endpoint, camera, nil)
 end
 
 -- Cette méthode permet de montrer les effets d'un tir relayé par le serveur lorsqu'il arrive : flamme sur l'arme 3P
@@ -232,7 +320,7 @@ local function onShotFired(shooter: any, weaponName: any, origin: any, direction
 	local result = workspace:Raycast(origin, direction.Unit * range, remoteRayParams)
 	local endpoint = ShotEffectRules.endpoint(origin, direction, result and result.Position, range)
 	local camera = workspace.CurrentCamera
-	show(muzzle, origin, endpoint, camera and camera.CFrame.Position, effectOf(gun))
+	show(muzzle, origin, endpoint, camera and camera.CFrame.Position, styleOfShooter(shooter))
 end
 
 -- Cette méthode permet d'écouter les tirs relayés par le serveur lorsque le client démarre ; stateOf lit l'état du
@@ -242,7 +330,8 @@ function ShotEffects.init(stateOf: () -> string?)
 	if connection then
 		return
 	end
-	-- Réserve d'un éclair de skin (#520) remplie en tâche de fond, si l'effet est activé : le premier tir ne crée rien
+	-- Réserve d'un éclair (#520, effet ÉCLAIR #566) remplie en tâche de fond, si le style est activé : le premier tir ne
+	-- crée rien
 	if ShotEffectRules.isEnabled("lightning") then
 		LightningBolt.prewarm()
 	end

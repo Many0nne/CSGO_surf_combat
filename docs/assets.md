@@ -85,12 +85,52 @@ par `ScaleTo` avec le reste de l'arme.
   moins de `NEAR_CAMERA` de notre caméra est retirée (`clipNearCamera` : tir qui nous touche, nous frôle, ou tireur
   collé à nous) : sinon le Beam, face à la caméra, couvre l'écran. Au plus `MAX_ACTIVE` rayons en même temps (au-delà,
   un tir relayé n'a que sa flamme) ; le tir local a toujours son rayon et compte parmi eux.
-- **Effet de tir d'un skin (#520) :** un skin du catalogue (`InventoryRules.ITEMS`) peut déclarer `shotEffect`
-  (noms connus et interrupteurs : `ShotEffectRules.SKIN_EFFECTS`). **L'éclair est désactivé en jeu** (`lightning =
-  false`) : validé par l'utilisateur, gardé de côté pour plus tard ; ORAGE tire avec le rayon ordinaire et la réserve
-  n'est pas préparée. Passer à `true` pour l'activer. Le client le lit sur l'attribut `SkinId` que `WeaponSkins.apply` pose
-  sur le viewmodel et sur l'arme 3P (construite par le serveur, donc répliquée) : rien de plus à envoyer, et les autres
-  joueurs le voient. `lightning` (AWP ORAGE) : un éclair (`LightningBolt`, forme et réglages dans `LightningRules`) à la
+- **Effets de tir (#520, caisse d'effets #566) :** un effet est un item `effect` du catalogue (`InventoryRules.ITEMS` :
+  nom, `appearance` listée dans la caisse, rareté, `shotEffect` = style joué, `inspiredBy` = skin du duo), obtenu par
+  la caisse `crate.fx.serie1` et équipé dans l'emplacement `effect`, **indépendant du skin** (rien ne lie l'effet à
+  l'arme ni au skin posé). Styles connus et interrupteurs : `ShotEffectRules.STYLES`. Le client lit l'effet du tir local
+  dans `LocalInventory`, celui d'un tir relayé sur les attributs `EquippedItems` (effet en 4e champ, après la tenue) et
+  `OwnedItems` du joueur tireur : rien de plus à envoyer, et les autres joueurs le voient. Les bots et le clip de la
+  partie tirent le rayon ordinaire. Le son propre à un effet est prévu dans l'item (pas encore fait).
+  Ajouter un effet : son item dans `InventoryRules.ITEMS`, son `appearance` dans la caisse (`ShopCatalog`), son style
+  dans `STYLES` et `ShotEffects.show`, sa traduction de description (`Locale/en/Shop.luau`).
+  - **TREMPE (`temper`) — mis de côté le 18/11/2026** (« du point de vue du joueur, c'est vraiment pas dingue » : vu du
+    tireur, le ruban n'est qu'un court trait doré au bout du canon). Plus d'item ni de place dans la caisse, style
+    désactivé dans `STYLES`, rendu gardé tel quel pour une reprise (#567) : repenser d'abord la vue du tireur. D'après une planche de concept faite par une IA externe sur brief (validée le 18/11/2026 :
+    « ruban d'acier torsadé qui refroidit, écailles d'oxyde qui s'en détachent »). Ruban plus large (`TEMPER_WIDTH`) et
+    plus long à s'effacer (`TEMPER_LIFETIME`), torsadé par une texture répétée qui défile (`TEMPER_RIBBON_IMAGE`, deux
+    losanges à facettes inversées = une torsion, `TEMPER_TWIST_LENGTH`, `TEMPER_TWIST_SPEED`), couleurs de revenu de
+    l'acier (`TEMPER_STOPS`, paille à la bouche → bronze → pourpre → bleu vers l'impact) recomposées à chaque frame :
+    franges claires qui défilent, front qui ondule (`temperKeypoints`, 16 points, Roblox en accepte 20). Écailles
+    (`TemperFlakes`, texture `TEMPER_FLAKE_IMAGE`) : un ParticleEmitter en volume par tiers du rayon, chaque tiers aux
+    couleurs du ruban à cet endroit, qui refroidissent jusqu'au bleu-gris en tombant. Textures :
+    `assets/effects/temper_textures.py`, publiées en Decal. **Piège : un Beam pose la hauteur de son image le long du
+    rayon et sa largeur en travers.** La première texture, dessinée à plat (torsions côte à côte en x), donnait deux
+    rangées de losanges, soit deux traits parallèles en jeu : le ruban est donc dessiné debout (64 x 512).
+    **Piège : un Beam à `Segments = 1` n'interpole sa `ColorSequence` qu'entre ses deux bouts** (bleu → paille en passant
+    par le gris, violet et bronze invisibles) : TREMPE en a 20 (`TEMPER_SEGMENTS`). `LightEmission` 0,25 : plus haut, les
+    couleurs sont lavées vers le blanc ; teintes plus saturées que le skin, qu'un Beam plat rend plus pâles.
+  - **Juger un effet du menu en capture :** il ne vit que 0,3 s. Depuis un `execute_luau` client, guetter dans
+    `Terrain` le `ShotTracer` (et dans `workspace.PanBurst` une copie hors de sa rangée, Y > -5000) du prochain tir de
+    démonstration, en cloner une copie figée (transparence 0), figer les écailles (`TimeScale = 0` des émetteurs de
+    `workspace.TemperFlakes`), capturer, puis tout détruire. Coordonnées de `user_mouse_input` : celles du viewport
+    (sans la barre du haut, `GetMouseLocation` = y + 58) ; pour un bouton, passer plutôt son `instance_path`.
+  - **PAN ! (`pan`) :** l'explosion de BD de la crosse du skin PAN !, en volume (rejet d'une version plate le
+    18/11/2026 : « un petit modèle 3D, pas quelque chose à plat »). `assets/effects/pan_burst_3d.py` (Blender sans
+    interface) reprend la fonction `burst` de `pan.py` et ses graines : plaque de contour noire, étoile rouge, cœur jaune
+    en calques décalés en profondeur, « PAN ! » en relief (Impact, biseauté), cerne noir fait par le **biseau** de
+    lettres noires (le `offset` de Blender soude les lettres en pavé), planche Workbench de face / trois quarts / profil.
+    Publié en Model, inséré dans `ReplicatedStorage.Props.PanBurst` (5 MeshParts, couleurs du skin posées dans le
+    `.rbxm`, face avant vers -Z, pivot au centre ; vérifié par `verify_place.luau`). `PanBurst` (client) en garde une
+    réserve et recalcule chaque frame taille et place de chaque pièce : pop (`panFrame`), tourné de `PAN_TURN` au tir
+    puis face à la caméra à la fin de la pose (`panTurn`, rend le relief visible), inclinaison tirée à chaque tir ; le
+    rayon part du bord de l'explosion (`panTracerStart`). Chez le tireur : plus petite et plus près
+    (`PAN_WIDTH_LOCAL`), absente à la lunette. **Exporter un seul prop sans réécrire les autres** (Studio connecté :
+    réécrire `Crate.rbxm` est interdit) : `lune run tools/rbxm/receive.luau Props`, puis depuis Studio un POST du seul
+    modèle sérialisé sur `/?path=assets/rbx/Props/<Nom>.rbxm` et un `/done` au corps autre que `OK` (export « partiel » :
+    rien n'est supprimé, le serveur sort en code 1). Le modèle inséré porte un tag `Assistant:<guid>`, sauvé avec lui
+    (sans effet, la caisse en a un aussi) : pour retirer la copie insérée à la main, ne pas filtrer sur ce tag.
+  - **ÉCLAIR (`lightning`) :** un éclair (`LightningBolt`, forme et réglages dans `LightningRules`) à la
   place du rayon de balle, tronc brisé resserré au canon et à l'impact, branches et brindilles tirées à chaque tir,
   flash puis second flash puis fondu, lueur `PointLight`. Au-delà de `LightningRules.MAX_ACTIVE` éclairs en cours, le
   tir garde le rayon ordinaire. Purement visuel : trajectoire, dégâts et son inchangés.

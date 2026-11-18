@@ -9,8 +9,8 @@
 -- items n'oblige à aucune migration.
 --
 -- Équipement (#280) : un joueur équipe une arme par emplacement (SNIPER, COUTEAU) et un skin de cette arme (nil : skin
--- « d'origine »), et une tenue de personnage (#521, emplacement `outfit` hors de SLOTS : rien dans le sac ; nil : tenue
--- d'origine). Seules ces armes vont dans le sac. Le choix est sauvegardé tel quel (`equipped` de PlayerInventory_v1)
+-- « d'origine »), une tenue de personnage (#521, emplacement `outfit` hors de SLOTS : rien dans le sac ; nil : tenue
+-- d'origine) et un effet de tir (#566, emplacement `effect`, même principe ; nil : rayon ordinaire). Seules ces armes vont dans le sac. Le choix est sauvegardé tel quel (`equipped` de PlayerInventory_v1)
 -- et résolu à chaque usage contre les items possédés : un item qui n'est plus possédé (rôle retiré) laisse la place à
 -- l'équipement par défaut, sans effacer le choix enregistré.
 --
@@ -25,11 +25,12 @@ local WalletRules = require(ReplicatedStorage.Shared.WalletRules)
 
 local InventoryRules = {}
 
-export type ItemType = "weapon" | "skin" | "outfit"
+export type ItemType = "weapon" | "skin" | "outfit" | "effect"
 export type Slot = "sniper" | "knife"
 -- Un skin porte aussi son nom affiché (`name`) et le nom de ses SurfaceAppearance (`appearance` : dossier
--- ReplicatedStorage.Skins.<viewmodel de l'arme>.<appearance>, cf. WeaponSkins), et peut déclarer un effet de tir
--- (`shotEffect`, #520 : "lightning" = éclair à la place du rayon de balle, cf. ShotEffectRules.effectOf). Une tenue
+-- ReplicatedStorage.Skins.<viewmodel de l'arme>.<appearance>, cf. WeaponSkins). Un effet de tir (#566) porte son nom
+-- affiché, son nom dans la caisse (`appearance`), sa rareté, le style joué au tir (`shotEffect`, cf. ShotEffectRules) et
+-- le skin dont il s'inspire (`inspiredBy`, duo skin + effet : rien de plus, il s'équipe avec n'importe quel skin). Une tenue
 -- (#521) porte son nom affiché, son dossier d'apparence (ReplicatedStorage.Outfits.<appearance>, cf. CharacterAppearance),
 -- sa rareté (id de ShopCatalog.RARITIES), son prix en crédits et deux lignes de description (vue détail du shop, #543).
 export type Item = {
@@ -41,6 +42,7 @@ export type Item = {
 	name: string?,
 	appearance: string?,
 	shotEffect: string?,
+	inspiredBy: string?,
 	rarity: string?,
 	price: number?,
 	description: string?,
@@ -48,7 +50,8 @@ export type Item = {
 -- Items possédés : ensemble d'ids du catalogue
 export type Owned = { [string]: boolean }
 -- Équipement d'un emplacement : id de l'arme, id du skin (nil : d'origine). Emplacement `outfit` (#521) : `weapon` porte
--- l'id de la tenue (OUTFIT_NONE : tenue d'origine choisie), sans skin.
+-- l'id de la tenue (OUTFIT_NONE : tenue d'origine choisie), sans skin ; emplacement `effect` (#566) : id de l'effet
+-- (EFFECT_NONE : aucun effet choisi).
 export type Loadout = { weapon: string, skin: string? }
 -- Équipement par emplacement ; une version enregistrée peut être partielle, une version résolue est complète
 export type Equipped = { [string]: Loadout }
@@ -80,6 +83,10 @@ InventoryRules.OUTFIT_SLOT = "outfit"
 -- Choix enregistré « tenue d'origine » : un id absent du catalogue, pour qu'un retour à l'origine écrase une tenue
 -- enregistrée par un autre serveur (un emplacement vide laisserait l'ancien choix en place, cf. mergeForSave)
 InventoryRules.OUTFIT_NONE = "outfit.none"
+-- Emplacement de l'effet de tir (#566), à part des armes comme la tenue, et son choix « aucun effet » (même raison que
+-- OUTFIT_NONE)
+InventoryRules.EFFECT_SLOT = "effect"
+InventoryRules.EFFECT_NONE = "effect.none"
 -- Bornes des données relues du DataStore : un id plus long ou au-delà du nombre maximal est ignoré
 InventoryRules.MAX_ID_LENGTH = 64
 InventoryRules.MAX_STORED = 512
@@ -89,6 +96,7 @@ InventoryRules.Type = {
 	WEAPON = "weapon" :: ItemType,
 	SKIN = "skin" :: ItemType,
 	OUTFIT = "outfit" :: ItemType,
+	EFFECT = "effect" :: ItemType,
 }
 
 -- Catalogue : tous les items du jeu. Ajouter une arme = une ligne ici (et son Tool dans assets/rbx/Tools).
@@ -132,7 +140,6 @@ InventoryRules.ITEMS = {
 		weapon = "weapon.awp",
 		name = "ORAGE",
 		appearance = "orage",
-		shotEffect = "lightning",
 	},
 	{
 		id = "skin.awp.circuit",
@@ -433,6 +440,30 @@ InventoryRules.ITEMS = {
 		price = 2500,
 		description = "Combinaison étanche moutarde, masque à gaz à deux filtres, gants et bottes scellés au ruban.",
 	},
+	-- Effets de tir (#566) : obtenus par la caisse d'effets (ShopCatalog), équipés à part du skin. Chacun s'inspire d'un
+	-- skin de l'AWP pour former un duo ; `shotEffect` : style joué au tir (ShotEffectRules.STYLES)
+	{
+		id = "effect.eclair",
+		type = "effect",
+		name = "ÉCLAIR",
+		appearance = "eclair",
+		rarity = "rare",
+		shotEffect = "lightning",
+		inspiredBy = "skin.awp.orage",
+		description = "Un éclair vert ramifié remplace le rayon, différent à chaque tir.",
+	},
+	{
+		id = "effect.pan",
+		type = "effect",
+		name = "PAN !",
+		appearance = "pan",
+		rarity = "exceptional",
+		shotEffect = "pan",
+		inspiredBy = "skin.awp.pan",
+		description = "L'explosion « PAN ! » de la crosse jaillit devant le canon à chaque tir.",
+	},
+	-- TREMPE (style `temper`, ruban d'acier torsadé à écailles) : mis de côté le 18/11/2026, peu lisible du point de vue
+	-- du tireur ; son rendu reste dans ShotEffects / TemperFlakes, désactivé (ShotEffectRules.STYLES), cf. #567
 } :: { Item }
 
 -- Inventaire de tout joueur (et des bots), sauvegardé ou non : Ka-Bar et AWP
@@ -509,9 +540,11 @@ function InventoryRules.sanitizeEquipped(raw: any): Equipped
 			equipped[slot] = { weapon = entry.weapon, skin = if InventoryRules.isValidId(skin) then skin else nil }
 		end
 	end
-	local outfit = raw[InventoryRules.OUTFIT_SLOT]
-	if type(outfit) == "table" and InventoryRules.isValidId(outfit.weapon) then
-		equipped[InventoryRules.OUTFIT_SLOT] = { weapon = outfit.weapon }
+	for _, slot in { InventoryRules.OUTFIT_SLOT, InventoryRules.EFFECT_SLOT } do
+		local entry = raw[slot]
+		if type(entry) == "table" and InventoryRules.isValidId(entry.weapon) then
+			equipped[slot] = { weapon = entry.weapon }
+		end
 	end
 	return equipped
 end
@@ -788,6 +821,12 @@ function InventoryRules.resolveEquipped(equipped: Equipped?, owned: Owned): Equi
 	if item and item.type == "outfit" and owned[item.id] then
 		resolved[InventoryRules.OUTFIT_SLOT] = { weapon = item.id }
 	end
+	-- Effet de tir (#566) : même principe, sinon aucun effet
+	local effect = equipped and equipped[InventoryRules.EFFECT_SLOT]
+	local effectItem = effect and byId[effect.weapon]
+	if effectItem and effectItem.type == "effect" and owned[effectItem.id] then
+		resolved[InventoryRules.EFFECT_SLOT] = { weapon = effectItem.id }
+	end
 	return resolved
 end
 
@@ -802,6 +841,9 @@ function InventoryRules.equip(
 ): (Equipped?, string?)
 	if slot == InventoryRules.OUTFIT_SLOT then
 		return InventoryRules.equipOutfit(equipped, owned, weaponId)
+	end
+	if slot == InventoryRules.EFFECT_SLOT then
+		return InventoryRules.equipEffect(equipped, owned, weaponId)
 	end
 	if not InventoryRules.slotIndex(slot) then
 		return nil, "slot"
@@ -832,6 +874,52 @@ function InventoryRules.equipOutfit(equipped: Equipped, owned: Owned, outfitId: 
 	local nextEquipped = InventoryRules.sanitizeEquipped(equipped)
 	nextEquipped[InventoryRules.OUTFIT_SLOT] = { weapon = chosen }
 	return nextEquipped
+end
+
+-- Cette méthode permet de valider le choix d'un effet de tir (#566) lorsque le joueur clique dans l'emplacement EFFET :
+-- nouvel équipement (copie), ou nil et le motif ; nil, "" ou EFFECT_NONE retirent l'effet.
+function InventoryRules.equipEffect(equipped: Equipped, owned: Owned, effectId: any): (Equipped?, string?)
+	local chosen = InventoryRules.EFFECT_NONE
+	if effectId ~= nil and effectId ~= "" and effectId ~= InventoryRules.EFFECT_NONE then
+		local item = type(effectId) == "string" and byId[effectId]
+		if not (item and item.type == "effect") then
+			return nil, "unknown"
+		end
+		if not owned[item.id] then
+			return nil, "not_owned"
+		end
+		chosen = item.id
+	end
+	local nextEquipped = InventoryRules.sanitizeEquipped(equipped)
+	nextEquipped[InventoryRules.EFFECT_SLOT] = { weapon = chosen }
+	return nextEquipped
+end
+
+-- Cette méthode permet de lire l'effet de tir d'un équipement résolu (#566) lorsqu'un tir part ou que l'écran
+-- d'équipement l'affiche ; nil : aucun effet.
+function InventoryRules.effectOf(resolved: Equipped?): string?
+	local effect = resolved and resolved[InventoryRules.EFFECT_SLOT]
+	return effect and effect.weapon
+end
+
+-- Cette méthode permet de lister les effets de tir du catalogue (#566), du plus courant au plus rare puis par nom,
+-- lorsque l'écran d'équipement les montre.
+function InventoryRules.effects(): { Item }
+	local order = { common = 1, rare = 2, exceptional = 3, legendary = 4 }
+	local list: { Item } = {}
+	for _, entry in InventoryRules.ITEMS do
+		if entry.type == "effect" then
+			table.insert(list, entry)
+		end
+	end
+	table.sort(list, function(a, b)
+		local ra, rb = order[a.rarity or ""] or 0, order[b.rarity or ""] or 0
+		if ra ~= rb then
+			return ra < rb
+		end
+		return (a.name or a.id) < (b.name or b.id)
+	end)
+	return list
 end
 
 -- Cette méthode permet de lire la tenue d'un équipement résolu (#521) lorsqu'un personnage est habillé ; nil : tenue
@@ -950,7 +1038,8 @@ function InventoryRules.decode(text: any): Owned
 end
 
 -- Cette méthode permet d'écrire l'équipement résolu dans l'attribut informatif du Player lorsqu'il change : « arme » ou
--- « arme:skin » par emplacement, dans l'ordre de SLOTS, puis la tenue (#521, absente : d'origine), séparés par des virgules.
+-- « arme:skin » par emplacement, dans l'ordre de SLOTS, puis la tenue (#521, vide : d'origine) et l'effet
+-- de tir (#566, absent : aucun), séparés par des virgules.
 function InventoryRules.encodeEquipped(resolved: Equipped): string
 	local parts: { string } = {}
 	for _, slot in InventoryRules.SLOTS do
@@ -962,8 +1051,12 @@ function InventoryRules.encodeEquipped(resolved: Equipped): string
 		end
 	end
 	local outfit = InventoryRules.outfitOf(resolved)
-	if outfit then
-		table.insert(parts, outfit) -- tenue (#521), après les emplacements d'armes ; absente : d'origine
+	local effect = InventoryRules.effectOf(resolved)
+	if outfit or effect then
+		table.insert(parts, outfit or "") -- tenue (#521), après les emplacements d'armes ; vide : d'origine
+	end
+	if effect then
+		table.insert(parts, effect) -- effet de tir (#566), après la tenue ; absent : aucun
 	end
 	return table.concat(parts, ",")
 end
@@ -978,10 +1071,17 @@ function InventoryRules.decodeEquipped(text: any, owned: Owned): Equipped
 			index += 1
 			local slot = InventoryRules.SLOTS[index]
 			if not slot then
-				if index == #InventoryRules.SLOTS + 1 and part ~= "" then
-					equipped[InventoryRules.OUTFIT_SLOT] = { weapon = part }
+				local extra = if index == #InventoryRules.SLOTS + 1
+					then InventoryRules.OUTFIT_SLOT
+					elseif index == #InventoryRules.SLOTS + 2 then InventoryRules.EFFECT_SLOT
+					else nil
+				if not extra then
+					break
 				end
-				break
+				if part ~= "" then
+					equipped[extra] = { weapon = part }
+				end
+				continue
 			end
 			local weapon, skin = string.match(part, "^([^:]+):?(.*)$")
 			if weapon then

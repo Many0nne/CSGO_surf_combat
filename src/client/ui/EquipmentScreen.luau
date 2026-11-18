@@ -3,8 +3,10 @@
 -- « ÉQUIPEMENT » puis l'emplacement actif et son étiquette, rendu de l'arme montrée, son nom avec « ÉQUIPÉ », onglets
 -- des emplacements, grille de cartes qui défile à la molette (armes possédées, puis skins de l'arme équipée). Survoler
 -- une carte la montre, cliquer l'équipe (remote EquipItem, l'écran suit la réponse du serveur). Seuls les items
--- possédés apparaissent. Dernier onglet, TENUE (#521) : tenues de personnage possédées, en portrait ; le personnage de
--- l'accueil porte la tenue survolée ou équipée (MenuScene.previewOutfit), la tenue s'achète au shop.
+-- possédés apparaissent. Onglet TENUE (#521) : tenues de personnage possédées, en portrait ; le personnage de
+-- l'accueil porte la tenue survolée ou équipée (MenuScene.previewOutfit), la tenue s'achète au shop. Dernier onglet,
+-- EFFET (#566) : effets de tir possédés (caisse d'effets), chaque carte montrant l'AWP dans le skin qui l'inspire ; le
+-- personnage tient l'AWP et tire en boucle avec l'effet survolé ou équipé (MenuScene.demoShot).
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
@@ -13,6 +15,7 @@ local InventoryRules = require(Shared:WaitForChild("InventoryRules"))
 local Locale = require(Shared:WaitForChild("Locale"))
 local PlayerSettings = require(Shared:WaitForChild("PlayerSettings"))
 local ShopCatalog = require(Shared:WaitForChild("ShopCatalog"))
+local ShotEffectRules = require(Shared:WaitForChild("ShotEffectRules"))
 local UITheme = require(Shared:WaitForChild("UITheme"))
 local WeaponConfig = require(Shared:WaitForChild("WeaponConfig"))
 local LocalInventory = require(script.Parent.Parent.systems.inventory.LocalInventory)
@@ -62,13 +65,18 @@ local SCROLL_STEP = CARD_SIZE.Y + CARD_GAP -- une rangée par cran de molette qu
 local PREVIEW_POSITION = Vector2.new(330, 76) -- rendu de l'arme montrée, à droite du titre
 local PREVIEW_SIZE = Vector2.new(470, 210)
 local SHOW_PREVIEW = true
-local SLOT_LABELS = { sniper = "SNIPER", knife = "COUTEAU", outfit = "TENUE" }
+local SLOT_LABELS = { sniper = "SNIPER", knife = "COUTEAU", outfit = "TENUE", effect = "EFFET" }
 local OUTFIT_TAB = #InventoryRules.SLOTS + 1 -- onglet de la tenue de personnage (#521), après ceux des armes
+local EFFECT_TAB = #InventoryRules.SLOTS + 2 -- onglet de l'effet de tir (#566), après la tenue
+local TAB_COUNT = EFFECT_TAB
+local EFFECT_TOOL = "AWP" -- arme tenue et cartes de l'onglet EFFET : la seule arme à distance
+local DEMO_PERIOD = 1.4 -- s entre deux tirs de démonstration de l'onglet EFFET (un peu plus que la cadence de l'AWP)
 local SCRIM_SIZE = Vector2.new(1100, 760) -- fond de coin sous la grille et le titre (décor clair possible)
 local SCRIM_SHOWN = 0.2
 
--- Carte survolée : arme et skin, ou tenue (#521, `outfit` nil : tenue d'origine) dans l'onglet TENUE
-type Hover = { tool: string?, skin: string?, outfit: string? }
+-- Carte survolée : arme et skin, tenue (#521, `outfit` nil : tenue d'origine) dans l'onglet TENUE, ou effet de tir
+-- (#566, `kind` "effect", `effect` nil : aucun) dans l'onglet EFFET
+type Hover = { tool: string?, skin: string?, outfit: string?, kind: string?, effect: string? }
 -- Texte à largeur automatique doublé de son ombre, pour une ligne qui enchaîne texte et étiquette
 type Flow = { set: (string, { [string]: any }?) -> (), bind: (() -> string) -> (), label: TextLabel }
 
@@ -87,6 +95,8 @@ local category: TextLabel
 local categoryShadow: TextLabel
 local selectedSlot = 1 -- emplacement actif : sa grille est affichée, le personnage tient son arme
 local hover: Hover? = nil -- carte survolée : arme (et skin) montrés tant que la souris reste dessus
+local screenRoot: GuiObject? = nil -- racine de l'écran : la démonstration ne tire que s'il est affiché
+local demoToken = 0 -- boucle de tirs de démonstration en cours (#566) ; changer le jeton l'arrête
 
 -- Cette méthode permet de nommer un emplacement (« SNIPER », sinon son id en majuscules) lorsqu'il est affiché.
 local function slotLabel(slotName: string): string
@@ -256,6 +266,70 @@ local function shownOutfit(): (string?, boolean)
 	return equippedOutfit, true
 end
 
+-- Cette méthode permet de nommer un effet de tir (#566 ; « AUCUN » sans effet) lorsqu'une carte ou la ligne de nom
+-- l'affiche.
+local function effectTitle(effectId: string?): string
+	local item = effectId and InventoryRules.item(effectId)
+	return if item and item.name then item.name else "AUCUN"
+end
+
+-- Cette méthode permet de lire la rareté d'un effet de tir (#566 ; nil sans effet) lorsqu'une carte ou la ligne de nom
+-- la montre.
+local function effectRarity(effectId: string?): ShopCatalog.Rarity?
+	local item = effectId and InventoryRules.item(effectId)
+	return if item then ShopCatalog.rarityOf(item) else nil
+end
+
+-- Cette méthode permet de lire le skin d'AWP qui inspire un effet de tir (#566 ; nil : AWP d'origine) lorsque sa carte
+-- dessine l'arme.
+local function effectSkin(effectId: string?): string?
+	local item = effectId and InventoryRules.item(effectId)
+	return item and item.inspiredBy
+end
+
+-- Cette méthode permet de donner l'effet montré (carte survolée, sinon effet équipé) et de dire s'il est équipé, lorsque
+-- l'onglet EFFET met à jour sa ligne de nom ou que la démonstration tire.
+local function shownEffect(): (string?, boolean)
+	local equippedEffect = InventoryRules.effectOf(LocalInventory.equipped())
+	if hover and hover.kind == "effect" then
+		return hover.effect, hover.effect == equippedEffect
+	end
+	return equippedEffect, true
+end
+
+-- Cette méthode permet de savoir si l'écran d'équipement est à l'écran (lui et ses parents visibles, interface activée)
+-- lorsque la démonstration s'apprête à tirer.
+local function isOnScreen(): boolean
+	local node: Instance? = screenRoot
+	while node do
+		if node:IsA("GuiObject") and not node.Visible then
+			return false
+		end
+		if node:IsA("LayerCollector") then
+			return node.Enabled and node:IsDescendantOf(game)
+		end
+		node = node.Parent
+	end
+	return false
+end
+
+-- Cette méthode permet de lancer la boucle des tirs de démonstration de l'onglet EFFET (#566) lorsqu'il devient actif :
+-- un tir tout de suite puis toutes les DEMO_PERIOD s, avec l'effet montré, tant que l'onglet reste actif et l'écran
+-- affiché ; tout autre onglet change le jeton et l'arrête.
+local function startDemo()
+	demoToken += 1
+	local token = demoToken
+	task.spawn(function()
+		while token == demoToken and selectedSlot == EFFECT_TAB do
+			if isOnScreen() then
+				local effect = shownEffect()
+				MenuScene.demoShot(ShotEffectRules.styleOf(effect))
+			end
+			task.wait(DEMO_PERIOD)
+		end
+	end)
+end
+
 -- Cette méthode permet de poser la ligne de nom (étiquette de rareté, « ÉQUIPÉ » ou « CLIC POUR ÉQUIPER ») selon ce
 -- qui est montré, lorsque l'en-tête d'un onglet d'arme ou de l'onglet TENUE se met à jour.
 local function paintStatus(visible: boolean, isEquipped: boolean, rarity: ShopCatalog.Rarity?)
@@ -288,11 +362,38 @@ local function paintOutfitHeader()
 	MenuScene.previewOutfit(outfit)
 end
 
+-- Cette méthode permet de mettre à jour l'en-tête de l'onglet EFFET (#566) : nom et rareté de l'effet montré, skin qui
+-- l'inspire, pas de rendu d'arme ; le personnage tient l'AWP dans son skin équipé (la démonstration tire avec).
+local function paintEffectHeader()
+	slotTitle.set(slotLabel(InventoryRules.EFFECT_SLOT))
+	Locale.apply(slotTag, "EMPLACEMENT {n}", { n = EFFECT_TAB })
+	local effect, isEquipped = shownEffect()
+	weaponName.bind(function()
+		return Locale.t(effectTitle(effect))
+	end)
+	paintStatus(true, isEquipped, effectRarity(effect))
+	local skin = effectSkin(effect)
+	local skinItem = skin and InventoryRules.item(skin)
+	if skinItem and skinItem.name then
+		Locale.apply(category, "EFFET DE TIR  ·  INSPIRÉ DE {skin}", { skin = skinItem.name })
+		Locale.apply(categoryShadow, "EFFET DE TIR  ·  INSPIRÉ DE {skin}", { skin = skinItem.name })
+	else
+		Locale.apply(category, "EFFET DE TIR")
+		Locale.apply(categoryShadow, "EFFET DE TIR")
+	end
+	showPreview(nil, nil)
+	MenuScene.holdTool(EFFECT_TOOL, InventoryRules.skinOfTool(LocalInventory.equipped(), EFFECT_TOOL))
+end
+
 -- Cette méthode permet de mettre à jour le titre, la ligne de nom (« ÉQUIPÉ » plein en rouge d'impact, sinon « CLIC POUR
 -- ÉQUIPER » en contour), le rendu et l'arme du personnage lorsque le survol, l'emplacement ou l'équipement change.
 local function paintHeader()
 	if selectedSlot == OUTFIT_TAB then
 		paintOutfitHeader()
+		return
+	end
+	if selectedSlot == EFFECT_TAB then
+		paintEffectHeader()
 		return
 	end
 	local slotName = InventoryRules.SLOTS[selectedSlot]
@@ -368,7 +469,11 @@ local function card(
 	local stroke = UIKit.stroke(button, C.Bone, 1)
 	local restStroke = if equipped then 0.1 else 0.7
 	stroke.Transparency = restStroke
-	local rarity = if portrait then outfitRarity(item.outfit) elseif textured then skinRarity(item.skin) else nil
+	local rarity = if item.kind == "effect"
+		then effectRarity(item.effect)
+		elseif portrait then outfitRarity(item.outfit)
+		elseif textured then skinRarity(item.skin)
+		else nil
 	local iconSize, iconTop = CARD_ICON, 12
 	if rarity then
 		local color = Color3.fromRGB(rarity.color[1], rarity.color[2], rarity.color[3])
@@ -512,11 +617,46 @@ local function fillOutfits(): number
 	return y + CARD_SIZE.Y
 end
 
+-- Cette méthode permet de poser les cartes de l'onglet EFFET (#566) : « aucun » puis effets possédés, du plus courant au
+-- plus rare, chacun sur l'AWP dans le skin qui l'inspire ; renvoie la hauteur occupée.
+local function fillEffects(): number
+	local owned = LocalInventory.owned()
+	local equippedEffect = InventoryRules.effectOf(LocalInventory.equipped())
+	local list: { { id: string? } } = { { id = nil } }
+	for _, effect in InventoryRules.effects() do
+		if owned[effect.id] then
+			table.insert(list, { id = effect.id })
+		end
+	end
+	local step = CARD_SIZE.X + CARD_GAP
+	local y = 0
+	for i, entry in list do
+		local effectId = entry.id
+		y = ((i - 1) // COLUMNS) * (CARD_SIZE.Y + CARD_GAP)
+		card(
+			((i - 1) % COLUMNS) * step,
+			y,
+			effectTitle(effectId),
+			{ kind = "effect", effect = effectId, tool = EFFECT_TOOL, skin = effectSkin(effectId) },
+			effectId == equippedEffect,
+			function()
+				LocalInventory.equip(InventoryRules.EFFECT_SLOT, effectId or "", nil)
+			end,
+			true
+		)
+	end
+	fillRow(#list, y)
+	return y + CARD_SIZE.Y
+end
+
 -- Cette méthode permet de poser les cartes (armes possédées de l'emplacement actif, puis skins possédés de son arme
 -- équipée) lorsque la grille se reconstruit ; renvoie la hauteur occupée, pour la zone défilante.
 local function fillGrid(): number
 	if selectedSlot == OUTFIT_TAB then
 		return fillOutfits()
+	end
+	if selectedSlot == EFFECT_TAB then
+		return fillEffects()
 	end
 	local slotName = InventoryRules.SLOTS[selectedSlot]
 	if not slotName then
@@ -606,7 +746,8 @@ end
 -- Cette méthode permet de rendre un emplacement actif (sa grille, son arme dans les mains du personnage) lorsque le
 -- joueur clique son onglet ou tape sa touche ; une autre grille repart du haut.
 local function selectSlot(index: number)
-	if index ~= selectedSlot then
+	local entering = index ~= selectedSlot
+	if entering then
 		scroller.CanvasPosition = Vector2.zero
 	end
 	selectedSlot = index
@@ -616,6 +757,11 @@ local function selectSlot(index: number)
 	rebuildGrid()
 	paintTabs()
 	paintHeader()
+	if index ~= EFFECT_TAB then
+		demoToken += 1 -- arrête la démonstration de l'onglet EFFET
+	elseif entering or demoToken == 0 then
+		startDemo()
+	end
 end
 
 -- Cette méthode permet d'arrêter la grille au-dessus de la fiche de statistiques lorsque la fenêtre est trop étroite
@@ -649,6 +795,7 @@ end
 -- à gauche) lorsque l'accueil est construit ; il suit ensuite chaque changement d'inventaire. La grille évite `stats`
 -- (fiche de statistiques, `reserved` px au-dessus du bas) quand elles ne tiennent pas côte à côte.
 function EquipmentScreen.build(root: Frame, column: Frame, stats: GuiObject, reserved: number)
+	screenRoot = column
 	-- Sous la colonne, créée avant lui : à ZIndex égal il passerait devant et voilerait la grille
 	UIKit.cornerScrim(root, "BottomLeft", SCRIM_SIZE, SCRIM_SHOWN).ZIndex = 0
 	-- La colonne de gauche descend avec le titre du jeu sous la barre de Roblox (#306)
@@ -703,6 +850,7 @@ function EquipmentScreen.build(root: Frame, column: Frame, stats: GuiObject, res
 	})
 	local tabSlots = table.clone(InventoryRules.SLOTS) :: { string }
 	table.insert(tabSlots, InventoryRules.OUTFIT_SLOT) -- TENUE (#521), après les armes
+	table.insert(tabSlots, InventoryRules.EFFECT_SLOT) -- EFFET (#566), après la tenue
 	for index, slotName in tabSlots do
 		tabChoices[index] = MenuShot.boxChoice({
 			text = string.format("%d  ·  %s", index, slotLabel(slotName)),
@@ -754,7 +902,7 @@ function EquipmentScreen.onInput(input: InputObject)
 	elseif input.KeyCode == Enum.KeyCode.ButtonR1 or input.KeyCode == Enum.KeyCode.ButtonL1 then
 		-- Manette (#276) : R1 / L1 passent à l'emplacement suivant / précédent, comme la barre d'armes en partie
 		local step = if input.KeyCode == Enum.KeyCode.ButtonR1 then 1 else -1
-		selectSlot((selectedSlot - 1 + step) % OUTFIT_TAB + 1)
+		selectSlot((selectedSlot - 1 + step) % TAB_COUNT + 1)
 	end
 end
 

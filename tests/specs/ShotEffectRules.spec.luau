@@ -166,4 +166,114 @@ return function(T, Loader)
 			T.expectEqual(ShotEffectRules.hasRoom(ShotEffectRules.MAX_ACTIVE), false)
 		end)
 	end)
+
+	T.describe("TREMPE (#566)", function()
+		T.it("s'efface plus lentement que le rayon ordinaire, sur sa propre durée de vie", function()
+			local life = ShotEffectRules.tracerLifetime("temper")
+			T.expectEqual(life, ShotEffectRules.TEMPER_LIFETIME)
+			T.expect(life > ShotEffectRules.TRACER_LIFETIME, "plus long que le rayon ordinaire")
+			T.expectEqual(ShotEffectRules.tracerLifetime(nil), ShotEffectRules.TRACER_LIFETIME)
+			T.expectEqual(ShotEffectRules.tracerLifetime("pan"), ShotEffectRules.TRACER_LIFETIME)
+			T.expectEqual(ShotEffectRules.fadeStep(life, false, life), ShotEffectRules.FADE_STEPS)
+			T.expect(
+				ShotEffectRules.fadeStep(ShotEffectRules.TRACER_LIFETIME, false, life) < ShotEffectRules.FADE_STEPS
+			)
+		end)
+
+		T.it("écailles réparties entre les tronçons, le reste près de la bouche", function()
+			local sections = #ShotEffectRules.TEMPER_FLAKE_SECTIONS
+			local counts = ShotEffectRules.temperFlakeSplit(sections * 4 + 1)
+			T.expectEqual(#counts, sections)
+			T.expectEqual(counts[1], 5)
+			T.expectEqual(counts[sections], 4)
+			local total = 0
+			for _, n in ShotEffectRules.temperFlakeSplit(20) do
+				total += n
+			end
+			T.expectEqual(total, 20)
+		end)
+
+		T.it("écailles proportionnelles à la longueur du rayon, bornées", function()
+			T.expectEqual(ShotEffectRules.temperFlakeCount(0), ShotEffectRules.TEMPER_FLAKES_MIN)
+			T.expectEqual(ShotEffectRules.temperFlakeCount(10000), ShotEffectRules.TEMPER_FLAKES_MAX)
+			local mid = ShotEffectRules.temperFlakeCount(60)
+			T.expect(
+				mid > ShotEffectRules.TEMPER_FLAKES_MIN and mid < ShotEffectRules.TEMPER_FLAKES_MAX,
+				"entre les bornes"
+			)
+		end)
+
+		T.it("de la paille à la bouche au bleu vers l'impact, dans les limites d'une ColorSequence", function()
+			local points = ShotEffectRules.temperKeypoints(0, 0.37)
+			T.expectEqual(#points, ShotEffectRules.TEMPER_KEYPOINTS)
+			T.expect(#points <= 20, "20 points au plus")
+			T.expectEqual(points[1][1], 0)
+			T.expectEqual(points[#points][1], 1)
+			for i, point in points do
+				for c = 2, 4 do
+					T.expect(point[c] >= 0 and point[c] <= 255, "couleur bornée au point " .. i)
+				end
+				if i > 1 then
+					T.expect(point[1] > points[i - 1][1], "positions croissantes")
+				end
+			end
+			local first, last = points[1], points[#points]
+			T.expect(first[2] > first[4], "paille (rouge > bleu) à la bouche")
+			T.expect(last[4] > last[2], "bleu dominant vers l'impact")
+		end)
+
+		T.it("les franges défilent : deux instants donnent deux dégradés", function()
+			local a = ShotEffectRules.temperKeypoints(0, 0.5)
+			local b = ShotEffectRules.temperKeypoints(0.1, 0.5)
+			local differs = false
+			for i = 1, #a do
+				differs = differs or math.abs(a[i][2] - b[i][2]) > 1
+			end
+			T.expect(differs, "les couleurs bougent")
+		end)
+	end)
+
+	T.describe("PAN ! (#566)", function()
+		T.it("le rayon part du bord de l'explosion, sauf si l'impact est trop proche", function()
+			local finish = ORIGIN + FORWARD * 100
+			local center = ORIGIN + FORWARD * 2
+			local start = ShotEffectRules.panTracerStart(ORIGIN, finish, center, 3)
+			T.expectNear((start - ORIGIN).Magnitude, 2 + 3 * ShotEffectRules.PAN_TRACER_GAP)
+			local close = ORIGIN + FORWARD * 3
+			T.expectEqual(ShotEffectRules.panTracerStart(ORIGIN, close, center, 3), ORIGIN)
+		end)
+
+		T.it("jaillit, dépasse, se pose puis s'efface sur sa durée de vie", function()
+			local scale0 = ShotEffectRules.panFrame(0)
+			T.expectEqual(scale0, 0)
+			local peak = ShotEffectRules.panFrame(ShotEffectRules.PAN_POP)
+			T.expectNear(peak, ShotEffectRules.PAN_OVERSHOOT)
+			local settled, visible = ShotEffectRules.panFrame(ShotEffectRules.PAN_POP + ShotEffectRules.PAN_SETTLE)
+			T.expectNear(settled, 1)
+			T.expectEqual(visible, 0)
+			local _, gone = ShotEffectRules.panFrame(ShotEffectRules.PAN_LIFETIME)
+			T.expectEqual(gone, 1)
+			T.expectEqual(ShotEffectRules.panTurn(0), ShotEffectRules.PAN_TURN)
+			T.expectEqual(ShotEffectRules.panTurn(ShotEffectRules.PAN_POP + ShotEffectRules.PAN_SETTLE), 0)
+			local mid = ShotEffectRules.panTurn(ShotEffectRules.PAN_POP)
+			T.expect(mid > 0 and mid < ShotEffectRules.PAN_TURN, "pivote vers la caméra pendant le pop")
+			local _, fading = ShotEffectRules.panFrame(ShotEffectRules.PAN_LIFETIME * 0.8)
+			T.expect(fading > 0 and fading < 1, "s'efface sur la fin")
+		end)
+
+		T.it("se place devant le canon vers l'impact, plus petit et plus près chez le tireur", function()
+			local finish = ORIGIN + FORWARD * 100
+			local pos, width = ShotEffectRules.panPlacement(ORIGIN, finish, false)
+			T.expectNear((pos - ORIGIN).Magnitude, ShotEffectRules.PAN_AHEAD)
+			T.expect((pos - ORIGIN):Dot(FORWARD) > 0, "devant le canon")
+			T.expectEqual(width, ShotEffectRules.PAN_WIDTH)
+			local localPos, localWidth = ShotEffectRules.panPlacement(ORIGIN, finish, true)
+			T.expect(localWidth < width, "plus petit chez le tireur")
+			T.expect((localPos - ORIGIN).Magnitude <= (pos - ORIGIN).Magnitude, "plus près chez le tireur")
+			local demo = ShotEffectRules.panPlacement(ORIGIN, finish, false, ShotEffectRules.PAN_AHEAD_DEMO)
+			T.expectNear((demo - ORIGIN).Magnitude, ShotEffectRules.PAN_AHEAD_DEMO)
+			local near = ShotEffectRules.panPlacement(ORIGIN, ORIGIN + FORWARD * 1, false)
+			T.expectNear((near - ORIGIN).Magnitude, 0.5, 1e-6)
+		end)
+	end)
 end

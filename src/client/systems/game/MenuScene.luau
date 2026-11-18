@@ -16,6 +16,7 @@ local PerfMarkers = require(Shared:WaitForChild("PerfMarkers"))
 local WeaponConfig = require(Shared:WaitForChild("WeaponConfig"))
 local WeaponThirdPerson = require(Shared:WaitForChild("WeaponThirdPerson"))
 local LocalInventory = require(script.Parent.Parent.inventory.LocalInventory)
+local ShotEffects = require(script.Parent.Parent.weapon.ShotEffects)
 local MenuPoses = require(script.Parent.MenuPoses)
 local Rules = require(script.Parent.MenuSceneRules)
 
@@ -48,6 +49,12 @@ local KEY_ANGLE = 50
 local KEY_RANGE = 30
 local KEY_BRIGHTNESS = 3
 local KEY_COLOR = Color3.fromRGB(255, 214, 170)
+-- Tir de démonstration d'un effet (#566) : point de l'image visé (part de la largeur, de la hauteur), à gauche du
+-- personnage, et sa distance à la caméra (studs, le personnage est à ~17)
+local DEMO_AIM = Vector2.new(0.5, 0.55)
+local DEMO_DEPTH = 9
+local demoParams = RaycastParams.new()
+demoParams.FilterType = Enum.RaycastFilterType.Exclude
 
 -- Plan de l'accueil par map (coordonnées de la map telle qu'elle est posée) : pieds du personnage (y relevé au sol,
 -- recalé par un rayon), direction de son regard, puis caméra devant lui à `distance`, à `eyeHeight` au-dessus des pieds,
@@ -505,6 +512,29 @@ end
 -- Cette méthode permet d'enregistrer le rappel appelé à chaque changement d'arme lorsque la fiche doit suivre la scène.
 function MenuScene.onWeaponChanged(callback: (string) -> ())
 	weaponChanged = callback
+end
+
+-- Cette méthode permet de tirer un coup de démonstration de l'arme tenue avec un style d'effet (#566, nil : rayon
+-- ordinaire) lorsque l'onglet EFFET de l'équipement le montre : du canon vers un point de l'image à gauche (DEMO_AIM),
+-- entre le personnage et la caméra (DEMO_DEPTH) : le tir passe devant lui (l'arme tenue en travers pointe hors du cadre,
+-- et un tir vers le fond passerait derrière sa tête), arrêté par le décor s'il en rencontre.
+function MenuScene.demoShot(style: string?)
+	local model = character
+	local gun = model and model:FindFirstChild(WeaponThirdPerson.MODEL_NAME)
+	local muzzle = ShotEffects.muzzleOf(gun)
+	local camera = workspace.CurrentCamera
+	if not (running and not paused and muzzle and camera) then
+		return
+	end
+	local viewport = camera.ViewportSize
+	local ray = camera:ViewportPointToRay(viewport.X * DEMO_AIM.X, viewport.Y * DEMO_AIM.Y)
+	local aim = ray.Origin + ray.Direction * DEMO_DEPTH - muzzle.WorldPosition
+	if aim.Magnitude < 1e-3 then
+		return
+	end
+	demoParams.FilterDescendantsInstances = { model :: Instance }
+	local result = workspace:Raycast(muzzle.WorldPosition, aim, demoParams)
+	ShotEffects.playDemo(muzzle.WorldPosition, if result then result.Position else muzzle.WorldPosition + aim, style)
 end
 
 -- Cette méthode permet de faire porter au personnage de l'accueil une tenue (#521, nil : d'origine) lorsque l'écran
