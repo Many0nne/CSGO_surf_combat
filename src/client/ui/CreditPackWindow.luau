@@ -27,7 +27,9 @@ local CreditPackWindow = {}
 
 -- Mise en page (px à 720 de haut), dans le bloc centré de 780 px
 local PACKS_Y = MenuPage.ContentTop + 24
-local PACK_WIDTH = 220
+-- Quatre packs (#555) dans la largeur du bloc (MenuPage.BlockWidth, 780) : 4 x 180 + 3 x 20
+local PACK_WIDTH = 180
+local PACK_GAP = 20
 local PACK_ICON = 56
 local AMOUNT_SIZE = 52
 local PRICE_SIZE = Vector2.new(160, 42)
@@ -287,10 +289,10 @@ function CreditPackWindow.init(onClose: () -> ())
 		FillDirection = Enum.FillDirection.Horizontal,
 		HorizontalAlignment = Enum.HorizontalAlignment.Center,
 		SortOrder = Enum.SortOrder.LayoutOrder,
-		Padding = UDim.new(0, 60),
+		Padding = UDim.new(0, PACK_GAP),
 		Parent = row,
 	})
-	for i, pack in CreditPacks.PACKS do
+	for i, pack in CreditPacks.onSale() do
 		buildPack(row, pack, i)
 	end
 	UIKit.text({

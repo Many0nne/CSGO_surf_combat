@@ -15,13 +15,38 @@ export type Pack = {
 	credits: number, -- crédits ajoutés au compteur `purchased`
 	robux: number, -- prix affiché (le prix réel est celui du produit sur le dashboard)
 	name: string, -- nom du produit sur le dashboard
+	-- retiré de la vente : ni affiché ni proposé, mais ses reçus (en attente, achat hors du jeu) restent accordés
+	retired: boolean?,
 }
 
+-- Prix calés sur les packs de Robux (#555) : le plus acheté fait 400 R$, d'où 99 / 199 / 399 / 799 R$ (barème :
+-- docs/economie.md). Le pack à 499 R$ d'avant #555 est retiré, gardé pour ses reçus
 CreditPacks.PACKS = {
 	{ id = "pack.500", productId = 3_732_001_755, credits = 500, robux = 99, name = "500 crédits" },
 	{ id = "pack.1100", productId = 3_732_001_894, credits = 1_100, robux = 199, name = "1 100 crédits" },
-	{ id = "pack.3000", productId = 3_732_001_987, credits = 3_000, robux = 499, name = "3 000 crédits" },
+	{ id = "pack.2400", productId = 3_733_000_372, credits = 2_400, robux = 399, name = "2 400 crédits" },
+	{ id = "pack.5000", productId = 3_733_000_397, credits = 5_000, robux = 799, name = "5 000 crédits" },
+	{
+		id = "pack.3000",
+		productId = 3_732_001_987,
+		credits = 3_000,
+		robux = 499,
+		name = "3 000 crédits",
+		retired = true,
+	},
 } :: { Pack }
+
+-- Cette méthode permet de lister les packs en vente (non retirés), dans l'ordre de la config, lorsque la fenêtre des
+-- packs les affiche.
+function CreditPacks.onSale(): { Pack }
+	local list = {}
+	for _, pack in CreditPacks.PACKS do
+		if not pack.retired then
+			table.insert(list, pack)
+		end
+	end
+	return list
+end
 
 -- Ids provisoires d'avant la création des produits : tant qu'un pack en porte un, les packs sont masqués et le prompt refusé hors de Studio
 -- (`isReady`), pour qu'une publication faite avant de coller les vrais ids ne montre pas un achat qui échoue.

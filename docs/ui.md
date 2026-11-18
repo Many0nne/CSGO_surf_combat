@@ -1059,8 +1059,8 @@ Achat de crédits en Robux (règles : `docs/economie.md`). Sur la page SHOP seul
   `PaidRandomRestricted` = false), sur la vitrine ou la vue détail, pas pendant une ouverture ; hors de Studio,
   seulement une fois les vrais ids des produits collés (`CreditPacks.isReady`).
 - **Fenêtre** (`CreditPackWindow`, gabarit des écrans secondaires `MenuPage` : bloc centré sur un voile, sans panneau,
-  sous la barre du menu dont le solde reste visible) : titre « PACKS DE CRÉDITS », trois packs côte à côte (jeton
-  56 px, montant Oswald gras 52 px, « CRÉDITS », prix « 99 R$ » dans un contour os comme ACHETER), une ligne atténuée
+  sous la barre du menu dont le solde reste visible) : titre « PACKS DE CRÉDITS », quatre packs côte à côte (#555,
+  colonnes de 180 px espacées de 20 dans les 780 px du bloc ; jeton 56 px, montant Oswald gras 52 px, « CRÉDITS », prix « 99 R$ » dans un contour os comme ACHETER), une ligne atténuée
   « PAIEMENT EN ROBUX · LES CRÉDITS ARRIVENT DÈS QUE ROBLOX CONFIRME L'ACHAT », RETOUR en bas au centre. Pendant
   qu'elle est ouverte, la colonne du shop et l'aide de la vitrine sont masquées (elles chevaucheraient le bloc ou
   parleraient de caisses inertes) et la salle ne réagit plus à la souris (`ShopScene.setInteractive`). Un voile plein

@@ -106,11 +106,17 @@ Mesures (Studio, map jouée, `[CreditGains]`) :
 ## Packs de crédits (Developer Products)
 
 - Config : `src/shared/CreditPacks.luau` (`PACKS` : id du pack, `productId`, crédits, prix affiché, nom du produit).
-  Valeurs : 500 crédits à 99 R$, 1 100 à 199 R$, 3 000 à 499 R$. Prévu (#555) : packs à 399 R$ (2 400) et 799 R$ (5 000)
-  à la place de celui à 499, car le pack de Robux le plus acheté fait 400 R$ et ne permet pas d'acheter un pack à 499.
+  En vente (#555) : 500 crédits à 99 R$, 1 100 à 199 R$ (+9 % de crédits par R$), 2 400 à 399 R$ (+19 %), 5 000 à 799 R$
+  (+24 %). Prix calés sur les packs de Robux : le plus acheté fait 400 R$, il paie un pack à 399 mais pas un à 499.
 - **Developer Products créés** (dashboard Creator, expérience > Monetization > Developer Products) : 500 crédits
-  `3732001755`, 1 100 crédits `3732001894`, 3 000 crédits `3732001987`. Le prix réel est celui du dashboard ; `robux`
-  n'est que l'affichage, à garder égal (un changement de prix se fait aux deux endroits).
+  `3732001755`, 1 100 crédits `3732001894`, 2 400 crédits `3733000372`, 5 000 crédits `3733000397` ; retiré : 3 000
+  crédits à 499 R$ `3732001987`. Le prix réel est celui du dashboard ; `robux` n'est que l'affichage, à garder égal (un
+  changement de prix se fait aux deux endroits).
+- **Retirer un pack de la vente** : `retired = true` dans `CreditPacks.PACKS`, jamais le supprimer. Il disparaît de la
+  fenêtre (`CreditPacks.onSale`) et son prompt est refusé (`unknown`), mais ses reçus (en attente, ou achat hors du jeu
+  par l'onglet Store) restent accordés. Le désactiver aussi sur le dashboard une fois la version publiée.
+- Fenêtre des packs : quatre colonnes de 180 px espacées de 20 remplissent `MenuPage.BlockWidth` (780). Un cinquième
+  pack demande de revoir la mise en page.
 - Nouveau pack : créer d'abord le produit sur le dashboard, puis l'ajouter à `CreditPacks.PACKS`. Un pack qui garde un
   id provisoire (3 950 001 à 3 950 003, `CreditPacks.isReady`) masque « + CRÉDITS » et fait refuser le prompt
   (`unavailable`) hors de Studio ; un test vérifie que la config livrée n'en a plus.
