@@ -74,9 +74,10 @@ OFFSETS = {
 	"UpperLeg": -2.2565,
 	"LowerLeg": -3.4955,
 	"Foot": -4.5264,
-	"Head": 2.3823,  # haut de l'UpperTorso + demi-hauteur de la tête (1,5882) : centre de la coque
+	"Head": 2.3823,  # centre de la coque : haut de l'UpperTorso (1,5882) + demi-hauteur de la tête (0,7941)
 }
-# Écart latéral du centre des pièces (studs, gauche = -X) : bras contre le torse, jambes côte à côte
+# Écart latéral du centre des pièces (studs, gauche = -X) : bras contre le torse (demi-largeur du torse 1,5882 + du
+# bras 0,7941), jambes côte à côte (demi-largeur d'une jambe)
 SIDE_X = {"UpperArm": 2.3823, "LowerArm": 2.3823, "Hand": 2.3823, "UpperLeg": 0.7941, "LowerLeg": 0.7941, "Foot": 0.7941}
 
 
