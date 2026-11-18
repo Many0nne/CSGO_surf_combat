@@ -34,9 +34,11 @@ local SHADOW_TRANSPARENCY = 0.35
 local LINE_GAP = 2
 local INPUT_HEIGHT = 30
 local INPUT_GAP = 8
--- Hauteur réservée aux lignes : FEED_VISIBLE lignes d'une rangée (un message long passe sur deux, la plus ancienne
--- sort alors par le haut)
-local LINES_HEIGHT = ChatRules.FEED_VISIBLE * (TEXT_SIZE + 6 + LINE_GAP)
+-- Rangée d'une ligne : texte (TEXT_SIZE + 6) et son ombre décalée de SHADOW
+local ROW_HEIGHT = TEXT_SIZE + 6 + SHADOW
+-- Hauteur réservée aux lignes : FEED_VISIBLE rangées et leurs écarts (un message long passe sur deux, la plus ancienne
+-- sort alors par le haut). Mesuré dans Studio : 26 px par rangée, sans l'ombre la rangée du haut était coupée
+local LINES_HEIGHT = ChatRules.FEED_VISIBLE * (ROW_HEIGHT + LINE_GAP) - LINE_GAP
 -- Fond sombre sous le bloc saisie ouverte (même image que les coins du HUD)
 local SCRIM_SIZE = Vector2.new(WIDTH + 200, LINES_HEIGHT + INPUT_HEIGHT + 140)
 local SCRIM_TRANSPARENCY = 0.25

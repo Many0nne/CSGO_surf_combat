@@ -76,7 +76,9 @@ local function logMessage(userId: number, name: string, raw: string)
 	local entry: ChatLogRules.Entry =
 		{ at = os.time(), kind = "message", userId = userId, name = name, text = nil, pending = true }
 	ChatLogRules.push(batch, entry)
-	entry.text = filterForAll(raw, userId) or ChatService.UNFILTERED_PLACEHOLDER
+	-- Le texte filtré revient en texte riche échappé (« &lt; ») : rendu lisible pour le journal
+	local filtered = filterForAll(raw, userId)
+	entry.text = if filtered then ChatRules.unescape(filtered) else ChatService.UNFILTERED_PLACEHOLDER
 	entry.pending = nil
 end
 
