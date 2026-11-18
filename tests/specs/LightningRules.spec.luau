@@ -149,7 +149,9 @@ return function(T, Loader)
 		T.it("chaque effet de la caisse joue son style, et un style désactivé redonne le rayon ordinaire", function()
 			T.expectEqual(ShotEffectRules.styleOf("effect.eclair"), "lightning")
 			T.expectEqual(ShotEffectRules.styleOf("effect.pan"), "pan")
-			T.expectEqual(ShotEffectRules.styleOf("effect.trempe"), "temper")
+			-- TREMPE mis de côté : plus d'item, style désactivé
+			T.expectEqual(ShotEffectRules.styleOf("effect.trempe"), nil)
+			T.expectEqual(ShotEffectRules.isEnabled("temper"), false)
 			local saved = ShotEffectRules.STYLES.lightning
 			ShotEffectRules.STYLES.lightning = false
 			T.expectEqual(ShotEffectRules.styleOf("effect.eclair"), nil)

@@ -112,8 +112,8 @@ ShopCatalog.CRATES = {
 			legendary = { "cordoue" },
 		},
 	},
-	-- Caisse d'effets de tir (#566) : un effet par rareté pour commencer (pas de commun), équipable avec n'importe quel
-	-- skin ; bande jaune de PAN !, distincte des caisses de skins
+	-- Caisse d'effets de tir (#566) : ÉCLAIR (rare) et PAN ! (exceptionnel) pour commencer, TREMPE (légendaire) mis de
+	-- côté ; équipables avec n'importe quel skin ; bande jaune de PAN !, distincte des caisses de skins
 	{
 		id = "crate.fx.serie1",
 		name = "EFFETS · SÉRIE 1",
@@ -124,7 +124,6 @@ ShopCatalog.CRATES = {
 		contents = {
 			rare = { "eclair" },
 			exceptional = { "pan" },
-			legendary = { "trempe" },
 		},
 	},
 } :: { Crate }
@@ -226,7 +225,7 @@ function ShopCatalog.rarityOf(skin: { weapon: string?, appearance: string?, rari
 	end
 	local sources = {}
 	for _, crate in ShopCatalog.CRATES do
-		-- Une caisse d'effets (#566) reprend des noms de skins (PAN !, TREMPE) : elle ne dit rien de leur rareté
+		-- Une caisse d'effets (#566) reprend des noms de skins (PAN !) : elle ne dit rien de leur rareté
 		if crate.weapon == skin.weapon and not ShopCatalog.isEffectCrate(crate) then
 			table.insert(sources, crate.contents)
 		end

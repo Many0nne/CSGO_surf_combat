@@ -94,7 +94,9 @@ par `ScaleTo` avec le reste de l'arme.
   partie tirent le rayon ordinaire. Le son propre à un effet est prévu dans l'item (pas encore fait).
   Ajouter un effet : son item dans `InventoryRules.ITEMS`, son `appearance` dans la caisse (`ShopCatalog`), son style
   dans `STYLES` et `ShotEffects.show`, sa traduction de description (`Locale/en/Shop.luau`).
-  - **TREMPE (`temper`) :** d'après une planche de concept faite par une IA externe sur brief (validée le 18/11/2026 :
+  - **TREMPE (`temper`) — mis de côté le 18/11/2026** (« du point de vue du joueur, c'est vraiment pas dingue » : vu du
+    tireur, le ruban n'est qu'un court trait doré au bout du canon). Plus d'item ni de place dans la caisse, style
+    désactivé dans `STYLES`, rendu gardé tel quel pour une reprise (#567) : repenser d'abord la vue du tireur. D'après une planche de concept faite par une IA externe sur brief (validée le 18/11/2026 :
     « ruban d'acier torsadé qui refroidit, écailles d'oxyde qui s'en détachent »). Ruban plus large (`TEMPER_WIDTH`) et
     plus long à s'effacer (`TEMPER_LIFETIME`), torsadé par une texture répétée qui défile (`TEMPER_RIBBON_IMAGE`, deux
     losanges à facettes inversées = une torsion, `TEMPER_TWIST_LENGTH`, `TEMPER_TWIST_SPEED`), couleurs de revenu de

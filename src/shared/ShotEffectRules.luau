@@ -14,9 +14,10 @@ local ShotEffectRules = {}
 
 -- Styles d'effet de tir qu'un item `effect` peut déclarer (`shotEffect` du catalogue, #520, #566) et leur interrupteur :
 -- un style à false (ou un nom inconnu) est ignoré, le joueur tire avec le rayon ordinaire. `lightning` : éclair vert
--- (ÉCLAIR, LightningBolt) ; `pan` : explosion « PAN ! » devant le canon (PanBurst), rayon ordinaire ; `temper` : rayon
--- aux couleurs de revenu de l'acier (TREMPE).
-ShotEffectRules.STYLES = { lightning = true, pan = true, temper = true }
+-- (ÉCLAIR, LightningBolt) ; `pan` : explosion « PAN ! » devant le canon (PanBurst), rayon ordinaire ; `temper` : ruban
+-- d'acier torsadé à écailles (TREMPE), mis de côté le 18/11/2026 (peu lisible du point de vue du tireur) : aucun item ne
+-- le porte, rendu gardé pour plus tard (#567).
+ShotEffectRules.STYLES = { lightning = true, pan = true, temper = false }
 
 -- Bouche du canon dans le modèle de l'arme (viewmodel ou 3P) : chemin de l'Attachment, puis nom de son effet.
 -- Une arme à distance sans ce chemin tire sans flamme, et son rayon part de l'origine du tir (l'œil).

@@ -462,16 +462,8 @@ InventoryRules.ITEMS = {
 		inspiredBy = "skin.awp.pan",
 		description = "L'explosion « PAN ! » de la crosse jaillit devant le canon à chaque tir.",
 	},
-	{
-		id = "effect.trempe",
-		type = "effect",
-		name = "TREMPE",
-		appearance = "trempe",
-		rarity = "legendary",
-		shotEffect = "temper",
-		inspiredBy = "skin.awp.trempe",
-		description = "Un rayon aux couleurs de l'acier chauffé, du bleu de la bouche à la paille de l'impact.",
-	},
+	-- TREMPE (style `temper`, ruban d'acier torsadé à écailles) : mis de côté le 18/11/2026, peu lisible du point de vue
+	-- du tireur ; son rendu reste dans ShotEffects / TemperFlakes, désactivé (ShotEffectRules.STYLES), cf. #567
 } :: { Item }
 
 -- Inventaire de tout joueur (et des bots), sauvegardé ou non : Ka-Bar et AWP
