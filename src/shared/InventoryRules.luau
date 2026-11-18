@@ -473,6 +473,17 @@ InventoryRules.ITEMS = {
 		inspiredBy = "skin.awp.balise",
 		description = "Un ruban de chantier orange et noir se déroule du canon jusqu'à la cible.",
 	},
+	-- CIRCUIT (#567) : piste de circuit imprimé parcourue d'une impulsion (ShotEffectRules CIRCUIT_*, CircuitTrace)
+	{
+		id = "effect.circuit",
+		type = "effect",
+		name = "CIRCUIT",
+		appearance = "circuit",
+		rarity = "exceptional",
+		shotEffect = "circuit",
+		inspiredBy = "skin.awp.circuit",
+		description = "Une piste de circuit imprimé magenta se trace jusqu'à la cible, parcourue d'une impulsion.",
+	},
 	-- TREMPE (style `temper`, ruban d'acier torsadé à écailles) : mis de côté le 18/11/2026, peu lisible du point de vue
 	-- du tireur ; son rendu reste dans ShotEffects / TemperFlakes, désactivé (ShotEffectRules.STYLES), cf. #567
 } :: { Item }

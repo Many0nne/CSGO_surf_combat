@@ -16,8 +16,9 @@ local ShotEffectRules = {}
 -- un style à false (ou un nom inconnu) est ignoré, le joueur tire avec le rayon ordinaire. `lightning` : éclair vert
 -- (ÉCLAIR, LightningBolt) ; `pan` : explosion « PAN ! » devant le canon (PanBurst), rayon ordinaire ; `temper` : ruban
 -- d'acier torsadé à écailles (TREMPE), mis de côté le 18/11/2026 (peu lisible du point de vue du tireur) : aucun item ne
--- le porte, rendu gardé pour plus tard (#567) ; `balise` : ruban de chantier qui se déroule (BALISE, #567).
-ShotEffectRules.STYLES = { lightning = true, pan = true, temper = false, balise = true }
+-- le porte, rendu gardé pour plus tard (#567) ; `balise` : ruban de chantier qui se déroule (BALISE, #567) ;
+-- `circuit` : piste de circuit imprimé parcourue d'une impulsion (CIRCUIT, #567).
+ShotEffectRules.STYLES = { lightning = true, pan = true, temper = false, balise = true, circuit = true }
 
 -- Bouche du canon dans le modèle de l'arme (viewmodel ou 3P) : chemin de l'Attachment, puis nom de son effet.
 -- Une arme à distance sans ce chemin tire sans flamme, et son rayon part de l'origine du tir (l'œil).
@@ -165,6 +166,81 @@ ShotEffectRules.BALISE_MARK_ZOFFSET = 1.5
 -- Jeux d'émetteurs (boucle et marque) en réserve, utilisés à tour de rôle
 ShotEffectRules.BALISE_EMITTERS = 4
 
+-- CIRCUIT (#567, style `circuit`), d'après la planche de concept retenue le 18/11/2026 (« un peu simpliste » à la
+-- première version : pastilles plates, piste trop brisée, rien qui pousse à l'impact) : le rayon devient une piste de
+-- circuit imprimé magenta (couleurs du skin CIRCUIT), presque droite, à coudes de 45°, qui se construit depuis la bouche
+-- du canon (CIRCUIT_BUILD s) ; une étincelle part du canon et un composant en cube (cadre d'arêtes néon, cœur clair) y
+-- jaillit ; une impulsion claire parcourt la piste jusqu'à l'impact (de CIRCUIT_PULSE_FROM, en CIRCUIT_PULSE_TIME s), où
+-- un second cube jaillit et un réseau de pistes fines pousse autour de lui en se ramifiant. Tout s'éteint ensuite, la
+-- piste de la bouche vers l'impact. Remplace le rayon ordinaire.
+-- Tracé (circuitPath) : paliers décalés de CIRCUIT_JOG studs de part et d'autre de l'axe du tir, dans le plan vertical
+-- qui le contient, reliés par des coudes à 45° ; longueur droite entre deux coudes tirée dans CIRCUIT_RUN (studs) ;
+-- CIRCUIT_FIRST_RUN studs droits au départ (la piste sort du canon), CIRCUIT_LAST_RUN à l'arrivée (elle finit sur
+-- l'impact). Un tir plus court que CIRCUIT_MIN_LENGTH studs a une piste droite.
+ShotEffectRules.CIRCUIT_JOG = 0.5
+ShotEffectRules.CIRCUIT_RUN = { 10, 22 } -- à { 4, 10 }, la piste zigzaguait sans arrêt
+ShotEffectRules.CIRCUIT_FIRST_RUN = 3
+ShotEffectRules.CIRCUIT_LAST_RUN = 3
+ShotEffectRules.CIRCUIT_MIN_LENGTH = 12
+ShotEffectRules.CIRCUIT_MAX_SEGMENTS = 16 -- au-delà, la piste finit droite jusqu'à l'impact
+ShotEffectRules.CIRCUIT_RGB = { 250, 26, 158 } -- piste et cadre des cubes (magenta du skin)
+ShotEffectRules.CIRCUIT_HALO_RGB = { 200, 15, 120 }
+ShotEffectRules.CIRCUIT_PULSE_RGB = { 255, 225, 245 } -- impulsion et cœur des cubes
+ShotEffectRules.CIRCUIT_WIDTH = 0.12
+ShotEffectRules.CIRCUIT_HALO_WIDTH = 0.5
+ShotEffectRules.CIRCUIT_HALO_TRANSPARENCY = 0.5
+ShotEffectRules.CIRCUIT_PULSE_WIDTH = 0.5
+ShotEffectRules.CIRCUIT_PULSE_LENGTH = 2.5 -- studs de piste couverts par l'impulsion
+ShotEffectRules.CIRCUIT_BUILD = 0.06
+ShotEffectRules.CIRCUIT_PULSE_FROM = 0.03
+ShotEffectRules.CIRCUIT_PULSE_TIME = 0.12
+-- Extinction : un segment commence à s'éteindre à CIRCUIT_FADE_FROM, plus CIRCUIT_FADE_SPREAD s fois sa place sur la
+-- piste (0 : bouche, 1 : impact), et s'éteint en CIRCUIT_FADE_TIME s
+ShotEffectRules.CIRCUIT_FADE_FROM = 0.2
+ShotEffectRules.CIRCUIT_FADE_SPREAD = 0.12
+ShotEffectRules.CIRCUIT_FADE_TIME = 0.1
+ShotEffectRules.CIRCUIT_LIFETIME = 0.48
+-- Étincelle du tir (sprite, assets/effects/circuit_textures.py, publié en Decal) : diamètre (studs), plus petit chez le
+-- tireur ; vie (s)
+ShotEffectRules.CIRCUIT_FLASH_IMAGE = "rbxassetid://113787169463562"
+ShotEffectRules.CIRCUIT_FLASH_SIZE = 1.8
+ShotEffectRules.CIRCUIT_FLASH_SIZE_LOCAL = 0.7
+ShotEffectRules.CIRCUIT_FLASH_LIFE = 0.08
+-- Composants en cube (CircuitCube) : arête (studs) au canon, plus petite chez le tireur ; à l'impact, arête selon la
+-- distance de la caméra (angle constant), bornée ; cœur (part de l'arête), épaisseur du cadre (part de l'arête) ; incliné
+-- de CIRCUIT_CUBE_TILT degrés au départ, il tourne de CIRCUIT_CUBE_SPIN degrés par seconde (on voit son volume) ;
+-- pop jusqu'à CIRCUIT_CUBE_OVERSHOOT en CIRCUIT_CUBE_POP s, retour à 1 en CIRCUIT_CUBE_SETTLE s, fondu à partir de
+-- CIRCUIT_CUBE_FADE_FROM de sa vie
+ShotEffectRules.CIRCUIT_CUBE_MUZZLE = 0.7
+ShotEffectRules.CIRCUIT_CUBE_MUZZLE_LOCAL = 0.32 -- à 0,2, petit éclat à peine lisible au bout du canon
+ShotEffectRules.CIRCUIT_CUBE_ANGLE = 0.045
+ShotEffectRules.CIRCUIT_CUBE_SIZE = { 0.6, 4 }
+ShotEffectRules.CIRCUIT_CUBE_CORE = 0.42
+ShotEffectRules.CIRCUIT_CUBE_EDGE = 0.09
+ShotEffectRules.CIRCUIT_CUBE_TILT = 28
+ShotEffectRules.CIRCUIT_CUBE_SPIN = 200
+ShotEffectRules.CIRCUIT_CUBE_POP = 0.05
+ShotEffectRules.CIRCUIT_CUBE_SETTLE = 0.06
+ShotEffectRules.CIRCUIT_CUBE_OVERSHOOT = 1.25
+ShotEffectRules.CIRCUIT_CUBE_FADE_FROM = 0.6
+ShotEffectRules.CIRCUIT_CUBE_LIFE_MUZZLE = 0.24
+ShotEffectRules.CIRCUIT_CUBE_LIFE_IMPACT = 0.32
+ShotEffectRules.CIRCUIT_CUBES = 8 -- cubes en réserve (au-delà, un tir n'a pas de cube)
+-- Réseau de l'impact (circuitBranches) : CIRCUIT_BRANCHES pistes, chacune partant d'un côté ou d'un coin du cube dans
+-- une des huit directions, avec CIRCUIT_BRANCH_TURNS coudes de 45° ; longueurs droites tirées dans CIRCUIT_BRANCH_RUN ;
+-- largeur des pistes et côté du carré qui les termine (unités : arête du cube d'impact) ; elles poussent en
+-- CIRCUIT_BRANCH_GROW s à l'arrivée de l'impulsion, puis s'éteignent de CIRCUIT_BRANCH_FADE_FROM en CIRCUIT_FADE_TIME s
+ShotEffectRules.CIRCUIT_BRANCHES = { 5, 7 }
+ShotEffectRules.CIRCUIT_BRANCH_TURNS = { 1, 2 }
+ShotEffectRules.CIRCUIT_BRANCH_RUN = { 0.45, 1 }
+ShotEffectRules.CIRCUIT_BRANCH_WIDTH = 0.06
+ShotEffectRules.CIRCUIT_BRANCH_DOT = 0.16
+ShotEffectRules.CIRCUIT_BRANCH_GROW = 0.08
+ShotEffectRules.CIRCUIT_BRANCH_FADE_FROM = 0.34
+-- Pistes en cours au plus (une réserve de ce nombre de jeux de Beams, créée au premier tir CIRCUIT) : au-delà, le tir a
+-- le rayon ordinaire
+ShotEffectRules.CIRCUIT_MAX_ACTIVE = 4
+
 -- Cette méthode permet de calculer la transparence d'un rayon lorsqu'il vieillit : opaque au tir, il s'efface de
 -- plus en plus vite (courbe quadratique) jusqu'à disparaître à `lifetime` (TRACER_LIFETIME par défaut).
 function ShotEffectRules.tracerTransparency(elapsed: number, lifetime: number?): number
@@ -200,6 +276,159 @@ end
 function ShotEffectRules.baliseMarkSize(distance: number): number
 	local bounds = ShotEffectRules.BALISE_MARK_SIZE
 	return math.clamp(distance * ShotEffectRules.BALISE_MARK_ANGLE, bounds[1], bounds[2])
+end
+
+-- Cette méthode permet de tracer la piste CIRCUIT d'un tir de `length` studs lorsqu'il part : points { le long du tir,
+-- décalage latéral } (studs), de { 0, 0 } (bouche) à { length, 0 } (impact), paliers à ±CIRCUIT_JOG reliés par des
+-- coudes à 45° ; `random(min, max)` tire un nombre (math.random ou un tirage fixe en test).
+function ShotEffectRules.circuitPath(length: number, random: (number, number) -> number): { { number } }
+	local jog = ShotEffectRules.CIRCUIT_JOG
+	if length < ShotEffectRules.CIRCUIT_MIN_LENGTH then
+		return { { 0, 0 }, { length, 0 } }
+	end
+	local run, last = ShotEffectRules.CIRCUIT_RUN, ShotEffectRules.CIRCUIT_LAST_RUN
+	local points = { { 0, 0 } }
+	local along, level = ShotEffectRules.CIRCUIT_FIRST_RUN, 0
+	table.insert(points, { along, 0 })
+	-- deux points par coude ; garder de quoi revenir sur l'axe (un coude et un dernier segment droit)
+	while #points + 4 <= ShotEffectRules.CIRCUIT_MAX_SEGMENTS do
+		-- nouveau palier, différent du courant : -1, 0 ou 1
+		local pick = math.floor(random(0, 1.999))
+		local choices = {}
+		for _, l in { -1, 0, 1 } do
+			if l ~= level then
+				table.insert(choices, l)
+			end
+		end
+		local nextLevel = choices[pick + 1]
+		local turn = math.abs(nextLevel - level) * jog
+		local straight = random(run[1], run[2])
+		-- après ce coude, il faut encore pouvoir revenir à 0 (au plus un palier) et finir droit
+		if along + turn + straight + jog + last > length then
+			break
+		end
+		along += turn
+		level = nextLevel
+		table.insert(points, { along, level * jog })
+		along += straight
+		table.insert(points, { along, level * jog })
+	end
+	if level ~= 0 then
+		along += math.abs(level) * jog
+		table.insert(points, { along, 0 })
+	end
+	table.insert(points, { length, 0 })
+	return points
+end
+
+-- Cette méthode permet de mesurer la longueur d'une piste CIRCUIT (somme de ses segments, coudes compris) lorsqu'elle
+-- est animée.
+function ShotEffectRules.circuitLength(points: { { number } }): number
+	local total = 0
+	for i = 2, #points do
+		total += math.sqrt((points[i][1] - points[i - 1][1]) ^ 2 + (points[i][2] - points[i - 1][2]) ^ 2)
+	end
+	return total
+end
+
+-- Cette méthode permet de trouver le point d'une piste CIRCUIT à `distance` studs de la bouche, en suivant ses coudes,
+-- lorsque la construction ou l'impulsion avancent : { le long du tir, décalage latéral }, borné aux deux bouts.
+function ShotEffectRules.circuitPointAt(points: { { number } }, distance: number): (number, number)
+	local remaining = math.max(distance, 0)
+	for i = 2, #points do
+		local a, b = points[i - 1], points[i]
+		local seg = math.sqrt((b[1] - a[1]) ^ 2 + (b[2] - a[2]) ^ 2)
+		if remaining <= seg and seg > 0 then
+			local t = remaining / seg
+			return a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t
+		end
+		remaining -= seg
+	end
+	local last = points[#points]
+	return last[1], last[2]
+end
+
+-- Cette méthode permet de donner la part de la piste CIRCUIT construite et la place de l'impulsion (0 : bouche, 1 :
+-- impact ; nil avant son départ ou après son arrivée) à un instant de sa vie (`elapsed`, s) lorsqu'une frame passe.
+function ShotEffectRules.circuitProgress(elapsed: number): (number, number?)
+	local build = ShotEffectRules.CIRCUIT_BUILD
+	local built = if build > 0 then math.clamp(elapsed / build, 0, 1) else 1
+	local t = (elapsed - ShotEffectRules.CIRCUIT_PULSE_FROM) / ShotEffectRules.CIRCUIT_PULSE_TIME
+	return built, if t >= 0 and t <= 1 then t else nil
+end
+
+-- Cette méthode permet de donner la transparence (0 : allumé, 1 : éteint) d'un segment de la piste CIRCUIT placé à
+-- `place` (0 : bouche, 1 : impact) à un instant de sa vie lorsqu'une frame passe : les segments s'éteignent de la
+-- bouche vers l'impact.
+function ShotEffectRules.circuitFade(elapsed: number, place: number): number
+	local from = ShotEffectRules.CIRCUIT_FADE_FROM + ShotEffectRules.CIRCUIT_FADE_SPREAD * math.clamp(place, 0, 1)
+	return math.clamp((elapsed - from) / ShotEffectRules.CIRCUIT_FADE_TIME, 0, 1)
+end
+
+-- Cette méthode permet de donner l'arête (studs) du cube d'impact CIRCUIT vu d'une caméra à `distance` studs lorsqu'il
+-- jaillit : proportionnelle à la distance, bornée par CIRCUIT_CUBE_SIZE.
+function ShotEffectRules.circuitCubeSize(distance: number): number
+	local bounds = ShotEffectRules.CIRCUIT_CUBE_SIZE
+	return math.clamp(distance * ShotEffectRules.CIRCUIT_CUBE_ANGLE, bounds[1], bounds[2])
+end
+
+-- Cette méthode permet de donner l'échelle et la transparence d'un cube CIRCUIT à un instant de sa vie (`elapsed`, s,
+-- vie `life`) lorsqu'une frame passe : pop jusqu'à CIRCUIT_CUBE_OVERSHOOT, retour à 1, fondu sur la fin ; transparence
+-- 1 une fois sa vie finie.
+function ShotEffectRules.circuitCubeFrame(elapsed: number, life: number): (number, number)
+	local pop, settle = ShotEffectRules.CIRCUIT_CUBE_POP, ShotEffectRules.CIRCUIT_CUBE_SETTLE
+	local over = ShotEffectRules.CIRCUIT_CUBE_OVERSHOOT
+	local scale
+	if elapsed <= 0 then
+		scale = 0
+	elseif elapsed < pop then
+		local t = elapsed / pop
+		scale = over * (1 - (1 - t) * (1 - t))
+	elseif elapsed < pop + settle then
+		scale = over + (1 - over) * ((elapsed - pop) / settle)
+	else
+		scale = 1
+	end
+	local from = life * ShotEffectRules.CIRCUIT_CUBE_FADE_FROM
+	local transparency = if elapsed >= life then 1 elseif elapsed <= from then 0 else (elapsed - from) / (life - from)
+	return scale, transparency
+end
+
+-- Cette méthode permet de tracer le réseau de pistes qui pousse autour du cube d'impact CIRCUIT lorsque l'impulsion y
+-- arrive : une liste de pistes, chacune une liste de points { x, y } dans le plan de la caméra (unité : arête du cube,
+-- 0 au centre), qui part du bord du cube dans une des huit directions (toutes différentes) et tourne de 45° à chaque
+-- coude ; `random(min, max)` tire un nombre.
+function ShotEffectRules.circuitBranches(random: (number, number) -> number): { { { number } } }
+	local counts, turns, run =
+		ShotEffectRules.CIRCUIT_BRANCHES, ShotEffectRules.CIRCUIT_BRANCH_TURNS, ShotEffectRules.CIRCUIT_BRANCH_RUN
+	local count = math.clamp(math.floor(random(counts[1], counts[2] + 0.999)), 1, 8)
+	-- directions : huitièmes de tour, mélangées puis prises dans l'ordre
+	local dirs = { 0, 1, 2, 3, 4, 5, 6, 7 }
+	for i = #dirs, 2, -1 do
+		local j = math.clamp(math.floor(random(1, i + 0.999)), 1, i)
+		dirs[i], dirs[j] = dirs[j], dirs[i]
+	end
+	local branches = {}
+	for k = 1, count do
+		local dir = dirs[k]
+		local angle = dir * math.pi / 4
+		-- départ sur le bord du cube (un coin pour une diagonale)
+		local edge = if dir % 2 == 0 then 0.5 else 0.5 * math.sqrt(2)
+		local x, y = math.cos(angle) * edge, math.sin(angle) * edge
+		local points = { { x, y } }
+		local bends = math.clamp(math.floor(random(turns[1], turns[2] + 0.999)), turns[1], turns[2])
+		for b = 0, bends do
+			local length = random(run[1], run[2])
+			x += math.cos(angle) * length
+			y += math.sin(angle) * length
+			table.insert(points, { x, y })
+			if b < bends then
+				angle += (if random(0, 1) < 0.5 then -1 else 1) * math.pi / 4
+			end
+		end
+		table.insert(branches, points)
+	end
+	return branches
 end
 
 -- Cette méthode permet de lire la couleur de base de TREMPE en un point du rayon (0 : bouche, 1 : impact) lorsque ses

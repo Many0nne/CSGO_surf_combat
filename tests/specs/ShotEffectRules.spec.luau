@@ -310,4 +310,126 @@ return function(T, Loader)
 			T.expectNear(ShotEffectRules.baliseMarkSize(d), d * ShotEffectRules.BALISE_MARK_ANGLE)
 		end)
 	end)
+
+	T.describe("CIRCUIT (#567)", function()
+		-- Tirage fixe : alterne le bas et le haut de chaque intervalle
+		local function seq()
+			local n = 0
+			return function(min, max)
+				n += 1
+				return if n % 2 == 0 then max else min
+			end
+		end
+
+		T.it("la piste part de la bouche, finit sur l'impact, et n'a que des paliers et des coudes à 45°", function()
+			for _, length in { 8, 20, 60, 300, 2000 } do
+				local path = ShotEffectRules.circuitPath(length, seq())
+				T.expectEqual(path[1][1], 0)
+				T.expectEqual(path[1][2], 0)
+				T.expectEqual(path[#path][1], length)
+				T.expectEqual(path[#path][2], 0)
+				T.expect(#path - 1 <= ShotEffectRules.CIRCUIT_MAX_SEGMENTS, "trop de segments : " .. #path - 1)
+				for i = 2, #path do
+					local da, dl = path[i][1] - path[i - 1][1], math.abs(path[i][2] - path[i - 1][2])
+					T.expect(da > 0, "la piste recule à " .. i .. " (" .. length .. " studs)")
+					T.expect(dl < 1e-9 or math.abs(da - dl) < 1e-9, "coude qui n'est pas à 45° à " .. i)
+					T.expect(math.abs(path[i][2]) <= ShotEffectRules.CIRCUIT_JOG + 1e-9, "palier hors des bornes")
+				end
+				local lastRun = path[#path][1] - path[#path - 1][1]
+				if #path > 2 then
+					T.expect(lastRun >= ShotEffectRules.CIRCUIT_LAST_RUN - 1e-9, "arrivée trop courte : " .. lastRun)
+				end
+			end
+		end)
+
+		T.it("un tir court a une piste droite", function()
+			local path = ShotEffectRules.circuitPath(ShotEffectRules.CIRCUIT_MIN_LENGTH - 1, seq())
+			T.expectEqual(#path, 2)
+		end)
+
+		T.it("un point de la piste suit ses coudes, borné aux deux bouts", function()
+			local path = { { 0, 0 }, { 2, 0 }, { 3, 1 }, { 6, 1 } }
+			T.expectNear(ShotEffectRules.circuitLength(path), 2 + math.sqrt(2) + 3)
+			local a, l = ShotEffectRules.circuitPointAt(path, 1)
+			T.expectNear(a, 1)
+			T.expectNear(l, 0)
+			a, l = ShotEffectRules.circuitPointAt(path, 2 + math.sqrt(2) / 2)
+			T.expectNear(a, 2.5)
+			T.expectNear(l, 0.5)
+			a, l = ShotEffectRules.circuitPointAt(path, 99)
+			T.expectEqual(a, 6)
+			T.expectEqual(l, 1)
+			a = ShotEffectRules.circuitPointAt(path, -3)
+			T.expectEqual(a, 0)
+		end)
+
+		T.it("se construit, envoie l'impulsion puis s'éteint de la bouche vers l'impact", function()
+			local built, pulse = ShotEffectRules.circuitProgress(0)
+			T.expectEqual(built, 0)
+			T.expectEqual(pulse, nil)
+			built, pulse = ShotEffectRules.circuitProgress(ShotEffectRules.CIRCUIT_BUILD)
+			T.expectEqual(built, 1)
+			T.expect(pulse ~= nil and pulse > 0, "impulsion en route à la fin de la construction")
+			local after = ShotEffectRules.CIRCUIT_PULSE_FROM + ShotEffectRules.CIRCUIT_PULSE_TIME + 0.01
+			T.expectEqual(select(2, ShotEffectRules.circuitProgress(after)), nil)
+			local t = ShotEffectRules.CIRCUIT_FADE_FROM + ShotEffectRules.CIRCUIT_FADE_TIME / 2
+			T.expect(ShotEffectRules.circuitFade(t, 0) > ShotEffectRules.circuitFade(t, 1), "bouche éteinte d'abord")
+			T.expectEqual(ShotEffectRules.circuitFade(0, 0), 0)
+			T.expectNear(ShotEffectRules.circuitFade(ShotEffectRules.CIRCUIT_LIFETIME, 1), 1)
+		end)
+
+		T.it("style activé, porté par l'item CIRCUIT ; cube d'impact selon la distance", function()
+			T.expectEqual(ShotEffectRules.styleOf("effect.circuit"), "circuit")
+			local bounds = ShotEffectRules.CIRCUIT_CUBE_SIZE
+			T.expectEqual(ShotEffectRules.circuitCubeSize(0), bounds[1])
+			T.expectEqual(ShotEffectRules.circuitCubeSize(1e6), bounds[2])
+		end)
+
+		T.it("le cube jaillit, dépasse, se pose puis s'efface sur sa vie", function()
+			local life = ShotEffectRules.CIRCUIT_CUBE_LIFE_IMPACT
+			T.expectEqual(ShotEffectRules.circuitCubeFrame(0, life), 0)
+			T.expectNear(
+				ShotEffectRules.circuitCubeFrame(ShotEffectRules.CIRCUIT_CUBE_POP, life),
+				ShotEffectRules.CIRCUIT_CUBE_OVERSHOOT
+			)
+			local settled, clear = ShotEffectRules.circuitCubeFrame(
+				ShotEffectRules.CIRCUIT_CUBE_POP + ShotEffectRules.CIRCUIT_CUBE_SETTLE,
+				life
+			)
+			T.expectEqual(settled, 1)
+			T.expectEqual(clear, 0)
+			T.expectEqual(select(2, ShotEffectRules.circuitCubeFrame(life, life)), 1)
+		end)
+
+		T.it("le réseau d'impact part du bord du cube, dans des directions différentes, coudes de 45°", function()
+			for _, draw in
+				{
+					seq(),
+					function(min, max)
+						return (min + max) / 2
+					end,
+				}
+			do
+				local net = ShotEffectRules.circuitBranches(draw)
+				local counts = ShotEffectRules.CIRCUIT_BRANCHES
+				T.expect(#net >= counts[1] and #net <= counts[2], "nombre de pistes : " .. #net)
+				local seen = {}
+				for _, branch in net do
+					local first = branch[1]
+					T.expect(math.max(math.abs(first[1]), math.abs(first[2])) >= 0.5 - 1e-9, "départ dans le cube")
+					local dir = math.round(math.deg(math.atan2(branch[2][2] - first[2], branch[2][1] - first[1])))
+					T.expect(not seen[dir], "deux pistes dans la même direction")
+					seen[dir] = true
+					T.expect(#branch - 2 <= ShotEffectRules.CIRCUIT_BRANCH_TURNS[2], "trop de coudes")
+					for i = 3, #branch do
+						local a1 = math.atan2(branch[i - 1][2] - branch[i - 2][2], branch[i - 1][1] - branch[i - 2][1])
+						local a2 = math.atan2(branch[i][2] - branch[i - 1][2], branch[i][1] - branch[i - 1][1])
+						local turn = math.abs(math.deg(a2 - a1)) % 360
+						turn = math.min(turn, 360 - turn)
+						T.expectNear(turn, 45, 1e-6)
+					end
+				end
+			end
+		end)
+	end)
 end

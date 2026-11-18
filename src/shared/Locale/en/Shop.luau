@@ -20,6 +20,7 @@ return {
 	["Un éclair vert ramifié remplace le rayon, différent à chaque tir."] = "A branching green lightning bolt replaces the tracer, different with every shot.",
 	["L'explosion « PAN ! » de la crosse jaillit devant le canon à chaque tir."] = "The stock's « PAN ! » burst pops out in front of the barrel with every shot.",
 	["Un ruban de chantier orange et noir se déroule du canon jusqu'à la cible."] = "An orange and black hazard tape unrolls from the barrel to the target.",
+	["Une piste de circuit imprimé magenta se trace jusqu'à la cible, parcourue d'une impulsion."] = "A magenta circuit trace draws itself to the target, a pulse racing along it.",
 
 	-- Vitrine et vue détail (ShopScreen)
 	["CAISSES"] = "CRATES",
