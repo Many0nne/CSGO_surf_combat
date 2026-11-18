@@ -850,12 +850,27 @@ Pièges vus sur ABRI (18/11/2026) :
 
 - **Le dessus d'un membre partage ses UV avec le bas de sa face avant** (jambe : le dessus, caché dans la cuisse,
   recouvre le bas de l'avant du tibia dans l'atlas). Avant correction, la couleur du dessus écrasait les bottes de
-  face. `r15_bake` écrit désormais les faces dessus/dessous en premier ; une tenue cuite avant ce correctif (DÉMINEUR)
-  garde le défaut tant qu'elle n'est pas recuite.
+  face. `r15_bake` écrit désormais les faces dessus/dessous en premier (DÉMINEUR et MERCURE recuites le 18/11/2026,
+  #559, #551).
 - **`publish_skin` ne republie pas une carte déjà listée dans `ids.json`** : après une nouvelle cuisson, supprimer
   `ids.json` pour publier les nouvelles cartes (sinon les anciennes ids restent, sans erreur).
 - **Le `require` du MCP garde ses modules en cache** : un item ajouté au catalogue n'y est pas vu. Pour habiller un
   mannequin dans Studio, copier les SurfaceAppearance et souder les pièces à la main (comme `dress`).
+**Recuire une tenue existante** (correctif de `r15_bake`, sans changer de pièce) :
+
+1. Copier l'ancien dossier `maps/` hors du dépôt, recuire, puis comparer les atlas avant/après (écart amplifié) : seuls
+   les défauts visés doivent bouger.
+2. Supprimer `ids.json`, republier (`publish_skin.py`).
+3. Studio connecté au worktree : changer directement les quatre cartes des `SurfaceAppearance` de la copie Rojo de
+   `ReplicatedStorage.Outfits.<nom>` (`UpperTorso`/`LowerTorso` → atlas Torso, `<côté>UpperArm`/`LowerArm`/`Hand` →
+   `<côté>Arm`, jambes et pieds → `<côté>Leg`), sans reconstruire le dossier, puis exporter `ONLY = "Outfits"`.
+   Reconnecter Studio ensuite (`-ReleaseStudio`, `-AcquireStudio`).
+4. Comparer en jeu sur deux mannequins (`StarterCharacter` cloné, SurfaceAppearance anciennes et nouvelles) au même
+   cadrage.
+
+Lune ne sait pas relire un `.rbxm` écrit par Studio (`Property Folder.Tags should be SharedString`) : la mise à jour des
+ids passe donc par Studio.
+
 - Plis du caoutchouc : un motif de sinus croisés sur toute la surface se lit comme des rayures diagonales ; garder des
   plis larges aux articulations, effacés sur une partie de la largeur, et un gonflement mou sans arête.
 
