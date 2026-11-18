@@ -1022,6 +1022,33 @@ Règles serveur : `docs/architecture.md`, « Achat d'une caisse ». Dans la vue 
   OUVRIR ne remplace plus ACHETER. Pour tester l'achat avec le compte propriétaire (admin, donc TOUT OBTENU), poser
   `DebugInventory = "default"` (contexte serveur) ; `DebugCredits` donne des crédits.
 
+## Portant des tenues (#543, planche en attente de validation)
+
+Les tenues de personnage (#521) s'achètent au shop sur un portant à vêtements (référence de l'utilisateur : portant
+métallique blanc, montants perforés, deux barres). L'achat côté serveur est fait (remote `BuyOutfit`,
+`docs/architecture.md` « Achat d'une tenue ») ; le portant dans Roblox et la vue détail attendent le choix de
+l'utilisateur sur trois planches : présentation d'une tenue (cintre, buste, personnage complet), emplacement dans la
+salle (P1 mur de gauche face à la vitrine, P2 fond à gauche du socle, P3 fond à droite), vue détail d'une tenue
+(personnage sur le socle). Libellés des refus prêts : `PurchaseStatus.OUTFIT_REFUSALS` ; écran d'analytics prévu :
+`shop_outfit`.
+
+Planche (Workbench, quelques secondes par vue ; tout est piloté par la liste `OUTFITS` du script) :
+
+```bash
+uv run tools/shop/outfit_rig_obj.py <rig>      # meshs du rig R15 en OBJ (cache de r15_bake, sans clé s'ils y sont)
+blender -b --factory-startup --python tools/shop/outfit_rack_board.py -- <rig> <rendus> [vue ...]
+python -I tools/shop/outfit_sheet.py <rendus> <planches> [préfixe]
+```
+
+- Salle reconstruite d'après les cotes de `ShopScene` (pas de `board.py` : la salle a changé depuis, #424) et vraie
+  caisse de `crate_model.py`, convertie du repère Blender au repère Roblox.
+- Pièges du script : un mesh créé par `bmesh` sans calque d'UV sort **blanc** en Workbench « texture » (l'image n'est pas
+  lue) ; après un script qui pose `location` (crate_model.py via `runpy`), `matrix_world` reste l'identité tant que
+  `view_layer.update()` n'a pas été appelé (toutes les pièces de la caisse au même point).
+- Mesures : le personnage fait 8,3 studs (pieds à -4,77, haut de la tête à 3,37 sous la racine) et 6,4 de large bras
+  compris. Debout sur le socle, sa tête arrive à 0,6 stud de la cloche de la suspension (`LAMP_LIFT` 0,7) : la planche
+  remonte la cloche de 2 studs.
+
 ## Crédits (#391)
 
 Monnaie du jeu (règles et sauvegarde : `docs/architecture.md`, « Crédits » et « Gains en jouant »). Achat des
