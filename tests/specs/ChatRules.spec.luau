@@ -42,10 +42,11 @@ return function(T, Loader)
 			T.expectEqual(ChatRules.admit(bucket, "gg", 0, false, ChatRules.SERVER_BURST), "rate")
 		end)
 
-		T.it("refuse sourdine, vide et trop long sans consommer de jeton", function()
+		T.it("refuse sourdine, vide, commande et trop long sans consommer de jeton", function()
 			local bucket = ChatRules.newBucket(0)
 			T.expectEqual(ChatRules.admit(bucket, "gg", 0, true), "muted")
 			T.expectEqual(ChatRules.admit(bucket, "  \n ", 0, false), "empty")
+			T.expectEqual(ChatRules.admit(bucket, "/kick Bob spam", 0, false), "command", "jamais diffusée")
 			T.expectEqual(ChatRules.admit(bucket, string.rep("a", ChatRules.MAX_LENGTH + 1), 0, false), "long")
 			T.expectEqual(bucket.tokens, ChatRules.BURST, "seau intact")
 			T.expectEqual(
@@ -53,6 +54,7 @@ return function(T, Loader)
 				"ok",
 				"limite en caractères"
 			)
+			T.expectEqual(ChatRules.admit(bucket, "/shrug", 0, false), "ok", "un texte en / qui n'est pas une commande")
 		end)
 	end)
 

@@ -165,6 +165,7 @@ end
 -- src/client/ui/FeedbackScreen.luau, à garder sous cette borne) et le serveur répond au-delà ; marge pour qu'un client
 -- honnête ne soit jamais pris pour un tricheur.
 RemoteGuard.FEEDBACK_MAX_BYTES = 1000
+RemoteGuard.CHAT_COMMAND_MAX_BYTES = 480
 
 -- Emplacements acceptés par EquipItem : ceux des armes, puis la tenue de personnage (#521)
 local EQUIP_SLOTS = table.clone(InventoryRules.SLOTS) :: { string }
@@ -254,6 +255,8 @@ RemoteGuard.RULES = {
 		args = { RemoteGuard.enum(PartyRules.REQUESTS), RemoteGuard.number() },
 	},
 	[N.SEND_FEEDBACK] = { rate = 0.5, burst = 3, args = { RemoteGuard.string(RemoteGuard.FEEDBACK_MAX_BYTES) } },
+	-- Commande admin du chat (#541) : une ligne tapée (ChatRules.MAX_LENGTH caractères, 4 octets au plus chacun)
+	[N.CHAT_COMMAND] = { rate = 1, burst = 4, args = { RemoteGuard.string(RemoteGuard.CHAT_COMMAND_MAX_BYTES) } },
 	-- Écran courant pour les analytics (#527) : relevé toutes les AnalyticsRules.POLL_INTERVAL s, envoyé au changement
 	[N.ANALYTICS_SCREEN] = { rate = 3, burst = 6, args = { RemoteGuard.enum(AnalyticsRules.SCREENS) } },
 	[N.SAVE_SETTINGS] = { rate = 2, burst = 5, args = { RemoteGuard.table() } },

@@ -81,8 +81,10 @@ Protocol.Names = {
 	-- lancé ; PartyRules.JOINED : entré dans le groupe d'un ami ; ou un statut de REJOINDRE). Le groupe de chaque joueur
 	-- est publié dans les attributs du Player (PartyRules.*_ATTRIBUTE)
 	PARTY = "Party",
-	-- Chat (#541), cf. server/ChatService : serveur → admin, retour d'une commande /mute, /unmute ou /kick (gabarit
-	-- français de ChatRules.Notice, table d'arguments), affiché dans son fil ; les messages passent par TextChatService
+	-- Chat (#541), cf. server/ChatService : les messages passent par TextChatService ; une commande admin (/mute,
+	-- /unmute, /kick) part par CHAT_COMMAND, client → serveur (texte de la ligne), jamais comme message, puis le retour
+	-- revient par CHAT_NOTICE, serveur → admin (gabarit français de ChatRules.Notice, table d'arguments)
+	CHAT_COMMAND = "ChatCommand",
 	CHAT_NOTICE = "ChatNotice",
 }
 

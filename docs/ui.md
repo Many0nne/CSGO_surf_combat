@@ -1195,7 +1195,9 @@ français si « fr… », anglais sinon). Changer de langue bascule tous les éc
   7 lignes visibles ; chacune reste 8 s puis s'efface en 1,5 s (`ChatRules.FADE_DELAY`, `FADE_TIME`).
 - **Saisie ouverte :** toutes les lignes réapparaissent, fond `cornerScrim` sous le bloc, ligne de saisie : « TOUS »
   ambré (canal) puis le champ (os, texte d'aide atténué), filet os à 0,88 dessous. Molette : remonter le fil
-  (60 lignes gardées).
+  (60 lignes gardées). Un texte long passe à la ligne et le champ grandit vers le haut, le fil avec lui (piste
+  écartée : `TextTruncate.AtEnd`, qui cachait la fin du texte et le curseur au-delà de ~45 caractères).
+- **Bulles natives coupées** (`BubbleChatConfiguration`) : une bulle au-dessus d'une tête trahirait la position.
 - **Où :** en partie (vivant ou mort) et sur l'accueil du menu ; masqué pendant le chargement, menu en partie ou
   Réglages ouverts, et sur les autres écrans du menu (blocs centrés qui occupent la même zone). Sur l'accueil, il passe
   par-dessus le bas de la grille de l'équipement (lignes non actives : les clics passent).

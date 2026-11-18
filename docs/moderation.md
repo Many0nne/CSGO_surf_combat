@@ -22,6 +22,8 @@ Le jeu ajoute :
 
 Décisions de l'utilisateur (18/11/2026) : souris toujours verrouillée pendant la saisie en partie, journal du texte
 filtré seulement, PC seulement (pas de bouton mobile ni de manette), pas de messages du jeu (kills, arrivées) dans le fil.
+Bulles au-dessus des têtes coupées aussi (`BubbleChatConfiguration.Enabled = false`, `ChatFeed`) : elles trahiraient la
+position d'un joueur derrière un mur.
 
 ## Limites côté serveur
 
@@ -45,12 +47,15 @@ par `MessageId` (`DECISION_TTL`), le message accepté est journalisé une seule 
   commandes `/mute`, `/unmute`, `/kick` aussi (admin, joueur visé, motif filtré).
 - Envoi par lots toutes les `ChatLogRules.FLUSH_INTERVAL` s (15), un embed par envoi (description bornée à
   `MAX_DESCRIPTION`), pause de 2 s entre deux envois d'un même passage ; dernier envoi à l'arrêt du serveur
-  (`BindToClose`, après au plus 12 s d'attente d'un envoi en cours). Envoi en deux temps (`ChatLogRules.peek` puis
-  `commit`) : un envoi en échec après ses essais ne retire rien, ses entrées repartent au passage suivant. Au plus
+  (`BindToClose` : au plus 12 s d'attente d'un envoi en cours, puis envoi forcé, entrées en filtrage comprises ; un
+  doublon possible plutôt qu'une perte). Envoi en deux temps (`ChatLogRules.peek` puis `commit` avec le reçu) : un
+  envoi en échec ne retire rien, ses entrées repartent au passage suivant ; un envoi réussi ne retire que ses propres
+  entrées (par identité : le lot a pu bouger pendant l'envoi). Au plus
   `MAX_PENDING` entrées en attente ; au-delà (webhook en panne longtemps), les plus anciennes sont abandonnées et leur
   nombre est signalé dans l'envoi suivant.
 - Ordre et heure : l'entrée d'un message est posée dès sa décision (heure d'envoi) et marquée `pending` le temps du
-  filtrage ; l'envoi s'arrête devant elle, l'ordre des messages est gardé. La longueur et le journal portent sur le
+  filtrage ; l'envoi s'arrête devant elle, l'ordre des messages est gardé. Filtrage plus long que
+  `ChatLogRules.PENDING_TIMEOUT` (20 s) : l'entrée part avec un texte de remplacement, sans retenir tout le journal. La longueur et le journal portent sur le
   texte sans entités de texte riche (`ChatRules.unescape`), comme chez le client.
 - **Webhook :** `StringValue` nommé `ChatLogWebhookUrl` dans `ServerScriptService` de la place publiée, posé à la main,
   jamais versionné (comme `FeedbackWebhookUrl` et `CheatLogWebhookUrl`, `Webhook.luau`). HTTP doit être activé dans les
@@ -65,9 +70,12 @@ par `MessageId` (`DECISION_TTL`), le message accepté est journalisé une seule 
 
 ## Commandes admin
 
-Réservées au rôle `Admin` de `Roles` (propriétaire du jeu et liste d'UserId). Des `TextChatCommand` (`CSGOMute`,
-`CSGOUnmute`, `CSGOKick`, dossier `TextChatService.CSGOCommands`) créées par le serveur : une commande n'est jamais
-diffusée comme message, quel que soit l'auteur. Un non-admin qui en tape une n'obtient rien.
+Réservées au rôle `Admin` de `Roles` (propriétaire du jeu et liste d'UserId). Le fil reconnaît une ligne de commande
+(`ChatRules.isCommand`) et l'envoie par le remote `ChatCommand` (client → serveur, garde `RemoteGuard`), jamais par le
+canal du chat ; côté serveur, un texte qui ressemble à une commande est refusé par `ShouldDeliverCallback` (verdict
+`command`) s'il arrive quand même par le canal. Une commande n'est donc jamais diffusée, quel que soit l'auteur, et un
+non-admin qui en tape une n'obtient rien. Piste écartée : des `TextChatCommand` ; plusieurs développeurs signalent que
+`TextChannel:SendAsync` (notre envoi) ne déclenche pas leurs alias, la commande partirait comme message public.
 
 - `/mute <joueur>` : ses messages ne sont plus délivrés, pour le serveur en cours (reconnexion comprise sur ce serveur).
 - `/unmute <joueur>` : lève la sourdine.

@@ -17,6 +17,10 @@ ChatLogRules.MAX_DESCRIPTION = 3800
 ChatLogRules.MAX_PENDING = 400
 -- Texte d'un message coupé au-delà (un message accepté en fait au plus ChatRules.MAX_LENGTH)
 ChatLogRules.MAX_TEXT = 300
+-- Secondes au plus d'attente d'un filtrage (TextService lent) avant que l'entrée parte avec PENDING_TEXT : un message
+-- ne retient pas tout le journal
+ChatLogRules.PENDING_TIMEOUT = 20
+ChatLogRules.PENDING_TEXT = "[texte non filtré : filtrage trop long]"
 
 ChatLogRules.TITLE = "Journal du chat"
 ChatLogRules.COLOR = 7506394
@@ -34,6 +38,8 @@ export type Entry = {
 	pending: boolean?,
 }
 export type Batch = { entries: { Entry }, dropped: number }
+-- Contenu d'un envoi préparé par peek : entrées envoyées et pertes signalées, retirées par commit s'il réussit
+export type Receipt = { entries: { Entry }, dropped: number }
 
 -- Cette méthode permet de créer un lot vide lorsque le service démarre.
 function ChatLogRules.newBatch(): Batch
@@ -83,30 +89,31 @@ function ChatLogRules.formatLine(entry: Entry): string
 	return line
 end
 
--- Cette méthode permet de préparer l'embed du prochain envoi lorsque le moment d'envoyer est venu, sans rien retirer :
--- lignes dans l'ordre, jusqu'à la limite ou une entrée encore filtrée. Renvoie l'embed (nil si rien) et son nombre d'entrées.
-function ChatLogRules.peek(batch: Batch, jobId: string): ({ [string]: any }?, number)
+-- Cette méthode permet de préparer le prochain envoi sans rien retirer lorsque le moment d'envoyer est venu : lignes
+-- dans l'ordre jusqu'à la limite ou une entrée encore filtrée (sauf `force` ou PENDING_TIMEOUT dépassé).
+function ChatLogRules.peek(batch: Batch, jobId: string, now: number, force: boolean?): ({ [string]: any }?, Receipt)
+	local receipt: Receipt = { entries = {}, dropped = batch.dropped }
 	local lines: { string } = {}
 	if batch.dropped > 0 then
 		table.insert(lines, string.format("*%d entrée(s) perdue(s) (webhook indisponible)*", batch.dropped))
 	end
 	local size = if #lines > 0 then #lines[1] + 1 else 0
-	local count = 0
 	for _, entry in batch.entries do
-		if entry.pending then
+		local waiting = entry.pending and not force and now - entry.at < ChatLogRules.PENDING_TIMEOUT
+		if waiting then
 			break
 		end
-		local line = ChatLogRules.formatLine(entry)
+		local line = ChatLogRules.formatLine(if entry.pending then ChatLogRules.unfiltered(entry) else entry)
 		-- Une ligne seule ne dépasse jamais la limite (texte coupé à MAX_TEXT) : la première part toujours
 		if #lines > 0 and size + #line + 1 > ChatLogRules.MAX_DESCRIPTION then
 			break
 		end
 		table.insert(lines, line)
 		size += #line + 1
-		count += 1
+		table.insert(receipt.entries, entry)
 	end
 	if #lines == 0 then
-		return nil, 0
+		return nil, receipt
 	end
 	return {
 		title = ChatLogRules.TITLE,
@@ -114,16 +121,33 @@ function ChatLogRules.peek(batch: Batch, jobId: string): ({ [string]: any }?, nu
 		color = ChatLogRules.COLOR,
 		footer = { text = "JobId " .. (if jobId == "" then "Studio" else jobId) },
 	},
-		count
+		receipt
 end
 
--- Cette méthode permet de retirer du lot les `count` premières entrées et le compte des pertes lorsque l'envoi préparé
--- par peek a réussi ; un envoi en échec ne retire rien, tout repart au suivant.
-function ChatLogRules.commit(batch: Batch, count: number)
-	for _ = 1, math.min(count, #batch.entries) do
-		table.remove(batch.entries, 1)
+-- Cette méthode permet de donner une copie d'une entrée dont le filtrage n'a pas abouti à temps lorsqu'elle part quand
+-- même : texte de remplacement, jamais le texte brut.
+function ChatLogRules.unfiltered(entry: Entry): Entry
+	local copy = table.clone(entry)
+	copy.text = ChatLogRules.PENDING_TEXT
+	copy.pending = nil
+	return copy
+end
+
+-- Cette méthode permet de retirer du lot les entrées envoyées (par identité : le lot a pu bouger pendant l'envoi) et
+-- les pertes signalées lorsque l'envoi préparé par peek a réussi ; un envoi en échec ne retire rien.
+function ChatLogRules.commit(batch: Batch, receipt: Receipt)
+	local sent: { [Entry]: boolean } = {}
+	for _, entry in receipt.entries do
+		sent[entry] = true
 	end
-	batch.dropped = 0
+	local kept: { Entry } = {}
+	for _, entry in batch.entries do
+		if not sent[entry] then
+			table.insert(kept, entry)
+		end
+	end
+	batch.entries = kept
+	batch.dropped = math.max(batch.dropped - receipt.dropped, 0)
 end
 
 return ChatLogRules

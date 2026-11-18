@@ -48,7 +48,7 @@ ChatRules.KICK_MESSAGE = "Expulsé par un modérateur."
 ChatRules.KICK_MESSAGE_REASON = "Expulsé par un modérateur : {reason}"
 
 export type Command = "mute" | "unmute" | "kick"
-export type Verdict = "ok" | "empty" | "long" | "rate" | "muted"
+export type Verdict = "ok" | "empty" | "command" | "long" | "rate" | "muted"
 export type Bucket = { tokens: number, at: number }
 export type Candidate = { userId: number, name: string, displayName: string }
 export type TargetProblem = "empty" | "none" | "ambiguous"
@@ -86,7 +86,7 @@ function ChatRules.newBucket(now: number, burst: number?): Bucket
 end
 
 -- Cette méthode permet de décider si un message passe lorsqu'il est envoyé (client) ou reçu (serveur) : sourdine,
--- message vide, trop long, puis débit. Seul un message accepté consomme un jeton du seau.
+-- vide, commande admin (jamais diffusée), trop long, puis débit ; seul un message accepté consomme un jeton.
 function ChatRules.admit(bucket: Bucket, text: string, now: number, muted: boolean, burst: number?): Verdict
 	if muted then
 		return "muted"
@@ -94,6 +94,9 @@ function ChatRules.admit(bucket: Bucket, text: string, now: number, muted: boole
 	local cleaned = ChatRules.clean(text)
 	if cleaned == "" then
 		return "empty"
+	end
+	if ChatRules.isCommand(cleaned) then
+		return "command"
 	end
 	if ChatRules.length(cleaned) > ChatRules.MAX_LENGTH then
 		return "long"
@@ -151,6 +154,12 @@ function ChatRules.parseCommand(text: string): (Command?, string?, string?)
 		reason = nil
 	end
 	return command, target, reason
+end
+
+-- Cette méthode permet de savoir si une ligne est une commande admin lorsqu'elle va partir : elle passe alors par le
+-- remote ChatCommand, jamais par le canal du chat.
+function ChatRules.isCommand(text: string): boolean
+	return (ChatRules.parseCommand(text)) ~= nil
 end
 
 -- Cette méthode permet de garder le seul joueur d'une liste de correspondances lorsque le joueur visé est cherché :

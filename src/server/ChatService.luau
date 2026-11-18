@@ -1,7 +1,8 @@
 -- Chat côté serveur (#541, docs/moderation.md). Le moteur reste TextChatService : filtrage, restrictions de compte,
 -- signalement et sourdine natifs de Roblox ne sont pas recodés. Ce module ajoute :
 -- - la limite de débit et de longueur (ChatRules) dans le ShouldDeliverCallback de chaque canal ; refus non journalisés ;
--- - la sourdine du serveur en cours (/mute, /unmute) et l'expulsion (/kick), réservées au rôle Admin (Roles) ;
+-- - la sourdine du serveur en cours (/mute, /unmute) et l'expulsion (/kick), réservées au rôle Admin (Roles), reçues
+--   par le remote ChatCommand ; un texte qui ressemble à une commande n'est jamais diffusé comme message ;
 -- - le journal par lots (ChatLogRules) vers un webhook Discord : StringValue `ChatLogWebhookUrl` de ServerScriptService,
 --   jamais versionné. Sans URL : rien n'est envoyé ni filtré (dans Studio, le lot s'écrit dans la sortie).
 -- Piège : dans ShouldDeliverCallback, `message.Text` est le texte BRUT (filtré ensuite, par destinataire). Le journal
@@ -15,7 +16,9 @@ local TextService = game:GetService("TextService")
 
 local ChatRules = require(ReplicatedStorage.Shared.ChatRules)
 local Locale = require(ReplicatedStorage.Shared.Locale)
+local NetworkProtocol = require(ReplicatedStorage.Shared.NetworkProtocol)
 local ChatLogRules = require(ServerScriptService.Server.ChatLogRules)
+local CheatLog = require(ServerScriptService.Server.CheatLog)
 local Roles = require(ServerScriptService.Server.Roles)
 local Webhook = require(ServerScriptService.Server.Webhook)
 
@@ -217,16 +220,16 @@ function ChatService.runCommand(player: Player, text: string)
 	end
 end
 
--- Cette méthode permet d'envoyer le lot en attente lorsque l'intervalle est écoulé ou que le serveur s'arrête : un
--- embed par envoi, pause entre deux ; un envoi en échec après ses essais laisse ses entrées pour le passage suivant.
-function ChatService.flush()
+-- Cette méthode permet d'envoyer le lot en attente lorsque l'intervalle est écoulé ou que le serveur s'arrête (`force` :
+-- entrées en filtrage comprises) ; un embed par envoi, un envoi en échec laisse ses entrées au passage suivant.
+function ChatService.flush(force: boolean?)
 	if flushing then
 		return
 	end
 	flushing = true
 	local url = Webhook.url(table.unpack(ChatService.WEBHOOK_NAMES))
 	while true do
-		local embed, count = ChatLogRules.peek(batch, game.JobId)
+		local embed, receipt = ChatLogRules.peek(batch, game.JobId, os.time(), force)
 		if not embed then
 			break
 		end
@@ -236,26 +239,27 @@ function ChatService.flush()
 				warn("[ChatService] journal non envoyé, nouvel essai au prochain passage :", err)
 				break
 			end
-			ChatLogRules.commit(batch, count)
+			ChatLogRules.commit(batch, receipt)
 			if #batch.entries > 0 then
 				task.wait(SPLIT_DELAY)
 			end
 		else
 			print("[ChatLog] " .. embed.footer.text .. "\n" .. embed.description)
-			ChatLogRules.commit(batch, count)
+			ChatLogRules.commit(batch, receipt)
 		end
 	end
 	flushing = false
 end
 
--- Cette méthode permet d'envoyer tout le lot lorsque le serveur s'arrête (BindToClose) : attend la fin d'un envoi
--- périodique en cours (CLOSE_WAIT s au plus), puis envoie le reste.
+-- Cette méthode permet d'envoyer tout le lot lorsque le serveur s'arrête (BindToClose) : attend un envoi périodique en
+-- cours (CLOSE_WAIT s au plus) puis envoie le reste, même si cet envoi n'a pas fini (un doublon plutôt qu'une perte).
 local function flushOnClose()
 	local deadline = os.clock() + CLOSE_WAIT
 	while flushing and os.clock() < deadline do
 		task.wait(0.2)
 	end
-	ChatService.flush()
+	flushing = false
+	ChatService.flush(true)
 end
 
 -- Cette méthode permet de couper les commandes par défaut de Roblox (/mute natif prendrait notre alias, /whisper ou
@@ -266,36 +270,23 @@ local function disableDefaultCommand(inst: Instance)
 	end
 end
 
--- Cette méthode permet de créer une commande admin lorsque le service démarre ; elle n'est jamais diffusée comme un
--- message, quel que soit l'auteur.
-local function makeCommand(parent: Instance, alias: string)
-	local command = Instance.new("TextChatCommand")
-	command.Name = "CSGO" .. string.upper(string.sub(alias, 2, 2)) .. string.sub(alias, 3)
-	command.PrimaryAlias = alias
-	command.Parent = parent
-	command.Triggered:Connect(function(source: TextSource, text: string)
-		local player = Players:GetPlayerByUserId(source.UserId)
-		if player then
-			ChatService.runCommand(player, text)
-		end
-	end)
-end
-
 -- Cette méthode permet de brancher le chat côté serveur lorsque le serveur démarre : contrôle de chaque canal,
--- commandes admin, envoi périodique du journal et dernier envoi à l'arrêt.
-function ChatService.init(notice: RemoteEvent)
+-- commandes admin (remote ChatCommand), envoi périodique du journal et dernier envoi à l'arrêt.
+function ChatService.init(notice: RemoteEvent, command: RemoteEvent)
 	noticeRemote = notice
 	for _, inst in TextChatService:GetDescendants() do
 		disableDefaultCommand(inst)
 	end
 	TextChatService.DescendantAdded:Connect(disableDefaultCommand)
 
-	local folder = Instance.new("Folder")
-	folder.Name = "CSGOCommands"
-	folder.Parent = TextChatService
-	for alias in ChatRules.COMMANDS do
-		makeCommand(folder, alias)
-	end
+	-- Commandes par un remote et non par TextChatCommand : TextChannel:SendAsync ne déclenche pas toujours les alias
+	-- (retours de développeurs), une commande serait alors partie comme message public
+	command.OnServerEvent:Connect(function(player: Player, text: unknown)
+		if not CheatLog.admit(player, NetworkProtocol.Names.CHAT_COMMAND, text) or type(text) ~= "string" then
+			return
+		end
+		ChatService.runCommand(player, text)
+	end)
 
 	task.spawn(function()
 		local channels = TextChatService:WaitForChild("TextChannels", 30)

@@ -72,6 +72,7 @@ local openedAt = -math.huge
 local closedAt = -math.huge
 local scroll = 0
 local nextVisibilityCheck = 0
+local commandRemote: RemoteEvent? = nil
 local bucket = ChatRules.newBucket(os.clock())
 local localUserId = Players.LocalPlayer.UserId
 
@@ -223,20 +224,25 @@ local function open()
 	end)
 end
 
--- Cette méthode permet d'envoyer le texte du champ lorsque le joueur appuie sur Entrée : vide, la saisie se ferme ;
--- débit dépassé (même règle que le serveur), un retour s'affiche et le texte reste ; sinon envoi au canal général.
+-- Cette méthode permet d'envoyer le texte du champ lorsque le joueur appuie sur Entrée : commande admin au serveur par
+-- son remote, débit dépassé = retour et texte gardé, sinon envoi au canal général ; la saisie se ferme.
 local function send()
 	local text = ChatRules.clean(box.Text)
-	if text == "" then
-		close()
-		return
-	end
-	if ChatRules.admit(bucket, text, os.clock(), false) == "rate" then
+	local verdict = ChatRules.admit(bucket, text, os.clock(), false)
+	if verdict == "rate" then
 		pushNotice(Locale.t(ChatRules.Notice.RATE))
 		refocus()
 		return
 	end
 	close()
+	if verdict == "command" then
+		if commandRemote then
+			commandRemote:FireServer(text)
+		end
+		return
+	elseif verdict ~= "ok" then
+		return
+	end
 	local channels = TextChatService:FindFirstChild("TextChannels")
 	local channel = channels and channels:FindFirstChild(CHANNEL_NAME)
 	if not (channel and channel:IsA("TextChannel")) then
@@ -340,14 +346,16 @@ local function step()
 	end
 end
 
--- Cette méthode permet de construire le champ de saisie (libellé du canal, champ, filet) lorsque le fil est construit.
-local function buildInput(parent: Frame)
+-- Cette méthode permet de construire le champ de saisie (libellé du canal, champ, filet) lorsque le fil est construit ;
+-- un texte long passe à la ligne (curseur toujours visible) et le champ grandit vers le haut, les lignes avec lui.
+local function buildInput(parent: Frame, lines: Frame)
 	inputBar = UIKit.frame({
 		Name = "Input",
 		BackgroundTransparency = 1,
 		AnchorPoint = Vector2.new(0, 1),
 		Position = UDim2.fromScale(0, 1),
 		Size = UDim2.new(1, 0, 0, INPUT_HEIGHT),
+		AutomaticSize = Enum.AutomaticSize.Y,
 		Visible = false,
 		Parent = parent,
 	})
@@ -355,8 +363,9 @@ local function buildInput(parent: Frame)
 		Name = "Channel",
 		Text = "TOUS",
 		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromScale(0, 1),
+		Size = UDim2.fromOffset(0, INPUT_HEIGHT),
 		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Top,
 	})
 	box = UIKit.create("TextBox", {
 		Name = "Box",
@@ -371,18 +380,29 @@ local function buildInput(parent: Frame)
 		TextSize = TEXT_SIZE,
 		TextColor3 = C.Bone,
 		TextXAlignment = Enum.TextXAlignment.Left,
-		TextTruncate = Enum.TextTruncate.AtEnd,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		TextWrapped = true,
+		AutomaticSize = Enum.AutomaticSize.Y,
 		Position = UDim2.fromOffset(56, 0),
-		Size = UDim2.new(1, -56, 1, 0),
+		Size = UDim2.new(1, -56, 0, INPUT_HEIGHT),
 		ZIndex = 2,
 		Parent = inputBar,
 	})
+	-- Cette méthode permet de convertir des px écran en px de maquette lorsque le champ se replace (racine à l'échelle).
+	local function toLayout(px: number): number
+		local scale = parent.Parent and (parent.Parent :: Instance):GetAttribute("Scale")
+		return px / (if type(scale) == "number" and scale > 0 then scale else 1)
+	end
 	-- Libellé de largeur variable selon la langue : le champ commence juste après
 	label:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
-		local scale = parent.Parent and (parent.Parent :: Instance):GetAttribute("Scale")
-		local width = label.AbsoluteSize.X / (if type(scale) == "number" and scale > 0 then scale else 1) + 12
+		local width = toLayout(label.AbsoluteSize.X) + 12
 		box.Position = UDim2.fromOffset(width, 0)
-		box.Size = UDim2.new(1, -width, 1, 0)
+		box.Size = UDim2.new(1, -width, 0, INPUT_HEIGHT)
+	end)
+	-- Champ sur plusieurs lignes : le fil remonte d'autant
+	inputBar:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+		local height = math.max(toLayout(inputBar.AbsoluteSize.Y), INPUT_HEIGHT)
+		lines.Position = UDim2.new(0, 0, 1, -(height + INPUT_GAP))
 	end)
 	UIKit.frame({
 		Name = "Rule",
@@ -402,10 +422,14 @@ local function buildInput(parent: Frame)
 	box.FocusLost:Connect(onFocusLost)
 end
 
--- Cette méthode permet de masquer la fenêtre ou la barre de saisie natives de TextChatService lorsque leur
--- configuration existe ou apparaît.
+-- Cette méthode permet de masquer fenêtre, barre de saisie et bulles natives de TextChatService lorsque leur
+-- configuration existe ou apparaît ; une bulle au-dessus d'une tête trahirait la position du joueur.
 local function hideNative(child: Instance)
-	if child:IsA("ChatWindowConfiguration") or child:IsA("ChatInputBarConfiguration") then
+	if
+		child:IsA("ChatWindowConfiguration")
+		or child:IsA("ChatInputBarConfiguration")
+		or child:IsA("BubbleChatConfiguration")
+	then
 		(child :: any).Enabled = false
 	end
 end
@@ -454,10 +478,13 @@ function ChatFeed.init(newDeps: Deps)
 	scrim = UIKit.cornerScrim(block, "BottomLeft", SCRIM_SIZE, SCRIM_TRANSPARENCY)
 	scrim.Position += UDim2.fromOffset(-LEFT, 40)
 	scrim.Visible = false
+	-- Calé au-dessus de la ligne de saisie (replacé quand elle passe sur plusieurs lignes)
 	local lines = UIKit.frame({
 		Name = "Lines",
 		BackgroundTransparency = 1,
 		ClipsDescendants = true,
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, 0, 1, -(INPUT_HEIGHT + INPUT_GAP)),
 		Size = UDim2.new(1, 0, 0, LINES_HEIGHT),
 		Parent = block,
 	})
@@ -471,7 +498,7 @@ function ChatFeed.init(newDeps: Deps)
 	for i = 1, ChatRules.FEED_VISIBLE do
 		rows[i] = makeRow(lines, i)
 	end
-	buildInput(block)
+	buildInput(block, lines)
 
 	UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
 		if processed or isOpen or not OPEN_KEYS[input.KeyCode] then
@@ -495,6 +522,9 @@ function ChatFeed.init(newDeps: Deps)
 		if remote then
 			remote.OnClientEvent:Connect(onNotice)
 		end
+	end)
+	task.spawn(function()
+		commandRemote = NetworkProtocol.getRemote(NetworkProtocol.Names.CHAT_COMMAND)
 	end)
 	RunService.Heartbeat:Connect(step)
 end
