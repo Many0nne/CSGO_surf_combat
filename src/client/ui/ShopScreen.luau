@@ -421,7 +421,17 @@ local function openOverview()
 	if outfits then
 		setText(countLabel, "{n} EN VENTE  ·  ACHAT DIRECT, SANS TIRAGE", { n = #ShopScene.outfits() })
 	else
-		setText(countLabel, "{n} EN VENTE  ·  SKINS ET EFFETS DE TIR", { n = #ShopCatalog.CRATES })
+		local withEffects = false
+		for _, crate in ShopCatalog.CRATES do
+			withEffects = withEffects or ShopCatalog.isEffectCrate(crate)
+		end
+		setText(
+			countLabel,
+			if withEffects
+				then "{n} EN VENTE  ·  SKINS ET EFFETS DE TIR"
+				else "{n} EN VENTE  ·  UNE PAR ARME ET PAR SÉRIE",
+			{ n = #ShopCatalog.CRATES }
+		)
 	end
 	-- Aide refaite : son action est liée à la langue (UIKit.keyHint), pas à réécrire par-dessus
 	for _, child in overviewHints:GetChildren() do

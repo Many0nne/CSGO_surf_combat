@@ -112,8 +112,14 @@ ShopCatalog.CRATES = {
 			legendary = { "cordoue" },
 		},
 	},
+} :: { Crate }
+
+-- Caisses retirées de la vente : définies et testées, mais absentes de la vitrine, et refusées à l'achat (`crate` ne les
+-- trouve pas). Les remettre en vente = les déplacer dans CRATES ; qui en possède déjà les items les garde
+ShopCatalog.OFF_SALE = {
 	-- Caisse d'effets de tir (#566) : ÉCLAIR (rare) et PAN ! (exceptionnel) pour commencer, TREMPE (légendaire) mis de
-	-- côté ; équipables avec n'importe quel skin ; bande jaune de PAN !, distincte des caisses de skins
+	-- côté ; équipables avec n'importe quel skin ; bande jaune de PAN !, distincte des caisses de skins. Retirée de la
+	-- vente le 18/11/2026 (choix de l'utilisateur) : deux effets seulement, trop peu pour une caisse
 	{
 		id = "crate.fx.serie1",
 		name = "EFFETS · SÉRIE 1",

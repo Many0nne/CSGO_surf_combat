@@ -38,7 +38,7 @@ return function(T, Loader)
 				end
 				T.expectEqual(
 					table.concat(ids, ","),
-					"crate.awp.serie1,crate.m9.serie1,crate.awp.serie2,crate.m9.serie2,crate.fx.serie1"
+					"crate.awp.serie1,crate.m9.serie1,crate.awp.serie2,crate.m9.serie2"
 				)
 			end
 		)
@@ -108,6 +108,9 @@ return function(T, Loader)
 			for _, crate in Shop.CRATES do
 				visit(crate.id, crate.weapon, crate.contents, crate.kind)
 			end
+			for _, crate in Shop.OFF_SALE do
+				visit(crate.id, crate.weapon, crate.contents, crate.kind)
+			end
 			for weapon, contents in Shop.RESERVE do
 				visit("réserve " .. weapon, weapon, contents)
 			end
@@ -121,8 +124,22 @@ return function(T, Loader)
 			end
 		end)
 
+		-- Caisse d'effets retirée de la vente (18/11/2026) : ni en vitrine, ni achetable (`crate` sert l'achat serveur)
+		T.it("caisses hors vente : absentes de la vitrine et introuvables à l'achat", function()
+			T.expect(#Shop.OFF_SALE > 0, "aucune caisse hors vente")
+			for _, crate in Shop.OFF_SALE do
+				T.expectEqual(Shop.crate(crate.id), nil, crate.id .. " encore achetable")
+			end
+			for _, crate in Shop.CRATES do
+				T.expectEqual(Shop.isEffectCrate(crate), false, crate.id)
+			end
+		end)
+
 		T.it("caisse d'effets (#566) : ÉCLAIR et PAN !, tous les effets du jeu, pochoir FX", function()
-			local crate = Shop.crate("crate.fx.serie1")
+			local crate
+			for _, c in Shop.OFF_SALE do
+				crate = if c.id == "crate.fx.serie1" then c else crate
+			end
 			T.expectEqual(Shop.isEffectCrate(crate), true)
 			T.expectEqual(Shop.isEffectCrate(Shop.crate("crate.awp.serie1")), false)
 			local rows = Shop.contents(crate, Inventory.ITEMS)
