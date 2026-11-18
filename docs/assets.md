@@ -818,6 +818,29 @@ balles). Chaque tenue a sa propre silhouette, validée sur une planche de concep
 3. L'utilisateur rapporte la planche (`assets/outfits/concepts/<tenue>.png`) et la valide ; seulement ensuite,
    fabrication : volumes ajoutés modélisés dans Blender, matières cuites par `r15_bake.py`.
 
+**Volumes ajoutés (DÉMINEUR, `assets/outfits/demineur/`)** : casque, col, épaulières, plastron et tablier sont des
+MeshParts du dossier de la tenue, une par couleur et par pièce du rig qui la porte, sans texture (couleur, matière et
+`Reflectance` posées sur la MeshPart). Attributs : `OutfitAttach` (pièce du rig), `OutfitOffset` (CFrame par rapport à
+elle), `OutfitHidesHead` (casque fermé : la tête du rig est cachée, elle reste la hitbox). `CharacterAppearance.dress`
+les soude au rig (`attachPiece`) sans collision, requête, contact ni masse ; `verify_place` contrôle ces attributs.
+Mesuré le 18/11/2026 (rayons dans Studio) : rayon au centre de la tête → `Head` ; au-dessus de la tête (casque) et dans
+une épaulière → rien ; masse du personnage inchangée (57,376 avec ou sans tenue). Les bras du viewmodel ne prennent que
+les cartes (pas d'épaulière en 1re personne).
+
+1. Cartes : `uv run tools/outfits/r15_bake.py assets/outfits/demineur/demineur.py assets/outfits/demineur/maps`.
+   **Couleurs en linéaire** : r15_bake applique le gamma à l'écriture, une couleur relevée sur une planche (sRGB) se
+   convertit d'abord (`srgb()` du module), sinon tout sort délavé (noir → gris moyen).
+2. Volumes et aperçu : `uv run tools/outfits/rig_obj.py <dossier>` (rig en OBJ), puis
+   `blender -b --factory-startup --python assets/outfits/demineur/demineur_meshes.py -- <dossier des OBJ> --fbx <sortie.fbx> --preview <dossier>`
+   (écrit `pieces.json` : pièce, décalage = centre de la boîte du mesh, couleur, matière). Comparer l'aperçu à la planche.
+3. `uv run tools/skins/publish_skin.py assets/outfits/demineur/maps/base demineur` et
+   `bash tools/publish_asset.sh <sortie.fbx> Model DemineurPieces`.
+4. Studio : `insert_asset`, puis dossier `Outfits.demineur` = SurfaceAppearance de MERCURE clonées avec les ids de
+   `ids.json` + MeshParts insérées, avec les attributs et l'aspect de `pieces.json` ; export comme ci-dessus. L'export
+   réécrit aussi `mercure.rbxm` (octets différents, même contenu) : le restaurer avec `git checkout`. Après l'export, la
+   copie faite à la main et celle de Rojo coexistent sous le même nom : détruire les deux et reconnecter Studio
+   (`-ReleaseStudio` puis `-AcquireStudio`) pour que Rojo recrée la sienne.
+
 ## Ajouter un couteau
 
 Un couteau qui se joue comme la M9, avec un autre modèle et d'autres animations. Le comportement de mêlée est piloté par

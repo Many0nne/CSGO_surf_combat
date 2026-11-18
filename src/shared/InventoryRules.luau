@@ -411,6 +411,16 @@ InventoryRules.ITEMS = {
 		rarity = "exceptional",
 		price = 2500,
 	},
+	-- Agents dans l'esprit de CS (#521, direction du 18/11/2026) : volumes ajoutés (MeshParts OutfitAttach) en plus des
+	-- cartes du rig
+	{
+		id = "outfit.demineur",
+		type = "outfit",
+		name = "DÉMINEUR",
+		appearance = "demineur",
+		rarity = "legendary",
+		price = 5000,
+	},
 } :: { Item }
 
 -- Inventaire de tout joueur (et des bots), sauvegardé ou non : Ka-Bar et AWP
