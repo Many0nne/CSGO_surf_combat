@@ -580,7 +580,7 @@ return function(T, Loader)
 	end)
 
 	T.describe("InventoryRules : tenues rares BRONZE et PORCELAINE (#521)", function()
-		T.it("deux tenues rares à 1 200 crédits, listées avant MERCURE (tri par prix)", function()
+		T.it("deux tenues rares à 1 200 crédits, toutes les tenues triées par prix", function()
 			for _, id in { "outfit.bronze", "outfit.porcelaine" } do
 				local item = Rules.item(id)
 				T.expect(item ~= nil, "tenue au catalogue : " .. id)
@@ -592,7 +592,10 @@ return function(T, Loader)
 			for _, outfit in Rules.outfits() do
 				table.insert(order, outfit.id)
 			end
-			T.expectEqual(table.concat(order, ","), "outfit.bronze,outfit.porcelaine,outfit.mercure")
+			T.expectEqual(
+				table.concat(order, ","),
+				"outfit.neoprene,outfit.platre,outfit.bronze,outfit.porcelaine,outfit.mercure,outfit.chitine"
+			)
 		end)
 
 		T.it("chaque dossier assets/rbx/Outfits correspond à une tenue du catalogue", function()
@@ -635,6 +638,31 @@ return function(T, Loader)
 				local n = counts[key] or 0
 				T.expect(math.abs(n / total - share) < 0.1, string.format("%s : %d bots sur %d", key, n, total))
 			end
+		end)
+	end)
+
+	T.describe("InventoryRules : CHITINE (#521)", function()
+		local CHITINE = "outfit.chitine"
+
+		T.it("légendaire à 5 000 crédits, avec son apparence", function()
+			local item = Rules.item(CHITINE)
+			T.expect(item ~= nil, "CHITINE au catalogue")
+			T.expectEqual(item and item.type, Rules.Type.OUTFIT)
+			T.expectEqual(item and item.rarity, "legendary")
+			T.expectEqual(item and item.price, 5000)
+			T.expectEqual(item and item.appearance, "chitine")
+		end)
+
+		T.it("l'admin l'équipe ; sans la posséder, refusée ; l'attribut la transporte", function()
+			local admin = Rules.resolve(nil, true)
+			local equipped = Rules.equip({}, admin, Rules.OUTFIT_SLOT, CHITINE, nil)
+			T.expect(equipped ~= nil, "tenue possédée équipée")
+			local resolved = Rules.resolveEquipped(equipped, admin)
+			T.expectEqual(Rules.outfitOf(resolved), CHITINE)
+			T.expectEqual(Rules.outfitOf(Rules.decodeEquipped(Rules.encodeEquipped(resolved), admin)), CHITINE)
+			local none, reason = Rules.equip({}, Rules.resolve(nil, false), Rules.OUTFIT_SLOT, CHITINE, nil)
+			T.expectEqual(none, nil)
+			T.expectEqual(reason, "not_owned")
 		end)
 	end)
 

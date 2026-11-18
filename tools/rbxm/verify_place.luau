@@ -417,6 +417,8 @@ for _, name in rbxmNames("assets/rbx/Outfits") do
 			fail("Outfits." .. name .. ".Head n'est pas une MeshPart")
 		elseif head.CanCollide or head.CanQuery or head.CanTouch or not head.Massless then
 			fail("Outfits." .. name .. ".Head doit être sans collision, ni requête, ni contact, et sans masse")
+		elseif not head:FindFirstChildOfClass("SurfaceAppearance") then
+			fail("Outfits." .. name .. ".Head sans SurfaceAppearance : la coque n'aurait pas la carte de la tenue")
 		end
 		local appearance = head:FindFirstChildOfClass("SurfaceAppearance")
 		if appearance then
