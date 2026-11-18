@@ -34,6 +34,8 @@ local WEBHOOK_RETRY_DELAY = 2
 local SPLIT_DELAY = 2
 -- Décision gardée par message (s) : ShouldDeliverCallback est appelé une fois par destinataire
 local DECISION_TTL = 30
+-- Attente au plus (s) d'un envoi périodique en cours avant le dernier envoi à l'arrêt (BindToClose : 30 s en tout)
+local CLOSE_WAIT = 12
 
 local buckets: { [number]: ChatRules.Bucket } = {}
 local muted: { [number]: boolean } = {}
@@ -73,8 +75,7 @@ local function logMessage(userId: number, name: string, raw: string)
 end
 
 -- Cette méthode permet de décider si un message est diffusé lorsque TextChatService le présente à un destinataire :
--- la décision est prise au premier appel (sourdine, longueur, débit), gardée pour les autres destinataires, et le
--- message accepté est journalisé une fois. Un message sans joueur auteur passe sans contrôle.
+-- décision prise au premier appel (sourdine, longueur, débit) puis gardée, message accepté journalisé une fois.
 function ChatService.decide(message: TextChatMessage): boolean
 	local id = message.MessageId
 	local known = decisions[id]
@@ -150,9 +151,8 @@ local function kickMessage(target: Player, reason: string?): string
 	return Locale.translate(language, ChatRules.KICK_MESSAGE)
 end
 
--- Cette méthode permet d'appliquer une commande admin lorsqu'un joueur la tape : rien pour un non-admin (le message
--- n'est de toute façon pas diffusé, c'est une commande), sinon sourdine, levée ou expulsion du joueur visé, journalisée,
--- et un retour à l'admin.
+-- Cette méthode permet d'appliquer une commande admin lorsqu'un joueur la tape : rien pour un non-admin, sinon
+-- sourdine, levée ou expulsion du joueur visé (jamais un admin, soi compris), journalisée, et un retour à l'admin.
 function ChatService.runCommand(player: Player, text: string)
 	if not canModerate(player) then
 		return
@@ -170,6 +170,11 @@ function ChatService.runCommand(player: Player, text: string)
 	if not target then
 		local template = if problem == "ambiguous" then ChatRules.Notice.AMBIGUOUS else ChatRules.Notice.NOT_FOUND
 		notify(player, template, { query = query })
+		return
+	end
+	-- Un admin (le propriétaire, un autre admin, soi-même) n'est ni mis en sourdine ni expulsé par une commande
+	if canModerate(target) then
+		notify(player, ChatRules.Notice.PROTECTED, { name = target.DisplayName })
 		return
 	end
 	local entry: ChatLogRules.Entry = {
@@ -216,6 +221,8 @@ function ChatService.flush()
 	flushing = true
 	local url = Webhook.url(table.unpack(ChatService.WEBHOOK_NAMES))
 	while true do
+		-- Pertes déjà signalées dans cet envoi : remises au compte s'il échoue
+		local droppedBefore = batch.dropped
 		local embed, taken = ChatLogRules.take(batch, game.JobId)
 		if not embed then
 			break
@@ -224,7 +231,7 @@ function ChatService.flush()
 			local ok, err = Webhook.postWithRetry(url, embed, WEBHOOK_ATTEMPTS, WEBHOOK_RETRY_DELAY)
 			if not ok then
 				warn("[ChatService] journal non envoyé :", err)
-				batch.dropped += taken
+				batch.dropped += droppedBefore + taken
 				break
 			end
 			if #batch.entries > 0 then
@@ -237,9 +244,18 @@ function ChatService.flush()
 	flushing = false
 end
 
--- Cette méthode permet de couper les commandes par défaut de Roblox lorsque le serveur démarre ou qu'elles
--- apparaissent : /mute et /unmute natifs prendraient nos alias, et /whisper, /team, /help ou /emote n'ont pas d'interface
--- dans notre fil (TextChatService.CreateDefaultCommands est aussi à false dans default.project.json).
+-- Cette méthode permet d'envoyer tout le lot lorsque le serveur s'arrête (BindToClose) : attend la fin d'un envoi
+-- périodique en cours (CLOSE_WAIT s au plus), puis envoie le reste.
+local function flushOnClose()
+	local deadline = os.clock() + CLOSE_WAIT
+	while flushing and os.clock() < deadline do
+		task.wait(0.2)
+	end
+	ChatService.flush()
+end
+
+-- Cette méthode permet de couper les commandes par défaut de Roblox (/mute natif prendrait notre alias, /whisper ou
+-- /team n'ont pas d'interface dans notre fil) lorsque le serveur démarre ou qu'elles apparaissent.
 local function disableDefaultCommand(inst: Instance)
 	if inst:IsA("TextChatCommand") and string.sub(inst.Name, 1, 3) == "RBX" then
 		inst.Enabled = false
@@ -304,7 +320,7 @@ function ChatService.init(notice: RemoteEvent)
 			end
 		end
 	end)
-	game:BindToClose(ChatService.flush)
+	game:BindToClose(flushOnClose)
 end
 
 return ChatService

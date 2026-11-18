@@ -124,7 +124,20 @@ return function(T, Loader)
 		T.it("préfère l'égalité exacte (nom affiché ou d'utilisateur, casse ignorée)", function()
 			T.expectEqual((ChatRules.findTarget("bob", players)), 1)
 			T.expectEqual((ChatRules.findTarget("BOBETTE", players)), 2)
-			T.expectEqual((ChatRules.findTarget("@alice", players)), 3, "@ retiré")
+			T.expectEqual((ChatRules.findTarget("@alice", players)), 3, "@ : nom d'utilisateur")
+		end)
+
+		T.it("un nom affiché qui copie un nom d'utilisateur est ambigu, « @nom » tranche", function()
+			local copied = {
+				{ userId = 1, name = "Bob", displayName = "Bob" },
+				{ userId = 2, name = "Troll123", displayName = "bob" },
+			}
+			local id, problem = ChatRules.findTarget("bob", copied)
+			T.expectEqual(id, nil)
+			T.expectEqual(problem, "ambiguous")
+			T.expectEqual((ChatRules.findTarget("@bob", copied)), 1, "nom d'utilisateur exact")
+			T.expectEqual((ChatRules.findTarget("@troll123", copied)), 2)
+			T.expectEqual(select(2, ChatRules.findTarget("@tro", copied)), "none", "pas de début de nom avec @")
 		end)
 
 		T.it("accepte un début de nom unique", function()

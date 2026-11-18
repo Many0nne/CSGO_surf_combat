@@ -84,9 +84,8 @@ function ChatLogRules.formatLine(entry: Entry): string
 	return line
 end
 
--- Cette méthode permet de retirer du lot les entrées d'un envoi lorsque le moment d'envoyer est venu : autant de
--- lignes qu'en tient une description, dans l'ordre d'arrivée. Renvoie l'embed et le nombre d'entrées retirées (nil, 0
--- pour un lot vide) ; le reste attend l'envoi suivant.
+-- Cette méthode permet de retirer du lot les lignes d'un embed (dans l'ordre d'arrivée) lorsque le moment d'envoyer est
+-- venu ; renvoie l'embed et le nombre d'entrées retirées (nil, 0 pour un lot vide), le reste attend l'envoi suivant.
 function ChatLogRules.take(batch: Batch, jobId: string): ({ [string]: any }?, number)
 	if #batch.entries == 0 and batch.dropped == 0 then
 		return nil, 0

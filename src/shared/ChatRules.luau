@@ -40,6 +40,7 @@ ChatRules.Notice = {
 	KICKED = "{name} a été expulsé.",
 	NOT_FOUND = "Aucun joueur ne correspond à « {query} ».",
 	AMBIGUOUS = "Plusieurs joueurs correspondent à « {query} ».",
+	PROTECTED = "{name} est admin : commande refusée.",
 	USAGE = "Usage : {usage}",
 	RATE = "Trop de messages, patiente un instant.",
 }
@@ -150,31 +151,47 @@ function ChatRules.parseCommand(text: string): (Command?, string?, string?)
 	return command, target, reason
 end
 
--- Cette méthode permet de trouver le joueur visé par une commande lorsque l'admin tape un nom : nom d'utilisateur ou
--- nom affiché, sans tenir compte de la casse ni d'un « @ » devant ; égalité exacte d'abord, sinon début de nom unique.
+-- Cette méthode permet de garder le seul joueur d'une liste de correspondances lorsque le joueur visé est cherché :
+-- aucun (nil), un seul (son UserId) ou plusieurs (« ambiguous »).
+local function single(matches: { number }): (number?, TargetProblem?)
+	if #matches == 0 then
+		return nil, nil
+	end
+	for _, userId in matches do
+		if userId ~= matches[1] then
+			return nil, "ambiguous"
+		end
+	end
+	return matches[1], nil
+end
+
+-- Cette méthode permet de trouver le joueur visé par une commande lorsque l'admin tape un nom (casse ignorée) : « @nom »
+-- = nom d'utilisateur exact ; sinon nom d'utilisateur ou affiché exact, puis début de nom, chacun devant être unique.
 function ChatRules.findTarget(query: string?, candidates: { Candidate }): (number?, TargetProblem?)
-	local stripped = string.gsub(query or "", "^@", "")
-	local wanted = string.lower(stripped)
+	local raw = query or ""
+	local byUsername = string.sub(raw, 1, 1) == "@"
+	local wanted = string.lower(if byUsername then string.sub(raw, 2) else raw)
 	if wanted == "" then
 		return nil, "empty"
 	end
-	for _, candidate in candidates do
-		if string.lower(candidate.name) == wanted or string.lower(candidate.displayName) == wanted then
-			return candidate.userId, nil
-		end
-	end
-	local found: number? = nil
+	local exact, prefix = {}, {}
 	for _, candidate in candidates do
 		local name, display = string.lower(candidate.name), string.lower(candidate.displayName)
-		if string.sub(name, 1, #wanted) == wanted or string.sub(display, 1, #wanted) == wanted then
-			if found and found ~= candidate.userId then
-				return nil, "ambiguous"
-			end
-			found = candidate.userId
+		if name == wanted or (not byUsername and display == wanted) then
+			table.insert(exact, candidate.userId)
+		elseif
+			not byUsername and (string.sub(name, 1, #wanted) == wanted or string.sub(display, 1, #wanted) == wanted)
+		then
+			table.insert(prefix, candidate.userId)
 		end
 	end
-	if found then
-		return found, nil
+	local found, problem = single(exact)
+	if found or problem then
+		return found, problem
+	end
+	found, problem = single(prefix)
+	if found or problem then
+		return found, problem
 	end
 	return nil, "none"
 end

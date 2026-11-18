@@ -68,8 +68,11 @@ diffusée comme message, quel que soit l'auteur. Un non-admin qui en tape une n'
 - `/unmute <joueur>` : lève la sourdine.
 - `/kick <joueur> [motif]` : expulse le joueur ; le motif est filtré (version pour tous) avant d'être montré au joueur
   expulsé et journalisé. Message d'expulsion dans la langue de son compte.
-- Joueur visé : nom d'utilisateur ou nom affiché, casse ignorée, « @ » toléré ; égalité exacte d'abord, sinon début de
-  nom unique (`ChatRules.findTarget`). Absent ou ambigu : retour à l'admin.
+- Joueur visé (`ChatRules.findTarget`, casse ignorée) : nom d'utilisateur ou nom affiché exact, sinon début de nom ;
+  dans les deux cas un seul joueur doit correspondre. Piège : un nom affiché peut copier le nom d'utilisateur d'un
+  autre joueur (« bob » d'un troll contre le compte « Bob ») ; c'est alors ambigu, et `@nom` vise le nom d'utilisateur
+  exact, seul. Absent ou ambigu : retour à l'admin, rien n'est appliqué.
+- Un admin (propriétaire, autre admin, soi-même) n'est jamais visé : retour « commande refusée ».
 - Retour à l'admin dans son fil (remote `ChatNotice`, gabarits `ChatRules.Notice` traduits chez lui).
 - Pas de bannissement (`Players:BanAsync`) : hors périmètre de #541.
 

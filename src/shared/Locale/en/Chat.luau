@@ -9,6 +9,7 @@ return {
 	["{name} a été expulsé."] = "{name} was kicked.",
 	["Aucun joueur ne correspond à « {query} »."] = 'No player matches "{query}".',
 	["Plusieurs joueurs correspondent à « {query} »."] = 'Several players match "{query}".',
+	["{name} est admin : commande refusée."] = "{name} is an admin: command refused.",
 	["Usage : {usage}"] = "Usage: {usage}",
 	["/mute <joueur>"] = "/mute <player>",
 	["/unmute <joueur>"] = "/unmute <player>",

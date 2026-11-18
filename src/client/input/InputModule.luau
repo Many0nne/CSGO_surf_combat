@@ -209,9 +209,8 @@ end
 
 local InputModule = {}
 
--- Cette méthode permet de couper (plus rien de tenu ni en attente) ou rendre les touches de jeu lorsque le menu en
--- partie (`reason` par défaut « menu ») ou la saisie du chat (« chat ») s'ouvre ou se ferme ; les touches ne reviennent
--- qu'une fois toutes les raisons levées, et une touche restée enfoncée ne compte qu'au prochain appui.
+-- Cette méthode permet de couper (rien de tenu ni en attente) ou rendre les touches de jeu lorsque le menu en partie
+-- (`reason` « menu » par défaut) ou la saisie du chat (« chat ») s'ouvre ou se ferme ; rendues une fois toutes levées.
 function InputModule.setSuspended(on: boolean, reason: string?)
 	local key = reason or "menu"
 	if on then
@@ -223,12 +222,6 @@ function InputModule.setSuspended(on: boolean, reason: string?)
 	if on then
 		clearAll()
 	end
-end
-
--- Cette méthode permet de savoir si les touches de jeu sont coupées (menu en partie, saisie du chat) lorsqu'un autre
--- lecteur de touches (classement, barre d'armes) doit se taire aussi.
-function InputModule.isSuspended(): boolean
-	return suspended
 end
 
 -- Cette méthode permet de tenir ou relâcher une action depuis un bouton tactile (#276) lorsque le joueur le touche.

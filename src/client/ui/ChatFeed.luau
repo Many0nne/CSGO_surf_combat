@@ -150,7 +150,9 @@ local function push(entry: Entry)
 	table.insert(entries, entry)
 	if #entries > ChatRules.FEED_KEEP then
 		table.remove(entries, 1)
-	elseif scroll > 0 then
+	end
+	-- Fil remonté : la ligne lue reste en place (un cran de plus depuis le bas, que la plus ancienne parte ou non)
+	if scroll > 0 then
 		scroll = ChatRules.clampScroll(scroll + 1, #entries)
 	end
 	render()
@@ -306,7 +308,7 @@ local function onNotice(template: unknown, args: unknown)
 end
 
 -- Cette méthode permet de suivre l'état du fil à chaque image lorsque le client tourne : fil masqué (et saisie fermée)
--- hors des écrans où il est disponible, voile des clics selon le pointeur, fondus en cours.
+-- hors des écrans où il est disponible, voile des clics selon le pointeur ; redessin seulement pendant un fondu.
 local function step()
 	if not gui or not deps then
 		return
@@ -315,11 +317,14 @@ local function step()
 	if not shown and isOpen then
 		close()
 	end
+	local appearing = shown and not gui.Enabled
 	gui.Enabled = shown
 	if isOpen then
 		blocker.Visible = pointerLocked()
 	end
-	if shown then
+	local newest = entries[#entries]
+	local fading = newest ~= nil and os.clock() - newest.at <= ChatRules.FADE_DELAY + ChatRules.FADE_TIME + 0.1
+	if appearing or (shown and fading and not isOpen) then
 		render()
 	end
 end
@@ -386,6 +391,14 @@ local function buildInput(parent: Frame)
 	box.FocusLost:Connect(onFocusLost)
 end
 
+-- Cette méthode permet de masquer la fenêtre ou la barre de saisie natives de TextChatService lorsque leur
+-- configuration existe ou apparaît.
+local function hideNative(child: Instance)
+	if child:IsA("ChatWindowConfiguration") or child:IsA("ChatInputBarConfiguration") then
+		(child :: any).Enabled = false
+	end
+end
+
 -- Cette méthode permet de construire le chat et de brancher Entrée, la molette, la réception des messages et les
 -- retours du serveur lorsque le client démarre ; masque la fenêtre et la barre natives de TextChatService.
 function ChatFeed.init(newDeps: Deps)
@@ -393,14 +406,11 @@ function ChatFeed.init(newDeps: Deps)
 		return
 	end
 	deps = newDeps
-	local windowConfig = TextChatService:FindFirstChildOfClass("ChatWindowConfiguration")
-	if windowConfig then
-		windowConfig.Enabled = false
+	for _, child in TextChatService:GetChildren() do
+		hideNative(child)
 	end
-	local inputConfig = TextChatService:FindFirstChildOfClass("ChatInputBarConfiguration")
-	if inputConfig then
-		inputConfig.Enabled = false
-	end
+	-- Configurations créées par le moteur après le démarrage du client : masquées à leur arrivée
+	TextChatService.ChildAdded:Connect(hideNative)
 
 	local screenGui = UIKit.create("ScreenGui", {
 		Name = "Chat",
@@ -476,11 +486,6 @@ function ChatFeed.init(newDeps: Deps)
 		end
 	end)
 	RunService.Heartbeat:Connect(step)
-end
-
--- Cette méthode permet de savoir si la saisie du chat est ouverte lorsqu'un autre écran doit attendre sa fermeture.
-function ChatFeed.isOpen(): boolean
-	return isOpen
 end
 
 return ChatFeed
