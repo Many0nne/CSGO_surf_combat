@@ -15,15 +15,12 @@
 -- documentée de `InventoryStore.transact`).
 local ServerScriptService = game:GetService("ServerScriptService")
 
-local CheatLog = require(ServerScriptService.Server.CheatLog)
 local InventoryStore = require(ServerScriptService.Server.InventoryStore)
 local OutfitPurchaseRules = require(ServerScriptService.Server.OutfitPurchaseRules)
+local PurchaseRemote = require(ServerScriptService.Server.PurchaseRemote)
 local WalletStore = require(ServerScriptService.Server.WalletStore)
 
 export type Result = OutfitPurchaseRules.Reply
-
--- Joueurs dont un achat attend son écriture (au plus un chacun) ; retirés à la fin de l'achat, départ compris
-local buying: { [Player]: boolean } = {}
 
 local OutfitService = {}
 
@@ -50,38 +47,16 @@ local function purchase(player: Player, outfitId: string): Result
 end
 
 -- Cette méthode permet d'acheter une tenue lorsque le client clique ACHETER au portant : un seul achat en vol par joueur,
--- puis `purchase` ; bloquante jusqu'à l'écriture. Le tour est toujours rendu, même sur une erreur.
-function OutfitService.buy(player: Player, outfitId: string): Result
-	if buying[player] then
-		return refuse("busy")
-	end
-	buying[player] = true
-	local ok, result = pcall(purchase, player, outfitId)
-	buying[player] = nil
-	if not ok then
-		warn("[OutfitService] achat en erreur pour", player.Name, ":", result)
-		return refuse("failed")
-	end
-	return result
-end
+-- puis `purchase` ; bloquante jusqu'à l'écriture. Le tour est toujours rendu, même sur une erreur (`PurchaseRemote`).
+OutfitService.buy = PurchaseRemote.guard("OutfitService", refuse, purchase)
 
--- Cette méthode permet de brancher le remote d'achat lorsque le serveur démarre : garde commune (débit, type de l'id)
--- puis `OutfitService.buy`. Le thread d'un achat n'est jamais annulé (il porte l'écriture, cf. InventoryStore.transact).
--- `onBought` (analytics) reçoit chaque achat traité, avant la réponse au client.
+-- Cette méthode permet de brancher le remote d'achat lorsque le serveur démarre : garde commune (`PurchaseRemote` :
+-- débit, type de l'id) puis `OutfitService.buy`. `onBought` (analytics) reçoit chaque achat traité, avant la réponse.
 function OutfitService.init(
 	buyRemote: RemoteFunction,
 	onBought: ((player: Player, outfitId: string, result: Result) -> ())?
 )
-	buyRemote.OnServerInvoke = function(player: Player, outfitId: any): Result
-		if not CheatLog.admit(player, buyRemote.Name, outfitId) then
-			return refuse("rate")
-		end
-		local result = OutfitService.buy(player, outfitId)
-		if onBought then
-			onBought(player, outfitId, result)
-		end
-		return result
-	end
+	PurchaseRemote.connect(buyRemote, refuse, OutfitService.buy, onBought)
 end
 
 return OutfitService
