@@ -177,9 +177,9 @@ table.insert(EQUIP_SLOTS, InventoryRules.OUTFIT_SLOT)
 --   SendFeedback : clic ENVOYER ; SaveSettings : 1 envoi par seconde au plus (LocalSettings) ; GetSettings : une
 --   demande au démarrage du client ; EquipItem : un clic sur une arme, un skin ou une tenue de l'accueil (#280, #521) ; OpenCrate : un
 --   clic sur OUVRIR, l'animation d'ouverture dure plusieurs secondes (#332) ; BuyCrate : un clic sur ACHETER, suivi de la
---   même animation (#393) ; BuyCreditPack : un clic sur un pack, suivi du prompt Roblox (#395) ; HighlightPov : une
---   réponse par kill record de la partie, demandée par le serveur au plus une fois par seconde (#499) ; AnalyticsScreen :
---   un changement d'écran par relevé du client, 2 par seconde au plus (#527) ; Party : un clic (JOUER ou changement
+--   même animation (#393) ; BuyOutfit : un clic sur ACHETER au portant des tenues (#543) ; BuyCreditPack : un clic
+--   sur un pack, suivi du prompt Roblox (#395) ; HighlightPov : une réponse par kill record de la partie, demandée par
+--   le serveur au plus une fois par seconde (#499) ; AnalyticsScreen : un changement d'écran par relevé du client, 2 par seconde au plus (#527) ; Party : un clic (JOUER ou changement
 --   d'onglet qui ouvre ou quitte le lobby, LANCER, QUITTER LE GROUPE, REJOINDRE) (#523).
 -- Une arme plus rapide (automatique) demandera de relever HitscanDamage, ShotFired et WeaponAction.
 local N = NetworkProtocol.Names
@@ -235,6 +235,8 @@ RemoteGuard.RULES = {
 	[N.OPEN_CRATE] = { rate = 1, burst = 3, args = { RemoteGuard.string(InventoryRules.MAX_ID_LENGTH) } },
 	-- Id de la caisse à acheter (#393) ; existence, prix, solde et achat déjà en vol vérifiés ensuite par CrateService
 	[N.BUY_CRATE] = { rate = 1, burst = 3, args = { RemoteGuard.string(InventoryRules.MAX_ID_LENGTH) } },
+	-- Id de la tenue à acheter (#543) ; tenue en vente, possession, solde et achat déjà en vol vérifiés par OutfitService
+	[N.BUY_OUTFIT] = { rate = 1, burst = 3, args = { RemoteGuard.string(InventoryRules.MAX_ID_LENGTH) } },
 	-- Id du pack de crédits (#395) ; pack connu et joueur non restreint vérifiés ensuite par ReceiptService
 	[N.BUY_CREDIT_PACK] = { rate = 1, burst = 3, args = { RemoteGuard.string(InventoryRules.MAX_ID_LENGTH) } },
 	-- Tampon caméra du clip de la partie (#499) : numéro de la demande, série bornée ; demande en attente vérifiée ensuite

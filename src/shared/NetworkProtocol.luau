@@ -58,6 +58,9 @@ Protocol.Names = {
 	-- Achat d'une caisse du shop (#393), cf. server/CrateService : RemoteFunction client → serveur (id de la caisse),
 	-- réponse après l'écriture { ok, reason?, skinId?, rarity?, added?, refund? } ; prix et tirage décidés par le serveur
 	BUY_CRATE = "BuyCrate",
+	-- Achat d'une tenue de personnage au portant du shop (#543), cf. server/OutfitService : RemoteFunction client →
+	-- serveur (id de la tenue), réponse après l'écriture { ok, reason?, outfitId?, rarity?, price? } ; prix lu par le serveur
+	BUY_OUTFIT = "BuyOutfit",
 	-- Achat d'un pack de crédits en Robux (#395), cf. server/ReceiptService : RemoteFunction client → serveur (id du pack),
 	-- réponse { ok, reason? } ; le serveur ouvre le prompt Roblox (refusé à un joueur restreint), les crédits arrivent
 	-- par ProcessReceipt (attribut `Credits`)

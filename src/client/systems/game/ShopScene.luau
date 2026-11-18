@@ -2,8 +2,10 @@
 -- cotes de la planche validée (tools/shop/board.py, scène B, en studs). Deux plans de caméra : la vue d'ensemble, face
 -- à la vitrine du mur de droite (une caisse par arme, étiquette avec nom et prix, survol en rouge d'impact), et la vue
 -- détail, la caisse choisie seule sur son socle, sous la suspension (#424 : son contenu est dans la colonne de
--- l'interface, plus au mur). La caméra glisse de l'une à l'autre. Tout est local au client ; pendant le shop, la scène
--- de l'accueil est suspendue (MenuScene.setPaused) et l'ambiance du jeu est assombrie (salle fermée).
+-- l'interface, plus au mur). Tenues (#543) : le portant contre le mur de gauche, face à la vitrine (vue « outfits »,
+-- OutfitRack), et la vue détail d'une tenue, portée par le personnage debout sur le socle à la place de la caisse
+-- (vue « outfit », suspension remontée). La caméra glisse d'un plan à l'autre. Tout est local au client ; pendant le
+-- shop, la scène de l'accueil est suspendue (MenuScene.setPaused) et l'ambiance du jeu est assombrie (salle fermée).
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -18,6 +20,7 @@ local CrateStencil = require(Shared:WaitForChild("CrateStencil"))
 local GamepadRules = require(Shared:WaitForChild("GamepadRules"))
 local InventoryRules = require(Shared:WaitForChild("InventoryRules"))
 local Locale = require(Shared:WaitForChild("Locale"))
+local OutfitRackRules = require(Shared:WaitForChild("OutfitRackRules"))
 local PerfMarkers = require(Shared:WaitForChild("PerfMarkers"))
 local ShopCatalog = require(Shared:WaitForChild("ShopCatalog"))
 local UITheme = require(Shared:WaitForChild("UITheme"))
@@ -27,6 +30,7 @@ local WeaponSkins = require(Shared:WaitForChild("WeaponSkins"))
 local CrateOpening = require(script.Parent.CrateOpening)
 local MenuScene = require(script.Parent.MenuScene)
 local Rules = require(script.Parent.MenuSceneRules)
+local OutfitRack = require(script.Parent.OutfitRack)
 
 local ShopScene = {}
 
@@ -68,6 +72,10 @@ local LIGHT_RANGE = 30
 -- onglets du menu dans la vue détail, assez haute pour sortir du cadre de l'ouverture : à -1, l'ampoule restait en
 -- haut de l'image pendant l'ouverture et son éclat passait sous les onglets
 local LAMP_LIFT = 0.7
+-- Vue détail d'une tenue (#543) : le personnage debout sur le socle (8,3 studs) passait à 0,6 stud de la cloche ; elle
+-- remonte de 2 studs (planche validée), et redescend pour les caisses (plus haute, elle passe sous les onglets du menu)
+local OUTFIT_LAMP_LIFT = 2.7
+local LAMP_MOVE_RATE = 5 -- vitesse du changement de hauteur (Rules.damp), hors du cadre pendant le glissement
 local CEILING_Y = 17.75 -- dessous du plafond, dans la salle
 -- Lampe de la suspension, à l'ampoule et à ombres, tournée vers le bas : sa tache couvre la caisse et le haut du socle
 local SUSPENSION_ANGLE = 70
@@ -145,11 +153,24 @@ local podiumFrame = room * CFrame.new(0, 1.34, 0) * CFrame.Angles(0, math.rad(-1
 local previewCenter = room * CFrame.new(0, 1.34 + PREVIEW_HEIGHT, 0) -- arme de l'aperçu, de profil face à la caméra
 -- Ouverture (#332) : la caméra avance vers la caisse (×1,8, la référence Apex avance de ×2,5) ; décalée, pas tournée,
 -- pour poser la caisse et l'arme au tiers droit (colonne de l'interface à gauche), de la caisse à l'arme au-dessus
+-- Portant des tenues (#543, emplacement P1 de la planche validée) : contre le mur de gauche, à l'avant de la salle, face à
+-- la vitrine ; à 2,9 studs du mur, les tenues de trois quarts n'y entrent pas. Hors du champ de la vue détail des caisses
+-- (derrière la caméra), qui reste intacte
+local rackFrame = room * CFrame.new(-12.85, 0, 16.8) * CFrame.Angles(0, math.rad(90), 0)
+-- Personnage du socle (vue détail d'une tenue) : de trois quarts vers la caméra, comme sur la planche
+local FIGURE_YAW = math.rad(180 + 28)
 local CAMERAS = {
 	detail = CFrame.lookAt(room * Vector3.new(4, 5.2, 20), room * Vector3.new(-4.5, 4.5, 0)),
 	overview = CFrame.lookAt(vitrineFrame * Vector3.new(-2.8, 5.2, 17), vitrineFrame * Vector3.new(-2.8, 3.6, 0)),
 	opening = CFrame.lookAt(room * Vector3.new(-2.4, 4.9, 13), room * Vector3.new(-2.4, 3.3, 0)),
+	-- Portant de face, au tiers droit (colonne à gauche), assez reculé pour ses deux barres
+	outfits = CFrame.lookAt(rackFrame * Vector3.new(-2.8, 6.0, 22), rackFrame * Vector3.new(-2.8, 5.4, 0)),
+	-- Vue détail des caisses, visée relevée d'un stud : personnage entier et cloche dans le cadre
+	outfit = CFrame.lookAt(room * Vector3.new(4, 5.6, 20), room * Vector3.new(-4.5, 5.5, 0)),
 }
+-- Lampe de face du personnage (vue détail d'une tenue) : les tenues métalliques (MERCURE) ne prennent que la lumière
+-- venue de face, comme les skins de l'aperçu (#358)
+local FIGURE_LIGHT_BRIGHTNESS = 1.1
 local OPENING_SHAKE = 0.04 -- secousse de la caméra à pleine charge, en studs
 -- Part de l'éclairage de la salle gardée pendant l'ouverture : salle éclairée, le décor concurrençait l'arme révélée
 -- (la référence se joue sur fond sombre, la lumière vient de l'objet)
@@ -160,12 +181,26 @@ local stage: Folder?
 local podium: Folder? -- caisse du socle, refaite à chaque caisse montrée
 local sale: { SaleCrate } = {}
 local vitrineLights: { SpotLight } = {} -- allumées dans la vue d'ensemble seulement
-local detailLights: { SpotLight } = {} -- allumées dans la vue détail seulement
+local detailLights: { SpotLight } = {} -- allumées dans les vues détail (caisse ou tenue) seulement
+local rackLights: { SpotLight } = {} -- allumées face au portant seulement
 local running = false
 local connection: RBXScriptConnection?
 local inputConnection: RBXScriptConnection?
-local mode: "overview" | "detail" | "opening" = "overview"
+local ownedConnection: RBXScriptConnection?
+type Mode = "overview" | "detail" | "opening" | "outfits" | "outfit"
+local mode: Mode = "overview"
 local podiumCrate: Model?
+-- Portant (#543) : tenues en vente (ordre du catalogue), portant construit, tenue survolée, tenue sur le socle
+local rackOutfits = OutfitRackRules.forSale()
+local outfitRack: OutfitRack.Rack?
+local hoveredOutfit = 0
+local onOutfitClicked: ((number) -> ())?
+local shownOutfit = 0
+local podiumFigure: Model? -- personnage de la vue détail d'une tenue, à la place de la caisse
+local figureBase = CFrame.identity -- pivot du personnage tourné de trois quarts, avant le glisser
+local figureLight: SpotLight?
+local suspension: Model? -- cloche, ampoule, lampe et faisceau : remontés dans la vue détail d'une tenue
+local lampLift = LAMP_LIFT
 -- Ouverture en cours (#332) : effets, rareté tirée, départ (os.clock), rappels de l'interface
 type Opening = {
 	fx: any,
@@ -510,18 +545,23 @@ local function buildRoom(parent: Instance)
 		1.3
 	)
 	-- suspension industrielle au-dessus de la caisse : câble (jusqu'au plafond), douille, cloche émaillée, ampoule
+	-- dans un modèle à part : remonté dans la vue détail d'une tenue (#543)
+	local lamp = Instance.new("Model")
+	lamp.Name = "Suspension"
+	lamp.Parent = parent
+	suspension = lamp
 	local enamel = Color3.fromRGB(52, 58, 54)
 	local cyl = Enum.PartType.Cylinder
 	local cableTop = CEILING_Y - LAMP_LIFT
 	box(
-		parent,
+		lamp,
 		lampFrame,
 		Vector3.new(0, (cableTop + 10.35) / 2, 0),
 		Vector3.new(0.06, cableTop - 10.35, 0.06),
 		Color3.fromRGB(20, 20, 20)
 	)
 	box(
-		parent,
+		lamp,
 		lampFrame,
 		Vector3.new(0, 10.15, 0),
 		Vector3.new(0.45, 0.4, 0.45),
@@ -530,12 +570,12 @@ local function buildRoom(parent: Instance)
 		cyl,
 		true
 	)
-	box(parent, lampFrame, Vector3.new(0, 9.85, 0), Vector3.new(1, 0.3, 1), enamel, metal, cyl, true)
-	box(parent, lampFrame, Vector3.new(0, 9.6, 0), Vector3.new(1.9, 0.25, 1.9), enamel, metal, cyl, true)
-	box(parent, lampFrame, Vector3.new(0, 9.42, 0), Vector3.new(2.4, 0.14, 2.4), enamel, metal, cyl, true)
-	box(parent, lampFrame, Vector3.new(0, 9.36, 0), Vector3.new(2.2, 0.04, 2.2), BONE, nil, cyl, true)
+	box(lamp, lampFrame, Vector3.new(0, 9.85, 0), Vector3.new(1, 0.3, 1), enamel, metal, cyl, true)
+	box(lamp, lampFrame, Vector3.new(0, 9.6, 0), Vector3.new(1.9, 0.25, 1.9), enamel, metal, cyl, true)
+	box(lamp, lampFrame, Vector3.new(0, 9.42, 0), Vector3.new(2.4, 0.14, 2.4), enamel, metal, cyl, true)
+	box(lamp, lampFrame, Vector3.new(0, 9.36, 0), Vector3.new(2.2, 0.04, 2.2), BONE, nil, cyl, true)
 	local bulb = box(
-		parent,
+		lamp,
 		lampFrame,
 		Vector3.new(0, 9.3, 0),
 		Vector3.new(0.6, 0.6, 0.6),
@@ -557,8 +597,9 @@ local function buildLights(parent: Instance)
 	end
 	-- Suspension, à l'ampoule, tournée vers la caisse
 	local bulb = lampFrame * Vector3.new(0, 9.3, 0)
+	local lamp = suspension or parent
 	spot(
-		parent,
+		lamp,
 		bulb,
 		dir(Vector3.new(0, -1, 0)),
 		SUSPENSION_ANGLE,
@@ -567,7 +608,20 @@ local function buildLights(parent: Instance)
 		SUSPENSION_RANGE,
 		true
 	)
-	lightBeam(parent)
+	lightBeam(lamp)
+	-- Lampe de face du personnage (vue détail d'une tenue), éteinte hors de cette vue
+	local figureAt = room * Vector3.new(0, 5.6, 0)
+	local figureFrom = room * Vector3.new(2.5, 7.5, 9)
+	figureLight = spot(parent, figureFrom, figureAt - figureFrom, 35, 0, Color3.fromRGB(255, 228, 190), 16)
+	-- Portant (#543) : deux lampes chaudes au plafond, comme la vitrine (l'étage du haut ombre celui du bas), allumées
+	-- face au portant seulement
+	for _, sx in { -1, 1 } do
+		local from = rackFrame * Vector3.new(sx * 4.3, 15.5, 5.5)
+		local to = rackFrame * Vector3.new(sx * 3.6, 4.5, 0.5)
+		-- Plus fortes et plus ouvertes que celles de la vitrine (1,3 et 60°) : le cadre blanc et les montants restaient
+		-- dans l'ombre (réglé dans Studio)
+		table.insert(rackLights, spot(parent, from, to - from, 75, 2.4, Color3.fromRGB(255, 226, 186), 22, true))
+	end
 	-- Lampe de face de l'aperçu d'un skin, un peu au-dessus de l'arme : éteinte (intensité 0) hors aperçu
 	local previewFrom = previewCenter * Vector3.new(0, 1.5, 6)
 	previewLight =
@@ -823,9 +877,11 @@ end
 -- en fondu sa lampe de face lorsqu'une image est rendue.
 local function updatePreview(dt: number)
 	local shown = preview
-	if shown then
+	-- Personnage de la vue détail d'une tenue (#543) : tourné comme l'arme de l'aperçu, autour de la verticale seulement
+	local figure = if mode == "outfit" then podiumFigure else nil
+	if shown or figure then
 		-- Stick droit : tourne l'arme en détail, la main reste au stick tant qu'il est incliné (pas de balancement)
-		if mode == "detail" and interactive and not dragging then
+		if (mode == "detail" or mode == "outfit") and interactive and not dragging then
 			local rx, ry = GamepadRules.lookRate(stickPos.X, stickPos.Y)
 			if rx ~= 0 or ry ~= 0 then
 				-- dt borné : une image longue (premier affichage) ne fait pas sauter l'arme
@@ -844,12 +900,31 @@ local function updatePreview(dt: number)
 			yaw = Rules.damp(yaw, sway, dt, PREVIEW_SETTLE_RATE)
 			pitch = Rules.damp(pitch, 0, dt, PREVIEW_SETTLE_RATE)
 		end
-		local center = CFrame.new(previewCenter.Position)
-		shown.model:PivotTo(center * CFrame.Angles(pitch, yaw, 0) * center:Inverse() * shown.base)
+		if shown then
+			local center = CFrame.new(previewCenter.Position)
+			shown.model:PivotTo(center * CFrame.Angles(pitch, yaw, 0) * center:Inverse() * shown.base)
+		end
+		if figure then
+			figure:PivotTo(figureBase * CFrame.Angles(0, yaw, 0))
+		end
 	end
 	if previewLight then
 		local target = if shown and mode == "detail" then PREVIEW_LIGHT_BRIGHTNESS else 0
 		previewLight.Brightness = Rules.damp(previewLight.Brightness, target, dt, PREVIEW_LIGHT_RATE)
+	end
+	if figureLight then
+		local target = if mode == "outfit" then FIGURE_LIGHT_BRIGHTNESS else 0
+		figureLight.Brightness = Rules.damp(figureLight.Brightness, target, dt, PREVIEW_LIGHT_RATE)
+	end
+	-- Suspension remontée au-dessus du personnage, à sa hauteur d'origine pour les caisses
+	local lift = if mode == "outfit" then OUTFIT_LAMP_LIFT else LAMP_LIFT
+	local lamp = suspension
+	if lamp and math.abs(lampLift - lift) > 1e-3 then
+		lampLift = if dt > 0 then Rules.damp(lampLift, lift, dt, LAMP_MOVE_RATE) else lift
+		if math.abs(lampLift - lift) < 0.01 then
+			lampLift = lift
+		end
+		lamp:PivotTo(lampFrame + Vector3.new(0, lampLift - LAMP_LIFT, 0))
 	end
 end
 
@@ -868,8 +943,37 @@ local function dressCrate(index: number)
 	podiumFolder.Name = "Podium"
 	local stripe = Color3.fromRGB(def.stripe[1], def.stripe[2], def.stripe[3])
 	podiumCrate = crate(podiumFolder, podiumFrame, stripe, nil, ShopCatalog.stencil(def))
+	podiumFigure = nil
 	podiumFolder.Parent = stage
 	podium = podiumFolder
+end
+
+-- Cette méthode permet de montrer une tenue dans sa vue détail (#543) : le personnage qui la porte, debout sur le socle à
+-- la place de la caisse, de trois quarts vers la caméra, lorsque le joueur la choisit au portant ou passe à la voisine.
+local function dressFigure(index: number)
+	local item = rackOutfits[index]
+	if not (item and stage) then
+		return
+	end
+	setPreview(nil)
+	if podium then
+		podium:Destroy()
+	end
+	podiumCrate = nil
+	podiumFigure = nil
+	local podiumFolder = Instance.new("Folder")
+	podiumFolder.Name = "Podium"
+	local figure = OutfitRack.figure(item.id)
+	if figure then
+		-- Pieds sur le dessus du socle (1,34), centré sur lui
+		figureBase = room * CFrame.new(0, 1.34 - figure.feet, 0) * CFrame.Angles(0, FIGURE_YAW, 0)
+		figure.model:PivotTo(figureBase)
+		figure.model.Parent = podiumFolder
+		podiumFigure = figure.model
+	end
+	podiumFolder.Parent = stage
+	podium = podiumFolder
+	yaw, pitch, swayClock = 0, 0, 0
 end
 
 -- Cette méthode permet de construire la salle une seule fois (pièce, lumières, vitrine) lorsque le shop s'ouvre pour la
@@ -880,7 +984,53 @@ local function build()
 	buildRoom(folder)
 	buildLights(folder)
 	buildVitrine(folder)
+	-- Pivot de la suspension posé une fois ses pièces construites : celui d'un Model créé vide n'est pas fiable
+	if suspension then
+		suspension.WorldPivot = lampFrame
+	end
+	outfitRack = OutfitRack.build(folder, rackFrame, rackOutfits)
 	stage = folder
+end
+
+-- Cette méthode permet de savoir si le joueur local possède une tenue (attribut informatif `OwnedItems`) lorsque les
+-- étiquettes du portant se peignent.
+local function ownsOutfit(id: string): boolean
+	local owned = InventoryRules.decode(Players.LocalPlayer:GetAttribute(InventoryRules.ATTRIBUTE))
+	return owned[id] == true
+end
+
+-- Cette méthode permet de peindre les étiquettes du portant (survol, tenues possédées) lorsque le survol ou l'inventaire
+-- change.
+local function paintRack()
+	local built = outfitRack
+	if built then
+		built.hovered = hoveredOutfit
+		OutfitRack.paint(built, rackOutfits, ownsOutfit)
+	end
+end
+
+-- Cette méthode permet de trouver la tenue du portant sous la souris (rayon depuis la caméra) lorsque le portant est
+-- affiché ; 0 si aucune.
+local function outfitUnderMouse(camera: Camera): number
+	local built = outfitRack
+	if mode ~= "outfits" or not built or not interactive then
+		return 0
+	end
+	local mouse = UserInputService:GetMouseLocation()
+	local ray = camera:ViewportPointToRay(mouse.X, mouse.Y)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Include
+	params.FilterDescendantsInstances = OutfitRack.targets(built)
+	local hit = workspace:Raycast(ray.Origin, ray.Direction * 200, params)
+	if not hit then
+		return 0
+	end
+	local index = hit.Instance:GetAttribute("ShopOutfit")
+	if type(index) ~= "number" then
+		local model = hit.Instance:FindFirstAncestorWhichIsA("Model")
+		index = model and model:GetAttribute("ShopOutfit")
+	end
+	return if type(index) == "number" then index else 0
 end
 
 -- Cette méthode permet de peindre les étiquettes de la vitrine (survolée en rouge d'impact à texte os) lorsque le survol
@@ -978,10 +1128,18 @@ local function update(dt: number)
 		hovered = index
 		paintTags()
 	end
+	local outfitIndex = outfitUnderMouse(camera)
+	if outfitIndex ~= hoveredOutfit then
+		hoveredOutfit = outfitIndex
+		paintRack()
+	end
+	if outfitRack then
+		OutfitRack.pose(outfitRack, math.min(dt, 0.1))
+	end
 end
 
 -- Cette méthode permet de passer d'un plan de caméra à l'autre en glissant depuis l'image courante lorsque la vue change.
-local function glideTo(newMode: "overview" | "detail")
+local function glideTo(newMode: "overview" | "detail" | "outfits" | "outfit")
 	if newMode == mode then
 		return
 	end
@@ -994,22 +1152,32 @@ local function glideTo(newMode: "overview" | "detail")
 		light.Enabled = newMode == "overview"
 	end
 	for _, light in detailLights do
-		light.Enabled = newMode == "detail"
+		light.Enabled = newMode == "detail" or newMode == "outfit"
 	end
+	for _, light in rackLights do
+		light.Enabled = newMode == "outfits"
+	end
+	dragging = false
+	dragInput = nil
 	hovered = 0
 	paintTags()
+	hoveredOutfit = 0
+	paintRack()
 end
 
 -- Cette méthode permet de montrer la vitrine (toutes les caisses en vente) lorsque le shop s'ouvre ou que le joueur
 -- revient de la vue détail.
 function ShopScene.showOverview()
+	if podiumFigure and shownCrate > 0 then
+		dressCrate(shownCrate)
+	end
 	glideTo("overview")
 end
 
 -- Cette méthode permet de montrer la caisse `index` du catalogue sur le socle lorsque le joueur la choisit dans la
 -- vitrine ou passe à la voisine dans la vue détail.
 function ShopScene.showCrate(index: number)
-	if index ~= shownCrate then
+	if index ~= shownCrate or not podiumCrate then
 		shownCrate = index
 		dressCrate(index)
 	end
@@ -1019,6 +1187,36 @@ end
 -- Cette méthode permet d'enregistrer le rappel appelé quand le joueur clique une caisse de la vitrine.
 function ShopScene.onCrateClicked(callback: (number) -> ())
 	onCrateClicked = callback
+end
+
+-- Cette méthode permet de montrer le portant des tenues (#543) lorsque le joueur passe à l'onglet TENUES du shop ou
+-- revient de la vue détail d'une tenue ; la caisse revient sur le socle (hors du cadre du portant).
+function ShopScene.showRack()
+	if podiumFigure and shownCrate > 0 then
+		dressCrate(shownCrate)
+	end
+	glideTo("outfits")
+end
+
+-- Cette méthode permet de montrer la tenue `index` du portant (`ShopScene.outfits`) portée par le personnage sur le
+-- socle lorsque le joueur la choisit au portant ou passe à la voisine dans la vue détail.
+function ShopScene.showOutfit(index: number)
+	if index ~= shownOutfit or not podiumFigure then
+		shownOutfit = index
+		dressFigure(index)
+	end
+	glideTo("outfit")
+end
+
+-- Cette méthode permet d'enregistrer le rappel appelé quand le joueur clique une tenue du portant.
+function ShopScene.onOutfitClicked(callback: (number) -> ())
+	onOutfitClicked = callback
+end
+
+-- Cette méthode permet de lire les tenues en vente au portant, dans l'ordre du portant, lorsque l'interface les nomme ou
+-- passe à la voisine.
+function ShopScene.outfits(): { InventoryRules.Item }
+	return rackOutfits
 end
 
 -- Cette méthode permet de montrer en grand, au-dessus de la caisse, l'arme habillée du skin `skinId` (#424, nil : retour
@@ -1165,6 +1363,9 @@ function ShopScene.start()
 		shownCrate = 1
 		dressCrate(1)
 	end
+	paintRack()
+	-- Tenue achetée (ici ou sur un autre serveur) : son étiquette passe à POSSÉDÉE
+	ownedConnection = Players.LocalPlayer:GetAttributeChangedSignal(InventoryRules.ATTRIBUTE):Connect(paintRack)
 	connection = RunService.RenderStepped:Connect(PerfMarkers.wrap("shop 3D", update))
 	inputConnection = UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
 		local isTouch = input.UserInputType == Enum.UserInputType.Touch
@@ -1178,8 +1379,14 @@ function ShopScene.start()
 		-- Le survol suit la souris, pas le doigt : un toucher ne choisit pas de caisse sur ce survol périmé
 		if not isTouch and hovered > 0 and onCrateClicked then
 			onCrateClicked(hovered)
-		elseif not dragging and preview and mode == "detail" and interactive then
-			-- Aperçu retenu : glisser dans la salle tourne l'arme
+		elseif not isTouch and hoveredOutfit > 0 and onOutfitClicked then
+			onOutfitClicked(hoveredOutfit)
+		elseif
+			not dragging
+			and interactive
+			and ((preview and mode == "detail") or (podiumFigure and mode == "outfit"))
+		then
+			-- Aperçu retenu (ou personnage d'une tenue) : glisser dans la salle le tourne
 			dragging = true
 			-- Doigt : position du toucher (pas de curseur) ; on ne suit que ce toucher jusqu'à son relâchement
 			dragInput = if isTouch then input else nil
@@ -1253,6 +1460,10 @@ function ShopScene.stop()
 		inputConnection:Disconnect()
 		inputConnection = nil
 	end
+	if ownedConnection then
+		ownedConnection:Disconnect()
+		ownedConnection = nil
+	end
 	for _, drag in dragConnections do
 		drag:Disconnect()
 	end
@@ -1274,6 +1485,8 @@ function ShopScene.stop()
 	workspace.CurrentCamera.FieldOfView = savedFov
 	hovered = 0
 	paintTags()
+	hoveredOutfit = 0
+	paintRack()
 	MenuScene.setPaused(false)
 end
 

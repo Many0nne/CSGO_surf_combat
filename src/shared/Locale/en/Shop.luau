@@ -52,6 +52,24 @@ return {
 	["INDISPONIBLE DANS TA RÉGION"] = "NOT AVAILABLE IN YOUR REGION",
 	["ACHAT IMPOSSIBLE  ·  RÉESSAIE PLUS TARD"] = "PURCHASE FAILED  ·  TRY AGAIN LATER",
 
+	-- Refus d'achat d'une tenue au portant (#543, PurchaseStatus.OUTFIT_REFUSALS)
+	["TENUE INCONNUE"] = "UNKNOWN OUTFIT",
+	["PAS EN VENTE"] = "NOT FOR SALE",
+	["DÉJÀ POSSÉDÉE"] = "ALREADY OWNED",
+
+	-- Portant des tenues et vue détail d'une tenue (#543, ShopScreen, OutfitShopPanel, OutfitRack)
+	["TENUES"] = "OUTFITS",
+	["{n} EN VENTE  ·  ACHAT DIRECT, SANS TIRAGE"] = "{n} ON SALE  ·  DIRECT PURCHASE, NO DRAW",
+	["VOIR LA TENUE ET ACHETER"] = "VIEW OUTFIT AND BUY",
+	["TENUE DE PERSONNAGE"] = "CHARACTER OUTFIT",
+	["S'ÉQUIPE DANS ÉQUIPEMENT  ·  TENUE"] = "EQUIP IT IN LOADOUT  ·  OUTFIT",
+	["TENUE  {n} / {total}"] = "OUTFIT  {n} / {total}",
+	["POSSÉDÉE"] = "OWNED",
+	["ACHETÉE  ·  À ÉQUIPER DANS ÉQUIPEMENT"] = "BOUGHT  ·  EQUIP IT IN LOADOUT",
+	["LA TOURNER"] = "ROTATE IT",
+	["Chrome liquide sur tout le corps, reflet du ciel peint dans la matière."] = "Liquid chrome over the whole body, the sky's reflection painted into the material.",
+	["Casque fermé à visière, plastron et tablier de protection, épaulières à liseré laiton."] = "Closed visor helmet, protective breastplate and apron, brass-trimmed shoulder pads.",
+
 	-- Packs de crédits (CreditPackWindow, CreditPacks)
 	["+ CRÉDITS"] = "+ CREDITS",
 	["PACKS DE CRÉDITS"] = "CREDIT PACKS",

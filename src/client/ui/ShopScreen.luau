@@ -9,7 +9,8 @@
 -- puis la scène joue l'ouverture et la colonne laisse place à la révélation (« OBTENU » ou « DOUBLON · +N CRÉDITS »,
 -- skin et rareté) jusqu'au clic. Pendant l'achat : « ACHAT… », pas de second clic ; tout le contenu possédé : ACHETER
 -- inactif « TOUT OBTENU » ; refus ou échec : message sous le bouton. Pour l'admin et dans Studio, ouverture de test
--- gratuite en plus (#332, remote `OpenCrate`), sous ACHETER.
+-- gratuite en plus (#332, remote `OpenCrate`), sous ACHETER. Tenues (#543) : onglets CAISSES / TENUES de la vue
+-- d'ensemble, la caméra se retourne vers le portant ; un clic sur une tenue ouvre sa vue détail (OutfitShopPanel).
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -28,6 +29,7 @@ local LocalWallet = require(script.Parent.Parent.systems.inventory.LocalWallet)
 local CreditPackWindow = require(script.Parent.CreditPackWindow)
 local MenuPage = require(script.Parent.MenuPage)
 local MenuShot = require(script.Parent.MenuShot)
+local OutfitShopPanel = require(script.Parent.OutfitShopPanel)
 local PurchaseStatus = require(script.Parent.PurchaseStatus)
 local UIKit = require(script.Parent.UIKit)
 
@@ -142,16 +144,19 @@ local PACKS_SIZE = Vector2.new(124, 34)
 local shopColumn: Frame
 local shopVeil: Frame
 local overviewHints: Frame -- aide de la vitrine, hors de la colonne (bas de l'écran)
+local overviewTitle: { TextLabel }
+-- Vue d'ensemble montrée (#543) : la vitrine des caisses ou le portant des tenues, gardée d'une ouverture du shop à
+-- l'autre ; onglets CAISSES / TENUES sous le titre
+local section: "crates" | "outfits" = "crates"
+local sectionTabs: { [string]: { chip: TextLabel, choice: MenuShot.Choice } } = {}
+local TAB_Y = SUBTITLE_Y + 30
 local packButton: Frame
 -- Motifs de refus du serveur (CrateService), affichés sous ACHETER
 local REFUSALS = PurchaseStatus.labels({
-	busy = "ACHAT DÉJÀ EN COURS",
-	loading = "INVENTAIRE EN CHARGEMENT",
 	forbidden = "RÉSERVÉ",
 	unknown = "CAISSE INCONNUE",
 	empty = "CAISSE VIDE",
 	owned = "TOUT OBTENU",
-	insufficient = "CRÉDITS INSUFFISANTS",
 })
 local paintActions: () -> ()
 local paintPackButton: () -> () = function() end
@@ -390,6 +395,7 @@ local function openCrate(index: number)
 	end
 	current = index
 	view += 1
+	OutfitShopPanel.close()
 	overview.Visible = false
 	detail.Visible = true
 	paintDetail()
@@ -401,10 +407,58 @@ end
 local function openOverview()
 	view += 1
 	clearPreview()
+	OutfitShopPanel.close()
 	overview.Visible = true
 	detail.Visible = false
 	back.reset()
-	ShopScene.showOverview()
+	local outfits = section == "outfits"
+	setText(overviewTitle, if outfits then "TENUES" else "CAISSES")
+	if outfits then
+		setText(countLabel, "{n} EN VENTE  ·  ACHAT DIRECT, SANS TIRAGE", { n = #ShopScene.outfits() })
+	else
+		setText(countLabel, "{n} EN VENTE  ·  UNE PAR ARME ET PAR SÉRIE", { n = #ShopCatalog.CRATES })
+	end
+	-- Aide refaite : son action est liée à la langue (UIKit.keyHint), pas à réécrire par-dessus
+	for _, child in overviewHints:GetChildren() do
+		if child:IsA("GuiObject") then
+			child:Destroy()
+		end
+	end
+	UIKit.keyHint(
+		overviewHints,
+		1,
+		"CLIC",
+		if outfits then "VOIR LA TENUE ET ACHETER" else "VOIR LE CONTENU ET ACHETER"
+	)
+	for key, tab in sectionTabs do
+		local on = key == section
+		tab.chip.BackgroundTransparency = if on then 0 else 1
+		tab.chip.TextColor3 = if on then C.Ground else C.TextSoft
+		tab.choice.setEnabled(not on)
+	end
+	if outfits then
+		ShopScene.showRack()
+	else
+		ShopScene.showOverview()
+	end
+end
+
+-- Cette méthode permet de passer de la vitrine des caisses au portant des tenues (ou l'inverse) lorsque le joueur
+-- touche un onglet de la vue d'ensemble : la caméra se retourne en glissant.
+local function openSection(key: "crates" | "outfits")
+	section = key
+	openOverview()
+end
+
+-- Cette méthode permet d'ouvrir la vue détail d'une tenue (#543) lorsque le joueur la clique au portant : la colonne de
+-- la vue d'ensemble laisse place à celle de la tenue.
+local function openOutfit(index: number)
+	view += 1
+	clearPreview()
+	overview.Visible = false
+	detail.Visible = false
+	OutfitShopPanel.open(index)
+	paintPackButton()
 end
 
 -- Cette méthode permet de construire la vue d'ensemble (titre, nombre de caisses, aide en bas à gauche) lorsque l'écran
@@ -421,7 +475,7 @@ local function buildOverview(column: Frame, root: Frame)
 		Position = UDim2.fromOffset(EDGE, LABEL_Y),
 		Size = UDim2.fromOffset(200, LABEL_SIZE + 4),
 	}, 2)
-	label(overview, {
+	overviewTitle = label(overview, {
 		Name = "Title",
 		Text = "CAISSES",
 		FontFace = F.Display,
@@ -436,7 +490,42 @@ local function buildOverview(column: Frame, root: Frame)
 		Size = UDim2.fromOffset(COLUMN_WIDTH, 18),
 	})
 	countLabel = { text, shadow }
-	setText(countLabel, "{n} EN VENTE  ·  UNE PAR ARME ET PAR SÉRIE", { n = #ShopCatalog.CRATES })
+	-- Onglets CAISSES / TENUES (#543) : celui affiché en boîte ambre, l'autre en texte atténué cliquable
+	local tabs = UIKit.frame({
+		Name = "Sections",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(EDGE, TAB_Y),
+		Size = UDim2.fromOffset(COLUMN_WIDTH, 26),
+		Parent = overview,
+	})
+	UIKit.create("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, 6),
+		Parent = tabs,
+	})
+	for order, entry in { { key = "crates", text = "CAISSES" }, { key = "outfits", text = "TENUES" } } do
+		local chip = UIKit.tag(tabs, "Tab" .. order, order, C.Accent, C.TextSoft)
+		chip.BackgroundTransparency = 1
+		chip.TextColor3 = C.TextSoft
+		Locale.apply(chip, entry.text)
+		local key = entry.key :: "crates" | "outfits"
+		local choice = MenuShot.textChoice({
+			text = "",
+			font = F.Display,
+			size = UITheme.TextSize.Min,
+			color = C.TextSoft,
+			parent = chip,
+			action = function()
+				openSection(key)
+			end,
+		})
+		choice.button.Size = UDim2.fromScale(1, 1)
+		choice.button.Position = UDim2.new()
+		choice.button.AnchorPoint = Vector2.zero
+		sectionTabs[entry.key] = { chip = chip, choice = choice }
+	end
 	-- L'aide n'est pas dans la colonne (qui descend sous la barre de Roblox) : elle tient le bas de l'écran
 	local hints = UIKit.hintRow(root, {
 		Name = "OverviewHints",
@@ -941,6 +1030,16 @@ local function debugOpening()
 		openCrate(tonumber(index) :: number)
 		return
 	end
+	-- Tenues (#543) : « outfits » montre le portant, « outfit:N » la vue détail de la tenue N du portant
+	if value == "outfits" then
+		openSection("outfits")
+		return
+	end
+	local outfitIndex = string.match(value, "^outfit:(%d+)$")
+	if outfitIndex then
+		openOutfit(tonumber(outfitIndex) :: number)
+		return
+	end
 	local skinId, rarityId, refundText = string.match(value, "^([^|]+)|([^|]+)|(%d+)$")
 	if not skinId then
 		skinId, rarityId = string.match(value, "^([^|]+)|([^|]+)$")
@@ -973,10 +1072,11 @@ paintPackButton = function()
 	end
 	packButton.Visible = gui.Enabled
 		and requesting == nil
+		and not OutfitShopPanel.isBusy()
 		and (CreditPacks.isReady() or RunService:IsStudio())
 		and LocalWallet.restricted() == false
 		and not CreditPackWindow.isOpen()
-		and (overview.Visible or detail.Visible)
+		and (overview.Visible or detail.Visible or OutfitShopPanel.isVisible())
 end
 
 -- Cette méthode permet de fermer la fenêtre des packs et de rendre la salle et la colonne du shop lorsque le joueur
@@ -993,7 +1093,7 @@ end
 -- Cette méthode permet d'ouvrir la fenêtre des packs (#395) lorsque le joueur clique « + CRÉDITS » : la colonne du shop
 -- se masque (elle chevaucherait le bloc centré) et la salle ne réagit plus à la souris ; refusé pendant une demande.
 local function openPacks()
-	if requesting or ShopScene.isOpening() or CreditPackWindow.isOpen() then
+	if requesting or OutfitShopPanel.isBusy() or ShopScene.isOpening() or CreditPackWindow.isOpen() then
 		return
 	end
 	CreditPackWindow.show()
@@ -1065,6 +1165,9 @@ function ShopScreen.init()
 		UIKit.frame({ Name = "Column", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Parent = root })
 	buildOverview(shopColumn, root)
 	buildDetail(shopColumn)
+	OutfitShopPanel.build(shopColumn, openOverview, function()
+		paintPackButton()
+	end)
 	-- Dans la colonne : masquée avec elle sous la fenêtre des packs
 	buildPreviewHints(shopColumn)
 	buildReveal(shopColumn, root)
@@ -1072,6 +1175,7 @@ function ShopScreen.init()
 	MenuPage.followTopbar(root, shopColumn)
 	CreditPackWindow.init(closePacks)
 	ShopScene.onCrateClicked(openCrate)
+	ShopScene.onOutfitClicked(openOutfit)
 	paintActions()
 	Players.LocalPlayer:GetAttributeChangedSignal("Role"):Connect(paintActions)
 	-- Skin obtenu (achat, ouverture de test, autre serveur) : TOUT OBTENU peut changer
@@ -1127,6 +1231,8 @@ function ShopScreen.analyticsScreen(): string?
 		return AnalyticsRules.Screen.CRATE_OPENING
 	elseif detail and detail.Visible then
 		return AnalyticsRules.Screen.SHOP_DETAIL
+	elseif OutfitShopPanel.isVisible() then
+		return AnalyticsRules.Screen.SHOP_OUTFIT
 	end
 	return AnalyticsRules.Screen.SHOP
 end
@@ -1142,6 +1248,7 @@ function ShopScreen.hide()
 	roomVeilShow += 1
 	roomVeil.Visible = false
 	clearPreview()
+	OutfitShopPanel.close()
 	closePacks()
 	ShopScene.stop()
 end

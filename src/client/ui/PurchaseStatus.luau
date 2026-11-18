@@ -11,12 +11,24 @@ local PurchaseStatus = {}
 local STATUS_TIME = 3 -- s d'affichage d'un message
 local FALLBACK = "ÉCHEC"
 
--- Libellés des motifs communs aux deux écrans (CrateService, ReceiptService)
+-- Libellés des motifs communs aux écrans d'achat (CrateService, OutfitService, ReceiptService) ; un écran peut en
+-- remplacer un (packs : `loading` dit que la sauvegarde manque)
 PurchaseStatus.REFUSALS = {
 	rate = "PATIENTE",
 	region = "INDISPONIBLE DANS TA RÉGION",
 	-- Pas « rien n'est débité » : une écriture passée dont la vérification échoue est aussi `failed` (InventoryStore)
 	failed = "ACHAT IMPOSSIBLE  ·  RÉESSAIE PLUS TARD",
+	busy = "ACHAT DÉJÀ EN COURS",
+	loading = "INVENTAIRE EN CHARGEMENT",
+	insufficient = "CRÉDITS INSUFFISANTS",
+}
+
+-- Libellés propres à l'achat d'une tenue au portant (#543, OutfitService), passés à `labels` par la vue détail d'une
+-- tenue (OutfitShopPanel)
+PurchaseStatus.OUTFIT_REFUSALS = {
+	unknown = "TENUE INCONNUE",
+	unavailable = "PAS EN VENTE",
+	owned = "DÉJÀ POSSÉDÉE",
 }
 
 -- Cette méthode permet de construire la table de libellés d'un écran lorsqu'il charge : les libellés communs, puis ses

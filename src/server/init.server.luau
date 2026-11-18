@@ -27,6 +27,7 @@ local CreditGains = require(script.CreditGains)
 local SettingsStore = require(script.SettingsStore)
 local InventoryStore = require(script.InventoryStore)
 local CrateService = require(script.CrateService)
+local OutfitService = require(script.OutfitService)
 local PaidRandomPolicy = require(script.PaidRandomPolicy)
 local ReceiptService = require(script.ReceiptService)
 local Roles = require(script.Roles)
@@ -108,6 +109,10 @@ openCrateRmt.Parent = ReplicatedStorage
 local buyCrateRmt = Instance.new("RemoteFunction")
 buyCrateRmt.Name = N.BUY_CRATE
 buyCrateRmt.Parent = ReplicatedStorage
+-- Achat d'une tenue au portant du shop (#543) : RemoteFunction, le client attend l'écriture (débit et tenue)
+local buyOutfitRmt = Instance.new("RemoteFunction")
+buyOutfitRmt.Name = N.BUY_OUTFIT
+buyOutfitRmt.Parent = ReplicatedStorage
 -- Pack de crédits en Robux (#395) : RemoteFunction, le serveur ouvre le prompt Roblox (refusé à un joueur restreint)
 local buyCreditPackRmt = Instance.new("RemoteFunction")
 buyCreditPackRmt.Name = N.BUY_CREDIT_PACK
@@ -156,6 +161,10 @@ PaidRandomPolicy.init()
 -- Analytics (#527) : chaque achat traité, avec le solde après l'achat
 CrateService.init(openCrateRmt, buyCrateRmt, function(player, crateId, result, price)
 	Analytics.crateBought(player, crateId, result, price, WalletStore.balance(player))
+end)
+-- Tenues au portant du shop (#543) : achat direct en crédits ; analytics de chaque achat traité, solde après l'achat
+OutfitService.init(buyOutfitRmt, function(player, outfitId, result)
+	Analytics.outfitBought(player, outfitId, result, WalletStore.balance(player))
 end)
 -- Packs de crédits en Robux (#395) : seul callback ProcessReceipt du jeu, prompt d'achat ouvert par le serveur
 ReceiptService.init(buyCreditPackRmt, {

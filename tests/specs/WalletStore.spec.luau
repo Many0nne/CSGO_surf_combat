@@ -229,6 +229,7 @@ return function(T, Loader)
 			-- Chargé ici, hors coroutine : la lecture d'un module par Lune cède la main à son propre ordonnanceur, qu'une
 			-- coroutine reprise par l'horloge simulée n'attend pas
 			Crates = loader:require("src/server/CrateService"),
+			Outfits = loader:require("src/server/OutfitService"),
 			Receipts = loader:require("src/server/ReceiptService"),
 			Policy = loader:require("src/server/PaidRandomPolicy"),
 		}
@@ -305,6 +306,16 @@ return function(T, Loader)
 			local state = { done = false, reply = nil }
 			sched.task.spawn(function()
 				state.reply = server.Crates.buy(player, crateId)
+				state.done = true
+			end)
+			return state
+		end
+		-- Cette méthode permet de lancer un achat de tenue (#543, OutfitService chargé sur ce serveur) dans sa propre
+		-- coroutine lorsqu'un test le demande ; renvoie un état rempli à la fin (`done`, `reply`).
+		function server.buyOutfit(player, outfitId: string)
+			local state = { done = false, reply = nil }
+			sched.task.spawn(function()
+				state.reply = server.Outfits.buy(player, outfitId)
 				state.done = true
 			end)
 			return state
@@ -1398,6 +1409,177 @@ return function(T, Loader)
 			T.expectEqual(alice.attributes.Credits, START + 200)
 			T.expectEqual(server.Inventory.owned(alice)["skin.awp.mue"], true)
 			T.expectEqual(ds.writes, 0, "jamais écrit")
+		end)
+	end)
+
+	T.describe("Achat de tenue (#543, OutfitService.buy)", function()
+		-- Tenue en vente sur main (prix lu au catalogue, comme le fait le serveur)
+		local OUTFIT = "outfit.mercure"
+		local PRICE = 2500
+
+		T.it("achat : solde exact débité et tenue donnée en une écriture, réponse après l'écriture", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 2000, 1000)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			ds.latency = 1
+			local buy = server.buyOutfit(alice, OUTFIT)
+			T.expect(not buy.done, "attend l'écriture")
+			sched.advance(1)
+			T.expect(buy.done)
+			T.expectEqual(buy.reply.ok, true)
+			T.expectEqual(buy.reply.outfitId, OUTFIT)
+			T.expectEqual(buy.reply.rarity, "exceptional")
+			T.expectEqual(buy.reply.price, PRICE)
+			T.expectEqual(ds.writes, 1, "une seule écriture")
+			T.expectEqual(storedWallet(ds, 1).purchased, 0, "achetés d'abord")
+			T.expectEqual(storedWallet(ds, 1).earned, 500)
+			T.expectEqual(storedBalance(ds, 1), 3000 - PRICE, "solde exact")
+			T.expect(storedHas(ds, 1, OUTFIT), "tenue écrite avec le débit")
+			T.expectEqual(server.Inventory.owned(alice)[OUTFIT], true, "possédée tout de suite (onglet TENUE)")
+			T.expectEqual(alice.attributes.Credits, 3000 - PRICE)
+		end)
+
+		T.it("double clic : le second achat est refusé `busy`, un seul débit", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 9000)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			ds.latency = 1
+			local first = server.buyOutfit(alice, OUTFIT)
+			local second = server.buyOutfit(alice, OUTFIT)
+			T.expect(second.done, "refusé tout de suite")
+			T.expectEqual(second.reply.reason, "busy")
+			sched.advance(2)
+			T.expectEqual(first.reply.ok, true)
+			T.expectEqual(storedBalance(ds, 1), 9000 - PRICE, "un seul débit")
+			-- Le tour est rendu : un nouvel achat de la même tenue est refusé `owned`, sans écriture
+			local writes = ds.writes
+			local third = server.buyOutfit(alice, OUTFIT)
+			sched.advance(2)
+			T.expectEqual(third.reply.reason, "owned")
+			T.expectEqual(ds.writes, writes, "rien d'écrit")
+			T.expectEqual(storedBalance(ds, 1), 9000 - PRICE)
+		end)
+
+		T.it("écrit mais réponse perdue (rejeu) : débité une fois, possédée, verdict neutre", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 3000)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			ds.commitThenFail = 1
+			local buy = server.buyOutfit(alice, OUTFIT)
+			sched.advance(10)
+			T.expect(buy.done)
+			T.expectEqual(buy.reply.ok, true)
+			T.expectEqual(buy.reply.outfitId, OUTFIT)
+			T.expectEqual(buy.reply.replayed, true)
+			T.expectEqual(buy.reply.price, nil, "aucune dépense incertaine comptée")
+			T.expectEqual(storedBalance(ds, 1), 3000 - PRICE, "débité une seule fois")
+			T.expectEqual(#ds.data["1"].items, 1)
+			T.expectEqual(server.Inventory.owned(alice)[OUTFIT], true)
+		end)
+
+		T.it("déjà possédée (session) : refus `owned` avant toute écriture", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 9000, 0, { OUTFIT })
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			local buy = server.buyOutfit(alice, OUTFIT)
+			T.expectEqual(buy.reply.ok, false)
+			T.expectEqual(buy.reply.reason, "owned")
+			T.expectEqual(ds.writes, 0)
+			T.expectEqual(storedBalance(ds, 1), 9000)
+		end)
+
+		T.it(
+			"achetée entre-temps sur un autre serveur : `owned`, rien de débité, possédée dans la session",
+			function()
+				local sched = makeScheduler()
+				local ds = makeDataStore(sched)
+				seed(ds, 1, 9000)
+				local server = makeServer(sched, ds)
+				local alice = server.join(1)
+				seed(ds, 1, 6500, 0, { OUTFIT })
+				T.expectEqual(server.Inventory.owned(alice)[OUTFIT], nil, "la session ne le sait pas encore")
+				local buy = server.buyOutfit(alice, OUTFIT)
+				T.expectEqual(buy.reply.ok, false)
+				T.expectEqual(buy.reply.reason, "owned")
+				T.expectEqual(storedBalance(ds, 1), 6500, "pas de second débit")
+				T.expectEqual(#ds.data["1"].items, 1)
+				-- Sans quoi l'onglet TENUE refuserait de l'équiper (`not_owned`, journalisé) jusqu'à la session suivante
+				T.expectEqual(server.Inventory.owned(alice)[OUTFIT], true, "items stockés relus par l'écriture")
+				T.expectEqual(alice.attributes.Credits, 6500, "solde publié recalé")
+			end
+		)
+
+		T.it("deux serveurs achètent la même tenue en même temps : un seul débit", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 9000)
+			local serverA = makeServer(sched, ds)
+			local serverB = makeServer(sched, ds)
+			local onA = serverA.join(1)
+			local onB = serverB.join(1)
+			ds.latency = 1
+			local buyA = serverA.buyOutfit(onA, OUTFIT)
+			local buyB = serverB.buyOutfit(onB, OUTFIT)
+			sched.advance(5)
+			T.expect(buyA.done and buyB.done)
+			local passed = (if buyA.reply.ok then 1 else 0) + (if buyB.reply.ok then 1 else 0)
+			T.expectEqual(passed, 1)
+			local refused = if buyA.reply.ok then buyB.reply else buyA.reply
+			T.expectEqual(refused.reason, "owned")
+			T.expectEqual(storedBalance(ds, 1), 9000 - PRICE)
+			T.expectEqual(#ds.data["1"].items, 1, "une seule tenue")
+		end)
+
+		T.it("solde stocké insuffisant : refus, rien d'écrit, rien donné", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, PRICE - 1)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			local buy = server.buyOutfit(alice, OUTFIT)
+			T.expectEqual(buy.reply.reason, "insufficient")
+			T.expectEqual(ds.writes, 0)
+			T.expectEqual(storedBalance(ds, 1), PRICE - 1)
+			T.expectEqual(server.Inventory.owned(alice)[OUTFIT], nil)
+		end)
+
+		T.it("écriture en échec : `failed`, rien débité, rien donné", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 3000)
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			ds.failures = 4 -- trois essais d'écriture, puis la lecture de vérification
+			local buy = server.buyOutfit(alice, OUTFIT)
+			sched.advance(10)
+			T.expect(buy.done)
+			T.expectEqual(buy.reply.reason, "failed")
+			T.expectEqual(buy.reply.outfitId, nil, "rien de révélé")
+			T.expectEqual(storedBalance(ds, 1), 3000)
+			T.expect(not storedHas(ds, 1, OUTFIT))
+			T.expectEqual(server.Inventory.owned(alice)[OUTFIT], nil)
+		end)
+
+		T.it("inventaire pas chargé, tenue inconnue ou pas une tenue : refus sans écriture", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 9000)
+			ds.latency = 5
+			local server = makeServer(sched, ds)
+			local alice = server.join(1)
+			T.expectEqual(server.buyOutfit(alice, OUTFIT).reply.reason, "loading")
+			sched.advance(5)
+			T.expectEqual(server.buyOutfit(alice, "outfit.inconnue").reply.reason, "unknown")
+			T.expectEqual(server.buyOutfit(alice, "weapon.m9bayonet").reply.reason, "unknown")
+			T.expectEqual(ds.writes, 0)
 		end)
 	end)
 
