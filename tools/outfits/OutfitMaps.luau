@@ -13,14 +13,28 @@ OutfitMaps.KINDS = {
 	RoughnessMapContent = "Rough",
 }
 
--- Cette méthode permet de donner l'atlas (groupe de r15_bake) d'une pièce du rig lorsqu'on pose ou vérifie ses cartes.
-function OutfitMaps.groupOf(part: string): string
-	if string.find(part, "Torso") then
-		return "Torso"
-	end
-	local side = if string.sub(part, 1, 4) == "Left" then "Left" else "Right"
-	local limb = if string.find(part, "Arm") or string.find(part, "Hand") then "Arm" else "Leg"
-	return side .. limb
+-- Pièce du rig -> atlas (groupe de r15_bake.PARTS)
+local GROUPS = {
+	UpperTorso = "Torso",
+	LowerTorso = "Torso",
+	LeftUpperArm = "LeftArm",
+	LeftLowerArm = "LeftArm",
+	LeftHand = "LeftArm",
+	RightUpperArm = "RightArm",
+	RightLowerArm = "RightArm",
+	RightHand = "RightArm",
+	LeftUpperLeg = "LeftLeg",
+	LeftLowerLeg = "LeftLeg",
+	LeftFoot = "LeftLeg",
+	RightUpperLeg = "RightLeg",
+	RightLowerLeg = "RightLeg",
+	RightFoot = "RightLeg",
+}
+
+-- Cette méthode permet de donner l'atlas (groupe de r15_bake) d'une pièce du rig lorsqu'on pose ou vérifie ses cartes ;
+-- nil pour un nom qui n'est pas une pièce du rig.
+function OutfitMaps.groupOf(part: string): string?
+	return GROUPS[part]
 end
 
 return OutfitMaps

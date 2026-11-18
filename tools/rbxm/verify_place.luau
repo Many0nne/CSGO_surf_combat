@@ -448,7 +448,7 @@ for _, name in rbxmNames("assets/rbx/Outfits") do
 		if not (appearance and appearance:IsA("SurfaceAppearance")) then
 			fail("Outfits." .. name .. "." .. partName .. " absent ou pas une SurfaceAppearance")
 		else
-			local maps = expectedMaps(expected, name, "R15", OutfitMaps.groupOf(partName))
+			local maps = expectedMaps(expected, name, "R15", OutfitMaps.groupOf(partName) :: string)
 			checkOutfitMaps(appearance, "Outfits." .. name .. "." .. partName, maps)
 		end
 	end

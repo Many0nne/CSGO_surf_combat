@@ -377,6 +377,8 @@ def bake_atlas(outfit, variant, out_dir, size, group, meshes):
 		metal[iy, ix] = s["metal"]
 		rough[iy, ix] = s["rough"]
 		filled[iy, ix] = True
+	if not filled.any():
+		raise SystemExit(f"[r15_bake] {variant} {group} : aucun texel couvert (mesh vide ou UV hors de la carte)")
 	normal[~filled] = (0.5, 0.5, 1.0)
 	passes = size // 8 if head else 8  # coque : combler aussi la couture du dépliage (triangles écartés)
 	maps = {
@@ -550,8 +552,8 @@ def main():
 		raise SystemExit(f"[r15_bake] --groups : groupes inconnus ou vides ({', '.join(sorted(unknown))})")
 	has_head = getattr(outfit, "HEAD", False)
 	wants_head = groups is None or "Head" in groups
-	if args.head and not has_head:
-		raise SystemExit(f"[r15_bake] {args.outfit} n'a pas de coque (HEAD absent) : --head refusé")
+	if (args.head or (groups and "Head" in groups)) and not has_head:
+		raise SystemExit(f"[r15_bake] {args.outfit} n'a pas de coque (HEAD absent) : --head et --groups Head refusés")
 	if has_head and wants_head and not args.head:
 		# sans elle, les anciennes cartes de la coque resteraient en place, désaccordées du corps
 		raise SystemExit("[r15_bake] la tenue a une coque (HEAD = True) : --head manque (ou --groups sans Head)")

@@ -39,17 +39,22 @@ end
 local outfit = source:Clone()
 outfit.Name = name
 local count = 0
+local hasHead = false
 for _, child in outfit:GetChildren() do
 	if child:IsA("SurfaceAppearance") then
-		apply(child, ids.R15[OutfitMaps.groupOf(child.Name)])
+		local group = OutfitMaps.groupOf(child.Name)
+		assert(group, "SurfaceAppearance " .. child.Name .. " : pas une pièce du rig")
+		apply(child, ids.R15[group])
 		count += 1
 	elseif child:IsA("MeshPart") and child.Name == "Head" then
 		local appearance = child:FindFirstChildOfClass("SurfaceAppearance")
 		assert(appearance, "coque sans SurfaceAppearance dans " .. template)
 		apply(appearance, ids.Head and ids.Head.Head)
+		hasHead = true
 	end
 end
 assert(count == 14, "14 SurfaceAppearance attendues, " .. count .. " trouvées")
+assert(hasHead or not ids.Head, "ids.json publie une coque, mais le modèle " .. template .. " n'en a pas")
 
 local out = "assets/rbx/Outfits/" .. name .. ".rbxm"
 fs.writeFile(out, roblox.serializeModel({ outfit }))
