@@ -24,6 +24,7 @@ return function(T, Loader)
 		return env
 	end
 
+	-- Cette méthode permet de construire une réponse de refus lorsque la garde ou l'achat refuse.
 	local function refuse(reason: string)
 		return { ok = false, reason = reason }
 	end
@@ -92,6 +93,7 @@ return function(T, Loader)
 	end)
 
 	T.describe("PurchaseRemote.connect", function()
+		-- Cette méthode permet de créer un faux RemoteFunction lorsqu'un test branche `connect`.
 		local function remote()
 			return { Name = "BuyThing" }
 		end
