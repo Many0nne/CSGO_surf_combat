@@ -8,11 +8,13 @@
 --     que Roblox ignore dès qu'un StarterCharacter existe.
 --   • Tenue de personnage (#521) : par-dessus, les cartes d'une tenue achetée (`dress`), sans toucher aux pièces du rig
 --     (mêmes tailles, mêmes collisions, même hitbox).
+--   • Hitbox de la tête (#539) : boîte de `Head` ramenée à la tête affichée (HeadHitbox), affichage inchangé.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterPlayer = game:GetService("StarterPlayer")
 
 local CharacterConfig = require(ReplicatedStorage.Shared.CharacterConfig)
+local HeadHitbox = require(ReplicatedStorage.Shared.HeadHitbox)
 local InventoryRules = require(ReplicatedStorage.Shared.InventoryRules)
 
 local CharacterAppearance = {}
@@ -230,8 +232,9 @@ end
 
 -- Cette méthode permet d'appliquer le skin commun à un personnage lorsqu'il spawn, côté serveur :
 -- couleurs du corps toujours, vêtements et visage seulement si un asset est configuré, puis la tenue `outfitId` (#521,
--- nil : d'origine).
+-- nil : d'origine). La boîte de la tête prend la taille de la tête affichée (HeadHitbox, #539).
 function CharacterAppearance.apply(model: Model, outfitId: string?)
+	HeadHitbox.fit(model)
 	local colors = replaceChild(model, "BodyColors", "Body Colors") :: BodyColors
 	colors.HeadColor3 = CharacterConfig.SKIN_COLOR
 	colors.TorsoColor3 = CharacterConfig.TORSO_COLOR
