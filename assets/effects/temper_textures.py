@@ -44,7 +44,9 @@ def ribbon(w=512, h=64):
 	rgb = (shade * 255).astype(np.uint8)
 	alpha = (inside * 255).astype(np.uint8)
 	img = Image.fromarray(np.dstack([rgb, rgb, rgb, alpha]), "RGBA")
-	return img.resize((w, h), Image.LANCZOS)
+	# Un Beam pose la HAUTEUR de l'image le long du rayon et sa LARGEUR en travers (vérifié en jeu) : dessinée à plat
+	# (torsions en x), la texture donnait deux rangées de losanges côte à côte, soit deux traits. Tournée d'un quart de tour.
+	return img.resize((w, h), Image.LANCZOS).transpose(Image.ROTATE_90)
 
 
 def flake(size=64):

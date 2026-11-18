@@ -102,7 +102,9 @@ par `ScaleTo` avec le reste de l'arme.
     franges claires qui défilent, front qui ondule (`temperKeypoints`, 16 points, Roblox en accepte 20). Écailles
     (`TemperFlakes`, texture `TEMPER_FLAKE_IMAGE`) : un ParticleEmitter en volume par tiers du rayon, chaque tiers aux
     couleurs du ruban à cet endroit, qui refroidissent jusqu'au bleu-gris en tombant. Textures :
-    `assets/effects/temper_textures.py`, publiées en Decal.
+    `assets/effects/temper_textures.py`, publiées en Decal. **Piège : un Beam pose la hauteur de son image le long du
+    rayon et sa largeur en travers.** La première texture, dessinée à plat (torsions côte à côte en x), donnait deux
+    rangées de losanges, soit deux traits parallèles en jeu : le ruban est donc dessiné debout (64 x 512).
     **Piège : un Beam à `Segments = 1` n'interpole sa `ColorSequence` qu'entre ses deux bouts** (bleu → paille en passant
     par le gris, violet et bronze invisibles) : TREMPE en a 20 (`TEMPER_SEGMENTS`). `LightEmission` 0,25 : plus haut, les
     couleurs sont lavées vers le blanc ; teintes plus saturées que le skin, qu'un Beam plat rend plus pâles.

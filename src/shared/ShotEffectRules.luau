@@ -62,7 +62,7 @@ ShotEffectRules.LIFETIME_MARGIN = 0.5
 ShotEffectRules.TEMPER_WIDTH = 0.3
 ShotEffectRules.TEMPER_LIFETIME = 0.3
 -- Textures (assets/effects/temper_textures.py), publiées en Decal : id de l'image contenue
-ShotEffectRules.TEMPER_RIBBON_IMAGE = "rbxassetid://80977441919695"
+ShotEffectRules.TEMPER_RIBBON_IMAGE = "rbxassetid://127964327625411"
 ShotEffectRules.TEMPER_FLAKE_IMAGE = "rbxassetid://77905204616866"
 ShotEffectRules.TEMPER_TWIST_LENGTH = 2.4
 ShotEffectRules.TEMPER_TWIST_SPEED = 2
