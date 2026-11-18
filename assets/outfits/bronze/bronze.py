@@ -22,6 +22,7 @@ BULGE = MERCURE.BULGE
 
 # Décor imaginaire reflété par le métal, puis par les parties polies (hauteur de la direction réfléchie -> couleur :
 # sol, bande sombre sous l'horizon, horizon, ciel, zénith), patine, part de patine et de poli
+HEAD = True  # coque de tête : mesh de la coque de MERCURE, avec sa propre carte
 VARIANTS = {
 	"poli": {
 		"env": [

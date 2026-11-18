@@ -1,6 +1,6 @@
 """CHITINE (#521, légendaire) : le corps devient une carapace biomécanique bleu-noir, humide et brillante (hommage à la
 créature du film de 1979 et aux planches biomécaniques de son dessinateur, sans en reprendre le crâne, la mâchoire ni
-la silhouette). Cuit par tools/outfits/r15_bake.py (--head : coque, cf. tools/outfits/head_obj.py).
+la silhouette). Cuit par tools/outfits/r15_bake.py (avec --head pour la coque de tête).
 
 Variante retenue (18/11/2026, à confirmer par l'utilisateur) : laque, reflets les plus larges, la plus lisible de
 loin. Gardées : nervure (relief plus fort, reflet plus fin), irise (reflet cyan-violet).
@@ -35,8 +35,8 @@ VARIANTS = {
 	"nervure": {"relief": 1.25, "gain": 0.9, "env": "laque"},
 	"irise": {"relief": 1.25, "gain": 0.9, "env": "irise"},
 }
-REJECTED_VARIANTS: dict = {}
 
+HEAD = True  # coque de tête : mesh de la coque de MERCURE, avec sa propre carte
 RELIEF = 0.065  # hauteur d'une côte, d'un tube (studs)
 GROOVE = 0.05  # profondeur d'un sillon entre deux plaques
 BULGE = 0.10  # bombé de chaque face
@@ -197,6 +197,8 @@ def limb(part, face, u, h):
 # Cette méthode permet de donner la surface de CHITINE en chaque point d'une pièce (relief, couleur, métal, rugosité)
 # lorsque r15_bake cuit un atlas ; `relief` et `groove` servent ensuite à `shade` (creux assombris).
 def surface(part, p, n, variant):
+	if part == "Head":
+		return head(p, variant)
 	cfg = VARIANTS[variant]
 	face, u, v = face_coords(p, n)
 	sides = (face == FRONT) | (face == BACK) | (face == LEFT) | (face == RIGHT)
@@ -239,7 +241,7 @@ def finish(relief, groove, bulge, cfg, side_light=0.8):
 
 # Cette méthode permet de donner la surface de la coque (crête au sommet, anneaux de nuque, symétrique d'avant en
 # arrière : l'orientation du mesh n'est pas vérifiée) lorsque r15_bake cuit la coque dans l'espace de la tête.
-def head_surface(p, n, variant):
+def head(p, variant):
 	x, y = p[:, 0], p[:, 1]
 	crest = tube(np.abs(x), 0.13) * smoothstep(0.45, 0.7, y)
 	rings, rgroove = plates(y, 0.2, phase=-1.0)

@@ -1,42 +1,42 @@
 {
  "Head": {
   "Head": {
-   "Color": "rbxassetid://118397791211104",
+   "Color": "rbxassetid://120795566220622",
    "Metal": "rbxassetid://129605393736368",
-   "Normal": "rbxassetid://101700870082132",
-   "Rough": "rbxassetid://89576449008495"
+   "Normal": "rbxassetid://138914404925283",
+   "Rough": "rbxassetid://117962346167705"
   }
  },
  "R15": {
   "LeftArm": {
-   "Color": "rbxassetid://122309499823270",
+   "Color": "rbxassetid://82706389373294",
    "Metal": "rbxassetid://129605393736368",
-   "Normal": "rbxassetid://132576529040418",
-   "Rough": "rbxassetid://112577309189984"
+   "Normal": "rbxassetid://106158590182075",
+   "Rough": "rbxassetid://104475295407894"
   },
   "LeftLeg": {
-   "Color": "rbxassetid://112288919088527",
+   "Color": "rbxassetid://101843962460659",
    "Metal": "rbxassetid://129605393736368",
-   "Normal": "rbxassetid://139524426416570",
-   "Rough": "rbxassetid://90638257290674"
+   "Normal": "rbxassetid://104592768354724",
+   "Rough": "rbxassetid://124867158255459"
   },
   "RightArm": {
-   "Color": "rbxassetid://133000268280059",
+   "Color": "rbxassetid://120161761093782",
    "Metal": "rbxassetid://129605393736368",
-   "Normal": "rbxassetid://104699975455045",
-   "Rough": "rbxassetid://112577309189984"
+   "Normal": "rbxassetid://89909652169288",
+   "Rough": "rbxassetid://104475295407894"
   },
   "RightLeg": {
-   "Color": "rbxassetid://79791820473109",
+   "Color": "rbxassetid://118793963436678",
    "Metal": "rbxassetid://129605393736368",
-   "Normal": "rbxassetid://129616424661750",
-   "Rough": "rbxassetid://105426866268458"
+   "Normal": "rbxassetid://102197699037890",
+   "Rough": "rbxassetid://74368861057566"
   },
   "Torso": {
-   "Color": "rbxassetid://87420574594710",
+   "Color": "rbxassetid://71124018033941",
    "Metal": "rbxassetid://107866460413953",
-   "Normal": "rbxassetid://86486953012045",
-   "Rough": "rbxassetid://82670901292417"
+   "Normal": "rbxassetid://105656917128045",
+   "Rough": "rbxassetid://78132327417307"
   }
  }
 }

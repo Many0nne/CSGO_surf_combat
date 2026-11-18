@@ -12,6 +12,7 @@ local fs = require("@lune/fs")
 local luau = require("@lune/luau")
 local process = require("@lune/process")
 local roblox = require("@lune/roblox")
+local serde = require("@lune/serde")
 
 local SpawnCheck = require("../map/SpawnCheck")
 
@@ -383,17 +384,54 @@ local OUTFIT_PARTS = {
 }
 local OUTFIT_MAPS = { "ColorMapContent", "NormalMapContent", "MetalnessMapContent", "RoughnessMapContent" }
 
--- Cette méthode permet de signaler une carte de tenue sans image lorsqu'on vérifie une SurfaceAppearance (une pièce
--- sans couleur ou sans normal map sortirait grise ou plate en jeu).
-local function checkOutfitMaps(appearance: Instance, label: string)
+local OUTFIT_KINDS = { ColorMapContent = "Color", NormalMapContent = "Normal", MetalnessMapContent = "Metal", RoughnessMapContent = "Rough" }
+
+-- Cette méthode permet de signaler une carte de tenue sans image, ou différente de l'image publiée de la variante
+-- retenue (`maps`, une entrée de ids.json), lorsqu'on vérifie une SurfaceAppearance (une pièce sans couleur sortirait
+-- grise ; un .rbxm pas refait après une nouvelle cuisson garderait les anciennes cartes).
+local function checkOutfitMaps(appearance: Instance, label: string, maps: { [string]: string }?)
 	for _, property in OUTFIT_MAPS do
 		local ok, value = pcall(function()
 			return (appearance :: any)[property]
 		end)
-		if not (ok and string.match(tostring(value), "rbxassetid://%d+")) then
+		local uri = if ok then string.match(tostring(value), "rbxassetid://%d+") else nil
+		local want = maps and maps[OUTFIT_KINDS[property]]
+		if not uri then
 			fail(label .. "." .. property .. " sans image")
+		elseif maps and uri ~= want then
+			fail(label .. "." .. property .. " = " .. uri .. ", ids.json de la variante retenue : " .. tostring(want))
 		end
 	end
+end
+
+-- Cette méthode permet de lire les ids publiés de la variante retenue d'une tenue (seul dossier de
+-- assets/outfits/<nom>/maps avec un ids.json) lorsqu'on compare un .rbxm à la dernière cuisson ; nil si absent.
+local function retainedIds(name: string): any
+	local dir = "assets/outfits/" .. name .. "/maps"
+	if not fs.isDir(dir) then
+		return nil
+	end
+	local found = {}
+	for _, variant in fs.readDir(dir) do
+		if fs.isFile(dir .. "/" .. variant .. "/ids.json") then
+			table.insert(found, dir .. "/" .. variant .. "/ids.json")
+		end
+	end
+	if #found ~= 1 then
+		fail("assets/outfits/" .. name .. " : " .. #found .. " variantes publiées (ids.json), une seule attendue")
+		return nil
+	end
+	return serde.decode("json", fs.readFile(found[1]))
+end
+
+-- Cette méthode permet de donner l'atlas (groupe de tools/outfits/r15_bake.py) d'une pièce du rig lorsqu'on cherche
+-- ses ids publiés.
+local function outfitGroup(part: string): string
+	if string.find(part, "Torso") then
+		return "Torso"
+	end
+	local side = if string.sub(part, 1, 4) == "Left" then "Left" else "Right"
+	return side .. (if string.find(part, "Arm") or string.find(part, "Hand") then "Arm" else "Leg")
 end
 
 local outfits = game.ReplicatedStorage:FindFirstChild("Outfits")
@@ -403,12 +441,14 @@ for _, name in rbxmNames("assets/rbx/Outfits") do
 		fail("ReplicatedStorage.Outfits." .. name .. " absent de la place")
 		continue
 	end
+	local expected = retainedIds(name)
 	for _, partName in OUTFIT_PARTS do
 		local appearance = outfit:FindFirstChild(partName)
 		if not (appearance and appearance:IsA("SurfaceAppearance")) then
 			fail("Outfits." .. name .. "." .. partName .. " absent ou pas une SurfaceAppearance")
 		else
-			checkOutfitMaps(appearance, "Outfits." .. name .. "." .. partName)
+			local maps = expected and expected.R15 and expected.R15[outfitGroup(partName)]
+			checkOutfitMaps(appearance, "Outfits." .. name .. "." .. partName, maps)
 		end
 	end
 	local head = outfit:FindFirstChild("Head")
@@ -417,17 +457,21 @@ for _, name in rbxmNames("assets/rbx/Outfits") do
 			fail("Outfits." .. name .. ".Head n'est pas une MeshPart")
 		elseif head.CanCollide or head.CanQuery or head.CanTouch or not head.Massless then
 			fail("Outfits." .. name .. ".Head doit être sans collision, ni requête, ni contact, et sans masse")
-		elseif not head:FindFirstChildOfClass("SurfaceAppearance") then
-			fail("Outfits." .. name .. ".Head sans SurfaceAppearance : la coque n'aurait pas la carte de la tenue")
 		end
 		local appearance = head:FindFirstChildOfClass("SurfaceAppearance")
 		if appearance then
-			checkOutfitMaps(appearance, "Outfits." .. name .. ".Head")
+			checkOutfitMaps(appearance, "Outfits." .. name .. ".Head", expected and expected.Head and expected.Head.Head)
 		else
 			fail("Outfits." .. name .. ".Head sans SurfaceAppearance (coque grise)")
 		end
 	end
 	print("Outfits." .. name .. " " .. summarize(outfit))
+end
+-- chaque tenue cuite (assets/outfits/<nom>/maps) a son dossier dans la place
+for _, name in fs.readDir("assets/outfits") do
+	if fs.isDir("assets/outfits/" .. name .. "/maps") and not fs.isFile("assets/rbx/Outfits/" .. name .. ".rbxm") then
+		fail("assets/outfits/" .. name .. " cuite mais sans assets/rbx/Outfits/" .. name .. ".rbxm")
+	end
 end
 
 -- ids d'assets : une animation, un mesh ou une matière sans texture est une erreur ; un son sans id est seulement

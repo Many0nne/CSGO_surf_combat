@@ -27,6 +27,7 @@ SHADOW = np.array([0.70, 0.74, 0.84])  # creux du vernis, bleutés
 COBALT = np.array([0.03, 0.075, 0.42])
 GOLD = np.array([0.92, 0.64, 0.22])
 
+HEAD = True  # coque de tête : mesh de la coque de MERCURE, avec sa propre carte
 VARIANTS = {
 	"filets": {"frame": True, "frieze": False, "chain": False, "gold": False},
 	"dense": {"frame": True, "frieze": True, "chain": True, "gold": False},

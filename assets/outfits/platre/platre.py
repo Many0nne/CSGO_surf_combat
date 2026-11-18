@@ -14,8 +14,6 @@ Variantes :
 Coordonnées : celles de r15_bake (studs, avant = -Z, gauche = -X) ; demi-tailles dans mercure.py.
 """
 
-import os
-
 import numpy as np
 from r15_bake import (
 	BACK,
@@ -27,17 +25,15 @@ from r15_bake import (
 	TOP,
 	face_coords,
 	lin,
-	load_outfit,
+	lit_relief,
+	mercure,
 	outline,
 	pillow,
-	preview_color,
 	segment,
 	smoothstep,
 )
 
-MERCURE = load_outfit(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "mercure", "mercure.py"), "mercure")
-
-
+MERCURE = mercure()
 
 VARIANTS = {
 	"lisse": {"lines": False, "joints": False, "anatomy": 1.0},
@@ -59,14 +55,12 @@ JOINT_SHADE = 0.55  # assombrissement au fond d'une rainure
 # Relief peint (vu en jeu le 18/11/2026 : sous la lumière douce du couchant, la normal map seule laissait un aplat gris
 # clair) : part du relief ombrée dans la couleur, lumière venue d'en haut
 PAINTED_RELIEF = 1.3
-# planche : le relief est déjà peint, Workbench n'y ajoute que la part de la normal map (sinon il compte double)
-PREVIEW_GAIN = 0.8
 
 
 # Cette méthode permet de peindre dans la couleur une part du relief ombré lorsque r15_bake connaît la normale en
 # relief : le plâtre mat se lit alors comme une sculpture, même sous une lumière douce.
 def shade(part, p, bumped, s, variant):
-	return preview_color(np.asarray(s["color"]), bumped, s["geo_normal"], PAINTED_RELIEF, 0.55, 1.25)
+	return lit_relief(np.asarray(s["color"]), bumped, s["geo_normal"], PAINTED_RELIEF, 0.55, 1.25)
 
 
 # Cette méthode permet de donner les traits de construction d'une étude d'atelier sur une pièce (0 à 1) lorsque la

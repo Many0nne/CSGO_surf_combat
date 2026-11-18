@@ -13,23 +13,28 @@ l'avant du personnage est -Z). Ce script trouve, pour chaque texel de l'atlas, l
 Le dossier <sortie>/<variante> se publie ensuite comme un skin d'arme (tools/skins/publish_skin.py).
 
 Une tenue peut aussi définir shade(part, p, normale en relief, surface, variante) -> couleur : le relief est alors
-connu, et la tenue peut peindre dans la couleur un reflet figé (chrome de MERCURE : Roblox ne reflète que le ciel).
+connu, et la tenue peut peindre dans la couleur un reflet figé (chrome de MERCURE : Roblox ne reflète que le ciel) ou
+une part du relief ombré (lit_relief : matières mates).
 
 Les pièces d'un même groupe se partagent un atlas (leurs UV ne se recouvrent pas) : Torso (UpperTorso, LowerTorso),
 LeftArm, RightArm (bras, avant-bras, main), LeftLeg, RightLeg (cuisse, jambe, pied). Les deux bras ont les mêmes UV,
 d'où un atlas par côté. La tête du rig est une pièce à SpecialMesh, sans UV : elle n'est pas cuite ici.
 
-Coque de tête (option --head) : la coque d'une tenue (MeshPart, cf. docs/assets.md) a ses propres UV. Exportée en JSON
-par tools/outfits/head_mesh.py, elle se cuit comme une pièce de plus, nommée « Head » (espace de la coque en studs,
-centrée), dans <sortie>/<variante>/Head/Head_*.png. Sa normal map reste plate : le JSON vient des axes du FBX.
+Deux défauts du rig sont corrigés à la cuisson (cf. docs/assets.md) : les faces cachées dans la pièce voisine qui
+partagent l'UV de la face avant sont cuites d'abord (la face visible l'emporte), et aux articulations les faces
+confondues de deux pièces peignent comme la pièce propriétaire (sinon leurs dessins scintillent).
+
+Coque de tête : une tenue qui pose `HEAD = True` reçoit aussi la pièce « Head » dans surface() (espace de la coque en
+studs, centrée). Le mesh de la coque (MeshPart, ses propres UV) est donné par --head, en JSON écrit par
+tools/outfits/head_mesh.py ; cartes dans <sortie>/<variante>/Head/Head_*.png. --groups Head ne cuit que la coque.
 
 Planche (option --rig-json) : écrit les meshs des pièces, placés au repos, pour tools/outfits/render_sheet.py.
 
 Meshs : téléchargés par Open Cloud (clé ROBLOX_OPEN_CLOUD_KEY, scope legacy-asset:manage), gardés dans <cache>.
 
 Usage (depuis la racine du worktree) :
-  uv run tools/outfits/r15_bake.py assets/outfits/mercure/mercure.py <sortie> [--size 1024] [--cache <dossier>]
-    [--variant <nom>] [--groups LeftArm,RightArm] [--head <coque.json>] [--rig-json <rig.json>]
+  uv run tools/outfits/r15_bake.py assets/outfits/bronze/bronze.py <sortie> [--size 1024] [--cache <dossier>]
+    [--variant <nom>] [--groups LeftArm,RightArm,Head] [--head <coque.json>] [--rig-json <rig.json>]
 """
 
 import argparse
@@ -120,7 +125,9 @@ def muscle(u, v, cu, cv, ru, rv, soft_top=0.6, soft_bottom=0.25):
 	x = (u - cu) / ru
 	y = (v - cv) / rv
 	d = np.hypot(x, y)
-	soft = np.where(y < 0, soft_bottom, soft_top)
+	# passage progressif d'un bord à l'autre : un changement net à mi-hauteur cassait la pente du relief (tirets clairs
+	# au milieu de chaque muscle dans la normal map, et dans la couleur des tenues qui peignent leur relief)
+	soft = soft_bottom + (soft_top - soft_bottom) * smoothstep(-0.2, 0.2, y)
 	edge = smoothstep(1.0, 1.0 - soft, d)
 	return edge * (0.2 + 0.8 * np.sqrt(np.clip(1 - d * d, 0, 1)))
 
@@ -174,6 +181,36 @@ def smoothstep(e0, e1, x):
 	return t * t * (3 - 2 * t)
 
 
+# Cette méthode permet de passer une couleur sRGB (celle qu'on lit à l'écran) en linéaire lorsqu'une tenue donne ses
+# couleurs, r15_bake travaillant en linéaire.
+def lin(r, g, b):
+	return np.array([r, g, b]) ** 2.2
+
+
+# Lumière du relief peint des matières mates (lit_relief) : venue d'en haut, un peu de la gauche du personnage (-X), et
+# de face pour chaque face
+RELIEF_LIGHT = np.array([-0.35, 1.0, 0.0])
+
+
+# Cette méthode permet d'ombrer dans la couleur une part du relief (lumière RELIEF_LIGHT, `gain` : force, bornée entre
+# `lo` et `hi`) lorsqu'une tenue mate doit garder ses muscles lisibles sous une lumière douce, dans son shade().
+def lit_relief(color, bumped, geo, gain, lo, hi):
+	light = RELIEF_LIGHT[None] + geo * 0.8
+	light /= np.linalg.norm(light, axis=1, keepdims=True)
+	detail = np.sum((bumped - geo) * light, axis=1)
+	return np.clip(color * np.clip(1 + gain * detail, lo, hi)[:, None], 0, 1)
+
+
+# Cette méthode permet de charger un module de tenue (qui importe ses outils depuis r15_bake) lorsqu'on cuit une tenue
+# ou qu'une tenue reprend l'anatomie de MERCURE.
+def load_outfit(path, name="outfit"):
+	sys.modules.setdefault("r15_bake", sys.modules[__name__])
+	spec = importlib.util.spec_from_file_location(name, path)
+	module = importlib.util.module_from_spec(spec)
+	spec.loader.exec_module(module)
+	return module
+
+
 _mercure = None
 
 
@@ -182,10 +219,7 @@ _mercure = None
 def mercure():
 	global _mercure
 	if _mercure is None:
-		path = os.path.join(HERE, "..", "..", "assets", "outfits", "mercure", "mercure.py")
-		spec = importlib.util.spec_from_file_location("mercure_anatomy", path)
-		_mercure = importlib.util.module_from_spec(spec)
-		spec.loader.exec_module(_mercure)
+		_mercure = load_outfit(os.path.join(HERE, "..", "..", "assets", "outfits", "mercure", "mercure.py"), "mercure")
 	return _mercure
 
 
@@ -303,10 +337,11 @@ def dilate(img, filled, passes=8):
 
 
 # Cette méthode permet de cuire l'atlas d'un groupe (pièces qui se le partagent) lorsqu'on cuit une variante ; `meshes`
-# est une liste de (nom de pièce, positions, normales, UV, triangles), `flat` garde une normal map plate.
-def bake_atlas(outfit, variant, out_dir, size, group, meshes, flat=False):
+# est une liste de (nom de pièce, positions, normales, UV, triangles) ; la coque (« Head ») n'a pas d'articulation.
+def bake_atlas(outfit, variant, out_dir, size, group, meshes):
 	os.makedirs(out_dir, exist_ok=True)
 	eps = 0.004
+	head = group == "Head"
 	color = np.zeros((size, size, 3))
 	normal = np.zeros((size, size, 3))
 	metal = np.zeros((size, size))
@@ -318,38 +353,32 @@ def bake_atlas(outfit, variant, out_dir, size, group, meshes, flat=False):
 		t, b = tangentize(r["t"], n), tangentize(r["b"], n)
 		# Aux articulations, deux pièces ont des faces confondues : chacune y peint comme la pièce propriétaire, fixée
 		# au texel (les points décalés du calcul de la normale gardent la même), sinon leurs dessins scintilleraient.
-		owner = None if flat else owners(name, p, n)
+		owner = np.full(len(p), name, dtype=object) if head else owners(name, p, n)
 
 		# Cette méthode permet de lire la surface de la tenue aux points `q` du texel lorsqu'on cuit ses cartes.
 		def surf(q):
-			return outfit.surface(name, q, n, variant) if flat else as_owner(outfit.surface, name, q, (n,), variant, owner=owner)
+			return as_owner(outfit.surface, name, q, (n,), variant, owner=owner)
 
 		s = surf(p)
 		h0 = s["height"]
-		if flat:
-			nt = np.tile([0.0, 0.0, 1.0], (len(p), 1))
-		else:
-			ht = surf(p + t * eps)["height"]
-			hb = surf(p + b * eps)["height"]
-			nt = np.stack([-(ht - h0) / eps, -(hb - h0) / eps, np.ones_like(h0)], axis=1)
-			nt /= np.linalg.norm(nt, axis=1, keepdims=True)
+		ht = surf(p + t * eps)["height"]
+		hb = surf(p + b * eps)["height"]
+		nt = np.stack([-(ht - h0) / eps, -(hb - h0) / eps, np.ones_like(h0)], axis=1)
+		nt /= np.linalg.norm(nt, axis=1, keepdims=True)
 		iy, ix = r["iy"], r["ix"]
 		if hasattr(outfit, "shade"):
 			# normale en relief dans l'espace de la pièce, pour une tenue qui peint son reflet dans la couleur
 			bumped = nt[:, :1] * t + nt[:, 1:2] * b + nt[:, 2:] * n
 			bumped /= np.linalg.norm(bumped, axis=1, keepdims=True)
 			s["geo_normal"] = n
-			if flat:
-				s["color"] = outfit.shade(name, p, bumped, s, variant)
-			else:
-				s["color"] = as_owner(outfit.shade, name, p, (bumped, s), variant, owner=owner)
+			s["color"] = as_owner(outfit.shade, name, p, (bumped, s), variant, owner=owner)
 		color[iy, ix] = s["color"]
 		normal[iy, ix] = nt * 0.5 + 0.5
 		metal[iy, ix] = s["metal"]
 		rough[iy, ix] = s["rough"]
 		filled[iy, ix] = True
 	normal[~filled] = (0.5, 0.5, 1.0)
-	passes = size // 8 if flat else 8  # coque : combler aussi la couture du dépliage (triangles écartés)
+	passes = size // 8 if head else 8  # coque : combler aussi la couture du dépliage (triangles écartés)
 	maps = {
 		"Color": dilate(color, filled, passes),
 		"Normal": dilate(normal, filled, passes),
@@ -468,7 +497,9 @@ def _assign(out, mask, res):
 # Cette méthode permet de cuire toutes les cartes d'une variante (un atlas par groupe, puis la coque) lorsqu'on lance le
 # script ; triangles cachés cuits d'abord, pour que les faces visibles qui partagent leurs UV l'emportent.
 def bake(outfit, variant, out_dir, size, cache, key, groups=None, head=None):
-	for group in groups or GROUPS:
+	for group in GROUPS if groups is None else groups:
+		if group == "Head":
+			continue
 		hidden, visible = [], []
 		for name, (_, _, g) in PARTS.items():
 			if g != group:
@@ -478,8 +509,8 @@ def bake(outfit, variant, out_dir, size, cache, key, groups=None, head=None):
 			hidden.append((name, pos, nrm, uv, tris[mask]))
 			visible.append((name, pos, nrm, uv, tris[~mask]))
 		bake_atlas(outfit, variant, os.path.join(out_dir, "R15"), size, group, hidden + visible)
-	if head:
-		bake_atlas(outfit, variant, os.path.join(out_dir, "Head"), size // 2, "Head", [("Head", *load_head(head))], True)
+	if head and (groups is None or "Head" in groups):
+		bake_atlas(outfit, variant, os.path.join(out_dir, "Head"), size // 2, "Head", [("Head", *load_head(head))])
 
 
 # Cette méthode permet d'écrire les meshs des pièces placés au repos (positions en studs depuis la racine, UV,
@@ -499,6 +530,8 @@ def export_rig(path, cache, key, head=None):
 	print(f"[r15_bake] rig -> {path}")
 
 
+# Cette méthode permet de cuire les variantes demandées d'une tenue (corps, puis coque si la tenue en a une) lorsqu'on
+# lance le script en ligne de commande ; refuse une coque demandée à une tenue qui n'en a pas.
 def main():
 	ap = argparse.ArgumentParser()
 	ap.add_argument("outfit")
@@ -506,19 +539,26 @@ def main():
 	ap.add_argument("--size", type=int, default=1024)
 	ap.add_argument("--cache", default=os.path.join(os.environ.get("TEMP", "/tmp"), "r15_meshes"))
 	ap.add_argument("--variant", action="append")
-	ap.add_argument("--groups", help="groupes à cuire, séparés par des virgules (défaut : tous)")
-	ap.add_argument("--head", help="coque de tête à cuire aussi (JSON de tools/outfits/head_mesh.py)")
+	ap.add_argument("--groups", help="groupes à cuire, séparés par des virgules, Head pour la coque (défaut : tous)")
+	ap.add_argument("--head", help="mesh de la coque de tête (JSON de tools/outfits/head_mesh.py)")
 	ap.add_argument("--rig-json", help="écrit aussi les meshs du rig au repos, pour la planche")
 	args = ap.parse_args()
-	spec = importlib.util.spec_from_file_location("outfit", args.outfit)
-	outfit = importlib.util.module_from_spec(spec)
-	sys.modules["r15_bake"] = sys.modules[__name__]
-	spec.loader.exec_module(outfit)
+	outfit = load_outfit(args.outfit)
+	groups = None if args.groups is None else [g for g in args.groups.split(",") if g]
+	unknown = set(groups or []) - set(GROUPS) - {"Head"}
+	if unknown or groups == []:
+		raise SystemExit(f"[r15_bake] --groups : groupes inconnus ou vides ({', '.join(sorted(unknown))})")
+	has_head = getattr(outfit, "HEAD", False)
+	wants_head = groups is None or "Head" in groups
+	if args.head and not has_head:
+		raise SystemExit(f"[r15_bake] {args.outfit} n'a pas de coque (HEAD absent) : --head refusé")
+	if has_head and wants_head and not args.head:
+		# sans elle, les anciennes cartes de la coque resteraient en place, désaccordées du corps
+		print("[r15_bake] ATTENTION : la tenue a une coque (HEAD = True) mais --head manque : coque non cuite")
 	key = os.environ["ROBLOX_OPEN_CLOUD_KEY"]
 	if args.rig_json:
 		export_rig(args.rig_json, args.cache, key, args.head)
 	for variant in args.variant or list(outfit.VARIANTS):
-		groups = args.groups.split(",") if args.groups else None
 		bake(outfit, variant, os.path.join(args.out, variant), args.size, args.cache, key, groups, args.head)
 
 

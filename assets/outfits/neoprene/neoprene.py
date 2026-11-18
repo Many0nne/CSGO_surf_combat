@@ -11,12 +11,10 @@ Variantes (deux couleurs au plus) : noir (corps noir, panneaux bleu canard), nui
 Coordonnées : celles de r15_bake (studs, avant = -Z, gauche = -X) ; demi-tailles dans mercure.py.
 """
 
-import os
-
 import numpy as np
-from r15_bake import BACK, FRONT, LEFT, RIGHT, TOP, face_coords, lin, load_outfit, pillow, preview_color, smoothstep
+from r15_bake import BACK, FRONT, LEFT, RIGHT, TOP, face_coords, lin, lit_relief, mercure, pillow, smoothstep
 
-MERCURE = load_outfit(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "mercure", "mercure.py"), "mercure")
+MERCURE = mercure()
 
 VARIANTS = {
 	# noir : anthracite plutôt que noir pur, sinon le relief disparaît sous la lumière du jeu
@@ -38,14 +36,12 @@ FAR = 9.0  # bord de panneau hors de la face (pas de couture sur l'arête du blo
 # Relief peint (vu en jeu le 18/11/2026 : côté ombre, l'anthracite tombait au noir et les muscles disparaissaient) :
 # part du relief ombrée dans la couleur, faible pour ne pas trop marquer la maille
 PAINTED_RELIEF = 0.6
-# planche : le relief est déjà peint, Workbench n'y ajoute que la part de la normal map (sinon il compte double)
-PREVIEW_GAIN = 0.8
 
 
 # Cette méthode permet de peindre dans la couleur une part du relief ombré lorsque r15_bake connaît la normale en
 # relief : muscles et coutures restent lisibles sur le néoprène sombre.
 def shade(part, p, bumped, s, variant):
-	return preview_color(np.asarray(s["color"]), bumped, s["geo_normal"], PAINTED_RELIEF, 0.7, 1.3)
+	return lit_relief(np.asarray(s["color"]), bumped, s["geo_normal"], PAINTED_RELIEF, 0.7, 1.3)
 
 
 # Cette méthode permet de donner la distance signée au bord d'un rectangle de face (négative dedans) lorsqu'une

@@ -739,196 +739,167 @@ par unité contre 250 à 300 pour les métaux) : les livrées y étaient floues.
 ## Tenues de personnage (#521)
 
 Une tenue habille le rig R15 en blocs commun (`StarterCharacter`) sans en changer la forme : mêmes pièces, mêmes
-tailles, même hitbox. Choix de l'utilisateur : on reste dans le style des blocs, la musculature est **dessinée** dans
-les cartes (pas de corps réaliste, cf. pistes rejetées). Une tenue = un item `outfit.<nom>` de `InventoryRules.ITEMS`
-(nom, `appearance`, `rarity`, `price`) et un dossier `assets/rbx/Outfits/<appearance>.rbxm`
-(`ReplicatedStorage.Outfits.<appearance>`) : une `SurfaceAppearance` par pièce du rig, nommée comme elle, et en option
-une `MeshPart` `Head` (coque de la tête : la tête du rig est une pièce à `SpecialMesh`, sans UV, qui ne prend pas de
-`SurfaceAppearance`). `CharacterAppearance.dress` copie le tout (`verify_place.luau` vérifie les 14 cartes et que la
-coque est sans collision, ni requête, ni contact, ni masse). Les bras des viewmodels portent les mêmes meshs que le rig
-(ids 1699715541…) : les mêmes cartes s'y posent (`CharacterAppearance.dressArms`).
+tailles, même hitbox. Choix de l'utilisateur : on reste dans le style des blocs, le corps est **changé en matière**
+(chrome, plâtre, carapace…) et la musculature est **dessinée** dans les cartes (pas de corps réaliste, cf. pistes
+rejetées). Une tenue = un item `outfit.<nom>` de `InventoryRules.ITEMS` (nom, `appearance`, `rarity`, `price`) et un
+dossier `assets/rbx/Outfits/<appearance>.rbxm` (`ReplicatedStorage.Outfits.<appearance>`) : une `SurfaceAppearance` par
+pièce du rig, nommée comme elle, et une `MeshPart` `Head` (coque de la tête : la tête du rig est une pièce à
+`SpecialMesh`, sans UV, qui ne prend pas de `SurfaceAppearance`). `CharacterAppearance.dress` copie le tout. Les bras
+des viewmodels portent les mêmes meshs que le rig (ids 1699715541…) : les mêmes cartes s'y posent
+(`CharacterAppearance.dressArms`).
 
-Fabrication (MERCURE, `assets/outfits/mercure/`) :
+| Tenue | Rareté, prix | Module, variante retenue | Matière |
+|---|---|---|---|
+| NÉOPRÈNE | commune, 600 | `neoprene`, `noir` | combinaison de surf anthracite, panneaux bleu canard (épaules, flancs, extérieur des jambes), coutures en relief à points réguliers, fermeture éclair dans le dos, genouillères quadrillées, cagoule en quatre panneaux ; anatomie de MERCURE à 45 % |
+| PLÂTRE | commune, 600 | `platre`, `lisse` | statue de plâtre blanc cassé très mat, creux entre les masses un peu plus sombres, coque lisse plus sombre en dessous |
+| BRONZE | rare, 1 200 | `bronze`, `patine` | reflet peint chaud et doux, vert-de-gris dans les creux, sommet des muscles et arêtes verticales polis |
+| PORCELAINE | rare, 1 200 | `porcelaine`, `dense` | vernis blanc, frises de rinceaux en bandes cobalt pleines à motif réservé en blanc, filets, quatre-feuilles sur les jambes, anneaux sur la coque |
+| MERCURE | exceptionnelle, 2 500 | `mercure`, `lisse` | chrome à reflet peint (coque peinte à part, dans Blender) |
+| CHITINE | légendaire, 5 000 | `chitine`, `laque` | carapace bleu-noir laquée : côtes autour du buste, sternum et colonne en vertèbres, tubes dorsaux par-dessus les épaules, membres en plaques à chevrons et câbles, coque à petite crête et anneaux de nuque |
 
-1. `uv run tools/outfits/r15_bake.py assets/outfits/mercure/mercure.py assets/outfits/mercure/maps` : télécharge les
-   meshs du rig (Open Cloud), et pour chaque texel de l'atlas demande à la tenue son relief, sa couleur, son métal et
-   sa rugosité, dans l'espace de la pièce en studs (avant = -Z, gauche = -X). Cinq atlas : Torso, LeftArm, RightArm
-   (mêmes UV des deux côtés), LeftLeg, RightLeg. La normal map vient de la pente du relief (convention OpenGL). Une
-   carte uniforme est écrite en 8 × 8.
-2. `uv run tools/skins/publish_skin.py assets/outfits/mercure/maps/lisse mercure` (deux fichiers identiques ne sont
-   publiés qu'une fois).
-3. Studio : dossier `ReplicatedStorage.Outfits.<nom>` construit avec les ids de `ids.json` (et la coque insérée par
-   `insert_asset`, PackageLink retiré), puis `lune run tools/rbxm/receive.luau Outfits` et `studio_export.luau` avec
-   `ONLY = "Outfits"` ; détruire ensuite la copie faite à la main (Rojo recrée la sienne depuis le `.rbxm`).
+Toutes reprennent la coque de MERCURE (même mesh) avec leur propre carte. Les variantes écartées restent dans les
+modules (`VARIANTS`) : une autre se cuit, se publie et se pose en quelques minutes.
 
-Coque de la tête de MERCURE : le mesh de la tête classique de Roblox (`content/avatar/heads/head.mesh` de
-l'installation de Studio, celui du `SpecialMesh` de type Head), à la taille où le rig l'affiche : 1,2 unité × 1,25
-(échelle du `SpecialMesh`) × 1,588 (taille de la pièce) / 1,2, soit 1,98 × 1,99 × 1,98 studs
-(`assets/outfits/mercure/MercureHead.fbx`, publié en Model 92982065353684). Carte de couleur cuite dans Blender
-(bandes du reflet selon la hauteur du point), sur un dépliage cylindrique refait (les UV d'origine de la tête,
-faites pour le visage, envoient l'arrière sur un bord : bandes noires). **Piège :** une première coque dessinée à la main (cylindre arrondi
-2,06 × 1,78) donnait une tête écrasée et élargie, refusée : partir du mesh d'origine. La tête du rig, cachée dessous,
-reste la zone de headshot ; la coque n'arrête aucun tir (mesuré : rayon au centre de la tête → `Head`, rayon au-dessus
-de la boîte de la tête → rien).
+### Fabrication (sans Studio)
 
-**Pièges :**
+Depuis la racine du worktree, `blender` = `"/c/Program Files/Blender Foundation/Blender 5.2/blender.exe"`, clé
+`ROBLOX_OPEN_CLOUD_KEY` dans l'environnement :
+
+1. **Module de tenue** `assets/outfits/<nom>/<nom>.py`, 2 ou 3 variantes (`VARIANTS`). `surface(part, p, n, variante)`
+   donne relief, couleur, métal et rugosité dans l'espace de la pièce en studs (avant = -Z, gauche = -X) ; `shade(...)`,
+   facultatif, peint dans la couleur ce qui dépend du relief (reflet figé, relief ombré). `HEAD = True` : la tenue reçoit
+   aussi la pièce `"Head"` (point dans l'espace de la coque, centrée). Helpers partagés de `r15_bake` : `face_coords`,
+   `muscle`, `dome`, `pillow`, `segment`, `outline`, `half_sizes`, `height_of` (dessin continu d'une pièce à l'autre),
+   `lin` (couleur sRGB → linéaire), `lit_relief` (relief ombré des matières mates), `mercure()` / `muscles` / `cavity`
+   (anatomie de MERCURE et ses creux).
+2. **Coque en JSON**, une fois : `blender -b --factory-startup --python tools/outfits/head_mesh.py --
+   assets/outfits/mercure/MercureHead.fbx head.json`.
+3. **Cuisson** : `uv run tools/outfits/r15_bake.py assets/outfits/<nom>/<nom>.py assets/outfits/<nom>/maps --head
+   head.json [--variant <v>] [--groups Torso,Head] [--rig-json rig.json]` : télécharge les meshs du rig (Open Cloud),
+   cuit cinq atlas (Torso, LeftArm, RightArm, LeftLeg, RightLeg ; mêmes UV des deux côtés) et la coque, dans
+   `<variante>/R15/` et `<variante>/Head/`. Normal map tirée de la pente du relief (convention OpenGL) ; carte uniforme
+   écrite en 8 × 8. Une tenue `HEAD = True` cuite sans `--head` le signale (la coque garderait ses anciennes cartes).
+   Environ une minute par variante en 1024.
+4. **Planche** (Workbench, quelques secondes) : `blender -b --factory-startup --python tools/outfits/render_sheet.py --
+   rig.json planche.png "MERCURE=assets/outfits/mercure/maps/lisse" "TITRE=<dossier de variante>" …` : rig au repos de
+   face, de trois quarts et de dos, une colonne par variante, même cadrage (`rig.json` : `--rig-json` de l'étape 3).
+   Workbench ne montre que la carte de couleur : le relief ne s'y lit que peint dans la couleur, la brillance pas du
+   tout. Comparer ensuite en jeu au même cadrage.
+5. **Publication** : `uv run tools/skins/publish_skin.py assets/outfits/<nom>/maps/<variante> <nom>`. Seules les cartes
+   absentes de `ids.json` sont publiées : pour une recuisson, retirer de `ids.json` les cartes qui changent. Ne garder
+   que le dossier de la variante retenue dans `maps/` (`verify_place` compare le `.rbxm` à son `ids.json`).
+6. **Dossier de la tenue** : `rojo build -o place.rbxl`, puis `lune run tools/outfits/make_rbxm.luau place.rbxl mercure
+   <nom> assets/outfits/<nom>/maps/<variante>/ids.json` : clone le dossier de MERCURE (cartes et coque avec toutes leurs
+   propriétés) et y pose les nouveaux ids. Les six dossiers ont la même structure et les mêmes propriétés.
+7. **Item** dans `InventoryRules.ITEMS`, puis `rojo build` et `lune run tools/rbxm/verify_place.luau <place>` : 14
+   cartes et coque présentes, ids égaux à ceux de `ids.json`, coque sans collision, requête, contact ni masse. Studio ne
+   sert plus qu'à vérifier en jeu.
+
+### Coque de la tête
+
+Mesh de la tête classique de Roblox (`content/avatar/heads/head.mesh` de l'installation de Studio, celui du
+`SpecialMesh` de type Head), à la taille où le rig l'affiche : 1,2 unité × 1,25 (échelle du `SpecialMesh`) × 1,588
+(taille de la pièce) / 1,2, soit 1,98 × 1,99 × 1,98 studs (`assets/outfits/mercure/MercureHead.fbx`, Model
+92982065353684), sur un dépliage cylindrique refait (les UV d'origine, faites pour le visage, envoient l'arrière sur un
+bord : bandes noires). La tête du rig, cachée dessous, reste la zone de headshot ; la coque n'arrête aucun tir (mesuré
+avec MERCURE, NÉOPRÈNE, PLÂTRE et CHITINE : rayon au centre de la tête → `Head`, rayon au-dessus de la boîte de la tête
+→ rien).
+
+- **Couture au milieu du visage.** Le dépliage met u = -angle/360 avec la couture devant : les triangles de la bande
+  de 10° au centre du visage vont de u = 0,976 à 0,024 et, cuits, traversaient toute la carte (bandes parasites sur la
+  coque de NÉOPRÈNE et de CHITINE avant l'outillage commun). `load_head` les écarte et la dilatation comble la bande :
+  un décor de coque ne dépend que de la hauteur et de |x| (anneaux, crête, coutures sur x = 0 et z = 0).
+- **Pas d'avant lisible.** La coque est presque symétrique d'un quart de tour, et seul le sens de `head_mesh.py`
+  (Y en haut, avant = -Z, comme l'importeur de Roblox) a servi : dessiner symétrique d'avant en arrière.
+- **Première coque refusée** : un cylindre arrondi dessiné à la main (2,06 × 1,78) donnait une tête écrasée et élargie.
+  Partir du mesh d'origine.
+
+### Pièges de cuisson (rig)
+
+- **Faces cachées qui partagent l'UV de la face avant** (dessus et biseaux de la jambe, cachés dans la cuisse ; idem
+  coude, poignet, cheville). Cuites après elle, elles l'écrasaient : haut et bas des jambes sans décor. `r15_bake` cuit
+  d'abord les triangles cachés dans une pièce voisine au repos (`hidden_triangles`).
+- **Pièces qui se recouvrent aux articulations** (bras et avant-bras sur 0,82 stud, cuisse et jambe sur 0,68, haut des
+  cuisses contre le bas du torse), faces confondues : un dessin qui change d'une pièce à l'autre y scintille. Chaque
+  point y est peint comme la pièce « propriétaire » (la première de `PARTS` qui le contient, face tournée du même côté :
+  `owners`, `as_owner`), et les tenues dessinent les membres selon la hauteur au-dessus de la racine (`height_of`).
+- **Dessin à l'extrémité d'une pièce = caché.** Le haut de l'avant-bras et de la jambe, le bas du bras et le pied sous
+  la jambe sont dans la pièce voisine : une rainure d'articulation, une rotule ou une couture de cheville n'y
+  apparaissent pas (variante `mannequin` de PLÂTRE presque illisible).
+- **`muscle()` à bord continu.** Son bord passait d'un coup de `soft_bottom` à `soft_top` à mi-hauteur : tiret clair au
+  milieu de chaque muscle dans la normal map et dans la couleur peinte. La transition est progressive depuis la série.
+- **MERCURE a été cuite avant ces corrections** (faces cachées, articulations, `muscle()`) : sa recuisson est suivie à
+  part (#551, #548). Les cinq autres tenues ont été recuites avec l'outillage commun le 18/11/2026 (écarts localisés aux
+  articulations, aux faces cachées, à la couture de la coque et au milieu des muscles ; dessin inchangé).
+- **Lune ne lit pas un `.rbxm` écrit par Studio** (`Folder.Tags` : « should be SharedString, but it was Tags ») : il
+  lit en revanche la place construite par Rojo, d'où le passage par `rojo build` dans `make_rbxm.luau`.
+
+### Pièges de matière
 
 - **Roblox ne fait refléter au métal que le ciel.** Un chrome uni (métal 1, rugosité 0,1) sort rose pâle et mat sur la
-  map (le ciel du couchant, sans le sol sombre) : aucun contraste. MERCURE peint donc son reflet dans la couleur
-  (`shade` du module de tenue : ciel clair, ligne d'horizon nette, sol sombre, lus selon la normale en relief, vue de
-  face) avec un tiers de métal seulement. Les reflets restent fixes quand on tourne autour : accepté par l'utilisateur.
-  Vérifié le 18/11/2026 sur des sphères : métal PBR (SurfaceAppearance, matériaux Metal et Foil) = ciel très flou,
-  gris rosé ; seule l'ancienne propriété `Reflectance` fait un vrai miroir (ciel, horizon, sol), mais elle est ignorée
-  sous une SurfaceAppearance (plus de muscles) et, sur les faces plates des blocs, chaque face ne reflète qu'une
-  direction (personnage brun foncé uni par face au couchant). Les deux montrés à l'utilisateur : reflet peint gardé.
-- **Faces planes en métal = miroirs uniformes.** Bomber légèrement chaque face (`pillow`) casse l'effet « boîte ».
-  Sur les jambes, bomber seulement en largeur : bombées aussi en hauteur, chaque pièce marquait une coupure au genou
-  (rejeté par l'utilisateur, avec les muscles dessinés des jambes).
-- **Muscles en plateaux = bulles.** Un relief à sommet plat se lit comme des boutons collés ; garder un sommet bombé
-  (`muscle`) et des masses larges qui se touchent.
+  map (le ciel du couchant, sans le sol sombre). MERCURE, BRONZE et CHITINE peignent donc leur reflet dans la couleur
+  (`shade` : décor imaginaire lu selon la normale en relief, vue de face) avec peu de métal. Les reflets restent fixes
+  quand on tourne autour : accepté par l'utilisateur. Vérifié le 18/11/2026 sur des sphères : métal PBR
+  (SurfaceAppearance, matériaux Metal et Foil) = ciel très flou, gris rosé ; seule l'ancienne propriété `Reflectance`
+  fait un vrai miroir, mais elle est ignorée sous une SurfaceAppearance et, sur les faces plates des blocs, chaque face
+  ne reflète qu'une direction.
+- **Faces planes en métal = miroirs uniformes.** Bomber légèrement chaque face (`pillow`) casse l'effet « boîte ». Sur
+  les jambes, bomber seulement en largeur : bombées aussi en hauteur, chaque pièce marquait une coupure au genou.
+- **Muscles en plateaux = bulles.** Garder un sommet bombé (`muscle`) et des masses larges qui se touchent.
+- **Éclairage peint fixe (lumière venant de l'avant)** : le dos sort noir. Peindre l'éclairage relatif à chaque face
+  (regard de face).
+- **Une matière mate ne vit pas de sa normal map.** Sous la lumière douce du couchant, PLÂTRE avec son seul relief en
+  normal map se lisait comme un aplat gris clair, et l'anthracite de NÉOPRÈNE tombait au noir côté ombre (vu en jeu le
+  18/11/2026). Les deux peignent une part de leur relief ombré dans la couleur (`lit_relief`, lumière venue d'en haut,
+  un peu de la gauche du personnage) : PLÂTRE à 1,3, NÉOPRÈNE à 0,6 (plus, la maille du jersey se marque).
+- **Le noir disparaît.** Un néoprène noir pur (sRGB 0,075) ne montre plus ni relief ni coutures : anthracite (0,15),
+  le contraste vient des panneaux.
+- **Blanc saturé à l'accueil.** À 0,87 (sRGB), la lumière chaude et le bloom de l'accueil saturaient le plâtre au
+  blanc : 0,76 garde un blanc cassé lisible partout.
+- **Traits fins illisibles de loin** : filets de 0,02 stud (PORCELAINE `filets`), traits de sanguine (PLÂTRE `atelier`).
+- **Reflet peint selon la seule hauteur = traits verticaux éteints.** Un câble vertical n'y prend aucune lumière et se
+  lit comme un trait noir. CHITINE ajoute deux bandes latérales, avec un seuil au-dessus de la pente du bombé des faces
+  (0,55 au bord d'un membre) : en dessous, chaque face entière s'allumait et la carapace paraissait délavée.
+- **Profil de tube en demi-cercle = contour seul éclairé** (des « poignées », des agrafes) : un profil parabolique
+  (`tube`, `bead` de CHITINE) met la ligne de lumière sur le haut du relief.
+- **Écarts constatés entre le jeu et la planche** : NÉOPRÈNE plus sombre côté ombre, maille plus visible ; PLÂTRE gris
+  rosé au crépuscule ; CHITINE noir et blanc plus que bleu-noir (vrai reflet du soleil à rugosité 0,12), liserés orangés
+  du couchant sur les bras, chevrons plus visibles. BRONZE et PORCELAINE pas encore vus en jeu.
+
+### Pièges Studio et jeu
+
 - **Studio garde l'échec d'une image tout juste publiée** (`AssetFetchStatus.Failure`), même une fois approuvée : il
   faut une autre id ou relancer Studio. Laisser une minute entre la publication et l'essai.
 - **Le visage du rig est retiré, pas caché**, sous une coque : le clip de fin remet la transparence des Decals à 0.
-- **Coude du viewmodel : faces superposées.** Avec l'AWP, le bras gauche est presque droit : les faces du bras et de
-  l'avant-bras (mêmes largeurs, même pivot) se superposent presque au coude, et deux dessins différents s'y disputent
-  l'affichage (scintillement, coupe en biais ; vu en jeu le 18/11/2026). Gris uni, c'était invisible. `dressArms`
-  amincit donc de 4 % les bras (épaule au coude) d'un viewmodel habillé ; l'avant-bras passe devant, net. Pistes
-  rejetées : effacer le dessin près du coude et donner aux bras de la 1re personne un chrome sans muscles (le chrome ne
-  se lisait plus, refusé), le défaut venant de la superposition et pas du dessin. Pas de doigts dessinés sur les mains
-  (jugés laids).
+- **Coude du viewmodel : faces superposées.** Avec l'AWP, le bras gauche est presque droit : bras et avant-bras se
+  superposent presque au coude et deux dessins s'y disputent l'affichage. `dressArms` amincit de 4 % les bras (épaule au
+  coude) d'un viewmodel habillé ; l'avant-bras passe devant, net. Pas de doigts dessinés sur les mains (jugés laids).
+- **Bots** : `outfitForName` répartit les noms sur l'origine et les tenues à chances égales (hachage modulo le nombre de
+  tenues + 1) ; chaque tenue ajoutée redistribue tout. Avec les six tenues, les 8 noms de `BotConfig.NAMES` donnent 2
+  PORCELAINE (Marcel, Odette), 2 MERCURE (Lucie, Lucien), 2 NÉOPRÈNE (Simone, Paulette), 1 CHITINE (Gaston), 1 BRONZE
+  (Raymond), aucun PLÂTRE ni tenue d'origine. Tirage pondéré par rareté à trancher : #547.
 
-**Tenues suivantes (BRONZE, PORCELAINE, rares) : fabrication sans Studio.**
+### Pistes rejetées
 
-1. Module `assets/outfits/<nom>/<nom>.py` à 2 ou 3 variantes ; BRONZE et PORCELAINE reprennent la musculature de
-   MERCURE (`r15_bake.muscles`, `cavity`) et leur propre couleur. Coque de tête : celle de MERCURE,
-   exportée une fois en JSON (`blender -b --factory-startup --python tools/outfits/head_mesh.py -- MercureHead.fbx
-   head.json`), cuite avec `r15_bake.py --head head.json` dans `<variante>/Head/`.
-2. Planche : `r15_bake.py --rig-json rig.json` (meshs placés au repos), puis
-   `blender -b --factory-startup --python tools/outfits/render_sheet.py -- rig.json planche.png "TITRE=<dossier>"…`
-   (Workbench, face, trois quarts, dos, quelques secondes). Workbench ne montre pas la normal map : le relief ne s'y lit
-   que peint dans la couleur.
-3. Publication (`publish_skin.py`), puis `rojo build` et `lune run tools/outfits/make_rbxm.luau <place> mercure <nom>
-   <ids.json>` : clone le dossier de MERCURE (cartes et coque avec toutes leurs propriétés) et y pose les nouveaux ids.
-   Studio ne sert plus qu'à vérifier.
-
-BRONZE (variante `patine`) : reflet peint comme MERCURE mais chaud et plus doux, vert-de-gris là où le relief est plus
-bas que ce qui l'entoure (moyenne sur huit directions à 0,26 stud : il remplit les creux entre les masses, ordonné),
-sommet des muscles et arêtes verticales polis (or clair). PORCELAINE (variante `dense`) : vernis blanc, creux à peine
-bleutés, frises de rinceaux en **bandes cobalt pleines à motif réservé en blanc** (lisibles de loin), filets, chaînes de
-quatre-feuilles sur les jambes, anneaux sur la coque.
-
-**Pièges (cuisson) :**
-
-- **Les meshs du rig partagent l'UV de la face avant avec leurs faces cachées** (dessus et biseaux de la jambe, cachés
-  dans la cuisse ; idem coude, poignet, cheville). Cuits après elle, ils l'écrasaient : bas des jambes sans décor.
-  `r15_bake` cuit donc d'abord les triangles cachés dans une pièce voisine au repos. MERCURE a été cuite avant cette
-  correction.
-- **Les pièces d'un membre se recouvrent au repos** (bras et avant-bras sur 0,82 stud, cuisse et jambe sur 0,68), faces
-  confondues (de même le haut des cuisses contre le bas du torse) : un décor qui change d'une pièce à l'autre y
-  scintille. `r15_bake` fait peindre ces points par la pièce « propriétaire » (la première de `PARTS` qui les contient,
-  `owners`/`as_owner`) : les deux pièces y peignent le même dessin. PORCELAINE peint en plus bras et jambes d'un seul
-  tenant, selon la hauteur au-dessus de la racine (`height_of`), avec des filets horizontaux aux seules extrémités.
-- **Coque de tête de MERCURE : couture au milieu du visage.** Le dépliage met u = -angle/360 avec la couture devant ;
-  la bande de 10° au centre du visage va de u = 0,976 à 0,024, donc lit toute la largeur de la carte. Un décor de coque
-  ne dépend que de la hauteur (anneaux) ; `load_head` écarte ces triangles à la cuisson.
-- **Une variante à traits fins disparaît en jeu** : filets de 0,02 stud illisibles à distance (variante `filets`).
-- **Éclairage peint fixe (lumière venant de l'avant)** : le dos sort noir. Peindre l'éclairage relatif à chaque face
-  (regard de face, comme MERCURE).
-
-**Pistes rejetées :** BRONZE éclairé « diffus + reflet » au lieu du reflet peint (aspect carton, mat), poli en aplats
-sur les muscles (pastilles jaunes) ou mesuré par un laplacien serré (anneaux autour des muscles) ; corps humain réaliste (extension MPFB de Blender) calé sur les articulations du rig : jambes
-**Coque de tête d'une autre tenue :** réutiliser le mesh de MERCURE (Model 92982065353684) avec sa propre carte. Le
-convertir une fois en OBJ (`blender -b --factory-startup --python tools/outfits/head_obj.py --
-assets/outfits/mercure/MercureHead.fbx <coque.obj>` : Y en haut, studs, centré), puis cuire la tenue avec
-`--head-obj <coque.obj>` (module de tenue avec `HEAD = True`, pièce `"Head"` dans `surface`, point dans l'espace de la
-coque). La coque est un cylindre arrondi presque symétrique d'un quart de tour : rien dans sa forme ne dit où est
-l'avant. NÉOPRÈNE et PLÂTRE n'y dessinent donc que des motifs qui tiennent si elle tourne (coutures sur les plans x = 0
-et z = 0, anneaux horizontaux).
-
-**Planche de variantes** (sans interface, quelques secondes) : cuire chaque variante avec `--preview <dossier>`
-(couleur où le relief est ombré, car Workbench ignore les normal maps), puis
-`uv run tools/outfits/board.py <planche.png> --head-obj <coque.obj> --row "NOM=<dossier>/<variante>" ...` : rig au
-repos, de face, de trois quarts et de dos, une rangée par variante. Pour MERCURE, dont la coque a été peinte à part :
-`--row "MERCURE=<dossier>/lisse,assets/outfits/mercure/maps/lisse/Head/Head_Color.png"`. Les reflets spéculaires de
-Workbench sont coupés (triangles clairs sur les grandes faces des jambes).
-
-**Tenues communes (NÉOPRÈNE, PLÂTRE, 600 crédits) :** elles reprennent l'anatomie de MERCURE (`PAINTERS` de
-`mercure.py`, chargé par `r15_bake.load_outfit`), atténuée pour NÉOPRÈNE (45 %, la combinaison moule le corps). Variantes
-gardées dans les modules, retenues : NÉOPRÈNE `noir` (anthracite, panneaux bleu canard : empiècement des épaules,
-flancs, face extérieure des jambes ; coutures en relief à points réguliers, fermeture éclair dans le dos, genouillères
-quadrillées, cagoule en quatre panneaux), PLÂTRE `lisse` (blanc cassé très mat, creux entre les masses un peu plus
-sombres d'après le relief, coque lisse plus sombre en dessous).
-
-- **Le noir disparaît.** Un néoprène noir pur (sRGB 0,075) ne montre plus ni relief ni coutures : anthracite (0,15)
-  à la place, le contraste vient des panneaux.
-- **Les pièces du rig se recouvrent aux coudes et aux genoux** (bras 1,86 studs et avant-bras 1,67 se chevauchent de
-  0,8 ; cuisse et jambe de 0,7) : le haut de l'avant-bras et de la jambe, et le bas du bras, sont cachés. Un dessin
-  posé à l'extrémité d'une pièce (rainure d'articulation, rotule) n'apparaît pas : le placer dans la partie visible.
-  C'est ce qui rendait la variante `mannequin` de PLÂTRE presque illisible (de même pour le pied sous la jambe :
-  la couture de cheville de NÉOPRÈNE ne se voit pas).
-- **Une matière mate ne vit pas de sa normal map.** Sous la lumière douce du couchant, PLÂTRE avec son seul relief en
-  normal map se lisait comme un aplat gris clair, et l'anthracite de NÉOPRÈNE tombait au noir côté ombre (vu en jeu
-  le 18/11/2026). Les deux peignent donc une part de leur relief ombré dans la couleur (`shade` du module, qui appelle
-  `r15_bake.preview_color` ; lumière venue d'en haut, un peu de la gauche du personnage) : PLÂTRE à 1,3, NÉOPRÈNE à
-  0,6 (plus, la maille du jersey se marque). Leur planche ne rajoute alors que la part de la normal map
-  (`PREVIEW_GAIN` du module), sinon le relief compte double.
-- **Plâtre trop blanc à l'accueil.** À 0,87 (sRGB), la lumière chaude et le bloom de l'accueil le saturaient au blanc,
-  muscles perdus : 0,76 garde un blanc cassé lisible partout.
-- **`muscle()` changé en route** : son bord passait d'un coup de `soft_bottom` à `soft_top` à mi-hauteur, d'où un
-  tiret clair au milieu de chaque muscle dans la normal map (et dans la couleur peinte). La transition est maintenant
-  progressive. Les cartes publiées de MERCURE datent d'avant (non recuites) : une prochaine cuisson de MERCURE n'aura
-  plus ces tirets, à republier en connaissance de cause.
-- **Bots** : `outfitForName` répartit les noms sur l'origine et les tenues (hachage modulo le nombre de tenues + 1).
-  Avec MERCURE, NÉOPRÈNE et PLÂTRE, les 8 noms de `BotConfig.NAMES` donnent 3 MERCURE, 3 PLÂTRE, 2 NÉOPRÈNE et
-  aucun bot d'origine ; chaque tenue ajoutée redistribue tout.
-- **Pistes écartées sur planche :** NÉOPRÈNE `vive` (orange uni : combinaison de travail plus que de surf) et `nuit`
-  (bleu nuit et noir : trop peu de contraste) ; PLÂTRE `atelier` (traits de sanguine : de loin invisibles, de près les
-  repères sur les jambes se lisent comme des points de suture) et `mannequin` (rainures cachées, ci-dessus).
-
-<!-- CHITINE -->
-### CHITINE (légendaire, 5 000 crédits)
-
-Carapace biomécanique bleu-noir laquée (`assets/outfits/chitine/chitine.py`, variante `laque`) : cage thoracique en
-côtes arquées qui font le tour du buste, sternum et colonne en vertèbres, deux tubes dorsaux qui passent par-dessus
-les épaules, plaques ventrales ; membres en plaques à chevrons avec deux câbles devant et un sur chaque côté ; coque
-de MERCURE (même mesh, Model 92982065353684) avec sa propre carte : dôme lisse, petite crête au sommet, anneaux de
-nuque.
-
-Outillage ajouté pour elle, réutilisable :
-
-- **Planche** : `uv run tools/outfits/board.py <planche.png> --outfit "NOM=<dossier de variante>" … --head <coque.obj>`
-  rend le rig habillé de face, de trois quarts et de dos (Blender sans interface, Workbench, une quinzaine de
-  secondes ; `board_blender.py`). La couleur peinte y est juste, pas le relief des normal maps ni la brillance réelle.
-- **Coque cuite par r15_bake** : `head_obj.py` (Blender sans interface) convertit le FBX de la coque en OBJ dans
-  l'espace de la tête ; `r15_bake.py … --head <coque.obj>` cuit alors `head_surface` du module de tenue dans
-  `<variante>/Head/` (`--groups ""` : la coque seule). **Piège :** l'avant et l'arrière du FBX dans le jeu ne sont pas
-  vérifiés (rotation de 180° dans le fichier) : une coque cuite ainsi doit être dessinée symétrique d'avant en arrière.
-
-**Pièges propres à une laque sombre :**
-
-- **Reflet peint selon la seule hauteur = traits verticaux éteints.** Le décor du reflet de MERCURE ne dépend que de
-  la hauteur de la direction réfléchie : un câble vertical n'y prend aucune lumière et se lit comme un trait noir.
-  CHITINE ajoute deux bandes latérales, avec un seuil au-dessus de la pente du bombé des faces (0,55 au bord d'un
-  membre) : en dessous, chaque face entière s'allumait et la carapace paraissait délavée, grise.
-- **Profil de tube en demi-cercle = contour seul éclairé.** Une pente infinie au bord allume le contour de chaque côte
-  ou vertèbre (des « poignées », des agrafes) ; un profil parabolique (`tube`, `bead`) met la ligne de lumière sur le
-  haut du relief.
-- **Membres dessinés selon la hauteur au-dessus de la racine**, comme les jambes de MERCURE : coude et genou font se
-  recouvrir deux pièces, et deux dessins différents s'y disputeraient l'affichage.
-- **Rendu en jeu plus contrasté que la planche** (vu le 18/11/2026) : la rugosité basse (0,12) ajoute le vrai reflet
-  du soleil, la laque se lit noir et blanc plus que bleu-noir, avec des liserés orangés du couchant sur les bras.
-
-**Pistes rejetées (CHITINE) :** membres en anneaux réguliers (pull rayé), en grille d'anneaux et de câbles
-(fenêtres), en côtes serrées autour d'une colonne (radiographie trop chargée) : les membres restent calmes pour
-laisser le torse porter la tenue ; crête médiane de la coque jusqu'à l'avant (lue comme un nez, un visage).
-Variantes `nervure` (relief plus fort, reflet plus fin, moins lisible de loin) et `irise` (reflet cyan-violet, à
-peine perceptible) gardées dans le module.
-
-**Pistes rejetées :** corps humain réaliste (extension MPFB de Blender) calé sur les articulations du rig : jambes
-courtes et épaules de gorille, le rig en blocs place hanches à 40 % et épaules très larges ; passer à un rig aux
-proportions humaines : refusé (« on reste dans le style rig 15 ») ; traits d'encre façon comics sur les contours
-(variante `encre`, gardée dans le module) : LISSE préférée ; tenues « métiers » (cordiste, jockey…) : pas assez
-marquées, l'utilisateur veut des corps changés en matière (chrome, biomécanique).
+- Corps humain réaliste (extension MPFB de Blender) calé sur les articulations du rig : jambes courtes et épaules de
+  gorille (le rig en blocs place les hanches à 40 % et des épaules très larges) ; passer à un rig aux proportions
+  humaines : refusé (« on reste dans le style rig 15 »).
+- Tenues « métiers » (cordiste, jockey…) : pas assez marquées, l'utilisateur veut des corps changés en matière.
+- MERCURE : traits d'encre façon comics (`encre`) ; `Reflectance` au lieu du reflet peint (ci-dessus) ; bras de la 1re
+  personne en chrome sans muscles pour cacher le coude (le chrome ne se lisait plus).
+- NÉOPRÈNE `vive` (orange uni : combinaison de travail) et `nuit` (bleu nuit et noir : trop peu de contraste).
+- PLÂTRE `atelier` (traits de sanguine invisibles de loin, repères des jambes lus comme des points de suture) et
+  `mannequin` (rainures cachées par le recouvrement des pièces) ; fissures au hasard (règle des skins).
+- BRONZE `poli` (se lit « or ») et `noirci` (silhouette sombre de loin) ; éclairage « diffus + reflet » au lieu du
+  reflet peint (aspect carton) ; poli en aplats sur les muscles (pastilles jaunes) ou mesuré par un laplacien serré
+  (anneaux autour des muscles).
+- PORCELAINE `filets` (disparaît de loin) et `or` (élégant mais peu « porcelaine ») ; craquelures au hasard.
+- CHITINE `nervure` (relief plus fort, reflet plus fin, moins lisible de loin) et `irise` (reflet cyan-violet à peine
+  perceptible) ; membres en anneaux réguliers (pull rayé), en grille d'anneaux et de câbles (fenêtres), en côtes serrées
+  autour d'une colonne (radiographie trop chargée) ; crête de la coque jusqu'à l'avant (lue comme un nez).
+- Outillage : trois façons de cuire la coque et trois scripts de planche coexistaient (OBJ par `head_obj.py`,
+  `head_surface`, planche par `board.py` et cartes `_Lit` pré-éclairées) : réunis en `head_mesh.py`, pièce `"Head"` de
+  `surface` et `render_sheet.py`.
 
 ## Ajouter un couteau
 

@@ -9,34 +9,34 @@
  },
  "R15": {
   "LeftArm": {
-   "Color": "rbxassetid://78037867209065",
-   "Metal": "rbxassetid://108787715820725",
-   "Normal": "rbxassetid://128698265793150",
-   "Rough": "rbxassetid://126391289318122"
+   "Color": "rbxassetid://109337484066888",
+   "Metal": "rbxassetid://94427697545405",
+   "Normal": "rbxassetid://120465468611992",
+   "Rough": "rbxassetid://84282252682427"
   },
   "LeftLeg": {
-   "Color": "rbxassetid://97034687365829",
-   "Metal": "rbxassetid://93267960990227",
+   "Color": "rbxassetid://99661737274568",
+   "Metal": "rbxassetid://98274182645555",
    "Normal": "rbxassetid://85878256381761",
-   "Rough": "rbxassetid://83659371059889"
+   "Rough": "rbxassetid://115938006850073"
   },
   "RightArm": {
-   "Color": "rbxassetid://128424068017136",
-   "Metal": "rbxassetid://139240257061334",
-   "Normal": "rbxassetid://86755016058826",
-   "Rough": "rbxassetid://97369972403638"
+   "Color": "rbxassetid://109637904821990",
+   "Metal": "rbxassetid://117152004951376",
+   "Normal": "rbxassetid://90187456781857",
+   "Rough": "rbxassetid://95468444626019"
   },
   "RightLeg": {
-   "Color": "rbxassetid://77723324139810",
-   "Metal": "rbxassetid://99308752082839",
+   "Color": "rbxassetid://129974393774771",
+   "Metal": "rbxassetid://77421871106932",
    "Normal": "rbxassetid://125441435420955",
-   "Rough": "rbxassetid://79047185842937"
+   "Rough": "rbxassetid://91879296450664"
   },
   "Torso": {
-   "Color": "rbxassetid://102014472616534",
-   "Metal": "rbxassetid://98548089416158",
-   "Normal": "rbxassetid://120138219171060",
-   "Rough": "rbxassetid://99958612792035"
+   "Color": "rbxassetid://133681657769132",
+   "Metal": "rbxassetid://83214419615194",
+   "Normal": "rbxassetid://75762827242159",
+   "Rough": "rbxassetid://136177687769772"
   }
  }
 }
