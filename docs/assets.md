@@ -801,7 +801,45 @@ de la boîte de la tête → rien).
 courtes et épaules de gorille, le rig en blocs place hanches à 40 % et épaules très larges ; passer à un rig aux
 proportions humaines : refusé (« on reste dans le style rig 15 ») ; traits d'encre façon comics sur les contours
 (variante `encre`, gardée dans le module) : LISSE préférée ; tenues « métiers » (cordiste, jockey…) : pas assez
-marquées, l'utilisateur veut des corps changés en matière (chrome, biomécanique).
+marquées ; série de corps changés en matière sur le pipeline de MERCURE (NÉOPRÈNE, PLÂTRE, BRONZE, PORCELAINE, CHITINE,
+PR fermées) : la piste « matière » était une méprise, seul MERCURE la garde.
+
+**Direction (18/11/2026) : des agents dans l'esprit de CS, en blocs.** Archétypes de soldats et d'équipements
+(démineur, combinaison chimique, combattant du désert, maintien de l'ordre…), sans insigne, nom ni copie d'un agent
+existant ; pas de tenue commune pour l'instant. Grosses épaulières et casques permis, en décor (hors collision et
+balles). Chaque tenue a sa propre silhouette, validée sur une planche de concept avant toute fabrication :
+
+1. Gabarit : `blender -b --factory-startup --python tools/outfits/gabarit_rig.py -- <dossier>` (rig nu de face,
+   de trois quarts, de dos ; le script rend le chemin absolu, Blender résolvant sinon un chemin relatif depuis `C:\`) puis
+   `uv run tools/outfits/gabarit_planche.py <dossier>` → `gabarit_rig.png` (1536 × 1024).
+2. Brief : `assets/outfits/concepts/<tenue>.brief.md` (en anglais, à coller avec le gabarit dans un modèle d'image
+   externe) : règles du corps en blocs (pas d'anatomie, pas de doigts, ajouts limités), palette fermée de 3 ou 4
+   couleurs, une forme signature par tenue, ni texte ni insigne ni arme.
+3. L'utilisateur rapporte la planche (`assets/outfits/concepts/<tenue>.png`) et la valide ; seulement ensuite,
+   fabrication : volumes ajoutés modélisés dans Blender, matières cuites par `r15_bake.py`.
+
+**Volumes ajoutés (DÉMINEUR, `assets/outfits/demineur/`)** : casque, col, épaulières, plastron et tablier sont des
+MeshParts du dossier de la tenue, une par couleur et par pièce du rig qui la porte, sans texture (couleur, matière et
+`Reflectance` posées sur la MeshPart). Attributs : `OutfitAttach` (pièce du rig), `OutfitOffset` (CFrame par rapport à
+elle), `OutfitHidesHead` (casque fermé : la tête du rig est cachée, elle reste la hitbox). `CharacterAppearance.dress`
+les soude au rig (`attachPiece`) sans collision, requête, contact ni masse ; `verify_place` contrôle ces attributs.
+Mesuré le 18/11/2026 (rayons dans Studio) : rayon au centre de la tête → `Head` ; au-dessus de la tête (casque) et dans
+une épaulière → rien ; masse du personnage inchangée (57,376 avec ou sans tenue). Les bras du viewmodel ne prennent que
+les cartes (pas d'épaulière en 1re personne).
+
+1. Cartes : `uv run tools/outfits/r15_bake.py assets/outfits/demineur/demineur.py assets/outfits/demineur/maps`.
+   **Couleurs en linéaire** : r15_bake applique le gamma à l'écriture, une couleur relevée sur une planche (sRGB) se
+   convertit d'abord (`srgb()` du module), sinon tout sort délavé (noir → gris moyen).
+2. Volumes et aperçu : `uv run tools/outfits/rig_obj.py <dossier>` (rig en OBJ), puis
+   `blender -b --factory-startup --python assets/outfits/demineur/demineur_meshes.py -- <dossier des OBJ> --fbx <sortie.fbx> --preview <dossier>`
+   (écrit `pieces.json` : pièce, décalage = centre de la boîte du mesh, couleur, matière). Comparer l'aperçu à la planche.
+3. `uv run tools/skins/publish_skin.py assets/outfits/demineur/maps/base demineur` et
+   `bash tools/publish_asset.sh <sortie.fbx> Model DemineurPieces`.
+4. Studio : `insert_asset`, puis dossier `Outfits.demineur` = SurfaceAppearance de MERCURE clonées avec les ids de
+   `ids.json` + MeshParts insérées, avec les attributs et l'aspect de `pieces.json` ; export comme ci-dessus. L'export
+   réécrit aussi `mercure.rbxm` (octets différents, même contenu) : le restaurer avec `git checkout`. Après l'export, la
+   copie faite à la main et celle de Rojo coexistent sous le même nom : détruire les deux et reconnecter Studio
+   (`-ReleaseStudio` puis `-AcquireStudio`) pour que Rojo recrée la sienne.
 
 ## Ajouter un couteau
 
