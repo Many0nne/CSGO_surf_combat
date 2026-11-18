@@ -135,7 +135,7 @@ return function(T, Loader)
 			end
 		end)
 
-		T.it("caisse d'effets (#566) : ÉCLAIR et PAN !, tous les effets du jeu, pochoir FX", function()
+		T.it("caisse d'effets (#566, #567) : ÉCLAIR, BALISE et PAN !, tous les effets du jeu, pochoir FX", function()
 			local crate
 			for _, c in Shop.OFF_SALE do
 				crate = if c.id == "crate.fx.serie1" then c else crate
@@ -143,12 +143,13 @@ return function(T, Loader)
 			T.expectEqual(Shop.isEffectCrate(crate), true)
 			T.expectEqual(Shop.isEffectCrate(Shop.crate("crate.awp.serie1")), false)
 			local rows = Shop.contents(crate, Inventory.ITEMS)
-			T.expectEqual(names(rows), "ÉCLAIR,PAN !")
+			T.expectEqual(names(rows), "ÉCLAIR,BALISE,PAN !")
 			T.expectEqual(rows[1].skin, "effect.eclair")
 			T.expectEqual(rows[1].rarity.id, "rare")
-			T.expectEqual(rows[2].rarity.id, "exceptional")
-			T.expectEqual(rows[2].weapon, "FX")
-			T.expectEqual(rows[2].viewmodel, "AWP")
+			T.expectEqual(rows[2].rarity.id, "rare")
+			T.expectEqual(rows[3].rarity.id, "exceptional")
+			T.expectEqual(rows[3].weapon, "FX")
+			T.expectEqual(rows[3].viewmodel, "AWP")
 			for _, item in Inventory.ITEMS do
 				if item.type == "effect" then
 					T.expect(Shop.rarityOf(item) ~= nil, item.id .. " sans rareté")
@@ -160,7 +161,7 @@ return function(T, Loader)
 				end
 			end
 			T.expectEqual(Shop.stencil(crate), "S1-FX")
-			T.expectEqual(select(2, Shop.subtitle(crate, Inventory.ITEMS)).n, 2)
+			T.expectEqual(select(2, Shop.subtitle(crate, Inventory.ITEMS)).n, 3)
 			-- PAN ! reste un skin exceptionnel de la série 1 : la caisse d'effets ne change pas sa rareté
 			T.expectEqual(Shop.rarityOf(Inventory.item("skin.awp.pan")).id, "exceptional")
 			T.expectEqual(Shop.rarityOf(Inventory.item("skin.awp.trempe")).id, "legendary")

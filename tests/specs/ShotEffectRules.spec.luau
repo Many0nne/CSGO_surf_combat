@@ -276,4 +276,38 @@ return function(T, Loader)
 			T.expectNear((near - ORIGIN).Magnitude, 0.5, 1e-6)
 		end)
 	end)
+
+	T.describe("BALISE (#567)", function()
+		T.it("le ruban se déroule de la bouche à l'impact, reste tendu, puis se rétracte vers l'impact", function()
+			local tail, head = ShotEffectRules.baliseSpan(0)
+			T.expectEqual(tail, 0)
+			T.expectEqual(head, 0)
+			tail, head = ShotEffectRules.baliseSpan(ShotEffectRules.BALISE_UNROLL / 2)
+			T.expectEqual(tail, 0)
+			T.expectNear(head, 0.5)
+			tail, head = ShotEffectRules.baliseSpan(ShotEffectRules.BALISE_RETRACT_FROM)
+			T.expectEqual(tail, 0)
+			T.expectEqual(head, 1)
+			local mid = (ShotEffectRules.BALISE_RETRACT_FROM + ShotEffectRules.BALISE_LIFETIME) / 2
+			tail = ShotEffectRules.baliseSpan(mid)
+			T.expect(tail > 0 and tail < 0.5, "rétraction lente puis rapide : " .. tail)
+			tail, head = ShotEffectRules.baliseSpan(ShotEffectRules.BALISE_LIFETIME)
+			T.expectEqual(tail, 1)
+			T.expectEqual(head, 1)
+		end)
+
+		T.it("vit BALISE_LIFETIME, style activé et porté par l'item BALISE", function()
+			T.expectEqual(ShotEffectRules.tracerLifetime("balise"), ShotEffectRules.BALISE_LIFETIME)
+			T.expectEqual(ShotEffectRules.styleOf("effect.balise"), "balise")
+			T.expect(ShotEffectRules.isEnabled("balise"), "BALISE désactivé")
+		end)
+
+		T.it("la marque d'impact suit la distance de la caméra, bornée", function()
+			local bounds = ShotEffectRules.BALISE_MARK_SIZE
+			T.expectEqual(ShotEffectRules.baliseMarkSize(0), bounds[1])
+			T.expectEqual(ShotEffectRules.baliseMarkSize(1e6), bounds[2])
+			local d = (bounds[1] + bounds[2]) / 2 / ShotEffectRules.BALISE_MARK_ANGLE
+			T.expectNear(ShotEffectRules.baliseMarkSize(d), d * ShotEffectRules.BALISE_MARK_ANGLE)
+		end)
+	end)
 end

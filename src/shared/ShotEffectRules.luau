@@ -16,8 +16,8 @@ local ShotEffectRules = {}
 -- un style à false (ou un nom inconnu) est ignoré, le joueur tire avec le rayon ordinaire. `lightning` : éclair vert
 -- (ÉCLAIR, LightningBolt) ; `pan` : explosion « PAN ! » devant le canon (PanBurst), rayon ordinaire ; `temper` : ruban
 -- d'acier torsadé à écailles (TREMPE), mis de côté le 18/11/2026 (peu lisible du point de vue du tireur) : aucun item ne
--- le porte, rendu gardé pour plus tard (#567).
-ShotEffectRules.STYLES = { lightning = true, pan = true, temper = false }
+-- le porte, rendu gardé pour plus tard (#567) ; `balise` : ruban de chantier qui se déroule (BALISE, #567).
+ShotEffectRules.STYLES = { lightning = true, pan = true, temper = false, balise = true }
 
 -- Bouche du canon dans le modèle de l'arme (viewmodel ou 3P) : chemin de l'Attachment, puis nom de son effet.
 -- Une arme à distance sans ce chemin tire sans flamme, et son rayon part de l'origine du tir (l'œil).
@@ -133,6 +133,38 @@ ShotEffectRules.PAN_TRACER_GAP = 0.5
 -- Explosions en cours au plus (une réserve de ce nombre de BillboardGui, créée au premier tir PAN !)
 ShotEffectRules.PAN_MAX_ACTIVE = 6
 
+-- BALISE (#567, style `balise`), d'après la planche de concept retenue le 18/11/2026 : un ruban de chantier (chevrons
+-- orange sur noir, liseré blanc, couleurs du skin BALISE) se déroule de la bouche du canon jusqu'à l'impact en
+-- BALISE_UNROLL s, chevrons qui défilent vers la cible, puis se rétracte vers l'impact de BALISE_RETRACT_FROM à
+-- BALISE_LIFETIME. Une boucle zébrée tourne à la bouche du canon au tir, trois chevrons s'ouvrent autour de l'impact à
+-- l'arrivée du ruban. Textures : assets/effects/balise_textures.py, publiées en Decal (id de l'image contenue).
+ShotEffectRules.BALISE_TAPE_IMAGE = "rbxassetid://138484076872781"
+ShotEffectRules.BALISE_RING_IMAGE = "rbxassetid://82072650119477"
+ShotEffectRules.BALISE_MARK_IMAGE = "rbxassetid://81577689344071"
+ShotEffectRules.BALISE_WIDTH = 0.45 -- à 0,2, un pointillé vu de côté
+ShotEffectRules.BALISE_TAPE_LENGTH = 2 -- studs du ruban pour un tronçon de texture (deux chevrons)
+ShotEffectRules.BALISE_TAPE_SPEED = 3 -- défilement des chevrons vers la cible
+ShotEffectRules.BALISE_LIFETIME = 0.32
+ShotEffectRules.BALISE_UNROLL = 0.06
+ShotEffectRules.BALISE_RETRACT_FROM = 0.2
+-- Boucle du canon : diamètre (studs) au début et à la fin de sa vie, plus petite chez le tireur (bouche à 2 ou 3 studs
+-- de l'œil) ; vie (s), vitesse de rotation (degrés/s)
+ShotEffectRules.BALISE_RING_SIZE = { 0.9, 1.6 }
+ShotEffectRules.BALISE_RING_SIZE_LOCAL = { 0.35, 0.8 }
+ShotEffectRules.BALISE_RING_LIFE = 0.16
+ShotEffectRules.BALISE_RING_SPIN = 720
+-- Marque d'impact : sa taille suit la distance de la caméra (angle constant, lisible de loin comme de près), bornée ;
+-- elle s'ouvre de BALISE_MARK_OPEN fois sa taille jusqu'à sa taille pleine, puis s'efface. Vie (s), décalage vers la
+-- caméra (studs, pour ne pas s'enfoncer dans le mur touché).
+-- À 0,05, 24 pixels de large à 35 studs en vue du tireur (FOV vertical 90°) : la marque ne se voyait pas
+ShotEffectRules.BALISE_MARK_ANGLE = 0.1 -- taille / distance (à 0,13, plus grosse que la cible vue de côté)
+ShotEffectRules.BALISE_MARK_SIZE = { 1.5, 10 }
+ShotEffectRules.BALISE_MARK_OPEN = 0.55
+ShotEffectRules.BALISE_MARK_LIFE = 0.28
+ShotEffectRules.BALISE_MARK_ZOFFSET = 1.5
+-- Jeux d'émetteurs (boucle et marque) en réserve, utilisés à tour de rôle
+ShotEffectRules.BALISE_EMITTERS = 4
+
 -- Cette méthode permet de calculer la transparence d'un rayon lorsqu'il vieillit : opaque au tir, il s'efface de
 -- plus en plus vite (courbe quadratique) jusqu'à disparaître à `lifetime` (TRACER_LIFETIME par défaut).
 function ShotEffectRules.tracerTransparency(elapsed: number, lifetime: number?): number
@@ -143,7 +175,31 @@ end
 -- Cette méthode permet de donner la durée de vie d'un rayon selon le style de tir (TREMPE s'efface plus lentement)
 -- lorsqu'il est créé.
 function ShotEffectRules.tracerLifetime(style: string?): number
-	return if style == "temper" then ShotEffectRules.TEMPER_LIFETIME else ShotEffectRules.TRACER_LIFETIME
+	if style == "temper" then
+		return ShotEffectRules.TEMPER_LIFETIME
+	elseif style == "balise" then
+		return ShotEffectRules.BALISE_LIFETIME
+	end
+	return ShotEffectRules.TRACER_LIFETIME
+end
+
+-- Cette méthode permet de savoir quelle partie du rayon le ruban BALISE couvre à un instant de sa vie (`elapsed`, s)
+-- lorsqu'une frame passe : sa queue et sa tête en part du rayon (0 : bouche du canon, 1 : impact). Il se déroule de la
+-- bouche à l'impact, reste tendu, puis se rétracte vers l'impact.
+function ShotEffectRules.baliseSpan(elapsed: number): (number, number)
+	local unroll = ShotEffectRules.BALISE_UNROLL
+	local head = if unroll > 0 then math.clamp(elapsed / unroll, 0, 1) else 1
+	local from, life = ShotEffectRules.BALISE_RETRACT_FROM, ShotEffectRules.BALISE_LIFETIME
+	local tail = if life > from then math.clamp((elapsed - from) / (life - from), 0, 1) else 0
+	-- rétraction plus rapide sur la fin (le ruban est tiré d'un coup)
+	return tail * tail, head
+end
+
+-- Cette méthode permet de donner la taille pleine (studs) de la marque d'impact BALISE lorsqu'elle apparaît, vue d'une
+-- caméra à `distance` studs de l'impact : proportionnelle à la distance, bornée par BALISE_MARK_SIZE.
+function ShotEffectRules.baliseMarkSize(distance: number): number
+	local bounds = ShotEffectRules.BALISE_MARK_SIZE
+	return math.clamp(distance * ShotEffectRules.BALISE_MARK_ANGLE, bounds[1], bounds[2])
 end
 
 -- Cette méthode permet de lire la couleur de base de TREMPE en un point du rayon (0 : bouche, 1 : impact) lorsque ses

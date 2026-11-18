@@ -119,7 +119,8 @@ ShopCatalog.CRATES = {
 ShopCatalog.OFF_SALE = {
 	-- Caisse d'effets de tir (#566) : ÉCLAIR (rare) et PAN ! (exceptionnel) pour commencer, TREMPE (légendaire) mis de
 	-- côté ; équipables avec n'importe quel skin ; bande jaune de PAN !, distincte des caisses de skins. Retirée de la
-	-- vente le 18/11/2026 (choix de l'utilisateur) : deux effets seulement, trop peu pour une caisse
+	-- vente le 18/11/2026 (choix de l'utilisateur) : deux effets seulement, trop peu pour une caisse. Les effets de #567
+	-- y entrent à mesure qu'ils sont faits (BALISE, rare), en attendant une remise en vente
 	{
 		id = "crate.fx.serie1",
 		name = "EFFETS · SÉRIE 1",
@@ -128,7 +129,7 @@ ShopCatalog.OFF_SALE = {
 		stripe = { 235, 195, 40 },
 		price = 500,
 		contents = {
-			rare = { "eclair" },
+			rare = { "eclair", "balise" },
 			exceptional = { "pan" },
 		},
 	},

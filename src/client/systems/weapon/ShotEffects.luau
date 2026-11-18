@@ -19,6 +19,7 @@ local InventoryRules = require(ReplicatedStorage.Shared.InventoryRules)
 local NetworkProtocol = require(ReplicatedStorage.Shared.NetworkProtocol)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local ShotEffectRules = require(ReplicatedStorage.Shared.ShotEffectRules)
+local BaliseMarks = require(script.Parent.BaliseMarks)
 local LightningBolt = require(script.Parent.LightningBolt)
 local PanBurst = require(script.Parent.PanBurst)
 local TemperFlakes = require(script.Parent.TemperFlakes)
@@ -30,8 +31,8 @@ local WeaponThirdPerson = require(ReplicatedStorage.Shared.WeaponThirdPerson)
 local ShotEffects = {}
 
 -- Rayon en cours : ses deux extrémités (le Beam est enfant de la première) et leurs positions, son instant de
--- création (os.clock), son palier de fondu courant, sa durée de vie, et pour TREMPE (#566) le tirage de ses franges
--- (nil : couleur fixe).
+-- création (os.clock), son palier de fondu courant, sa durée de vie, pour TREMPE (#566) le tirage de ses franges
+-- (nil : couleur fixe), et pour BALISE (#567) le ruban qui se déroule puis se rétracte (extrémités déplacées).
 type Tracer = {
 	a0: Attachment,
 	a1: Attachment,
@@ -42,6 +43,7 @@ type Tracer = {
 	fade: number,
 	life: number,
 	temperSeed: number?,
+	balise: boolean?,
 }
 
 local tracers: { Tracer } = {}
@@ -109,6 +111,14 @@ local function step()
 		else
 			local hidden = eye ~= nil and ShotEffectRules.isTooClose(tracer.start, tracer.finish, eye)
 			local fade = ShotEffectRules.fadeStep(elapsed, hidden, tracer.life)
+			if tracer.balise then
+				-- BALISE : opaque, il disparaît en se rétractant, pas en s'effaçant
+				fade = if hidden then ShotEffectRules.FADE_STEPS else 0
+				local tail, head = ShotEffectRules.baliseSpan(elapsed)
+				local path = tracer.finish - tracer.start
+				tracer.a0.WorldPosition = tracer.start + path * tail
+				tracer.a1.WorldPosition = tracer.start + path * head
+			end
 			if fade ~= tracer.fade then
 				tracer.fade = fade
 				tracer.beam.Transparency = FADE[fade + 1]
@@ -127,18 +137,23 @@ end
 local timedStep = PerfMarkers.wrap("effets de tir", step)
 
 -- Cette méthode permet de créer un rayon entre deux points du monde lorsqu'un tir est montré (`style` "temper" : rayon
--- TREMPE, #566) ; il s'efface ensuite de lui-même (step) et Debris le détruit au plus tard après sa durée de vie et une
--- marge.
+-- TREMPE, #566 ; "balise" : ruban BALISE, #567) ; il s'efface ensuite de lui-même (step) et Debris le détruit au plus
+-- tard après sa durée de vie et une marge.
 local function spawnTracer(start: Vector3, finish: Vector3, style: string?)
+	local balise = style == "balise"
 	local a0 = Instance.new("Attachment")
 	a0.Name = ShotEffectRules.INSTANCE_NAME
 	a0.WorldPosition = start
 	local a1 = Instance.new("Attachment")
 	a1.Name = ShotEffectRules.INSTANCE_NAME
-	a1.WorldPosition = finish
+	-- BALISE : le ruban part de la bouche du canon et se déroule (step)
+	a1.WorldPosition = if balise then start else finish
 
 	local temperSeed = if style == "temper" then math.random() else nil
-	local width = if temperSeed then ShotEffectRules.TEMPER_WIDTH else ShotEffectRules.TRACER_WIDTH
+	local width = if temperSeed
+		then ShotEffectRules.TEMPER_WIDTH
+		elseif balise then ShotEffectRules.BALISE_WIDTH
+		else ShotEffectRules.TRACER_WIDTH
 	local beam = Instance.new("Beam")
 	beam.Name = ShotEffectRules.INSTANCE_NAME
 	beam.Attachment0 = a0
@@ -159,6 +174,15 @@ local function spawnTracer(start: Vector3, finish: Vector3, style: string?)
 		beam.TextureLength = ShotEffectRules.TEMPER_TWIST_LENGTH
 		beam.TextureSpeed = ShotEffectRules.TEMPER_TWIST_SPEED
 		TemperFlakes.spawn(start, finish)
+	elseif balise then
+		-- BALISE : ruban de chantier aux couleurs de l'image (blanc : pas de teinte, pas de lumière additive qui
+		-- rendrait le noir transparent), chevrons qui défilent vers la cible
+		beam.Color = ColorSequence.new(Color3.new(1, 1, 1))
+		beam.LightEmission = 0
+		beam.Texture = ShotEffectRules.BALISE_TAPE_IMAGE
+		beam.TextureMode = Enum.TextureMode.Wrap
+		beam.TextureLength = ShotEffectRules.BALISE_TAPE_LENGTH
+		beam.TextureSpeed = ShotEffectRules.BALISE_TAPE_SPEED
 	end
 	beam.Parent = a0
 
@@ -175,6 +199,7 @@ local function spawnTracer(start: Vector3, finish: Vector3, style: string?)
 		fade = 0,
 		life = life,
 		temperSeed = temperSeed,
+		balise = balise,
 	})
 	local maxLife = life + ShotEffectRules.LIFETIME_MARGIN
 	Debris:AddItem(a0, maxLife)
@@ -236,6 +261,10 @@ local function show(
 		end
 		if style == "lightning" and LightningBolt.spawn(start, finish) then
 			return
+		end
+		if style == "balise" then
+			-- Boucle au canon (pas à la lunette : elle serait dans l'œil du tireur) et chevrons à l'impact
+			BaliseMarks.spawn(start, finish, isLocal == true, not (isLocal and ScopeSystem.getLevel() > 0))
 		end
 		spawnTracer(start, finish, style)
 	end
