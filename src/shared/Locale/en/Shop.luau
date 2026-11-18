@@ -23,14 +23,14 @@ return {
 
 	-- Vitrine et vue détail (ShopScreen)
 	["CAISSES"] = "CRATES",
-	["{n} EN VENTE  ·  UNE PAR ARME ET PAR SÉRIE"] = "{n} ON SALE  ·  ONE PER WEAPON AND SERIES",
+	["{n} EN VENTE  ·  SKINS ET EFFETS DE TIR"] = "{n} ON SALE  ·  SKINS AND SHOT EFFECTS",
 	["VOIR LE CONTENU ET ACHETER"] = "VIEW CONTENTS AND BUY",
 	["‹  SHOP"] = "‹  SHOP",
 	["CAISSE  {n} / {total}"] = "CRATE  {n} / {total}",
 	["CHANCE"] = "ODDS",
 	["SI DOUBLON"] = "IF DUPLICATE",
 	["SURVOL"] = "HOVER",
-	["VOIR UN SKIN"] = "PREVIEW A SKIN",
+	["VOIR UN APERÇU"] = "PREVIEW",
 	["LE GARDER"] = "KEEP IT",
 	["GLISSER"] = "DRAG",
 	["LE TOURNER"] = "ROTATE IT",
