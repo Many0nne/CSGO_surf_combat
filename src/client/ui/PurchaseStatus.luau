@@ -23,8 +23,8 @@ PurchaseStatus.REFUSALS = {
 	insufficient = "CRÉDITS INSUFFISANTS",
 }
 
--- Libellés propres à l'achat d'une tenue au portant (#543, OutfitService), à passer à `labels` par la vue détail d'une
--- tenue (à venir, après validation de la planche) ; « déjà possédée » est aussi le marquage d'une tenue possédée
+-- Libellés propres à l'achat d'une tenue au portant (#543, OutfitService), passés à `labels` par la vue détail d'une
+-- tenue (OutfitShopPanel)
 PurchaseStatus.OUTFIT_REFUSALS = {
 	unknown = "TENUE INCONNUE",
 	unavailable = "PAS EN VENTE",

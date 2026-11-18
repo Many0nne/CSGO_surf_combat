@@ -31,7 +31,7 @@ export type Slot = "sniper" | "knife"
 -- ReplicatedStorage.Skins.<viewmodel de l'arme>.<appearance>, cf. WeaponSkins), et peut déclarer un effet de tir
 -- (`shotEffect`, #520 : "lightning" = éclair à la place du rayon de balle, cf. ShotEffectRules.effectOf). Une tenue
 -- (#521) porte son nom affiché, son dossier d'apparence (ReplicatedStorage.Outfits.<appearance>, cf. CharacterAppearance),
--- sa rareté (id de ShopCatalog.RARITIES) et son prix en crédits.
+-- sa rareté (id de ShopCatalog.RARITIES), son prix en crédits et deux lignes de description (vue détail du shop, #543).
 export type Item = {
 	id: string,
 	type: ItemType,
@@ -43,6 +43,7 @@ export type Item = {
 	shotEffect: string?,
 	rarity: string?,
 	price: number?,
+	description: string?,
 }
 -- Items possédés : ensemble d'ids du catalogue
 export type Owned = { [string]: boolean }
@@ -410,6 +411,7 @@ InventoryRules.ITEMS = {
 		appearance = "mercure",
 		rarity = "exceptional",
 		price = 2500,
+		description = "Chrome liquide sur tout le corps, reflet du ciel peint dans la matière.",
 	},
 	-- Agents dans l'esprit de CS (#521, direction du 18/11/2026) : volumes ajoutés (MeshParts OutfitAttach) en plus des
 	-- cartes du rig
@@ -420,6 +422,7 @@ InventoryRules.ITEMS = {
 		appearance = "demineur",
 		rarity = "legendary",
 		price = 5000,
+		description = "Casque fermé à visière, plastron et tablier de protection, épaulières à liseré laiton.",
 	},
 } :: { Item }
 

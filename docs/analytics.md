@@ -31,7 +31,7 @@ même tâche : une issue par correction, une fois les premières données collec
 
 `loading` (écran de chargement), `playing` (en partie : arrivée, vivant, mort ou bannière, précisé par le serveur),
 `menu_home`, `menu_shop`, `menu_infos`, `menu_learn`, `menu_settings`, `menu_feedback`, `menu_lobby` (lobby, #523), `shop_detail` (détail d'une
-caisse), `shop_outfit` (détail d'une tenue au portant, #543, pas encore signalé), `crate_opening` (animation d'ouverture), `credit_packs` (fenêtre des packs Robux). Composés dans
+caisse), `shop_outfit` (détail d'une tenue au portant, #543), `crate_opening` (animation d'ouverture), `credit_packs` (fenêtre des packs Robux). Composés dans
 `init.client` (`LoadingScreen.isCovering`, `GameStateController.getState`, `ShopScreen.analyticsScreen`,
 `MainMenu.getPage`). Un écran tenu moins de 0,5 s peut ne pas être vu.
 
@@ -91,12 +91,12 @@ retour au détail restent dans la visite.
 ### Tenues (funnel `Tenues`, #543)
 
 Même `funnelSessionId` que la visite du shop en cours (une visite ouverte si l'achat arrive sans elle). Chaque étape
-une fois par visite. L'étape 1 attend la vue détail d'une tenue côté client (écran `shop_outfit`, déjà accepté par la
-garde et compté comme écran du shop) : numérotée dès maintenant pour ne jamais renuméroter les suivantes.
+une fois par visite. L'étape 1 est la vue détail d'une tenue côté client (écran `shop_outfit`, compté comme écran du
+shop). Vérifié en Studio le 18/11/2026 : étapes 1, 2 et 3 puis dépense 2 500 (Shop, outfit.mercure).
 
 | Étape | Nom | Émise par |
 |---|---|---|
-| 1 | Détail d'une tenue | écran `shop_outfit` (pas encore signalé par le client) |
+| 1 | Détail d'une tenue | écran `shop_outfit` (`ShopScreen.analyticsScreen`, vue détail d'une tenue) |
 | 2 | ACHETER | toute demande `BuyOutfit` traitée (refus compris : déjà possédée, solde insuffisant…) |
 | 3 | Tenue achetée | achat réussi (`OutfitService.init`, rappel `onBought`) |
 | 4 | Tenue équipée | `EquipItem` accepté (emplacement `outfit`) d'une tenue achetée pendant la session, compté dans la visite de l'achat |

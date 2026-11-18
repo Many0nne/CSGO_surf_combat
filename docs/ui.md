@@ -530,8 +530,8 @@ règles du groupe : `docs/architecture.md` « Lobby entre amis ».
 Troisième onglet de l'écran d'équipement (« 3 · TENUE »), après SNIPER et COUTEAU : carte D'ORIGINE puis tenues
 possédées, chacune avec un portrait du buste habillé (`UIKit.outfitPortrait`) et sa rareté. Survoler une carte habille
 le personnage de l'accueil (`MenuScene.previewOutfit`), cliquer l'équipe ; quitter l'onglet remet la tenue équipée.
-Pas de rendu d'arme dans cet onglet. L'achat se fera au shop, sur un portant à vêtements (choix de l'utilisateur, à
-venir) : l'écran d'équipement ne montre que les tenues possédées, comme pour les armes.
+Pas de rendu d'arme dans cet onglet. L'achat se fait au shop, sur le portant à vêtements (voir « Portant des tenues ») :
+l'écran d'équipement ne montre que les tenues possédées, comme pour les armes.
 
 ## Règles des écrans secondaires
 
@@ -1023,15 +1023,44 @@ Règles serveur : `docs/architecture.md`, « Achat d'une caisse ». Dans la vue 
   OUVRIR ne remplace plus ACHETER. Pour tester l'achat avec le compte propriétaire (admin, donc TOUT OBTENU), poser
   `DebugInventory = "default"` (contexte serveur) ; `DebugCredits` donne des crédits.
 
-## Portant des tenues (#543, planche en attente de validation)
+## Portant des tenues (#543)
 
-Les tenues de personnage (#521) s'achètent au shop sur un portant à vêtements (référence de l'utilisateur : portant
-métallique blanc, montants perforés, deux barres). L'achat côté serveur est fait (remote `BuyOutfit`,
-`docs/architecture.md` « Achat d'une tenue ») ; le portant dans Roblox et la vue détail attendent le choix de
-l'utilisateur sur trois planches : présentation d'une tenue (cintre, buste, personnage complet), emplacement dans la
-salle (P1 mur de gauche face à la vitrine, P2 fond à gauche du socle, P3 fond à droite), vue détail d'une tenue
-(personnage sur le socle). Libellés des refus prêts : `PurchaseStatus.OUTFIT_REFUSALS` ; écran d'analytics prévu :
-`shop_outfit`.
+**Planche validée par l'utilisateur le 18/11/2026, construit dans Roblox** (`OutfitRack`, `ShopScene`, `ShopScreen`,
+`OutfitShopPanel`). Les tenues de personnage (#521) s'achètent au shop sur un portant à vêtements (référence de
+l'utilisateur : portant métallique blanc, montants perforés, deux barres). Achat côté serveur : remote `BuyOutfit`
+(`docs/architecture.md` « Achat d'une tenue »). Choix de l'utilisateur sur les trois planches
+(`worktrees/.briefs/csgo-feature-543-portant-tenues_planche_*.png`, hors dépôt) :
+
+- **Présentation : sur cintre (A).** Haut (torse et bras) sur la barre du haut, bas (bassin et jambes) sur celle du
+  bas, de trois quarts (145°) ; la tenue survolée sort du rang de face (176°, avancée de 1,9 stud, `OutfitRackRules.pose`)
+  et son étiquette passe en rouge d'impact. Pièces ajoutées d'une tenue (épaulières, col, tablier de DÉMINEUR) pendues
+  avec la moitié qui les porte ; pas de tête au portant. Écartés : buste (ni bras ni jambes, 6 tenues au plus),
+  personnage complet (mannequins qui se cachent, 6 au plus).
+- **Emplacement : P1**, contre le mur de gauche à l'avant de la salle, face à la vitrine (2,9 studs du mur). Le portant
+  est hors du champ de la vue détail des caisses, inchangée. Onglets **CAISSES / TENUES** sous le titre de la vue
+  d'ensemble (onglet affiché en boîte ambre) : la caméra se retourne de la vitrine au portant en glissant. Titre
+  « TENUES », « n EN VENTE · ACHAT DIRECT, SANS TIRAGE », aide « CLIC · VOIR LA TENUE ET ACHETER ». Écartés : P2 (blanc
+  derrière la caisse et sous le texte), P3 (deuxième sujet à côté de la caisse).
+- **Vue détail : personnage sur le socle**, à la place de la caisse, de trois quarts (208°), sous la suspension
+  remontée de 2 studs (`OUTFIT_LAMP_LIFT`, redescend pour les caisses), lampe de face (les tenues métalliques ne prennent
+  que la lumière de face). Colonne : « ‹ SHOP » (retour au portant), nom, « TENUE DE PERSONNAGE » et la rareté en boîte
+  de sa couleur, deux lignes de description (`description` du catalogue, traduite), « S'ÉQUIPE DANS ÉQUIPEMENT ·
+  TENUE », prix, ACHETER (contour os comme les caisses, « ACHAT… » pendant la demande, refus sous le bouton, « ACHETÉE ·
+  À ÉQUIPER DANS ÉQUIPEMENT » en ambre), « ‹ TENUE n / N › » ; tenue possédée : **POSSÉDÉE** pleine en rouge d'impact à
+  la place d'ACHETER, sans clic. Glisser (ou stick droit) tourne le personnage, balancement lent sinon, comme l'aperçu
+  d'un skin. Écartée : la variante gros plan.
+- **Rang** (`OutfitRackRules.slots`) : 6 cintres par barre au moins, tenues au milieu dans l'ordre du catalogue (prix
+  puis nom), cintres vides de part et d'autre (comme le stock sans marque de la vitrine : un portant à moitié vide fait
+  magasin en rupture) ; au-delà de 6 tenues, les cintres se serrent. Étiquette os sur la traverse du haut : nom, jeton
+  et prix, ou POSSÉDÉE.
+- **Réglé dans Studio** : cadre blanc en plastique lisse (en métal, il sortait gris foncé sous les lampes) ; deux
+  lampes au plafond devant le portant, 2,4 et 75° (celles de la vitrine, 1,3 et 60°, laissaient montants et cadre dans
+  l'ombre), allumées face au portant seulement.
+- Debug Studio (contexte Client, shop ouvert) : `DebugCrateOpening = "outfits"` montre le portant, `"outfit:N"` la vue
+  détail de la tenue N. Pour tester l'achat avec le compte propriétaire (admin : toutes les tenues), `DebugInventory =
+  "default"` (contexte Server).
+- Piège : dans une fenêtre plus large que 16:9 (FOV adapté, `Rules.fitFov`), la cloche remontée passe sous les onglets
+  du menu dans la vue détail d'une tenue ; en 16:9 elle reste en dessous (planche).
 
 Planche (Workbench, quelques secondes par vue ; tout est piloté par la liste `OUTFITS` du script) :
 
