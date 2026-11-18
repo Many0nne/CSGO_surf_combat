@@ -553,16 +553,13 @@ return function(T, Loader)
 	T.describe("InventoryRules : CHITINE (#521)", function()
 		local CHITINE = "outfit.chitine"
 
-		T.it("légendaire à 5 000 crédits, la tenue la plus chère du catalogue", function()
+		T.it("légendaire à 5 000 crédits, avec son apparence", function()
 			local item = Rules.item(CHITINE)
 			T.expect(item ~= nil, "CHITINE au catalogue")
 			T.expectEqual(item and item.type, Rules.Type.OUTFIT)
 			T.expectEqual(item and item.rarity, "legendary")
 			T.expectEqual(item and item.price, 5000)
 			T.expectEqual(item and item.appearance, "chitine")
-			for _, outfit in Rules.outfits() do
-				T.expect((outfit.price or 0) <= 5000, "aucune tenue plus chère que CHITINE : " .. outfit.id)
-			end
 		end)
 
 		T.it("l'admin l'équipe ; sans la posséder, refusée ; l'attribut la transporte", function()

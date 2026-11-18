@@ -8,21 +8,25 @@ loin. Gardées : nervure (relief plus fort, reflet plus fin), irise (reflet cyan
 Structure dessinée, ordonnée et symétrique (rien au hasard) :
 - torse : sternum en vertèbres, côtes arquées qui font le tour du buste, clavicules, plaques ventrales en écailles ;
   dos : colonne de vertèbres à apophyses, côtes dorsales et deux tubes qui passent par-dessus les épaules ;
-- bras et jambes : plaques segmentées qui se recouvrent comme les anneaux d'un insecte, câbles le long du membre,
-  rotule ; mains lisses (pas de doigts dessinés) ;
-- coque de tête : dôme lisse à crête médiane et anneaux de nuque, symétrique d'avant en arrière.
+- bras et jambes : plaques à chevrons qui se recouvrent (pointe en bas, comme les côtes), deux câbles devant et un
+  sur chaque côté ; mains lisses (pas de doigts dessinés) ;
+- coque de tête : dôme lisse, petite crête au sommet et anneaux de nuque, symétrique d'avant en arrière.
 
 Les membres sont dessinés selon la hauteur au-dessus de la racine (`height_of`), et non pièce par pièce : au genou et
 au coude, les pièces du rig se recouvrent, et deux dessins différents s'y disputeraient l'affichage.
 
-Brillance humide : Roblox ne reflète que le ciel (cf. MERCURE). `shade` peint donc dans la couleur les reflets d'une
-lumière fixe venue d'en haut et de face, sur les flancs des côtes, tubes et plaques tournés vers elle.
+Brillance humide : Roblox ne reflète que le ciel (cf. MERCURE). `shade` peint donc dans la couleur le reflet d'un
+décor fixe (sol noir, bande de lumière au-dessus de l'horizon, deux bandes latérales) sur les flancs des côtes, tubes
+et plaques.
+
+Le haut de la face avant et arrière du torse est à la hauteur 1,588 (UpperTorso : centre 0,3176, demi-hauteur
+1,2706) : tout motif placé plus haut n'est pas dessiné.
 
 Coordonnées : espace de la pièce en studs, avant du personnage = -Z, sa gauche = -X (cf. r15_bake.face_coords).
 """
 
 import numpy as np
-from r15_bake import BACK, BOTTOM, FRONT, LEFT, RIGHT, TOP, face_coords, height_of, pillow, smoothstep
+from r15_bake import BACK, FRONT, LEFT, RIGHT, TOP, dome, face_coords, height_of, pillow, smoothstep
 
 # relief : multiplicateur de hauteur ; gain : amplification de la pente du reflet (grand = bande plus nette et plus
 # fréquente) ; env : décor peint dans le reflet (cf. ENV_*)
@@ -69,17 +73,6 @@ def plates(h, period, phase=0.0):
 	return body, groove
 
 
-# Cette méthode permet de donner le relief de segments articulés (une grande plaque bombée puis un collier étroit, période
-# `period`) selon la hauteur `h` lorsqu'on dessine un membre ; renvoie (relief de 0 à 1, sillon de 0 à 1).
-def segments(h, period, phase=0.0):
-	s = np.mod((h - phase) / period, 1.0)
-	plate = np.sin(np.pi * np.clip(s / 0.76, 0, 1)) ** 0.45
-	collar = tube(np.abs(s - 0.88) * period, 0.045) * 0.75
-	d = np.minimum.reduce([np.abs(s - 0.78), np.abs(s - 0.98), s]) * period  # distance aux sillons (studs)
-	groove = 1 - smoothstep(0.0, 0.03, d)
-	return union(plate, collar), groove
-
-
 # Cette méthode permet de donner les points d'une côte arquée (de `a` à `b`, flèche `arch`) lorsqu'on dessine la cage
 # thoracique.
 def arc(a, b, arch, n=12):
@@ -89,10 +82,10 @@ def arc(a, b, arch, n=12):
 	return list(zip(u, v))
 
 
-# Cette méthode permet de donner le relief d'une vertèbre (dôme elliptique de demi-axes `ru`, `rv`, pente régulière :
+# Cette méthode permet de donner le relief d'une vertèbre (dôme elliptique de pente régulière, centré sur le point :
 # le reflet peint en éclaire le haut, pas le contour) lorsqu'on dessine le sternum ou la colonne.
 def bead(du, dv, ru, rv):
-	return np.clip(1 - (du / ru) ** 2 - (dv / rv) ** 2, 0, 1)
+	return dome(du, dv, 0, 0, ru, rv)
 
 
 # Cette méthode permet de réunir plusieurs reliefs (le plus haut l'emporte) lorsqu'une face en porte plusieurs.
@@ -119,13 +112,13 @@ def torso_front(u, h):
 	for front, _ in RIBS:
 		pts = arc((0.22, front), (1.62, front - RIB_DROP_FRONT), 0.1)
 		ribs = union(ribs, tube(polyline_distance(au, h, pts), 0.13))
-	clav = tube(polyline_distance(au, h, [(0.2, 1.72), (0.9, 1.68), (1.62, 1.62)]), 0.1)
+	clav = tube(polyline_distance(au, h, [(0.2, 1.5), (0.9, 1.47), (1.62, 1.43)]), 0.1)
 	# sternum : vertèbres de 0,3 stud, du col au bas des côtes
-	k = np.round((h - 1.75) / 0.3)
-	sc = 1.75 + k * 0.3
-	stern = np.where((sc <= 1.75) & (sc >= -0.05), bead(u, h - sc, 0.24, 0.135), 0)
+	k = np.round((h - 1.45) / 0.3)
+	sc = 1.45 + k * 0.3
+	stern = np.where((sc <= 1.45) & (sc >= -0.05), bead(u, h - sc, 0.24, 0.135), 0)
 	# tubes des épaules : arrivent du dos par le dessus et s'enfoncent sous la clavicule
-	shoulder = np.where(h > 1.66, tube(np.abs(au - TUBE_U), TUBE_W), 0)
+	shoulder = np.where(h > 1.47, tube(np.abs(au - TUBE_U), TUBE_W), 0)
 	# ventre : écailles sous les côtes, deux colonnes séparées par un sillon
 	belly_zone = smoothstep(-0.12, -0.32, h) * (1 - smoothstep(0.95, 1.1, au))
 	scales, sgroove = plates(h, 0.32, phase=-1.588)
@@ -141,8 +134,8 @@ def torso_front(u, h):
 # Cette méthode permet de dessiner le dos (colonne, apophyses, côtes dorsales, tubes) lorsqu'on cuit le torse.
 def torso_back(u, h):
 	au = np.abs(u)
-	k = np.round((h - 1.62) / 0.32)
-	vc = 1.62 + k * 0.32
+	k = np.round((h - 1.42) / 0.32)
+	vc = 1.42 + k * 0.32
 	spine = bead(u, h - vc, 0.3, 0.145)
 	process = tube(polyline_distance(au, h - vc, [(0.26, 0.0), (0.56, -0.07)]), 0.075) * 0.9
 	ribs = 0 * u
@@ -157,7 +150,7 @@ def torso_back(u, h):
 
 
 # Cette méthode permet de dessiner un flanc du buste (côtes qui font le tour, de l'avant à l'arrière) lorsqu'on cuit
-# le torse ; `w` va de -1 (avant) à 1 (arrière).
+# le torse ; `w` est la profondeur du point (studs, de -depth à l'avant à +depth à l'arrière).
 def torso_side(w, h, depth):
 	ribs = 0 * w
 	for front, back in RIBS:
@@ -170,7 +163,7 @@ def torso_side(w, h, depth):
 
 
 # Cette méthode permet de dessiner le dessus des épaules (tubes dorsaux qui passent vers l'avant) lorsqu'on cuit le
-# torse ; `w` va de l'avant (-) à l'arrière (+).
+# torse ; `w` est la profondeur du point (studs, négative à l'avant).
 def torso_top(u, w):
 	au = np.abs(u)
 	tubes = tube(np.abs(au - TUBE_U), TUBE_W)
@@ -185,7 +178,7 @@ def torso_top(u, w):
 # laisser le torse porter la tenue : des plaques en chevron qui se recouvrent (pointe en bas, comme les côtes du
 # buste), deux câbles devant et un sur chaque côté. Le dessin ne dépend que de la hauteur et de la position sur la
 # face, si bien qu'il continue d'une pièce à l'autre (coude, genou).
-def limb(part, face, u, h, out):
+def limb(part, face, u, h):
 	leg = "Leg" in part or "Foot" in part
 	phase = -4.77 if leg else -1.59
 	period = 0.62 if leg else 0.55
@@ -224,8 +217,7 @@ def surface(part, p, n, variant):
 		relief, groove = np.zeros_like(u), np.zeros_like(u)
 		bulge = pillow(part, face, u, v)
 	else:
-		out = 1 if part.startswith("Right") else -1
-		relief, groove = limb(part, face, u, height_of(part, p), out)
+		relief, groove = limb(part, face, u, height_of(part, p))
 		relief = np.where(sides, relief, 0)
 		groove = np.where(sides, groove, 0)
 		bulge = pillow(part, face, u, v, vertical=False)

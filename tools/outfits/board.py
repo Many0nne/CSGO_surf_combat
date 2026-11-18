@@ -20,6 +20,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -59,6 +60,8 @@ def write_part(name, cache, key, path):
 			f.write(f"f {a}/{a}/{a} {b}/{b}/{b} {c}/{c}/{c}\n")
 
 
+# Cette méthode permet de rendre et d'assembler la planche lorsqu'on lance le script : OBJ du rig en cache, vues
+# rendues par Blender dans un dossier propre à ce lancement (plusieurs worktrees peuvent rendre en même temps).
 def main():
 	ap = argparse.ArgumentParser()
 	ap.add_argument("out")
@@ -68,11 +71,13 @@ def main():
 	ap.add_argument("--size", type=int, default=520, help="hauteur d'une vue (pixels)")
 	args = ap.parse_args()
 	key = os.environ["ROBLOX_OPEN_CLOUD_KEY"]
-	work = os.path.join(args.cache, "board")
-	os.makedirs(work, exist_ok=True)
+	rig_dir = os.path.join(args.cache, "board_rig")
+	os.makedirs(rig_dir, exist_ok=True)
+	work = tempfile.mkdtemp(prefix="board_", dir=args.cache)
 	rig = {}
-	for name in r15_bake.PARTS:
-		rig[name] = os.path.join(work, name + ".obj")
+	for name, (mesh_id, size, _) in r15_bake.PARTS.items():
+		# nom du cache : mesh et taille de la pièce, un changement de PARTS refait l'OBJ
+		rig[name] = os.path.join(rig_dir, f"{name}_{mesh_id}_{'x'.join(f'{c:.4f}' for c in size)}.obj")
 		if not os.path.exists(rig[name]):
 			write_part(name, args.cache, key, rig[name])
 	outfits = []
@@ -97,7 +102,10 @@ def main():
 	cfg_path = os.path.join(work, "board.json")
 	json.dump(config, open(cfg_path, "w"), indent=1)
 	script = os.path.join(HERE, "board_blender.py")
-	subprocess.run([BLENDER, "-b", "--factory-startup", "--python", script, "--", cfg_path], check=True)
+	# --python-exit-code : une erreur du script Blender fait échouer le rendu (sinon Blender sort en 0)
+	subprocess.run(
+		[BLENDER, "-b", "--factory-startup", "--python-exit-code", "1", "--python", script, "--", cfg_path], check=True
+	)
 	# Assemblage : une ligne par tenue, une colonne par vue, nom de la tenue à gauche
 	tiles = [[Image.open(os.path.join(work, f"view_{i}_{j}.png")) for j in range(len(VIEWS))] for i in range(len(outfits))]
 	tw, th = tiles[0][0].size

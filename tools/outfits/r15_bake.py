@@ -378,6 +378,8 @@ def main():
 	outfit = importlib.util.module_from_spec(spec)
 	sys.modules["r15_bake"] = sys.modules[__name__]
 	spec.loader.exec_module(outfit)
+	if args.head and not hasattr(outfit, "head_surface"):
+		raise SystemExit(f"[r15_bake] {args.outfit} ne définit pas head_surface : pas de coque à cuire (--head)")
 	key = os.environ["ROBLOX_OPEN_CLOUD_KEY"]
 	for variant in args.variant or list(outfit.VARIANTS):
 		groups = None if args.groups is None else [g for g in args.groups.split(",") if g]
