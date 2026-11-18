@@ -95,6 +95,17 @@ par `ScaleTo` avec le reste de l'arme.
   partie tirent le rayon ordinaire. Le son propre à un effet est prévu dans l'item (pas encore fait).
   Ajouter un effet : son item dans `InventoryRules.ITEMS`, son `appearance` dans la caisse (`ShopCatalog`), son style
   dans `STYLES` et `ShotEffects.show`, sa traduction de description (`Locale/en/Shop.luau`).
+  **Méthode pour un nouvel effet (BALISE et CIRCUIT, 18/11/2026) :** un dossier de brief pour une IA externe (vidéos
+  des effets existants filmés dans la démo de l'onglet EFFET, planche des skins AWP rendue par `render_views.py`,
+  contraintes : lisible vu du tireur, ne cache pas la cible, 0,2 à 0,6 s, briques Roblox disponibles), l'utilisateur
+  choisit sur les planches rapportées, puis chaque effet est comparé à sa planche, en vue du tireur et de côté, avant
+  d'être montré. **Règle (utilisateur, 18/11/2026) : favoriser la 3D** (Parts néon ou modèle en volume, comme PAN ! et les
+  cubes de CIRCUIT) pour tout élément qui doit se lire comme un objet ; un sprite plat « c'est moche ». Les sprites
+  restent pour un éclat bref (étincelle) ou une marque d'impact, les Beams pour ce qui suit le rayon.
+  Filmer la démo : enregistrer la fenêtre Studio à pleine résolution (`mss`), puis repérer les coupes entre les deux
+  plans (écart moyen entre images > 20) pour retrouver les tirs. **Piège : le survol d'une carte se perd quand
+  l'enregistrement met Studio au premier plan** (le vrai curseur remplace le curseur simulé) et la démo retombe sur
+  l'effet équipé : équiper l'effet à filmer, puis remettre celui du joueur.
   - **TREMPE (`temper`) — mis de côté le 18/11/2026** (« du point de vue du joueur, c'est vraiment pas dingue » : vu du
     tireur, le ruban n'est qu'un court trait doré au bout du canon). Plus d'item ni de place dans la caisse, style
     désactivé dans `STYLES`, rendu gardé tel quel pour une reprise (#567) : repenser d'abord la vue du tireur. D'après une planche de concept faite par une IA externe sur brief (validée le 18/11/2026 :
@@ -147,6 +158,18 @@ par `ScaleTo` avec le reste de l'arme.
     **Piège : couleurs sombres d'une texture (noir) = `LightEmission` 0** sur le Beam et les particules ; avec la lumière
     additive habituelle des rayons, le noir devient transparent. Le plan de côté de la démo (FOV 40°) grossit la
     marque deux fois plus qu'en partie : juger sa taille en 1re personne.
+  - **CIRCUIT (`circuit`, #567, validé le 18/11/2026) :** remplace le rayon. Piste magenta presque droite à coudes de
+    45° (`circuitPath`, Beams de piste et de halo par segment) construite depuis la bouche, impulsion claire qui la
+    parcourt (`circuitProgress`), extinction de la bouche vers l'impact (`circuitFade`) ; étincelle en étoile au tir
+    (sprite `CIRCUIT_FLASH_IMAGE`, `assets/effects/circuit_textures.py`) ; **composants en cube** (`CircuitCube` : douze
+    arêtes néon et un cœur clair, Parts en matériau Neon recalculées à chaque frame, pop puis rotation qui montre le
+    volume, `circuitCubeFrame`) au canon et à l'impact ; réseau de pistes fines qui pousse autour du cube d'impact
+    (`circuitBranches`, Beams dans le plan de la caméra, carré au bout de chaque piste). Réserves : `CircuitTrace`
+    (`CIRCUIT_MAX_ACTIVE` jeux de Beams, au-delà le rayon ordinaire) et `CircuitCube` (`CIRCUIT_CUBES`).
+    Première version rejetée (« un peu simpliste ») : pastilles plates en sprite, piste qui zigzaguait sans arrêt
+    (`CIRCUIT_RUN` { 4, 10 }), rien qui pousse à l'impact. Puis : « une sorte de composant 3D en cube, pas juste en 2D ».
+    **Piège : le néon fleurit (bloom)** : vu de côté, le cube d'impact est une tache blanche les premiers 0,1 s avant de
+    montrer ses arêtes.
   - **ÉCLAIR (`lightning`) :** un éclair (`LightningBolt`, forme et réglages dans `LightningRules`) à la
   place du rayon de balle, tronc brisé resserré au canon et à l'impact, branches et brindilles tirées à chaque tir,
   flash puis second flash puis fondu, lueur `PointLight`. Au-delà de `LightningRules.MAX_ACTIVE` éclairs en cours, le

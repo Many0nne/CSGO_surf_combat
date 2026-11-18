@@ -623,7 +623,7 @@ return function(T, Loader)
 					T.expect(skin ~= nil and skin.type == Rules.Type.SKIN, "skin d'inspiration de " .. entry.id)
 				end
 			end
-			T.expectEqual(count, 3) -- ÉCLAIR, PAN ! et BALISE (TREMPE mis de côté)
+			T.expectEqual(count, 4) -- ÉCLAIR, PAN !, BALISE et CIRCUIT (TREMPE mis de côté)
 			T.expectEqual(#Rules.effects(), count)
 			T.expectEqual(Rules.effects()[1].rarity, "rare", "rare d'abord")
 			T.expectEqual(Rules.effects()[count].id, "effect.pan", "exceptionnel en dernier")

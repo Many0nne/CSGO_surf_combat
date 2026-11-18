@@ -135,37 +135,40 @@ return function(T, Loader)
 			end
 		end)
 
-		T.it("caisse d'effets (#566, #567) : ÉCLAIR, BALISE et PAN !, tous les effets du jeu, pochoir FX", function()
-			local crate
-			for _, c in Shop.OFF_SALE do
-				crate = if c.id == "crate.fx.serie1" then c else crate
-			end
-			T.expectEqual(Shop.isEffectCrate(crate), true)
-			T.expectEqual(Shop.isEffectCrate(Shop.crate("crate.awp.serie1")), false)
-			local rows = Shop.contents(crate, Inventory.ITEMS)
-			T.expectEqual(names(rows), "ÉCLAIR,BALISE,PAN !")
-			T.expectEqual(rows[1].skin, "effect.eclair")
-			T.expectEqual(rows[1].rarity.id, "rare")
-			T.expectEqual(rows[2].rarity.id, "rare")
-			T.expectEqual(rows[3].rarity.id, "exceptional")
-			T.expectEqual(rows[3].weapon, "FX")
-			T.expectEqual(rows[3].viewmodel, "AWP")
-			for _, item in Inventory.ITEMS do
-				if item.type == "effect" then
-					T.expect(Shop.rarityOf(item) ~= nil, item.id .. " sans rareté")
-					local listed = false
-					for _, row in rows do
-						listed = listed or row.skin == item.id
-					end
-					T.expect(listed, item.id .. " absent de la caisse d'effets")
+		T.it(
+			"caisse d'effets (#566, #567) : ÉCLAIR, BALISE, PAN ! et CIRCUIT, tous les effets du jeu, pochoir FX",
+			function()
+				local crate
+				for _, c in Shop.OFF_SALE do
+					crate = if c.id == "crate.fx.serie1" then c else crate
 				end
+				T.expectEqual(Shop.isEffectCrate(crate), true)
+				T.expectEqual(Shop.isEffectCrate(Shop.crate("crate.awp.serie1")), false)
+				local rows = Shop.contents(crate, Inventory.ITEMS)
+				T.expectEqual(names(rows), "ÉCLAIR,BALISE,PAN !,CIRCUIT")
+				T.expectEqual(rows[1].skin, "effect.eclair")
+				T.expectEqual(rows[1].rarity.id, "rare")
+				T.expectEqual(rows[2].rarity.id, "rare")
+				T.expectEqual(rows[3].rarity.id, "exceptional")
+				T.expectEqual(rows[3].weapon, "FX")
+				T.expectEqual(rows[3].viewmodel, "AWP")
+				for _, item in Inventory.ITEMS do
+					if item.type == "effect" then
+						T.expect(Shop.rarityOf(item) ~= nil, item.id .. " sans rareté")
+						local listed = false
+						for _, row in rows do
+							listed = listed or row.skin == item.id
+						end
+						T.expect(listed, item.id .. " absent de la caisse d'effets")
+					end
+				end
+				T.expectEqual(Shop.stencil(crate), "S1-FX")
+				T.expectEqual(select(2, Shop.subtitle(crate, Inventory.ITEMS)).n, 4)
+				-- PAN ! reste un skin exceptionnel de la série 1 : la caisse d'effets ne change pas sa rareté
+				T.expectEqual(Shop.rarityOf(Inventory.item("skin.awp.pan")).id, "exceptional")
+				T.expectEqual(Shop.rarityOf(Inventory.item("skin.awp.trempe")).id, "legendary")
 			end
-			T.expectEqual(Shop.stencil(crate), "S1-FX")
-			T.expectEqual(select(2, Shop.subtitle(crate, Inventory.ITEMS)).n, 3)
-			-- PAN ! reste un skin exceptionnel de la série 1 : la caisse d'effets ne change pas sa rareté
-			T.expectEqual(Shop.rarityOf(Inventory.item("skin.awp.pan")).id, "exceptional")
-			T.expectEqual(Shop.rarityOf(Inventory.item("skin.awp.trempe")).id, "legendary")
-		end)
+		)
 
 		T.it("trouve une caisse par son id", function()
 			T.expectEqual(Shop.crate("crate.awp.serie1").name, "AWP · SÉRIE 1")

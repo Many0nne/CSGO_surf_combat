@@ -20,6 +20,7 @@ local NetworkProtocol = require(ReplicatedStorage.Shared.NetworkProtocol)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local ShotEffectRules = require(ReplicatedStorage.Shared.ShotEffectRules)
 local BaliseMarks = require(script.Parent.BaliseMarks)
+local CircuitTrace = require(script.Parent.CircuitTrace)
 local LightningBolt = require(script.Parent.LightningBolt)
 local PanBurst = require(script.Parent.PanBurst)
 local TemperFlakes = require(script.Parent.TemperFlakes)
@@ -260,6 +261,13 @@ local function show(
 			end
 		end
 		if style == "lightning" and LightningBolt.spawn(start, finish) then
+			return
+		end
+		-- CIRCUIT : la piste remplace le rayon s'il reste de la place (pastille du canon absente à la lunette)
+		if
+			style == "circuit"
+			and CircuitTrace.spawn(start, finish, isLocal == true, not (isLocal and ScopeSystem.getLevel() > 0))
+		then
 			return
 		end
 		if style == "balise" then
