@@ -792,7 +792,7 @@ Depuis la racine du worktree, `blender` = `"/c/Program Files/Blender Foundation/
    <nom> assets/outfits/<nom>/maps/<variante>/ids.json` : clone le dossier de MERCURE (cartes et coque avec toutes leurs
    propriétés) et y pose les nouveaux ids. Les six dossiers ont la même structure et les mêmes propriétés.
 7. **Item** dans `InventoryRules.ITEMS`, puis `rojo build` et `lune run tools/rbxm/verify_place.luau <place>` : 14
-   cartes et coque présentes, ids égaux à ceux de `ids.json`, coque sans collision, requête, contact ni masse. Studio ne
+   SurfaceAppearance (quatre cartes chacune) et coque présentes, ids égaux à ceux de `ids.json`, coque sans collision, requête, contact ni masse. Studio ne
    sert plus qu'à vérifier en jeu.
 
 ### Coque de la tête
