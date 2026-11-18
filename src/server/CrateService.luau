@@ -29,14 +29,13 @@ local CheatLog = require(ServerScriptService.Server.CheatLog)
 local CratePurchaseRules = require(ServerScriptService.Server.CratePurchaseRules)
 local InventoryStore = require(ServerScriptService.Server.InventoryStore)
 local PaidRandomPolicy = require(ServerScriptService.Server.PaidRandomPolicy)
+local PurchaseRemote = require(ServerScriptService.Server.PurchaseRemote)
 local Roles = require(ServerScriptService.Server.Roles)
 local WalletStore = require(ServerScriptService.Server.WalletStore)
 
 export type Result = CratePurchaseRules.Reply
 
 local random = Random.new()
--- Joueurs dont un achat attend son écriture (au plus un chacun) ; retirés à la fin de l'achat, départ compris
-local buying: { [Player]: boolean } = {}
 
 local CrateService = {}
 
@@ -112,25 +111,13 @@ local function purchase(player: Player, crateId: string): Result
 end
 
 -- Cette méthode permet d'acheter et d'ouvrir une caisse lorsque le client clique ACHETER (#393) : un seul achat en vol
--- par joueur, puis `purchase` ; bloquante jusqu'à l'écriture. Le tour est toujours rendu, même sur une erreur.
-function CrateService.buy(player: Player, crateId: string): Result
-	if buying[player] then
-		return refuse("busy")
-	end
-	buying[player] = true
-	local ok, result = pcall(purchase, player, crateId)
-	buying[player] = nil
-	if not ok then
-		warn("[CrateService] achat en erreur pour", player.Name, ":", result)
-		return refuse("failed")
-	end
-	return result
-end
+-- par joueur, puis `purchase` ; bloquante jusqu'à l'écriture. Le tour est toujours rendu, même sur une erreur
+-- (`PurchaseRemote`).
+CrateService.buy = PurchaseRemote.guard("CrateService", refuse, purchase)
 
 -- Cette méthode permet de brancher les remotes d'ouverture de test et d'achat lorsque le serveur démarre : garde commune
--- (débit, type de l'id de caisse) puis `CrateService.open` ou `CrateService.buy`. Le thread d'un achat n'est jamais
--- annulé (il porte l'écriture, cf. InventoryStore.transact). `onBought` (analytics, #527) reçoit chaque achat traité
--- (réponse et prix de la caisse, nil si elle est inconnue), avant la réponse au client.
+-- (débit, type de l'id de caisse) puis `CrateService.open` ; l'achat passe par `PurchaseRemote`. `onBought` (analytics,
+-- #527) reçoit chaque achat traité (réponse et prix de la caisse, nil si elle est inconnue), avant la réponse au client.
 function CrateService.init(
 	openRemote: RemoteFunction,
 	buyRemote: RemoteFunction,
@@ -142,17 +129,19 @@ function CrateService.init(
 		end
 		return CrateService.open(player, crateId)
 	end
-	buyRemote.OnServerInvoke = function(player: Player, crateId: any): Result
-		if not CheatLog.admit(player, buyRemote.Name, crateId) then
-			return refuse("rate")
-		end
-		local result = CrateService.buy(player, crateId)
-		if onBought then
-			local crate = ShopCatalog.crate(crateId)
-			onBought(player, crateId, result, if crate then crate.price else nil)
-		end
-		return result
-	end
+	PurchaseRemote.connect(
+		buyRemote,
+		refuse,
+		function(player: Player, crateId: string): Result
+			return CrateService.buy(player, crateId)
+		end,
+		if onBought
+			then function(player: Player, crateId: string, result: Result)
+				local crate = ShopCatalog.crate(crateId)
+				onBought(player, crateId, result, if crate then crate.price else nil)
+			end
+			else nil
+	)
 end
 
 return CrateService
