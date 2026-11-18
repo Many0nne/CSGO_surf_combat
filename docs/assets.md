@@ -800,7 +800,7 @@ de la boîte de la tête → rien).
 **Tenues suivantes (BRONZE, PORCELAINE, rares) : fabrication sans Studio.**
 
 1. Module `assets/outfits/<nom>/<nom>.py` à 2 ou 3 variantes ; BRONZE et PORCELAINE reprennent la musculature de
-   MERCURE (`MERCURE.PAINTERS`, module chargé par chemin) et leur propre couleur. Coque de tête : celle de MERCURE,
+   MERCURE (`r15_bake.muscles`, `cavity`) et leur propre couleur. Coque de tête : celle de MERCURE,
    exportée une fois en JSON (`blender -b --factory-startup --python tools/outfits/head_mesh.py -- MercureHead.fbx
    head.json`), cuite avec `r15_bake.py --head head.json` dans `<variante>/Head/`.
 2. Planche : `r15_bake.py --rig-json rig.json` (meshs placés au repos), puis
@@ -824,9 +824,10 @@ quatre-feuilles sur les jambes, anneaux sur la coque.
   `r15_bake` cuit donc d'abord les triangles cachés dans une pièce voisine au repos. MERCURE a été cuite avant cette
   correction.
 - **Les pièces d'un membre se recouvrent au repos** (bras et avant-bras sur 0,82 stud, cuisse et jambe sur 0,68), faces
-  confondues : un décor qui change d'une pièce à l'autre y scintille. PORCELAINE peint bras et jambes d'un seul tenant,
-  selon la hauteur au-dessus de la racine (`height_of`) : les deux pièces y peignent le même dessin. Pas de filet
-  horizontal aux articulations, seulement aux extrémités du membre.
+  confondues (de même le haut des cuisses contre le bas du torse) : un décor qui change d'une pièce à l'autre y
+  scintille. `r15_bake` fait peindre ces points par la pièce « propriétaire » (la première de `PARTS` qui les contient,
+  `owners`/`as_owner`) : les deux pièces y peignent le même dessin. PORCELAINE peint en plus bras et jambes d'un seul
+  tenant, selon la hauteur au-dessus de la racine (`height_of`), avec des filets horizontaux aux seules extrémités.
 - **Coque de tête de MERCURE : couture au milieu du visage.** Le dépliage met u = -angle/360 avec la couture devant ;
   la bande de 10° au centre du visage va de u = 0,976 à 0,024, donc lit toute la largeur de la carte. Un décor de coque
   ne dépend que de la hauteur (anneaux) ; `load_head` écarte ces triangles à la cuisson.

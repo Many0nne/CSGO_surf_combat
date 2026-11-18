@@ -124,14 +124,21 @@ def muscle(u, v, cu, cv, ru, rv, soft_top=0.6, soft_bottom=0.25):
 	return edge * (0.2 + 0.8 * np.sqrt(np.clip(1 - d * d, 0, 1)))
 
 
+# Cette méthode permet de donner les demi-dimensions de la face d'un bloc le long de u et de v (cf. face_coords)
+# lorsqu'une tenue place un dessin par rapport aux bords de la face.
+def half_sizes(part, face):
+	sx, sy, sz = (s / 2 for s in PARTS[part][1])
+	hu = np.where((face == RIGHT) | (face == LEFT), sz, sx)
+	hv = np.where((face == TOP) | (face == BOTTOM), sz, sy)
+	return hu, hv
+
+
 # Cette méthode permet de bomber légèrement chaque face d'un bloc (1 au centre, 0 sur les arêtes) lorsqu'une tenue
 # métallique doit éviter les grandes faces planes, qui reflètent le décor comme un miroir uniforme.
 # Avec `vertical` à False, la face ne se bombe qu'en largeur : le reflet continue d'une pièce à la suivante (cuisse,
 # genou, jambe) au lieu de marquer une coupure à chaque articulation.
 def pillow(part, face, u, v, vertical=True):
-	sx, sy, sz = (s / 2 for s in PARTS[part][1])
-	hu = np.where((face == RIGHT) | (face == LEFT), sz, sx)
-	hv = np.where((face == TOP) | (face == BOTTOM), sz, sy)
+	hu, hv = half_sizes(part, face)
 	across = np.clip(1 - (u / hu) ** 2, 0, 1)
 	if not vertical:
 		return np.where((face == TOP) | (face == BOTTOM), 0.0, across)
@@ -164,6 +171,40 @@ def outline(u, v, cu, cv, ru, rv, width, a0=0, a1=360):
 def smoothstep(e0, e1, x):
 	t = np.clip((x - e0) / (e1 - e0), 0, 1)
 	return t * t * (3 - 2 * t)
+
+
+_mercure = None
+
+
+# Cette méthode permet de charger une fois le module de MERCURE lorsqu'une tenue reprend sa musculature dessinée
+# (PAINTERS, RELIEF, BULGE).
+def mercure():
+	global _mercure
+	if _mercure is None:
+		path = os.path.join(HERE, "..", "..", "assets", "outfits", "mercure", "mercure.py")
+		spec = importlib.util.spec_from_file_location("mercure_anatomy", path)
+		_mercure = importlib.util.module_from_spec(spec)
+		spec.loader.exec_module(_mercure)
+	return _mercure
+
+
+# Cette méthode permet de donner le relief des muscles dessinés de MERCURE sur une pièce (0 si elle n'en a pas)
+# lorsqu'une autre tenue reprend cette anatomie.
+def muscles(part, face, u, v):
+	painter = mercure().PAINTERS.get(part)
+	return painter(face, u, v)[0] if painter else np.zeros_like(u)
+
+
+# Cette méthode permet de mesurer le creux des muscles en un point (> 0 : plus bas que la moyenne du relief sur huit
+# directions à `step` studs) lorsqu'une patine ou un vernis s'accumule entre les masses.
+def cavity(part, face, u, v, step=0.26):
+	if part not in mercure().PAINTERS:
+		return np.zeros_like(u)
+	around = np.zeros_like(u)
+	for k in range(8):
+		a = k * np.pi / 4
+		around += muscles(part, face, u + step * np.cos(a), v + step * np.sin(a))
+	return (around / 8 - muscles(part, face, u, v)) / mercure().RELIEF
 
 
 # Cette méthode permet de lire un mesh du rig (positions ramenées à la taille de la pièce, normales, UV, triangles)
@@ -274,13 +315,18 @@ def bake_atlas(outfit, variant, out_dir, size, group, meshes, flat=False):
 		r = rasterize(pos, nrm, uv, tris, size)
 		p, n = r["p"], r["n"]
 		t, b = tangentize(r["t"], n), tangentize(r["b"], n)
-		s = outfit.surface(name, p, n, variant)
+		# Aux articulations, deux pièces ont des faces confondues : chacune y peint comme la pièce propriétaire
+		# (owners), sinon leurs dessins différents scintilleraient en jeu.
+		def surf(q):
+			return outfit.surface(name, q, n, variant) if flat else as_owner(outfit.surface, name, q, (n,), variant)
+
+		s = surf(p)
 		h0 = s["height"]
 		if flat:
 			nt = np.tile([0.0, 0.0, 1.0], (len(p), 1))
 		else:
-			ht = outfit.surface(name, p + t * eps, n, variant)["height"]
-			hb = outfit.surface(name, p + b * eps, n, variant)["height"]
+			ht = surf(p + t * eps)["height"]
+			hb = surf(p + b * eps)["height"]
 			nt = np.stack([-(ht - h0) / eps, -(hb - h0) / eps, np.ones_like(h0)], axis=1)
 			nt /= np.linalg.norm(nt, axis=1, keepdims=True)
 		iy, ix = r["iy"], r["ix"]
@@ -289,7 +335,10 @@ def bake_atlas(outfit, variant, out_dir, size, group, meshes, flat=False):
 			bumped = nt[:, :1] * t + nt[:, 1:2] * b + nt[:, 2:] * n
 			bumped /= np.linalg.norm(bumped, axis=1, keepdims=True)
 			s["geo_normal"] = n
-			s["color"] = outfit.shade(name, p, bumped, s, variant)
+			if flat:
+				s["color"] = outfit.shade(name, p, bumped, s, variant)
+			else:
+				s["color"] = as_owner(outfit.shade, name, p, (bumped, s), variant)
 		color[iy, ix] = s["color"]
 		normal[iy, ix] = nt * 0.5 + 0.5
 		metal[iy, ix] = s["metal"]
@@ -314,18 +363,17 @@ def bake_atlas(outfit, variant, out_dir, size, group, meshes, flat=False):
 	print(f"[r15_bake] {variant} {group} : {int(filled.sum())} texels")
 
 
-# Cette méthode permet de lire la coque de tête exportée par head_mesh.py lorsqu'une tenue a une coque à cuire.
-# Les triangles qui enjambent la couture du dépliage (u de 0,98 à 0,02 : la bande de 10° au milieu du visage de la
-# coque de MERCURE) sont écartés : ils couvriraient toute la largeur de l'atlas. En jeu, cette bande lit toute la
-# largeur de la carte : le décor d'une coque ne doit dépendre que de la hauteur (anneaux), cf. docs/assets.md.
-def load_head(path):
+# Cette méthode permet de lire la coque exportée par head_mesh.py (unités du FBX = studs de la MeshPart) lorsqu'une
+# tenue a une coque à cuire, sans les triangles qui enjambent la couture du dépliage (cf. docs/assets.md).
+def load_head(path, skip_seam=True):
 	with open(path) as f:
 		d = json.load(f)
 	nrm = np.array(d["nrm"], dtype=np.float64)
 	nrm /= np.linalg.norm(nrm, axis=1, keepdims=True) + 1e-12
 	uv = np.array(d["uv"], dtype=np.float64)
 	tris = np.array(d["tris"], dtype=np.int64)
-	tris = tris[np.ptp(uv[tris, 0], axis=1) < 0.5]
+	if skip_seam:
+		tris = tris[np.ptp(uv[tris, 0], axis=1) < 0.5]  # bande de 10° au milieu du visage : u de 0,976 à 0,024
 	return np.array(d["pos"], dtype=np.float64), nrm, uv, tris
 
 
@@ -337,9 +385,8 @@ def rest_offset(name):
 	return np.array([SIDE_X.get(kind, 0) * side, OFFSETS[kind], 0])
 
 
-# Cette méthode permet de repérer les triangles d'une pièce cachés dans une pièce voisine au repos (dessus de la jambe
-# dans la cuisse, biseaux du coude…) lorsqu'on cuit un atlas : les meshs du rig réutilisent pour eux l'espace UV de la
-# face avant, et s'ils étaient cuits après elle, ils l'écraseraient (dessin coupé ou effacé au bas des jambes).
+# Cette méthode permet de repérer les triangles d'une pièce cachés dans une voisine au repos (dessus de la jambe…)
+# lorsqu'on cuit un atlas : ils réutilisent l'UV de la face avant, qu'ils écraseraient s'ils étaient cuits après elle.
 def hidden_triangles(name, pos, tris, margin=0.01):
 	centers = pos[tris].mean(axis=1) + rest_offset(name)
 	hidden = np.zeros(len(tris), dtype=bool)
@@ -351,9 +398,62 @@ def hidden_triangles(name, pos, tris, margin=0.01):
 	return hidden
 
 
-# Cette méthode permet de cuire toutes les cartes d'une variante de tenue (un atlas par groupe, puis la coque de tête
-# si elle est donnée) lorsqu'on lance le script sur un module de tenue. Les triangles cachés sont cuits d'abord, pour
-# que les faces visibles qui partagent leurs UV l'emportent.
+# Cette méthode permet de trouver, pour chaque point d'une pièce, la pièce qui en « possède » la surface (la première,
+# dans l'ordre de PARTS, dont la boîte au repos le contient) lorsque deux pièces ont là des faces confondues.
+def owners(name, p, margin=0.01):
+	world = p + rest_offset(name)
+	owner = np.full(len(p), name, dtype=object)
+	for other, (_, size, _) in reversed(list(PARTS.items())):
+		inside = np.all(np.abs(world - rest_offset(other)) <= np.array(size) / 2 + margin, axis=1)
+		owner = np.where(inside, other, owner)
+	return owner
+
+
+# Cette méthode permet d'appeler une fonction de la tenue (surface, shade) comme la pièce propriétaire de chaque point
+# (owners) lorsque les deux pièces d'une articulation doivent y peindre le même dessin ; `extra` suit les points.
+def as_owner(fn, name, p, extra, *args):
+	owner = owners(name, p)
+	parts = list(dict.fromkeys(owner))
+	if len(p) == 0 or parts == [name]:
+		return fn(name, p, *extra, *args)
+	out = None
+	for part in parts:
+		mask = owner == part
+		local = p[mask] + rest_offset(name) - rest_offset(part)
+		res = fn(part, local, *[e[mask] if isinstance(e, np.ndarray) else _sub(e, mask) for e in extra], *args)
+		if out is None:
+			out = _empty_like(res, len(p))
+		_assign(out, mask, res)
+	return out
+
+
+# Cette méthode permet de garder les points d'un masque dans un résultat (tableau ou dictionnaire de tableaux)
+# lorsqu'as_owner découpe les points par pièce.
+def _sub(value, mask):
+	if isinstance(value, dict):
+		return {k: (v[mask] if isinstance(v, np.ndarray) and len(v) == len(mask) else v) for k, v in value.items()}
+	return value[mask]
+
+
+# Cette méthode permet de créer un résultat vide de la forme de `res` pour `n` points lorsqu'as_owner le remplit.
+def _empty_like(res, n):
+	if isinstance(res, dict):
+		return {k: np.zeros((n,) + np.shape(v)[1:]) for k, v in res.items()}
+	return np.zeros((n,) + np.shape(res)[1:])
+
+
+# Cette méthode permet de recopier dans `out` les valeurs calculées pour les points d'un masque lorsqu'as_owner
+# rassemble les résultats des différentes pièces.
+def _assign(out, mask, res):
+	if isinstance(res, dict):
+		for k, v in res.items():
+			out[k][mask] = v
+	else:
+		out[mask] = res
+
+
+# Cette méthode permet de cuire toutes les cartes d'une variante (un atlas par groupe, puis la coque) lorsqu'on lance le
+# script ; triangles cachés cuits d'abord, pour que les faces visibles qui partagent leurs UV l'emportent.
 def bake(outfit, variant, out_dir, size, cache, key, groups=None, head=None):
 	for group in groups or GROUPS:
 		hidden, visible = [], []
@@ -375,10 +475,12 @@ def export_rig(path, cache, key, head=None):
 	rig = {}
 	for name in PARTS:
 		pos, _, uv, tris = load_part(name, cache, key)
-		rig[name] = {"pos": (pos + rest_offset(name)).tolist(), "uv": uv.tolist(), "tris": tris.tolist()}
+		rig[name] = {"pos": (pos + rest_offset(name)).tolist(), "uv": uv.tolist(), "tris": tris.tolist(),
+			"group": PARTS[name][2]}
 	if head:
-		pos, _, uv, tris = load_head(head)
-		rig["Head"] = {"pos": (pos + [0, OFFSETS["Head"], 0]).tolist(), "uv": uv.tolist(), "tris": tris.tolist()}
+		pos, _, uv, tris = load_head(head, skip_seam=False)  # la planche montre la coque entière
+		rig["Head"] = {"pos": (pos + [0, OFFSETS["Head"], 0]).tolist(), "uv": uv.tolist(), "tris": tris.tolist(),
+			"group": "Head"}
 	with open(path, "w") as f:
 		json.dump(rig, f)
 	print(f"[r15_bake] rig -> {path}")

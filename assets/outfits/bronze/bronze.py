@@ -12,26 +12,13 @@ noirci (bronze presque noir, arêtes et sommets dorés).
 Coordonnées : espace de la pièce en studs, avant du personnage = -Z, sa gauche = -X (cf. r15_bake.face_coords).
 """
 
-import importlib.util
-import os
-
 import numpy as np
-from r15_bake import PARTS, TOP, face_coords, height_of, pillow, smoothstep
+from r15_bake import TOP, cavity, face_coords, half_sizes, height_of, mercure, muscles, pillow, smoothstep
 
 
-# Cette méthode permet de charger le module de MERCURE lorsqu'une tenue reprend sa musculature dessinée.
-def _load_mercure():
-	path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "mercure", "mercure.py")
-	spec = importlib.util.spec_from_file_location("mercure_anatomy", path)
-	module = importlib.util.module_from_spec(spec)
-	spec.loader.exec_module(module)
-	return module
-
-
-MERCURE = _load_mercure()
+MERCURE = mercure()
 RELIEF = MERCURE.RELIEF
 BULGE = MERCURE.BULGE
-CAVITY_STEP = 0.26  # pas du laplacien qui mesure les creux et les bosses (studs)
 
 # Décor imaginaire reflété par le métal, puis par les parties polies (hauteur de la direction réfléchie -> couleur :
 # sol, bande sombre sous l'horizon, horizon, ciel, zénith), patine, part de patine et de poli
@@ -102,33 +89,12 @@ VARIANTS = {
 }
 
 
-# Cette méthode permet de donner le relief des muscles dessinés d'une pièce (0 si elle n'en a pas) lorsqu'on cuit le
-# bronze ou qu'on en mesure les creux.
-def muscles(part, face, u, v):
-	painter = MERCURE.PAINTERS.get(part)
-	return painter(face, u, v)[0] if painter else np.zeros_like(u)
-
-
-# Cette méthode permet de mesurer le creux d'un point (> 0 : plus bas que le relief qui l'entoure, à CAVITY_STEP sur
-# huit directions) lorsque la patine se dépose au fond des sillons et entre les masses musculaires.
-def cavity(part, face, u, v):
-	d = CAVITY_STEP
-	h = muscles(part, face, u, v)
-	around = np.zeros_like(u)
-	for k in range(8):
-		a = k * np.pi / 4
-		around += muscles(part, face, u + d * np.cos(a), v + d * np.sin(a))
-	return (around / 8 - h) / RELIEF
-
-
 # Cette méthode permet de donner la part polie d'une arête de bloc (1 sur l'arête verticale, 0 à 0,14 stud) lorsqu'on
 # éclaircit les angles que l'on touche : arêtes verticales des faces latérales, tour du dessus des blocs.
 def edge_wear(part, face, u, v):
-	sx, sy, sz = (s / 2 for s in PARTS[part][1])
-	hu = np.where(face >= 2, sz, sx)  # côtés (RIGHT, LEFT) : u = z ; dessus : u = x
-	hu = np.where(face >= 4, sx, hu)
+	hu, hv = half_sizes(part, face)
 	dist = hu - np.abs(u)
-	dist = np.where(face == TOP, np.minimum(dist, sz - np.abs(v)), dist)
+	dist = np.where(face == TOP, np.minimum(dist, hv - np.abs(v)), dist)
 	dist = np.where(face == TOP + 1, 1.0, dist)  # dessous : jamais touché
 	return 1 - smoothstep(0.0, 0.14, dist)
 
@@ -147,7 +113,7 @@ def surface(part, p, n, variant):
 	h = muscles(part, face, u, v)
 	legs = "Leg" in part or "Foot" in part
 	h = h + pillow(part, face, u, v, vertical=not legs) * BULGE
-	cav = cavity(part, face, u, v) if part in MERCURE.PAINTERS else np.zeros_like(u)
+	cav = cavity(part, face, u, v)
 	patina = smoothstep(0.06, 0.3, cav) * cfg["patina_amount"]
 	crest = smoothstep(0.55, 1.0, muscles(part, face, u, v) / RELIEF)  # sommet des muscles
 	wear = np.maximum(crest, edge_wear(part, face, u, v) * 0.8)

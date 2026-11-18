@@ -30,16 +30,6 @@ VIEWS = [("FACE", 0), ("TROIS QUARTS", -35), ("DOS", 180)]
 STEP_X, STEP_Y = 7.5, 10.0  # écart entre deux personnages (studs)
 
 
-# Cette méthode permet de donner l'atlas d'une pièce du rig (Torso, LeftArm…) lorsqu'on lui pose son matériau.
-def group_of(part):
-	if part == "Head":
-		return "Head"
-	if "Torso" in part:
-		return "Torso"
-	side = "Left" if part.startswith("Left") else "Right"
-	return side + ("Arm" if ("Arm" in part or "Hand" in part) else "Leg")
-
-
 # Cette méthode permet de créer le matériau d'un atlas (carte de couleur) lorsqu'une variante a cette carte, gris du
 # rig sinon.
 def material(folder, group):
@@ -89,7 +79,7 @@ for col, (title, folder) in enumerate(COLUMNS):
 			math.radians(angle), 4, "Z"
 		)
 		for name, me in meshes.items():
-			group = group_of(name)
+			group = rig[name]["group"]  # atlas de la pièce (r15_bake.PARTS)
 			if group not in mats:
 				mats[group] = material(folder, group)
 			mesh = me.copy()

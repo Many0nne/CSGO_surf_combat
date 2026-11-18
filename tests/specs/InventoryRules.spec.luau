@@ -598,7 +598,12 @@ return function(T, Loader)
 				counts[key] = (counts[key] or 0) + 1
 			end
 			local share = 1 / (#Rules.outfits() + 1)
-			for key, n in counts do
+			local keys = { "origine" }
+			for _, outfit in Rules.outfits() do
+				table.insert(keys, outfit.id)
+			end
+			for _, key in keys do
+				local n = counts[key] or 0
 				T.expect(math.abs(n / total - share) < 0.1, string.format("%s : %d bots sur %d", key, n, total))
 			end
 		end)

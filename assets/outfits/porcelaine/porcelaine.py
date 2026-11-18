@@ -13,26 +13,13 @@ or (blanc et or : liserés dorés aux arêtes, bracelets dorés).
 Coordonnées : espace de la pièce en studs, avant du personnage = -Z, sa gauche = -X (cf. r15_bake.face_coords).
 """
 
-import importlib.util
-import os
-
 import numpy as np
-from r15_bake import BOTTOM, OFFSETS, PARTS, TOP, face_coords, height_of, pillow, smoothstep
+from r15_bake import BOTTOM, OFFSETS, PARTS, TOP, cavity, face_coords, half_sizes, height_of, mercure, muscles, pillow, smoothstep
 
 
-# Cette méthode permet de charger le module de MERCURE lorsqu'une tenue reprend sa musculature dessinée.
-def _load_mercure():
-	path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "mercure", "mercure.py")
-	spec = importlib.util.spec_from_file_location("mercure_anatomy", path)
-	module = importlib.util.module_from_spec(spec)
-	spec.loader.exec_module(module)
-	return module
-
-
-MERCURE = _load_mercure()
+MERCURE = mercure()
 RELIEF = MERCURE.RELIEF
 BULGE = MERCURE.BULGE * 0.8
-CAVITY_STEP = 0.26
 AA = 0.008  # demi-largeur de l'anticrénelage d'un trait (studs)
 
 GLAZE = np.array([0.97, 0.975, 0.98])  # blanc laiteux
@@ -53,37 +40,8 @@ def stroke(dist, half):
 	return np.clip((half - np.abs(dist)) / AA + 0.5, 0, 1)
 
 
-# Cette méthode permet de donner les demi-dimensions de la face d'un bloc (le long de u et de v) lorsqu'on place un
-# décor par rapport à ses bords.
-def half_sizes(part, face):
-	sx, sy, sz = (s / 2 for s in PARTS[part][1])
-	side = (face == 2) | (face == 3)
-	flat = (face == TOP) | (face == BOTTOM)
-	return np.where(side, sz, sx), np.where(flat, sz, sy)
-
-
-# Cette méthode permet de donner le relief des muscles dessinés d'une pièce (0 si elle n'en a pas) lorsqu'on cuit la
-# porcelaine ou qu'on en mesure les creux.
-def muscles(part, face, u, v):
-	painter = MERCURE.PAINTERS.get(part)
-	return painter(face, u, v)[0] if painter else np.zeros_like(u)
-
-
-# Cette méthode permet de mesurer le creux d'un point (> 0 : plus bas que le relief qui l'entoure) lorsque le vernis
-# s'y accumule et bleuit légèrement.
-def cavity(part, face, u, v):
-	d = CAVITY_STEP
-	h = muscles(part, face, u, v)
-	around = np.zeros_like(u)
-	for k in range(8):
-		a = k * np.pi / 4
-		around += muscles(part, face, u + d * np.cos(a), v + d * np.sin(a))
-	return (around / 8 - h) / RELIEF
-
-
-# Cette méthode permet de peindre une frise de rinceaux (tige ondulée, volutes alternées en haut et en bas, feuilles
-# aux crêtes) centrée sur la hauteur `vc`, lorsqu'une articulation reçoit son bracelet décoré. La période divise la
-# face en un nombre pair d'ondes : la frise se raccorde d'une face à l'autre sur les arêtes.
+# Cette méthode permet de peindre une frise de rinceaux (tige ondulée, volutes, feuilles) centrée sur `vc` lorsqu'une
+# articulation reçoit sa frise ; un nombre pair d'ondes par face la raccorde d'une face à l'autre.
 def rinceau(u, v, hu, vc, amp):
 	waves = 2 * np.maximum(np.round(hu / 0.26), 1)
 	period = 2 * hu / waves
@@ -236,7 +194,7 @@ def surface(part, p, n, variant):
 		face, u, v = face_coords(p, n)
 		legs = "Leg" in part or "Foot" in part
 		h = muscles(part, face, u, v) + pillow(part, face, u, v, vertical=not legs) * BULGE
-		cav = cavity(part, face, u, v) if part in MERCURE.PAINTERS else np.zeros_like(u)
+		cav = cavity(part, face, u, v)
 		blue, gold = decor(part, face, u, v, height_of(part, p), cfg)
 	gold = np.clip(gold, 0, 1)
 	blue = np.clip(blue, 0, 1) * (1 - gold)
