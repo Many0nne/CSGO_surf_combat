@@ -912,7 +912,11 @@ function InventoryStore.init(
 		local ok, reason = InventoryStore.equip(player, slot, weaponId, skin)
 		if ok and onEquipped then
 			if slot == InventoryRules.OUTFIT_SLOT then
-				onEquipped(player, nil, weaponId)
+				-- Retour à la tenue d'origine ("" ou OUTFIT_NONE) : pas de tenue équipée à compter
+				local outfitId = InventoryRules.outfitOf(InventoryStore.equipped(player))
+				if outfitId then
+					onEquipped(player, nil, outfitId)
+				end
 			else
 				onEquipped(player, skin)
 			end

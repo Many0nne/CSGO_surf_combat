@@ -131,6 +131,7 @@ def plan():
     im = Image.open(os.path.join(R, "q2_plan.png")).convert("RGB")
     d = ImageDraw.Draw(im)
 
+    # Cette méthode permet de convertir une position de la salle (x, z en studs) en pixel du plan.
     def px(x, z):
         return (600 + x / 36 * 1200, 600 + (z - 7.6) / 36 * 1200)
 
