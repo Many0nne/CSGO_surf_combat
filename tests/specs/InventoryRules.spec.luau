@@ -550,6 +550,34 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("InventoryRules : CHITINE (#521)", function()
+		local CHITINE = "outfit.chitine"
+
+		T.it("légendaire à 5 000 crédits, la tenue la plus chère du catalogue", function()
+			local item = Rules.item(CHITINE)
+			T.expect(item ~= nil, "CHITINE au catalogue")
+			T.expectEqual(item and item.type, Rules.Type.OUTFIT)
+			T.expectEqual(item and item.rarity, "legendary")
+			T.expectEqual(item and item.price, 5000)
+			T.expectEqual(item and item.appearance, "chitine")
+			for _, outfit in Rules.outfits() do
+				T.expect((outfit.price or 0) <= 5000, "aucune tenue plus chère que CHITINE : " .. outfit.id)
+			end
+		end)
+
+		T.it("l'admin l'équipe ; sans la posséder, refusée ; l'attribut la transporte", function()
+			local admin = Rules.resolve(nil, true)
+			local equipped = Rules.equip({}, admin, Rules.OUTFIT_SLOT, CHITINE, nil)
+			T.expect(equipped ~= nil, "tenue possédée équipée")
+			local resolved = Rules.resolveEquipped(equipped, admin)
+			T.expectEqual(Rules.outfitOf(resolved), CHITINE)
+			T.expectEqual(Rules.outfitOf(Rules.decodeEquipped(Rules.encodeEquipped(resolved), admin)), CHITINE)
+			local none, reason = Rules.equip({}, Rules.resolve(nil, false), Rules.OUTFIT_SLOT, CHITINE, nil)
+			T.expectEqual(none, nil)
+			T.expectEqual(reason, "not_owned")
+		end)
+	end)
+
 	T.describe("InventoryRules.outfitForName (#521)", function()
 		T.it("un bot garde la même tenue, et les bots se partagent l'origine et les tenues", function()
 			T.expectEqual(Rules.outfitForName("Bot_Vega"), Rules.outfitForName("Bot_Vega"))

@@ -797,6 +797,44 @@ de la boîte de la tête → rien).
   se lisait plus, refusé), le défaut venant de la superposition et pas du dessin. Pas de doigts dessinés sur les mains
   (jugés laids).
 
+### CHITINE (légendaire, 5 000 crédits)
+
+Carapace biomécanique bleu-noir laquée (`assets/outfits/chitine/chitine.py`, variante `laque`) : cage thoracique en
+côtes arquées qui font le tour du buste, sternum et colonne en vertèbres, deux tubes dorsaux qui passent par-dessus
+les épaules, plaques ventrales ; membres en plaques à chevrons avec deux câbles devant et un sur chaque côté ; coque
+de MERCURE (même mesh, Model 92982065353684) avec sa propre carte : dôme lisse, petite crête au sommet, anneaux de
+nuque.
+
+Outillage ajouté pour elle, réutilisable :
+
+- **Planche** : `uv run tools/outfits/board.py <planche.png> --outfit "NOM=<dossier de variante>" … --head <coque.obj>`
+  rend le rig habillé de face, de trois quarts et de dos (Blender sans interface, Workbench, une quinzaine de
+  secondes ; `board_blender.py`). La couleur peinte y est juste, pas le relief des normal maps ni la brillance réelle.
+- **Coque cuite par r15_bake** : `head_obj.py` (Blender sans interface) convertit le FBX de la coque en OBJ dans
+  l'espace de la tête ; `r15_bake.py … --head <coque.obj>` cuit alors `head_surface` du module de tenue dans
+  `<variante>/Head/` (`--groups ""` : la coque seule). **Piège :** l'avant et l'arrière du FBX dans le jeu ne sont pas
+  vérifiés (rotation de 180° dans le fichier) : une coque cuite ainsi doit être dessinée symétrique d'avant en arrière.
+
+**Pièges propres à une laque sombre :**
+
+- **Reflet peint selon la seule hauteur = traits verticaux éteints.** Le décor du reflet de MERCURE ne dépend que de
+  la hauteur de la direction réfléchie : un câble vertical n'y prend aucune lumière et se lit comme un trait noir.
+  CHITINE ajoute deux bandes latérales, avec un seuil au-dessus de la pente du bombé des faces (0,55 au bord d'un
+  membre) : en dessous, chaque face entière s'allumait et la carapace paraissait délavée, grise.
+- **Profil de tube en demi-cercle = contour seul éclairé.** Une pente infinie au bord allume le contour de chaque côte
+  ou vertèbre (des « poignées », des agrafes) ; un profil parabolique (`tube`, `bead`) met la ligne de lumière sur le
+  haut du relief.
+- **Membres dessinés selon la hauteur au-dessus de la racine**, comme les jambes de MERCURE : coude et genou font se
+  recouvrir deux pièces, et deux dessins différents s'y disputeraient l'affichage.
+- **Rendu en jeu plus contrasté que la planche** (vu le 18/11/2026) : la rugosité basse (0,12) ajoute le vrai reflet
+  du soleil, la laque se lit noir et blanc plus que bleu-noir, avec des liserés orangés du couchant sur les bras.
+
+**Pistes rejetées (CHITINE) :** membres en anneaux réguliers (pull rayé), en grille d'anneaux et de câbles
+(fenêtres), en côtes serrées autour d'une colonne (radiographie trop chargée) : les membres restent calmes pour
+laisser le torse porter la tenue ; crête médiane de la coque jusqu'à l'avant (lue comme un nez, un visage).
+Variantes `nervure` (relief plus fort, reflet plus fin, moins lisible de loin) et `irise` (reflet cyan-violet, à
+peine perceptible) gardées dans le module.
+
 **Pistes rejetées :** corps humain réaliste (extension MPFB de Blender) calé sur les articulations du rig : jambes
 courtes et épaules de gorille, le rig en blocs place hanches à 40 % et épaules très larges ; passer à un rig aux
 proportions humaines : refusé (« on reste dans le style rig 15 ») ; traits d'encre façon comics sur les contours

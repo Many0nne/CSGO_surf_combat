@@ -411,6 +411,16 @@ InventoryRules.ITEMS = {
 		rarity = "exceptional",
 		price = 2500,
 	},
+	-- Légendaire : carapace biomécanique bleu-noir laquée (côtes, colonne, tubes dorsaux), coque de tête de MERCURE
+	-- avec sa propre carte (assets/outfits/chitine/chitine.py)
+	{
+		id = "outfit.chitine",
+		type = "outfit",
+		name = "CHITINE",
+		appearance = "chitine",
+		rarity = "legendary",
+		price = 5000,
+	},
 } :: { Item }
 
 -- Inventaire de tout joueur (et des bots), sauvegardé ou non : Ka-Bar et AWP

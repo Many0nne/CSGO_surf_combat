@@ -23,7 +23,10 @@ Meshs : téléchargés par Open Cloud (clé ROBLOX_OPEN_CLOUD_KEY, scope legacy-
 
 Usage (depuis la racine du worktree) :
   uv run tools/outfits/r15_bake.py assets/outfits/mercure/mercure.py <sortie> [--size 1024] [--cache <dossier>]
-    [--variant <nom>] [--groups LeftArm,RightArm]
+    [--variant <nom>] [--groups LeftArm,RightArm] [--head <coque.obj> [--head-size 512]]
+
+Coque de tête : avec --head, la tenue doit définir head_surface(p, n, variante) (espace de la tête, en studs) ; le mesh
+OBJ s'obtient depuis le FBX de la coque par tools/outfits/head_obj.py. --groups "" ne cuit que la coque.
 """
 
 import argparse
@@ -248,59 +251,116 @@ def dilate(img, filled, passes=8):
 	return img
 
 
+# Cette méthode permet de cuire, dans les tampons d'un atlas, les texels couverts par un mesh (relief, couleur, métal,
+# rugosité demandés à `surface_of`) lorsqu'on cuit une pièce du rig ou la coque de la tête.
+def fill(outfit, surface_of, name, mesh, size, buf, variant):
+	pos, nrm, uv, tris = mesh
+	eps = 0.004
+	r = rasterize(pos, nrm, uv, tris, size)
+	p, n = r["p"], r["n"]
+	t, b = tangentize(r["t"], n), tangentize(r["b"], n)
+	s = surface_of(p, n)
+	h0 = s["height"]
+	ht = surface_of(p + t * eps, n)["height"]
+	hb = surface_of(p + b * eps, n)["height"]
+	nt = np.stack([-(ht - h0) / eps, -(hb - h0) / eps, np.ones_like(h0)], axis=1)
+	nt /= np.linalg.norm(nt, axis=1, keepdims=True)
+	iy, ix = r["iy"], r["ix"]
+	if hasattr(outfit, "shade"):
+		# normale en relief dans l'espace de la pièce, pour une tenue qui peint son reflet dans la couleur
+		bumped = nt[:, :1] * t + nt[:, 1:2] * b + nt[:, 2:] * n
+		bumped /= np.linalg.norm(bumped, axis=1, keepdims=True)
+		s["geo_normal"] = n
+		s["color"] = outfit.shade(name, p, bumped, s, variant)
+	buf["color"][iy, ix] = s["color"]
+	buf["normal"][iy, ix] = nt * 0.5 + 0.5
+	buf["metal"][iy, ix] = s["metal"]
+	buf["rough"][iy, ix] = s["rough"]
+	buf["filled"][iy, ix] = True
+
+
+# Cette méthode permet d'écrire les quatre cartes d'un atlas cuit (dilatées, carte uniforme réduite à 8 × 8) lorsqu'un
+# groupe ou la coque de la tête est fini.
+def write_maps(buf, out_dir, prefix):
+	filled = buf["filled"]
+	buf["normal"][~filled] = (0.5, 0.5, 1.0)
+	maps = {
+		"Color": dilate(buf["color"], filled),
+		"Normal": dilate(buf["normal"], filled),
+		"Metal": dilate(buf["metal"], filled),
+		"Rough": dilate(buf["rough"], filled),
+	}
+	for kind, img in maps.items():
+		arr = np.clip(img * 255 + 0.5, 0, 255).astype(np.uint8)
+		if kind == "Color":
+			arr = np.clip((np.clip(img, 0, 1) ** (1 / 2.2)) * 255 + 0.5, 0, 255).astype(np.uint8)
+		used = arr[filled]  # texels couverts par les pièces (le reste de l'atlas n'est jamais lu)
+		if np.all(used.max(axis=0) - used.min(axis=0) <= 1):
+			arr = np.empty((8, 8) + arr.shape[2:], dtype=np.uint8)  # carte uniforme : 8 × 8 suffit
+			arr[...] = used[0]
+		Image.fromarray(arr).save(os.path.join(out_dir, f"{prefix}_{kind}.png"))
+
+
+# Cette méthode permet de préparer les tampons vides d'un atlas carré lorsqu'on commence à cuire un groupe.
+def buffers(size):
+	return {
+		"color": np.zeros((size, size, 3)),
+		"normal": np.zeros((size, size, 3)),
+		"metal": np.zeros((size, size)),
+		"rough": np.zeros((size, size)),
+		"filled": np.zeros((size, size), dtype=bool),
+	}
+
+
 # Cette méthode permet de cuire toutes les cartes d'une variante de tenue (un atlas par groupe) lorsqu'on lance le
 # script sur un module de tenue.
 def bake(outfit, variant, out_dir, size, cache, key, groups=None):
 	os.makedirs(out_dir, exist_ok=True)
-	eps = 0.004
 	for group in groups or GROUPS:
-		color = np.zeros((size, size, 3))
-		normal = np.zeros((size, size, 3))
-		metal = np.zeros((size, size))
-		rough = np.zeros((size, size))
-		filled = np.zeros((size, size), dtype=bool)
+		buf = buffers(size)
 		for name, (_, _, g) in PARTS.items():
 			if g != group:
 				continue
-			pos, nrm, uv, tris = load_part(name, cache, key)
-			r = rasterize(pos, nrm, uv, tris, size)
-			p, n = r["p"], r["n"]
-			t, b = tangentize(r["t"], n), tangentize(r["b"], n)
-			s = outfit.surface(name, p, n, variant)
-			h0 = s["height"]
-			ht = outfit.surface(name, p + t * eps, n, variant)["height"]
-			hb = outfit.surface(name, p + b * eps, n, variant)["height"]
-			nt = np.stack([-(ht - h0) / eps, -(hb - h0) / eps, np.ones_like(h0)], axis=1)
-			nt /= np.linalg.norm(nt, axis=1, keepdims=True)
-			iy, ix = r["iy"], r["ix"]
-			if hasattr(outfit, "shade"):
-				# normale en relief dans l'espace de la pièce, pour une tenue qui peint son reflet dans la couleur
-				bumped = nt[:, :1] * t + nt[:, 1:2] * b + nt[:, 2:] * n
-				bumped /= np.linalg.norm(bumped, axis=1, keepdims=True)
-				s["geo_normal"] = n
-				s["color"] = outfit.shade(name, p, bumped, s, variant)
-			color[iy, ix] = s["color"]
-			normal[iy, ix] = nt * 0.5 + 0.5
-			metal[iy, ix] = s["metal"]
-			rough[iy, ix] = s["rough"]
-			filled[iy, ix] = True
-		normal[~filled] = (0.5, 0.5, 1.0)
-		maps = {
-			"Color": dilate(color, filled),
-			"Normal": dilate(normal, filled),
-			"Metal": dilate(metal, filled),
-			"Rough": dilate(rough, filled),
-		}
-		for kind, img in maps.items():
-			arr = np.clip(img * 255 + 0.5, 0, 255).astype(np.uint8)
-			if kind == "Color":
-				arr = np.clip((np.clip(img, 0, 1) ** (1 / 2.2)) * 255 + 0.5, 0, 255).astype(np.uint8)
-			used = arr[filled]  # texels couverts par les pièces (le reste de l'atlas n'est jamais lu)
-			if np.all(used.max(axis=0) - used.min(axis=0) <= 1):
-				arr = np.empty((8, 8) + arr.shape[2:], dtype=np.uint8)  # carte uniforme : 8 × 8 suffit
-				arr[...] = used[0]
-			Image.fromarray(arr).save(os.path.join(out_dir, f"{group}_{kind}.png"))
-		print(f"[r15_bake] {variant} {group} : {int(filled.sum())} texels")
+			mesh = load_part(name, cache, key)
+			fill(outfit, lambda p, n, name=name: outfit.surface(name, p, n, variant), name, mesh, size, buf, variant)
+		write_maps(buf, out_dir, group)
+		print(f"[r15_bake] {variant} {group} : {int(buf['filled'].sum())} texels")
+
+
+# Cette méthode permet de lire un mesh OBJ (positions, normales, UV, triangles ; UV en convention Roblox, v vers le bas
+# de l'image) lorsqu'on cuit la coque de la tête (cf. head_obj.py).
+def load_obj(path):
+	vs, vns, vts, corners = [], [], [], []
+	for line in open(path, encoding="utf-8"):
+		parts = line.split()
+		if not parts:
+			continue
+		if parts[0] == "v":
+			vs.append([float(x) for x in parts[1:4]])
+		elif parts[0] == "vn":
+			vns.append([float(x) for x in parts[1:4]])
+		elif parts[0] == "vt":
+			vts.append([float(x) for x in parts[1:3]])
+		elif parts[0] == "f":
+			idx = [[int(i) - 1 for i in c.split("/")] for c in parts[1:]]
+			for k in range(1, len(idx) - 1):
+				corners += [idx[0], idx[k], idx[k + 1]]
+	c = np.array(corners)
+	pos = np.array(vs)[c[:, 0]]
+	uv = np.array(vts)[c[:, 1]]
+	nrm = np.array(vns)[c[:, 2]]
+	nrm /= np.linalg.norm(nrm, axis=1, keepdims=True) + 1e-12
+	return pos, nrm, uv, np.arange(len(c)).reshape(-1, 3)
+
+
+# Cette méthode permet de cuire les cartes de la coque de tête d'une variante (outfit.head_surface, espace de la tête
+# en studs) lorsque le module de tenue en définit une.
+def bake_head(outfit, variant, obj_path, out_dir, size):
+	os.makedirs(out_dir, exist_ok=True)
+	buf = buffers(size)
+	fill(outfit, lambda p, n: outfit.head_surface(p, n, variant), "Head", load_obj(obj_path), size, buf, variant)
+	write_maps(buf, out_dir, "Head")
+	print(f"[r15_bake] {variant} Head : {int(buf['filled'].sum())} texels")
 
 
 def main():
@@ -311,6 +371,8 @@ def main():
 	ap.add_argument("--cache", default=os.path.join(os.environ.get("TEMP", "/tmp"), "r15_meshes"))
 	ap.add_argument("--variant", action="append")
 	ap.add_argument("--groups", help="groupes à cuire, séparés par des virgules (défaut : tous)")
+	ap.add_argument("--head", help="mesh OBJ de la coque de tête (tools/outfits/head_obj.py), cuit par head_surface")
+	ap.add_argument("--head-size", type=int, default=512)
 	args = ap.parse_args()
 	spec = importlib.util.spec_from_file_location("outfit", args.outfit)
 	outfit = importlib.util.module_from_spec(spec)
@@ -318,8 +380,11 @@ def main():
 	spec.loader.exec_module(outfit)
 	key = os.environ["ROBLOX_OPEN_CLOUD_KEY"]
 	for variant in args.variant or list(outfit.VARIANTS):
-		groups = args.groups.split(",") if args.groups else None
-		bake(outfit, variant, os.path.join(args.out, variant, "R15"), args.size, args.cache, key, groups)
+		groups = None if args.groups is None else [g for g in args.groups.split(",") if g]
+		if groups != []:
+			bake(outfit, variant, os.path.join(args.out, variant, "R15"), args.size, args.cache, key, groups)
+		if args.head:
+			bake_head(outfit, variant, args.head, os.path.join(args.out, variant, "Head"), args.head_size)
 
 
 if __name__ == "__main__":
