@@ -841,6 +841,24 @@ les cartes (pas d'épaulière en 1re personne).
    copie faite à la main et celle de Rojo coexistent sous le même nom : détruire les deux et reconnecter Studio
    (`-ReleaseStudio` puis `-AcquireStudio`) pour que Rojo recrée la sienne.
 
+**ABRI (`assets/outfits/abri/`)** : même procédure. Les volumes (cagoule, masque, filtres, visière, sac) utilisent
+`tools/outfits/mesh_kit.py`, les outils communs (primitives, booléens, coque de tête, pieces.json, FBX, aperçu) : une
+nouvelle tenue part de `abri_meshes.py` plutôt que de recopier `demineur_meshes.py`. Une forme vue de face (visière,
+masque) se découpe en intersectant une coque cylindrique (`arc_shell`) avec un pavé arrondi profond (`kit.intersect`).
+
+Pièges vus sur ABRI (18/11/2026) :
+
+- **Le dessus d'un membre partage ses UV avec le bas de sa face avant** (jambe : le dessus, caché dans la cuisse,
+  recouvre le bas de l'avant du tibia dans l'atlas). Avant correction, la couleur du dessus écrasait les bottes de
+  face. `r15_bake` écrit désormais les faces dessus/dessous en premier ; une tenue cuite avant ce correctif (DÉMINEUR)
+  garde le défaut tant qu'elle n'est pas recuite.
+- **`publish_skin` ne republie pas une carte déjà listée dans `ids.json`** : après une nouvelle cuisson, supprimer
+  `ids.json` pour publier les nouvelles cartes (sinon les anciennes ids restent, sans erreur).
+- **Le `require` du MCP garde ses modules en cache** : un item ajouté au catalogue n'y est pas vu. Pour habiller un
+  mannequin dans Studio, copier les SurfaceAppearance et souder les pièces à la main (comme `dress`).
+- Plis du caoutchouc : un motif de sinus croisés sur toute la surface se lit comme des rayures diagonales ; garder des
+  plis larges aux articulations, effacés sur une partie de la largeur, et un gonflement mou sans arête.
+
 ## Ajouter un couteau
 
 Un couteau qui se joue comme la M9, avec un autre modèle et d'autres animations. Le comportement de mêlée est piloté par

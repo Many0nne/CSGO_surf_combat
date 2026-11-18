@@ -264,6 +264,11 @@ def bake(outfit, variant, out_dir, size, cache, key, groups=None):
 				continue
 			pos, nrm, uv, tris = load_part(name, cache, key)
 			r = rasterize(pos, nrm, uv, tris, size)
+			# Le dessus d'une jambe (caché dans la cuisse) a les mêmes UV que le bas de sa face avant : écrire les
+			# faces dessus/dessous d'abord, pour que les faces visibles passent par-dessus (le dernier écrit gagne) ;
+			# tri continu sur |normale.y| : les arêtes arrondies du dessus passent aussi sous les faces latérales
+			order = np.argsort(-np.abs(r["n"][:, 1]), kind="stable")
+			r = {k: v[order] for k, v in r.items()}
 			p, n = r["p"], r["n"]
 			t, b = tangentize(r["t"], n), tangentize(r["b"], n)
 			s = outfit.surface(name, p, n, variant)
