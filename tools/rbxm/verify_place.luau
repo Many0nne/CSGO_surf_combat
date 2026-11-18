@@ -394,12 +394,22 @@ for _, name in rbxmNames("assets/rbx/Outfits") do
 			fail("Outfits." .. name .. "." .. partName .. " absent ou pas une SurfaceAppearance")
 		end
 	end
-	local head = outfit:FindFirstChild("Head")
-	if head then
-		if not head:IsA("MeshPart") then
-			fail("Outfits." .. name .. ".Head n'est pas une MeshPart")
-		elseif head.CanCollide or head.CanQuery or head.CanTouch or not head.Massless then
-			fail("Outfits." .. name .. ".Head doit être sans collision, ni requête, ni contact, et sans masse")
+	-- Pièces ajoutées (coque `Head`, ou MeshPart portant OutfitAttach : casque, col, épaulières…), cf.
+	-- CharacterAppearance.attachPiece
+	for _, piece in outfit:GetChildren() do
+		if piece:IsA("SurfaceAppearance") then
+			continue
+		end
+		local label = "Outfits." .. name .. "." .. piece.Name
+		local attach = piece:GetAttribute("OutfitAttach")
+		if not piece:IsA("MeshPart") then
+			fail(label .. " n'est ni une SurfaceAppearance ni une MeshPart")
+		elseif piece.CanCollide or piece.CanQuery or piece.CanTouch or not piece.Massless then
+			fail(label .. " doit être sans collision, ni requête, ni contact, et sans masse")
+		elseif piece.Name ~= "Head" and not table.find(OUTFIT_PARTS, attach) and attach ~= "Head" then
+			fail(label .. " : OutfitAttach doit nommer une pièce du rig (" .. tostring(attach) .. ")")
+		elseif attach ~= nil and typeof(piece:GetAttribute("OutfitOffset")) ~= "CFrame" then
+			fail(label .. " : OutfitOffset (CFrame) absent")
 		end
 	end
 	print("Outfits." .. name .. " " .. summarize(outfit))

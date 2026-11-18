@@ -810,9 +810,10 @@ l'étiquette BIENTÔT jusqu'à #393 (voir « Achat d'une caisse »).
   ce qu'une arme en ait assez. En vente : trois caisses, une par arme et par série, dans l'ordre de la vitrine série 1
   (AWP puis M9) puis série 2 (`crate.awp.serie1`, `crate.m9.serie1`, `crate.awp.serie2`, nom « AWP · SÉRIE 1 », bande
   rouge pour l'AWP série 1, bleu-vert pour le M9, ocre laiton pour l'AWP série 2, #493), prix
-  500 CRÉDITS par caisse, une ouverture = un seul skin de l'arme de la caisse, raretés en pyramide à la CS:GO (#430) :
-  COMMUN 80 %, RARE 16 %, EXCEPTIONNEL 3,2 %, LÉGENDAIRE 0,8 % (rouge vif 235/75/75), chacune partagée à parts égales
-  entre ses skins (20 / 5,33 / 1,6 / 0,8 % par skin). Remboursement d'un doublon 20 / 40 / 70 / 100 % du prix. AWP :
+  500 CRÉDITS par caisse, une ouverture = un seul skin de l'arme de la caisse, raretés (#554, choix dans
+  `docs/economie.md` « Barème ») : COMMUN 72 %, RARE 20 %, EXCEPTIONNEL 6 %, LÉGENDAIRE 2 % (rouge vif 235/75/75), chacune
+  partagée à parts égales entre ses skins (18 / 6,67 / 3 / 2 % par skin). Remboursement d'un doublon 20 / 40 / 70 / 100 %
+  du prix. AWP :
   COMMUN MAQUIS, ÉPURE, TARTAN, BANCHE ; RARE MUE, ORAGE, CIRCUIT ; EXCEPTIONNEL BALISE, PAN ! ; LÉGENDAIRE TREMPE. M9 :
   COMMUN ART DÉCO, LEURRE, CHANTIER, CÉRAMIQUE ; RARE PATROUILLE, RELEVÉ, GUILLOCHÉ ; EXCEPTIONNEL ÉMAIL, RECUIT ;
   LÉGENDAIRE COUCHANT. AWP série 2 : COMMUN LOGOGRAMME, PARQUET, CANNAGE, TÔLE LARMÉE ; RARE CAPITON, VITRAIL, LAQUE ;
@@ -1085,8 +1086,8 @@ Achat de crédits en Robux (règles : `docs/economie.md`). Sur la page SHOP seul
   `PaidRandomRestricted` = false), sur la vitrine ou la vue détail, pas pendant une ouverture ; hors de Studio,
   seulement une fois les vrais ids des produits collés (`CreditPacks.isReady`).
 - **Fenêtre** (`CreditPackWindow`, gabarit des écrans secondaires `MenuPage` : bloc centré sur un voile, sans panneau,
-  sous la barre du menu dont le solde reste visible) : titre « PACKS DE CRÉDITS », trois packs côte à côte (jeton
-  56 px, montant Oswald gras 52 px, « CRÉDITS », prix « 99 R$ » dans un contour os comme ACHETER), une ligne atténuée
+  sous la barre du menu dont le solde reste visible) : titre « PACKS DE CRÉDITS », quatre packs côte à côte (#555,
+  colonnes de 180 px espacées de 20 dans les 780 px du bloc ; jeton 56 px, montant Oswald gras 52 px, « CRÉDITS », prix « 99 R$ » dans un contour os comme ACHETER), une ligne atténuée
   « PAIEMENT EN ROBUX · LES CRÉDITS ARRIVENT DÈS QUE ROBLOX CONFIRME L'ACHAT », RETOUR en bas au centre. Pendant
   qu'elle est ouverte, la colonne du shop et l'aide de la vitrine sont masquées (elles chevaucheraient le bloc ou
   parleraient de caisses inertes) et la salle ne réagit plus à la souris (`ShopScene.setInteractive`). Un voile plein

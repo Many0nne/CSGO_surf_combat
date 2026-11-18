@@ -1147,9 +1147,9 @@ return function(T, Loader)
 		end)
 	end)
 
-	-- Tirages de la caisse AWP série 1 (chances 80 / 16 / 3,2 / 0,8, #430) : le roll 80 tire MUE (RARE), un roll de 10 MAQUIS (COMMUN)
+	-- Tirages de la caisse AWP série 1 (chances 72 / 20 / 6 / 2, #554) : le roll 72 tire MUE (RARE), un roll de 10 MAQUIS (COMMUN)
 	local AWP1 = "crate.awp.serie1"
-	local ROLL_IMPACT = 80
+	local ROLL_IMPACT = 72
 
 	-- Cette méthode permet de savoir si un skin est dans les items stockés d'un joueur lorsqu'un test vérifie un achat.
 	local function storedHas(ds, userId: number, id: string): boolean
@@ -1702,6 +1702,17 @@ return function(T, Loader)
 			T.expectEqual(alice.attributes.Credits, 540)
 		end)
 
+		T.it("pack retiré de la vente (499 R$, #555) : son reçu reste accordé", function()
+			local sched = makeScheduler()
+			local ds = makeDataStore(sched)
+			seed(ds, 1, 40)
+			local server = makeServer(sched, ds)
+			server.join(1)
+			local receipt = server.receipt(1, 3_732_001_987, "ancien-achat")
+			T.expectEqual(receipt.verdict, "granted")
+			T.expectEqual(storedWallet(ds, 1).purchased, 3000)
+		end)
+
 		T.it("même reçu rejoué : accordé sans rien ajouter ni écrire", function()
 			local sched = makeScheduler()
 			local ds = makeDataStore(sched)
@@ -1853,9 +1864,9 @@ return function(T, Loader)
 			serverB.join(1)
 			ds.latency = 1
 			serverA.receipt(1, PACK.productId, "achat-1")
-			serverB.receipt(1, Packs.PACKS[3].productId, "achat-2")
+			serverB.receipt(1, Packs.byId("pack.5000").productId, "achat-2")
 			sched.advance(5)
-			T.expectEqual(storedWallet(ds, 1).purchased, 3500)
+			T.expectEqual(storedWallet(ds, 1).purchased, 5500)
 		end)
 
 		T.it(
@@ -1893,6 +1904,9 @@ return function(T, Loader)
 			T.expectEqual(pack and pack.productId, PACK.productId)
 			T.expectEqual(alice.attributes.PaidRandomRestricted, false)
 			T.expectEqual(server.Receipts.promptFor(alice, "pack.inconnu").reason, "unknown")
+			local retired, offered = server.Receipts.promptFor(alice, "pack.3000")
+			T.expectEqual(retired.reason, "unknown", "pack retiré de la vente (#555) : plus proposé")
+			T.expectEqual(offered, nil)
 		end)
 
 		T.it("hors Studio avec des ids provisoires : prompt refusé `unavailable`", function()

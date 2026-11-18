@@ -12,6 +12,49 @@ Piste rejetée : 500 (caisse ouverte dès l'arrivée), car le joueur n'aurait pa
 Seuls les portefeuilles absents (nouveau joueur, enregistrement d'avant #396) ou illisibles reçoivent ce solde : un
 solde déjà enregistré n'est pas modifié.
 
+## Barème : ce que vaut un crédit (#554)
+
+Point d'ancrage de tous les prix : **1 crédit ≈ 0,2 R$ ≈ 0,2 centime d'euro** (pack de base 500 crédits à 99 R$, gros
+packs jusqu'à ~6 crédits par R$). Un prix en crédits se décide d'après ce qu'il coûte en euros et en jours de jeu.
+
+Argent réel (relu le 18/11/2026) :
+
+- Le joueur paie 100 R$ ~1,25 € (pack Roblox de 400 R$ à 4,99 € dans l'app) à ~1 € (gros packs, site web).
+- Sur un Developer Product, Roblox garde 30 % ; les 70 % restants s'échangent au DevEx à 0,0038 $ par Robux (0,0054 $
+  pour un joueur américain de 18 ans et plus vérifié). **Pour 100 R$ dépensés, le jeu reçoit ~0,27 $** : ÷4 à ÷5 par
+  rapport à ce que paie le joueur. Premier retrait à 30 000 R$ gagnés (~43 000 R$ dépensés par les joueurs).
+
+Repères de prix :
+
+| Objet | Prix | En € | En jouant (plafond 250/jour) |
+|---|---|---|---|
+| Une caisse | 500 cr | ~1 € (cohérent avec Roblox, sous une clé CS:GO à 2,49 $) | 2 jours |
+| Tenue commune / rare / exceptionnelle / légendaire (achat direct, #521) | 750 / 1 500 / 2 500 / 5 000 cr | 1,5 / 3 / 5 / 10 € | 3 / 6 / 10 / 20 jours |
+
+Une tenue s'achète directement, sans hasard : c'est aussi le seul achat possible pour un joueur à qui les caisses sont
+bloquées (`PaidRandomPolicy`). Elle peut donc coûter bien moins qu'un skin de même rareté obtenu en caisse.
+
+**Chances des caisses : 72 / 20 / 6 / 2 % (#554).** Simulation de 20 000 joueurs (caisse à 500, composition 4 / 3 / 2 / 1,
+doublons remboursés 20 / 40 / 70 / 100 %), coût net = débits moins remboursements (~22 % rendus) :
+
+| Objectif | 80 / 16 / 3,2 / 0,8 (avant) | 72 / 20 / 6 / 2 |
+|---|---|---|
+| Le légendaire | 124 ouvertures, 48 200 cr (~90 €, 193 jours) | 50 ouvertures, 19 500 cr (~35 €, 78 jours) |
+| Un exceptionnel précis | 63, 24 800 cr | 33, 13 300 cr |
+| Les 3 rares | 34, 14 100 cr | 28, 11 400 cr |
+| Caisse complète | 162, 62 800 cr | 76, 29 200 cr |
+
+- Objectif : un légendaire moyen à 30–40 € (~18 000 à 24 000 crédits). Avant, ~90 € en moyenne (180 € pour un joueur
+  sur 10) pour un jeu à deux armes et un public jeune : la plupart abandonnaient avant, et le jeu touchait ~21 $.
+- Pistes rejetées : la pyramide CS (0,8 %), trop chère ; 80 / 15 / 3,5 / 1,5 (légendaire ~45 €), car un exceptionnel
+  précis (1,75 %) y tombait presque aussi souvent que le légendaire (1,5 %) ; 66 / 24 / 8 / 2, où la caisse complète ne
+  coûte plus que ~25 000 crédits.
+- Contrainte de la composition 4 / 3 / 2 / 1 : un légendaire abordable impose des écarts faibles entre raretés (par skin
+  18 / 6,67 / 3 / 2). Pour un légendaire plus rare sans renchérir la caisse, il faudrait une garantie (légendaire assuré
+  après N ouvertures), non retenue pour l'instant.
+- Refaire la simulation avant de changer chances, remboursements ou composition (script Python d'une trentaine de lignes :
+  tirage pondéré, remboursement d'un skin déjà possédé, arrêt quand l'objectif est atteint).
+
 ## Manche jouée : activité réelle (#401)
 
 Barème et plafonds des gains en jouant (#394) : `docs/architecture.md` (« Gains en jouant »). Une manche jouée
@@ -63,10 +106,17 @@ Mesures (Studio, map jouée, `[CreditGains]`) :
 ## Packs de crédits (Developer Products)
 
 - Config : `src/shared/CreditPacks.luau` (`PACKS` : id du pack, `productId`, crédits, prix affiché, nom du produit).
-  Valeurs : 500 crédits à 99 R$, 1 100 à 199 R$, 3 000 à 499 R$.
+  En vente (#555) : 500 crédits à 99 R$, 1 100 à 199 R$ (+9 % de crédits par R$), 2 400 à 399 R$ (+19 %), 5 000 à 799 R$
+  (+24 %). Prix calés sur les packs de Robux : le plus acheté fait 400 R$, il paie un pack à 399 mais pas un à 499.
 - **Developer Products créés** (dashboard Creator, expérience > Monetization > Developer Products) : 500 crédits
-  `3732001755`, 1 100 crédits `3732001894`, 3 000 crédits `3732001987`. Le prix réel est celui du dashboard ; `robux`
-  n'est que l'affichage, à garder égal (un changement de prix se fait aux deux endroits).
+  `3732001755`, 1 100 crédits `3732001894`, 2 400 crédits `3733000372`, 5 000 crédits `3733000397` ; retiré : 3 000
+  crédits à 499 R$ `3732001987`. Le prix réel est celui du dashboard ; `robux` n'est que l'affichage, à garder égal (un
+  changement de prix se fait aux deux endroits).
+- **Retirer un pack de la vente** : `retired = true` dans `CreditPacks.PACKS`, jamais le supprimer. Il disparaît de la
+  fenêtre (`CreditPacks.onSale`) et son prompt est refusé (`unknown`), mais ses reçus (en attente, ou achat hors du jeu
+  par l'onglet Store) restent accordés. Le désactiver aussi sur le dashboard une fois la version publiée.
+- Fenêtre des packs : quatre colonnes de 180 px espacées de 20 remplissent `MenuPage.BlockWidth` (780). Un cinquième
+  pack demande de revoir la mise en page.
 - Nouveau pack : créer d'abord le produit sur le dashboard, puis l'ajouter à `CreditPacks.PACKS`. Un pack qui garde un
   id provisoire (3 950 001 à 3 950 003, `CreditPacks.isReady`) masque « + CRÉDITS » et fait refuser le prompt
   (`unavailable`) hors de Studio ; un test vérifie que la config livrée n'en a plus.
@@ -167,8 +217,9 @@ un achat payé en crédits achetés puis remboursé convertissait des crédits a
 un chemin « gratuit » payé en Robux si les caisses étaient un jour payées en `earned` seuls).
 
 **Chances affichées** (vue détail du shop, #393, `ShopCatalog.chances`) : en pour cent, deux décimales au plus (centièmes,
-#430), somme exactement 100 % (plus fort reste), visibles avant ACHETER. Caisses actuelles : 80 / 16 / 3,2 / 0,8 % par
-rareté, partagés entre les skins (AWP · SÉRIE 1 : 5,34 / 5,33 / 5,33 % pour trois RARE). Piège : avec des chances qui ne
+#430), somme exactement 100 % (plus fort reste), visibles avant ACHETER. Caisses actuelles : 72 / 20 / 6 / 2 % par
+rareté (#554, choix ci-dessous dans « Barème »), partagés entre les skins (18 % par commun, 6,67 / 6,67 / 6,66 % pour
+trois RARE, 3 % par exceptionnel). Piège : avec des chances qui ne
 tombent pas juste au centième, le plus fort reste décale un affichage d'au plus 0,01 point, et une chance sous 0,005 %
 s'afficherait « 0 % » ; Roblox demande alors plus de
 décimales (quatre de plus que le premier chiffre non nul) ou la mention « Probabilities are rounded… ».

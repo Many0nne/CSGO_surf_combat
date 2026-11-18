@@ -5,12 +5,33 @@ return function(T, Loader)
 	local Wallet = Loader.new({}):require("src/shared/WalletRules")
 
 	T.describe("CreditPacks", function()
-		T.it("trois packs : 500 à 99 R$, 1 100 à 199 R$, 3 000 à 499 R$", function()
-			T.expectEqual(#Packs.PACKS, 3)
-			local expected = { { 500, 99 }, { 1100, 199 }, { 3000, 499 } }
-			for i, pack in Packs.PACKS do
+		T.it("en vente : 500 à 99 R$, 1 100 à 199 R$, 2 400 à 399 R$, 5 000 à 799 R$ (#555)", function()
+			local sale = Packs.onSale()
+			T.expectEqual(#sale, 4)
+			local expected = { { 500, 99 }, { 1100, 199 }, { 2400, 399 }, { 5000, 799 } }
+			for i, pack in sale do
 				T.expectEqual(pack.credits, expected[i][1])
 				T.expectEqual(pack.robux, expected[i][2])
+			end
+		end)
+
+		T.it("plus de crédits par Robux à chaque pack plus cher", function()
+			local previous = 0
+			for _, pack in Packs.onSale() do
+				local rate = pack.credits / pack.robux
+				T.expect(rate > previous, "taux non croissant : " .. pack.id)
+				previous = rate
+			end
+		end)
+
+		-- Un pack déjà vendu ne quitte jamais la config : ses reçus en attente (ou achetés hors du jeu) restent accordés
+		T.it("pack à 499 R$ retiré de la vente mais reconnu pour ses reçus", function()
+			local old = Packs.byProduct(3_732_001_987)
+			T.expect(old ~= nil, "produit vendu avant #555 encore connu")
+			T.expectEqual(old.credits, 3000)
+			T.expectEqual(old.retired, true)
+			for _, pack in Packs.onSale() do
+				T.expect(pack.id ~= old.id, "pack retiré encore affiché")
 			end
 		end)
 

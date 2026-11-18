@@ -14,7 +14,7 @@ return function(T, Loader)
 	end
 
 	T.describe("ShopCatalog : catalogue", function()
-		T.it("les chances des raretés font 100 % (pyramide 80 / 16 / 3,2 / 0,8, #430)", function()
+		T.it("les chances des raretés font 100 % (72 / 20 / 6 / 2, #554)", function()
 			local total, ids, chances, refunds = 0, {}, {}, {}
 			for _, rarity in Shop.RARITIES do
 				total += rarity.chance
@@ -24,7 +24,7 @@ return function(T, Loader)
 			end
 			T.expectNear(total, 100)
 			T.expectEqual(table.concat(ids, ","), "common,rare,exceptional,legendary")
-			T.expectEqual(table.concat(chances, ","), "80,16,3.2,0.8")
+			T.expectEqual(table.concat(chances, ","), "72,20,6,2")
 			T.expectEqual(table.concat(refunds, ","), "20,40,70,100")
 			T.expectEqual(Shop.RARITIES[4].label, "LÉGENDAIRE")
 		end)
@@ -198,22 +198,23 @@ return function(T, Loader)
 	T.describe("ShopCatalog.draw (#332, #424)", function()
 		local crate = Shop.crate("crate.awp.serie1")
 
-		T.it("partage la chance d'une rareté entre ses skins (4 x 20 / 3 x 5,33 / 2 x 1,6 / 0,8)", function()
+		T.it("partage la chance d'une rareté entre ses skins (4 x 18 / 3 x 6,67 / 2 x 3 / 2)", function()
 			local function at(roll)
 				local row, skinId = Shop.draw(crate, Inventory.ITEMS, roll)
 				return row.rarity.id .. ":" .. skinId
 			end
 			T.expectEqual(at(0), "common:skin.awp.maquis")
-			T.expectEqual(at(19.99), "common:skin.awp.maquis")
-			T.expectEqual(at(20), "common:skin.awp.epure")
-			T.expectEqual(at(40), "common:skin.awp.tartan")
-			T.expectEqual(at(79.99), "common:skin.awp.banche")
-			T.expectEqual(at(80), "rare:skin.awp.mue")
-			T.expectEqual(at(85.4), "rare:skin.awp.orage")
-			T.expectEqual(at(95.99), "rare:skin.awp.circuit")
-			T.expectEqual(at(96.1), "exceptional:skin.awp.balise")
-			T.expectEqual(at(97.7), "exceptional:skin.awp.pan")
-			T.expectEqual(at(99.3), "legendary:skin.awp.trempe")
+			T.expectEqual(at(17.99), "common:skin.awp.maquis")
+			T.expectEqual(at(18), "common:skin.awp.epure")
+			T.expectEqual(at(36), "common:skin.awp.tartan")
+			T.expectEqual(at(71.99), "common:skin.awp.banche")
+			T.expectEqual(at(72), "rare:skin.awp.mue")
+			T.expectEqual(at(78.7), "rare:skin.awp.orage")
+			T.expectEqual(at(91.99), "rare:skin.awp.circuit")
+			T.expectEqual(at(92), "exceptional:skin.awp.balise")
+			T.expectEqual(at(95), "exceptional:skin.awp.pan")
+			T.expectEqual(at(97.99), "exceptional:skin.awp.pan")
+			T.expectEqual(at(98), "legendary:skin.awp.trempe")
 			T.expectEqual(at(99.999), "legendary:skin.awp.trempe")
 		end)
 
@@ -225,7 +226,7 @@ return function(T, Loader)
 		end)
 
 		T.it("tire le skin de l'arme de la caisse (M9)", function()
-			local _, skinId = Shop.draw(Shop.crate("crate.m9.serie1"), Inventory.ITEMS, 81)
+			local _, skinId = Shop.draw(Shop.crate("crate.m9.serie1"), Inventory.ITEMS, 73)
 			T.expectEqual(skinId, "skin.m9bayonet.patrouille")
 		end)
 
@@ -239,14 +240,14 @@ return function(T, Loader)
 					counts[skinId] = (counts[skinId] or 0) + 1
 				end
 				for i, row in rows do
-					-- Une chance qui ne tombe pas juste sur un centième (16 / 3 = 5,333 %) est arrondie à 1 centième près
+					-- Une chance qui ne tombe pas juste sur un centième (20 / 3 = 6,667 %) est arrondie à 1 centième près
 					T.expect(math.abs(counts[row.skin] - tenths[i]) <= 1, row.skin)
 				end
 			end
 		end)
 
 		T.it("exclut une rareté sans skin et renormalise les chances restantes", function()
-			-- Rare absente : commun 80 / (80 + 3,2), exceptionnel 3,2 / 83,2 (96,15 %)
+			-- Rare absente : commun 72 / (72 + 6) (92,31 %), exceptionnel 6 / 78
 			local partial = {
 				id = "x",
 				name = "X",
@@ -256,8 +257,8 @@ return function(T, Loader)
 				contents = { common = { "balise" }, rare = { "absent" }, exceptional = { "orage" } },
 			}
 			T.expectEqual(Shop.draw(partial, Inventory.ITEMS, 0).rarity.id, "common")
-			T.expectEqual(Shop.draw(partial, Inventory.ITEMS, 96.1).rarity.id, "common")
-			T.expectEqual(Shop.draw(partial, Inventory.ITEMS, 96.2).rarity.id, "exceptional")
+			T.expectEqual(Shop.draw(partial, Inventory.ITEMS, 92.3).rarity.id, "common")
+			T.expectEqual(Shop.draw(partial, Inventory.ITEMS, 92.32).rarity.id, "exceptional")
 			T.expectEqual(Shop.draw(partial, Inventory.ITEMS, 99.99).rarity.id, "exceptional")
 		end)
 
@@ -376,13 +377,14 @@ return function(T, Loader)
 			end
 		end)
 
-		T.it("chances par skin, total exactement 100 % (20 / 5,33 / 1,6 / 0,8)", function()
+		T.it("chances par skin, total exactement 100 % (18 / 6,67 / 3 / 2)", function()
 			local awp = Shop.chances(Shop.contents(Shop.crate("crate.awp.serie1"), Inventory.ITEMS))
-			T.expectEqual(table.concat(awp, ","), "2000,2000,2000,2000,534,533,533,160,160,80")
-			T.expectEqual(Shop.chanceLabel(awp[1]), "20 %")
-			T.expectEqual(Shop.chanceLabel(awp[5]), "5,34 %")
-			T.expectEqual(Shop.chanceLabel(awp[8]), "1,6 %")
-			T.expectEqual(Shop.chanceLabel(awp[10]), "0,8 %")
+			T.expectEqual(table.concat(awp, ","), "1800,1800,1800,1800,667,667,666,300,300,200")
+			T.expectEqual(Shop.chanceLabel(awp[1]), "18 %")
+			T.expectEqual(Shop.chanceLabel(awp[5]), "6,67 %")
+			T.expectEqual(Shop.chanceLabel(awp[7]), "6,66 %")
+			T.expectEqual(Shop.chanceLabel(awp[8]), "3 %")
+			T.expectEqual(Shop.chanceLabel(awp[10]), "2 %")
 			local m9 = Shop.chances(Shop.contents(Shop.crate("crate.m9.serie1"), Inventory.ITEMS))
 			T.expectEqual(table.concat(m9, ","), table.concat(awp, ","))
 		end)

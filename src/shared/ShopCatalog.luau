@@ -36,14 +36,15 @@ export type Slot = { index: number, row: number, column: number }
 
 ShopCatalog.CURRENCY = WalletRules.CURRENCY
 
--- Raretés, de la plus courante à la plus rare (pyramide à la CS:GO, #430) ; chances en pour cent (total 100) : 80 / 16 /
--- 3,2 / 0,8. Remboursement d'un doublon (#393) en part du prix, pour qu'une caisse d'un autre prix suive sans nouvelle
--- table : 20 / 40 / 70 / 100 % (100, 200, 350, 500 crédits pour une caisse à 500)
+-- Raretés, de la plus courante à la plus rare ; chances en pour cent (total 100) : 72 / 20 / 6 / 2 (#554, par skin 18 /
+-- 6,67 / 3 / 2 : légendaire en ~50 ouvertures, barème et simulation dans docs/economie.md). Remboursement d'un doublon
+-- (#393) en part du prix, pour qu'une caisse d'un autre prix suive sans nouvelle table : 20 / 40 / 70 / 100 % (100, 200,
+-- 350, 500 crédits pour une caisse à 500)
 ShopCatalog.RARITIES = {
-	{ id = "common", label = "COMMUN", chance = 80, color = { 150, 160, 172 }, refund = 20, perCrate = 4 },
-	{ id = "rare", label = "RARE", chance = 16, color = { 70, 120, 230 }, refund = 40, perCrate = 3 },
-	{ id = "exceptional", label = "EXCEPTIONNEL", chance = 3.2, color = { 170, 70, 220 }, refund = 70, perCrate = 2 },
-	{ id = "legendary", label = "LÉGENDAIRE", chance = 0.8, color = { 235, 75, 75 }, refund = 100, perCrate = 1 },
+	{ id = "common", label = "COMMUN", chance = 72, color = { 150, 160, 172 }, refund = 20, perCrate = 4 },
+	{ id = "rare", label = "RARE", chance = 20, color = { 70, 120, 230 }, refund = 40, perCrate = 3 },
+	{ id = "exceptional", label = "EXCEPTIONNEL", chance = 6, color = { 170, 70, 220 }, refund = 70, perCrate = 2 },
+	{ id = "legendary", label = "LÉGENDAIRE", chance = 2, color = { 235, 75, 75 }, refund = 100, perCrate = 1 },
 } :: { Rarity }
 
 -- Caisses en vente, dans l'ordre de la vitrine : une par arme et par série, une ouverture donne un seul skin de l'arme
@@ -314,7 +315,7 @@ end
 
 -- Mêmes proportions que `draw` ; arrondi au plus fort reste, à égalité la ligne la plus courante ; vide si total nul.
 -- Cette méthode permet de convertir les chances de chaque skin en centièmes de pour cent de somme exacte 10000 lorsque
--- la vue détail les affiche (#393, #430 : 16 / 3 = 5,33 %, règle Roblox des objets aléatoires payants).
+-- la vue détail les affiche (#393, #554 : 20 / 3 = 6,67 %, règle Roblox des objets aléatoires payants).
 function ShopCatalog.chances(rows: { Row }): { number }
 	local weight = weights(rows)
 	local total = 0

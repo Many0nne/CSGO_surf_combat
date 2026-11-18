@@ -1,0 +1,184 @@
+[
+ {
+  "name": "Helmet",
+  "attach": "Head",
+  "offset": [
+   0.0,
+   0.06,
+   -0.0
+  ],
+  "color": [
+   84,
+   92,
+   52
+  ],
+  "material": "Plastic",
+  "hidesHead": true
+ },
+ {
+  "name": "HelmetFrame",
+  "attach": "Head",
+  "offset": [
+   0.0,
+   -0.1,
+   -0.4044
+  ],
+  "color": [
+   34,
+   34,
+   32
+  ],
+  "material": "Plastic"
+ },
+ {
+  "name": "Visor",
+  "attach": "Head",
+  "offset": [
+   0.0,
+   -0.1,
+   -0.8543
+  ],
+  "color": [
+   30,
+   34,
+   38
+  ],
+  "material": "SmoothPlastic",
+  "reflectance": 0.25
+ },
+ {
+  "name": "Collar",
+  "attach": "UpperTorso",
+  "offset": [
+   0.0,
+   1.4306,
+   -0.0
+  ],
+  "color": [
+   34,
+   34,
+   32
+  ],
+  "material": "Fabric"
+ },
+ {
+  "name": "LeftPad",
+  "attach": "LeftUpperArm",
+  "offset": [
+   -0.115,
+   0.624,
+   -0.0
+  ],
+  "color": [
+   34,
+   34,
+   32
+  ],
+  "material": "Fabric"
+ },
+ {
+  "name": "LeftPadTrim",
+  "attach": "LeftUpperArm",
+  "offset": [
+   -0.1425,
+   0.085,
+   -0.0
+  ],
+  "color": [
+   184,
+   156,
+   96
+  ],
+  "material": "SmoothPlastic"
+ },
+ {
+  "name": "RightPad",
+  "attach": "RightUpperArm",
+  "offset": [
+   0.115,
+   0.624,
+   -0.0
+  ],
+  "color": [
+   34,
+   34,
+   32
+  ],
+  "material": "Fabric"
+ },
+ {
+  "name": "RightPadTrim",
+  "attach": "RightUpperArm",
+  "offset": [
+   0.1425,
+   0.085,
+   -0.0
+  ],
+  "color": [
+   184,
+   156,
+   96
+  ],
+  "material": "SmoothPlastic"
+ },
+ {
+  "name": "ChestPlate",
+  "attach": "UpperTorso",
+  "offset": [
+   0.0,
+   -0.095,
+   -0.8591
+  ],
+  "color": [
+   34,
+   34,
+   32
+  ],
+  "material": "Plastic"
+ },
+ {
+  "name": "ChestTrim",
+  "attach": "UpperTorso",
+  "offset": [
+   0.0,
+   -0.095,
+   -0.9466
+  ],
+  "color": [
+   184,
+   156,
+   96
+  ],
+  "material": "SmoothPlastic"
+ },
+ {
+  "name": "Flap",
+  "attach": "LowerTorso",
+  "offset": [
+   0.0,
+   -0.25,
+   -0.8491
+  ],
+  "color": [
+   34,
+   34,
+   32
+  ],
+  "material": "Plastic"
+ },
+ {
+  "name": "FlapTrim",
+  "attach": "LowerTorso",
+  "offset": [
+   0.0,
+   -0.25,
+   -0.9266
+  ],
+  "color": [
+   184,
+   156,
+   96
+  ],
+  "material": "SmoothPlastic"
+ }
+]

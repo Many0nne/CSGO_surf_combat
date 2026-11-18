@@ -21,6 +21,11 @@ local CharacterAppearance = {}
 local OUTFIT_ATTRIBUTE = "Outfit"
 -- Attribut de la tête du rig cachée sous la coque d'une tenue
 local HIDDEN_ATTRIBUTE = "OutfitHidden"
+-- Attributs d'une pièce ajoutée par une tenue (MeshPart du dossier, #521) : pièce du rig qui la porte, place par
+-- rapport à elle (CFrame, défaut : confondue), et tête du rig à cacher dessous (casque fermé)
+local ATTACH_ATTRIBUTE = "OutfitAttach"
+local OFFSET_ATTRIBUTE = "OutfitOffset"
+local HIDES_HEAD_ATTRIBUTE = "OutfitHidesHead"
 -- Amincissement (largeur et profondeur) des bras d'un viewmodel habillé, et attribut de leur taille d'origine
 local UPPER_ARM_THIN = 0.96
 local BASE_SIZE_ATTRIBUTE = "OutfitBaseSize"
@@ -93,11 +98,56 @@ local function undress(model: Model)
 	model:SetAttribute(OUTFIT_ATTRIBUTE, nil)
 end
 
+-- Cette méthode permet de cacher la tête du rig (et d'en retirer le visage) lorsqu'une pièce de tenue la recouvre.
+local function hideHead(head: BasePart)
+	head.Transparency = 1
+	head:SetAttribute(HIDDEN_ATTRIBUTE, true)
+	-- Le visage est retiré, pas caché : le clip de fin remet la transparence des Decals à 0 (HighlightPlayer)
+	for _, decal in head:GetChildren() do
+		if decal:IsA("Decal") then
+			decal:Destroy()
+		end
+	end
+end
+
+-- Cette méthode permet de souder au personnage une copie d'une pièce de tenue (casque, col, épaulière…) lorsqu'on
+-- l'habille : posée sur la pièce du rig nommée par OutfitAttach (la coque `Head` de MERCURE : sur la tête), à
+-- OutfitOffset près, sans collision, requête, contact ni masse.
+local function attachPiece(model: Model, piece: BasePart, outfitId: string)
+	local attachName = piece:GetAttribute(ATTACH_ATTRIBUTE)
+	if type(attachName) ~= "string" then
+		attachName = if piece.Name == "Head" then "Head" else nil
+	end
+	local target = attachName and model:FindFirstChild(attachName)
+	if not (target and target:IsA("BasePart")) then
+		return
+	end
+	local offset = piece:GetAttribute(OFFSET_ATTRIBUTE)
+	local copy = piece:Clone()
+	copy.Name = "Outfit" .. piece.Name
+	copy.Anchored = false
+	copy.CanCollide = false
+	copy.CanQuery = false
+	copy.CanTouch = false
+	copy.Massless = true
+	copy.CFrame = if typeof(offset) == "CFrame" then target.CFrame * offset else target.CFrame
+	copy:SetAttribute(OUTFIT_ATTRIBUTE, outfitId)
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = target
+	weld.Part1 = copy
+	weld.Parent = copy
+	copy.Parent = model
+	if attachName == "Head" and (piece.Name == "Head" or piece:GetAttribute(HIDES_HEAD_ATTRIBUTE) == true) then
+		hideHead(target)
+	end
+end
+
 -- Cette méthode permet d'habiller un personnage d'une tenue de personnage (#521) lorsqu'il apparaît, à l'accueil ou quand
 -- l'écran d'équipement en montre une : SurfaceAppearance du dossier ReplicatedStorage.Outfits.<appearance> copiées sur
--- les pièces du même nom (une copie : un script de jeu ne peut pas écrire les cartes), et coque de la tête (MeshPart
--- `Head` du dossier) soudée à la tête du rig, cachée. Purement visuel : la coque ne bloque, ne pèse et ne reçoit rien, la
--- tête du rig reste la hitbox. nil, id inconnu ou dossier absent : tenue d'origine. Idempotente.
+-- les pièces du même nom (une copie : un script de jeu ne peut pas écrire les cartes), et pièces ajoutées (MeshParts du
+-- dossier : coque de la tête, casque, épaulières…) soudées au rig (`attachPiece`). Purement visuel : les pièces ajoutées
+-- ne bloquent, ne pèsent et ne reçoivent rien, le rig reste la hitbox. nil, id inconnu ou dossier absent : tenue
+-- d'origine. Idempotente.
 function CharacterAppearance.dress(model: Model, outfitId: string?)
 	if model:GetAttribute(OUTFIT_ATTRIBUTE) == outfitId and outfitId ~= nil then
 		return
@@ -126,30 +176,9 @@ function CharacterAppearance.dress(model: Model, outfitId: string?)
 			copy.Parent = part
 		end
 	end
-	local shell = source:FindFirstChild("Head")
-	local head = model:FindFirstChild("Head")
-	if shell and shell:IsA("BasePart") and head and head:IsA("BasePart") then
-		local copy = shell:Clone()
-		copy.Name = "OutfitHead"
-		copy.Anchored = false
-		copy.CanCollide = false
-		copy.CanQuery = false
-		copy.CanTouch = false
-		copy.Massless = true
-		copy.CFrame = head.CFrame
-		copy:SetAttribute(OUTFIT_ATTRIBUTE, outfitId)
-		local weld = Instance.new("WeldConstraint")
-		weld.Part0 = head
-		weld.Part1 = copy
-		weld.Parent = copy
-		copy.Parent = model
-		head.Transparency = 1
-		head:SetAttribute(HIDDEN_ATTRIBUTE, true)
-		-- Le visage est retiré, pas caché : le clip de fin remet la transparence des Decals à 0 (HighlightPlayer)
-		for _, decal in head:GetChildren() do
-			if decal:IsA("Decal") then
-				decal:Destroy()
-			end
+	for _, child in source:GetChildren() do
+		if child:IsA("BasePart") then
+			attachPiece(model, child, outfitId :: string)
 		end
 	end
 	model:SetAttribute(OUTFIT_ATTRIBUTE, outfitId)
