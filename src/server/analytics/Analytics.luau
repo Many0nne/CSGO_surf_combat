@@ -2,7 +2,7 @@
 -- (écran signalé par le client, phase en partie, manches jouées, série de morts, visites du shop) et en tire les
 -- funnels (onboarding, session, shop, packs Robux), l'économie des crédits et les événements de départ et de blocage.
 -- Étapes, noms et valeurs des champs : shared/AnalyticsRules. Points d'appel : server/init.server (branchement),
--- CrateService, ReceiptService, InventoryStore (rappels). Lecture des tableaux de bord : docs/analytics.md.
+-- CrateService, OutfitService, ReceiptService, InventoryStore (rappels). Lecture des tableaux de bord : docs/analytics.md.
 --
 -- Rien n'est envoyé sans `service` (Studio : init.server ne le donne pas) ; `log` écrit alors chaque envoi, préfixé
 -- [Analytics], pour vérifier en playtest. Un appel refusé par AnalyticsService (limite, argument) est signalé une
@@ -57,6 +57,11 @@ type State = {
 	-- Skins obtenus par une caisse achetée, avec la visite du shop de l'achat (étape Skin équipé)
 	boughtSkins: { [string]: string },
 	equippedShops: { [string]: boolean },
+	-- Étapes du funnel des tenues (#543) déjà envoyées dans la visite du shop en cours
+	outfitDone: { [number]: boolean },
+	-- Tenues achetées au portant, avec la visite du shop de l'achat (étape Tenue équipée)
+	boughtOutfits: { [string]: string },
+	equippedOutfitShops: { [string]: boolean },
 	packId: string?,
 }
 
@@ -234,12 +239,28 @@ local function shop(d: Deps, player: Player, state: State, step: AnalyticsRules.
 	if not state.shopId then
 		state.shopId = d.guid()
 		state.shopDone = {}
+		state.outfitDone = {}
 	end
 	if state.shopDone[step.step] then
 		return
 	end
 	state.shopDone[step.step] = true
 	funnelStep(d, player, R.SHOP_FUNNEL, state.shopId :: string, step)
+end
+
+-- Cette méthode permet d'envoyer une étape du funnel des tenues (#543) lorsqu'elle est atteinte, une fois par visite du
+-- shop (même funnelSessionId) ; sans visite ouverte (achat sans passer par le shop), une visite est ouverte.
+local function outfitStep(d: Deps, player: Player, state: State, step: AnalyticsRules.Step)
+	if not state.shopId then
+		state.shopId = d.guid()
+		state.shopDone = {}
+		state.outfitDone = {}
+	end
+	if state.outfitDone[step.step] then
+		return
+	end
+	state.outfitDone[step.step] = true
+	funnelStep(d, player, R.OUTFIT_FUNNEL, state.shopId :: string, step)
 end
 
 -- Cette méthode permet d'envoyer une étape du funnel des packs Robux lorsqu'elle est atteinte, dans la dernière
@@ -299,6 +320,9 @@ Analytics.playerAdded = guarded("playerAdded", function(d: Deps, player: Player)
 		shopDone = {},
 		boughtSkins = {},
 		equippedShops = {},
+		outfitDone = {},
+		boughtOutfits = {},
+		equippedOutfitShops = {},
 		packId = nil,
 	}
 	states[player] = state
@@ -365,10 +389,14 @@ Analytics.screen = guarded("screen", function(d: Deps, player: Player, screen: s
 	if R.isShop(screen) and not R.isShop(previous) then
 		state.shopId = d.guid()
 		state.shopDone = {}
+		state.outfitDone = {}
 		shop(d, player, state, R.Shop.TAB)
 	end
 	if screen == S.SHOP_DETAIL then
 		shop(d, player, state, R.Shop.DETAIL)
+	end
+	if screen == S.SHOP_OUTFIT then
+		outfitStep(d, player, state, R.Outfit.DETAIL)
 	end
 	if screen == S.CREDIT_PACKS then
 		state.packId = d.guid()
@@ -490,10 +518,47 @@ Analytics.crateBought = guarded(
 	end
 )
 
+-- Cette méthode permet de compter un achat de tenue au portant (#543) lorsque le serveur a répondu : étape ACHETER (toute
+-- demande traitée), puis pour un achat réussi étape Tenue achetée, crédits dépensés (prix lu dans la réponse), tenue
+-- retenue pour l'étape Tenue équipée. `balance` : solde après l'achat (nil s'il n'est pas connu).
+Analytics.outfitBought = guarded(
+	"outfitBought",
+	function(d: Deps, player: Player, outfitId: string, result: any, balance: number?)
+		local state = states[player]
+		if not state then
+			return
+		end
+		outfitStep(d, player, state, R.Outfit.BUY)
+		if type(result) ~= "table" or result.ok ~= true then
+			return
+		end
+		outfitStep(d, player, state, R.Outfit.BOUGHT)
+		state.boughtOutfits[outfitId] = state.shopId :: string
+		if type(result.price) == "number" then
+			economy(d, player, false, result.price, balance or 0, R.Transaction.SHOP, outfitId)
+		end
+	end
+)
+
+-- Cette méthode permet de compter l'étape Tenue équipée lorsqu'un joueur équipe une tenue achetée au portant pendant la
+-- session (une fois par visite du shop de l'achat).
+local function outfitEquipped(d: Deps, player: Player, state: State, outfitId: string)
+	local shopId = state.boughtOutfits[outfitId]
+	if not shopId or state.equippedOutfitShops[shopId] then
+		return
+	end
+	state.equippedOutfitShops[shopId] = true
+	funnelStep(d, player, R.OUTFIT_FUNNEL, shopId, R.Outfit.EQUIPPED)
+end
+
 -- Cette méthode permet de compter l'étape Skin équipé lorsqu'un joueur équipe un skin obtenu par une caisse achetée
--- pendant la session (une fois par visite du shop).
-Analytics.equipped = guarded("equipped", function(d: Deps, player: Player, skinId: string?)
+-- pendant la session (une fois par visite du shop), ou l'étape Tenue équipée pour une tenue (`outfitId`, #543).
+Analytics.equipped = guarded("equipped", function(d: Deps, player: Player, skinId: string?, outfitId: string?)
 	local state = states[player]
+	if state and outfitId then
+		outfitEquipped(d, player, state, outfitId)
+		return
+	end
 	if not (state and skinId) then
 		return
 	end

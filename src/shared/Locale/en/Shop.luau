@@ -52,6 +52,11 @@ return {
 	["INDISPONIBLE DANS TA RÉGION"] = "NOT AVAILABLE IN YOUR REGION",
 	["ACHAT IMPOSSIBLE  ·  RÉESSAIE PLUS TARD"] = "PURCHASE FAILED  ·  TRY AGAIN LATER",
 
+	-- Refus d'achat d'une tenue au portant (#543, PurchaseStatus.OUTFIT_REFUSALS)
+	["TENUE INCONNUE"] = "UNKNOWN OUTFIT",
+	["PAS EN VENTE"] = "NOT FOR SALE",
+	["DÉJÀ POSSÉDÉE"] = "ALREADY OWNED",
+
 	-- Packs de crédits (CreditPackWindow, CreditPacks)
 	["+ CRÉDITS"] = "+ CREDITS",
 	["PACKS DE CRÉDITS"] = "CREDIT PACKS",

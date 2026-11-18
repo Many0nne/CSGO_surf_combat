@@ -259,6 +259,61 @@ return function(T, Loader)
 			T.expectEqual(#callsOf(env, "LogEconomyEvent"), 0, "rien dépensé")
 		end)
 
+		T.it(
+			"suit l'achat d'une tenue au portant jusqu'à la tenue équipée, dans la visite du shop (#543)",
+			function()
+				local env = setup()
+				local A = env.Analytics
+				local p = { Name = "Coquet" }
+				A.playerAdded(p)
+				A.screen(p, S.HOME)
+				A.screen(p, S.SHOP)
+				A.screen(p, S.SHOP_OUTFIT)
+				A.outfitBought(p, "outfit.mercure", { ok = false, reason = "busy" }, 4000)
+				local result = { ok = true, outfitId = "outfit.mercure", rarity = "exceptional", price = 2500 }
+				A.outfitBought(p, "outfit.mercure", result, 1500)
+				A.screen(p, S.HOME)
+				A.equipped(p, nil, "outfit.autre")
+				A.equipped(p, nil, "outfit.mercure")
+				A.equipped(p, nil, "outfit.mercure")
+				expectList(stepsOf(env, Rules.OUTFIT_FUNNEL), { 1, 2, 3, 4 }, "étapes des tenues, chacune une fois")
+				expectList(stepsOf(env, Rules.SHOP_FUNNEL), { 1 }, "le portant est une visite du shop, pas une caisse")
+				local visits = {}
+				for _, args in callsOf(env, "LogFunnelStepEvent") do
+					if args[2] == Rules.SHOP_FUNNEL or args[2] == Rules.OUTFIT_FUNNEL then
+						visits[args[3]] = true
+					end
+				end
+				local count = 0
+				for _ in visits do
+					count += 1
+				end
+				T.expectEqual(count, 1, "même funnelSessionId que la visite du shop")
+				local eco = callsOf(env, "LogEconomyEvent")
+				T.expectEqual(#eco, 1, "une dépense, pas de remboursement")
+				T.expectEqual(eco[1][2], "Sink")
+				T.expectEqual(eco[1][4], 2500, "prix de la réponse")
+				T.expectEqual(eco[1][5], 1500, "solde après l'achat")
+				T.expectEqual(eco[1][6], Rules.Transaction.SHOP)
+				T.expectEqual(eco[1][7], "outfit.mercure")
+			end
+		)
+
+		T.it(
+			"achat de tenue refusé : étape ACHETER seule, rien dépensé ni compté à l'équipement (#543)",
+			function()
+				local env = setup()
+				local A = env.Analytics
+				local p = { Name = "Pauvre" }
+				A.playerAdded(p)
+				A.screen(p, S.SHOP)
+				A.outfitBought(p, "outfit.mercure", { ok = false, reason = "insufficient" }, 20)
+				A.equipped(p, nil, "outfit.mercure")
+				expectList(stepsOf(env, Rules.OUTFIT_FUNNEL), { 2 }, "pas de détail signalé, pas d'achat")
+				T.expectEqual(#callsOf(env, "LogEconomyEvent"), 0, "rien dépensé")
+			end
+		)
+
 		T.it("ouvre une nouvelle visite en revenant au shop depuis un autre onglet", function()
 			local env = setup()
 			local A = env.Analytics

@@ -24,14 +24,14 @@ même tâche : une issue par correction, une fois les premières données collec
 - **Jamais d'erreur dans le jeu** : chaque point d'entrée est sous `pcall` ; un appel refusé par `AnalyticsService`
   (limite de débit, argument) est signalé une fois par méthode (`[Analytics] LogFunnelStepEvent refusé : …`).
 - **Cardinalité** : aucun identifiant libre ni position brute dans les champs. Valeurs possibles : écrans (11), zones de
-  la map (16), causes de mort (3), classes de manches (5), ancienneté (3), ids de caisses et de packs (quelques-uns).
+  la map (16), causes de mort (3), classes de manches (5), ancienneté (3), ids de caisses, de tenues et de packs (quelques-uns).
   Trois champs au plus par événement (`CustomField01..03`).
 
 ## Écrans signalés par le client
 
 `loading` (écran de chargement), `playing` (en partie : arrivée, vivant, mort ou bannière, précisé par le serveur),
 `menu_home`, `menu_shop`, `menu_infos`, `menu_learn`, `menu_settings`, `menu_feedback`, `menu_lobby` (lobby, #523), `shop_detail` (détail d'une
-caisse), `crate_opening` (animation d'ouverture), `credit_packs` (fenêtre des packs Robux). Composés dans
+caisse), `shop_outfit` (détail d'une tenue au portant, #543, pas encore signalé), `crate_opening` (animation d'ouverture), `credit_packs` (fenêtre des packs Robux). Composés dans
 `init.client` (`LoadingScreen.isCovering`, `GameStateController.getState`, `ShopScreen.analyticsScreen`,
 `MainMenu.getPage`). Un écran tenu moins de 0,5 s peut ne pas être vu.
 
@@ -88,6 +88,19 @@ retour au détail restent dans la visite.
 | 4 | Caisse ouverte | achat réussi (`CrateService.init`, rappel `onBought`) |
 | 5 | Skin équipé | `EquipItem` accepté d'un skin obtenu par une caisse achetée pendant la session (rappel de `InventoryStore.init`), compté dans la visite de l'achat |
 
+### Tenues (funnel `Tenues`, #543)
+
+Même `funnelSessionId` que la visite du shop en cours (une visite ouverte si l'achat arrive sans elle). Chaque étape
+une fois par visite. L'étape 1 attend la vue détail d'une tenue côté client (écran `shop_outfit`, déjà accepté par la
+garde et compté comme écran du shop) : numérotée dès maintenant pour ne jamais renuméroter les suivantes.
+
+| Étape | Nom | Émise par |
+|---|---|---|
+| 1 | Détail d'une tenue | écran `shop_outfit` (pas encore signalé par le client) |
+| 2 | ACHETER | toute demande `BuyOutfit` traitée (refus compris : déjà possédée, solde insuffisant…) |
+| 3 | Tenue achetée | achat réussi (`OutfitService.init`, rappel `onBought`) |
+| 4 | Tenue équipée | `EquipItem` accepté (emplacement `outfit`) d'une tenue achetée pendant la session, compté dans la visite de l'achat |
+
 ### Packs Robux (funnel `PacksRobux`)
 
 Une visite = une ouverture de la fenêtre des packs. Champ 1 des étapes 2 et 3 : id du pack.
@@ -106,6 +119,7 @@ Une visite = une ouverture de la fenêtre des packs. Champ 1 des étapes 2 et 3 
 | Source | `IAP` | id du pack | crédits d'un reçu écrits |
 | Sink | `Shop` | id de la caisse | achat de caisse réussi (prix) |
 | Source | `Shop` | id de la caisse | remboursement d'un doublon tiré |
+| Sink | `Shop` | id de la tenue | achat d'une tenue au portant réussi (prix, #543) |
 
 Solde final : `WalletStore.balance` après l'opération (pour la dépense d'une caisse remboursée : solde final moins le
 remboursement, le flux réel étant débit puis remboursement).
@@ -131,7 +145,7 @@ remboursement, le flux réel étant débit puis remboursement).
 
 Creator Hub → l'expérience → **Analytics** :
 
-- **Funnels** : l'onboarding (où décrochent les nouveaux), puis les funnels récurrents `Session`, `Shop`, `PacksRobux`
+- **Funnels** : l'onboarding (où décrochent les nouveaux), puis les funnels récurrents `Session`, `Shop`, `Tenues`, `PacksRobux`
   (conversion d'une étape à l'autre).
 - **Economy** : sources et puits de `Credits` par type de transaction et SKU.
 - **Custom events** : `Depart` découpé par le champ 1 donne où l'on quitte le jeu (ex. beaucoup de `menu_home` avec

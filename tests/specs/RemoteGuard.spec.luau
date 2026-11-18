@@ -128,6 +128,7 @@ return function(T, Loader)
 					N.EQUIP_ITEM,
 					N.OPEN_CRATE,
 					N.BUY_CRATE,
+					N.BUY_OUTFIT,
 					N.BUY_CREDIT_PACK,
 					N.HIGHLIGHT_POV,
 					N.ANALYTICS_SCREEN,
@@ -175,6 +176,20 @@ return function(T, Loader)
 			T.expectEqual(honest(N.BUY_CRATE, 42), "malformed", "id non textuel")
 			T.expectEqual(honest(N.BUY_CRATE), "malformed", "id absent")
 			T.expectEqual(honest(N.BUY_CRATE, string.rep("a", 200)), "malformed", "id trop long")
+		end)
+
+		T.it("accepte l'achat d'une tenue, refuse un id impossible et une rafale de clics (#543)", function()
+			T.expectEqual(honest(N.BUY_OUTFIT, "outfit.mercure"), "ok")
+			T.expectEqual(honest(N.BUY_OUTFIT, 42), "malformed", "id non textuel")
+			T.expectEqual(honest(N.BUY_OUTFIT), "malformed", "id absent")
+			T.expectEqual(honest(N.BUY_OUTFIT, string.rep("a", 200)), "malformed", "id trop long")
+			-- Rafale de 3 au plus, puis 1 par seconde : un clic répété en boucle n'atteint même pas OutfitService
+			local guard = RemoteGuard.new()
+			for _ = 1, 3 do
+				T.expectEqual((guard:check("joueur", N.BUY_OUTFIT, 0, "outfit.mercure")), "ok")
+			end
+			T.expectEqual((guard:check("joueur", N.BUY_OUTFIT, 0, "outfit.mercure")), "rate", "4e clic immédiat")
+			T.expectEqual((guard:check("joueur", N.BUY_OUTFIT, 1, "outfit.mercure")), "ok", "une seconde plus tard")
 		end)
 
 		T.it("accepte la demande d'un pack de crédits et refuse un id de forme impossible (#395)", function()

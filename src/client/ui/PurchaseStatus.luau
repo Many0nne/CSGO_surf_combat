@@ -19,6 +19,17 @@ PurchaseStatus.REFUSALS = {
 	failed = "ACHAT IMPOSSIBLE  ·  RÉESSAIE PLUS TARD",
 }
 
+-- Libellés propres à l'achat d'une tenue au portant (#543, OutfitService), à passer à `labels` par la vue détail d'une
+-- tenue ; « déjà possédée » est aussi le marquage d'une tenue possédée
+PurchaseStatus.OUTFIT_REFUSALS = {
+	busy = "ACHAT DÉJÀ EN COURS",
+	loading = "INVENTAIRE EN CHARGEMENT",
+	unknown = "TENUE INCONNUE",
+	unavailable = "PAS EN VENTE",
+	owned = "DÉJÀ POSSÉDÉE",
+	insufficient = "CRÉDITS INSUFFISANTS",
+}
+
 -- Cette méthode permet de construire la table de libellés d'un écran lorsqu'il charge : les libellés communs, puis ses
 -- propres motifs (`own`) qui l'emportent sur les communs.
 function PurchaseStatus.labels(own: { [string]: string }): { [string]: string }

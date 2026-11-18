@@ -22,6 +22,8 @@ AnalyticsRules.Screen = {
 	SHOP_DETAIL = "shop_detail",
 	CRATE_OPENING = "crate_opening",
 	CREDIT_PACKS = "credit_packs",
+	-- Détail d'une tenue au portant du shop (#543) : valeur prête pour la vue détail, que le client ne signale pas encore
+	SHOP_OUTFIT = "shop_outfit",
 }
 
 local S = AnalyticsRules.Screen
@@ -39,10 +41,13 @@ AnalyticsRules.SCREENS = {
 	S.SHOP_DETAIL,
 	S.CRATE_OPENING,
 	S.CREDIT_PACKS,
+	S.SHOP_OUTFIT,
 }
 
--- Écrans du shop (onglet, détail d'une caisse, ouverture, fenêtre des packs) : une visite du shop les enchaîne
+-- Écrans du shop (onglet, détail d'une caisse, ouverture, fenêtre des packs, détail d'une tenue) : une visite du shop
+-- les enchaîne
 local SHOP_SCREENS = {
+	[S.SHOP_OUTFIT] = true,
 	[S.SHOP] = true,
 	[S.SHOP_DETAIL] = true,
 	[S.CRATE_OPENING] = true,
@@ -119,6 +124,16 @@ AnalyticsRules.Shop = {
 	BUY = { step = 3, name = "ACHETER" },
 	OPENED = { step = 4, name = "Caisse ouverte" },
 	EQUIPPED = { step = 5, name = "Skin équipé" },
+}
+
+-- Funnel des tenues du portant (#543) : même funnelSessionId que la visite du shop en cours. L'étape 1 attend la vue
+-- détail côté client (écran SHOP_OUTFIT) ; numérotée dès maintenant pour ne jamais renuméroter les suivantes.
+AnalyticsRules.OUTFIT_FUNNEL = "Tenues"
+AnalyticsRules.Outfit = {
+	DETAIL = { step = 1, name = "Détail d'une tenue" },
+	BUY = { step = 2, name = "ACHETER" },
+	BOUGHT = { step = 3, name = "Tenue achetée" },
+	EQUIPPED = { step = 4, name = "Tenue équipée" },
 }
 
 -- Funnel des packs de crédits en Robux : un funnelSessionId par ouverture de la fenêtre des packs
