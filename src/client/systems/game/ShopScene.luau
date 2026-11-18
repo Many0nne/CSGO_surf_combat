@@ -27,6 +27,8 @@ local UITheme = require(Shared:WaitForChild("UITheme"))
 local WalletRules = require(Shared:WaitForChild("WalletRules"))
 local WeaponProfile = require(Shared:WaitForChild("WeaponProfile"))
 local WeaponSkins = require(Shared:WaitForChild("WeaponSkins"))
+local ShotEffectRules = require(Shared:WaitForChild("ShotEffectRules"))
+local ShotEffects = require(script.Parent.Parent.weapon.ShotEffects)
 local CrateOpening = require(script.Parent.CrateOpening)
 local MenuScene = require(script.Parent.MenuScene)
 local Rules = require(script.Parent.MenuSceneRules)
@@ -142,6 +144,12 @@ local REVEAL_WEAPONS = {
 	["weapon.awp"] = { viewmodel = "AWP", length = 4.4 },
 	["weapon.m9bayonet"] = { viewmodel = "M9Bayonet", length = 2.7 },
 }
+-- Effet de tir (#566) : arme qui le montre (la seule à distance), un tir toutes les DEMO_PERIOD s, portée sans mur (studs)
+local EFFECT_WEAPON = "weapon.awp"
+local DEMO_PERIOD = 1.4
+local DEMO_RANGE = 40
+local demoParams = RaycastParams.new()
+demoParams.FilterType = Enum.RaycastFilterType.Exclude
 
 type Frame = CFrame
 type SaleCrate = { model: Model, tag: BasePart, name: TextLabel, price: TextLabel }
@@ -201,7 +209,8 @@ local figureBase = CFrame.identity -- pivot du personnage tourné de trois quart
 local figureLight: SpotLight?
 local suspension: Model? -- cloche, ampoule, lampe et faisceau : remontés dans la vue détail d'une tenue
 local lampLift = LAMP_LIFT
--- Ouverture en cours (#332) : effets, rareté tirée, départ (os.clock), rappels de l'interface
+-- Ouverture en cours (#332) : effets, rareté tirée, départ (os.clock), rappels de l'interface, et pour un effet de tir
+-- révélé (#566) sa démonstration
 type Opening = {
 	fx: any,
 	rarity: string,
@@ -209,6 +218,7 @@ type Opening = {
 	revealed: boolean,
 	onRevealed: () -> (),
 	onFinished: () -> (),
+	demo: Demo?,
 }
 local opening: Opening?
 local shownCrate = 0
@@ -221,8 +231,12 @@ local savedAmbient: Color3?
 local savedFov = 70
 local onCrateClicked: ((number) -> ())?
 local interactive = true -- survol et clic de la vitrine (coupés sous la fenêtre des packs, #395)
--- Aperçu d'un skin (#424) : arme montrée, pivot d'origine (profil), longueur ; orientation et glissement à la souris
-type Preview = { skin: string, model: Model, base: CFrame, length: number }
+-- Démonstration d'un effet de tir (#566) sur une arme de la salle : style joué, arme, pivot et axe du canon (+X du
+-- profil) à la pose, longueur de l'arme, prochain tir (os.clock)
+type Demo = { style: string?, model: Model, pivot: CFrame, axis: Vector3, length: number, nextShot: number }
+-- Aperçu d'un skin (#424) : arme montrée, pivot d'origine (profil), longueur ; orientation et glissement à la souris ;
+-- aperçu d'un effet de tir (#566) : l'AWP dans le skin qui l'inspire, qui tire avec (`demo`)
+type Preview = { skin: string, model: Model, base: CFrame, length: number, demo: Demo? }
 local preview: Preview?
 local previewLight: SpotLight?
 local yaw, pitch = 0, 0
@@ -795,7 +809,7 @@ end
 local function revealWeapon(
 	parent: Instance,
 	viewmodelName: string,
-	skinId: string,
+	skinId: string?,
 	at: CFrame,
 	length: number,
 	castShadow: boolean
@@ -806,7 +820,7 @@ local function revealWeapon(
 		return nil
 	end
 	local model = Instance.new("Model")
-	model.Name = skinId
+	model.Name = skinId or viewmodelName
 	for _, part in source:GetChildren() do
 		if part:IsA("MeshPart") and part.Transparency < 1 then
 			local copy = part:Clone()
@@ -838,8 +852,56 @@ local function revealWeapon(
 	return model
 end
 
+-- Cette méthode permet de dire comment montrer un item de caisse lorsqu'il est révélé ou en aperçu : arme (fiche de
+-- REVEAL_WEAPONS), skin posé dessus et style de tir à démontrer ; un effet de tir (#566) se montre sur l'AWP dans le
+-- skin qui l'inspire. nil si l'item ne se montre pas.
+local function showcase(item: InventoryRules.Item?): ({ viewmodel: string, length: number }?, string?, string?)
+	if not item then
+		return nil, nil, nil
+	end
+	if item.type == InventoryRules.Type.EFFECT then
+		return REVEAL_WEAPONS[EFFECT_WEAPON], item.inspiredBy, ShotEffectRules.styleOf(item.id)
+	end
+	return if item.weapon then REVEAL_WEAPONS[item.weapon] else nil, item.id, nil
+end
+
+-- Cette méthode permet de préparer la démonstration d'un effet de tir (#566) sur une arme posée de profil (canon vers le
+-- +X de `at`) lorsqu'elle apparaît ; nil sans style. Premier tir après `delay` s.
+local function newDemo(model: Model, at: CFrame, length: number, style: string?, delay: number): Demo?
+	if not style then
+		return nil
+	end
+	return {
+		style = style,
+		model = model,
+		pivot = model:GetPivot(),
+		axis = at.XVector,
+		length = length,
+		nextShot = os.clock() + delay,
+	}
+end
+
+-- Cette méthode permet de tirer avec l'effet d'une démonstration lorsque son heure est venue : de la bouche de l'arme
+-- (bout de sa boîte dans l'axe du canon, qui suit la rotation de l'arme depuis sa pose) jusqu'au mur de la salle, ou
+-- DEMO_RANGE studs plus loin.
+local function stepDemo(demo: Demo?)
+	if not demo or os.clock() < demo.nextShot or not demo.model.Parent then
+		return
+	end
+	demo.nextShot = os.clock() + DEMO_PERIOD
+	local turn = demo.model:GetPivot().Rotation * demo.pivot.Rotation:Inverse()
+	local axis = turn:VectorToWorldSpace(demo.axis)
+	local center = demo.model:GetBoundingBox().Position
+	local start = center + axis * (demo.length / 2)
+	demoParams.FilterDescendantsInstances = { demo.model :: Instance }
+	local result = workspace:Raycast(start, axis * DEMO_RANGE, demoParams)
+	local endpoint = if result then result.Position else start + axis * DEMO_RANGE
+	ShotEffects.playDemo(start, endpoint, demo.style, ShotEffectRules.PAN_AHEAD_SHOP, ShotEffectRules.PAN_WIDTH_SHOP)
+end
+
 -- Cette méthode permet de changer le skin montré en aperçu (#424, nil : aucun) lorsque l'interface le demande ou que la
 -- vue change : l'arme habillée remplace la précédente au-dessus de la caisse, la caméra glisse vers elle ou en revient.
+-- Un effet de tir (#566) se montre sur l'AWP, qui tire avec lui.
 local function setPreview(skinId: string?)
 	local shown = preview
 	if (if shown then shown.skin else nil) == skinId then
@@ -850,12 +912,18 @@ local function setPreview(skinId: string?)
 		preview = nil
 	end
 	local item = if skinId and stage and mode == "detail" and not opening then InventoryRules.item(skinId) else nil
-	local weapon = if item and item.weapon then REVEAL_WEAPONS[item.weapon] else nil
+	local weapon, modelSkin, style = showcase(item)
 	if skinId and weapon and stage then
-		local model = revealWeapon(stage, weapon.viewmodel, skinId, previewCenter, weapon.length, true)
+		local model = revealWeapon(stage, weapon.viewmodel, modelSkin, previewCenter, weapon.length, true)
 		if model then
 			model.Name = "SkinPreview"
-			preview = { skin = skinId, model = model, base = model:GetPivot(), length = weapon.length }
+			preview = {
+				skin = skinId,
+				model = model,
+				base = model:GetPivot(),
+				length = weapon.length,
+				demo = newDemo(model, previewCenter, weapon.length, style, PREVIEW_GLIDE_TIME),
+			}
 			-- D'un skin à l'autre, l'arme garde son orientation ; un nouvel aperçu repart du profil
 			if not shown then
 				yaw, pitch, swayClock = 0, 0, 0
@@ -903,6 +971,7 @@ local function updatePreview(dt: number)
 		if shown then
 			local center = CFrame.new(previewCenter.Position)
 			shown.model:PivotTo(center * CFrame.Angles(pitch, yaw, 0) * center:Inverse() * shown.base)
+			stepDemo(shown.demo)
 		end
 		if figure then
 			figure:PivotTo(figureBase * CFrame.Angles(0, yaw, 0))
@@ -1118,6 +1187,9 @@ local function update(dt: number)
 			current.revealed = true
 			current.onRevealed()
 		end
+		if current.revealed then
+			stepDemo(current.demo) -- effet de tir révélé (#566) : l'AWP tire avec lui
+		end
 	end
 	camera.CameraType = Enum.CameraType.Scriptable
 	camera.CFrame = glideFrom:Lerp(targetFrame(aspect), eased)
@@ -1272,7 +1344,7 @@ function ShopScene.playOpening(skinId: string, rarityId: string, onRevealed: () 
 	if opening or not (running and item and crateModel and stage) or mode ~= "detail" then
 		return false
 	end
-	local row = item.weapon and REVEAL_WEAPONS[item.weapon]
+	local row, modelSkin, style = showcase(item)
 	if not row then
 		return false
 	end
@@ -1287,7 +1359,7 @@ function ShopScene.playOpening(skinId: string, rarityId: string, onRevealed: () 
 		table.insert(colors, Color3.fromRGB(r.color[1], r.color[2], r.color[3]))
 	end
 	local at = podiumFrame * CFrame.new(0, 3.7, 0)
-	local weapon = revealWeapon(stage, row.viewmodel, skinId, at, row.length, true)
+	local weapon = revealWeapon(stage, row.viewmodel, modelSkin, at, row.length, true)
 	if not weapon then
 		return false
 	end
@@ -1314,6 +1386,7 @@ function ShopScene.playOpening(skinId: string, rarityId: string, onRevealed: () 
 		revealed = false,
 		onRevealed = onRevealed,
 		onFinished = onFinished,
+		demo = newDemo(weapon, at, row.length, style, 0),
 	}
 	-- La caméra avance vers la caisse pendant la montée de la charge (CrateOpeningRules : `push`, PUSH_TIME mesurée sur
 	-- la référence), depuis le plan détail

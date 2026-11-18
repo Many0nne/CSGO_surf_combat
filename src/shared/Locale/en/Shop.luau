@@ -14,6 +14,12 @@ return {
 	["M9 · SÉRIE 1"] = "M9 · SERIES 1",
 	["M9 · SÉRIE 2"] = "M9 · SERIES 2",
 	["CAISSE  ·  {n} SKINS  ·  UN PAR OUVERTURE"] = "CRATE  ·  {n} SKINS  ·  ONE PER OPENING",
+	-- Caisse d'effets de tir (#566) et descriptions de ses effets (InventoryRules.ITEMS)
+	["EFFETS · SÉRIE 1"] = "EFFECTS · SERIES 1",
+	["CAISSE  ·  {n} EFFETS DE TIR  ·  UN PAR OUVERTURE"] = "CRATE  ·  {n} SHOT EFFECTS  ·  ONE PER OPENING",
+	["Un éclair vert ramifié remplace le rayon, différent à chaque tir."] = "A branching green lightning bolt replaces the tracer, different with every shot.",
+	["L'explosion « PAN ! » de la crosse jaillit devant le canon à chaque tir."] = "The stock's « PAN ! » burst pops out in front of the barrel with every shot.",
+	["Un rayon aux couleurs de l'acier chauffé, du bleu de la bouche à la paille de l'impact."] = "A tracer in the colours of heated steel, from blue at the muzzle to straw at the impact.",
 
 	-- Vitrine et vue détail (ShopScreen)
 	["CAISSES"] = "CRATES",

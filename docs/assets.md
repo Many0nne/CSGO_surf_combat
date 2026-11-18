@@ -85,12 +85,29 @@ par `ScaleTo` avec le reste de l'arme.
   moins de `NEAR_CAMERA` de notre caméra est retirée (`clipNearCamera` : tir qui nous touche, nous frôle, ou tireur
   collé à nous) : sinon le Beam, face à la caméra, couvre l'écran. Au plus `MAX_ACTIVE` rayons en même temps (au-delà,
   un tir relayé n'a que sa flamme) ; le tir local a toujours son rayon et compte parmi eux.
-- **Effet de tir d'un skin (#520) :** un skin du catalogue (`InventoryRules.ITEMS`) peut déclarer `shotEffect`
-  (noms connus et interrupteurs : `ShotEffectRules.SKIN_EFFECTS`). **L'éclair est désactivé en jeu** (`lightning =
-  false`) : validé par l'utilisateur, gardé de côté pour plus tard ; ORAGE tire avec le rayon ordinaire et la réserve
-  n'est pas préparée. Passer à `true` pour l'activer. Le client le lit sur l'attribut `SkinId` que `WeaponSkins.apply` pose
-  sur le viewmodel et sur l'arme 3P (construite par le serveur, donc répliquée) : rien de plus à envoyer, et les autres
-  joueurs le voient. `lightning` (AWP ORAGE) : un éclair (`LightningBolt`, forme et réglages dans `LightningRules`) à la
+- **Effets de tir (#520, caisse d'effets #566) :** un effet est un item `effect` du catalogue (`InventoryRules.ITEMS` :
+  nom, `appearance` listée dans la caisse, rareté, `shotEffect` = style joué, `inspiredBy` = skin du duo), obtenu par
+  la caisse `crate.fx.serie1` et équipé dans l'emplacement `effect`, **indépendant du skin** (rien ne lie l'effet à
+  l'arme ni au skin posé). Styles connus et interrupteurs : `ShotEffectRules.STYLES`. Le client lit l'effet du tir local
+  dans `LocalInventory`, celui d'un tir relayé sur les attributs `EquippedItems` (effet en 4e champ, après la tenue) et
+  `OwnedItems` du joueur tireur : rien de plus à envoyer, et les autres joueurs le voient. Les bots et le clip de la
+  partie tirent le rayon ordinaire. Le son propre à un effet est prévu dans l'item (pas encore fait).
+  Ajouter un effet : son item dans `InventoryRules.ITEMS`, son `appearance` dans la caisse (`ShopCatalog`), son style
+  dans `STYLES` et `ShotEffects.show`, sa traduction de description (`Locale/en/Shop.luau`).
+  - **TREMPE (`temper`) :** Beam plus large (`TEMPER_WIDTH`) et plus long à s'effacer (`TEMPER_LIFETIME`), couleurs de
+    revenu de l'acier (`TEMPER_STOPS`, du bleu à la bouche à la paille à l'impact) recomposées à chaque frame : franges
+    claires qui défilent vers l'impact, front qui ondule (`temperKeypoints`, 16 points, Roblox en accepte 20).
+    **Piège : un Beam à `Segments = 1` n'interpole sa `ColorSequence` qu'entre ses deux bouts** (bleu → paille en passant
+    par le gris, violet et bronze invisibles) : TREMPE en a 20 (`TEMPER_SEGMENTS`). `LightEmission` 0,25 : plus haut, les
+    couleurs sont lavées vers le blanc ; teintes plus saturées que le skin, qu'un Beam plat rend plus pâles.
+  - **Juger un effet du menu en capture :** il ne vit que 0,3 s. Depuis un `execute_luau` client, guetter dans
+    `Terrain` le `ShotTracer` (et le `PanBurst` activé) du prochain tir de démonstration, en cloner une copie figée
+    (transparence 0, taille 1), capturer, puis la détruire.
+  - **PAN ! (`pan`) :** explosion de BD de la crosse du skin PAN ! (`assets/effects/pan_burst.py` reprend sa fonction
+    `burst` et ses graines, publiée en Decal : id de l'image dans `PAN_IMAGE`) dans un BillboardGui devant le canon
+    (`PanBurst`), toujours tournée vers la caméra, inclinaison tirée à chaque tir, pop puis fondu (`panFrame`) ; rayon
+    ordinaire en plus. Chez le tireur : plus petite et plus près (`PAN_WIDTH_LOCAL`), absente à la lunette.
+  - **ÉCLAIR (`lightning`) :** un éclair (`LightningBolt`, forme et réglages dans `LightningRules`) à la
   place du rayon de balle, tronc brisé resserré au canon et à l'impact, branches et brindilles tirées à chaque tir,
   flash puis second flash puis fondu, lueur `PointLight`. Au-delà de `LightningRules.MAX_ACTIVE` éclairs en cours, le
   tir garde le rayon ordinaire. Purement visuel : trajectoire, dégâts et son inchangés.

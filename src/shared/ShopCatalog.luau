@@ -19,7 +19,9 @@ export type Rarity = { id: string, label: string, chance: number, color: Rgb, re
 -- `weapon` : id de l'arme dont la caisse donne un skin (`id` d'un item `weapon` de InventoryRules.ITEMS) ; `contents` :
 -- noms d'apparence des skins (`appearance` de InventoryRules.ITEMS) par id de rareté, le skin étant celui de cette arme ;
 -- `series` (facultatif, #454) : code de série du pochoir (« FO » pour une série `foam` qui donnerait « FM » comme `film`),
--- prioritaire sur le code tiré de l'id, pour lever une collision sans renommer un id déjà en inventaire
+-- prioritaire sur le code tiré de l'id, pour lever une collision sans renommer un id déjà en inventaire ; `kind`
+-- (facultatif, #566) : type d'item donné, "skin" par défaut ou "effect" (effets de tir : `contents` liste leurs
+-- `appearance`, `weapon` est l'arme qui les montre en vignette, rien ne les lie à elle)
 export type Crate = {
 	id: string,
 	name: string,
@@ -28,6 +30,7 @@ export type Crate = {
 	price: number,
 	contents: { [string]: { string } },
 	series: string?,
+	kind: string?,
 }
 -- Une ligne du contenu = un skin : sa rareté, son nom affiché, son id d'item, le nom court de son arme (« AWP ») et le
 -- viewmodel de son arme (vignette)
@@ -109,7 +112,25 @@ ShopCatalog.CRATES = {
 			legendary = { "cordoue" },
 		},
 	},
+	-- Caisse d'effets de tir (#566) : un effet par rareté pour commencer (pas de commun), équipable avec n'importe quel
+	-- skin ; bande jaune de PAN !, distincte des caisses de skins
+	{
+		id = "crate.fx.serie1",
+		name = "EFFETS · SÉRIE 1",
+		weapon = "weapon.awp",
+		kind = "effect",
+		stripe = { 235, 195, 40 },
+		price = 500,
+		contents = {
+			rare = { "eclair" },
+			exceptional = { "pan" },
+			legendary = { "trempe" },
+		},
+	},
 } :: { Crate }
+
+-- Nom court d'une caisse d'effets de tir (#566) sur la révélation et le pochoir, à la place de celui de l'arme
+ShopCatalog.EFFECT_LABEL = "FX"
 
 -- Réserve : skins finis qu'aucune caisse en vente ne donne encore, par arme puis par rareté. Ils gardent leur rareté
 -- (`rarityOf`, pour qui les possède déjà : les caisses FILM, #433, ont été vendues avant d'être retirées), et forment
@@ -141,6 +162,12 @@ function ShopCatalog.crate(id: string): Crate?
 	return nil
 end
 
+-- Cette méthode permet de savoir si une caisse donne des effets de tir (#566) plutôt que des skins lorsque son contenu,
+-- son pochoir ou sa révélation se composent.
+function ShopCatalog.isEffectCrate(crate: { kind: string? }?): boolean
+	return crate ~= nil and crate.kind == "effect"
+end
+
 -- Cette méthode permet de lister le contenu d'une caisse, un skin par ligne, par rareté (de la plus courante à la plus
 -- rare) puis dans l'ordre du catalogue, lorsque la vue détail l'affiche ou que le serveur tire : lus dans le catalogue
 -- des items (`items` : InventoryRules.ITEMS), seuls les skins connus de l'arme de la caisse comptant.
@@ -152,16 +179,20 @@ function ShopCatalog.contents(crate: Crate, items: { any }): { Row }
 		end
 	end
 	local rows = {}
+	local isEffect = ShopCatalog.isEffectCrate(crate)
 	for _, rarity in ShopCatalog.RARITIES do
 		local appearances: { string } = crate.contents[rarity.id] or {}
 		for _, appearance in appearances do
 			for _, item in items do
-				if item.type == "skin" and item.appearance == appearance and item.weapon == crate.weapon then
+				local matches = if isEffect
+					then item.type == "effect" and item.appearance == appearance
+					else item.type == "skin" and item.appearance == appearance and item.weapon == crate.weapon
+				if matches then
 					table.insert(rows, {
 						rarity = rarity,
 						name = item.name or string.upper(appearance),
 						skin = item.id,
-						weapon = weaponLabel(crate.weapon),
+						weapon = if isEffect then ShopCatalog.EFFECT_LABEL else weaponLabel(crate.weapon),
 						viewmodel = viewmodel,
 					})
 					break
@@ -195,7 +226,8 @@ function ShopCatalog.rarityOf(skin: { weapon: string?, appearance: string?, rari
 	end
 	local sources = {}
 	for _, crate in ShopCatalog.CRATES do
-		if crate.weapon == skin.weapon then
+		-- Une caisse d'effets (#566) reprend des noms de skins (PAN !, TREMPE) : elle ne dit rien de leur rareté
+		if crate.weapon == skin.weapon and not ShopCatalog.isEffectCrate(crate) then
 			table.insert(sources, crate.contents)
 		end
 	end
@@ -258,7 +290,11 @@ end
 -- Cette méthode permet de composer la ligne sous le nom d'une caisse lorsque la vue détail l'affiche : renvoie le gabarit
 -- français « CAISSE  ·  {n} SKINS  ·  UN PAR OUVERTURE » et ses paramètres, à traduire à l'affichage (Locale).
 function ShopCatalog.subtitle(crate: Crate, items: { any }): (string, { [string]: any })
-	return "CAISSE  ·  {n} SKINS  ·  UN PAR OUVERTURE", { n = #ShopCatalog.contents(crate, items) }
+	local n = #ShopCatalog.contents(crate, items)
+	if ShopCatalog.isEffectCrate(crate) then
+		return "CAISSE  ·  {n} EFFETS DE TIR  ·  UN PAR OUVERTURE", { n = n }
+	end
+	return "CAISSE  ·  {n} SKINS  ·  UN PAR OUVERTURE", { n = n }
 end
 
 -- Cette méthode permet de ranger `count` caisses dans la vitrine lorsque la vue d'ensemble se construit : réparties à
@@ -385,7 +421,7 @@ end
 -- Cette méthode permet de composer le pochoir du couvercle d'une caisse (« S1-AWP », « FM-M9 », #434) lorsque le shop la
 -- pose : série (`series` de la caisse, sinon tirée de l'id : `serie<n>` → `S<n>`, sinon 1re et dernière lettre), arme ;
 -- repli sur l'un des deux, ou "".
-function ShopCatalog.stencil(crate: { id: string?, weapon: string?, series: string? }?): string
+function ShopCatalog.stencil(crate: { id: string?, weapon: string?, series: string?, kind: string? }?): string
 	local series = crate and crate.id and string.match(crate.id, "^crate%.[^.]+%.(.+)$")
 	local code: string? = nil
 	local explicit = crate and crate.series
@@ -401,7 +437,10 @@ function ShopCatalog.stencil(crate: { id: string?, weapon: string?, series: stri
 		end
 	end
 	local weapon = crate and crate.weapon
-	local label: string? = if weapon then weaponLabel(weapon) else nil
+	local label: string? = if ShopCatalog.isEffectCrate(crate)
+		then ShopCatalog.EFFECT_LABEL
+		elseif weapon then weaponLabel(weapon)
+		else nil
 	if code and label then
 		return code .. "-" .. label
 	end

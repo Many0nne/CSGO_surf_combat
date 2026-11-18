@@ -23,7 +23,10 @@ return function(T, Loader)
 				T.expect(not seen[entry.id], "id unique : " .. entry.id)
 				seen[entry.id] = true
 				T.expect(
-					entry.type == Rules.Type.WEAPON or entry.type == Rules.Type.SKIN or entry.type == Rules.Type.OUTFIT,
+					entry.type == Rules.Type.WEAPON
+						or entry.type == Rules.Type.SKIN
+						or entry.type == Rules.Type.OUTFIT
+						or entry.type == Rules.Type.EFFECT,
 					"type de " .. entry.id
 				)
 				if entry.type == Rules.Type.WEAPON then
@@ -547,6 +550,82 @@ return function(T, Loader)
 			T.expectEqual(Rules.encodeEquipped(Rules.resolveEquipped(nil, admin)), "weapon.awp,weapon.kabar")
 			T.expectEqual(Rules.outfitOf(Rules.decodeEquipped("weapon.awp,weapon.kabar", admin)), nil)
 			T.expectEqual(Rules.outfitOf(Rules.decodeEquipped(text, Rules.resolve(nil, false))), nil, "non possédée")
+		end)
+	end)
+
+	T.describe("InventoryRules : effet de tir (#566)", function()
+		local PAN = "effect.pan"
+
+		T.it("rien de choisi : aucun effet, et l'effet n'entre pas dans le sac", function()
+			local resolved = Rules.resolveEquipped(nil, Rules.resolve(nil, true))
+			T.expectEqual(Rules.effectOf(resolved), nil)
+			T.expectEqual(table.concat(Rules.equippedTools(resolved), ","), "AWP,KaBar")
+		end)
+
+		T.it("équiper un effet possédé quel que soit le skin, refuser un effet non possédé ou inconnu", function()
+			local admin = Rules.resolve(nil, true)
+			local equipped = Rules.equip({}, admin, Rules.SLOTS[1], "weapon.awp", "skin.awp.maquis")
+			equipped = equipped and Rules.equip(equipped, admin, Rules.EFFECT_SLOT, PAN, nil)
+			T.expect(equipped ~= nil, "effet possédé équipé")
+			local resolved = Rules.resolveEquipped(equipped, admin)
+			T.expectEqual(Rules.effectOf(resolved), PAN)
+			T.expectEqual(Rules.skinOfTool(resolved, "AWP"), "skin.awp.maquis", "skin inchangé")
+			local _, reason = Rules.equip({}, Rules.resolve(nil, false), Rules.EFFECT_SLOT, PAN, nil)
+			T.expectEqual(reason, "not_owned")
+			local _, skin = Rules.equip({}, admin, Rules.EFFECT_SLOT, "skin.awp.pan", nil)
+			T.expectEqual(skin, "unknown", "un skin n'est pas un effet")
+			local _, outfit = Rules.equip({}, admin, Rules.OUTFIT_SLOT, PAN, nil)
+			T.expectEqual(outfit, "unknown", "un effet n'est pas une tenue")
+		end)
+
+		T.it("retirer l'effet enregistre EFFECT_NONE, qui l'emporte sur l'effet d'un autre serveur", function()
+			local admin = Rules.resolve(nil, true)
+			local back = Rules.equip({ effect = { weapon = PAN } }, admin, Rules.EFFECT_SLOT, "", nil)
+			T.expectEqual(back and back.effect and back.effect.weapon, Rules.EFFECT_NONE)
+			T.expectEqual(Rules.effectOf(Rules.resolveEquipped(back, admin)), nil)
+			local old = { schemaVersion = 2, items = {}, equipped = { effect = { weapon = PAN } } }
+			local record = Rules.mergeForSave(old, {}, { effect = { weapon = Rules.EFFECT_NONE } })
+			T.expectEqual(record and record.equipped and record.equipped.effect.weapon, Rules.EFFECT_NONE)
+			local kept = Rules.mergeForSave(old, {}, { sniper = { weapon = "weapon.awp" } })
+			T.expectEqual(kept and kept.equipped.effect.weapon, PAN, "effet d'un autre serveur gardé")
+		end)
+
+		T.it("attribut : l'effet suit la tenue (vide si d'origine), un ancien attribut se relit", function()
+			local admin = Rules.resolve(nil, true)
+			local resolved = Rules.resolveEquipped({ effect = { weapon = PAN } }, admin)
+			local text = Rules.encodeEquipped(resolved)
+			T.expectEqual(text, "weapon.awp,weapon.kabar,," .. PAN)
+			local decoded = Rules.decodeEquipped(text, admin)
+			T.expectEqual(Rules.effectOf(decoded), PAN)
+			T.expectEqual(Rules.outfitOf(decoded), nil)
+			local both =
+				Rules.resolveEquipped({ outfit = { weapon = "outfit.mercure" }, effect = { weapon = PAN } }, admin)
+			local bothText = Rules.encodeEquipped(both)
+			T.expectEqual(bothText, "weapon.awp,weapon.kabar,outfit.mercure," .. PAN)
+			T.expectEqual(Rules.outfitOf(Rules.decodeEquipped(bothText, admin)), "outfit.mercure")
+			T.expectEqual(Rules.effectOf(Rules.decodeEquipped("weapon.awp,weapon.kabar,outfit.mercure", admin)), nil)
+			T.expectEqual(Rules.effectOf(Rules.decodeEquipped(text, Rules.resolve(nil, false))), nil, "non possédé")
+		end)
+
+		T.it("chaque effet a un nom, une rareté, un style connu et le skin qui l'inspire", function()
+			local ShopCatalog = Loader.new({}):require("src/shared/ShopCatalog")
+			local count = 0
+			for _, entry in Rules.ITEMS do
+				if entry.type == Rules.Type.EFFECT then
+					count += 1
+					T.expect(string.sub(entry.id, 1, 7) == "effect.", "id en effect.<nom> : " .. entry.id)
+					T.expect(entry.id ~= Rules.EFFECT_NONE, "id réservé : " .. entry.id)
+					T.expect(type(entry.name) == "string" and entry.name ~= "", "nom de " .. entry.id)
+					T.expect(type(entry.appearance) == "string", "nom en caisse de " .. entry.id)
+					T.expect(ShopCatalog.rarity(entry.rarity) ~= nil, "rareté de " .. entry.id)
+					T.expect(type(entry.shotEffect) == "string", "style de " .. entry.id)
+					local skin = entry.inspiredBy and Rules.item(entry.inspiredBy)
+					T.expect(skin ~= nil and skin.type == Rules.Type.SKIN, "skin d'inspiration de " .. entry.id)
+				end
+			end
+			T.expectEqual(count, 3)
+			T.expectEqual(#Rules.effects(), count)
+			T.expectEqual(Rules.effects()[1].id, "effect.eclair", "rare d'abord")
 		end)
 	end)
 

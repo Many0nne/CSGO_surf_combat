@@ -12,12 +12,11 @@ local ShotSoundRules = require(ReplicatedStorage.Shared.ShotSoundRules)
 
 local ShotEffectRules = {}
 
--- Effets de tir qu'un skin peut déclarer (`shotEffect` du catalogue, #520) et leur interrupteur : un effet à false (ou
--- un nom inconnu) est ignoré, le skin tire avec le rayon ordinaire. L'éclair (AWP ORAGE) est prêt, validé en jeu, mais
--- gardé de côté pour l'instant : passer `lightning` à true pour l'activer.
-ShotEffectRules.SKIN_EFFECTS = { lightning = false }
--- Attribut du modèle d'arme (viewmodel, arme 3P) qui porte l'id du skin posé (WeaponSkins.ATTRIBUTE)
-ShotEffectRules.SKIN_ATTRIBUTE = "SkinId"
+-- Styles d'effet de tir qu'un item `effect` peut déclarer (`shotEffect` du catalogue, #520, #566) et leur interrupteur :
+-- un style à false (ou un nom inconnu) est ignoré, le joueur tire avec le rayon ordinaire. `lightning` : éclair vert
+-- (ÉCLAIR, LightningBolt) ; `pan` : explosion « PAN ! » devant le canon (PanBurst), rayon ordinaire ; `temper` : rayon
+-- aux couleurs de revenu de l'acier (TREMPE).
+ShotEffectRules.STYLES = { lightning = true, pan = true, temper = true }
 
 -- Bouche du canon dans le modèle de l'arme (viewmodel ou 3P) : chemin de l'Attachment, puis nom de son effet.
 -- Une arme à distance sans ce chemin tire sans flamme, et son rayon part de l'origine du tir (l'œil).
@@ -54,11 +53,164 @@ ShotEffectRules.INSTANCE_NAME = "ShotTracer"
 -- Filet : un rayon est détruit au plus tard après sa durée de vie plus cette marge (s), même si sa boucle s'arrête.
 ShotEffectRules.LIFETIME_MARGIN = 0.5
 
+-- TREMPE (#566, style `temper`) : rayon un peu plus large et plus long à s'effacer que le rayon ordinaire, aux couleurs
+-- de revenu de l'acier du skin TREMPE (assets/awp/skins/trempe.py), de la bouche (bleu profond) à l'impact (paille).
+-- Les franges (bandes plus claires) défilent vers l'impact à TEMPER_SPEED (longueurs de rayon par seconde), et le front
+-- des couleurs ondule de TEMPER_WAVE (part de la longueur) : le rayon n'est jamais deux fois le même.
+ShotEffectRules.TEMPER_WIDTH = 0.14
+ShotEffectRules.TEMPER_LIFETIME = 0.3
+-- Teintes plus saturées que celles du skin : un Beam sans relief ni reflet les rend plus pâles (comparé en jeu).
+ShotEffectRules.TEMPER_STOPS = {
+	{ 0.0, { 20, 40, 210 } }, -- bleu profond, à la bouche
+	{ 0.3, { 120, 35, 200 } }, -- violet
+	{ 0.6, { 205, 100, 20 } }, -- bronze
+	{ 1.0, { 245, 205, 90 } }, -- paille, à l'impact
+}
+ShotEffectRules.TEMPER_FRINGES = 3 -- franges sur la longueur du rayon
+ShotEffectRules.TEMPER_FRINGE_GAIN = 0.25 -- éclaircissement au cœur d'une frange (vers le blanc)
+ShotEffectRules.TEMPER_SPEED = 2.5
+ShotEffectRules.TEMPER_WAVE = 0.06
+-- Points de la ColorSequence (Roblox en accepte 20 au plus)
+ShotEffectRules.TEMPER_KEYPOINTS = 16
+-- Segments du Beam : avec un seul, Roblox n'interpole qu'entre les deux bouts (bleu → paille en passant par le gris)
+-- et le violet et le bronze disparaissent
+ShotEffectRules.TEMPER_SEGMENTS = 20
+-- Lumière additive : à 0,6 les couleurs sont lavées vers le blanc sur le décor clair, à 0 le rayon est terne dans le noir
+ShotEffectRules.TEMPER_LIGHT_EMISSION = 0.25
+
+-- PAN ! (#566, style `pan`) : l'explosion « PAN ! » du skin (image tirée de assets/effects/pan_burst.py) jaillit devant
+-- le canon, toujours tournée vers la caméra (case de BD), avec le rayon ordinaire. Taille en studs (largeur ; l'image est
+-- en 512 x 320), plus petite chez le tireur pour ne pas cacher sa cible ; avance devant la bouche du canon (studs) ;
+-- pop (s) jusqu'au dépassement PAN_OVERSHOOT, puis retour à 1 ; fondu sur la fin de PAN_LIFETIME.
+ShotEffectRules.PAN_IMAGE = "rbxassetid://128462521847770"
+ShotEffectRules.PAN_ASPECT = 320 / 512
+ShotEffectRules.PAN_WIDTH = 3.2
+ShotEffectRules.PAN_WIDTH_LOCAL = 1.1
+ShotEffectRules.PAN_AHEAD = 1.6
+ShotEffectRules.PAN_AHEAD_LOCAL = 1.2
+ShotEffectRules.PAN_AHEAD_DEMO = 3.5 -- aperçu du menu : le canon y est au bord du cadre, l'explosion s'en écarte
+-- Aperçu et révélation du shop : l'AWP de profil, canon vers le bord droit et caméra proche ; explosion plus petite,
+-- collée à la bouche, pour rester dans le cadre
+ShotEffectRules.PAN_AHEAD_SHOP = 0.6
+ShotEffectRules.PAN_WIDTH_SHOP = 1.6
+ShotEffectRules.PAN_LIFETIME = 0.32
+ShotEffectRules.PAN_POP = 0.06
+ShotEffectRules.PAN_SETTLE = 0.1
+ShotEffectRules.PAN_OVERSHOOT = 1.15
+ShotEffectRules.PAN_FADE_FROM = 0.55 -- part de la vie à partir de laquelle il s'efface
+ShotEffectRules.PAN_TILT = 14 -- inclinaison tirée à chaque tir, en degrés (±)
+-- Le rayon part à cette part de la largeur de l'explosion au-delà de son centre (son bord, pointes comprises)
+ShotEffectRules.PAN_TRACER_GAP = 0.5
+-- Explosions en cours au plus (une réserve de ce nombre de BillboardGui, créée au premier tir PAN !)
+ShotEffectRules.PAN_MAX_ACTIVE = 6
+
 -- Cette méthode permet de calculer la transparence d'un rayon lorsqu'il vieillit : opaque au tir, il s'efface de
--- plus en plus vite (courbe quadratique) jusqu'à disparaître à TRACER_LIFETIME.
-function ShotEffectRules.tracerTransparency(elapsed: number): number
-	local t = math.clamp(elapsed / ShotEffectRules.TRACER_LIFETIME, 0, 1)
+-- plus en plus vite (courbe quadratique) jusqu'à disparaître à `lifetime` (TRACER_LIFETIME par défaut).
+function ShotEffectRules.tracerTransparency(elapsed: number, lifetime: number?): number
+	local t = math.clamp(elapsed / (lifetime or ShotEffectRules.TRACER_LIFETIME), 0, 1)
 	return t * t
+end
+
+-- Cette méthode permet de donner la durée de vie d'un rayon selon le style de tir (TREMPE s'efface plus lentement)
+-- lorsqu'il est créé.
+function ShotEffectRules.tracerLifetime(style: string?): number
+	return if style == "temper" then ShotEffectRules.TEMPER_LIFETIME else ShotEffectRules.TRACER_LIFETIME
+end
+
+-- Cette méthode permet de lire la couleur de base de TREMPE en un point du rayon (0 : bouche, 1 : impact) lorsque ses
+-- couleurs sont composées : interpolation linéaire entre les étapes de TEMPER_STOPS, en RGB 0..255.
+local function temperBase(x: number): (number, number, number)
+	local stops = ShotEffectRules.TEMPER_STOPS
+	x = math.clamp(x, 0, 1)
+	for i = 2, #stops do
+		local a, b = stops[i - 1], stops[i]
+		if x <= b[1] then
+			local t = if b[1] > a[1] then (x - a[1]) / (b[1] - a[1]) else 0
+			return a[2][1] + (b[2][1] - a[2][1]) * t,
+				a[2][2] + (b[2][2] - a[2][2]) * t,
+				a[2][3] + (b[2][3] - a[2][3]) * t
+		end
+	end
+	local last = stops[#stops][2]
+	return last[1], last[2], last[3]
+end
+
+-- Cette méthode permet de composer les couleurs de TREMPE le long du rayon à un instant (`elapsed`, s) lorsqu'il est créé
+-- puis à chaque frame : TEMPER_KEYPOINTS points { position 0..1, r, g, b } (0..255), du dégradé de l'acier décalé par une
+-- onde (`seed` : tirage du tir) et éclairci au passage des franges qui défilent vers l'impact.
+function ShotEffectRules.temperKeypoints(elapsed: number, seed: number): { { number } }
+	local points = {}
+	local n = ShotEffectRules.TEMPER_KEYPOINTS
+	local phase = elapsed * ShotEffectRules.TEMPER_SPEED
+	for i = 0, n - 1 do
+		local x = i / (n - 1)
+		local wave = ShotEffectRules.TEMPER_WAVE * math.sin((x * 2.3 + seed) * math.pi * 2 + phase * 3)
+		local r, g, b = temperBase(x + wave)
+		-- frange : bosse en cosinus, une par 1/TEMPER_FRINGES, qui avance vers l'impact
+		local fringe = (math.cos(((x - phase) * ShotEffectRules.TEMPER_FRINGES + seed) * math.pi * 2) + 1) / 2
+		local lift = ShotEffectRules.TEMPER_FRINGE_GAIN * fringe ^ 4
+		points[i + 1] = { x, r + (255 - r) * lift, g + (255 - g) * lift, b + (255 - b) * lift }
+	end
+	return points
+end
+
+-- Cette méthode permet de donner l'échelle et la transparence de l'explosion PAN ! à un instant de sa vie (`elapsed`,
+-- s) lorsqu'elle est animée : pop de 0 à PAN_OVERSHOOT, retour à 1, puis fondu ; transparence 1 une fois sa vie finie.
+function ShotEffectRules.panFrame(elapsed: number): (number, number)
+	local pop, settle = ShotEffectRules.PAN_POP, ShotEffectRules.PAN_SETTLE
+	local over = ShotEffectRules.PAN_OVERSHOOT
+	local scale
+	if elapsed <= 0 then
+		scale = 0
+	elseif elapsed < pop then
+		local t = elapsed / pop
+		scale = over * (1 - (1 - t) * (1 - t))
+	elseif elapsed < pop + settle then
+		scale = over + (1 - over) * ((elapsed - pop) / settle)
+	else
+		scale = 1
+	end
+	local life = ShotEffectRules.PAN_LIFETIME
+	local from = life * ShotEffectRules.PAN_FADE_FROM
+	local transparency = if elapsed >= life then 1 elseif elapsed <= from then 0 else (elapsed - from) / (life - from)
+	return scale, transparency
+end
+
+-- Cette méthode permet de faire partir le rayon du bord de l'explosion PAN ! (centre `center`, largeur `width`) lorsque
+-- les deux sont tracés : départ avancé de PAN_TRACER_GAP largeur au-delà du centre, sans dépasser l'impact moins
+-- TRACER_MIN_LENGTH (sinon le départ d'origine).
+function ShotEffectRules.panTracerStart(start: Vector3, finish: Vector3, center: Vector3, width: number): Vector3
+	local path = finish - start
+	local length = path.Magnitude
+	if length <= 0 then
+		return start
+	end
+	local unit = path / length
+	local along = (center - start):Dot(unit) + width * ShotEffectRules.PAN_TRACER_GAP
+	if along <= 0 or along > length - ShotEffectRules.TRACER_MIN_LENGTH then
+		return start
+	end
+	return start + unit * along
+end
+
+-- Cette méthode permet de placer l'explosion PAN ! lorsqu'un tir part : devant la bouche du canon dans la direction du
+-- tir, plus près chez le tireur (`aheadOverride`, `widthOverride` : avance et largeur imposées, démonstrations) ; sans
+-- s'avancer au-delà de la moitié du rayon (cible collée au canon). Renvoie sa position et sa largeur (studs).
+function ShotEffectRules.panPlacement(
+	start: Vector3,
+	finish: Vector3,
+	isLocal: boolean,
+	aheadOverride: number?,
+	widthOverride: number?
+): (Vector3, number)
+	local path = finish - start
+	local length = path.Magnitude
+	local ahead = aheadOverride or if isLocal then ShotEffectRules.PAN_AHEAD_LOCAL else ShotEffectRules.PAN_AHEAD
+	local width = widthOverride or if isLocal then ShotEffectRules.PAN_WIDTH_LOCAL else ShotEffectRules.PAN_WIDTH
+	if length <= 0 then
+		return start, width
+	end
+	return start + path / length * math.min(ahead, length / 2), width
 end
 
 -- Cette méthode permet de trouver la fin d'un rayon lorsqu'un tir part : le point touché, sinon l'origine prolongée
@@ -147,12 +299,12 @@ function ShotEffectRules.isTooClose(start: Vector3, endpoint: Vector3, camera: V
 end
 
 -- Cette méthode permet de choisir le palier de transparence d'un rayon lorsqu'il vieillit (0 : opaque, FADE_STEPS :
--- invisible) : un rayon caché par la caméra prend le dernier palier.
-function ShotEffectRules.fadeStep(elapsed: number, hidden: boolean): number
+-- invisible) : un rayon caché par la caméra prend le dernier palier ; `lifetime` : sa durée de vie (tracerLifetime).
+function ShotEffectRules.fadeStep(elapsed: number, hidden: boolean, lifetime: number?): number
 	if hidden then
 		return ShotEffectRules.FADE_STEPS
 	end
-	return math.round(ShotEffectRules.tracerTransparency(elapsed) * ShotEffectRules.FADE_STEPS)
+	return math.round(ShotEffectRules.tracerTransparency(elapsed, lifetime) * ShotEffectRules.FADE_STEPS)
 end
 
 -- Cette méthode permet de décider si les effets d'un tir relayé sont montrés lorsqu'il arrive : le tir d'un autre
@@ -168,23 +320,30 @@ function ShotEffectRules.hasRoom(activeCount: number): boolean
 	return activeCount < ShotEffectRules.MAX_ACTIVE
 end
 
--- Cette méthode permet de trouver l'effet de tir du skin posé sur une arme lorsqu'un tir en part (#520) : nil pour le
--- skin d'origine, un id inconnu, un item qui n'est pas un skin ou un effet inconnu.
-function ShotEffectRules.effectOf(skinId: any): string?
-	if type(skinId) ~= "string" or skinId == "" then
+-- Cette méthode permet de trouver le style joué par un item d'effet de tir (#566) lorsqu'un tir part : nil sans effet,
+-- pour un id inconnu, un item qui n'est pas un effet ou un style désactivé.
+function ShotEffectRules.styleOf(effectId: any): string?
+	if type(effectId) ~= "string" or effectId == "" then
 		return nil
 	end
-	local item = InventoryRules.item(skinId)
-	local effect = item and item.type == InventoryRules.Type.SKIN and item.shotEffect
-	if type(effect) == "string" and ShotEffectRules.SKIN_EFFECTS[effect] == true then
-		return effect
+	local item = InventoryRules.item(effectId)
+	local style = item and item.type == InventoryRules.Type.EFFECT and item.shotEffect
+	if type(style) == "string" and ShotEffectRules.STYLES[style] == true then
+		return style
 	end
 	return nil
 end
 
--- Cette méthode permet de savoir si un effet de tir est activé lorsque le client démarre (réserve à préparer ou non).
-function ShotEffectRules.isEnabled(effect: string): boolean
-	return ShotEffectRules.SKIN_EFFECTS[effect] == true
+-- Cette méthode permet de lire le style de tir d'un joueur lorsqu'un de ses tirs est relayé : ses attributs
+-- informatifs `EquippedItems` et `OwnedItems` (posés par le serveur) relus comme l'équipement résolu, nil sans effet.
+function ShotEffectRules.styleOfPlayer(equippedText: any, ownedText: any): string?
+	local resolved = InventoryRules.decodeEquipped(equippedText, InventoryRules.decode(ownedText))
+	return ShotEffectRules.styleOf(InventoryRules.effectOf(resolved))
+end
+
+-- Cette méthode permet de savoir si un style de tir est activé lorsque le client démarre (réserve à préparer ou non).
+function ShotEffectRules.isEnabled(style: string): boolean
+	return ShotEffectRules.STYLES[style] == true
 end
 
 return ShotEffectRules

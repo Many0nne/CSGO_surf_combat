@@ -145,28 +145,38 @@ return function(T, Loader)
 		end)
 	end)
 
-	T.describe("ShotEffectRules.effectOf (#520)", function()
-		T.it("l'AWP ORAGE tire un éclair quand l'effet est activé, le rayon ordinaire sinon", function()
-			local saved = ShotEffectRules.SKIN_EFFECTS.lightning
-			ShotEffectRules.SKIN_EFFECTS.lightning = true
-			T.expectEqual(ShotEffectRules.effectOf("skin.awp.orage"), "lightning")
-			T.expectEqual(ShotEffectRules.isEnabled("lightning"), true)
-			ShotEffectRules.SKIN_EFFECTS.lightning = false
-			T.expectEqual(ShotEffectRules.effectOf("skin.awp.orage"), nil)
+	T.describe("ShotEffectRules.styleOf (#520, #566)", function()
+		T.it("chaque effet de la caisse joue son style, et un style désactivé redonne le rayon ordinaire", function()
+			T.expectEqual(ShotEffectRules.styleOf("effect.eclair"), "lightning")
+			T.expectEqual(ShotEffectRules.styleOf("effect.pan"), "pan")
+			T.expectEqual(ShotEffectRules.styleOf("effect.trempe"), "temper")
+			local saved = ShotEffectRules.STYLES.lightning
+			ShotEffectRules.STYLES.lightning = false
+			T.expectEqual(ShotEffectRules.styleOf("effect.eclair"), nil)
 			T.expectEqual(ShotEffectRules.isEnabled("lightning"), false)
-			ShotEffectRules.SKIN_EFFECTS.lightning = saved
+			ShotEffectRules.STYLES.lightning = saved
+			T.expectEqual(ShotEffectRules.isEnabled("lightning"), true)
 		end)
 
-		T.it("l'éclair est gardé de côté : désactivé en jeu pour l'instant (#520)", function()
-			T.expectEqual(ShotEffectRules.effectOf("skin.awp.orage"), nil)
+		T.it("un skin ne porte plus d'effet : ORAGE tire le rayon ordinaire (#566)", function()
+			T.expectEqual(ShotEffectRules.styleOf("skin.awp.orage"), nil)
+			T.expectEqual(ShotEffectRules.styleOf("skin.awp.pan"), nil)
 		end)
 
-		T.it("les autres skins, le skin d'origine et les ids inconnus gardent le rayon ordinaire", function()
-			T.expectEqual(ShotEffectRules.effectOf("skin.awp.circuit"), nil)
-			T.expectEqual(ShotEffectRules.effectOf(""), nil)
-			T.expectEqual(ShotEffectRules.effectOf(nil), nil)
-			T.expectEqual(ShotEffectRules.effectOf("skin.awp.inconnu"), nil)
-			T.expectEqual(ShotEffectRules.effectOf("weapon.awp"), nil)
+		T.it("aucun effet, un id inconnu ou une arme gardent le rayon ordinaire", function()
+			T.expectEqual(ShotEffectRules.styleOf(""), nil)
+			T.expectEqual(ShotEffectRules.styleOf(nil), nil)
+			T.expectEqual(ShotEffectRules.styleOf("effect.none"), nil)
+			T.expectEqual(ShotEffectRules.styleOf("effect.inconnu"), nil)
+			T.expectEqual(ShotEffectRules.styleOf("weapon.awp"), nil)
+		end)
+
+		T.it("le style d'un tireur se lit sur ses attributs, l'effet devant être possédé", function()
+			local equipped = "weapon.awp:skin.awp.maquis,weapon.kabar,,effect.pan"
+			T.expectEqual(ShotEffectRules.styleOfPlayer(equipped, "effect.pan"), "pan")
+			T.expectEqual(ShotEffectRules.styleOfPlayer(equipped, ""), nil)
+			T.expectEqual(ShotEffectRules.styleOfPlayer("weapon.awp,weapon.kabar", "effect.pan"), nil)
+			T.expectEqual(ShotEffectRules.styleOfPlayer(nil, nil), nil)
 		end)
 	end)
 end
