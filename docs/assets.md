@@ -837,6 +837,55 @@ quatre-feuilles sur les jambes, anneaux sur la coque.
 
 **Pistes rejetées :** BRONZE éclairé « diffus + reflet » au lieu du reflet peint (aspect carton, mat), poli en aplats
 sur les muscles (pastilles jaunes) ou mesuré par un laplacien serré (anneaux autour des muscles) ; corps humain réaliste (extension MPFB de Blender) calé sur les articulations du rig : jambes
+**Coque de tête d'une autre tenue :** réutiliser le mesh de MERCURE (Model 92982065353684) avec sa propre carte. Le
+convertir une fois en OBJ (`blender -b --factory-startup --python tools/outfits/head_obj.py --
+assets/outfits/mercure/MercureHead.fbx <coque.obj>` : Y en haut, studs, centré), puis cuire la tenue avec
+`--head-obj <coque.obj>` (module de tenue avec `HEAD = True`, pièce `"Head"` dans `surface`, point dans l'espace de la
+coque). La coque est un cylindre arrondi presque symétrique d'un quart de tour : rien dans sa forme ne dit où est
+l'avant. NÉOPRÈNE et PLÂTRE n'y dessinent donc que des motifs qui tiennent si elle tourne (coutures sur les plans x = 0
+et z = 0, anneaux horizontaux).
+
+**Planche de variantes** (sans interface, quelques secondes) : cuire chaque variante avec `--preview <dossier>`
+(couleur où le relief est ombré, car Workbench ignore les normal maps), puis
+`uv run tools/outfits/board.py <planche.png> --head-obj <coque.obj> --row "NOM=<dossier>/<variante>" ...` : rig au
+repos, de face, de trois quarts et de dos, une rangée par variante. Pour MERCURE, dont la coque a été peinte à part :
+`--row "MERCURE=<dossier>/lisse,assets/outfits/mercure/maps/lisse/Head/Head_Color.png"`. Les reflets spéculaires de
+Workbench sont coupés (triangles clairs sur les grandes faces des jambes).
+
+**Tenues communes (NÉOPRÈNE, PLÂTRE, 600 crédits) :** elles reprennent l'anatomie de MERCURE (`PAINTERS` de
+`mercure.py`, chargé par `r15_bake.load_outfit`), atténuée pour NÉOPRÈNE (45 %, la combinaison moule le corps). Variantes
+gardées dans les modules, retenues : NÉOPRÈNE `noir` (anthracite, panneaux bleu canard : empiècement des épaules,
+flancs, face extérieure des jambes ; coutures en relief à points réguliers, fermeture éclair dans le dos, genouillères
+quadrillées, cagoule en quatre panneaux), PLÂTRE `lisse` (blanc cassé très mat, creux entre les masses un peu plus
+sombres d'après le relief, coque lisse plus sombre en dessous).
+
+- **Le noir disparaît.** Un néoprène noir pur (sRGB 0,075) ne montre plus ni relief ni coutures : anthracite (0,15)
+  à la place, le contraste vient des panneaux.
+- **Les pièces du rig se recouvrent aux coudes et aux genoux** (bras 1,86 studs et avant-bras 1,67 se chevauchent de
+  0,8 ; cuisse et jambe de 0,7) : le haut de l'avant-bras et de la jambe, et le bas du bras, sont cachés. Un dessin
+  posé à l'extrémité d'une pièce (rainure d'articulation, rotule) n'apparaît pas : le placer dans la partie visible.
+  C'est ce qui rendait la variante `mannequin` de PLÂTRE presque illisible (de même pour le pied sous la jambe :
+  la couture de cheville de NÉOPRÈNE ne se voit pas).
+- **Une matière mate ne vit pas de sa normal map.** Sous la lumière douce du couchant, PLÂTRE avec son seul relief en
+  normal map se lisait comme un aplat gris clair, et l'anthracite de NÉOPRÈNE tombait au noir côté ombre (vu en jeu
+  le 18/11/2026). Les deux peignent donc une part de leur relief ombré dans la couleur (`shade` du module, qui appelle
+  `r15_bake.preview_color` ; lumière venue d'en haut, un peu de la gauche du personnage) : PLÂTRE à 1,3, NÉOPRÈNE à
+  0,6 (plus, la maille du jersey se marque). Leur planche ne rajoute alors que la part de la normal map
+  (`PREVIEW_GAIN` du module), sinon le relief compte double.
+- **Plâtre trop blanc à l'accueil.** À 0,87 (sRGB), la lumière chaude et le bloom de l'accueil le saturaient au blanc,
+  muscles perdus : 0,76 garde un blanc cassé lisible partout.
+- **`muscle()` changé en route** : son bord passait d'un coup de `soft_bottom` à `soft_top` à mi-hauteur, d'où un
+  tiret clair au milieu de chaque muscle dans la normal map (et dans la couleur peinte). La transition est maintenant
+  progressive. Les cartes publiées de MERCURE datent d'avant (non recuites) : une prochaine cuisson de MERCURE n'aura
+  plus ces tirets, à republier en connaissance de cause.
+- **Bots** : `outfitForName` répartit les noms sur l'origine et les tenues (hachage modulo le nombre de tenues + 1).
+  Avec MERCURE, NÉOPRÈNE et PLÂTRE, les 8 noms de `BotConfig.NAMES` donnent 3 MERCURE, 3 PLÂTRE, 2 NÉOPRÈNE et
+  aucun bot d'origine ; chaque tenue ajoutée redistribue tout.
+- **Pistes écartées sur planche :** NÉOPRÈNE `vive` (orange uni : combinaison de travail plus que de surf) et `nuit`
+  (bleu nuit et noir : trop peu de contraste) ; PLÂTRE `atelier` (traits de sanguine : de loin invisibles, de près les
+  repères sur les jambes se lisent comme des points de suture) et `mannequin` (rainures cachées, ci-dessus).
+
+**Pistes rejetées :** corps humain réaliste (extension MPFB de Blender) calé sur les articulations du rig : jambes
 courtes et épaules de gorille, le rig en blocs place hanches à 40 % et épaules très larges ; passer à un rig aux
 proportions humaines : refusé (« on reste dans le style rig 15 ») ; traits d'encre façon comics sur les contours
 (variante `encre`, gardée dans le module) : LISSE préférée ; tenues « métiers » (cordiste, jockey…) : pas assez

@@ -411,6 +411,24 @@ InventoryRules.ITEMS = {
 		rarity = "exceptional",
 		price = 2500,
 	},
+	-- Communes : combinaison de surf noire à panneaux bleu canard (assets/outfits/neoprene) et statue de plâtre lisse
+	-- (assets/outfits/platre), cagoule et coque sans visage
+	{
+		id = "outfit.neoprene",
+		type = "outfit",
+		name = "NÉOPRÈNE",
+		appearance = "neoprene",
+		rarity = "common",
+		price = 600,
+	},
+	{
+		id = "outfit.platre",
+		type = "outfit",
+		name = "PLÂTRE",
+		appearance = "platre",
+		rarity = "common",
+		price = 600,
+	},
 	-- Statue de bronze patiné : vert-de-gris dans les creux, saillies polies (bronze.py, variante patine)
 	{
 		id = "outfit.bronze",

@@ -487,6 +487,35 @@ return function(T, Loader)
 	T.describe("InventoryRules : tenue de personnage (#521)", function()
 		local MERCURE = "outfit.mercure"
 
+		T.it("NÉOPRÈNE et PLÂTRE : tenues communes à 600 crédits, équipables par l'admin", function()
+			local admin = Rules.resolve(nil, true)
+			for _, case in { { "outfit.neoprene", "neoprene" }, { "outfit.platre", "platre" } } do
+				local id, appearance = case[1], case[2]
+				local item = Rules.item(id)
+				T.expect(item ~= nil, "tenue au catalogue : " .. id)
+				T.expectEqual(item and item.type, Rules.Type.OUTFIT)
+				T.expectEqual(item and item.rarity, "common")
+				T.expectEqual(item and item.price, 600)
+				T.expectEqual(item and item.appearance, appearance)
+				local equipped = Rules.equip({}, admin, Rules.OUTFIT_SLOT, id, nil)
+				T.expectEqual(Rules.outfitOf(Rules.resolveEquipped(equipped, admin)), id)
+				local _, reason = Rules.equip({}, Rules.resolve(nil, false), Rules.OUTFIT_SLOT, id, nil)
+				T.expectEqual(reason, "not_owned", "non possédée par un joueur sans achat")
+			end
+		end)
+
+		T.it("les tenues sont listées par prix : les communes avant MERCURE", function()
+			local ids = {}
+			for _, outfit in Rules.outfits() do
+				table.insert(ids, outfit.id)
+			end
+			local function index(id)
+				return table.find(ids, id) or math.huge
+			end
+			T.expect(index("outfit.neoprene") < index("outfit.mercure"), "NÉOPRÈNE avant MERCURE")
+			T.expect(index("outfit.platre") < index("outfit.mercure"), "PLÂTRE avant MERCURE")
+		end)
+
 		T.it("rien de choisi : tenue d'origine, et la tenue n'entre pas dans le sac", function()
 			local resolved = Rules.resolveEquipped(nil, Rules.resolve(nil, true))
 			T.expectEqual(Rules.outfitOf(resolved), nil)
