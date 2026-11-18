@@ -113,6 +113,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `CSGO.rbxlx`: artefact de build produit par `rojo build`.
 - `sourcemap.json`: mapping de source pour la synchro Rojo.
 - `tools/studio/ramp_crest_sim.luau`: harnais à exécuter dans Studio qui reproduit l'issue #7 (perte de vitesse à la jonction entre une rampe et le sol).
+- `tools/studio/head_hitbox_probe.luau` (#539): sonde à exécuter dans Studio en playtest (contexte Server) : rayons tirés de face et de profil autour de la tête d'une copie du personnage habillée comme en jeu, pièce touchée tous les 0,1 stud.
 
 ## `src/`
 
@@ -312,6 +313,7 @@ Les anciennes specs ont été retirées du dépôt et restent lisibles dans l'hi
 - `src/server/SpawnPointRules.luau`: choix pur du point d'apparition (#288 : loin et hors de vue des ennemis vivants, repli au hasard), testé (`tests/specs/SpawnPointRules.spec.luau`).
 - `src/server/SpawnProtection.luau`: protection d'apparition (#288 : `ForceField` visible `SPAWN_PROTECTION` secondes, retiré au premier tir), testée (`tests/specs/SpawnProtection.spec.luau`).
 - `src/shared/HitZones.luau`: zones du corps touchées (tête, torse, bras, jambes), multiplicateurs de dégâts des armes à distance et règle de calcul.
+- `src/shared/HeadHitbox.luau` (#539): hitbox de la tête. Un raycast touche la boîte de `Head`, pas son `SpecialMesh` : la boîte du `StarterCharacter` (3,18 × 1,59 × 1,59) donnait des headshots dans le vide à côté de la tête. `CharacterAppearance.apply` (joueurs, bots, cible du helper, menus) la ramène au cube de la tête affichée (`SIZE` = 1,92, tête mesurée 1,91 × 1,93 × 1,91) et compense l'échelle du mesh : un mesh Head suit la plus petite dimension de sa pièce, uniformément, l'affichage et la hauteur lue par `CharacterDimensions` ne changent pas (testé par `tests/specs/HeadHitbox.spec.luau`). Le `StarterCharacter` de la place garde sa tête d'origine.
 - `src/shared/LadderRules.luau`: règles pures des échelles (grimpe façon Source selon le regard, saut pour s'en détacher), testées (`tests/specs/LadderRules.spec.luau`).
 - `src/shared/MapGeometry.luau`: dossiers d'une map lus par le code (`Geometry.Clips`, `Geometry.Ramps`, `GroundSpawns`, `Ladders`, contrôlés par `tools/rbxm/verify_place.luau`) et règle des balles : murs d'air et grillages `passbullets` écartés des rayons de tir et de vue (#292, `docs/maps.md` « Murs d'air et balles »), testé (`tests/specs/MapGeometry.spec.luau`).
 - `src/shared/MapRules.luau`: règles pures de la map (volume et vitesse des boosts, hauteur de mort, tir balistique), testées (`tests/specs/MapRules.spec.luau`).

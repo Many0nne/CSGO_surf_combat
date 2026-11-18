@@ -739,7 +739,7 @@ par unité contre 250 à 300 pour les métaux) : les livrées y étaient floues.
 ## Tenues de personnage (#521)
 
 Une tenue habille le rig R15 en blocs commun (`StarterCharacter`) sans en changer la forme : mêmes pièces, mêmes
-tailles, même hitbox. Choix de l'utilisateur : on reste dans le style des blocs, la musculature est **dessinée** dans
+tailles, même hitbox (tête comprise : boîte ramenée à la tête affichée par `HeadHitbox`, #539). Choix de l'utilisateur : on reste dans le style des blocs, la musculature est **dessinée** dans
 les cartes (pas de corps réaliste, cf. pistes rejetées). Une tenue = un item `outfit.<nom>` de `InventoryRules.ITEMS`
 (nom, `appearance`, `rarity`, `price`) et un dossier `assets/rbx/Outfits/<appearance>.rbxm`
 (`ReplicatedStorage.Outfits.<appearance>`) : une `SurfaceAppearance` par pièce du rig, nommée comme elle, et en option
@@ -764,7 +764,7 @@ Fabrication (MERCURE, `assets/outfits/mercure/`) :
 Coque de la tête de MERCURE : le mesh de la tête classique de Roblox (`content/avatar/heads/head.mesh` de
 l'installation de Studio, celui du `SpecialMesh` de type Head), à la taille où le rig l'affiche : 1,2 unité × 1,25
 (échelle du `SpecialMesh`) × 1,588 (taille de la pièce) / 1,2, soit 1,98 × 1,99 × 1,98 studs
-(`assets/outfits/mercure/MercureHead.fbx`, publié en Model 92982065353684). Carte de couleur cuite dans Blender
+(tête affichée mesurée dans Studio le 18/11/2026 : 1,91 × 1,93 × 1,91, cf. `HeadHitbox`) (`assets/outfits/mercure/MercureHead.fbx`, publié en Model 92982065353684). Carte de couleur cuite dans Blender
 (bandes du reflet selon la hauteur du point), sur un dépliage cylindrique refait (les UV d'origine de la tête,
 faites pour le visage, envoient l'arrière sur un bord : bandes noires). **Piège :** une première coque dessinée à la main (cylindre arrondi
 2,06 × 1,78) donnait une tête écrasée et élargie, refusée : partir du mesh d'origine. La tête du rig, cachée dessous,
