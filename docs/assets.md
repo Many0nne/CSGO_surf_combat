@@ -87,7 +87,8 @@ par `ScaleTo` avec le reste de l'arme.
   un tir relayé n'a que sa flamme) ; le tir local a toujours son rayon et compte parmi eux.
 - **Effets de tir (#520, caisse d'effets #566) :** un effet est un item `effect` du catalogue (`InventoryRules.ITEMS` :
   nom, `appearance` listée dans la caisse, rareté, `shotEffect` = style joué, `inspiredBy` = skin du duo), obtenu par
-  la caisse `crate.fx.serie1` et équipé dans l'emplacement `effect`, **indépendant du skin** (rien ne lie l'effet à
+  la caisse `crate.fx.serie1` (retirée de la vente le 18/11/2026 faute d'effets : rangée dans `ShopCatalog.OFF_SALE`,
+  la remettre dans `CRATES` pour la revendre) et équipé dans l'emplacement `effect`, **indépendant du skin** (rien ne lie l'effet à
   l'arme ni au skin posé). Styles connus et interrupteurs : `ShotEffectRules.STYLES`. Le client lit l'effet du tir local
   dans `LocalInventory`, celui d'un tir relayé sur les attributs `EquippedItems` (effet en 4e champ, après la tenue) et
   `OwnedItems` du joueur tireur : rien de plus à envoyer, et les autres joueurs le voient. Les bots et le clip de la

@@ -23,6 +23,7 @@ return {
 	-- Vitrine et vue détail (ShopScreen)
 	["CAISSES"] = "CRATES",
 	["{n} EN VENTE  ·  SKINS ET EFFETS DE TIR"] = "{n} ON SALE  ·  SKINS AND SHOT EFFECTS",
+	["{n} EN VENTE  ·  UNE PAR ARME ET PAR SÉRIE"] = "{n} ON SALE  ·  ONE PER WEAPON AND SERIES",
 	["VOIR LE CONTENU ET ACHETER"] = "VIEW CONTENTS AND BUY",
 	["‹  SHOP"] = "‹  SHOP",
 	["CAISSE  {n} / {total}"] = "CRATE  {n} / {total}",
