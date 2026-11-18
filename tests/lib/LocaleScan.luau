@@ -23,6 +23,7 @@ LocaleScan.FILES = {
 	"src/shared/KeyBindings.luau",
 	"src/shared/PlayerSettings.luau",
 	"src/server/FeedbackService.luau",
+	"src/shared/ChatRules.luau",
 	"src/shared/WeaponConfig.luau",
 }
 -- Sous-chemins ignorés : outils de debug (overlay F3, routes de perf, enregistreurs), jamais vus d'un joueur

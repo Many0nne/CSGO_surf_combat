@@ -81,6 +81,9 @@ Protocol.Names = {
 	-- lancé ; PartyRules.JOINED : entré dans le groupe d'un ami ; ou un statut de REJOINDRE). Le groupe de chaque joueur
 	-- est publié dans les attributs du Player (PartyRules.*_ATTRIBUTE)
 	PARTY = "Party",
+	-- Chat (#541), cf. server/ChatService : serveur → admin, retour d'une commande /mute, /unmute ou /kick (gabarit
+	-- français de ChatRules.Notice, table d'arguments), affiché dans son fil ; les messages passent par TextChatService
+	CHAT_NOTICE = "ChatNotice",
 }
 
 function Protocol.getRemote(name: string): RemoteEvent

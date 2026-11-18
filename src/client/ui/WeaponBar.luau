@@ -295,9 +295,14 @@ local function watchCharacter(character: Model)
 end
 
 -- Cette méthode permet de savoir si les entrées doivent changer d'arme lorsqu'une touche ou la molette est utilisée :
--- barre affichée et menu en partie fermé (Réglages compris : on peut y réaffecter une touche).
+-- barre affichée, menu en partie fermé (Réglages compris : on peut y réaffecter une touche) et aucune saisie de texte
+-- en cours (chat, #541 : la molette y fait défiler le fil, et n'est pas toujours marquée traitée).
 local function acceptsInput(processed: boolean): boolean
-	return not processed and gui ~= nil and gui.Enabled and not InGameMenu.isOpen()
+	return not processed
+		and gui ~= nil
+		and gui.Enabled
+		and not InGameMenu.isOpen()
+		and UserInputService:GetFocusedTextBox() == nil
 end
 
 -- Cette méthode permet de remettre à jour les libellés de touche des emplacements lorsque le joueur les réaffecte.

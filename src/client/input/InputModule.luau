@@ -51,8 +51,10 @@ local jumpPressTime = -math.huge
 local reloadPressedEdge = false
 local inspectPressedEdge = false
 local lastWishdir = Vector3.zero
--- Menu en partie ouvert (#157) : touches de jeu ignorées, rien n'est tenu
+-- Menu en partie ouvert (#157) ou saisie du chat (#541) : touches de jeu ignorées, rien n'est tenu. Une raison par
+-- source, les touches reviennent quand plus aucune ne suspend.
 local suspended = false
+local suspendedBy: { [string]: true } = {}
 -- Parcours rejoué (#379, debug/PerfReplay) : le clavier est ignoré, les entrées viennent de applyVirtual
 local virtual = false
 -- Appuis comptés depuis le démarrage, lus par l'enregistreur de parcours (debug/PerfRecorder) sans consommer les fronts
@@ -208,12 +210,25 @@ end
 local InputModule = {}
 
 -- Cette méthode permet de couper (plus rien de tenu ni en attente) ou rendre les touches de jeu lorsque le menu en
--- partie s'ouvre ou se ferme ; une touche restée enfoncée ne compte qu'au prochain appui.
-function InputModule.setSuspended(on: boolean)
-	suspended = on
+-- partie (`reason` par défaut « menu ») ou la saisie du chat (« chat ») s'ouvre ou se ferme ; les touches ne reviennent
+-- qu'une fois toutes les raisons levées, et une touche restée enfoncée ne compte qu'au prochain appui.
+function InputModule.setSuspended(on: boolean, reason: string?)
+	local key = reason or "menu"
+	if on then
+		suspendedBy[key] = true
+	else
+		suspendedBy[key] = nil
+	end
+	suspended = next(suspendedBy) ~= nil
 	if on then
 		clearAll()
 	end
+end
+
+-- Cette méthode permet de savoir si les touches de jeu sont coupées (menu en partie, saisie du chat) lorsqu'un autre
+-- lecteur de touches (classement, barre d'armes) doit se taire aussi.
+function InputModule.isSuspended(): boolean
+	return suspended
 end
 
 -- Cette méthode permet de tenir ou relâcher une action depuis un bouton tactile (#276) lorsque le joueur le touche.

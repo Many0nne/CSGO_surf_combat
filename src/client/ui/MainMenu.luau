@@ -314,7 +314,8 @@ end
 
 -- Cette méthode permet de passer les touches et la molette à l'écran d'équipement lorsque le joueur est sur l'accueil.
 local function onWeaponInput(input: InputObject, processed: boolean)
-	if processed or currentPage ~= "home" then
+	-- Saisie du chat (#541) : la molette y fait défiler le fil, pas les emplacements
+	if processed or currentPage ~= "home" or UserInputService:GetFocusedTextBox() then
 		return
 	end
 	EquipmentScreen.onInput(input)

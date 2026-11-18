@@ -960,7 +960,12 @@ function RoundHUD.init()
 
 	-- Pendant l'écran de fin, Tab maintenu le remplace par le classement complet, rendu au relâchement (#295)
 	-- Manette : croix bas (#276, Select est pris par Roblox)
+	-- Pas de filtre sur `processed` (Tab peut être marqué traité par le moteur) : seule la saisie de texte (chat, #541)
+	-- est écartée
 	tabConn = UserInputService.InputBegan:Connect(function(input, _processed)
+		if UserInputService:GetFocusedTextBox() then
+			return
+		end
 		if input.KeyCode == Enum.KeyCode.Tab or input.KeyCode == PAD_SCOREBOARD then
 			RoundHUD.setLeaderboardHeld(true)
 		end
