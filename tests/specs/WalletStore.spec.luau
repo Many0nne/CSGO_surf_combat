@@ -1136,9 +1136,9 @@ return function(T, Loader)
 		end)
 	end)
 
-	-- Tirages de la caisse AWP série 1 (chances 80 / 16 / 3,2 / 0,8, #430) : le roll 80 tire MUE (RARE), un roll de 10 MAQUIS (COMMUN)
+	-- Tirages de la caisse AWP série 1 (chances 72 / 20 / 6 / 2, #554) : le roll 72 tire MUE (RARE), un roll de 10 MAQUIS (COMMUN)
 	local AWP1 = "crate.awp.serie1"
-	local ROLL_IMPACT = 80
+	local ROLL_IMPACT = 72
 
 	-- Cette méthode permet de savoir si un skin est dans les items stockés d'un joueur lorsqu'un test vérifie un achat.
 	local function storedHas(ds, userId: number, id: string): boolean
