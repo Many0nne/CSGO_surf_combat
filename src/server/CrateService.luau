@@ -111,7 +111,8 @@ local function purchase(player: Player, crateId: string): Result
 end
 
 -- Cette méthode permet d'acheter et d'ouvrir une caisse lorsque le client clique ACHETER (#393) : un seul achat en vol
--- par joueur, puis `purchase` ; bloquante jusqu'à l'écriture. Le tour est toujours rendu, même sur une erreur (`PurchaseRemote`).
+-- par joueur, puis `purchase` ; bloquante jusqu'à l'écriture. Le tour est toujours rendu, même sur une erreur
+-- (`PurchaseRemote`).
 CrateService.buy = PurchaseRemote.guard("CrateService", refuse, purchase)
 
 -- Cette méthode permet de brancher les remotes d'ouverture de test et d'achat lorsque le serveur démarre : garde commune
@@ -131,7 +132,9 @@ function CrateService.init(
 	PurchaseRemote.connect(
 		buyRemote,
 		refuse,
-		CrateService.buy,
+		function(player: Player, crateId: string): Result
+			return CrateService.buy(player, crateId)
+		end,
 		if onBought
 			then function(player: Player, crateId: string, result: Result)
 				local crate = ShopCatalog.crate(crateId)

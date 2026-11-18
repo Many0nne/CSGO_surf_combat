@@ -47,7 +47,8 @@ local function purchase(player: Player, outfitId: string): Result
 end
 
 -- Cette méthode permet d'acheter une tenue lorsque le client clique ACHETER au portant : un seul achat en vol par joueur,
--- puis `purchase` ; bloquante jusqu'à l'écriture. Le tour est toujours rendu, même sur une erreur (`PurchaseRemote`).
+-- puis `purchase` ; bloquante jusqu'à l'écriture. Le tour est toujours rendu, même sur une erreur
+-- (`PurchaseRemote`).
 OutfitService.buy = PurchaseRemote.guard("OutfitService", refuse, purchase)
 
 -- Cette méthode permet de brancher le remote d'achat lorsque le serveur démarre : garde commune (`PurchaseRemote` :
@@ -56,7 +57,9 @@ function OutfitService.init(
 	buyRemote: RemoteFunction,
 	onBought: ((player: Player, outfitId: string, result: Result) -> ())?
 )
-	PurchaseRemote.connect(buyRemote, refuse, OutfitService.buy, onBought)
+	PurchaseRemote.connect(buyRemote, refuse, function(player: Player, outfitId: string): Result
+		return OutfitService.buy(player, outfitId)
+	end, onBought)
 end
 
 return OutfitService
