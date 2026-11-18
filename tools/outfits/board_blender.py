@@ -52,7 +52,8 @@ head = import_obj(cfg["head_mesh"], "Head", cfg["positions"]["Head"]) if cfg["he
 try:
 	scene.render.engine = "BLENDER_WORKBENCH"
 except TypeError as e:
-	print("[board] moteurs :", e)
+	# sans Workbench, Blender rendrait en EEVEE (une demi-heure sur ce poste) : on s'arrête
+	raise SystemExit(f"[board] moteur Workbench introuvable : {e}") from e
 shading = scene.display.shading
 shading.light = "STUDIO"
 shading.color_type = "TEXTURE"

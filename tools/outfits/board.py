@@ -18,6 +18,7 @@ Chaque dossier de tenue contient R15/<Groupe>_Color.png et, s'il a une coque, He
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -70,7 +71,6 @@ def main():
 	ap.add_argument("--cache", default=os.path.join(os.environ.get("TEMP", "/tmp"), "r15_meshes"))
 	ap.add_argument("--size", type=int, default=520, help="hauteur d'une vue (pixels)")
 	args = ap.parse_args()
-	key = os.environ["ROBLOX_OPEN_CLOUD_KEY"]
 	rig_dir = os.path.join(args.cache, "board_rig")
 	os.makedirs(rig_dir, exist_ok=True)
 	work = tempfile.mkdtemp(prefix="board_", dir=args.cache)
@@ -79,7 +79,7 @@ def main():
 		# nom du cache : mesh et taille de la pièce, un changement de PARTS refait l'OBJ
 		rig[name] = os.path.join(rig_dir, f"{name}_{mesh_id}_{'x'.join(f'{c:.4f}' for c in size)}.obj")
 		if not os.path.exists(rig[name]):
-			write_part(name, args.cache, key, rig[name])
+			write_part(name, args.cache, os.environ["ROBLOX_OPEN_CLOUD_KEY"], rig[name])
 	outfits = []
 	for spec in args.outfit:
 		label, folder = spec.split("=", 1)
@@ -124,6 +124,7 @@ def main():
 			if i == 0:
 				draw.text((j * tw + tw - 130, y + 4), VIEWS[j][0], fill=(150, 150, 150), font=font)
 	sheet.save(args.out)
+	shutil.rmtree(work, ignore_errors=True)
 	print(f"[board] {args.out}")
 
 

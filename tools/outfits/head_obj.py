@@ -13,13 +13,23 @@ convention Roblox (v vers le bas de l'image) : celle d'un FBX importé dans Stud
 import sys
 
 import bpy
+from mathutils import Matrix, Vector
 
 src, out = sys.argv[sys.argv.index("--") + 1 :][:2]
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.ops.import_scene.fbx(filepath=src)
-obj = next(o for o in bpy.context.scene.objects if o.type == "MESH")
+meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+if len(meshes) != 1 or not meshes[0].data.uv_layers.active:
+	raise SystemExit(f"[head_obj] attendu un seul mesh avec des UV dans {src}, trouvé {len(meshes)}")
+obj = meshes[0]
 me = obj.data
-mw = obj.matrix_world
+mw = obj.matrix_world.copy()
+# centre de la boîte englobante à l'origine : Roblox centre un mesh importé sur sa boîte
+corners = [mw @ v.co for v in me.vertices]
+lo = Vector([min(c[i] for c in corners) for i in range(3)])
+hi = Vector([max(c[i] for c in corners) for i in range(3)])
+center = (lo + hi) / 2
+mw = Matrix.Translation(-center) @ mw
 nm = mw.to_3x3().inverted().transposed()
 uvl = me.uv_layers.active.data
 with open(out, "w", encoding="utf-8") as f:

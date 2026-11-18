@@ -56,9 +56,8 @@ def polyline_distance(u, v, pts):
 	return best
 
 
-# Cette méthode permet de donner le profil bombé d'un tube (1 sur l'axe, 0 à `width`) lorsqu'on dessine une côte, un
-# câble ou une crête ; profil parabolique : la pente croît régulièrement vers le bord, si bien que le reflet peint
-# forme une ligne nette d'un côté de chaque tube.
+# Cette méthode permet de donner le profil parabolique d'un tube (1 sur l'axe, 0 à `width`) lorsqu'on dessine une côte,
+# un câble ou une crête : la pente croît régulièrement, le reflet peint forme une ligne nette sur le haut du tube.
 def tube(d, width):
 	return np.clip(1 - (d / width) ** 2, 0, 1)
 
@@ -174,10 +173,8 @@ def torso_top(u, w):
 # --- Membres --------------------------------------------------------------------------------------------------------
 
 
-# Cette méthode permet de dessiner un bras ou une jambe lorsqu'on cuit un membre. Les membres restent calmes pour
-# laisser le torse porter la tenue : des plaques en chevron qui se recouvrent (pointe en bas, comme les côtes du
-# buste), deux câbles devant et un sur chaque côté. Le dessin ne dépend que de la hauteur et de la position sur la
-# face, si bien qu'il continue d'une pièce à l'autre (coude, genou).
+# Cette méthode permet de dessiner un bras ou une jambe (plaques à chevrons, deux câbles devant, un par côté) lorsqu'on
+# cuit un membre ; selon la seule hauteur et la position sur la face, pour continuer d'une pièce à l'autre.
 def limb(part, face, u, h):
 	leg = "Leg" in part or "Foot" in part
 	phase = -4.77 if leg else -1.59
@@ -226,7 +223,7 @@ def surface(part, p, n, variant):
 
 # Cette méthode permet d'assembler relief, sillons et bombé en cartes (hauteur, métal, rugosité) lorsqu'une pièce ou
 # la coque est dessinée ; la couleur est peinte ensuite par `shade`.
-def finish(relief, groove, bulge, cfg):
+def finish(relief, groove, bulge, cfg, side_light=0.8):
 	groove = np.clip(groove, 0, 1)
 	height = (relief * RELIEF - groove * GROOVE) * cfg["relief"] + bulge
 	return {
@@ -236,18 +233,19 @@ def finish(relief, groove, bulge, cfg):
 		"rough": 0.12 + 0.35 * groove,
 		"relief": np.clip(relief, 0, 1),
 		"groove": groove,
+		"side_light": side_light,  # force des bandes latérales du reflet (cf. shade)
 	}
 
 
-# Cette méthode permet de donner la surface de la coque de tête de CHITINE (espace de la tête en studs, centre à
-# l'origine, Y vers le haut) lorsque r15_bake cuit la coque : dôme lisse, crête médiane, anneaux de nuque. Symétrique
-# d'avant en arrière et de gauche à droite (l'orientation du mesh dans le jeu n'est pas vérifiée).
+# Cette méthode permet de donner la surface de la coque (crête au sommet, anneaux de nuque, symétrique d'avant en
+# arrière : l'orientation du mesh n'est pas vérifiée) lorsque r15_bake cuit la coque dans l'espace de la tête.
 def head_surface(p, n, variant):
 	x, y = p[:, 0], p[:, 1]
 	crest = tube(np.abs(x), 0.13) * smoothstep(0.45, 0.7, y)
 	rings, rgroove = plates(y, 0.2, phase=-1.0)
 	neck = smoothstep(-0.3, -0.45, y)
-	return finish(union(crest * 1.2, rings * neck * 0.7), rgroove * neck, 0 * x, VARIANTS[variant])
+	# pas de bandes latérales sur le dôme : ses flancs courbes en faisaient deux traits verticaux, comme un visage
+	return finish(union(crest * 1.2, rings * neck * 0.7), rgroove * neck, 0 * x, VARIANTS[variant], side_light=0.0)
 
 
 # Décor peint dans le reflet de la laque (hauteur de la direction réfléchie -> couleur) : sol noir, horizon bleu nuit,
@@ -285,9 +283,8 @@ def environment(y, env):
 	return np.stack([np.interp(y, keys, cols[:, i]) for i in range(3)], axis=1)
 
 
-# Cette méthode permet de peindre dans la couleur le reflet humide de la carapace lorsque r15_bake connaît la normale
-# en relief (regard de face, comme MERCURE) ; les creux sont assombris (sillons au noir, fond entre les côtes plus
-# sombre que leurs crêtes).
+# Cette méthode permet de peindre dans la couleur le reflet humide de la carapace (regard de face, comme MERCURE ; creux
+# assombris) lorsque r15_bake connaît la normale en relief.
 def shade(part, p, bumped, s, variant):
 	cfg = VARIANTS[variant]
 	view = s["geo_normal"]
@@ -300,7 +297,7 @@ def shade(part, p, bumped, s, variant):
 	across /= np.linalg.norm(across, axis=1, keepdims=True)
 	lat = np.abs(np.sum(refl * across, axis=1)) / cfg["gain"]
 	# seuil au-dessus de la pente du bombé des faces (0,55 au bord d'un membre) : seuls les flancs raides s'allument
-	side = smoothstep(0.62, 0.7, lat) * (1 - smoothstep(0.9, 1.0, lat)) * (0.0 if part == "Head" else 0.8)
+	side = smoothstep(0.62, 0.7, lat) * (1 - smoothstep(0.9, 1.0, lat)) * s["side_light"]
 	band = environment(np.full_like(lat, 0.3), ENVS[cfg["env"]])
 	color = np.maximum(color, band * side[:, None])
 	occlusion = (0.55 + 0.45 * s["relief"]) * (1 - 0.9 * s["groove"])
