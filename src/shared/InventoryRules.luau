@@ -9,7 +9,8 @@
 -- items n'oblige à aucune migration.
 --
 -- Équipement (#280) : un joueur équipe une arme par emplacement (SNIPER, COUTEAU) et un skin de cette arme (nil : skin
--- « d'origine »). Seules ces armes vont dans le sac. Le choix est sauvegardé tel quel (`equipped` de PlayerInventory_v1)
+-- « d'origine »), et une tenue de personnage (#521, emplacement `outfit` hors de SLOTS : rien dans le sac ; nil : tenue
+-- d'origine). Seules ces armes vont dans le sac. Le choix est sauvegardé tel quel (`equipped` de PlayerInventory_v1)
 -- et résolu à chaque usage contre les items possédés : un item qui n'est plus possédé (rôle retiré) laisse la place à
 -- l'équipement par défaut, sans effacer le choix enregistré.
 --
@@ -24,11 +25,13 @@ local WalletRules = require(ReplicatedStorage.Shared.WalletRules)
 
 local InventoryRules = {}
 
-export type ItemType = "weapon" | "skin"
+export type ItemType = "weapon" | "skin" | "outfit"
 export type Slot = "sniper" | "knife"
 -- Un skin porte aussi son nom affiché (`name`) et le nom de ses SurfaceAppearance (`appearance` : dossier
 -- ReplicatedStorage.Skins.<viewmodel de l'arme>.<appearance>, cf. WeaponSkins), et peut déclarer un effet de tir
--- (`shotEffect`, #520 : "lightning" = éclair à la place du rayon de balle, cf. ShotEffectRules.effectOf)
+-- (`shotEffect`, #520 : "lightning" = éclair à la place du rayon de balle, cf. ShotEffectRules.effectOf). Une tenue
+-- (#521) porte son nom affiché, son dossier d'apparence (ReplicatedStorage.Outfits.<appearance>, cf. CharacterAppearance),
+-- sa rareté (id de ShopCatalog.RARITIES) et son prix en crédits.
 export type Item = {
 	id: string,
 	type: ItemType,
@@ -38,10 +41,13 @@ export type Item = {
 	name: string?,
 	appearance: string?,
 	shotEffect: string?,
+	rarity: string?,
+	price: number?,
 }
 -- Items possédés : ensemble d'ids du catalogue
 export type Owned = { [string]: boolean }
--- Équipement d'un emplacement : id de l'arme, id du skin (nil : d'origine)
+-- Équipement d'un emplacement : id de l'arme, id du skin (nil : d'origine). Emplacement `outfit` (#521) : `weapon` porte
+-- l'id de la tenue (OUTFIT_NONE : tenue d'origine choisie), sans skin.
 export type Loadout = { weapon: string, skin: string? }
 -- Équipement par emplacement ; une version enregistrée peut être partielle, une version résolue est complète
 export type Equipped = { [string]: Loadout }
@@ -68,6 +74,11 @@ InventoryRules.ATTRIBUTE = "OwnedItems"
 InventoryRules.EQUIPPED_ATTRIBUTE = "EquippedItems"
 -- Emplacements, dans l'ordre de la barre d'armes et des touches (1 · SNIPER, 2 · COUTEAU)
 InventoryRules.SLOTS = { "sniper", "knife" } :: { Slot }
+-- Emplacement de la tenue de personnage (#521), à part des armes : il n'entre ni dans le sac ni dans la barre d'armes
+InventoryRules.OUTFIT_SLOT = "outfit"
+-- Choix enregistré « tenue d'origine » : un id absent du catalogue, pour qu'un retour à l'origine écrase une tenue
+-- enregistrée par un autre serveur (un emplacement vide laisserait l'ancien choix en place, cf. mergeForSave)
+InventoryRules.OUTFIT_NONE = "outfit.none"
 -- Bornes des données relues du DataStore : un id plus long ou au-delà du nombre maximal est ignoré
 InventoryRules.MAX_ID_LENGTH = 64
 InventoryRules.MAX_STORED = 512
@@ -76,6 +87,7 @@ local ID_PATTERN = "^[%l%d_]+[%l%d_%.]*$"
 InventoryRules.Type = {
 	WEAPON = "weapon" :: ItemType,
 	SKIN = "skin" :: ItemType,
+	OUTFIT = "outfit" :: ItemType,
 }
 
 -- Catalogue : tous les items du jeu. Ajouter une arme = une ligne ici (et son Tool dans assets/rbx/Tools).
@@ -389,6 +401,16 @@ InventoryRules.ITEMS = {
 		name = "CUIR DE CORDOUE",
 		appearance = "cordoue",
 	},
+	-- Tenues de personnage (#521) : achetées en crédits (portant du shop), l'admin les a toutes ; cartes et tête dans
+	-- assets/rbx/Outfits/<appearance>.rbxm (fabrication : docs/assets.md, « Tenues de personnage »)
+	{
+		id = "outfit.mercure",
+		type = "outfit",
+		name = "MERCURE",
+		appearance = "mercure",
+		rarity = "exceptional",
+		price = 2500,
+	},
 } :: { Item }
 
 -- Inventaire de tout joueur (et des bots), sauvegardé ou non : Ka-Bar et AWP
@@ -464,6 +486,10 @@ function InventoryRules.sanitizeEquipped(raw: any): Equipped
 			local skin = entry.skin
 			equipped[slot] = { weapon = entry.weapon, skin = if InventoryRules.isValidId(skin) then skin else nil }
 		end
+	end
+	local outfit = raw[InventoryRules.OUTFIT_SLOT]
+	if type(outfit) == "table" and InventoryRules.isValidId(outfit.weapon) then
+		equipped[InventoryRules.OUTFIT_SLOT] = { weapon = outfit.weapon }
 	end
 	return equipped
 end
@@ -734,6 +760,12 @@ function InventoryRules.resolveEquipped(equipped: Equipped?, owned: Owned): Equi
 			resolved[slot] = { weapon = InventoryRules.DEFAULT_EQUIPPED[slot] }
 		end
 	end
+	-- Tenue (#521) : le choix s'il est une tenue possédée, sinon rien (tenue d'origine)
+	local outfit = equipped and equipped[InventoryRules.OUTFIT_SLOT]
+	local item = outfit and byId[outfit.weapon]
+	if item and item.type == "outfit" and owned[item.id] then
+		resolved[InventoryRules.OUTFIT_SLOT] = { weapon = item.id }
+	end
 	return resolved
 end
 
@@ -746,6 +778,9 @@ function InventoryRules.equip(
 	weaponId: any,
 	skinId: any
 ): (Equipped?, string?)
+	if slot == InventoryRules.OUTFIT_SLOT then
+		return InventoryRules.equipOutfit(equipped, owned, weaponId)
+	end
 	if not InventoryRules.slotIndex(slot) then
 		return nil, "slot"
 	end
@@ -756,6 +791,62 @@ function InventoryRules.equip(
 	local nextEquipped = InventoryRules.sanitizeEquipped(equipped)
 	nextEquipped[slot] = { weapon = weaponId, skin = skinId }
 	return nextEquipped
+end
+
+-- Cette méthode permet de valider le choix d'une tenue (#521) lorsque le joueur clique dans l'emplacement TENUE :
+-- nouvel équipement (copie), ou nil et le motif ; nil, "" ou OUTFIT_NONE remettent la tenue d'origine.
+function InventoryRules.equipOutfit(equipped: Equipped, owned: Owned, outfitId: any): (Equipped?, string?)
+	local chosen = InventoryRules.OUTFIT_NONE
+	if outfitId ~= nil and outfitId ~= "" and outfitId ~= InventoryRules.OUTFIT_NONE then
+		local item = type(outfitId) == "string" and byId[outfitId]
+		if not (item and item.type == "outfit") then
+			return nil, "unknown"
+		end
+		if not owned[item.id] then
+			return nil, "not_owned"
+		end
+		chosen = item.id
+	end
+	local nextEquipped = InventoryRules.sanitizeEquipped(equipped)
+	nextEquipped[InventoryRules.OUTFIT_SLOT] = { weapon = chosen }
+	return nextEquipped
+end
+
+-- Cette méthode permet de lire la tenue d'un équipement résolu (#521) lorsqu'un personnage est habillé ; nil : tenue
+-- d'origine.
+function InventoryRules.outfitOf(resolved: Equipped?): string?
+	local outfit = resolved and resolved[InventoryRules.OUTFIT_SLOT]
+	return outfit and outfit.weapon
+end
+
+-- Cette méthode permet de lister les tenues du catalogue (#521), triées par prix puis par nom, lorsque l'écran
+-- d'équipement ou le shop les montre.
+function InventoryRules.outfits(): { Item }
+	local list: { Item } = {}
+	for _, entry in InventoryRules.ITEMS do
+		if entry.type == "outfit" then
+			table.insert(list, entry)
+		end
+	end
+	table.sort(list, function(a, b)
+		if (a.price or 0) ~= (b.price or 0) then
+			return (a.price or 0) < (b.price or 0)
+		end
+		return (a.name or a.id) < (b.name or b.id)
+	end)
+	return list
+end
+
+-- Cette méthode permet de choisir la tenue d'un bot (#521) d'après son nom lorsqu'il apparaît : l'origine ou une tenue
+-- du catalogue, à chances égales, toujours la même pour un même nom ; nil : tenue d'origine.
+function InventoryRules.outfitForName(name: string): string?
+	local outfits = InventoryRules.outfits()
+	local hash = 0
+	for i = 1, #name do
+		hash = (hash * 31 + string.byte(name, i)) % 1000003
+	end
+	local index = hash % (#outfits + 1)
+	return if index == 0 then nil else outfits[index].id
 end
 
 -- Cette méthode permet de lister les Tools d'un équipement résolu, dans l'ordre des emplacements, lorsque le serveur
@@ -849,7 +940,7 @@ function InventoryRules.decode(text: any): Owned
 end
 
 -- Cette méthode permet d'écrire l'équipement résolu dans l'attribut informatif du Player lorsqu'il change : « arme » ou
--- « arme:skin » par emplacement, dans l'ordre de SLOTS, séparés par des virgules.
+-- « arme:skin » par emplacement, dans l'ordre de SLOTS, puis la tenue (#521, absente : d'origine), séparés par des virgules.
 function InventoryRules.encodeEquipped(resolved: Equipped): string
 	local parts: { string } = {}
 	for _, slot in InventoryRules.SLOTS do
@@ -859,6 +950,10 @@ function InventoryRules.encodeEquipped(resolved: Equipped): string
 		else
 			table.insert(parts, "")
 		end
+	end
+	local outfit = InventoryRules.outfitOf(resolved)
+	if outfit then
+		table.insert(parts, outfit) -- tenue (#521), après les emplacements d'armes ; absente : d'origine
 	end
 	return table.concat(parts, ",")
 end
@@ -873,6 +968,9 @@ function InventoryRules.decodeEquipped(text: any, owned: Owned): Equipped
 			index += 1
 			local slot = InventoryRules.SLOTS[index]
 			if not slot then
+				if index == #InventoryRules.SLOTS + 1 and part ~= "" then
+					equipped[InventoryRules.OUTFIT_SLOT] = { weapon = part }
+				end
 				break
 			end
 			local weapon, skin = string.match(part, "^([^:]+):?(.*)$")

@@ -235,6 +235,16 @@ local function groundUnder(feet: Vector3, folder: Folder): Vector3
 	return if hit then hit.Position else feet
 end
 
+-- Tenue montrée en aperçu par l'écran d'équipement (#521) : `previewing` faux, la tenue équipée
+local previewing = false
+local previewed: string? = nil
+
+-- Cette méthode permet de lire la tenue que porte le personnage de l'accueil (#521) lorsqu'il est construit ou
+-- rhabillé : l'aperçu en cours, sinon la tenue équipée (nil : d'origine).
+local function shownOutfit(): string?
+	return if previewing then previewed else InventoryRules.outfitOf(LocalInventory.equipped())
+end
+
 -- Cette méthode permet de créer le personnage du jeu (StarterCharacter, skin commun) sans script ni physique, debout
 -- sur `ground`, tourné vers `facing` et éclairé par sa lumière de portrait, lorsque la scène se construit ; nil si la
 -- place n'a pas de StarterCharacter.
@@ -255,7 +265,7 @@ local function buildCharacter(ground: Vector3, facing: Vector3, parent: Instance
 			item.CanTouch = false
 		end
 	end
-	CharacterAppearance.apply(model)
+	CharacterAppearance.apply(model, shownOutfit())
 	local humanoid = model:FindFirstChildOfClass("Humanoid")
 	local root = model:FindFirstChild("HumanoidRootPart")
 	if not (humanoid and root and root:IsA("BasePart")) then
@@ -497,10 +507,33 @@ function MenuScene.onWeaponChanged(callback: (string) -> ())
 	weaponChanged = callback
 end
 
+-- Cette méthode permet de faire porter au personnage de l'accueil une tenue (#521, nil : d'origine) lorsque l'écran
+-- d'équipement la montre (survol, sélection) ; `MenuScene.endOutfitPreview` revient à la tenue équipée.
+function MenuScene.previewOutfit(outfitId: string?)
+	previewing = true
+	previewed = outfitId
+	if character then
+		CharacterAppearance.dress(character, outfitId)
+	end
+end
+
+-- Cette méthode permet de rhabiller le personnage de l'accueil de la tenue équipée (#521) lorsque l'aperçu se termine.
+function MenuScene.endOutfitPreview()
+	previewing = false
+	previewed = nil
+	if character then
+		CharacterAppearance.dress(character, shownOutfit())
+	end
+end
+
 -- Cette méthode permet de suivre l'inventaire lorsqu'il change (#267, chargement ou debug Studio) : liste refaite, arme
--- tenue remplacée par la première possédée si elle ne l'est plus, fiche remise à jour (rang et nombre d'armes).
+-- tenue remplacée par la première possédée si elle ne l'est plus, fiche remise à jour (rang et nombre d'armes), tenue
+-- équipée remise (#521) hors aperçu.
 local function onInventoryChanged()
 	weapons = nil
+	if character then
+		CharacterAppearance.dress(character, shownOutfit())
+	end
 	if current == nil then
 		return -- rien d'affiché encore : la liste sera lue à la première demande
 	end

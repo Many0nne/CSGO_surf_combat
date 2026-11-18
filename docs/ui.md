@@ -525,6 +525,14 @@ règles du groupe : `docs/architecture.md` « Lobby entre amis ».
 - Studio : `DebugFriends` (cf. `docs/architecture.md`) pour voir la liste remplie ; groupe à 2 avec l'onglet Test,
   « Clients and Servers », 2 joueurs (`DebugFriends` sur chacun, REJOINDRE l'autre).
 
+## Onglet TENUE de l'écran d'équipement (#521)
+
+Troisième onglet de l'écran d'équipement (« 3 · TENUE »), après SNIPER et COUTEAU : carte D'ORIGINE puis tenues
+possédées, chacune avec un portrait du buste habillé (`UIKit.outfitPortrait`) et sa rareté. Survoler une carte habille
+le personnage de l'accueil (`MenuScene.previewOutfit`), cliquer l'équipe ; quitter l'onglet remet la tenue équipée.
+Pas de rendu d'arme dans cet onglet. L'achat se fera au shop, sur un portant à vêtements (choix de l'utilisateur, à
+venir) : l'écran d'équipement ne montre que les tenues possédées, comme pour les armes.
+
 ## Règles des écrans secondaires
 
 - Rien ne se tire (#130) : souris système, un clic agit tout de suite. Un curseur de réglage se place d'un clic, puis se glisse.

@@ -4,6 +4,8 @@ return {
 	["ÉQUIPEMENT"] = "LOADOUT",
 	["SNIPER"] = "SNIPER",
 	["COUTEAU"] = "KNIFE",
+	["TENUE"] = "OUTFIT",
+	["PERSONNAGE"] = "CHARACTER",
 	["FUSIL DE PRÉCISION"] = "SNIPER RIFLE",
 	["D'ORIGINE"] = "DEFAULT",
 	["EMPLACEMENT {n}"] = "SLOT {n}",

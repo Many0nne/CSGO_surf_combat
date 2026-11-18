@@ -909,7 +909,7 @@ function InventoryStore.init(
 		end
 		local skin = if skinId == "" then nil else skinId
 		local ok, reason = InventoryStore.equip(player, slot, weaponId, skin)
-		if ok and onEquipped then
+		if ok and onEquipped and slot ~= InventoryRules.OUTFIT_SLOT then
 			onEquipped(player, skin)
 		end
 		if not ok and reason and SUSPECT_REFUSALS[reason] then

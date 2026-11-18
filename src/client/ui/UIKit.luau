@@ -7,6 +7,7 @@ local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("U
 local WalletRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WalletRules"))
 local WeaponProfile = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WeaponProfile"))
 local WeaponSkins = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WeaponSkins"))
+local CharacterAppearance = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("CharacterAppearance"))
 local Locale = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Locale"))
 local HUDRules = require(script.Parent.HUDRules)
 
@@ -297,6 +298,49 @@ function UIKit.weaponSilhouette(
 	local distance = halfHeight / math.tan(math.rad(fov / 2)) + extents.Z
 	local camera = UIKit.create("Camera", { FieldOfView = fov, Parent = viewport })
 	camera.CFrame = profile * CFrame.new(0, 0, distance)
+	viewport.CurrentCamera = camera
+	return viewport
+end
+
+-- Cette méthode permet de créer le portrait d'un personnage habillé d'une tenue (#521, nil : d'origine), buste de trois
+-- quarts, lorsqu'une carte de l'écran d'équipement ou du shop montre une tenue ; `aspect` : largeur / hauteur du cadre.
+function UIKit.outfitPortrait(parent: GuiObject, outfitId: string?, aspect: number): ViewportFrame
+	local fov = 20
+	local viewport = UIKit.create("ViewportFrame", {
+		Name = "Portrait",
+		BackgroundTransparency = 1,
+		Ambient = Color3.fromRGB(150, 150, 160),
+		LightColor = C.White,
+		LightDirection = Vector3.new(-0.6, -0.8, -1),
+		Size = UDim2.fromScale(1, 1),
+		Parent = parent,
+	})
+	local template = CharacterAppearance.getTemplate()
+	if not template then
+		return viewport
+	end
+	local wasArchivable = template.Archivable
+	template.Archivable = true
+	local model = template:Clone()
+	template.Archivable = wasArchivable
+	for _, item in model:GetDescendants() do
+		if item:IsA("LuaSourceContainer") then
+			item:Destroy()
+		elseif item:IsA("BasePart") then
+			item.Anchored = true
+		end
+	end
+	CharacterAppearance.apply(model, outfitId)
+	model:PivotTo(CFrame.new())
+	model.Parent = viewport
+	-- Buste (haut du torse et tête) vu de trois quarts face : l'avant du rig est -Z
+	local head = model:FindFirstChild("Head")
+	local focus = if head and head:IsA("BasePart") then head.Position - Vector3.new(0, 1.2, 0) else Vector3.zero
+	local halfHeight = 2.4
+	local distance = halfHeight / math.tan(math.rad(fov / 2))
+	local direction = Vector3.new(0.45, 0.15, -1).Unit
+	local camera = UIKit.create("Camera", { FieldOfView = fov, Parent = viewport })
+	camera.CFrame = CFrame.lookAt(focus + direction * distance * math.max(1, 1 / aspect), focus)
 	viewport.CurrentCamera = camera
 	return viewport
 end

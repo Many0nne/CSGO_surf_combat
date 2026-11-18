@@ -1,7 +1,7 @@
 -- verify_place.luau
 -- Relit la place produite par `rojo build` et vérifie que les viewmodels (assets/rbx/ViewModels), les Tools
 -- (assets/rbx/Tools, dans ReplicatedStorage.Tools, StarterPack vide), la map (assets/rbx/Maps) et ses matières (assets/rbx/Materials) y sont, avec leurs animations,
--- sons, textures, attributs et scripts.
+-- sons, textures, attributs et scripts, ainsi que les tenues de personnage (assets/rbx/Outfits, #521).
 -- Contrôle les dossiers de chaque map lus par le code (src/shared/MapGeometry.luau, #292) : un renommage casse la CI.
 -- Contrôle la hauteur des points d'apparition au sol (tools/map/SpawnCheck.luau, #328).
 -- Signale aussi les Tools dont le nom d'arme n'a pas d'entrée dans src/shared/WeaponConfig.luau (avertissement,
@@ -361,6 +361,48 @@ else
 	for _, problem in CrateStencil.problems(boxes) do
 		fail("Props.Crate : " .. problem .. " (src/shared/CrateStencil.luau)")
 	end
+end
+
+-- Tenues de personnage (assets/rbx/Outfits, #521) : une SurfaceAppearance par pièce du rig (copiée par
+-- CharacterAppearance.dress), et une coque de tête qui ne bloque ni n'intercepte rien (la tête du rig reste la hitbox)
+local OUTFIT_PARTS = {
+	"UpperTorso",
+	"LowerTorso",
+	"LeftUpperArm",
+	"LeftLowerArm",
+	"LeftHand",
+	"RightUpperArm",
+	"RightLowerArm",
+	"RightHand",
+	"LeftUpperLeg",
+	"LeftLowerLeg",
+	"LeftFoot",
+	"RightUpperLeg",
+	"RightLowerLeg",
+	"RightFoot",
+}
+local outfits = game.ReplicatedStorage:FindFirstChild("Outfits")
+for _, name in rbxmNames("assets/rbx/Outfits") do
+	local outfit = outfits and outfits:FindFirstChild(name)
+	if not outfit then
+		fail("ReplicatedStorage.Outfits." .. name .. " absent de la place")
+		continue
+	end
+	for _, partName in OUTFIT_PARTS do
+		local appearance = outfit:FindFirstChild(partName)
+		if not (appearance and appearance:IsA("SurfaceAppearance")) then
+			fail("Outfits." .. name .. "." .. partName .. " absent ou pas une SurfaceAppearance")
+		end
+	end
+	local head = outfit:FindFirstChild("Head")
+	if head then
+		if not head:IsA("MeshPart") then
+			fail("Outfits." .. name .. ".Head n'est pas une MeshPart")
+		elseif head.CanCollide or head.CanQuery or head.CanTouch or not head.Massless then
+			fail("Outfits." .. name .. ".Head doit être sans collision, ni requête, ni contact, et sans masse")
+		end
+	end
+	print("Outfits." .. name .. " " .. summarize(outfit))
 end
 
 -- ids d'assets : une animation, un mesh ou une matière sans texture est une erreur ; un son sans id est seulement

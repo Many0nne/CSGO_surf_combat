@@ -736,6 +736,73 @@ par unité contre 250 à 300 pour les métaux) : les livrées y étaient floues.
   identiques aux PNG versionnés (écart 0 constaté). `make_skins.py` relit `assets/sniper/textures` pour chaque skin : ne
   pas remplacer ces cartes pendant qu'il tourne.
 
+## Tenues de personnage (#521)
+
+Une tenue habille le rig R15 en blocs commun (`StarterCharacter`) sans en changer la forme : mêmes pièces, mêmes
+tailles, même hitbox. Choix de l'utilisateur : on reste dans le style des blocs, la musculature est **dessinée** dans
+les cartes (pas de corps réaliste, cf. pistes rejetées). Une tenue = un item `outfit.<nom>` de `InventoryRules.ITEMS`
+(nom, `appearance`, `rarity`, `price`) et un dossier `assets/rbx/Outfits/<appearance>.rbxm`
+(`ReplicatedStorage.Outfits.<appearance>`) : une `SurfaceAppearance` par pièce du rig, nommée comme elle, et en option
+une `MeshPart` `Head` (coque de la tête : la tête du rig est une pièce à `SpecialMesh`, sans UV, qui ne prend pas de
+`SurfaceAppearance`). `CharacterAppearance.dress` copie le tout (`verify_place.luau` vérifie les 14 cartes et que la
+coque est sans collision, ni requête, ni contact, ni masse). Les bras des viewmodels portent les mêmes meshs que le rig
+(ids 1699715541…) : les mêmes cartes s'y posent (`CharacterAppearance.dressArms`).
+
+Fabrication (MERCURE, `assets/outfits/mercure/`) :
+
+1. `uv run tools/outfits/r15_bake.py assets/outfits/mercure/mercure.py assets/outfits/mercure/maps` : télécharge les
+   meshs du rig (Open Cloud), et pour chaque texel de l'atlas demande à la tenue son relief, sa couleur, son métal et
+   sa rugosité, dans l'espace de la pièce en studs (avant = -Z, gauche = -X). Cinq atlas : Torso, LeftArm, RightArm
+   (mêmes UV des deux côtés), LeftLeg, RightLeg. La normal map vient de la pente du relief (convention OpenGL). Une
+   carte uniforme est écrite en 8 × 8.
+2. `uv run tools/skins/publish_skin.py assets/outfits/mercure/maps/lisse mercure` (deux fichiers identiques ne sont
+   publiés qu'une fois).
+3. Studio : dossier `ReplicatedStorage.Outfits.<nom>` construit avec les ids de `ids.json` (et la coque insérée par
+   `insert_asset`, PackageLink retiré), puis `lune run tools/rbxm/receive.luau Outfits` et `studio_export.luau` avec
+   `ONLY = "Outfits"` ; détruire ensuite la copie faite à la main (Rojo recrée la sienne depuis le `.rbxm`).
+
+Coque de la tête de MERCURE : le mesh de la tête classique de Roblox (`content/avatar/heads/head.mesh` de
+l'installation de Studio, celui du `SpecialMesh` de type Head), à la taille où le rig l'affiche : 1,2 unité × 1,25
+(échelle du `SpecialMesh`) × 1,588 (taille de la pièce) / 1,2, soit 1,98 × 1,99 × 1,98 studs
+(`assets/outfits/mercure/MercureHead.fbx`, publié en Model 92982065353684). Carte de couleur cuite dans Blender
+(bandes du reflet selon la hauteur du point), sur un dépliage cylindrique refait (les UV d'origine de la tête,
+faites pour le visage, envoient l'arrière sur un bord : bandes noires). **Piège :** une première coque dessinée à la main (cylindre arrondi
+2,06 × 1,78) donnait une tête écrasée et élargie, refusée : partir du mesh d'origine. La tête du rig, cachée dessous,
+reste la zone de headshot ; la coque n'arrête aucun tir (mesuré : rayon au centre de la tête → `Head`, rayon au-dessus
+de la boîte de la tête → rien).
+
+**Pièges :**
+
+- **Roblox ne fait refléter au métal que le ciel.** Un chrome uni (métal 1, rugosité 0,1) sort rose pâle et mat sur la
+  map (le ciel du couchant, sans le sol sombre) : aucun contraste. MERCURE peint donc son reflet dans la couleur
+  (`shade` du module de tenue : ciel clair, ligne d'horizon nette, sol sombre, lus selon la normale en relief, vue de
+  face) avec un tiers de métal seulement. Les reflets restent fixes quand on tourne autour : accepté par l'utilisateur.
+  Vérifié le 18/11/2026 sur des sphères : métal PBR (SurfaceAppearance, matériaux Metal et Foil) = ciel très flou,
+  gris rosé ; seule l'ancienne propriété `Reflectance` fait un vrai miroir (ciel, horizon, sol), mais elle est ignorée
+  sous une SurfaceAppearance (plus de muscles) et, sur les faces plates des blocs, chaque face ne reflète qu'une
+  direction (personnage brun foncé uni par face au couchant). Les deux montrés à l'utilisateur : reflet peint gardé.
+- **Faces planes en métal = miroirs uniformes.** Bomber légèrement chaque face (`pillow`) casse l'effet « boîte ».
+  Sur les jambes, bomber seulement en largeur : bombées aussi en hauteur, chaque pièce marquait une coupure au genou
+  (rejeté par l'utilisateur, avec les muscles dessinés des jambes).
+- **Muscles en plateaux = bulles.** Un relief à sommet plat se lit comme des boutons collés ; garder un sommet bombé
+  (`muscle`) et des masses larges qui se touchent.
+- **Studio garde l'échec d'une image tout juste publiée** (`AssetFetchStatus.Failure`), même une fois approuvée : il
+  faut une autre id ou relancer Studio. Laisser une minute entre la publication et l'essai.
+- **Le visage du rig est retiré, pas caché**, sous une coque : le clip de fin remet la transparence des Decals à 0.
+- **Coude du viewmodel : faces superposées.** Avec l'AWP, le bras gauche est presque droit : les faces du bras et de
+  l'avant-bras (mêmes largeurs, même pivot) se superposent presque au coude, et deux dessins différents s'y disputent
+  l'affichage (scintillement, coupe en biais ; vu en jeu le 18/11/2026). Gris uni, c'était invisible. `dressArms`
+  amincit donc de 4 % les bras (épaule au coude) d'un viewmodel habillé ; l'avant-bras passe devant, net. Pistes
+  rejetées : effacer le dessin près du coude et donner aux bras de la 1re personne un chrome sans muscles (le chrome ne
+  se lisait plus, refusé), le défaut venant de la superposition et pas du dessin. Pas de doigts dessinés sur les mains
+  (jugés laids).
+
+**Pistes rejetées :** corps humain réaliste (extension MPFB de Blender) calé sur les articulations du rig : jambes
+courtes et épaules de gorille, le rig en blocs place hanches à 40 % et épaules très larges ; passer à un rig aux
+proportions humaines : refusé (« on reste dans le style rig 15 ») ; traits d'encre façon comics sur les contours
+(variante `encre`, gardée dans le module) : LISSE préférée ; tenues « métiers » (cordiste, jockey…) : pas assez
+marquées, l'utilisateur veut des corps changés en matière (chrome, biomécanique).
+
 ## Ajouter un couteau
 
 Un couteau qui se joue comme la M9, avec un autre modèle et d'autres animations. Le comportement de mêlée est piloté par

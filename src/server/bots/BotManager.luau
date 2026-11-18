@@ -22,6 +22,7 @@ local BotRules = require(ReplicatedStorage.Shared.BotRules)
 local CharacterAppearance = require(ReplicatedStorage.Shared.CharacterAppearance)
 local CharacterConfig = require(ReplicatedStorage.Shared.CharacterConfig)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local InventoryRules = require(ReplicatedStorage.Shared.InventoryRules)
 local MapGeometry = require(ReplicatedStorage.Shared.MapGeometry)
 local MapSelection = require(ReplicatedStorage.Shared.MapSelection)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
@@ -163,7 +164,8 @@ local function buildCharacter(name: string): Model?
 	if not humanoid:FindFirstChildOfClass("Animator") then
 		Instance.new("Animator").Parent = humanoid
 	end
-	CharacterAppearance.apply(model)
+	-- Tenue (#521) : une par nom de bot, tirée parmi l'origine et les tenues du catalogue, gardée d'une apparition à l'autre
+	CharacterAppearance.apply(model, InventoryRules.outfitForName(name))
 	return model
 end
 

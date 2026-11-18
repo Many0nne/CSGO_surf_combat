@@ -18,6 +18,9 @@
       },
       "Props": {
         "$path": "assets/rbx/Props"
+      },
+      "Outfits": {
+        "$path": "assets/rbx/Outfits"
       }
     },
 
