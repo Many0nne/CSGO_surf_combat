@@ -5,8 +5,8 @@
 -- une carte la montre, cliquer l'équipe (remote EquipItem, l'écran suit la réponse du serveur). Seuls les items
 -- possédés apparaissent. Onglet TENUE (#521) : tenues de personnage possédées, en portrait ; le personnage de
 -- l'accueil porte la tenue survolée ou équipée (MenuScene.previewOutfit), la tenue s'achète au shop. Dernier onglet,
--- EFFET (#566) : effets de tir possédés (caisse d'effets), chaque carte montrant l'AWP dans le skin qui l'inspire ; le
--- personnage tient l'AWP et tire en boucle avec l'effet survolé ou équipé (MenuScene.demoShot).
+-- EFFET (#566) : effets de tir possédés (caisse d'effets), chaque carte montrant l'AWP dans le skin qui l'inspire ;
+-- l'effet survolé ou équipé est montré par la démonstration jouée sur la map (EffectStage, #575), qui prend la caméra.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
@@ -20,6 +20,7 @@ local UITheme = require(Shared:WaitForChild("UITheme"))
 local WeaponConfig = require(Shared:WaitForChild("WeaponConfig"))
 local LocalInventory = require(script.Parent.Parent.systems.inventory.LocalInventory)
 local LocalSettings = require(script.Parent.Parent.systems.settings.LocalSettings)
+local EffectStage = require(script.Parent.Parent.systems.game.EffectStage)
 local MenuScene = require(script.Parent.Parent.systems.game.MenuScene)
 local Rules = require(script.Parent.Parent.systems.game.MenuSceneRules)
 local HUDRules = require(script.Parent.HUDRules)
@@ -70,7 +71,7 @@ local OUTFIT_TAB = #InventoryRules.SLOTS + 1 -- onglet de la tenue de personnage
 local EFFECT_TAB = #InventoryRules.SLOTS + 2 -- onglet de l'effet de tir (#566), après la tenue
 local TAB_COUNT = EFFECT_TAB
 local EFFECT_TOOL = "AWP" -- arme tenue et cartes de l'onglet EFFET : la seule arme à distance
-local DEMO_PERIOD = 1.4 -- s entre deux tirs de démonstration de l'onglet EFFET (un peu plus que la cadence de l'AWP)
+local DEMO_POLL = 0.1 -- s entre deux vérifications de la démonstration de l'onglet EFFET (écran affiché ou non)
 local SCRIM_SIZE = Vector2.new(1100, 760) -- fond de coin sous la grille et le titre (décor clair possible)
 local SCRIM_SHOWN = 0.2
 
@@ -95,8 +96,8 @@ local category: TextLabel
 local categoryShadow: TextLabel
 local selectedSlot = 1 -- emplacement actif : sa grille est affichée, le personnage tient son arme
 local hover: Hover? = nil -- carte survolée : arme (et skin) montrés tant que la souris reste dessus
-local screenRoot: GuiObject? = nil -- racine de l'écran : la démonstration ne tire que s'il est affiché
-local demoToken = 0 -- boucle de tirs de démonstration en cours (#566) ; changer le jeton l'arrête
+local screenRoot: GuiObject? = nil -- racine de l'écran : la démonstration n'est montrée que s'il est affiché
+local demoToken = 0 -- suivi de la démonstration de l'onglet EFFET en cours (#575) ; changer le jeton l'arrête
 
 -- Cette méthode permet de nommer un emplacement (« SNIPER », sinon son id en majuscules) lorsqu'il est affiché.
 local function slotLabel(slotName: string): string
@@ -313,19 +314,27 @@ local function isOnScreen(): boolean
 	return false
 end
 
--- Cette méthode permet de lancer la boucle des tirs de démonstration de l'onglet EFFET (#566) lorsqu'il devient actif :
--- un tir tout de suite puis toutes les DEMO_PERIOD s, avec l'effet montré, tant que l'onglet reste actif et l'écran
--- affiché ; tout autre onglet change le jeton et l'arrête.
+-- Cette méthode permet de montrer l'effet de l'onglet EFFET par la démonstration sur la map (#575) tant que l'écran est
+-- affiché, et de la retirer sinon, lorsque l'effet montré change ou que le suivi vérifie l'écran.
+local function syncDemo()
+	if selectedSlot == EFFECT_TAB and isOnScreen() then
+		EffectStage.play(ShotEffectRules.styleOf((shownEffect())))
+	else
+		EffectStage.stop()
+	end
+end
+
+-- Cette méthode permet de suivre la démonstration de l'onglet EFFET lorsqu'il devient actif : vérifiée toutes les
+-- DEMO_POLL s (écran quitté, menu fermé : elle se retire), tant que l'onglet reste actif ; tout autre onglet change le
+-- jeton et l'arrête.
 local function startDemo()
 	demoToken += 1
 	local token = demoToken
+	EffectStage.prepare()
 	task.spawn(function()
 		while token == demoToken and selectedSlot == EFFECT_TAB do
-			if isOnScreen() then
-				local effect = shownEffect()
-				MenuScene.demoShot(ShotEffectRules.styleOf(effect))
-			end
-			task.wait(DEMO_PERIOD)
+			syncDemo()
+			task.wait(DEMO_POLL)
 		end
 	end)
 end
@@ -383,6 +392,7 @@ local function paintEffectHeader()
 	end
 	showPreview(nil, nil)
 	MenuScene.holdTool(EFFECT_TOOL, InventoryRules.skinOfTool(LocalInventory.equipped(), EFFECT_TOOL))
+	syncDemo() -- l'effet survolé passe tout de suite dans la démonstration
 end
 
 -- Cette méthode permet de mettre à jour le titre, la ligne de nom (« ÉQUIPÉ » plein en rouge d'impact, sinon « CLIC POUR
@@ -759,6 +769,7 @@ local function selectSlot(index: number)
 	paintHeader()
 	if index ~= EFFECT_TAB then
 		demoToken += 1 -- arrête la démonstration de l'onglet EFFET
+		EffectStage.stop()
 	elseif entering or demoToken == 0 then
 		startDemo()
 	end

@@ -19,9 +19,9 @@ local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local ShotSoundRules = require(ReplicatedStorage.Shared.ShotSoundRules)
 local UITheme = require(ReplicatedStorage.Shared.UITheme)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
-local WeaponSkins = require(ReplicatedStorage.Shared.WeaponSkins)
 local WeaponThirdPerson = require(ReplicatedStorage.Shared.WeaponThirdPerson)
 local AnimationSoundSystem = require(script.Parent.Parent.weapon.AnimationSoundSystem)
+local ViewmodelClone = require(script.Parent.Parent.weapon.ViewmodelClone)
 local DeathRagdoll = require(script.Parent.Parent.game.DeathRagdoll)
 local ShotEffects = require(script.Parent.Parent.weapon.ShotEffects)
 local SoundChannels = require(script.Parent.Parent.settings.SoundChannels)
@@ -64,13 +64,7 @@ type Actor = {
 }
 
 -- Viewmodel d'une arme du tireur (préparé au début du clip, caché tant qu'elle n'est pas en main)
-type Held = {
-	model: Model,
-	weapon: string, -- fiche WeaponConfig
-	offset: CFrame,
-	parts: { BasePart },
-	tracks: { [string]: AnimationTrack },
-}
+type Held = ViewmodelClone.Held
 
 type Session = {
 	clip: HighlightClipRules.Clip,
@@ -105,93 +99,9 @@ end
 local sample = table.create(6, 0) -- ligne interpolée de la caméra (réutilisée chaque image)
 local actorSample = table.create(4, 0)
 
--- Cette méthode permet de trouver le Tool d'une arme (ReplicatedStorage.Tools) lorsque le clip désigne celle du tireur.
-local function toolTemplate(toolName: string?): Tool?
-	local tools = ReplicatedStorage:FindFirstChild("Tools")
-	local tool = tools and toolName and tools:FindFirstChild(toolName)
-	return if tool and tool:IsA("Tool") then tool else nil
-end
-
 -- Cette méthode permet de nommer le viewmodel d'une arme du tireur (outil et skin) lorsqu'il est préparé ou sorti.
 local function heldKey(equip: HighlightClipRules.Equip): string
 	return (equip.tool or "") .. "|" .. (equip.skinId or "")
-end
-
--- Cette méthode permet de montrer ou cacher un viewmodel du tireur lorsqu'il sort ou range l'arme (caché par le
--- modificateur de transparence, comme ViewmodelSystem : les pistes restent chargées).
-local function setHeldVisible(held: Held, visible: boolean)
-	local modifier = if visible then 0 else 1
-	for _, part in held.parts do
-		part.LocalTransparencyModifier = modifier
-	end
-end
-
--- Cette méthode permet de préparer, caché devant la caméra, le viewmodel d'une arme du tireur (skin compris) lorsque
--- le clip démarre : clone du modèle de ReplicatedStorage.ViewModels, sans ombre, pistes chargées ; nil sans modèle.
-local function buildViewmodel(camera: Camera, equip: HighlightClipRules.Equip): Held?
-	local tool = toolTemplate(equip.tool)
-	local viewmodelName = tool and tool:GetAttribute("ViewmodelName")
-	if not tool or type(viewmodelName) ~= "string" or viewmodelName == "" then
-		return nil
-	end
-	local container = ReplicatedStorage:FindFirstChild("ViewModels")
-	local template = container and container:FindFirstChild(viewmodelName)
-	if not (template and template:IsA("Model")) then
-		return nil
-	end
-	local model = template:Clone()
-	if not model.PrimaryPart then
-		local root = model:FindFirstChild("HumanoidRootPart")
-		model.PrimaryPart = if root and root:IsA("BasePart")
-			then root
-			else model:FindFirstChildWhichIsA("BasePart", true)
-	end
-	if not model.PrimaryPart then
-		model:Destroy()
-		return nil
-	end
-	local parts = {}
-	for _, inst in model:GetDescendants() do
-		if inst:IsA("BasePart") then
-			inst.CastShadow = false
-			table.insert(parts, inst)
-		end
-	end
-	local humanoid = model:FindFirstChildWhichIsA("Humanoid")
-	if humanoid then
-		humanoid.EvaluateStateMachine = false
-		humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-	end
-	if equip.skinId then
-		WeaponSkins.apply(model, viewmodelName, equip.skinId)
-	end
-	local offset = tool:GetAttribute("ViewmodelOffset")
-	local weapon = tool:GetAttribute("WeaponName")
-	local held: Held = {
-		model = model,
-		weapon = if type(weapon) == "string" then weapon else tool.Name,
-		offset = if typeof(offset) == "CFrame" then offset else CFrame.new(),
-		parts = parts,
-		tracks = {},
-	}
-	setHeldVisible(held, false)
-	model:PivotTo(camera.CFrame * held.offset)
-	model.Parent = camera
-	local animator = AnimationSoundSystem.getAnimator(model)
-	local folder = model:FindFirstChild("Animations") or model:FindFirstChild("AnimSaves")
-	if animator and folder then
-		for _, anim in folder:GetChildren() do
-			if anim:IsA("Animation") then
-				held.tracks[anim.Name] = animator:LoadAnimation(anim)
-			end
-		end
-	end
-	local idle = held.tracks.Idle
-	if idle then
-		idle.Looped = true
-		idle.Priority = Enum.AnimationPriority.Idle
-	end
-	return held
 end
 
 -- Cette méthode permet de mettre une arme en main du tireur lorsque le clip y arrive : l'arme précédente est rangée
@@ -207,14 +117,14 @@ local function equipHeld(session: Session, equip: HighlightClipRules.Equip, anim
 		for _, track in previous.tracks do
 			track:Stop(0)
 		end
-		setHeldVisible(previous, false)
+		ViewmodelClone.setVisible(previous, false)
 	end
 	session.viewmodel = held
 	session.swing = 0
 	if not held then
 		return
 	end
-	setHeldVisible(held, true)
+	ViewmodelClone.setVisible(held, true)
 	local idle = held.tracks.Idle
 	if idle then
 		idle:Play(0)
@@ -679,7 +589,7 @@ function HighlightPlayer.play(clip: HighlightClipRules.Clip, onDone: () -> ())
 		for _, equip in session.equips do
 			local key = heldKey(equip)
 			if equip.tool and not session.held[key] then
-				local held = buildViewmodel(camera, equip)
+				local held = ViewmodelClone.build(camera, equip.tool, equip.skinId)
 				if held then
 					session.held[key] = held
 					table.insert(weapons, held.model.Name)

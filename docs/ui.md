@@ -905,6 +905,24 @@ caisse. Sous-titre « CAISSE · 10 SKINS · UN PAR OUVERTURE ».
   depuis 2 s, l'arme se balance lentement de ±30° autour du profil. Aide en bas à droite : « SURVOL · VOIR UN APERÇU » (skin ou effet de tir, #566),
   « CLIC · LE GARDER », « GLISSER · LE TOURNER ». L'aperçu se retire au changement de caisse ou de vue et dès une
   demande d'achat (l'ouverture part du plan détail).
+- **Aperçu d'un effet de tir (#575, choix de l'utilisateur le 18/11/2026)** : survoler un effet (ligne du shop, carte de
+  l'onglet EFFET de l'équipement) lance une démonstration jouée par le moteur sur la map, à la place de l'AWP qui tirait
+  dans la salle ou dans les mains du personnage de l'accueil (« on ne se rend pas vraiment compte »). Boucle de deux plans
+  montés cut (`EffectStageRules`) : le tir vu par le tireur (viewmodel de l'AWP dans son skin équipé, bras de sa tenue,
+  FOV du jeu), puis le même tir vu de côté, comme le voient les autres joueurs (tireur dans la tenue équipée, cible
+  debout à 35 studs). Stand de Dizzy : toit au-dessus de la cour des rampes, tir vers le nord entre les hangars ; plan
+  de côté depuis l'ouest du toit, le tir va de gauche à droite et tireur et cible tiennent dans la moitié droite de
+  l'image (la colonne de l'interface tient la gauche ; cadré dans Studio, les pièces plus au sud masquent la vue). Les
+  vignettes restent l'AWP du skin associé (à remplacer plus tard). Pas de son : un tir toutes les 2,3 s dans le shop
+  serait pénible.
+  - Pistes écartées : une vraie vidéo (`VideoFrame`) : 2 000 Robux par envoi, compte vérifié, à refaire et repayer à
+    chaque retouche d'un effet ; une démo dans un `ViewportFrame` : il n'affiche ni Beams ni particules ni lumières, donc
+    aucun effet. La démonstration prend donc la caméra : `MenuScene` et `ShopScene` lâchent la leur tant que
+    `EffectStage.isShowing()` (et le shop rend l'ambiance du jeu, sa salle fermée l'assombrit).
+  - Piège : un `WeaponThirdPersonView` remet à 0 le `LocalTransparencyModifier` de toute arme 3P taguée à chaque
+    image : pour cacher le tireur en 1re personne, il est rangé 500 studs sous la scène, pas rendu transparent.
+  - Juger un effet en capture : voir `docs/assets.md` « Juger un effet du menu en capture » (copie figée des Beams du
+    prochain tir, ou des pièces de `workspace.PanBurst`).
 - **Rotation au doigt et à la manette (#469)** : même glisser au doigt (position du toucher, un seul toucher suivi, même
   0,5° par pixel ; un toucher sans glissement ne tourne rien et `processed` laisse les boutons à l'interface) et stick
   droit (`Thumbstick2`, zone morte et courbe de `GamepadRules.lookRate`, un tour en 1,5 s à fond). Règles pures dans

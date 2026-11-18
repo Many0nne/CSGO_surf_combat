@@ -255,6 +255,19 @@ function ShotEffects.playDemo(start: Vector3, endpoint: Vector3, style: string?,
 	show(nil, start, endpoint, nil, style, false, panAhead or ShotEffectRules.PAN_AHEAD_DEMO, panWidth)
 end
 
+-- Cette méthode permet de montrer un tir mis en scène par la démonstration d'un effet (#575, EffectStage) lorsqu'il part,
+-- rendu comme en partie : `firstPerson`, tir du joueur vu par lui (viewmodel) ; sinon tir d'un autre vu de `camera`.
+function ShotEffects.playStaged(
+	weapon: Instance?,
+	origin: Vector3,
+	endpoint: Vector3,
+	style: string?,
+	firstPerson: boolean,
+	camera: Vector3?
+)
+	show(muzzleOf(weapon), origin, endpoint, if firstPerson then nil else camera, style, firstPerson)
+end
+
 -- Cette méthode permet de trouver la bouche du canon d'un modèle d'arme (#566) lorsque l'aperçu vise devant elle ;
 -- nil sans canon.
 function ShotEffects.muzzleOf(weapon: Instance?): Attachment?

@@ -16,8 +16,10 @@ local PerfMarkers = require(Shared:WaitForChild("PerfMarkers"))
 local WeaponConfig = require(Shared:WaitForChild("WeaponConfig"))
 local WeaponThirdPerson = require(Shared:WaitForChild("WeaponThirdPerson"))
 local LocalInventory = require(script.Parent.Parent.inventory.LocalInventory)
-local ShotEffects = require(script.Parent.Parent.weapon.ShotEffects)
+local EffectStage = require(script.Parent.EffectStage)
+local MapCopy = require(script.Parent.MapCopy)
 local MenuPoses = require(script.Parent.MenuPoses)
+local SceneFigure = require(script.Parent.SceneFigure)
 local Rules = require(script.Parent.MenuSceneRules)
 
 local MenuScene = {}
@@ -49,13 +51,6 @@ local KEY_ANGLE = 50
 local KEY_RANGE = 30
 local KEY_BRIGHTNESS = 3
 local KEY_COLOR = Color3.fromRGB(255, 214, 170)
--- Tir de démonstration d'un effet (#566) : point de l'image visé (part de la largeur, de la hauteur), à gauche du
--- personnage, et sa distance à la caméra (studs, le personnage est à ~17)
-local DEMO_AIM = Vector2.new(0.5, 0.55)
-local DEMO_DEPTH = 9
-local demoParams = RaycastParams.new()
-demoParams.FilterType = Enum.RaycastFilterType.Exclude
-
 -- Plan de l'accueil par map (coordonnées de la map telle qu'elle est posée) : pieds du personnage (y relevé au sol,
 -- recalé par un rayon), direction de son regard, puis caméra devant lui à `distance`, à `eyeHeight` au-dessus des pieds,
 -- visant `lookHeight` ; `shift` décale caméra et visée sur le côté (studs, vers la droite de l'image).
@@ -179,69 +174,6 @@ local function shotFor(map: Instance): Shot?
 	}
 end
 
--- Cette méthode permet de copier dans `folder`, décalées de OFFSET et sans physique, les pièces visibles de la map vues
--- depuis `eye` dans la direction `forward` lorsque la scène se construit ; les pièces invisibles (murs d'air, volumes)
--- sont ignorées. Les pièces enfants d'une autre pièce sont copiées pour elles-mêmes, pas avec leur parent.
-local function copyMap(map: Instance, eye: Vector3, forward: Vector3, folder: Folder)
-	for i, part in map:GetDescendants() do
-		if i % 4000 == 0 then
-			task.wait() -- la map compte plusieurs dizaines de milliers d'instances
-		end
-		if
-			part:IsA("BasePart")
-			and part.Transparency < 1
-			and Rules.inView(
-				part.Position,
-				part.Size.Magnitude / 2,
-				eye,
-				forward,
-				COPY_TAN_HALF,
-				COPY_DISTANCE,
-				COPY_NEAR
-			)
-		then
-			local copy = part:Clone()
-			for _, child in copy:GetDescendants() do
-				if
-					child:IsA("BasePart")
-					or child:IsA("JointInstance")
-					or child:IsA("Constraint")
-					or child:IsA("LuaSourceContainer")
-				then
-					child:Destroy()
-				end
-			end
-			copy.Anchored = true
-			copy.CanCollide = false
-			copy.CanQuery = false
-			copy.CanTouch = false
-			copy.CFrame = part.CFrame + OFFSET
-			copy.Parent = folder
-		end
-	end
-end
-
--- Cette méthode permet de trouver le sol de la copie sous les pieds du personnage lorsque la scène se construit ; garde
--- la hauteur du plan si le rayon ne touche rien.
-local function groundUnder(feet: Vector3, folder: Folder): Vector3
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Include
-	params.FilterDescendantsInstances = { folder }
-	-- Les copies ont CanQuery coupé : on le rend le temps du rayon aux seules pièces sous les pieds
-	local under = {}
-	for _, part in folder:GetChildren() do
-		if part:IsA("BasePart") and (part.Position - feet).Magnitude < part.Size.Magnitude / 2 + 2 then
-			part.CanQuery = true
-			table.insert(under, part)
-		end
-	end
-	local hit = workspace:Raycast(feet + Vector3.new(0, 6, 0), Vector3.new(0, -14, 0), params)
-	for _, part in under do
-		part.CanQuery = false
-	end
-	return if hit then hit.Position else feet
-end
-
 -- Tenue montrée en aperçu par l'écran d'équipement (#521) : `previewing` faux, la tenue équipée
 local previewing = false
 local previewed: string? = nil
@@ -256,36 +188,12 @@ end
 -- sur `ground`, tourné vers `facing` et éclairé par sa lumière de portrait, lorsque la scène se construit ; nil si la
 -- place n'a pas de StarterCharacter.
 local function buildCharacter(ground: Vector3, facing: Vector3, parent: Instance): Model?
-	local template = CharacterAppearance.getTemplate()
-	if not template then
+	local model = SceneFigure.build(ground, facing, parent, "MenuCharacter", shownOutfit())
+	if not model then
 		return nil
 	end
-	local model = template:Clone()
-	model.Name = "MenuCharacter"
-	for _, item in model:GetDescendants() do
-		if item:IsA("LuaSourceContainer") then
-			item:Destroy()
-		elseif item:IsA("BasePart") then
-			item.Anchored = false
-			item.CanCollide = false
-			item.CanQuery = false
-			item.CanTouch = false
-		end
-	end
-	CharacterAppearance.apply(model, shownOutfit())
-	local humanoid = model:FindFirstChildOfClass("Humanoid")
-	local root = model:FindFirstChild("HumanoidRootPart")
-	if not (humanoid and root and root:IsA("BasePart")) then
-		model:Destroy()
-		return nil
-	end
-	humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-	humanoid.EvaluateStateMachine = false
-	root.Anchored = true
-	local center = ground + Vector3.new(0, humanoid.HipHeight + root.Size.Y / 2, 0)
-	local frame = CFrame.lookAt(center, center + facing)
-	model:PivotTo(frame)
-	model.Parent = parent
+	local frame = model:GetPivot()
+	local center = frame.Position
 
 	local holder = Instance.new("Part")
 	holder.Name = "KeyLight"
@@ -391,13 +299,19 @@ local function build()
 	mapCopy.Name = "Map"
 	-- Caméra tournée vers la gauche : le personnage passe à droite de l'image, la gauche revient à l'équipement
 	local view = CFrame.lookAt(eye, target) * CFrame.Angles(0, math.rad(CHARACTER_YAW), 0)
-	copyMap(map, eye, view.LookVector, mapCopy)
+	MapCopy.copy(
+		map,
+		{ { eye = eye, forward = view.LookVector } },
+		{ tanHalf = COPY_TAN_HALF, distance = COPY_DISTANCE, near = COPY_NEAR },
+		OFFSET,
+		mapCopy
+	)
 	mapCopy.Parent = folder
 	folder.Parent = workspace
 	stage = folder
 
 	baseCFrame = CFrame.lookAt(eye, target) + OFFSET
-	local ground = groundUnder(shot.feet + OFFSET, mapCopy)
+	local ground = MapCopy.groundUnder(shot.feet + OFFSET, mapCopy)
 	character = buildCharacter(ground, shot.facing, folder)
 end
 
@@ -405,6 +319,14 @@ end
 -- personnage lorsqu'une image est rendue.
 local function update(dt: number)
 	if paused then
+		return
+	end
+	-- Démonstration d'un effet de tir (#575, onglet EFFET) : elle tient la caméra, sans le flou de l'accueil
+	local staged = EffectStage.isShowing()
+	if blur then
+		blur.Enabled = not staged
+	end
+	if staged then
 		return
 	end
 	local camera = workspace.CurrentCamera
@@ -512,29 +434,6 @@ end
 -- Cette méthode permet d'enregistrer le rappel appelé à chaque changement d'arme lorsque la fiche doit suivre la scène.
 function MenuScene.onWeaponChanged(callback: (string) -> ())
 	weaponChanged = callback
-end
-
--- Cette méthode permet de tirer un coup de démonstration de l'arme tenue avec un style d'effet (#566, nil : rayon
--- ordinaire) lorsque l'onglet EFFET de l'équipement le montre : du canon vers un point de l'image à gauche (DEMO_AIM),
--- entre le personnage et la caméra (DEMO_DEPTH) : le tir passe devant lui (l'arme tenue en travers pointe hors du cadre,
--- et un tir vers le fond passerait derrière sa tête), arrêté par le décor s'il en rencontre.
-function MenuScene.demoShot(style: string?)
-	local model = character
-	local gun = model and model:FindFirstChild(WeaponThirdPerson.MODEL_NAME)
-	local muzzle = ShotEffects.muzzleOf(gun)
-	local camera = workspace.CurrentCamera
-	if not (running and not paused and muzzle and camera) then
-		return
-	end
-	local viewport = camera.ViewportSize
-	local ray = camera:ViewportPointToRay(viewport.X * DEMO_AIM.X, viewport.Y * DEMO_AIM.Y)
-	local aim = ray.Origin + ray.Direction * DEMO_DEPTH - muzzle.WorldPosition
-	if aim.Magnitude < 1e-3 then
-		return
-	end
-	demoParams.FilterDescendantsInstances = { model :: Instance }
-	local result = workspace:Raycast(muzzle.WorldPosition, aim, demoParams)
-	ShotEffects.playDemo(muzzle.WorldPosition, if result then result.Position else muzzle.WorldPosition + aim, style)
 end
 
 -- Cette méthode permet de faire porter au personnage de l'accueil une tenue (#521, nil : d'origine) lorsque l'écran

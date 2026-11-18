@@ -30,6 +30,7 @@ local WeaponSkins = require(Shared:WaitForChild("WeaponSkins"))
 local ShotEffectRules = require(Shared:WaitForChild("ShotEffectRules"))
 local ShotEffects = require(script.Parent.Parent.weapon.ShotEffects)
 local CrateOpening = require(script.Parent.CrateOpening)
+local EffectStage = require(script.Parent.EffectStage)
 local MenuScene = require(script.Parent.MenuScene)
 local Rules = require(script.Parent.MenuSceneRules)
 local OutfitRack = require(script.Parent.OutfitRack)
@@ -238,6 +239,8 @@ type Demo = { style: string?, model: Model, pivot: CFrame, axis: Vector3, length
 -- aperçu d'un effet de tir (#566) : l'AWP dans le skin qui l'inspire, qui tire avec (`demo`)
 type Preview = { skin: string, model: Model, base: CFrame, length: number, demo: Demo? }
 local preview: Preview?
+-- Effet de tir en aperçu (#575, id de l'item) : montré par la démonstration sur la map (EffectStage), pas dans la salle
+local effectPreview: string? = nil
 local previewLight: SpotLight?
 local yaw, pitch = 0, 0
 local swayClock = 0
@@ -901,10 +904,10 @@ end
 
 -- Cette méthode permet de changer le skin montré en aperçu (#424, nil : aucun) lorsque l'interface le demande ou que la
 -- vue change : l'arme habillée remplace la précédente au-dessus de la caisse, la caméra glisse vers elle ou en revient.
--- Un effet de tir (#566) se montre sur l'AWP, qui tire avec lui.
+-- Un effet de tir se montre par la démonstration sur la map (#575, EffectStage), qui prend la caméra.
 local function setPreview(skinId: string?)
 	local shown = preview
-	if (if shown then shown.skin else nil) == skinId then
+	if (if shown then shown.skin else effectPreview) == skinId then
 		return
 	end
 	if shown then
@@ -912,6 +915,17 @@ local function setPreview(skinId: string?)
 		preview = nil
 	end
 	local item = if skinId and stage and mode == "detail" and not opening then InventoryRules.item(skinId) else nil
+	-- Effet de tir (#575) : la démonstration sur la map prend la caméra, la salle reste en place derrière elle
+	if item and item.type == InventoryRules.Type.EFFECT then
+		effectPreview = item.id
+		EffectStage.play(ShotEffectRules.styleOf(item.id))
+		return
+	end
+	local leftStage = effectPreview ~= nil
+	if leftStage then
+		effectPreview = nil
+		EffectStage.stop()
+	end
 	local weapon, modelSkin, style = showcase(item)
 	if skinId and weapon and stage then
 		local model = revealWeapon(stage, weapon.viewmodel, modelSkin, previewCenter, weapon.length, true)
@@ -931,7 +945,8 @@ local function setPreview(skinId: string?)
 		end
 	end
 	if running and (shown ~= nil) ~= (preview ~= nil) then
-		glideFrom = workspace.CurrentCamera.CFrame
+		-- En revenant de la démonstration, la caméra est sur la map : le glissement part du plan détail
+		glideFrom = if leftStage then CAMERAS.detail else workspace.CurrentCamera.CFrame
 		glideStart = os.clock()
 		glideTime = PREVIEW_GLIDE_TIME
 	end
@@ -1148,6 +1163,15 @@ end
 -- Cette méthode permet de placer la caméra (glissement entre les plans, léger suivi du curseur, FOV adapté au format),
 -- de tourner l'aperçu d'un skin et de suivre le survol des étiquettes de la vitrine lorsqu'une image est rendue.
 local function update(dt: number)
+	-- Démonstration d'un effet de tir (#575) : elle tient la caméra, sous l'ambiance du jeu (la salle fermée l'assombrit)
+	local staged = EffectStage.isShowing()
+	local ambient = if staged then savedAmbient else ROOM_AMBIENT
+	if ambient and Lighting.Ambient ~= ambient then
+		Lighting.Ambient = ambient
+	end
+	if staged then
+		return
+	end
 	local camera = workspace.CurrentCamera
 	local viewport = camera.ViewportSize
 	local mouse = UserInputService:GetMouseLocation()
@@ -1421,6 +1445,7 @@ function ShopScene.start()
 	if not stage then
 		build()
 	end
+	EffectStage.prepare() -- copie de la map des aperçus d'effets (#575), en tâche de fond
 	local folder = stage :: Folder
 	running = true
 	MenuScene.setPaused(true)
