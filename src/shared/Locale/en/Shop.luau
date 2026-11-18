@@ -69,6 +69,7 @@ return {
 	["LA TOURNER"] = "ROTATE IT",
 	["Chrome liquide sur tout le corps, reflet du ciel peint dans la matière."] = "Liquid chrome over the whole body, the sky's reflection painted into the material.",
 	["Casque fermé à visière, plastron et tablier de protection, épaulières à liseré laiton."] = "Closed visor helmet, protective breastplate and apron, brass-trimmed shoulder pads.",
+	["Combinaison étanche moutarde, masque à gaz à deux filtres, gants et bottes scellés au ruban."] = "Mustard sealed suit, twin-filter gas mask, gloves and boots taped shut.",
 
 	-- Packs de crédits (CreditPackWindow, CreditPacks)
 	["+ CRÉDITS"] = "+ CREDITS",

@@ -424,6 +424,15 @@ InventoryRules.ITEMS = {
 		price = 5000,
 		description = "Casque fermé à visière, plastron et tablier de protection, épaulières à liseré laiton.",
 	},
+	{
+		id = "outfit.abri",
+		type = "outfit",
+		name = "ABRI",
+		appearance = "abri",
+		rarity = "exceptional",
+		price = 2500,
+		description = "Combinaison étanche moutarde, masque à gaz à deux filtres, gants et bottes scellés au ruban.",
+	},
 } :: { Item }
 
 -- Inventaire de tout joueur (et des bots), sauvegardé ou non : Ka-Bar et AWP
