@@ -823,7 +823,7 @@ l'étiquette BIENTÔT jusqu'à #393 (voir « Achat d'une caisse »).
   2,25 / 2,85 / 3,6 s, avant la tension) et tenue de la silhouette de 1,1 s, la plus longue. Le pochoir du couvercle est posé par le jeu, propre à chaque caisse (« S1-AWP », « FM-M9 », #434, `docs/assets.md`). Doublons possibles : le
   tirage suit les chances affichées même si le skin est déjà possédé ; un achat rembourse alors une part du prix
   (#393), l'ouverture de test ne donne rien de plus. Tout est dans `ShopCatalog`. L'étiquette de la vitrine (3,4 studs) tient « AWP · SÉRIE 1 » + « 500 CRÉDITS »
-  (vérifié en Studio) ; sous-titre de la vue d'ensemble « UNE PAR ARME ET PAR SÉRIE ». Depuis #391, le prix est le jeton
+  (vérifié en Studio) ; sous-titre de la vue d'ensemble « SKINS ET EFFETS DE TIR » (« UNE PAR ARME ET PAR SÉRIE » avant la caisse d'effets, #566). Depuis #391, le prix est le jeton
   du crédit suivi du montant : sur l'étiquette, le jeton (32 px) remplace le mot CRÉDITS, qui ne tiendrait plus ; dans la
   vue détail, jeton (34 px), montant puis CRÉDITS. Le solde est en haut à droite de la barre du menu (voir « Crédits »).
 - **Modèle de la caisse (validé le 14/11/2026, #332)** : caisse d'armes en bois (piste B de
@@ -902,7 +902,7 @@ caisse. Sous-titre « CAISSE · 10 SKINS · UN PAR OUVERTURE ».
   45 % de la largeur, centrée à 66 % (à droite de la colonne), lampe de face allumée en fondu. La ligne montrée reste
   en avant, les autres atténuées. Un clic retient l'aperçu (fond os léger sur la ligne), un second clic le relâche ;
   aperçu retenu, glisser dans la salle tourne l'arme (0,5° par pixel, inclinaison de 35° au plus). Sans glissement
-  depuis 2 s, l'arme se balance lentement de ±30° autour du profil. Aide en bas à droite : « SURVOL · VOIR UN SKIN »,
+  depuis 2 s, l'arme se balance lentement de ±30° autour du profil. Aide en bas à droite : « SURVOL · VOIR UN APERÇU » (skin ou effet de tir, #566),
   « CLIC · LE GARDER », « GLISSER · LE TOURNER ». L'aperçu se retire au changement de caisse ou de vue et dès une
   demande d'achat (l'ouverture part du plan détail).
 - **Rotation au doigt et à la manette (#469)** : même glisser au doigt (position du toucher, un seul toucher suivi, même
