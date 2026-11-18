@@ -94,19 +94,38 @@ par `ScaleTo` avec le reste de l'arme.
   partie tirent le rayon ordinaire. Le son propre à un effet est prévu dans l'item (pas encore fait).
   Ajouter un effet : son item dans `InventoryRules.ITEMS`, son `appearance` dans la caisse (`ShopCatalog`), son style
   dans `STYLES` et `ShotEffects.show`, sa traduction de description (`Locale/en/Shop.luau`).
-  - **TREMPE (`temper`) :** Beam plus large (`TEMPER_WIDTH`) et plus long à s'effacer (`TEMPER_LIFETIME`), couleurs de
-    revenu de l'acier (`TEMPER_STOPS`, du bleu à la bouche à la paille à l'impact) recomposées à chaque frame : franges
-    claires qui défilent vers l'impact, front qui ondule (`temperKeypoints`, 16 points, Roblox en accepte 20).
+  - **TREMPE (`temper`) :** d'après une planche de concept faite par une IA externe sur brief (validée le 18/11/2026 :
+    « ruban d'acier torsadé qui refroidit, écailles d'oxyde qui s'en détachent »). Ruban plus large (`TEMPER_WIDTH`) et
+    plus long à s'effacer (`TEMPER_LIFETIME`), torsadé par une texture répétée qui défile (`TEMPER_RIBBON_IMAGE`, deux
+    losanges à facettes inversées = une torsion, `TEMPER_TWIST_LENGTH`, `TEMPER_TWIST_SPEED`), couleurs de revenu de
+    l'acier (`TEMPER_STOPS`, paille à la bouche → bronze → pourpre → bleu vers l'impact) recomposées à chaque frame :
+    franges claires qui défilent, front qui ondule (`temperKeypoints`, 16 points, Roblox en accepte 20). Écailles
+    (`TemperFlakes`, texture `TEMPER_FLAKE_IMAGE`) : un ParticleEmitter en volume par tiers du rayon, chaque tiers aux
+    couleurs du ruban à cet endroit, qui refroidissent jusqu'au bleu-gris en tombant. Textures :
+    `assets/effects/temper_textures.py`, publiées en Decal.
     **Piège : un Beam à `Segments = 1` n'interpole sa `ColorSequence` qu'entre ses deux bouts** (bleu → paille en passant
     par le gris, violet et bronze invisibles) : TREMPE en a 20 (`TEMPER_SEGMENTS`). `LightEmission` 0,25 : plus haut, les
     couleurs sont lavées vers le blanc ; teintes plus saturées que le skin, qu'un Beam plat rend plus pâles.
   - **Juger un effet du menu en capture :** il ne vit que 0,3 s. Depuis un `execute_luau` client, guetter dans
-    `Terrain` le `ShotTracer` (et le `PanBurst` activé) du prochain tir de démonstration, en cloner une copie figée
-    (transparence 0, taille 1), capturer, puis la détruire.
-  - **PAN ! (`pan`) :** explosion de BD de la crosse du skin PAN ! (`assets/effects/pan_burst.py` reprend sa fonction
-    `burst` et ses graines, publiée en Decal : id de l'image dans `PAN_IMAGE`) dans un BillboardGui devant le canon
-    (`PanBurst`), toujours tournée vers la caméra, inclinaison tirée à chaque tir, pop puis fondu (`panFrame`) ; rayon
-    ordinaire en plus. Chez le tireur : plus petite et plus près (`PAN_WIDTH_LOCAL`), absente à la lunette.
+    `Terrain` le `ShotTracer` (et dans `workspace.PanBurst` une copie hors de sa rangée, Y > -5000) du prochain tir de
+    démonstration, en cloner une copie figée (transparence 0), figer les écailles (`TimeScale = 0` des émetteurs de
+    `workspace.TemperFlakes`), capturer, puis tout détruire. Coordonnées de `user_mouse_input` : celles du viewport
+    (sans la barre du haut, `GetMouseLocation` = y + 58) ; pour un bouton, passer plutôt son `instance_path`.
+  - **PAN ! (`pan`) :** l'explosion de BD de la crosse du skin PAN !, en volume (rejet d'une version plate le
+    18/11/2026 : « un petit modèle 3D, pas quelque chose à plat »). `assets/effects/pan_burst_3d.py` (Blender sans
+    interface) reprend la fonction `burst` de `pan.py` et ses graines : plaque de contour noire, étoile rouge, cœur jaune
+    en calques décalés en profondeur, « PAN ! » en relief (Impact, biseauté), cerne noir fait par le **biseau** de
+    lettres noires (le `offset` de Blender soude les lettres en pavé), planche Workbench de face / trois quarts / profil.
+    Publié en Model, inséré dans `ReplicatedStorage.Props.PanBurst` (5 MeshParts, couleurs du skin posées dans le
+    `.rbxm`, face avant vers -Z, pivot au centre ; vérifié par `verify_place.luau`). `PanBurst` (client) en garde une
+    réserve et recalcule chaque frame taille et place de chaque pièce : pop (`panFrame`), tourné de `PAN_TURN` au tir
+    puis face à la caméra à la fin de la pose (`panTurn`, rend le relief visible), inclinaison tirée à chaque tir ; le
+    rayon part du bord de l'explosion (`panTracerStart`). Chez le tireur : plus petite et plus près
+    (`PAN_WIDTH_LOCAL`), absente à la lunette. **Exporter un seul prop sans réécrire les autres** (Studio connecté :
+    réécrire `Crate.rbxm` est interdit) : `lune run tools/rbxm/receive.luau Props`, puis depuis Studio un POST du seul
+    modèle sérialisé sur `/?path=assets/rbx/Props/<Nom>.rbxm` et un `/done` au corps autre que `OK` (export « partiel » :
+    rien n'est supprimé, le serveur sort en code 1). Le modèle inséré porte un tag `Assistant:<guid>`, sauvé avec lui
+    (sans effet, la caisse en a un aussi) : pour retirer la copie insérée à la main, ne pas filtrer sur ce tag.
   - **ÉCLAIR (`lightning`) :** un éclair (`LightningBolt`, forme et réglages dans `LightningRules`) à la
   place du rayon de balle, tronc brisé resserré au canon et à l'impact, branches et brindilles tirées à chaque tir,
   flash puis second flash puis fondu, lueur `PointLight`. Au-delà de `LightningRules.MAX_ACTIVE` éclairs en cours, le

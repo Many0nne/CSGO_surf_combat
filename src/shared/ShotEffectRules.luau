@@ -53,19 +53,44 @@ ShotEffectRules.INSTANCE_NAME = "ShotTracer"
 -- Filet : un rayon est détruit au plus tard après sa durée de vie plus cette marge (s), même si sa boucle s'arrête.
 ShotEffectRules.LIFETIME_MARGIN = 0.5
 
--- TREMPE (#566, style `temper`) : rayon un peu plus large et plus long à s'effacer que le rayon ordinaire, aux couleurs
--- de revenu de l'acier du skin TREMPE (assets/awp/skins/trempe.py), de la bouche (bleu profond) à l'impact (paille).
--- Les franges (bandes plus claires) défilent vers l'impact à TEMPER_SPEED (longueurs de rayon par seconde), et le front
--- des couleurs ondule de TEMPER_WAVE (part de la longueur) : le rayon n'est jamais deux fois le même.
-ShotEffectRules.TEMPER_WIDTH = 0.14
+-- TREMPE (#566, style `temper`), d'après la planche de concept validée (ruban d'acier torsadé qui refroidit, écailles
+-- d'oxyde qui s'en détachent) : ruban plus large et plus long à s'effacer que le rayon ordinaire, torsadé (texture
+-- TEMPER_RIBBON_IMAGE répétée tous les TEMPER_TWIST_LENGTH studs, qui défile à TEMPER_TWIST_SPEED : le ruban tourne),
+-- aux couleurs de revenu de l'acier, paille à la bouche (le plus chaud) puis bronze, pourpre et bleu profond vers
+-- l'impact. Les franges (bandes plus claires) défilent vers l'impact à TEMPER_SPEED (longueurs de rayon par seconde), et
+-- le front des couleurs ondule de TEMPER_WAVE (part de la longueur) : le rayon n'est jamais deux fois le même.
+ShotEffectRules.TEMPER_WIDTH = 0.3
 ShotEffectRules.TEMPER_LIFETIME = 0.3
+-- Textures (assets/effects/temper_textures.py), publiées en Decal : id de l'image contenue
+ShotEffectRules.TEMPER_RIBBON_IMAGE = "rbxassetid://80977441919695"
+ShotEffectRules.TEMPER_FLAKE_IMAGE = "rbxassetid://77905204616866"
+ShotEffectRules.TEMPER_TWIST_LENGTH = 2.4
+ShotEffectRules.TEMPER_TWIST_SPEED = 2
 -- Teintes plus saturées que celles du skin : un Beam sans relief ni reflet les rend plus pâles (comparé en jeu).
 ShotEffectRules.TEMPER_STOPS = {
-	{ 0.0, { 20, 40, 210 } }, -- bleu profond, à la bouche
-	{ 0.3, { 120, 35, 200 } }, -- violet
-	{ 0.6, { 205, 100, 20 } }, -- bronze
-	{ 1.0, { 245, 205, 90 } }, -- paille, à l'impact
+	{ 0.0, { 245, 205, 90 } }, -- paille, à la bouche
+	{ 0.3, { 215, 115, 30 } }, -- bronze
+	{ 0.6, { 135, 45, 200 } }, -- pourpre
+	{ 1.0, { 30, 50, 210 } }, -- bleu profond, vers l'impact
 }
+-- Écailles d'oxyde : semées le long du rayon (TEMPER_FLAKES_PER_STUD, bornées), elles tombent en refroidissant (paille
+-- → bleu-gris au fil de leur vie) ; taille (studs), vie (s), vitesse de départ (studs/s), gravité (studs/s²)
+ShotEffectRules.TEMPER_FLAKES_PER_STUD = 0.35
+ShotEffectRules.TEMPER_FLAKES_MIN = 6
+ShotEffectRules.TEMPER_FLAKES_MAX = 36
+ShotEffectRules.TEMPER_FLAKE_SIZE = { 0.05, 0.14 } -- à 0,28, les écailles proches de la caméra mangeaient le ruban
+ShotEffectRules.TEMPER_FLAKE_LIFE = { 0.45, 0.8 }
+ShotEffectRules.TEMPER_FLAKE_SPEED = { 0.5, 2.5 }
+ShotEffectRules.TEMPER_FLAKE_GRAVITY = 14
+-- Couleurs des écailles au fil de leur vie, par tronçon du rayon (de la bouche vers l'impact) : chaque écaille part de
+-- la couleur du ruban là où elle s'en détache, puis refroidit jusqu'au bleu-gris
+ShotEffectRules.TEMPER_FLAKE_SECTIONS = {
+	{ { 0, { 245, 205, 90 } }, { 0.5, { 215, 115, 30 } }, { 1, { 120, 140, 185 } } }, -- paille → bronze
+	{ { 0, { 215, 115, 30 } }, { 0.5, { 135, 45, 200 } }, { 1, { 120, 140, 185 } } }, -- bronze → pourpre
+	{ { 0, { 135, 45, 200 } }, { 0.5, { 30, 50, 210 } }, { 1, { 120, 140, 185 } } }, -- pourpre → bleu
+}
+-- Écailles en cours au plus (une réserve de ce nombre d'émetteurs, utilisés à tour de rôle)
+ShotEffectRules.TEMPER_FLAKE_EMITTERS = 4
 ShotEffectRules.TEMPER_FRINGES = 3 -- franges sur la longueur du rayon
 ShotEffectRules.TEMPER_FRINGE_GAIN = 0.25 -- éclaircissement au cœur d'une frange (vers le blanc)
 ShotEffectRules.TEMPER_SPEED = 2.5
@@ -78,21 +103,24 @@ ShotEffectRules.TEMPER_SEGMENTS = 20
 -- Lumière additive : à 0,6 les couleurs sont lavées vers le blanc sur le décor clair, à 0 le rayon est terne dans le noir
 ShotEffectRules.TEMPER_LIGHT_EMISSION = 0.25
 
--- PAN ! (#566, style `pan`) : l'explosion « PAN ! » du skin (image tirée de assets/effects/pan_burst.py) jaillit devant
--- le canon, toujours tournée vers la caméra (case de BD), avec le rayon ordinaire. Taille en studs (largeur ; l'image est
--- en 512 x 320), plus petite chez le tireur pour ne pas cacher sa cible ; avance devant la bouche du canon (studs) ;
--- pop (s) jusqu'au dépassement PAN_OVERSHOOT, puis retour à 1 ; fondu sur la fin de PAN_LIFETIME.
-ShotEffectRules.PAN_IMAGE = "rbxassetid://128462521847770"
-ShotEffectRules.PAN_ASPECT = 320 / 512
-ShotEffectRules.PAN_WIDTH = 3.2
-ShotEffectRules.PAN_WIDTH_LOCAL = 1.1
+-- PAN ! (#566, style `pan`) : l'explosion « PAN ! » de la crosse du skin jaillit devant le canon, en volume, avec le
+-- rayon ordinaire. Largeur en studs, plus petite chez le tireur pour ne pas cacher sa cible ; avance devant la bouche du
+-- canon (studs) ; pop (s) jusqu'au dépassement PAN_OVERSHOOT, puis retour à 1 ; fondu sur la fin de PAN_LIFETIME.
+-- Modèle en volume (ReplicatedStorage.Props.PanBurst, assets/effects/pan_burst_3d.py) : face avant vers -Z, pivot au
+-- centre, PAN_MODEL_WIDTH studs de large à l'échelle 1. Il jaillit tourné de PAN_TURN degrés et pivote face à la caméra
+-- pendant le pop et la pose : on voit le relief, puis on lit l'onomatopée.
+ShotEffectRules.PAN_MODEL = "PanBurst"
+ShotEffectRules.PAN_MODEL_WIDTH = 4
+ShotEffectRules.PAN_TURN = 35
+ShotEffectRules.PAN_WIDTH = 4
+ShotEffectRules.PAN_WIDTH_LOCAL = 1.4
 ShotEffectRules.PAN_AHEAD = 1.6
 ShotEffectRules.PAN_AHEAD_LOCAL = 1.2
 ShotEffectRules.PAN_AHEAD_DEMO = 3.5 -- aperçu du menu : le canon y est au bord du cadre, l'explosion s'en écarte
 -- Aperçu et révélation du shop : l'AWP de profil, canon vers le bord droit et caméra proche ; explosion plus petite,
 -- collée à la bouche, pour rester dans le cadre
-ShotEffectRules.PAN_AHEAD_SHOP = 0.6
-ShotEffectRules.PAN_WIDTH_SHOP = 1.6
+ShotEffectRules.PAN_AHEAD_SHOP = 0.8
+ShotEffectRules.PAN_WIDTH_SHOP = 2
 ShotEffectRules.PAN_LIFETIME = 0.32
 ShotEffectRules.PAN_POP = 0.06
 ShotEffectRules.PAN_SETTLE = 0.1
@@ -191,6 +219,31 @@ function ShotEffectRules.panTracerStart(start: Vector3, finish: Vector3, center:
 		return start
 	end
 	return start + unit * along
+end
+
+-- Cette méthode permet de compter les écailles d'oxyde de TREMPE semées le long d'un rayon de `length` studs lorsqu'il
+-- est tracé : proportionnel à sa longueur, borné par TEMPER_FLAKES_MIN et TEMPER_FLAKES_MAX.
+function ShotEffectRules.temperFlakeCount(length: number): number
+	local count = math.floor(length * ShotEffectRules.TEMPER_FLAKES_PER_STUD + 0.5)
+	return math.clamp(count, ShotEffectRules.TEMPER_FLAKES_MIN, ShotEffectRules.TEMPER_FLAKES_MAX)
+end
+
+-- Cette méthode permet de répartir `total` écailles entre les tronçons du rayon (TEMPER_FLAKE_SECTIONS) lorsqu'un tir
+-- TREMPE les sème : parts égales, le reste aux premiers tronçons (près de la bouche).
+function ShotEffectRules.temperFlakeSplit(total: number): { number }
+	local sections = #ShotEffectRules.TEMPER_FLAKE_SECTIONS
+	local counts = {}
+	for i = 1, sections do
+		counts[i] = total // sections + (if i <= total % sections then 1 else 0)
+	end
+	return counts
+end
+
+-- Cette méthode permet de donner l'angle (degrés) dont l'explosion PAN ! est encore tournée par rapport à la caméra à un
+-- instant de sa vie : PAN_TURN au tir, ramené à 0 en douceur à la fin de la pose (PAN_POP + PAN_SETTLE).
+function ShotEffectRules.panTurn(elapsed: number): number
+	local t = math.clamp(elapsed / (ShotEffectRules.PAN_POP + ShotEffectRules.PAN_SETTLE), 0, 1)
+	return ShotEffectRules.PAN_TURN * (1 - t) * (1 - t)
 end
 
 -- Cette méthode permet de placer l'explosion PAN ! lorsqu'un tir part : devant la bouche du canon dans la direction du

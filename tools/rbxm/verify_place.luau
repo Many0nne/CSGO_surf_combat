@@ -322,6 +322,19 @@ for _, name in rbxmNames("assets/rbx/Props") do
 		print("Props." .. name .. " " .. summarize(prop))
 	end
 end
+-- Explosion de l'effet de tir PAN ! (#566) : PanBurst anime ces pièces (taille et place recalculées chaque frame)
+local PAN_PARTS = { "Contour", "Etoile", "Coeur", "Cerne", "Lettres" }
+local panModel = props and props:FindFirstChild("PanBurst")
+if not panModel then
+	fail("ReplicatedStorage.Props.PanBurst absent (effet de tir PAN !)")
+else
+	for _, partName in PAN_PARTS do
+		local part = panModel:FindFirstChild(partName)
+		if not (part and part:IsA("MeshPart")) then
+			fail("Props.PanBurst." .. partName .. " absent ou pas une MeshPart")
+		end
+	end
+end
 local crateModel = props and props:FindFirstChild("Crate")
 if not crateModel then
 	fail("ReplicatedStorage.Props.Crate absent (caisse du shop)")

@@ -180,7 +180,30 @@ return function(T, Loader)
 			)
 		end)
 
-		T.it("du bleu à la bouche à la paille à l'impact, dans les limites d'une ColorSequence", function()
+		T.it("écailles réparties entre les tronçons, le reste près de la bouche", function()
+			local sections = #ShotEffectRules.TEMPER_FLAKE_SECTIONS
+			local counts = ShotEffectRules.temperFlakeSplit(sections * 4 + 1)
+			T.expectEqual(#counts, sections)
+			T.expectEqual(counts[1], 5)
+			T.expectEqual(counts[sections], 4)
+			local total = 0
+			for _, n in ShotEffectRules.temperFlakeSplit(20) do
+				total += n
+			end
+			T.expectEqual(total, 20)
+		end)
+
+		T.it("écailles proportionnelles à la longueur du rayon, bornées", function()
+			T.expectEqual(ShotEffectRules.temperFlakeCount(0), ShotEffectRules.TEMPER_FLAKES_MIN)
+			T.expectEqual(ShotEffectRules.temperFlakeCount(10000), ShotEffectRules.TEMPER_FLAKES_MAX)
+			local mid = ShotEffectRules.temperFlakeCount(60)
+			T.expect(
+				mid > ShotEffectRules.TEMPER_FLAKES_MIN and mid < ShotEffectRules.TEMPER_FLAKES_MAX,
+				"entre les bornes"
+			)
+		end)
+
+		T.it("de la paille à la bouche au bleu vers l'impact, dans les limites d'une ColorSequence", function()
 			local points = ShotEffectRules.temperKeypoints(0, 0.37)
 			T.expectEqual(#points, ShotEffectRules.TEMPER_KEYPOINTS)
 			T.expect(#points <= 20, "20 points au plus")
@@ -195,8 +218,8 @@ return function(T, Loader)
 				end
 			end
 			local first, last = points[1], points[#points]
-			T.expect(first[4] > first[2], "bleu dominant à la bouche")
-			T.expect(last[2] > last[4], "paille (rouge > bleu) à l'impact")
+			T.expect(first[2] > first[4], "paille (rouge > bleu) à la bouche")
+			T.expect(last[4] > last[2], "bleu dominant vers l'impact")
 		end)
 
 		T.it("les franges défilent : deux instants donnent deux dégradés", function()
@@ -230,6 +253,10 @@ return function(T, Loader)
 			T.expectEqual(visible, 0)
 			local _, gone = ShotEffectRules.panFrame(ShotEffectRules.PAN_LIFETIME)
 			T.expectEqual(gone, 1)
+			T.expectEqual(ShotEffectRules.panTurn(0), ShotEffectRules.PAN_TURN)
+			T.expectEqual(ShotEffectRules.panTurn(ShotEffectRules.PAN_POP + ShotEffectRules.PAN_SETTLE), 0)
+			local mid = ShotEffectRules.panTurn(ShotEffectRules.PAN_POP)
+			T.expect(mid > 0 and mid < ShotEffectRules.PAN_TURN, "pivote vers la caméra pendant le pop")
 			local _, fading = ShotEffectRules.panFrame(ShotEffectRules.PAN_LIFETIME * 0.8)
 			T.expect(fading > 0 and fading < 1, "s'efface sur la fin")
 		end)

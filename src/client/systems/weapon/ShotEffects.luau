@@ -21,6 +21,7 @@ local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local ShotEffectRules = require(ReplicatedStorage.Shared.ShotEffectRules)
 local LightningBolt = require(script.Parent.LightningBolt)
 local PanBurst = require(script.Parent.PanBurst)
+local TemperFlakes = require(script.Parent.TemperFlakes)
 local ScopeSystem = require(script.Parent.ScopeSystem)
 local LocalInventory = require(script.Parent.Parent.inventory.LocalInventory)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
@@ -151,6 +152,14 @@ local function spawnTracer(start: Vector3, finish: Vector3, style: string?)
 	beam.LightInfluence = 0
 	beam.FaceCamera = true
 	beam.Segments = if temperSeed then ShotEffectRules.TEMPER_SEGMENTS else 1
+	if temperSeed then
+		-- TREMPE : ruban torsadé (texture répétée qui défile) et écailles d'oxyde semées le long du rayon
+		beam.Texture = ShotEffectRules.TEMPER_RIBBON_IMAGE
+		beam.TextureMode = Enum.TextureMode.Wrap
+		beam.TextureLength = ShotEffectRules.TEMPER_TWIST_LENGTH
+		beam.TextureSpeed = ShotEffectRules.TEMPER_TWIST_SPEED
+		TemperFlakes.spawn(start, finish)
+	end
 	beam.Parent = a0
 
 	a0.Parent = terrain
