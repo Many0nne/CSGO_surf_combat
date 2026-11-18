@@ -550,20 +550,6 @@ return function(T, Loader)
 		end)
 	end)
 
-	T.describe("InventoryRules.outfitForName (#521)", function()
-		T.it("un bot garde la même tenue, et les bots se partagent l'origine et les tenues", function()
-			T.expectEqual(Rules.outfitForName("Bot_Vega"), Rules.outfitForName("Bot_Vega"))
-			local seen = {}
-			for i = 1, 60 do
-				seen[Rules.outfitForName("Bot" .. i) or "origine"] = true
-			end
-			T.expect(seen.origine, "certains bots en tenue d'origine")
-			for _, outfit in Rules.outfits() do
-				T.expect(seen[outfit.id], "certains bots en " .. outfit.id)
-			end
-		end)
-	end)
-
 	T.describe("InventoryRules.skinOfTool (#268)", function()
 		T.it("donne le skin équipé de l'arme d'un Tool, nil pour d'origine ou une arme hors équipement", function()
 			local resolved = {

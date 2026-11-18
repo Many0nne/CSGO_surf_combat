@@ -242,6 +242,12 @@ Règles pures dans `BotPopulationRules`, appliquées par `BotManager` (`adjustPo
   `POPULATION_DUEL_TIME` s) : si tous le sont, le retrait est reporté au passage suivant. `lastContact` compte aussi un
   tir entendu, donc un bot qui vient d'entendre un tir est protégé quelques secondes (prudent, pas gênant).
 - Noms : liste fixe `BotConfig.NAMES`, premier nom libre (préfixe `BOT` ajouté à l'affichage par `ParticipantRules`).
+- **Tenues** (#521, #547, `BotRules.outfitTable`) : fixées par nom, calculées depuis le catalogue (rien à tenir à jour
+  quand une tenue s'ajoute). Un nom sur deux reste en origine (2e, 4e…), donc le premier bot est habillé. Les autres
+  prennent tour à tour la tenue au plus fort `poids / (portées + 1)` (`OUTFIT_WEIGHTS` par rareté). À égalité, la plus
+  rare passe, ce qui laisse voir une légendaire quand il y a peu de tenues. Il y a au plus `OUTFIT_LEGENDARY_MAX`
+  légendaires. Écarté : le hachage du nom modulo le nombre de tenues, qui redistribuait tout à chaque tenue ajoutée et
+  ne laissait parfois aucun bot en origine.
 - **DebugPlaytest** : `BotManager.setPaused(true)` pendant un run retire tous les bots (forcé, même en duel), rétablis
   à la fin (compteur, plusieurs runs possibles).
 
