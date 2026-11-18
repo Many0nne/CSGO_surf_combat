@@ -801,7 +801,22 @@ de la boîte de la tête → rien).
 courtes et épaules de gorille, le rig en blocs place hanches à 40 % et épaules très larges ; passer à un rig aux
 proportions humaines : refusé (« on reste dans le style rig 15 ») ; traits d'encre façon comics sur les contours
 (variante `encre`, gardée dans le module) : LISSE préférée ; tenues « métiers » (cordiste, jockey…) : pas assez
-marquées, l'utilisateur veut des corps changés en matière (chrome, biomécanique).
+marquées ; série de corps changés en matière sur le pipeline de MERCURE (NÉOPRÈNE, PLÂTRE, BRONZE, PORCELAINE, CHITINE,
+PR fermées) : la piste « matière » était une méprise, seul MERCURE la garde.
+
+**Direction (18/11/2026) : des agents dans l'esprit de CS, en blocs.** Archétypes de soldats et d'équipements
+(démineur, combinaison chimique, combattant du désert, maintien de l'ordre…), sans insigne, nom ni copie d'un agent
+existant ; pas de tenue commune pour l'instant. Grosses épaulières et casques permis, en décor (hors collision et
+balles). Chaque tenue a sa propre silhouette, validée sur une planche de concept avant toute fabrication :
+
+1. Gabarit : `blender -b --factory-startup --python tools/outfits/gabarit_rig.py -- <dossier>` (rig nu de face,
+   de trois quarts, de dos ; le script rend le chemin absolu, Blender résolvant sinon un chemin relatif depuis `C:\`) puis
+   `uv run tools/outfits/gabarit_planche.py <dossier>` → `gabarit_rig.png` (1536 × 1024).
+2. Brief : `assets/outfits/concepts/<tenue>.brief.md` (en anglais, à coller avec le gabarit dans un modèle d'image
+   externe) : règles du corps en blocs (pas d'anatomie, pas de doigts, ajouts limités), palette fermée de 3 ou 4
+   couleurs, une forme signature par tenue, ni texte ni insigne ni arme.
+3. L'utilisateur rapporte la planche (`assets/outfits/concepts/<tenue>.png`) et la valide ; seulement ensuite,
+   fabrication : volumes ajoutés modélisés dans Blender, matières cuites par `r15_bake.py`.
 
 ## Ajouter un couteau
 
