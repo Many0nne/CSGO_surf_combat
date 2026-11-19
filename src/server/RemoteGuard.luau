@@ -226,6 +226,8 @@ RemoteGuard.RULES = {
 	[N.REQUEST_SPAWN] = { rate = 1, burst = 3, args = {} },
 	-- Point de contrôle d'un parcours rejoué (#379) ; droit de mesurer vérifié ensuite (PerfRules.canUse)
 	[N.PERF_ROUTE_TELEPORT] = { rate = 2, burst = 4, args = { RemoteGuard.vector3() } },
+	-- Enregistreur de partie (#582) : lancer ou arrêter ; droit vérifié ensuite (PerfRules.canUse)
+	[N.MATCH_RECORD] = { rate = 1, burst = 4, args = { RemoteGuard.enum({ "start", "stop" }) } },
 	[N.LEAVE_ROUND] = { rate = 1, burst = 3, args = {} },
 	-- Rejoindre ou quitter l'entraînement (#345) : un clic ; demande en double répondue « busy » (TrainingService)
 	[N.TRAINING] = {

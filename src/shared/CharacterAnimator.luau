@@ -112,6 +112,7 @@ function CharacterAnimator.new(humanoid: Humanoid)
 		groundedSince = nil :: number?,
 		owned = {} :: { [AnimationTrack]: boolean },
 		playedConn = nil :: RBXScriptConnection?,
+		timeScale = 1,
 	}, CharacterAnimator)
 	return self
 end
@@ -196,17 +197,23 @@ function CharacterAnimator:update(input: AnimInput)
 	local track = self:_getTrack(animator, id)
 	if track ~= self.currentTrack then
 		if self.currentTrack then
-			self.currentTrack:Stop(CharacterConfig.FADE_TIME)
+			self.currentTrack:Stop(CharacterConfig.FADE_TIME / self.timeScale)
 		end
 		track.Priority = if IDLE_PRIORITY_STATES[state]
 			then Enum.AnimationPriority.Idle
 			else Enum.AnimationPriority.Movement
-		track:Play(CharacterConfig.FADE_TIME)
+		track:Play(CharacterConfig.FADE_TIME / self.timeScale)
 		self.currentTrack = track
 		self.currentId = id
 	end
 	self.state = state
-	track:AdjustSpeed(CharacterAnimator.playbackSpeed(state, input.speed))
+	track:AdjustSpeed(CharacterAnimator.playbackSpeed(state, input.speed) * self.timeScale)
+end
+
+-- Cette méthode permet de ralentir ou d'accélérer les pistes (lecture et fondus) lorsqu'un rejeu tourne à une autre
+-- vitesse que le temps réel (enregistreur de partie au ralenti, #582) ; 1 par défaut.
+function CharacterAnimator:setTimeScale(scale: number)
+	self.timeScale = if scale > 0 then scale else 1
 end
 
 -- Cette méthode permet de renvoyer l'état d'animation joué lorsqu'un autre système (ex. arme 3P, #5) en dépend.
