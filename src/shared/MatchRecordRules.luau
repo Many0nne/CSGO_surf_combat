@@ -53,7 +53,17 @@ MatchRecordRules.Event = table.freeze({
 	OUTFIT = "outfit", -- id ; o : tenue (#521, absente : d'origine)
 	ACTION = "act", -- id ; a : action de l'arme 3P (Shoot, Reload, Equip)
 	INSPECT = "inspect", -- id (joueur qui enregistre, client)
+	-- Rejeu fidèle (#586) :
+	FX = "fx", -- id ; s : effet de tir équipé (style de ShotEffectRules, absent : rayon ordinaire)
+	HIT = "hit", -- id (joueur qui enregistre) ; kl : touche mortelle, hs : tête (hitmarker et son de touche)
+	AMMO = "ammo", -- id (joueur qui enregistre, client) ; m : chargeur, r : réserve (absents : arme sans chargeur)
+	STEP = "step", -- id ; ld : atterrissage (sinon pas)
+	ROUND = "round", -- id 0 ; s : état de la manche (idle, active, result), l : temps restant (s)
+	SCORES = "scores", -- id 0 ; sc : classement { { i = id, n = nom, b = bot, k = kills, d = morts } }
 })
+
+-- État de la manche dont le timer avance (RoundManager)
+MatchRecordRules.ROUND_ACTIVE = "active"
 
 local KNOWN_EVENTS: { [string]: boolean } = {}
 for _, kind in MatchRecordRules.Event do
@@ -74,7 +84,19 @@ export type Event = {
 	dz: number?,
 	o: string?,
 	a: string?,
+	s: string?,
+	kl: boolean?,
+	m: number?,
+	r: number?,
+	ld: boolean?,
+	l: number?,
+	sc: { ScoreEntry }?,
 }
+
+-- Ligne du classement d'un évènement SCORES (clés courtes : JSON plus court)
+export type ScoreEntry = { i: number, n: string, b: boolean?, k: number, d: number }
+-- Score tel que le HUD de manche le lit (ScoreRules.Score)
+export type Score = { id: number, name: string, isBot: boolean?, kills: number, deaths: number }
 
 -- Morceau tel qu'il circule (JSON) : série et évènements relatifs à t0
 export type Chunk = {
@@ -523,6 +545,122 @@ function MatchRecordRules.summary(match: Match): { [string]: any }
 		povRows = #match.pov.t,
 		missing = #match.missing,
 	}
+end
+
+-- ── HUD et sons du rejeu (#586) ────────────────────────────────────────────
+
+-- Cette méthode permet de ranger le classement de la manche dans un évènement SCORES lorsqu'il est relevé (serveur) :
+-- lignes triées par id (comparables d'un relevé à l'autre), puis une clé texte qui change avec le classement.
+function MatchRecordRules.encodeScores(scores: { [number]: Score }): ({ ScoreEntry }, string)
+	local list: { ScoreEntry } = {}
+	for _, score in scores do
+		if type(score) == "table" and MathRules.isFinite(score.id) then
+			table.insert(list, {
+				i = score.id,
+				n = tostring(score.name),
+				b = if score.isBot then true else nil,
+				k = math.floor(tonumber(score.kills) or 0),
+				d = math.floor(tonumber(score.deaths) or 0),
+			})
+		end
+	end
+	table.sort(list, function(a, b)
+		return a.i < b.i
+	end)
+	local parts = table.create(#list)
+	for i, entry in list do
+		parts[i] = string.format("%d:%d:%d", entry.i, entry.k, entry.d)
+	end
+	return list, table.concat(parts, ",")
+end
+
+-- Cette méthode permet de relire le classement d'un évènement SCORES lorsque le rejeu y arrive, au format du HUD de
+-- manche (par id) ; `rename` remplace le nom d'un participant (joueur qui enregistrait → joueur de Studio, son rang
+-- étant cherché par nom). Lignes abîmées écartées.
+function MatchRecordRules.decodeScores(list: any, rename: { [number]: string }?): { [number]: Score }
+	local out: { [number]: Score } = {}
+	if type(list) ~= "table" then
+		return out
+	end
+	for _, entry in list do
+		if type(entry) == "table" and MathRules.isFinite(entry.i) and type(entry.n) == "string" then
+			local id = entry.i :: number
+			out[id] = {
+				id = id,
+				name = if rename and rename[id] then rename[id] else entry.n,
+				isBot = entry.b == true,
+				kills = tonumber(entry.k) or 0,
+				deaths = tonumber(entry.d) or 0,
+			}
+		end
+	end
+	return out
+end
+
+-- Réserve infinie notée dans un évènement AMMO (JSON n'a pas d'infini)
+MatchRecordRules.INFINITE_RESERVE = -1
+
+-- Cette méthode permet de ranger une quantité de munitions dans un évènement AMMO lorsqu'elle est notée : infini → -1,
+-- valeur non finie ou absente → nil.
+function MatchRecordRules.encodeAmmo(value: number?): number?
+	if value == math.huge then
+		return MatchRecordRules.INFINITE_RESERVE
+	end
+	return if MathRules.isFinite(value) then value else nil
+end
+
+-- Cette méthode permet de relire une quantité de munitions d'un évènement AMMO lorsque le compteur du rejeu l'affiche.
+function MatchRecordRules.decodeAmmo(value: any): number?
+	if value == MatchRecordRules.INFINITE_RESERVE then
+		return math.huge
+	end
+	return if MathRules.isFinite(value) then value else nil
+end
+
+-- Cette méthode permet de lire le temps restant affiché (s entières, comme le serveur l'annonce) à l'instant t du rejeu
+-- d'après le dernier évènement ROUND : il décompte pendant une manche active, il est figé sinon ; nil sans évènement.
+function MatchRecordRules.timeLeftAt(round: Event?, t: number): number?
+	if not round or not MathRules.isFinite(round.l) then
+		return nil
+	end
+	local left = round.l :: number
+	if round.s == MatchRecordRules.ROUND_ACTIVE then
+		left -= math.max(0, t - round.t)
+	end
+	return math.max(0, math.ceil(left - 1e-6))
+end
+
+-- Cette méthode permet de compter la série de kills du joueur `me` à l'instant t (inclus) lorsque le rejeu démarre en
+-- cours de partie : kills depuis sa dernière mort ou la dernière sortie de manche active, comme l'annonceur
+-- (KillAnnouncer, remis à 0 hors de IN_ROUND).
+function MatchRecordRules.streakAt(match: Match, me: number?, t: number): number
+	local E = MatchRecordRules.Event
+	local streak = 0
+	for _, event in match.events do
+		if event.t > t then
+			break
+		end
+		if event.k == E.KILL and event.id == me and event.victim ~= me then
+			streak += 1
+		elseif
+			(event.k == E.DEATH and event.id == me)
+			or (event.k == E.ROUND and event.s ~= MatchRecordRules.ROUND_ACTIVE)
+		then
+			streak = 0
+		end
+	end
+	return streak
+end
+
+-- Cette méthode permet de mesurer la vitesse horizontale (studs/s) d'une piste à l'instant t lorsque le compteur de
+-- vitesse du rejeu se met à jour : écart des positions (colonnes 1 à 3) sur `window` s ; 0 hors de la piste.
+function MatchRecordRules.speedAt(track: Track, t: number, window: number, a: { number }, b: { number }): number
+	local okB = MatchRecordRules.sample(track, t, b)
+	local okA = MatchRecordRules.sample(track, t - window, a)
+	if not (okA and okB) or window <= 0 then
+		return 0
+	end
+	return Vector3.new(b[1] - a[1], 0, b[3] - a[3]).Magnitude / window
 end
 
 return MatchRecordRules

@@ -7,6 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
 local UIKit = require(script.Parent.UIKit)
+local EffectClock = require(script.Parent.Parent.systems.game.EffectClock)
 
 local SHARD_IMAGE = "rbxassetid://85649397588861"
 local SHARD_RATIO = 48 / 128 -- hauteur / longueur de l'image
@@ -97,7 +98,7 @@ function HitShards.burst(shards: Shards, color: Color3, spread: number, hold: nu
 		end
 	end
 	if hold > 0 then
-		task.delay(hold, fadeOut)
+		EffectClock.delay(hold, fadeOut)
 	else
 		fadeOut()
 	end

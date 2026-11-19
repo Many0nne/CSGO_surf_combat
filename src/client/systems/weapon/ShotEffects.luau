@@ -28,6 +28,7 @@ local ScopeSystem = require(script.Parent.ScopeSystem)
 local LocalInventory = require(script.Parent.Parent.inventory.LocalInventory)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 local WeaponThirdPerson = require(ReplicatedStorage.Shared.WeaponThirdPerson)
+local EffectClock = require(script.Parent.Parent.game.EffectClock)
 
 local ShotEffects = {}
 
@@ -81,6 +82,7 @@ end
 local function flash(muzzle: Attachment)
 	local effect = muzzle:FindFirstChild(ShotEffectRules.MUZZLE_EFFECT)
 	if effect and effect:IsA("ParticleEmitter") then
+		effect.TimeScale = EffectClock.scale()
 		effect:Emit(ShotEffectRules.MUZZLE_EMIT_COUNT)
 	end
 end
@@ -99,7 +101,7 @@ end
 -- franges de TREMPE défilent), et de détruire ceux dont la vie est finie (ou déjà détruits par Debris) ; la boucle
 -- s'arrête quand il n'en reste plus.
 local function step()
-	local now = os.clock()
+	local now = EffectClock.now()
 	local camera = workspace.CurrentCamera
 	local eye = camera and camera.CFrame.Position
 	for i = #tracers, 1, -1 do
@@ -196,15 +198,15 @@ local function spawnTracer(start: Vector3, finish: Vector3, style: string?)
 		beam = beam,
 		start = start,
 		finish = finish,
-		born = os.clock(),
+		born = EffectClock.now(),
 		fade = 0,
 		life = life,
 		temperSeed = temperSeed,
 		balise = balise,
 	})
 	local maxLife = life + ShotEffectRules.LIFETIME_MARGIN
-	Debris:AddItem(a0, maxLife)
-	Debris:AddItem(a1, maxLife)
+	Debris:AddItem(a0, EffectClock.real(maxLife))
+	Debris:AddItem(a1, EffectClock.real(maxLife))
 	if not stepConn then
 		stepConn = RunService.Heartbeat:Connect(timedStep)
 	end
@@ -233,7 +235,8 @@ end
 -- canon (repli : l'origine du tir) jusqu'à endpoint, s'il n'est pas trop court ; camera : arrêté avant elle (autres) ;
 -- style : effet de tir équipé (#566 : éclair à la place du rayon s'il reste de la place, rayon TREMPE, ou explosion
 -- PAN ! en plus du rayon ; `isLocal` : tir du joueur local, explosion réduite et absente à la lunette ; `panAhead`,
--- `panWidth` : avance et largeur de l'explosion, pour une démonstration).
+-- `panWidth` : avance et largeur de l'explosion, pour une démonstration ; `scopedOverride` : lunette du tireur local
+-- rejoué (#586), à la place de celle du joueur).
 local function show(
 	muzzle: Attachment?,
 	origin: Vector3,
@@ -242,8 +245,10 @@ local function show(
 	style: string?,
 	isLocal: boolean?,
 	panAhead: number?,
-	panWidth: number?
+	panWidth: number?,
+	scopedOverride: boolean?
 )
+	local scoped = if scopedOverride ~= nil then scopedOverride else ScopeSystem.getLevel() > 0
 	if muzzle then
 		flash(muzzle)
 	end
@@ -253,7 +258,7 @@ local function show(
 		start, finish = ShotEffectRules.clipNearCamera(start, endpoint, camera)
 	end
 	if start and finish then
-		if style == "pan" and not (isLocal and ScopeSystem.getLevel() > 0) then
+		if style == "pan" and not (isLocal and scoped) then
 			-- Le rayon sort du bord de l'explosion : tracé par-dessus, il barrerait l'onomatopée
 			local center, width = PanBurst.spawn(start, finish, isLocal == true, panAhead, panWidth)
 			if center then
@@ -264,15 +269,12 @@ local function show(
 			return
 		end
 		-- CIRCUIT : la piste remplace le rayon s'il reste de la place (pastille du canon absente à la lunette)
-		if
-			style == "circuit"
-			and CircuitTrace.spawn(start, finish, isLocal == true, not (isLocal and ScopeSystem.getLevel() > 0))
-		then
+		if style == "circuit" and CircuitTrace.spawn(start, finish, isLocal == true, not (isLocal and scoped)) then
 			return
 		end
 		if style == "balise" then
 			-- Boucle au canon (pas à la lunette : elle serait dans l'œil du tireur) et chevrons à l'impact
-			BaliseMarks.spawn(start, finish, isLocal == true, not (isLocal and ScopeSystem.getLevel() > 0))
+			BaliseMarks.spawn(start, finish, isLocal == true, not (isLocal and scoped))
 		end
 		spawnTracer(start, finish, style)
 	end
@@ -311,15 +313,18 @@ function ShotEffects.muzzleOf(weapon: Instance?): Attachment?
 	return muzzleOf(weapon)
 end
 
--- Cette méthode permet de montrer la flamme et le rayon d'un tir rejoué par le clip de la partie (#499) lorsqu'il y
--- arrive : canon de `weapon` (viewmodel ou arme 3P d'un figurant), rayon jusqu'au point que touche origin + direction
--- dans la map (`ignore` écarté) ; `camera` : arrêté avant elle (tirs des figurants).
+-- Cette méthode permet de montrer la flamme et le rayon d'un tir rejoué par le clip de la partie (#499) ou le rejeu d'une
+-- partie (#582) lorsqu'il y arrive : canon de `weapon` (viewmodel ou arme 3P d'un figurant), rayon jusqu'au point que
+-- touche origin + direction dans la map (`ignore` écarté) ; `camera` : arrêté avant elle (tirs des figurants) ; `style` :
+-- effet de tir du tireur (#586, nil : rayon ordinaire) ; `scoped` : tir vu par le tireur (sans `camera`) à la lunette.
 function ShotEffects.playReplay(
 	weapon: Instance?,
 	origin: Vector3,
 	direction: Vector3,
 	ignore: { Instance },
-	camera: Vector3?
+	camera: Vector3?,
+	style: string?,
+	scoped: boolean?
 )
 	if direction.Magnitude < 1e-6 then
 		return
@@ -335,8 +340,7 @@ function ShotEffects.playReplay(
 	local range = WeaponConfig.HITSCAN_RANGE
 	local result = workspace:Raycast(origin, direction.Unit * range, remoteRayParams)
 	local endpoint = ShotEffectRules.endpoint(origin, direction, result and result.Position, range)
-	-- Le clip ne garde pas l'effet de tir de ses tireurs : rayon ordinaire
-	show(muzzle, origin, endpoint, camera, nil)
+	show(muzzle, origin, endpoint, camera, style, camera == nil, nil, nil, scoped == true)
 end
 
 -- Cette méthode permet de montrer les effets d'un tir relayé par le serveur lorsqu'il arrive : flamme sur l'arme 3P

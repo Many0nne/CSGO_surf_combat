@@ -11,6 +11,7 @@ local RunService = game:GetService("RunService")
 
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local ShotEffectRules = require(ReplicatedStorage.Shared.ShotEffectRules)
+local EffectClock = require(script.Parent.Parent.game.EffectClock)
 
 local PanBurst = {}
 
@@ -132,7 +133,7 @@ end
 -- Cette méthode permet d'animer les explosions en cours lorsqu'une frame passe, de ranger celles dont la vie est finie,
 -- et d'arrêter la boucle sans explosion.
 local function step()
-	local now = os.clock()
+	local now = EffectClock.now()
 	local camera = workspace.CurrentCamera
 	local eye = if camera then camera.CFrame.Position else Vector3.zero
 	local active = 0
@@ -193,7 +194,7 @@ function PanBurst.spawn(
 	burst.width = size
 	burst.tilt = math.rad((math.random() * 2 - 1) * ShotEffectRules.PAN_TILT)
 	burst.side = if math.random() < 0.5 then -1 else 1
-	burst.born = os.clock()
+	burst.born = EffectClock.now()
 	local camera = workspace.CurrentCamera
 	pose(burst, 0, if camera then camera.CFrame.Position else position + Vector3.zAxis)
 	if not stepConn then

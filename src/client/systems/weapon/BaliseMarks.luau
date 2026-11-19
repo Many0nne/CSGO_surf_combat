@@ -8,6 +8,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local ShotEffectRules = require(ReplicatedStorage.Shared.ShotEffectRules)
+local EffectClock = require(script.Parent.Parent.game.EffectClock)
 
 local BaliseMarks = {}
 
@@ -106,9 +107,10 @@ function BaliseMarks.spawn(start: Vector3, finish: Vector3, isLocal: boolean, wi
 		slot.ringPart.CFrame = CFrame.new(start)
 		slot.ring.Size = grow(size[1], size[2])
 		slot.ring.Rotation = NumberRange.new(math.random() * 360)
+		slot.ring.TimeScale = EffectClock.scale()
 		slot.ring:Emit(1)
 	end
-	task.delay(ShotEffectRules.BALISE_UNROLL, function()
+	EffectClock.delay(ShotEffectRules.BALISE_UNROLL, function()
 		if not slot.markPart.Parent then
 			return
 		end
@@ -117,6 +119,7 @@ function BaliseMarks.spawn(start: Vector3, finish: Vector3, isLocal: boolean, wi
 		local full = ShotEffectRules.baliseMarkSize(distance)
 		slot.markPart.CFrame = CFrame.new(finish)
 		slot.mark.Size = grow(full * ShotEffectRules.BALISE_MARK_OPEN, full)
+		slot.mark.TimeScale = EffectClock.scale()
 		slot.mark:Emit(1)
 	end)
 end

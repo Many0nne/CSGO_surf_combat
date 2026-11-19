@@ -10,6 +10,7 @@ local WeaponSkins = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChil
 local CharacterAppearance = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("CharacterAppearance"))
 local Locale = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Locale"))
 local HUDRules = require(script.Parent.HUDRules)
+local EffectClock = require(script.Parent.Parent.systems.game.EffectClock)
 
 local C = UITheme.Colors
 local Motion = UITheme.Motion
@@ -384,7 +385,8 @@ end
 
 -- Cette méthode permet de lancer une interpolation et de la renvoyer lorsqu'un élément doit s'animer.
 function UIKit.tween(inst: Instance, info: TweenInfo, goals: { [string]: any }): Tween
-	local tween = TweenService:Create(inst, info, goals)
+	-- Rejeu filmé au ralenti (#586) : interpolations du HUD à la vitesse du rejeu
+	local tween = TweenService:Create(inst, EffectClock.tweenInfo(info), goals)
 	tween:Play()
 	return tween
 end

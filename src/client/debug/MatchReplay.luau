@@ -1,7 +1,10 @@
 -- Rejeu d'un enregistrement de partie (#582), Studio seulement : la partie enregistrée dans le jeu publié
 -- (debug/MatchRecorder) est reconstruite dans la vraie map pour être filmée (docs/promo.md, « Enregistreur de
 -- partie »). Chaque participant devient un figurant (rig du jeu, tenue, arme 3P et skin, animation de déplacement,
--- actions de l'arme), les tirs ont leur rayon et leur son, les morts leur ragdoll, les kills leur ligne au kill feed.
+-- actions de l'arme), les tirs ont leur effet de tir équipé, leur son et leur douille, les morts leur ragdoll, les kills
+-- leur ligne au kill feed ; les pas s'entendent. En vue du joueur (#586), le HUD de jeu est celui de la partie (viseur,
+-- hitmarker et son de touche, munitions, vitesse, barre d'armes, timer, rang, série de kills) et l'annonceur parle.
+-- Pas de musique pendant le rejeu (elle se choisit au montage).
 -- Piloté par attributs du joueur, posés en contexte Server (répliqués) :
 -- - `MatchReplay` = nom de l'enregistrement (recordings/<Nom>/), publié par server/MatchReplayService ; nil arrête ;
 -- - `MatchReplayRun` (nombre, à changer) relance avec les réglages courants, sans recharger ;
@@ -10,14 +13,19 @@
 --   "side" (de côté, perpendiculaire à la course), "front" (devant), "orbit" (tour lent), "track" (posée en
 --   `MatchReplayCameraPosition`, suit la cible), "fixed" (`MatchReplayCameraCFrame`) ;
 -- - `MatchReplayTarget` (id, défaut : le joueur qui enregistrait), `MatchReplayDistance`, `MatchReplayHeight`,
---   `MatchReplayFov` (plans hors POV), `MatchReplayHud` (false : sans kill feed).
--- Au ralenti, positions, caméra, pistes d'animation, actions 3P, kill feed et chute des corps (gravité × vitesse²)
--- suivent le temps du rejeu ; rayons des tirs et sons restent en temps réel. Écran noir SLATE s avant et TAIL s après
--- la lecture : l'outil de capture (tools/matchrec/capture.py) y cale le début, la fin et le cadre du viewport.
+--   `MatchReplayFov` (plans hors POV), `MatchReplayHud` (false : sans interface de jeu) ;
+-- - `MatchReplayAudio` (true : passe du son, à vitesse 1) : bip BEEP_LEAD s avant la lecture, sur lequel l'outil de
+--   capture cale le son ; la lecture part exactement BEEP_LEAD s après le bip.
+-- Au ralenti, positions, caméra, pistes d'animation, actions 3P, kill feed, chute des corps (gravité × vitesse²),
+-- effets de tir, douilles et interpolations du HUD (EffectClock) suivent le temps du rejeu ; seuls les sons restent en
+-- temps réel (le son se prend dans une seconde passe à vitesse 1). Écran noir SLATE s avant et TAIL s après la
+-- lecture : l'outil de capture (tools/matchrec/capture.py) y cale le début, la fin et le cadre du viewport.
+local ContentProvider = game:GetService("ContentProvider")
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local StarterGui = game:GetService("StarterGui")
+local SoundService = game:GetService("SoundService")
 local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -30,16 +38,28 @@ local ShotSoundRules = require(Shared:WaitForChild("ShotSoundRules"))
 local UITheme = require(Shared:WaitForChild("UITheme"))
 local WeaponConfig = require(Shared:WaitForChild("WeaponConfig"))
 local WeaponThirdPerson = require(Shared:WaitForChild("WeaponThirdPerson"))
-local AnimationSoundSystem = require(script.Parent.Parent.systems.weapon.AnimationSoundSystem)
+local FootstepSounds = require(script.Parent.Parent.systems.audio.FootstepSounds)
+local HitSound = require(script.Parent.Parent.systems.audio.HitSound)
 local DeathRagdoll = require(script.Parent.Parent.systems.game.DeathRagdoll)
+local EffectClock = require(script.Parent.Parent.systems.game.EffectClock)
+local KillAnnouncer = require(script.Parent.Parent.systems.game.KillAnnouncer)
 local MenuScene = require(script.Parent.Parent.systems.game.MenuScene)
-local ShotEffects = require(script.Parent.Parent.systems.weapon.ShotEffects)
 local SoundChannels = require(script.Parent.Parent.systems.settings.SoundChannels)
+local AnimationSoundSystem = require(script.Parent.Parent.systems.weapon.AnimationSoundSystem)
+local CasingEjection = require(script.Parent.Parent.systems.weapon.CasingEjection)
+local ShotEffects = require(script.Parent.Parent.systems.weapon.ShotEffects)
 local ViewmodelClone = require(script.Parent.Parent.systems.weapon.ViewmodelClone)
+local AmmoCounter = require(script.Parent.Parent.ui.AmmoCounter)
 local HUDRules = require(script.Parent.Parent.ui.HUDRules)
+local HUDState = require(script.Parent.Parent.ui.HUDState)
+local Hitmarker = require(script.Parent.Parent.ui.Hitmarker)
 local KillFeed = require(script.Parent.Parent.ui.KillFeed)
+local MenuCursor = require(script.Parent.Parent.ui.MenuCursor)
+local RoundHUD = require(script.Parent.Parent.ui.RoundHUD)
 local ScopeOverlay = require(script.Parent.Parent.ui.ScopeOverlay)
+local Speedometer = require(script.Parent.Parent.ui.Speedometer)
 local UIKit = require(script.Parent.Parent.ui.UIKit)
+local WeaponBar = require(script.Parent.Parent.ui.WeaponBar)
 
 local E = MatchRecordRules.Event
 
@@ -58,6 +78,7 @@ local A = {
 	cframe = "MatchReplayCameraCFrame",
 	position = "MatchReplayCameraPosition",
 	hud = "MatchReplayHud",
+	audio = "MatchReplayAudio",
 }
 
 local DATA_NAME = "MatchReplayData"
@@ -81,6 +102,23 @@ local HEADING_RATE = 5
 local FEED_REFRESH = 2
 local FEED_MARGIN_RIGHT = 20
 local FEED_MARGIN_TOP = 12
+-- Passe du son (#586) : bip de synchro joué BEEP_LEAD s (réelles) avant la lecture, pendant l'écran noir ; même valeur
+-- dans tools/matchrec/capture.py
+local BEEP_LEAD = 0.5
+local BEEP_SOUND = "rbxasset://sounds/volume_slider.ogg"
+-- Écart (s du rejeu) sur lequel la vitesse du compteur est mesurée
+local SPEED_WINDOW = 0.1
+-- Interface du jeu laissée affichée pendant un rejeu en vue du joueur avec HUD (ScreenGui par nom) ; le reste est caché
+local HUD_GUIS = table.freeze({
+	AmmoCounter = true,
+	Crosshair = true,
+	Hitmarker = true,
+	RoundHUD = true,
+	RoundTimerOverMenu = true,
+	ScopeOverlay = true,
+	Speedometer = true,
+	WeaponBar = true,
+})
 
 type Event = MatchRecordRules.Event
 type Held = ViewmodelClone.Held
@@ -101,6 +139,8 @@ type Actor = {
 	action: string?,
 	actionAt: number?,
 	weapon: string?, -- clé outil|skin de l'arme 3P posée
+	style: string?, -- effet de tir équipé (#586)
+	feet: number, -- hauteur de la racine au-dessus des pieds (pas entendus aux pieds)
 }
 
 type Session = {
@@ -133,13 +173,27 @@ type Session = {
 	conns: { RBXScriptConnection },
 	sounds: { Instance },
 	disabledGuis: { ScreenGui },
+	playerGui: PlayerGui,
 	gravity: number,
 	menuWasRunning: boolean, -- scène 3D du menu arrêtée pendant le rejeu (elle tient la caméra), relancée ensuite
+	cursorWasShown: boolean, -- souris imposée par le menu (MenuCursor) retirée pendant le rejeu, rendue ensuite
 	frames: number,
 	finished: boolean,
+	-- Rejeu fidèle (#586)
+	gameHud: boolean, -- HUD de jeu piloté (vue du joueur, MatchReplayHud non coupé)
+	audio: boolean, -- passe du son : bip de synchro, lecture calée dessus
+	beepAt: number?, -- os.clock du bip
+	myStyle: string?, -- effet de tir du joueur qui enregistrait
+	myTools: { string }, -- armes du joueur qui enregistrait (barre d'armes)
+	round: Event?, -- dernier état de la manche (timer)
+	shownLeft: number?,
+	alive: boolean?, -- joueur rejoué en vie (HUD de jeu affiché)
+	speedA: { number },
+	speedB: { number },
 }
 
 local MatchReplay = {}
+local hideOtherGuis: (Session) -> ()
 
 local player: Player
 local cache: { name: string, match: MatchRecordRules.Match }? = nil
@@ -280,6 +334,7 @@ local function buildActor(session: Session, rig: Model, info: MatchRecordRules.A
 		visible = true,
 		hint = 0,
 		velocity = Vector3.zero,
+		feet = root.Size.Y / 2 + (if humanoid then humanoid.HipHeight else 2),
 	}
 	if actor.animator then
 		actor.animator:setTimeScale(session.speed)
@@ -338,6 +393,19 @@ local function playHeld(session: Session, name: string, lethal: boolean?)
 	local sounds = cfg and cfg.AnimationSounds and cfg.AnimationSounds[trackName] or {}
 	for _, conn in AnimationSoundSystem.connectSoundMarkers(track, held.model, sounds) do
 		table.insert(session.conns, conn)
+	end
+	if name == "Shoot" then
+		-- Douille à l'ouverture de culasse, comme en partie ; branchement rendu à l'arrêt de la piste (tir suivant)
+		local casing = CasingEjection.connectMarker(track, held.model)
+		if casing then
+			table.insert(session.conns, casing)
+			table.insert(
+				session.conns,
+				track.Stopped:Once(function()
+					casing:Disconnect()
+				end)
+			)
+		end
 	end
 	if name == "Shoot" and cfg and cfg.IsMelee then
 		local conn = AnimationSoundSystem.connectSoundMarker(
@@ -436,8 +504,67 @@ local function drawFeed(session: Session, force: boolean)
 	end
 end
 
+-- Cette méthode permet de lister les armes du joueur qui enregistrait (barre d'armes du HUD) lorsque le rejeu se prépare :
+-- toutes celles qu'il sort pendant l'enregistrement.
+local function toolsOf(match: MatchRecordRules.Match, me: number?): { string }
+	local seen: { [string]: boolean } = {}
+	local tools = {}
+	for _, event in MatchRecordRules.eventsOf(match, E.EQUIP, me) do
+		if event.tool and not seen[event.tool] then
+			seen[event.tool] = true
+			table.insert(tools, event.tool)
+		end
+	end
+	return tools
+end
+
+-- Cette méthode permet de montrer ou cacher le HUD de jeu du rejeu lorsque le joueur rejoué apparaît ou meurt
+-- (comme en partie : rien de ce HUD pendant la mort).
+local function setGameHudAlive(session: Session, alive: boolean)
+	if not session.gameHud or session.alive == alive then
+		return
+	end
+	session.alive = alive
+	HUDState.setReplay(alive)
+	Speedometer.setVisible(alive)
+	WeaponBar.setVisible(alive)
+	AmmoCounter.setVisible(alive)
+end
+
+-- Cette méthode permet de mettre à jour le compteur de vitesse et le timer du HUD de jeu lorsqu'une image du rejeu est
+-- rendue.
+local function updateGameHud(session: Session)
+	if not session.gameHud then
+		return
+	end
+	if session.alive then
+		Speedometer.update(
+			MatchRecordRules.speedAt(session.match.pov, session.t, SPEED_WINDOW, session.speedA, session.speedB)
+		)
+	end
+	local left = MatchRecordRules.timeLeftAt(session.round, session.t)
+	if left and left ~= session.shownLeft then
+		session.shownLeft = left
+		RoundHUD.updateTimer(left)
+	end
+end
+
+-- Cette méthode permet de faire entendre le pas d'un participant lorsque le rejeu y arrive : les siens sans position en
+-- vue du joueur, ceux des autres en 3D à leurs pieds (figurant visible).
+local function playStep(session: Session, event: Event)
+	local kind = if event.ld then "land" else "step"
+	if event.id == session.me and session.mode == "pov" then
+		FootstepSounds.playOwn(kind)
+		return
+	end
+	local actor = session.actors[event.id]
+	if actor and actor.visible then
+		FootstepSounds.playAt(actor.root.Position - Vector3.new(0, actor.feet, 0), kind)
+	end
+end
+
 -- Cette méthode permet de rejouer un évènement lorsque le rejeu y arrive ; `live` faux au démarrage en cours de partie
--- (seuls l'arme, la tenue et l'action en cours sont posées, sans son ni effet).
+-- (seuls l'arme, la tenue, l'effet de tir, l'action en cours et l'état du HUD sont posés, sans son ni effet).
 local function handleEvent(session: Session, event: Event, live: boolean)
 	local actor = session.actors[event.id]
 	local mine = event.id == session.me
@@ -448,6 +575,33 @@ local function handleEvent(session: Session, event: Event, live: boolean)
 		end
 		if mine then
 			equipHeld(session, event.tool, event.skin, live)
+			if session.gameHud then
+				WeaponBar.setReplay({ tools = session.myTools, equipped = event.tool })
+			end
+		end
+	elseif event.k == E.FX then
+		if actor then
+			actor.style = event.s
+		end
+		if mine then
+			session.myStyle = event.s
+		end
+	elseif event.k == E.AMMO then
+		if mine and session.gameHud then
+			AmmoCounter.setReplay({
+				ammo = MatchRecordRules.decodeAmmo(event.m),
+				reserve = MatchRecordRules.decodeAmmo(event.r),
+			})
+		end
+	elseif event.k == E.ROUND then
+		session.round = event
+		if live and event.s ~= MatchRecordRules.ROUND_ACTIVE then
+			KillAnnouncer.reset()
+		end
+	elseif event.k == E.SCORES then
+		if session.gameHud then
+			local rename = if session.me then { [session.me] = player.Name } else nil
+			RoundHUD.updateScores(MatchRecordRules.decodeScores(event.sc, rename) :: any)
 		end
 	elseif event.k == E.OUTFIT then
 		if actor then
@@ -471,6 +625,15 @@ local function handleEvent(session: Session, event: Event, live: boolean)
 		end
 	elseif not live then
 		return
+	elseif event.k == E.HIT then
+		if mine then
+			HitSound.play()
+			if session.gameHud and session.alive then
+				Hitmarker.show(event.kl == true, event.hs == true)
+			end
+		end
+	elseif event.k == E.STEP then
+		playStep(session, event)
 	elseif event.k == E.SHOT then
 		local dir = MatchRecordRules.directionOf(event)
 		local camera = workspace.CurrentCamera
@@ -485,14 +648,28 @@ local function handleEvent(session: Session, event: Event, live: boolean)
 			playHeld(session, "Shoot", lethal)
 			if dir then
 				local model = if session.viewmodel then session.viewmodel.model else nil
-				ShotEffects.playReplay(model, camera.CFrame.Position, dir, { session.folder, camera })
+				ShotEffects.playReplay(
+					model,
+					camera.CFrame.Position,
+					dir,
+					{ session.folder, camera },
+					nil,
+					session.myStyle,
+					session.scoped
+				)
 			end
 		elseif actor and actor.visible then
 			playActorShot(session, actor)
+			local gun = actor.model:FindFirstChild(WeaponThirdPerson.MODEL_NAME)
 			if dir and camera then
-				local gun = actor.model:FindFirstChild(WeaponThirdPerson.MODEL_NAME)
 				local eye = actor.root.Position + Vector3.new(0, CameraConfig.CAM_HEIGHT_STAND - 0.4, 0)
-				ShotEffects.playReplay(gun, eye, dir, { session.folder, camera }, camera.CFrame.Position)
+				ShotEffects.playReplay(gun, eye, dir, { session.folder, camera }, camera.CFrame.Position, actor.style)
+			end
+			-- Douille de l'arme 3P à l'ouverture de culasse (délai de l'arme, au temps du rejeu)
+			local weaponName = gun and gun:GetAttribute("WeaponName")
+			local cfg = type(weaponName) == "string" and WeaponConfig.Weapons[weaponName]
+			if cfg and type(cfg.CasingEjectDelay) == "number" then
+				EffectClock.delay(cfg.CasingEjectDelay, CasingEjection.ejectReplay, gun)
 			end
 		end
 	elseif event.k == E.INSPECT then
@@ -522,10 +699,17 @@ local function handleEvent(session: Session, event: Event, live: boolean)
 			setVisible(actor, false)
 			actor.downAt = event.t
 		end
-		if mine and session.viewmodel then
-			ViewmodelClone.setVisible(session.viewmodel, false)
+		if mine then
+			KillAnnouncer.reset()
+			if session.viewmodel then
+				ViewmodelClone.setVisible(session.viewmodel, false)
+			end
 		end
 	elseif event.k == E.KILL then
+		if mine and event.victim ~= session.me then
+			-- Annonceur et série de kills (crâne du HUD), comme pour le joueur qui tue
+			KillAnnouncer.onKill(event.hs == true)
+		end
 		local killer = session.match.actors[event.id]
 		local victim = event.victim and session.match.actors[event.victim]
 		table.insert(session.feedLines, {
@@ -740,11 +924,32 @@ local function cleanup(session: Session)
 		ScopeOverlay.setVisible(false)
 	end
 	workspace.Gravity = session.gravity
+	EffectClock.setScale(1)
+	SoundChannels.setMusicMuted(false)
+	KillAnnouncer.reset()
+	if session.gameHud then
+		-- HUD de jeu rendu à l'état du client (le rejeu se lance depuis le menu : masqué)
+		local show = HUDRules.gameHudVisible(HUDState.get().gameState)
+		HUDState.setReplay(false)
+		AmmoCounter.setReplay(nil)
+		WeaponBar.setReplay(nil)
+		Speedometer.update(0)
+		Speedometer.setVisible(show)
+		WeaponBar.setVisible(show)
+		AmmoCounter.setVisible(show)
+		RoundHUD.updateScores({})
+		if not show then
+			RoundHUD.hide()
+		end
+	end
 	for _, gui in session.disabledGuis do
 		gui.Enabled = true
 	end
 	pcall(StarterGui.SetCoreGuiEnabled, StarterGui, Enum.CoreGuiType.All, true)
 	UserInputService.MouseIconEnabled = true
+	if session.cursorWasShown then
+		MenuCursor.show()
+	end
 	local camera = workspace.CurrentCamera
 	if camera then
 		camera.FieldOfView = CameraConfig.DEFAULT_FOV
@@ -754,15 +959,51 @@ local function cleanup(session: Session)
 	end
 end
 
+-- Cette méthode permet de cacher l'interface du jeu hors HUD de jeu lorsque le rejeu démarre puis à chaque image : un
+-- écran abonné à HUDState (chat, affichage des touches) se réaffiche quand le rejeu change cet état. Rendue au nettoyage.
+function hideOtherGuis(session: Session)
+	for _, child in session.playerGui:GetChildren() do
+		local kept = child == session.gui
+			or child.Name == "ScopeOverlay"
+			or (session.gameHud and HUD_GUIS[child.Name] == true)
+		if child:IsA("ScreenGui") and child.Enabled and not kept then
+			child.Enabled = false
+			if not table.find(session.disabledGuis, child) then
+				table.insert(session.disabledGuis, child)
+			end
+		end
+	end
+end
+
 -- Cette méthode permet de rendre une image du rejeu lorsqu'il tourne : écran noir de départ, lecture (temps du rejeu
 -- = temps réel × vitesse), écran noir de fin, puis nettoyage.
 local function render(session: Session, dt: number)
 	local now = os.clock()
+	if session.phase ~= "tail" then
+		hideOtherGuis(session)
+	end
 	if session.phase == "slate" then
+		if session.audio and not session.beepAt and now - session.phaseAt >= SLATE - BEEP_LEAD then
+			-- Repère du son : la lecture part BEEP_LEAD s après ce bip (tools/matchrec/capture.py, passe du son)
+			local beep = Instance.new("Sound")
+			beep.Name = "MatchReplayBeep"
+			beep.SoundId = BEEP_SOUND
+			beep.Volume = 1
+			beep.Parent = SoundService
+			beep:Play()
+			table.insert(session.sounds, beep)
+			session.beepAt = now
+		end
 		if now - session.phaseAt >= SLATE then
 			session.phase = "play"
 			session.phaseAt = now
 			session.cover.Visible = false
+			if session.beepAt then
+				-- Instant 0 de la lecture calé sur le bip ; cette image le dépasse déjà de quelques ms
+				session.t = session.from
+					+ math.max(0, now - session.beepAt - BEEP_LEAD) * session.speed
+					- dt * session.speed
+			end
 			workspace.Gravity = session.gravity * session.speed * session.speed
 			log(
 				string.format(
@@ -796,6 +1037,8 @@ local function render(session: Session, dt: number)
 	end
 	placeActors(session, dtReplay)
 	placeCamera(session, dtReplay)
+	setGameHudAlive(session, session.povVisible)
+	updateGameHud(session)
 	drawFeed(session, false)
 	if session.t >= session.to then
 		local real = now - session.phaseAt
@@ -812,6 +1055,7 @@ local function render(session: Session, dt: number)
 		session.phaseAt = now
 		session.cover.Visible = true
 		workspace.Gravity = session.gravity
+		setGameHudAlive(session, false)
 	end
 end
 
@@ -887,6 +1131,7 @@ local function start(name: string)
 	local mode = player:GetAttribute(A.camera)
 	mode = if type(mode) == "string" and mode ~= "" then mode else "pov"
 	local hud = player:GetAttribute(A.hud) ~= false
+	local gameHud = hud and mode == "pov"
 	local gui, cover, feed = buildGui(hud)
 	local folder = Instance.new("Folder")
 	folder.Name = "MatchReplay"
@@ -921,24 +1166,42 @@ local function start(name: string)
 		conns = {},
 		sounds = {},
 		disabledGuis = {},
+		playerGui = playerGui,
 		gravity = workspace.Gravity,
 		menuWasRunning = MenuScene.isRunning(),
+		cursorWasShown = MenuCursor.isShown(),
 		frames = 0,
 		finished = false,
+		gameHud = gameHud,
+		audio = player:GetAttribute(A.audio) == true,
+		beepAt = nil,
+		myStyle = nil,
+		myTools = toolsOf(match, match.me),
+		round = nil,
+		shownLeft = nil,
+		alive = nil,
+		speedA = table.create(4, 0),
+		speedB = table.create(4, 0),
 	}
 	current = session
+	if session.audio then
+		task.spawn(function()
+			local sample = Instance.new("Sound")
+			sample.SoundId = BEEP_SOUND
+			pcall(ContentProvider.PreloadAsync, ContentProvider, { sample })
+		end)
+	end
+	-- Effets et HUD à la vitesse du rejeu, musique coupée (#586)
+	EffectClock.setScale(speed)
+	SoundChannels.setMusicMuted(true)
 	if session.menuWasRunning then
 		MenuScene.stop()
 	end
-	-- Interface du jeu et du moteur cachée pendant le rejeu (rendue au nettoyage)
-	for _, child in playerGui:GetChildren() do
-		if child:IsA("ScreenGui") and child.Enabled and child.Name ~= "ScopeOverlay" then
-			child.Enabled = false
-			table.insert(session.disabledGuis, child)
-		end
-	end
+	hideOtherGuis(session)
 	gui.Parent = playerGui
 	pcall(StarterGui.SetCoreGuiEnabled, StarterGui, Enum.CoreGuiType.All, false)
+	-- Le menu réimpose la souris à chaque image : sinon elle reste filmée au milieu de l'image
+	MenuCursor.hide()
 	UserInputService.MouseIconEnabled = false
 	for _, info in match.actors do
 		local actor = buildActor(session, rig, info)
@@ -946,7 +1209,16 @@ local function start(name: string)
 			session.actors[info.id] = actor
 		end
 	end
-	-- État en place au point de départ : armes, tenues, actions (sans son ni effet)
+	if gameHud then
+		-- HUD de jeu de la partie, piloté par les évènements (créé au premier spawn en partie : peut manquer au menu)
+		Speedometer.init()
+		RoundHUD.show()
+		setGameHudAlive(session, false)
+		WeaponBar.setReplay({ tools = session.myTools, equipped = nil })
+		AmmoCounter.setReplay({})
+	end
+	KillAnnouncer.restore(MatchRecordRules.streakAt(match, match.me, from))
+	-- État en place au point de départ : armes, tenues, effets, actions, HUD (sans son ni effet)
 	local events = match.events
 	while session.nextEvent <= #events and events[session.nextEvent].t <= from do
 		handleEvent(session, events[session.nextEvent], false)

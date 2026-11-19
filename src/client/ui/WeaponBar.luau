@@ -13,6 +13,7 @@ local UserInputService = game:GetService("UserInputService")
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
 local PlayerSettings = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("PlayerSettings"))
 local UIKit = require(script.Parent.UIKit)
+local EffectClock = require(script.Parent.Parent.systems.game.EffectClock)
 local HUDRules = require(script.Parent.HUDRules)
 local InGameMenu = require(script.Parent.InGameMenu)
 local LocalSettings = require(script.Parent.Parent.systems.settings.LocalSettings)
@@ -58,12 +59,25 @@ local hudVisible = false -- règle « HUD de jeu visible » (HUDRules), posée p
 local faded = false -- barre masquée après le délai sans changement d'arme
 local fadeToken = 0
 local watchConns: { RBXScriptConnection } = {}
+-- Armes montrées par le rejeu d'une partie (#586) à la place du sac : modèles d'outils (ReplicatedStorage.Tools) par
+-- nom et arme en main ; nil hors rejeu
+local replay: { tools: { [string]: Tool }, equipped: string? }? = nil
 
 -- Cette méthode permet de lister les outils du joueur (sac et main) dans l'ordre des emplacements lorsque la barre se met à jour.
 local function collectTools(): { Tool }
 	local byName: { [string]: Tool } = {}
 	local names = {}
-	for _, container in { player:FindFirstChildOfClass("Backpack"), player.Character } do
+	if replay then
+		for name, tool in replay.tools do
+			byName[name] = tool
+			table.insert(names, name)
+		end
+	end
+	local containers: { Instance? } = {}
+	if not replay then
+		containers = { player:FindFirstChildOfClass("Backpack"), player.Character }
+	end
+	for _, container in containers do
 		if container then
 			for _, child in container:GetChildren() do
 				if child:IsA("Tool") and not byName[child.Name] then
@@ -82,6 +96,9 @@ end
 
 -- Cette méthode permet de renvoyer l'outil en main lorsque la barre doit savoir quel emplacement est actif.
 local function equippedTool(): Tool?
+	if replay then
+		return if replay.equipped then replay.tools[replay.equipped] else nil
+	end
 	local character = player.Character
 	return character and character:FindFirstChildOfClass("Tool")
 end
@@ -229,7 +246,7 @@ local function wake(animate: boolean)
 	faded = false
 	applySlots(animate)
 	UIKit.tween(scrim, Motion.Hover, { ImageTransparency = SCRIM_SHOWN })
-	task.delay(HUDRules.WEAPON_BAR_FADE_DELAY, function()
+	EffectClock.delay(HUDRules.WEAPON_BAR_FADE_DELAY, function()
 		if token ~= fadeToken then
 			return
 		end
@@ -262,7 +279,7 @@ local function refresh()
 		end
 		bar.Size = UDim2.fromOffset(SLOT_SIZE.X, math.max(#tools, 1) * SLOT_STEP)
 	end
-	gui.Enabled = hudVisible and alive and #slots > 0
+	gui.Enabled = hudVisible and (alive or replay ~= nil) and #slots > 0
 	wake(not rebuilt)
 end
 
@@ -353,6 +370,39 @@ end
 
 -- Cette méthode permet de masquer la barre hors partie lorsque le HUD de jeu change de visibilité ; elle ne se masque pas
 -- seule à la fin d'un round, car le serveur détruit le personnage sans déclencher CharacterRemoving.
+-- Cette méthode permet au rejeu d'une partie (#586) de montrer les armes du joueur enregistré (noms des outils, arme en
+-- main) lorsqu'il en change ; nil rend la barre au sac du joueur (fin du rejeu).
+function WeaponBar.setReplay(state: { tools: { string }, equipped: string? }?)
+	if state then
+		local folder = ReplicatedStorage:FindFirstChild("Tools")
+		local tools: { [string]: Tool } = {}
+		for _, name in state.tools do
+			local tool = folder and folder:FindFirstChild(name)
+			if tool and tool:IsA("Tool") then
+				tools[name] = tool
+			end
+		end
+		local same = replay ~= nil
+		if replay then
+			for name in tools do
+				same = same and replay.tools[name] ~= nil
+			end
+			for name in replay.tools do
+				same = same and tools[name] ~= nil
+			end
+		end
+		if same and replay and replay.equipped == state.equipped then
+			return
+		end
+		replay = { tools = tools, equipped = state.equipped }
+	else
+		replay = nil
+	end
+	if gui then
+		refresh()
+	end
+end
+
 function WeaponBar.setVisible(show: boolean)
 	hudVisible = show
 	refresh()

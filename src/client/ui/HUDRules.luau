@@ -206,17 +206,22 @@ function HUDRules.gameHudVisible(state: string): boolean
 end
 
 -- État du HUD (#223), tenu par HUDState : état client (GameStateController), menu en partie ouvert (InGameMenu, Réglages
--- compris), lunette affichée (ScopeOverlay). La mort est l'état client DEAD.
+-- compris), lunette affichée (ScopeOverlay), HUD de jeu d'un rejeu (#586, joueur rejoué en vie). La mort est l'état
+-- client DEAD.
 export type HUDSnapshot = {
 	gameState: string,
 	menuOpen: boolean,
 	scoped: boolean,
+	replay: boolean?,
 }
 
 -- Cette méthode permet de savoir si le crosshair de la visée simplifiée (#195) est affiché lorsque le réglage ou l'état du
 -- HUD changent : réglage actif, HUD de jeu visible (donc ni menu principal, ni mort, ni résultat), ni lunette ni menu ouvert.
 function HUDRules.crosshairVisible(hud: HUDSnapshot, enabled: boolean): boolean
-	return enabled and HUDRules.gameHudVisible(hud.gameState) and not hud.scoped and not hud.menuOpen
+	return enabled
+		and (HUDRules.gameHudVisible(hud.gameState) or hud.replay == true)
+		and not hud.scoped
+		and not hud.menuOpen
 end
 
 -- Affichage des touches (#197) : une entrée par action, placée sur une grille (colonne, rangée, largeur en cases).

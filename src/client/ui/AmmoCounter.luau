@@ -33,15 +33,22 @@ local reserveShadow: TextLabel
 local hudVisible = false -- règle « HUD de jeu visible » (HUDRules), posée par GameStateController
 local lastAmmo: number? = nil
 local lastReserve: number? = nil
+-- Munitions montrées par le rejeu d'une partie (#586) à la place de celles de l'arme en main ; nil hors rejeu
+local replay: { ammo: number?, reserve: number? }? = nil
 
 -- Cette méthode permet de mettre à jour les textes et la visibilité lorsque les munitions de l'arme en main changent.
 local function update()
 	if not gui then
 		return
 	end
-	local character = player.Character
-	local tool = character and character:FindFirstChildOfClass("Tool")
-	local ammo, reserve = WeaponSystem.getAmmo(tool)
+	local ammo, reserve
+	if replay then
+		ammo, reserve = replay.ammo, replay.reserve
+	else
+		local character = player.Character
+		local tool = character and character:FindFirstChildOfClass("Tool")
+		ammo, reserve = WeaponSystem.getAmmo(tool)
+	end
 	gui.Enabled = hudVisible and ammo ~= nil
 	if ammo == lastAmmo and reserve == lastReserve then
 		return
@@ -60,6 +67,13 @@ end
 -- Cette méthode permet de masquer le compteur hors partie lorsque le HUD de jeu change de visibilité.
 function AmmoCounter.setVisible(show: boolean)
 	hudVisible = show
+	update()
+end
+
+-- Cette méthode permet au rejeu d'une partie (#586) de montrer les munitions enregistrées lorsqu'elles changent ; nil rend
+-- le compteur à l'arme en main (fin du rejeu).
+function AmmoCounter.setReplay(state: { ammo: number?, reserve: number? }?)
+	replay = state
 	update()
 end
 
