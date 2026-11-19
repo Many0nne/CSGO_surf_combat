@@ -70,6 +70,10 @@ Protocol.Names = {
 	-- Rejeu d'un parcours de mesure (#379) : client → serveur (position du point de contrôle) ; le serveur y replace le
 	-- personnage par une correction (CharacterSync.teleport). Refusé sauf dans Studio ou pour le créateur du jeu publié
 	PERF_ROUTE_TELEPORT = "PerfRouteTeleport",
+	-- Enregistreur de partie (#582), cf. server/MatchRecorder : client → serveur ("start", "stop"), puis serveur → client
+	-- qui enregistre ("started", "chunk" avec un morceau JSON, "stopped", "refused"). Refusé sauf dans Studio ou pour le
+	-- créateur du jeu publié (PerfRules.canUse)
+	MATCH_RECORD = "MatchRecord",
 	-- Mode entraînement (#345), cf. server/TrainingService : client → serveur ("join" depuis APPRENDRE, "leave" depuis le
 	-- serveur d'entraînement), puis serveur → client (réponse, TrainingRules.Status) ; le serveur téléporte le joueur
 	TRAINING = "Training",

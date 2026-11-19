@@ -183,3 +183,75 @@ Faites par ChatGPT à partir du kit (`assets/promo/kit/`), exportées en 1920×1
 | 2 | `assets/promo/thumbnails/2-m9-cuir-de-cordoue.png` | Inspection de la M9 CUIR DE CORDOUE, lame vers le soleil, toits de Dizzy et grue | Nuages en volume ; motifs de la lame redessinés (paon, fleurs, garde et manche fidèles) |
 
 Reste à faire (#524) : trois miniatures (vitesse du bunny hop, AWP CISELURE en inspection, autre idée de ChatGPT).
+
+## Enregistreur de partie (#582)
+
+Les outils de capture (OBS) font laguer le jeu quand on joue et qu'on filme en même temps. On joue donc sans filmer
+dans le jeu publié, la partie est notée en données, puis reconstruite dans Studio et filmée au ralenti.
+
+**Ce qui est noté.** Le serveur (`src/server/MatchRecorder.luau`) relève la racine de chaque participant en vie
+(joueurs et bots) à 20 Hz, la tenue portée et les actions de l'arme 3P (tir, recharge, sortie : attributs de
+`WeaponThirdPerson`) ; il reçoit de `HighlightService` (observateur, même hors manche active) les tirs acceptés, les
+armes sorties avec leur skin, les kills et les morts. Le client qui enregistre (`src/client/debug/MatchRecorder.luau`)
+ajoute sa caméra à 30 Hz (position, hauteur des yeux, lacet, tangage, champ de vision, lunette) et ses inspections.
+Format et lecture : `src/shared/MatchRecordRules.luau` (testé). Taille mesurée : 65 Ko pour 36 s avec 5 participants
+(~550 Ko pour 5 min).
+
+**Transport.** Un morceau toutes les 5 s, envoyé au client qui enregistre (remote `MatchRecord`, JSON), recopié dans la
+console en lignes `[MatchRec <enregistrement> <morceau> i/n]` : il finit dans le journal Roblox du poste qui joue.
+Rien n'est stocké côté Roblox (pas de DataStore) : la clé Open Cloud du dépôt n'a que les droits d'assets, et l'accès
+de Studio aux API ferait écrire les playtests dans les vraies données.
+
+**Enregistrer** (compte créateur dans le jeu publié, ou Studio) :
+
+1. En partie, **F8** : bandeau rouge « ● REC 0:00 · F8 POUR ARRÊTER » en haut de l'écran. Jouer (20 min au plus).
+2. **F8** pour arrêter : « ENREGISTREMENT <numéro> · durée · n MORCEAUX ».
+3. Récupérer le journal : `%LOCALAPPDATA%\Roblox\logs\*_Player_*_last.log` sur le poste qui a joué (le plus récent),
+   ou tout le dossier. Dans Studio, F8 est un raccourci de l'éditeur : attribut joueur `MatchRecord` = true / false
+   (contexte Server) ; le journal est alors `*_Studio_*_last.log`.
+
+**Extraire** : `lune run tools/matchrec/extract.luau <journal ou dossier> <Nom>` écrit `recordings/<Nom>/` (un `.txt`
+par morceau, non versionné), liste les enregistrements trouvés (le plus récent par défaut, ou donner son numéro en 3e
+argument), les participants, les kills et les morceaux manquants. Rojo le synchronise dans
+`ServerStorage.MatchRecordings.<Nom>` (retiré au démarrage hors de Studio).
+
+**Rejouer** (Studio, playtest lancé, joueur resté au menu : pas de manche, pas de bots ; attributs du joueur en
+contexte Server) :
+
+```lua
+local p = game.Players:GetPlayers()[1]
+p:SetAttribute("MatchReplayCamera", "side")   -- pov (défaut), follow, side, front, orbit, track, fixed
+p:SetAttribute("MatchReplayTarget", -5)       -- id du participant suivi (défaut : le joueur qui enregistrait)
+p:SetAttribute("MatchReplayFrom", 6)          -- début et fin (s depuis le début de l'enregistrement)
+p:SetAttribute("MatchReplayTo", 12)
+p:SetAttribute("MatchReplaySpeed", 0.25)      -- vitesse du rejeu
+p:SetAttribute("MatchReplay", "Essai")        -- charge et lance ; nil arrête
+p:SetAttribute("MatchReplayRun", os.clock())  -- relance avec les réglages courants
+```
+
+Réglages des plans hors POV : `MatchReplayDistance` (10), `MatchReplayHeight` (3), `MatchReplayFov` (70),
+`MatchReplayCameraPosition` (Vector3, plan `track`), `MatchReplayCameraCFrame` (plan `fixed`), `MatchReplayHud` (false :
+sans kill feed). Les ids des participants sont listés par l'extraction (bots négatifs, joueurs = UserId). La scène 3D du
+menu, l'interface du jeu et celle de Roblox sont coupées pendant le rejeu, puis rendues.
+
+**Filmer** : `uv run tools/matchrec/capture.py <sortie.mp4> --speed 0.25`, lancé avant `MatchReplayRun`, Studio au
+premier plan. Le rejeu s'ouvre et se ferme sur un écran noir : l'outil y trouve le cadre du viewport, le début et la
+fin, place chaque capture à l'instant du rejeu qu'elle montre et écrit une vidéo à 60 i/s à vitesse normale.
+Mesuré sur `Essai` (plan de côté, 6 s de rejeu au quart de la vitesse, fenêtre Studio 1920x1080, viewport
+1614x758) : 19 captures par seconde réelle, soit 77 par seconde de rejeu, vidéo de 359 images à 60 i/s sans aucune image
+en double tant que la scène bouge. Les boutons Roblox du coin haut gauche (logo, menu, micro) restent affichés en
+playtest et aucune API ne les cache (`SetCoreGuiEnabled`, `TopbarEnabled` essayés) : `--cut-top 80` retire le haut du
+viewport, et un recadrage vertical (TikTok) centré les exclut de lui-même.
+
+**Limites.**
+
+- Au ralenti, positions, caméra, pistes d'animation (personnages et viewmodel), actions 3P, kill feed et chute des
+  corps (gravité × vitesse², élan × vitesse) suivent le temps du rejeu. Les rayons des tirs et les sons restent en temps
+  réel : rayons 4 fois plus brefs une fois la vidéo remise à vitesse normale, sons inutilisables (la capture n'a pas de
+  son ; l'utilisateur pose une musique sur TikTok).
+- Rayon ordinaire pour tous les tirs (comme le clip de fin de manche, #568) ; pas de HUD (vie, munitions) en vue du joueur,
+  seulement le kill feed et la lunette.
+- Les autres participants sont relevés à 20 Hz sur le serveur : écart d'interpolation mesuré sur `Essai` (bots en
+  mouvement, relevés retirés un sur deux, donc au pas de 0,1 s) : 0,47 stud en moyenne, 1,5 au p95. Le joueur qui
+  enregistre est rejoué sur sa caméra à 30 Hz. Kills et morts : instants du serveur, au millième.
+- La cible `DebugDummy` du helper de playtest n'est pas un participant : absente du rejeu.

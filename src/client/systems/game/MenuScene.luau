@@ -525,6 +525,11 @@ function MenuScene.start()
 	connection = RunService.RenderStepped:Connect(PerfMarkers.wrap("menu 3D", update))
 end
 
+-- Cette méthode permet de savoir si la scène tourne lorsqu'un autre système prend l'écran (rejeu de partie, #582).
+function MenuScene.isRunning(): boolean
+	return running
+end
+
 -- Cette méthode permet de savoir si la scène est construite et ses textures chargées lorsque l'écran de chargement du
 -- lancement (#480) décide de se lever.
 function MenuScene.isReady(): boolean

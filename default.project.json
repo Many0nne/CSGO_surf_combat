@@ -43,6 +43,12 @@
       "$path": "assets/rbx/Materials"
     },
 
+    "ServerStorage": {
+      "MatchRecordings": {
+        "$path": "recordings"
+      }
+    },
+
     "StarterPlayer": {
       "$properties": {
         "DevTouchMovementMode": "Scriptable"

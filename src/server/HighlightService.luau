@@ -44,6 +44,15 @@ export type Deps = {
 	isAirborne: (Vector3) -> boolean,
 }
 
+-- Observateur des évènements de combat (enregistreur de partie, #582) : prévenu de chaque tir, arme, kill et mort reçus,
+-- même hors manche active et sur un serveur d'entraînement (avant les filtres du clip).
+export type Observer = {
+	onShot: (Participant, number, Vector3, boolean) -> (),
+	onEquip: (Participant, string?, string?) -> (),
+	onKill: (Participant, Participant, { weapon: string?, headshot: boolean, at: number? }) -> (),
+	onDeath: (Participant) -> (),
+}
+
 type Meta = { direction: Vector3?, tool: string?, weapon: string, skinId: string? }
 type Pending = { id: number, start: number, stop: number, done: (rows: { HighlightClipRules.CameraRow }?) -> () }
 
@@ -54,6 +63,7 @@ local HighlightService = {}
 HighlightService.AIR_PROBE = 4.5
 
 local deps: Deps? = nil
+local observer: Observer? = nil
 local tracks: { [number]: HighlightClipRules.Track } = {}
 local shots: { [number]: HighlightClipRules.ShotRing } = {}
 local equips: { [number]: HighlightClipRules.EquipRing } = {}
@@ -189,8 +199,7 @@ end
 -- Cette méthode permet de retenir un tir accepté (instant serveur ; `aimed` faux pour un coup de couteau, dont la
 -- direction est celle de la racine) lorsqu'il est relayé ou porté.
 function HighlightService.noteShot(participant: Participant, direction: Vector3, shotTime: number?, aimed: boolean?)
-	local d = deps
-	if not d or not d.enabled or not d.isActive() or not MathRules.isFiniteVector3(direction) then
+	if not MathRules.isFiniteVector3(direction) then
 		return
 	end
 	local now = workspace:GetServerTimeNow()
@@ -198,6 +207,13 @@ function HighlightService.noteShot(participant: Participant, direction: Vector3,
 	local t = if MathRules.isFinite(shotTime) and math.abs((shotTime :: number) - now) < 1
 		then shotTime :: number
 		else now
+	if observer then
+		observer.onShot(participant, t, direction, aimed ~= false)
+	end
+	local d = deps
+	if not d or not d.enabled or not d.isActive() then
+		return
+	end
 	local ring = shots[participant.id]
 	if not ring then
 		ring = HighlightClipRules.newShotRing()
@@ -209,6 +225,9 @@ end
 -- Cette méthode permet de retenir l'arme sortie (outil, skin) ou rangée (outil nil) d'un participant lorsque le serveur
 -- la voit arriver dans son personnage ou en partir ; aussi hors manche active (l'arme en main au début du clip).
 function HighlightService.noteEquip(participant: Participant, toolName: string?, skinId: string?)
+	if observer then
+		observer.onEquip(participant, toolName, skinId)
+	end
 	local d = deps
 	if not d or not d.enabled then
 		return
@@ -230,6 +249,9 @@ end
 -- Cette méthode permet de noter la mort d'un participant (série remise à zéro, apparence gardée tant que le personnage
 -- existe) lorsqu'il meurt, avant la destruction de son corps.
 function HighlightService.onDeath(participant: Participant, char: Model)
+	if observer then
+		observer.onDeath(participant)
+	end
 	local d = deps
 	if not d or not d.enabled or not d.isActive() then
 		return
@@ -441,6 +463,9 @@ function HighlightService.onKill(
 	killer: Participant,
 	hit: { weapon: string?, headshot: boolean, at: number? }
 )
+	if observer then
+		observer.onKill(victim, killer, hit)
+	end
 	local d = deps
 	if not d or not d.enabled or not d.isActive() then
 		return
@@ -551,6 +576,12 @@ function HighlightService.reset()
 		published:Destroy()
 		published = nil
 	end
+end
+
+-- Cette méthode permet de brancher un observateur des tirs, armes, kills et morts lorsque l'enregistreur de partie
+-- démarre (#582) ; nil le retire.
+function HighlightService.setObserver(value: Observer?)
+	observer = value
 end
 
 -- Cette méthode permet de brancher le clip de la partie lorsque le serveur démarre (sauf entraînement : `enabled` faux,

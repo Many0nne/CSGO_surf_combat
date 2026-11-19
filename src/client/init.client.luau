@@ -43,6 +43,8 @@ local PerfOverlay = require(script.debug.PerfOverlay)
 local PerfBench = require(script.debug.PerfBench)
 local PerfRecorder = require(script.debug.PerfRecorder)
 local PerfReplay = require(script.debug.PerfReplay)
+local MatchRecorder = require(script.debug.MatchRecorder)
+local MatchReplay = require(script.debug.MatchReplay)
 local InputModule = require(script.input.InputModule)
 local HighlightRecorder = require(script.systems.highlight.HighlightRecorder)
 local AnalyticsClient = require(script.systems.analytics.AnalyticsClient)
@@ -228,6 +230,10 @@ PerfBench.init(player)
 -- Parcours enregistré puis rejoué pour mesurer en mouvement (#379) : attributs joueur `PerfRecord` (puis F7) et
 -- `PerfRun`, mêmes droits que l'overlay (cf. docs/performance.md, « Parcours rejoué »).
 PerfRecorder.init({ player = player, fpsCamera = FPSCamera, movement = MovementController, input = InputModule })
+-- Enregistreur de partie (#582) : F8 enregistre toute la partie (Studio ou créateur du jeu publié) ; rejeu dans Studio
+-- par l'attribut joueur `MatchReplay` (cf. docs/promo.md, « Enregistreur de partie »).
+MatchRecorder.init({ player = player, fpsCamera = FPSCamera, input = InputModule })
+MatchReplay.init(player)
 PerfReplay.init({
 	player = player,
 	fpsCamera = FPSCamera,

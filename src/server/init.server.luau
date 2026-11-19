@@ -47,6 +47,8 @@ local AimStats = require(script.AimStats)
 local TrainingService = require(script.TrainingService)
 local PartyService = require(script.PartyService)
 local HighlightService = require(script.HighlightService)
+local MatchRecorder = require(script.MatchRecorder)
+local MatchReplayService = require(script.MatchReplayService)
 local Analytics = require(script.analytics.Analytics)
 
 -- Serveur d'entraînement (#345, serveur réservé de la même place) : ni bots, ni armes, ni stats, manche sans fin
@@ -123,6 +125,8 @@ buyCreditPackRmt.Name = N.BUY_CREDIT_PACK
 buyCreditPackRmt.Parent = ReplicatedStorage
 -- Clip de la partie (#499) : tampon caméra demandé au tireur d'un kill record, renvoyé une fois (HighlightService)
 local highlightPovRmt = makeRemote(N.HIGHLIGHT_POV)
+-- Enregistreur de partie (#582) : lancer, arrêter, morceaux envoyés au joueur qui enregistre (MatchRecorder)
+local matchRecordRmt = makeRemote(N.MATCH_RECORD)
 -- Analytics (#527) : écran courant du client (menu, shop, en partie), pour les funnels et l'endroit d'un départ
 local analyticsScreenRmt = makeRemote(N.ANALYTICS_SCREEN)
 
@@ -900,6 +904,20 @@ HighlightService.init({
 		return sightCast(pos, Vector3.new(0, -HighlightService.AIR_PROBE, 0)) == nil
 	end,
 })
+
+-- Enregistreur de partie (#582) : toute la partie notée pour être rejouée dans Studio (Studio ou créateur du jeu
+-- publié) ; tirs, armes, kills et morts relayés par le clip de la partie, même hors manche active
+MatchRecorder.init({
+	remote = matchRecordRmt,
+	-- Cette méthode permet de lire le skin équipé sur l'outil d'un joueur lorsque l'enregistrement démarre (bots : d'origine).
+	skinOf = function(participant, toolName)
+		local player = participant.player
+		return if player then InventoryRules.skinOfTool(InventoryStore.equipped(player), toolName) else nil
+	end,
+})
+HighlightService.setObserver(MatchRecorder)
+-- Rejeu d'un enregistrement dans Studio (#582) : ServerStorage.MatchRecordings retiré hors de Studio
+MatchReplayService.init()
 
 hitscanRmt.OnServerEvent:Connect(function(player, targetCharacter, hitPart, origin, direction, hitPos, shotTime)
 	if not CheatLog.admit(player, N.HITSCAN_DAMAGE, targetCharacter, hitPart, origin, direction, hitPos, shotTime) then

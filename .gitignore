@@ -21,3 +21,7 @@ __pycache__/
 
 # Vidéos de référence pour les animations (index dans docs/animations.md)
 /references/
+
+# Enregistrements de partie extraits des journaux (#582, tools/matchrec/extract.luau) : propres au poste qui filme
+/recordings/*
+!/recordings/README.md
