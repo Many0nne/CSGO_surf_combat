@@ -70,6 +70,14 @@ function SoundChannels.footstep(sound: Sound): Sound
 	return sound
 end
 
+-- Cette méthode permet de couper la musique de fond (canal « Music ») lorsque le rejeu d'une partie démarre (#586 : le
+-- son des rushes n'a que les sons de jeu, la musique se choisit au montage), puis de la rendre à sa fin.
+function SoundChannels.setMusicMuted(muted: boolean)
+	if started then
+		music.Volume = if muted then 0 else 1
+	end
+end
+
 -- Cette méthode permet de créer les groupes, d'y rattacher les sons existants et futurs, et de suivre les réglages
 -- lorsque le client démarre.
 function SoundChannels.init()

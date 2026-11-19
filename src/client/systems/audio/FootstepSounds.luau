@@ -52,16 +52,9 @@ local function makeSound(kind: FootstepRules.Kind, volume: number): Sound
 	return SoundChannels.footstep(sound)
 end
 
--- Cette méthode permet de jouer le pas d'un autre relayé par le serveur lorsqu'il arrive : en 3D aux pieds de son
--- auteur, détruit à la fin de sa lecture.
-local function onFootstep(source: any, feetPos: any, kind: any)
-	if typeof(feetPos) ~= "Vector3" or (kind ~= "step" and kind ~= "land") then
-		return
-	end
-	local localPlayer = Players.LocalPlayer
-	if not FootstepRules.shouldPlay(source, localPlayer and localPlayer.Character, getState(), prune()) then
-		return
-	end
+-- Cette méthode permet de jouer le pas d'un autre en 3D aux pieds de son auteur lorsqu'il est entendu (relayé par le
+-- serveur, ou rejoué par le rejeu d'une partie, #586) ; détruit à la fin de sa lecture.
+function FootstepSounds.playAt(feetPos: Vector3, kind: FootstepRules.Kind)
 	local anchor = Instance.new("Attachment")
 	anchor.Name = INSTANCE_NAME
 	anchor.WorldPosition = feetPos
@@ -79,13 +72,31 @@ local function onFootstep(source: any, feetPos: any, kind: any)
 	Debris:AddItem(anchor, FootstepRules.LIFETIME)
 end
 
--- Cette méthode permet de jouer ses propres pas lorsque le mouvement local avance d'un tick (dt) : au sol ou non,
--- vitesse horizontale ; son sans position, plus bas que celui d'un autre.
-function FootstepSounds.onTick(dt: number, grounded: boolean, speed: number)
-	local kind = FootstepRules.update(ownState, dt, grounded, speed * dt)
-	if not kind then
+-- Cette méthode permet de jouer le pas d'un autre relayé par le serveur lorsqu'il arrive, s'il doit être entendu
+-- (FootstepRules.shouldPlay).
+local function onFootstep(source: any, feetPos: any, kind: any)
+	if typeof(feetPos) ~= "Vector3" or (kind ~= "step" and kind ~= "land") then
 		return
 	end
+	local localPlayer = Players.LocalPlayer
+	if not FootstepRules.shouldPlay(source, localPlayer and localPlayer.Character, getState(), prune()) then
+		return
+	end
+	FootstepSounds.playAt(feetPos, kind)
+end
+
+-- Cette méthode permet de jouer ses propres pas lorsque le mouvement local avance d'un tick (dt) : au sol ou non,
+-- vitesse horizontale.
+function FootstepSounds.onTick(dt: number, grounded: boolean, speed: number)
+	local kind = FootstepRules.update(ownState, dt, grounded, speed * dt)
+	if kind then
+		FootstepSounds.playOwn(kind)
+	end
+end
+
+-- Cette méthode permet de jouer un de ses propres pas lorsqu'il est fait (ou rejoué en vue du joueur, #586) : son sans
+-- position, plus bas que celui d'un autre.
+function FootstepSounds.playOwn(kind: FootstepRules.Kind)
 	local sound = makeSound(kind, FootstepRules.OWN_VOLUME)
 	sound.Parent = SoundService
 	sound.Ended:Once(function()

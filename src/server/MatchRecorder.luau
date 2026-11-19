@@ -5,7 +5,11 @@
 -- - tenue portée (#521) et action de l'arme 3P (tir, recharge, sortie : attributs de WeaponThirdPerson), relevées à
 --   chaque échantillon et notées quand elles changent ;
 -- - tirs acceptés, armes sorties et leur skin, kills, morts : relayés par HighlightService (observateur), même hors
---   manche active et sur un serveur d'entraînement.
+--   manche active et sur un serveur d'entraînement ;
+-- - rejeu fidèle (#586) : effet de tir équipé de chaque joueur (relevé comme la tenue), pas et atterrissages
+--   (FootstepService, branché par init), touches confirmées au joueur qui enregistre (hitmarker), état et timer de la
+--   manche et classement (RoundManager, relevés toutes les ROUND_SPACING s, notés au début de chaque morceau et quand
+--   ils changent).
 -- Un morceau part au client qui enregistre toutes les CHUNK_SECONDS (remote MatchRecord, JSON) : il y ajoute sa caméra
 -- et le recopie dans la console. Rien n'est gardé ici au-delà du morceau en cours ; aucun coût sans enregistrement.
 local HttpService = game:GetService("HttpService")
@@ -31,7 +35,14 @@ export type Deps = {
 	remote: RemoteEvent,
 	-- Skin équipé sur l'outil d'un participant (bots : d'origine), pour les armes déjà en main au départ
 	skinOf: (Participant, string) -> string?,
+	-- Effet de tir équipé d'un participant (style de ShotEffectRules ; bots : nil)
+	styleOf: (Participant) -> string?,
+	-- État de la manche, temps restant (s) et classement par id (RoundManager)
+	round: () -> (string, number, { [number]: any }),
 }
+
+-- Écart (s) entre deux relevés de la manche et du classement
+local ROUND_SPACING = 0.5
 
 type Session = {
 	owner: Player,
@@ -44,7 +55,11 @@ type Session = {
 	names: { [number]: { name: string, bot: boolean } },
 	events: { Event },
 	outfits: { [number]: string | false },
+	styles: { [number]: string | false },
 	actions: { [Model]: number },
+	lastRound: number,
+	roundState: string?,
+	scoresKey: string?,
 }
 
 local MatchRecorder = {}
@@ -115,6 +130,12 @@ local function sample(s: Session, now: number)
 			s.outfits[id] = outfit
 			push(now, { t = 0, k = E.OUTFIT, id = id, o = if outfit then outfit else nil })
 		end
+		local d = deps
+		local style = (d and d.styleOf(participant)) or false
+		if s.styles[id] ~= style then
+			s.styles[id] = style
+			push(now, { t = 0, k = E.FX, id = id, s = if style then style else nil })
+		end
 		local at = char:GetAttribute(WeaponThirdPerson.ACTION_AT_ATTR)
 		local action = char:GetAttribute(WeaponThirdPerson.ACTION_ATTR)
 		if type(at) == "number" and type(action) == "string" and s.actions[char] ~= at then
@@ -125,6 +146,25 @@ local function sample(s: Session, now: number)
 				push(math.max(at, s.t0), { t = 0, k = E.ACTION, id = id, a = action })
 			end
 		end
+	end
+end
+
+-- Cette méthode permet de relever l'état de la manche (timer) et le classement lorsqu'un relevé est dû : notés quand ils
+-- changent, et au début de chaque morceau (rejeu lancé en cours de partie, morceau perdu).
+local function sampleRound(s: Session, now: number)
+	local d = deps
+	if not d then
+		return
+	end
+	local state, left, scores = d.round()
+	if state ~= s.roundState then
+		s.roundState = state
+		push(now, { t = 0, k = E.ROUND, id = 0, s = state, l = MatchRecordRules.milli(left) })
+	end
+	local list, key = MatchRecordRules.encodeScores(scores)
+	if key ~= s.scoresKey then
+		s.scoresKey = key
+		push(now, { t = 0, k = E.SCORES, id = 0, sc = list })
 	end
 end
 
@@ -174,6 +214,13 @@ local function flush(s: Session, now: number, last: boolean)
 	s.t0 = now
 	s.rows = {}
 	s.events = {}
+	-- Timer et classement repris au début du morceau suivant
+	s.roundState = nil
+	s.scoresKey = nil
+	if not last then
+		sampleRound(s, now)
+		s.lastRound = now
+	end
 end
 
 -- Cette méthode permet de noter l'arme en main de chaque participant au début d'un enregistrement (les changements
@@ -217,11 +264,16 @@ local function start(player: Player)
 		names = {},
 		events = {},
 		outfits = {},
+		styles = {},
 		actions = setmetatable({}, { __mode = "k" }) :: any,
+		lastRound = now,
+		roundState = nil,
+		scoresKey = nil,
 	}
 	session = s
 	noteHeldWeapons(now)
 	sample(s, now)
+	sampleRound(s, now)
 	s.lastSample = now
 	log(string.format("REC %s par %s", s.rec, player.Name))
 	d.remote:FireClient(player, "started", s.rec, now)
@@ -262,6 +314,10 @@ local function onHeartbeat()
 	if now - s.lastSample >= MatchRecordRules.ACTOR_SPACING then
 		s.lastSample = now
 		sample(s, now)
+	end
+	if now - s.lastRound >= ROUND_SPACING then
+		s.lastRound = now
+		sampleRound(s, now)
 	end
 	if now - s.startedAt >= MatchRecordRules.MAX_SECONDS then
 		MatchRecorder.stop("durée maximale")
@@ -328,6 +384,34 @@ function MatchRecorder.onDeath(participant: Participant)
 		return
 	end
 	push(workspace:GetServerTimeNow(), { t = 0, k = E.DEATH, id = participant.id })
+end
+
+-- Cette méthode permet de noter une touche confirmée au joueur qui enregistre (hitmarker, son de touche) lorsque le
+-- serveur la lui annonce ; les touches des autres joueurs ne se voient pas de son écran.
+function MatchRecorder.onHitConfirm(player: Player, isKill: boolean, isHeadshot: boolean)
+	local s = session
+	if not s or s.owner ~= player then
+		return
+	end
+	push(workspace:GetServerTimeNow(), {
+		t = 0,
+		k = E.HIT,
+		id = player.UserId,
+		kl = if isKill then true else nil,
+		hs = if isHeadshot then true else nil,
+	})
+end
+
+-- Cette méthode permet de noter un pas ou un atterrissage lorsque FootstepService le détecte (tous les participants,
+-- joueur qui enregistre compris : son client joue ses pas sans passer par le serveur, mais le serveur les juge aussi).
+function MatchRecorder.onFootstep(participant: Participant, kind: string)
+	if not session then
+		return
+	end
+	push(
+		workspace:GetServerTimeNow(),
+		{ t = 0, k = E.STEP, id = participant.id, ld = if kind == "land" then true else nil }
+	)
 end
 
 -- Cette méthode permet de brancher l'enregistreur lorsque le serveur démarre : demandes du client (start, stop),

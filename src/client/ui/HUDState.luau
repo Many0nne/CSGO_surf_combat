@@ -1,7 +1,8 @@
 -- État central du HUD (#223) : état client (GameStateController : MENU, IN_ROUND, DEAD…, d'où « HUD de jeu actif » et
 -- « mort »), menu en partie ouvert (InGameMenu, Réglages compris) et lunette affichée (ScopeOverlay). Les écrans poussent
 -- leur part par un setter, les éléments du HUD s'abonnent (onChanged) et appliquent leur règle de HUDRules
--- (crosshairVisible, keyDisplayVisible…). Une nouvelle condition de masquage = un champ ici et la règle des éléments
+-- (crosshairVisible, keyDisplayVisible…). Rejeu d'une partie en vue du joueur (#586, debug/MatchReplay) : HUD de jeu
+-- montré au menu, tant que le joueur enregistré est en vie. Une nouvelle condition de masquage = un champ ici et la règle des éléments
 -- concernés, sans setter de plus dans chaque élément. Sans Instance ni service : testé sous Lune
 -- (tests/specs/HUDState.spec.luau).
 local HUDState = {}
@@ -11,12 +12,13 @@ export type Snapshot = {
 	gameState: string,
 	menuOpen: boolean,
 	scoped: boolean,
+	replay: boolean,
 }
 
 type Listener = (hud: Snapshot, previous: Snapshot) -> ()
 
 -- Instantané courant, remplacé (jamais modifié) à chaque changement : un abonné peut garder `previous`
-local current: Snapshot = table.freeze({ gameState = "MENU", menuOpen = false, scoped = false })
+local current: Snapshot = table.freeze({ gameState = "MENU", menuOpen = false, scoped = false, replay = false })
 local listeners: { Listener } = {}
 
 -- Cette méthode permet de prévenir les abonnés lorsqu'un champ change vraiment ; l'erreur d'un abonné est relancée à
@@ -56,6 +58,12 @@ end
 -- Cette méthode permet de signaler la lunette affichée ou refermée lorsque ScopeOverlay change de visibilité.
 function HUDState.setScoped(isScoped: boolean)
 	set("scoped", isScoped)
+end
+
+-- Cette méthode permet de signaler le HUD de jeu d'un rejeu (#586) lorsque le joueur rejoué apparaît ou meurt, ou que le
+-- rejeu se termine (false).
+function HUDState.setReplay(active: boolean)
+	set("replay", active)
 end
 
 -- Cette méthode permet à un élément d'être prévenu de chaque changement d'état (nouvel et ancien instantanés) lorsqu'il

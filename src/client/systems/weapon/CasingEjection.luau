@@ -19,6 +19,7 @@ local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local ShotEffectRules = require(ReplicatedStorage.Shared.ShotEffectRules)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 local WeaponThirdPerson = require(ReplicatedStorage.Shared.WeaponThirdPerson)
+local EffectClock = require(script.Parent.Parent.game.EffectClock)
 
 local CasingEjection = {}
 
@@ -78,7 +79,7 @@ end
 -- Cette méthode permet de déplacer les douilles en vol lorsqu'une frame passe, et de rendre au pool celles dont la vie
 -- est finie ; la boucle s'arrête quand plus aucune ne vole.
 local function step()
-	local now = os.clock()
+	local now = EffectClock.now()
 	local active = 0
 	for index, slot in slots do
 		local flight, t0 = slot.flight, born[index]
@@ -115,7 +116,7 @@ local function eject(port: Attachment, scale: number, inherited: Vector3, evict:
 	local rolls = { random:NextNumber(), random:NextNumber(), random:NextNumber(), random:NextNumber() }
 	local flight = CasingRules.launch(port.WorldCFrame, scale, inherited, rolls)
 	slot.flight = flight
-	born[index] = os.clock()
+	born[index] = EffectClock.now()
 	slot.part.Size = Vector3.new(CasingRules.LENGTH, CasingRules.DIAMETER, CasingRules.DIAMETER) * scale
 	slot.part.CFrame = flight.start
 	-- dans workspace, pas sous la caméra : une caméra remplacée détruirait la pièce et bloquerait son emplacement
@@ -141,6 +142,18 @@ function CasingEjection.connectMarker(track: AnimationTrack, viewmodel: Model): 
 		-- sa création) alors que les réglages de CasingRules sont pris dans ce repère.
 		eject(port, 1, getVelocity(), true)
 	end)
+end
+
+-- Cette méthode permet d'éjecter la douille d'un tir rejoué (#586, debug/MatchReplay) depuis l'arme 3P d'un figurant
+-- lorsque sa culasse s'ouvre : sans vitesse héritée, rien si l'arme n'a pas de fenêtre d'éjection ou est loin de la
+-- caméra.
+function CasingEjection.ejectReplay(gun: Instance?)
+	local port = gun and gun:IsA("Model") and portOf(gun)
+	local camera = workspace.CurrentCamera
+	if not (gun and port and camera) or not CasingRules.isNearCamera(port.WorldPosition, camera.CFrame.Position) then
+		return
+	end
+	eject(port, (gun :: Model):GetScale(), Vector3.zero, false)
 end
 
 -- Cette méthode permet de savoir si un tir relayé a droit à ses effets lorsqu'il arrive puis quand sa douille part :

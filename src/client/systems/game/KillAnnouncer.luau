@@ -78,6 +78,13 @@ function KillAnnouncer.isSpeaking(): boolean
 	return playing ~= nil and playing.IsPlaying
 end
 
+-- Cette méthode permet de poser la série sans annonce lorsque le rejeu d'une partie (#586) démarre en cours de série
+-- (kills du joueur enregistré depuis sa dernière mort).
+function KillAnnouncer.restore(value: number)
+	streak = math.max(0, math.floor(value))
+	notify()
+end
+
 -- Cette méthode permet de remettre la série à 0 lorsque le joueur local meurt ou quitte la partie.
 function KillAnnouncer.reset()
 	if streak == 0 then

@@ -13,6 +13,7 @@ local RunService = game:GetService("RunService")
 local LightningRules = require(ReplicatedStorage.Shared.LightningRules)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local ShotEffectRules = require(ReplicatedStorage.Shared.ShotEffectRules)
+local EffectClock = require(script.Parent.Parent.game.EffectClock)
 
 local LightningBolt = {}
 
@@ -142,7 +143,7 @@ end
 -- Cette méthode permet de faire scintiller puis s'éteindre les éclairs en cours lorsqu'une frame passe (masqués si
 -- la caméra les traverse) ; la boucle s'arrête quand il n'en reste plus.
 local function step()
-	local now = os.clock()
+	local now = EffectClock.now()
 	local camera = workspace.CurrentCamera
 	local eye = camera and camera.CFrame.Position
 	for i = #bolts, 1, -1 do
@@ -227,7 +228,7 @@ function LightningBolt.spawn(start: Vector3, finish: Vector3): boolean
 		light = light,
 		start = start,
 		finish = finish,
-		born = os.clock(),
+		born = EffectClock.now(),
 	}
 	for _, line in lines do
 		local layers = LightningRules.KINDS[line.kind]

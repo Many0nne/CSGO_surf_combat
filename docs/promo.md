@@ -192,10 +192,14 @@ dans le jeu publié, la partie est notée en données, puis reconstruite dans St
 **Ce qui est noté.** Le serveur (`src/server/MatchRecorder.luau`) relève la racine de chaque participant en vie
 (joueurs et bots) à 20 Hz, la tenue portée et les actions de l'arme 3P (tir, recharge, sortie : attributs de
 `WeaponThirdPerson`) ; il reçoit de `HighlightService` (observateur, même hors manche active) les tirs acceptés, les
-armes sorties avec leur skin, les kills et les morts. Le client qui enregistre (`src/client/debug/MatchRecorder.luau`)
-ajoute sa caméra à 30 Hz (position, hauteur des yeux, lacet, tangage, champ de vision, lunette) et ses inspections.
+armes sorties avec leur skin, les kills et les morts. Pour un rejeu fidèle (#586), il note aussi l'effet de tir équipé
+de chaque joueur (relevé comme la tenue), les pas et atterrissages (`FootstepService`), les touches confirmées au
+joueur qui enregistre (hitmarker), l'état et le timer de la manche et le classement (`RoundManager`, au début de chaque
+morceau et quand ils changent). Le client qui enregistre (`src/client/debug/MatchRecorder.luau`) ajoute sa caméra à
+30 Hz (position, hauteur des yeux, lacet, tangage, champ de vision, lunette), ses inspections et ses munitions.
 Format et lecture : `src/shared/MatchRecordRules.luau` (testé). Taille mesurée : 65 Ko pour 36 s avec 5 participants
-(~550 Ko pour 5 min).
+(~550 Ko pour 5 min) avant #586 ; 86 Ko pour 28 s avec 8 participants depuis (pas : 247 évènements, l'essentiel de la
+hausse). Un enregistrement fait avant #586 se rejoue encore, sans effet de tir, pas, HUD de manche ni touches.
 
 **Transport.** Un morceau toutes les 5 s, envoyé au client qui enregistre (remote `MatchRecord`, JSON), recopié dans la
 console en lignes `[MatchRec <enregistrement> <morceau> i/n]` : il finit dans le journal Roblox du poste qui joue.
@@ -231,11 +235,35 @@ p:SetAttribute("MatchReplayRun", os.clock())  -- relance avec les réglages cour
 
 Réglages des plans hors POV : `MatchReplayDistance` (10), `MatchReplayHeight` (3), `MatchReplayFov` (70),
 `MatchReplayCameraPosition` (Vector3, plan `track`), `MatchReplayCameraCFrame` (plan `fixed`), `MatchReplayHud` (false :
-sans kill feed). Les ids des participants sont listés par l'extraction (bots négatifs, joueurs = UserId). La scène 3D du
-menu, l'interface du jeu et celle de Roblox sont coupées pendant le rejeu, puis rendues.
+sans interface de jeu). Les ids des participants sont listés par l'extraction (bots négatifs, joueurs = UserId). La
+scène 3D du menu, la musique, la souris, l'interface du jeu et celle de Roblox sont coupées pendant le rejeu, puis
+rendues.
 
-**Filmer** : `uv run tools/matchrec/capture.py <sortie.mp4> --speed 0.25`, lancé avant `MatchReplayRun`, Studio au
-premier plan. Le rejeu s'ouvre et se ferme sur un écran noir : l'outil y trouve le cadre du viewport, le début et la
+**Ce que le rejeu reproduit (#586).** Figurants habillés et armés (skin), effet de tir équipé de chaque tireur
+(ÉCLAIR, PAN !, CIRCUIT…), flamme, douilles, sons des tirs et des pas, ragdolls, kill feed. En vue du joueur, le HUD
+est celui de la partie, piloté par les données : viseur, hitmarker et son de touche, munitions, compteur de vitesse,
+barre d'armes, timer, rang, série de kills (crâne), annonceur (« Headshot », « Double kill »…) ; rien de ce HUD pendant
+la mort, comme en partie. Pas de musique (choix de l'utilisateur : elle se pose au montage). Au ralenti, effets de tir,
+douilles, hitmarker et interpolations du HUD suivent le temps du rejeu (`src/client/systems/game/EffectClock.luau`,
+lu par les modules d'effets à la place d'`os.clock`) : la vidéo remise à vitesse normale, chaque effet dure ce qu'il
+dure en partie. Non reproduits : écran de mort (caméra vers le tueur, compte à rebours), bannière de fin de manche et
+clip de la partie.
+
+**Filmer** : deux passes du même segment (`MatchReplayFrom` / `MatchReplayTo` inchangés), l'outil lancé avant
+`MatchReplayRun`, Studio au premier plan.
+
+1. Son : `MatchReplaySpeed` = 1, `MatchReplayAudio` = true, puis `uv run tools/matchrec/capture.py <son.wav>`. L'outil
+   enregistre la sortie audio du poste (boucle WASAPI, paquet `soundcard`) ; le rejeu joue un bip 0,5 s avant sa
+   lecture, pendant l'écran noir, et le son est coupé à partir de là. Rien d'autre ne doit jouer sur le poste.
+2. Image : `MatchReplaySpeed` = 0.25, `MatchReplayAudio` = false, puis
+   `uv run tools/matchrec/capture.py <sortie.mp4> --speed 0.25 --cut-top 80 --audio <son.wav>`.
+
+Calage mesuré sur `Test586` (segment de 1,5 à 6 s, un tir AWP ÉCLAIR à 3,82 s, soit 2,32 s dans la vidéo) : son du
+tir à 2,310 s, flamme à l'image 139 (2,317 s), soit moins d'une image d'écart à 60 i/s. Pièges : la musique du menu joue
+avant l'écran noir (le bip n'est cherché qu'autour de 0,5 s avant la lecture) ; la boucle WASAPI ne livre rien
+pendant un silence (chaque bloc est daté à son arrivée et les trous redeviennent des zéros).
+
+Passe de l'image : Le rejeu s'ouvre et se ferme sur un écran noir : l'outil y trouve le cadre du viewport, le début et la
 fin, place chaque capture à l'instant du rejeu qu'elle montre et écrit une vidéo à 60 i/s à vitesse normale.
 Mesuré sur `Essai` (plan de côté, 6 s de rejeu au quart de la vitesse, fenêtre Studio 1920x1080, viewport
 1614x758) : 19 captures par seconde réelle, soit 77 par seconde de rejeu, vidéo de 359 images à 60 i/s sans aucune image

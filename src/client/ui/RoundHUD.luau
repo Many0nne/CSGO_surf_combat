@@ -14,6 +14,7 @@ local EconomyRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChi
 local WalletRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WalletRules"))
 local KeyBindings = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("KeyBindings"))
 local UIKit = require(script.Parent.UIKit)
+local EffectClock = require(script.Parent.Parent.systems.game.EffectClock)
 local HitShards = require(script.Parent.HitShards)
 local HUDRules = require(script.Parent.HUDRules)
 local HUDState = require(script.Parent.HUDState)
@@ -277,7 +278,7 @@ local function pulseStreak()
 	streakSkull.ImageColor3 = C.HitRed
 	streakCount.TextColor3 = if streakRest == C.HitRed then C.Bone else C.HitRed
 	HitShards.burst(streakShards, C.HitRed, STREAK_SHARD_SPREAD, STREAK_SHARD_HOLD, Motion.Hit)
-	task.delay(STREAK_FLASH_HOLD, function()
+	EffectClock.delay(STREAK_FLASH_HOLD, function()
 		if token ~= streakPulse then
 			return
 		end

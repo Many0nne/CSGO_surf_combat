@@ -10,6 +10,7 @@ local RunService = game:GetService("RunService")
 
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local ShotEffectRules = require(ReplicatedStorage.Shared.ShotEffectRules)
+local EffectClock = require(script.Parent.Parent.game.EffectClock)
 
 local CircuitCube = {}
 
@@ -117,7 +118,7 @@ end
 -- Cette méthode permet d'animer les cubes en cours lorsqu'une frame passe, de ranger ceux dont la vie est finie, et
 -- d'arrêter la boucle sans cube.
 local function step()
-	local now = os.clock()
+	local now = EffectClock.now()
 	local active = 0
 	for _, cube in pool do
 		local born = cube.born
@@ -168,7 +169,7 @@ function CircuitCube.spawn(position: Vector3, edge: number, life: number)
 	c.base = CFrame.Angles(tilt * (math.random() * 2 - 1), tilt * (math.random() * 2 - 1), tilt)
 	c.axis = Vector3.new(math.random() - 0.5, 1, math.random() - 0.5).Unit
 	c.life = life
-	c.born = os.clock()
+	c.born = EffectClock.now()
 	pose(c, 0)
 	if not stepConn then
 		stepConn = RunService.Heartbeat:Connect(timedStep)

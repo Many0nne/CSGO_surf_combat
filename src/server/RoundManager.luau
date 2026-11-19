@@ -346,6 +346,18 @@ function RoundManager.isActive(): boolean
 	return state == "active"
 end
 
+-- Cette méthode permet de lire le temps restant de la manche (s, non arrondi) lorsque l'enregistreur de partie relève
+-- le timer (#586).
+function RoundManager.getTimeLeft(): number
+	return timeLeft
+end
+
+-- Cette méthode permet de lire le classement de la manche (par id de participant, en lecture seule) lorsque
+-- l'enregistreur de partie le relève (#586).
+function RoundManager.getScores(): { [number]: Score }
+	return scores
+end
+
 -- ── init ───────────────────────────────────────────────────────────────────
 
 function RoundManager.init(remotes: {

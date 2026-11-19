@@ -193,4 +193,107 @@ return function(T, Loader)
 			T.expectEqual(R.lastBefore(list, 3).tool, "Knife")
 		end)
 	end)
+
+	T.describe("MatchRecordRules HUD et sons du rejeu (#586)", function()
+		T.it("garde les nouveaux évènements à la lecture d'un morceau", function()
+			local chunk = R.readChunk(chunkOf(1, 0, 5, {
+				events = {
+					{ t = 0.1, k = "fx", id = 7, s = "pan" },
+					{ t = 0.2, k = "hit", id = 7, kl = true, hs = true },
+					{ t = 0.3, k = "ammo", id = 7, m = 4, r = 30 },
+					{ t = 0.4, k = "step", id = 7, ld = true },
+					{ t = 0.5, k = "round", id = 0, s = "active", l = 120 },
+					{ t = 0.6, k = "scores", id = 0, sc = {} },
+				},
+			}))
+			T.expect(chunk ~= nil)
+			T.expectEqual(#(chunk :: any).events, 6)
+		end)
+
+		T.it("range le classement trié avec une clé qui suit les kills et les morts", function()
+			local list, key = R.encodeScores({
+				[-2] = { id = -2, name = "Lucie", isBot = true, kills = 3, deaths = 1 },
+				[7] = { id = 7, name = "Joueur", kills = 5, deaths = 0 },
+			})
+			T.expectEqual(#list, 2)
+			T.expectEqual(list[1].i, -2)
+			T.expectEqual(list[1].b, true)
+			T.expectEqual(list[2].b, nil)
+			T.expectEqual(key, "-2:3:1,7:5:0")
+			local _, other = R.encodeScores({ [7] = { id = 7, name = "Joueur", kills = 6, deaths = 0 } })
+			T.expect(other ~= key)
+		end)
+
+		T.it("relit le classement au format du HUD, joueur rejoué renommé", function()
+			local list = R.encodeScores({
+				[-2] = { id = -2, name = "Lucie", isBot = true, kills = 3, deaths = 1 },
+				[7] = { id = 7, name = "Joueur", kills = 5, deaths = 0 },
+			})
+			local scores = R.decodeScores(list, { [7] = "Studio" })
+			T.expectEqual(scores[7].name, "Studio")
+			T.expectEqual(scores[7].kills, 5)
+			T.expectEqual(scores[7].isBot, false)
+			T.expectEqual(scores[-2].name, "Lucie")
+			T.expectEqual(scores[-2].isBot, true)
+			T.expect(next(R.decodeScores("abîmé")) == nil)
+			T.expect(next(R.decodeScores({ { i = "x", n = 3 } })) == nil, "ligne abîmée écartée")
+		end)
+
+		T.it("range une réserve infinie en JSON et la relit", function()
+			T.expectEqual(R.encodeAmmo(math.huge), -1)
+			T.expectEqual(R.decodeAmmo(-1), math.huge)
+			T.expectEqual(R.encodeAmmo(4), 4)
+			T.expectEqual(R.decodeAmmo(4), 4)
+			T.expect(R.encodeAmmo(nil) == nil)
+			T.expect(R.encodeAmmo(0 / 0) == nil)
+			T.expect(R.decodeAmmo({ v = "inf" }) == nil)
+		end)
+
+		T.it("décompte le timer d'une manche active et le fige sinon", function()
+			local active = { t = 10, k = "round", id = 0, s = "active", l = 120.4 }
+			T.expectEqual(R.timeLeftAt(active, 10), 121)
+			T.expectEqual(R.timeLeftAt(active, 15.5), 115)
+			T.expectEqual(R.timeLeftAt(active, 500), 0)
+			local result = { t = 10, k = "round", id = 0, s = "result", l = 0 }
+			T.expectEqual(R.timeLeftAt(result, 20), 0)
+			local idle = { t = 10, k = "round", id = 0, s = "idle", l = 90 }
+			T.expectEqual(R.timeLeftAt(idle, 30), 90)
+			T.expect(R.timeLeftAt(nil, 3) == nil)
+		end)
+
+		T.it("compte la série de kills depuis la dernière mort ou fin de manche", function()
+			local match = R.newMatch()
+			match.events = {
+				{ t = 1, k = "kill", id = 7, victim = -1 },
+				{ t = 2, k = "kill", id = 7, victim = -2 },
+				{ t = 3, k = "kill", id = -3, victim = 7 },
+				{ t = 3, k = "death", id = 7 },
+				{ t = 4, k = "kill", id = 7, victim = -1 },
+				{ t = 5, k = "kill", id = -1, victim = -2 },
+				{ t = 6, k = "round", id = 0, s = "result", l = 0 },
+				{ t = 7, k = "round", id = 0, s = "active", l = 120 },
+				{ t = 8, k = "kill", id = 7, victim = -4 },
+			}
+			T.expectEqual(R.streakAt(match, 7, 0.5), 0)
+			T.expectEqual(R.streakAt(match, 7, 2), 2)
+			T.expectEqual(R.streakAt(match, 7, 3), 0, "mort")
+			T.expectEqual(R.streakAt(match, 7, 5), 1, "kill d'un autre ignoré")
+			T.expectEqual(R.streakAt(match, 7, 6.5), 0, "fin de manche")
+			T.expectEqual(R.streakAt(match, 7, 9), 1)
+		end)
+
+		T.it("mesure la vitesse horizontale d'une piste, 0 hors de la piste", function()
+			-- 30 Hz, 12 studs/s sur X, 5 studs/s sur Y (non comptés)
+			local track = { t = {}, cols = { {}, {}, {} } }
+			for i = 0, 30 do
+				table.insert(track.t, i / 30)
+				table.insert(track.cols[1], 12 * i / 30)
+				table.insert(track.cols[2], 5 * i / 30)
+				table.insert(track.cols[3], 0)
+			end
+			local a, b = {}, {}
+			T.expectNear(R.speedAt(track, 0.5, 0.1, a, b), 12, 1e-6)
+			T.expectEqual(R.speedAt(track, 3, 0.1, a, b), 0)
+		end)
+	end)
 end

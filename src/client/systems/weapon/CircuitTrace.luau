@@ -14,6 +14,7 @@ local RunService = game:GetService("RunService")
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local ShotEffectRules = require(ReplicatedStorage.Shared.ShotEffectRules)
 local CircuitCube = require(script.Parent.CircuitCube)
+local EffectClock = require(script.Parent.Parent.game.EffectClock)
 
 local CircuitTrace = {}
 
@@ -391,7 +392,7 @@ end
 -- Cette méthode permet d'animer les pistes en cours lorsqu'une frame passe, de libérer celles qui sont éteintes, et
 -- d'arrêter la boucle sans piste.
 local function step()
-	local now = os.clock()
+	local now = EffectClock.now()
 	local active = 0
 	for _, set in pool do
 		local born = set.born
@@ -484,7 +485,7 @@ function CircuitTrace.spawn(start: Vector3, finish: Vector3, isLocal: boolean, w
 	end
 	hideNet(set)
 	set.impact = false
-	set.born = os.clock()
+	set.born = EffectClock.now()
 	if withMuzzle then
 		set.flashPart.Position = start
 		set.flash.Size = NumberSequence.new(

@@ -27,6 +27,12 @@ function MenuCursor.show()
 	end
 end
 
+-- Cette méthode permet de savoir si la souris est imposée (menu ouvert) lorsque le rejeu d'une partie la retire le temps
+-- de sa lecture (#586).
+function MenuCursor.isShown(): boolean
+	return connection ~= nil
+end
+
 -- Cette méthode permet de rendre la main sur l'icône de la souris lorsque la partie démarre (la caméra FPS la gère).
 function MenuCursor.hide()
 	GamepadCursor.request("mainMenu", false)

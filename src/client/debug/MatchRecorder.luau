@@ -2,7 +2,7 @@
 -- créateur du jeu publié : PerfRules.canUse), pour la rejouer dans Studio et la filmer sans lag (docs/promo.md,
 -- « Enregistreur de partie »). Le serveur (server/MatchRecorder) note tous les participants et envoie un morceau toutes
 -- les MatchRecordRules.CHUNK_SECONDS ; ce client y ajoute sa caméra (position, yeux, lacet, tangage, champ de vision,
--- lunette, à POV_HZ) et ses inspections, puis recopie le morceau dans la console (lignes `[MatchRec …]`, journal
+-- lunette, à POV_HZ), ses inspections et ses munitions (#586), puis recopie le morceau dans la console (lignes `[MatchRec …]`, journal
 -- Roblox du poste qui joue) et le range dans Player.MatchRecordings (lu par le MCP dans Studio). Dans Studio, F8 est un
 -- raccourci de l'éditeur : l'attribut joueur `MatchRecord` (true / false) fait la même chose.
 local HttpService = game:GetService("HttpService")
@@ -18,6 +18,7 @@ local PerfMarkers = require(Shared:WaitForChild("PerfMarkers"))
 local PerfRules = require(Shared:WaitForChild("PerfRules"))
 local UITheme = require(Shared:WaitForChild("UITheme"))
 local ScopeSystem = require(script.Parent.Parent.systems.weapon.ScopeSystem)
+local WeaponSystem = require(script.Parent.Parent.systems.weapon.WeaponSystem)
 
 local TOGGLE_KEY = Enum.KeyCode.F8
 local ATTRIBUTE = "MatchRecord"
@@ -46,6 +47,9 @@ local povRows: { { number } } = {}
 local lastPov = -math.huge
 local inspects: { MatchRecordRules.Event } = {}
 local lastInspect = 0
+-- Munitions de l'arme en main déjà notées (compteur du HUD rejoué, #586) ; "?" : rien de noté encore
+local lastAmmo: any = "?"
+local lastReserve: any = "?"
 local status: TextLabel? = nil
 local doneToken = 0
 
@@ -103,10 +107,22 @@ local function step()
 		)
 	end
 	local t = workspace:GetServerTimeNow()
+	local char = deps.player.Character
+	local tool = char and char:FindFirstChildOfClass("Tool")
+	local ammo, reserve = WeaponSystem.getAmmo(tool)
+	if ammo ~= lastAmmo or reserve ~= lastReserve then
+		lastAmmo, lastReserve = ammo, reserve
+		table.insert(inspects, {
+			t = t,
+			k = MatchRecordRules.Event.AMMO,
+			id = deps.player.UserId,
+			m = MatchRecordRules.encodeAmmo(ammo),
+			r = MatchRecordRules.encodeAmmo(reserve),
+		})
+	end
 	if t - lastPov < MatchRecordRules.POV_SPACING then
 		return
 	end
-	local char = deps.player.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart")
 	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
 	local camera = workspace.CurrentCamera
@@ -172,7 +188,9 @@ local function onChunk(seq: number, t0: number, t1: number, text: string)
 		if event.t >= t1 and not chunk.last then
 			table.insert(keptInspects, event)
 		elseif event.t >= t0 then
-			table.insert(chunk.events, { t = MatchRecordRules.milli(event.t - t0), k = event.k, id = event.id })
+			local copy = table.clone(event)
+			copy.t = MatchRecordRules.milli(event.t - t0)
+			table.insert(chunk.events, copy)
 		end
 	end
 	inspects = keptInspects
@@ -211,6 +229,7 @@ local function onServer(kind: any, a: any, b: any, c: any, d: any)
 		povRows = {}
 		inspects = {}
 		lastPov = -math.huge
+		lastAmmo, lastReserve = "?", "?"
 		local _, counts = deps.input.snapshot()
 		lastInspect = counts.inspect
 		log("REC " .. a)

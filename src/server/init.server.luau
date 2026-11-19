@@ -11,6 +11,7 @@ local MapGeometry = require(Shared:WaitForChild("MapGeometry"))
 local MapSelection = require(Shared:WaitForChild("MapSelection"))
 local WeaponThirdPerson = require(Shared:WaitForChild("WeaponThirdPerson"))
 local InventoryRules = require(Shared:WaitForChild("InventoryRules"))
+local ShotEffectRules = require(Shared:WaitForChild("ShotEffectRules"))
 local WeaponConfig = require(Shared:WaitForChild("WeaponConfig"))
 local MemoryTracker = require(Shared:WaitForChild("MemoryTracker"))
 local PerfRules = require(Shared:WaitForChild("PerfRules"))
@@ -643,10 +644,12 @@ end
 KillZone.init()
 -- Bruits de pas (#146) : détectés sur chaque position acceptée (joueurs et bots), relayés aux autres clients et
 -- entendus par les bots
-FootstepService.init(footstepRmt, function(char, feetPos)
+FootstepService.init(footstepRmt, function(char, feetPos, kind)
 	local participant = Participants.fromCharacter(char)
 	if participant then
 		BotManager.hearFootstep(participant, feetPos)
+		-- Pas rejoués par l'enregistreur de partie (#586)
+		MatchRecorder.onFootstep(participant, kind)
 	end
 end)
 CharacterSync.init(characterSyncRmt, movementCorrectionRmt, function(char: Model, pos: Vector3)
@@ -766,6 +769,7 @@ local function applyHit(
 	local player = attacker.player
 	if outcome and player then
 		hitConfirmRmt:FireClient(player, outcome == "kill", isHeadshot)
+		MatchRecorder.onHitConfirm(player, outcome == "kill", isHeadshot)
 	end
 	return outcome
 end
@@ -913,6 +917,15 @@ MatchRecorder.init({
 	skinOf = function(participant, toolName)
 		local player = participant.player
 		return if player then InventoryRules.skinOfTool(InventoryStore.equipped(player), toolName) else nil
+	end,
+	-- Cette méthode permet de lire l'effet de tir équipé d'un joueur lorsqu'il est relevé (#586 ; bots : rayon ordinaire).
+	styleOf = function(participant)
+		local player = participant.player
+		return if player then ShotEffectRules.styleOf(InventoryRules.effectOf(InventoryStore.equipped(player))) else nil
+	end,
+	-- Cette méthode permet de lire l'état, le temps restant et le classement de la manche lorsqu'ils sont relevés (#586).
+	round = function()
+		return RoundManager.getState(), RoundManager.getTimeLeft(), RoundManager.getScores()
 	end,
 })
 HighlightService.setObserver(MatchRecorder)

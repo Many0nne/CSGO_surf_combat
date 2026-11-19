@@ -40,6 +40,16 @@ return function(T, Loader)
 				T.expectEqual(HUDRules.crosshairVisible(hud({ gameState = state }), true), false, state)
 			end
 		end)
+
+		T.it("affiche le crosshair d'un rejeu au menu (#586), sauf à la lunette", function()
+			T.expectEqual(HUDRules.crosshairVisible(hud({ gameState = "MENU", replay = true }), true), true)
+			T.expectEqual(HUDRules.crosshairVisible(hud({ gameState = "MENU", replay = true }), false), false)
+			T.expectEqual(
+				HUDRules.crosshairVisible(hud({ gameState = "MENU", replay = true, scoped = true }), true),
+				false,
+				"lunette du joueur rejoué"
+			)
+		end)
 	end)
 
 	T.describe("HUDRules.keyDisplayEntries", function()
