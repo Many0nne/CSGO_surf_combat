@@ -243,6 +243,10 @@ en double tant que la scène bouge. Les boutons Roblox du coin haut gauche (logo
 playtest et aucune API ne les cache (`SetCoreGuiEnabled`, `TopbarEnabled` essayés) : `--cut-top 80` retire le haut du
 viewport, et un recadrage vertical (TikTok) centré les exclut de lui-même.
 
+**Plans retenus.** Les rushes se filment en vue du joueur (`pov`). Les plans en 3e personne (`follow`, `side`,
+`front`, `orbit`) ont été jugés « plutôt mauvais » par l'utilisateur (19/11/2026, rush de côté sur un bot) : gardés
+dans le code, mais ni proposés ni améliorés sans demande.
+
 **Limites.**
 
 - Au ralenti, positions, caméra, pistes d'animation (personnages et viewmodel), actions 3P, kill feed et chute des
