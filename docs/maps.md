@@ -33,20 +33,20 @@ dans Studio). En jeu :
   round, elle est annoncée pour le suivant. Tant qu'il est posé, la rotation reste sur cette map ; le retirer
   (`nil`) la relance. Ignoré hors Studio. Rounds courts pour voir la rotation : attribut `RoundDuration` (secondes).
 
-Coût mesuré (20/11/2026, Studio, playtest solo : client et serveur dans le même processus, fenêtre en arrière-plan
-bridée à 15 i/s, soit 68 ms par image au repos ; Dizzy 19 939 pièces, Radoub 406 pièces en maquette) :
+Coût mesuré (20/11/2026, Studio, playtest solo : client et serveur dans le même processus, fenêtre bridée par
+Studio, 40 à 68 ms par image au repos ; Dizzy 19 939 pièces ; Radoub habillée (#596) 6 725 pièces, maquette 406) :
 
-| Mesure | Valeur |
-|---|---|
-| Plan de Dizzy (au démarrage) | 25,0 s à 53,8 s selon le bridage de Studio (7,8 s mesurées en jeu le 09/11, cf. `docs/bots.md`) |
-| Plan de Radoub (pendant le 1er round) | 3,6 s à 13,5 s |
-| Échange côté serveur (`[MapRotation]`) | 47 à 310 ms (Dizzy rangée ou remise), 118 et 191 ms en fin de round réel |
-| Dizzy → Radoub, client | une image de 233 ms (et 172 ms de l'échange serveur, même processus) |
-| Radoub → Dizzy, client | une image de 255 ms (et 134 ms) |
-| Piste rejetée : maps rangées dans `ServerStorage` | Dizzy remise : une image de 1 249 ms, 7 images > 100 ms (tout est répliqué de nouveau) |
+| Mesure | Radoub habillée | Radoub maquette |
+|---|---|---|
+| Plan de Dizzy (au démarrage) | 25,5 s | 25,0 à 53,8 s (7,8 s en jeu le 09/11, cf. `docs/bots.md`) |
+| Plan de Radoub (pendant le 1er round) | 12,7 s (45 089 cases) | 3,6 à 13,5 s |
+| Échange côté serveur (`[MapRotation]`) | 139 ms (→ Radoub), 91 ms (→ Dizzy) | 47 à 310 ms |
+| Pic client Dizzy → Radoub | une image de 182 ms (repos 40 ms) | 233 ms (repos 68 ms) |
+| Pic client Radoub → Dizzy | une image de 170 ms | 255 ms |
+| Piste rejetée : maps rangées dans `ServerStorage` | non refait | Dizzy remise : une image de 1 249 ms, 7 images > 100 ms |
 
 D'où `ReplicatedStorage.MapStore` : les clients gardent les maps rangées en mémoire (pas de réplication au changement),
-mais ni rendu ni collision. La saccade restante (~0,25 s) tombe entre la fin du clip et l'apparition (volets de
+mais ni rendu ni collision. La saccade restante (0,2 s environ) tombe entre la fin du clip et l'apparition (volets de
 transition), pas en jeu. Non mesuré sur un vrai client en ligne (réseau, machine modeste).
 
 ## Dizzy (map par défaut)
