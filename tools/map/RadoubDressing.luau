@@ -678,17 +678,18 @@ end
 -- Cette méthode permet d'aménager la salle des pompes : deux groupes motopompes sur socle, tuyauteries vers le mur,
 -- armoires électriques, lampes.
 local function pumpInside(parent, h)
+	local x0 = h.x0
 	for _, zc in { 186, 204 } do
-		blk(parent, 8, 34, Q, Q + 1.5, zc - 3.5, zc + 3.5, PAL.concrete, M.Concrete, true)
-		cyl(parent, ORIGIN, V3.new(10, Q + 4.5, zc), V3.new(18, Q + 4.5, zc), 5.4, PAL.pump, M.Metal, true)
-		cyl(parent, ORIGIN, V3.new(18, Q + 4, zc), V3.new(20, Q + 4, zc), 2, PAL.steel, M.Metal, true)
-		cyl(parent, ORIGIN, V3.new(20, Q + 4, zc), V3.new(30, Q + 4, zc), 4.4, PAL.blue, M.Metal, true)
-		cyl(parent, ORIGIN, V3.new(14, Q + 7, zc), V3.new(14, Q + 17, zc), 2.6, PAL.pump, M.Metal, true)
-		cyl(parent, ORIGIN, V3.new(14, Q + 17, zc), V3.new(h.x0 + ctx.wall, Q + 17, zc), 2.6, PAL.pump, M.Metal, true)
-		local elbow = part(parent, CF.new(14, Q + 17, zc), V3.new(2.6, 2.6, 2.6), PAL.pump, M.Metal, true)
+		blk(parent, x0 + 8, x0 + 34, Q, Q + 1.5, zc - 3.5, zc + 3.5, PAL.concrete, M.Concrete, true)
+		cyl(parent, ORIGIN, V3.new(x0 + 10, Q + 4.5, zc), V3.new(x0 + 18, Q + 4.5, zc), 5.4, PAL.pump, M.Metal, true)
+		cyl(parent, ORIGIN, V3.new(x0 + 18, Q + 4, zc), V3.new(x0 + 20, Q + 4, zc), 2, PAL.steel, M.Metal, true)
+		cyl(parent, ORIGIN, V3.new(x0 + 20, Q + 4, zc), V3.new(x0 + 30, Q + 4, zc), 4.4, PAL.blue, M.Metal, true)
+		cyl(parent, ORIGIN, V3.new(x0 + 14, Q + 7, zc), V3.new(x0 + 14, Q + 17, zc), 2.6, PAL.pump, M.Metal, true)
+		cyl(parent, ORIGIN, V3.new(x0 + 14, Q + 17, zc), V3.new(h.x0 + ctx.wall, Q + 17, zc), 2.6, PAL.pump, M.Metal, true)
+		local elbow = part(parent, CF.new(x0 + 14, Q + 17, zc), V3.new(2.6, 2.6, 2.6), PAL.pump, M.Metal, true)
 		elbow.Shape = E.PartType.Ball
 		-- volant de vanne rouge
-		cyl(parent, ORIGIN, V3.new(14, Q + 12, zc - 1.4), V3.new(14, Q + 12, zc - 1.7), 1.8, PAL.red)
+		cyl(parent, ORIGIN, V3.new(x0 + 14, Q + 12, zc - 1.4), V3.new(x0 + 14, Q + 12, zc - 1.7), 1.8, PAL.red)
 	end
 	local xe = h.x1 - ctx.wall
 	blk(parent, xe - 2, xe, Q, Q + 7, 250, 266, C3.fromRGB(180, 184, 186), M.Metal, true)
@@ -696,7 +697,7 @@ local function pumpInside(parent, h)
 		blk(parent, xe - 2.05, xe - 2, Q + 5.3, Q + 5.7, z - 0.2, z + 0.2, PAL.lit, M.Neon)
 	end
 	for _, z in { 192, 270 } do
-		highBay(parent, 27, z, Q + h.h - 3, z < 230)
+		highBay(parent, x0 + 27, z, Q + h.h - 3, z < 230)
 	end
 end
 

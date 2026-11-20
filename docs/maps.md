@@ -484,7 +484,8 @@ des échelles, sinon on reste coincé dessous). Garde-corps des passerelles d'ac
 invisible inchangé, barres en décor.
 
 Voies de course (retour du 20/11/2026) : le petit décor au sol est collé aux bâtiments ou aux angles (mâts d'éclairage
-aux quatre coins, piles de tôles entre les bâtiments, cabane contre le hangar), une bitte tous les 80 studs du plan le
+aux quatre coins, piles de tôles entre les bâtiments, cabane contre le hangar, salle des pompes reculée à X −20..35
+du plan, `PUMP_X0`, soit 25 studs du plan jusqu'à la tête de forme au lieu de 5), une bitte tous les 80 studs du plan le
 long de la forme : de longues lignes droites restent libres sur les quais.
 
 Coût du rendu (`audit_map`) : ombres coupées en plus de `cullShadows` sur toute pièce linéaire ou petite (deuxième

@@ -42,6 +42,8 @@ local KILL_HEIGHT = -40
 -- les pentes de surf gardent leur angle. Restent en vraie grandeur : points d'apparition, hauteur des volumes de mort
 -- au-dessus de l'eau, KillHeight (en studs du monde), garde-corps du portique (GANTRY.railH).
 local SCALE = 1.4
+-- salle des pompes reculée vers le hangar (retour du 20/11/2026) : 25 studs du plan jusqu'à la tête de forme
+local PUMP_X0, PUMP_X1 = -20, 35
 local WALL = 1.5 -- épaisseur des murs des bâtiments
 local SCREEN_GAP = 7 -- studs entre une porte et l'écran intérieur qui la masque (passage de chaque côté)
 local SCREEN_OVERLAP = 5 -- studs dont l'écran dépasse la porte de chaque côté
@@ -472,14 +474,14 @@ local function buildings()
 	end
 	building(
 		"pompes",
-		0,
-		55,
+		PUMP_X0,
+		PUMP_X1,
 		160,
 		300,
 		24,
 		{ { "E", 222, 238, 12 }, { "N", 20, 35, 12 } },
 		"brick",
-		{ chimney = { x = 27, z = 178, top = QUAY + 52 } }
+		{ chimney = { x = PUMP_X0 + 27, z = 178, top = QUAY + 52 } }
 	)
 	building("local", 438, 470, 312, 346, 16, { { "W", 322, 334, 10 }, { "N", 448, 460, 10 } }, "clad")
 	for _, c in CONTAINERS do
@@ -502,7 +504,7 @@ local SPAWNS = {
 	{ zone = "AtelierEst", look = { -1, 1 }, points = { { 400, 85 }, { 412, 85 }, { 412, 95 } } },
 	{ zone = "MagasinOuest", look = { 1, -1 }, points = { { 60, 410 }, { 72, 410 }, { 60, 420 } } },
 	{ zone = "MagasinEst", look = { 1, -1 }, points = { { 300, 415 }, { 312, 415 }, { 300, 425 } } },
-	{ zone = "Pompes", look = { 1, -1 }, points = { { 27, 270 }, { 20, 282 }, { 34, 282 } } },
+	{ zone = "Pompes", look = { 1, -1 }, points = { { PUMP_X0 + 27, 270 }, { PUMP_X0 + 20, 282 }, { PUMP_X0 + 34, 282 } } },
 	{ zone = "BateauPorte", look = { -1, 0 }, points = { { 454, 329 }, { 460, 338 }, { 460, 320 } } },
 }
 
