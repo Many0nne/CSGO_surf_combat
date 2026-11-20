@@ -135,6 +135,7 @@ par un verrou, `worktrees/.run/studio.lock`. Faire d'abord tout ce qui se passe 
 - Avec le plugin Rojo « CSGO autoconnect » (`tools/rojo-plugin/README.md`, `install.ps1` une fois par poste), la
   réservation connecte Studio au worktree toute seule (patch accepté sans clic), et la libération le renvoie sur `34872`.
   Sinon (plugin officiel, Studio en Play), la réservation indique s'il faut faire Disconnect et le port à saisir.
+  Il ne suit que la place publiée de CSGO (ouverte depuis Roblox, pas un `.rbxlx` local) : cf. son README.
 - Un verrou est repris d'office si son détenteur n'a plus de worktree, plus de Rojo ou plus de thread T3 actif : un
   agent qui s'arrête sans libérer ne bloque pas les autres.
 - Une tâche qui attend l'avis de l'utilisateur garde le verrou jusqu'à son retour : regrouper ces demandes.
