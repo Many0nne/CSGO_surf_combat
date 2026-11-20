@@ -278,6 +278,13 @@ local function checkMap(map)
 	if kill ~= nil and type(kill) ~= "number" then
 		fail("Maps." .. map.Name .. ".KillHeight doit être un nombre")
 	end
+	-- volumes de mort (#593) : invisibles au mouvement (un volume interrogeable serait pris pour un mur ou un sol)
+	local killVolumes = map:FindFirstChild("KillVolumes")
+	for _, v in if killVolumes then killVolumes:GetDescendants() else {} do
+		if v:IsA("BasePart") and (v.CanCollide or v.CanQuery) then
+			fail("Maps." .. map.Name .. ".KillVolumes." .. v.Name .. " doit être sans collision ni requête")
+		end
+	end
 	print(
 		string.format(
 			"Maps.%s : %d instances, %d spawns au sol, %d boosts, %d murs d'air, %d grillages passbullets, KillHeight %s",

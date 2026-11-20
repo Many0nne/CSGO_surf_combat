@@ -2,7 +2,8 @@
 -- Export des pièces visibles d'une map générée, pour les planches Blender (tools/map/render_dizzy.py, cf. docs/maps.md,
 -- « Planche Blender ») :
 --   lune run tools/map/dump_parts.luau -- <sortie.json> [x y z rayon]   (racine du worktree)
--- Lit assets/rbx/Maps/Dizzy.rbxm tel que build_dizzy.luau l'a écrit ; garde les pièces visibles (Transparency < 1) dont
+-- Lit assets/rbx/Maps/Dizzy.rbxm tel que build_dizzy.luau l'a écrit (autre map : variable d'environnement MAP, ex.
+-- MAP=assets/rbx/Maps/Radoub.rbxm) ; garde les pièces visibles (Transparency < 1) dont
 -- le centre est à moins de `rayon` studs du point (toutes sans point). Coordonnées du monde (décalage de la map compris).
 
 local fs = require("@lune/fs")
@@ -10,7 +11,7 @@ local process = require("@lune/process")
 local roblox = require("@lune/roblox")
 local serde = require("@lune/serde")
 
-local MAP = "assets/rbx/Maps/Dizzy.rbxm"
+local MAP = process.env.MAP or "assets/rbx/Maps/Dizzy.rbxm"
 
 local args = table.clone(process.args)
 if args[1] == "--" then

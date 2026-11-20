@@ -1,6 +1,7 @@
 # Maps
 
-Référence pour modifier une map ou en construire une autre. Seule map du jeu : **Dizzy** (réplique de ar_dizzy).
+Référence pour modifier une map ou en construire une autre. Map du jeu : **Dizzy** (réplique de ar_dizzy) ; **Radoub**
+(map inventée, maquette grise, #593) attend la rotation des maps (#594).
 Les maps précédentes (l'Arène et la ville ensablée) ont été retirées : leurs leçons sont dans « Maps retirées ».
 
 ## Choisir la map jouée
@@ -396,6 +397,54 @@ Aperçu dans Studio sans reconnecter Rojo : le MCP refuse `HttpService` vers `lo
 donc pas de `loadstring` d'un fichier servi en local depuis `execute_luau` ; il faut envoyer le code lui-même. Les
 captures (`screen_capture`) sont blanches tant que la fenêtre Studio n'est pas au premier plan.
 
+## Radoub (#593, maquette grise)
+
+Map inventée (pas une reprise) : chantier naval sur une presqu'île au crépuscule. Un navire en construction est posé en
+trois tronçons au fond d'une forme de radoub ; les deux flancs de la forme sont les rampes de surf, face à face, et la
+coque passe entre elles. Choisie sur maquettes (`docs/maps/plans-radoub.html`, three.js, à l'échelle) parmi trois plans.
+Pas encore jouée hors test : la coexistence avec Dizzy passe par la rotation des maps (#594).
+
+- **Générateur** : `lune run tools/map/build_radoub.luau` (plugin Rojo déconnecté de ce serveur) écrit
+  `assets/rbx/Maps/Radoub.rbxm`, environ 400 pièces. Plan écrit en dur (pas de relevé). Outils communs avec Dizzy
+  (soleil, ombres, points d'apparition) : `tools/map/MapBuild.luau`.
+- **Repère** : le plan est écrit X ouest → est, Z nord → sud, quais à y 60, fond à y 0, mer à y 42 ; il est posé en jeu
+  **tourné d'un demi-tour** autour de (236, 0, 220) puis décalé de (−2000, 0, 0) (`PLACE`). Point du plan (x, y, z) →
+  monde (−1528 − x, y, 440 − z). Raison : le soleil du jeu est à 1,4° au-dessus de l'horizon, à l'ouest-nord-ouest ;
+  le hangar de 90 studs qui ferme le côté terre, posé à l'ouest, mettait toute la map à l'ombre (26 pièces gardaient une
+  ombre sur 400). Tourné, le soleil se couche sur la mer au bout de la forme. **Règle pour toute map : rien de haut entre
+  le soleil (ouest-nord-ouest) et la zone de jeu.**
+- **Cotes (repère du plan)** : forme X 60..460, Z 150..310 ; flancs à 55°, 60 de haut, 42 en plan (nord X 74..460, sud
+  X 60..460) ; rampe d'accès à pied (32°) le long de la tête de forme, X 60..74, du quai nord au fond ; bateau-porte X
+  460..472 (passage à hauteur de quai) ; navire X 95..442 (tronçons 95..200, 215..315, 330..410, étrave), pont à
+  y 44,5 ; portique roulant, poutre praticable à y 112 (échelle dans chaque pied) ; ateliers (Z 25..110) et magasins
+  (Z 350..435) creux, salle des pompes, local du bateau-porte.
+- **Mer = mort** : volumes invisibles `KillVolumes` (cf. « Ce que le code attend de la map »), haut à 4 studs au-dessus
+  de l'eau (la position testée est la racine, 4,77 au-dessus des pieds : on meurt les pieds dans l'eau). Vérifié en
+  Studio : mer → mort ; quai, pont, fond de la forme (sous le niveau de la mer), saut au-dessus de l'eau → rien.
+  `KillHeight` −40 en secours.
+- **Points d'apparition** : 6 zones de 3 points à l'intérieur des bâtiments, `Team` = `FFA`, `Zone` = nom du bâtiment.
+  135 paires, 0 vue (`SpawnSight`) ; pieds à 0,76 stud du sol (`SpawnCheck`).
+- **Rampes** : `RampEdges` + `RampCheck` comme Dizzy, 0,000 d'écart sur les deux flancs (collision et rendu).
+- **Bots** : plan de navigation de 15 322 cases, 3 échelles, en 12 s. Les bots ne prennent pas les flancs (« aucun
+  trajet » : pas de case d'entrée sur le flanc nord, sauts refusés sur le flanc sud) : ils se battent à pied.
+
+Pièges rencontrés :
+- **Passerelles au-dessus d'un flanc** (maquette : quai → pont en travers du surf) : près de la crête, la passerelle
+  est à moins d'une hauteur de corps de la pente (le surfeur s'y cogne) et dans le volume que `RampCheck` mesure (8 studs
+  au-dessus du plan), qui la compterait comme un rebord. Passerelles posées aux deux bouts de la forme (tête → poupe,
+  bateau-porte → étrave), hors des flancs.
+- **Vues par les portes** : 7 paires de points d'apparition se voyaient d'un bâtiment à l'autre à travers les grandes
+  portes, par-dessus la forme et le pont. Chaque porte a un écran intérieur (`SCREEN_GAP` derrière, `SCREEN_OVERLAP` de
+  chaque côté) qu'on contourne.
+- **Coin couché** (étrave en plan) : le côté haut d'un `WedgePart` est son +Z local ; pour un triangle horizontal
+  extrudé verticalement, local X vertical = Y × Z (`bowHalf`), vérifié sur la planche Blender.
+- **Planche Blender** : `MAP=assets/rbx/Maps/Radoub.rbxm lune run tools/map/dump_parts.luau -- <sortie.json>`, puis
+  `render_dizzy.py` comme pour Dizzy (coordonnées du monde, cf. la conversion ci-dessus).
+
+À trancher ou tester avec l'utilisateur : sortie d'un flanc par un saut sur le pont (même hauteur, 35 à 45 studs de
+côté, non mesuré), bouts fermés des flancs, temps de parcours d'un flanc (2,9 s à 140 studs/s, calculé, non mesuré).
+Habillage : planche Blender à faire valider avant (cf. « Planche Blender d'un habillage »).
+
 ## Maps retirées (leçons)
 
 L'Arène (#71, anneau de dunes surfables face à face façon surf_japan, au-dessus du vide) et, avant elle, la ville
@@ -456,6 +505,9 @@ Rojo gère `Workspace.Maps` : un objet posé à la main dans une map est supprim
   prévoir des points dans plusieurs zones éloignées et sans vue entre elles, sinon le choix retombe au hasard
   (`tools/map/spawn_sight.luau`), et accessibles aller et retour depuis les autres (plan des bots, cf. « Points
   d'apparition (#329) »).
+- `Maps.Map.KillVolumes` (#593) : volumes invisibles (`CanCollide`, `CanQuery`, `CanTouch` faux, contrôlé par
+  `verify_place`) où l'on meurt, ex. la mer de Radoub. Le serveur (`KillZone`) les relève au démarrage et teste la
+  position de la racine de chaque position acceptée (`MapRules.isInKillVolume`), en plus de `KillHeight`.
 - `Maps.Map.Boosts` : volumes invisibles (`CanCollide`, `CanQuery`, `CanTouch` faux), attribut `Kind` :
   `Geyser` / `Launcher` avec `Velocity` (Vector3 imposé), `Portal` avec `Boost` (studs/s ajoutés), `Cooldown`
   optionnel. Le client teste sa position dans la boîte (marge `CHAR_RADIUS`) à chaque frame : un portique doit être

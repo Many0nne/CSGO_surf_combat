@@ -73,6 +73,21 @@ return function(T, Loader)
 		end)
 	end)
 
+	T.describe("MapRules.isInKillVolume", function()
+		T.it("tue dans l'un des volumes (la mer de Radoub), pas à côté ni sans volume (#593)", function()
+			local volumes = {
+				{ cf = CFrame.new(0, 20, -100), size = Vector3.new(400, 50, 100) },
+				{ cf = CFrame.new(300, 20, 0), size = Vector3.new(100, 50, 300) },
+			}
+			T.expectEqual(MapRules.isInKillVolume(volumes, Vector3.new(10, 44, -60)), true)
+			T.expectEqual(MapRules.isInKillVolume(volumes, Vector3.new(300, 0, 100)), true)
+			-- sur le quai, au-dessus du haut du volume (y 45), et à côté
+			T.expectEqual(MapRules.isInKillVolume(volumes, Vector3.new(10, 64, -60)), false)
+			T.expectEqual(MapRules.isInKillVolume(volumes, Vector3.new(10, 20, 0)), false)
+			T.expectEqual(MapRules.isInKillVolume({}, Vector3.new(0, 20, -100)), false)
+		end)
+	end)
+
 	T.describe("MapRules.ballisticVelocity", function()
 		T.it("atteint la cible au temps demandé", function()
 			local from, to, t, g = Vector3.new(0, 0, 0), Vector3.new(-60, 36, 70), 1.3, -110
