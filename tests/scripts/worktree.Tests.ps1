@@ -220,6 +220,15 @@ Describe 'csgo-worktree.ps1 : verrou Studio' {
     (Get-Content $a.Lock -Raw | ConvertFrom-Json).branch | Should Be 'feature/7-studio-a'
   }
 
+  It 'publie la cible et inscrit la place CSGO au registre du plugin (port principal, fichiers cible et etat)' {
+    (Get-Content $a.Target -Raw | ConvertFrom-Json).port | Should Be '35478'
+    $project = Get-Content $a.Project -Raw | ConvertFrom-Json
+    @($project.placeIds) -contains '91817475928288' | Should Be $true
+    $project.mainPort | Should Be 34872
+    $project.target | Should Be $a.Target
+    $project.status | Should Be (Join-Path $a.Run 'studio.status')
+  }
+
   It 'refuse la seconde branche (code 2) tant que la premiere est active' {
     (Invoke-Wt $sb @('feature/7-studio-b', '-AcquireStudio')).Code | Should Be 2
   }
@@ -247,6 +256,85 @@ Describe 'csgo-worktree.ps1 : verrou Studio' {
     (Get-Content $a.Lock -Raw | ConvertFrom-Json).branch | Should Be 'feature/7-studio-b'
   }
 
+  It 'la liberation renvoie la cible sur le checkout principal, ou la vide s''il ne repond pas' {
+    $rev = (Get-Content $a.Target -Raw | ConvertFrom-Json).rev
+    (Invoke-Wt $sb @('feature/7-studio-b', '-ReleaseStudio')).Code | Should Be 0
+    $t = Get-Content $a.Target -Raw | ConvertFrom-Json
+    $t.rev | Should Not Be $rev
+    # Pas de `rojo serve` sur 34872 dans le bac a sable ; sur le poste, il peut tourner (checkout principal).
+    $mainUp = try { (Invoke-WebRequest 'http://localhost:34872/api/rojo' -TimeoutSec 3).StatusCode -eq 200 } catch { $false }
+    $t.port | Should Be $(if ($mainUp) { '34872' } else { '' })
+  }
+
+  Remove-Sandbox $sb
+}
+
+# Issue #589 : un seul serveur de commande pour toutes les fenetres Studio du poste, une cible par place.
+Describe 'control-server.luau : une cible par place' {
+  $sb = New-Sandbox
+  $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+  $reg = Join-Path $sb.Root 'autoconnect'
+  New-Item -ItemType Directory -Force (Join-Path $reg 'projects') | Out-Null
+  $csgo = @{ target = Join-Path $reg 'csgo.target'; status = Join-Path $reg 'csgo.status' }
+  $fad = @{ target = Join-Path $reg 'fad.target'; status = Join-Path $reg 'fad.status' }
+  Set-Content $csgo.target '{"port":"34880","rev":"1"}'
+  Set-Content $fad.target '{"port":"34901","rev":"7"}'
+  @{ name = 'csgo'; placeIds = @('91817475928288'); mainPort = 34872; target = $csgo.target; status = $csgo.status } |
+    ConvertTo-Json -Compress | Set-Content (Join-Path $reg 'projects\csgo.json')
+  # Place en nombre JSON (et non en texte) : acceptee aussi.
+  Set-Content (Join-Path $reg 'projects\fad.json') ('{"name":"fad","placeIds":[88580736516669],"mainPort":34900,"target":' +
+    (ConvertTo-Json $fad.target) + ',"status":' + (ConvertTo-Json $fad.status) + '}')
+  Set-Content (Join-Path $reg 'projects\casse.json') '{ tronque'
+  $port = 35870
+  $out = Join-Path $sb.Root 'control.log'
+  # lune lance depuis le depot : le shim Rokit y trouve sa version (rokit.toml).
+  $server = Start-Process -FilePath (Get-Command lune).Source -WorkingDirectory $repoRoot -PassThru -WindowStyle Hidden `
+    -RedirectStandardOutput $out -RedirectStandardError "$out.err" `
+    -ArgumentList 'run', (Join-Path $repoRoot 'tools\rojo-plugin\control-server.luau'), $reg, "$port"
+  $sb.Dummies.Add($server.Id)
+  # Cette methode permet d'interroger le serveur de test ; renvoie le code HTTP et le corps en texte.
+  function Get-Control([string]$Path, [string]$Method = 'GET', [string]$Body) {
+    $r = Invoke-WebRequest "http://localhost:$port$Path" -Method $Method -Body $Body -SkipHttpErrorCheck -TimeoutSec 3
+    [pscustomobject]@{ Code = [int]$r.StatusCode; Body = [Text.Encoding]::UTF8.GetString($r.RawContentStream.ToArray()) }
+  }
+  for ($i = 0; $i -lt 20; $i++) {
+    try { if ((Get-Control '/health').Body -eq 'rojo-control 3') { break } } catch { }
+    Start-Sleep -Milliseconds 500
+  }
+
+  It 'annonce la version 3 du protocole' { (Get-Control '/health').Body | Should Be 'rojo-control 3' }
+
+  It 'sert a chaque place la cible de son projet' {
+    ((Get-Control '/target?placeId=91817475928288').Body | ConvertFrom-Json).port | Should Be '34880'
+    ((Get-Control '/target?placeId=88580736516669').Body | ConvertFrom-Json).port | Should Be '34901'
+  }
+
+  It 'place inconnue : 404, le plugin de cette fenetre ne fait rien' {
+    (Get-Control '/target?placeId=123').Code | Should Be 404
+  }
+
+  It 'sans placeId (ancien plugin) : 400, aucune cible servie' {
+    (Get-Control '/target').Code | Should Be 400
+  }
+
+  It 'projet inscrit sans fichier cible : 404' {
+    Remove-Item $fad.target
+    (Get-Control '/target?placeId=88580736516669').Code | Should Be 404
+  }
+
+  It 'ecrit l''etat du plugin dans le fichier du projet de sa place, et pas dans celui d''un autre' {
+    (Get-Control '/status?placeId=91817475928288' 'POST' '{"rev":"1","port":"34880","state":"connected"}').Code | Should Be 204
+    (Get-Content $csgo.status -Raw | ConvertFrom-Json).state | Should Be 'connected'
+    $fad.status | Should Not Exist
+  }
+
+  It 'liste les projets inscrits, sans l''inscription illisible' {
+    $names = @((Get-Control '/projects').Body | ConvertFrom-Json | ForEach-Object { $_.name }) | Sort-Object
+    ($names -join ',') | Should Be 'csgo,fad'
+  }
+
+  # Arbre complet : le shim Rokit lance le vrai lune en processus enfant.
+  taskkill /PID $server.Id /T /F *> $null
   Remove-Sandbox $sb
 }
 

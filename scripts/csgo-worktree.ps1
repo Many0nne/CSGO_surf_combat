@@ -249,28 +249,48 @@ function Invoke-StudioLocked([scriptblock]$Action) {
 
 $studioTarget = Join-Path $runDir 'studio.target'
 $studioStateFile = Join-Path $runDir 'studio.status'
+# Serveur de commande partage entre les projets du poste (tools/rojo-plugin/README.md) : registre des projets, journal
+# et pid dans un dossier commun. ROJO_AUTOCONNECT_DIR : autre dossier (bac a sable des tests).
 $controlPort = 34870
-$controlPidFile = Join-Path $runDir 'rojo-control.pid'
+$controlVersion = 'rojo-control 3'
+$controlDir = if ($env:ROJO_AUTOCONNECT_DIR) { $env:ROJO_AUTOCONNECT_DIR } else { Join-Path $env:LOCALAPPDATA 'RojoAutoconnect' }
+$controlPidFile = Join-Path $controlDir 'control.pid'
+# Place(s) Roblox de CSGO : le plugin d'une autre place (autre projet) ne suit pas les cibles de ce script.
+$placeIds = @('91817475928288')
+
+# Cette methode permet d'inscrire CSGO dans le registre du serveur de commande (sa place, son port principal, ses
+# fichiers cible et etat) lorsqu'il publie une cible ; reecrit a chaque fois, l'inscription suit le checkout courant.
+function Register-AutoconnectProject {
+  $projects = Join-Path $controlDir 'projects'
+  New-Item -ItemType Directory -Force $projects | Out-Null
+  $entry = [pscustomobject]@{ name = 'csgo'; placeIds = $placeIds; mainPort = $basePort; target = $studioTarget; status = $studioStateFile }
+  # Fichier temporaire puis remplacement : le serveur ne lit jamais une inscription a moitie ecrite.
+  $file = Join-Path $projects 'csgo.json'
+  [IO.File]::WriteAllText("$file.tmp", ($entry | ConvertTo-Json -Compress), [Text.UTF8Encoding]::new($false))
+  Move-Item -Force "$file.tmp" $file
+}
 
 # Cette methode permet de demarrer le serveur de commande du plugin Rojo modifie (tools/rojo-plugin) lorsqu'il ne
-# tourne pas encore ; sans le plugin modifie dans Studio, il ne sert a rien mais ne gene pas.
+# tourne pas encore, ou pas dans la version attendue ; sans le plugin modifie dans Studio, il ne sert a rien mais ne gene pas.
 function Start-RojoControl {
   $health = try { (Invoke-WebRequest "http://localhost:$controlPort/health" -TimeoutSec 3).Content } catch { $null }
-  if ($health -eq 'csgo-control 2') { return }
-  # Ancienne version encore lancee : on l'arrete avant de demarrer celle du depot.
+  if ($health -eq $controlVersion) { return }
+  $lune = (Get-Command lune -ErrorAction SilentlyContinue).Source
+  $server = Join-Path $PSScriptRoot '..\tools\rojo-plugin\control-server.luau'
+  # Verifie avant d'arreter quoi que ce soit : un script sans serveur a lancer laisse tourner celui en place.
+  if (-not ($lune -and (Test-Path $server))) { return }
+  # Ancienne version encore lancee (par ce projet ou un autre) : on l'arrete avant de demarrer celle du depot.
   @(Get-NetTCPConnection -LocalPort $controlPort -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique) |
     Where-Object { (Get-Process -Id $_ -ErrorAction SilentlyContinue).ProcessName -eq 'lune' } | ForEach-Object { taskkill /PID $_ /T /F *> $null }
   if (Test-Path $controlPidFile) {
     $old = [int](Get-Content $controlPidFile)
     if (Get-Process -Id $old -ErrorAction SilentlyContinue) { taskkill /PID $old /T /F *> $null }
   }
-  $lune = (Get-Command lune -ErrorAction SilentlyContinue).Source
-  $server = Join-Path $PSScriptRoot '..\tools\rojo-plugin\control-server.luau'
-  if (-not ($lune -and (Test-Path $server))) { return }
-  # Dossier de travail = celui du script : le shim Rokit de lune y trouve rokit.toml.
-  $proc = Start-Process -FilePath (Get-Command pwsh).Source -WorkingDirectory (Split-Path -Parent $PSScriptRoot) `
+  # Dossier de travail = racine du checkout principal (le shim Rokit de lune y trouve rokit.toml) : pas un worktree,
+  # que le serveur bloquerait a sa suppression.
+  $proc = Start-Process -FilePath (Get-Command pwsh).Source -WorkingDirectory $root `
     -WindowStyle Hidden -PassThru -ArgumentList '-NoProfile',
-    '-NonInteractive', '-Command', "& '$lune' run '$((Resolve-Path $server).Path)' '$studioTarget' '$studioStateFile' *>'$(Join-Path $runDir 'rojo-control.log')'"
+    '-NonInteractive', '-Command', "& '$lune' run '$((Resolve-Path $server).Path)' '$controlDir' *>'$(Join-Path $controlDir 'control.log')'"
   Set-Content -Path $controlPidFile -Value $proc.Id
 }
 
@@ -280,6 +300,7 @@ function Set-StudioTarget([string]$Port) {
   New-Item -ItemType Directory -Force $runDir | Out-Null
   $rev = [string](Get-Date).Ticks
   [pscustomobject]@{ port = $Port; rev = $rev } | ConvertTo-Json -Compress | Set-Content $studioTarget
+  Register-AutoconnectProject
   Start-RojoControl
   return $rev
 }

@@ -7,7 +7,9 @@
   Les scripts calculent leur racine depuis leur propre emplacement : la copie ne touche ni worktrees\.owners.json, ni
   worktrees\.run, ni la tache planifiee du vrai checkout. Limites connues, a respecter dans les tests :
   - ports : le port de base 34872 est fige dans le script ; les tests qui demarrent un faux Rojo passent -Slot >= 600 ;
-  - mutex : les noms 'Local\csgo-studio-lock' et 'Local\csgo-worktree-cleanup' sont partages avec le vrai poste.
+  - mutex : les noms 'Local\csgo-studio-lock' et 'Local\csgo-worktree-cleanup' sont partages avec le vrai poste ;
+  - plugin Rojo : le registre du serveur de commande est celui du bac a sable (ROJO_AUTOCONNECT_DIR), et le serveur
+    lui-meme n'y est pas copie (tools\ absent) : -AcquireStudio n'arrete ni ne lance celui du poste.
 #>
 
 $script:SourceScripts = Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'scripts'
@@ -114,6 +116,8 @@ function Set-FakeGh($Sb, [hashtable]$Prs = @{}, [switch]$Fail) {
 function Use-SandboxEnv($Sb, [string]$Session, [scriptblock]$Action) {
   $vars = @{
     PATH = "$($Sb.Bin);$env:PATH"; CSGO_FAKE_T3 = $Sb.T3File; CSGO_FAKE_GH = $Sb.GhFile
+    # Registre du serveur de commande du plugin : celui du bac a sable, jamais celui du poste (%LOCALAPPDATA%).
+    ROJO_AUTOCONNECT_DIR = Join-Path $Sb.Root 'autoconnect'
     CLAUDE_CODE_SESSION_ID = $(if ($Session) { $Session } else { $null }); GH_CONFIG_DIR = $null
   }
   $saved = @{}
@@ -182,7 +186,8 @@ function Get-SbPaths($Sb, [string]$Branch) {
   [pscustomobject]@{
     Dir = Join-Path $Sb.Repo "worktrees\csgo-$slug"; Port = Join-Path $run "$slug.port"; Pid = Join-Path $run "$slug.pid"
     Run = $run; Owners = Join-Path $Sb.Repo 'worktrees\.owners.json'; Lock = Join-Path $run 'studio.lock'
-    Log = Join-Path $Sb.Repo 'worktrees\.cleanup.log'
+    Log = Join-Path $Sb.Repo 'worktrees\.cleanup.log'; Target = Join-Path $run 'studio.target'
+    Project = Join-Path $Sb.Root 'autoconnect\projects\csgo.json'
   }
 }
 

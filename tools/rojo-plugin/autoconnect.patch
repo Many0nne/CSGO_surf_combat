@@ -1,21 +1,31 @@
 diff --git a/plugin/src/App/init.lua b/plugin/src/App/init.lua
-index e6e4dee..2956f1a 100644
+index e6e4dee..7b89337 100644
 --- a/plugin/src/App/init.lua
 +++ b/plugin/src/App/init.lua
-@@ -2,6 +2,12 @@ local ChangeHistoryService = game:GetService("ChangeHistoryService")
+@@ -2,6 +2,22 @@ local ChangeHistoryService = game:GetService("ChangeHistoryService")
  local Players = game:GetService("Players")
  local ServerStorage = game:GetService("ServerStorage")
  local RunService = game:GetService("RunService")
 +local HttpService = game:GetService("HttpService")
 +
-+-- CSGO autoconnect : point HTTP local qui donne le port Rojo cible (tools/rojo-plugin/control-server.luau).
-+local CONTROL_URL = "http://localhost:34870/target"
-+local CONTROL_STATUS_URL = "http://localhost:34870/status"
++-- CSGO autoconnect : point HTTP local qui donne le port Rojo cible de chaque place (tools/rojo-plugin/control-server.luau).
++-- Le plugin envoie game.PlaceId : il ne suit que la cible du projet qui a declare cette place.
++local CONTROL_URL = "http://localhost:34870/target?placeId="
++local CONTROL_STATUS_URL = "http://localhost:34870/status?placeId="
 +local CONTROL_POLL_SECONDS = 1
++
++-- Cette methode permet de connaitre la place ouverte dans Studio lorsque le plugin interroge le serveur de commande ;
++-- nil pour une place jamais publiee (PlaceId 0) : le plugin se comporte alors comme l'officiel.
++local function controlPlaceId(): string?
++	if game.PlaceId == 0 then
++		return nil
++	end
++	return string.format("%d", game.PlaceId)
++end
  
  local Rojo = script:FindFirstAncestor("Rojo")
  local Plugin = Rojo.Plugin
-@@ -154,6 +160,8 @@ function App:init()
+@@ -154,6 +170,8 @@ function App:init()
  				self:checkSyncReminder()
  			end
  		end)
@@ -24,7 +34,7 @@ index e6e4dee..2956f1a 100644
  	end
  
  	if self:isAutoConnectPlaytestServerAvailable() then
-@@ -186,6 +194,7 @@ function App:willUnmount()
+@@ -186,6 +204,7 @@ function App:willUnmount()
  	end
  
  	self:stopSyncReminderPolling()
@@ -32,15 +42,20 @@ index e6e4dee..2956f1a 100644
  
  	self.autoConnectPlaytestServerListener()
  	self:clearRunningConnectionInfo()
-@@ -600,7 +609,101 @@ function App:useRunningConnectionInfo()
+@@ -600,7 +619,107 @@ function App:useRunningConnectionInfo()
  	self.setPort(port)
  end
  
 -function App:startSession()
-+-- Cette methode permet de lire le port cible publie par csgo-worktree.ps1 lorsque la boucle de commande s'execute ;
-+-- renvoie nil si le serveur de commande ne repond pas (le plugin se comporte alors comme l'officiel).
++-- Cette methode permet de lire le port cible publie pour cette place (csgo-worktree.ps1 ou autre projet inscrit) lorsque
++-- la boucle de commande s'execute ; nil si le serveur ne repond pas ou ne connait pas la place (comportement officiel).
 +function App:fetchControlTarget(): { port: string, rev: string }?
-+	local ok, response = pcall(HttpService.RequestAsync, HttpService, { Url = CONTROL_URL, Method = "GET" })
++	local placeId = controlPlaceId()
++	if placeId == nil then
++		return nil
++	end
++	local ok, response =
++		pcall(HttpService.RequestAsync, HttpService, { Url = CONTROL_URL .. placeId, Method = "GET" })
 +	if not ok or not response.Success then
 +		return nil
 +	end
@@ -54,13 +69,14 @@ index e6e4dee..2956f1a 100644
 +-- Cette methode permet de renvoyer l'etat reel de la session au serveur de commande lorsqu'il change, pour que
 +-- csgo-worktree.ps1 sache si la connexion a abouti (les connexions TCP inactives de Studio ne le disent pas).
 +function App:reportControlStatus(state: string, port: string)
-+	if self.controlRev == nil then
++	local placeId = controlPlaceId()
++	if self.controlRev == nil or placeId == nil then
 +		return
 +	end
 +	local body = HttpService:JSONEncode({ rev = self.controlRev, port = port, state = state })
 +	task.spawn(function()
 +		pcall(HttpService.RequestAsync, HttpService, {
-+			Url = CONTROL_STATUS_URL,
++			Url = CONTROL_STATUS_URL .. placeId,
 +			Method = "POST",
 +			Headers = { ["Content-Type"] = "application/json" },
 +			Body = body,
@@ -135,7 +151,7 @@ index e6e4dee..2956f1a 100644
  	local claimedLock, priorOwner = self:claimSyncLock()
  	if not claimedLock then
  		local msg = string.format("Could not sync because user '%s' is already syncing", tostring(priorOwner))
-@@ -699,8 +802,11 @@ function App:startSession()
+@@ -699,8 +818,11 @@ function App:startSession()
  			self:addNotification({
  				text = string.format("Connected to session '%s' at %s.", details, address),
  			})
@@ -147,7 +163,7 @@ index e6e4dee..2956f1a 100644
  			self:releaseSyncLock()
  			self:clearRunningConnectionInfo()
  			self:setState({
-@@ -744,6 +850,12 @@ function App:startSession()
+@@ -744,6 +866,12 @@ function App:startSession()
  			return "Accept"
  		end
  
@@ -160,7 +176,7 @@ index e6e4dee..2956f1a 100644
  		-- Play solo auto-connect does not require confirmation
  		if self:isAutoConnectPlaytestServerAvailable() then
  			Log.trace("Accepting patch without confirmation because play solo auto-connect is enabled")
-@@ -827,6 +939,7 @@ function App:startSession()
+@@ -827,6 +955,7 @@ function App:startSession()
  	serveSession:start()
  
  	self.serveSession = serveSession
@@ -168,7 +184,7 @@ index e6e4dee..2956f1a 100644
  end
  
  function App:endSession()
-@@ -838,6 +951,7 @@ function App:endSession()
+@@ -838,6 +967,7 @@ function App:endSession()
  
  	self.serveSession:stop()
  	self.serveSession = nil

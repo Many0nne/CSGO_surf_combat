@@ -6,6 +6,7 @@
   Clone le tag Rojo de rokit.toml dans worktrees\.run\rojo-plugin-src, applique autoconnect.patch, compile le plugin
   avec le rojo du projet, puis remplace %LOCALAPPDATA%\Roblox\Plugins\Rojo.rbxm. Le plugin officiel est sauvegarde
   une fois dans %LOCALAPPDATA%\Roblox\Rojo.official.rbxm (hors du dossier Plugins : Studio y charge tout .rbxm).
+  Copie aussi control-server.luau dans %LOCALAPPDATA%\RojoAutoconnect, ou les autres projets du poste le trouvent.
   Redemarrer Studio ensuite. Voir README.md.
 
 .EXAMPLE
@@ -61,4 +62,9 @@ if ((Test-Path $installed) -and -not (Test-Path $backup)) {
   Write-Host "Plugin officiel sauvegarde : $backup"
 }
 Copy-Item -Force $out $installed
+# Copie du serveur de commande dans le dossier commun : les autres projets du poste le lancent depuis la (README.md).
+$controlDir = Join-Path $env:LOCALAPPDATA 'RojoAutoconnect'
+New-Item -ItemType Directory -Force (Join-Path $controlDir 'projects') | Out-Null
+Copy-Item -Force (Join-Path $PSScriptRoot 'control-server.luau') (Join-Path $controlDir 'control-server.luau')
+Write-Host "Serveur de commande copie : $(Join-Path $controlDir 'control-server.luau')"
 Write-Host "Installe : $installed. Redemarrer Studio, puis autoriser l'acces a localhost si Studio le demande."
