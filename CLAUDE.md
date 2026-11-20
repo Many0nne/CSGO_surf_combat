@@ -153,7 +153,7 @@ par un verrou, `worktrees/.run/studio.lock`. Faire d'abord tout ce qui se passe 
 - `assets/rbx/ViewModels/<Nom>.rbxm` -> `ReplicatedStorage/ViewModels/<Nom>` (viewmodels FPS, aussi clonés pour l'arme 3P)
 - `assets/rbx/Tools/<Nom>.rbxm` -> `ReplicatedStorage/Tools/<Nom>` (Tools des armes, attribut `ViewmodelName` ; donnés par le serveur selon l'inventaire, `StarterPack` vide, cf. `InventoryStore`)
 - `assets/rbx/Skins/<Viewmodel>/<skin>.model.json` -> `ReplicatedStorage/Skins/<Viewmodel>/<skin>` (SurfaceAppearance des skins d'arme, générées par `tools/skins/make_rbx.py`, cf. `docs/assets.md`)
-- `assets/rbx/Maps/<Nom>.rbxm` -> `Workspace/Maps/<Nom>` (une map par fichier, générées par `tools/map/build_*.luau`, map jouée : `GameConfig.ACTIVE_MAP`, cf. `docs/maps.md`)
+- `assets/rbx/Maps/<Nom>.rbxm` -> `Workspace/Maps/<Nom>` (une map par fichier, générées par `tools/map/build_*.luau`, une par round en rotation : `GameConfig.MAP_ROTATION`, cf. `docs/maps.md`)
 - `assets/rbx/Materials/<Nom>.rbxm` -> `MaterialService/<Nom>` (MaterialVariant des maps, cf. `docs/maps.md`)
 - `assets/rbx/Props/<Nom>.rbxm` -> `ReplicatedStorage/Props/<Nom>` (modèles de décor clonés par le jeu : caisse du shop, cf. `docs/assets.md`)
 

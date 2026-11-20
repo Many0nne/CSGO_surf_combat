@@ -565,6 +565,24 @@ function HUDRules.readRoundResult(data: any, localUserId: number): RoundResultVi
 	return view
 end
 
+-- Cette méthode permet de composer le nom de la map annoncée par le bandeau de fin (#594) lorsqu'il s'affiche : nom de
+-- la map suivante en majuscules, nil si elle n'est pas connue ou si la map ne change pas.
+function HUDRules.nextMapName(nextName: any, currentName: any): string?
+	if type(nextName) ~= "string" or nextName == "" or nextName == currentName then
+		return nil
+	end
+	return string.upper(nextName)
+end
+
+-- Cette méthode permet de savoir quel nom de map afficher lorsque le joueur entre dans une manche (#594) : la map jouée
+-- en majuscules si elle diffère de la dernière annoncée à ce joueur (première manche comprise), nil sinon.
+function HUDRules.mapTitle(activeName: any, lastShown: string?): string?
+	if type(activeName) ~= "string" or activeName == "" or activeName == lastShown then
+		return nil
+	end
+	return string.upper(activeName)
+end
+
 -- Échelle du HUD (#282) : taille plancher d'un texte à l'écran, en px réels. Juste sous le plus petit texte de bord du
 -- HUD à 100 % au plus petit écran (13 px x échelle d'écran 0,75 = 9,75 px) : à 100 % rien ne bouge, à 50 % les textes
 -- s'arrêtent à 9 px au lieu de descendre à 4,9 px.

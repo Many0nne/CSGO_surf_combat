@@ -1,17 +1,53 @@
 # Maps
 
-Référence pour modifier une map ou en construire une autre. Map du jeu : **Dizzy** (réplique de ar_dizzy) ; **Radoub**
-(map inventée, #593, habillée en #596) attend la rotation des maps (#594).
+Référence pour modifier une map ou en construire une autre. Maps du jeu, jouées tour à tour (une par round, #594) :
+**Dizzy** (réplique de ar_dizzy) et **Radoub** (map inventée, #593, habillée en #596).
 Les maps précédentes (l'Arène et la ville ensablée) ont été retirées : leurs leçons sont dans « Maps retirées ».
 
-## Choisir la map jouée
+## Choisir la map jouée (rotation, #594)
 
-Chaque map est un `.rbxm` de `assets/rbx/Maps` (aujourd'hui `Dizzy.rbxm`), toutes synchronisées dans
-`Workspace.Maps`. Au démarrage, le serveur (`src/shared/MapSelection.luau`) garde celle de `GameConfig.ACTIVE_MAP` (nom
-du `.rbxm`), détruit les autres et pose l'attribut `ActiveMap` sur `Workspace.Maps` ; le serveur (`SpawnManager`) et le
-client (`BoostSystem`) retrouvent la map jouée par `MapSelection.waitForActive`. Nom absent : repli sur `Dizzy`. Tout
-code qui lit la map doit passer par là, jamais par un nom de map en dur. Rotation par round et vote : pas faits (une map
-à la fois, choisie dans le code).
+Chaque map est un `.rbxm` de `assets/rbx/Maps`, toutes synchronisées par Rojo dans `Workspace.Maps` (on les édite là
+dans Studio). En jeu :
+
+- **Ordre** : `GameConfig.MAP_ROTATION` (`Dizzy`, `Radoub`), une map par round, ordre fixe (choix de l'utilisateur :
+  pas de vote tant qu'il n'y a que deux maps). Une map présente mais absente de la liste passe après les autres ; une
+  map de la liste absente est sautée (`MapSelection.nextInRotation`, testée).
+- **Au démarrage** (`MapRotation.init`, appelé par `init.server` avant les premières apparitions) : la première map reste
+  dans `Workspace.Maps`, les autres sont rangées dans `ReplicatedStorage.MapStore` (`MapSelection.setup`). Attributs de
+  `Workspace.Maps` : `ActiveMap` (map jouée) et `NextMap` (map du round suivant).
+- **Fin de round** : le bandeau de fin annonce « PROCHAINE MAP », puis le clip de la partie est rejoué **dans la map
+  de la manche** ; `RoundManager` appelle `beforeIdle` à la fin de ce résultat, juste avant le retour à idle qui
+  autorise les apparitions, et `MapRotation` échange alors les maps : la première apparition se fait sur la nouvelle.
+  Piste rejetée : échanger pendant le bandeau (1 s après son apparition) faisait jouer le clip dans le vide. Un serveur d'entraînement (manche sans fin) ne tourne jamais. À l'arrivée dans une
+  manche sur une map pas encore annoncée, le HUD affiche son nom 2,5 s (`RoundHUD.showMapTitle`, `HUDRules.mapTitle`).
+- **Lire la map** : toujours par `MapSelection` (`current`/`currentName` sans attendre, `waitForActive` pour une copie
+  faite une fois comme le décor du menu, `observe` pour tout ce qui relève le contenu de la map : volumes de mort
+  `KillZone`, géométrie anti-triche `CharacterSync`, murs d'air des bots, boosts et échelles du client), jamais par un
+  nom en dur ni par un cache gardé d'un round à l'autre. `MapSelection.find` trouve aussi une map rangée (lecteur de
+  démo).
+- **Plans des bots** : un par map, gardé (`NavPlan.build`, `NavPlan.setActive`). La map jouée d'abord, puis chaque autre
+  map est **prêtée** à `Workspace.Maps` le temps de sa construction (les rayons ne touchent que le Workspace) : un
+  changement de map ne fait jamais attendre les bots, sauf au tout premier round si le plan suivant n'est pas fini.
+- **Forcer une map dans Studio** : attribut `DebugMap` de `Workspace` (nom d'une map), en contexte Server pendant le
+  playtest : `workspace:SetAttribute("DebugMap", "Radoub")`. Hors round (menu), la map change tout de suite ; pendant un
+  round, elle est annoncée pour le suivant. Tant qu'il est posé, la rotation reste sur cette map ; le retirer
+  (`nil`) la relance. Ignoré hors Studio. Rounds courts pour voir la rotation : attribut `RoundDuration` (secondes).
+
+Coût mesuré (20/11/2026, Studio, playtest solo : client et serveur dans le même processus, fenêtre bridée par
+Studio, 40 à 68 ms par image au repos ; Dizzy 19 939 pièces ; Radoub habillée (#596) 6 725 pièces, maquette 406) :
+
+| Mesure | Radoub habillée | Radoub maquette |
+|---|---|---|
+| Plan de Dizzy (au démarrage) | 25,5 s | 25,0 à 53,8 s (7,8 s en jeu le 09/11, cf. `docs/bots.md`) |
+| Plan de Radoub (pendant le 1er round) | 12,7 s (45 089 cases) | 3,6 à 13,5 s |
+| Échange côté serveur (`[MapRotation]`) | 139 ms (→ Radoub), 91 ms (→ Dizzy) | 47 à 310 ms |
+| Pic client Dizzy → Radoub | une image de 182 ms (repos 40 ms) | 233 ms (repos 68 ms) |
+| Pic client Radoub → Dizzy | une image de 170 ms | 255 ms |
+| Piste rejetée : maps rangées dans `ServerStorage` | non refait | Dizzy remise : une image de 1 249 ms, 7 images > 100 ms |
+
+D'où `ReplicatedStorage.MapStore` : les clients gardent les maps rangées en mémoire (pas de réplication au changement),
+mais ni rendu ni collision. La saccade restante (0,2 s environ) tombe entre la fin du clip et l'apparition (volets de
+transition), pas en jeu. Non mesuré sur un vrai client en ligne (réseau, machine modeste).
 
 ## Dizzy (map par défaut)
 
@@ -399,10 +435,9 @@ captures (`screen_capture`) sont blanches tant que la fenêtre Studio n'est pas 
 
 ## Radoub (#593, habillage #596)
 
-Map inventée (pas une reprise) : chantier naval sur une presqu'île au crépuscule. Un navire en construction est posé en
-trois tronçons au fond d'une forme de radoub ; les deux flancs de la forme sont les rampes de surf, face à face, et la
-coque passe entre elles. Choisie sur maquettes (`docs/maps/plans-radoub.html`, three.js, à l'échelle) parmi trois plans.
-Pas encore jouée hors test : la coexistence avec Dizzy passe par la rotation des maps (#594).
+Map inventée (pas une reprise) : chantier naval sur une presqu'île au crépuscule, jouée en rotation avec Dizzy (#594).
+Un navire en construction est posé en trois tronçons au fond d'une forme de radoub ; les deux flancs de la forme sont
+les rampes de surf, face à face, et la coque passe entre elles. Choisie sur maquettes (`docs/maps/plans-radoub.html`, three.js, à l'échelle) parmi trois plans.
 
 - **Générateur** : `lune run tools/map/build_radoub.luau` (plugin Rojo déconnecté de ce serveur) écrit
   `assets/rbx/Maps/Radoub.rbxm`, environ 6 700 pièces (400 de maquette, le reste d'habillage). Plan écrit en dur (pas de relevé). Outils communs avec Dizzy
@@ -624,6 +659,12 @@ Rojo gère `Workspace.Maps` : un objet posé à la main dans une map est supprim
   vers le bas, d'où un coût GPU par nappe ; l'opacité cumulée est gardée.
 
 ## Pièges
+
+- **Map rangée ≠ map détruite** (#594) : une map rangée dans `ReplicatedStorage.MapStore` garde ses pièces, avec un
+  `Parent` non nul. Un test `part.Parent` ou `map.Parent` ne dit donc plus si une map ou un volume est joué : suivre
+  la map par `MapSelection.observe` et refaire les listes à chaque changement.
+- **Événements différés** : `workspace:SetAttribute("DebugMap", …)` n'agit qu'à la fin du cycle (signaux en mode
+  différé) ; relire `ActiveMap`/`NextMap` dans un appel suivant, pas dans le même `execute_luau`.
 
 - **Captures en mode Edit** (`screen_capture`) : un viewport entièrement blanc, même sur une scène connue, vient de la
   fenêtre Studio réduite ou en arrière-plan. La mettre au premier plan.

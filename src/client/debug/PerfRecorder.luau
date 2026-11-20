@@ -13,7 +13,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
-local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local MapSelection = require(Shared:WaitForChild("MapSelection"))
 local PerfRules = require(Shared:WaitForChild("PerfRules"))
 local Rules = require(Shared:WaitForChild("PerfRouteRules"))
 local UITheme = require(Shared:WaitForChild("UITheme"))
@@ -189,7 +189,7 @@ function PerfRecorder.stop()
 	if #ticks < Rules.CHECK_EVERY then
 		log("STOP " .. name .. " : prise de moins d'une seconde, rien de rangé")
 	else
-		local route = { version = Rules.VERSION, map = GameConfig.ACTIVE_MAP, ticks = ticks }
+		local route = { version = Rules.VERSION, map = MapSelection.currentName(), ticks = ticks }
 		local text = Rules.encode(route)
 		store(name, text)
 		-- Numéro de prise : l'heure en ms, unique d'un playtest à l'autre ; la plus récente l'emporte au recollage

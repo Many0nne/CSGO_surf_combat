@@ -13,6 +13,7 @@ local ParticipantRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitFo
 local EconomyRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("EconomyRules"))
 local WalletRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WalletRules"))
 local KeyBindings = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("KeyBindings"))
+local MapSelection = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("MapSelection"))
 local UIKit = require(script.Parent.UIKit)
 local EffectClock = require(script.Parent.Parent.systems.game.EffectClock)
 local HitShards = require(script.Parent.HitShards)
@@ -91,11 +92,23 @@ local RESULT_CREDITS_GAP = 18
 local RESULT_CREDITS_HEIGHT = 32
 local RESULT_CREDITS_ICON = 26
 local RESULT_CREDITS_SIZE = 26
+-- Map du round suivant (#594), sous les crédits : « PROCHAINE MAP » en ambre, puis son nom en os
+local RESULT_NEXT_GAP = 16
+local RESULT_NEXT_HEIGHT = 30
+local RESULT_NEXT_SIZE = 28
 local RESULT_HEIGHT = RESULT_BOARD_TOP
 	+ LB_ROW * (HUDRules.PODIUM_SIZE + 2)
 	+ RESULT_ME_GAP
 	+ RESULT_CREDITS_GAP
 	+ RESULT_CREDITS_HEIGHT
+	+ RESULT_NEXT_GAP
+	+ RESULT_NEXT_HEIGHT
+-- Nom de la map à l'arrivée dans une manche sur une nouvelle map (#594) : « MAP » en ambre sur un filet, nom en os géant,
+-- sous le timer, MAP_TITLE_HOLD secondes puis fondu
+local MAP_TITLE_TOP = 150
+local MAP_TITLE_WIDTH = 640
+local MAP_TITLE_SIZE = 64
+local MAP_TITLE_HOLD = 2.5
 
 local gui: ScreenGui
 local hudRoot: Frame
@@ -156,6 +169,13 @@ local resultCreditsIcon: Frame
 local resultCreditsAmountBox: Frame
 local resultCreditsAmount: { TextLabel }
 local resultCreditsCap: Frame
+local resultNext: Frame
+local resultNextName: { TextLabel }
+local mapTitle: Frame
+local mapTitleName: { TextLabel }
+-- Transparences de repos des éléments du nom de map, rendues à chaque apparition (le fondu de sortie les met à 1)
+local mapTitleRest: { [Instance]: { [string]: number } } = {}
+local mapTitleTask: thread?
 local resultShown = false -- écran de fin en cours : Tab maintenu le remplace par le classement, sans superposition
 local touchScoreboardHeld = false -- bouton tactile SCORES tenu (#276)
 local training = false -- serveur d'entraînement (#345) : ni timer, ni rang, ni classement
@@ -862,6 +882,101 @@ local function buildResultBanner(root: Frame)
 		AutomaticSize = Enum.AutomaticSize.X,
 		Size = UDim2.fromScale(0, 1),
 	})
+	-- Map du round suivant (#594) : placée par showResult sous les crédits
+	resultNext = UIKit.frame({
+		Name = "NextMap",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, RESULT_NEXT_HEIGHT),
+		Visible = false,
+		Parent = resultContent,
+	})
+	UIKit.create("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		HorizontalAlignment = Enum.HorizontalAlignment.Center,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, 12),
+		Parent = resultNext,
+	})
+	local nextLabelBox = UIKit.frame({
+		Name = "Label",
+		BackgroundTransparency = 1,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 20),
+		LayoutOrder = 1,
+		Parent = resultNext,
+	})
+	UIKit.accentLabel(nextLabelBox, {
+		Name = "Value",
+		Text = "PROCHAINE MAP",
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromScale(0, 1),
+	})
+	local nextNameBox = UIKit.frame({
+		Name = "Name",
+		BackgroundTransparency = 1,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, RESULT_NEXT_SIZE + 2),
+		LayoutOrder = 2,
+		Parent = resultNext,
+	})
+	local nextText, nextShadow = shadowedText(nextNameBox, {
+		Name = "Value",
+		FontFace = F.Display,
+		TextSize = RESULT_NEXT_SIZE,
+		TextColor3 = C.Bone,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromScale(0, 1),
+		ZIndex = 2,
+	}, 2)
+	resultNextName = { nextText, nextShadow }
+end
+
+-- Cette méthode permet de construire le nom de la map affiché à l'arrivée sur une nouvelle map (#594) lorsque le HUD est
+-- initialisé : « MAP » en ambre, filet ambre, nom en os géant, sous le timer ; masqué au repos.
+local function buildMapTitle(root: Frame)
+	mapTitle = UIKit.frame({
+		Name = "MapTitle",
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, MAP_TITLE_TOP),
+		Size = UDim2.fromOffset(MAP_TITLE_WIDTH, 34 + MAP_TITLE_SIZE),
+		Visible = false,
+		Parent = root,
+	})
+	UIKit.accentLabel(mapTitle, {
+		Name = "Over",
+		Text = "MAP",
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Size = UDim2.new(1, 0, 0, 20),
+	})
+	UIKit.frame({
+		Name = "Rule",
+		BackgroundColor3 = C.Accent,
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 26),
+		Size = UDim2.fromOffset(160, 3),
+		Parent = mapTitle,
+	})
+	local nameText, nameShadow = shadowedText(mapTitle, {
+		Name = "MapName",
+		Text = "",
+		FontFace = F.Display,
+		TextSize = MAP_TITLE_SIZE,
+		TextColor3 = C.Bone,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Position = UDim2.fromOffset(0, 32),
+		Size = UDim2.new(1, 0, 0, MAP_TITLE_SIZE + 4),
+		ZIndex = 2,
+	}, 4)
+	mapTitleName = { nameText, nameShadow }
+	for _, inst in mapTitle:GetDescendants() do
+		if inst:IsA("TextLabel") then
+			mapTitleRest[inst] = { TextTransparency = inst.TextTransparency }
+		elseif inst:IsA("Frame") then
+			mapTitleRest[inst] = { BackgroundTransparency = inst.BackgroundTransparency }
+		end
+	end
 end
 
 -- Cette méthode permet d'afficher les crédits gagnés dans la manche (« +N CRÉDITS », « PLAFOND DU JOUR ATTEINT ») lorsque
@@ -941,6 +1056,7 @@ function RoundHUD.init()
 	end)
 	buildLeaderboard(root)
 	buildResultBanner(root)
+	buildMapTitle(root)
 	-- Gains de la manche publiés par le serveur après RoundResult (#394) : l'écran de fin se met à jour à leur arrivée
 	table.insert(
 		creditConns,
@@ -1327,12 +1443,55 @@ function RoundHUD.showResult(data: any)
 	end
 	resultCredits.Position = UDim2.fromOffset(0, boardBottom + RESULT_CREDITS_GAP)
 	paintCredits()
+	-- Map du round suivant (#594), sous les crédits ; absente si la map ne change pas
+	local nextName = HUDRules.nextMapName(MapSelection.nextName(), MapSelection.currentName())
+	resultNext.Visible = nextName ~= nil
+	resultNext.Position =
+		UDim2.fromOffset(0, boardBottom + RESULT_CREDITS_GAP + RESULT_CREDITS_HEIGHT + RESULT_NEXT_GAP)
+	for _, label in resultNextName do
+		label.Text = nextName or ""
+	end
 
 	resultShown = true
 	resultRoot.Visible = not tabHeld
 	resultVeil.BackgroundTransparency = 1
 	UIKit.tween(resultVeil, Motion.Enter, { BackgroundTransparency = 0 })
 	UIKit.reveal(resultContent, 0.15, 16)
+end
+
+-- Cette méthode permet d'afficher le nom de la map pendant MAP_TITLE_HOLD secondes puis de l'effacer en fondu lorsque
+-- le joueur entre dans une manche sur une map qu'on ne lui a pas encore annoncée (#594, HUDRules.mapTitle).
+function RoundHUD.showMapTitle(name: string)
+	if not mapTitle then
+		return
+	end
+	if mapTitleTask then
+		task.cancel(mapTitleTask)
+		mapTitleTask = nil
+	end
+	for _, label in mapTitleName do
+		label.Text = name
+	end
+	for inst, values in mapTitleRest do
+		for prop, value in values do
+			(inst :: any)[prop] = value
+		end
+	end
+	mapTitle.Visible = true
+	UIKit.reveal(mapTitle, 0, 10)
+	mapTitleTask = task.delay(MAP_TITLE_HOLD, function()
+		for inst, values in mapTitleRest do
+			local goals = {}
+			for prop in values do
+				goals[prop] = 1
+			end
+			UIKit.tween(inst, Motion.Exit, goals)
+		end
+		mapTitleTask = task.delay(Motion.Exit.Time, function()
+			mapTitleTask = nil
+			mapTitle.Visible = false
+		end)
+	end)
 end
 
 function RoundHUD.hideResult()

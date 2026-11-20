@@ -421,11 +421,12 @@ function CharacterSync.init(
 	relayRemote = remote
 	correctionRemote = correction
 	acceptedCallback = onAccepted
-	task.spawn(function()
-		local map = MapSelection.waitForActive(30)
-		if map then
-			geometry, floorIn = buildGeometry(map)
-		else
+	-- Géométrie relevée de nouveau à chaque changement de map (#594)
+	MapSelection.observe(30, function(map)
+		geometry, floorIn = buildGeometry(map)
+	end)
+	task.delay(30, function()
+		if not geometry then
 			warn("[CharacterSync] map jouée introuvable : noclip, vol et vide non surveillés")
 		end
 	end)

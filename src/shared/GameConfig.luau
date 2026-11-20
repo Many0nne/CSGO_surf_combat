@@ -9,5 +9,5 @@ return {
 	SPAWN_PROTECTION   = 2,    -- seconds of invulnerability after any spawn, dropped at the first shot (#288, SpawnProtection)
 	SPAWN_SAFE_RADIUS  = 100,  -- studs : a spawn point closer than this to a living enemy is avoided (#288, SpawnPointRules)
 	LEAVE_DEATH_WINDOW = 5,    -- seconds after a hit during which MENU PRINCIPAL counts as a death (#217, LeaveRules)
-	ACTIVE_MAP         = "Dizzy", -- map jouée : nom d'un .rbxm de assets/rbx/Maps ("Dizzy")
+	MAP_ROTATION       = { "Dizzy", "Radoub" }, -- maps jouées tour à tour, une par round (#594) ; la 1re ouvre le serveur
 }

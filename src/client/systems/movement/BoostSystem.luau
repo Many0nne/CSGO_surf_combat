@@ -14,6 +14,7 @@ local BoostSystem = {}
 local boosts: { Boost } = {}
 local lastUse: { [BasePart]: number } = {}
 local watching = false
+local addedConn: RBXScriptConnection? = nil
 
 -- Cette méthode permet d'enregistrer un volume de boost lorsqu'il apparaît dans le dossier de la map.
 local function register(inst: Instance)
@@ -32,23 +33,29 @@ local function register(inst: Instance)
 	})
 end
 
--- Cette méthode permet de trouver les boosts de la map une seule fois lorsque le premier personnage apparaît
--- (la map peut arriver après le script client : attente en tâche de fond).
+-- Cette méthode permet de suivre les boosts de la map jouée lorsque le premier personnage apparaît (la map peut arriver
+-- après le script client : attente en tâche de fond) ; la liste est refaite à chaque changement de map (#594), la map
+-- rangée gardant ses pièces dans ReplicatedStorage.
 function BoostSystem.init()
 	if watching then
 		return
 	end
 	watching = true
-	task.spawn(function()
-		local map = MapSelection.waitForActive(30)
-		local folder = map and map:WaitForChild(MapRules.BOOSTS_FOLDER, 30)
-		if not folder then
+	MapSelection.observe(30, function(map)
+		boosts = {}
+		lastUse = {}
+		if addedConn then
+			addedConn:Disconnect()
+			addedConn = nil
+		end
+		local folder = map:WaitForChild(MapRules.BOOSTS_FOLDER, 30)
+		if not folder or map ~= MapSelection.current() then
 			return
 		end
 		for _, child in folder:GetChildren() do
 			register(child)
 		end
-		folder.ChildAdded:Connect(register)
+		addedConn = folder.ChildAdded:Connect(register)
 	end)
 end
 

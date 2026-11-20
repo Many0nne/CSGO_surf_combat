@@ -13,17 +13,18 @@ local KillZone = {}
 local mapModel: Instance? = nil
 local volumes: { { cf: CFrame, size: Vector3 } } = {}
 
--- Cette méthode permet de retrouver la map jouée en arrière-plan lorsque le serveur démarre, pour lire sa hauteur
--- de mort ensuite sans attendre, et de relever une fois ses volumes de mort (ancrés, la map est statique).
+-- Cette méthode permet de suivre la map jouée en arrière-plan lorsque le serveur démarre, pour lire sa hauteur de mort
+-- ensuite sans attendre, et de relever ses volumes de mort (ancrés, la map est statique) à chaque changement de map.
 function KillZone.init()
-	task.spawn(function()
-		mapModel = MapSelection.waitForActive(30)
-		local folder = mapModel and mapModel:FindFirstChild(MapRules.KILL_VOLUMES_FOLDER)
+	MapSelection.observe(30, function(map)
+		local found = {}
+		local folder = map:FindFirstChild(MapRules.KILL_VOLUMES_FOLDER)
 		for _, part in if folder then folder:GetDescendants() else {} do
 			if part:IsA("BasePart") then
-				table.insert(volumes, { cf = part.CFrame, size = part.Size })
+				table.insert(found, { cf = part.CFrame, size = part.Size })
 			end
 		end
+		mapModel, volumes = map, found
 	end)
 end
 

@@ -13,7 +13,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
-local GameConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("GameConfig"))
+local MapSelection = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("MapSelection"))
 local KeyBindings = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("KeyBindings"))
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
 local DemoClipRules = require(script.Parent.Parent.ui.DemoClipRules)
@@ -162,7 +162,7 @@ local function stop()
 	if #samples < 2 then
 		log("STOP " .. name .. " : prise trop courte, rien de rangé")
 	else
-		local clip = { version = DemoClipRules.VERSION, hz = HZ, map = GameConfig.ACTIVE_MAP, samples = samples }
+		local clip = { version = DemoClipRules.VERSION, hz = HZ, map = MapSelection.currentName(), samples = samples }
 		local text = DemoClipRules.encode(clip)
 		store(name, text)
 		taken[name] = DemoClipRules.duration(clip)

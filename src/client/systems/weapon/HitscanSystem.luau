@@ -21,9 +21,7 @@ end
 -- Cette méthode permet de lister ce que le tir traverse dans la map jouée lorsqu'un tir part : murs d'air et grillages
 -- (#292, même règle que la ligne de vue du serveur) ; vide tant que la map n'est pas choisie.
 local function seeThrough(): { Instance }
-	local maps = workspace:FindFirstChild("Maps")
-	local name = maps and maps:GetAttribute(MapSelection.ACTIVE_ATTRIBUTE)
-	local map = if maps and type(name) == "string" then maps:FindFirstChild(name) else nil
+	local map = MapSelection.current()
 	return if map then MapGeometry.bulletTransparent(map) else {}
 end
 

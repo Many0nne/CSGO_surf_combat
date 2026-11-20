@@ -39,6 +39,9 @@ local timerConn: RBXScriptConnection?
 local roundEndHandler: ((participants: { Participant }, winner: Participant?) -> ())? = nil
 -- Kill compté (tueur crédité), avec le dernier coup de la victime : notation du clip de la partie (#499), branché par init
 local killHandler: ((victim: Participant, killer: Participant, hit: LastHit) -> ())? = nil
+-- Appelé à la fin du résultat (bandeau puis clip de la partie, joué dans la map de la manche), juste avant le retour à
+-- idle qui autorise les apparitions : rotation des maps (#594)
+local beforeIdleHandler: (() -> ())? = nil
 -- Clip de la partie (#499) : clip retenu pris à la fin de la manche (nil sans kill valide), oubli au retour à idle
 export type Highlight = { take: () -> any, reset: () -> () }
 local highlight: Highlight? = nil
@@ -118,6 +121,13 @@ local function endRound()
 
 	-- Même durée que la bannière et le clip des clients : une seule source, HighlightClipRules.resultDuration
 	task.delay(HighlightClipRules.resultDuration(clip and clip.duration), function()
+		-- Map suivante en place avant toute apparition (#594) ; une erreur ne bloque pas le retour à idle
+		if beforeIdleHandler then
+			local ok, err = pcall(beforeIdleHandler :: () -> ())
+			if not ok then
+				warn("[RoundManager] changement de map impossible : " .. tostring(err))
+			end
+		end
 		state = "idle"
 		scores = {}
 		lastAttacker = {}
@@ -368,6 +378,7 @@ function RoundManager.init(remotes: {
 	onRoundEnd: ((participants: { Participant }, winner: Participant?) -> ())?,
 	onKill: ((victim: Participant, killer: Participant, hit: LastHit) -> ())?,
 	highlight: Highlight?,
+	beforeIdle: (() -> ())?,
 })
 	roundStateRmt = remotes.roundState
 	scoreUpdateRmt = remotes.scoreUpdate
@@ -376,6 +387,7 @@ function RoundManager.init(remotes: {
 	roundEndHandler = remotes.onRoundEnd
 	killHandler = remotes.onKill
 	highlight = remotes.highlight
+	beforeIdleHandler = remotes.beforeIdle
 end
 
 return RoundManager

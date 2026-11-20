@@ -38,6 +38,7 @@ local FeedbackService = require(script.FeedbackService)
 local ChatService = require(script.ChatService)
 local DebugPlaytest = require(script.DebugPlaytest)
 local KillZone = require(script.KillZone)
+local MapRotation = require(script.MapRotation)
 local CharacterSync = require(script.CharacterSync)
 local FootstepService = require(script.FootstepService)
 local BotManager = require(script.bots.BotManager)
@@ -217,6 +218,9 @@ RoundManager.init({
 	-- Clip de la partie (#499) : chaque kill crédité est noté ; clip retenu diffusé avec le résultat, oublié à idle
 	onKill = HighlightService.onKill,
 	highlight = { take = HighlightService.take, reset = HighlightService.reset },
+	-- Rotation des maps (#594) : map suivante mise en place après le bandeau et le clip (joué dans la map de la manche),
+	-- avant le retour à idle qui autorise les apparitions
+	beforeIdle = MapRotation.onRoundEnded,
 })
 
 -- Gains de crédits en jouant (#394) : rien en entraînement ni hors manche active ; lignes [CreditGains] dans Studio
@@ -523,8 +527,10 @@ local function forgetCombatState(participant: Participants.Participant)
 	ShotRelayRules.forget(shotRelay, participant)
 end
 
--- Boîte (X, Z) de la map jouée, lue à la première mort comptée : grille des zones de l'événement Mort (#527)
+-- Boîte (X, Z) de la map jouée, lue à la première mort comptée sur cette map : grille des zones de l'événement Mort
+-- (#527), relue quand la rotation change de map (#594)
 local mapBounds: AnalyticsRules.Bounds? = nil
+local mapBoundsOf: Instance? = nil
 
 -- Cette méthode permet de nommer la zone de la map où se trouve le personnage d'un participant lorsqu'une mort est
 -- comptée (grille AnalyticsRules.zone, boîte englobante de la map jouée, « ? » sans personnage ni map).
@@ -534,10 +540,9 @@ local function deathZone(participant: Participants.Participant): string
 	if not (root and root:IsA("BasePart")) then
 		return "?"
 	end
-	if not mapBounds then
-		local maps = workspace:FindFirstChild("Maps")
-		local active = maps and maps:GetAttribute(MapSelection.ACTIVE_ATTRIBUTE)
-		local map = if maps and type(active) == "string" then maps:FindFirstChild(active) else nil
+	local map = MapSelection.current()
+	if map ~= mapBoundsOf then
+		mapBounds, mapBoundsOf = nil, map
 		if map and map:IsA("Model") then
 			local center, size = map:GetBoundingBox()
 			mapBounds = {
@@ -675,8 +680,13 @@ perfRouteTeleportRmt.OnServerEvent:Connect(function(player, pos)
 	CharacterSync.teleport(player, pos)
 end)
 
--- Une seule map est jouée (GameConfig.ACTIVE_MAP) : les autres sont retirées avant les premières apparitions
-MapSelection.activate(workspace:FindFirstChild("Maps"), GameConfig.ACTIVE_MAP)
+-- Une map par round, tour à tour (#594) : seule la map jouée reste dans Workspace.Maps, les autres sont rangées avant
+-- les premières apparitions ; DebugMap (Studio) en force une
+MapRotation.init({
+	isIdle = function()
+		return RoundManager.getState() == "idle"
+	end,
+})
 
 -- Règles de la demande (déjà vivant, spawn en vol, bannière de fin, délai depuis la mort) : SpawnRules (#171)
 SpawnManager.init(spawnRmt, {
@@ -843,9 +853,7 @@ end
 -- Cette méthode permet de tester la ligne de vue d'un tir lorsque le Validator la vérifie (#174) : murs d'air et
 -- grillages de la map jouée traversés (#292).
 local function isShotObstructed(from: Vector3, delta: Vector3): boolean
-	local maps = workspace:FindFirstChild("Maps")
-	local active = maps and maps:GetAttribute(MapSelection.ACTIVE_ATTRIBUTE)
-	local map = if maps and type(active) == "string" then maps:FindFirstChild(active) else nil
+	local map = MapSelection.current()
 	if not map then
 		return sightCast(from, delta) ~= nil
 	end

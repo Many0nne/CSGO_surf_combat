@@ -463,14 +463,10 @@ end
 -- Cette méthode permet de démarrer la gestion des bots lorsque le serveur démarre.
 function BotManager.init(dependencies: Deps)
 	deps = dependencies
-	task.spawn(function()
-		local map = MapSelection.waitForActive(30)
-		if map then
-			seeThrough = MapGeometry.bulletTransparent(map)
-			NavPlan.start(map)
-		else
-			warn("[BotManager] pas de map jouée : pas de plan de navigation, les bots restent sur place")
-		end
+	-- Murs d'air et grillages de la map jouée, relevés à chaque changement de map (#594) ; les plans de navigation sont
+	-- construits et choisis par MapRotation (NavPlan)
+	MapSelection.observe(30, function(map)
+		seeThrough = MapGeometry.bulletTransparent(map)
 	end)
 	NavDebug.init(function()
 		local list = {}

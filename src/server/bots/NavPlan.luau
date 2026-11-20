@@ -1,6 +1,7 @@
--- Plan de navigation de la map jouée (#140) : construit une fois au démarrage du serveur (NavBuilder), puis
--- interrogé par les bots (case la plus proche, chemin, destination, échelle). Tant qu'il n'est pas prêt, get()
--- renvoie nil et les bots attendent sur place.
+-- Plans de navigation des maps (#140) : un par map, construit une fois (NavBuilder) pendant que la map est dans
+-- Workspace.Maps, gardé ensuite pour les retours de la map en rotation (#594), puis interrogé par les bots (case la plus
+-- proche, chemin, destination, échelle) sur la map jouée. Tant que le plan de la map jouée n'est pas prêt, get() renvoie
+-- nil et les bots attendent sur place.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
@@ -13,53 +14,73 @@ export type Plan = NavBuilder.Plan
 
 local NavPlan = {}
 
-local current: Plan? = nil
-local started = false
+local plans: { [string]: Plan } = {} -- par nom de map
+local building: { [string]: boolean } = {}
+local failed: { [string]: boolean } = {}
+local activeName: string? = nil
 
--- Cette méthode permet de lancer la construction du plan lorsque le serveur démarre et que la map est connue ; une
--- seule fois, en tâche de fond.
-function NavPlan.start(map: Instance)
-	if started then
-		return
+-- Cette méthode permet de construire le plan d'une map lorsqu'elle est dans Workspace.Maps et qu'il n'existe pas encore :
+-- attend la fin de la construction (tâche découpée par NAV_BUILD_BUDGET) et renvoie le plan, nil en cas d'échec. Un appel
+-- pendant la construction du même plan attend celle-ci.
+function NavPlan.build(map: Instance): Plan?
+	local name = map.Name
+	while building[name] do
+		task.wait(0.2)
 	end
-	started = true
-	task.spawn(function()
-		local ok, result = pcall(NavBuilder.build, map)
-		if not ok then
-			warn("[Nav] construction du plan impossible : " .. tostring(result))
-			return
-		end
-		local plan = result :: Plan
-		local s = plan.stats
-		print(
-			string.format(
-				"[Nav] %s : %d cases (%d gardées), %d points, arêtes marche %d / descente %d / saut %d / échelle %d / rampe %d, %d échelles, %d rampes, %.1f s (cases %.1f, marche %.1f, rebords %.1f, rampes %.1f, vue %.1f)",
-				plan.mapName,
-				s.cells,
-				s.kept,
-				s.waypoints,
-				s.walk,
-				s.drop,
-				s.jump,
-				s.ladder,
-				s.ramp,
-				#plan.ladders,
-				s.ramps,
-				s.seconds,
-				s.secondsCells,
-				s.secondsWalk,
-				s.secondsLedges,
-				s.secondsRamps,
-				s.secondsView
-			)
+	if plans[name] or failed[name] then
+		return plans[name]
+	end
+	building[name] = true
+	local ok, result = pcall(NavBuilder.build, map)
+	building[name] = false
+	if not ok then
+		failed[name] = true
+		warn(string.format("[Nav] construction du plan de %s impossible : %s", name, tostring(result)))
+		return nil
+	end
+	local plan = result :: Plan
+	local s = plan.stats
+	print(
+		string.format(
+			"[Nav] %s : %d cases (%d gardées), %d points, arêtes marche %d / descente %d / saut %d / échelle %d / rampe %d, %d échelles, %d rampes, %.1f s (cases %.1f, marche %.1f, rebords %.1f, rampes %.1f, vue %.1f)",
+			plan.mapName,
+			s.cells,
+			s.kept,
+			s.waypoints,
+			s.walk,
+			s.drop,
+			s.jump,
+			s.ladder,
+			s.ramp,
+			#plan.ladders,
+			s.ramps,
+			s.seconds,
+			s.secondsCells,
+			s.secondsWalk,
+			s.secondsLedges,
+			s.secondsRamps,
+			s.secondsView
 		)
-		current = plan
-	end)
+	)
+	plans[name] = plan
+	return plan
 end
 
--- Cette méthode permet de lire le plan lorsqu'un bot en a besoin ; nil tant qu'il n'est pas construit.
+-- Cette méthode permet de savoir si le plan d'une map est prêt (ou a échoué) lorsque la rotation décide de prêter la map
+-- à Workspace pour le construire.
+function NavPlan.isDone(name: string): boolean
+	return plans[name] ~= nil or failed[name] == true
+end
+
+-- Cette méthode permet de choisir le plan servi aux bots lorsque la map jouée change ; nil tant que son plan n'est pas
+-- construit.
+function NavPlan.setActive(name: string)
+	activeName = name
+end
+
+-- Cette méthode permet de lire le plan de la map jouée lorsqu'un bot en a besoin ; nil tant qu'il n'est pas construit.
 function NavPlan.get(): Plan?
-	return current
+	return if activeName then plans[activeName] else nil
 end
 
 -- Cette méthode permet de trouver la case du plan sous un bot lorsqu'il a besoin d'un point de départ : la plus

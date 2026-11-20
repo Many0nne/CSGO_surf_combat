@@ -738,4 +738,37 @@ return function(T, Loader)
 			T.expectEqual(env.delays[1], env.GameConfig.RESULT_DURATION)
 		end)
 	end)
+
+	T.describe("RoundManager : changement de map (#594)", function()
+		T.it("change de map après le résultat, encore en état result, juste avant le retour à idle", function()
+			local seen = {}
+			local env
+			env = setup({
+				beforeIdle = function()
+					table.insert(seen, env.RoundManager.getState())
+				end,
+			})
+			env.addPlayer(1, "Alice", Vector3.zero)
+			env.RoundManager.startRound(60)
+			env.tick(61)
+			T.expectEqual(#seen, 0, "pas pendant le bandeau ni le clip")
+			env.flush()
+			T.expectEqual(#seen, 1)
+			T.expectEqual(seen[1], "result")
+			T.expectEqual(env.RoundManager.getState(), "idle")
+		end)
+
+		T.it("revient à idle même si le changement de map échoue", function()
+			local env = setup({
+				beforeIdle = function()
+					error("panne")
+				end,
+			})
+			env.addPlayer(1, "Alice", Vector3.zero)
+			env.RoundManager.startRound(60)
+			env.tick(61)
+			env.flush()
+			T.expectEqual(env.RoundManager.getState(), "idle")
+		end)
+	end)
 end
