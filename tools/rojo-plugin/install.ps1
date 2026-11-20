@@ -65,6 +65,14 @@ Copy-Item -Force $out $installed
 # Copie du serveur de commande dans le dossier commun : les autres projets du poste le lancent depuis la (README.md).
 $controlDir = Join-Path $env:LOCALAPPDATA 'RojoAutoconnect'
 New-Item -ItemType Directory -Force (Join-Path $controlDir 'projects') | Out-Null
-Copy-Item -Force (Join-Path $PSScriptRoot 'control-server.luau') (Join-Path $controlDir 'control-server.luau')
-Write-Host "Serveur de commande copie : $(Join-Path $controlDir 'control-server.luau')"
+# Une copie plus recente (deposee par un autre projet) n'est pas remplacee par celle-ci.
+$versionOf = { param($p) $m = if (Test-Path $p) { Select-String -Path $p -Pattern '^local VERSION = "rojo-control (\d+)"' | Select-Object -First 1 }; if ($m) { [int]$m.Matches[0].Groups[1].Value } else { 0 } }
+$shared = Join-Path $controlDir 'control-server.luau'
+$repoServer = Join-Path $PSScriptRoot 'control-server.luau'
+if ((& $versionOf $repoServer) -ge (& $versionOf $shared)) {
+  Copy-Item -Force $repoServer $shared
+  Write-Host "Serveur de commande copie : $shared"
+} else {
+  Write-Host "Serveur de commande garde : $shared est plus recent que celui du depot."
+}
 Write-Host "Installe : $installed. Redemarrer Studio, puis autoriser l'acces a localhost si Studio le demande."

@@ -299,8 +299,8 @@ Describe 'control-server.luau : une cible par place' {
     -ArgumentList 'run', (Join-Path $repoRoot 'tools\rojo-plugin\control-server.luau'), $reg, "$port"
   $sb.Dummies.Add($server.Id)
   # Cette methode permet d'interroger le serveur de test lorsqu'un test verifie une route ; renvoie le code HTTP et le corps.
-  function Get-Control([string]$Path, [string]$Method = 'GET', [string]$Body) {
-    $r = Invoke-WebRequest "http://localhost:$port$Path" -Method $Method -Body $Body -SkipHttpErrorCheck -TimeoutSec 3
+  function Get-Control([string]$Path, [string]$Method = 'GET', [string]$Body, [string]$ContentType = 'application/json') {
+    $r = Invoke-WebRequest "http://localhost:$port$Path" -Method $Method -Body $Body -ContentType $ContentType -SkipHttpErrorCheck -TimeoutSec 3
     [pscustomobject]@{ Code = [int]$r.StatusCode; Body = [Text.Encoding]::UTF8.GetString($r.RawContentStream.ToArray()) }
   }
   for ($i = 0; $i -lt 20; $i++) {
@@ -311,33 +311,44 @@ Describe 'control-server.luau : une cible par place' {
   It 'annonce la version 3 du protocole' { (Get-Control '/health').Body | Should Be 'rojo-control 3' }
 
   It 'sert a chaque place la cible de son projet' {
-    ((Get-Control '/target?placeId=91817475928288').Body | ConvertFrom-Json).port | Should Be '34880'
-    ((Get-Control '/target?placeId=88580736516669').Body | ConvertFrom-Json).port | Should Be '34901'
+    ((Get-Control '/v3/target?placeId=91817475928288').Body | ConvertFrom-Json).port | Should Be '34880'
+    ((Get-Control '/v3/target?placeId=88580736516669').Body | ConvertFrom-Json).port | Should Be '34901'
   }
 
   It 'inscription et cible avec BOM : lues, et la cible servie sans BOM' {
-    $r = Get-Control '/target?placeId=555'
+    $r = Get-Control '/v3/target?placeId=555'
     $r.Code | Should Be 200
     $r.Body.StartsWith('{') | Should Be $true
   }
 
   It 'place inconnue : 404, le plugin de cette fenetre ne fait rien' {
-    (Get-Control '/target?placeId=123').Code | Should Be 404
+    (Get-Control '/v3/target?placeId=123').Code | Should Be 404
   }
 
-  It 'sans placeId (ancien plugin) : 400, aucune cible servie' {
+  It 'ancien plugin (chemins sans /v3/) : 400, aucune cible servie' {
     (Get-Control '/target').Code | Should Be 400
+    (Get-Control '/target?placeId=91817475928288').Code | Should Be 400
+  }
+
+  It 'sans placeId : 400' {
+    (Get-Control '/v3/target').Code | Should Be 400
   }
 
   It 'projet inscrit sans fichier cible : 404' {
     Remove-Item $fad.target
-    (Get-Control '/target?placeId=88580736516669').Code | Should Be 404
+    (Get-Control '/v3/target?placeId=88580736516669').Code | Should Be 404
   }
 
   It 'ecrit l''etat du plugin dans le fichier du projet de sa place, et pas dans celui d''un autre' {
-    (Get-Control '/status?placeId=91817475928288' 'POST' '{"rev":"1","port":"34880","state":"connected"}').Code | Should Be 204
+    (Get-Control '/v3/status?placeId=91817475928288' 'POST' '{"rev":"1","port":"34880","state":"connected"}').Code | Should Be 204
     (Get-Content $csgo.status -Raw | ConvertFrom-Json).state | Should Be 'connected'
     $fad.status | Should Not Exist
+  }
+
+  It 'refuse un etat qui n''est pas du JSON (requete d''une page web) et garde l''etat precedent' {
+    (Get-Control '/v3/status?placeId=91817475928288' 'POST' '{"state":"x"}' 'text/plain').Code | Should Be 400
+    (Get-Control '/v3/status?placeId=91817475928288' 'POST' 'pas du json').Code | Should Be 400
+    (Get-Content $csgo.status -Raw | ConvertFrom-Json).state | Should Be 'connected'
   }
 
   It 'liste les projets inscrits, sans l''inscription illisible' {

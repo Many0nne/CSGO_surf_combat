@@ -12,9 +12,11 @@ de **sa** place (`game.PlaceId`), ce qui permet à d'autres projets Rojo du post
   `%LOCALAPPDATA%\RojoAutoconnect`.
 - `-AcquireStudio` écrit le port du worktree dans `worktrees/.run/studio.target` (`{ port, rev }`), inscrit CSGO au
   registre (`projects/csgo.json`, place `91817475928288`) et démarre au besoin le serveur de commande.
-- Le plugin interroge `GET /target?placeId=<sa place>` chaque seconde (en mode Edit). Quand `rev` change : Disconnect,
+- Le plugin interroge `GET /v3/target?placeId=<sa place>` chaque seconde (en mode Edit). Quand `rev` change : Disconnect,
   port cible, Connect, et **patch de connexion accepté sans fenêtre** (comme un Accept manuel : une instance ajoutée à
-  la main est supprimée). Il renvoie l'état de sa session (`POST /status?placeId=…`), écrit dans `worktrees/.run/studio.status`.
+  la main est supprimée). Il renvoie l'état de sa session (`POST /v3/status?placeId=…`, JSON), écrit dans
+  `worktrees/.run/studio.status`. Préfixe `/v3/` : un ancien serveur (avant #589, une seule cible pour toutes les places)
+  lui répond 404, si bien qu'un ancien script qui le relancerait ne piloterait jamais la fenêtre d'une autre place.
 - Place inconnue du registre, place jamais publiée (`PlaceId` 0), serveur arrêté ou fichier cible absent : le plugin de
   cette fenêtre se comporte comme l'officiel.
 - La libération (`-ReleaseStudio`, `-Stop`, `-Remove`) renvoie Studio sur `34872` si le `rojo serve` du checkout principal
@@ -47,7 +49,7 @@ Prérequis : `install.ps1` lancé une fois sur le poste (plugin + copie du serve
 2. **Publier une cible** (réservation ou libération) : écrire dans `target` `{"port":"34901","rev":"<nouvelle valeur>"}`
    (`port` en texte ; `""` = déconnecter). Le plugin n'agit que si `rev` change (ex. `(Get-Date).Ticks`).
 3. **Démarrer le serveur s'il ne répond pas**, sous le mutex système `Local\rojo-autoconnect-control` (commun à tous les
-   projets, pris pour toute l'étape, 60 s d'attente au plus) : si `GET http://localhost:34870/health` renvoie
+   projets, pris pour toute l'étape, 60 s d'attente au plus) : si `GET http://127.0.0.1:34870/health` (IPv4 : le serveur n'écoute pas `::1`) renvoie
    `rojo-control N` avec N ≥ 3, garder ce serveur (un N plus grand vient d'un projet plus récent). Sinon, arrêter
    le processus `lune` qui écoute sur 34870 (ancienne version) et le pid de `control.pid` seulement si sa ligne de
    commande cite `control-server.luau` (pid recyclé après un redémarrage), puis lancer, depuis un dossier dont le
@@ -55,7 +57,7 @@ Prérequis : `install.ps1` lancé une fois sur le poste (plugin + copie du serve
    `lune run "%LOCALAPPDATA%\RojoAutoconnect\control-server.luau" "%LOCALAPPDATA%\RojoAutoconnect"`
    (en arrière-plan, sortie dans `control.log`, pid dans `control.pid` du dossier commun), et attendre que `/health`
    réponde avant de rendre le mutex. Ne jamais arrêter un serveur de version ≥ 3 : il sert les autres fenêtres.
-   CSGO met cette copie commune à jour avec celle de son dépôt avant chaque lancement.
+   Avant de lancer, chaque script remplace cette copie commune par la sienne seulement si la sienne est plus récente.
 4. **Attendre la connexion** (facultatif) : lire `status` jusqu'à `{"rev":"<rev publiée>","state":"connected","port":"<port>"}`.
 
 ## Installation (par poste)
@@ -78,6 +80,8 @@ Redémarrer Studio. Au premier appel, Studio peut demander d'autoriser l'accès 
   dans `csgo-worktree.ps1`) en restant compatible avec les versions précédentes : un script garde tout serveur de
   version supérieure ou égale à la sienne, et le premier qui en attend une plus récente le remplace.
 - Ancien plugin (avant #589, sans `placeId`) : le serveur v3 lui répond 400, il ne suit plus rien. Relancer `install.ps1`
-  et redémarrer Studio.
+  et redémarrer Studio (Studio ne recharge pas un plugin modifié à chaud).
+- Seule la place publiée est suivie : une copie de test (autre `PlaceId`) ou un `.rbxlx` ouvert en local (`PlaceId` 0) ne
+  l'est pas ; ajouter l'id d'une copie de test à `$placeIds` dans `csgo-worktree.ps1` si besoin.
 - Ne pas garder de copie `.rbxm` du plugin dans le dossier `Plugins` : Studio charge tous les `.rbxm` et deux Rojo
   se disputeraient la session.
