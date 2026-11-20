@@ -1,7 +1,7 @@
 # Maps
 
 Référence pour modifier une map ou en construire une autre. Map du jeu : **Dizzy** (réplique de ar_dizzy) ; **Radoub**
-(map inventée, maquette grise, #593) attend la rotation des maps (#594).
+(map inventée, #593, habillée en #596) attend la rotation des maps (#594).
 Les maps précédentes (l'Arène et la ville ensablée) ont été retirées : leurs leçons sont dans « Maps retirées ».
 
 ## Choisir la map jouée
@@ -397,7 +397,7 @@ Aperçu dans Studio sans reconnecter Rojo : le MCP refuse `HttpService` vers `lo
 donc pas de `loadstring` d'un fichier servi en local depuis `execute_luau` ; il faut envoyer le code lui-même. Les
 captures (`screen_capture`) sont blanches tant que la fenêtre Studio n'est pas au premier plan.
 
-## Radoub (#593, maquette grise)
+## Radoub (#593, habillage #596)
 
 Map inventée (pas une reprise) : chantier naval sur une presqu'île au crépuscule. Un navire en construction est posé en
 trois tronçons au fond d'une forme de radoub ; les deux flancs de la forme sont les rampes de surf, face à face, et la
@@ -405,8 +405,15 @@ coque passe entre elles. Choisie sur maquettes (`docs/maps/plans-radoub.html`, t
 Pas encore jouée hors test : la coexistence avec Dizzy passe par la rotation des maps (#594).
 
 - **Générateur** : `lune run tools/map/build_radoub.luau` (plugin Rojo déconnecté de ce serveur) écrit
-  `assets/rbx/Maps/Radoub.rbxm`, environ 400 pièces. Plan écrit en dur (pas de relevé). Outils communs avec Dizzy
+  `assets/rbx/Maps/Radoub.rbxm`, environ 6 700 pièces (400 de maquette, le reste d'habillage). Plan écrit en dur (pas de relevé). Outils communs avec Dizzy
   (soleil, ombres, points d'apparition) : `tools/map/MapBuild.luau`.
+- **Échelle ×1,4** (`SCALE`, retour du 20/11/2026 : trop encombrée pour prendre de la vitesse en bhop) : le plan et
+  l'habillage sont écrits à l'échelle 1, puis `scaleMap` agrandit toute la map (positions, tailles, portée des lampes,
+  plafonnée à 60) autour du centre posé, y = 0 compris : les pentes de surf gardent leur angle, la map fait environ
+  870 × 700 studs, quais à y 84, flancs de 84 de haut. Gardés en vraie grandeur : points d'apparition (face basse remise
+  à `SPAWN_SKIN` du sol agrandi), haut des volumes de mort à 4 studs au-dessus de l'eau (`KILL_ABOVE_SEA / SCALE` dans
+  le plan), `KillHeight` (−56), garde-corps du portique à 3,5 (`GANTRY.railH`). Toutes les cotes ci-dessous sont celles
+  du plan, avant l'échelle.
 - **Repère** : le plan est écrit X ouest → est, Z nord → sud, quais à y 60, fond à y 0, mer à y 42 ; il est posé en jeu
   **tourné d'un demi-tour** autour de (236, 0, 220) puis décalé de (−2000, 0, 0) (`PLACE`). Point du plan (x, y, z) →
   monde (−1528 − x, y, 440 − z). Raison : le soleil du jeu est à 1,4° au-dessus de l'horizon, à l'ouest-nord-ouest ;
@@ -443,7 +450,69 @@ Pièges rencontrés :
 
 À trancher ou tester avec l'utilisateur : sortie d'un flanc par un saut sur le pont (même hauteur, 35 à 45 studs de
 côté, non mesuré), bouts fermés des flancs, temps de parcours d'un flanc (2,9 s à 140 studs/s, calculé, non mesuré).
-Habillage : planche Blender à faire valider avant (cf. « Planche Blender d'un habillage »).
+### Habillage de Radoub (#596, `tools/map/RadoubDressing.luau`)
+
+Direction : chantier naval **récent et propre** (références : formes Damen à Rotterdam, halls Meyer Werft, Chantiers de
+l'Atlantique ; salle des pompes de la forme Thompson à Belfast pour l'unique bâtiment ancien). Teintes unies, pas de
+matière rouillée ni de matière Brick (rejetée le 20/11/2026). Palette : blanc cassé, bleu chantier (38, 86, 146), jaune
+sécurité, acier sombre ; coque bleu marine / liston noir / carène rouge.
+
+`build_radoub.luau` pose la maquette (collisions) et note les objets à habiller (`HALLS` avec leur `style`, `SECTIONS`,
+`HATCHES`, `GANTRY`, `CONTAINERS`, `PLATES`) ; `RadoubDressing.build` pose le dossier `Dressing` par-dessus :
+- **Façades** par style : `atelier` (bardage à joints horizontaux, poteaux tous les ~11, ruban de fenêtres sur les longs
+  pans, filet et bandeau bleus, numéro peint 01/02), `magasin` (béton préfabriqué à joints, fenêtres de bureaux une travée
+  sur deux, panneau bleu au numéro 03/04), `pompes` (brique, socle et corniche de pierre, pilastres, fenêtres cintrées et
+  oculus, cheminée), `local` (bardage, ruban vitré). Une façade = repère (X le long du mur vu du dehors, Z sortant) +
+  liste de trous ; bandes et éléments verticaux sont découpés autour des trous (`hstrip`, `vstrip`). Revers des fenêtres
+  et plinthe sur la face intérieure (w négatif = dans l'épaisseur du mur).
+- **Hangar** (face est, 500 × 90) : bardage nervuré, bandeau bleu au numéro 05, grande porte bleue à quatre vantaux.
+- **Navire** : soudures, liston blanc, numéros de tronçons, échelles de tirant d'eau, coupes des tronçons en primaire
+  (ponts et couples), château vitré, cheminée bleue, mât, canots orange, bittes, guindeau, hélice et safran, deux
+  échafaudages entre les tronçons.
+- **Portique** : pieds en deux poteaux sur bogie (porteurs), deux poutres-caissons et passerelle en caillebotis (dessus
+  inchangé à y 112), contreventements, roues, panneau « 300 », damiers, cabine suspendue, palan au-dessus du pont.
+- **Quais** : couronnement et liseré jaune le long de la forme et des bords de mer, joints de dalles, rails sur longrine,
+  défenses côté mer, bittes, quatre mâts d'éclairage, conteneurs détaillés, lits de tôles, bobines, cabane de chantier,
+  palettes, profilés, bouteilles de gaz ; intérieurs (pont roulant, fermes, lampes, rayonnages, motopompes).
+- **Fond de décor** (sans collision ni ombre) : rive d'en face (portiques à conteneurs, piles, entrepôts éclairés,
+  cheminée rayée, cuves), digue et phare au nord.
+
+Collision ajoutée par l'habillage (volumes porteurs seulement) : acrotères et groupes de toiture, bittes, mâts, cabane,
+palettes, bobines, profilés, rayonnages, motopompes, tins de bouchain sous la coque, hélice et safran, bittes et manches
+à air du pont, **garde-corps de la passerelle du portique** (main courante à 3,5 : on tire par-dessus ; coupé au débouché
+des échelles, sinon on reste coincé dessous). Garde-corps des passerelles d'accès au navire : plan de collision
+invisible inchangé, barres en décor.
+
+Voies de course (retour du 20/11/2026) : le petit décor au sol est collé aux bâtiments ou aux angles (mâts d'éclairage
+aux quatre coins, piles de tôles entre les bâtiments, cabane contre le hangar, salle des pompes reculée à X −20..35
+du plan, `PUMP_X0`, soit 25 studs du plan jusqu'à la tête de forme au lieu de 5), une bitte tous les 80 studs du plan le
+long de la forme : de longues lignes droites restent libres sur les quais.
+
+Coût du rendu (`audit_map`) : ombres coupées en plus de `cullShadows` sur toute pièce linéaire ou petite (deuxième
+dimension < 3 studs ou plus grande < 5, après l'échelle) : rails, poteaux, garde-corps, acrotères, bittes traînaient de
+longues ombres fines au soleil rasant. Mer opaque (quatre nappes translucides de plusieurs millions de studs² avant).
+Une SpotLight sur deux seulement dans les ateliers, une sur trois dans les magasins, une seule par grande porte (l'autre
+lampe n'a que son verre lumineux).
+
+| | maquette #593 | habillage (1re version) | habillage ×1,4 optimisé |
+|---|---|---|---|
+| pièces | 406 | 6 781 | 6 728 |
+| pièces qui projettent une ombre | 92 | 262 | 92 |
+| SpotLight (sans ombre) | 0 | 44 | 33 |
+| pièces translucides | 4 | 4 | 0 |
+
+`RampCheck` 0,000 sur les deux flancs ; 0 vue entre zones d'apparition ; pieds à 0,764-0,765 stud du sol. FPS en jeu :
+non mesuré.
+
+Pièges :
+- **Couches au sol** (liserés, joints, longrines posés sur le quai) : hauteurs toutes différentes (joints 0,04,
+  couronnement 0,07, liseré 0,10, longrine 0,12), sinon deux plaques de couleurs différentes se croisent au même niveau
+  et scintillent.
+- **Fenêtre cintrée** : disque de verre derrière la vitre rectangulaire (0,10 contre 0,15) ; à la même profondeur, la
+  moitié basse du disque scintille contre la vitre.
+- **Décor près des flancs** : rien en saillie sur le bateau-porte au-dessus des pentes de surf (raidisseurs limités à la
+  partie entre les pieds des flancs, z 196-264), sinon `RampCheck` le compterait comme un rebord.
+- **Planche** : `python -I tools/map/radoub_views.py <vues.json> [noms]` écrit les vues de jeu (quai, fond, poupe, étrave, portique, intérieurs…) dans le repère du plan, converties dans le monde, pour `render_dizzy.py`.
 
 ## Maps retirées (leçons)
 

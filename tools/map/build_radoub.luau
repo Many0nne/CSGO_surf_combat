@@ -11,6 +11,7 @@ local roblox = require("@lune/roblox")
 
 local MapBuild = require("./MapBuild")
 local RampCheck = require("./RampCheck")
+local RadoubDressing = require("./RadoubDressing")
 local RampEdges = require("./RampEdges")
 local SpawnSight = require("./SpawnSight")
 
@@ -36,37 +37,50 @@ local DECK = 44.5 -- dessus du pont du navire
 -- des pieds (SpawnCheck.ROOT_TO_FEET) ; à 4 studs, on meurt les pieds dans l'eau.
 local KILL_ABOVE_SEA = 4
 local KILL_HEIGHT = -40
+-- Échelle (retour du 20/11/2026 : trop encombrée pour prendre de la vitesse en bhop) : le plan est écrit à l'échelle 1
+-- puis toute la map (pièces, tailles, portées des lampes) est agrandie de SCALE autour du centre posé, y = 0 compris ;
+-- les pentes de surf gardent leur angle. Restent en vraie grandeur : points d'apparition, hauteur des volumes de mort
+-- au-dessus de l'eau, KillHeight (en studs du monde), garde-corps du portique (GANTRY.railH).
+local SCALE = 1.4
+-- salle des pompes reculée vers le hangar (retour du 20/11/2026) : 25 studs du plan jusqu'à la tête de forme
+local PUMP_X0, PUMP_X1 = -20, 35
 local WALL = 1.5 -- épaisseur des murs des bâtiments
 local SCREEN_GAP = 7 -- studs entre une porte et l'écran intérieur qui la masque (passage de chaque côté)
 local SCREEN_OVERLAP = 5 -- studs dont l'écran dépasse la porte de chaque côté
 
--- Habillage de la maquette grise : couleur, matière
+-- Couleur et matière des pièces de la maquette ; l'habillage (RadoubDressing) se pose par-dessus. Chantier propre et
+-- récent (retour du 20/11/2026 : la matière Brick de Roblox jugée laide, aucune matière rouillée) : teintes unies.
 local LOOK = {
-	quay = { Color3.fromRGB(150, 146, 138), Enum.Material.Concrete },
-	dock = { Color3.fromRGB(112, 108, 102), Enum.Material.Concrete },
+	quay = { Color3.fromRGB(158, 154, 146), Enum.Material.Concrete },
+	dock = { Color3.fromRGB(118, 114, 108), Enum.Material.Concrete },
 	surf = { Color3.fromRGB(70, 74, 82), Enum.Material.DiamondPlate },
-	-- teinte unie : la matière Brick de Roblox a été jugée laide (retour du 20/11/2026), l'habillage viendra après
-	brick = { Color3.fromRGB(150, 96, 80), Enum.Material.SmoothPlastic },
-	store = { Color3.fromRGB(128, 124, 118), Enum.Material.Concrete },
-	roof = { Color3.fromRGB(86, 90, 102), Enum.Material.CorrodedMetal },
-	hull = { Color3.fromRGB(140, 58, 43), Enum.Material.Metal },
-	deck = { Color3.fromRGB(110, 115, 120), Enum.Material.Metal },
-	cabin = { Color3.fromRGB(214, 210, 200), Enum.Material.Metal },
+	clad = { Color3.fromRGB(222, 224, 220), Enum.Material.SmoothPlastic }, -- bardage des ateliers et du hangar
+	precast = { Color3.fromRGB(196, 192, 184), Enum.Material.Concrete }, -- béton préfabriqué des magasins
+	brick = { Color3.fromRGB(146, 74, 56), Enum.Material.SmoothPlastic }, -- salle des pompes (teinte, pas la matière Brick)
+	roof = { Color3.fromRGB(92, 98, 110), Enum.Material.Metal },
+	antifoul = { Color3.fromRGB(150, 48, 38), Enum.Material.Metal }, -- carène sous la flottaison
+	boottop = { Color3.fromRGB(28, 28, 30), Enum.Material.Metal }, -- liston noir de flottaison
+	hull = { Color3.fromRGB(34, 50, 82), Enum.Material.Metal }, -- œuvres mortes bleu marine
+	deck = { Color3.fromRGB(78, 98, 86), Enum.Material.Metal },
+	cabin = { Color3.fromRGB(232, 232, 226), Enum.Material.Metal },
+	funnel = { Color3.fromRGB(38, 86, 146), Enum.Material.Metal },
 	steel = { Color3.fromRGB(96, 104, 112), Enum.Material.Metal },
-	crane = { Color3.fromRGB(216, 177, 58), Enum.Material.Metal },
-	wood = { Color3.fromRGB(154, 118, 80), Enum.Material.WoodPlanks },
-	hangar = { Color3.fromRGB(120, 118, 114), Enum.Material.Concrete },
+	gate = { Color3.fromRGB(88, 100, 114), Enum.Material.Metal },
+	grating = { Color3.fromRGB(70, 74, 80), Enum.Material.DiamondPlate },
+	crane = { Color3.fromRGB(232, 180, 40), Enum.Material.Metal },
+	concrete = { Color3.fromRGB(176, 172, 164), Enum.Material.Concrete },
+	wood = { Color3.fromRGB(150, 112, 72), Enum.Material.WoodPlanks },
 	dark = { Color3.fromRGB(35, 36, 44), Enum.Material.SmoothPlastic },
 	water = { Color3.fromRGB(43, 86, 119), Enum.Material.SmoothPlastic },
-	red = { Color3.fromRGB(181, 82, 59), Enum.Material.CorrodedMetal },
-	blue = { Color3.fromRGB(62, 110, 142), Enum.Material.CorrodedMetal },
-	ochre = { Color3.fromRGB(201, 161, 59), Enum.Material.CorrodedMetal },
-	green = { Color3.fromRGB(95, 127, 78), Enum.Material.CorrodedMetal },
+	red = { Color3.fromRGB(176, 52, 40), Enum.Material.Metal },
+	blue = { Color3.fromRGB(40, 90, 150), Enum.Material.Metal },
+	ochre = { Color3.fromRGB(214, 160, 44), Enum.Material.Metal },
+	green = { Color3.fromRGB(70, 120, 84), Enum.Material.Metal },
 }
 
 local map = Instance.new("Model")
 map.Name = "Radoub"
-map:SetAttribute("KillHeight", KILL_HEIGHT)
+map:SetAttribute("KillHeight", KILL_HEIGHT * SCALE)
 map:SetAttribute("GeneratedBy", "build_radoub")
 local geometry = folder(map, "Geometry")
 local F = {
@@ -133,7 +147,7 @@ local function land()
 	block(F.floors, -60, 472, -20, QUAY, 310, 470, "quay")
 	block(F.floors, -60, 60, -20, QUAY, 150, 310, "quay")
 	-- hangar : mur de 90 studs qui borne la map à l'ouest, faîtage en décor
-	block(F.walls, -150, -60, -20, 150, -30, 470, "hangar")
+	block(F.walls, -150, -60, -20, 150, -30, 470, "clad")
 	for _, side in { { -150, -105, 1 }, { -105, -60, -1 } } do
 		-- deux pans de toit (coins) au-dessus du hangar, faîtage au milieu
 		local w = side[2] - side[1]
@@ -149,20 +163,16 @@ local function land()
 	}
 	for _, s in seas do
 		local w = block(F.scenery, s[1], s[2], SEA - 1, SEA, s[3], s[4], "water", false)
-		w.Transparency = 0.1
+		-- opaque : une nappe translucide de cette taille se redessine sur tout l'écran (coût GPU, cf. nuages de Dizzy)
+		w.Transparency = 0
 		w.Reflectance = 0.15
 		w.CastShadow = false
-		local k = block(F.kill, s[1], s[2], KILL_HEIGHT - 20, SEA + KILL_ABOVE_SEA, s[3], s[4], "water", false)
+		local k = block(F.kill, s[1], s[2], KILL_HEIGHT - 20, SEA + KILL_ABOVE_SEA / SCALE, s[3], s[4], "water", false)
 		k.Transparency = 1
 		k.CastShadow = false
 		k.Name = "Sea"
 	end
-	-- rive d'en face et grues lointaines (décor, au-delà de la mer à l'est)
-	block(F.scenery, 1100, 1700, 0, 52, -700, 900, "hangar", false)
-	for _, p in { { 1150, -200 }, { 1250, 150 }, { 1180, 520 } } do
-		block(F.scenery, p[1], p[1] + 14, 52, 270, p[2], p[2] + 14, "crane", false)
-		block(F.scenery, p[1] - 120, p[1] + 80, 255, 266, p[2] + 2, p[2] + 12, "crane", false)
-	end
+	-- rive d'en face, digue et phare : RadoubDressing (fond de décor)
 end
 
 -- Forme de radoub ---------------------------------------------------------------------------------------------------
@@ -199,10 +209,11 @@ local function dock()
 		"quay"
 	)
 	-- bateau-porte : passage à hauteur de quai au bout est
-	block(F.floors, 460, 472, -20, QUAY, 150, 310, "steel")
-	-- tins de calage sous la coque
+	block(F.floors, 460, 472, -20, QUAY, 150, 310, "gate")
+	-- tins de quille sous la coque : socle béton, chapeau en bois
 	for x = 100, 425, 14 do
-		block(F.decor, x, x + 5, 0, 5, 222, 238, "wood")
+		block(F.decor, x, x + 5, 0, 3.5, 222, 238, "concrete")
+		block(F.decor, x, x + 5, 3.5, 5, 222, 238, "wood")
 	end
 end
 
@@ -210,39 +221,53 @@ end
 
 -- Cette méthode permet de poser une moitié d'étrave (coin couché, extrudé verticalement) dont l'angle droit est en
 -- (x0, zc) : côtés de `len` vers l'est et de `half` vers le nord (side -1) ou le sud (side 1).
-local function bowHalf(x0, zc, len, half, side, y0, y1)
+local function bowHalf(x0, zc, len, half, side, y0, y1, look)
 	-- local Y vers l'est, local Z vers le sud (side 1) ou le nord (side -1) : local X vertical, X = Y × Z
 	local xv = Vector3.new(0, side, 0)
 	local yv = Vector3.new(1, 0, 0)
 	local cf = CFrame.fromMatrix(Vector3.new(x0 + len / 2, (y0 + y1) / 2, zc + side * half / 2), xv, yv)
-	piece(F.walls, "WedgePart", cf, Vector3.new(y1 - y0, len, half), "hull")
+	piece(F.walls, "WedgePart", cf, Vector3.new(y1 - y0, len, half), look or "hull")
 end
+
+-- tronçons du navire (bornes en X), flottaison peinte : carène rouge sous BOOT_LOW, liston noir jusqu'à BOOT_HIGH
+local SECTIONS = { { 95, 200 }, { 215, 315 }, { 330, 410 } }
+local BOOT_LOW, BOOT_HIGH = 26.5, 28
+local HATCHES = {
+	{ 228, 262, DECK + 3.5, 215, 245 },
+	{ 272, 306, DECK + 3.5, 215, 245 },
+	{ 345, 365, DECK + 5.5, 218, 242 },
+}
 
 -- Cette méthode permet de poser le navire : trois tronçons sur leurs tins, étrave, château arrière, panneaux de cale.
 local function ship()
-	for _, s in { { 95, 200 }, { 215, 315 }, { 330, 410 } } do
+	for _, s in SECTIONS do
 		local a, b = s[1], s[2]
-		block(F.walls, a, b, 20, DECK - 0.9, 205, 255, "hull")
-		block(F.walls, a, b, 10, 20, 210, 250, "hull")
-		block(F.walls, a, b, 5, 10, 220, 240, "hull")
+		block(F.walls, a, b, 20, BOOT_LOW, 205, 255, "antifoul")
+		block(F.walls, a, b, BOOT_LOW, BOOT_HIGH, 205, 255, "boottop")
+		block(F.walls, a, b, BOOT_HIGH, DECK - 0.9, 205, 255, "hull")
+		block(F.walls, a, b, 10, 20, 210, 250, "antifoul")
+		block(F.walls, a, b, 5, 10, 220, 240, "antifoul")
 		block(F.floors, a, b, DECK - 0.9, DECK, 205, 255, "deck")
 		-- pavois : couvert bas le long des bords du pont
 		block(F.walls, a, b, DECK, DECK + 2.5, 205, 205.8, "hull")
 		block(F.walls, a, b, DECK, DECK + 2.5, 254.2, 255, "hull")
 	end
-	bowHalf(410, 230, 32, 25, -1, 10, DECK)
-	bowHalf(410, 230, 32, 25, 1, 10, DECK)
+	for _, side in { -1, 1 } do
+		bowHalf(410, 230, 32, 25, side, 10, BOOT_LOW, "antifoul")
+		bowHalf(410, 230, 32, 25, side, BOOT_LOW, BOOT_HIGH, "boottop")
+		bowHalf(410, 230, 32, 25, side, BOOT_HIGH, DECK)
+	end
 	-- château arrière (ouvert à l'est), mât
 	block(F.walls, 105, 150, DECK, DECK + 22, 212, 213.5, "cabin")
 	block(F.walls, 105, 150, DECK, DECK + 22, 246.5, 248, "cabin")
 	block(F.walls, 105, 106.5, DECK, DECK + 22, 213.5, 246.5, "cabin")
 	block(F.walls, 148.5, 150, DECK + 10, DECK + 22, 213.5, 246.5, "cabin")
 	block(F.floors, 105, 150, DECK + 22, DECK + 23.5, 212, 248, "cabin")
-	block(F.decor, 112, 124, DECK + 23.5, DECK + 34, 224, 236, "cabin")
+	block(F.decor, 112, 124, DECK + 23.5, DECK + 34, 224, 236, "funnel")
 	-- panneaux de cale, tôles, bois de chantier
-	block(F.decor, 228, 262, DECK, DECK + 3.5, 215, 245, "steel")
-	block(F.decor, 272, 306, DECK, DECK + 3.5, 215, 245, "steel")
-	block(F.decor, 345, 365, DECK, DECK + 5.5, 218, 242, "steel")
+	for _, h in HATCHES do
+		block(F.decor, h[1], h[2], DECK, h[3], h[4], h[5], "steel")
+	end
 	block(F.decor, 380, 398, DECK, DECK + 7.5, 220, 240, "wood")
 end
 
@@ -259,7 +284,19 @@ local function gangway(xq, xd, zc)
 	end
 	piece(F.floors, "Part", frame * CFrame.new(0, -0.4, 0), Vector3.new(len, 0.8, 8), "steel")
 	for _, side in { -3.8, 3.8 } do
-		piece(F.walls, "Part", frame * CFrame.new(0, 1.5, side), Vector3.new(len, 3, 0.4), "crane")
+		-- garde-corps : plan de collision invisible (arrête toujours les balles), main courante, sous-lisse, plinthe
+		-- et poteaux verticaux en décor
+		local guard = piece(F.walls, "Part", frame * CFrame.new(0, 1.5, side), Vector3.new(len, 3, 0.4), "crane")
+		guard.Transparency = 1
+		guard.CastShadow = false
+		piece(F.decor, "Part", frame * CFrame.new(0, 3, side), Vector3.new(len, 0.25, 0.25), "crane", false)
+		piece(F.decor, "Part", frame * CFrame.new(0, 1.6, side), Vector3.new(len, 0.16, 0.16), "crane", false)
+		piece(F.decor, "Part", frame * CFrame.new(0, 0.2, side), Vector3.new(len, 0.4, 0.12), "crane", false)
+		for t = -len / 2 + 0.3, len / 2 - 0.2, 3.5 do
+			local base = (frame * CFrame.new(t, 0, side)).Position
+			local top = (frame * CFrame.new(t, 3, side)).Position
+			piece(F.decor, "Part", CFrame.new((base + top) / 2), Vector3.new(0.18, (top - base).Magnitude, 0.18), "crane", false)
+		end
 	end
 end
 
@@ -288,17 +325,38 @@ end
 
 -- Portique roulant, bâtiments, quais ----------------------------------------------------------------------------------
 
--- Cette méthode permet de poser le portique roulant : rails, deux pieds avec échelle, poutre praticable, chariot.
+-- Portique : chaque pied fait de deux poteaux sur un bogie, deux poutres-caissons reliées par une passerelle en
+-- caillebotis (dessus praticable à y GANTRY.top, même emprise que la maquette), chariot sous les poutres. Les rails,
+-- roues, contreventements, garde-corps, cabine et palan sont dans RadoubDressing.
+local GANTRY = {
+	legs = { { 110, 124 }, { 336, 350 } },
+	beamLow = 103,
+	top = 112,
+	z0 = 110,
+	z1 = 350,
+	trolley = { 247, 265, 97, 103, 200, 222 },
+	rails = { { z = 117, x1 = 470.5 }, { z = 343, x1 = 436 } }, -- le rail sud s'arrête avant le local du bateau-porte
+	railX0 = -60,
+	ladderGaps = { { 115, 119 }, { 341, 345 } },
+	railH = 3.5 / SCALE, -- main courante à 3,5 studs du monde après l'échelle : on tire par-dessus
+}
+
+-- Cette méthode permet de poser la structure porteuse du portique : poteaux, bogies, poutres, passerelle, chariot,
+-- échelles dans les pieds.
 local function crane()
-	block(F.decor, -60, 472, QUAY, QUAY + 0.4, 116, 118, "steel", false)
-	block(F.decor, -60, 472, QUAY, QUAY + 0.4, 342, 344, "steel", false)
-	block(F.walls, 245, 267, QUAY, 104, 110, 124, "crane")
-	block(F.walls, 245, 267, QUAY, 104, 336, 350, "crane")
-	block(F.floors, 245, 267, 104, 112, 110, 350, "crane")
-	block(F.walls, 249, 263, 92, 104, 200, 222, "crane")
-	block(F.decor, 255.5, 256.5, 66, 92, 210, 211, "dark", false)
-	ladder(Vector3.new(245, 0, 117), Vector3.new(-1, 0, 0), QUAY, 112)
-	ladder(Vector3.new(245, 0, 343), Vector3.new(-1, 0, 0), QUAY, 112)
+	local g = GANTRY
+	for _, leg in g.legs do
+		block(F.walls, 245, 251, QUAY + 5, g.beamLow, leg[1], leg[2], "crane")
+		block(F.walls, 261, 267, QUAY + 5, g.beamLow, leg[1], leg[2], "crane")
+		block(F.walls, 245, 267, QUAY, QUAY + 5, leg[1] + 3, leg[2] - 3, "crane")
+	end
+	block(F.floors, 245, 251, g.beamLow, g.top, g.z0, g.z1, "crane")
+	block(F.floors, 261, 267, g.beamLow, g.top, g.z0, g.z1, "crane")
+	block(F.floors, 251, 261, g.top - 1, g.top, g.z0, g.z1, "grating")
+	local t = g.trolley
+	block(F.walls, t[1], t[2], t[3], t[4], t[5], t[6], "crane")
+	ladder(Vector3.new(245, 0, 117), Vector3.new(-1, 0, 0), QUAY, g.top)
+	ladder(Vector3.new(245, 0, 343), Vector3.new(-1, 0, 0), QUAY, g.top)
 end
 
 -- Cette méthode permet de poser un bâtiment creux (murs, toit plat) avec ses portes : `doors` = { { côté N/S/E/W,
@@ -354,35 +412,86 @@ local function hall(x0, x1, z0, z1, h, doors, look)
 	block(F.floors, x0, x1, y1, y1 + 1.5, z0, z1, "roof")
 end
 
+-- bâtiments (habillés par RadoubDressing selon `style`) ; doors = { { côté N/S/E/W, début, fin le long du mur,
+-- hauteur } }
+local HALLS = {}
+-- conteneurs { x, z, hauteur au-dessus du quai, couleur } (24 × 10 × 10), piles de tôles { x0, x1, hauteur, z0, z1 }
+local CONTAINERS = {
+	{ 200, 32, 0, "red" },
+	{ 200, 32, 10.2, "blue" },
+	{ 228, 46, 0, "ochre" },
+	{ 205, 64, 0, "green" },
+	{ 232, 78, 0, "red" },
+	{ 232, 78, 10.2, "ochre" },
+}
+local PLATES = {
+	-- entre les bâtiments, hors des lignes droites le long de la forme (retour du 20/11/2026)
+	{ 198, 218, 4, 92, 106 },
+	{ 226, 248, 5, 94, 108 },
+	{ 200, 218, 3, 372, 386 },
+	{ 224, 246, 6, 376, 390 },
+}
+
+-- Cette méthode permet de poser un bâtiment et de le noter pour l'habillage.
+local function building(style, x0, x1, z0, z1, h, doors, look, extra)
+	hall(x0, x1, z0, z1, h, doors, look)
+	local entry = { style = style, x0 = x0, x1 = x1, z0 = z0, z1 = z1, h = h, doors = doors }
+	for k, v in extra or {} do
+		entry[k] = v
+	end
+	table.insert(HALLS, entry)
+end
+
 -- Cette méthode permet de poser les bâtiments d'angle, la salle des pompes, le local du bateau-porte et les objets des
--- quais (conteneurs, tôles, bittes).
+-- quais (conteneurs, tôles ; les bittes sont dans RadoubDressing).
 local function buildings()
-	for _, s in { { 30, 195, 1 }, { 275, 440, -1 } } do
+	for i, s in { { 30, 195 }, { 275, 440 } } do
 		local a, b = s[1], s[2]
 		-- ateliers : grande porte vers la forme, portes de côté
-		hall(a, b, 25, 110, 38, { { "S", a + 55, a + 105, 26 }, { "E", 40, 60, 12 }, { "W", 60, 75, 12 } }, "brick")
+		building(
+			"atelier",
+			a,
+			b,
+			25,
+			110,
+			38,
+			{ { "S", a + 55, a + 105, 26 }, { "E", 40, 60, 12 }, { "W", 60, 75, 12 } },
+			"clad",
+			{ number = string.format("%02d", i) }
+		)
 		-- magasins : porte vers la forme, portes de côté
-		hall(a, b, 350, 435, 30, { { "N", a + 60, a + 100, 20 }, { "E", 400, 415, 12 }, { "W", 400, 415, 12 } }, "store")
+		building(
+			"magasin",
+			a,
+			b,
+			350,
+			435,
+			30,
+			{ { "N", a + 60, a + 100, 20 }, { "E", 400, 415, 12 }, { "W", 400, 415, 12 } },
+			"precast",
+			{ number = string.format("%02d", i + 2) }
+		)
 	end
-	hall(0, 55, 160, 300, 24, { { "E", 222, 238, 12 }, { "N", 20, 35, 12 } }, "brick")
-	block(F.decor, 24, 30, QUAY + 25.5, QUAY + 52, 175, 181, "brick", false)
-	hall(438, 470, 312, 346, 16, { { "W", 322, 334, 10 }, { "N", 448, 460, 10 } }, "brick")
-	-- conteneurs entre les ateliers
-	for _, c in
-		{ { 200, 32, 0, "red" }, { 200, 32, 10.2, "blue" }, { 228, 46, 0, "ochre" }, { 205, 64, 0, "green" }, { 232, 78, 0, "red" }, { 232, 78, 10.2, "ochre" } }
-	do
+	building(
+		"pompes",
+		PUMP_X0,
+		PUMP_X1,
+		160,
+		300,
+		24,
+		{ { "E", 222, 238, 12 }, { "N", 20, 35, 12 } },
+		"brick",
+		{ chimney = { x = PUMP_X0 + 27, z = 178, top = QUAY + 52 } }
+	)
+	building("local", 438, 470, 312, 346, 16, { { "W", 322, 334, 10 }, { "N", 448, 460, 10 } }, "clad")
+	for _, c in CONTAINERS do
 		block(F.walls, c[1], c[1] + 24, QUAY + c[3], QUAY + c[3] + 10, c[2], c[2] + 10, c[4])
 	end
-	-- piles de tôles (couverts bas), bittes d'amarrage
-	for _, t in { { 70, 90, 4, 126, 140 }, { 330, 352, 5, 128, 142 }, { 400, 420, 3, 126, 138 }, { 110, 130, 3, 322, 336 }, { 300, 318, 6, 320, 334 } } do
-		block(F.decor, t[1], t[2], QUAY, QUAY + t[3], t[4], t[5], "steel")
-	end
-	for x = 80, 440, 40 do
-		for _, z in { 146, 314 } do
-			local p = piece(F.decor, "Part", CFrame.new(x, QUAY + 1.5, z), Vector3.new(3, 2.4, 2.4), "dark")
-			p.Shape = Enum.PartType.Cylinder
-			p.CFrame = PLACE * (CFrame.new(x, QUAY + 1.5, z) * CFrame.Angles(0, 0, math.pi / 2))
-		end
+	-- piles de tôles (couverts bas) : volume porteur invisible, lits de tôles dessinés par l'habillage
+	for _, t in PLATES do
+		local p = block(F.decor, t[1], t[2], QUAY, QUAY + t[3], t[4], t[5], "steel")
+		p.Transparency = 1
+		p.CastShadow = false
 	end
 end
 
@@ -395,7 +504,7 @@ local SPAWNS = {
 	{ zone = "AtelierEst", look = { -1, 1 }, points = { { 400, 85 }, { 412, 85 }, { 412, 95 } } },
 	{ zone = "MagasinOuest", look = { 1, -1 }, points = { { 60, 410 }, { 72, 410 }, { 60, 420 } } },
 	{ zone = "MagasinEst", look = { 1, -1 }, points = { { 300, 415 }, { 312, 415 }, { 300, 425 } } },
-	{ zone = "Pompes", look = { 1, -1 }, points = { { 27, 270 }, { 20, 282 }, { 34, 282 } } },
+	{ zone = "Pompes", look = { 1, -1 }, points = { { PUMP_X0 + 27, 270 }, { PUMP_X0 + 20, 282 }, { PUMP_X0 + 34, 282 } } },
 	{ zone = "BateauPorte", look = { -1, 0 }, points = { { 454, 329 }, { 460, 338 }, { 460, 320 } } },
 }
 
@@ -423,6 +532,100 @@ ladder(Vector3.new(460, 0, 230), Vector3.new(-1, 0, 0), 0, QUAY)
 crane()
 buildings()
 local spawnCount = spawns()
+local bollards, containers = {}, {}
+for _, c in CONTAINERS do
+	table.insert(containers, { c[1], c[2], c[3], LOOK[c[4]][1] })
+end
+for x = 80, 400, 80 do
+	table.insert(bollards, { x, 146 })
+	table.insert(bollards, { x, 314 })
+end
+RadoubDressing.build({
+	map = map,
+	place = PLACE,
+	quay = QUAY,
+	deck = DECK,
+	sea = SEA,
+	wall = WALL,
+	halls = HALLS,
+	hangar = { x0 = -150, x1 = -60, z0 = -30, z1 = 470, h = 90, doorZ = 230, doorW = 120, doorH = 66 },
+	sections = SECTIONS,
+	draftMarks = { { 99 }, {}, { 404 } },
+	openEnds = { { 200, 1 }, { 215, -1 }, { 315, 1 }, { 330, -1 } },
+	hatches = HATCHES,
+	gantry = GANTRY,
+	containers = containers,
+	plates = PLATES,
+	bollards = bollards,
+	masts = { { -50, 140 }, { 466, 136 }, { -50, 320 }, { 466, 354 } }, -- aux angles, hors des voies de course
+	mastTarget = Vector3.new(260, 20, 230),
+	dock = {
+		sections = SECTIONS,
+		x0 = 60,
+		x1 = 460,
+		toeN = 192,
+		toeS = 268,
+		ramp = { x0 = 60, x1 = 74, z0 = 150, z1 = 246 },
+	},
+	gate = {
+		x0 = 460,
+		x1 = 472,
+		z0 = 150,
+		z1 = 310,
+		freeZ0 = 196,
+		freeZ1 = 264,
+		stiffeners = { 200, 208, 216, 224, 236, 244, 252, 260 },
+	},
+	quays = {
+		x0 = -60,
+		x1 = 472,
+		z0 = -30,
+		z1 = 470,
+		crestN = 150,
+		crestS = 310,
+		dockX0 = 60,
+		dockX1 = 460,
+		rails = GANTRY.rails,
+	},
+})
+
+-- Cette méthode permet d'agrandir toute la map de SCALE autour du centre posé (positions et tailles ; points
+-- d'apparition gardés en vraie grandeur, face basse remise à SPAWN_SKIN du sol agrandi ; portée des lampes).
+local function scaleMap()
+	local pivot = OFFSET + CENTER
+	for _, d in map:GetDescendants() do
+		if d:IsA("BasePart") then
+			local cf = d.CFrame
+			local pos = pivot + (cf.Position - pivot) * SCALE
+			if d.Parent == F.spawns then
+				local bottom = cf.Position.Y - d.Size.Y / 2 - MapBuild.SPAWN_SKIN
+				pos = Vector3.new(pos.X, bottom * SCALE + MapBuild.SPAWN_SKIN + d.Size.Y / 2, pos.Z)
+			else
+				d.Size = d.Size * SCALE
+			end
+			d.CFrame = (cf - cf.Position) + pos
+		elseif d:IsA("SpotLight") then
+			d.Range = math.min(60, d.Range * SCALE)
+		end
+	end
+end
+scaleMap()
+
+-- Ombres sans intérêt au soleil rasant (retour du 20/11/2026) : une pièce linéaire (rails, poteaux, garde-corps,
+-- acrotères, raidisseurs) ou un petit objet traîne une longue ombre fine sur le quai sans rien dessiner.
+local THIN_SHADOW, SMALL_SHADOW = 3, 5 -- studs du monde : deuxième et plus grande dimension
+local thinCut = 0
+for _, p in map:GetDescendants() do
+	if p:IsA("BasePart") and p.CastShadow then
+		local s = { p.Size.X, p.Size.Y, p.Size.Z }
+		table.sort(s)
+		if s[2] < THIN_SHADOW or s[3] < SMALL_SHADOW then
+			p.CastShadow = false
+			thinCut += 1
+		end
+	end
+end
+print(string.format("  ombres : %d pièces fines ou petites coupées", thinCut))
 
 -- rampes de surf : une seule pièce en surface, rien en travers dessous (#136), puis mesure de contrôle
 for _, r in RampEdges.apply(geometry) do
@@ -467,4 +670,4 @@ for _, d in map:GetDescendants() do
 		count += 1
 	end
 end
-print(string.format("Radoub : %d pièces, %d spawns, KillHeight %d -> %s", count, spawnCount, KILL_HEIGHT, OUT))
+print(string.format("Radoub : %d pièces, %d spawns, KillHeight %d -> %s", count, spawnCount, KILL_HEIGHT * SCALE, OUT))
