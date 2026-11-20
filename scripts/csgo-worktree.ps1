@@ -252,7 +252,9 @@ $studioStateFile = Join-Path $runDir 'studio.status'
 # Serveur de commande partage entre les projets du poste (tools/rojo-plugin/README.md) : registre des projets, journal
 # et pid dans un dossier commun. ROJO_AUTOCONNECT_DIR : autre dossier (bac a sable des tests).
 $controlPort = 34870
-$controlVersion = 'rojo-control 3'
+# Version du protocole du serveur (VERSION de control-server.luau) : un serveur plus recent, lance par un autre projet,
+# est garde ; un plus ancien est remplace.
+$controlVersion = 3
 $controlDir = if ($env:ROJO_AUTOCONNECT_DIR) { $env:ROJO_AUTOCONNECT_DIR } else { Join-Path $env:LOCALAPPDATA 'RojoAutoconnect' }
 $controlPidFile = Join-Path $controlDir 'control.pid'
 # Place(s) Roblox de CSGO : le plugin d'une autre place (autre projet) ne suit pas les cibles de ce script.
@@ -268,24 +270,54 @@ function Register-AutoconnectProject {
   # ou a moitie ecrite.
   $file = Join-Path $projects 'csgo.json'
   [IO.File]::WriteAllText("$file.tmp", ($entry | ConvertTo-Json -Compress), [Text.UTF8Encoding]::new($false))
-  # [NullString] : un $null passe a un parametre string arrive en "" (chemin vide refuse), pas en null.
-  if (Test-Path $file) { [IO.File]::Replace("$file.tmp", $file, [NullString]::Value) } else { [IO.File]::Move("$file.tmp", $file) }
+  for ($i = 1; $i -le 10; $i++) {
+    try {
+      # [NullString] : un $null passe a un parametre string arrive en "" (chemin vide refuse), pas en null.
+      if (Test-Path $file) { [IO.File]::Replace("$file.tmp", $file, [NullString]::Value) } else { [IO.File]::Move("$file.tmp", $file) }
+      return
+    } catch [System.IO.IOException] {
+      # Fichier ouvert au meme moment par le serveur (lecture a chaque requete du plugin) : on reessaie.
+      Start-Sleep -Milliseconds 100
+    }
+  }
+  # L'inscription precedente reste valable (memes chemins) : la reservation continue.
+  Remove-Item -Force -ErrorAction SilentlyContinue "$file.tmp"
+  Write-Warning "Inscription $file non mise a jour (fichier occupe) : l'ancienne est gardee."
 }
 
 # Cette methode permet d'executer une action sur le serveur de commande sous un mutex commun a tous les projets du poste,
-# lorsque deux scripts (CSGO, Fling a Dummy) voudraient le demarrer en meme temps.
+# lorsque deux scripts (CSGO, Fling a Dummy) voudraient le demarrer en meme temps ; abandonne apres 60 s d'attente.
 function Invoke-ControlLocked([scriptblock]$Action) {
   $m = New-Object System.Threading.Mutex($false, 'Local\rojo-autoconnect-control')
-  try { [void]$m.WaitOne() } catch [System.Threading.AbandonedMutexException] { }
-  try { & $Action } finally { $m.ReleaseMutex(); $m.Dispose() }
+  try {
+    $owned = try { $m.WaitOne(60000) } catch [System.Threading.AbandonedMutexException] { $true }
+    if (-not $owned) { Write-Warning 'Serveur de commande du plugin occupe depuis 60 s : non verifie.'; return }
+    try { & $Action } finally { $m.ReleaseMutex() }
+  } finally { $m.Dispose() }
+}
+
+# Cette methode permet de lire la version du serveur de commande qui ecoute sur 34870 lorsqu'il faut decider de le garder ;
+# 0 s'il ne repond pas ou annonce un ancien protocole (csgo-control 2).
+function Get-RojoControlVersion([int]$TimeoutSec = 3) {
+  $health = try { (Invoke-WebRequest "http://localhost:$controlPort/health" -TimeoutSec $TimeoutSec).Content } catch { $null }
+  if ("$health" -match '^rojo-control (\d+)$') { return [int]$Matches[1] }
+  return 0
+}
+
+# Cette methode permet d'arreter un processus du serveur de commande lorsque son pid est enregistre dans un fichier ;
+# un pid recycle par Windows apres un redemarrage (autre programme) n'est pas touche.
+function Stop-RojoControlPid([string]$PidFile) {
+  if (-not (Test-Path $PidFile)) { return }
+  $old = [int](Get-Content $PidFile)
+  $cmd = (Get-CimInstance Win32_Process -Filter "ProcessId = $old" -ErrorAction SilentlyContinue).CommandLine
+  if ($cmd -like '*control-server.luau*') { taskkill /PID $old /T /F *> $null }
 }
 
 # Cette methode permet de demarrer le serveur de commande du plugin Rojo modifie (tools/rojo-plugin) lorsqu'il ne
-# tourne pas encore, ou pas dans la version attendue ; sans le plugin modifie dans Studio, il ne sert a rien mais ne gene pas.
+# tourne pas encore, ou dans une version plus ancienne ; sans le plugin modifie dans Studio, il ne sert a rien mais ne gene pas.
 function Start-RojoControl {
   Invoke-ControlLocked {
-    $health = try { (Invoke-WebRequest "http://localhost:$controlPort/health" -TimeoutSec 3).Content } catch { $null }
-    if ($health -eq $controlVersion) { return }
+    if ((Get-RojoControlVersion) -ge $controlVersion) { return }
     $lune = (Get-Command lune -ErrorAction SilentlyContinue).Source
     $server = Join-Path $PSScriptRoot '..\tools\rojo-plugin\control-server.luau'
     # Verifie avant d'arreter quoi que ce soit : un script sans serveur a lancer laisse tourner celui en place.
@@ -293,26 +325,26 @@ function Start-RojoControl {
     # Ancienne version encore lancee (par ce projet ou un autre) : on l'arrete avant de demarrer celle du depot.
     @(Get-NetTCPConnection -LocalPort $controlPort -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique) |
       Where-Object { (Get-Process -Id $_ -ErrorAction SilentlyContinue).ProcessName -eq 'lune' } | ForEach-Object { taskkill /PID $_ /T /F *> $null }
-    if (Test-Path $controlPidFile) {
-      # Pid recycle par Windows apres un redemarrage : on ne tue que l'enveloppe du serveur de commande.
-      $old = [int](Get-Content $controlPidFile)
-      $cmd = (Get-CimInstance Win32_Process -Filter "ProcessId = $old" -ErrorAction SilentlyContinue).CommandLine
-      if ($cmd -like '*control-server.luau*') { taskkill /PID $old /T /F *> $null }
-    }
+    Stop-RojoControlPid $controlPidFile
+    # Fichiers du serveur d'avant #589 (dans worktrees\.run) : arretes et retires une fois.
+    $legacyPid = Join-Path $runDir 'rojo-control.pid'
+    Stop-RojoControlPid $legacyPid
+    Remove-Item -Force -ErrorAction SilentlyContinue $legacyPid, (Join-Path $runDir 'rojo-control.log')
     # Copie commune (celle que lancent les autres projets) mise a jour avec celle du depot, puis lancee : tous les
     # projets du poste lancent alors la meme version.
     $shared = Join-Path $controlDir 'control-server.luau'
     Copy-Item -Force $server $shared
+    # Chemins entre apostrophes dans -Command : une apostrophe du chemin (nom d'utilisateur) y est doublee.
+    $q = { param($s) "'" + ($s -replace "'", "''") + "'" }
+    $command = "& $(& $q $lune) run $(& $q $shared) $(& $q $controlDir) *>$(& $q (Join-Path $controlDir 'control.log'))"
     # Dossier de travail = racine du checkout principal (le shim Rokit de lune y trouve rokit.toml) : pas un worktree,
     # que le serveur bloquerait a sa suppression.
-    $proc = Start-Process -FilePath (Get-Command pwsh).Source -WorkingDirectory $root `
-      -WindowStyle Hidden -PassThru -ArgumentList '-NoProfile',
-      '-NonInteractive', '-Command', "& '$lune' run '$shared' '$controlDir' *>'$(Join-Path $controlDir 'control.log')'"
+    $proc = Start-Process -FilePath (Get-Command pwsh).Source -WorkingDirectory $root -WindowStyle Hidden -PassThru `
+      -ArgumentList '-NoProfile', '-NonInteractive', '-Command', $command
     Set-Content -Path $controlPidFile -Value $proc.Id
     # Mutex garde jusqu'a ce que le serveur reponde : le script suivant ne le prend pas pour un serveur absent.
     for ($i = 0; $i -lt 20; $i++) {
-      $up = try { (Invoke-WebRequest "http://localhost:$controlPort/health" -TimeoutSec 1).Content -eq $controlVersion } catch { $false }
-      if ($up) { break }
+      if ((Get-RojoControlVersion 1) -ge $controlVersion) { break }
       Start-Sleep -Milliseconds 500
     }
   }

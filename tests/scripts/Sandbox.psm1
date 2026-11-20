@@ -9,7 +9,8 @@
   - ports : le port de base 34872 est fige dans le script ; les tests qui demarrent un faux Rojo passent -Slot >= 600 ;
   - mutex : les noms 'Local\csgo-studio-lock' et 'Local\csgo-worktree-cleanup' sont partages avec le vrai poste ;
   - plugin Rojo : le registre du serveur de commande est celui du bac a sable (ROJO_AUTOCONNECT_DIR), et le serveur
-    lui-meme n'y est pas copie (tools\ absent) : -AcquireStudio n'arrete ni ne lance celui du poste.
+    lui-meme n'y est pas copie (tools\ absent) : -AcquireStudio n'arrete ni ne lance celui du poste. Mais il interroge
+    le vrai /health (port 34870) et prend le mutex 'Local\rojo-autoconnect-control', partage avec le poste.
 #>
 
 $script:SourceScripts = Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'scripts'

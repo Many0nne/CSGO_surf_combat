@@ -47,13 +47,14 @@ Prérequis : `install.ps1` lancé une fois sur le poste (plugin + copie du serve
 2. **Publier une cible** (réservation ou libération) : écrire dans `target` `{"port":"34901","rev":"<nouvelle valeur>"}`
    (`port` en texte ; `""` = déconnecter). Le plugin n'agit que si `rev` change (ex. `(Get-Date).Ticks`).
 3. **Démarrer le serveur s'il ne répond pas**, sous le mutex système `Local\rojo-autoconnect-control` (commun à tous les
-   projets, pris pour toute l'étape) : si `GET http://localhost:34870/health` ne renvoie pas `rojo-control 3`, arrêter
+   projets, pris pour toute l'étape, 60 s d'attente au plus) : si `GET http://localhost:34870/health` renvoie
+   `rojo-control N` avec N ≥ 3, garder ce serveur (un N plus grand vient d'un projet plus récent). Sinon, arrêter
    le processus `lune` qui écoute sur 34870 (ancienne version) et le pid de `control.pid` seulement si sa ligne de
    commande cite `control-server.luau` (pid recyclé après un redémarrage), puis lancer, depuis un dossier dont le
    `rokit.toml` fournit `lune` et qui n'est pas un worktree :
    `lune run "%LOCALAPPDATA%\RojoAutoconnect\control-server.luau" "%LOCALAPPDATA%\RojoAutoconnect"`
    (en arrière-plan, sortie dans `control.log`, pid dans `control.pid` du dossier commun), et attendre que `/health`
-   réponde avant de rendre le mutex. Ne jamais arrêter un serveur qui répond `rojo-control 3` : il sert les autres fenêtres.
+   réponde avant de rendre le mutex. Ne jamais arrêter un serveur de version ≥ 3 : il sert les autres fenêtres.
    CSGO met cette copie commune à jour avec celle de son dépôt avant chaque lancement.
 4. **Attendre la connexion** (facultatif) : lire `status` jusqu'à `{"rev":"<rev publiée>","state":"connected","port":"<port>"}`.
 
@@ -74,8 +75,8 @@ Redémarrer Studio. Au premier appel, Studio peut demander d'autoriser l'accès 
   tag, reporter les modifications dans `plugin/src/App/init.lua` et `plugin/src/soundPlayer.lua` (repérer `CSGO autoconnect`) et régénérer le patch
   avec `git diff > autoconnect.patch`.
 - Changement du protocole du serveur : incrémenter sa version (`VERSION` dans `control-server.luau`, `$controlVersion`
-  dans `csgo-worktree.ps1`) et la version attendue par les autres projets, sinon deux versions attendues sur le poste
-  s'arrêteraient l'une l'autre à chaque réservation.
+  dans `csgo-worktree.ps1`) en restant compatible avec les versions précédentes : un script garde tout serveur de
+  version supérieure ou égale à la sienne, et le premier qui en attend une plus récente le remplace.
 - Ancien plugin (avant #589, sans `placeId`) : le serveur v3 lui répond 400, il ne suit plus rien. Relancer `install.ps1`
   et redémarrer Studio.
 - Ne pas garder de copie `.rbxm` du plugin dans le dossier `Plugins` : Studio charge tous les `.rbxm` et deux Rojo
