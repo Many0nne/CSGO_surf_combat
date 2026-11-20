@@ -45,7 +45,8 @@ local LOOK = {
 	quay = { Color3.fromRGB(150, 146, 138), Enum.Material.Concrete },
 	dock = { Color3.fromRGB(112, 108, 102), Enum.Material.Concrete },
 	surf = { Color3.fromRGB(70, 74, 82), Enum.Material.DiamondPlate },
-	brick = { Color3.fromRGB(150, 84, 66), Enum.Material.Brick },
+	-- teinte unie : la matière Brick de Roblox a été jugée laide (retour du 20/11/2026), l'habillage viendra après
+	brick = { Color3.fromRGB(150, 96, 80), Enum.Material.SmoothPlastic },
 	store = { Color3.fromRGB(128, 124, 118), Enum.Material.Concrete },
 	roof = { Color3.fromRGB(86, 90, 102), Enum.Material.CorrodedMetal },
 	hull = { Color3.fromRGB(140, 58, 43), Enum.Material.Metal },
