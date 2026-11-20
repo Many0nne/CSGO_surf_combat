@@ -11,9 +11,9 @@ local roblox = require("@lune/roblox")
 
 local DizzyDressing = require("./DizzyDressing")
 local DizzyPatches = require("./DizzyPatches")
+local MapBuild = require("./MapBuild")
 local RampCheck = require("./RampCheck")
 local RampEdges = require("./RampEdges")
-local ShadowCulling = require("./ShadowCulling")
 local SpawnSight = require("./SpawnSight")
 
 local CFrame = roblox.CFrame
@@ -26,13 +26,9 @@ local LAYOUT = "tools/map/dizzy_layout.json"
 local OUT = "assets/rbx/Maps/Dizzy.rbxm"
 -- Décalage de la map : ne pas se superposer à une autre map de Workspace.Maps en mode Edit
 local OFFSET = Vector3.new(2000, 0, 0)
+local folder, ghost, spawnPoint = MapBuild.folder, MapBuild.ghost, MapBuild.spawnPoint
+local SPAWN_SKIN = MapBuild.SPAWN_SKIN
 
--- Ombres (cf. docs/performance.md) : direction vers le soleil pour Lighting.ClockTime 17,9 et GeographicLatitude 0
--- (Lighting:GetSunDirection() relevé dans Studio). Changer l'heure ou la latitude (default.project.json)
--- oblige à la relever de nouveau : le générateur refuse de tourner si default.project.json ne correspond plus.
-local SUN_CLOCK, SUN_LATITUDE = 17.9, 0
-local SUN = { -0.9167592525482178, 0.024006040766835213, -0.39871811866760254 }
-local SMALL_SHADOW = 2 -- studs : une pièce plus petite que ça dans toutes ses dimensions ne projette pas d'ombre
 
 -- Habillage par rôle de face (relevé par extract_dizzy.py) : couleur, matière
 local CONCRETE = Color3.fromRGB(150, 140, 128)
@@ -75,26 +71,6 @@ local FOLDERS = {
 	block = "Decor",
 	clip = "Clips",
 }
-
--- Cette méthode permet de créer (ou retrouver) un dossier enfant lorsqu'on range les pièces de la map par rôle.
-local function folder(parent, name)
-	local f = parent:FindFirstChild(name)
-	if not f then
-		f = Instance.new("Folder")
-		f.Name = name
-		f.Parent = parent
-	end
-	return f
-end
-
--- Cette méthode permet de rendre une pièce purement décorative : sans collision ni requête (les raycasts du
--- mouvement la prendraient sinon pour un mur ou une rampe).
-local function ghost(p)
-	p.CanCollide = false
-	p.CanQuery = false
-	p.CanTouch = false
-	return p
-end
 
 -- Cette méthode permet d'habiller une pièce selon son rôle (floor, slope, wall, ceiling, surf, clip) ou son groupe de
 -- décor (decor:<groupe>), pour le plan relevé comme pour les retouches de dizzy_patches.luau.
@@ -214,23 +190,6 @@ local FFA_SPAWNS = {
 		points = { { -241.037, -261.783 }, { -230.668, -256.516 }, { -241.037, -251.249 } },
 	},
 }
-local SPAWN_SKIN = 0.029 -- studs : face basse du point au-dessus du sol, comme les points T/CT relevés
-
--- Cette méthode permet de poser un point d'apparition au sol (pièce invisible sans collision, repère `cf`) lorsque le
--- générateur remplit GroundSpawns.
-local function spawnPoint(f, name, cf, team, zone)
-	local p = ghost(Instance.new("Part"))
-	p.Anchored = true
-	p.Transparency = 1
-	p.Size = Vector3.new(2, 1, 2)
-	p.CFrame = cf
-	p.Name = name
-	p:SetAttribute("Team", team)
-	if zone then
-		p:SetAttribute("Zone", zone)
-	end
-	p.Parent = f
-end
 
 -- Cette méthode permet de poser les points d'apparition au sol : info_player_* de l'original (Team T ou CT, 0,406 m sous
 -- l'origine source), puis les zones FFA_SPAWNS des deux côtés de la map (#329) ; renvoie le nombre de points.
@@ -259,49 +218,7 @@ local function spawns(parent, data)
 	return #data.spawns + n
 end
 
--- Cette méthode permet de vérifier que l'heure et la latitude de default.project.json sont celles du soleil SUN
--- lorsque le générateur va couper des ombres d'après sa direction.
-local function checkSun()
-	local project = serde.decode("json", fs.readFile("default.project.json"))
-	local props = project.tree.Lighting["$properties"]
-	assert(
-		props.ClockTime == SUN_CLOCK and props.GeographicLatitude == SUN_LATITUDE,
-		"Lighting de default.project.json ≠ soleil de build_dizzy.luau : relever SUN dans Studio (GetSunDirection)"
-	)
-end
-
--- Cette méthode permet de couper CastShadow là où l'ombre ne se voit pas lorsque la map est complète : petites
--- pièces, puis pièces entièrement à l'ombre des autres (ShadowCulling). Renvoie (petites, masquées, gardées).
-local function cullShadows(map)
-	local parts, boxes, occluders, candidates = {}, {}, {}, {}
-	local small = 0
-	for _, p in map:GetDescendants() do
-		if p:IsA("BasePart") and p.CastShadow then
-			local s = p.Size
-			if math.max(s.X, s.Y, s.Z) < SMALL_SHADOW then
-				p.CastShadow = false
-				small += 1
-			else
-				table.insert(parts, p)
-				table.insert(boxes, RampCheck.box(p))
-				local i = #boxes
-				candidates[i] = true
-				-- seules les vraies boîtes et les coins arrêtent la lumière (un cylindre traité en boîte masquerait trop)
-				occluders[i] = p.Transparency == 0
-					and (p.ClassName == "WedgePart" or (p.ClassName == "Part" and p.Shape == Enum.PartType.Block))
-			end
-		end
-	end
-	local hidden = ShadowCulling.shadowed(boxes, occluders, candidates, SUN)
-	local culled = 0
-	for i in hidden do
-		parts[i].CastShadow = false
-		culled += 1
-	end
-	return small, culled, #parts - culled
-end
-
-checkSun()
+MapBuild.checkSun()
 local data = serde.decode("json", fs.readFile(LAYOUT))
 local map = Instance.new("Model")
 map.Name = "Dizzy"
@@ -358,7 +275,7 @@ if rampWorst > RampCheck.TOL then
 	)
 end
 local t0 = os.clock()
-local small, culled, kept = cullShadows(map)
+local small, culled, kept = MapBuild.cullShadows(map)
 print(
 	string.format(
 		"  ombres : %d petites pièces et %d pièces masquées coupées, %d gardées (%.1f s)",

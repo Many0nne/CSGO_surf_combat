@@ -16,6 +16,9 @@ MapRules.COOLDOWN_ATTRIBUTE = "Cooldown" -- secondes avant de pouvoir reprendre 
 
 -- Attribut de Maps.Map : sous cette hauteur, le joueur est tombé de l'île et meurt
 MapRules.KILL_HEIGHT_ATTRIBUTE = "KillHeight"
+-- Dossier de Maps.Map : volumes invisibles (sans collision ni requête) où l'on meurt, ex. la mer de Radoub (#593). La
+-- position testée est celle de la racine : le générateur monte le haut du volume au-dessus de l'eau d'autant.
+MapRules.KILL_VOLUMES_FOLDER = "KillVolumes"
 
 MapRules.DEFAULT_COOLDOWN = { Geyser = 3, Launcher = 3, Portal = 1 }
 
@@ -70,6 +73,17 @@ end
 -- Cette méthode permet de savoir si un joueur est tombé de l'île lorsque la map déclare une hauteur de mort.
 function MapRules.isBelowKillHeight(y: number, killHeight: any): boolean
 	return type(killHeight) == "number" and y < killHeight
+end
+
+-- Cette méthode permet de savoir si un point est dans l'un des volumes de mort de la map (boîtes orientées) lorsqu'on
+-- teste une position acceptée.
+function MapRules.isInKillVolume(volumes: { { cf: CFrame, size: Vector3 } }, pos: Vector3): boolean
+	for _, v in volumes do
+		if MapRules.contains(v.cf, v.size, pos, 0) then
+			return true
+		end
+	end
+	return false
 end
 
 -- Cette méthode permet de calculer la vitesse de départ d'un saut balistique lorsqu'on veut atteindre `to`

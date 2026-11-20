@@ -1,0 +1,659 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Barrage et Cale sèche</title>
+<style>
+:root {
+  --txt: var(--foreground, #eee7dc); --mut: var(--muted-foreground, #a59d93); --bd: var(--border, #34364a);
+  --cardc: var(--card, #1c1e2c); --acc: #e8873a; --sp: #6fd39a;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; color: var(--txt); font: 15px/1.55 var(--font-sans, "Segoe UI", system-ui, sans-serif); }
+.tabs { display: flex; gap: 8px; margin: 0 0 10px; flex-wrap: wrap; }
+button { font: inherit; font-size: 13px; color: var(--txt); background: var(--secondary, #262838); border: 1px solid var(--bd); border-radius: 8px; padding: 5px 11px; cursor: pointer; }
+button:hover { border-color: var(--acc); }
+button.on { background: var(--acc); border-color: var(--acc); color: #1a1208; font-weight: 600; }
+.tabs button { font-size: 15px; padding: 7px 14px; }
+#view { position: relative; height: 470px; border-radius: 10px; overflow: hidden; background: #1d1f45; }
+#view canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+#labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.lb { position: absolute; transform: translate(-50%, -100%); font: 600 11px "Segoe UI", sans-serif; color: #f6efe4; background: rgba(14,15,24,.72); padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+.lb.sp { background: rgba(30,105,66,.88); }
+#hint { position: absolute; left: 8px; bottom: 6px; font-size: 11px; color: #e8e0d4; opacity: .75; pointer-events: none; }
+#err { position: absolute; inset: 0; display: grid; place-items: center; color: #eee; padding: 20px; text-align: center; }
+.bar { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 6px; align-items: center; }
+.bar .sep { width: 1px; height: 22px; background: var(--bd); margin: 0 4px; }
+button.ride { border-color: var(--acc); color: var(--acc); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--mut); margin: 4px 0 16px; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 5px; }
+.card { background: var(--cardc); border: 1px solid var(--bd); border-radius: var(--radius, 10px); padding: 16px; margin-bottom: 16px; }
+.card h2 { margin: 0 0 4px; font-size: 21px; }
+.card h3 { margin: 14px 0 4px; font-size: 15px; color: var(--acc); }
+.card p { margin: 6px 0; }
+.card ul { margin: 4px 0; padding-left: 18px; }
+.card li { margin: 3px 0; }
+.tag { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--acc); border: 1px solid var(--acc); border-radius: 99px; padding: 1px 9px; margin-left: 8px; vertical-align: 3px; }
+.stats { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 2px; }
+.stats div { border: 1px solid var(--bd); border-radius: 8px; padding: 3px 10px; font-size: 12px; color: var(--mut); }
+.stats b { display: block; font-size: 14px; color: var(--txt); }
+.new { border-left: 3px solid var(--acc); padding-left: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 7px 8px; border-bottom: 1px solid var(--bd); }
+th { color: var(--mut); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+td:first-child { color: var(--mut); white-space: nowrap; }
+.verdict { border-color: var(--acc); }
+</style>
+</head>
+<body>
+<div class="tabs" id="tabs">
+  <button data-plan="A" class="on">A · Le Barrage</button>
+  <button data-plan="B">B · La Cale sèche</button>
+</div>
+<div id="view">
+  <div id="labels"></div>
+  <div id="hint">Glisser : tourner · Molette : zoom · Clic droit : déplacer</div>
+  <div id="err" hidden>La maquette 3D n'a pas pu se charger (three.js via jsdelivr). Le texte ci-dessous reste valable.</div>
+</div>
+<div class="bar" id="bar"></div>
+<div class="legend">
+  <span><i style="background:#e3873c"></i>Rampe de surf (55°)</span>
+  <span><i style="background:#b3ada3"></i>Béton</span>
+  <span><i style="background:#9b5a46"></i>Bâtiment jouable</span>
+  <span><i style="background:#2b5677"></i>Eau</span>
+  <span><i style="background:#6fd39a;border-radius:50%"></i>Zone d'apparition (avec un joueur de 5 studs)</span>
+  <span><i style="background:#ffcf7a"></i>Galerie intérieure (bouton « Voir à travers »)</span>
+</div>
+
+<!-- ================= TEXTE A ================= -->
+<section id="txtA">
+  <div class="card">
+    <h2>A · Le Barrage<span class="tag">Le plus spectaculaire</span></h2>
+    <p>Un barrage-poids en travers d'une gorge, au crépuscule. Trois étages superposés : la <b>crête</b> à y 100, une <b>galerie</b> de service dans le béton à y 45, et le <b>fond de la gorge</b> à y 20, coupé en deux par la rivière.</p>
+
+    <h3>Surf</h3>
+    <p>La rampe, c'est le parement aval du barrage : 55°, 80 studs de haut, en deux pans droits de 195 studs séparés par l'évacuateur de crue. On passe d'un pan à l'autre en sautant 50 studs (0,4 s en l'air à 140 studs/s). Si on rate le saut, on tombe dans l'évacuateur et on meurt. On entre sur la rampe en glissant depuis le bord de la crête. On en sort par le saut, ou en se laissant tomber au pied du barrage. Les deux bouts sont fermés par les cages d'escalier, comme les rampes de Dizzy. Un pan se descend en 1,4 s.</p>
+
+    <h3>Combat, étage par étage</h3>
+    <ul>
+      <li><b>Crête</b> : une route de 460 × 30, à découvert, avec un parapet côté lac. Seul couvert : le portique des vannes, au milieu. Deux passerelles mènent aux tours de prise d'eau plantées dans le lac : des postes de tir isolés, avec une seule sortie.</li>
+      <li><b>Galerie</b> : un couloir fermé de 10 studs de large, d'un bout à l'autre du barrage. Elle traverse l'évacuateur dans un tube vitré où l'on est vu depuis la crête. Combat à bout portant.</li>
+      <li><b>Fond</b> : rive ouest, l'usine (salle des turbines, grand intérieur), reliée au pied du barrage par deux conduites forcées qui servent de couverts bas. Rive est, le poste électrique grillagé (on voit à travers) derrière son bâtiment de commande. Plus loin, la cité ouvrière (ruelles) et l'atelier. On traverse la rivière par le pont au milieu ou par une passerelle étroite au fond.</li>
+    </ul>
+
+    <h3>Circulation</h3>
+    <p>Pour remonter : les deux cages d'escalier aux bouts du parement (fond, galerie, crête), et le sentier de falaise sur la rive ouest, lent et à découvert, qui arrive sur le toit de la cage ouest. Pour descendre vite : le surf.</p>
+
+    <h3>Apparitions</h3>
+    <p>6 zones : les maisons de garde ouest et est sur la crête (1, 2), l'usine (3), le poste (4), la cité (5), l'atelier (6). Toutes à plus de 100 studs les unes des autres.</p>
+
+    <h3>Ce que j'ai développé depuis la planche</h3>
+    <div class="new">
+      <p><b>Surfeurs exposés.</b> L'usine est collée au pied du barrage (faîtage à y 64) : depuis la cité, elle cache la moitié basse du pan ouest. À l'est, j'ai ajouté le bâtiment de commande devant le poste, qui joue le même rôle. Le haut du parement reste visible de partout : c'est le prix du surf. La vue « Depuis la cité » permet d'en juger.</p>
+      <p><b>Tube de la galerie</b> sous la trajectoire du saut, 10 studs plus bas : un saut trop court peut s'y poser au lieu de tomber.</p>
+      <p><b>Lac</b> plus haut que le fond de la gorge. J'ai mis un parapet de 4 studs côté lac. Si on passe quand même par-dessus, le code actuel nous fait traverser l'eau, et on meurt 1,5 s plus tard, 120 studs plus bas. Plus propre : mourir au contact de l'eau (petit ajout au code, qui servirait aussi à B).</p>
+    </div>
+
+    <div class="stats">
+      <div>Emprise<b>500 × 500</b></div><div>Surf<b>2 × 195 + saut 50</b></div><div>Hauteurs<b>lac 92 · crête 100 · galerie 45 · fond 20</b></div><div>Zones<b>6</b></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= TEXTE B ================= -->
+<section id="txtB" hidden>
+  <div class="card">
+    <h2>B · La Cale sèche<span class="tag">La valeur sûre</span></h2>
+    <p>Un chantier naval sur une presqu'île. Un navire de 340 studs en construction est posé en trois tronçons sur ses tins, au fond d'une forme de radoub de 400 × 160. Les deux flancs de la forme sont les rampes, face à face. La coque passe entre elles.</p>
+
+    <h3>Surf</h3>
+    <p>Deux flancs droits de 400 studs à 55°, hauts de 60 studs (du quai à y 60 jusqu'au fond à y 0). Sous la hauteur du pont (y 44), la coque cache l'autre flanc, sauf aux deux brèches de 15 studs entre les tronçons. Au-dessus, on voit l'autre flanc par-dessus le pont : surfer haut, c'est aller plus vite mais être exposé. Les 4 passerelles enjambent les flancs : on surfe dessous, elles ne gênent que les derniers studs du haut. Les bouts sont fermés (la tête de forme d'un côté, le bateau-porte de l'autre). Pour sortir : sauter sur le pont du navire, à peu près à la même hauteur et 35 à 45 studs sur le côté (à tester), ou glisser jusqu'au fond. Un flanc se parcourt en 2,9 s à 140 studs/s.</p>
+
+    <h3>Combat, niveau par niveau</h3>
+    <ul>
+      <li><b>Pont du navire</b> (y 44) : trois plateaux de 100 × 50. Le château arrière est sur le premier tronçon, des panneaux de cale sur le deuxième, l'étrave en pointe sur le troisième. Les 4 passerelles qui le relient aux quais sont des couloirs de tir exposés.</li>
+      <li><b>Fond de la forme</b> (y 0) : 76 studs de large, dans l'ombre de la coque, avec les tins de calage comme couverts bas. C'est le seul endroit qu'on voit mal d'en haut.</li>
+      <li><b>Quais</b> (y 60) : 40 studs entre la forme et les bâtiments, avec des piles de tôles, des bittes d'amarrage et des conteneurs au nord.</li>
+      <li><b>Bâtiments d'angle</b> : deux ateliers (grandes portes vers la forme) et deux magasins.</li>
+      <li><b>Portique roulant</b> (y 112) : une poutre de 22 × 240 au-dessus de tout, accessible par une échelle dans chaque pied. On voit tout, mais sans aucun couvert.</li>
+    </ul>
+
+    <h3>Circulation</h3>
+    <p>Un anneau de quais fait le tour de la forme, et le pont du navire passe au milieu, par les passerelles. Pour descendre au fond : l'escalier de la salle des pompes (il débouche au pied de la tête de forme), les échelles aux deux bouts, ou un saut par une brèche depuis le pont. Pour remonter : l'escalier et les échelles.</p>
+
+    <h3>Apparitions</h3>
+    <p>6 zones : les ateliers ouest et est (1, 2), les magasins ouest et est (3, 4), la salle des pompes (5), le local du bateau-porte (6).</p>
+
+    <h3>Ce que j'ai développé depuis la planche</h3>
+    <div class="new">
+      <p><b>Pont abaissé de y 55 à y 44.</b> Le saut du jeu monte de 6,6 studs au plus (vitesse de saut 38, gravité 110) : avec un pont plus haut que le surfeur, on ne pouvait pas sortir de la rampe dessus. En contrepartie, le haut des flancs voit par-dessus le pont.</p>
+      <p><b>Point 4 déplacé</b> vers l'ouest du magasin est. Il était à 97 studs du local 6, donc sous la limite de 100.</p>
+      <p><b>Mer</b> plus haute que le fond de la forme (y 42 contre y 0). Le quai domine la mer de 18 studs, sans parapet. Avec le code actuel, une chute à la mer tue 1 s plus tard, à y −10. Même remarque que pour A : mourir au contact de l'eau serait plus propre.</p>
+    </div>
+
+    <div class="stats">
+      <div>Emprise<b>520 × 470</b></div><div>Surf<b>2 × 400</b></div><div>Hauteurs<b>fond 0 · pont 44 · quais 60 · portique 112</b></div><div>Zones<b>6</b></div>
+    </div>
+  </div>
+</section>
+
+<div class="card">
+  <h2>A ou B</h2>
+  <table>
+    <tr><th></th><th>A · Barrage</th><th>B · Cale sèche</th></tr>
+    <tr><td>Surf</td><td>2 × 195, coupé par un saut de 50. Une seule rampe, tournée vers le sud.</td><td>2 × 400 sans coupure, face à face.</td></tr>
+    <tr><td>Combat</td><td>3 étages très différents : crête à découvert, galerie fermée, fond bâti.</td><td>4 niveaux autour d'un objet central : fond, pont, quais, portique.</td></tr>
+    <tr><td>Équilibre</td><td>Asymétrique : le haut contre le bas, et deux rives différentes.</td><td>Symétrique, donc plus simple à régler.</td></tr>
+    <tr><td>Image</td><td>Très forte : un mur de béton de 100 studs, le lac, la gorge au crépuscule.</td><td>Lisible, mais plus attendue.</td></tr>
+    <tr><td>Risque</td><td>Les surfeurs sont visibles depuis le fond.</td><td>Bouts fermés, et le haut des flancs se voit par-dessus le pont.</td></tr>
+    <tr><td>Code</td><td colspan="2">Le même pour les deux : mort au contact de l'eau conseillée. Sinon, rien à changer.</td></tr>
+    <tr><td>Construction</td><td>Plus de formes uniques (gorge, sentier, cité).</td><td>Plus de répétition (conteneurs, tins) : plus rapide.</td></tr>
+  </table>
+  <p style="margin-top:12px"><b>Mon avis :</b> B pour le jeu, A pour l'identité. B offre deux fois plus de surf continu et se règle facilement en FFA. A donnerait au jeu une image qu'on n'oublie pas, mais demandera plus d'essais d'équilibre.</p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function () {
+  "use strict";
+  const view = document.getElementById("view");
+  if (typeof THREE === "undefined" || !THREE.OrbitControls) { document.getElementById("err").hidden = false; wireTextTabs(); return; }
+
+  const C = {
+    rock: "#6f5f52", rockPath: "#86735f", grass: "#3f4a38", mount: "#3b3552", floor: "#7b7770", quay: "#86837d",
+    concrete: "#b3ada3", concreteDk: "#8b867f", surf: "#e3873c", brick: "#9b5a46", brickLight: "#a8705a", brickDk: "#6f3d30",
+    roof: "#565a66", metal: "#8a949e", metalDk: "#5d6670", hull: "#8c3b2b", deck: "#6e7378", white: "#d9d5cc",
+    glass: "#9fd6ef", glassDk: "#2b3a4a", dark: "#23242c", wood: "#9a7650", yellow: "#d8b13a", yellowDk: "#b08e2a",
+    fence: "#d0d7de", inner: "#ffcf7a", water: "#2b5677", spill: "#d6ecf6"
+  };
+
+  // ---------- rendu ----------
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  view.insertBefore(renderer.domElement, view.firstChild);
+
+  const scene = new THREE.Scene();
+  const skyCv = document.createElement("canvas"); skyCv.width = 2; skyCv.height = 256;
+  const sg = skyCv.getContext("2d"); const grad = sg.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, "#1b1d44"); grad.addColorStop(0.5, "#5f5384"); grad.addColorStop(0.82, "#d9926f"); grad.addColorStop(1, "#f2b98a");
+  sg.fillStyle = grad; sg.fillRect(0, 0, 2, 256);
+  scene.background = new THREE.CanvasTexture(skyCv);
+  scene.fog = new THREE.Fog(0xb08592, 800, 2800);
+
+  const camera = new THREE.PerspectiveCamera(60, 1, 1, 7000);
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true; controls.dampingFactor = 0.12; controls.maxPolarAngle = Math.PI * 0.497;
+
+  scene.add(new THREE.HemisphereLight(0x9c9ed4, 0x4a3a32, 0.78));
+  const sun = new THREE.DirectionalLight(0xffc49a, 1.05);
+  sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0015; sun.shadow.normalBias = 1.2;
+  Object.assign(sun.shadow.camera, { left: -460, right: 460, top: 460, bottom: -460, near: 10, far: 2200 });
+  scene.add(sun); scene.add(sun.target);
+  const SUN_DIR = new THREE.Vector3(-0.55, 0.42, 0.72).normalize();
+
+  // ---------- outils de géométrie ----------
+  const EDGE = new THREE.LineBasicMaterial({ color: 0x14141c, transparent: true, opacity: 0.3 });
+  const cache = {};
+  let building = "A";
+  const xray = { A: [], B: [] };
+
+  // Cette méthode permet de créer un matériau mat lorsque la couleur n'est pas encore en cache.
+  function mkMat(color, o) { return new THREE.MeshLambertMaterial(Object.assign({ color: color, side: THREE.DoubleSide }, o || {})); }
+  // Cette méthode permet d'ajouter une pièce (et ses arêtes) au groupe lorsque sa géométrie est prête.
+  function add(g, geo, color, o) {
+    o = o || {};
+    let m;
+    if (o.mat) m = o.mat;
+    else if (o.xray) { m = mkMat(color); xray[building].push(m); }
+    else m = cache[color] || (cache[color] = mkMat(color));
+    const mesh = new THREE.Mesh(geo, m);
+    mesh.castShadow = o.cast !== false; mesh.receiveShadow = true;
+    g.add(mesh);
+    if (o.edges !== false) g.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 25), EDGE));
+    return mesh;
+  }
+  // Cette méthode permet de poser un bloc aligné sur les axes lorsqu'on connaît ses bornes.
+  function box(g, x0, x1, y0, y1, z0, z1, color, o) {
+    const geo = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0);
+    geo.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+    return add(g, geo, color, o);
+  }
+  // Cette méthode permet d'extruder un profil (z, y) le long de X lorsqu'une pièce a une section constante (barrage, flanc, coque).
+  function prismX(g, pts, x0, x1, color, o) {
+    const s = new THREE.Shape(pts.map(p => new THREE.Vector2(-p[0], p[1])));
+    const geo = new THREE.ExtrudeGeometry(s, { depth: x1 - x0, bevelEnabled: false });
+    geo.rotateY(Math.PI / 2); geo.translate(x0, 0, 0);
+    return add(g, geo, color, o);
+  }
+  // Cette méthode permet d'extruder un profil (x, y) le long de Z lorsqu'un toit a son faîtage dans l'axe Z.
+  function prismZ(g, pts, z0, z1, color, o) {
+    const s = new THREE.Shape(pts.map(p => new THREE.Vector2(p[0], p[1])));
+    const geo = new THREE.ExtrudeGeometry(s, { depth: z1 - z0, bevelEnabled: false });
+    geo.translate(0, 0, z0);
+    return add(g, geo, color, o);
+  }
+  // Cette méthode permet d'extruder un contour vu de dessus (x, z) verticalement lorsqu'une pièce a une forme en plan (étrave).
+  function prismY(g, pts, y0, y1, color, o) {
+    const s = new THREE.Shape(pts.map(p => new THREE.Vector2(p[0], -p[1])));
+    const geo = new THREE.ExtrudeGeometry(s, { depth: y1 - y0, bevelEnabled: false });
+    geo.rotateX(-Math.PI / 2); geo.translate(0, y0, 0);
+    return add(g, geo, color, o);
+  }
+  // Cette méthode permet de poser un cylindre vertical lorsqu'on a son centre au sol et ses hauteurs.
+  function cylV(g, x, z, r, y0, y1, color, o) {
+    const geo = new THREE.CylinderGeometry(r, r, y1 - y0, 20);
+    geo.translate(x, (y0 + y1) / 2, z);
+    return add(g, geo, color, Object.assign({ edges: false }, o));
+  }
+  // Cette méthode permet de poser un tuyau horizontal le long de Z (ou de X si axis vaut "x").
+  function pipe(g, a, y, r, b0, b1, color, axis) {
+    const geo = new THREE.CylinderGeometry(r, r, b1 - b0, 16);
+    if (axis === "x") { geo.rotateZ(Math.PI / 2); geo.translate((b0 + b1) / 2, y, a); }
+    else { geo.rotateX(Math.PI / 2); geo.translate(a, y, (b0 + b1) / 2); }
+    return add(g, geo, color, { edges: false });
+  }
+  // Cette méthode permet de poser une montagne lointaine lorsqu'il faut fermer l'horizon.
+  function cone(g, x, z, r, h, y0) {
+    const geo = new THREE.ConeGeometry(r, h, 7); geo.translate(x, y0 + h / 2, z);
+    return add(g, geo, C.mount, { edges: false, cast: false });
+  }
+  const WATER = new THREE.MeshPhongMaterial({ color: C.water, shininess: 90, specular: 0x8a6650, transparent: true, opacity: 0.93 });
+  // Cette méthode permet de poser une nappe d'eau horizontale lorsqu'on connaît son emprise et son niveau.
+  function water(g, x0, x1, z0, z1, y) {
+    const geo = new THREE.PlaneGeometry(x1 - x0, z1 - z0); geo.rotateX(-Math.PI / 2);
+    geo.translate((x0 + x1) / 2, y, (z0 + z1) / 2);
+    return add(g, geo, null, { mat: WATER, edges: false, cast: false });
+  }
+  // Cette méthode permet de plaquer une fine couche sur une pente (z, y) étendue en X, côté air, lorsqu'il faut la colorer (surf, eau de l'évacuateur).
+  function slopeSkin(g, zt, yt, zb, yb, x0, x1, color, o) {
+    const dz = zb - zt, dy = yb - yt, len = Math.hypot(dz, dy);
+    let nz = dy / len, ny = -dz / len;
+    if (ny < 0) { nz = -nz; ny = -ny; }
+    const t = 0.35;
+    return prismX(g, [[zt, yt], [zb, yb], [zb + nz * t, yb + ny * t], [zt + nz * t, yt + ny * t]], x0, x1, color, Object.assign({ cast: false }, o));
+  }
+  const SPILL = new THREE.MeshLambertMaterial({ color: C.spill, transparent: true, opacity: 0.6, side: THREE.DoubleSide });
+  const FENCE = new THREE.MeshLambertMaterial({ color: C.fence, transparent: true, opacity: 0.26, side: THREE.DoubleSide, depthWrite: false });
+  const INNER = new THREE.MeshBasicMaterial({ color: C.inner });
+  const SPAWN = new THREE.MeshBasicMaterial({ color: 0x6fd39a });
+  const BEAM = new THREE.MeshBasicMaterial({ color: 0x6fd39a, transparent: true, opacity: 0.4, depthWrite: false });
+
+  // Cette méthode permet de poser un personnage de 5 studs lorsqu'il faut un repère d'échelle.
+  function figure(g, x, y, z, color) {
+    const m = new THREE.MeshLambertMaterial({ color: color });
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 3.4, 10), m); b.position.set(x, y + 1.9, z); b.castShadow = true; g.add(b);
+    const h = new THREE.Mesh(new THREE.SphereGeometry(0.75, 10, 8), m); h.position.set(x, y + 4.3, z); h.castShadow = true; g.add(h);
+  }
+  // Cette méthode permet de marquer une zone d'apparition (disque, faisceau, joueur, étiquette) lorsqu'on construit un plan.
+  function spawn(g, L, n, name, x, y, z) {
+    const d = new THREE.Mesh(new THREE.CylinderGeometry(4.5, 4.5, 0.3, 24), SPAWN); d.position.set(x, y + 0.2, z); g.add(d);
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 70, 8), BEAM); b.position.set(x, y + 35, z); g.add(b);
+    figure(g, x + 2, y, z, 0x6fd39a);
+    L.push({ p: [x, y + 12, z], t: n + " · " + name, sp: true });
+  }
+
+  // ---------- Plan A : le Barrage ----------
+  // Cette méthode permet de construire la maquette du Barrage (gorge, barrage, fond) lorsqu'on charge la page.
+  function buildA() {
+    building = "A";
+    const g = new THREE.Group(), L = [];
+    // décor lointain : parois de la gorge, vallée, montagnes, lac, rivière
+    box(g, -260, 0, -60, 150, -700, 520, C.rock, { cast: false });
+    box(g, 500, 760, -60, 150, -700, 520, C.rock, { cast: false });
+    box(g, -700, 1200, -140, -40, 520, 2400, C.grass, { edges: false, cast: false });
+    [[-250, -1150, 520, 300], [300, -1350, 650, 380], [880, -1050, 520, 300], [-750, 1350, 600, 260], [1250, 1300, 620, 280], [300, 1900, 700, 240]]
+      .forEach(c => cone(g, c[0], c[1], c[2], c[3], -60));
+    water(g, -260, 760, -1500, 80, 92);
+    water(g, 215, 285, 140, 2400, -26);
+    // fond de la gorge et culées
+    box(g, 0, 215, -60, 20, 166, 500, C.floor);
+    box(g, 285, 500, -60, 20, 166, 500, C.floor);
+    box(g, 0, 31, -60, 100, 72, 125, C.rock);
+    box(g, 469, 500, -60, 100, 72, 125, C.rock);
+    // barrage : deux pans, parement de surf, parapet (ouvert vers les tours)
+    const prof = [[80, -60], [80, 100], [110, 100], [166, 20], [166, -60]];
+    prismX(g, prof, 30, 225, C.concrete, { xray: true });
+    prismX(g, prof, 275, 470, C.concrete, { xray: true });
+    slopeSkin(g, 110, 100, 166, 20, 30, 225, C.surf);
+    slopeSkin(g, 110, 100, 166, 20, 275, 470, C.surf);
+    [[20, 146], [154, 346], [354, 480]].forEach(s => box(g, s[0], s[1], 100, 104, 79, 81.5, C.concreteDk));
+    // évacuateur : coursier, nappe d'eau, pont de crête, piles, salle et vannes
+    prismX(g, [[86, -60], [86, 70], [108, 70], [143, -26], [143, -60]], 225, 275, C.concreteDk);
+    slopeSkin(g, 108, 70, 143, -26, 229, 271, null, { mat: SPILL, edges: false });
+    box(g, 225, 275, 96, 100, 80, 110, C.concreteDk);
+    box(g, 219, 229, 70, 132, 76, 112, C.concrete);
+    box(g, 271, 281, 70, 132, 76, 112, C.concrete);
+    box(g, 219, 281, 122, 134, 78, 110, C.concreteDk);
+    box(g, 229, 271, 70, 96, 86, 89, C.metal);
+    // galerie : tube vitré au-dessus de l'évacuateur, couloir dans le béton (visible en transparence)
+    box(g, 225, 275, 40, 52, 121, 135, C.concrete);
+    box(g, 225, 275, 44, 49, 120.6, 135.4, C.glass, { edges: false });
+    box(g, 30, 470, 41, 51, 124, 132, null, { mat: INNER, edges: false, cast: false });
+    // cages d'escalier et maisons de garde
+    [[0, 31], [469, 500]].forEach(s => {
+      box(g, s[0], s[1], 20, 100, 125, 170, C.concrete, { xray: true });
+      box(g, s[0] + 9, s[1] - 9, 20, 32, 169.6, 170.4, C.dark, { edges: false });
+    });
+    box(g, 0, 31, 100, 119, 72, 122, C.brick); box(g, -1, 32, 119, 121, 71, 123, C.roof);
+    box(g, 469, 500, 100, 119, 72, 122, C.brick); box(g, 468, 501, 119, 121, 71, 123, C.roof);
+    // tours de prise d'eau et passerelles
+    [150, 350].forEach(x => {
+      cylV(g, x, 44, 12, -60, 104, C.concrete);
+      cylV(g, x, 44, 15, 104, 106, C.concreteDk);
+      box(g, x - 4, x + 4, 100, 102, 58, 80, C.metal);
+    });
+    // sentier de falaise (rive ouest), jusqu'au toit de la cage ouest
+    prismX(g, [[470, 20], [330, 60], [310, 60], [310, 20]], 1, 25, C.rockPath);
+    prismX(g, [[310, 60], [170, 100], [170, 20], [310, 20]], 1, 25, C.rockPath);
+    // conduites forcées et usine
+    pipe(g, 95, 27, 4, 158, 196, C.metal);
+    pipe(g, 155, 27, 4, 158, 196, C.metal);
+    box(g, 50, 200, 20, 52, 196, 290, C.brick, { xray: true });
+    prismX(g, [[194, 52], [243, 64], [292, 52]], 48, 202, C.roof, { xray: true });
+    for (let x = 58; x < 192; x += 17) box(g, x, x + 8, 27, 47, 195.5, 196.2, C.glassDk, { edges: false });
+    box(g, 110, 140, 20, 38, 289.8, 290.6, C.dark, { edges: false });
+    // rive est : bâtiment de commande, poste électrique grillagé
+    box(g, 300, 420, 20, 46, 188, 212, C.brick, { xray: true });
+    box(g, 298, 422, 46, 48, 186, 214, C.roof);
+    box(g, 300, 450, 20, 28, 214, 215, null, { mat: FENCE, edges: false, cast: false });
+    box(g, 300, 450, 20, 28, 321, 322, null, { mat: FENCE, edges: false, cast: false });
+    box(g, 300, 301, 20, 28, 214, 322, null, { mat: FENCE, edges: false, cast: false });
+    box(g, 449, 450, 20, 28, 214, 322, null, { mat: FENCE, edges: false, cast: false });
+    [[315, 238], [355, 238], [395, 238], [315, 280], [355, 280]].forEach(p => {
+      box(g, p[0], p[0] + 22, 20, 36, p[1], p[1] + 16, C.metal);
+      box(g, p[0] + 3, p[0] + 19, 36, 40, p[1] + 4, p[1] + 12, C.metalDk);
+    });
+    [[306, 226], [444, 226], [306, 312], [444, 312]].forEach(p => cylV(g, p[0], p[1], 1, 20, 60, C.metal));
+    box(g, 306, 444, 57, 60, 225, 227, C.metal); box(g, 306, 444, 57, 60, 311, 313, C.metal);
+    // pont et passerelle sur la rivière
+    box(g, 208, 292, 14, 20, 335, 351, C.concreteDk);
+    box(g, 208, 292, 20, 23, 335, 336, C.metal, { edges: false }); box(g, 208, 292, 20, 23, 350, 351, C.metal, { edges: false });
+    box(g, 213, 287, 18.5, 20, 440, 446, C.metal);
+    box(g, 213, 287, 20, 22.5, 440, 440.4, C.metal, { edges: false }); box(g, 213, 287, 20, 22.5, 445.6, 446, C.metal, { edges: false });
+    // cité ouvrière et atelier
+    [55, 105, 155].forEach(x0 => {
+      box(g, x0, x0 + 38, 20, 36, 392, 430, C.brickLight);
+      prismZ(g, [[x0 - 1, 36], [x0 + 19, 46], [x0 + 39, 36]], 391, 431, C.roof);
+      box(g, x0 + 15, x0 + 23, 20, 30, 429.8, 430.6, C.dark, { edges: false });
+    });
+    box(g, 55, 195, 20, 23, 456, 457, C.concreteDk);
+    box(g, 305, 445, 20, 46, 380, 450, C.concreteDk, { xray: true });
+    prismX(g, [[378, 46], [415, 58], [452, 46]], 303, 447, C.roof, { xray: true });
+    box(g, 355, 395, 20, 40, 379.3, 380.2, C.dark, { edges: false });
+    // couverts du fond
+    box(g, 60, 72, 20, 26, 320, 340, C.wood);
+    pipe(g, 330, 23, 3, 120, 160, C.metalDk, "x"); pipe(g, 337, 23, 3, 120, 160, C.metalDk, "x"); pipe(g, 333.5, 28.2, 3, 120, 160, C.metalDk, "x");
+    box(g, 170, 178, 20, 28, 345, 353, C.wood); box(g, 330, 338, 20, 28, 335, 343, C.wood); box(g, 405, 415, 20, 30, 340, 350, C.wood);
+    // repère d'échelle sur le parement
+    figure(g, 120, 100 - (140 - 110) / 0.7 + 0.3, 140, 0xffaa6e);
+
+    L.push({ p: [110, 106, 95], t: "Crête · y 100" }, { p: [130, 66, 140], t: "Parement · surf 55°" },
+      { p: [250, 80, 128], t: "Évacuateur · saut 50" }, { p: [250, 54, 128], t: "Tube de la galerie · y 45" },
+      { p: [250, 98, 20], t: "Lac · y 92" }, { p: [150, 112, 44], t: "Tour de prise d'eau" },
+      { p: [125, 68, 242], t: "Usine" }, { p: [360, 52, 200], t: "Commande" }, { p: [375, 44, 268], t: "Poste électrique" },
+      { p: [125, 50, 410], t: "Cité ouvrière" }, { p: [375, 62, 415], t: "Atelier" },
+      { p: [250, 26, 343], t: "Pont" }, { p: [250, 25, 443], t: "Passerelle" },
+      { p: [13, 66, 320], t: "Sentier de falaise" }, { p: [250, -18, 480], t: "Rivière · mort" });
+    spawn(g, L, 1, "Maison de garde ouest", 16, 100, 96);
+    spawn(g, L, 2, "Maison de garde est", 484, 100, 96);
+    spawn(g, L, 3, "Usine", 75, 20, 270);
+    spawn(g, L, 4, "Poste", 432, 20, 305);
+    spawn(g, L, 5, "Cité", 80, 20, 440);
+    spawn(g, L, 6, "Atelier", 420, 20, 435);
+    return { g: g, L: L };
+  }
+
+  // ---------- Plan B : la Cale sèche ----------
+  // Cette méthode permet de poser une passerelle en pente entre un quai et le pont du navire.
+  function gangway(g, x, zq, zd) {
+    const yq = 60, yd = 44.5, z0 = Math.min(zq, zd), z1 = Math.max(zq, zd);
+    const y0 = zq < zd ? yq : yd, y1 = zq < zd ? yd : yq;
+    const dz = z1 - z0, dy = y1 - y0, len = Math.hypot(dz, dy), ang = Math.atan2(-dy, dz);
+    const mid = [(y0 + y1) / 2, (z0 + z1) / 2];
+    const deck = new THREE.BoxGeometry(8, 0.8, len); deck.rotateX(ang); deck.translate(x, mid[0], mid[1]);
+    add(g, deck, C.metal);
+    [-3.8, 3.8].forEach(dx => {
+      const r = new THREE.BoxGeometry(0.4, 3, len); r.rotateX(ang); r.translate(x + dx, mid[0] + 1.6, mid[1]);
+      add(g, r, C.yellow, { edges: false });
+    });
+  }
+  // Cette méthode permet de construire la maquette de la Cale sèche (forme, navire, quais) lorsqu'on charge la page.
+  function buildB() {
+    building = "B";
+    const g = new THREE.Group(), L = [];
+    // mer autour de la presqu'île, rive lointaine
+    water(g, -1800, 2600, -1800, -30, 42); water(g, -1800, 2600, 470, 2600, 42);
+    water(g, 472, 2600, -30, 470, 42); water(g, -1800, -260, -30, 470, 42);
+    box(g, 1100, 1700, 0, 52, -700, 900, C.mount, { edges: false, cast: false });
+    [[1150, -200], [1250, 150], [1180, 520]].forEach(p => {
+      box(g, p[0], p[0] + 14, 52, 270, p[1], p[1] + 14, C.mount, { edges: false, cast: false });
+      box(g, p[0] - 120, p[0] + 80, 255, 266, p[1] + 2, p[1] + 12, C.mount, { edges: false, cast: false });
+    });
+    cone(g, -900, -1400, 500, 260, 0); cone(g, -300, 1700, 600, 220, 0);
+    // terre-plein (quais à y 60)
+    box(g, -260, 472, -20, 60, -30, 150, C.quay);
+    box(g, -260, 472, -20, 60, 310, 470, C.quay);
+    box(g, -260, 60, -20, 60, 150, 310, C.quay);
+    // forme de radoub : fond, deux flancs de surf, bateau-porte
+    box(g, 60, 460, -20, 0, 192, 268, C.concreteDk);
+    prismX(g, [[150, -20], [150, 60], [192, 0], [192, -20]], 60, 460, C.concrete);
+    prismX(g, [[310, -20], [310, 60], [268, 0], [268, -20]], 60, 460, C.concrete);
+    slopeSkin(g, 150, 60, 192, 0, 60, 460, C.surf);
+    slopeSkin(g, 310, 60, 268, 0, 60, 460, C.surf);
+    box(g, 460, 472, -20, 60, 150, 310, C.metalDk);
+    box(g, 60, 60.9, 0, 60, 214, 218, C.yellow, { edges: false }); box(g, 60, 60.9, 0, 60, 242, 246, C.yellow, { edges: false });
+    box(g, 459.1, 460, 0, 60, 228, 232, C.yellow, { edges: false });
+    box(g, 59.4, 60.2, 0, 10, 226, 234, C.dark, { edges: false });
+    // tins de calage
+    for (let x = 100; x < 430; x += 14) box(g, x, x + 5, 0, 5, 222, 238, C.wood);
+    // navire : trois tronçons, étrave, château arrière, panneaux de cale
+    const hull = [[205, 44], [255, 44], [255, 20], [249, 10], [238, 5], [222, 5], [211, 10], [205, 20]];
+    [[95, 200], [215, 315], [330, 410]].forEach(s => {
+      prismX(g, hull, s[0], s[1], C.hull, { xray: true });
+      box(g, s[0], s[1], 44, 44.5, 205, 255, C.deck, { xray: true });
+      box(g, s[0], s[1], 44.5, 47, 205, 205.6, C.metalDk, { edges: false });
+      box(g, s[0], s[1], 44.5, 47, 254.4, 255, C.metalDk, { edges: false });
+    });
+    prismY(g, [[410, 205], [410, 255], [442, 230]], 10, 44, C.hull, { xray: true });
+    prismY(g, [[410, 205], [410, 255], [442, 230]], 44, 44.5, C.deck, { xray: true });
+    box(g, 105, 150, 44.5, 66, 212, 248, C.white, { xray: true });
+    box(g, 105, 150, 58, 62, 211.5, 248.5, C.glassDk, { edges: false });
+    box(g, 112, 124, 66, 78, 224, 236, C.white);
+    box(g, 228, 262, 44.5, 48, 215, 245, C.metal); box(g, 272, 306, 44.5, 48, 215, 245, C.metal);
+    box(g, 345, 365, 44.5, 50, 218, 242, C.metalDk); box(g, 380, 398, 44.5, 52, 220, 240, C.wood);
+    // passerelles quai - pont
+    [150, 380].forEach(x => { gangway(g, x, 150, 205); gangway(g, x, 310, 255); });
+    // portique roulant et rails
+    box(g, 0, 470, 60, 60.5, 116, 118, C.metal, { edges: false, cast: false });
+    box(g, 0, 470, 60, 60.5, 342, 344, C.metal, { edges: false, cast: false });
+    box(g, 245, 267, 60, 104, 110, 124, C.yellow); box(g, 245, 267, 60, 104, 336, 350, C.yellow);
+    box(g, 243, 269, 104, 112, 106, 354, C.yellow);
+    box(g, 247, 265, 92, 104, 200, 222, C.yellowDk);
+    box(g, 255.5, 256.5, 66, 92, 210, 211, C.dark, { edges: false });
+    // bâtiments d'angle
+    [[30, 195], [275, 440]].forEach(s => {
+      box(g, s[0], s[1], 60, 98, 25, 110, C.brick, { xray: true });
+      prismX(g, [[23, 98], [67.5, 110], [112, 98]], s[0] - 2, s[1] + 2, C.roof, { xray: true });
+      box(g, s[0] + 55, s[0] + 105, 60, 86, 109.6, 110.4, C.dark, { edges: false });
+      box(g, s[0], s[1], 60, 90, 350, 435, C.concreteDk, { xray: true });
+      box(g, s[0] - 1, s[1] + 1, 90, 92, 349, 436, C.roof);
+      box(g, s[0] + 60, s[0] + 100, 60, 80, 349.6, 350.4, C.dark, { edges: false });
+    });
+    // conteneurs
+    [[200, 32, 0, "#b5523b"], [200, 32, 10.2, "#3e6e8e"], [228, 46, 0, "#c9a13b"], [205, 64, 0, "#5f7f4e"], [232, 78, 0, "#b5523b"], [232, 78, 10.2, "#c9a13b"]]
+      .forEach(c => box(g, c[0], c[0] + 24, 60 + c[2], 70 + c[2], c[1], c[1] + 10, c[3]));
+    // salle des pompes, local du bateau-porte, hangar qui ferme l'ouest
+    box(g, 0, 55, 60, 84, 160, 300, C.brick, { xray: true }); box(g, -1, 56, 84, 86, 159, 301, C.roof);
+    cylV(g, 27, 178, 3, 86, 112, C.brickDk);
+    box(g, 54.6, 55.4, 60, 72, 222, 238, C.dark, { edges: false });
+    box(g, 438, 470, 60, 76, 312, 346, C.brick); box(g, 437, 471, 76, 78, 311, 347, C.roof);
+    box(g, -190, -10, 60, 150, -10, 470, C.concreteDk);
+    prismZ(g, [[-192, 150], [-100, 172], [-8, 150]], -12, 472, C.roof);
+    // tôles, bittes d'amarrage
+    box(g, 70, 90, 60, 64, 126, 140, C.metalDk); box(g, 330, 352, 60, 65, 128, 142, C.metalDk);
+    box(g, 110, 130, 60, 63, 322, 336, C.metalDk); box(g, 300, 318, 60, 66, 320, 334, C.metalDk); box(g, 400, 420, 60, 63, 126, 138, C.metalDk);
+    for (let x = 80; x <= 440; x += 40) { cylV(g, x, 146, 1.2, 60, 63, C.dark); cylV(g, x, 314, 1.2, 60, 63, C.dark); }
+    // repère d'échelle sur le flanc nord
+    figure(g, 300, 60 - (168 - 150) / 0.7 + 0.3, 168, 0xffaa6e);
+
+    L.push({ p: [100, 66, 135], t: "Quai · y 60" }, { p: [300, 40, 168], t: "Flanc nord · surf 55°" }, { p: [300, 40, 292], t: "Flanc sud · surf 55°" },
+      { p: [265, 54, 230], t: "Pont du navire · y 44" }, { p: [322, 30, 230], t: "Brèche" }, { p: [207, 30, 230], t: "Brèche" },
+      { p: [380, 6, 262], t: "Fond · y 0" }, { p: [256, 120, 230], t: "Portique · y 112" }, { p: [150, 64, 178], t: "Passerelle" },
+      { p: [112, 112, 68], t: "Atelier ouest" }, { p: [357, 112, 68], t: "Atelier est" },
+      { p: [112, 96, 392], t: "Magasin ouest" }, { p: [357, 96, 392], t: "Magasin est" },
+      { p: [27, 92, 230], t: "Salle des pompes" }, { p: [466, 64, 230], t: "Bateau-porte" }, { p: [540, 48, 230], t: "Mer · mort" },
+      { p: [228, 76, 60], t: "Conteneurs" });
+    spawn(g, L, 1, "Atelier ouest", 70, 60, 85);
+    spawn(g, L, 2, "Atelier est", 400, 60, 85);
+    spawn(g, L, 3, "Magasin ouest", 70, 60, 410);
+    spawn(g, L, 4, "Magasin est", 310, 60, 415);
+    spawn(g, L, 5, "Pompes", 27, 60, 270);
+    spawn(g, L, 6, "Bateau-porte", 454, 60, 329);
+    return { g: g, L: L };
+  }
+
+  // ---------- trajets « surfer la rampe » ----------
+  // Cette méthode permet de donner la caméra du surfeur sur le parement du Barrage à l'instant t (saut au-dessus de l'évacuateur).
+  function rideA(t) {
+    const x = 40 + 140 * t;
+    const ys = 78 - 16 * (x - 40) / 420;
+    const z = 110 + (100 - ys) * 0.7 + 1.5;
+    let eye = ys + 4.5;
+    if (x > 225 && x < 275) eye += 8 * Math.sin(Math.PI * (x - 225) / 50);
+    return { pos: [x, eye, z], look: [x + 60, eye - 7, z + 4] };
+  }
+  // Cette méthode permet de donner la caméra du surfeur sur le flanc nord à l'instant t, puis son saut sur l'étrave.
+  function rideB(t) {
+    const t1 = 325 / 140, tj = 0.6;
+    const flank = x => { const ys = 47 - 3 * (x - 70) / 325; return [x, ys + 4.5, 150 + (60 - ys) * 0.7 + 1.5]; };
+    if (t <= t1) { const p = flank(70 + 140 * t); return { pos: p, look: [p[0] + 60, p[1] - 6, p[2] + 4] }; }
+    const u = Math.min(1, (t - t1) / tj), a = flank(395), b = [428, 48.5, 228];
+    const p = [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u + 7 * Math.sin(Math.PI * u), a[2] + (b[2] - a[2]) * u];
+    const la = [a[0] + 60, a[1] - 6, a[2] + 4], lb = [480, 46, 232];
+    return { pos: p, look: [la[0] + (lb[0] - la[0]) * u, la[1] + (lb[1] - la[1]) * u, la[2] + (lb[2] - la[2]) * u] };
+  }
+
+  const PLANS = {
+    A: Object.assign(buildA(), {
+      center: [250, 0, 260], ride: rideA, rideDur: 415 / 140, rideLabel: "Surfer le parement",
+      presets: [
+        { n: "Vue d'ensemble", pos: [320, 270, 690], tgt: [250, 30, 240] },
+        { n: "Depuis la crête", pos: [36, 106, 96], tgt: [330, 45, 250] },
+        { n: "Sur le parement", pos: [45, 80, 128], tgt: [400, 62, 140] },
+        { n: "Depuis le pont", pos: [250, 26, 343], tgt: [250, 75, 130] },
+        { n: "Depuis la cité", pos: [99, 25, 450], tgt: [118, 72, 130] }
+      ]
+    }),
+    B: Object.assign(buildB(), {
+      center: [240, 0, 230], ride: rideB, rideDur: 325 / 140 + 1.1, rideLabel: "Surfer le flanc, sauter sur le pont",
+      presets: [
+        { n: "Vue d'ensemble", pos: [560, 250, 600], tgt: [240, 20, 230] },
+        { n: "Depuis le quai", pos: [95, 65.5, 146], tgt: [380, 20, 235] },
+        { n: "Sur le flanc", pos: [75, 52, 160], tgt: [400, 40, 170] },
+        { n: "Fond de la forme", pos: [75, 5.5, 205], tgt: [420, 12, 230] },
+        { n: "Depuis le portique", pos: [266, 117, 190], tgt: [340, 20, 250] }
+      ]
+    })
+  };
+
+  const labelsEl = document.getElementById("labels");
+  Object.keys(PLANS).forEach(k => {
+    const P = PLANS[k];
+    scene.add(P.g);
+    P.L.forEach(l => { const d = document.createElement("div"); d.className = "lb" + (l.sp ? " sp" : ""); d.textContent = l.t; l.el = d; l.v = new THREE.Vector3(l.p[0], l.p[1], l.p[2]); labelsEl.appendChild(d); });
+  });
+
+  let cur = "A", anim = null, showLabels = true, xrayOn = false;
+  const bar = document.getElementById("bar");
+
+  // Cette méthode permet de déplacer la caméra en douceur vers un point de vue lorsqu'on clique sur un bouton.
+  function goTo(pos, tgt, dur) {
+    const p0 = camera.position.clone(), t0 = controls.target.clone(), p1 = new THREE.Vector3().fromArray(pos), t1 = new THREE.Vector3().fromArray(tgt);
+    anim = { start: performance.now(), dur: dur, fn: u => { const e = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2; return { pos: p0.clone().lerp(p1, e), look: t0.clone().lerp(t1, e) }; } };
+  }
+  // Cette méthode permet de lancer le trajet du surfeur du plan courant lorsqu'on clique sur « Surfer ».
+  function ride() {
+    const P = PLANS[cur];
+    anim = { start: performance.now(), dur: P.rideDur * 1000, fn: u => { const r = P.ride(u * P.rideDur); return { pos: new THREE.Vector3().fromArray(r.pos), look: new THREE.Vector3().fromArray(r.look) }; } };
+  }
+  // Cette méthode permet d'appliquer la transparence aux volumes qui cachent des intérieurs lorsqu'on bascule « Voir à travers ».
+  function applyXray() {
+    Object.keys(xray).forEach(k => xray[k].forEach(m => { m.transparent = xrayOn; m.opacity = xrayOn ? 0.2 : 1; m.depthWrite = !xrayOn; m.needsUpdate = true; }));
+  }
+  // Cette méthode permet de construire la barre de boutons du plan courant lorsqu'on change d'onglet.
+  function buildBar() {
+    bar.innerHTML = "";
+    const P = PLANS[cur];
+    P.presets.forEach(pr => { const b = document.createElement("button"); b.textContent = pr.n; b.onclick = () => goTo(pr.pos, pr.tgt, 900); bar.appendChild(b); });
+    const s = document.createElement("span"); s.className = "sep"; bar.appendChild(s);
+    const r = document.createElement("button"); r.className = "ride"; r.textContent = "▶ " + P.rideLabel; r.onclick = ride; bar.appendChild(r);
+    const x = document.createElement("button"); x.textContent = "Voir à travers"; x.className = xrayOn ? "on" : "";
+    x.onclick = () => { xrayOn = !xrayOn; x.className = xrayOn ? "on" : ""; applyXray(); }; bar.appendChild(x);
+    const l = document.createElement("button"); l.textContent = "Noms"; l.className = showLabels ? "on" : "";
+    l.onclick = () => { showLabels = !showLabels; l.className = showLabels ? "on" : ""; }; bar.appendChild(l);
+  }
+  // Cette méthode permet d'afficher un plan (maquette, soleil, boutons, texte) lorsqu'on clique sur son onglet.
+  function setPlan(k) {
+    cur = k;
+    Object.keys(PLANS).forEach(j => { PLANS[j].g.visible = j === k; PLANS[j].L.forEach(l => { l.el.style.display = "none"; }); });
+    document.getElementById("txtA").hidden = k !== "A"; document.getElementById("txtB").hidden = k !== "B";
+    document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.plan === k));
+    const c = new THREE.Vector3().fromArray(PLANS[k].center);
+    sun.target.position.copy(c); sun.position.copy(c).addScaledVector(SUN_DIR, 900);
+    const pr = PLANS[k].presets[0];
+    camera.position.fromArray(pr.pos); controls.target.fromArray(pr.tgt); anim = null;
+    buildBar();
+  }
+  document.querySelectorAll("#tabs button").forEach(b => b.addEventListener("click", () => setPlan(b.dataset.plan)));
+
+  // Cette méthode permet d'ajuster le rendu à la taille du cadre lorsqu'il change.
+  function resize() {
+    const w = view.clientWidth, h = view.clientHeight;
+    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(view); else window.addEventListener("resize", resize);
+  resize();
+
+  const tmp = new THREE.Vector3();
+  // Cette méthode permet de placer les étiquettes à l'écran lorsqu'une image est rendue.
+  function updateLabels() {
+    const w = view.clientWidth, h = view.clientHeight;
+    PLANS[cur].L.forEach(l => {
+      tmp.copy(l.v).project(camera);
+      const vis = showLabels && tmp.z < 1 && tmp.z > -1 && Math.abs(tmp.x) < 1.05 && Math.abs(tmp.y) < 1.05;
+      l.el.style.display = vis ? "block" : "none";
+      if (vis) { l.el.style.left = ((tmp.x + 1) / 2 * w) + "px"; l.el.style.top = ((1 - tmp.y) / 2 * h) + "px"; }
+    });
+  }
+  // Cette méthode permet de faire tourner la boucle de rendu (animation de caméra ou contrôle à la souris).
+  function loop(now) {
+    requestAnimationFrame(loop);
+    if (anim) {
+      const u = Math.min(1, (now - anim.start) / anim.dur), r = anim.fn(u);
+      camera.position.copy(r.pos); camera.lookAt(r.look);
+      if (u >= 1) { controls.target.copy(r.look); anim = null; }
+    } else controls.update();
+    renderer.render(scene, camera);
+    updateLabels();
+  }
+  renderer.domElement.addEventListener("pointerdown", () => { if (anim) { controls.target.copy(camera.position.clone().add(camera.getWorldDirection(tmp).multiplyScalar(60))); anim = null; } });
+
+  setPlan("A");
+  requestAnimationFrame(loop);
+
+  // Cette méthode permet de garder les onglets du texte fonctionnels lorsque three.js n'a pas pu se charger.
+  function wireTextTabs() {
+    document.querySelectorAll("#tabs button").forEach(b => b.addEventListener("click", () => {
+      document.getElementById("txtA").hidden = b.dataset.plan !== "A"; document.getElementById("txtB").hidden = b.dataset.plan !== "B";
+      document.querySelectorAll("#tabs button").forEach(x => x.classList.toggle("on", x === b));
+    }));
+  }
+})();
+</script>
+</body>
+</html>
