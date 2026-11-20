@@ -18,7 +18,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local CharacterAppearance = require(ReplicatedStorage.Shared.CharacterAppearance)
-local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
+local MapSelection = require(ReplicatedStorage.Shared.MapSelection)
 local MatchRecordRules = require(ReplicatedStorage.Shared.MatchRecordRules)
 local HighlightClipRules = require(ReplicatedStorage.Shared.HighlightClipRules)
 local PerfRules = require(ReplicatedStorage.Shared.PerfRules)
@@ -200,7 +200,7 @@ local function flush(s: Session, now: number, last: boolean)
 		chunk.meta = {
 			me = s.owner.UserId,
 			name = s.owner.Name,
-			map = GameConfig.ACTIVE_MAP,
+			map = MapSelection.currentName(),
 			place = game.PlaceVersion,
 			date = DateTime.now():ToIsoDate(),
 		}

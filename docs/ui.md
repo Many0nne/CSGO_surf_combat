@@ -369,6 +369,10 @@ Essais successifs (maquettes HTML sur la page privée « Surf FFA, direction Vit
   Pas de classement complet à la fin : Tab maintenu remplace l'écran de fin par le classement, rendu au relâchement
   (jamais l'un sur l'autre). Contenu composé par `HUDRules.readRoundResult` (nom du vainqueur résolu par son id dans les
   scores de `RoundResult`) ; ordre et issue de la manche dans `src/shared/ScoreRules.luau`, communs au serveur.
+  Rotation des maps (#594) : sous les crédits, à place fixe (rien ne saute quand les crédits arrivent), « PROCHAINE MAP »
+  ambré puis le nom en os (`HUDRules.nextMapName`, absent si la map ne change pas). À l'arrivée dans une manche sur une
+  map pas encore annoncée : « MAP » ambré sur un filet et le nom en os géant sous le timer, 2,5 s puis fondu
+  (`RoundHUD.showMapTitle`, `HUDRules.mapTitle`).
 - `UIKit.cornerScrim` : fond de coin du HUD (`assets/ui/hud/scrim_coin.png`) dans les quatre orientations, par rotation ;
   `Top` / `Bottom` : fond centré sur un bord (`scrim_bord.png`, `make_corner_scrim.py --edge`), `size` = largeur totale.
   Rien n'est penché dans le HUD depuis #308 (le compteur de vitesse l'était, de -6°).

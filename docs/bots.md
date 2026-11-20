@@ -6,8 +6,10 @@ qu'il faut savoir pour la modifier.
 
 ## Plan de navigation (#140)
 
-Construit **automatiquement au démarrage du serveur** dans la vraie collision de la map jouée (`NavBuilder`, appelé par
-`NavPlan.start` depuis `BotManager.init`), sans rien placer à la main : il marche pour une future map sans travail.
+Construit **automatiquement au démarrage du serveur** dans la vraie collision de chaque map (`NavBuilder`, appelé par
+`NavPlan.build` depuis `MapRotation`), sans rien placer à la main : il marche pour une future map sans travail. Un plan
+par map, gardé : la map jouée d'abord, puis les autres, prêtées à `Workspace.Maps` le temps de leur construction ; les
+bots suivent le plan de la map jouée (`NavPlan.setActive`, rotation des maps #594, cf. `docs/maps.md`).
 
 1. **Cases** : une colonne tous les `NAV_GRID` studs (4). Un rayon descend du haut de la map, puis repart sous chaque
    surface touchée (24 au plus par colonne) ; une surface marchable (`SURF_NORMAL_Y`) devient une case si une boîte de

@@ -17,7 +17,7 @@ local Stats = game:GetService("Stats")
 local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
-local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local MapSelection = require(Shared:WaitForChild("MapSelection"))
 local NetworkProtocol = require(Shared:WaitForChild("NetworkProtocol"))
 local PerfMarkers = require(Shared:WaitForChild("PerfMarkers"))
 local PerfRules = require(Shared:WaitForChild("PerfRules"))
@@ -356,8 +356,9 @@ local function loadRoute(name: string): (Rules.Route?, string?)
 	if not decoded then
 		return nil, "piste illisible : " .. tostring(why)
 	end
-	if decoded.map ~= GameConfig.ACTIVE_MAP then
-		return nil, string.format("piste enregistrée sur %s, map jouée %s", decoded.map, GameConfig.ACTIVE_MAP)
+	local active = MapSelection.currentName()
+	if decoded.map ~= active then
+		return nil, string.format("piste enregistrée sur %s, map jouée %s", decoded.map, tostring(active))
 	end
 	return decoded, nil
 end

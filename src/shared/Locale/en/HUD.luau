@@ -21,6 +21,9 @@ return {
 	["TU REMPORTES LE ROUND"] = "YOU WIN THE ROUND",
 	["REMPORTE LE ROUND"] = "WINS THE ROUND",
 	["PLAFOND DU JOUR ATTEINT"] = "DAILY CAP REACHED",
+	-- Rotation des maps (#594) : bandeau de fin et nom de la map à l'arrivée
+	["PROCHAINE MAP"] = "NEXT MAP",
+	["MAP"] = "MAP",
 	-- Armes et commandes
 	["MUNITIONS"] = "AMMO",
 	["MEILLEURE ACTION"] = "BEST PLAY",

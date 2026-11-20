@@ -4,6 +4,7 @@ local UserInputService = game:GetService("UserInputService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local NetworkProtocol = require(Shared:WaitForChild("NetworkProtocol"))
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local MapSelection = require(Shared:WaitForChild("MapSelection"))
 local ParticipantRules = require(Shared:WaitForChild("ParticipantRules"))
 local BotCharacters = require(Shared:WaitForChild("BotCharacters"))
 
@@ -62,6 +63,8 @@ local lastDeath: { killer: string?, weapon: string?, headshot: boolean, at: numb
 -- Conseils de l'écran de mort (#291) : morts du joueur local, et morts qui ont montré un conseil (les conseils tournent,
 -- un par mort, en commençant au premier) ; `tipDeath` : dernière mort comptée, pour ne la compter qu'une fois
 local deathCount = 0
+-- Dernière map dont le nom a été affiché à l'arrivée dans une manche (#594) : nil avant la première manche
+local lastMapTitle: string? = nil
 local tipCount = 0
 local tipDeath = 0
 
@@ -214,6 +217,12 @@ local function setState(newState: State)
 		RoundHUD.show()
 		RoundHUD.hideRespawning()
 		deactivateMenuCamera()
+		-- Arrivée sur une map pas encore annoncée (première manche, ou map changée par la rotation, #594) : son nom
+		local title = HUDRules.mapTitle(MapSelection.currentName(), lastMapTitle)
+		if title then
+			lastMapTitle = MapSelection.currentName()
+			RoundHUD.showMapTitle(title)
+		end
 	elseif newState == "DEAD" then
 		RoundHUD.showRespawning(GameConfig.RESPAWN_DELAY)
 		applyDeathInfo()

@@ -10,6 +10,7 @@ local RunService = game:GetService("RunService")
 
 local CameraConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("CameraConfig"))
 local Locale = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Locale"))
+local MapSelection = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("MapSelection"))
 local PerfMarkers = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("PerfMarkers"))
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
 local DemoClipRules = require(script.Parent.DemoClipRules)
@@ -416,8 +417,8 @@ function DemoPlayer.new(parent: GuiObject, layoutOrder: number, clipIds: { strin
 		if scene or building then
 			return
 		end
-		local maps = workspace:FindFirstChild("Maps")
-		local map = maps and maps:FindFirstChild(clips[1].map)
+		-- Map du clip, jouée ou rangée par la rotation (#594)
+		local map = MapSelection.find(clips[1].map)
 		if not map then
 			setMessage("MAP {name} ABSENTE", { name = clips[1].map })
 			return

@@ -15,7 +15,6 @@ local SpawnRules = require(ServerScriptService.Server.SpawnRules)
 
 local SpawnManager = {}
 
-local mapModel: Instance?
 -- Remote RequestSpawn, aussi la voie de la réponse au client (#219, SpawnRules.reply)
 local replyRemote: RemoteEvent?
 -- Joueurs dont un LoadCharacterAsync est en vol, et heure (os.clock) de leur dernière mort (#171)
@@ -40,14 +39,10 @@ local REFUSAL_SEVERITY: { [string]: CheatLog.Severity } = {
 	early = CheatLog.Severity.MEDIUM,
 }
 
--- Cette méthode permet de trouver la map jouée (GameConfig.ACTIVE_MAP dans Workspace.Maps) lorsqu'un joueur demande à
--- apparaître.
+-- Cette méthode permet de trouver la map jouée (attribut ActiveMap de Workspace.Maps, qui change à chaque round, #594)
+-- lorsqu'un personnage apparaît ; attend au plus 10 s qu'elle soit publiée au démarrage.
 local function getMap(): Instance?
-	if mapModel and mapModel.Parent then
-		return mapModel
-	end
-	mapModel = MapSelection.waitForActive(10)
-	return mapModel
+	return MapSelection.current() or MapSelection.waitForActive(10)
 end
 
 -- Tirage des points d'apparition, paramètres du raycast de vue et règle des pièces traversées, créés au premier placement

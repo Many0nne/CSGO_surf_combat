@@ -12,7 +12,7 @@ local Stats = game:GetService("Stats")
 local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
-local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local MapSelection = require(Shared:WaitForChild("MapSelection"))
 local PerfRules = require(Shared:WaitForChild("PerfRules"))
 
 local TOGGLE_KEY = Enum.KeyCode.F4
@@ -63,7 +63,7 @@ local function activeMap(): Instance?
 	if not maps then
 		return nil
 	end
-	return maps:FindFirstChild(GameConfig.ACTIVE_MAP) or maps:GetChildren()[1]
+	return MapSelection.current() or maps:GetChildren()[1]
 end
 
 -- Cette méthode permet de construire un levier qui masque localement les pièces translucides d'un dossier lorsque
