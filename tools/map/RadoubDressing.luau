@@ -251,13 +251,15 @@ local function digits(parent, frame, u, v, H, text, color, w)
 end
 
 -- Cette méthode permet de poser une applique (patte, bras, tête, verre lumineux et SpotLight vers le bas) sur une
--- façade, fixée en (u, v).
-local function wallLamp(parent, frame, u, v, range)
+-- façade, fixée en (u, v) ; `unlit` n'y met que le verre lumineux (sans SpotLight, pour le coût du rendu).
+local function wallLamp(parent, frame, u, v, range, unlit)
 	box(parent, frame, u - 0.5, u + 0.5, v - 0.6, v + 0.4, 0, 0.3, PAL.steel, M.Metal)
 	box(parent, frame, u - 0.15, u + 0.15, v - 0.1, v + 0.2, 0.3, 1.5, PAL.steel, M.Metal)
 	box(parent, frame, u - 0.9, u + 0.9, v - 0.5, v - 0.05, 0.9, 2.4, PAL.steel, M.Metal)
 	local lens = box(parent, frame, u - 0.7, u + 0.7, v - 0.6, v - 0.5, 1.0, 2.3, PAL.lamp, M.Neon)
-	spot(lens, E.NormalId.Bottom, 110, range or 26, 2.2)
+	if not unlit then
+		spot(lens, E.NormalId.Bottom, 110, range or 26, 2.2)
+	end
 end
 
 -- Façades -------------------------------------------------------------------------------------------------------------
@@ -410,7 +412,7 @@ local function door(parent, face, d, style)
 			cyl(parent, f, V3.new(u, 3.2, 1.6), V3.new(u, 3.7, 1.6), 0.9, PAL.black)
 		end
 		wallLamp(parent, f, u0 - 3.5, h - 2, 34)
-		wallLamp(parent, f, u1 + 3.5, h - 2, 34)
+		wallLamp(parent, f, u1 + 3.5, h - 2, 34, true)
 		-- armoire à incendie rouge
 		box(parent, f, u1 + 5.5, u1 + 7.5, 3, 6, 0, 0.7, PAL.red)
 		box(parent, f, u1 + 5.8, u1 + 7.2, 3.3, 5.7, 0.7, 0.75, PAL.white)
@@ -567,12 +569,15 @@ local function skylights(parent, h, y)
 	end
 end
 
--- Cette méthode permet de suspendre une lampe d'atelier (cloche, verre lumineux, SpotLight vers le bas) en (x, z).
-local function highBay(parent, x, z, y)
+-- Cette méthode permet de suspendre une lampe d'atelier (cloche, verre lumineux, SpotLight vers le bas sauf si
+-- `unlit`) en (x, z).
+local function highBay(parent, x, z, y, unlit)
 	post(parent, x, z, y + 0.6, y + 4, 0.15, PAL.black)
 	post(parent, x, z, y, y + 0.9, 2.4, PAL.steel, M.Metal)
 	local lens = blk(parent, x - 0.8, x + 0.8, y - 0.12, y, z - 0.8, z + 0.8, PAL.lamp, M.Neon)
-	spot(lens, E.NormalId.Bottom, 120, 44, 1.6)
+	if not unlit then
+		spot(lens, E.NormalId.Bottom, 120, 44, 1.6)
+	end
 end
 
 -- Cette méthode permet d'aménager un atelier : poteaux et chemins de roulement le long des longs murs, pont roulant
@@ -619,7 +624,7 @@ local function atelierInside(parent, h)
 	blk(parent, xc - 0.7, xc + 0.7, y1 - 22.6, y1 - 21, zm - 0.7, zm + 0.7, PAL.yellow, M.Metal)
 	for _, tx in { 0.3, 0.7 } do
 		for _, tz in { 0.3, 0.7 } do
-			highBay(parent, h.x0 + (h.x1 - h.x0) * tx, h.z0 + (h.z1 - h.z0) * tz, y1 - 4)
+			highBay(parent, h.x0 + (h.x1 - h.x0) * tx, h.z0 + (h.z1 - h.z0) * tz, y1 - 4, tx ~= tz)
 		end
 	end
 	-- liseré des allées, à 3 studs des murs
@@ -666,7 +671,7 @@ end
 local function storeInside(parent, h)
 	rack(parent, h.x0 + ctx.wall + 12, h.x1 - ctx.wall - 12, h.z1 - ctx.wall)
 	for _, t in { 0.25, 0.5, 0.75 } do
-		highBay(parent, h.x0 + (h.x1 - h.x0) * t, (h.z0 + h.z1) / 2, Q + h.h - 4)
+		highBay(parent, h.x0 + (h.x1 - h.x0) * t, (h.z0 + h.z1) / 2, Q + h.h - 4, t == 0.5)
 	end
 end
 
@@ -691,7 +696,7 @@ local function pumpInside(parent, h)
 		blk(parent, xe - 2.05, xe - 2, Q + 5.3, Q + 5.7, z - 0.2, z + 0.2, PAL.lit, M.Neon)
 	end
 	for _, z in { 192, 270 } do
-		highBay(parent, 27, z, Q + h.h - 3)
+		highBay(parent, 27, z, Q + h.h - 3, z < 230)
 	end
 end
 
@@ -999,12 +1004,12 @@ local function gantry(parent, g)
 	for _, x in { 245.3, 266.7 } do
 		local gaps = if x < 256 then g.ladderGaps else {}
 		for _, s in minus(z0, z1, gaps) do
-			blk(parent, x - 0.15, x + 0.15, g.top + 3.3, g.top + 3.6, s[1], s[2], PAL.yellow, M.Metal, true)
-			blk(parent, x - 0.1, x + 0.1, g.top + 1.6, g.top + 1.8, s[1], s[2], PAL.yellow, M.Metal, true)
+			blk(parent, x - 0.15, x + 0.15, g.top + g.railH - 0.2, g.top + g.railH + 0.1, s[1], s[2], PAL.yellow, M.Metal, true)
+			blk(parent, x - 0.1, x + 0.1, g.top + g.railH / 2, g.top + g.railH / 2 + 0.2, s[1], s[2], PAL.yellow, M.Metal, true)
 			for z = s[1] + 0.15, s[2] - 0.1, 5 do
-				blk(parent, x - 0.15, x + 0.15, g.top, g.top + 3.3, z - 0.15, z + 0.15, PAL.yellow, M.Metal, true)
+				blk(parent, x - 0.15, x + 0.15, g.top, g.top + g.railH - 0.2, z - 0.15, z + 0.15, PAL.yellow, M.Metal, true)
 			end
-			blk(parent, x - 0.15, x + 0.15, g.top, g.top + 3.3, s[2] - 0.3, s[2], PAL.yellow, M.Metal, true)
+			blk(parent, x - 0.15, x + 0.15, g.top, g.top + g.railH - 0.2, s[2] - 0.3, s[2], PAL.yellow, M.Metal, true)
 		end
 	end
 	-- cabine suspendue sous la poutre est, près du pied nord
@@ -1068,6 +1073,8 @@ local function lampMast(parent, x, z, target)
 	post(parent, x, z, Q + 1, Q + 44, 1.3, PAL.galva, M.Metal, true)
 	local side = flat(target - V3.new(x, Q + 44, z)):Cross(V3.new(0, 1, 0)).Unit
 	local head = V3.new(x, Q + 44, z)
+	-- projecteurs pointés sur le quai devant le mât, vers la forme (une SpotLight ne porte qu'à 60 studs)
+	target = V3.new(x, Q, z) + flat(target - head) * 36
 	cyl(parent, ORIGIN, head - side * 4, head + side * 4, 0.5, PAL.galva, M.Metal)
 	for i = -1, 1 do
 		local pos = head + side * (i * 3) + V3.new(0, 0.9, 0)
@@ -1477,7 +1484,7 @@ function RadoubDressing.build(c)
 	end
 	cableReel(quay, 264, 97, 6, 3)
 	cableReel(quay, 267, 103.5, 5, 2.6)
-	siteCabin(quay, -52, -28, 54, 70)
+	siteCabin(quay, -58.9, -34.9, 56, 72)
 	palletLoad(quay, 27, 86, Q, 3.2, PAL.cardboard)
 	palletLoad(quay, 27, 90, Q, 2.4, PAL.wood)
 	palletLoad(quay, 27, 376, Q, 3.2, PAL.white)

@@ -37,6 +37,11 @@ local DECK = 44.5 -- dessus du pont du navire
 -- des pieds (SpawnCheck.ROOT_TO_FEET) ; à 4 studs, on meurt les pieds dans l'eau.
 local KILL_ABOVE_SEA = 4
 local KILL_HEIGHT = -40
+-- Échelle (retour du 20/11/2026 : trop encombrée pour prendre de la vitesse en bhop) : le plan est écrit à l'échelle 1
+-- puis toute la map (pièces, tailles, portées des lampes) est agrandie de SCALE autour du centre posé, y = 0 compris ;
+-- les pentes de surf gardent leur angle. Restent en vraie grandeur : points d'apparition, hauteur des volumes de mort
+-- au-dessus de l'eau, KillHeight (en studs du monde), garde-corps du portique (GANTRY.railH).
+local SCALE = 1.4
 local WALL = 1.5 -- épaisseur des murs des bâtiments
 local SCREEN_GAP = 7 -- studs entre une porte et l'écran intérieur qui la masque (passage de chaque côté)
 local SCREEN_OVERLAP = 5 -- studs dont l'écran dépasse la porte de chaque côté
@@ -73,7 +78,7 @@ local LOOK = {
 
 local map = Instance.new("Model")
 map.Name = "Radoub"
-map:SetAttribute("KillHeight", KILL_HEIGHT)
+map:SetAttribute("KillHeight", KILL_HEIGHT * SCALE)
 map:SetAttribute("GeneratedBy", "build_radoub")
 local geometry = folder(map, "Geometry")
 local F = {
@@ -156,10 +161,11 @@ local function land()
 	}
 	for _, s in seas do
 		local w = block(F.scenery, s[1], s[2], SEA - 1, SEA, s[3], s[4], "water", false)
-		w.Transparency = 0.1
+		-- opaque : une nappe translucide de cette taille se redessine sur tout l'écran (coût GPU, cf. nuages de Dizzy)
+		w.Transparency = 0
 		w.Reflectance = 0.15
 		w.CastShadow = false
-		local k = block(F.kill, s[1], s[2], KILL_HEIGHT - 20, SEA + KILL_ABOVE_SEA, s[3], s[4], "water", false)
+		local k = block(F.kill, s[1], s[2], KILL_HEIGHT - 20, SEA + KILL_ABOVE_SEA / SCALE, s[3], s[4], "water", false)
 		k.Transparency = 1
 		k.CastShadow = false
 		k.Name = "Sea"
@@ -330,6 +336,7 @@ local GANTRY = {
 	rails = { { z = 117, x1 = 470.5 }, { z = 343, x1 = 436 } }, -- le rail sud s'arrête avant le local du bateau-porte
 	railX0 = -60,
 	ladderGaps = { { 115, 119 }, { 341, 345 } },
+	railH = 3.5 / SCALE, -- main courante à 3,5 studs du monde après l'échelle : on tire par-dessus
 }
 
 -- Cette méthode permet de poser la structure porteuse du portique : poteaux, bogies, poutres, passerelle, chariot,
@@ -416,11 +423,11 @@ local CONTAINERS = {
 	{ 232, 78, 10.2, "ochre" },
 }
 local PLATES = {
-	{ 70, 90, 4, 126, 140 },
-	{ 330, 352, 5, 128, 142 },
-	{ 400, 420, 3, 126, 138 },
-	{ 110, 130, 3, 322, 336 },
-	{ 300, 318, 6, 320, 334 },
+	-- entre les bâtiments, hors des lignes droites le long de la forme (retour du 20/11/2026)
+	{ 198, 218, 4, 92, 106 },
+	{ 226, 248, 5, 94, 108 },
+	{ 200, 218, 3, 372, 386 },
+	{ 224, 246, 6, 376, 390 },
 }
 
 -- Cette méthode permet de poser un bâtiment et de le noter pour l'habillage.
@@ -527,7 +534,7 @@ local bollards, containers = {}, {}
 for _, c in CONTAINERS do
 	table.insert(containers, { c[1], c[2], c[3], LOOK[c[4]][1] })
 end
-for x = 80, 440, 40 do
+for x = 80, 400, 80 do
 	table.insert(bollards, { x, 146 })
 	table.insert(bollards, { x, 314 })
 end
@@ -548,7 +555,7 @@ RadoubDressing.build({
 	containers = containers,
 	plates = PLATES,
 	bollards = bollards,
-	masts = { { 44, 140 }, { 452, 140 }, { 44, 320 }, { 424, 322 } },
+	masts = { { -50, 140 }, { 466, 136 }, { -50, 320 }, { 466, 354 } }, -- aux angles, hors des voies de course
 	mastTarget = Vector3.new(260, 20, 230),
 	dock = {
 		sections = SECTIONS,
@@ -579,6 +586,44 @@ RadoubDressing.build({
 		rails = GANTRY.rails,
 	},
 })
+
+-- Cette méthode permet d'agrandir toute la map de SCALE autour du centre posé (positions et tailles ; points
+-- d'apparition gardés en vraie grandeur, face basse remise à SPAWN_SKIN du sol agrandi ; portée des lampes).
+local function scaleMap()
+	local pivot = OFFSET + CENTER
+	for _, d in map:GetDescendants() do
+		if d:IsA("BasePart") then
+			local cf = d.CFrame
+			local pos = pivot + (cf.Position - pivot) * SCALE
+			if d.Parent == F.spawns then
+				local bottom = cf.Position.Y - d.Size.Y / 2 - MapBuild.SPAWN_SKIN
+				pos = Vector3.new(pos.X, bottom * SCALE + MapBuild.SPAWN_SKIN + d.Size.Y / 2, pos.Z)
+			else
+				d.Size = d.Size * SCALE
+			end
+			d.CFrame = (cf - cf.Position) + pos
+		elseif d:IsA("SpotLight") then
+			d.Range = math.min(60, d.Range * SCALE)
+		end
+	end
+end
+scaleMap()
+
+-- Ombres sans intérêt au soleil rasant (retour du 20/11/2026) : une pièce linéaire (rails, poteaux, garde-corps,
+-- acrotères, raidisseurs) ou un petit objet traîne une longue ombre fine sur le quai sans rien dessiner.
+local THIN_SHADOW, SMALL_SHADOW = 3, 5 -- studs du monde : deuxième et plus grande dimension
+local thinCut = 0
+for _, p in map:GetDescendants() do
+	if p:IsA("BasePart") and p.CastShadow then
+		local s = { p.Size.X, p.Size.Y, p.Size.Z }
+		table.sort(s)
+		if s[2] < THIN_SHADOW or s[3] < SMALL_SHADOW then
+			p.CastShadow = false
+			thinCut += 1
+		end
+	end
+end
+print(string.format("  ombres : %d pièces fines ou petites coupées", thinCut))
 
 -- rampes de surf : une seule pièce en surface, rien en travers dessous (#136), puis mesure de contrôle
 for _, r in RampEdges.apply(geometry) do
@@ -623,4 +668,4 @@ for _, d in map:GetDescendants() do
 		count += 1
 	end
 end
-print(string.format("Radoub : %d pièces, %d spawns, KillHeight %d -> %s", count, spawnCount, KILL_HEIGHT, OUT))
+print(string.format("Radoub : %d pièces, %d spawns, KillHeight %d -> %s", count, spawnCount, KILL_HEIGHT * SCALE, OUT))

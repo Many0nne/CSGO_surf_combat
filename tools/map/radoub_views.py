@@ -1,9 +1,17 @@
 """Vues de la planche Radoub, écrites dans le repère du plan, converties dans le monde (cf. docs/maps.md, Radoub)."""
 import json, sys
 
-# Cette méthode permet de passer un point du plan (x, y, z) dans le monde lorsque la map est posée par PLACE.
-def world(p):
-    return [-1528 - p[0], p[1], 440 - p[2]]
+PIVOT, SCALE = (-1764, 0, 220), 1.4  # OFFSET + CENTER et SCALE de build_radoub.luau
+
+
+# Cette méthode permet de passer un point du plan (x, y, z) dans le monde lorsque la map est posée par PLACE puis
+# agrandie de SCALE ; `eye` garde la hauteur d'œil (5 studs au-dessus du sol du plan) en vraie grandeur.
+def world(p, eye=False):
+    raw = (-1528 - p[0], p[1] - 5 if eye else p[1], 440 - p[2])
+    out = [PIVOT[i] + (raw[i] - PIVOT[i]) * SCALE for i in range(3)]
+    if eye:
+        out[1] += 5
+    return out
 
 VIEWS = [
     ("quai_nord", (40, 65, 135), (300, 42, 230)),
@@ -26,5 +34,5 @@ out = []
 for name, pos, target in VIEWS:
     if only and name not in only:
         continue
-    out.append({"name": name, "position": world(pos), "target": world(target), "res": [1280, 720], "radius": 700})
+    out.append({"name": name, "position": world(pos, True), "target": world(target), "res": [1280, 720], "radius": 700})
 json.dump(out, open(sys.argv[1], "w"), indent=1)

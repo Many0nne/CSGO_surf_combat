@@ -405,8 +405,15 @@ coque passe entre elles. Choisie sur maquettes (`docs/maps/plans-radoub.html`, t
 Pas encore jouée hors test : la coexistence avec Dizzy passe par la rotation des maps (#594).
 
 - **Générateur** : `lune run tools/map/build_radoub.luau` (plugin Rojo déconnecté de ce serveur) écrit
-  `assets/rbx/Maps/Radoub.rbxm`, environ 6 800 pièces (400 de maquette, le reste d'habillage). Plan écrit en dur (pas de relevé). Outils communs avec Dizzy
+  `assets/rbx/Maps/Radoub.rbxm`, environ 6 700 pièces (400 de maquette, le reste d'habillage). Plan écrit en dur (pas de relevé). Outils communs avec Dizzy
   (soleil, ombres, points d'apparition) : `tools/map/MapBuild.luau`.
+- **Échelle ×1,4** (`SCALE`, retour du 20/11/2026 : trop encombrée pour prendre de la vitesse en bhop) : le plan et
+  l'habillage sont écrits à l'échelle 1, puis `scaleMap` agrandit toute la map (positions, tailles, portée des lampes,
+  plafonnée à 60) autour du centre posé, y = 0 compris : les pentes de surf gardent leur angle, la map fait environ
+  870 × 700 studs, quais à y 84, flancs de 84 de haut. Gardés en vraie grandeur : points d'apparition (face basse remise
+  à `SPAWN_SKIN` du sol agrandi), haut des volumes de mort à 4 studs au-dessus de l'eau (`KILL_ABOVE_SEA / SCALE` dans
+  le plan), `KillHeight` (−56), garde-corps du portique à 3,5 (`GANTRY.railH`). Toutes les cotes ci-dessous sont celles
+  du plan, avant l'échelle.
 - **Repère** : le plan est écrit X ouest → est, Z nord → sud, quais à y 60, fond à y 0, mer à y 42 ; il est posé en jeu
   **tourné d'un demi-tour** autour de (236, 0, 220) puis décalé de (−2000, 0, 0) (`PLACE`). Point du plan (x, y, z) →
   monde (−1528 − x, y, 440 − z). Raison : le soleil du jeu est à 1,4° au-dessus de l'horizon, à l'ouest-nord-ouest ;
@@ -476,8 +483,25 @@ palettes, bobines, profilés, rayonnages, motopompes, tins de bouchain sous la c
 des échelles, sinon on reste coincé dessous). Garde-corps des passerelles d'accès au navire : plan de collision
 invisible inchangé, barres en décor.
 
-Mesures (avant → après) : 406 → 6 781 pièces ; 92 → 262 pièces qui projettent une ombre ; 0 → 44 SpotLight (sans
-ombre) ; `RampCheck` 0,000 sur les deux flancs ; 0 vue entre zones d'apparition ; pieds à 0,764-0,765 stud du sol.
+Voies de course (retour du 20/11/2026) : le petit décor au sol est collé aux bâtiments ou aux angles (mâts d'éclairage
+aux quatre coins, piles de tôles entre les bâtiments, cabane contre le hangar), une bitte tous les 80 studs du plan le
+long de la forme : de longues lignes droites restent libres sur les quais.
+
+Coût du rendu (`audit_map`) : ombres coupées en plus de `cullShadows` sur toute pièce linéaire ou petite (deuxième
+dimension < 3 studs ou plus grande < 5, après l'échelle) : rails, poteaux, garde-corps, acrotères, bittes traînaient de
+longues ombres fines au soleil rasant. Mer opaque (quatre nappes translucides de plusieurs millions de studs² avant).
+Une SpotLight sur deux seulement dans les ateliers, une sur trois dans les magasins, une seule par grande porte (l'autre
+lampe n'a que son verre lumineux).
+
+| | maquette #593 | habillage (1re version) | habillage ×1,4 optimisé |
+|---|---|---|---|
+| pièces | 406 | 6 781 | 6 728 |
+| pièces qui projettent une ombre | 92 | 262 | 92 |
+| SpotLight (sans ombre) | 0 | 44 | 33 |
+| pièces translucides | 4 | 4 | 0 |
+
+`RampCheck` 0,000 sur les deux flancs ; 0 vue entre zones d'apparition ; pieds à 0,764-0,765 stud du sol. FPS en jeu :
+non mesuré.
 
 Pièges :
 - **Couches au sol** (liserés, joints, longrines posés sur le quai) : hauteurs toutes différentes (joints 0,04,
