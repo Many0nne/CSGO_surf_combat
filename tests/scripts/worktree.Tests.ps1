@@ -285,6 +285,12 @@ Describe 'control-server.luau : une cible par place' {
   Set-Content (Join-Path $reg 'projects\fad.json') ('{"name":"fad","placeIds":[88580736516669],"mainPort":34900,"target":' +
     (ConvertTo-Json $fad.target) + ',"status":' + (ConvertTo-Json $fad.status) + '}')
   Set-Content (Join-Path $reg 'projects\casse.json') '{ tronque'
+  # Inscription et cible ecrites avec un BOM (Set-Content -Encoding UTF8 de Windows PowerShell 5.1).
+  $bomTarget = Join-Path $reg 'bom.target'
+  $utf8Bom = [Text.UTF8Encoding]::new($true)
+  [IO.File]::WriteAllText($bomTarget, '{"port":"34950","rev":"3"}', $utf8Bom)
+  [IO.File]::WriteAllText((Join-Path $reg 'projects\bom.json'),
+    ('{"name":"bom","placeIds":["555"],"mainPort":34949,"target":' + (ConvertTo-Json $bomTarget) + '}'), $utf8Bom)
   $port = 35870
   $out = Join-Path $sb.Root 'control.log'
   # lune lance depuis le depot : le shim Rokit y trouve sa version (rokit.toml).
@@ -292,7 +298,7 @@ Describe 'control-server.luau : une cible par place' {
     -RedirectStandardOutput $out -RedirectStandardError "$out.err" `
     -ArgumentList 'run', (Join-Path $repoRoot 'tools\rojo-plugin\control-server.luau'), $reg, "$port"
   $sb.Dummies.Add($server.Id)
-  # Cette methode permet d'interroger le serveur de test ; renvoie le code HTTP et le corps en texte.
+  # Cette methode permet d'interroger le serveur de test lorsqu'un test verifie une route ; renvoie le code HTTP et le corps.
   function Get-Control([string]$Path, [string]$Method = 'GET', [string]$Body) {
     $r = Invoke-WebRequest "http://localhost:$port$Path" -Method $Method -Body $Body -SkipHttpErrorCheck -TimeoutSec 3
     [pscustomobject]@{ Code = [int]$r.StatusCode; Body = [Text.Encoding]::UTF8.GetString($r.RawContentStream.ToArray()) }
@@ -307,6 +313,12 @@ Describe 'control-server.luau : une cible par place' {
   It 'sert a chaque place la cible de son projet' {
     ((Get-Control '/target?placeId=91817475928288').Body | ConvertFrom-Json).port | Should Be '34880'
     ((Get-Control '/target?placeId=88580736516669').Body | ConvertFrom-Json).port | Should Be '34901'
+  }
+
+  It 'inscription et cible avec BOM : lues, et la cible servie sans BOM' {
+    $r = Get-Control '/target?placeId=555'
+    $r.Code | Should Be 200
+    $r.Body.StartsWith('{') | Should Be $true
   }
 
   It 'place inconnue : 404, le plugin de cette fenetre ne fait rien' {
@@ -330,7 +342,7 @@ Describe 'control-server.luau : une cible par place' {
 
   It 'liste les projets inscrits, sans l''inscription illisible' {
     $names = @((Get-Control '/projects').Body | ConvertFrom-Json | ForEach-Object { $_.name }) | Sort-Object
-    ($names -join ',') | Should Be 'csgo,fad'
+    ($names -join ',') | Should Be 'bom,csgo,fad'
   }
 
   # Arbre complet : le shim Rokit lance le vrai lune en processus enfant.

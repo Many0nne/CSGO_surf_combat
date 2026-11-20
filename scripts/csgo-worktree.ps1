@@ -264,34 +264,58 @@ function Register-AutoconnectProject {
   $projects = Join-Path $controlDir 'projects'
   New-Item -ItemType Directory -Force $projects | Out-Null
   $entry = [pscustomobject]@{ name = 'csgo'; placeIds = $placeIds; mainPort = $basePort; target = $studioTarget; status = $studioStateFile }
-  # Fichier temporaire puis remplacement : le serveur ne lit jamais une inscription a moitie ecrite.
+  # Fichier temporaire puis remplacement atomique (ReplaceFile) : le serveur ne lit jamais une inscription absente
+  # ou a moitie ecrite.
   $file = Join-Path $projects 'csgo.json'
   [IO.File]::WriteAllText("$file.tmp", ($entry | ConvertTo-Json -Compress), [Text.UTF8Encoding]::new($false))
-  Move-Item -Force "$file.tmp" $file
+  # [NullString] : un $null passe a un parametre string arrive en "" (chemin vide refuse), pas en null.
+  if (Test-Path $file) { [IO.File]::Replace("$file.tmp", $file, [NullString]::Value) } else { [IO.File]::Move("$file.tmp", $file) }
+}
+
+# Cette methode permet d'executer une action sur le serveur de commande sous un mutex commun a tous les projets du poste,
+# lorsque deux scripts (CSGO, Fling a Dummy) voudraient le demarrer en meme temps.
+function Invoke-ControlLocked([scriptblock]$Action) {
+  $m = New-Object System.Threading.Mutex($false, 'Local\rojo-autoconnect-control')
+  try { [void]$m.WaitOne() } catch [System.Threading.AbandonedMutexException] { }
+  try { & $Action } finally { $m.ReleaseMutex(); $m.Dispose() }
 }
 
 # Cette methode permet de demarrer le serveur de commande du plugin Rojo modifie (tools/rojo-plugin) lorsqu'il ne
 # tourne pas encore, ou pas dans la version attendue ; sans le plugin modifie dans Studio, il ne sert a rien mais ne gene pas.
 function Start-RojoControl {
-  $health = try { (Invoke-WebRequest "http://localhost:$controlPort/health" -TimeoutSec 3).Content } catch { $null }
-  if ($health -eq $controlVersion) { return }
-  $lune = (Get-Command lune -ErrorAction SilentlyContinue).Source
-  $server = Join-Path $PSScriptRoot '..\tools\rojo-plugin\control-server.luau'
-  # Verifie avant d'arreter quoi que ce soit : un script sans serveur a lancer laisse tourner celui en place.
-  if (-not ($lune -and (Test-Path $server))) { return }
-  # Ancienne version encore lancee (par ce projet ou un autre) : on l'arrete avant de demarrer celle du depot.
-  @(Get-NetTCPConnection -LocalPort $controlPort -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique) |
-    Where-Object { (Get-Process -Id $_ -ErrorAction SilentlyContinue).ProcessName -eq 'lune' } | ForEach-Object { taskkill /PID $_ /T /F *> $null }
-  if (Test-Path $controlPidFile) {
-    $old = [int](Get-Content $controlPidFile)
-    if (Get-Process -Id $old -ErrorAction SilentlyContinue) { taskkill /PID $old /T /F *> $null }
+  Invoke-ControlLocked {
+    $health = try { (Invoke-WebRequest "http://localhost:$controlPort/health" -TimeoutSec 3).Content } catch { $null }
+    if ($health -eq $controlVersion) { return }
+    $lune = (Get-Command lune -ErrorAction SilentlyContinue).Source
+    $server = Join-Path $PSScriptRoot '..\tools\rojo-plugin\control-server.luau'
+    # Verifie avant d'arreter quoi que ce soit : un script sans serveur a lancer laisse tourner celui en place.
+    if (-not ($lune -and (Test-Path $server))) { return }
+    # Ancienne version encore lancee (par ce projet ou un autre) : on l'arrete avant de demarrer celle du depot.
+    @(Get-NetTCPConnection -LocalPort $controlPort -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique) |
+      Where-Object { (Get-Process -Id $_ -ErrorAction SilentlyContinue).ProcessName -eq 'lune' } | ForEach-Object { taskkill /PID $_ /T /F *> $null }
+    if (Test-Path $controlPidFile) {
+      # Pid recycle par Windows apres un redemarrage : on ne tue que l'enveloppe du serveur de commande.
+      $old = [int](Get-Content $controlPidFile)
+      $cmd = (Get-CimInstance Win32_Process -Filter "ProcessId = $old" -ErrorAction SilentlyContinue).CommandLine
+      if ($cmd -like '*control-server.luau*') { taskkill /PID $old /T /F *> $null }
+    }
+    # Copie commune (celle que lancent les autres projets) mise a jour avec celle du depot, puis lancee : tous les
+    # projets du poste lancent alors la meme version.
+    $shared = Join-Path $controlDir 'control-server.luau'
+    Copy-Item -Force $server $shared
+    # Dossier de travail = racine du checkout principal (le shim Rokit de lune y trouve rokit.toml) : pas un worktree,
+    # que le serveur bloquerait a sa suppression.
+    $proc = Start-Process -FilePath (Get-Command pwsh).Source -WorkingDirectory $root `
+      -WindowStyle Hidden -PassThru -ArgumentList '-NoProfile',
+      '-NonInteractive', '-Command', "& '$lune' run '$shared' '$controlDir' *>'$(Join-Path $controlDir 'control.log')'"
+    Set-Content -Path $controlPidFile -Value $proc.Id
+    # Mutex garde jusqu'a ce que le serveur reponde : le script suivant ne le prend pas pour un serveur absent.
+    for ($i = 0; $i -lt 20; $i++) {
+      $up = try { (Invoke-WebRequest "http://localhost:$controlPort/health" -TimeoutSec 1).Content -eq $controlVersion } catch { $false }
+      if ($up) { break }
+      Start-Sleep -Milliseconds 500
+    }
   }
-  # Dossier de travail = racine du checkout principal (le shim Rokit de lune y trouve rokit.toml) : pas un worktree,
-  # que le serveur bloquerait a sa suppression.
-  $proc = Start-Process -FilePath (Get-Command pwsh).Source -WorkingDirectory $root `
-    -WindowStyle Hidden -PassThru -ArgumentList '-NoProfile',
-    '-NonInteractive', '-Command', "& '$lune' run '$((Resolve-Path $server).Path)' '$controlDir' *>'$(Join-Path $controlDir 'control.log')'"
-  Set-Content -Path $controlPidFile -Value $proc.Id
 }
 
 # Cette methode permet de publier le port Rojo que Studio doit suivre lorsque le verrou change de main ;

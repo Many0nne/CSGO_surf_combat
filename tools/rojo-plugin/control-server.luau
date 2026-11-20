@@ -30,6 +30,15 @@ end
 local PORT = tonumber(process.args[2]) or 34870
 local projectsDir = `{registryDir}/projects`
 
+-- Cette methode permet de retirer le BOM UTF-8 lorsqu'un fichier a ete ecrit par Windows PowerShell 5.1
+-- (Set-Content -Encoding UTF8) : le decodeur JSON du serveur comme celui du plugin le refusent.
+local function withoutBom(text: string): string
+	if string.sub(text, 1, 3) == "\u{FEFF}" then
+		return string.sub(text, 4)
+	end
+	return text
+end
+
 -- Cette methode permet de lire les projets inscrits lorsqu'une requete arrive ; une inscription illisible (ecriture en
 -- cours, JSON invalide) est ignoree jusqu'a la requete suivante.
 local function readProjects(): { any }
@@ -40,7 +49,7 @@ local function readProjects(): { any }
 	for _, name in fs.readDir(projectsDir) do
 		if string.sub(name, -5) == ".json" then
 			local ok, project = pcall(function()
-				return serde.decode("json", fs.readFile(`{projectsDir}/{name}`))
+				return serde.decode("json", withoutBom(fs.readFile(`{projectsDir}/{name}`)))
 			end)
 			if ok and type(project) == "table" and type(project.placeIds) == "table" then
 				table.insert(projects, project)
@@ -50,7 +59,8 @@ local function readProjects(): { any }
 	return projects
 end
 
--- Cette methode permet de trouver le projet qui a declare la place demandee par le plugin ; nil si aucun.
+-- Cette methode permet de trouver le projet qui a declare une place lorsque le plugin de cette place l'interroge ;
+-- nil si aucun projet ne l'a declaree.
 local function projectOf(placeId: string?): any
 	if not placeId or placeId == "" then
 		return nil
@@ -66,7 +76,8 @@ local function projectOf(placeId: string?): any
 	return nil
 end
 
--- Cette methode permet de repondre a une requete du plugin (/target, /status) ou d'un script (/health, /projects).
+-- Cette methode permet de repondre a une requete lorsqu'elle arrive : du plugin (/target, /status) ou d'un script
+-- (/health, /projects).
 local function handle(request)
 	if request.path == "/health" then
 		return { status = 200, headers = { ["Content-Type"] = "text/plain" }, body = VERSION }
@@ -107,7 +118,7 @@ local function handle(request)
 		-- Ecriture en cours par le script : le plugin reessaiera a la seconde suivante.
 		return { status = 503, body = "busy" }
 	end
-	return { status = 200, headers = { ["Content-Type"] = "application/json" }, body = content }
+	return { status = 200, headers = { ["Content-Type"] = "application/json" }, body = withoutBom(content) }
 end
 
 net.serve(PORT, { address = "http://127.0.0.1", handleRequest = handle })
