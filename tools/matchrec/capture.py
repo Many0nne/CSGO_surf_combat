@@ -9,8 +9,9 @@ Deux passes sur le même segment (MatchReplayFrom / MatchReplayTo inchangés) :
 
 1. Son : uv run tools/matchrec/capture.py <son.wav>
    Rejeu à vitesse 1 avec l'attribut joueur MatchReplayAudio = true. Le son du poste (boucle WASAPI de la sortie par
-   défaut) est enregistré ; le rejeu joue un bip BEEP_LEAD s avant sa lecture, pendant l'écran noir : le son est coupé
-   à partir de ce bip + BEEP_LEAD, donc calé sur l'instant 0 du rejeu à la milliseconde près.
+   défaut) est enregistré dans un processus à part, qui joue du silence pour garder le flux continu (#601) ; le rejeu
+   joue un bip BEEP_LEAD s avant sa lecture, pendant l'écran noir : le son est coupé à partir de ce bip + BEEP_LEAD,
+   donc calé sur l'instant 0 du rejeu à la milliseconde près. Le nombre de discontinuités (son perdu) est affiché.
 2. Image : uv run tools/matchrec/capture.py <sortie.mp4> [--speed 0.25] [--audio <son.wav>] [--fps 60] [--cut-top 80]
    Rejeu au ralenti (MatchReplaySpeed = la même vitesse, MatchReplayAudio = false). Le rejeu commence par un écran noir
    (repère) : l'outil y relève le cadre du viewport, prend le départ à la première image non noire, puis s'arrête à
@@ -26,6 +27,7 @@ lit l'écran, cf. tools/anim/record_window.py) et le son du poste ne doit jouer 
 import argparse
 import ctypes
 import ctypes.wintypes as W
+import multiprocessing
 import os
 import subprocess
 import sys
@@ -58,10 +60,13 @@ BEEP_ONSET_SHARE = 0.25
 BEEP_WINDOW = 0.35
 # Son gardé après la fin de la lecture vue à l'écran (s) : la vidéo, plus courte, coupe le reste
 AUDIO_MARGIN = 0.5
-# Blocs lus dans la boucle (échantillons, ~10 ms) ; un bloc arrivé plus de GAP s après la fin du précédent suit un silence
-# que Windows n'a pas transmis (la boucle WASAPI ne livre rien quand rien ne joue) : il est rendu en zéros
-BLOCK = 480
-GAP = 0.02
+# Tampon de la boucle WASAPI (s) : soundcard le dimensionne sur `blocksize`. À 10 ms (480 échantillons), le moindre
+# retard du lecteur perdait du son, comblé de zéros : des claquements dans les rushes du 20/11 (#601)
+BUFFER_SECONDS = 0.5
+# Blocs de silence joués pendant l'enregistrement (échantillons, 100 ms) : sans flux joué, la boucle ne livre rien
+SILENCE_BLOCK = 4800
+# Écart toléré (s) entre la durée du son enregistré et le temps écoulé : au-delà, du son a été perdu ou inventé
+MAX_DRIFT = 0.05
 
 
 # Cette méthode permet de trouver la fenêtre principale de Studio d'après son titre.
@@ -175,56 +180,78 @@ def write_wav(path, data):
 		out.writeframes(pcm.tobytes())
 
 
-# Cette méthode permet de recoller les blocs de la boucle sur l'horloge lorsqu'ils sont tous lus : chaque bloc est daté à
-# son arrivée, les silences non transmis (écart de plus de GAP) redeviennent des zéros. Renvoie le son et l'instant
-# (perf_counter) de son premier échantillon.
-def timeline(blocks):
-	if not blocks:
-		return np.zeros((0, 2)), time.perf_counter()
-	first_at, first = blocks[0]
-	origin = first_at - len(first) / SAMPLE_RATE
-	parts, pos = [], 0
-	for arrived, block in blocks:
-		expected = round((arrived - origin) * SAMPLE_RATE) - len(block)
-		if expected - pos > GAP * SAMPLE_RATE:
-			parts.append(np.zeros((expected - pos, block.shape[1]), dtype=block.dtype))
-			pos = expected
-		parts.append(block)
-		pos += len(block)
-	return np.concatenate(parts), origin
+# Cette méthode permet d'enregistrer la boucle de la sortie audio dans `raw_path` (float32 stéréo) lorsque la passe du
+# son tourne (processus à part) ; renvoie dans `result` l'instant du premier échantillon et le nombre de discontinuités.
+def record_audio(raw_path, stop, ready, result):
+	import soundcard as sc
+
+	speaker = sc.default_speaker()
+	silence_done = threading.Event()
+
+	# Cette méthode permet de jouer du silence sur la sortie tant que l'enregistrement tourne (fil à part) : la boucle
+	# WASAPI livre alors un flux continu, même quand Studio se tait.
+	def keep_alive():
+		with speaker.player(samplerate=SAMPLE_RATE, channels=2, blocksize=SILENCE_BLOCK) as out:
+			zeros = np.zeros((SILENCE_BLOCK, 2), dtype=np.float32)
+			while not silence_done.is_set():
+				out.play(zeros)
+
+	threading.Thread(target=keep_alive, daemon=True).start()
+	mic = sc.get_microphone(id=str(speaker.name), include_loopback=True)
+	origin = None
+	with warnings.catch_warnings(record=True) as caught, open(raw_path, "wb") as out:
+		warnings.simplefilter("always", sc.SoundcardRuntimeWarning)
+		with mic.recorder(samplerate=SAMPLE_RATE, channels=2, blocksize=int(BUFFER_SECONDS * SAMPLE_RATE)) as rec:
+			ready.set()
+			while not stop.is_set():
+				# Lu seulement quand des données attendent : sinon soundcard, après 40 ms sans rien, invente des zéros
+				# d'après l'horloge alors que le son, juste en retard, arrive ensuite (trous et son allongé, #601)
+				if rec._capture_available_frames() == 0:
+					time.sleep(0.002)
+					continue
+				block = rec.record(numframes=None)
+				if len(block) == 0:
+					continue
+				if origin is None:
+					origin = time.perf_counter() - len(block) / SAMPLE_RATE
+				out.write(np.ascontiguousarray(block, dtype="<f4").tobytes())
+		lost = sum(1 for w in caught if "discontinuity" in str(w.message))
+	span = time.perf_counter() - origin if origin is not None else 0.0
+	silence_done.set()
+	result.put({"origin": origin, "span": span, "discontinuities": lost, "speaker": speaker.name})
 
 
 # Cette méthode permet d'enregistrer le son du poste pendant le rejeu à vitesse 1, puis de le couper à l'instant 0 du
 # rejeu d'après le bip de synchro (passe du son).
 def audio_pass(args):
-	import soundcard as sc
-
-	warnings.simplefilter("ignore", sc.SoundcardRuntimeWarning)
 	window = studio_window()
-	speaker = sc.default_speaker()
-	print(f"son enregistré : {speaker.name} (boucle)", flush=True)
-	blocks = []
-	stop = threading.Event()
-	ready = threading.Event()
-
-	# Cette méthode permet de lire la boucle de la sortie audio par blocs datés lorsqu'elle tourne (fil à part).
-	def record():
-		mic = sc.get_microphone(id=str(speaker.name), include_loopback=True)
-		with mic.recorder(samplerate=SAMPLE_RATE, channels=2, blocksize=BLOCK) as rec:
-			ready.set()
-			while not stop.is_set():
-				block = rec.record(numframes=BLOCK)
-				blocks.append((time.perf_counter(), block))
-
-	thread = threading.Thread(target=record, daemon=True)
-	thread.start()
-	ready.wait(10)
+	ctx = multiprocessing.get_context("spawn")
+	stop, ready, result = ctx.Event(), ctx.Event(), ctx.Queue()
+	raw_path = args.out + ".raw"
+	recorder = ctx.Process(target=record_audio, args=(raw_path, stop, ready, result), daemon=True)
+	recorder.start()
+	if not ready.wait(30):
+		recorder.terminate()
+		sys.exit("enregistrement du son impossible à démarrer (sortie audio par défaut ?)")
 	start, end = watch(window, args.timeout, 0)
 	stop.set()
-	thread.join(5)
+	info = result.get(timeout=15)
+	recorder.join(5)
+	data = np.fromfile(raw_path, dtype="<f4").reshape(-1, 2)
+	os.remove(raw_path)
+	speaker_name, origin, lost = info["speaker"], info["origin"], info["discontinuities"]
+	# Flux continu : autant de son que de temps écoulé ; un écart signale du son perdu (-) ou inventé (+)
+	drift = len(data) / SAMPLE_RATE - info["span"]
+	print(
+		f"son enregistré : {speaker_name} (boucle), {len(data) / SAMPLE_RATE:.1f} s, {lost} discontinuité(s), "
+		f"écart avec l'horloge {drift * 1000:+.0f} ms"
+	)
+	if lost or abs(drift) > MAX_DRIFT:
+		print("attention : son perdu pendant l'enregistrement (discontinuités) : refaire la passe du son")
 	if start is None:
 		sys.exit("aucune lecture vue : le rejeu a-t-il démarré (écran noir puis image) ?")
-	data, origin = timeline(blocks)
+	if origin is None:
+		sys.exit("aucun son reçu de la sortie audio par défaut")
 	# Bip cherché pendant l'écran noir, autour de BEEP_LEAD s avant la lecture vue à l'écran : avant l'écran noir, le
 	# menu peut jouer sa musique (coupée par le rejeu dès son départ)
 	low = max(0, int((start - origin - BEEP_LEAD - BEEP_WINDOW) * SAMPLE_RATE))
@@ -234,7 +261,7 @@ def audio_pass(args):
 	if peak < BEEP_MIN_PEAK:
 		sys.exit(
 			f"bip introuvable (crête {peak:.4f}) : MatchReplayAudio = true ? Studio muet ou sur une autre sortie que "
-			f"{speaker.name} ?"
+			f"{speaker_name} ?"
 		)
 	onset = low + int(np.argmax(level >= BEEP_ONSET_SHARE * peak))
 	first = onset + int(BEEP_LEAD * SAMPLE_RATE)
@@ -346,4 +373,6 @@ def main():
 		video_pass(args)
 
 
-main()
+# Garde : la passe du son relance ce fichier dans un processus à part (multiprocessing, spawn), qui ne doit pas rejouer main
+if __name__ == "__main__":
+	main()

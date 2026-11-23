@@ -260,8 +260,29 @@ clip de la partie.
 
 Calage mesuré sur `Test586` (segment de 1,5 à 6 s, un tir AWP ÉCLAIR à 3,82 s, soit 2,32 s dans la vidéo) : son du
 tir à 2,310 s, flamme à l'image 139 (2,317 s), soit moins d'une image d'écart à 60 i/s. Pièges : la musique du menu joue
-avant l'écran noir (le bip n'est cherché qu'autour de 0,5 s avant la lecture) ; la boucle WASAPI ne livre rien
-pendant un silence (chaque bloc est daté à son arrivée et les trous redeviennent des zéros).
+avant l'écran noir (le bip n'est cherché qu'autour de 0,5 s avant la lecture).
+
+**Son haché (#601).** Les rushes du 20/11 avaient des claquements (« micro qui sature qu'on tapote ») : 27 trous de 20
+à 40 ms dans le son du rush A. Trois causes, toutes dans la passe du son :
+- `soundcard` dimensionne le tampon WASAPI sur `blocksize` : à 480 échantillons, il ne tenait que 10 ms, et le fil
+  de lecture, qui partageait le GIL avec la capture d'écran, prenait du retard. Le son perdu n'était signalé que par
+  un avertissement « data discontinuity », alors masqué.
+- `soundcard` invente des zéros d'après l'horloge quand rien n'arrive pendant 40 ms, même si le son, simplement en
+  retard, arrive ensuite (trous, son allongé).
+- La boucle WASAPI ne livre rien quand rien ne joue : l'ancien outil recollait les blocs sur l'heure d'arrivée.
+
+Depuis : enregistrement dans un processus à part, tampon de 0,5 s, silence joué sur la sortie pendant l'enregistrement
+(flux continu, rien à recoller), lecture seulement quand des données attendent. L'outil affiche les discontinuités et
+l'écart entre la durée enregistrée et l'horloge ; s'il en signale, refaire la passe. Banc (son pur de 6 s joué pendant
+la capture d'écran, `worktrees/.briefs/son-capture/bench.py`, non versionné), 3 essais : ancienne méthode 3 à 6
+discontinuités et 1 à 2 trous, nouvelle 0 et 0, écart avec l'horloge de -4 à -8 ms. Le PC doit rester libre pendant
+la passe : rien d'autre ne doit jouer de son (tout ce qui sort des haut-parleurs est enregistré) et Studio doit rester
+au premier plan.
+
+**Non résolu (23/11, #601) :** le rush A refait sans aucune coupure garde, à l'oreille de l'utilisateur, le même défaut.
+Ce qu'il entend vient donc d'ailleurs, cause non trouvée. Pistes : le son d'atterrissage (`FootstepRules`, joué à
+chaque saut du bhop, aux instants exacts des atterrissages notés) ou le rendu du son par Studio. Sujet mis de côté :
+l'utilisateur fournira des parties filmées directement.
 
 Passe de l'image : Le rejeu s'ouvre et se ferme sur un écran noir : l'outil y trouve le cadre du viewport, le début et la
 fin, place chaque capture à l'instant du rejeu qu'elle montre et écrit une vidéo à 60 i/s à vitesse normale.
