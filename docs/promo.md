@@ -68,8 +68,8 @@ Roblox ne publie pas d'étude sur les miniatures des shooters ; les règles ci-d
    éclat de soleil ; adversaire touché en plein saut.
 4. **Lisible en petit :** juger chaque image à **320×180** (tuile de recherche ou d'accueil sur ordinateur) et
    **160×90** (téléphone, quatre jeux par ligne).
-5. **Lumière du jeu :** ciel de crépuscule bleu nuit, soleil bas, mer de nuages ; plu à l'utilisateur (garder). Pas
-   de néon, pas de lueur inventée.
+5. **Lumière :** ciel bleu de plein jour (choix de l'utilisateur, 24/11/2026, comme les jeux de référence), soleil
+   **derrière la caméra** : face à elle, le skin passe en contre-jour et ne se lit plus (refusé). Pas de néon.
 6. **Aucun texte** (choix de l'utilisateur, #524) : l'image doit se comprendre seule.
 7. **Fidèle au jeu :** le personnage est celui du jeu (`StarterCharacter`, tous les joueurs ont le même), avec ses
    proportions en blocs ; armes et skins à l'identique. Effets permis car présents en jeu : flamme de bouche, rayon de
@@ -80,9 +80,41 @@ Roblox ne publie pas d'étude sur les miniatures des shooters ; les règles ci-d
 
 ## Fabrication
 
-**Retenu (17/11/2026, choix de l'utilisateur) : ChatGPT fait les miniatures en entier** à partir d'un kit de références
-et d'un brief ; Claude fournit le kit, contrôle la fidélité et exporte. Deux essais de mise en scène dans Studio
-retravaillés par ChatGPT ont été rejetés (voir « Pistes écartées »).
+**Retenu (24/11/2026) : rendu Blender (Cycles) des vrais modèles et des vrais skins.** Rien n'est redessiné : le skin
+rendu est celui du jeu (les images de ChatGPT déformaient les skins, voir « Pistes écartées »). Les plans des cinq
+miniatures sont versionnés dans `tools/promo/shots/` ; Blender sans interface, aucun besoin de Studio.
+
+1. **Modèles** (dans `.promo/`, non versionné ; clé `ROBLOX_OPEN_CLOUD_KEY`) :
+   ```bash
+   uv run tools/preview/fetch_viewmodel.py AWP .promo/AWP.glb --arms          # viewmodel avec ses bras
+   uv run tools/preview/fetch_viewmodel.py M9Bayonet .promo/M9Bayonet.glb --arms
+   uv run tools/promo/fetch_character.py .promo/saut.glb tools/promo/pose-saut.json   # adversaire en plein saut
+   ```
+   `fetch_character.py` reconstruit le `StarterCharacter` (absent de Rojo : pièces, couleurs et articulations relevées
+   dans `tools/promo/character.json`, lues dans Studio le 24/11/2026), posé articulation par articulation comme un
+   Motor6D ; la tête classique et son visage sont recréés.
+2. **Rendu** (~50 s par image en 1920×1080, 64 échantillons, sur ce poste sans GPU NVIDIA) :
+   ```bash
+   blender -b --factory-startup --python tools/promo/render_thumb.py -- tools/promo/shots/<n>.json <sortie.png> --samples 64
+   ```
+   Pour chercher un cadrage, `--engine workbench --res 960x540` rend en quelques secondes (lumière fausse). Options du
+   plan : docstring de `render_thumb.py`.
+3. **Export** : `uv run tools/promo/finish.py export <rendu> assets/promo/thumbnails/<n>.png`, puis
+   `finish.py small` (planche 320×180 et 160×90).
+
+Pièges rencontrés :
+
+- **Contre-jour :** soleil face à la caméra = skin illisible (refusé). Azimut du soleil vers l'arrière de la caméra.
+- **Métal qui reflète le ciel :** même bien éclairé, un skin métallique devient bleu et sombre sur fond de ciel. Le plan
+  fait émettre au skin sa propre couleur (`skin_glow` 0,6) et coupe les ombres du soleil (`shadows: false`) : validé.
+- **Ciel pâle :** `sun_disc` du ciel Nishita brûle l'éclairage (bras blancs) ; le soleil est une lampe à part, le fond
+  un dégradé vu seulement par la caméra, en vue « Standard » (AgX délave le bleu).
+- **Couleurs Roblox en sRGB :** les écrire en linéaire dans le glTF (`srgb_to_linear`), sinon tout est délavé.
+- **Bras blancs dans le jeu :** rendus gris clair (`plain_color` 0,26), sinon brûlés au soleil.
+- **Couteau vu par la tranche ou main qui flotte :** `align` pose l'arme comme l'inspection du jeu (axe long en
+  diagonale, flanc vers la caméra, main ancrée à l'écran).
+
+### Ancienne méthode : kit de références pour ChatGPT (17/11/2026, abandonnée)
 
 1. **Kit de références** (`assets/promo/kit/`, régénérable par `tools/promo/stage.luau`) : personnage du jeu sous
    plusieurs angles avec chaque tenue d'arme (`01-*`), armes et skins de profil (`02-*`), bras du joueur et arme en vue
@@ -134,6 +166,8 @@ libérer Studio.
 |---|---|
 | Mises en scène sur les rampes de Dizzy (surf en vue subjective, lunette à FOV 10, inspection des deux skins, surfeur de dos), retravaillées par ChatGPT | « Pas très proche des miniatures de référence » ; zoom sur l'ennemi et plan avec l'adversaire seul inutiles ; la rampe gêne sur les inspections ; sa tôle est laide et on croit que le joueur tombe ou vole. Gardés : mer de nuages et soleil, inspections des armes |
 | Décor dédié : deux rampes isolées au-dessus des nuages, vers le soleil (vue d'ensemble, tir en vol, couteau, inspections sans rampe) | « Trop focus sur le surf » : on ne comprend pas le surf sur une miniature. Passage au kit et à ChatGPT en entier |
+| ChatGPT fait les miniatures en entier à partir du kit (2 images publiées, 17/11) | Skin déformé, rendu en dessous des autres jeux (24/11). Remplacé par le rendu Blender |
+| Rendu Blender avec le soleil face à la caméra (halo dans le ciel) | Contre-jour : on ne voit pas bien le skin |
 
 ## Mise en ligne et personnalisation (test A/B)
 
@@ -174,15 +208,16 @@ Libellés d'après la documentation et les annonces citées plus haut (pas véri
 
 ## Miniatures publiées
 
-Faites par ChatGPT à partir du kit (`assets/promo/kit/`), exportées en 1920×1080 par `tools/promo/finish.py export`
-(sources 1672×941, déjà en 16:9). Lisibles à 320×180 et 160×90 (`finish.py small`).
+Rendues dans Blender (`tools/promo/shots/<fichier>.json`), validées par l'utilisateur le 24/11/2026. Lisibles à
+320×180 et 160×90 (`finish.py small`). Les quatre skins légendaires plus un plan d'action.
 
 | Ordre | Fichier | Idée | Écarts avec le jeu, gardés |
 |---|---|---|---|
-| 1 | `assets/promo/thumbnails/1-tir-en-vol-awp-ciselure.png` | Vue subjective, AWP CISELURE : un adversaire touché en plein saut au-dessus des nuages, au couchant, grue de Dizzy | Étoile d'impact sur l'adversaire (pas d'effet d'impact en jeu) ; adversaire sans arme (il en tient toujours une) ; rayon du tir plus épais et doré ; nuages en volume (nappes translucides en jeu) |
-| 2 | `assets/promo/thumbnails/2-m9-cuir-de-cordoue.png` | Inspection de la M9 CUIR DE CORDOUE, lame vers le soleil, toits de Dizzy et grue | Nuages en volume ; motifs de la lame redessinés (paon, fleurs, garde et manche fidèles) |
-
-Reste à faire (#524) : trois miniatures (vitesse du bunny hop, AWP CISELURE en inspection, autre idée de ChatGPT).
+| 1 | `assets/promo/thumbnails/1-tir-en-vol-awp-ciselure.png` | Vue subjective, AWP CISELURE (caméra du viewmodel) : tir sur un adversaire armé en plein saut, contre-plongée | Ciel de jour (crépuscule en jeu) ; flamme de bouche en volume (particules en jeu) ; bras gris clair (blancs en jeu) ; tête du personnage recréée |
+| 2 | `assets/promo/thumbnails/2-awp-ciselure.png` | Inspection de l'AWP CISELURE vers le ciel | Ciel de jour sans décor ; skin légèrement lumineux (`skin_glow`) |
+| 3 | `assets/promo/thumbnails/3-m9-cuir-de-cordoue.png` | Inspection de la M9 CUIR DE CORDOUE, pointe vers le ciel | Idem |
+| 4 | `assets/promo/thumbnails/4-awp-trempe.png` | Inspection de l'AWP TREMPE | Idem |
+| 5 | `assets/promo/thumbnails/5-m9-couchant.png` | Inspection de la M9 COUCHANT | Idem |
 
 ## Enregistreur de partie (#582)
 
