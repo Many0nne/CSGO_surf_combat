@@ -13,7 +13,8 @@ Clé : variable d'environnement ROBLOX_OPEN_CLOUD_KEY, avec le scope legacy-asse
 de publish_asset.sh. Les fichiers téléchargés sont gardés dans <dossier de sortie>/cache.
 
 Usage (depuis la racine du worktree) : uv run tools/preview/fetch_viewmodel.py <Viewmodel> <sortie.glb> [place.rbxlx]
-Sans place, lance `rojo build default.project.json` dans un fichier temporaire. Les bras (LeftArm, RightArm) sont ignorés.
+Sans place, lance `rojo build default.project.json` dans un fichier temporaire. Les bras (LeftArm, RightArm) sont ignorés,
+sauf avec --arms.
 """
 
 import json
@@ -380,8 +381,12 @@ def image_ext(data):
 
 
 def main():
+	# --arms : garde les bras (LeftArm, RightArm), pour un rendu en vue subjective (miniatures, docs/promo.md)
+	if "--arms" in sys.argv:
+		sys.argv.remove("--arms")
+		SKIP_MODELS.clear()
 	if len(sys.argv) not in (3, 4):
-		raise SystemExit("usage : uv run tools/preview/fetch_viewmodel.py <Viewmodel> <sortie.glb> [place.rbxlx]")
+		raise SystemExit("usage : uv run tools/preview/fetch_viewmodel.py <Viewmodel> <sortie.glb> [place.rbxlx] [--arms]")
 	name, out = sys.argv[1], os.path.abspath(sys.argv[2])
 	key = os.environ.get("ROBLOX_OPEN_CLOUD_KEY")
 	if not key:

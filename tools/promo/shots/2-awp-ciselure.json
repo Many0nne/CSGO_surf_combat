@@ -1,0 +1,91 @@
+{
+ "glb": ".promo/AWP.glb",
+ "skin_dir": "assets/skins/ciselure/AWP",
+ "parts": {
+  "Stock": "WOOD",
+  "Handguard": "WOOD",
+  "Handle": "METAL_A",
+  "Bolt": "METAL_A",
+  "Magazine": "METAL_A",
+  "Trigger": "METAL_A",
+  "Barrel": "METAL_B",
+  "Fittings": "METAL_B",
+  "Scope": "SCOPE"
+ },
+ "camera": {
+  "pos": [
+   0,
+   0,
+   0
+  ],
+  "look": [
+   0,
+   0.35,
+   -1
+  ],
+  "fov": 50
+ },
+ "view": "Standard",
+ "look": "None",
+ "plain_color": [
+  0.26,
+  0.26,
+  0.29
+ ],
+ "plain_roughness": 0.8,
+ "exposure": -0.2,
+ "hide": [
+  "LeftUpperArm",
+  "LeftLowerArm",
+  "LeftHand"
+ ],
+ "backdrop": {
+  "glow_power": 70,
+  "glow_color": [
+   1.8,
+   1.7,
+   1.5
+  ]
+ },
+ "align": {
+  "dir": [
+   -0.78,
+   0.62
+  ],
+  "flip_tip": true,
+  "flip_face": true,
+  "arm_dir": [
+   0.7,
+   -0.7
+  ],
+  "anchor": "hand",
+  "at_screen": [
+   0.72,
+   -0.85,
+   4.3
+  ]
+ },
+ "sun": {
+  "elevation": 40,
+  "azimuth": 330,
+  "strength": 1.8
+ },
+ "fills": [
+  {
+   "pos": [
+    3,
+    2,
+    1
+   ],
+   "look": [
+    0,
+    0.5,
+    -4
+   ],
+   "energy": 60,
+   "size": 4
+  }
+ ],
+ "skin_glow": 0.6,
+ "shadows": false
+}

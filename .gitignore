@@ -25,3 +25,6 @@ __pycache__/
 # Enregistrements de partie extraits des journaux (#582, tools/matchrec/extract.luau) : propres au poste qui filme
 /recordings/*
 !/recordings/README.md
+
+# Modèles des miniatures (#524), régénérés par tools/promo/fetch_character.py et tools/preview/fetch_viewmodel.py
+/.promo/
