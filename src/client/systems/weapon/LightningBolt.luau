@@ -41,6 +41,10 @@ local freeBeams: { [string]: { Beam } } = {}
 local freeLights: { Attachment } = {}
 local stepConn: RBXScriptConnection? = nil
 local prewarmed = false
+-- Instances créées depuis le démarrage, par sorte : le remplissage s'arrête à la taille visée, tirs compris
+local madeAttachments = 0
+local madeBeams: { [string]: number } = {}
+local madeLights = 0
 
 local COLORS = {
 	core = ColorSequence.new(Color3.fromRGB(table.unpack(LightningRules.CORE_RGB))),
@@ -64,6 +68,7 @@ end
 
 -- Cette méthode permet de créer un Attachment éteint de la réserve lorsqu'il en manque.
 local function newAttachment(): Attachment
+	madeAttachments += 1
 	local attachment = Instance.new("Attachment")
 	attachment.Name = LightningBolt.INSTANCE_NAME
 	attachment.Parent = terrain
@@ -71,7 +76,8 @@ local function newAttachment(): Attachment
 end
 
 -- Cette méthode permet de créer un Beam éteint d'un style (largeur, couleur de sa couche) lorsqu'il en manque.
-local function newBeam(layer: LightningRules.Layer): Beam
+local function newBeam(style: string, layer: LightningRules.Layer): Beam
+	madeBeams[style] = (madeBeams[style] or 0) + 1
 	local beam = Instance.new("Beam")
 	beam.Name = LightningBolt.INSTANCE_NAME
 	beam.LightEmission = 1
@@ -88,6 +94,7 @@ end
 
 -- Cette méthode permet de créer la lumière éteinte d'un éclair (PointLight dans un Attachment) lorsqu'il en manque.
 local function newLight(): Attachment
+	madeLights += 1
 	local holder = Instance.new("Attachment")
 	holder.Name = LightningBolt.INSTANCE_NAME
 	local light = Instance.new("PointLight")
@@ -112,7 +119,7 @@ end
 -- Cette méthode permet d'allumer un Beam d'un style entre deux points d'éclair lorsqu'un segment est tracé.
 local function addStroke(bolt: Bolt, a0: Attachment, a1: Attachment, style: string, layer: LightningRules.Layer)
 	local pool = freeBeams[style]
-	local beam = pool and table.remove(pool) or newBeam(layer)
+	local beam = pool and table.remove(pool) or newBeam(style, layer)
 	beam.Attachment0 = a0
 	beam.Attachment1 = a1
 	local step = LightningRules.fadeStep(layer.alpha, 1, false)
@@ -172,31 +179,31 @@ end
 
 local timedStep = PerfMarkers.wrap("effets de tir", step)
 
--- Cette méthode permet de remplir au démarrage du client, depuis une tâche de fond (ShotEffects.init), la réserve de
--- MAX_ACTIVE éclairs complets, par lots (AssetPreload.created) : aucun tir d'un skin à éclair ne crée rien, même
--- quand trois éclairs se suivent (un seul remplissage).
+-- Cette méthode permet de remplir par lots, depuis une tâche de fond (ShotEffects.init), la réserve de MAX_ACTIVE éclairs
+-- complets lorsque le client démarre : aucun tir d'un skin à éclair ne crée rien, même trois éclairs de suite.
 function LightningBolt.prewarm()
 	if prewarmed then
 		return
 	end
 	prewarmed = true
+	local count = LightningRules.MAX_ACTIVE
 	local segments, points = LightningRules.maxCounts()
-	for _ = 1, LightningRules.MAX_ACTIVE do
-		for _ = 1, points do
-			table.insert(freeAttachments, newAttachment())
-			AssetPreload.created(1)
-		end
-		for kind, layers in LightningRules.KINDS do
-			for index, layer in layers do
-				local style = styleOf(kind, index)
-				local pool = freeBeams[style] or {}
-				freeBeams[style] = pool
-				for _ = 1, segments[kind] or 0 do
-					table.insert(pool, newBeam(layer))
-					AssetPreload.created(1)
-				end
+	while madeAttachments < points * count do
+		table.insert(freeAttachments, newAttachment())
+		AssetPreload.created(1)
+	end
+	for kind, layers in LightningRules.KINDS do
+		for index, layer in layers do
+			local style = styleOf(kind, index)
+			local pool = freeBeams[style] or {}
+			freeBeams[style] = pool
+			while (madeBeams[style] or 0) < (segments[kind] or 0) * count do
+				table.insert(pool, newBeam(style, layer))
+				AssetPreload.created(1)
 			end
 		end
+	end
+	while madeLights < count do
 		table.insert(freeLights, newLight())
 		AssetPreload.created(2)
 	end

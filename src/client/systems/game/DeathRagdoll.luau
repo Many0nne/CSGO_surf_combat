@@ -98,12 +98,8 @@ local function convertMotor(clone: Model, motor: Motor6D)
 	motor:Destroy()
 end
 
--- Cette méthode permet de transformer le clone en corps inerte et articulé lorsqu'il vient d'être copié, en un seul
--- parcours de ses descendants (#606) : scripts, bouclier et étiquettes retirés, articulations du rig en rotules, autres
--- soudures (arme, accessoires) gardées rigides, pièces passées en décor local. Le tag Weapon3P de l'arme est retiré :
--- WeaponThirdPersonView ne suit plus le corps. Les pièces de l'arme restent hors du fondu du corps :
--- tant qu'elle portait le tag, sa transparence locale était remise à 0 à chaque frame, l'arme restait donc opaque
--- jusqu'au retrait du corps ; ce rendu est gardé tel quel.
+-- Cette méthode permet de transformer le clone en corps inerte et articulé, en un seul parcours (#606), lorsqu'il vient
+-- d'être copié ; arme sans tag Weapon3P et hors du fondu, comme rendue avant (cf. docs/performance.md, #610).
 local function rigClone(clone: Model): ({ BasePart }, { Decal })
 	local gun = clone:FindFirstChild(WeaponThirdPerson.MODEL_NAME)
 	if gun then

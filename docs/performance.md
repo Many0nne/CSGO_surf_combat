@@ -371,7 +371,8 @@ d'un effet ou à la première tenue portée. Rien ne devait changer à l'écran.
 modèle) les prend dans une réserve remplie **au démarrage du client, en tâche de fond, par lots**
 (`AssetPreload.created`, une frame cédée toutes les 60 Instances), à la taille maximale de l'effet (`MAX_ACTIVE` éclairs,
 `CIRCUIT_MAX_ACTIVE` jeux, `PAN_MAX_ACTIVE` copies, `MAX_ACTIVE` rayons…), seulement pour les styles activés
-(`ShotEffectRules.STYLES`). Un effet libéré s'éteint (`Enabled = false`, pièces rangées hors de vue) et retourne à sa
+(`ShotEffectRules.STYLES`) : environ 1 750 Instances au repos dans `Terrain` et `Workspace` (relevé Studio : 48 rayons,
+1 050 éclair, 469 CIRCUIT, 113 cubes, PAN ! et BALISE), mémoire non mesurée. Un effet libéré s'éteint (`Enabled = false`, pièces rangées hors de vue) et retourne à sa
 réserve ; un objet de la réserve repose **tous** ses réglages à chaque usage (un rayon peut avoir servi à un autre
 style). Ses textures et meshes passent par `AssetPreload.images` / `AssetPreload.instances` (ImageLabel hors interface :
 `PreloadAsync` échoue sur un id brut). Les réserves à tour de rôle (BALISE, TREMPE) gardent le même ordre d'usage que

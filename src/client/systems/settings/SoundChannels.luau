@@ -21,8 +21,8 @@ local music: SoundGroup
 local announcer: SoundGroup
 local footsteps: SoundGroup
 local started = false
--- Arbres déjà suivis : un enfant retiré puis remis n'est pas branché deux fois (oublié à sa destruction)
-local watched: { [Instance]: boolean } = {}
+-- Arbres suivis et leur écoute : un enfant retiré puis remis n'est pas branché deux fois, ni gardé une fois retiré
+local watched: { [Instance]: RBXScriptConnection } = {}
 
 -- Conteneurs suivis en entier : sons du jeu (SoundService), de l'interface et des Tools du sac (Players)
 local WATCHED_SERVICES = { "SoundService", "Players", "ReplicatedFirst", "Lighting" }
@@ -47,15 +47,19 @@ local function watchTree(root: Instance)
 	if watched[root] then
 		return
 	end
-	watched[root] = true
-	root.Destroying:Once(function()
-		watched[root] = nil
+	watched[root] = root.DescendantAdded:Connect(adopt)
+	local ancestry: RBXScriptConnection
+	ancestry = root.AncestryChanged:Connect(function(_, parent)
+		if parent == nil and watched[root] then
+			watched[root]:Disconnect()
+			watched[root] = nil
+			ancestry:Disconnect()
+		end
 	end)
 	adopt(root)
 	for _, instance in root:GetDescendants() do
 		adopt(instance)
 	end
-	root.DescendantAdded:Connect(adopt)
 end
 
 -- Cette méthode permet de suivre un service enfant par enfant lorsque le client démarre, sauf les enfants nommés dans

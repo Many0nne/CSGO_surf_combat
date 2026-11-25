@@ -203,9 +203,8 @@ local function buildRow(feed: Feed, entry: HUDRules.KillFeedEntry): Frame
 	return row
 end
 
--- Cette méthode permet de mettre un feed à jour d'après ses lignes encore valides lorsqu'une mort arrive ou qu'une ligne
--- expire (rien s'il a été détruit) : les lignes sorties de la liste sont détruites, seules les nouvelles sont
--- construites, et chacune est replacée à son rang (#606, plus de reconstruction complète).
+-- Cette méthode permet de mettre un feed à jour lorsqu'une mort arrive ou qu'une ligne expire (rien s'il a été détruit) :
+-- lignes sorties détruites, seules les nouvelles construites, chacune replacée à son rang (#606).
 local function renderFeed(feed: Feed)
 	if not feed.alive then
 		return

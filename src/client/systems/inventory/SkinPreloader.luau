@@ -83,6 +83,10 @@ local function preloadOutfits()
 		if not folder then
 			return
 		end
+		-- Toutes les tenues répliquées avant de les lister (connexion lente)
+		if not game:IsLoaded() then
+			game.Loaded:Wait()
+		end
 		local uris: { string } = {}
 		local meshes: { Instance } = {}
 		-- Cette méthode permet d'ajouter les cartes pas encore demandées d'un porteur de SurfaceAppearance.
