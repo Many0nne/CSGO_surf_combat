@@ -38,6 +38,8 @@ dans Studio). En jeu :
   détruite) et se calcule dès que la map est jouée **ou annoncée** (`MapSelection.observeNext`, attribut `NextMap`),
   en tâche de fond : liste des murs d'air et grillages des tirs (`MapGeometry.prepare`, client et serveur), boîte de la
   map des zones de mort (`init.server`). Le premier tir sur une nouvelle map ne parcourt plus ses ~20 000 pièces.
+  Exception, Studio seulement : `DebugMap` posé hors round change la map sans l'annoncer, la liste est alors calculée
+  d'une traite (serveur au changement, client au premier tir) ; ne pas mesurer un gel de premier tir par ce chemin.
 - **Forcer une map dans Studio** : attribut `DebugMap` de `Workspace` (nom d'une map), en contexte Server pendant le
   playtest : `workspace:SetAttribute("DebugMap", "Radoub")`. Hors round (menu), la map change tout de suite ; pendant un
   round, elle est annoncée pour le suivant. Tant qu'il est posé, la rotation reste sur cette map ; le retirer

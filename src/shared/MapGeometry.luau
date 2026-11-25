@@ -32,6 +32,9 @@ MapGeometry.MAX_PASSES = 16
 
 -- Repère de la préparation en tâche de fond (MicroProfiler, sonde serveur, overlay F3 ; cf. docs/performance.md)
 MapGeometry.PREPARE_MARKER = "map géométrie"
+-- Temps de calcul par frame (s) de cette préparation, client et serveur : rien ne presse (map annoncée un round à
+-- l'avance), et côté serveur elle ne doit pas s'ajouter aux 8 ms par frame des plans des bots
+MapGeometry.PREPARE_BUDGET = 0.001
 
 -- Liste de chaque map, calculée une fois (maps statiques, rangées sans être détruites entre deux rounds ; clés fortes :
 -- une clé faible pourrait être recalculée à chaque tir)

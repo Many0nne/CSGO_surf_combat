@@ -14,9 +14,6 @@ local hitscanEvent: RemoteEvent? = nil
 local shotFiredEvent: RemoteEvent? = nil
 local watching = false
 
--- Temps de calcul par frame (s) de la liste des murs d'air et grillages d'une map, préparée en tâche de fond (#605)
-local PREPARE_BUDGET = 0.001
-
 -- Cette méthode permet de préparer la liste de ce que traversent les tirs dans une map lorsqu'elle est jouée ou annoncée
 -- pour le round suivant (#605) : un peu par frame, pour que le premier tir sur cette map ne la calcule pas.
 local function prepareMap(map: Instance)
@@ -24,9 +21,13 @@ local function prepareMap(map: Instance)
 		return
 	end
 	local started = os.clock()
-	local slicer = SlicedWork.slicer(MapGeometry.PREPARE_MARKER, PREPARE_BUDGET)
-	local list = MapGeometry.prepare(map, slicer.step)
+	local slicer = SlicedWork.slicer(MapGeometry.PREPARE_MARKER, MapGeometry.PREPARE_BUDGET)
+	local ok, list = pcall(MapGeometry.prepare, map, slicer.step)
 	slicer.finish()
+	if not ok then
+		warn(string.format("[MapGeometry] préparation de %s impossible : %s", map.Name, tostring(list)))
+		return
+	end
 	-- Relevé de contrôle, dans Studio seulement (pas de journal par round chez les joueurs)
 	if RunService:IsStudio() then
 		print(

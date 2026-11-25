@@ -80,10 +80,11 @@ local function buildFromCopy(map: Instance)
 		NavPlan.markFailed(map.Name)
 		warn(string.format("[MapRotation] copie de %s impossible, pas de plan : %s", map.Name, tostring(copy)))
 	end
-	-- Copie détruite dans tous les cas (y compris une copie à moitié faite)
+	-- Copie détruite dans tous les cas (y compris une copie à moitié faite, ou la sonde d'un plan interrompu) ; seule
+	-- la sonde de WallSlide reste (une par monde, gardée)
 	slicer = SlicedWork.slicer("map copie", BotConfig.NAV_BUILD_BUDGET)
 	for _, leftover in world:GetChildren() do
-		if leftover.Name == map.Name then
+		if leftover.Name ~= "PenProbe" then
 			pcall(SlicedWork.destroy, leftover, slicer.step)
 		end
 	end

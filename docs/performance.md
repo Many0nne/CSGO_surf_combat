@@ -344,7 +344,7 @@ Travaux longs étalés sur plusieurs frames (#605, `src/shared/SlicedWork.luau`)
 la main (`task.wait`) une fois la tranche de la frame écoulée ; chaque tranche est repérée sous son nom dans le
 MicroProfiler (repère refermé avant l'attente) et relevée par `PerfMarkers.record` (sonde serveur, overlay). Repères :
 `nav plan` (construction d'un plan de bots, 8 ms par frame), `map copie` (copie et destruction d'une map rangée pour son
-plan), `map géométrie` (liste des murs d'air et grillages d'une map, client 1 ms par frame, serveur 8 ms). Repères
+plan), `map géométrie` (liste des murs d'air et grillages d'une map, 1 ms par frame côté client comme serveur : `MapGeometry.PREPARE_BUDGET`). Repères
 ponctuels : `srv échange map` (échange des maps entre deux rounds), `srv boîte map` (boîte d'une map, une fois par
 map). Tout parcours d'une map entière (~20 000 pièces) passe par `SlicedWork.eachDescendant` (même ordre que
 `GetDescendants`) avec un `step`, jamais par un `GetDescendants` d'une traite dans une frame de jeu.

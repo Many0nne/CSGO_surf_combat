@@ -473,9 +473,12 @@ function BotManager.init(dependencies: Deps)
 		if MapGeometry.isPreparedOrPreparing(map) then
 			return
 		end
-		local slicer = SlicedWork.slicer(MapGeometry.PREPARE_MARKER, BotConfig.NAV_BUILD_BUDGET)
-		MapGeometry.prepare(map, slicer.step)
+		local slicer = SlicedWork.slicer(MapGeometry.PREPARE_MARKER, MapGeometry.PREPARE_BUDGET)
+		local ok, err = pcall(MapGeometry.prepare, map, slicer.step)
 		slicer.finish()
+		if not ok then
+			warn(string.format("[MapGeometry] préparation de %s impossible : %s", map.Name, tostring(err)))
+		end
 	end)
 	NavDebug.init(function()
 		local list = {}
