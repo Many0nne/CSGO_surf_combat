@@ -68,9 +68,8 @@ local function eachDescendant(root: Instance, visit: (Instance) -> (), step: (()
 	end
 end
 
--- Cette méthode permet de calculer la liste d'une map une fois pour toutes lorsqu'elle est jouée ou annoncée (#605) :
--- le dossier des murs d'air, puis les pièces des grillages `passbullets`, liste figée. step (optionnel) est appelé à
--- chaque pièce parcourue pour étaler le calcul sur plusieurs frames. Renvoie la liste gardée.
+-- Cette méthode permet de calculer une fois la liste figée d'une map (murs d'air, grillages `passbullets`) lorsqu'elle
+-- est jouée ou annoncée (#605) ; step, appelé à chaque pièce, étale le calcul sur plusieurs frames.
 function MapGeometry.prepare(map: Instance, step: (() -> ())?): { Instance }
 	local known = cache[map]
 	if known then

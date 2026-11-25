@@ -117,9 +117,8 @@ function NavBuilder.findRamps(map: Instance, step: (() -> ())?): { RampRules.Fra
 	return frames
 end
 
--- Cette méthode permet de construire le plan de navigation de la map lorsque le serveur démarre ; à appeler dans un
--- thread qui peut céder la main (task.wait entre deux tranches de calcul). world : monde où se trouve la map
--- (Workspace par défaut, WorldModel pour la copie d'une map rangée, #605).
+-- Cette méthode permet de construire le plan d'une map lorsque le serveur démarre (thread qui peut céder la main) ;
+-- world : monde de la map (Workspace par défaut, WorldModel de la copie d'une map rangée, #605).
 function NavBuilder.build(map: Instance, world: WorldRoot?): Plan
 	local slicer = SlicedWork.slicer("nav plan", BotConfig.NAV_BUILD_BUDGET)
 	local ok, result = pcall(NavBuilder._build, map, world or workspace, slicer.step)

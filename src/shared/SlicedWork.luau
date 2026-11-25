@@ -76,9 +76,8 @@ local function shellOf(source: Instance): Instance
 	return copy
 end
 
--- Cette méthode permet de copier une map sous `parent` lorsque la copie d'une traite gèlerait une frame : dossiers et
--- modèles recréés vides puis remplis un enfant à la fois (dans l'ordre de GetChildren), le reste copié d'un bloc.
--- Comme Clone, ignore ce qui n'est pas Archivable. Renvoie la copie (déjà rangée sous parent).
+-- Cette méthode permet de copier une map sous `parent` lorsque Clone d'une traite gèlerait une frame : dossiers et
+-- modèles recréés vides puis remplis un enfant à la fois, dans l'ordre (non Archivable ignoré, comme Clone).
 function SlicedWork.cloneInto(source: Instance, parent: Instance, step: (() -> ())?): Instance
 	local copy = shellOf(source)
 	copy.Parent = parent
