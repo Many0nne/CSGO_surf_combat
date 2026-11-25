@@ -2,12 +2,14 @@
 -- Marques de l'effet de tir BALISE (#567) : une boucle zébrée orange et noire tourne à la bouche du canon au tir, puis
 -- trois chevrons s'ouvrent autour du point d'impact quand le ruban y arrive (le ruban lui-même est le rayon, tracé par
 -- ShotEffects). Réglages dans ShotEffectRules (BALISE_*). Réserve de BALISE_EMITTERS jeux (une pièce invisible et son
--- ParticleEmitter pour la boucle, idem pour la marque), utilisés à tour de rôle : un tir déplace un jeu et émet une
+-- ParticleEmitter pour la boucle, idem pour la marque), créés au démarrage en tâche de fond (`prewarm`, #606), à défaut
+-- au premier besoin, utilisés à tour de rôle : un tir déplace un jeu et émet une
 -- particule de chaque ; les particules restent dans le monde (pas LockedToPart) quand le jeu sert au tir suivant.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local ShotEffectRules = require(ReplicatedStorage.Shared.ShotEffectRules)
+local AssetPreload = require(script.Parent.Parent.game.AssetPreload)
 local EffectClock = require(script.Parent.Parent.game.EffectClock)
 
 local BaliseMarks = {}
@@ -95,6 +97,15 @@ local function nextSlot(): Slot
 		pool[index] = slot
 	end
 	return slot
+end
+
+-- Cette méthode permet de remplir la réserve au démarrage du client, depuis une tâche de fond (#606) : le premier tir
+-- BALISE ne crée rien ; l'ordre d'usage des jeux reste celui d'un remplissage au fil des tirs.
+function BaliseMarks.prewarm()
+	while #pool < ShotEffectRules.BALISE_EMITTERS do
+		table.insert(pool, make())
+		AssetPreload.created(4)
+	end
 end
 
 -- Cette méthode permet de montrer les marques d'un tir BALISE lorsqu'il part : boucle à la bouche du canon `start`

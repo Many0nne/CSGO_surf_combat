@@ -7,6 +7,7 @@ local RunService = game:GetService("RunService")
 
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
 local BotCharacters = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("BotCharacters"))
+local PerfMarkers = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("PerfMarkers"))
 local DeathRules = require(script.Parent.Parent.systems.game.DeathRules)
 local UIKit = require(script.Parent.Parent.ui.UIKit)
 
@@ -105,34 +106,38 @@ function DeathCamera.start(killer: Model?, killerName: string?)
 		marker = gui
 	end
 
-	RunService:BindToRenderStep(BIND_NAME, Enum.RenderPriority.Camera.Value + 1, function(dt: number)
-		if not active then
-			return
-		end
-		cam.CameraType = Enum.CameraType.Scriptable
-		local alpha = DeathRules.turnAlpha(dt)
-		-- Recul progressif depuis les yeux, pas de saut
-		position = position:Lerp(origin, alpha)
-		local focus = killerFocus(killer)
-		if focus then
-			local target = CFrame.lookAt(position, focus.Position)
-			current = current:Lerp(target, alpha)
-			if marker then
-				marker.Adornee = focus
-				marker.Enabled = true
-				local text = string.format(
-					"%s · %s",
-					markerName,
-					DeathRules.formatDistance((focus.Position - origin).Magnitude)
-				)
-				label.Text = text
-				shadow.Text = text
+	RunService:BindToRenderStep(
+		BIND_NAME,
+		Enum.RenderPriority.Camera.Value + 1,
+		PerfMarkers.wrap("caméra de mort", function(dt: number)
+			if not active then
+				return
 			end
-		elseif marker then
-			marker.Enabled = false
-		end
-		cam.CFrame = CFrame.new(position) * current.Rotation
-	end)
+			cam.CameraType = Enum.CameraType.Scriptable
+			local alpha = DeathRules.turnAlpha(dt)
+			-- Recul progressif depuis les yeux, pas de saut
+			position = position:Lerp(origin, alpha)
+			local focus = killerFocus(killer)
+			if focus then
+				local target = CFrame.lookAt(position, focus.Position)
+				current = current:Lerp(target, alpha)
+				if marker then
+					marker.Adornee = focus
+					marker.Enabled = true
+					local text = string.format(
+						"%s · %s",
+						markerName,
+						DeathRules.formatDistance((focus.Position - origin).Magnitude)
+					)
+					label.Text = text
+					shadow.Text = text
+				end
+			elseif marker then
+				marker.Enabled = false
+			end
+			cam.CFrame = CFrame.new(position) * current.Rotation
+		end)
+	)
 end
 
 -- Cette méthode permet de rendre la caméra à FPSCamera lorsque le joueur réapparaît ou quitte la partie.

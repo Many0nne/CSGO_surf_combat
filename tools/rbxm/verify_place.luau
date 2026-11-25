@@ -217,6 +217,14 @@ local function checkMap(map)
 	if nGround == 0 then
 		fail("Maps." .. map.Name .. " sans point d'apparition (GroundSpawns)")
 	end
+	-- aucun son (#606) : SoundChannels ne suit pas les maps (milliers de pièces à chaque échange), un son n'y aurait
+	-- pas de canal et ignorerait le volume général
+	for _, inst in map:GetDescendants() do
+		if inst:IsA("Sound") then
+			fail("Maps." .. map.Name .. " : son " .. inst:GetFullName() .. " (pas de son dans une map, cf. SoundChannels)")
+			break
+		end
+	end
 	-- hauteur des points (#328) : pieds du rig au-dessus du sol mesuré par un rayon vertical (tools/map/SpawnCheck.luau)
 	local spawnLines, spawnErrors, spawnLow, spawnHigh = SpawnCheck.check(map)
 	for _, message in spawnErrors do

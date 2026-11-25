@@ -7,6 +7,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local CollisionGroups = require(ReplicatedStorage.Shared.CollisionGroups)
+local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
+local WeaponThirdPerson = require(ReplicatedStorage.Shared.WeaponThirdPerson)
 
 local DeathRules = require(script.Parent.DeathRules)
 local CharacterSync = require(script.Parent.Parent.network.CharacterSync)
@@ -74,39 +76,62 @@ local function cloneCharacter(char: Model): Model?
 	return if ok then clone else nil
 end
 
--- Cette méthode permet de transformer le clone en corps inerte et articulé lorsqu'il vient d'être copié : scripts,
--- bouclier et étiquettes retirés, articulations du rig en rotules, autres soudures (arme, accessoires) gardées rigides.
+-- Cette méthode permet de convertir une articulation Motor6D du clone lorsque le corps est préparé : rotule entre deux
+-- membres du rig, soudure rigide pour l'arme 3P ou un accessoire, rien si elle touche la racine (détruite ensuite).
+local function convertMotor(clone: Model, motor: Motor6D)
+	local p0, p1 = motor.Part0, motor.Part1
+	local bodyJoint = p0
+		and p1
+		and p0.Parent == clone
+		and p1.Parent == clone
+		and p0.Name ~= "HumanoidRootPart"
+		and p1.Name ~= "HumanoidRootPart"
+	if bodyJoint then
+		toBallSocket(motor, p0 :: BasePart, p1 :: BasePart)
+	elseif p0 and p1 and p0.Name ~= "HumanoidRootPart" and p1.Name ~= "HumanoidRootPart" then
+		-- Arme 3P ou accessoire monté sur Motor6D : soudure rigide
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0 = p0
+		weld.Part1 = p1
+		weld.Parent = p0
+	end
+	motor:Destroy()
+end
+
+-- Cette méthode permet de transformer le clone en corps inerte et articulé, en un seul parcours (#606), lorsqu'il vient
+-- d'être copié ; arme sans tag Weapon3P et hors du fondu, comme rendue avant (cf. docs/performance.md, #610).
 local function rigClone(clone: Model): ({ BasePart }, { Decal })
+	local gun = clone:FindFirstChild(WeaponThirdPerson.MODEL_NAME)
+	if gun then
+		gun:RemoveTag(WeaponThirdPerson.TAG)
+	end
+	local root = clone:FindFirstChild("HumanoidRootPart")
+	local parts, decals = {}, {}
 	for _, inst in clone:GetDescendants() do
-		if inst:IsA("LuaSourceContainer") or inst:IsA("ForceField") or inst:IsA("BillboardGui") then
+		if inst:IsA("BasePart") then
+			if inst ~= root then
+				inst.Anchored = false
+				-- Ni raycast (mouvement, tirs) ni contact : le corps est un décor local
+				inst.CanQuery = false
+				inst.CanTouch = false
+				-- Groupe des corps (#452) : heurte la map et ses propres membres, pas les vivants ni leur mouvement
+				inst.CollisionGroup = CollisionGroups.CORPSES
+				local isBody = inst.Parent == clone
+				inst.CanCollide = isBody
+				inst.Massless = not isBody
+				inst.LocalTransparencyModifier = 0
+				if not (gun and inst:IsDescendantOf(gun)) then
+					table.insert(parts, inst)
+				end
+			end
+		elseif inst:IsA("Motor6D") then
+			convertMotor(clone, inst)
+		elseif inst:IsA("Decal") then
+			table.insert(decals, inst)
+		elseif inst:IsA("LuaSourceContainer") or inst:IsA("ForceField") or inst:IsA("BillboardGui") then
 			inst:Destroy()
 		end
 	end
-	for _, inst in clone:GetDescendants() do
-		if inst:IsA("Motor6D") then
-			local p0, p1 = inst.Part0, inst.Part1
-			local bodyJoint = p0
-				and p1
-				and p0.Parent == clone
-				and p1.Parent == clone
-				and p0.Name ~= "HumanoidRootPart"
-				and p1.Name ~= "HumanoidRootPart"
-			if bodyJoint then
-				toBallSocket(inst, p0 :: BasePart, p1 :: BasePart)
-				inst:Destroy()
-			elseif p0 and p1 and p0.Name ~= "HumanoidRootPart" and p1.Name ~= "HumanoidRootPart" then
-				-- Arme 3P ou accessoire monté sur Motor6D : soudure rigide
-				local weld = Instance.new("WeldConstraint")
-				weld.Part0 = p0
-				weld.Part1 = p1
-				weld.Parent = p0
-				inst:Destroy()
-			else
-				inst:Destroy()
-			end
-		end
-	end
-	local root = clone:FindFirstChild("HumanoidRootPart")
 	if root then
 		root:Destroy()
 	end
@@ -120,25 +145,6 @@ local function rigClone(clone: Model): ({ BasePart }, { Decal })
 		local animator = humanoid:FindFirstChildOfClass("Animator")
 		if animator then
 			animator:Destroy()
-		end
-	end
-
-	local parts, decals = {}, {}
-	for _, inst in clone:GetDescendants() do
-		if inst:IsA("BasePart") then
-			inst.Anchored = false
-			-- Ni raycast (mouvement, tirs) ni contact : le corps est un décor local
-			inst.CanQuery = false
-			inst.CanTouch = false
-			-- Groupe des corps (#452) : heurte la map et ses propres membres, pas les vivants ni leur mouvement
-			inst.CollisionGroup = CollisionGroups.CORPSES
-			local isBody = inst.Parent == clone
-			inst.CanCollide = isBody
-			inst.Massless = not isBody
-			inst.LocalTransparencyModifier = 0
-			table.insert(parts, inst)
-		elseif inst:IsA("Decal") then
-			table.insert(decals, inst)
 		end
 	end
 	return parts, decals
@@ -186,10 +192,12 @@ local function stepFade()
 	end
 end
 
+local timedFade = PerfMarkers.wrap("corps", stepFade)
+
 -- Cette méthode permet de remplacer le personnage tué (joueur ou bot) par son ragdoll lorsque PlayerDied arrive ;
 -- direction = du tueur vers la victime (nil pour une chute) ; velocity : vitesse de la victime si l'appelant la connaît
 -- (figurant du clip de la partie, #499), sinon lue sur le personnage. Sans personnage encore présent, rien n'est créé.
-function DeathRagdoll.spawn(char: Model?, direction: Vector3?, weapon: string?, headshot: boolean, velocity: Vector3?)
+local function spawnRagdoll(char: Model?, direction: Vector3?, weapon: string?, headshot: boolean, velocity: Vector3?)
 	if not char or not char.Parent then
 		return
 	end
@@ -221,8 +229,16 @@ function DeathRagdoll.spawn(char: Model?, direction: Vector3?, weapon: string?, 
 	end
 	table.insert(corpses, { model = clone, bornAt = os.clock(), parts = parts, decals = decals })
 	if not fadeConn then
-		fadeConn = RunService.Heartbeat:Connect(stepFade)
+		fadeConn = RunService.Heartbeat:Connect(timedFade)
 	end
+end
+
+local timedSpawn = PerfMarkers.wrap("kill : corps", spawnRagdoll)
+
+-- Cette méthode permet de créer le corps d'un personnage tué lorsque sa mort est montrée (spawnRagdoll), sous le repère
+-- « kill : corps » (#606) : coût de la frame du kill, visible dans l'overlay et le MicroProfiler.
+function DeathRagdoll.spawn(char: Model?, direction: Vector3?, weapon: string?, headshot: boolean, velocity: Vector3?)
+	timedSpawn(char, direction, weapon, headshot, velocity)
 end
 
 -- Cette méthode permet de retirer tous les corps lorsque le joueur quitte la partie (menu, fin de round).

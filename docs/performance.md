@@ -329,9 +329,16 @@ point de contrôle volontairement faux déclenche un recalage (écart 55 studs) 
 RenderStepped, BindToRenderStep). Le repère est toujours posé (`debug.profilebegin`, coût négligeable si le profiler est
 fermé), et il est chronométré seulement quand l'overlay est ouvert. Repères posés : `mouvement`, `caméra`, `viewmodel`,
 `armes`, `armes 3P`, `tenue 3P` (sous `PreSimulation`), `menu 3D`, `curseur menu`, `autres joueurs`, `munitions`,
-`touches` (client),
+`touches`, `effets de tir`, `corps` (fondu des corps), `chat`, `caméra de mort` (client),
 `srv round`, `srv bots` et ses sous-repères `bots mouvement`, `bots cerveau`, `bots chemin` (serveur, sonde `PerfServer`). Toute nouvelle boucle par frame doit
-passer par `wrap`.
+passer par `wrap`. Les traitements d'un événement lourd portent aussi un repère (`wrap` accepte tout callback sans valeur
+de retour ; appels par frame < 1) : `kill : corps` (`DeathRagdoll.spawn`), `kill : feed` (kill feed), `kill : scores`
+(`RoundHUD.updateScores`). Le pire appel (`max`) de la ligne `[Perf] RUN … scripts` dit ce que coûte la frame du kill.
+
+Piège (typage) : dans un module dont les fonctions s'appellent avant d'être définies (`RoundHUD.show` appelle
+`RoundHUD.hideResult`, plus bas), une instruction ordinaire placée entre deux `function M.x` (comme
+`local t = PerfMarkers.wrap(...)`) fait perdre à luau-lsp les fonctions définies après elle (`Key 'hideResult' not
+found`). Déclarer la variable en haut et l'affecter après la dernière fonction.
 
 Dans le MicroProfiler (Ctrl+F6, puis pause pour figer une frame lente), ces noms apparaissent sous `Heartbeat` ou
 `RenderStep` (`mouvement`, `caméra` et `viewmodel` sont sous `RenderStep`, `tenue 3P` sous `PreAnimation` et
@@ -354,6 +361,63 @@ le contrôle « avant » n°2 est aussi lent que les « après », et des postes
 navigation 11 → 22 s) varient autant. Coût propre mesuré : l'enregistreur de caméra (`clip caméra`) 0,02 ms/frame ; le
 figeage d'un record côté serveur 1 à 14 ms, une fois par record (journal `[Highlight]`). Pistes et tirs du serveur
 sont comptés dans le repère `srv historique`. Pendant la lecture (phase de résultat) : non mesuré à l'overlay.
+
+## Frame du kill et premier usage des effets (#606, mesure du 2026-11-25)
+
+Audit du client : des frames où beaucoup de travail tombe ensemble, au kill (corps, kill feed, scores) et au premier tir
+d'un effet ou à la première tenue portée. Rien ne devait changer à l'écran.
+
+**Règle : préchauffer les réserves.** Tout effet qui crée des Instances (Beams, Attachments, Parts, émetteurs, copies de
+modèle) les prend dans une réserve remplie **au démarrage du client, en tâche de fond, par lots**
+(`AssetPreload.created`, une frame cédée toutes les 60 Instances), à la taille maximale de l'effet (`MAX_ACTIVE` éclairs,
+`CIRCUIT_MAX_ACTIVE` jeux, `PAN_MAX_ACTIVE` copies, `MAX_ACTIVE` rayons…), seulement pour les styles activés
+(`ShotEffectRules.STYLES`) : environ 1 750 Instances au repos dans `Terrain` et `Workspace` (relevé Studio : 48 rayons,
+1 050 éclair, 469 CIRCUIT, 113 cubes, PAN ! et BALISE), mémoire non mesurée. Un effet libéré s'éteint (`Enabled = false`, pièces rangées hors de vue) et retourne à sa
+réserve ; un objet de la réserve repose **tous** ses réglages à chaque usage (un rayon peut avoir servi à un autre
+style). Ses textures et meshes passent par `AssetPreload.images` / `AssetPreload.instances` (ImageLabel hors interface :
+`PreloadAsync` échoue sur un id brut). Les réserves à tour de rôle (BALISE, TREMPE) gardent le même ordre d'usage que
+remplies au fil des tirs. Les tenues (`ReplicatedStorage.Outfits`, cartes et meshes) sont toutes préchargées par
+`SkinPreloader` (coût mémoire non mesuré ; 3 tenues au 2026-11-25 : si le catalogue grandit, ne précharger que les
+tenues portées).
+
+Mesures (Studio, Dizzy, 7 bots passifs, 21-23 FPS, banc déterministe : modules chargés à neuf depuis le MCP en contexte
+`Client`, mêmes appels sur `main` + repères puis sur la branche, dans la même session ; médianes) :
+
+| Poste | Avant | Après |
+|---|---|---|
+| Kill feed, une mort (4 lignes affichées) | 11,9 ms | 4,5 ms (1 ligne construite, 3 réutilisées) |
+| `ScoreUpdate`, classement fermé (9 scores) | 6,7 ms | 0,05 ms (reconstruit à l'ouverture de Tab) |
+| Corps (`DeathRagdoll.spawn`) | 8,0 / 11,6 / 10,4 ms | 11,7 / 11,3 / 10,1 ms : pas de gain mesurable |
+| Premier PAN ! | 5,0 ms | 0,27 ms |
+| Premier CIRCUIT | 4,7 ms | 1,7 ms |
+| Premier BALISE | 0,5 ms | 0,24 ms |
+| Éclairs n° 1 / 2 / 3 enchaînés | 2,3 / 7,8 / 5,7 ms | 1,5 / 1,5 / 3,6 ms |
+| Instances créées au premier tir d'un effet, au tir d'un bot (rayon) | 36 à 350 (d'après le code), 3 par rayon (sonde) | 0 (sonde) |
+
+- Corps : le passage de trois parcours des descendants à un seul ne se voit pas. Décomposition d'un corps (Studio) :
+  clonage 3,6 ms, entrée dans le monde 2,5 ms, réglage des pièces 0,2 ms, le reste dans la création des ~60 contraintes
+  (rotules, `NoCollisionConstraint`, soudures). Seule une copie préparée à l'avance l'allégerait (issue à part).
+- Le corps clonait le tag `Weapon3P` de l'arme : `WeaponThirdPersonView` le suivait (pose par frame, recherche de ses
+  articulations détruites toutes les 0,5 s). Tag retiré. **Piège :** en le suivant, il remettait la transparence locale
+  de l'arme à 0 à chaque frame, donc l'arme du corps ne s'estompait pas avec lui ; pour un rendu identique, ses pièces
+  restent hors du fondu.
+- `SoundChannels` n'écoute plus `game.DescendantAdded` (du Lua pour chaque Instance créée, dont les ~6 800 à 20 000 pièces
+  d'un échange de map) : services suivis en entier, `Workspace` et `ReplicatedStorage` enfant par enfant, sans `Maps` ni
+  `MapStore` (aucun son dans les maps, vérifié sur la place construite).
+
+Pièges de la mesure :
+
+- **Signaux différés** : un compteur branché sur `DescendantAdded` autour d'un appel, dans le même script, lit 0 (le
+  signal part après). Compter `#workspace:GetDescendants()` avant/après, ou par frame sur `Heartbeat`.
+- `DebugPlaytest` tire sur une cible à 6 studs : trop près pour qu'un rayon ou un effet soit dessiné. Pour un effet,
+  `ShotEffects.playDemo` d'une instance chargée à neuf (`init` d'abord pour ses réserves).
+- **Figer un effet pour une capture** : `EffectClock.setScale(0)` est refusé (remis à 1). Ralentir avant de tirer
+  (`setScale(0.02)`), attendre, puis `setScale(0.0001)` ; même graine (`math.randomseed`) avant et après : PAN !, CIRCUIT,
+  BALISE retombent identiques à la capture (l'éclair tire sa forme d'un `Random.new()` non semé).
+- Une instance du module chargée depuis le MCP a son propre dossier `Ragdolls` : chercher le corps par son nom.
+- Le rejeu `PerfRun` d'une fenêtre sans focus (Studio à 6 FPS) ne compare rien : banc à appels fixes à la place.
+- `lune` (`roblox.deserializeModel`) échoue sur les `.rbxm` à tags (`Folder.Tags`) : lire la place construite
+  (`rojo build`, `roblox.deserializePlace`).
 
 ## Relevés mémoire (fuites)
 
