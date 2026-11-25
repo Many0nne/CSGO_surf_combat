@@ -340,6 +340,15 @@ Piège (typage) : dans un module dont les fonctions s'appellent avant d'être d�
 `local t = PerfMarkers.wrap(...)`) fait perdre à luau-lsp les fonctions définies après elle (`Key 'hideResult' not
 found`). Déclarer la variable en haut et l'affecter après la dernière fonction.
 
+Travaux longs étalés sur plusieurs frames (#605, `src/shared/SlicedWork.luau`) : `SlicedWork.slicer(nom, budget)` rend
+la main (`task.wait`) une fois la tranche de la frame écoulée ; chaque tranche est repérée sous son nom dans le
+MicroProfiler (repère refermé avant l'attente) et relevée par `PerfMarkers.record` (sonde serveur, overlay). Repères :
+`nav plan` (construction d'un plan de bots, 8 ms par frame), `map copie` (copie et destruction d'une map rangée pour son
+plan), `map géométrie` (liste des murs d'air et grillages d'une map, client 1 ms par frame, serveur 8 ms). Repères
+ponctuels : `srv échange map` (échange des maps entre deux rounds), `srv boîte map` (boîte d'une map, une fois par
+map). Tout parcours d'une map entière (~20 000 pièces) passe par `SlicedWork.eachDescendant` (même ordre que
+`GetDescendants`) avec un `step`, jamais par un `GetDescendants` d'une traite dans une frame de jeu.
+
 Dans le MicroProfiler (Ctrl+F6, puis pause pour figer une frame lente), ces noms apparaissent sous `Heartbeat` ou
 `RenderStep` (`mouvement`, `caméra` et `viewmodel` sont sous `RenderStep`, `tenue 3P` sous `PreAnimation` et
 `PreSimulation`) : on voit si une frame lente vient de nos scripts ou du moteur (rendu, physique, GC).

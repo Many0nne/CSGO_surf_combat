@@ -25,9 +25,19 @@ dans Studio). En jeu :
   `KillZone`, géométrie anti-triche `CharacterSync`, murs d'air des bots, boosts et échelles du client), jamais par un
   nom en dur ni par un cache gardé d'un round à l'autre. `MapSelection.find` trouve aussi une map rangée (lecteur de
   démo).
-- **Plans des bots** : un par map, gardé (`NavPlan.build`, `NavPlan.setActive`). La map jouée d'abord, puis chaque autre
-  map est **prêtée** à `Workspace.Maps` le temps de sa construction (les rayons ne touchent que le Workspace) : un
-  changement de map ne fait jamais attendre les bots, sauf au tout premier round si le plan suivant n'est pas fini.
+- **Plans des bots** : un par map, gardé (`NavPlan.build`, `NavPlan.setActive`). La map jouée d'abord (dans
+  `Workspace.Maps`), puis chaque autre map sur une **copie** rangée dans un `WorldModel` de `ServerStorage` (`NavWorld`,
+  #605) : rien n'est répliqué aux clients, la map rangée ne bouge pas. Copie et destruction sont étalées sur plusieurs
+  frames (`SlicedWork.cloneInto`, repère `map copie`), et toutes les requêtes du plan (rayons, `GetPartsInPart`, et la
+  simulation des rampes par `CharacterMotor`) passent par le monde de la map (paramètre `world`, Workspace par défaut).
+  Un changement de map ne fait jamais attendre les bots, sauf au tout premier round si le plan suivant n'est pas fini.
+  Piste rejetée : **prêter** la map à `Workspace.Maps` le temps du calcul (#594) : deux changements de parent répliqués
+  à tous les clients en pleine manche (une image client de 170 à 250 ms chacun, cf. tableau ci-dessous), et la map
+  prêtée était rendue et solide chez eux pendant ~13 s.
+- **Préparé à l'avance** (#605) : tout ce qui se relève une fois par map se garde par map (la map rangée n'est pas
+  détruite) et se calcule dès que la map est jouée **ou annoncée** (`MapSelection.observeNext`, attribut `NextMap`),
+  en tâche de fond : liste des murs d'air et grillages des tirs (`MapGeometry.prepare`, client et serveur), boîte de la
+  map des zones de mort (`init.server`). Le premier tir sur une nouvelle map ne parcourt plus ses ~20 000 pièces.
 - **Forcer une map dans Studio** : attribut `DebugMap` de `Workspace` (nom d'une map), en contexte Server pendant le
   playtest : `workspace:SetAttribute("DebugMap", "Radoub")`. Hors round (menu), la map change tout de suite ; pendant un
   round, elle est annoncée pour le suivant. Tant qu'il est posé, la rotation reste sur cette map ; le retirer
