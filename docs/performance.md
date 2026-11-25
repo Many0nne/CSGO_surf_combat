@@ -353,6 +353,20 @@ Dans le MicroProfiler (Ctrl+F6, puis pause pour figer une frame lente), ces noms
 `RenderStep` (`mouvement`, `caméra` et `viewmodel` sont sous `RenderStep`, `tenue 3P` sous `PreAnimation` et
 `PreSimulation`) : on voit si une frame lente vient de nos scripts ou du moteur (rendu, physique, GC).
 
+## Gels de la rotation des maps (#605, mesure du 2026-11-25)
+
+Studio, playtest solo (client et serveur dans le même processus, 67 ms par image au repos). Détail des plans des bots
+dans `docs/maps.md` (« Plans sur copie »).
+
+| Gel | Avant | Après |
+|---|---|---|
+| Map rangée prêtée au Workspace pour son plan (manche 1) | image client 185 ms, frame serveur 258 ms, map rendue chez les clients ~13 s | aucun pic au-dessus du repos (copie hors du Workspace, 1,4 s étalée) |
+| Premier tir sur une nouvelle map (liste des murs d'air et grillages) | Dizzy 8,6 à 13,4 ms dans la frame du tir (Radoub 0,3 à 0,5 ms) | 2,9 µs (liste prête : 23 frames, tranche max 2,05 ms, dès que la map est jouée ou annoncée) |
+| Boîte de la map à la première mort (zones Analytics) | `GetBoundingBox` dans la frame de la mort | faite au changement ou à l'annonce de la map (non chronométrée) |
+
+Piège : un `pcall` autour d'un travail découpé (`task.wait` dedans) cède sans problème dans Roblox ; mais un repère
+`debug.profilebegin` ouvert ne doit pas rester ouvert pendant l'attente, d'où `SlicedWork.slicer` qui le referme.
+
 ## Clip de la partie (#499, mesure du 2026-11-17)
 
 Coût du clip de fin de partie pendant la manche (Studio, Dizzy, `PerfRun "Dizzy"` avec `DebugBots` 5 qui tirent, un

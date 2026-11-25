@@ -59,6 +59,22 @@ D'où `ReplicatedStorage.MapStore` : les clients gardent les maps rangées en m�
 mais ni rendu ni collision. La saccade restante (0,2 s environ) tombe entre la fin du clip et l'apparition (volets de
 transition), pas en jeu. Non mesuré sur un vrai client en ligne (réseau, machine modeste).
 
+Plans sur copie (#605, mesure du 25/11/2026, Studio, playtest solo, fenêtre bridée : 67 ms par image au repos, pire
+image au repos 141 ms côté client, 144 ms côté serveur) :
+
+| Mesure | Avant : map prêtée à `Workspace.Maps` | Après : copie dans `NavWorld` |
+|---|---|---|
+| Map vue par le client pendant le calcul | Radoub ajoutée à `Workspace.Maps` (rendue, solide) | `Workspace.Maps` = `[Dizzy]` de bout en bout |
+| Pire image client | 185 ms (au prêt) | 158 ms (= pire image pendant le plan de Dizzy, 160 ms) |
+| Pire frame serveur | 258 ms (78 ms de prêt, 70 ms de rangement) | 119 ms (copie de Radoub : 1,4 s, 23 frames) |
+| Plan de Radoub (empreinte `NavRules.fingerprint`) | `bd16143a`, 45 089 cases | `bd16143a`, 45 089 cases |
+| Plan de Dizzy (au cas où DebugMap ouvre sur Radoub) | `0f33baae`, 41 191 cases, 4 trajets de rampe | `0f33baae` |
+
+Contrôle d'identité refait à la main (mode Edit, `execute_luau`) : construire la même map dans le Workspace puis sur
+une copie (`SlicedWork.cloneInto` dans un `WorldModel`), et comparer `NavRules.fingerprint` des deux plans.
+`WorldModel` hors du Workspace : rayons, `Blockcast`, `Spherecast` et `GetPartsInPart` y marchent (la sonde de
+`GetPartsInPart` doit être rangée dans le même monde, d'où une sonde `PenProbe` par monde dans `WallSlide`).
+
 ## Dizzy (map par défaut)
 
 Toit d'un gratte-ciel au-dessus des nuages, reproduit d'après `ar_dizzy` (CS:GO, port CS2 `ar_dizzy.vpk` de ModDB) :
