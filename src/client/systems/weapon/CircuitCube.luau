@@ -2,14 +2,15 @@
 -- Composant en cube de l'effet de tir CIRCUIT (#567) : un cadre de douze arêtes néon magenta autour d'un cœur cubique
 -- clair, qui jaillit (pop), tourne sur lui-même pour montrer son volume, puis s'efface. Un au canon au tir, un à l'impact
 -- à l'arrivée de l'impulsion (CircuitTrace). Réglages et courbe dans ShotEffectRules (CIRCUIT_CUBE_*, circuitCubeFrame).
--- Réserve de CIRCUIT_CUBES cubes (Parts ancrées en matériau Neon, sans collision), créés au premier besoin puis
--- réutilisés : un tir ne crée aucune Instance. Chaque frame, taille et place de chaque pièce sont recalculées.
+-- Réserve de CIRCUIT_CUBES cubes (Parts ancrées en matériau Neon, sans collision), créés au démarrage en tâche de fond
+-- (`prewarm`, #606), à défaut au premier besoin, puis réutilisés : un tir ne crée aucune Instance. Chaque frame, taille et place de chaque pièce sont recalculées.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local ShotEffectRules = require(ReplicatedStorage.Shared.ShotEffectRules)
+local AssetPreload = require(script.Parent.Parent.game.AssetPreload)
 local EffectClock = require(script.Parent.Parent.game.EffectClock)
 
 local CircuitCube = {}
@@ -139,6 +140,15 @@ local function step()
 end
 
 local timedStep = PerfMarkers.wrap("effets de tir", step)
+
+-- Cette méthode permet de remplir la réserve de cubes au démarrage du client, depuis une tâche de fond (#606).
+function CircuitCube.prewarm()
+	while #pool < ShotEffectRules.CIRCUIT_CUBES do
+		local cube = make()
+		table.insert(pool, cube)
+		AssetPreload.created(#cube.pieces + 1)
+	end
+end
 
 -- Cette méthode permet de faire jaillir un cube lorsqu'un tir CIRCUIT le demande : centré sur `position`, d'arête
 -- `edge` studs, vivant `life` s, tourné de CIRCUIT_CUBE_TILT degrés au hasard et pivotant autour d'un axe tiré au

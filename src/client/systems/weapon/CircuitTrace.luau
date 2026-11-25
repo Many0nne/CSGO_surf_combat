@@ -5,7 +5,8 @@
 -- jaillit et un réseau de pistes fines pousse autour de lui (circuitBranches, dans le plan de la caméra). Tout s'éteint
 -- ensuite, la piste de la bouche vers l'impact. Réglages et courbes dans ShotEffectRules (CIRCUIT_*).
 -- Réserve de CIRCUIT_MAX_ACTIVE jeux (Attachments du Terrain ; Beams de piste, de halo, d'impulsion et du réseau ; un
--- émetteur d'étincelle), créés au premier besoin puis réutilisés : un tir ne crée aucune Instance. Réserve pleine :
+-- émetteur d'étincelle), créés au démarrage en tâche de fond (`prewarm`, #606), à défaut au premier besoin, puis
+-- réutilisés : un tir ne crée aucune Instance. Réserve pleine :
 -- `spawn` renvoie false et le tir garde le rayon ordinaire.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -14,6 +15,7 @@ local RunService = game:GetService("RunService")
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local ShotEffectRules = require(ReplicatedStorage.Shared.ShotEffectRules)
 local CircuitCube = require(script.Parent.CircuitCube)
+local AssetPreload = require(script.Parent.Parent.game.AssetPreload)
 local EffectClock = require(script.Parent.Parent.game.EffectClock)
 
 local CircuitTrace = {}
@@ -432,6 +434,16 @@ local function freeSet(): Set?
 		return set
 	end
 	return nil
+end
+
+-- Cette méthode permet de remplir la réserve (jeux de pistes, puis cubes) au démarrage du client, depuis une tâche de
+-- fond (ShotEffects.init, #606) : un jeu par lot, le premier tir CIRCUIT ne crée rien.
+function CircuitTrace.prewarm()
+	while #pool < ShotEffectRules.CIRCUIT_MAX_ACTIVE do
+		table.insert(pool, make())
+		AssetPreload.created(AssetPreload.CHUNK)
+	end
+	CircuitCube.prewarm()
 end
 
 -- Cette méthode permet de montrer la piste CIRCUIT d'un tir lorsqu'il part, de la bouche `start` à l'impact `finish` :

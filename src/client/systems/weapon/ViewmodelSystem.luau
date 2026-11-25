@@ -37,8 +37,9 @@ local currentOffset = CFrame.new()
 local viewmodelCache = {} :: { [string]: Model }
 local tracksCache = {} :: { [string]: { [string]: AnimationTrack } }
 local partsCache = {} :: { [string]: { BasePart } }
--- Guard: prevents double-hooking when a tool moves Backpack → Character
-local hookedTools = {} :: { [Tool]: boolean }
+-- Guard: prevents double-hooking when a tool moves Backpack → Character. Clés faibles (#606) : un Tool détruit au
+-- respawn n'y reste pas (ses connexions Equipped/Unequipped, qui le référencent, le gardent tant qu'il existe)
+local hookedTools: { [Tool]: boolean } = setmetatable({}, { __mode = "k" }) :: any
 
 local SWAY_STRENGTH = 3.5
 local SWAY_MAX = math.rad(6)

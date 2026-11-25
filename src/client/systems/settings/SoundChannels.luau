@@ -4,9 +4,13 @@
 -- (voix des annonces de kills, #405 : volume effectif = général × annonces × volume de base) et « Footsteps » (bruits de
 -- pas, #146 : les siens et ceux des autres, volume effectif = général × pas × volume de base). Les valeurs
 -- viennent des réglages (LocalSettings) et s'appliquent en direct. Règle : tout nouveau son d'arme passe par
--- SoundChannels.weapon(sound) avant d'être joué ; les autres sons sont rattachés au général automatiquement.
+-- SoundChannels.weapon(sound) avant d'être joué ; les autres sons sont rattachés au général automatiquement, dans les
+-- conteneurs où un son peut apparaître (#606 : plus d'écoute de tout le jeu, qui appelait du Lua pour chaque Instance
+-- créée, maps comprises).
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SoundService = game:GetService("SoundService")
 
+local MapSelection = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("MapSelection"))
 local LocalSettings = require(script.Parent.LocalSettings)
 
 local SoundChannels = {}
@@ -17,6 +21,16 @@ local music: SoundGroup
 local announcer: SoundGroup
 local footsteps: SoundGroup
 local started = false
+-- Arbres déjà suivis (clés faibles) : un enfant retiré puis remis n'est pas branché deux fois
+local watched: { [Instance]: boolean } = setmetatable({}, { __mode = "k" }) :: any
+
+-- Conteneurs suivis en entier : sons du jeu (SoundService), de l'interface et des Tools du sac (Players)
+local WATCHED_SERVICES = { "SoundService", "Players", "ReplicatedFirst", "Lighting" }
+-- Conteneurs suivis enfant par enfant, sans les dossiers des maps (milliers de pièces à chaque échange, aucun son)
+local SPLIT_SERVICES: { [string]: { [string]: boolean } } = {
+	Workspace = { Maps = true },
+	ReplicatedStorage = { [MapSelection.STORE_NAME] = true },
+}
 
 -- Cette méthode permet de rattacher au canal général un son créé sans groupe lorsqu'il apparaît dans le jeu (filet de
 -- sécurité : un son oublié suit au moins le volume général).
@@ -26,6 +40,34 @@ local function adopt(instance: Instance)
 		local parent = instance.Parent
 		instance.SoundGroup = if parent and parent.Name == "Sounds" then weapons else master
 	end
+end
+
+-- Cette méthode permet de rattacher les sons d'un arbre (existants et futurs) lorsqu'un conteneur suivi le reçoit.
+local function watchTree(root: Instance)
+	if watched[root] then
+		return
+	end
+	watched[root] = true
+	adopt(root)
+	for _, instance in root:GetDescendants() do
+		adopt(instance)
+	end
+	root.DescendantAdded:Connect(adopt)
+end
+
+-- Cette méthode permet de suivre un service enfant par enfant lorsque le client démarre, sauf les enfants nommés dans
+-- `skip` (dossiers des maps).
+local function watchChildren(service: Instance, skip: { [string]: boolean })
+	-- Cette méthode permet de suivre un enfant du service lorsqu'il est présent ou arrive.
+	local function onChild(child: Instance)
+		if not skip[child.Name] then
+			watchTree(child)
+		end
+	end
+	for _, child in service:GetChildren() do
+		onChild(child)
+	end
+	service.ChildAdded:Connect(onChild)
 end
 
 -- Cette méthode permet d'appliquer les volumes des réglages aux groupes lorsqu'ils changent ou sont chargés.
@@ -101,10 +143,12 @@ function SoundChannels.init()
 	footsteps.Parent = master
 	started = true
 
-	for _, instance in game:GetDescendants() do
-		adopt(instance)
+	for _, name in WATCHED_SERVICES do
+		watchTree(game:GetService(name))
 	end
-	game.DescendantAdded:Connect(adopt)
+	for name, skip in SPLIT_SERVICES do
+		watchChildren(game:GetService(name), skip)
+	end
 
 	apply(LocalSettings.get())
 	LocalSettings.onChanged(apply)

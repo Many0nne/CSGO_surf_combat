@@ -9,6 +9,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local UITheme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UITheme"))
+local PerfMarkers = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("PerfMarkers"))
 local ParticipantRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ParticipantRules"))
 local UIKit = require(script.Parent.UIKit)
 local HUDRules = require(script.Parent.HUDRules)
@@ -30,11 +31,13 @@ local ICON_GAP = 4
 
 local KillFeed = {}
 
--- Liste de lignes posée dans une interface ; `root` porte l'attribut Scale de UIKit.scaledRoot (largeur de la bande)
+-- Liste de lignes posée dans une interface ; `root` porte l'attribut Scale de UIKit.scaledRoot (largeur de la bande) ;
+-- `rows` : la ligne affichée de chaque mort encore listée (#606 : seules les nouvelles sont construites)
 export type Feed = {
 	root: GuiObject,
 	list: Frame,
 	entries: { HUDRules.KillFeedEntry },
+	rows: { [HUDRules.KillFeedEntry]: Frame },
 	alive: boolean,
 }
 
@@ -149,13 +152,12 @@ local function buildLine(line: Frame, entry: HUDRules.KillFeedEntry)
 end
 
 -- Cette méthode permet de construire une ligne du feed (morceaux à ombre, bande rouge si elle concerne le joueur)
--- lorsque le feed est redessiné.
-local function buildRow(feed: Feed, entry: HUDRules.KillFeedEntry, index: number)
+-- lorsqu'une nouvelle mort y est affichée ; `render` la place ensuite à son rang.
+local function buildRow(feed: Feed, entry: HUDRules.KillFeedEntry): Frame
 	local root = feed.root
 	local row = UIKit.frame({
-		Name = "Row" .. index,
+		Name = "Row",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(0, (index - 1) * ROW_HEIGHT),
 		Size = UDim2.new(1, 0, 0, ROW_HEIGHT),
 		Parent = feed.list,
 	})
@@ -198,22 +200,39 @@ local function buildRow(feed: Feed, entry: HUDRules.KillFeedEntry, index: number
 		fitBand()
 		line:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitBand)
 	end
+	return row
 end
 
--- Cette méthode permet de redessiner un feed d'après ses lignes encore valides lorsqu'une mort arrive ou qu'une ligne
--- expire (rien s'il a été détruit).
-local function render(feed: Feed)
+-- Cette méthode permet de mettre un feed à jour d'après ses lignes encore valides lorsqu'une mort arrive ou qu'une ligne
+-- expire (rien s'il a été détruit) : les lignes sorties de la liste sont détruites, seules les nouvelles sont
+-- construites, et chacune est replacée à son rang (#606, plus de reconstruction complète).
+local function renderFeed(feed: Feed)
 	if not feed.alive then
 		return
 	end
 	feed.entries = HUDRules.pruneKillFeed(feed.entries, os.clock())
-	for _, child in feed.list:GetChildren() do
-		child:Destroy()
+	local kept: { [HUDRules.KillFeedEntry]: boolean } = {}
+	for _, entry in feed.entries do
+		kept[entry] = true
+	end
+	for entry, row in feed.rows do
+		if not kept[entry] then
+			row:Destroy()
+			feed.rows[entry] = nil
+		end
 	end
 	for i, entry in feed.entries do
-		buildRow(feed, entry, i)
+		local row = feed.rows[entry]
+		if not row then
+			row = buildRow(feed, entry)
+			feed.rows[entry] = row
+		end
+		row.Name = "Row" .. i
+		row.Position = UDim2.fromOffset(0, (i - 1) * ROW_HEIGHT)
 	end
 end
+
+local render = PerfMarkers.wrap("kill : feed", renderFeed)
 
 -- Cette méthode permet de poser un feed vide dans une interface lorsqu'elle se construit (HUD, clip de la partie) :
 -- liste ancrée en haut à droite à `position`, dans `root` (racine de UIKit.scaledRoot).
@@ -226,7 +245,7 @@ function KillFeed.mount(root: GuiObject, position: UDim2): Feed
 		Size = UDim2.fromOffset(WIDTH, ROW_HEIGHT * HUDRules.KILL_FEED_MAX),
 		Parent = root,
 	}) :: Frame
-	return { root = root, list = list, entries = {}, alive = true }
+	return { root = root, list = list, entries = {}, rows = {}, alive = true }
 end
 
 -- Cette méthode permet d'ajouter une mort à un feed lorsqu'elle arrive ; la ligne disparaît d'elle-même après
@@ -260,6 +279,7 @@ end
 function KillFeed.destroy(feed: Feed)
 	feed.alive = false
 	feed.entries = {}
+	feed.rows = {}
 	feed.list:Destroy()
 end
 

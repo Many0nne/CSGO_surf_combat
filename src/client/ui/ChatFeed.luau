@@ -14,6 +14,7 @@ local UserInputService = game:GetService("UserInputService")
 local ChatRules = require(ReplicatedStorage.Shared.ChatRules)
 local Locale = require(ReplicatedStorage.Shared.Locale)
 local NetworkProtocol = require(ReplicatedStorage.Shared.NetworkProtocol)
+local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local UITheme = require(ReplicatedStorage.Shared.UITheme)
 local InputModule = require(script.Parent.Parent.input.InputModule)
 local HUDRules = require(script.Parent.HUDRules)
@@ -572,7 +573,7 @@ function ChatFeed.init(newDeps: Deps)
 	task.spawn(function()
 		commandRemote = NetworkProtocol.getRemote(NetworkProtocol.Names.CHAT_COMMAND)
 	end)
-	RunService.Heartbeat:Connect(step)
+	RunService.Heartbeat:Connect(PerfMarkers.wrap("chat", step))
 end
 
 return ChatFeed

@@ -7,10 +7,11 @@
 --     flamme part du canon de l'arme 3P du tireur et le rayon va de ce canon au point que touche, chez nous, le rayon
 --     origine + direction. Rien n'est envoyé au serveur.
 -- La flamme est un Emit du ParticleEmitter du modèle de l'arme (aucune Instance créée, elle suit le recul). Le rayon
--- (deux Attachment du Terrain et un Beam, nommés ShotEffectRules.INSTANCE_NAME) s'efface à chaque frame puis est
--- détruit, au plus tard par Debris si la boucle s'arrête.
+-- (deux Attachment du Terrain et un Beam, nommés ShotEffectRules.INSTANCE_NAME) s'efface à chaque frame puis est éteint
+-- et rendu à sa réserve (#606). Au démarrage du client, une tâche de fond remplit les réserves de tous les effets activés
+-- (rayons, éclairs, PAN !, CIRCUIT, BALISE, TREMPE) et précharge leurs textures et meshes : le premier tir d'un effet ne
+-- crée rien et ne charge rien.
 
-local Debris = game:GetService("Debris")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -28,9 +29,13 @@ local ScopeSystem = require(script.Parent.ScopeSystem)
 local LocalInventory = require(script.Parent.Parent.inventory.LocalInventory)
 local WeaponConfig = require(ReplicatedStorage.Shared.WeaponConfig)
 local WeaponThirdPerson = require(ReplicatedStorage.Shared.WeaponThirdPerson)
+local AssetPreload = require(script.Parent.Parent.game.AssetPreload)
 local EffectClock = require(script.Parent.Parent.game.EffectClock)
 
 local ShotEffects = {}
+
+-- Rayon de la réserve : deux extrémités du Terrain et le Beam (enfant de la première), éteint quand il est libre
+type Ray = { a0: Attachment, a1: Attachment, beam: Beam }
 
 -- Rayon en cours : ses deux extrémités (le Beam est enfant de la première) et leurs positions, son instant de
 -- création (os.clock), son palier de fondu courant, sa durée de vie, pour TREMPE (#566) le tirage de ses franges
@@ -49,6 +54,8 @@ type Tracer = {
 }
 
 local tracers: { Tracer } = {}
+local freeRays: { Ray } = {}
+local prewarmStarted = false
 local stepConn: RBXScriptConnection? = nil
 local connection: RBXScriptConnection? = nil
 local getState: () -> string? = function()
@@ -87,19 +94,73 @@ local function flash(muzzle: Attachment)
 	end
 end
 
+-- Points de la ColorSequence de TREMPE, table réutilisée d'une frame à l'autre (#606)
+local temperPoints: { ColorSequenceKeypoint } = {}
+
 -- Cette méthode permet de composer les couleurs d'un rayon TREMPE (#566) à un instant de sa vie lorsqu'il est créé puis
 -- à chaque frame (ShotEffectRules.temperKeypoints).
 local function temperColor(elapsed: number, seed: number): ColorSequence
-	local keypoints = {}
+	table.clear(temperPoints)
 	for i, point in ShotEffectRules.temperKeypoints(elapsed, seed) do
-		keypoints[i] = ColorSequenceKeypoint.new(point[1], Color3.fromRGB(point[2], point[3], point[4]))
+		temperPoints[i] = ColorSequenceKeypoint.new(point[1], Color3.fromRGB(point[2], point[3], point[4]))
 	end
-	return ColorSequence.new(keypoints)
+	return ColorSequence.new(temperPoints)
+end
+
+-- Cette méthode permet de créer un rayon éteint de la réserve (extrémités dans le Terrain, Beam désactivé) lorsqu'elle se
+-- remplit ou qu'un tir n'en trouve plus de libre.
+local function newRay(): Ray
+	local a0 = Instance.new("Attachment")
+	a0.Name = ShotEffectRules.INSTANCE_NAME
+	local a1 = Instance.new("Attachment")
+	a1.Name = ShotEffectRules.INSTANCE_NAME
+	local beam = Instance.new("Beam")
+	beam.Name = ShotEffectRules.INSTANCE_NAME
+	beam.Attachment0 = a0
+	beam.Attachment1 = a1
+	beam.LightInfluence = 0
+	beam.FaceCamera = true
+	beam.Enabled = false
+	beam.Parent = a0
+	a0.Parent = terrain
+	a1.Parent = terrain
+	return { a0 = a0, a1 = a1, beam = beam }
+end
+
+-- Cette méthode permet de savoir si un rayon de la réserve est encore entier lorsqu'il va resservir (un tiers a pu le
+-- détruire).
+local function intact(ray: Ray): boolean
+	return ray.a0.Parent ~= nil and ray.a1.Parent ~= nil and ray.beam.Parent == ray.a0
+end
+
+-- Cette méthode permet de prendre un rayon libre de la réserve lorsqu'un tir est montré (créé s'il n'en reste plus ou si
+-- un tiers a détruit le rayon rangé).
+local function takeRay(): Ray
+	while #freeRays > 0 do
+		local ray = table.remove(freeRays) :: Ray
+		if intact(ray) then
+			return ray
+		end
+		ray.a0:Destroy()
+		ray.a1:Destroy()
+	end
+	return newRay()
+end
+
+-- Cette méthode permet de rendre un rayon à la réserve (éteint) lorsque sa vie est finie ; détruit s'il a été abîmé.
+local function releaseRay(ray: Ray)
+	if intact(ray) then
+		ray.beam.Enabled = false
+		table.insert(freeRays, { a0 = ray.a0, a1 = ray.a1, beam = ray.beam })
+	else
+		ray.a0:Destroy()
+		ray.a1:Destroy()
+	end
 end
 
 -- Cette méthode permet d'effacer les rayons en cours lorsqu'une frame passe (masqués si la caméra les traverse ; les
--- franges de TREMPE défilent), et de détruire ceux dont la vie est finie (ou déjà détruits par Debris) ; la boucle
--- s'arrête quand il n'en reste plus.
+-- franges de TREMPE défilent), et de rendre à la réserve ceux dont la vie est finie (ou qu'un tiers a détruits) ; la
+-- boucle s'arrête quand il n'en reste plus.
 local function step()
 	local now = EffectClock.now()
 	local camera = workspace.CurrentCamera
@@ -108,8 +169,7 @@ local function step()
 		local tracer = tracers[i]
 		local elapsed = now - tracer.born
 		if elapsed >= tracer.life or not tracer.a0.Parent then
-			tracer.a0:Destroy()
-			tracer.a1:Destroy()
+			releaseRay(tracer)
 			table.remove(tracers, i)
 		else
 			local hidden = eye ~= nil and ShotEffectRules.isTooClose(tracer.start, tracer.finish, eye)
@@ -140,15 +200,13 @@ end
 local timedStep = PerfMarkers.wrap("effets de tir", step)
 
 -- Cette méthode permet de créer un rayon entre deux points du monde lorsqu'un tir est montré (`style` "temper" : rayon
--- TREMPE, #566 ; "balise" : ruban BALISE, #567) ; il s'efface ensuite de lui-même (step) et Debris le détruit au plus
--- tard après sa durée de vie et une marge.
+-- TREMPE, #566 ; "balise" : ruban BALISE, #567) ; il s'efface ensuite de lui-même (step), puis est rendu à la réserve.
+-- Tous les réglages du Beam sont reposés à chaque tir : un rayon de la réserve a pu servir à un autre style.
 local function spawnTracer(start: Vector3, finish: Vector3, style: string?)
 	local balise = style == "balise"
-	local a0 = Instance.new("Attachment")
-	a0.Name = ShotEffectRules.INSTANCE_NAME
+	local ray = takeRay()
+	local a0, a1, beam = ray.a0, ray.a1, ray.beam
 	a0.WorldPosition = start
-	local a1 = Instance.new("Attachment")
-	a1.Name = ShotEffectRules.INSTANCE_NAME
 	-- BALISE : le ruban part de la bouche du canon et se déroule (step)
 	a1.WorldPosition = if balise then start else finish
 
@@ -157,19 +215,18 @@ local function spawnTracer(start: Vector3, finish: Vector3, style: string?)
 		then ShotEffectRules.TEMPER_WIDTH
 		elseif balise then ShotEffectRules.BALISE_WIDTH
 		else ShotEffectRules.TRACER_WIDTH
-	local beam = Instance.new("Beam")
-	beam.Name = ShotEffectRules.INSTANCE_NAME
-	beam.Attachment0 = a0
-	beam.Attachment1 = a1
 	beam.Width0 = width
 	beam.Width1 = width
 	beam.Color = if temperSeed then temperColor(0, temperSeed) else TRACER_COLOR
 	beam.Transparency = FADE[1]
 	-- TREMPE : couleurs sombres (bleu, violet) qu'une lumière additive pleine laverait, dégradé découpé en segments
 	beam.LightEmission = if temperSeed then ShotEffectRules.TEMPER_LIGHT_EMISSION else 1
-	beam.LightInfluence = 0
-	beam.FaceCamera = true
 	beam.Segments = if temperSeed then ShotEffectRules.TEMPER_SEGMENTS else 1
+	-- Rayon ordinaire : sans texture (valeurs par défaut d'un Beam neuf)
+	beam.Texture = ""
+	beam.TextureMode = Enum.TextureMode.Stretch
+	beam.TextureLength = 1
+	beam.TextureSpeed = 1
 	if temperSeed then
 		-- TREMPE : ruban torsadé (texture répétée qui défile) et écailles d'oxyde semées le long du rayon
 		beam.Texture = ShotEffectRules.TEMPER_RIBBON_IMAGE
@@ -187,10 +244,7 @@ local function spawnTracer(start: Vector3, finish: Vector3, style: string?)
 		beam.TextureLength = ShotEffectRules.BALISE_TAPE_LENGTH
 		beam.TextureSpeed = ShotEffectRules.BALISE_TAPE_SPEED
 	end
-	beam.Parent = a0
-
-	a0.Parent = terrain
-	a1.Parent = terrain
+	beam.Enabled = true
 	local life = ShotEffectRules.tracerLifetime(style)
 	table.insert(tracers, {
 		a0 = a0,
@@ -204,9 +258,6 @@ local function spawnTracer(start: Vector3, finish: Vector3, style: string?)
 		temperSeed = temperSeed,
 		balise = balise,
 	})
-	local maxLife = life + ShotEffectRules.LIFETIME_MARGIN
-	Debris:AddItem(a0, EffectClock.real(maxLife))
-	Debris:AddItem(a1, EffectClock.real(maxLife))
 	if not stepConn then
 		stepConn = RunService.Heartbeat:Connect(timedStep)
 	end
@@ -377,18 +428,69 @@ local function onShotFired(shooter: any, weaponName: any, origin: any, direction
 	show(muzzle, origin, endpoint, camera and camera.CFrame.Position, styleOfShooter(shooter))
 end
 
+-- Cette méthode permet de lister les images des effets activés (#606) lorsque le client les précharge.
+local function effectImages(): { string }
+	local images = {}
+	if ShotEffectRules.isEnabled("temper") then
+		table.insert(images, ShotEffectRules.TEMPER_RIBBON_IMAGE)
+		table.insert(images, ShotEffectRules.TEMPER_FLAKE_IMAGE)
+	end
+	if ShotEffectRules.isEnabled("balise") then
+		table.insert(images, ShotEffectRules.BALISE_TAPE_IMAGE)
+		table.insert(images, ShotEffectRules.BALISE_RING_IMAGE)
+		table.insert(images, ShotEffectRules.BALISE_MARK_IMAGE)
+	end
+	if ShotEffectRules.isEnabled("circuit") then
+		table.insert(images, ShotEffectRules.CIRCUIT_FLASH_IMAGE)
+	end
+	return images
+end
+
+-- Cette méthode permet de préparer au démarrage du client, en tâche de fond, tout ce que le premier tir d'un effet
+-- créerait ou chargerait (#606) : réserve des rayons (MAX_ACTIVE), réserves des effets activés par lots, puis
+-- textures et meshes (explosion PAN !).
+local function prewarm()
+	if prewarmStarted then
+		return
+	end
+	prewarmStarted = true
+	task.spawn(function()
+		while #freeRays < ShotEffectRules.MAX_ACTIVE do
+			table.insert(freeRays, newRay())
+			AssetPreload.created(3)
+		end
+		if ShotEffectRules.isEnabled("lightning") then
+			LightningBolt.prewarm()
+		end
+		if ShotEffectRules.isEnabled("circuit") then
+			CircuitTrace.prewarm()
+		end
+		if ShotEffectRules.isEnabled("balise") then
+			BaliseMarks.prewarm()
+		end
+		if ShotEffectRules.isEnabled("temper") then
+			TemperFlakes.prewarm()
+		end
+		if ShotEffectRules.isEnabled("pan") then
+			PanBurst.prewarm()
+		end
+		AssetPreload.images(effectImages())
+		local pan = if ShotEffectRules.isEnabled("pan") then PanBurst.template() else nil
+		if pan then
+			AssetPreload.instances({ pan })
+		end
+	end)
+end
+
 -- Cette méthode permet d'écouter les tirs relayés par le serveur lorsque le client démarre ; stateOf lit l'état du
--- client (GameStateController.getState) : pas d'effets des autres dans les écrans du menu.
+-- client (GameStateController.getState) : pas d'effets des autres dans les écrans du menu. Les réserves des effets se
+-- remplissent en tâche de fond (#606).
 function ShotEffects.init(stateOf: () -> string?)
 	getState = stateOf
 	if connection then
 		return
 	end
-	-- Réserve d'un éclair (#520, effet ÉCLAIR #566) remplie en tâche de fond, si le style est activé : le premier tir ne
-	-- crée rien
-	if ShotEffectRules.isEnabled("lightning") then
-		LightningBolt.prewarm()
-	end
+	prewarm()
 	-- Attente hors du fil de démarrage du client (init.client continue sans elle)
 	task.spawn(function()
 		local remote = ReplicatedStorage:WaitForChild(NetworkProtocol.Names.SHOT_FIRED, 15)

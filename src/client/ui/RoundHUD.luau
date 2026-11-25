@@ -14,6 +14,7 @@ local EconomyRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChi
 local WalletRules = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WalletRules"))
 local KeyBindings = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("KeyBindings"))
 local MapSelection = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("MapSelection"))
+local PerfMarkers = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("PerfMarkers"))
 local UIKit = require(script.Parent.UIKit)
 local EffectClock = require(script.Parent.Parent.systems.game.EffectClock)
 local HitShards = require(script.Parent.HitShards)
@@ -140,6 +141,11 @@ local streakPulse = 0 -- jeton du dernier flash : un retour au repos ne s'appliq
 local streakFlashing = false -- flash d'un palier en cours : la couleur de repos attend sa fin
 local leaderboard: Frame
 local leaderboardList: Frame
+-- Lignes du classement en retard sur les derniers scores : reconstruites à son ouverture, pas à chaque ScoreUpdate (#606)
+local leaderboardDirty = false
+local lastSorted: { HUDRules.Score }? = nil
+local rebuildLeaderboard: () -> ()
+local timedScores: (scores: { [number]: HUDRules.Score }) -> ()
 local respawnRoot: Frame
 local respawnScrim: ImageLabel
 local respawnTipScrim: ImageLabel
@@ -555,6 +561,9 @@ end
 local function openLeaderboard()
 	if leaderboard.Visible then
 		return
+	end
+	if leaderboardDirty then
+		rebuildLeaderboard()
 	end
 	leaderboard.Visible = true
 	UIKit.fadeIn(leaderboard, Motion.Hover)
@@ -1290,26 +1299,46 @@ function renderRank()
 	rankShadow.Text = text
 end
 
-function RoundHUD.updateScores(scores: { [number]: Score })
-	if not leaderboardList then
-		return
-	end
-	lastScores = scores
+-- Cette méthode permet de reconstruire les lignes du classement d'après les derniers scores lorsqu'il s'ouvre (Tab)
+-- ou qu'il est déjà affiché quand les scores changent ; fermé, il attend son ouverture (#606).
+function rebuildLeaderboard()
+	leaderboardDirty = false
 	for _, child in leaderboardList:GetChildren() do
 		child:Destroy()
 	end
-
-	local sorted = HUDRules.sortScores(scores)
+	if not lastSorted then
+		return
+	end
 	local localName = Players.LocalPlayer.Name
-	local rank = HUDRules.rankOf(sorted, localName)
-	rankShown = if rank then { rank = rank, total = #sorted } else nil
-	renderRank()
-
-	for i, score in sorted do
+	for i, score in lastSorted do
 		local isMe = not score.isBot and score.name == localName
 		local row = scoreRow(leaderboardList, i, score, isMe, (i - 1) * LB_ROW, true)
 		row:SetAttribute("Order", i)
 	end
+end
+
+-- Cette méthode permet de suivre les scores lorsque ScoreUpdate arrive : rang du timer tout de suite, lignes du
+-- classement seulement s'il est affiché (sinon à son ouverture, #606).
+local function applyScores(scores: { [number]: Score })
+	if not leaderboardList then
+		return
+	end
+	lastScores = scores
+	local sorted = HUDRules.sortScores(scores)
+	lastSorted = sorted
+	local rank = HUDRules.rankOf(sorted, Players.LocalPlayer.Name)
+	rankShown = if rank then { rank = rank, total = #sorted } else nil
+	renderRank()
+
+	leaderboardDirty = true
+	if leaderboard.Visible then
+		rebuildLeaderboard()
+	end
+end
+
+-- Cette méthode permet de recevoir les scores lorsque ScoreUpdate arrive (repère « kill : scores », #606).
+function RoundHUD.updateScores(scores: { [number]: Score })
+	timedScores(scores)
 end
 
 function RoundHUD.showRespawning(delaySeconds: number)
@@ -1424,6 +1453,9 @@ function RoundHUD.showResult(data: any)
 	local tabHeld = UserInputService:IsKeyDown(Enum.KeyCode.Tab)
 		or UserInputService:IsGamepadButtonDown(Enum.UserInputType.Gamepad1, PAD_SCOREBOARD)
 		or touchScoreboardHeld
+	if tabHeld and leaderboardDirty then
+		rebuildLeaderboard()
+	end
 	leaderboard.Visible = tabHeld
 	Locale.apply(resultName, view.title)
 	Locale.apply(resultNameShadow, view.title)
@@ -1500,6 +1532,9 @@ function RoundHUD.hideResult()
 		resultRoot.Visible = false
 	end
 end
+
+-- Repère des scores, posé après toutes les fonctions du module (une instruction entre elles les cache au typage)
+timedScores = PerfMarkers.wrap("kill : scores", applyScores)
 
 -- Langue changée : classement et conseil, composés en RichText, sont recomposés dans la nouvelle langue
 Locale.onChanged(function()

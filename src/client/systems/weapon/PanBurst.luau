@@ -2,8 +2,8 @@
 -- Effet de tir PAN ! (#566) : l'explosion de BD du skin PAN !, en volume (ReplicatedStorage.Props.PanBurst, fabriqué
 -- par assets/effects/pan_burst_3d.py), jaillit devant le canon : tournée de trois quarts au tir, elle pivote face à la
 -- caméra en grossissant, se pose, puis s'efface. Réglages et courbes dans ShotEffectRules (PAN_*, panFrame, panTurn).
--- Réserve de PAN_MAX_ACTIVE copies du modèle (MeshParts ancrées, sans collision), créée au premier tir puis réutilisée :
--- un tir ne crée aucune Instance. Chaque frame, taille et place de chaque pièce sont recalculées (échelle du pop).
+-- Réserve de PAN_MAX_ACTIVE copies du modèle (MeshParts ancrées, sans collision), remplie au démarrage en tâche de fond
+-- (`prewarm`, #606), à défaut au premier tir, puis réutilisée : un tir ne crée aucune Instance. Chaque frame, taille et place de chaque pièce sont recalculées (échelle du pop).
 -- Réserve pleine ou modèle absent : le tir n'a pas d'explosion.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -11,11 +11,14 @@ local RunService = game:GetService("RunService")
 
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
 local ShotEffectRules = require(ReplicatedStorage.Shared.ShotEffectRules)
+local AssetPreload = require(script.Parent.Parent.game.AssetPreload)
 local EffectClock = require(script.Parent.Parent.game.EffectClock)
 
 local PanBurst = {}
 
 PanBurst.INSTANCE_NAME = "PanBurst"
+-- Attente au plus (s) du modèle source répliqué, au remplissage de la réserve
+PanBurst.PREWARM_WAIT = 15
 
 -- Pièce d'une copie : la MeshPart, sa place par rapport au pivot du modèle et sa taille à l'échelle 1, sa transparence
 -- de repos (celle du modèle)
@@ -103,15 +106,34 @@ local function make(): Burst?
 	return burst
 end
 
--- Cette méthode permet de remplir la réserve lorsque le premier tir PAN ! part (ou que l'aperçu le demande).
-function PanBurst.prewarm()
+-- Cette méthode permet de remplir la réserve lorsque le premier tir PAN ! part, si le remplissage en tâche de fond ne
+-- l'a pas déjà fait (`fill`) ; `paced` : une copie par lot (AssetPreload.created), depuis une tâche de fond.
+local function fill(paced: boolean)
 	while #pool < ShotEffectRules.PAN_MAX_ACTIVE do
 		local burst = make()
 		if not burst then
 			return
 		end
 		table.insert(pool, burst)
+		if paced then
+			AssetPreload.created(#burst.pieces + 1)
+		end
 	end
+end
+
+-- Cette méthode permet de remplir la réserve au démarrage du client, depuis une tâche de fond (ShotEffects.init, #606) :
+-- le premier tir PAN ! ne crée rien. Attend le modèle source (réplication) au plus PREWARM_WAIT s.
+function PanBurst.prewarm()
+	local props = ReplicatedStorage:WaitForChild("Props", PanBurst.PREWARM_WAIT)
+	if props then
+		props:WaitForChild(ShotEffectRules.PAN_MODEL, PanBurst.PREWARM_WAIT)
+	end
+	fill(true)
+end
+
+-- Cette méthode permet de rendre le modèle source de l'explosion (nil s'il manque) lorsque ses meshes sont préchargés.
+function PanBurst.template(): Model?
+	return template()
 end
 
 -- Cette méthode permet de poser une explosion à un instant de sa vie lorsqu'une frame passe : face à la caméra
@@ -169,7 +191,7 @@ function PanBurst.spawn(
 	ahead: number?,
 	width: number?
 ): (Vector3?, number)
-	PanBurst.prewarm()
+	fill(false)
 	local index: number? = nil
 	for i, burst in pool do
 		if not burst.born then

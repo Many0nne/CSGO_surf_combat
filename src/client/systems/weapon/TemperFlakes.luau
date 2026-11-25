@@ -5,10 +5,12 @@
 -- bleu-gris. Réglages dans ShotEffectRules (TEMPER_FLAKE*). Réserve de TEMPER_FLAKE_EMITTERS jeux d'émetteurs (une pièce
 -- invisible par tronçon, ParticleEmitter en volume étiré sur le tronçon), utilisés à tour de rôle : un jeu est posé sur
 -- le rayon puis émet d'un coup ; ses écailles restent dans le monde (pas LockedToPart) quand il sert au tir suivant.
+-- La réserve est remplie au démarrage en tâche de fond (`prewarm`, #606), à défaut au fil des tirs.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local ShotEffectRules = require(ReplicatedStorage.Shared.ShotEffectRules)
+local AssetPreload = require(script.Parent.Parent.game.AssetPreload)
 
 local TemperFlakes = {}
 
@@ -90,6 +92,16 @@ local function make(): Emitters
 		table.insert(sections, makeSection(stops, folder :: Folder))
 	end
 	return { sections = sections }
+end
+
+-- Cette méthode permet de remplir la réserve au démarrage du client, depuis une tâche de fond (#606) : le premier tir
+-- TREMPE ne crée rien ; l'ordre d'usage des jeux reste celui d'un remplissage au fil des tirs.
+function TemperFlakes.prewarm()
+	while #pool < ShotEffectRules.TEMPER_FLAKE_EMITTERS do
+		local slot = make()
+		table.insert(pool, slot)
+		AssetPreload.created(#slot.sections * 2)
+	end
 end
 
 -- Cette méthode permet de semer les écailles d'un tir TREMPE le long du rayon `start` → `finish` lorsqu'il est tracé :
