@@ -446,9 +446,8 @@ local function effectImages(): { string }
 	return images
 end
 
--- Cette méthode permet de préparer au démarrage du client, en tâche de fond, tout ce que le premier tir d'un effet
--- créerait ou chargerait (#606) : réserve des rayons (MAX_ACTIVE), réserves des effets activés par lots, puis
--- textures et meshes (explosion PAN !).
+-- Cette méthode permet de préparer en tâche de fond, au démarrage du client, ce que le premier tir d'un effet créerait
+-- ou chargerait (#606) : réserves par lots, textures, puis PAN ! (qui attend son modèle répliqué).
 local function prewarm()
 	if prewarmStarted then
 		return
@@ -471,10 +470,10 @@ local function prewarm()
 		if ShotEffectRules.isEnabled("temper") then
 			TemperFlakes.prewarm()
 		end
+		AssetPreload.images(effectImages())
 		if ShotEffectRules.isEnabled("pan") then
 			PanBurst.prewarm()
 		end
-		AssetPreload.images(effectImages())
 		local pan = if ShotEffectRules.isEnabled("pan") then PanBurst.template() else nil
 		if pan then
 			AssetPreload.instances({ pan })

@@ -376,7 +376,8 @@ réserve ; un objet de la réserve repose **tous** ses réglages à chaque usage
 style). Ses textures et meshes passent par `AssetPreload.images` / `AssetPreload.instances` (ImageLabel hors interface :
 `PreloadAsync` échoue sur un id brut). Les réserves à tour de rôle (BALISE, TREMPE) gardent le même ordre d'usage que
 remplies au fil des tirs. Les tenues (`ReplicatedStorage.Outfits`, cartes et meshes) sont toutes préchargées par
-`SkinPreloader`.
+`SkinPreloader` (coût mémoire non mesuré ; 3 tenues au 2026-11-25 : si le catalogue grandit, ne précharger que les
+tenues portées).
 
 Mesures (Studio, Dizzy, 7 bots passifs, 21-23 FPS, banc déterministe : modules chargés à neuf depuis le MCP en contexte
 `Client`, mêmes appels sur `main` + repères puis sur la branche, dans la même session ; médianes) :

@@ -123,8 +123,8 @@ par `ScaleTo` avec le reste de l'arme.
     par le gris, violet et bronze invisibles) : TREMPE en a 20 (`TEMPER_SEGMENTS`). `LightEmission` 0,25 : plus haut, les
     couleurs sont lavées vers le blanc ; teintes plus saturées que le skin, qu'un Beam plat rend plus pâles.
   - **Juger un effet du menu en capture :** il ne vit que 0,3 s. Depuis un `execute_luau` client, guetter dans
-    `Terrain` le `ShotTracer` (et dans `workspace.PanBurst` une copie hors de sa rangée, Y > -5000) du prochain tir de
-    démonstration, en cloner une copie figée (transparence 0), figer les écailles (`TimeScale = 0` des émetteurs de
+    `Terrain` le `Beam` `ShotTracer` allumé (`Enabled`, les rayons éteints restent en réserve depuis #606) (et dans
+    `workspace.PanBurst` une copie hors de sa rangée, Y > -5000) du prochain tir de démonstration, en cloner une copie figée (transparence 0), figer les écailles (`TimeScale = 0` des émetteurs de
     `workspace.TemperFlakes`), capturer, puis tout détruire. Coordonnées de `user_mouse_input` : celles du viewport
     (sans la barre du haut, `GetMouseLocation` = y + 58) ; pour un bouton, passer plutôt son `instance_path`.
   - **PAN ! (`pan`) :** l'explosion de BD de la crosse du skin PAN !, en volume (rejet d'une version plate le
@@ -190,8 +190,10 @@ par `ScaleTo` avec le reste de l'arme.
     `WorldPosition` d'un Attachment **après** l'avoir rattaché, sinon sa position est décalée de celle du parent.
 - **Nouvelle arme à distance :** garder `Barrel.ShootPart.MuzzleEffect` dans son viewmodel (le copier de l'AWP), sinon
   elle tire sans flamme et son rayon part de l'œil.
-- **Vérifier qu'un tir ne laisse rien :** le rayon crée deux `Attachment` dans `Terrain` (et un `Beam`), tous nommés
-  `ShotTracer` : leur nombre revient à 0 après `TRACER_LIFETIME`.
+- **Vérifier qu'un tir ne laisse rien :** les rayons sont une réserve permanente (#606) : `MAX_ACTIVE` jeux de deux
+  `Attachment` et un `Beam` dans `Terrain`, tous nommés `ShotTracer`, créés au démarrage. Compter les `Beam` allumés
+  (`Enabled`) : leur nombre revient à 0 après `TRACER_LIFETIME`, et le nombre total de `ShotTracer` ne grandit pas
+  au-delà de la réserve (sauf tirs locaux au-delà de `MAX_ACTIVE` rayons en cours).
 - **Mesures (#54, Studio) :** bouche du canon du viewmodel AWP à 8,5 studs de la caméra (un mur plus proche que ça :
   pas de rayon local) ; flamme 3P à 0,7 × la taille du viewmodel (`ScaleTo` réduit aussi les particules) ; créer un
   rayon coûte ~0,1 ms ; un tir relayé de bot donne un rayon qui part exactement du canon 3P.

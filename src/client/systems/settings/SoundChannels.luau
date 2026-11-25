@@ -21,8 +21,8 @@ local music: SoundGroup
 local announcer: SoundGroup
 local footsteps: SoundGroup
 local started = false
--- Arbres déjà suivis (clés faibles) : un enfant retiré puis remis n'est pas branché deux fois
-local watched: { [Instance]: boolean } = setmetatable({}, { __mode = "k" }) :: any
+-- Arbres déjà suivis : un enfant retiré puis remis n'est pas branché deux fois (oublié à sa destruction)
+local watched: { [Instance]: boolean } = {}
 
 -- Conteneurs suivis en entier : sons du jeu (SoundService), de l'interface et des Tools du sac (Players)
 local WATCHED_SERVICES = { "SoundService", "Players", "ReplicatedFirst", "Lighting" }
@@ -48,6 +48,9 @@ local function watchTree(root: Instance)
 		return
 	end
 	watched[root] = true
+	root.Destroying:Once(function()
+		watched[root] = nil
+	end)
 	adopt(root)
 	for _, instance in root:GetDescendants() do
 		adopt(instance)
