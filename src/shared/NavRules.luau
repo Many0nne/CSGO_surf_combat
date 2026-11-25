@@ -724,6 +724,9 @@ function NavRules.fingerprint(plan: PlanLike): string
 	for _, key in rampKeys do
 		local path = plan.rampPaths[key]
 		mix(string.format("%d|%.4f|%d|", key, path.duration, #path.points))
+		for _, point in path.points do
+			mix(vec(point))
+		end
 	end
 	return string.format(
 		"%s : %d cases, %d arêtes, %d points, %d trajets de rampe, empreinte %08x",

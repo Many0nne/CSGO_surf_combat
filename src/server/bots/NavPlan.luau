@@ -73,6 +73,12 @@ function NavPlan.isDone(name: string): boolean
 	return plans[name] ~= nil or failed[name] == true
 end
 
+-- Cette méthode permet de noter qu'une map n'aura pas de plan lorsque sa préparation échoue avant la construction
+-- (copie impossible) : la rotation passe à la suivante, les bots y attendent sur place comme après un échec du plan.
+function NavPlan.markFailed(name: string)
+	failed[name] = true
+end
+
 -- Cette méthode permet de choisir le plan servi aux bots lorsque la map jouée change ; nil tant que son plan n'est pas
 -- construit.
 function NavPlan.setActive(name: string)

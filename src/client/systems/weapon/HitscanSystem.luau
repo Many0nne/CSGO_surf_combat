@@ -1,5 +1,6 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local MapGeometry = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("MapGeometry"))
 local MapSelection = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("MapSelection"))
@@ -19,21 +20,24 @@ local PREPARE_BUDGET = 0.001
 -- Cette méthode permet de préparer la liste de ce que traversent les tirs dans une map lorsqu'elle est jouée ou annoncée
 -- pour le round suivant (#605) : un peu par frame, pour que le premier tir sur cette map ne la calcule pas.
 local function prepareMap(map: Instance)
-	if MapGeometry.isPrepared(map) then
+	if MapGeometry.isPreparedOrPreparing(map) then
 		return
 	end
 	local started = os.clock()
 	local slicer = SlicedWork.slicer(MapGeometry.PREPARE_MARKER, PREPARE_BUDGET)
 	local list = MapGeometry.prepare(map, slicer.step)
 	slicer.finish()
-	print(
-		string.format(
-			"[MapGeometry] %s préparée avant le tir : %d entrées, %.2f s en tâche de fond",
-			map.Name,
-			#list,
-			os.clock() - started
+	-- Relevé de contrôle, dans Studio seulement (pas de journal par round chez les joueurs)
+	if RunService:IsStudio() then
+		print(
+			string.format(
+				"[MapGeometry] %s préparée avant le tir : %d entrées, %.2f s en tâche de fond",
+				map.Name,
+				#list,
+				os.clock() - started
+			)
 		)
-	)
+	end
 end
 
 -- Cette méthode permet de brancher les remotes du tir lorsque le système d'armes démarre : touche (HitscanDamage) et

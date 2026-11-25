@@ -3,6 +3,9 @@
 -- (debug.profilebegin, refermé avant chaque attente) et chronométrée pour la sonde serveur et l'overlay (PerfMarkers).
 -- `eachDescendant` parcourt dans l'ordre de GetDescendants (préfixe, en profondeur), `cloneInto` copie une map dossier
 -- par dossier, dans le même ordre que Clone : les calculs faits sur la copie sont ceux qu'on ferait sur l'original.
+-- Limites de cloneInto : pièces copiées une à une, donc une référence d'un sous-arbre à un autre (Weld, ObjectValue,
+-- PrimaryPart) garde sa cible d'origine, et un modèle recréé n'a ni PrimaryPart ni pivot. Le plan des bots ne lit que
+-- la géométrie (pièces, noms de dossiers, attributs) : à revoir si un calcul fait sur la copie en vient à les lire.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 

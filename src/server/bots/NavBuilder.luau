@@ -121,10 +121,19 @@ end
 -- thread qui peut céder la main (task.wait entre deux tranches de calcul). world : monde où se trouve la map
 -- (Workspace par défaut, WorldModel pour la copie d'une map rangée, #605).
 function NavBuilder.build(map: Instance, world: WorldRoot?): Plan
-	local started = os.clock()
-	local queryWorld: WorldRoot = world or workspace
 	local slicer = SlicedWork.slicer("nav plan", BotConfig.NAV_BUILD_BUDGET)
-	local slice = slicer.step
+	local ok, result = pcall(NavBuilder._build, map, world or workspace, slicer.step)
+	slicer.finish()
+	if not ok then
+		error(result, 0)
+	end
+	return result
+end
+
+-- Cette méthode permet de construire le plan (corps de build) lorsque le repère « nav plan » est ouvert : slice rend la
+-- main au moteur une fois la tranche de la frame écoulée.
+function NavBuilder._build(map: Instance, queryWorld: WorldRoot, slice: () -> ()): Plan
+	local started = os.clock()
 
 	local G = BotConfig.NAV_GRID
 	local R = BotConfig.NAV_BODY_RADIUS
@@ -622,7 +631,6 @@ function NavBuilder.build(map: Instance, world: WorldRoot?): Plan
 		slice()
 	end
 
-	slicer.finish()
 	local kept = 0
 	for _ in keep do
 		kept += 1

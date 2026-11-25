@@ -470,6 +470,9 @@ function BotManager.init(dependencies: Deps)
 		seeThrough = MapGeometry.bulletTransparent(map)
 	end)
 	MapSelection.observeNext(30, function(map)
+		if MapGeometry.isPreparedOrPreparing(map) then
+			return
+		end
 		local slicer = SlicedWork.slicer(MapGeometry.PREPARE_MARKER, BotConfig.NAV_BUILD_BUDGET)
 		MapGeometry.prepare(map, slicer.step)
 		slicer.finish()

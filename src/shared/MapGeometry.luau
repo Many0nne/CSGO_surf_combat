@@ -36,6 +36,8 @@ MapGeometry.PREPARE_MARKER = "map géométrie"
 -- Liste de chaque map, calculée une fois (maps statiques, rangées sans être détruites entre deux rounds ; clés fortes :
 -- une clé faible pourrait être recalculée à chaque tir)
 local cache: { [Instance]: { Instance } } = {}
+-- Maps dont la liste est en cours de préparation en tâche de fond (prepare avec step)
+local preparing: { [Instance]: boolean } = {}
 
 -- Cette méthode permet de retrouver le dossier des murs d'air d'une map lorsqu'un rayon doit les écarter (nil si la map
 -- n'en a pas).
@@ -78,7 +80,11 @@ function MapGeometry.prepare(map: Instance, step: (() -> ())?): { Instance }
 	end
 	local geometry = map:FindFirstChild(MapGeometry.GEOMETRY)
 	if geometry then
-		eachDescendant(geometry, function(inst)
+		local background = step ~= nil and not preparing[map]
+		if background then
+			preparing[map] = true
+		end
+		local ok, err = pcall(eachDescendant, geometry, function(inst)
 			if
 				inst:IsA("BasePart")
 				and MapGeometry.passesBullets(inst)
@@ -87,6 +93,12 @@ function MapGeometry.prepare(map: Instance, step: (() -> ())?): { Instance }
 				table.insert(list, inst)
 			end
 		end, step)
+		if background then
+			preparing[map] = nil
+		end
+		if not ok then
+			error(err, 0)
+		end
 	end
 	table.freeze(list)
 	-- Une autre préparation de la même map a pu finir pendant celle-ci : la première liste reste la liste gardée
@@ -101,6 +113,12 @@ end
 -- Cette méthode permet de savoir si la liste d'une map est déjà prête lorsqu'on vérifie qu'un tir ne la calculera pas.
 function MapGeometry.isPrepared(map: Instance): boolean
 	return cache[map] ~= nil
+end
+
+-- Cette méthode permet de savoir si la liste d'une map est prête ou en cours de préparation en tâche de fond lorsqu'une
+-- nouvelle préparation est demandée (map jouée et annoncée à la fois : un seul parcours).
+function MapGeometry.isPreparedOrPreparing(map: Instance): boolean
+	return cache[map] ~= nil or preparing[map] == true
 end
 
 -- Cette méthode permet de lister ce que les balles et le regard traversent dans une map lorsqu'on prépare un rayon :

@@ -240,11 +240,23 @@ function MapSelection.observeNext(timeout: number, callback: (Instance) -> ())
 		if not maps then
 			return
 		end
-		-- Cette méthode permet de passer la map annoncée au callback lorsque l'attribut NextMap est posé ou change.
+		local generation = 0
+		-- Cette méthode permet de passer la map annoncée au callback lorsque l'attribut NextMap est posé ou change : la
+		-- map est attendue (réplication du rangement) dans la limite de timeout, une annonce plus récente l'emporte.
 		local function deliver()
+			generation += 1
+			local mine = generation
 			local name = maps:GetAttribute(MapSelection.NEXT_ATTRIBUTE)
-			local map = if type(name) == "string" then MapSelection.find(name) else nil
-			if map then
+			if type(name) ~= "string" then
+				return
+			end
+			local deadline = os.clock() + timeout
+			local map = MapSelection.find(name)
+			while not map and mine == generation and os.clock() < deadline do
+				task.wait(0.2)
+				map = MapSelection.find(name)
+			end
+			if map and mine == generation then
 				callback(map)
 			end
 		end

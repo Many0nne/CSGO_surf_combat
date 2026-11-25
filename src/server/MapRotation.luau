@@ -71,14 +71,26 @@ local function buildFromCopy(map: Instance)
 	end
 	local started = os.clock()
 	local slicer = SlicedWork.slicer("map copie", BotConfig.NAV_BUILD_BUDGET)
-	local copy = SlicedWork.cloneInto(map, world, slicer.step)
+	local ok, copy = pcall(SlicedWork.cloneInto, map, world, slicer.step)
 	slicer.finish()
 	local copied = os.clock() - started
-	NavPlan.build(copy, world)
+	if ok then
+		NavPlan.build(copy, world)
+	else
+		NavPlan.markFailed(map.Name)
+		warn(string.format("[MapRotation] copie de %s impossible, pas de plan : %s", map.Name, tostring(copy)))
+	end
+	-- Copie détruite dans tous les cas (y compris une copie à moitié faite)
 	slicer = SlicedWork.slicer("map copie", BotConfig.NAV_BUILD_BUDGET)
-	SlicedWork.destroy(copy, slicer.step)
+	for _, leftover in world:GetChildren() do
+		if leftover.Name == map.Name then
+			pcall(SlicedWork.destroy, leftover, slicer.step)
+		end
+	end
 	slicer.finish()
-	print(string.format("[MapRotation] plan de %s construit sur une copie (copie %.1f s)", map.Name, copied))
+	if ok then
+		print(string.format("[MapRotation] plan de %s construit sur une copie (copie %.1f s)", map.Name, copied))
+	end
 end
 
 -- Cette méthode permet de construire en tâche de fond les plans de navigation de toutes les maps lorsque le serveur
