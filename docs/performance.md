@@ -340,9 +340,32 @@ Piège (typage) : dans un module dont les fonctions s'appellent avant d'être d�
 `local t = PerfMarkers.wrap(...)`) fait perdre à luau-lsp les fonctions définies après elle (`Key 'hideResult' not
 found`). Déclarer la variable en haut et l'affecter après la dernière fonction.
 
+Travaux longs étalés sur plusieurs frames (#605, `src/shared/SlicedWork.luau`) : `SlicedWork.slicer(nom, budget)` rend
+la main (`task.wait`) une fois la tranche de la frame écoulée ; chaque tranche est repérée sous son nom dans le
+MicroProfiler (repère refermé avant l'attente) et relevée par `PerfMarkers.record` (sonde serveur, overlay). Repères :
+`nav plan` (construction d'un plan de bots, 8 ms par frame), `map copie` (copie et destruction d'une map rangée pour son
+plan), `map géométrie` (liste des murs d'air et grillages d'une map, 1 ms par frame côté client comme serveur : `MapGeometry.PREPARE_BUDGET`). Repères
+ponctuels : `srv échange map` (échange des maps entre deux rounds), `srv boîte map` (boîte d'une map, une fois par
+map). Tout parcours d'une map entière (~20 000 pièces) passe par `SlicedWork.eachDescendant` (même ordre que
+`GetDescendants`) avec un `step`, jamais par un `GetDescendants` d'une traite dans une frame de jeu.
+
 Dans le MicroProfiler (Ctrl+F6, puis pause pour figer une frame lente), ces noms apparaissent sous `Heartbeat` ou
 `RenderStep` (`mouvement`, `caméra` et `viewmodel` sont sous `RenderStep`, `tenue 3P` sous `PreAnimation` et
 `PreSimulation`) : on voit si une frame lente vient de nos scripts ou du moteur (rendu, physique, GC).
+
+## Gels de la rotation des maps (#605, mesure du 2026-11-25)
+
+Studio, playtest solo (client et serveur dans le même processus, 67 ms par image au repos). Détail des plans des bots
+dans `docs/maps.md` (« Plans sur copie »).
+
+| Gel | Avant | Après |
+|---|---|---|
+| Map rangée prêtée au Workspace pour son plan (manche 1) | image client 185 ms, frame serveur 258 ms, map rendue chez les clients ~13 s | aucun pic au-dessus du repos (copie hors du Workspace, 1,4 s étalée) |
+| Premier tir sur une nouvelle map (liste des murs d'air et grillages) | Dizzy 8,6 à 13,4 ms dans la frame du tir (Radoub 0,3 à 0,5 ms) | 2,9 µs (liste prête : 23 frames, tranche max 2,05 ms, dès que la map est jouée ou annoncée) |
+| Boîte de la map à la première mort (zones Analytics) | `GetBoundingBox` dans la frame de la mort | faite au changement ou à l'annonce de la map (non chronométrée) |
+
+Piège : un `pcall` autour d'un travail découpé (`task.wait` dedans) cède sans problème dans Roblox ; mais un repère
+`debug.profilebegin` ouvert ne doit pas rester ouvert pendant l'attente, d'où `SlicedWork.slicer` qui le referme.
 
 ## Clip de la partie (#499, mesure du 2026-11-17)
 

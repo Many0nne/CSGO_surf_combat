@@ -137,9 +137,9 @@ function MapSelection.setup(maps: Instance?, wanted: string?): Instance?
 end
 
 -- Cette méthode permet de changer la map jouée lorsque la rotation passe à la suivante : la nouvelle entre dans
--- Workspace.Maps, ActiveMap est publié, puis l'ancienne est rangée (keep : laissée dans Workspace.Maps, le temps de
--- construire son plan de navigation). Renvoie la map jouée, inchangée si le nom est inconnu ou déjà joué.
-function MapSelection.switch(maps: Instance, name: string, keep: { [string]: boolean }?): Instance?
+-- Workspace.Maps, ActiveMap est publié, puis l'ancienne est rangée. Renvoie la map jouée, inchangée si le nom est inconnu
+-- ou déjà joué.
+function MapSelection.switch(maps: Instance, name: string): Instance?
 	local active = maps:GetAttribute(MapSelection.ACTIVE_ATTRIBUTE)
 	local map = MapSelection.find(name)
 	if not map then
@@ -150,7 +150,7 @@ function MapSelection.switch(maps: Instance, name: string, keep: { [string]: boo
 	maps:SetAttribute(MapSelection.ACTIVE_ATTRIBUTE, name)
 	local store = MapSelection.store(true) :: Folder
 	for _, child in maps:GetChildren() do
-		if child.Name ~= name and not (keep and keep[child.Name]) then
+		if child.Name ~= name then
 			child.Parent = store
 		end
 	end
@@ -225,6 +225,42 @@ function MapSelection.observe(timeout: number, callback: (Instance) -> ())
 			end
 		end
 		maps:GetAttributeChangedSignal(MapSelection.ACTIVE_ATTRIBUTE):Connect(function()
+			task.spawn(deliver)
+		end)
+		deliver()
+	end)
+end
+
+-- Cette méthode permet de suivre la map du round suivant lorsqu'un système veut la préparer avant l'échange (#605 :
+-- géométrie des tirs, boîte de la map) : callback reçoit la map annoncée (rangée ou jouée) dès qu'elle est connue, puis
+-- à chaque nouvelle annonce, en tâche de fond.
+function MapSelection.observeNext(timeout: number, callback: (Instance) -> ())
+	task.spawn(function()
+		local maps = workspace:WaitForChild("Maps", timeout)
+		if not maps then
+			return
+		end
+		local generation = 0
+		-- Cette méthode permet de passer la map annoncée au callback lorsque l'attribut NextMap est posé ou change : la
+		-- map est attendue (réplication du rangement) dans la limite de timeout, une annonce plus récente l'emporte.
+		local function deliver()
+			generation += 1
+			local mine = generation
+			local name = maps:GetAttribute(MapSelection.NEXT_ATTRIBUTE)
+			if type(name) ~= "string" then
+				return
+			end
+			local deadline = os.clock() + timeout
+			local map = MapSelection.find(name)
+			while not map and mine == generation and os.clock() < deadline do
+				task.wait(0.2)
+				map = MapSelection.find(name)
+			end
+			if map and mine == generation then
+				callback(map)
+			end
+		end
+		maps:GetAttributeChangedSignal(MapSelection.NEXT_ATTRIBUTE):Connect(function()
 			task.spawn(deliver)
 		end)
 		deliver()

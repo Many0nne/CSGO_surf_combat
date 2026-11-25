@@ -25,6 +25,7 @@ local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local MapGeometry = require(ReplicatedStorage.Shared.MapGeometry)
 local MapSelection = require(ReplicatedStorage.Shared.MapSelection)
 local PerfMarkers = require(ReplicatedStorage.Shared.PerfMarkers)
+local SlicedWork = require(ReplicatedStorage.Shared.SlicedWork)
 local Participants = require(ServerScriptService.Server.Participants)
 local BotArsenal = require(script.Parent.BotArsenal)
 local BotBrain = require(script.Parent.BotBrain)
@@ -463,10 +464,21 @@ end
 -- Cette méthode permet de démarrer la gestion des bots lorsque le serveur démarre.
 function BotManager.init(dependencies: Deps)
 	deps = dependencies
-	-- Murs d'air et grillages de la map jouée, relevés à chaque changement de map (#594) ; les plans de navigation sont
-	-- construits et choisis par MapRotation (NavPlan)
+	-- Murs d'air et grillages de la map jouée, relevés à chaque changement de map (#594) et préparés un peu par frame dès
+	-- que la map est annoncée (#605) ; les plans de navigation sont construits et choisis par MapRotation (NavPlan)
 	MapSelection.observe(30, function(map)
 		seeThrough = MapGeometry.bulletTransparent(map)
+	end)
+	MapSelection.observeNext(30, function(map)
+		if MapGeometry.isPreparedOrPreparing(map) then
+			return
+		end
+		local slicer = SlicedWork.slicer(MapGeometry.PREPARE_MARKER, MapGeometry.PREPARE_BUDGET)
+		local ok, err = pcall(MapGeometry.prepare, map, slicer.step)
+		slicer.finish()
+		if not ok then
+			warn(string.format("[MapGeometry] préparation de %s impossible : %s", map.Name, tostring(err)))
+		end
 	end)
 	NavDebug.init(function()
 		local list = {}

@@ -32,6 +32,7 @@ GroundDetection.__index = GroundDetection
 export type GroundDetection = typeof(setmetatable(
 	{} :: {
 		params: RaycastParams,
+		world: WorldRoot,
 		castRadius: number,
 		halfHeight: number,
 		centerOffset: number,
@@ -42,8 +43,12 @@ export type GroundDetection = typeof(setmetatable(
 ))
 
 -- Cette méthode permet de préparer la détection du sol d'un personnage lorsqu'il apparaît (ses pièces sont exclues
--- des rayons, dimensions debout mesurées sur son rig).
-function GroundDetection.new(character: Model, dims: CharacterDimensions.CharacterDimensions): GroundDetection
+-- des rayons, dimensions debout mesurées sur son rig) ; world : monde des rayons (Workspace par défaut).
+function GroundDetection.new(
+	character: Model,
+	dims: CharacterDimensions.CharacterDimensions,
+	world: WorldRoot?
+): GroundDetection
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = { character, workspace.CurrentCamera }
@@ -52,6 +57,7 @@ function GroundDetection.new(character: Model, dims: CharacterDimensions.Charact
 	local castDist = stand.halfHeight + CAST_SKIN
 	return setmetatable({
 		params = params,
+		world = world or workspace,
 		castRadius = stand.radius - 0.05,
 		halfHeight = stand.halfHeight,
 		centerOffset = stand.centerOffset,
@@ -75,7 +81,7 @@ function GroundDetection.getGroundInfo(
 
 	-- Détection par spherecast (capsule tolérante), avec repli sur 4 quadrants
 	-- pour ne pas rater le sol au bord d'une marche (≈ TryTouchGroundInQuadrants).
-	local result = workspace:Spherecast(origin, castRadius, castDir, params)
+	local result = self.world:Spherecast(origin, castRadius, castDir, params)
 	if not result then
 		local q = castRadius * 0.6
 		for _, off in ipairs({
@@ -84,7 +90,7 @@ function GroundDetection.getGroundInfo(
 			Vector3.new(0, 0, q),
 			Vector3.new(0, 0, -q),
 		}) do
-			result = workspace:Spherecast(origin + off, castRadius, castDir, params)
+			result = self.world:Spherecast(origin + off, castRadius, castDir, params)
 			if result then
 				break
 			end
@@ -102,7 +108,7 @@ function GroundDetection.getGroundInfo(
 	local lowOrigin = Vector3.new(origin.X, feetY + Config.STEPUP_HEIGHT + castRadius, origin.Z)
 	local drop = origin.Y - lowOrigin.Y
 	if drop > 0 and PhysicsUtils.isSideContact(result.Position.Y, feetY, Config.STEPUP_HEIGHT) then
-		local low = workspace:Spherecast(lowOrigin, castRadius, Vector3.new(0, -(castDist - drop), 0), params)
+		local low = self.world:Spherecast(lowOrigin, castRadius, Vector3.new(0, -(castDist - drop), 0), params)
 		if not low or PhysicsUtils.isSideContact(low.Position.Y, feetY, Config.STEPUP_HEIGHT) then
 			return GROUND_MISS
 		end
@@ -118,7 +124,7 @@ function GroundDetection.getGroundInfo(
 	-- et lit une face plus plate (ou le sol SOUS la rampe) → faux "marchable".
 	local normal = result.Normal
 	local probeLen = result.Distance + castRadius + 0.1 -- depuis `origin` (relevée si la sonde a été relancée)
-	local centerRay = workspace:Raycast(origin, Vector3.new(0, -probeLen, 0), params)
+	local centerRay = self.world:Raycast(origin, Vector3.new(0, -probeLen, 0), params)
 	if centerRay then
 		normal = centerRay.Normal
 	end

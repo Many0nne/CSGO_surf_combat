@@ -1,8 +1,10 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local MapGeometry = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("MapGeometry"))
 local MapSelection = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("MapSelection"))
+local SlicedWork = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("SlicedWork"))
 local WeaponConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("WeaponConfig"))
 local ShotEffects = require(script.Parent.ShotEffects)
 
@@ -10,12 +12,46 @@ local HitscanSystem = {}
 
 local hitscanEvent: RemoteEvent? = nil
 local shotFiredEvent: RemoteEvent? = nil
+local watching = false
+
+-- Cette méthode permet de préparer la liste de ce que traversent les tirs dans une map lorsqu'elle est jouée ou annoncée
+-- pour le round suivant (#605) : un peu par frame, pour que le premier tir sur cette map ne la calcule pas.
+local function prepareMap(map: Instance)
+	if MapGeometry.isPreparedOrPreparing(map) then
+		return
+	end
+	local started = os.clock()
+	local slicer = SlicedWork.slicer(MapGeometry.PREPARE_MARKER, MapGeometry.PREPARE_BUDGET)
+	local ok, list = pcall(MapGeometry.prepare, map, slicer.step)
+	slicer.finish()
+	if not ok then
+		warn(string.format("[MapGeometry] préparation de %s impossible : %s", map.Name, tostring(list)))
+		return
+	end
+	-- Relevé de contrôle, dans Studio seulement (pas de journal par round chez les joueurs)
+	if RunService:IsStudio() then
+		print(
+			string.format(
+				"[MapGeometry] %s préparée avant le tir : %d entrées, %.2f s en tâche de fond",
+				map.Name,
+				#list,
+				os.clock() - started
+			)
+		)
+	end
+end
 
 -- Cette méthode permet de brancher les remotes du tir lorsque le système d'armes démarre : touche (HitscanDamage) et
--- tir parti, entendu par les autres joueurs (ShotFired, #156).
+-- tir parti, entendu par les autres joueurs (ShotFired, #156) ; murs d'air et grillages de la map jouée et de la
+-- suivante préparés à l'avance (#605).
 function HitscanSystem.init(event: RemoteEvent?, shotEvent: RemoteEvent?)
 	hitscanEvent = event
 	shotFiredEvent = shotEvent
+	if not watching then
+		watching = true
+		MapSelection.observe(30, prepareMap)
+		MapSelection.observeNext(30, prepareMap)
+	end
 end
 
 -- Cette méthode permet de lister ce que le tir traverse dans la map jouée lorsqu'un tir part : murs d'air et grillages

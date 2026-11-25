@@ -31,6 +31,7 @@ export type Params = {
 	entryPos: Vector3,
 	killY: number?,
 	castParams: RaycastParams, -- requêtes dans la map (sol devant lui)
+	world: WorldRoot?, -- monde de la map (Workspace par défaut ; WorldModel d'une copie de map rangée, #605)
 	cellsNear: (point: Vector3, radius: number) -> { Candidate },
 	yield: (() -> ())?, -- appelé à chaque tick simulé (NavBuilder : rend la main quand la tranche de la frame est écoulée)
 }
@@ -106,7 +107,8 @@ function RampSim.simulate(rig: Rig, params: Params): (RampRules.Trajectory?, str
 	local standing = CFrame.new(params.entryPos + Vector3.new(0, MovementConfig.CHAR_HEIGHT_STAND / 2, 0))
 	rig.root.CFrame = standing
 	rig.body.CFrame = standing
-	local motor = CharacterMotor.new(rig.model, rig.root, false)
+	local world: WorldRoot = params.world or workspace
+	local motor = CharacterMotor.new(rig.model, rig.root, false, world)
 	local ci = motor:standInfo()
 	local lift = Vector3.new(0, ci.rootToBottom, 0)
 	motor:teleport(CFrame.new(params.entryPos + lift))
@@ -159,7 +161,7 @@ function RampSim.simulate(rig: Rig, params: Params): (RampRules.Trajectory?, str
 			if not jumped then
 				-- Saut près du point de passage, ou au bord du vide (rien sous les pieds un peu plus loin)
 				local ahead = motor.cframe.Position + wish * (ci.radius + 1.5)
-				local floor = workspace:Raycast(ahead, Vector3.new(0, -(ci.rootToBottom + 2), 0), params.castParams)
+				local floor = world:Raycast(ahead, Vector3.new(0, -(ci.rootToBottom + 2), 0), params.castParams)
 				jump = MathRules.horizontalLength(approach - foot) <= BotConfig.RAMP_JUMP_DIST or floor == nil
 			end
 			jumped = jumped or jump

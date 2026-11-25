@@ -7,19 +7,23 @@ local HeadCollisionResolver = {}
 HeadCollisionResolver.__index = HeadCollisionResolver
 
 export type HeadCollisionResolver = typeof(setmetatable(
-	{} :: { castParams: RaycastParams, lastSafeCenter: Vector3? },
+	{} :: { castParams: RaycastParams, lastSafeCenter: Vector3?, world: WorldRoot },
 	HeadCollisionResolver
 ))
 
 local SKIN = 0.05 -- studs, marge anti-pénétration
 
--- Cette méthode permet de préparer les collisions de tête d'un personnage lorsqu'il apparaît (ses pièces exclues).
-function HeadCollisionResolver.new(char: Model): HeadCollisionResolver
+-- Cette méthode permet de préparer les collisions de tête d'un personnage lorsqu'il apparaît (ses pièces exclues) ;
+-- world : monde des requêtes (Workspace par défaut).
+function HeadCollisionResolver.new(char: Model, world: WorldRoot?): HeadCollisionResolver
 	local castParams = RaycastParams.new()
 	castParams.FilterType = Enum.RaycastFilterType.Exclude
 	castParams.FilterDescendantsInstances = { char, workspace.CurrentCamera }
 	CollisionGroups.ignoreCharacters(castParams)
-	return setmetatable({ castParams = castParams, lastSafeCenter = nil }, HeadCollisionResolver)
+	return setmetatable(
+		{ castParams = castParams, lastSafeCenter = nil, world = world or workspace },
+		HeadCollisionResolver
+	)
 end
 
 function HeadCollisionResolver.getHeadHitAlongMove(
@@ -31,7 +35,7 @@ function HeadCollisionResolver.getHeadHitAlongMove(
 	if moveVec.Magnitude < 1e-4 then
 		return nil
 	end
-	return workspace:Spherecast(startPos, radius, moveVec, self.castParams)
+	return self.world:Spherecast(startPos, radius, moveVec, self.castParams)
 end
 
 function HeadCollisionResolver.resolve(
@@ -49,7 +53,7 @@ function HeadCollisionResolver.resolve(
 	local dir = moveVec.Unit
 	local dist = moveVec.Magnitude
 	-- on recule de SKIN : détecte le contact AVANT la pénétration
-	local hit = workspace:Spherecast(headCenter - dir * SKIN, info.radius, dir * (dist + SKIN), self.castParams)
+	local hit = self.world:Spherecast(headCenter - dir * SKIN, info.radius, dir * (dist + SKIN), self.castParams)
 	if not hit then
 		return moveVec, false
 	end
@@ -81,7 +85,7 @@ function HeadCollisionResolver.sweep(self: HeadCollisionResolver, moveVec, hrpPo
 		return moveVec, moveVec, false
 	end
 
-	local hit = workspace:Spherecast(from, info.radius, delta, self.castParams)
+	local hit = self.world:Spherecast(from, info.radius, delta, self.castParams)
 	if not hit then
 		self.lastSafeCenter = target
 		return moveVec, moveVec, false

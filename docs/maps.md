@@ -25,9 +25,21 @@ dans Studio). En jeu :
   `KillZone`, géométrie anti-triche `CharacterSync`, murs d'air des bots, boosts et échelles du client), jamais par un
   nom en dur ni par un cache gardé d'un round à l'autre. `MapSelection.find` trouve aussi une map rangée (lecteur de
   démo).
-- **Plans des bots** : un par map, gardé (`NavPlan.build`, `NavPlan.setActive`). La map jouée d'abord, puis chaque autre
-  map est **prêtée** à `Workspace.Maps` le temps de sa construction (les rayons ne touchent que le Workspace) : un
-  changement de map ne fait jamais attendre les bots, sauf au tout premier round si le plan suivant n'est pas fini.
+- **Plans des bots** : un par map, gardé (`NavPlan.build`, `NavPlan.setActive`). La map jouée d'abord (dans
+  `Workspace.Maps`), puis chaque autre map sur une **copie** rangée dans un `WorldModel` de `ServerStorage` (`NavWorld`,
+  #605) : rien n'est répliqué aux clients, la map rangée ne bouge pas. Copie et destruction sont étalées sur plusieurs
+  frames (`SlicedWork.cloneInto`, repère `map copie`), et toutes les requêtes du plan (rayons, `GetPartsInPart`, et la
+  simulation des rampes par `CharacterMotor`) passent par le monde de la map (paramètre `world`, Workspace par défaut).
+  Un changement de map ne fait jamais attendre les bots, sauf au tout premier round si le plan suivant n'est pas fini.
+  Piste rejetée : **prêter** la map à `Workspace.Maps` le temps du calcul (#594) : deux changements de parent répliqués
+  à tous les clients en pleine manche (une image client de 170 à 250 ms chacun, cf. tableau ci-dessous), et la map
+  prêtée était rendue et solide chez eux pendant ~13 s.
+- **Préparé à l'avance** (#605) : tout ce qui se relève une fois par map se garde par map (la map rangée n'est pas
+  détruite) et se calcule dès que la map est jouée **ou annoncée** (`MapSelection.observeNext`, attribut `NextMap`),
+  en tâche de fond : liste des murs d'air et grillages des tirs (`MapGeometry.prepare`, client et serveur), boîte de la
+  map des zones de mort (`init.server`). Le premier tir sur une nouvelle map ne parcourt plus ses ~20 000 pièces.
+  Exception, Studio seulement : `DebugMap` posé hors round change la map sans l'annoncer, la liste est alors calculée
+  d'une traite (serveur au changement, client au premier tir) ; ne pas mesurer un gel de premier tir par ce chemin.
 - **Forcer une map dans Studio** : attribut `DebugMap` de `Workspace` (nom d'une map), en contexte Server pendant le
   playtest : `workspace:SetAttribute("DebugMap", "Radoub")`. Hors round (menu), la map change tout de suite ; pendant un
   round, elle est annoncée pour le suivant. Tant qu'il est posé, la rotation reste sur cette map ; le retirer
@@ -48,6 +60,22 @@ Studio, 40 à 68 ms par image au repos ; Dizzy 19 939 pièces ; Radoub habillée
 D'où `ReplicatedStorage.MapStore` : les clients gardent les maps rangées en mémoire (pas de réplication au changement),
 mais ni rendu ni collision. La saccade restante (0,2 s environ) tombe entre la fin du clip et l'apparition (volets de
 transition), pas en jeu. Non mesuré sur un vrai client en ligne (réseau, machine modeste).
+
+Plans sur copie (#605, mesure du 25/11/2026, Studio, playtest solo, fenêtre bridée : 67 ms par image au repos, pire
+image au repos 141 ms côté client, 144 ms côté serveur) :
+
+| Mesure | Avant : map prêtée à `Workspace.Maps` | Après : copie dans `NavWorld` |
+|---|---|---|
+| Map vue par le client pendant le calcul | Radoub ajoutée à `Workspace.Maps` (rendue, solide) | `Workspace.Maps` = `[Dizzy]` de bout en bout |
+| Pire image client | 185 ms (au prêt) | 158 ms (= pire image pendant le plan de Dizzy, 160 ms) |
+| Pire frame serveur | 258 ms (78 ms de prêt, 70 ms de rangement) | 119 ms (copie de Radoub : 1,4 s, 23 frames) |
+| Plan de Radoub (empreinte `NavRules.fingerprint`) | `bd16143a`, 45 089 cases | `bd16143a`, 45 089 cases |
+| Plan de Dizzy (au cas où DebugMap ouvre sur Radoub) | `0f33baae`, 41 191 cases, 4 trajets de rampe | `0f33baae` |
+
+Contrôle d'identité refait à la main (mode Edit, `execute_luau`) : construire la même map dans le Workspace puis sur
+une copie (`SlicedWork.cloneInto` dans un `WorldModel`), et comparer `NavRules.fingerprint` des deux plans.
+`WorldModel` hors du Workspace : rayons, `Blockcast`, `Spherecast` et `GetPartsInPart` y marchent (la sonde de
+`GetPartsInPart` doit être rangée dans le même monde, d'où une sonde `PenProbe` par monde dans `WallSlide`).
 
 ## Dizzy (map par défaut)
 

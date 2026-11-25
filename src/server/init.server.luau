@@ -527,10 +527,29 @@ local function forgetCombatState(participant: Participants.Participant)
 	ShotRelayRules.forget(shotRelay, participant)
 end
 
--- Boîte (X, Z) de la map jouée, lue à la première mort comptée sur cette map : grille des zones de l'événement Mort
--- (#527), relue quand la rotation change de map (#594)
-local mapBounds: AnalyticsRules.Bounds? = nil
-local mapBoundsOf: Instance? = nil
+-- Boîte (X, Z) de chaque map : grille des zones de l'événement Mort (#527). Calculée une fois par map (statique, rangée
+-- sans être détruite entre deux rounds, #594) dès qu'elle est jouée ou annoncée (#605), pas dans la frame d'une mort
+local mapBounds: { [Instance]: AnalyticsRules.Bounds } = {}
+
+-- Cette méthode permet de calculer la boîte (X, Z) d'une map lorsqu'elle est jouée ou annoncée pour le round suivant
+-- (une fois par map, repère « srv boîte map » du MicroProfiler) ; nil pour une map qui n'est pas un modèle.
+local function boundsOf(map: Instance): AnalyticsRules.Bounds?
+	local known = mapBounds[map]
+	if known or not map:IsA("Model") then
+		return known
+	end
+	debug.profilebegin("srv boîte map")
+	local center, size = map:GetBoundingBox()
+	debug.profileend()
+	local bounds = {
+		minX = center.X - size.X / 2,
+		maxX = center.X + size.X / 2,
+		minZ = center.Z - size.Z / 2,
+		maxZ = center.Z + size.Z / 2,
+	}
+	mapBounds[map] = bounds
+	return bounds
+end
 
 -- Cette méthode permet de nommer la zone de la map où se trouve le personnage d'un participant lorsqu'une mort est
 -- comptée (grille AnalyticsRules.zone, boîte englobante de la map jouée, « ? » sans personnage ni map).
@@ -541,19 +560,7 @@ local function deathZone(participant: Participants.Participant): string
 		return "?"
 	end
 	local map = MapSelection.current()
-	if map ~= mapBoundsOf then
-		mapBounds, mapBoundsOf = nil, map
-		if map and map:IsA("Model") then
-			local center, size = map:GetBoundingBox()
-			mapBounds = {
-				minX = center.X - size.X / 2,
-				maxX = center.X + size.X / 2,
-				minZ = center.Z - size.Z / 2,
-				maxZ = center.Z + size.Z / 2,
-			}
-		end
-	end
-	return AnalyticsRules.zone(root.Position.X, root.Position.Z, mapBounds)
+	return AnalyticsRules.zone(root.Position.X, root.Position.Z, if map then boundsOf(map) else nil)
 end
 
 -- Cette méthode permet d'appliquer les suites d'une mort (bot tueur replacé, stats persistantes) lorsqu'un personnage
@@ -687,6 +694,13 @@ MapRotation.init({
 		return RoundManager.getState() == "idle"
 	end,
 })
+-- Boîte de la map jouée et de la suivante, calculée à l'avance pour les zones de mort (#605)
+MapSelection.observe(30, function(map)
+	boundsOf(map)
+end)
+MapSelection.observeNext(30, function(map)
+	boundsOf(map)
+end)
 
 -- Règles de la demande (déjà vivant, spawn en vol, bannière de fin, délai depuis la mort) : SpawnRules (#171)
 SpawnManager.init(spawnRmt, {
