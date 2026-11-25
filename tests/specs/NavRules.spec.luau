@@ -394,4 +394,50 @@ return function(T, Loader)
 			T.expectEqual(stalled, 0, "1 stud : progrès, compteur remis à 0")
 		end)
 	end)
+
+	T.describe("NavRules.fingerprint", function()
+		-- Cette méthode permet de construire un petit plan lorsqu'un test compare deux empreintes.
+		local function plan()
+			local g = graph({ Vector3.new(0, 0, 0), Vector3.new(4, 0, 0), Vector3.new(8, 1, 0) }, {
+				{ 1, 2, Rules.WALK, true },
+				{ 2, 3, Rules.JUMP },
+			})
+			return {
+				mapName = "Radoub",
+				grid = 4,
+				originX = -2,
+				originZ = -2,
+				graph = g,
+				keep = { [1] = true, [2] = true },
+				clearance = { 1, 2, 1 },
+				waypoints = {
+					{ cell = 1, position = Vector3.new(0, 0, 0), kind = "open", score = 0.5, visible = { 2 } },
+					{ cell = 3, position = Vector3.new(8, 1, 0), kind = "high", score = 0.75, visible = { 1 } },
+				},
+				ladders = { { bottom = 1, top = 3 } },
+				rampPaths = { [Rules.edgeKey(2, 3)] = { duration = 1.5, points = { Vector3.zero, Vector3.one } } },
+			}
+		end
+
+		T.it("donne la même empreinte à deux constructions identiques, et la résume", function()
+			local text = Rules.fingerprint(plan())
+			T.expectEqual(text, Rules.fingerprint(plan()))
+			T.expect(string.find(text, "3 cases, 3 arêtes, 2 points, 1 trajets de rampe", 1, true) ~= nil, text)
+		end)
+
+		T.it("change si une case, une arête, un point ou une rampe diffère", function()
+			local reference = Rules.fingerprint(plan())
+			local moved = plan()
+			moved.graph.positions[3] = Vector3.new(8, 1.01, 0)
+			local kind = plan()
+			kind.graph.outKind[2][2] = Rules.DROP
+			local score = plan()
+			score.waypoints[1].score = 0.6
+			local ramp = plan()
+			ramp.rampPaths[Rules.edgeKey(2, 3)].duration = 1.6
+			for name, variant in { moved = moved, kind = kind, score = score, ramp = ramp } do
+				T.expect(Rules.fingerprint(variant) ~= reference, name)
+			end
+		end)
+	end)
 end

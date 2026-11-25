@@ -79,6 +79,57 @@ return function(T, Loader)
 		T.it("rend une liste vide pour une map sans Geometry", function()
 			T.expectEqual(#MapGeometry.bulletTransparent(make("Model", "Vide", nil)), 0)
 		end)
+
+		T.it("garde la liste de chaque map quand les maps alternent (rotation, #605)", function()
+			local dizzy = fakeMap()
+			local radoub = fakeMap()
+			local first = MapGeometry.bulletTransparent(dizzy)
+			local other = MapGeometry.bulletTransparent(radoub)
+			T.expect(first ~= other, "une liste par map")
+			T.expectEqual(MapGeometry.bulletTransparent(dizzy), first)
+			T.expectEqual(MapGeometry.bulletTransparent(radoub), other)
+		end)
+	end)
+
+	T.describe("MapGeometry.prepare", function()
+		T.it("prépare à l'avance la liste que le premier tir relira (#605)", function()
+			local map, parts = fakeMap()
+			T.expect(not MapGeometry.isPrepared(map), "pas encore préparée")
+			local steps = 0
+			local list = MapGeometry.prepare(map, function()
+				steps += 1
+			end)
+			T.expect(MapGeometry.isPrepared(map), "préparée")
+			T.expectEqual(MapGeometry.bulletTransparent(map), list)
+			T.expect(has(list, parts.clips) and has(list, parts.fence), "même contenu que bulletTransparent")
+			T.expectEqual(steps, #map.Geometry:GetDescendants())
+		end)
+
+		T.it("rend la liste déjà gardée sans reparcourir la map", function()
+			local map = fakeMap()
+			local list = MapGeometry.prepare(map)
+			local steps = 0
+			T.expectEqual(
+				MapGeometry.prepare(map, function()
+					steps += 1
+				end),
+				list
+			)
+			T.expectEqual(steps, 0)
+		end)
+
+		T.it("garde la première liste quand deux préparations de la même map se croisent", function()
+			local map = fakeMap()
+			local inner: { any }? = nil
+			-- La seconde préparation se termine pendant la première (premier pas de celle-ci)
+			local outer = MapGeometry.prepare(map, function()
+				if not inner then
+					inner = MapGeometry.prepare(map)
+				end
+			end)
+			T.expectEqual(outer, inner)
+			T.expectEqual(MapGeometry.bulletTransparent(map), inner)
+		end)
 	end)
 
 	T.describe("MapGeometry.seeThrough", function()

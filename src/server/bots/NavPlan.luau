@@ -1,5 +1,6 @@
--- Plans de navigation des maps (#140) : un par map, construit une fois (NavBuilder) pendant que la map est dans
--- Workspace.Maps, gardé ensuite pour les retours de la map en rotation (#594), puis interrogé par les bots (case la plus
+-- Plans de navigation des maps (#140) : un par map, construit une fois (NavBuilder) sur la map jouée dans Workspace.Maps
+-- ou sur la copie d'une map rangée dans un WorldModel hors du Workspace (#605, MapRotation), gardé ensuite pour les
+-- retours de la map en rotation (#594), puis interrogé par les bots (case la plus
 -- proche, chemin, destination, échelle) sur la map jouée. Tant que le plan de la map jouée n'est pas prêt, get() renvoie
 -- nil et les bots attendent sur place.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -19,10 +20,10 @@ local building: { [string]: boolean } = {}
 local failed: { [string]: boolean } = {}
 local activeName: string? = nil
 
--- Cette méthode permet de construire le plan d'une map lorsqu'elle est dans Workspace.Maps et qu'il n'existe pas encore :
--- attend la fin de la construction (tâche découpée par NAV_BUILD_BUDGET) et renvoie le plan, nil en cas d'échec. Un appel
--- pendant la construction du même plan attend celle-ci.
-function NavPlan.build(map: Instance): Plan?
+-- Cette méthode permet de construire le plan d'une map lorsqu'il n'existe pas encore : attend la fin de la construction
+-- (tâche découpée par NAV_BUILD_BUDGET) et renvoie le plan, nil en cas d'échec. Un appel pendant la construction du même
+-- plan attend celle-ci. world : monde de la map (Workspace par défaut, WorldModel pour la copie d'une map rangée).
+function NavPlan.build(map: Instance, world: WorldRoot?): Plan?
 	local name = map.Name
 	while building[name] do
 		task.wait(0.2)
@@ -31,7 +32,7 @@ function NavPlan.build(map: Instance): Plan?
 		return plans[name]
 	end
 	building[name] = true
-	local ok, result = pcall(NavBuilder.build, map)
+	local ok, result = pcall(NavBuilder.build, map, world)
 	building[name] = false
 	if not ok then
 		failed[name] = true
@@ -66,8 +67,8 @@ function NavPlan.build(map: Instance): Plan?
 	return plan
 end
 
--- Cette méthode permet de savoir si le plan d'une map est prêt (ou a échoué) lorsque la rotation décide de prêter la map
--- à Workspace pour le construire.
+-- Cette méthode permet de savoir si le plan d'une map est prêt (ou a échoué) lorsque la rotation décide de copier la map
+-- pour le construire.
 function NavPlan.isDone(name: string): boolean
 	return plans[name] ~= nil or failed[name] == true
 end

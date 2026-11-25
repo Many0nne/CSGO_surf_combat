@@ -30,32 +30,54 @@ local SNAP_IN = 1.4 -- distance (en rayons) vers la surface
 local SNAP_MAX = 1.0 -- decalage max (en rayons) qu'un snap peut appliquer
 local LEAVE_SPEED = 0 -- au-dela de cette vitesse SORTANTE, on ne recolle pas (saut/ejection)
 
--- Sonde de pénétration unique pour tous les personnages (#139) : elle est replacée juste avant chaque requête, et
--- chaque instance l'exclut de ses propres OverlapParams.
-local penProbe = Instance.new("Part")
-penProbe.Anchored = true
-penProbe.CanCollide = false
-penProbe.CanQuery = false
-penProbe.CanTouch = false
-penProbe.Transparency = 1
-penProbe.Name = "PenProbe"
+-- Sonde de pénétration unique pour tous les personnages d'un même monde (#139) : elle est replacée juste avant chaque
+-- requête, et chaque instance l'exclut de ses propres OverlapParams. Une sonde par monde (Workspace, et WorldModel
+-- d'une copie de map pour la simulation des rampes du plan des bots, #605) : GetPartsInPart demande une sonde du monde.
+local penProbes: { [WorldRoot]: BasePart } = {}
+
+-- Cette méthode permet de rendre la sonde de pénétration d'un monde lorsqu'un personnage y est préparé (créée au
+-- premier appel, rangée dans ce monde).
+local function penProbeOf(world: WorldRoot): BasePart
+	local probe = penProbes[world]
+	if not probe then
+		local part = Instance.new("Part")
+		part.Anchored = true
+		part.CanCollide = false
+		part.CanQuery = false
+		part.CanTouch = false
+		part.Transparency = 1
+		part.Name = "PenProbe"
+		penProbes[world] = part
+		probe = part
+	end
+	if probe.Parent ~= world then
+		probe.Parent = world
+	end
+	return probe
+end
 
 local WallSlide = {}
 WallSlide.__index = WallSlide
 
-export type WallSlide = typeof(setmetatable({} :: { castParams: RaycastParams, penOP: OverlapParams }, WallSlide))
+export type WallSlide = typeof(setmetatable(
+	{} :: { castParams: RaycastParams, penOP: OverlapParams, world: WorldRoot, penProbe: BasePart },
+	WallSlide
+))
 
 local function penInfoRaw(self: WallSlide, pos: Vector3, radius: number, rtb: number, rtt: number): BasePart?
 	local centerY = (rtt - rtb) * 0.5
+	local penProbe = self.penProbe
 	penProbe.Size = Vector3.new(radius * 2, rtt + rtb, radius * 2) * 0.9
 	penProbe.CFrame = CFrame.new(pos + Vector3.new(0, centerY, 0))
-	local parts = workspace:GetPartsInPart(penProbe, self.penOP)
+	local parts = self.world:GetPartsInPart(penProbe, self.penOP)
 	return parts[1]
 end
 
 -- Cette méthode permet de préparer le glissement le long des murs et rampes d'un personnage lorsqu'il apparaît (ses
--- pièces et la sonde exclues des requêtes).
-function WallSlide.new(character: Model): WallSlide
+-- pièces et la sonde exclues des requêtes) ; world : monde des requêtes (Workspace par défaut).
+function WallSlide.new(character: Model, world: WorldRoot?): WallSlide
+	local queryWorld: WorldRoot = world or workspace
+	local penProbe = penProbeOf(queryWorld)
 	local castParams = RaycastParams.new()
 	castParams.FilterType = Enum.RaycastFilterType.Exclude
 	castParams.FilterDescendantsInstances = { character, workspace.CurrentCamera }
@@ -64,10 +86,7 @@ function WallSlide.new(character: Model): WallSlide
 	penOP.FilterType = Enum.RaycastFilterType.Exclude
 	penOP.FilterDescendantsInstances = { character, penProbe, workspace.CurrentCamera }
 	CollisionGroups.ignoreCharactersOverlap(penOP)
-	if penProbe.Parent ~= workspace then
-		penProbe.Parent = workspace
-	end
-	return setmetatable({ castParams = castParams, penOP = penOP }, WallSlide)
+	return setmetatable({ castParams = castParams, penOP = penOP, world = queryWorld, penProbe = penProbe }, WallSlide)
 end
 
 function WallSlide.penInfo(
@@ -92,7 +111,7 @@ local function hullCast(
 	local centerY = (rtt - rtb) * 0.5
 	local cf = CFrame.new(pos + Vector3.new(0, centerY, 0))
 	local size = Vector3.new(radius * 2, rtt + rtb, radius * 2)
-	return workspace:Blockcast(cf, size, moveVec, self.castParams)
+	return self.world:Blockcast(cf, size, moveVec, self.castParams)
 end
 
 local function clipVelocity(vel: Vector3, normal: Vector3, overbounce: number): Vector3
@@ -193,7 +212,7 @@ local function slideOnce(
 		if hitNormal.Y < SURF_THRESHOLD then
 			-- Rayon fin depuis le centre du joueur jusqu'a la face (le hit.Position du Blockcast
 			-- est sur la boite balayee, decale d'un rayon ; on vise donc hit.Distance + radius).
-			local probe = workspace:Raycast(pos, moveDir * (hit.Distance + radius + 0.5), self.castParams)
+			local probe = self.world:Raycast(pos, moveDir * (hit.Distance + radius + 0.5), self.castParams)
 			if probe and probe.Normal.Y >= SURF_THRESHOLD then
 				hitNormal = probe.Normal
 			end

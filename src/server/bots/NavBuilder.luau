@@ -7,7 +7,9 @@
 --    par rampe de surf et par sens (#142 : trajet simulé par RampSim, de la case d'entrée à la case de sortie) ;
 -- 3. cases gardées : celles d'où l'on va partout et revient (NavRules.stronglyConnected depuis un point d'apparition) ;
 -- 4. points de passage (NavRules.cluster) et leur note fixe (vue entre points, hauteur, couvert, type).
--- Le calcul est étalé sur plusieurs frames (NAV_BUILD_BUDGET par frame). Règles pures : NavRules.
+-- Le calcul est étalé sur plusieurs frames (NAV_BUILD_BUDGET par frame, repère « nav plan » du MicroProfiler et de la
+-- sonde serveur). Une map rangée se construit sur une copie dans un WorldModel hors du Workspace (#605, MapRotation) :
+-- toutes les requêtes passent par le monde de la map (`world`). Règles pures : NavRules.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
@@ -16,6 +18,7 @@ local MapGeometry = require(ReplicatedStorage.Shared.MapGeometry)
 local MovementConfig = require(ReplicatedStorage.Shared.MovementConfig)
 local NavRules = require(ReplicatedStorage.Shared.NavRules)
 local RampRules = require(ReplicatedStorage.Shared.RampRules)
+local SlicedWork = require(ReplicatedStorage.Shared.SlicedWork)
 local RampSim = require(script.Parent.RampSim)
 
 local NavBuilder = {}
@@ -77,29 +80,37 @@ end
 
 -- Cette méthode permet de trouver les rampes de surf d'une map lorsque le plan est construit (#142) : grandes faces de
 -- surf des dossiers RAMPS_FOLDER (RampRules.frameOf), une seule par rampe (la plus grande des pièces superposées).
-function NavBuilder.findRamps(map: Instance): { RampRules.Frame }
+-- step : appelé à chaque instance parcourue (découpage sur plusieurs frames, #605).
+function NavBuilder.findRamps(map: Instance, step: (() -> ())?): { RampRules.Frame }
 	local frames: { RampRules.Frame } = {}
-	for _, folder in map:GetDescendants() do
-		if folder.Name == BotConfig.RAMPS_FOLDER and not folder:IsA("BasePart") then
-			for _, part in folder:GetDescendants() do
-				if part:IsA("Part") and part.Shape == Enum.PartType.Block and part.CanCollide then
-					local frame = RampRules.frameOf(part.CFrame, part.Size)
-					if frame then
-						local merged = false
-						for i, other in frames do
-							if RampRules.sameRamp(other, frame) or RampRules.sameRamp(frame, other) then
-								if frame.halfU * frame.halfV > other.halfU * other.halfV then
-									frames[i] = frame
-								end
-								merged = true
-								break
+	local folders: { Instance } = {}
+	SlicedWork.eachDescendant(map, function(inst)
+		if inst.Name == BotConfig.RAMPS_FOLDER and not inst:IsA("BasePart") then
+			table.insert(folders, inst)
+		end
+	end, step)
+	for _, folder in folders do
+		for _, part in folder:GetDescendants() do
+			if part:IsA("Part") and part.Shape == Enum.PartType.Block and part.CanCollide then
+				local frame = RampRules.frameOf(part.CFrame, part.Size)
+				if frame then
+					local merged = false
+					for i, other in frames do
+						if RampRules.sameRamp(other, frame) or RampRules.sameRamp(frame, other) then
+							if frame.halfU * frame.halfV > other.halfU * other.halfV then
+								frames[i] = frame
 							end
-						end
-						if not merged then
-							table.insert(frames, frame)
+							merged = true
+							break
 						end
 					end
+					if not merged then
+						table.insert(frames, frame)
+					end
 				end
+			end
+			if step then
+				step()
 			end
 		end
 	end
@@ -107,17 +118,13 @@ function NavBuilder.findRamps(map: Instance): { RampRules.Frame }
 end
 
 -- Cette méthode permet de construire le plan de navigation de la map lorsque le serveur démarre ; à appeler dans un
--- thread qui peut céder la main (task.wait entre deux tranches de calcul).
-function NavBuilder.build(map: Instance): Plan
+-- thread qui peut céder la main (task.wait entre deux tranches de calcul). world : monde où se trouve la map
+-- (Workspace par défaut, WorldModel pour la copie d'une map rangée, #605).
+function NavBuilder.build(map: Instance, world: WorldRoot?): Plan
 	local started = os.clock()
-	local sliceStart = os.clock()
-	-- Cette méthode permet de rendre la main au moteur lorsque la tranche de calcul de la frame est écoulée.
-	local function slice()
-		if os.clock() - sliceStart > BotConfig.NAV_BUILD_BUDGET then
-			task.wait()
-			sliceStart = os.clock()
-		end
-	end
+	local queryWorld: WorldRoot = world or workspace
+	local slicer = SlicedWork.slicer("nav plan", BotConfig.NAV_BUILD_BUDGET)
+	local slice = slicer.step
 
 	local G = BotConfig.NAV_GRID
 	local R = BotConfig.NAV_BODY_RADIUS
@@ -144,7 +151,7 @@ function NavBuilder.build(map: Instance): Plan
 	local seeThrough = MapGeometry.seeThrough(map)
 	-- Cette méthode permet de lancer un rayon de vue ou de couvert lorsque les notes des points sont calculées.
 	local function viewCast(from: Vector3, delta: Vector3): RaycastResult?
-		return workspace:Raycast(from, delta, viewParams)
+		return queryWorld:Raycast(from, delta, viewParams)
 	end
 
 	local probe = Instance.new("Part")
@@ -155,19 +162,19 @@ function NavBuilder.build(map: Instance): Plan
 	probe.CanTouch = false
 	probe.Transparency = 1
 	probe.Size = bodySize
-	probe.Parent = workspace
+	probe.Parent = queryWorld
 
 	-- Emprise : pièces qui bloquent, au-dessus de la hauteur de mort
 	local killY = map:GetAttribute("KillHeight")
 	local minX, minY, minZ = math.huge, math.huge, math.huge
 	local maxX, maxY, maxZ = -math.huge, -math.huge, -math.huge
-	for _, inst in map:GetDescendants() do
+	SlicedWork.eachDescendant(map, function(inst)
 		if inst:IsA("BasePart") and inst.CanCollide then
 			local p, r = inst.Position, inst.Size.Magnitude / 2
 			minX, minY, minZ = math.min(minX, p.X - r), math.min(minY, p.Y - r), math.min(minZ, p.Z - r)
 			maxX, maxY, maxZ = math.max(maxX, p.X + r), math.max(maxY, p.Y + r), math.max(maxZ, p.Z + r)
 		end
-	end
+	end, slice)
 	local bottomY = if type(killY) == "number" then math.max(minY, killY) else minY
 	local topY = maxY + 5
 	local nx, nz = math.ceil((maxX - minX) / G), math.ceil((maxZ - minZ) / G)
@@ -182,13 +189,13 @@ function NavBuilder.build(map: Instance): Plan
 			local x, z = minX + (ix + 0.5) * G, minZ + (iz + 0.5) * G
 			local y = topY
 			for _ = 1, 24 do
-				local hit = workspace:Raycast(Vector3.new(x, y, z), Vector3.new(0, bottomY - y, 0), castParams)
+				local hit = queryWorld:Raycast(Vector3.new(x, y, z), Vector3.new(0, bottomY - y, 0), castParams)
 				if not hit then
 					break
 				end
 				if hit.Normal.Y >= MovementConfig.SURF_NORMAL_Y then
 					probe.CFrame = CFrame.new(hit.Position + bodyLift)
-					if #workspace:GetPartsInPart(probe, overlap) == 0 then
+					if #queryWorld:GetPartsInPart(probe, overlap) == 0 then
 						table.insert(positions, hit.Position)
 						local id = #positions
 						local key = NavBuilder.columnKey(ix, iz)
@@ -237,7 +244,7 @@ function NavBuilder.build(map: Instance): Plan
 		if delta.Magnitude < 1e-3 then
 			return true
 		end
-		return workspace:Blockcast(CFrame.new(from), bodySize, delta, castParams) == nil
+		return queryWorld:Blockcast(CFrame.new(from), bodySize, delta, castParams) == nil
 	end
 
 	local phaseStart = os.clock()
@@ -404,7 +411,7 @@ function NavBuilder.build(map: Instance): Plan
 	-- départ ; le plus court réussi devient une arête (coût d'après sa durée). Avant les cases gardées : une corniche
 	-- qu'on ne rejoint que par une rampe (et d'où l'on revient par l'autre sens) en fait partie.
 	phaseStart = os.clock()
-	local ramps: { RampRules.Frame } = if BotConfig.RAMP_ENABLED then NavBuilder.findRamps(map) else {}
+	local ramps: { RampRules.Frame } = if BotConfig.RAMP_ENABLED then NavBuilder.findRamps(map, slice) else {}
 	local rampPaths: { [number]: RampRules.Trajectory } = {}
 	local rampCost: { [number]: number } = {}
 	if #ramps > 0 then
@@ -435,6 +442,7 @@ function NavBuilder.build(map: Instance): Plan
 						entryPos = positions[entry],
 						killY = if type(killY) == "number" then killY else nil,
 						castParams = castParams,
+						world = queryWorld,
 						cellsNear = cellsNear,
 						yield = slice,
 					})
@@ -614,6 +622,7 @@ function NavBuilder.build(map: Instance): Plan
 		slice()
 	end
 
+	slicer.finish()
 	local kept = 0
 	for _ in keep do
 		kept += 1

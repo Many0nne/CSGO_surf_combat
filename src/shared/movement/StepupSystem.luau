@@ -8,13 +8,17 @@ local StepupSystem = {}
 StepupSystem.__index = StepupSystem
 
 export type StepupSystem = typeof(setmetatable(
-	{} :: { castParams: RaycastParams, halfHeight: number, centerOffset: number, radius: number },
+	{} :: { castParams: RaycastParams, halfHeight: number, centerOffset: number, radius: number, world: WorldRoot },
 	StepupSystem
 ))
 
 -- Cette méthode permet de préparer la montée de marches d'un personnage lorsqu'il apparaît (ses pièces exclues des
--- rayons, dimensions debout).
-function StepupSystem.new(character: Model, dims: CharacterDimensions.CharacterDimensions): StepupSystem
+-- rayons, dimensions debout) ; world : monde des requêtes (Workspace par défaut).
+function StepupSystem.new(
+	character: Model,
+	dims: CharacterDimensions.CharacterDimensions,
+	world: WorldRoot?
+): StepupSystem
 	local castParams = RaycastParams.new()
 	castParams.FilterType = Enum.RaycastFilterType.Exclude
 	castParams.FilterDescendantsInstances = { character, workspace.CurrentCamera }
@@ -25,6 +29,7 @@ function StepupSystem.new(character: Model, dims: CharacterDimensions.CharacterD
 		halfHeight = stand.halfHeight,
 		centerOffset = stand.centerOffset,
 		radius = stand.radius - 0.05,
+		world = world or workspace,
 	}, StepupSystem)
 end
 
@@ -47,7 +52,7 @@ function StepupSystem.tryStepup(
 	local upVec = Vector3.new(0, Config.STEPUP_HEIGHT, 0)
 
 	-- 1. Bloqué horizontalement ?
-	local horizHit = workspace:Spherecast(origin, radius, moveVec, castParams)
+	local horizHit = self.world:Spherecast(origin, radius, moveVec, castParams)
 	if not horizHit then
 		return nil, nil, nil
 	end
@@ -64,17 +69,17 @@ function StepupSystem.tryStepup(
 		or Vector3.new(-moveVec.X, 0, -moveVec.Z).Unit
 
 	-- 2. Plafond bloque la montée ?
-	if workspace:Spherecast(origin, radius, upVec, castParams) then
+	if self.world:Spherecast(origin, radius, upVec, castParams) then
 		return nil, wallNormal, nil
 	end
 
 	-- 3. Encore bloqué à la hauteur surélevée ?
-	if workspace:Spherecast(origin + upVec, radius, moveVec, castParams) then
+	if self.world:Spherecast(origin + upVec, radius, moveVec, castParams) then
 		return nil, wallNormal, nil
 	end
 
 	-- 4. Trouver la surface exacte de la marche par cast descendant
-	local downHit = workspace:Spherecast(
+	local downHit = self.world:Spherecast(
 		origin + upVec + moveVec,
 		radius,
 		Vector3.new(0, -(Config.STEPUP_HEIGHT + 0.5), 0),

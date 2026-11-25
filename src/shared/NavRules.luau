@@ -666,4 +666,74 @@ function NavRules.progress(best: number, stalled: number, dist: number, dt: numb
 	return best, stalled + dt
 end
 
+-- Plan tel que l'empreinte le lit (NavBuilder.Plan, champs utiles seulement)
+export type PlanLike = {
+	mapName: string,
+	grid: number,
+	originX: number,
+	originZ: number,
+	graph: Graph,
+	keep: { [number]: boolean },
+	clearance: { number },
+	waypoints: { { cell: number, position: Vector3, kind: string, score: number, visible: { number } } },
+	ladders: { { bottom: number?, top: number? } },
+	rampPaths: { [number]: { duration: number, points: { Vector3 } } },
+}
+
+-- Cette méthode permet de résumer un plan de navigation en une empreinte lorsqu'on vérifie que deux constructions de
+-- la même map donnent le même plan (#605 : map copiée hors du Workspace) : nombres de cases, d'arêtes et de points,
+-- puis somme de contrôle (FNV-1a 32 bits) de tout son contenu (positions au millième de stud).
+function NavRules.fingerprint(plan: PlanLike): string
+	local hash = 2166136261
+	-- Cette méthode permet d'ajouter un morceau du plan à la somme de contrôle lorsqu'on le parcourt.
+	local function mix(text: string)
+		for i = 1, #text do
+			hash = bit32.bxor(hash, string.byte(text, i))
+			hash = (bit32.lshift(hash, 24) + hash * 403) % 4294967296
+		end
+	end
+	-- Cette méthode permet d'écrire une position au millième lorsqu'elle entre dans la somme de contrôle.
+	local function vec(v: Vector3): string
+		return string.format("%.3f,%.3f,%.3f;", v.X, v.Y, v.Z)
+	end
+	local g = plan.graph
+	mix(string.format("%s|%g|%.3f|%.3f|", plan.mapName, plan.grid, plan.originX, plan.originZ))
+	local edges = 0
+	for id, p in g.positions do
+		mix(vec(p))
+		mix(if plan.keep[id] then "k" else "-")
+		mix(string.format("%g|", plan.clearance[id] or -1))
+		for k, to in g.out[id] do
+			mix(string.format("%d:%d,", to, g.outKind[id][k]))
+			edges += 1
+		end
+	end
+	for _, wp in plan.waypoints do
+		mix(string.format("%d|%s|%.4f|", wp.cell, wp.kind, wp.score))
+		mix(vec(wp.position))
+		mix(table.concat(wp.visible, ",") .. "|")
+	end
+	for _, ladder in plan.ladders do
+		mix(string.format("%s>%s|", tostring(ladder.bottom), tostring(ladder.top)))
+	end
+	local rampKeys = {}
+	for key in plan.rampPaths do
+		table.insert(rampKeys, key)
+	end
+	table.sort(rampKeys)
+	for _, key in rampKeys do
+		local path = plan.rampPaths[key]
+		mix(string.format("%d|%.4f|%d|", key, path.duration, #path.points))
+	end
+	return string.format(
+		"%s : %d cases, %d arêtes, %d points, %d trajets de rampe, empreinte %08x",
+		plan.mapName,
+		#g.positions,
+		edges,
+		#plan.waypoints,
+		#rampKeys,
+		hash
+	)
+end
+
 return NavRules

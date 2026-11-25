@@ -47,6 +47,7 @@ export type CharacterMotor = typeof(setmetatable(
 		wallSlide: WallSlide.WallSlide,
 		head: HeadCollisionResolver.HeadCollisionResolver,
 		slideParams: RaycastParams,
+		world: WorldRoot,
 		cframe: CFrame,
 		velocity: Vector3,
 		state: string,
@@ -59,8 +60,10 @@ export type CharacterMotor = typeof(setmetatable(
 ))
 
 -- Cette méthode permet de préparer le mouvement d'un personnage lorsqu'il apparaît : dimensions mesurées sur son rig,
--- requêtes de collision qui l'excluent, état au sol à la position de sa racine.
-function CharacterMotor.new(char: Model, hrp: BasePart, writeRoot: boolean): CharacterMotor
+-- requêtes de collision qui l'excluent, état au sol à la position de sa racine. world : monde des requêtes (Workspace
+-- par défaut ; WorldModel d'une copie de map pour la simulation des rampes du plan des bots, #605).
+function CharacterMotor.new(char: Model, hrp: BasePart, writeRoot: boolean, world: WorldRoot?): CharacterMotor
+	local queryWorld: WorldRoot = world or workspace
 	local dims = CharacterDimensions.new(char, hrp)
 	local slideParams = RaycastParams.new()
 	slideParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -70,11 +73,12 @@ function CharacterMotor.new(char: Model, hrp: BasePart, writeRoot: boolean): Cha
 		hrp = hrp,
 		writeRoot = writeRoot,
 		dims = dims,
-		ground = GroundDetection.new(char, dims),
-		stepup = StepupSystem.new(char, dims),
-		wallSlide = WallSlide.new(char),
-		head = HeadCollisionResolver.new(char),
+		ground = GroundDetection.new(char, dims, queryWorld),
+		stepup = StepupSystem.new(char, dims, queryWorld),
+		wallSlide = WallSlide.new(char, queryWorld),
+		head = HeadCollisionResolver.new(char, queryWorld),
 		slideParams = slideParams,
+		world = queryWorld,
 		cframe = hrp.CFrame,
 		velocity = Vector3.zero,
 		state = MovementState.GROUNDED,
@@ -253,7 +257,7 @@ local function moveGrounded(
 		local up = Config.STEPUP_HEIGHT
 		local org = Vector3.new(newPos.X, pos.Y + up, newPos.Z)
 		local down = Vector3.new(0, -(up + ci.rootToBottom + 0.6), 0)
-		local destHit = workspace:Spherecast(org, ci.radius * 0.9, down, self.slideParams)
+		local destHit = self.world:Spherecast(org, ci.radius * 0.9, down, self.slideParams)
 		if destHit and destHit.Normal.Y >= Config.SURF_NORMAL_Y then
 			local destSnapY = destHit.Position.Y + ci.rootToBottom
 			if destSnapY > targetY then

@@ -2,23 +2,27 @@
 -- seule la première reste dans Workspace.Maps (MapSelection.setup) ; la suivante est publiée dans l'attribut NextMap
 -- (annoncée par le bandeau de fin) et l'échange se fait après le bandeau et le clip de la partie (rejoué dans la map de
 -- la manche), juste avant le retour à idle qui autorise les apparitions.
--- Plans de navigation des bots : celui de la map jouée d'abord, puis ceux des autres maps, chacune prêtée à
--- Workspace.Maps le temps de sa construction (les rayons ne touchent que le Workspace), pour un échange sans attente.
+-- Plans de navigation des bots : celui de la map jouée d'abord, puis ceux des autres maps, chacune construite sur une
+-- copie rangée dans un WorldModel de ServerStorage (#605 : rien n'est répliqué aux clients, la map rangée ne bouge pas),
+-- pour un échange sans attente.
 -- Studio : l'attribut DebugMap de Workspace force une map (tout de suite hors round, sinon au round suivant).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
+local ServerStorage = game:GetService("ServerStorage")
 
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local MapSelection = require(ReplicatedStorage.Shared.MapSelection)
+local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
 local NavPlan = require(ServerScriptService.Server.bots.NavPlan)
+local SlicedWork = require(ReplicatedStorage.Shared.SlicedWork)
 
 local MapRotation = {}
 
 local maps: Instance? = nil
--- Maps prêtées à Workspace.Maps pour la construction de leur plan : l'échange ne les range pas pendant ce temps
-local lent: { [string]: boolean } = {}
+-- Monde des copies de maps rangées (plans des bots), créé à la première copie et gardé : la sonde de WallSlide y reste
+local navWorld: WorldModel? = nil
 -- Le round est-il terminé (idle) ? Branché par init : DebugMap change la map tout de suite seulement hors round
 local isIdle: () -> boolean = function()
 	return false
@@ -48,14 +52,37 @@ local function switchTo(name: string)
 		return
 	end
 	local started = os.clock()
-	MapSelection.switch(maps, name, lent)
+	debug.profilebegin("srv échange map")
+	MapSelection.switch(maps, name)
+	debug.profileend()
 	NavPlan.setActive(name)
 	print(string.format("[MapRotation] map jouée : %s (échange %.0f ms)", name, (os.clock() - started) * 1000))
 	publishNext()
 end
 
+-- Cette méthode permet de construire le plan d'une map rangée lorsque la map jouée a le sien : copie étalée sur
+-- plusieurs frames dans un WorldModel de ServerStorage (non répliqué), plan construit dans ce monde, copie détruite.
+local function buildFromCopy(map: Instance)
+	local world: WorldModel = navWorld or Instance.new("WorldModel")
+	if not navWorld then
+		world.Name = "NavWorld"
+		world.Parent = ServerStorage
+		navWorld = world
+	end
+	local started = os.clock()
+	local slicer = SlicedWork.slicer("map copie", BotConfig.NAV_BUILD_BUDGET)
+	local copy = SlicedWork.cloneInto(map, world, slicer.step)
+	slicer.finish()
+	local copied = os.clock() - started
+	NavPlan.build(copy, world)
+	slicer = SlicedWork.slicer("map copie", BotConfig.NAV_BUILD_BUDGET)
+	SlicedWork.destroy(copy, slicer.step)
+	slicer.finish()
+	print(string.format("[MapRotation] plan de %s construit sur une copie (copie %.1f s)", map.Name, copied))
+end
+
 -- Cette méthode permet de construire en tâche de fond les plans de navigation de toutes les maps lorsque le serveur
--- démarre : la map jouée d'abord, puis chaque autre map prêtée à Workspace.Maps le temps de sa construction.
+-- démarre : la map jouée d'abord (dans Workspace.Maps), puis chaque autre map sur une copie hors du Workspace.
 local function buildPlans()
 	local active = MapSelection.current()
 	if active then
@@ -63,15 +90,8 @@ local function buildPlans()
 	end
 	for _, name in GameConfig.MAP_ROTATION do
 		local map = MapSelection.find(name)
-		if map and maps and not NavPlan.isDone(name) then
-			lent[name] = true
-			map.Parent = maps
-			NavPlan.build(map)
-			lent[name] = nil
-			-- Rangée de nouveau, sauf si elle est devenue la map jouée pendant la construction
-			if MapSelection.currentName() ~= name then
-				map.Parent = MapSelection.store(true)
-			end
+		if map and not NavPlan.isDone(name) then
+			buildFromCopy(map)
 		end
 	end
 end

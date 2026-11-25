@@ -2,6 +2,8 @@
 -- boîtes des grillages `passbullets` arrêtent le mouvement (CanCollide inchangé) mais pas les balles ni le regard des
 -- bots. Les rayons de tir (client, ligne de vue serveur, bots) et de vue des bots les écartent tous par ce module :
 -- bulletTransparent pour une liste d'exclusion, castThrough (rayon relancé derrière) pour un rayon en inclusion.
+-- Liste gardée par map (#605) et préparée en tâche de fond dès qu'une map est jouée ou annoncée (prepare) : le premier
+-- tir sur une nouvelle map ne parcourt plus ses ~20 000 pièces.
 -- Sans dépendance : relu aussi par tools/rbxm/verify_place.luau (dossiers attendus dans chaque map).
 
 local MapGeometry = {}
@@ -28,10 +30,12 @@ MapGeometry.REQUIRED_FOLDERS = {
 MapGeometry.PASS_STEP = 0.01
 MapGeometry.MAX_PASSES = 16
 
--- Dernière liste calculée et sa map (une seule map jouée par serveur ; référence forte : une clé faible pourrait être
--- recalculée à chaque tir)
-local cachedMap: Instance? = nil
-local cachedList: { Instance } = {}
+-- Repère de la préparation en tâche de fond (MicroProfiler, sonde serveur, overlay F3 ; cf. docs/performance.md)
+MapGeometry.PREPARE_MARKER = "map géométrie"
+
+-- Liste de chaque map, calculée une fois (maps statiques, rangées sans être détruites entre deux rounds ; clés fortes :
+-- une clé faible pourrait être recalculée à chaque tir)
+local cache: { [Instance]: { Instance } } = {}
 
 -- Cette méthode permet de retrouver le dossier des murs d'air d'une map lorsqu'un rayon doit les écarter (nil si la map
 -- n'en a pas).
@@ -47,11 +51,25 @@ function MapGeometry.passesBullets(inst: Instance): boolean
 	return type(group) == "string" and MapGeometry.PASSBULLETS_GROUPS[group] == true
 end
 
--- Cette méthode permet de lister ce que les balles et le regard traversent dans une map lorsqu'on prépare un rayon : le
--- dossier des murs d'air, puis les pièces des grillages `passbullets`. Une fois par map (statique), liste figée.
-function MapGeometry.bulletTransparent(map: Instance): { Instance }
-	if cachedMap and cachedMap == map then
-		return cachedList
+-- Cette méthode permet de visiter les descendants d'une instance dans l'ordre de GetDescendants lorsque la liste d'une
+-- map est préparée en tâche de fond : step appelé après chaque visite (il peut céder la main).
+local function eachDescendant(root: Instance, visit: (Instance) -> (), step: (() -> ())?)
+	for _, child in root:GetChildren() do
+		visit(child)
+		if step then
+			step()
+		end
+		eachDescendant(child, visit, step)
+	end
+end
+
+-- Cette méthode permet de calculer la liste d'une map une fois pour toutes lorsqu'elle est jouée ou annoncée (#605) :
+-- le dossier des murs d'air, puis les pièces des grillages `passbullets`, liste figée. step (optionnel) est appelé à
+-- chaque pièce parcourue pour étaler le calcul sur plusieurs frames. Renvoie la liste gardée.
+function MapGeometry.prepare(map: Instance, step: (() -> ())?): { Instance }
+	local known = cache[map]
+	if known then
+		return known
 	end
 	local list: { Instance } = {}
 	local clips = MapGeometry.clips(map)
@@ -59,14 +77,36 @@ function MapGeometry.bulletTransparent(map: Instance): { Instance }
 		table.insert(list, clips)
 	end
 	local geometry = map:FindFirstChild(MapGeometry.GEOMETRY)
-	for _, inst in if geometry then geometry:GetDescendants() else {} do
-		if inst:IsA("BasePart") and MapGeometry.passesBullets(inst) and not (clips and inst:IsDescendantOf(clips)) then
-			table.insert(list, inst)
-		end
+	if geometry then
+		eachDescendant(geometry, function(inst)
+			if
+				inst:IsA("BasePart")
+				and MapGeometry.passesBullets(inst)
+				and not (clips and inst:IsDescendantOf(clips))
+			then
+				table.insert(list, inst)
+			end
+		end, step)
 	end
 	table.freeze(list)
-	cachedMap, cachedList = map, list
+	-- Une autre préparation de la même map a pu finir pendant celle-ci : la première liste reste la liste gardée
+	known = cache[map]
+	if known then
+		return known
+	end
+	cache[map] = list
 	return list
+end
+
+-- Cette méthode permet de savoir si la liste d'une map est déjà prête lorsqu'on vérifie qu'un tir ne la calculera pas.
+function MapGeometry.isPrepared(map: Instance): boolean
+	return cache[map] ~= nil
+end
+
+-- Cette méthode permet de lister ce que les balles et le regard traversent dans une map lorsqu'on prépare un rayon :
+-- la liste préparée (prepare), calculée sur le champ si la map n'a pas encore été préparée.
+function MapGeometry.bulletTransparent(map: Instance): { Instance }
+	return cache[map] or MapGeometry.prepare(map)
 end
 
 -- Cette méthode permet de savoir si une pièce touchée est traversée par les balles et le regard lorsqu'un rayon en
