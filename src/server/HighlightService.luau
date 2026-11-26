@@ -107,17 +107,18 @@ end
 -- Cette méthode permet de garder l'apparence d'un participant (clone du personnage sans scripts, outils, bouclier ni
 -- sons hors ceux de l'arme 3P, tirés pendant le rejeu ; humanoïde en vie, racine seule ancrée) lorsqu'il meurt ou
 -- qu'un record est figé ; une fois par manche.
-local function keepAppearance(id: number, char: Model?)
+-- Renvoie true si une copie a été faite (rien si déjà gardée, sans personnage, ou personnage déjà retiré du jeu).
+local function keepAppearance(id: number, char: Model?): boolean
 	local folder = appearanceFolder()
-	if not char or folder:FindFirstChild(tostring(id)) then
-		return
+	if not char or not char.Parent or folder:FindFirstChild(tostring(id)) then
+		return false
 	end
 	local wasArchivable = char.Archivable
 	char.Archivable = true
 	local ok, copy = pcall(char.Clone, char)
 	char.Archivable = wasArchivable
 	if not ok or not copy then
-		return
+		return false
 	end
 	local gun = copy:FindFirstChild(WeaponThirdPerson.MODEL_NAME)
 	for _, inst in copy:GetDescendants() do
@@ -145,6 +146,18 @@ local function keepAppearance(id: number, char: Model?)
 	end
 	copy.Name = tostring(id)
 	copy.Parent = folder
+	return true
+end
+
+-- Cette méthode permet de garder l'apparence de plusieurs personnages lorsqu'un record est figé, une copie par frame
+-- (#607 : jusqu'à 14 copies d'environ 100 instances tombaient dans la même frame) ; un personnage mort entre-temps a
+-- déjà été gardé à sa mort (onDeath), un personnage retiré sans mourir (joueur parti, bot retiré) est perdu pour le clip.
+local function keepAppearances(list: { { id: number, char: Model } })
+	for _, item in list do
+		if keepAppearance(item.id, item.char) then
+			task.wait()
+		end
+	end
 end
 
 -- Cette méthode permet de lire la position de la racine d'un personnage lorsqu'un kill est noté (nil sans racine).
@@ -327,13 +340,21 @@ local function freeze(myToken: number, chain: { Kill }, killer: Participant)
 	local last = chain[#chain]
 	local meta = metas[last]
 
-	-- Apparences des participants encore en jeu (les morts ont été gardés à leur mort)
+	-- Apparences des participants encore en jeu (les morts ont été gardés à leur mort), une copie par frame
+	local alive = {}
 	for _, participant in Participants.all() do
 		local char = Participants.characterOf(participant)
 		if char then
-			keepAppearance(participant.id, char)
+			table.insert(alive, { id = participant.id, char = char })
 		end
 	end
+	keepAppearances(alive)
+	-- Record plus récent ou manche finie pendant les copies : celui-ci n'est plus à figer
+	if myToken ~= token or not d.isActive() then
+		return
+	end
+	local copiedIn = os.clock() - startedAt
+	startedAt = os.clock()
 
 	local actorCount = HighlightClipRules.rowCount(start, stop, HighlightClipRules.ACTOR_HZ)
 	local actors = {}
@@ -436,13 +457,15 @@ local function freeze(myToken: number, chain: { Kill }, killer: Participant)
 		clipActors = actorIds
 		log(
 			string.format(
-				"clip retenu : %s, %d kill(s), %.1f s, %d figurant(s), POV %s, figé en %.1f ms",
+				"clip retenu : %s, %d kill(s), %.1f s, %d figurant(s), POV %s, figé en %.1f ms (apparences de %d personnages en jeu, une copie par frame : %.0f ms)",
 				killer.name,
 				#chain,
 				stop - start,
 				#actors,
 				if trusted then "du client" else "serveur",
-				(os.clock() - startedAt) * 1000
+				(os.clock() - startedAt) * 1000,
+				#alive,
+				copiedIn * 1000
 			)
 		)
 	end
@@ -542,15 +565,25 @@ function HighlightService.take(): HighlightClipRules.Clip?
 	end
 	local folder = Instance.new("Folder")
 	folder.Name = ACTORS_FOLDER
-	local source = appearanceFolder()
-	for _, id in clipActors do
-		local model = source:FindFirstChild(tostring(id))
-		if model then
-			model:Clone().Parent = folder
-		end
-	end
 	folder.Parent = ReplicatedStorage
 	published = folder
+	-- Un figurant par frame (#607) : la fin de manche détruit déjà tous les personnages dans cette frame. Les apparences
+	-- sont déplacées, pas copiées (plus rien ne les lit avant reset) ; le client attend chacune (HighlightPlayer,
+	-- WaitForChild) et ne lit le clip qu'à la fin de la bannière, bien après les quelques frames de la publication.
+	local source = appearanceFolder()
+	local ids = table.clone(clipActors)
+	task.spawn(function()
+		for _, id in ids do
+			if published ~= folder then
+				return
+			end
+			local model = source:FindFirstChild(tostring(id))
+			if model then
+				model.Parent = folder
+				task.wait()
+			end
+		end
+	end)
 	return retained
 end
 
