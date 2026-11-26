@@ -190,7 +190,8 @@ Règles pures dans `BotCombatRules`, armes dans `BotArsenal` (une par bot vivant
   aussi par le relais des joueurs (`relayShot`, `onFire` de `BotArsenal`) : son chez les joueurs et recul de l'arme 3P
   (#215), jamais refusé ni compté pour un bot (`BotArsenal` tient son chargeur, `docs/anticheat.md` « Tirs comptés et
   touches rattachées »). Le coup de couteau pose son recul 3P dans `BotArsenal.fire`.
-- **Armes** : AWP en main, couteau dans le dossier `BotBag` du personnage. Couteau sorti sous `KNIFE_RANGE`, fusil
+- **Armes** : AWP en main, couteau dans le sac `BotBag` du bot, rangé hors du Workspace (`ReplicatedStorage.BotBags`, #607 :
+  répliqué une fois, sortir une arme n'est qu'un changement de parent). Couteau sorti sous `KNIFE_RANGE`, fusil
   repris au-delà de `KNIFE_DROP_RANGE`. Temps de sortie, cadence, chargeur, réserve et rechargement de `WeaponConfig`
   (rechargement aussi quand il n'a rien à viser) ; vitesse de course selon l'arme (`BotMotion:setWeapon`).
 - **Délai de grâce** : `SpawnManager.place` pose l'attribut serveur `SpawnedAt` (os.clock) sur tout personnage ; un

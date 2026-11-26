@@ -423,7 +423,8 @@ jamais d'un effet propre à three.js. C'est ce qui permet de publier telle quell
 
 Un skin est un item de l'inventaire (`InventoryRules.ITEMS` : `skin.<arme>.<nom>`, `name` affiché, `appearance`), choisi
 à l'écran d'équipement et rendu partout où l'arme apparaît : 1re personne (`ViewmodelSystem`), arme vue par les autres
-(`WeaponThirdPerson.attach` côté serveur, skin lu dans l'équipement du joueur), personnage de l'accueil (`MenuScene`),
+(`Weapon3PStash.equip` côté serveur, qui ressort de la réserve du personnage le modèle déjà construit par
+`WeaponThirdPerson.build`, skin lu dans l'équipement du joueur), personnage de l'accueil (`MenuScene`),
 grand rendu et cartes de l'écran d'équipement (`UIKit.weaponSilhouette`). Tous passent par `WeaponSkins.apply`.
 
 **Un script de jeu ne peut pas écrire les cartes d'une `SurfaceAppearance`** (`ColorMapContent`… : sécurité plugin). Les

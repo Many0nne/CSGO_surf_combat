@@ -79,6 +79,9 @@ type Bot = {
 
 -- Dossier de ReplicatedStorage des personnages préparés
 local STAGING_FOLDER = "BotStaging"
+-- Écart minimal (s) entre deux préparations : à la fin d'une manche, les sept bots se préparent en 0,7 s au lieu de sept
+-- frames de suite, qui tombaient avec la publication des figurants du clip (bien en deçà de RESPAWN_DELAY)
+local PREPARE_INTERVAL = 0.1
 
 local BotManager = {}
 
@@ -90,6 +93,7 @@ local pauseCount = 0 -- runs de DebugPlaytest en cours (population suspendue, au
 local passive = false -- DebugBotsPassive : les bots (présents et ajoutés ensuite) ne tirent pas sur les humains
 -- Temps accumulé vers la prochaine publication des positions, commune à tous les bots (un paquet groupé par envoi, #607)
 local sendAccumulator = 0
+local nextPrepareAt = 0 -- os.clock() à partir duquel une nouvelle préparation est permise
 -- Préparation et apparition repérées (« bots préparation », « bots apparition ») : affectées après la dernière fonction du
 -- module (piège de typage de luau-lsp, cf. docs/performance.md « Repères de scripts »)
 local timedPrepare: (Bot) -> ()
@@ -326,7 +330,7 @@ local timedMotion: (BotMotion.BotMotion, number) -> () = PerfMarkers.wrap(
 local function stepBots(dt: number)
 	local active = deps.roundManager.isActive()
 	local now = os.clock()
-	local canPrepare, canSpawn = true, true
+	local canPrepare, canSpawn = now >= nextPrepareAt, true
 	-- Cadence réseau d'un joueur (NET_SYNC_RATE), commune à tous les bots : leurs positions partent dans la même frame
 	sendAccumulator += dt
 	local publish = sendAccumulator >= CharacterSyncRules.SEND_INTERVAL
@@ -356,6 +360,7 @@ local function stepBots(dt: number)
 				end
 			elseif canPrepare and now >= bot.prepareAt then
 				canPrepare = false
+				nextPrepareAt = now + PREPARE_INTERVAL
 				timedPrepare(bot)
 			end
 		end
