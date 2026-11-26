@@ -453,7 +453,7 @@ tenue, même AWP en tenue fusil sur les captures avant/après, 52 instances dans
 | **Bot préparé pendant son délai de réapparition** : rig habillé, groupe de collision, sac et modèle 3P du fusil construits dans `ReplicatedStorage.BotStaging` (déjà répliqués, ni rendus ni simulés), une préparation au plus par frame et toutes les `PREPARE_INTERVAL` (0,1 s). L'apparition n'est plus qu'un changement de parent, une par frame au plus | `BotManager` (`prepareBot`, `spawnBot`, repères `bots préparation`, `bots apparition`) |
 | **Sac des bots hors du personnage** : `ReplicatedStorage.BotBags/BotBag`, détruit avec le personnage | `BotArsenal.prepare` |
 | **Réserve des modèles 3P par personnage** : une arme rangée part dans `ReplicatedStorage.Weapon3PStash/<personnage>` (tag retiré), la ressortir n'est qu'un changement de parent ; 4 modèles gardés au plus par personnage | `Weapon3PStash`, `WeaponThirdPerson.build` / `mount` |
-| **Clip** : apparences copiées une par frame en tâche de fond après le figeage (le clip n'attend pas les copies ; `take` fait celles qui restent avant que la fin de manche ne détruise les personnages), figurants publiés un par frame et déplacés au lieu d'être copiés | `HighlightService` |
+| **Clip** : apparences copiées une par frame en tâche de fond après le figeage (le clip n'attend pas les copies ; `take` fait d'un coup celles qui restent avant que la fin de manche ne détruise les personnages : rafale seulement pour un record figé dans les quelques frames avant la fin), figurants publiés un par frame et déplacés au lieu d'être copiés | `HighlightService` |
 | **Positions des bots** : cadence réseau commune à tous les bots, un seul paquet par envoi (`CharacterSync.flushBots`, 8 bots au plus par paquet), envoyé même si un bot lève une erreur dans la frame | `BotManager.step`, `CharacterSync` (serveur et client), `CharacterSyncRules.batchSize` |
 | **`AdjustSpeed`** seulement si la vitesse de lecture change de plus de 2 % (`CharacterAnimator.SPEED_TOLERANCE`) | `CharacterAnimator` |
 
@@ -487,7 +487,7 @@ sur un ensemble des instances déjà vues ; un simple changement de parent ne co
   le modèle du personnage (`WeaponThirdPersonView`, `DeathRagdoll`, `HighlightPlayer`, `ShotEffects`, `CasingEjection`,
   `RemoteShotSounds`, `MatchReplay`), et les copies serveur (figurants du clip) devraient reconstruire l'arme elles
   aussi : risque de rendu différent trop grand pour le gain restant, la réserve supprimant déjà la reconstruction à chaque
-  changement d'arme. Suivi dans une issue à part.
+  changement d'arme. Suivi dans #614.
 
 Pièges :
 
