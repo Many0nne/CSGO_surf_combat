@@ -383,11 +383,9 @@ function WeaponThirdPerson.detach(character: Model)
 	character:SetAttribute(WeaponThirdPerson.ACTION_AT_ATTR, nil)
 end
 
--- Cette méthode permet d'attacher le modèle 3P d'une arme à la main d'un personnage côté
--- serveur lorsqu'il l'équipe : grip de WeaponConfig, skin équipé (#268, nil : d'origine), action "Equip" ; renvoie le
--- modèle.
-function WeaponThirdPerson.attach(character: Model, weaponName: string, viewmodelName: string?, skinId: string?): Model?
-	WeaponThirdPerson.detach(character)
+-- Cette méthode permet de construire le modèle 3P d'une arme soudé à la main d'un personnage, sans le mettre en main
+-- (pas de parent, pas de tag) lorsqu'on l'attache ou qu'on le prépare d'avance (#607) ; nil sans main ni modèle.
+function WeaponThirdPerson.build(character: Model, weaponName: string, viewmodelName: string?, skinId: string?): Model?
 	local hand = findAny(character, HANDS)
 	if not (hand and hand:IsA("BasePart")) then
 		return nil
@@ -408,10 +406,31 @@ function WeaponThirdPerson.attach(character: Model, weaponName: string, viewmode
 
 	gun:SetAttribute("WeaponName", weaponName)
 	gun:SetAttribute("GripC0", settings.Grip)
+	return gun
+end
+
+-- Cette méthode permet de mettre en main un modèle 3P construit par `build` (neuf ou ressorti d'une réserve, #607)
+-- lorsque le personnage équipe l'arme : poignée recalée sur la main, tag des clients, action "Equip".
+function WeaponThirdPerson.mount(character: Model, gun: Model)
+	local handle = gun.PrimaryPart
+	local grip = handle and handle:FindFirstChild(WeaponThirdPerson.WELD_NAME)
+	if handle and grip and grip:IsA("Weld") and grip.Part0 then
+		handle.CFrame = WeaponThirdPerson.handleCFrame(grip.Part0.CFrame, grip.C0)
+	end
 	gun:AddTag(WeaponThirdPerson.TAG)
 	gun.Parent = character
-
 	WeaponThirdPerson.setAction(character, "Equip")
+end
+
+-- Cette méthode permet d'attacher le modèle 3P d'une arme à la main d'un personnage lorsqu'il l'équipe : grip de
+-- WeaponConfig, skin équipé (#268, nil : d'origine), action "Equip" ; renvoie le modèle.
+function WeaponThirdPerson.attach(character: Model, weaponName: string, viewmodelName: string?, skinId: string?): Model?
+	WeaponThirdPerson.detach(character)
+	local gun = WeaponThirdPerson.build(character, weaponName, viewmodelName, skinId)
+	if not gun then
+		return nil
+	end
+	WeaponThirdPerson.mount(character, gun)
 	return gun
 end
 

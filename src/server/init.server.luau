@@ -40,6 +40,7 @@ local DebugPlaytest = require(script.DebugPlaytest)
 local KillZone = require(script.KillZone)
 local MapRotation = require(script.MapRotation)
 local CharacterSync = require(script.CharacterSync)
+local Weapon3PStash = require(script.Weapon3PStash)
 local FootstepService = require(script.FootstepService)
 local BotManager = require(script.bots.BotManager)
 local ServerPerf = require(script.ServerPerf)
@@ -255,19 +256,23 @@ local WEAPON_ACTION_MIN_INTERVAL = 0.05
 -- Délai (s) entre la mort et la destruction du personnage, le temps que les clients le clonent en ragdoll (#102)
 local CORPSE_HANDOFF_DELAY = 0.3
 
--- Cette méthode permet d'attacher le modèle 3P lorsqu'un outil arrive dans le personnage (équipement), habillé du skin
--- équipé du joueur (#268 ; bots : d'origine) ; les pièces propres de l'outil sont masquées pour ne pas doubler l'arme.
-local function onToolEquipped(char: Model, tool: Tool)
+-- Cette méthode permet de lire l'arme, le viewmodel et le skin du modèle 3P d'un outil lorsqu'il est mis en main ou
+-- préparé d'avance (skin équipé du joueur, #268 ; bots : d'origine).
+local function gunSpecOf(char: Model, tool: Tool): (string, string, string?)
 	local weaponName = tool:GetAttribute("WeaponName") or tool.Name
 	local viewmodelName = tool:GetAttribute("ViewmodelName")
 	local player = Players:GetPlayerFromCharacter(char)
 	local skinId = if player then InventoryRules.skinOfTool(InventoryStore.equipped(player), tool.Name) else nil
-	local gun = WeaponThirdPerson.attach(
-		char,
-		weaponName,
+	return weaponName,
 		if type(viewmodelName) == "string" and viewmodelName ~= "" then viewmodelName else weaponName,
 		skinId
-	)
+end
+
+-- Cette méthode permet d'attacher le modèle 3P lorsqu'un outil arrive dans le personnage (équipement), habillé du skin
+-- équipé du joueur (#268 ; bots : d'origine) ; les pièces propres de l'outil sont masquées pour ne pas doubler l'arme.
+-- Un modèle déjà construit pour ce personnage ressort de sa réserve (#607, Weapon3PStash) au lieu d'être reconstruit.
+local function onToolEquipped(char: Model, tool: Tool)
+	local gun = Weapon3PStash.equip(char, gunSpecOf(char, tool))
 	if not gun then
 		equippedTools[char] = nil
 		return
@@ -337,7 +342,8 @@ local function trackWeapon3P(participant: Participants.Participant, char: Model)
 		end
 		if equippedTools[char] == child then
 			equippedTools[char] = nil
-			WeaponThirdPerson.detach(char)
+			-- Rangé dans la réserve du personnage (#607) : le ressortir ne sera qu'un changement de parent
+			Weapon3PStash.unequip(char)
 		end
 	end)
 end
@@ -990,8 +996,13 @@ end)
 if not training then
 	BotManager.init({
 		onCharacter = onParticipantCharacter,
+		-- Personnage préparé hors du jeu (#607) : modèle 3P de l'arme de départ construit d'avance dans sa réserve
+		prepareWeapon = function(char: Model, tool: Tool)
+			Weapon3PStash.prepare(char, gunSpecOf(char, tool))
+		end,
 		place = SpawnManager.place,
 		relay = CharacterSync.relayBot,
+		flushRelay = CharacterSync.flushBots,
 		-- Touches d'un bot (#143) : même validation (arme en main, portée, cadence) et mêmes dégâts qu'un joueur
 		hitscan = function(bot, targetCharacter, hitPart)
 			local damage, isHeadshot = Validator.authorizeHitscan(bot, targetCharacter, hitPart, os.clock())
