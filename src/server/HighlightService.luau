@@ -475,7 +475,7 @@ local function freeze(myToken: number, chain: { Kill }, killer: Participant)
 		} :: any
 		log(
 			string.format(
-				"clip retenu : %s, %d kill(s), %.1f s, %d figurant(s), POV %s, figé en %.1f ms (%d apparences copiées en tâche de fond)",
+				"clip retenu : %s, %d kill(s), %.1f s, %d figurant(s), POV %s, figé en %.1f ms (%d personnages en jeu mis en file de copie)",
 				killer.name,
 				#chain,
 				stop - start,

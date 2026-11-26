@@ -223,8 +223,12 @@ local function prepareBot(bot: Bot)
 		bot.prepareAt = os.clock() + GameConfig.RESPAWN_DELAY
 		return
 	end
-	-- Même valeur que onCharacter posera à l'apparition : rien de plus à répliquer à ce moment-là
-	CollisionGroups.assignCharacter(char)
+	-- Même groupe que onCharacter posera à l'apparition (sans écoute ici : il la branche) : rien de plus à répliquer alors
+	for _, inst in char:GetDescendants() do
+		if inst:IsA("BasePart") then
+			inst.CollisionGroup = CollisionGroups.CHARACTERS
+		end
+	end
 	local kit = BotArsenal.prepare(char)
 	local rifle = kit.tools[BotCombatRules.RIFLE]
 	if rifle and deps.prepareWeapon then
@@ -319,7 +323,7 @@ local timedMotion: (BotMotion.BotMotion, number) -> () = PerfMarkers.wrap(
 
 -- Cette méthode permet de faire vivre les bots lorsque Heartbeat passe : mouvement et positions publiées, personnage
 -- suivant préparé, apparitions (au plus une préparation et une apparition par frame, #607).
-local function step(dt: number)
+local function stepBots(dt: number)
 	local active = deps.roundManager.isActive()
 	local now = os.clock()
 	local canPrepare, canSpawn = true, true
@@ -356,8 +360,17 @@ local function step(dt: number)
 			end
 		end
 	end
+end
+
+-- Cette méthode permet d'avancer les bots puis d'envoyer leurs positions groupées lorsque Heartbeat passe : l'envoi part
+-- même si un bot a levé une erreur pendant la frame (erreur relancée ensuite, comme avant).
+local function step(dt: number)
+	local ok, err = pcall(stepBots, dt)
 	if deps.flushRelay then
 		deps.flushRelay()
+	end
+	if not ok then
+		error(err, 0)
 	end
 end
 
