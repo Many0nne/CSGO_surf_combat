@@ -12,7 +12,6 @@ local BotConfig = require(ReplicatedStorage.Shared.BotConfig)
 local BotRules = require(ReplicatedStorage.Shared.BotRules)
 local CharacterAnimator = require(ReplicatedStorage.Shared.CharacterAnimator)
 local CharacterMotor = require(ReplicatedStorage.Shared.movement.CharacterMotor)
-local CharacterSyncRules = require(ReplicatedStorage.Shared.CharacterSyncRules)
 local LadderRules = require(ReplicatedStorage.Shared.LadderRules)
 local Config = require(ReplicatedStorage.Shared.MovementConfig)
 local PhysicsUtils = require(ReplicatedStorage.Shared.PhysicsUtils)
@@ -45,7 +44,6 @@ export type BotMotion = typeof(setmetatable(
 		navigator: BotNavigator.BotNavigator,
 		yaw: number,
 		tickAccumulator: number,
-		sendAccumulator: number,
 		frozen: boolean,
 		wishSpeed: number,
 		gaze: Gaze,
@@ -76,7 +74,6 @@ function BotMotion.new(char: Model, root: BasePart, humanoid: Humanoid, weaponNa
 		navigator = BotNavigator.new(rng, runSpeed),
 		yaw = rng:NextNumber(0, 360),
 		tickAccumulator = 0,
-		sendAccumulator = 0,
 		frozen = false,
 		wishSpeed = runSpeed,
 		gaze = { lookAt = nil, aiming = false },
@@ -217,20 +214,20 @@ function BotMotion._tick(self: BotMotion, dt: number)
 	motor:endTick(isGroundedState)
 end
 
--- Cette méthode permet d'avancer le bot du temps serveur écoulé (dt) lorsque Heartbeat passe : ticks fixes joués,
--- puis position publiée au plus NET_SYNC_RATE fois par seconde.
+-- Cette méthode permet d'avancer le bot du temps serveur écoulé (dt) lorsque Heartbeat passe : ticks fixes joués. La
+-- position est publiée à part (publish), à la cadence réseau commune à tous les bots (BotManager, #607).
 function BotMotion.update(self: BotMotion, dt: number)
 	local ticks
 	ticks, self.tickAccumulator = StepTiming.advance(self.tickAccumulator, dt)
 	for _ = 1, ticks do
 		self:_tick(StepTiming.TICK)
 	end
-	self.sendAccumulator += dt
-	if self.sendAccumulator >= CharacterSyncRules.SEND_INTERVAL then
-		self.sendAccumulator =
-			math.min(self.sendAccumulator - CharacterSyncRules.SEND_INTERVAL, CharacterSyncRules.SEND_INTERVAL)
-		self.relay(self.char, self.root, self.motor.cframe)
-	end
+end
+
+-- Cette méthode permet de publier la position du bot (racine serveur, relais aux clients) lorsque la cadence réseau
+-- des bots est atteinte (NET_SYNC_RATE, même frame pour tous : un seul paquet groupé, #607).
+function BotMotion.publish(self: BotMotion)
+	self.relay(self.char, self.root, self.motor.cframe)
 end
 
 -- Cette méthode permet de lire la position simulée du bot lorsqu'un outil de debug ou la population la demande.

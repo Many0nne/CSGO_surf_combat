@@ -20,6 +20,9 @@ CharacterSyncRules.MAX_COORD = 1e5
 -- Seau de distance (#172) : true = un déplacement refusé est corrigé (client renvoyé à sa dernière position acceptée) ;
 -- false = journal seul (violation comptée, déplacement appliqué), à remettre si des joueurs honnêtes sont corrigés.
 CharacterSyncRules.ENFORCE_MOVEMENT = true
+-- Positions de bots au plus par paquet groupé (#607) : 8 × (personnage, Vector3, cap) reste loin des 900 octets d'un
+-- UnreliableRemoteEvent.
+CharacterSyncRules.BOT_BATCH_MAX = 8
 
 export type Snapshot = { t: number, pos: Vector3, yaw: number }
 
@@ -69,6 +72,19 @@ end
 -- valide, numéro plus récent que la dernière correction appliquée (ack), et pour le personnage local actuel (target).
 function CharacterSyncRules.acceptsCorrection(char: any, pos: any, seq: any, target: Model?, ack: number): boolean
 	return typeof(pos) == "Vector3" and type(seq) == "number" and seq > ack and target ~= nil and char == target
+end
+
+-- Cette méthode permet de lire la taille d'un paquet groupé de positions de bots lorsqu'il arrive au client (#607) ;
+-- 0 si sa forme est fausse. Un personnage pas encore répliqué arrive nil : seule son entrée sera ignorée.
+function CharacterSyncRules.batchSize(chars: any, positions: any, yaws: any, stamp: any): number
+	if type(chars) ~= "table" or type(positions) ~= "table" or type(yaws) ~= "table" or type(stamp) ~= "number" then
+		return 0
+	end
+	local count = #positions
+	if count > CharacterSyncRules.BOT_BATCH_MAX or #yaws ~= count then
+		return 0
+	end
+	return count
 end
 
 -- Cette méthode permet de lire le cap horizontal (rad, autour de Y) d'une orientation lorsque le client l'envoie.

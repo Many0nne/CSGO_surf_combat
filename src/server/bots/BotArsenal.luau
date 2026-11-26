@@ -1,8 +1,11 @@
 -- Armes d'un bot (#143), une par bot vivant : AWP et couteau (Ka-Bar) copiés de ReplicatedStorage.Tools (sans scripts)
 -- parmi ceux de l'inventaire par défaut (#267, InventoryRules), un seul en main
--- (l'autre rangé dans un dossier du personnage, comme un sac), avec les mêmes contraintes qu'un joueur : temps de
+-- (l'autre rangé dans un sac, comme le Backpack d'un joueur : dossier de ReplicatedStorage depuis #607, hors du
+-- Workspace, répliqué une fois : sortir une arme n'est qu'un changement de parent), avec les mêmes contraintes qu'un
+-- joueur : temps de
 -- sortie, cadence, chargeur, réserve et rechargement de WeaponConfig. Le tir part du regard réel du bot
 -- (BotCombatRules) en vrai raycast ; la touche est ensuite validée par le serveur comme celle d'un joueur (onHit).
+-- Les outils sont copiés pendant le délai de réapparition (prepare, #607), pas dans la frame de l'apparition.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
@@ -23,6 +26,11 @@ local BotArsenal = {}
 BotArsenal.__index = BotArsenal
 
 local BAG_NAME = "BotBag"
+-- Dossier de ReplicatedStorage qui reçoit les sacs des bots (un par personnage, détruit avec lui)
+local BAGS_FOLDER = "BotBags"
+
+-- Outils d'un bot préparés d'avance (prepare) : sac hors du Workspace et outils par nom
+export type Kit = { bag: Folder, tools: { [string]: Tool } }
 
 export type BotArsenal = typeof(setmetatable(
 	{} :: {
@@ -66,11 +74,23 @@ local function copyTool(name: string): Tool?
 	return tool
 end
 
--- Cette méthode permet de créer les armes d'un bot lorsqu'il apparaît : fusil en main, couteau rangé.
-function BotArsenal.new(char: Model, onHit: OnHit, onWeapon: (string) -> (), onFire: OnFire?): BotArsenal
+-- Cette méthode permet de retrouver (ou créer) le dossier des sacs lorsqu'un sac est préparé.
+local function bagsFolder(): Instance
+	local folder = ReplicatedStorage:FindFirstChild(BAGS_FOLDER)
+	if folder then
+		return folder
+	end
+	local created = Instance.new("Folder")
+	created.Name = BAGS_FOLDER
+	created.Parent = ReplicatedStorage
+	return created
+end
+
+-- Cette méthode permet de préparer les armes d'un bot pendant son délai de réapparition (#607) : fusil et couteau dans
+-- un sac de ReplicatedStorage, détruit avec le personnage (ou quand il quitte le jeu) ; rien n'est encore en main.
+function BotArsenal.prepare(char: Model): Kit
 	local bag = Instance.new("Folder")
 	bag.Name = BAG_NAME
-	bag.Parent = char
 	local tools = {}
 	for _, name in { BotCombatRules.RIFLE, BotCombatRules.KNIFE } do
 		local tool = copyTool(name)
@@ -79,6 +99,24 @@ function BotArsenal.new(char: Model, onHit: OnHit, onWeapon: (string) -> (), onF
 			tools[name] = tool
 		end
 	end
+	bag.Parent = bagsFolder()
+	char.Destroying:Once(function()
+		bag:Destroy()
+	end)
+	char.AncestryChanged:Connect(function()
+		if char.Parent == nil then
+			bag:Destroy()
+		end
+	end)
+	return { bag = bag, tools = tools }
+end
+
+-- Cette méthode permet de créer les armes d'un bot lorsqu'il apparaît (outils préparés d'avance, sinon copiés ici) :
+-- fusil en main, couteau rangé.
+function BotArsenal.new(char: Model, kit: Kit?, onHit: OnHit, onWeapon: (string) -> (), onFire: OnFire?): BotArsenal
+	local prepared = kit or BotArsenal.prepare(char)
+	local bag = prepared.bag
+	local tools = prepared.tools
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = { char }

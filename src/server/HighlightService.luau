@@ -78,7 +78,6 @@ local bestScore: number? = nil
 -- Numéro du record en cours de figeage : un record plus récent périme le précédent
 local token = 0
 local clip: HighlightClipRules.Clip? = nil
-local clipActors: { number } = {}
 local pending: { [Player]: Pending } = {}
 local nextPovId = 0
 local appearances: Folder? = nil -- ServerStorage : apparence de chaque participant de la manche
@@ -107,17 +106,18 @@ end
 -- Cette méthode permet de garder l'apparence d'un participant (clone du personnage sans scripts, outils, bouclier ni
 -- sons hors ceux de l'arme 3P, tirés pendant le rejeu ; humanoïde en vie, racine seule ancrée) lorsqu'il meurt ou
 -- qu'un record est figé ; une fois par manche.
-local function keepAppearance(id: number, char: Model?)
+-- Renvoie true si une copie a été faite (rien si déjà gardée, sans personnage, ou personnage déjà retiré du jeu).
+local function keepAppearance(id: number, char: Model?): boolean
 	local folder = appearanceFolder()
-	if not char or folder:FindFirstChild(tostring(id)) then
-		return
+	if not char or not char.Parent or folder:FindFirstChild(tostring(id)) then
+		return false
 	end
 	local wasArchivable = char.Archivable
 	char.Archivable = true
 	local ok, copy = pcall(char.Clone, char)
 	char.Archivable = wasArchivable
 	if not ok or not copy then
-		return
+		return false
 	end
 	local gun = copy:FindFirstChild(WeaponThirdPerson.MODEL_NAME)
 	for _, inst in copy:GetDescendants() do
@@ -145,6 +145,43 @@ local function keepAppearance(id: number, char: Model?)
 	end
 	copy.Name = tostring(id)
 	copy.Parent = folder
+	return true
+end
+
+-- Copies d'apparence en attente (#607) : une par frame en tâche de fond, toutes d'un coup si la manche finit avant
+local copyQueue: { { id: number, char: Model } } = {}
+local copying = false
+
+-- Cette méthode permet de faire la prochaine copie en attente lorsqu'une frame passe ou que la manche finit (celles
+-- devenues inutiles sont sautées) ; renvoie false quand la file est vide.
+local function copyNext(): boolean
+	while true do
+		local item = table.remove(copyQueue, 1)
+		if not item then
+			return false
+		end
+		if keepAppearance(item.id, item.char) then
+			return true
+		end
+	end
+end
+
+-- Cette méthode permet de mettre en file les apparences des personnages en jeu lorsqu'un record est figé : une copie
+-- par frame en tâche de fond (#607 : jusqu'à 14 copies d'environ 100 instances tombaient dans la même frame).
+local function queueAppearances(list: { { id: number, char: Model } })
+	for _, item in list do
+		table.insert(copyQueue, item)
+	end
+	if copying then
+		return
+	end
+	copying = true
+	task.spawn(function()
+		while copyNext() do
+			task.wait()
+		end
+		copying = false
+	end)
 end
 
 -- Cette méthode permet de lire la position de la racine d'un personnage lorsqu'un kill est noté (nil sans racine).
@@ -327,20 +364,24 @@ local function freeze(myToken: number, chain: { Kill }, killer: Participant)
 	local last = chain[#chain]
 	local meta = metas[last]
 
-	-- Apparences des participants encore en jeu (les morts ont été gardés à leur mort)
+	-- Apparences des participants encore en jeu (les morts ont été gardés à leur mort), copiées une par frame en tâche
+	-- de fond : le clip est figé sans les attendre, take() fait les copies restantes si la manche finit avant
+	local queued: { [number]: boolean } = {}
+	local alive = {}
 	for _, participant in Participants.all() do
 		local char = Participants.characterOf(participant)
 		if char then
-			keepAppearance(participant.id, char)
+			table.insert(alive, { id = participant.id, char = char })
+			queued[participant.id] = true
 		end
 	end
+	queueAppearances(alive)
 
 	local actorCount = HighlightClipRules.rowCount(start, stop, HighlightClipRules.ACTOR_HZ)
 	local actors = {}
-	local actorIds: { number } = {}
 	local folder = appearanceFolder()
 	for id, track in tracks do
-		if id == killer.id or not folder:FindFirstChild(tostring(id)) then
+		if id == killer.id or not (queued[id] or folder:FindFirstChild(tostring(id))) then
 			continue
 		end
 		local rows, any = HighlightClipRules.trackRows(track, start, actorCount, HighlightClipRules.ACTOR_HZ)
@@ -350,7 +391,6 @@ local function freeze(myToken: number, chain: { Kill }, killer: Participant)
 				name = names[id] or "?",
 				track = HighlightClipRules.encodeSeries(rows, HighlightClipRules.ACTOR_SCALES),
 			})
-			table.insert(actorIds, id)
 		end
 	end
 
@@ -433,16 +473,16 @@ local function freeze(myToken: number, chain: { Kill }, killer: Participant)
 			kills = clipKills,
 			equips = clipEquips,
 		} :: any
-		clipActors = actorIds
 		log(
 			string.format(
-				"clip retenu : %s, %d kill(s), %.1f s, %d figurant(s), POV %s, figé en %.1f ms",
+				"clip retenu : %s, %d kill(s), %.1f s, %d figurant(s), POV %s, figé en %.1f ms (%d personnages en jeu mis en file de copie)",
 				killer.name,
 				#chain,
 				stop - start,
 				#actors,
 				if trusted then "du client" else "serveur",
-				(os.clock() - startedAt) * 1000
+				(os.clock() - startedAt) * 1000,
+				#alive
 			)
 		)
 	end
@@ -542,15 +582,39 @@ function HighlightService.take(): HighlightClipRules.Clip?
 	end
 	local folder = Instance.new("Folder")
 	folder.Name = ACTORS_FOLDER
-	local source = appearanceFolder()
-	for _, id in clipActors do
-		local model = source:FindFirstChild(tostring(id))
-		if model then
-			model:Clone().Parent = folder
-		end
-	end
 	folder.Parent = ReplicatedStorage
 	published = folder
+	-- Un figurant par frame (#607) : la fin de manche détruit déjà tous les personnages dans cette frame. Les apparences
+	-- sont déplacées, pas copiées (plus rien ne les lit avant reset) ; le client attend chacune (HighlightPlayer,
+	-- WaitForChild) et ne lit le clip qu'à la fin de la bannière, bien après les quelques frames de la publication.
+	local source = appearanceFolder()
+	-- Copies du dernier record pas encore faites : faites ici, avant que la fin de manche ne détruise les personnages
+	local copiesLeft = true
+	while copiesLeft do
+		copiesLeft = copyNext()
+	end
+	-- Figurant sans apparence (personnage retiré avant sa copie) : retiré du clip, le client ne l'attend pas
+	local actors = {}
+	local ids = {}
+	for _, actor in retained.actors do
+		if source:FindFirstChild(tostring(actor.id)) then
+			table.insert(actors, actor)
+			table.insert(ids, actor.id)
+		end
+	end
+	retained.actors = actors
+	task.spawn(function()
+		for _, id in ids do
+			if published ~= folder then
+				return
+			end
+			local model = source:FindFirstChild(tostring(id))
+			if model then
+				model.Parent = folder
+				task.wait()
+			end
+		end
+	end)
 	return retained
 end
 
@@ -566,9 +630,9 @@ function HighlightService.reset()
 	table.clear(streaks)
 	table.clear(flicks)
 	table.clear(pending)
+	table.clear(copyQueue)
 	bestScore = nil
 	clip = nil
-	clipActors = {}
 	if appearances then
 		appearances:ClearAllChildren()
 	end

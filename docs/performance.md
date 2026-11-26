@@ -61,7 +61,7 @@ bots mouvement …, bots chemin …, bots cerveau …, srv round …
 - `Heartbeat méd/p99/max` : durée des frames serveur. Dans Studio, elle suit le client (même processus) : ne vaut que
   pour comparer deux versions.
 - Repères des bots : `srv bots` (total) = `bots mouvement` (physique, **recherche de chemin comprise**) + `bots
-  cerveau` (perception, état) + apparitions ; `bots chemin` isole la recherche de chemin (appels par frame < 1 :
+  cerveau` (perception, état) + `bots préparation` (personnage suivant, pendant l'attente) + `bots apparition` (#607) ; `bots chemin` isole la recherche de chemin (appels par frame < 1 :
   une recherche étalée sur plusieurs ticks). `×N` = appels par frame, `(max …)` = pire appel en ms.
 - Piège : le `max` dit ce qui fait la saccade, la moyenne non. Une moyenne de 2 ms cachait des pics de 150 ms.
 - Méthode pour les bots : `workspace:SetAttribute("DebugBots", 5)`, la sonde, puis un run `DebugPlaytest` pour lancer
@@ -330,7 +330,8 @@ RenderStepped, BindToRenderStep). Le repère est toujours posé (`debug.profileb
 fermé), et il est chronométré seulement quand l'overlay est ouvert. Repères posés : `mouvement`, `caméra`, `viewmodel`,
 `armes`, `armes 3P`, `tenue 3P` (sous `PreSimulation`), `menu 3D`, `curseur menu`, `autres joueurs`, `munitions`,
 `touches`, `effets de tir`, `corps` (fondu des corps), `chat`, `caméra de mort` (client),
-`srv round`, `srv bots` et ses sous-repères `bots mouvement`, `bots cerveau`, `bots chemin` (serveur, sonde `PerfServer`). Toute nouvelle boucle par frame doit
+`srv round`, `srv bots` et ses sous-repères `bots mouvement`, `bots cerveau`, `bots chemin`, `bots préparation`,
+`bots apparition` (#607) (serveur, sonde `PerfServer`). Toute nouvelle boucle par frame doit
 passer par `wrap`. Les traitements d'un événement lourd portent aussi un repère (`wrap` accepte tout callback sans valeur
 de retour ; appels par frame < 1) : `kill : corps` (`DeathRagdoll.spawn`), `kill : feed` (kill feed), `kill : scores`
 (`RoundHUD.updateScores`). Le pire appel (`max`) de la ligne `[Perf] RUN … scripts` dit ce que coûte la frame du kill.
@@ -441,6 +442,65 @@ Pièges de la mesure :
 - Le rejeu `PerfRun` d'une fenêtre sans focus (Studio à 6 FPS) ne compare rien : banc à appels fixes à la place.
 - `lune` (`roblox.deserializeModel`) échoue sur les `.rbxm` à tags (`Folder.Tags`) : lire la place construite
   (`rojo build`, `roblox.deserializePlace`).
+
+## Réplication des bots, armes 3P, clip et paquets de position (#607, mesure du 2026-11-27)
+
+Passe sur ce que le serveur construit et réplique d'un coup. Rien ne change à l'écran ni dans le jeu (même bot, même
+tenue, même AWP en tenue fusil sur les captures avant/après, 52 instances dans le modèle 3P des deux côtés).
+
+| Changement | Où |
+|---|---|
+| **Bot préparé pendant son délai de réapparition** : rig habillé, groupe de collision, sac et modèle 3P du fusil construits dans `ReplicatedStorage.BotStaging` (déjà répliqués, ni rendus ni simulés), une préparation au plus par frame et toutes les `PREPARE_INTERVAL` (0,1 s). L'apparition n'est plus qu'un changement de parent, une par frame au plus | `BotManager` (`prepareBot`, `spawnBot`, repères `bots préparation`, `bots apparition`) |
+| **Sac des bots hors du personnage** : `ReplicatedStorage.BotBags/BotBag`, détruit avec le personnage | `BotArsenal.prepare` |
+| **Réserve des modèles 3P par personnage** : une arme rangée part dans `ReplicatedStorage.Weapon3PStash/<personnage>` (tag retiré), la ressortir n'est qu'un changement de parent ; 4 modèles gardés au plus par personnage | `Weapon3PStash`, `WeaponThirdPerson.build` / `mount` |
+| **Clip** : apparences copiées une par frame en tâche de fond après le figeage (le clip n'attend pas les copies ; `take` fait d'un coup celles qui restent avant que la fin de manche ne détruise les personnages : rafale seulement pour un record figé dans les quelques frames avant la fin), figurants publiés un par frame et déplacés au lieu d'être copiés | `HighlightService` |
+| **Positions des bots** : cadence réseau commune à tous les bots, un seul paquet par envoi (`CharacterSync.flushBots`, 8 bots au plus par paquet), envoyé même si un bot lève une erreur dans la frame | `BotManager.step`, `CharacterSync` (serveur et client), `CharacterSyncRules.batchSize` |
+| **`AdjustSpeed`** seulement si la vitesse de lecture change de plus de 2 % (`CharacterAnimator.SPEED_TOLERANCE`) | `CharacterAnimator` |
+
+Mesures (Studio, Dizzy, 7 bots passifs, un joueur, même session : `main` à 1aa23ce puis la branche, code échangé par
+Rojo). Sonde client : instances **nouvelles** (jamais vues par le client) par frame, par `game.DescendantAdded` filtré
+sur un ensemble des instances déjà vues ; un simple changement de parent ne compte pas.
+
+| Poste | Avant | Après |
+|---|---|---|
+| Paquets de position reçus par le client | 136 par seconde, 1 position chacun | 19 à 20 par seconde, 6,2 positions chacun |
+| Apparition d'un bot | ~220 instances neuves dans le Workspace, sur 3 frames | 0 (personnage déplacé depuis `BotStaging`) ; la préparation réplique ~200 à 250 instances dans `ReplicatedStorage`, 2 à 3 frames, pendant l'attente |
+| Changements d'arme du joueur (AWP → couteau → AWP → couteau → AWP) | à chacun le modèle neuf : 10 (couteau) ou 54 (AWP) instances | 9 au premier couteau, puis 0 |
+| Publication des figurants du clip (7 figurants) | 1 538 instances en 2 frames client (205 + 1 333) | une par frame serveur ; 4 frames client (216, 620, 437, 222) avec un client Studio à 20-30 FPS |
+| Figeage d'un record côté serveur (`figé en`, POV compris) | 51,5 ms au premier record (8 copies dans la frame), puis 2,5 à 4,9 ms | 1,4 à 4,8 ms, copies à part (une par frame) |
+| `bots préparation` / `bots apparition`, pire appel | (dans `srv bots` : 70 ms une fois, 11 à 43 ms) | 2,6 à 6,8 ms (31 ms une fois, Studio lent) / 2,9 à 28 ms (Studio lent) |
+| `AdjustSpeed` | à chaque tick par personnage animé | non mesuré (appels non comptés) |
+
+- Studio était dans son état lent (Heartbeat médian 17 à 42 ms selon le moment) : les ms ne comparent rien, les
+  compteurs d'instances et de paquets si. Aucune violation `[CheatLog]` dans les deux sessions, `DebugPlaytest` 9/9.
+- Client Studio à 20-30 FPS : une frame client reçoit plusieurs frames serveur, d'où des paquets d'instances regroupés
+  côté client même quand le serveur les étale. Dans le client publié (60 FPS), l'étalement serveur se retrouve.
+- **Écriture du `CFrame` de la racine gardée** (joueurs : `onClientPosition`, bots : `relayBot`). Elle se réplique en plus du
+  remote, mais le serveur a besoin de la vraie position des pièces : rayons des bots (`BotArsenal.fire`, vue de
+  `BotBrain`) qui touchent les pièces des personnages, `SpawnManager` (distance aux ennemis), `HighlightService`
+  (`rootOf`), zone de mort (`deathZone`), `DebugPlaytest`. Le `Validator` rembobine sur l'historique
+  (`CharacterSync.positionAt`), mais la partie touchée doit exister au bon endroit. Pas de moyen de poser un `CFrame` côté
+  serveur sans le répliquer : écarté, les paquets des bots sont groupés à la place.
+- **Envoi d'un record** (`HighlightRecorder`, jusqu'à 16 Ko environ 1 s après le kill) : un seul envoi par record, déjà
+  différé : inchangé.
+- **Construction de l'arme 3P par chaque client** (piste de l'issue) : écartée pour l'instant. Sept modules client lisent
+  le modèle du personnage (`WeaponThirdPersonView`, `DeathRagdoll`, `HighlightPlayer`, `ShotEffects`, `CasingEjection`,
+  `RemoteShotSounds`, `MatchReplay`), et les copies serveur (figurants du clip) devraient reconstruire l'arme elles
+  aussi : risque de rendu différent trop grand pour le gain restant, la réserve supprimant déjà la reconstruction à chaque
+  changement d'arme. Suivi dans #614.
+
+Pièges :
+
+- **Une table faible indexée par une Instance peut perdre son entrée** : Roblox peut recréer l'objet Lua d'une Instance
+  que plus rien ne retient. La réserve garde ses modèles par références fortes, libérées à la destruction ou au départ
+  du personnage (`Destroying`, `AncestryChanged` vers nil).
+- **`Destroying` en signaux différés** : le gestionnaire tourne après la destruction, l'Instance n'est plus copiable.
+  On ne s'en sert pas pour sauver une apparence au dernier moment.
+- Un paquet groupé non fiable porte des références d'Instances : un personnage pas encore répliqué arrive `nil` et laisse
+  un trou dans la liste. `CharacterSyncRules.batchSize` compte sur les positions, pas sur les personnages, et seule
+  l'entrée trouée est ignorée.
+- Une sonde `workspace.DescendantAdded` compte aussi un changement de parent (un personnage préparé qui entre dans le
+  Workspace) : compter les instances jamais vues, pas les ajouts.
 
 ## Relevés mémoire (fuites)
 
@@ -686,13 +746,13 @@ Conséquences :
 
 ### Pistes ouvertes, non appliquées
 
-- **Réserve de personnages de bots** : après #376, une apparition coûte encore 3 à 7 ms au pire (copie du rig 0,8 à
+- **Réserve de personnages de bots** (fait, #607 : « Réplication des bots ») : après #376, une apparition coûte encore 3 à 7 ms au pire (copie du rig 0,8 à
   2,3 ms, mise en jeu 0,6 à 1,9 ms, placement 1,2 à 2,8 ms). Préparer le rig à l'avance gagnerait 1 à 2 ms par
   apparition. Faible.
 - **`autres joueurs` et `tenue 3P`** (0,4 à 0,55 ms par frame à 7 bots) : le coût est celui des écritures de `CFrame`
   et de `Transform` par personnage. Ne plus écrire pour un personnage hors du champ de la caméra le réduirait, mais
   un personnage qui entre dans le champ aurait une frame de retard : à juger à l'œil, donc non appliqué.
-- **Paquets de position des bots groupés** : un paquet par tick pour tous les bots au lieu d'un par bot (140 par
+- **Paquets de position des bots groupés** (fait, #607) : un paquet par tick pour tous les bots au lieu d'un par bot (140 par
   seconde à 7 bots). Gain en débit non mesurable dans Studio ; change le protocole (`CharacterSync`).
 - **Plan de navigation précalculé** (12 à 14 s au démarrage du serveur, bots immobiles en attendant) : à calculer
   hors jeu et à charger. Ne coûte rien en partie.

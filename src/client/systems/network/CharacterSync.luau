@@ -56,6 +56,18 @@ local function onRelayed(char: any, pos: any, yaw: any, stamp: any)
 	CharacterSyncRules.push(entry.buffer, { t = stamp, pos = pos, yaw = yaw })
 end
 
+-- Cette méthode permet de recevoir un paquet du relais lorsqu'il arrive : une position (joueur), ou les positions de
+-- tous les bots d'une même frame serveur groupées en listes (#607), rangées chacune comme celle d'un joueur.
+local function onRelayPacket(char: any, pos: any, yaw: any, stamp: any)
+	if type(char) ~= "table" then
+		onRelayed(char, pos, yaw, stamp)
+		return
+	end
+	for i = 1, CharacterSyncRules.batchSize(char, pos, yaw, stamp) do
+		onRelayed(char[i], pos[i], yaw[i], stamp)
+	end
+end
+
 -- Cette méthode permet de placer chaque autre personnage à sa position interpolée lorsque le client dessine une
 -- frame ; un personnage retiré du jeu (mort, joueur parti, bot retiré) est oublié.
 local function placeRemoteCharacters()
@@ -82,7 +94,7 @@ function CharacterSync.init()
 			return
 		end
 		remote = found
-		found.OnClientEvent:Connect(onRelayed)
+		found.OnClientEvent:Connect(onRelayPacket)
 	end)
 	task.spawn(function()
 		local found = ReplicatedStorage:WaitForChild(NetworkProtocol.Names.MOVEMENT_CORRECTION, 15)
