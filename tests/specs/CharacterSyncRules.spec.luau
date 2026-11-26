@@ -276,4 +276,28 @@ return function(T, Loader)
 			T.expectEqual(Rules.sample({}, 1), nil)
 		end)
 	end)
+	T.describe("CharacterSyncRules.batchSize (paquet groupé des bots, #607)", function()
+		local v = Vector3.new(1, 2, 3)
+		T.it("compte les entrées de listes de même longueur", function()
+			T.expectEqual(Rules.batchSize({ "a", "b" }, { v, v }, { 0, 1 }, 10), 2)
+			T.expectEqual(Rules.batchSize({}, {}, {}, 10), 0)
+		end)
+
+		T.it("refuse des listes de longueurs différentes ou un horodatage absent", function()
+			T.expectEqual(Rules.batchSize({ "a", "b" }, { v }, { 0, 1 }, 10), 0)
+			T.expectEqual(Rules.batchSize({ "a" }, { v }, { 0, 1 }, 10), 0)
+			T.expectEqual(Rules.batchSize({ "a" }, { v }, { 0 }, nil), 0)
+			T.expectEqual(Rules.batchSize("a", v, 0, 10), 0)
+		end)
+
+		T.it("refuse un paquet de plus de BOT_BATCH_MAX entrées", function()
+			local chars, positions, yaws = {}, {}, {}
+			for i = 1, Rules.BOT_BATCH_MAX + 1 do
+				chars[i], positions[i], yaws[i] = i, v, 0
+			end
+			T.expectEqual(Rules.batchSize(chars, positions, yaws, 1), 0)
+			chars[#chars], positions[#positions], yaws[#yaws] = nil, nil, nil
+			T.expectEqual(Rules.batchSize(chars, positions, yaws, 1), Rules.BOT_BATCH_MAX)
+		end)
+	end)
 end

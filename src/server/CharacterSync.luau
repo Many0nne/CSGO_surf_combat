@@ -484,12 +484,19 @@ function CharacterSync.setPositionListener(listener: (Model, Vector3, number, nu
 	positionListener = listener
 end
 
+-- Positions de bots publiées depuis le dernier envoi groupé (#607) : personnages, positions, caps, et heure serveur de la
+-- première (toutes sont prises dans la même frame).
+local botChars: { Model } = {}
+local botPositions: { Vector3 } = {}
+local botYaws: { number } = {}
+local botStamp = 0
+
 -- Cette méthode permet de publier la position d'un bot lorsque son mouvement serveur atteint la cadence réseau : racine
--- serveur posée (Validator, hauteur de mort), position relayée horodatée à tous les clients, comme celle d'un joueur.
+-- serveur posée (lue par les rayons des bots, le Validator, la hauteur de mort…), historique et pas tout de suite,
+-- position mise en attente de l'envoi groupé (flushBots) aux clients, qui la traitent comme celle d'un joueur.
 function CharacterSync.relayBot(char: Model, root: BasePart, cf: CFrame)
 	root.CFrame = cf
-	local remote = relayRemote
-	if not remote then
+	if not relayRemote then
 		return
 	end
 	local pos = cf.Position
@@ -497,10 +504,37 @@ function CharacterSync.relayBot(char: Model, root: BasePart, cf: CFrame)
 	local stamp = workspace:GetServerTimeNow()
 	-- Les bots ne s'accroupissent pas (BotMotion)
 	recordPosition(char, pos, yaw, false, stamp)
-	remote:FireAllClients(char, pos, yaw, stamp)
+	if #botChars == 0 then
+		botStamp = stamp
+	end
+	table.insert(botChars, char)
+	table.insert(botPositions, pos)
+	table.insert(botYaws, yaw)
 	if acceptedCallback then
 		acceptedCallback(char, pos)
 	end
+end
+
+-- Cette méthode permet d'envoyer à tous les clients les positions de bots en attente lorsque la frame des bots se
+-- termine (BotManager) : un paquet pour tous (BOT_BATCH_MAX au plus par paquet) au lieu d'un par bot (#607).
+function CharacterSync.flushBots()
+	local remote = relayRemote
+	local count = #botChars
+	if not remote or count == 0 then
+		return
+	end
+	for first = 1, count, CharacterSyncRules.BOT_BATCH_MAX do
+		local last = math.min(first + CharacterSyncRules.BOT_BATCH_MAX - 1, count)
+		remote:FireAllClients(
+			table.move(botChars, first, last, 1, {}),
+			table.move(botPositions, first, last, 1, {}),
+			table.move(botYaws, first, last, 1, {}),
+			botStamp
+		)
+	end
+	table.clear(botChars)
+	table.clear(botPositions)
+	table.clear(botYaws)
 end
 
 -- Cette méthode permet de lire le dernier cap accepté d'un joueur et son heure de réception (os.clock) lorsqu'un tir

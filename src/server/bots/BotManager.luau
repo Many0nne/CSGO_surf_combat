@@ -21,6 +21,8 @@ local BotPopulationRules = require(ReplicatedStorage.Shared.BotPopulationRules)
 local BotRules = require(ReplicatedStorage.Shared.BotRules)
 local CharacterAppearance = require(ReplicatedStorage.Shared.CharacterAppearance)
 local CharacterConfig = require(ReplicatedStorage.Shared.CharacterConfig)
+local CharacterSyncRules = require(ReplicatedStorage.Shared.CharacterSyncRules)
+local CollisionGroups = require(ReplicatedStorage.Shared.CollisionGroups)
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local MapGeometry = require(ReplicatedStorage.Shared.MapGeometry)
 local MapSelection = require(ReplicatedStorage.Shared.MapSelection)
@@ -38,10 +40,13 @@ type Participant = Participants.Participant
 export type Deps = {
 	-- Branchement commun joueur/bot du personnage (arme 3P, mort, corps), cf. init.server
 	onCharacter: (Participant, Model, () -> ()) -> (),
+	-- Modèle 3P de l'arme de départ construit d'avance pour un personnage préparé (#607, Weapon3PStash.prepare)
+	prepareWeapon: ((Model, Tool) -> ())?,
 	-- Placement à l'apparition (point au sol loin des ennemis, protection ; SpawnManager.place)
 	place: (Model) -> (),
-	-- Publication de la position aux clients (CharacterSync.relayBot)
+	-- Publication de la position aux clients (CharacterSync.relayBot), envoyée groupée en fin de frame (flushRelay, #607)
 	relay: (Model, BasePart, CFrame) -> (),
+	flushRelay: (() -> ())?,
 	-- Touches d'un bot, validées et appliquées comme celles d'un joueur (tireur, personnage visé, partie touchée) ;
 	-- renvoient "hit", "kill", ou nil si la touche est refusée ou sans effet
 	hitscan: (Participant, Model, BasePart) -> ("hit" | "kill")?,
@@ -57,14 +62,23 @@ export type Deps = {
 	},
 }
 
+-- Personnage préparé pendant le délai de réapparition (#607) : rangé dans ReplicatedStorage (déjà répliqué aux clients,
+-- ni rendu ni simulé), outils dans leur sac ; l'apparition n'est plus qu'un changement de parent.
+type Prepared = { char: Model, kit: BotArsenal.Kit }
+
 type Bot = {
 	participant: Participant,
 	character: Model?,
+	prepared: Prepared?,
+	prepareAt: number, -- os.clock() à partir duquel préparer (nouvel essai après un échec de construction)
 	motion: BotMotion.BotMotion?,
 	brain: BotBrain.BotBrain?,
 	diedAt: number, -- os.clock() de la dernière mort (-inf : jamais mort, apparaît dès que le round est actif)
 	frozen: boolean,
 }
+
+-- Dossier de ReplicatedStorage des personnages préparés
+local STAGING_FOLDER = "BotStaging"
 
 local BotManager = {}
 
@@ -74,6 +88,12 @@ local seeThrough: { Instance } = {} -- murs d'air et grillages de la map jouée 
 local debugCount: number? = nil -- nombre de bots fixé par DebugBots (nil : population automatique)
 local pauseCount = 0 -- runs de DebugPlaytest en cours (population suspendue, aucun bot)
 local passive = false -- DebugBotsPassive : les bots (présents et ajoutés ensuite) ne tirent pas sur les humains
+-- Temps accumulé vers la prochaine publication des positions, commune à tous les bots (un paquet groupé par envoi, #607)
+local sendAccumulator = 0
+-- Préparation et apparition repérées (« bots préparation », « bots apparition ») : affectées après la dernière fonction du
+-- module (piège de typage de luau-lsp, cf. docs/performance.md « Repères de scripts »)
+local timedPrepare: (Bot) -> ()
+local timedSpawn: (Bot) -> ()
 
 -- Cette méthode permet de lire l'état de gel voulu par le debug lorsqu'un bot est créé : l'attribut DebugBotsFreeze
 -- (Studio uniquement), pour qu'un bot ajouté après la pose de l'attribut soit figé comme les autres.
@@ -183,14 +203,55 @@ local function dropCharacter(bot: Bot)
 	end
 end
 
--- Cette méthode permet de faire apparaître un bot lorsque le round est actif et que son délai de réapparition est
--- passé : personnage construit, inscrit, branché, mis en jeu puis placé au sol (SpawnManager.place).
-local function spawnBot(bot: Bot)
+-- Cette méthode permet de retrouver (ou créer) le dossier des personnages préparés lorsqu'un bot est préparé.
+local function stagingFolder(): Instance
+	local folder = ReplicatedStorage:FindFirstChild(STAGING_FOLDER)
+	if folder then
+		return folder
+	end
+	local created = Instance.new("Folder")
+	created.Name = STAGING_FOLDER
+	created.Parent = ReplicatedStorage
+	return created
+end
+
+-- Cette méthode permet de préparer le prochain personnage d'un bot pendant son délai de réapparition (#607) : rig
+-- habillé, groupe de collision, outils dans leur sac, modèle 3P du fusil construit d'avance, le tout répliqué aux
+-- clients dans ReplicatedStorage ; un échec de construction est retenté après RESPAWN_DELAY.
+local function prepareBot(bot: Bot)
 	local char = buildCharacter(bot.participant.name)
 	if not char then
-		bot.diedAt = os.clock() -- nouvel essai après RESPAWN_DELAY, sans boucle à chaque frame
+		bot.prepareAt = os.clock() + GameConfig.RESPAWN_DELAY
 		return
 	end
+	-- Même valeur que onCharacter posera à l'apparition : rien de plus à répliquer à ce moment-là
+	CollisionGroups.assignCharacter(char)
+	local kit = BotArsenal.prepare(char)
+	local rifle = kit.tools[BotCombatRules.RIFLE]
+	if rifle and deps.prepareWeapon then
+		deps.prepareWeapon(char, rifle)
+	end
+	char.Parent = stagingFolder()
+	bot.prepared = { char = char, kit = kit }
+end
+
+-- Cette méthode permet de détruire le personnage préparé d'un bot lorsqu'il est retiré avant d'apparaître (sac et
+-- réserve d'armes partent avec lui).
+local function dropPrepared(bot: Bot)
+	local prepared = bot.prepared
+	bot.prepared = nil
+	if prepared then
+		prepared.char:Destroy()
+	end
+end
+
+-- Cette méthode permet de faire apparaître un bot lorsque le round est actif, que son délai de réapparition est
+-- passé et que son personnage est préparé : inscrit, branché, mis en jeu (changement de parent) puis placé au sol
+-- (SpawnManager.place).
+local function spawnBot(bot: Bot)
+	local prepared = bot.prepared :: Prepared
+	bot.prepared = nil
+	local char = prepared.char
 	local humanoid = char:FindFirstChildOfClass("Humanoid") :: Humanoid
 	local root = char:FindFirstChild("HumanoidRootPart") :: BasePart
 	bot.character = char
@@ -211,7 +272,7 @@ local function spawnBot(bot: Bot)
 	bot.motion = motion
 	local participant = bot.participant
 	-- Armes : fusil en main (modèle 3P attaché par onCharacter), couteau rangé ; touches validées par le serveur
-	local arsenal = BotArsenal.new(char, function(target: Model, hitPart: BasePart?)
+	local arsenal = BotArsenal.new(char, prepared.kit, function(target: Model, hitPart: BasePart?)
 		local outcome = if hitPart then deps.hitscan(participant, target, hitPart) else deps.melee(participant, target)
 		if outcome then
 			BotBrain.stats.hits += 1
@@ -259,23 +320,48 @@ local timedMotion: (BotMotion.BotMotion, number) -> () = PerfMarkers.wrap(
 )
 
 -- Cette méthode permet de faire vivre les bots lorsque Heartbeat passe : mouvement des bots en jeu, personnages
--- disparus oubliés, apparition des bots morts depuis RESPAWN_DELAY quand le round est actif.
+-- disparus oubliés, personnage suivant préparé pendant l'attente, apparition des bots morts depuis RESPAWN_DELAY quand
+-- le round est actif. Au plus une préparation et une apparition par frame, jamais le même bot dans la même frame
+-- (#607) : sept bots qui apparaissent ensemble s'étalent sur quelques frames au lieu d'en charger une seule.
 local function step(dt: number)
 	local active = deps.roundManager.isActive()
 	local now = os.clock()
+	local canPrepare, canSpawn = true, true
+	-- Cadence réseau d'un joueur (NET_SYNC_RATE), commune à tous les bots : leurs positions partent dans la même frame
+	sendAccumulator += dt
+	local publish = sendAccumulator >= CharacterSyncRules.SEND_INTERVAL
+	if publish then
+		sendAccumulator = math.min(sendAccumulator - CharacterSyncRules.SEND_INTERVAL, CharacterSyncRules.SEND_INTERVAL)
+	end
 	for _, bot in bots do
 		local char = bot.character
 		if char and not char.Parent then
 			dropCharacter(bot)
 		end
-		if bot.motion then
+		local motion = bot.motion
+		if motion then
 			if bot.brain and not bot.frozen then
 				timedBrain(bot.brain, dt)
 			end
-			timedMotion(bot.motion, dt)
-		elseif not bot.character and active and now - bot.diedAt >= GameConfig.RESPAWN_DELAY then
-			spawnBot(bot)
+			timedMotion(motion, dt)
+			-- Le cerveau peut avoir retiré le mouvement (mort pendant la frame) : on publie seulement un bot encore en jeu
+			if publish and bot.motion == motion then
+				motion:publish()
+			end
+		elseif not bot.character then
+			if bot.prepared then
+				if canSpawn and active and now - bot.diedAt >= GameConfig.RESPAWN_DELAY then
+					canSpawn = false
+					timedSpawn(bot)
+				end
+			elseif canPrepare and now >= bot.prepareAt then
+				canPrepare = false
+				timedPrepare(bot)
+			end
 		end
+	end
+	if deps.flushRelay then
+		deps.flushRelay()
 	end
 end
 
@@ -293,6 +379,8 @@ function BotManager.add(): Participant?
 	table.insert(bots, {
 		participant = participant,
 		character = nil,
+		prepared = nil,
+		prepareAt = -math.huge,
 		motion = nil,
 		brain = nil,
 		diedAt = -math.huge,
@@ -311,6 +399,7 @@ function BotManager.removeAt(index: number?)
 		return
 	end
 	dropCharacter(bot)
+	dropPrepared(bot)
 	deps.forget(bot.participant)
 	deps.roundManager.removeParticipant(bot.participant)
 	Participants.remove(bot.participant)
@@ -464,6 +553,8 @@ end
 -- Cette méthode permet de démarrer la gestion des bots lorsque le serveur démarre.
 function BotManager.init(dependencies: Deps)
 	deps = dependencies
+	timedPrepare = PerfMarkers.wrap("bots préparation", prepareBot)
+	timedSpawn = PerfMarkers.wrap("bots apparition", spawnBot)
 	-- Murs d'air et grillages de la map jouée, relevés à chaque changement de map (#594) et préparés un peu par frame dès
 	-- que la map est annoncée (#605) ; les plans de navigation sont construits et choisis par MapRotation (NavPlan)
 	MapSelection.observe(30, function(map)
