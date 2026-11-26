@@ -285,9 +285,13 @@ return function(T, Loader)
 
 		T.it("refuse des listes de longueurs différentes ou un horodatage absent", function()
 			T.expectEqual(Rules.batchSize({ "a", "b" }, { v }, { 0, 1 }, 10), 0)
-			T.expectEqual(Rules.batchSize({ "a" }, { v }, { 0, 1 }, 10), 0)
+			T.expectEqual(Rules.batchSize({ "a" }, { v, v }, { 0 }, 10), 0)
 			T.expectEqual(Rules.batchSize({ "a" }, { v }, { 0 }, nil), 0)
 			T.expectEqual(Rules.batchSize("a", v, 0, 10), 0)
+		end)
+
+		T.it("garde les autres entrées quand un personnage arrive à nil (pas encore répliqué)", function()
+			T.expectEqual(Rules.batchSize({ nil, "b", "c" }, { v, v, v }, { 0, 1, 2 }, 10), 3)
 		end)
 
 		T.it("refuse un paquet de plus de BOT_BATCH_MAX entrées", function()

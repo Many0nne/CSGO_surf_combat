@@ -74,14 +74,14 @@ function CharacterSyncRules.acceptsCorrection(char: any, pos: any, seq: any, tar
 	return typeof(pos) == "Vector3" and type(seq) == "number" and seq > ack and target ~= nil and char == target
 end
 
--- Cette méthode permet de lire la taille d'un paquet groupé de positions de bots lorsqu'il arrive au client (#607) :
--- trois listes de même longueur (au plus BOT_BATCH_MAX) et un horodatage ; 0 si sa forme est fausse.
+-- Cette méthode permet de lire la taille d'un paquet groupé de positions de bots lorsqu'il arrive au client (#607) ;
+-- 0 si sa forme est fausse. Un personnage pas encore répliqué arrive nil : seule son entrée sera ignorée.
 function CharacterSyncRules.batchSize(chars: any, positions: any, yaws: any, stamp: any): number
 	if type(chars) ~= "table" or type(positions) ~= "table" or type(yaws) ~= "table" or type(stamp) ~= "number" then
 		return 0
 	end
-	local count = #chars
-	if count > CharacterSyncRules.BOT_BATCH_MAX or #positions ~= count or #yaws ~= count then
+	local count = #positions
+	if count > CharacterSyncRules.BOT_BATCH_MAX or #yaws ~= count then
 		return 0
 	end
 	return count

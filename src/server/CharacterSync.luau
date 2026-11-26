@@ -491,9 +491,8 @@ local botPositions: { Vector3 } = {}
 local botYaws: { number } = {}
 local botStamp = 0
 
--- Cette méthode permet de publier la position d'un bot lorsque son mouvement serveur atteint la cadence réseau : racine
--- serveur posée (lue par les rayons des bots, le Validator, la hauteur de mort…), historique et pas tout de suite,
--- position mise en attente de l'envoi groupé (flushBots) aux clients, qui la traitent comme celle d'un joueur.
+-- Cette méthode permet de publier la position d'un bot lorsque la cadence réseau est atteinte : racine serveur posée,
+-- historique et pas tout de suite, envoi aux clients mis en attente du paquet groupé (flushBots, #607).
 function CharacterSync.relayBot(char: Model, root: BasePart, cf: CFrame)
 	root.CFrame = cf
 	if not relayRemote then

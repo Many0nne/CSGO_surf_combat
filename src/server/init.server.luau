@@ -268,9 +268,8 @@ local function gunSpecOf(char: Model, tool: Tool): (string, string, string?)
 		skinId
 end
 
--- Cette méthode permet d'attacher le modèle 3P lorsqu'un outil arrive dans le personnage (équipement), habillé du skin
--- équipé du joueur (#268 ; bots : d'origine) ; les pièces propres de l'outil sont masquées pour ne pas doubler l'arme.
--- Un modèle déjà construit pour ce personnage ressort de sa réserve (#607, Weapon3PStash) au lieu d'être reconstruit.
+-- Cette méthode permet d'attacher le modèle 3P lorsqu'un outil arrive dans le personnage (réserve du personnage,
+-- Weapon3PStash, #607) ; les pièces propres de l'outil sont masquées pour ne pas doubler l'arme.
 local function onToolEquipped(char: Model, tool: Tool)
 	local gun = Weapon3PStash.equip(char, gunSpecOf(char, tool))
 	if not gun then

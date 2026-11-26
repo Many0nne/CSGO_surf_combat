@@ -215,9 +215,8 @@ local function stagingFolder(): Instance
 	return created
 end
 
--- Cette méthode permet de préparer le prochain personnage d'un bot pendant son délai de réapparition (#607) : rig
--- habillé, groupe de collision, outils dans leur sac, modèle 3P du fusil construit d'avance, le tout répliqué aux
--- clients dans ReplicatedStorage ; un échec de construction est retenté après RESPAWN_DELAY.
+-- Cette méthode permet de préparer le prochain personnage d'un bot pendant son attente (#607) : rig habillé, sac et
+-- modèle 3P du fusil, répliqués d'avance dans ReplicatedStorage ; un échec est retenté après RESPAWN_DELAY.
 local function prepareBot(bot: Bot)
 	local char = buildCharacter(bot.participant.name)
 	if not char then
@@ -245,9 +244,8 @@ local function dropPrepared(bot: Bot)
 	end
 end
 
--- Cette méthode permet de faire apparaître un bot lorsque le round est actif, que son délai de réapparition est
--- passé et que son personnage est préparé : inscrit, branché, mis en jeu (changement de parent) puis placé au sol
--- (SpawnManager.place).
+-- Cette méthode permet de faire apparaître un bot préparé lorsque le round est actif et son délai passé : inscrit,
+-- branché, mis en jeu (changement de parent) puis placé au sol (SpawnManager.place).
 local function spawnBot(bot: Bot)
 	local prepared = bot.prepared :: Prepared
 	bot.prepared = nil
@@ -319,10 +317,8 @@ local timedMotion: (BotMotion.BotMotion, number) -> () = PerfMarkers.wrap(
 	end
 )
 
--- Cette méthode permet de faire vivre les bots lorsque Heartbeat passe : mouvement des bots en jeu, personnages
--- disparus oubliés, personnage suivant préparé pendant l'attente, apparition des bots morts depuis RESPAWN_DELAY quand
--- le round est actif. Au plus une préparation et une apparition par frame, jamais le même bot dans la même frame
--- (#607) : sept bots qui apparaissent ensemble s'étalent sur quelques frames au lieu d'en charger une seule.
+-- Cette méthode permet de faire vivre les bots lorsque Heartbeat passe : mouvement et positions publiées, personnage
+-- suivant préparé, apparitions (au plus une préparation et une apparition par frame, #607).
 local function step(dt: number)
 	local active = deps.roundManager.isActive()
 	local now = os.clock()
