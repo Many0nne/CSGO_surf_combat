@@ -84,4 +84,39 @@ return function(T, Loader)
 			T.expectEqual(CharacterAnimator.playbackSpeed("FALL", 50), 1)
 		end)
 	end)
+	T.describe("CharacterAnimator.needsSpeedChange (#607)", function()
+		T.it("pose toujours la vitesse d'une piste qui démarre", function()
+			T.expectEqual(CharacterAnimator.needsSpeedChange(nil, 1), true)
+		end)
+
+		T.it("garde la vitesse sous SPEED_TOLERANCE d'écart, la change au-delà", function()
+			local tol = CharacterAnimator.SPEED_TOLERANCE
+			T.expectEqual(CharacterAnimator.needsSpeedChange(1, 1), false)
+			T.expectEqual(CharacterAnimator.needsSpeedChange(1, 1 + tol * 0.5), false)
+			T.expectEqual(CharacterAnimator.needsSpeedChange(1, 1 - tol * 0.5), false)
+			T.expectEqual(CharacterAnimator.needsSpeedChange(1, 1 + tol * 2), true)
+			T.expectEqual(CharacterAnimator.needsSpeedChange(0.5, 0.5 * (1 - tol * 2)), true)
+		end)
+
+		T.it(
+			"une lente dérive finit par être appliquée (écart mesuré depuis la dernière vitesse posée)",
+			function()
+				local posed = 1
+				local wanted = 1
+				local changes = 0
+				for _ = 1, 10 do
+					wanted *= 1.005
+					if CharacterAnimator.needsSpeedChange(posed, wanted) then
+						posed = wanted
+						changes += 1
+					end
+				end
+				T.expect(changes >= 1, "aucune mise à jour sur 5 % de dérive")
+				T.expect(
+					math.abs(wanted - posed) <= CharacterAnimator.SPEED_TOLERANCE * posed,
+					"écart final hors tolérance"
+				)
+			end
+		)
+	end)
 end

@@ -99,6 +99,19 @@ function CharacterAnimator.playbackSpeed(state: string, speed: number): number
 	return math.clamp(speed / ref, CharacterConfig.PLAYBACK_MIN, CharacterConfig.PLAYBACK_MAX)
 end
 
+-- Écart relatif de vitesse de lecture en dessous duquel la piste garde sa vitesse (#607) : un AdjustSpeed est répliqué
+-- par Roblox (pistes du joueur local, pistes des bots jouées par le serveur), et 2 % de cadence de pas ne se voient pas.
+CharacterAnimator.SPEED_TOLERANCE = 0.02
+
+-- Cette méthode permet de décider s'il faut changer la vitesse de lecture d'une piste lorsqu'une frame est simulée :
+-- toujours pour une piste qui vient de démarrer (current nil), sinon seulement au-delà de SPEED_TOLERANCE d'écart.
+function CharacterAnimator.needsSpeedChange(current: number?, wanted: number): boolean
+	if current == nil then
+		return true
+	end
+	return math.abs(wanted - current) > CharacterAnimator.SPEED_TOLERANCE * math.max(math.abs(current), 1e-3)
+end
+
 -- Cette méthode permet de créer l'animateur d'un personnage lorsqu'il spawn ; l'Animator est résolu paresseusement.
 function CharacterAnimator.new(humanoid: Humanoid)
 	local self = setmetatable({
@@ -113,6 +126,7 @@ function CharacterAnimator.new(humanoid: Humanoid)
 		owned = {} :: { [AnimationTrack]: boolean },
 		playedConn = nil :: RBXScriptConnection?,
 		timeScale = 1,
+		speed = nil :: number?, -- vitesse de lecture posée sur la piste courante (nil : à poser)
 	}, CharacterAnimator)
 	return self
 end
@@ -205,9 +219,14 @@ function CharacterAnimator:update(input: AnimInput)
 		track:Play(CharacterConfig.FADE_TIME / self.timeScale)
 		self.currentTrack = track
 		self.currentId = id
+		self.speed = nil
 	end
 	self.state = state
-	track:AdjustSpeed(CharacterAnimator.playbackSpeed(state, input.speed) * self.timeScale)
+	local speed = CharacterAnimator.playbackSpeed(state, input.speed) * self.timeScale
+	if CharacterAnimator.needsSpeedChange(self.speed, speed) then
+		track:AdjustSpeed(speed)
+		self.speed = speed
+	end
 end
 
 -- Cette méthode permet de ralentir ou d'accélérer les pistes (lecture et fondus) lorsqu'un rejeu tourne à une autre
@@ -240,6 +259,7 @@ function CharacterAnimator:destroy()
 	self.currentTrack = nil
 	self.currentId = nil
 	self.state = nil
+	self.speed = nil
 end
 
 return CharacterAnimator
